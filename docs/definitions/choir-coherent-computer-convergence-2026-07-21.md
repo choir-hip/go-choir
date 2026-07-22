@@ -282,15 +282,15 @@ now:
     status: reconciled
   candidate:
     id: convergence-durable-work-runtime-01
-    state: implementation_blockers_documented
+    state: candidate_review_02_blocked
     ref: refs/heads/convergence/kernel-contract-01
     owner: owner-and-current-session
     base: 9f725b9bd2e38b6079b23eb265f081bc91d1835f
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
     scope: "Phase C protected paths only; effects OFF and uninjected"
-    observed_problem: "The first independent runtime-candidate panel rejected the partial cutover. Reproduced gaps: legacy DispatchWorkerUpdate precedes canonical append; lifecycle Trajectory/update identities still include RunID/SourceRunID; exact update retries under a new CommandID conflict; raw head/work/terminal/delete writers remain; Start accepts mismatched subject identity; Amend reopens refused work; settlement predicates and CAS coverage are client-weak; cancellation does not pin the terminal head; snapshot/watermark is not one read transaction and late-event cursors can exceed it; the public DTO/stream/desktop/CLI path is incomplete; archive and terminal manual heads are absent; startup inventory covers only mailbox shape; signed execution identity is absent; and lifecycle incorporation discards the source-graph write set."
-    remaining_error: "Do not land or deploy until each reproduced panel blocker is repaired and re-reviewed against a frozen complete candidate. The only accepted implementation evidence is one canonical append/head/reducer path with stable non-run identities, unconditional settlement predicates, transactional snapshot/outbox semantics, archival history, startup refusal/migration, shared clients, signed least-disclosure identity, and source-graph fate-sharing; focused happy-path tests are insufficient."
+    observed_problem: "The second frozen-candidate review (diff sha256:180df03f7f35d57370ef36bd9c9feecd5336936566f41c0f4a762592a202ad4d) returned REPAIR from both completed independent reviewers. Reproduced blockers: lifecycle-bound Texture documents still have raw split head writers and physical deletion; refused work can reopen; RecordLifecycleRefs does not update Trajectory.SubjectRefs; legacy and tuple-keyed update authorities can diverge; ReferenceExistingArtifact lacks head CAS; snapshot/outbox reads are fenced but not one read transaction; incorporated revisions attempt unconditional trajectory settlement; public start exposes authority-bearing reducer internals instead of the shared prompt DTO; and execution identity is guest-self-attested rather than a platform/CI-attested least-disclosure join. One reviewer also flagged that the sandbox can still receive self-development capability despite this candidate's effects-OFF constraint."
+    remaining_error: "Do not land or deploy review-02 candidate. Repair every reproduced authority, terminality, atomicity, identity, and effects-OFF blocker; add refusal tests for raw writer/delete/update bypasses and terminal reopen; freeze a complete diff including all new files; rerun focused restart/cancellation/replay tests and independent review."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -300,9 +300,9 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: [9f725b9bd2e38b6079b23eb265f081bc91d1835f, /tmp/choir-kernel-contract-review-9f725b9b/manifest.tsv, /tmp/choir-kernel-contract-review-9f725b9b/codex.out, /tmp/choir-kernel-contract-review-9f725b9b/cursor.out, /tmp/choir-kernel-contract-review-9f725b9b/omp-gemini35.out, /tmp/choir-kernel-contract-review-9f725b9b/omp-gpt55.out]
-  blocker_or_risk: "Runtime candidate review 01 returned REJECT/REPAIR across all three substantive reviewers. The largest risks are dual writes around typed delivery, RunID-derived identity, incomplete cancellation/settlement CAS, non-transactional replay snapshots, raw Texture authorities, and absent signed execution identity."
-  next_action: "Repair the adjudicated candidate-review blockers in the documented order—identity and one append, reducer invariants/CAS, source/head/archive cutover, startup inventory, shared replay clients, then execution attestation—while effects remain OFF; freeze and rerun the full candidate gate."
+  evidence_refs: [9f725b9bd2e38b6079b23eb265f081bc91d1835f, /tmp/choir-kernel-contract-review-9f725b9b/manifest.tsv, /tmp/agentic-consensus-20260721-213857/manifest.tsv, /tmp/agentic-consensus-20260721-213857/codex.out, /tmp/agentic-consensus-20260721-213857/omp-gpt55.out]
+  blocker_or_risk: "Runtime candidate review 02 returned REPAIR from both completed substantive reviewers. The candidate still permits raw history deletion/writes, terminal refusal reopening, split update identities, non-transactional snapshots, unconditional settlement, an over-authoritative public DTO, incomplete attested identity, and possible self-development capability injection."
+  next_action: "Commit this problem receipt before repair code. Then close raw writer/delete/update paths for lifecycle-bound objects, enforce terminality and subject-ref/head CAS invariants, remove automatic settlement, add a transactional read snapshot, narrow the public DTO, implement platform/CI-attested least-disclosure identity, hard-disable self-development capability, and rerun the frozen candidate gate."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
