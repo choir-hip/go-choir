@@ -132,6 +132,9 @@ resolve_service_package() {
   return 1
 }
 
+# Resolve the immutable package behind the activated wrapper. Deployment
+# receipts use this instead of treating the atomically copied /var/lib runner
+# as package identity.
 resolve_service_package_from_unit() {
   local service="$1"
   local store_root="${2:-/nix/store}"

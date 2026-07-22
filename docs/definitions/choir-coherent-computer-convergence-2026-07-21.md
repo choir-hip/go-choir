@@ -283,15 +283,15 @@ now:
   candidate:
     id: convergence-durable-work-runtime-03
     state: deploy_repair_candidate
-    ref: working-tree-code-diff-excluding-definition@sha256:c260ae5aee18bfc7d5285e00bfc302f7935cade7bfd90f39e955cf896559f4a1
+    ref: refs/heads/main@a1ed83e57090f0e9170e49543dff5fe1e269250f plus deploy-trigger-diff@sha256:1af19afec0b48483a12a6e63dc2657bda85c974697515e70dd74a6d7e752b370
     owner: owner-and-current-session
     base: a8f849f1bfb74978ba6cd64e60f30313c260e762
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
     scope: "Phase C protected paths only; effects OFF and uninjected"
     observed_problem: "CI run 29909000446 proved immutable package resolution and activated all seven host services at 5fe6d241, then exited during host identity assembly. The assembly re-queried `.build.commit` from each health JSON body even though gateway, maild, and sourcecycled expose exact build identity only through the already verified X-Choir-Build-Commit response header. Under set -e, jq -er aborted silently on the first body without build.commit. Failure receipt: /var/lib/go-choir/deploy-failures/29909000446-1.json."
-    repair_evidence: "Receipt assembly now consumes the exact active commit already observed from each service's X-Choir-Build-Commit header and recorded in receipt_artifacts, then independently joins it to the immutable package manifest and digest. It no longer assumes a noncanonical health JSON body field. Contract tests require this join and reject the old body lookup. A Node B rehearsal joined all seven active artifact entries from failure receipt 29909000446-1 to their immutable /nix/store package manifests at exact commit 5fe6d241; exit 0."
-    remaining_error: "Commit and deploy repair candidate c260ae5; CI/deploy must publish a complete receipt and public exact identity before lifecycle acceptance."
+    repair_evidence: "Receipt assembly now consumes the exact active commit already observed from each service's X-Choir-Build-Commit header and recorded in receipt_artifacts, then independently joins it to the immutable package manifest and digest. Contract tests require this join and reject the old body lookup. A Node B rehearsal joined all seven active artifact entries from failure receipt 29909000446-1 to their immutable /nix/store package manifests at exact commit 5fe6d241; exit 0. Commit a1ed83e5 passed CI run 29910652765, but its workflow-only runtime change did not select deployment; a source-script clarification now intentionally selects host OS activation so the repaired workflow can publish its receipt."
+    remaining_error: "Commit and push deploy-trigger diff 1af19af; CI/deploy must publish a complete receipt and public exact identity before lifecycle acceptance."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -301,9 +301,9 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: ["problem receipt commit a35d7404", "skipped workflow-only repair commit 9dcb2521", "immutable resolver repair 5fe6d241960f77531eb08c2327e6e6bad616ba39", "CI run https://github.com/choir-hip/go-choir/actions/runs/29909000446", "failed deploy job 88889472774", "/var/lib/go-choir/deploy-failures/29909000446-1.json"]
-  blocker_or_risk: "Red deployment-identity repair is locally rehearsed but not deployed. Exact header observations and immutable package manifests now join on one target commit. Rollback remains the prior NixOS profile, service pointers, frontend previous root, guest realization, and deploy receipts."
-  next_action: "Commit and push repair candidate c260ae5, monitor CI/deploy receipt, then run public signed identity and lifecycle acceptance."
+  evidence_refs: ["problem receipt commit a35d7404", "skipped workflow-only repair commit 9dcb2521", "immutable resolver repair 5fe6d241960f77531eb08c2327e6e6bad616ba39", "receipt join repair a1ed83e57090f0e9170e49543dff5fe1e269250f", "passed CI run https://github.com/choir-hip/go-choir/actions/runs/29910652765", "failed deploy run https://github.com/choir-hip/go-choir/actions/runs/29909000446", "/var/lib/go-choir/deploy-failures/29909000446-1.json"]
+  blocker_or_risk: "Red deployment-identity repair passed CI but remains undeployed because its workflow-only path did not select deployment. The trigger diff selects host OS activation; rollback remains the prior NixOS profile, service pointers, frontend previous root, guest realization, and deploy receipts."
+  next_action: "Commit and push deploy-trigger diff 1af19af, monitor CI/deploy receipt, then run public signed identity and lifecycle acceptance."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
