@@ -273,8 +273,8 @@ now:
   slice: C-build-disabled-candidate
   question: "Can the smallest conditional object-graph transaction plus scoped identity migration establish one restart-durable lifecycle without touching effect capabilities?"
   reconciliation:
-    observed_at: 2026-07-21T21:03:29Z
-    source_ref: refs/remotes/origin/main@9d887494c230a5276529066c7f1e049349d933c9
+    observed_at: 2026-07-22T02:00:15Z
+    source_ref: refs/heads/convergence/kernel-contract-01@32a66a629647ad41b58f86faa33441460c3591e2
     deploy_identity: "Public https://choir.news/health reported proxy build/deployed commit 832ae951e84400a54bd7f8ef52a312e872b5c3ef; exact host/guest joined identity remains unavailable without the new product path."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
@@ -282,15 +282,15 @@ now:
     status: reconciled
   candidate:
     id: convergence-durable-work-runtime-01
-    state: candidate_review_02_blocked
+    state: repairing_candidate_review_02
     ref: refs/heads/convergence/kernel-contract-01
     owner: owner-and-current-session
     base: 9f725b9bd2e38b6079b23eb265f081bc91d1835f
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
     scope: "Phase C protected paths only; effects OFF and uninjected"
-    observed_problem: "The second frozen-candidate review (diff sha256:180df03f7f35d57370ef36bd9c9feecd5336936566f41c0f4a762592a202ad4d) returned REPAIR from both completed independent reviewers. Reproduced blockers: lifecycle-bound Texture documents still have raw split head writers and physical deletion; refused work can reopen; RecordLifecycleRefs does not update Trajectory.SubjectRefs; legacy and tuple-keyed update authorities can diverge; ReferenceExistingArtifact lacks head CAS; snapshot/outbox reads are fenced but not one read transaction; incorporated revisions attempt unconditional trajectory settlement; public start exposes authority-bearing reducer internals instead of the shared prompt DTO; and execution identity is guest-self-attested rather than a platform/CI-attested least-disclosure join. One reviewer also flagged that the sandbox can still receive self-development capability despite this candidate's effects-OFF constraint."
-    remaining_error: "Do not land or deploy review-02 candidate. Repair every reproduced authority, terminality, atomicity, identity, and effects-OFF blocker; add refusal tests for raw writer/delete/update bypasses and terminal reopen; freeze a complete diff including all new files; rerun focused restart/cancellation/replay tests and independent review."
+    observed_problem: "Candidate review 02 and the 2026-07-21 six-model live supervision panel both returned COURSE_CORRECTION/REPAIR. Reproduced blockers now include: an unstamped InitialDocument.TrajectoryID that bypasses raw head/delete guards; lifecycle and legacy trajectory/update identity forks; unguarded raw SubjectRefs/cancel/agent upserts; physical DELETE instead of reducer-owned archive; non-transactional snapshot/watermark reads; public reducer-authority DTOs instead of prompt/update/cancel observation DTOs; effects-capable agent assignment; unscoped restart discovery; and guest-self-attested execution identity with raw path disclosure and no platform/CI/vmctl trust join. The panel also confirmed the reducer transaction, command replay, terminal-work rule, head CAS, explicit settlement/cancellation, and subscribe-before-snapshot direction."
+    remaining_error: "Repair is active and unaccepted. Completed in the mutable candidate: blocker receipt 32a66a62; refused-work terminal guard; RecordLifecycleRefs subject-ref merge; ReferenceExistingArtifact document/head CAS; removal of automatic Texture trajectory settlement; lifecycle-aware pending projections; and initial refusal guards on lifecycle-bound raw document/revision/work/trajectory/update writers. Still required: stamp all bindings; close raw subject/cancel/agent/update forks; reducer-owned archive; transactional snapshot; effects-disabled assignment and scoped restart; narrow shared public protocol; platform/CI/vmctl-attested execution identity; focused refusal/restart tests; frozen candidate review."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -300,9 +300,9 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: [9f725b9bd2e38b6079b23eb265f081bc91d1835f, /tmp/choir-kernel-contract-review-9f725b9b/manifest.tsv, /tmp/agentic-consensus-20260721-213857/manifest.tsv, /tmp/agentic-consensus-20260721-213857/codex.out, /tmp/agentic-consensus-20260721-213857/omp-gpt55.out]
-  blocker_or_risk: "Runtime candidate review 02 returned REPAIR from both completed substantive reviewers. The candidate still permits raw history deletion/writes, terminal refusal reopening, split update identities, non-transactional snapshots, unconditional settlement, an over-authoritative public DTO, incomplete attested identity, and possible self-development capability injection."
-  next_action: "Commit this problem receipt before repair code. Then close raw writer/delete/update paths for lifecycle-bound objects, enforce terminality and subject-ref/head CAS invariants, remove automatic settlement, add a transactional read snapshot, narrow the public DTO, implement platform/CI-attested least-disclosure identity, hard-disable self-development capability, and rerun the frozen candidate gate."
+  evidence_refs: [9f725b9bd2e38b6079b23eb265f081bc91d1835f, /tmp/choir-kernel-contract-review-9f725b9b/manifest.tsv, /tmp/agentic-consensus-20260721-213857/manifest.tsv, /tmp/agentic-consensus-20260721-213857/codex.out, /tmp/agentic-consensus-20260721-213857/omp-gpt55.out, /tmp/agentic-consensus-20260721-215959/manifest.tsv, /tmp/agentic-consensus-20260721-215959/codex.out, /tmp/agentic-consensus-20260721-215959/cursor.out, /tmp/agentic-consensus-20260721-215959/opencode.out, /tmp/agentic-consensus-20260721-215959/omp-gemini35.out, /tmp/agentic-consensus-20260721-215959/devin.out]
+  blocker_or_risk: "Candidate review 02 remains binding. The six-model external live panel produced five substantive COURSE_CORRECTION verdicts and one empty output; its reproducible findings are adjudicated above. Current code is mutable and must not land until every blocker is repaired and a new frozen panel accepts."
+  next_action: "Close lifecycle bindings, legacy semantic writers, assignment/restart scope, and reducer-owned archival first; then implement a transactional snapshot and platform/CI/vmctl-attested identity join. Run focused smoke/restart/refusal proof, freeze the complete diff, and rerun the independent candidate gate."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
@@ -349,8 +349,8 @@ receipts:
     registry_conformance_ref: "origin/main@c972ce1b6ab4bf4c1d03e7590773082c92c4e9dc; one working mission entrypoint; one active_product_mission; live doccheck passed"
 
 view:
-  path: none
-  generator: "node skills/definition/scripts/dashboard.mjs docs/definitions/choir-coherent-computer-convergence-2026-07-21.md --output /tmp/choir-convergence-definition.html"
+  path: http://127.0.0.1:8788/
+  generator: "node skills/definition/scripts/dashboard.mjs docs/definitions/choir-coherent-computer-convergence-2026-07-21.md --serve 127.0.0.1:8788 --watch --output /tmp/choir-convergence-definition.html"
 ---
 
 # Converge Choir on One Durable Agentic Computer
