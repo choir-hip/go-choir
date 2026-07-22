@@ -414,47 +414,45 @@ func (rt *Handler) requestPersistentSuperExecution(ctx context.Context, ownerID,
 	requesterAgentID = strings.TrimSpace(requesterAgentID)
 	requesterRunID = strings.TrimSpace(requesterRunID)
 
-	if existing, ok, err := rt.findExistingSuperExecutionRequest(ctx, ownerID, channelID, superAgent.AgentID, requesterRunID, requesterAgentID); err != nil {
-		return nil, err
-	} else if ok {
-		superRun, err := rt.Core.ReconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
-		if err != nil {
-			return nil, err
-		}
-		loopID := ""
-		state := ""
-		if superRun != nil {
-			loopID = superRun.RunID
-			state = string(superRun.State)
-		}
-		return map[string]any{
-			"agent_id":            superAgent.AgentID,
-			"loop_id":             loopID,
-			"channel_id":          channelID,
-			"cursor":              existing.Seq,
-			"profile":             superAgent.Profile,
-			"role":                superAgent.Role,
-			"requested_by":        requesterAgentID,
-			"requested_by_run_id": requesterRunID,
-			"persistent":          true,
-			"state":               state,
-			"request_source":      "update_coagent",
-			"deduped":             true,
-			"dedupe_reason":       "texture_run_already_requested_super",
-		}, nil
-	}
 	now := time.Now().UTC()
-	trajectoryID := ""
+	trajectoryID, computerID := "", ""
 	if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil {
 		trajectoryID = trajectoryIDForRun(runRec)
+		computerID = strings.TrimSpace(runRec.SandboxID)
+	}
+	updateID := uuid.NewString()
+	workItemID := ""
+	if trajectoryID != "" {
+		stableRequestKey := strings.Join([]string{trajectoryID, requesterAgentID, superAgent.AgentID, objective}, "\x00")
+		stableDigest := objectgraph.SHA256([]byte(stableRequestKey))
+		updateID = "super-request:" + stableDigest
+		workItemID = "super-work:" + stableDigest
+		open := types.OpenLifecycleWorkRequest{
+			OwnerID: ownerID, ComputerID: computerID,
+			CommandID: "lifecycle-open:" + workItemID, TrajectoryID: trajectoryID,
+			WorkItem: types.WorkItemRecord{
+				WorkItemID: workItemID, OwnerID: ownerID, ComputerID: computerID,
+				TrajectoryID: trajectoryID, Objective: objective,
+				AuthorityProfile: agentprofile.Super, AssignedAgentID: superAgent.AgentID,
+			},
+		}
+		open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
+		if _, err := rt.Store.OpenLifecycleWork(ctx, open); err != nil {
+			return nil, fmt.Errorf("open durable Super obligation: %w", err)
+		}
+	}
+	actionInputs := map[string]any{"work_item_id": workItemID}
+	if trajectoryID == "" {
+		actionInputs["requested_by_run_id"] = requesterRunID
 	}
 	update := types.CoagentSourcePacket{
-		UpdateID:      uuid.NewString(),
+		UpdateID:      updateID,
 		OwnerID:       ownerID,
 		AgentID:       requesterAgentID,
 		TargetAgentID: superAgent.AgentID,
 		ChannelID:     channelID,
 		TrajectoryID:  trajectoryID,
+		WorkItemID:    workItemID,
 		Role:          agentprofile.Texture,
 		Packet: types.CoagentSourcePacketPayload{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
@@ -463,7 +461,7 @@ func (rt *Handler) requestPersistentSuperExecution(ctx context.Context, ownerID,
 			Actions: []types.CoagentPacketAction{{
 				Type:      "request_super_execution",
 				Objective: objective,
-				Inputs:    map[string]any{"requested_by_run_id": requesterRunID},
+				Inputs:    actionInputs,
 				Safety: types.CoagentPacketActionSafety{
 					MutationClass: "red",
 					Network:       "allowed",
@@ -510,6 +508,7 @@ func (rt *Handler) requestPersistentSuperExecution(ctx context.Context, ownerID,
 		"channel_id":          channelID,
 		"cursor":              stored.MessageSeq,
 		"update_id":           stored.UpdateID,
+		"work_item_id":        workItemID,
 		"profile":             superAgent.Profile,
 		"role":                superAgent.Role,
 		"requested_by":        requesterAgentID,
@@ -733,12 +732,86 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		ParentRevisionID: baseRevisionID,
 		CreatedAt:        now,
 	}
+	if strings.TrimSpace(doc.TrajectoryID) != "" {
+		rev.RevisionID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
+			"choir:texture:lifecycle-revision", doc.TrajectoryID, baseRevisionID, objectgraph.SHA256(materialized.BodyDoc),
+		}, ":"))).String()
+		rev.ComputerID = strings.TrimSpace(doc.ComputerID)
+		rev.TrajectoryID = strings.TrimSpace(doc.TrajectoryID)
+	}
 	graph, err := textureToolSourceGraphWriteSet(rev, materialized, rec)
 	if err != nil {
 		_ = rt.Store.FailAgentMutation(ctx, rec.RunID)
 		return types.Revision{}, fmt.Errorf("build Texture source graph shadow write: %w", err)
 	}
-	if err := rt.Store.CreateRevisionWithSourceGraph(ctx, rev, graph); err != nil {
+	if strings.TrimSpace(doc.TrajectoryID) != "" {
+		workItemID := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id"))
+		if workItemID == "" {
+			_ = rt.Store.FailAgentMutation(ctx, rec.RunID)
+			return types.Revision{}, fmt.Errorf("create Texture revision: lifecycle work identity missing")
+		}
+		agentID := currentTextureAgentID(doc.DocID)
+		producerUpdateID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{"choir:texture:lifecycle-update", doc.TrajectoryID, workItemID, baseRevisionID, objectgraph.SHA256(materialized.BodyDoc)}, ":"))).String()
+		packet := types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "artifact_revision", Summary: "Texture appagent produced a candidate artifact revision",
+		}
+		payloadDigest, digestErr := store.ComputeLifecycleUpdatePayloadDigest(packet, materialized.Content)
+		if digestErr != nil {
+			return types.Revision{}, fmt.Errorf("digest Texture lifecycle update: %w", digestErr)
+		}
+		queue := types.QueueLifecycleUpdateRequest{
+			OwnerID: rec.OwnerID, ComputerID: doc.ComputerID,
+			CommandID:    "texture-lifecycle-queue:" + producerUpdateID,
+			TrajectoryID: doc.TrajectoryID, TargetAgentID: agentID, ProducerAgentID: agentID,
+			ProducerUpdateID: producerUpdateID, UpdateID: producerUpdateID,
+			Packet: packet, Content: materialized.Content, PayloadDigest: payloadDigest,
+		}
+		queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
+		if _, err := rt.Store.QueueLifecycleUpdate(ctx, queue); err != nil {
+			_ = rt.Store.FailAgentMutation(ctx, rec.RunID)
+			return types.Revision{}, fmt.Errorf("queue Texture lifecycle revision: %w", err)
+		}
+		apply := types.ApplyLifecycleUpdateRequest(queue)
+		apply.CommandID = "texture-lifecycle-apply:" + producerUpdateID
+		apply.Disposition, apply.DispositionRef = types.UpdateIncorporated, rev.RevisionID
+		apply.Revision, apply.WorkItemID, apply.WorkResultRef = rev, workItemID, rev.RevisionID
+		apply.CommandDigest = ""
+		apply.CommandDigest, _ = store.ComputeApplyLifecycleUpdateWithSourceGraphDigest(apply, graph)
+		_, err := rt.Store.ApplyLifecycleUpdateWithSourceGraph(ctx, apply, graph)
+		if err != nil {
+			_ = rt.Store.FailAgentMutation(ctx, rec.RunID)
+			return types.Revision{}, fmt.Errorf("apply Texture lifecycle revision: %w", err)
+		}
+		if consumedThroughSeq > 0 {
+			snapshot, snapshotErr := rt.Store.GetLifecycleSnapshot(ctx, rec.OwnerID, doc.ComputerID, doc.TrajectoryID)
+			if snapshotErr != nil {
+				return types.Revision{}, fmt.Errorf("load pending lifecycle updates: %w", snapshotErr)
+			}
+			for _, pending := range snapshot.Updates {
+				if pending.Disposition != types.UpdatePending || pending.MessageSeq <= 0 || pending.MessageSeq > consumedThroughSeq {
+					continue
+				}
+				pendingWorkItemID := strings.TrimSpace(pending.WorkItemID)
+				consume := types.ApplyLifecycleUpdateRequest{
+					OwnerID: rec.OwnerID, ComputerID: doc.ComputerID,
+					CommandID:    "texture-lifecycle-consume:" + pending.UpdateID,
+					TrajectoryID: doc.TrajectoryID, TargetAgentID: pending.TargetAgentID,
+					ProducerAgentID: pending.AgentID, ProducerUpdateID: pending.ProducerUpdateID,
+					UpdateID: pending.UpdateID, MessageSeq: pending.MessageSeq,
+					Packet: pending.Packet, Content: pending.Content, PayloadDigest: pending.PayloadDigest,
+					Disposition: types.UpdateIncorporated, DispositionRef: rev.RevisionID,
+					ReferenceExistingArtifact: true, WorkItemID: pendingWorkItemID,
+					WorkResultRef: rev.RevisionID,
+				}
+				consume.CommandDigest, _ = store.ComputeApplyLifecycleUpdateDigest(consume)
+				_, err = rt.Store.ApplyLifecycleUpdate(ctx, consume)
+				if err != nil {
+					return types.Revision{}, fmt.Errorf("incorporate pending lifecycle update %s: %w", pending.UpdateID, err)
+				}
+			}
+		}
+	} else if err := rt.Store.CreateRevisionWithSourceGraph(ctx, rev, graph); err != nil {
 		_ = rt.Store.FailAgentMutation(ctx, rec.RunID)
 		return types.Revision{}, fmt.Errorf("create Texture revision: %w", err)
 	}

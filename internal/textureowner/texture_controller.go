@@ -27,7 +27,7 @@ func (rt *Handler) scheduleTextureWorkerWake(ownerID, docID, _ string) {
 	if rt.Core == nil || !rt.Core.DispatchActorActive() {
 		return
 	}
-	if err := rt.Core.DispatchActor(context.Background(), textureAgentID, "coagent_result", "", "", ""); err != nil {
+	if err := rt.Core.DispatchActor(context.Background(), ownerID, rt.Core.TextureSandboxID(), textureAgentID, "coagent_result", "", "", ""); err != nil {
 		log.Printf("runtime: schedule texture wake for doc %s: %v", docID, err)
 	}
 }
@@ -35,14 +35,17 @@ func (rt *Handler) scheduleTextureWorkerWake(ownerID, docID, _ string) {
 // Start reconciles durable Texture documents after the generic core has
 // recovered interrupted activations and before the actor mailbox boot sweep.
 func (rt *Handler) Start(ctx context.Context) {
-	docs, err := rt.Store.ListAllDocuments(ctx, 2000)
+	subjects, err := rt.Store.ListLifecycleSubjects(ctx, 2000)
 	if err != nil {
-		log.Printf("runtime: reconcile all texture docs: %v", err)
+		log.Printf("runtime: reconcile lifecycle Texture subjects: %v", err)
 		return
 	}
-	for _, doc := range docs {
-		if _, err := rt.ReconcileAgentWake(ctx, doc.OwnerID, doc.DocID); err != nil {
-			log.Printf("runtime: reconcile doc %s: %v", doc.DocID, err)
+	for _, subject := range subjects {
+		if agentprofile.Canonical(subject.Profile) != agentprofile.Texture {
+			continue
+		}
+		if _, err := rt.ReconcileActorWake(ctx, subject.OwnerID, subject.ComputerID, subject.AgentID); err != nil {
+			log.Printf("runtime: reconcile subject %s/%s/%s: %v", subject.OwnerID, subject.ComputerID, subject.AgentID, err)
 		}
 	}
 }
@@ -50,39 +53,26 @@ func (rt *Handler) Start(ctx context.Context) {
 // ReconcileActorWake resolves a Texture actor from canonical document state,
 // persists its durable identity when first seen, and reconciles its mailbox.
 // This path does not depend on a pre-existing generic agents row.
-func (rt *Handler) ReconcileActorWake(ctx context.Context, agentID string) (*types.RunRecord, error) {
-	agentID = strings.TrimSpace(agentID)
-	if rt == nil || rt.Store == nil || rt.Core == nil || agentID == "" {
-		return nil, fmt.Errorf("resolve Texture actor wake: incomplete owner state")
+func (rt *Handler) ReconcileActorWake(ctx context.Context, ownerID, computerID, agentID string) (*types.RunRecord, error) {
+	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
+	if rt == nil || rt.Store == nil || rt.Core == nil || ownerID == "" || computerID == "" || agentID == "" {
+		return nil, fmt.Errorf("resolve Texture actor wake: incomplete scoped owner state")
 	}
-	docs, err := rt.Store.ListAllDocuments(ctx, 100000)
+	docID := docIDFromTextureAgentID(agentID)
+	if docID == "" {
+		return nil, fmt.Errorf("resolve Texture actor wake: invalid Texture agent id")
+	}
+	doc, err := rt.Store.GetDocument(ctx, docID, ownerID)
 	if err != nil {
-		return nil, fmt.Errorf("resolve Texture actor wake: list documents: %w", err)
+		return nil, fmt.Errorf("resolve Texture actor wake: document not found: %w", err)
 	}
-	for _, doc := range docs {
-		if currentTextureAgentID(doc.DocID) != agentID {
-			continue
-		}
-		if _, err := rt.Store.GetAgent(ctx, agentID); errors.Is(err, store.ErrNotFound) {
-			now := time.Now().UTC()
-			if err := rt.Store.UpsertAgent(ctx, types.AgentRecord{
-				AgentID:   agentID,
-				OwnerID:   doc.OwnerID,
-				SandboxID: rt.Core.TextureSandboxID(),
-				Profile:   agentprofile.Texture,
-				Role:      agentprofile.Texture,
-				ChannelID: doc.DocID,
-				CreatedAt: now,
-				UpdatedAt: now,
-			}); err != nil {
-				return nil, fmt.Errorf("persist Texture actor identity: %w", err)
-			}
-		} else if err != nil {
-			return nil, fmt.Errorf("load Texture actor identity: %w", err)
-		}
-		return rt.ReconcileAgentWake(ctx, doc.OwnerID, doc.DocID)
+	if doc.ComputerID != computerID || strings.TrimSpace(doc.TrajectoryID) == "" {
+		return nil, fmt.Errorf("resolve Texture actor wake: document lifecycle binding conflict")
 	}
-	return nil, fmt.Errorf("resolve Texture actor wake: document not found")
+	if _, err := rt.Store.GetAgentByScope(ctx, ownerID, computerID, agentID); err != nil {
+		return nil, fmt.Errorf("resolve Texture actor wake: durable subject unavailable: %w", err)
+	}
+	return rt.ReconcileAgentWake(ctx, ownerID, doc.DocID)
 }
 
 // ReconcileAgentWake starts or reuses a Texture activation when pending
@@ -96,14 +86,27 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 		return nil, nil
 	}
 	textureAgentID := currentTextureAgentID(docID)
+	doc, err := rt.Store.GetDocument(ctx, docID, ownerID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("load doc for texture wake: %w", err)
+	}
+	if strings.TrimSpace(doc.ComputerID) == "" || strings.TrimSpace(doc.TrajectoryID) == "" {
+		return nil, fmt.Errorf("texture wake requires durable lifecycle document binding")
+	}
+	if _, err := rt.Store.GetAgentByScope(ctx, ownerID, doc.ComputerID, textureAgentID); err != nil {
+		return nil, fmt.Errorf("load durable Texture subject: %w", err)
+	}
 	if _, found, err := rt.Core.TextureActiveRunByAgent(ctx, ownerID, textureAgentID); err != nil {
 		return nil, fmt.Errorf("check resident Texture loop: %w", err)
 	} else if found {
 		return nil, nil
 	}
-	updates, err := rt.Store.ListCoagentMailboxBacklog(ctx, ownerID, textureAgentID, 100)
+	updates, err := rt.Store.ListPendingLifecycleUpdates(ctx, ownerID, doc.ComputerID, textureAgentID, 100)
 	if err != nil {
-		return nil, fmt.Errorf("list pending texture updates: %w", err)
+		return nil, fmt.Errorf("list pending lifecycle Texture updates: %w", err)
 	}
 	if len(updates) == 0 {
 		return nil, nil
@@ -113,13 +116,6 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 		return nil, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("check pending doc mutation: %w", err)
-	}
-	doc, err := rt.Store.GetDocument(ctx, docID, ownerID)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("load doc for texture wake: %w", err)
 	}
 	var scheduledSeq int64
 	for _, update := range updates {

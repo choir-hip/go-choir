@@ -598,6 +598,9 @@ EOF
       CHOIR_VERIFIER_AUTHORITY_SOCKET = "/run/choir-verifier/authority.sock";
       CHOIR_PRIVACY_KEY_FILE = "/mnt/persistent/choir-credentials/privacy-key";
       CHOIR_KERNEL_CAPABILITY_PROBE = "/run/choir/kernel-capabilities.json";
+      CHOIR_GUEST_IMAGE_MANIFEST = guestImageManifest;
+      CHOIR_KERNEL_CONFIG = config.boot.kernelPackages.kernel.configfile;
+      CHOIR_GUEST_SIGNER_SOCKET = "/run/choir-signers/guest-core/signer.sock";
       CHOIR_SELF_DEVELOPMENT_G0_RECEIPT = genesisG0Receipt;
       CHOIR_SELF_DEVELOPMENT_G1_RECEIPT = genesisG1Receipt;
       CHOIR_SELF_DEVELOPMENT_G1_CANDIDATE_REF = genesisCandidateRef;
@@ -687,7 +690,7 @@ EOF
       StandardError = "journal+console";
       EnvironmentFile = [ "-/run/go-choir-sandbox.env" ];
       ReadWritePaths = [ "/mnt/persistent" "/run/choir" "/run/choir-runtime-handoff" ];
-      InaccessiblePaths = [ "/mnt/persistent/choir-signers" "/run/choir-signers" "/run/choir-updater-control" ];
+      InaccessiblePaths = [ "/mnt/persistent/choir-signers" "/run/choir-updater-control" ];
     };
   };
 

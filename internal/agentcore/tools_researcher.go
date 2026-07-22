@@ -53,13 +53,15 @@ func resolveResearcherFindingsTarget(ctx context.Context, rt *Runtime, explicitA
 	}
 	channelID := docID
 	if rt != nil && rt.store != nil {
-		target, err := rt.store.GetAgent(ctx, explicitAgentID)
-		if err != nil && !errors.Is(err, store.ErrNotFound) {
-			return "", "", fmt.Errorf("resolve texture delivery target: %w", err)
-		}
-		if err == nil {
-			if ch := strings.TrimSpace(target.ChannelID); ch != "" {
-				channelID = ch
+		if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil && strings.TrimSpace(runRec.OwnerID) != "" && strings.TrimSpace(runRec.SandboxID) != "" {
+			target, err := rt.store.GetAgentByScope(ctx, runRec.OwnerID, runRec.SandboxID, explicitAgentID)
+			if err != nil && !errors.Is(err, store.ErrNotFound) {
+				return "", "", fmt.Errorf("resolve texture delivery target: %w", err)
+			}
+			if err == nil {
+				if ch := strings.TrimSpace(target.ChannelID); ch != "" {
+					channelID = ch
+				}
 			}
 		}
 	}
@@ -72,7 +74,7 @@ func resolveCoagentFindingsTarget(ctx context.Context, rt *Runtime, explicitAgen
 	if runRec != nil && agentprofile.IsTexture(metadataStringValue(runRec.Metadata, "requested_by_profile")) {
 		requesterAgentID := metadataStringValue(runRec.Metadata, "requested_by_agent_id")
 		if requesterAgentID != "" {
-			target, err := rt.store.GetAgent(ctx, requesterAgentID)
+			target, err := rt.store.GetAgentByScope(ctx, runRec.OwnerID, runRec.SandboxID, requesterAgentID)
 			if err != nil {
 				if errors.Is(err, store.ErrNotFound) && isTextureAgentID(requesterAgentID) {
 					channelID := metadataStringValue(runRec.Metadata, runMetadataChannelID)
@@ -97,7 +99,10 @@ func resolveCoagentFindingsTarget(ctx context.Context, rt *Runtime, explicitAgen
 
 	explicitAgentID = strings.TrimSpace(explicitAgentID)
 	if explicitAgentID != "" {
-		target, err := rt.store.GetAgent(ctx, explicitAgentID)
+		if runRec == nil {
+			return "", "", fmt.Errorf("resolve delivery target lookup: missing scoped run context")
+		}
+		target, err := rt.store.GetAgentByScope(ctx, runRec.OwnerID, runRec.SandboxID, explicitAgentID)
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				if fallbackAgentID, fallbackChannelID := textureDeliveryFallbackFromContext(runRec, explicitAgentID); fallbackAgentID != "" && fallbackChannelID != "" {

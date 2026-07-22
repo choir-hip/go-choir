@@ -491,6 +491,10 @@ func (h *Handler) HandleTextureAcceptMerge(w http.ResponseWriter, r *http.Reques
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
+	if strings.TrimSpace(doc.TrajectoryID) != "" {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle-authored documents cannot merge outside the durable lifecycle"})
+		return
+	}
 	if err := h.canonicalizeAliasedTextureDocumentTitle(r.Context(), ownerID, &doc, time.Now().UTC()); err != nil {
 		log.Printf("texture api: canonicalize merge document title: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to canonicalize document title"})

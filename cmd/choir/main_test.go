@@ -235,6 +235,29 @@ func TestTrajectoriesHitsAPI(t *testing.T) {
 	}
 }
 
+func TestLifecycleEventsUsesDurableCursor(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/trajectories/trajectory-one/events" {
+			t.Errorf("request = %s %s, want lifecycle event page", r.Method, r.URL.EscapedPath())
+		}
+		if r.URL.Query().Get("after") != "7" || r.URL.Query().Get("limit") != "25" {
+			t.Errorf("query = %q", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"schema":"choir.durable_work.v1","events":[],"next_cursor":7,"watermark":9}`)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"lifecycle", "events", "--host=" + stub.URL, "--after=7", "--limit=25", "trajectory-one"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), `"watermark": 9`) {
+		t.Fatalf("stdout = %s", out.String())
+	}
+}
+
 // TestTrajectoriesDecodesObjectSettlementRule asserts the trajectories
 // command handles settlement_rule as the JSON object the API actually
 // returns (e.g. {"require_no_open_work_items":true}), not a string.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,6 +49,43 @@ func (p *startupBlockingProvider) Execute(ctx context.Context, task *types.RunRe
 
 func (p *startupBlockingProvider) ProviderName() string { return "startup-blocking" }
 
+func seedDurableTextureUpdate(t *testing.T, s *store.Store, ctx context.Context, computerID, ownerID, docID, updateID, content string) types.QueueLifecycleUpdateRequest {
+	t.Helper()
+	agentID := "texture:" + docID
+	now := time.Now().UTC()
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "start:" + docID, TrajectoryID: "trajectory:" + docID,
+		Kind:            types.TrajectoryKindDocument,
+		SettlementRule:  types.SettlementRule{RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID},
+		InitialWork:     types.WorkItemRecord{WorkItemID: "work:" + docID, Objective: "incorporate durable update", AssignedAgentID: agentID},
+		InitialDocument: types.Document{DocID: docID, Title: "Durable Texture target"},
+		InitialRevision: types.Revision{
+			RevisionID: "revision:" + docID, AuthorKind: types.AuthorUser, AuthorLabel: "user", Content: "Initial durable content",
+		},
+		Agent: types.AgentRecord{
+			AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+			Profile: "texture", Role: "texture", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
+		},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start durable lifecycle: %v", err)
+	}
+	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: content}
+	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+	queue := types.QueueLifecycleUpdateRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "queue:" + updateID, TrajectoryID: start.TrajectoryID,
+		TargetAgentID: agentID, ProducerAgentID: "researcher:" + docID, ProducerUpdateID: updateID, UpdateID: updateID,
+		ChannelID: docID, Role: "researcher", Packet: packet, Content: content, PayloadDigest: payloadDigest,
+	}
+	queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
+	if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
+		t.Fatalf("queue durable lifecycle update: %v", err)
+	}
+	return queue
+}
+
 func newAdapterTestEnv(t *testing.T) *adapterTestEnv {
 	t.Helper()
 	dir := t.TempDir()
@@ -76,7 +114,9 @@ func newAdapterTestEnv(t *testing.T) *adapterTestEnv {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	adapter.Start(ctx)
+	if err := adapter.Start(ctx); err != nil {
+		t.Fatalf("start adapter: %v", err)
+	}
 
 	return &adapterTestEnv{t: t, adapter: adapter, store: s, ctx: ctx, cancel: cancel}
 }
@@ -114,65 +154,25 @@ func TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery(t *testin
 		docID   = "doc-startup-recovery"
 		agentID = "texture:" + docID
 	)
-	now := time.Now().UTC()
-	if err := s.CreateDocument(ctx, types.Document{
-		DocID: docID, OwnerID: ownerID, Title: "Startup target", CreatedAt: now, UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("create document: %v", err)
-	}
-	if err := s.CreateRevision(ctx, types.Revision{
-		RevisionID:  "rev-startup-recovery",
-		DocID:       docID,
-		OwnerID:     ownerID,
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "user",
-		Content:     "Durable startup content",
-		CreatedAt:   now,
-	}); err != nil {
-		t.Fatalf("create revision: %v", err)
-	}
-	update := types.CoagentSourcePacket{
-		UpdateID:      "update-startup-recovery",
-		OwnerID:       ownerID,
-		AgentID:       "researcher:startup-recovery",
-		TargetAgentID: agentID,
-		ChannelID:     docID,
-		Role:          "researcher",
-		Packet: types.CoagentSourcePacketPayload{
-			SchemaVersion: types.CoagentSourcePacketSchemaV1,
-			Kind:          "evidence_update",
-			Summary:       "durable startup finding",
-		},
-		Content:   "Durable startup finding",
-		CreatedAt: now.Add(time.Millisecond),
-	}
-	message := types.ChannelMessage{
-		ChannelID:   docID,
-		FromAgentID: update.AgentID,
-		ToAgentID:   agentID,
-		Role:        update.Role,
-		Content:     update.Content,
-		Timestamp:   update.CreatedAt,
-	}
-	if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
-		t.Fatalf("dispatch durable startup update: %v", err)
-	}
-	if _, err := s.GetAgent(ctx, agentID); err == nil {
-		t.Fatal("fixture unexpectedly has a Texture agent identity before startup")
+	seedDurableTextureUpdate(t, s, ctx, "sandbox-startup", ownerID, docID, "update-startup-recovery", "Durable startup finding")
+	if runs, err := s.ListRunsByOwner(ctx, ownerID, 20); err != nil || len(runs) != 0 {
+		t.Fatalf("fixture unexpectedly has an activation before startup: %+v, %v", runs, err)
 	}
 
 	owner := textureowner.NewHandler(adapter.Runtime)
 	if err := adapter.BindTextureOwner(owner); err != nil {
 		t.Fatalf("bind Texture owner: %v", err)
 	}
-	adapter.Start(ctx)
+	if err := adapter.Start(ctx); err != nil {
+		t.Fatalf("start adapter: %v", err)
+	}
 	select {
 	case <-blocking.started:
 	case <-time.After(5 * time.Second):
 		t.Fatal("Texture activation did not start after owner recovery")
 	}
 
-	agent, err := s.GetAgent(ctx, agentID)
+	agent, err := s.GetAgentByScope(ctx, ownerID, "sandbox-startup", agentID)
 	if err != nil {
 		t.Fatalf("load recovered Texture identity: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestHandlerColdStartCoagentResult(t *testing.T) {
 
 	// Send a coagent_result with nil memory — simulates cold start.
 	handler := newActorHandler(env.adapter.Runtime, nil)
-	u := actorUpdate("coagent_result", agentID, "coagent-result-content")
+	u := actorUpdate("user-cold-start", "coagent_result", agentID, "coagent-result-content")
 	memory, err := handler.HandleUpdate(env.ctx, agentID, u, nil)
 	if err != nil {
 		t.Fatalf("HandleUpdate cold start: %v", err)
@@ -309,7 +309,7 @@ func TestHandlerColdStartCoagentResult(t *testing.T) {
 
 func TestTextureColdWakeRoutesToConcreteOwner(t *testing.T) {
 	env := newAdapterTestEnv(t)
-	env.adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string) error {
+	env.adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
 		return nil
 	})
 
@@ -318,59 +318,17 @@ func TestTextureColdWakeRoutesToConcreteOwner(t *testing.T) {
 		docID   = "doc-texture-wake"
 		agentID = "texture:" + docID
 	)
-	now := time.Now().UTC()
-	if err := env.store.CreateDocument(env.ctx, types.Document{
-		DocID: docID, OwnerID: ownerID, Title: "Wake target", CreatedAt: now, UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("create Texture document: %v", err)
-	}
-	if err := env.store.CreateRevision(env.ctx, types.Revision{
-		RevisionID:  "rev-texture-wake",
-		DocID:       docID,
-		OwnerID:     ownerID,
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "user",
-		Content:     "Initial Texture content",
-		CreatedAt:   now,
-	}); err != nil {
-		t.Fatalf("create Texture revision: %v", err)
-	}
-	update := types.CoagentSourcePacket{
-		UpdateID:      "update-texture-wake",
-		OwnerID:       ownerID,
-		AgentID:       "researcher:texture-wake",
-		TargetAgentID: agentID,
-		ChannelID:     docID,
-		Role:          "researcher",
-		Packet: types.CoagentSourcePacketPayload{
-			SchemaVersion: types.CoagentSourcePacketSchemaV1,
-			Kind:          "evidence_update",
-			Summary:       "durable Texture wake",
-		},
-		Content:   "Durable Texture wake",
-		CreatedAt: now,
-	}
-	message := types.ChannelMessage{
-		ChannelID:   docID,
-		FromAgentID: update.AgentID,
-		ToAgentID:   agentID,
-		Role:        update.Role,
-		Content:     update.Content,
-		Timestamp:   now,
-	}
-	if _, _, err := env.store.DispatchWorkerUpdate(env.ctx, update, &message); err != nil {
-		t.Fatalf("dispatch Texture update: %v", err)
-	}
+	update := seedDurableTextureUpdate(t, env.store, env.ctx, "sandbox-test", ownerID, docID, "update-texture-wake", "Durable Texture wake")
 
 	handler := newActorHandler(env.adapter.Runtime, textureowner.NewHandler(env.adapter.Runtime))
-	memory, err := handler.HandleUpdate(env.ctx, agentID, actorUpdate("coagent_result", agentID, update.Content), nil)
+	memory, err := handler.HandleUpdate(env.ctx, agentID, actorUpdate(ownerID, "coagent_result", agentID, update.Content), nil)
 	if err != nil {
 		t.Fatalf("route Texture coagent_result: %v", err)
 	}
 	if memory != nil {
 		t.Fatalf("cold Texture wake memory = %v, want nil", memory)
 	}
-	agent, err := env.store.GetAgent(env.ctx, agentID)
+	agent, err := env.store.GetAgentByScope(env.ctx, ownerID, "sandbox-test", agentID)
 	if err != nil {
 		t.Fatalf("load first-wake Texture identity: %v", err)
 	}
@@ -392,7 +350,7 @@ func TestTextureColdWakeRoutesToConcreteOwner(t *testing.T) {
 func TestTextureColdWakeFailsClosedWithoutOwner(t *testing.T) {
 	env := newAdapterTestEnv(t)
 	_, err := newActorHandler(env.adapter.Runtime, nil).reconcileCoagentWake(
-		env.ctx, "texture:doc-texture-wake",
+		env.ctx, actor.Update{ToAgentID: scopedActorMailboxID("owner-texture", "sandbox-test", "texture:doc-texture-wake")},
 	)
 	if err == nil || err.Error() != "Texture owner is not bound" {
 		t.Fatalf("Texture wake error = %v, want explicit unbound-owner failure", err)
@@ -400,17 +358,18 @@ func TestTextureColdWakeFailsClosedWithoutOwner(t *testing.T) {
 }
 
 // TestHandlerCancelPassivatedRun tests that a cancel message for a passivated
-// run transitions it to RunFailed.
+// run projects canonical RunCancelled state.
 func TestHandlerCancelPassivatedRun(t *testing.T) {
 	env := newAdapterTestEnv(t)
 
 	// Create a run and manually set it to RunPassivated.
 	rec := types.RunRecord{
-		RunID:   "run-cancel-test",
-		OwnerID: "user-cancel",
-		AgentID: "agent-cancel-test",
-		Prompt:  "test cancel",
-		State:   types.RunPassivated,
+		RunID:     "run-cancel-test",
+		OwnerID:   "user-cancel",
+		AgentID:   "agent-cancel-test",
+		SandboxID: "sandbox-test",
+		Prompt:    "test cancel",
+		State:     types.RunPassivated,
 	}
 	if err := env.store.CreateRun(env.ctx, rec); err != nil {
 		t.Fatalf("CreateRun: %v", err)
@@ -421,19 +380,19 @@ func TestHandlerCancelPassivatedRun(t *testing.T) {
 
 	// Send cancel.
 	handler := newActorHandler(env.adapter.Runtime, nil)
-	u := actorUpdate("cancel", "agent-cancel-test", "")
+	u := actorUpdate(rec.OwnerID, "cancel", "agent-cancel-test", "")
 	_, err := handler.HandleUpdate(env.ctx, "agent-cancel-test", u, mem)
 	if err != nil {
 		t.Fatalf("HandleUpdate cancel: %v", err)
 	}
 
-	// Verify the run was cancelled (state = RunFailed).
+	// Verify the run was cancelled without impersonating execution failure.
 	updated, err := env.store.GetRun(env.ctx, rec.RunID)
 	if err != nil {
 		t.Fatalf("GetRun: %v", err)
 	}
-	if updated.State != types.RunFailed {
-		t.Errorf("run state = %s, want RunFailed (cancelled)", updated.State)
+	if updated.State != types.RunCancelled {
+		t.Errorf("run state = %s, want RunCancelled", updated.State)
 	}
 	if updated.Error == "" {
 		t.Error("run error is empty, want cancel message")
@@ -447,7 +406,7 @@ func TestHandlerCancelMissingRun(t *testing.T) {
 
 	mem, _ := json.Marshal(resumeState{RunID: "nonexistent-run", Phase: "parked"})
 	handler := newActorHandler(env.adapter.Runtime, nil)
-	u := actorUpdate("cancel", "agent-missing", "")
+	u := actorUpdate("owner-missing", "cancel", "agent-missing", "")
 	_, err := handler.HandleUpdate(env.ctx, "agent-missing", u, mem)
 	if err != nil {
 		t.Errorf("HandleUpdate cancel missing run: error = %v, want nil (no-op)", err)
@@ -473,12 +432,13 @@ func TestHandlerCoagentResultForCompletedRun(t *testing.T) {
 
 	// Create a completed run.
 	rec := types.RunRecord{
-		RunID:   "run-completed-test",
-		OwnerID: ownerID,
-		AgentID: agentID,
-		Prompt:  "test completed",
-		State:   types.RunCompleted,
-		Result:  "done",
+		RunID:     "run-completed-test",
+		OwnerID:   ownerID,
+		AgentID:   agentID,
+		SandboxID: "sandbox-test",
+		Prompt:    "test completed",
+		State:     types.RunCompleted,
+		Result:    "done",
 	}
 	now := time.Now().UTC()
 	rec.FinishedAt = &now
@@ -489,7 +449,7 @@ func TestHandlerCoagentResultForCompletedRun(t *testing.T) {
 	// Send coagent_result with memory pointing to the completed run.
 	mem, _ := json.Marshal(resumeState{RunID: rec.RunID, Phase: "parked"})
 	handler := newActorHandler(env.adapter.Runtime, nil)
-	u := actorUpdate("coagent_result", agentID, "new-result")
+	u := actorUpdate(ownerID, "coagent_result", agentID, "new-result")
 	_, err = handler.HandleUpdate(env.ctx, agentID, u, mem)
 	if err != nil {
 		t.Fatalf("HandleUpdate coagent_result for completed run: %v", err)
@@ -522,12 +482,13 @@ func TestHandlerCoagentResultForBlockedRun(t *testing.T) {
 
 	// Create a blocked run.
 	rec := types.RunRecord{
-		RunID:   "run-blocked-test",
-		OwnerID: ownerID,
-		AgentID: agentID,
-		Prompt:  "test blocked",
-		State:   types.RunBlocked,
-		Error:   "provider rate limit",
+		RunID:     "run-blocked-test",
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		AgentID:   agentID,
+		Prompt:    "test blocked",
+		State:     types.RunBlocked,
+		Error:     "provider rate limit",
 	}
 	if err := env.store.CreateRun(env.ctx, rec); err != nil {
 		t.Fatalf("CreateRun: %v", err)
@@ -536,7 +497,7 @@ func TestHandlerCoagentResultForBlockedRun(t *testing.T) {
 	// Send coagent_result with memory pointing to the blocked run.
 	mem, _ := json.Marshal(resumeState{RunID: rec.RunID, Phase: "parked"})
 	handler := newActorHandler(env.adapter.Runtime, nil)
-	u := actorUpdate("coagent_result", agentID, "unblocking-result")
+	u := actorUpdate(ownerID, "coagent_result", agentID, "unblocking-result")
 	resultMem, err := handler.HandleUpdate(env.ctx, agentID, u, mem)
 	if err != nil {
 		t.Fatalf("HandleUpdate coagent_result for blocked run: %v", err)
@@ -568,7 +529,7 @@ func TestHandlerUnknownUpdateKind(t *testing.T) {
 	env := newAdapterTestEnv(t)
 
 	handler := newActorHandler(env.adapter.Runtime, nil)
-	u := actorUpdate("unknown_kind", "agent-test", "content")
+	u := actorUpdate("owner-unknown", "unknown_kind", "agent-test", "content")
 	existingMem := []byte(`{"run_id":"run-x","phase":"parked"}`)
 	resultMem, err := handler.HandleUpdate(env.ctx, "agent-test", u, existingMem)
 	if err != nil {
@@ -580,11 +541,100 @@ func TestHandlerUnknownUpdateKind(t *testing.T) {
 	}
 }
 
+func TestScopedActorMailboxDoesNotCrossOwner(t *testing.T) {
+	env := newAdapterTestEnv(t)
+	const agentID = "shared-agent-id"
+	for _, ownerID := range []string{"owner-scope-a", "owner-scope-b"} {
+		if err := env.store.UpsertAgent(env.ctx, types.AgentRecord{
+			AgentID: agentID, OwnerID: ownerID, ComputerID: "sandbox-test", SandboxID: "sandbox-test",
+			Profile: "researcher", Role: "researcher", ChannelID: "channel-" + ownerID,
+		}); err != nil {
+			t.Fatalf("upsert scoped agent %s: %v", ownerID, err)
+		}
+	}
+	handler := newActorHandler(env.adapter.Runtime, nil)
+	update := actorUpdate("owner-scope-a", "coagent_result", agentID, "scoped wake")
+	now := time.Now().UTC()
+	packet := types.CoagentSourcePacket{
+		UpdateID: "scoped-update-a", OwnerID: "owner-scope-a", ComputerID: "sandbox-test",
+		AgentID: "producer-a", TargetAgentID: agentID, ChannelID: "channel-owner-scope-a", Role: "researcher",
+		Packet:  types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "scoped update"},
+		Content: "scoped wake", CreatedAt: now,
+	}
+	message := types.ChannelMessage{
+		ChannelID: packet.ChannelID, FromAgentID: packet.AgentID, ToAgentID: agentID,
+		Role: packet.Role, Content: packet.Content, Timestamp: now,
+	}
+	if _, _, err := env.store.DispatchWorkerUpdate(env.ctx, packet, &message); err != nil {
+		t.Fatalf("dispatch scoped update: %v", err)
+	}
+	if _, err := handler.HandleUpdate(env.ctx, update.ToAgentID, update, nil); err != nil {
+		t.Fatalf("handle scoped wake: %v", err)
+	}
+	ownerARuns, err := env.store.ListRunsByOwner(env.ctx, "owner-scope-a", 20)
+	if err != nil || len(ownerARuns) == 0 {
+		t.Fatalf("owner A wake missing: runs=%+v err=%v", ownerARuns, err)
+	}
+	ownerBRuns, err := env.store.ListRunsByOwner(env.ctx, "owner-scope-b", 20)
+	if err != nil {
+		t.Fatalf("list owner B runs: %v", err)
+	}
+	if len(ownerBRuns) != 0 {
+		t.Fatalf("owner A wake crossed into owner B: %+v", ownerBRuns)
+	}
+}
+
+func TestInitialDispatchCannotLoadAnotherOwnersRun(t *testing.T) {
+	env := newAdapterTestEnv(t)
+	now := time.Now().UTC()
+	rec := types.RunRecord{
+		RunID: "run-owner-b", OwnerID: "owner-scope-b", SandboxID: "sandbox-test",
+		AgentID: "agent-owner-b", State: types.RunPending, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := env.store.CreateRun(env.ctx, rec); err != nil {
+		t.Fatalf("create owner B run: %v", err)
+	}
+	handler := newActorHandler(env.adapter.Runtime, nil)
+	update := actorUpdate("owner-scope-a", "initial_dispatch", rec.AgentID, rec.RunID)
+	if _, err := handler.HandleUpdate(env.ctx, update.ToAgentID, update, nil); err == nil {
+		t.Fatal("cross-owner initial dispatch succeeded")
+	}
+	stored, err := env.store.GetRunByOwner(env.ctx, rec.OwnerID, rec.RunID)
+	if err != nil || stored.State != types.RunPending {
+		t.Fatalf("cross-owner dispatch changed run: %+v, %v", stored, err)
+	}
+}
+
+func TestAdapterStartRefusesLegacyUnscopedMailbox(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "legacy-mailbox.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	cfg := provideriface.Config{SandboxID: "sandbox-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
+	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
+	t.Cleanup(func() {
+		adapter.Stop()
+		adapter.cleanupLog()
+		_ = s.Close()
+	})
+	if appended, err := adapter.log.Append(ctx, actor.Update{
+		UpdateID: "legacy-update", ToAgentID: "legacy-unscoped-agent", Kind: "coagent_result", CreatedAt: time.Now().UTC(),
+	}); err != nil || !appended {
+		t.Fatalf("append legacy mailbox: appended=%v err=%v", appended, err)
+	}
+	if err := adapter.Start(ctx); err == nil || !strings.Contains(err.Error(), "unsupported legacy durable mailbox") {
+		t.Fatalf("startup error = %v, want explicit legacy mailbox refusal", err)
+	}
+}
+
 // actorUpdate creates an actor.Update for testing.
-func actorUpdate(kind, toAgentID, content string) actor.Update {
+func actorUpdate(ownerID, kind, toAgentID, content string) actor.Update {
 	return actor.Update{
 		UpdateID:  "test-update-id",
-		ToAgentID: toAgentID,
+		ToAgentID: scopedActorMailboxID(ownerID, "sandbox-test", toAgentID),
 		Kind:      kind,
 		Content:   content,
 		CreatedAt: time.Now().UTC(),

@@ -11,7 +11,6 @@ const (
 	RunAcceptanceStagingSmokeLevel RunAcceptanceLevel = "staging-smoke-level"
 	RunAcceptanceExportLevel       RunAcceptanceLevel = "export-level"
 	RunAcceptancePromotionLevel    RunAcceptanceLevel = "promotion-level"
-	RunAcceptanceContinuationLevel RunAcceptanceLevel = "continuation-level"
 )
 
 // RunAcceptanceState is the verifier outcome for the current evidence set.

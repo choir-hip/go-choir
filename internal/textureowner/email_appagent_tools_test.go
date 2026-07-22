@@ -16,6 +16,45 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+func startDurableTextureParent(t *testing.T, rt *agentcore.Runtime, ownerID, docID, prompt string, extra map[string]any) *types.RunRecord {
+	t.Helper()
+	agentID := "texture:" + docID
+	computerID := rt.TextureSandboxID()
+	now := time.Now().UTC()
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "email-start:" + docID, TrajectoryID: "email-trajectory:" + docID,
+		Kind:            types.TrajectoryKindDocument,
+		SettlementRule:  types.SettlementRule{RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID},
+		InitialWork:     types.WorkItemRecord{WorkItemID: "email-work:" + docID, Objective: prompt, AssignedAgentID: agentID},
+		InitialDocument: types.Document{DocID: docID, Title: "Email source"},
+		InitialRevision: types.Revision{
+			RevisionID: "email-revision:" + docID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: prompt,
+		},
+		Agent: types.AgentRecord{
+			AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+			Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now,
+		},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	if _, err := rt.Store().StartLifecycle(context.Background(), start); err != nil {
+		t.Fatalf("start Texture lifecycle: %v", err)
+	}
+	metadata := map[string]any{
+		runMetadataAgentProfile: agentprofile.Texture, runMetadataAgentRole: agentprofile.Texture,
+		runMetadataAgentID: agentID, runMetadataChannelID: docID, "type": "texture_agent_revision",
+		"doc_id": docID, "trajectory_id": start.TrajectoryID,
+	}
+	for key, value := range extra {
+		metadata[key] = value
+	}
+	parent, err := rt.StartRunWithMetadata(context.Background(), prompt, ownerID, metadata)
+	if err != nil {
+		t.Fatalf("create durable Texture parent: %v", err)
+	}
+	return parent
+}
+
 func TestTextureRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 	rt, s := testRuntime(t)
 	textureRegistry := rt.ToolRegistryForProfile(agentprofile.Texture)
@@ -81,18 +120,9 @@ func TestTextureRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) 
 	rt, s = testRuntime(t, maild.URL)
 	textureRegistry = rt.ToolRegistryForProfile(agentprofile.Texture)
 
-	parent, err := rt.StartRunWithMetadata(context.Background(), "write the email artifact", "user-alice", map[string]any{
-		runMetadataAgentProfile: agentprofile.Texture,
-		runMetadataAgentRole:    agentprofile.Texture,
-		runMetadataAgentID:      "texture:doc-email-1",
-		runMetadataChannelID:    "doc-email-1",
-		runMetadataOwnerEmail:   "owner@example.com",
-		"type":                  "texture_agent_revision",
-		"doc_id":                "doc-email-1",
+	parent := startDurableTextureParent(t, rt, "user-alice", "doc-email-1", "write the email artifact", map[string]any{
+		runMetadataOwnerEmail: "owner@example.com",
 	})
-	if err != nil {
-		t.Fatalf("create texture parent: %v", err)
-	}
 
 	raw, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(parent)), "request_email_draft", mustJSON(t, map[string]any{
 		"doc_id":        "doc-email-1",
@@ -129,7 +159,7 @@ func TestTextureRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) 
 		t.Fatalf("approval email endpoint was not called/result missing: %+v", out)
 	}
 
-	agent, err := s.GetAgent(context.Background(), persistentEmailAgentID("user-alice"))
+	agent, err := s.GetAgentByScope(context.Background(), "user-alice", "sandbox-test", persistentEmailAgentID("user-alice"))
 	if err != nil {
 		t.Fatalf("get email agent: %v", err)
 	}
@@ -177,17 +207,7 @@ func TestTextureRequestEmailDraftDropsUnsupportedFromAliasBeforeMaild(t *testing
 	defer maild.Close()
 	rt, _ = testRuntime(t, maild.URL)
 
-	parent, err := rt.StartRunWithMetadata(context.Background(), "write email with malformed alias", "user-alice", map[string]any{
-		runMetadataAgentProfile: agentprofile.Texture,
-		runMetadataAgentRole:    agentprofile.Texture,
-		runMetadataAgentID:      "texture:doc-email-clean-alias",
-		runMetadataChannelID:    "doc-email-clean-alias",
-		"type":                  "texture_agent_revision",
-		"doc_id":                "doc-email-clean-alias",
-	})
-	if err != nil {
-		t.Fatalf("create texture parent: %v", err)
-	}
+	parent := startDurableTextureParent(t, rt, "user-alice", "doc-email-clean-alias", "write email with malformed alias", nil)
 	raw, err := rt.ToolRegistryForProfile(agentprofile.Texture).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(parent)), "request_email_draft", mustJSON(t, map[string]any{
 		"doc_id":              "doc-email-clean-alias",
 		"revision_id":         "rev-email-clean-alias",
@@ -465,18 +485,9 @@ func TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent(t *testing.T) {
 	}))
 	defer maild.Close()
 	rt, s = testRuntime(t, maild.URL)
-	parent, err := rt.StartRunWithMetadata(context.Background(), "write risky email artifact", "user-alice", map[string]any{
-		runMetadataAgentProfile: agentprofile.Texture,
-		runMetadataAgentRole:    agentprofile.Texture,
-		runMetadataAgentID:      "texture:doc-risk",
-		runMetadataChannelID:    "doc-risk",
-		runMetadataOwnerEmail:   "owner@example.com",
-		"type":                  "texture_agent_revision",
-		"doc_id":                "doc-risk",
+	parent := startDurableTextureParent(t, rt, "user-alice", "doc-risk", "write risky email artifact", map[string]any{
+		runMetadataOwnerEmail: "owner@example.com",
 	})
-	if err != nil {
-		t.Fatalf("create texture parent: %v", err)
-	}
 	raw, err := rt.ToolRegistryForProfile(agentprofile.Texture).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(parent)), "request_email_draft", mustJSON(t, map[string]any{
 		"doc_id":              "doc-risk",
 		"revision_id":         "rev-risk",

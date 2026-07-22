@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -72,7 +73,13 @@ func (h *Handler) signReceipt(w http.ResponseWriter, r *http.Request) {
 	var request SignReceiptRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&request) != nil || request.Issuer != "choir-updater" || !allowedGuestReceipt(request.ReceiptKind) || fmt.Sprint(request.KindFields["computer_id"]) != h.computerID {
+	if decoder.Decode(&request) != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "typed guest receipt refused"})
+		return
+	}
+	validIssuer := (request.ReceiptKind == "ExecutionIdentity" && request.Issuer == "choir-sandbox") || (request.ReceiptKind != "ExecutionIdentity" && request.Issuer == "choir-updater")
+	if !validIssuer || !allowedGuestReceipt(request.ReceiptKind) || fmt.Sprint(request.KindFields["computer_id"]) != h.computerID {
+		log.Printf("receipt signer: refused kind=%q issuer=%q computer_id=%q want_computer_id=%q valid_issuer=%v", request.ReceiptKind, request.Issuer, fmt.Sprint(request.KindFields["computer_id"]), h.computerID, validIssuer)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "typed guest receipt refused"})
 		return
 	}
@@ -85,6 +92,7 @@ func (h *Handler) signReceipt(w http.ResponseWriter, r *http.Request) {
 	if err := h.cached("guest-receipts", request, &receipt, func() (any, error) {
 		return computerevent.NewSignedReceipt(request.ReceiptKind, request.Issuer, request.KindFields, []computerevent.SigningKey{h.key}, issuedAt)
 	}); err != nil {
+		log.Printf("receipt signer: cache/sign %s: %v", request.ReceiptKind, err)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "typed guest receipt refused"})
 		return
 	}
@@ -93,7 +101,7 @@ func (h *Handler) signReceipt(w http.ResponseWriter, r *http.Request) {
 
 func allowedGuestReceipt(kind string) bool {
 	switch kind {
-	case "HealthReceipt", "MaterializationReceipt", "UpdaterRecoveryReceipt", "KernelCapabilityReceipt":
+	case "HealthReceipt", "MaterializationReceipt", "UpdaterRecoveryReceipt", "KernelCapabilityReceipt", "ExecutionIdentity":
 		return true
 	default:
 		return false

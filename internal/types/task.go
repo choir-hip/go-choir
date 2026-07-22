@@ -533,14 +533,17 @@ type InboxDelivery struct {
 // Runs are ephemeral executions owned by an agent; channels are the shared
 // coordination surface that can outlive any one run.
 type AgentRecord struct {
-	AgentID   string    `json:"agent_id"`
-	OwnerID   string    `json:"owner_id"`
-	SandboxID string    `json:"sandbox_id"`
-	Profile   string    `json:"profile"`
-	Role      string    `json:"role"`
-	ChannelID string    `json:"channel_id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	AgentID          string    `json:"agent_id"`
+	OwnerID          string    `json:"owner_id"`
+	ComputerID       string    `json:"computer_id"`
+	SandboxID        string    `json:"sandbox_id"`
+	Profile          string    `json:"profile"`
+	Role             string    `json:"role"`
+	ChannelID        string    `json:"channel_id"`
+	LifecycleVersion int64     `json:"lifecycle_version,omitempty"`
+	LastReducerSeq   int64     `json:"last_reducer_seq,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // RuntimeHealthState represents the health state of the runtime.

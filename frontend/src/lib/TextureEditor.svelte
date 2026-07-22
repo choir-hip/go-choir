@@ -32,6 +32,7 @@
     WIRE_PLATFORM_READ_OWNER,
   } from './texture.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
+  import { getLifecycleSnapshot, observeLifecycle } from './lifecycle.js';
   import { previewTextureDocument } from './public-preview-data';
   import TextureCompareMergePanel from './TextureCompareMergePanel.svelte';
   import TexturePublicationResult from './TexturePublicationResult.svelte';
@@ -529,21 +530,62 @@
     streamDocId = '';
   }
 
-  function connectDocumentStream(docId) {
+  async function handleLifecycleProjection(snapshot) {
+    if (!snapshot || snapshot.trajectory?.trajectory_id !== currentDoc?.trajectory_id) return;
+    const nextHead = snapshot.head_revision?.revision_id || '';
+    latestHeadRevisionId = nextHead || latestHeadRevisionId;
+    agentPending = snapshot.activation?.state === 'pending' || snapshot.activation?.state === 'running' || snapshot.activation?.state === 'blocked';
+    agentRunId = snapshot.activation?.run_id || '';
+    if (agentPending) saveStatus = synthStatusLabel();
+    if (nextHead && currentRevision?.revision_id !== nextHead) {
+      await applyHeadChange(nextHead);
+    }
+  }
+
+  async function connectDocumentStream(docId, trajectoryId = '') {
     if (!docId) return;
-    if (streamSource && streamDocId === docId) return;
+    const streamKey = trajectoryId || docId;
+    if (streamSource && streamDocId === streamKey) return;
     closeDocumentStream();
-    streamDocId = docId;
-    streamSource = openDocumentStream(docId, {
-      readOwner: textureReadOwner,
-      onEvent: (event) => {
-        void handleDocumentStreamEvent(event);
-      },
-      onError: () => {
-        // EventSource retries automatically. Each reconnect receives a fresh
-        // snapshot from the server, which re-synchronizes the editor.
-      },
-    });
+    streamDocId = streamKey;
+    if (!trajectoryId) {
+      streamSource = openDocumentStream(docId, {
+        readOwner: textureReadOwner,
+        onEvent: (event) => void handleDocumentStreamEvent(event),
+        onError: () => {},
+      });
+      return;
+    }
+    const expectedKey = streamKey;
+    try {
+      const cleanup = await observeLifecycle(trajectoryId, {
+        onSnapshot: (snapshot) => void handleLifecycleProjection(snapshot),
+        onEvent: async () => {
+          try {
+            await handleLifecycleProjection(await getLifecycleSnapshot(trajectoryId));
+          } catch (streamError) {
+            error = streamError?.message || 'Lifecycle refresh failed';
+          }
+        },
+        onReplayRequired: async () => {
+          try {
+            await handleLifecycleProjection(await getLifecycleSnapshot(trajectoryId));
+          } finally {
+            if (streamDocId === expectedKey) {
+              streamSource = null;
+              void connectDocumentStream(docId, trajectoryId);
+            }
+          }
+        },
+        onError: (streamError) => {
+          error = streamError?.message || 'Lifecycle stream disconnected';
+        },
+      });
+      if (streamDocId !== expectedKey) cleanup();
+      else streamSource = { close: cleanup };
+    } catch (streamError) {
+      if (streamDocId === expectedKey) error = streamError?.message || 'Lifecycle stream unavailable';
+    }
   }
 
   async function refreshRevisions(docId, preferredRevisionId = '') {
@@ -900,7 +942,7 @@
           restoreLocalDraftIfNewer();
         }
         publishCurrentDocumentContext(normalizeTitle(appContext));
-        connectDocumentStream(currentDoc.doc_id);
+        void connectDocumentStream(currentDoc.doc_id, currentDoc.trajectory_id || '');
       }
     } catch (err) {
       if (err instanceof AuthRequiredError) {
@@ -1006,7 +1048,7 @@
       await reloadDocument(revision.revision_id);
       await ensureFileManifest();
       publishCurrentDocumentContext(title);
-      connectDocumentStream(currentDoc.doc_id);
+      void connectDocumentStream(currentDoc.doc_id, currentDoc.trajectory_id || '');
       saveStatus = auto ? 'Private version ready' : 'Private version created';
     } catch (err) {
       if (err instanceof AuthRequiredError) {
@@ -1056,7 +1098,7 @@
       saveStatus = 'Blank document ready';
       await ensureFileManifest();
       publishCurrentDocumentContext('Untitled Texture');
-      connectDocumentStream(currentDoc.doc_id);
+      void connectDocumentStream(currentDoc.doc_id, currentDoc.trajectory_id || '');
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');

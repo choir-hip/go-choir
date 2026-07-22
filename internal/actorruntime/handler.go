@@ -71,7 +71,7 @@ func (h *actorHandler) handleInitialDispatch(ctx context.Context, u actor.Update
 	if runID == "" {
 		return nil, fmt.Errorf("actorruntime: initial_dispatch update has empty content (run ID)")
 	}
-	rec, err := h.rt.Store().GetRun(ctx, runID)
+	rec, err := h.scopedRunForUpdate(ctx, u, runID)
 	if err != nil {
 		return nil, fmt.Errorf("actorruntime: load run %s for initial dispatch: %w", runID, err)
 	}
@@ -100,14 +100,14 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		// mailbox. Create a new run via the reconcile logic, which
 		// calls rt.activate(rec) → sends an initial_dispatch actor
 		// message. The actor loop will process it next.
-		if _, err := h.reconcileCoagentWake(ctx, u.ToAgentID); err != nil {
+		if _, err := h.reconcileCoagentWake(ctx, u); err != nil {
 			return nil, fmt.Errorf("actorruntime: reconcile coagent wake: %w", err)
 		}
 		// Return nil memory — the new run will be started by the
 		// initial_dispatch message, not by this handler call.
 		return nil, nil
 	}
-	rec, err := h.rt.Store().GetRun(ctx, rs.RunID)
+	rec, err := h.scopedRunForUpdate(ctx, u, rs.RunID)
 	if err != nil {
 		return nil, fmt.Errorf("actorruntime: load parked run %s: %w", rs.RunID, err)
 	}
@@ -153,14 +153,17 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 
 	// Run is terminal (completed/failed/cancelled) — create a new run
 	// for the coagent update via the reconcile path.
-	if _, err := h.reconcileCoagentWake(ctx, u.ToAgentID); err != nil {
+	if _, err := h.reconcileCoagentWake(ctx, u); err != nil {
 		return nil, fmt.Errorf("actorruntime: reconcile coagent wake: %w", err)
 	}
 	return nil, nil
 }
 
-func (h *actorHandler) reconcileCoagentWake(ctx context.Context, agentID string) (*types.RunRecord, error) {
-	agentID = strings.TrimSpace(agentID)
+func (h *actorHandler) reconcileCoagentWake(ctx context.Context, update actor.Update) (*types.RunRecord, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(update.ToAgentID)
+	if err != nil {
+		return nil, err
+	}
 	prefix := agentprofile.Texture + ":"
 	if strings.HasPrefix(agentID, prefix) {
 		if h.textureOwner == nil {
@@ -169,11 +172,10 @@ func (h *actorHandler) reconcileCoagentWake(ctx context.Context, agentID string)
 		if strings.TrimSpace(strings.TrimPrefix(agentID, prefix)) == "" {
 			return nil, fmt.Errorf("Texture agent id has no document id")
 		}
-		return h.textureOwner.ReconcileActorWake(ctx, agentID)
+		return h.textureOwner.ReconcileActorWake(ctx, ownerID, computerID, agentID)
 	}
-	ownerID, err := h.ownerForAgent(ctx, agentID)
-	if err != nil {
-		return nil, fmt.Errorf("lookup owner for coagent_result: %w", err)
+	if _, err := h.rt.Store().GetAgentByScope(ctx, ownerID, computerID, agentID); err != nil {
+		return nil, fmt.Errorf("lookup scoped agent for coagent_result: %w", err)
 	}
 	return h.rt.ReconcileCoagentWake(ctx, ownerID, agentID)
 }
@@ -187,13 +189,13 @@ func (h *actorHandler) handleCancel(ctx context.Context, u actor.Update, memory 
 	if rs.RunID == "" {
 		return nil, nil
 	}
-	rec, err := h.rt.Store().GetRun(ctx, rs.RunID)
+	rec, err := h.scopedRunForUpdate(ctx, u, rs.RunID)
 	if err != nil {
 		return nil, nil // run gone — nothing to cancel
 	}
-	if rec.State == types.RunPassivated || rec.State == types.RunPending {
-		rec.State = types.RunFailed
-		rec.Error = "cancelled by actor cancel message"
+	if rec.State == types.RunPassivated || rec.State == types.RunPending || rec.State == types.RunRunning || rec.State == types.RunBlocked {
+		rec.State = types.RunCancelled
+		rec.Error = "cancelled by durable trajectory"
 		now := time.Now().UTC()
 		rec.UpdatedAt = now
 		rec.FinishedAt = &now
@@ -229,14 +231,31 @@ func decodeResumeState(memory []byte) (resumeState, error) {
 	return rs, nil
 }
 
-// ownerForAgent looks up the owner ID for an agent by loading the agent
-// record from the store.
-func (h *actorHandler) ownerForAgent(ctx context.Context, agentID string) (string, error) {
-	agent, err := h.rt.Store().GetAgent(ctx, agentID)
+func (h *actorHandler) scopedRunForUpdate(ctx context.Context, update actor.Update, runID string) (types.RunRecord, error) {
+	ownerID, computerID, _, err := parseScopedActorMailboxID(update.ToAgentID)
 	if err != nil {
-		return "", fmt.Errorf("lookup agent %s: %w", agentID, err)
+		return types.RunRecord{}, err
 	}
-	return agent.OwnerID, nil
+	rec, err := h.rt.Store().GetRunByOwner(ctx, ownerID, strings.TrimSpace(runID))
+	if err != nil {
+		return types.RunRecord{}, err
+	}
+	if strings.TrimSpace(rec.SandboxID) != computerID {
+		return types.RunRecord{}, fmt.Errorf("actorruntime: run computer identity mismatch")
+	}
+	return rec, nil
+}
+
+func scopedActorMailboxID(ownerID, computerID, agentID string) string {
+	return strings.TrimSpace(ownerID) + "\x00" + strings.TrimSpace(computerID) + "\x00" + strings.TrimSpace(agentID)
+}
+
+func parseScopedActorMailboxID(mailboxID string) (string, string, string, error) {
+	parts := strings.Split(strings.TrimSpace(mailboxID), "\x00")
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		return "", "", "", fmt.Errorf("actorruntime: malformed scoped actor mailbox id")
+	}
+	return parts[0], parts[1], parts[2], nil
 }
 
 // Compile-time assertion that actorHandler implements actor.Handler.

@@ -3,8 +3,10 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -13,27 +15,29 @@ import (
 
 // Object graph kind constants for VM store records.
 const (
-	ogKindAgent        = objectgraph.ObjectKind("choir.agent")
-	ogKindRun          = objectgraph.ObjectKind("choir.run")
-	ogKindEvent        = objectgraph.ObjectKind("choir.event")
-	ogKindTrajectory   = objectgraph.ObjectKind("choir.trajectory")
-	ogKindWorkItem     = objectgraph.ObjectKind("choir.work_item")
-	ogKindChannelMsg   = objectgraph.ObjectKind("choir.channel_message")
-	ogKindWorkerUpdate = objectgraph.ObjectKind("choir.worker_update")
-	ogKindInboxDeliv   = objectgraph.ObjectKind("choir.inbox_delivery")
-	ogKindRunMemory    = objectgraph.ObjectKind("choir.run_memory_entry")
-	ogKindRunAccept    = objectgraph.ObjectKind("choir.run_acceptance")
-	ogKindRunContin    = objectgraph.ObjectKind("choir.run_continuation")
-	ogKindTexDoc       = objectgraph.ObjectKind("choir.texture_document")
-	ogKindTexRev       = objectgraph.ObjectKind("choir.texture_revision")
-	ogKindTexDecision  = objectgraph.ObjectKind("choir.texture_decision")
-	ogKindEvidence     = objectgraph.ObjectKind("choir.agent_evidence")
-	ogKindContentItem  = objectgraph.ObjectKind("choir.content_item")
-	ogKindPodcastSub   = objectgraph.ObjectKind("choir.podcast_subscription")
-	ogKindBrowserSess  = objectgraph.ObjectKind("choir.browser_session")
-	ogKindCoagentMail  = objectgraph.ObjectKind("choir.coagent_mailbox")
-	ogKindDesktopSess  = objectgraph.ObjectKind("choir.desktop_session")
-	ogKindDesktopApp   = objectgraph.ObjectKind("choir.desktop_app_instance")
+	ogKindAgent          = objectgraph.ObjectKind("choir.agent")
+	ogKindRun            = objectgraph.ObjectKind("choir.run")
+	ogKindEvent          = objectgraph.ObjectKind("choir.event")
+	ogKindTrajectory     = objectgraph.ObjectKind("choir.trajectory")
+	ogKindWorkItem       = objectgraph.ObjectKind("choir.work_item")
+	ogKindChannelMsg     = objectgraph.ObjectKind("choir.channel_message")
+	ogKindWorkerUpdate   = objectgraph.ObjectKind("choir.worker_update")
+	ogKindLifecycleEvent = objectgraph.ObjectKind("choir.lifecycle_event")
+	ogKindLifecycleCmd   = objectgraph.ObjectKind("choir.lifecycle_command")
+	ogKindInboxDeliv     = objectgraph.ObjectKind("choir.inbox_delivery")
+	ogKindRunMemory      = objectgraph.ObjectKind("choir.run_memory_entry")
+	ogKindRunAccept      = objectgraph.ObjectKind("choir.run_acceptance")
+	ogKindRunContin      = objectgraph.ObjectKind("choir.run_continuation")
+	ogKindTexDoc         = objectgraph.ObjectKind("choir.texture_document")
+	ogKindTexRev         = objectgraph.ObjectKind("choir.texture_revision")
+	ogKindTexDecision    = objectgraph.ObjectKind("choir.texture_decision")
+	ogKindEvidence       = objectgraph.ObjectKind("choir.agent_evidence")
+	ogKindContentItem    = objectgraph.ObjectKind("choir.content_item")
+	ogKindPodcastSub     = objectgraph.ObjectKind("choir.podcast_subscription")
+	ogKindBrowserSess    = objectgraph.ObjectKind("choir.browser_session")
+	ogKindCoagentMail    = objectgraph.ObjectKind("choir.coagent_mailbox")
+	ogKindDesktopSess    = objectgraph.ObjectKind("choir.desktop_session")
+	ogKindDesktopApp     = objectgraph.ObjectKind("choir.desktop_app_instance")
 )
 
 // Edge kind constants.
@@ -207,33 +211,79 @@ func (s *Store) ogDelete(ctx context.Context, id string) error {
 // Agents — object graph implementation
 // =========================================================================
 
+func scopedAgentIdentityKey(computerID, agentID string) string {
+	return strings.TrimSpace(computerID) + "\x00" + strings.TrimSpace(agentID)
+}
+
+func scopedAgentCanonicalID(ownerID, computerID, agentID string) (string, error) {
+	suffix := objectgraph.StableSuffixFromKey(scopedAgentIdentityKey(computerID, agentID))
+	return objectgraph.BuildCanonicalID(ogKindAgent, strings.TrimSpace(ownerID), suffix)
+}
+
 // UpsertAgentOG stores or updates an agent record in the object graph.
 // The agent_id is stored in metadata for point lookups.
 func (s *Store) UpsertAgentOG(ctx context.Context, rec types.AgentRecord) error {
+	rec.OwnerID = strings.TrimSpace(rec.OwnerID)
+	rec.AgentID = strings.TrimSpace(rec.AgentID)
+	rec.ComputerID = strings.TrimSpace(rec.ComputerID)
+	rec.SandboxID = strings.TrimSpace(rec.SandboxID)
+	if rec.ComputerID == "" {
+		rec.ComputerID = rec.SandboxID
+	}
+	if rec.SandboxID == "" {
+		rec.SandboxID = rec.ComputerID
+	}
+	if rec.OwnerID == "" || rec.ComputerID == "" || rec.AgentID == "" {
+		return fmt.Errorf("store: upsert agent requires owner_id, computer_id, and agent_id")
+	}
+	if strings.HasPrefix(rec.AgentID, "texture:") {
+		return ErrLifecycleAuthorityRequired
+	}
+	if rec.LifecycleVersion > 0 {
+		return ErrLifecycleAuthorityRequired
+	}
+	if existing, err := s.GetAgentByScopeOG(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID); err == nil {
+		if existing.LifecycleVersion > 0 {
+			return ErrLifecycleAuthorityRequired
+		}
+	} else if !errors.Is(err, ErrNotFound) {
+		return err
+	}
 	now := rec.UpdatedAt
 	if now.IsZero() {
 		now = time.Now().UTC()
+		rec.UpdatedAt = now
 	}
 	metadata := map[string]any{
-		"agent_id":   rec.AgentID,
-		"sandbox_id": rec.SandboxID,
-		"profile":    rec.Profile,
-		"role":       rec.Role,
-		"channel_id": rec.ChannelID,
-		"created_at": rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at": now.UTC().Format(time.RFC3339Nano),
+		"agent_id":    rec.AgentID,
+		"computer_id": rec.ComputerID,
+		"sandbox_id":  rec.SandboxID,
+		"profile":     rec.Profile,
+		"role":        rec.Role,
+		"channel_id":  rec.ChannelID,
+		"created_at":  rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":  now.UTC().Format(time.RFC3339Nano),
 	}
-	_, err := s.ogPut(ctx, ogKindAgent, rec.OwnerID, rec.AgentID, rec, metadata, now)
+	_, err := s.ogPut(ctx, ogKindAgent, rec.OwnerID, scopedAgentIdentityKey(rec.ComputerID, rec.AgentID), rec, metadata, now)
 	return err
 }
 
-// GetAgentOG retrieves an agent by ID from the object graph.
-// Looks up by agent_id in metadata since the canonical ID includes
-// the owner, which the caller may not know.
-func (s *Store) GetAgentOG(ctx context.Context, agentID string) (types.AgentRecord, error) {
-	obj, err := s.ogGetByKey(ctx, ogKindAgent, "agent_id", agentID)
+// GetAgentByScopeOG retrieves an agent by its complete durable identity.
+func (s *Store) GetAgentByScopeOG(ctx context.Context, ownerID, computerID, agentID string) (types.AgentRecord, error) {
+	id, err := scopedAgentCanonicalID(ownerID, computerID, agentID)
 	if err != nil {
-		if err == objectgraph.ErrNotFound {
+		return types.AgentRecord{}, err
+	}
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return types.AgentRecord{}, fmt.Errorf("store: object graph not initialized")
+	}
+	obj, err := graph.GetObject(ctx, id)
+	if err != nil {
+		if errors.Is(err, objectgraph.ErrNotFound) {
 			return types.AgentRecord{}, ErrNotFound
 		}
 		return types.AgentRecord{}, err
@@ -241,6 +291,9 @@ func (s *Store) GetAgentOG(ctx context.Context, agentID string) (types.AgentReco
 	var rec types.AgentRecord
 	if err := ogDecode(obj, &rec); err != nil {
 		return types.AgentRecord{}, err
+	}
+	if rec.OwnerID != strings.TrimSpace(ownerID) || rec.ComputerID != strings.TrimSpace(computerID) || rec.AgentID != strings.TrimSpace(agentID) {
+		return types.AgentRecord{}, ErrNotFound
 	}
 	return rec, nil
 }
@@ -278,10 +331,11 @@ func (s *Store) CreateRunOG(ctx context.Context, rec types.RunRecord) error {
 	}
 
 	// Write structural edges.
-	if rec.AgentID != "" {
-		agentSuffix := objectgraph.StableSuffixFromKey(rec.AgentID)
-		agentID, _ := objectgraph.BuildCanonicalID(ogKindAgent, rec.OwnerID, agentSuffix)
-		_ = s.ogPutEdge(ctx, obj.CanonicalID, agentID, ogEdgeRunAgent, nil)
+	if rec.AgentID != "" && rec.SandboxID != "" {
+		agentID, buildErr := scopedAgentCanonicalID(rec.OwnerID, rec.SandboxID, rec.AgentID)
+		if buildErr == nil {
+			_ = s.ogPutEdge(ctx, obj.CanonicalID, agentID, ogEdgeRunAgent, nil)
+		}
 	}
 	if rec.TrajectoryID != "" {
 		trajSuffix := objectgraph.StableSuffixFromKey(rec.TrajectoryID)
@@ -619,6 +673,14 @@ func (s *Store) getTrajectoryObjectOG(ctx context.Context, ownerID, trajectoryID
 // CreateTrajectoryIfAbsentOG creates a trajectory if it doesn't exist.
 // Returns the stored record (existing or newly created).
 func (s *Store) CreateTrajectoryIfAbsentOG(ctx context.Context, rec types.TrajectoryRecord) (types.TrajectoryRecord, error) {
+	if rec.LifecycleVersion > 0 {
+		return types.TrajectoryRecord{}, ErrLifecycleAuthorityRequired
+	}
+	if exists, err := s.lifecycleTrajectoryExists(ctx, rec.OwnerID, rec.TrajectoryID); err != nil {
+		return types.TrajectoryRecord{}, err
+	} else if exists {
+		return types.TrajectoryRecord{}, ErrLifecycleAuthorityRequired
+	}
 	existing, err := s.getTrajectoryObjectOG(ctx, rec.OwnerID, rec.TrajectoryID)
 	if err == nil {
 		var existingRec types.TrajectoryRecord
@@ -700,6 +762,9 @@ func (s *Store) UpdateTrajectoryStatusOG(ctx context.Context, ownerID, trajector
 	if err := ogDecode(obj, &rec); err != nil {
 		return types.TrajectoryRecord{}, err
 	}
+	if rec.LifecycleVersion > 0 {
+		return rec, ErrLifecycleAuthorityRequired
+	}
 	if rec.Status == status {
 		return rec, nil
 	}
@@ -768,6 +833,14 @@ func trajectoryObject(rec types.TrajectoryRecord, existing objectgraph.Object) (
 func (s *Store) CreateWorkItemOG(ctx context.Context, rec types.WorkItemRecord) (types.WorkItemRecord, error) {
 	if rec.WorkItemID == "" {
 		return types.WorkItemRecord{}, fmt.Errorf("create work item: work_item_id is required")
+	}
+	if exists, err := s.lifecycleTrajectoryExists(ctx, rec.OwnerID, rec.TrajectoryID); err != nil {
+		return types.WorkItemRecord{}, err
+	} else if exists {
+		return types.WorkItemRecord{}, ErrLifecycleAuthorityRequired
+	}
+	if rec.LifecycleVersion > 0 {
+		return types.WorkItemRecord{}, ErrLifecycleAuthorityRequired
 	}
 	if rec.Status == "" {
 		rec.Status = types.WorkItemOpen
@@ -870,6 +943,9 @@ func (s *Store) UpdateWorkItemStatusOG(ctx context.Context, ownerID, workItemID 
 	if err := ogDecode(obj, &rec); err != nil {
 		return types.WorkItemRecord{}, err
 	}
+	if rec.LifecycleVersion > 0 {
+		return rec, ErrLifecycleAuthorityRequired
+	}
 	if rec.Status == status {
 		return rec, nil
 	}
@@ -926,6 +1002,9 @@ func (s *Store) cancelTrajectoryAuthorityOG(ctx context.Context, ownerID, trajec
 	var trajectory types.TrajectoryRecord
 	if err := ogDecode(trajectoryObj, &trajectory); err != nil {
 		return types.TrajectoryRecord{}, err
+	}
+	if trajectory.LifecycleVersion > 0 {
+		return trajectory, ErrLifecycleAuthorityRequired
 	}
 	if trajectory.Status == types.TrajectorySettled || trajectory.Status == types.TrajectoryCancelled {
 		return trajectory, nil
@@ -1077,6 +1156,16 @@ func (s *Store) ListChannelMessagesOG(ctx context.Context, ownerID, channelID st
 
 // CreateWorkerUpdateOG stores a worker update in the object graph.
 func (s *Store) CreateWorkerUpdateOG(ctx context.Context, rec types.CoagentSourcePacket) error {
+	if rec.LifecycleVersion > 0 {
+		return ErrLifecycleAuthorityRequired
+	}
+	if strings.TrimSpace(rec.ComputerID) != "" && strings.TrimSpace(rec.TrajectoryID) != "" {
+		if _, err := s.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID); err == nil {
+			return ErrLifecycleAuthorityRequired
+		} else if !errors.Is(err, ErrNotFound) {
+			return err
+		}
+	}
 	now := rec.CreatedAt
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -1191,7 +1280,11 @@ func (s *Store) ListPendingWorkerUpdatesOG(ctx context.Context, ownerID, targetA
 		if rec.OwnerID != ownerID {
 			continue
 		}
-		if rec.DeliveredToRunID != "" {
+		if rec.LifecycleVersion > 0 {
+			if rec.Disposition != types.UpdatePending {
+				continue
+			}
+		} else if rec.DeliveredToRunID != "" {
 			continue
 		}
 		packets = append(packets, rec)
@@ -1505,6 +1598,9 @@ func (s *Store) ListRunContinuationsBySourceRunOG(ctx context.Context, ownerID, 
 // CreateTextureDocumentOG creates a texture document in the object graph.
 // Documents use external-key identity (doc_id).
 func (s *Store) CreateTextureDocumentOG(ctx context.Context, rec types.Document) error {
+	if strings.TrimSpace(rec.TrajectoryID) != "" {
+		return ErrLifecycleAuthorityRequired
+	}
 	now := rec.CreatedAt
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -1612,6 +1708,9 @@ func (s *Store) UpdateTextureDocumentOG(ctx context.Context, rec types.Document)
 	if existing.OwnerID != rec.OwnerID {
 		return ErrNotFound
 	}
+	if strings.TrimSpace(existing.TrajectoryID) != "" {
+		return ErrLifecycleAuthorityRequired
+	}
 
 	now := rec.UpdatedAt
 	if now.IsZero() {
@@ -1639,6 +1738,9 @@ func (s *Store) UpdateTextureDocumentOG(ctx context.Context, rec types.Document)
 // CreateTextureRevisionOG creates a texture revision in the object graph.
 // Revisions use external-key identity (revision_id).
 func (s *Store) CreateTextureRevisionOG(ctx context.Context, rec types.Revision) error {
+	if strings.TrimSpace(rec.TrajectoryID) != "" {
+		return ErrLifecycleAuthorityRequired
+	}
 	now := rec.CreatedAt
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -2257,6 +2359,15 @@ func (s *Store) TextureSourceEntityVersionExistsOG(ctx context.Context, canonica
 
 // PutTextureSourceRefOG stores a texture source ref in the object graph.
 func (s *Store) PutTextureSourceRefOG(ctx context.Context, rec TextureSourceRefGraphRecord) error {
+	if strings.TrimSpace(rec.DocID) != "" {
+		doc, err := s.GetTextureDocumentOG(ctx, rec.OwnerID, rec.DocID)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(doc.TrajectoryID) != "" {
+			return ErrLifecycleAuthorityRequired
+		}
+	}
 	now := rec.CreatedAt
 	if now.IsZero() {
 		now = time.Now().UTC()

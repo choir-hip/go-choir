@@ -70,6 +70,9 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	if first.TrajectoryID != "" {
 		metadata[runMetadataTrajectoryID] = first.TrajectoryID
 	}
+	if first.WorkItemID != "" {
+		metadata["lifecycle_work_item_id"] = first.WorkItemID
+	}
 	updateIDs := make([]string, 0, len(updates))
 	for _, update := range updates {
 		if id := strings.TrimSpace(update.UpdateID); id != "" {
@@ -351,7 +354,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	} else if found {
 		return &resident, nil
 	}
-	agent, err := rt.store.GetAgent(ctx, agentID)
+	agent, err := rt.store.GetAgentByScope(ctx, ownerID, rt.TextureSandboxID(), agentID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, nil
@@ -741,7 +744,7 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 	if rt.dispatchActor == nil {
 		panic("runtime: wakeUpdatedCoagent called without dispatchActor set — actor runtime is required")
 	}
-	if err := rt.dispatchActor(context.Background(), target, "coagent_result", update.UpdateID, update.TrajectoryID, update.AgentID); err != nil {
+	if err := rt.dispatchActor(context.Background(), update.OwnerID, firstNonEmpty(update.ComputerID, rt.TextureSandboxID()), target, "coagent_result", update.UpdateID, update.TrajectoryID, update.AgentID); err != nil {
 		log.Printf("runtime: actor wake coagent for update %s: %v", update.UpdateID, err)
 	}
 }

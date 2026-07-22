@@ -37,7 +37,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
-	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"github.com/yusefmosiah/go-choir/internal/zot"
 )
 
@@ -286,11 +285,8 @@ func Run() {
 		if err != nil {
 			log.Fatalf("sandbox: reconstruct computer event authority: %v", err)
 		}
-		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher), agentcore.WithSelfDevelopmentControl(credentials))
-		if vmctlURL := strings.TrimSpace(os.Getenv("RUNTIME_VMCTL_URL")); vmctlURL != "" {
-			coreOpts = append(coreOpts, agentcore.WithSelfDevelopmentRoute(vmctl.NewClient(vmctlURL), os.Getenv("CHOIR_OWNER_ID"), os.Getenv("CHOIR_DESKTOP_ID")))
-		}
-		log.Printf("sandbox: computer event authority reconstructed")
+		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher))
+		log.Printf("sandbox: computer event authority reconstructed; self-development effects disabled")
 	}
 	var rtOpts []actorruntime.RuntimeOption
 
@@ -407,7 +403,9 @@ func Run() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	log.Printf("sandbox: orchestration topology (super=1, researchers=%d)", rtCfg.ResearcherCount)
-	rt.Start(ctx)
+	if err := rt.Start(ctx); err != nil {
+		log.Fatalf("sandbox: runtime startup refused: %v", err)
+	}
 
 	s.Start()
 }

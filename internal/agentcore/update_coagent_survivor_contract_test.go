@@ -61,19 +61,7 @@ func TestSurvivorContract_AcceptsCanonicalSurface(t *testing.T) {
 	ctx := context.Background()
 	ownerID := "user-survivor-canonical"
 	docID := "doc-survivor"
-	now := mustNow(t)
-	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   currentTextureAgentID(docID),
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		Profile:   agentprofile.Texture,
-		Role:      agentprofile.Texture,
-		ChannelID: docID,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("upsert texture agent: %v", err)
-	}
+	seedDurableTextureSubject(t, s, ownerID, docID)
 	researcherRun := d9CoagentRun("run-survivor-canonical", ownerID, "researcher:survivor", agentprofile.Researcher, docID, "")
 	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(researcherRun)), "update_coagent", json.RawMessage(validEvidenceUpdatePacket))
 	if err != nil {
@@ -172,19 +160,7 @@ func TestSurvivorContract_TextureCollatesOnlyPacketSources(t *testing.T) {
 	ctx := context.Background()
 	ownerID := "user-survivor-collation"
 	docID := "doc-survivor-collation"
-	now := mustNow(t)
-	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   currentTextureAgentID(docID),
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		Profile:   agentprofile.Texture,
-		Role:      agentprofile.Texture,
-		ChannelID: docID,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("upsert texture agent: %v", err)
-	}
+	seedDurableTextureSubject(t, s, ownerID, docID)
 	researcherRun := d9CoagentRun("run-survivor-collation", ownerID, "researcher:collation", agentprofile.Researcher, docID, "")
 	// Deliberately embed source-shaped text in notes and summary prose that
 	// must NOT be scraped: an http URL in notes, a "[Source: foo]" style
@@ -301,19 +277,7 @@ func TestSurvivorContract_RejectedSourcesAreReported(t *testing.T) {
 	ctx := context.Background()
 	ownerID := "user-survivor-reported"
 	docID := "doc-survivor-reported"
-	now := mustNow(t)
-	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   currentTextureAgentID(docID),
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		Profile:   agentprofile.Texture,
-		Role:      agentprofile.Texture,
-		ChannelID: docID,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("upsert texture agent: %v", err)
-	}
+	seedDurableTextureSubject(t, s, ownerID, docID)
 	researcherRun := d9CoagentRun("run-survivor-reported", ownerID, "researcher:reported", agentprofile.Researcher, docID, "")
 	// A packet.source with an unsupported kind that cannot materialize. The
 	// current behavior silently drops it. The survivor contract requires the

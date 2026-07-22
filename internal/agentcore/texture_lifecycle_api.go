@@ -26,11 +26,11 @@ type TextureActorToolLoopBudgetSpend struct {
 
 // DispatchActor sends a concrete actor-runtime message through the configured
 // actor execution substrate.
-func (rt *Runtime) DispatchActor(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
+func (rt *Runtime) DispatchActor(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
 	if rt == nil || rt.dispatchActor == nil {
 		return fmt.Errorf("runtime: actor dispatch unavailable")
 	}
-	return rt.dispatchActor(ctx, toAgentID, kind, content, trajectoryID, fromAgentID)
+	return rt.dispatchActor(ctx, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID)
 }
 
 // ActivateRun dispatches a persisted run's initial actor activation.
@@ -46,7 +46,7 @@ func (rt *Runtime) ActivateRun(rec *types.RunRecord) {
 		panic("runtime: activate called with empty AgentID")
 	}
 	trajectoryID := metadataStringValue(rec.Metadata, runMetadataTrajectoryID)
-	if err := rt.dispatchActor(context.Background(), agentID, "initial_dispatch", rec.RunID, trajectoryID, ""); err != nil {
+	if err := rt.dispatchActor(context.Background(), rec.OwnerID, rec.SandboxID, agentID, "initial_dispatch", rec.RunID, trajectoryID, ""); err != nil {
 		log.Printf("runtime: activate dispatch for run %s: %v", rec.RunID, err)
 	}
 }

@@ -112,6 +112,23 @@ func TestHandlePromptBarOperationalProofInitialRunStartsWithTexture(t *testing.T
 	if got := superResult["requested_by"]; got != initialRun.AgentID {
 		t.Fatalf("requested_by = %v, want %s", got, initialRun.AgentID)
 	}
+	workItemID, _ := superResult["work_item_id"].(string)
+	if workItemID == "" {
+		t.Fatalf("super request missing durable work identity: %+v", superResult)
+	}
+	snapshot, err := rt.Store().GetLifecycleSnapshot(context.Background(), "user-alice", initialRun.SandboxID, decision.TrajectoryID)
+	if err != nil {
+		t.Fatalf("load lifecycle after Super request: %v", err)
+	}
+	foundOpenWork := false
+	for _, work := range snapshot.WorkItems {
+		if work.WorkItemID == workItemID && work.Status == types.WorkItemOpen && work.AssignedAgentID == superResult["agent_id"] {
+			foundOpenWork = true
+		}
+	}
+	if !foundOpenWork {
+		t.Fatalf("Super request did not open canonical lifecycle obligation %q: %+v", workItemID, snapshot.WorkItems)
+	}
 }
 
 func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) {
@@ -132,6 +149,10 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) 
 	var resp promptBarSubmitResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
+	}
+	if resp.CommandID == "" || resp.TrajectoryID == "" || resp.DocID == "" || resp.RevisionID == "" ||
+		resp.SubjectID == "" || len(resp.ObligationIDs) != 1 || resp.ReducerSeq != 1 || resp.SnapshotCursor != 1 {
+		t.Fatalf("prompt response missing atomic lifecycle identity: %+v", resp)
 	}
 	conductor, err := rt.GetRun(context.Background(), resp.SubmissionID, "user-alice")
 	if err != nil {
@@ -195,6 +216,16 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) 
 	}
 	if doc.CurrentRevisionID != seedRev.RevisionID {
 		t.Fatalf("document head = %q, want V0 user revision %q before any appagent write under the stub provider", doc.CurrentRevisionID, seedRev.RevisionID)
+	}
+	if doc.ComputerID == "" || doc.TrajectoryID == "" {
+		t.Fatalf("prompt-bar document missing lifecycle identity: %+v", doc)
+	}
+	snapshot, err := rt.Store().GetLifecycleSnapshot(context.Background(), "user-alice", doc.ComputerID, doc.TrajectoryID)
+	if err != nil {
+		t.Fatalf("get prompt-bar lifecycle snapshot: %v", err)
+	}
+	if snapshot.Trajectory.Status != types.TrajectoryLive || len(snapshot.WorkItems) != 1 || snapshot.HeadRevision.RevisionID != seedRev.RevisionID {
+		t.Fatalf("unexpected prompt-bar lifecycle snapshot: %+v", snapshot)
 	}
 }
 

@@ -25,6 +25,32 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+func seedDurableTextureSubject(t *testing.T, s *store.Store, ownerID, docID string) string {
+	t.Helper()
+	agentID := currentTextureAgentID(docID)
+	now := time.Now().UTC()
+	req := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "test-start:" + ownerID + ":" + docID,
+		TrajectoryID: "test-trajectory:" + ownerID + ":" + docID, Kind: types.TrajectoryKindDocument,
+		SettlementRule:  types.SettlementRule{RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID},
+		InitialWork:     types.WorkItemRecord{WorkItemID: "test-work:" + ownerID + ":" + docID, Objective: "process durable updates", AssignedAgentID: agentID},
+		InitialDocument: types.Document{DocID: docID, Title: "Durable test subject"},
+		InitialRevision: types.Revision{
+			RevisionID: "test-revision:" + ownerID + ":" + docID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "Initial durable test content",
+		},
+		Agent: types.AgentRecord{
+			AgentID: agentID, OwnerID: ownerID, ComputerID: "sandbox-test", SandboxID: "sandbox-test",
+			Profile: "texture", Role: "texture", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
+		},
+	}
+	req.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(req)
+	if _, err := s.StartLifecycle(context.Background(), req); err != nil {
+		t.Fatalf("seed durable Texture subject: %v", err)
+	}
+	return req.TrajectoryID
+}
+
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
@@ -233,7 +259,7 @@ func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 // tests use this minimal dispatch that calls ExecuteActivationSync in a
 // goroutine. This is test infrastructure, not production code.
 func setTestDispatch(rt *Runtime, s *store.Store) {
-	rt.SetDispatchActor(func(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
+	rt.SetDispatchActor(func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
 		switch kind {
 		case "initial_dispatch":
 			runID := strings.TrimSpace(content)
@@ -250,7 +276,7 @@ func setTestDispatch(rt *Runtime, s *store.Store) {
 		case "coagent_result":
 			// Synchronous: the boot sweep needs the reconcile to
 			// complete before the test checks the result.
-			agent, err := s.GetAgent(ctx, toAgentID)
+			agent, err := s.GetAgentByScope(ctx, ownerID, computerID, toAgentID)
 			if err != nil {
 				return nil // agent not found — nothing to wake
 			}
@@ -275,7 +301,6 @@ func testPromptRuntime(t *testing.T) *Runtime {
 		modelPolicy: modelpolicy.NewManager(modelpolicy.ManagerConfig{}),
 	}
 }
-
 
 func mustJSON(t *testing.T, value any) json.RawMessage {
 	t.Helper()

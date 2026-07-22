@@ -96,12 +96,14 @@ func TestInternalRunEventAppendAcceptsOnlyEmailEvidenceEvents(t *testing.T) {
 
 func TestTextureRunProjectsLifecycleEvents(t *testing.T) {
 	rt, _ := testAPISetup(t)
+	trajectoryID := seedDurableTextureSubject(t, rt.Store(), "user-texture-events", "doc-event-projection")
 	rec, err := rt.StartRunWithMetadata(context.Background(), "revise the document", "user-texture-events", map[string]any{
 		runMetadataAgentProfile: agentprofile.Texture,
 		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataAgentID:      "texture:doc-event-projection",
 		runMetadataChannelID:    "doc-event-projection",
 		"doc_id":                "doc-event-projection",
+		"trajectory_id":         trajectoryID,
 	})
 	if err != nil {
 		t.Fatalf("start Texture run: %v", err)

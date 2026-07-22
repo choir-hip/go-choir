@@ -15,6 +15,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -24,16 +27,19 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
 const (
-	defaultHost      = "https://choir.news"
-	apiKeyEnvVar     = "CHOIR_API_KEY"
-	hostEnvVar       = "CHOIR_HOST"
-	timeoutEnvVar    = "CHOIR_TIMEOUT"
-	apiKeyPrefix     = "choir_sk_"
-	defaultTimeout   = 75 * time.Second
-	defaultListLimit = 50
+	defaultHost                 = "https://choir.news"
+	apiKeyEnvVar                = "CHOIR_API_KEY"
+	hostEnvVar                  = "CHOIR_HOST"
+	timeoutEnvVar               = "CHOIR_TIMEOUT"
+	apiKeyPrefix                = "choir_sk_"
+	defaultTimeout              = 75 * time.Second
+	defaultListLimit            = 50
+	lifecycleRequestMaxBytesCLI = 2 << 20
 )
 
 var cliStdin io.Reader = os.Stdin
@@ -57,6 +63,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runTrajectories(rest, stdout, stderr)
 	case "trajectory":
 		return runTrajectory(rest, stdout, stderr)
+	case "lifecycle":
+		return runLifecycle(rest, stdout, stderr)
 	case "texture":
 		return runTexture(rest, stdout, stderr)
 	case "search":
@@ -65,6 +73,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runRun(rest, stdout, stderr)
 	case "computer":
 		return runComputer(rest, stdout, stderr)
+	case "identity":
+		return runExecutionIdentity(rest, stdout, stderr)
 	case "api-key":
 		return runAPIKey(rest, stdout, stderr)
 	case "self-dev":
@@ -94,6 +104,10 @@ Commands:
   trajectories        List recent trajectories (ingestion/run state)
   trajectory <id>     Show one trajectory's obligations
   trajectory cancel <id>  Cancel an owner-scoped trajectory
+  lifecycle snapshot <id>  Reconstruct one durable lifecycle from canonical state
+  lifecycle events <id>  Read reducer events after a durable cursor
+  lifecycle <open|amend|record|queue|apply|settle-work|refuse|settle|cancel|archive> --request <json-file>
+  identity            Verify a nonce-bound signed execution identity
   texture read <doc>  Read a Texture document's metadata (title, current revision id)
   texture history <doc>  List revision history for a document (metadata only)
   texture revisions <doc>  List revisions with full content bodies
@@ -435,6 +449,232 @@ func runTrajectoryCancel(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return writeJSON(stdout, resp)
+}
+
+type executionIdentityCLIEnvelope struct {
+	Schema          string                        `json:"schema"`
+	Identity        map[string]any                `json:"identity"`
+	Receipt         computerevent.Receipt         `json:"receipt"`
+	SignerPublicKey string                        `json:"signer_public_key"`
+	Joined          bool                          `json:"joined,omitempty"`
+	Guest           *executionIdentityCLIEnvelope `json:"guest,omitempty"`
+}
+
+type executionIdentityCLIResolver struct {
+	ref computerevent.SignerRef
+	key ed25519.PublicKey
+}
+
+func (r executionIdentityCLIResolver) ResolveReceiptKey(domain, _ string, keyID string, _ uint64, _ time.Time) (ed25519.PublicKey, error) {
+	if domain != r.ref.SignerDomain || keyID != r.ref.KeyID {
+		return nil, fmt.Errorf("execution identity signer mismatch")
+	}
+	return r.key, nil
+}
+
+func sameJSONValue(left, right any) bool {
+	leftJSON, leftErr := json.Marshal(left)
+	rightJSON, rightErr := json.Marshal(right)
+	return leftErr == nil && rightErr == nil && bytes.Equal(leftJSON, rightJSON)
+}
+
+func runExecutionIdentity(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir identity", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	expectedSignerKeyDigest := fs.String("signer-key-sha256", strings.TrimSpace(os.Getenv("CHOIR_GUEST_SIGNER_KEY_SHA256")), "Expected guest-core signer public-key digest from signed no-SSH inventory")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir identity: %v\n", err)
+		return 2
+	}
+	if len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir identity: no positional arguments allowed")
+		return 2
+	}
+	if strings.TrimSpace(*expectedSignerKeyDigest) == "" {
+		fmt.Fprintln(stderr, "choir identity: --signer-key-sha256 or CHOIR_GUEST_SIGNER_KEY_SHA256 is required")
+		return 2
+	}
+	nonceBytes := make([]byte, 24)
+	if _, err := rand.Read(nonceBytes); err != nil {
+		fmt.Fprintf(stderr, "choir identity: generate nonce: %v\n", err)
+		return 1
+	}
+	nonce := base64.RawURLEncoding.EncodeToString(nonceBytes)
+	var envelope executionIdentityCLIEnvelope
+	if err := c.do(http.MethodGet, "/api/acceptance/execution-identity?nonce="+url.QueryEscape(nonce), nil, &envelope); err != nil {
+		fmt.Fprintf(stderr, "choir identity: %v\n", err)
+		return 1
+	}
+	signed := &envelope
+	if envelope.Guest != nil {
+		if !envelope.Joined {
+			fmt.Fprintln(stderr, "choir identity: platform identity join refused")
+			return 1
+		}
+		signed = envelope.Guest
+	}
+	if signed.Schema != "choir.execution_identity.v1" || signed.Identity["schema"] != signed.Schema || signed.Identity["nonce"] != nonce {
+		fmt.Fprintln(stderr, "choir identity: schema or nonce binding refused")
+		return 1
+	}
+	publicKey, err := base64.RawStdEncoding.DecodeString(signed.SignerPublicKey)
+	if err != nil || len(publicKey) != ed25519.PublicKeySize || len(signed.Receipt.RequiredSigners) != 1 {
+		fmt.Fprintln(stderr, "choir identity: invalid signer public key")
+		return 1
+	}
+	actualSignerKeyDigest := "sha256:" + computerevent.DigestBytes(publicKey)
+	if !strings.EqualFold(strings.TrimSpace(*expectedSignerKeyDigest), actualSignerKeyDigest) {
+		fmt.Fprintln(stderr, "choir identity: signer key does not match no-SSH inventory")
+		return 1
+	}
+	if signed.Receipt.ReceiptKind != "ExecutionIdentity" {
+		fmt.Fprintln(stderr, "choir identity: unexpected receipt kind")
+		return 1
+	}
+	ref := signed.Receipt.RequiredSigners[0]
+	if ref.SignerDomain != "guest-core" || signed.Receipt.Verify(executionIdentityCLIResolver{ref: ref, key: ed25519.PublicKey(publicKey)}) != nil {
+		fmt.Fprintln(stderr, "choir identity: signature verification failed")
+		return 1
+	}
+	if !sameJSONValue(signed.Receipt.IssuedAt, signed.Identity["issued_at"]) {
+		fmt.Fprintln(stderr, "choir identity: signed field issued_at mismatch")
+		return 1
+	}
+	for key, value := range signed.Identity {
+		if key == "issued_at" {
+			continue
+		}
+		if !sameJSONValue(signed.Receipt.KindFields[key], value) {
+			fmt.Fprintf(stderr, "choir identity: signed field %s mismatch\n", key)
+			return 1
+		}
+	}
+	expiresAt, expiresErr := time.Parse(time.RFC3339Nano, fmt.Sprint(signed.Identity["expires_at"]))
+	issuedAt, issuedErr := time.Parse(time.RFC3339Nano, fmt.Sprint(signed.Identity["issued_at"]))
+	now := time.Now().UTC()
+	if expiresErr != nil || issuedErr != nil || !expiresAt.After(now) || issuedAt.After(now.Add(30*time.Second)) || expiresAt.Sub(issuedAt) > 2*time.Minute {
+		fmt.Fprintln(stderr, "choir identity: expired or invalid validity window")
+		return 1
+	}
+	build, ok := envelope.Identity["build"].(map[string]any)
+	if !ok || strings.TrimSpace(fmt.Sprint(build["commit"])) == "" || build["commit"] != build["deployed_commit"] {
+		fmt.Fprintln(stderr, "choir identity: build/deploy identity conflict")
+		return 1
+	}
+	return writeJSON(stdout, envelope)
+}
+
+func validateDurableWorkResponse(raw json.RawMessage) error {
+	var envelope struct {
+		Schema string `json:"schema"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return err
+	}
+	if envelope.Schema != "choir.durable_work.v1" {
+		return fmt.Errorf("unsupported lifecycle schema %q", envelope.Schema)
+	}
+	return nil
+}
+
+func runLifecycle(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "choir lifecycle: subcommand required (snapshot|events|open|amend|record|queue|apply|settle-work|refuse|settle|cancel|archive)")
+		return 2
+	}
+	subcommand := args[0]
+	fs := flag.NewFlagSet("choir lifecycle "+subcommand, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	requestPath := fs.String("request", "", "JSON lifecycle command file; '-' reads stdin")
+	after := fs.Int64("after", 0, "Event cursor (events only)")
+	limit := fs.Int("limit", 100, "Maximum events per page (events only)")
+	c, err := newClient(fs, args[1:], stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir lifecycle %s: %v\n", subcommand, err)
+		return 2
+	}
+	if subcommand == "events" {
+		rest := fs.Args()
+		if len(rest) != 1 || strings.TrimSpace(rest[0]) == "" || *after < 0 || *limit <= 0 {
+			fmt.Fprintln(stderr, "choir lifecycle events: trajectory id, non-negative --after, and positive --limit required")
+			return 2
+		}
+		var response json.RawMessage
+		path := fmt.Sprintf("/api/trajectories/%s/events?after=%d&limit=%d", url.PathEscape(strings.TrimSpace(rest[0])), *after, *limit)
+		if err := c.do(http.MethodGet, path, nil, &response); err != nil {
+			fmt.Fprintf(stderr, "choir lifecycle events: %v\n", err)
+			return 1
+		}
+		if err := validateDurableWorkResponse(response); err != nil {
+			fmt.Fprintf(stderr, "choir lifecycle events: %v\n", err)
+			return 1
+		}
+		return writeJSON(stdout, response)
+	}
+	if subcommand == "snapshot" {
+		rest := fs.Args()
+		if len(rest) != 1 || strings.TrimSpace(rest[0]) == "" {
+			fmt.Fprintln(stderr, "choir lifecycle snapshot: trajectory id required")
+			return 2
+		}
+		var response json.RawMessage
+		path := "/api/trajectories/" + url.PathEscape(strings.TrimSpace(rest[0]))
+		if err := c.do(http.MethodGet, path, nil, &response); err != nil {
+			fmt.Fprintf(stderr, "choir lifecycle snapshot: %v\n", err)
+			return 1
+		}
+		if err := validateDurableWorkResponse(response); err != nil {
+			fmt.Fprintf(stderr, "choir lifecycle snapshot: %v\n", err)
+			return 1
+		}
+		return writeJSON(stdout, response)
+	}
+	endpoints := map[string]string{
+		"open":        "/api/lifecycle/work/open",
+		"amend":       "/api/lifecycle/work/amend",
+		"record":      "/api/lifecycle/refs/record",
+		"queue":       "/api/lifecycle/updates/queue",
+		"apply":       "/api/lifecycle/updates/apply",
+		"settle-work": "/api/lifecycle/work/settle",
+		"refuse":      "/api/lifecycle/work/refuse",
+		"settle":      "/api/lifecycle/trajectories/settle",
+		"cancel":      "/api/lifecycle/trajectories/cancel",
+		"archive":     "/api/lifecycle/artifacts/archive",
+	}
+	endpoint, ok := endpoints[subcommand]
+	if !ok {
+		fmt.Fprintf(stderr, "choir lifecycle: unknown subcommand %q\n", subcommand)
+		return 2
+	}
+	if strings.TrimSpace(*requestPath) == "" || len(fs.Args()) != 0 {
+		fmt.Fprintf(stderr, "choir lifecycle %s: --request <json-file> is required\n", subcommand)
+		return 2
+	}
+	var raw []byte
+	if *requestPath == "-" {
+		raw, err = io.ReadAll(io.LimitReader(cliStdin, lifecycleRequestMaxBytesCLI+1))
+	} else {
+		raw, err = os.ReadFile(*requestPath)
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "choir lifecycle %s: read request: %v\n", subcommand, err)
+		return 2
+	}
+	if len(raw) > lifecycleRequestMaxBytesCLI || !json.Valid(raw) {
+		fmt.Fprintf(stderr, "choir lifecycle %s: request must be valid JSON no larger than %d bytes\n", subcommand, lifecycleRequestMaxBytesCLI)
+		return 2
+	}
+	var response json.RawMessage
+	if err := c.do(http.MethodPost, endpoint, json.RawMessage(raw), &response); err != nil {
+		fmt.Fprintf(stderr, "choir lifecycle %s: %v\n", subcommand, err)
+		return 1
+	}
+	if err := validateDurableWorkResponse(response); err != nil {
+		fmt.Fprintf(stderr, "choir lifecycle %s: %v\n", subcommand, err)
+		return 1
+	}
+	return writeJSON(stdout, response)
 }
 
 type trajectoriesListResponse struct {

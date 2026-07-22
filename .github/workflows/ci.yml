@@ -1378,6 +1378,36 @@ jobs:
               exit 1
             fi
 
+            checkout_head=$(git rev-parse HEAD)
+            if [ "$checkout_head" != "$DEPLOY_COMMIT" ] || [ -n "$(git status --porcelain)" ]; then
+              echo "Refusing identity receipt for a dirty or divergent checkout" >&2
+              exit 1
+            fi
+            nixos_closure=$(readlink -f /nix/var/nix/profiles/system)
+            if [ -z "$nixos_closure" ] || [[ "$nixos_closure" != /nix/store/* ]]; then
+              echo "NixOS system closure identity is unavailable" >&2
+              exit 1
+            fi
+            host_services='{}'
+            for service in auth proxy vmctl gateway corpusd maild sourcecycled; do
+              package_path=$(readlink -f "/var/lib/go-choir/services/${service}")
+              port=$(service_health_port "$service")
+              service_commit=$(curl -fsS --max-time 5 "http://127.0.0.1:${port}/health" | jq -er '.build.commit')
+              if [ -z "$package_path" ] || [[ "$package_path" != /nix/store/* ]] || [ "${#service_commit}" -ne 40 ]; then
+                echo "Host service identity is incomplete for ${service}" >&2
+                exit 1
+              fi
+              host_services=$(printf '%s' "$host_services" |
+                jq --arg service "$service" --arg path "$package_path" --arg commit "$service_commit" \
+                  '. + {($service): {package_path: $path, embedded_commit: $commit}}')
+            done
+            host_identity=$(jq -n \
+              --arg canonical_ref "refs/heads/main@${DEPLOY_COMMIT}" \
+              --arg checkout_head "$checkout_head" \
+              --arg nixos_closure "$nixos_closure" \
+              --argjson services "$host_services" \
+              '{canonical_ref: $canonical_ref, checkout_head: $checkout_head, checkout_clean: true, nixos_closure: $nixos_closure, services: $services}')
+
             activated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             receipt_tmp=/var/lib/go-choir/deploy-receipt.json.tmp
             jq -n \
@@ -1386,7 +1416,8 @@ jobs:
               --arg run_id "$DEPLOY_RUN_ID" \
               --arg run_attempt "$DEPLOY_RUN_ATTEMPT" \
               --argjson artifacts "$receipt_artifacts" \
-              '{schema_version: 1, target_commit: $target_commit, activated_at: $activated_at, github: {run_id: $run_id, run_attempt: $run_attempt}, artifacts: $artifacts}' \
+              --argjson host_identity "$host_identity" \
+              '{schema_version: 1, target_commit: $target_commit, activated_at: $activated_at, github: {run_id: $run_id, run_attempt: $run_attempt}, artifacts: $artifacts, host_identity: $host_identity}' \
               > "$receipt_tmp"
             if [ -f /var/lib/go-choir/deploy-receipt.json ]; then
               cp /var/lib/go-choir/deploy-receipt.json /var/lib/go-choir/deploy-receipt-previous.json

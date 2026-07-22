@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -171,12 +173,14 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 			agentID := toolregistry.ExecutionContextFrom(ctx).AgentID
 			runID := toolregistry.ExecutionContextFrom(ctx).RunID
 			role := toolregistry.ExecutionContextFrom(ctx).Role
-			if ownerID == "" || agentID == "" || runID == "" {
-				return "", fmt.Errorf("update_coagent missing coagent context")
+			computerID := rt.TextureSandboxID()
+			if ownerID == "" || computerID == "" || agentID == "" || runID == "" {
+				return "", fmt.Errorf("update_coagent missing owner/computer/agent/run context")
 			}
 
 			update := types.CoagentSourcePacket{
 				OwnerID:     ownerID,
+				ComputerID:  computerID,
 				AgentID:     agentID,
 				Role:        nonEmpty(role, configuredAgentProfileForRun(toolregistry.ExecutionContextFrom(ctx).RunRecord)),
 				SourceRunID: runID,
@@ -192,7 +196,7 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 					return "", fmt.Errorf("update_coagent channel_id %q does not match Texture coagent %q channel %q", explicitChannel, targetAgentID, targetChannelID)
 				}
 			}
-			if target, err := rt.store.GetAgent(ctx, targetAgentID); err == nil {
+			if target, err := rt.store.GetAgentByScope(ctx, ownerID, computerID, targetAgentID); err == nil {
 				targetProfile := agentprofile.Canonical(target.Profile)
 				if targetProfile == agentprofile.Email {
 					return "", fmt.Errorf("%s cannot send arbitrary coagent updates to Email appagent %s; use a Texture-owned request_email_draft artifact handoff", agentprofile.Canonical(toolregistry.ExecutionContextFrom(ctx).Profile), target.AgentID)
@@ -230,15 +234,65 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 				Content:      update.Content,
 				Timestamp:    update.CreatedAt,
 			}
-			stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message)
-			if err != nil {
-				return "", err
+			var stored types.CoagentSourcePacket
+			var created bool
+			if trajectoryID != "" {
+				if _, lifecycleErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID); lifecycleErr == nil {
+					payloadDigest, digestErr := store.ComputeLifecycleUpdatePayloadDigest(update.Packet, update.Content)
+					if digestErr != nil {
+						return "", digestErr
+					}
+					workItemID := ""
+					if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil {
+						workItemID = strings.TrimSpace(metadataStringValue(runRec.Metadata, "lifecycle_work_item_id"))
+					}
+					queue := types.QueueLifecycleUpdateRequest{
+						OwnerID: ownerID, ComputerID: computerID,
+						CommandID: "lifecycle-queue:" + update.UpdateID,
+						TrajectoryID: trajectoryID, TargetAgentID: targetAgentID, ProducerAgentID: agentID,
+						ProducerUpdateID: update.UpdateID, UpdateID: update.UpdateID,
+						ChannelID: update.ChannelID, Role: update.Role, SourceRunID: update.SourceRunID,
+						Packet: update.Packet, Content: update.Content, PayloadDigest: payloadDigest,
+						WorkItemID: workItemID,
+					}
+					queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
+					queued, queueErr := rt.store.QueueLifecycleUpdate(ctx, queue)
+					if queueErr != nil {
+						return "", fmt.Errorf("queue durable lifecycle update: %w", queueErr)
+					}
+					if queued.Update == nil {
+						return "", fmt.Errorf("queue durable lifecycle update: reducer returned no update projection")
+					}
+					stored = *queued.Update
+					created = !queued.Replay
+					if stored.Disposition == types.UpdatePending {
+						if created {
+							rt.emitChannelMessageEvent(ctx, *message, ownerID)
+						}
+						rt.wakeUpdatedCoagent(ctx, stored)
+					}
+				} else if !errors.Is(lifecycleErr, store.ErrNotFound) {
+					return "", fmt.Errorf("load durable lifecycle trajectory: %w", lifecycleErr)
+				} else {
+					var dispatchErr error
+					stored, created, dispatchErr = rt.store.DispatchWorkerUpdate(ctx, update, message)
+					if dispatchErr != nil {
+						return "", dispatchErr
+					}
+				}
+			} else {
+				var dispatchErr error
+				stored, created, dispatchErr = rt.store.DispatchWorkerUpdate(ctx, update, message)
+				if dispatchErr != nil {
+					return "", dispatchErr
+				}
 			}
-			if !created {
+			if stored.Disposition == "" && !created {
 				if err := validateExistingWorkerUpdate(stored, update); err != nil {
 					return "", err
 				}
-			} else {
+			}
+			if stored.Disposition == "" && created {
 				rt.emitChannelMessageEvent(ctx, *message, ownerID)
 				rt.wakeUpdatedCoagent(ctx, stored)
 			}
@@ -446,7 +500,6 @@ func deriveWorkerUpdateID(update types.CoagentSourcePacket) string {
 		ChannelID     string                           `json:"channel_id"`
 		TrajectoryID  string                           `json:"trajectory_id,omitempty"`
 		Role          string                           `json:"role,omitempty"`
-		SourceRunID   string                           `json:"source_run_id"`
 		Packet        types.CoagentSourcePacketPayload `json:"packet"`
 	}{
 		OwnerID:       strings.TrimSpace(update.OwnerID),
@@ -455,7 +508,6 @@ func deriveWorkerUpdateID(update types.CoagentSourcePacket) string {
 		ChannelID:     strings.TrimSpace(update.ChannelID),
 		TrajectoryID:  strings.TrimSpace(update.TrajectoryID),
 		Role:          strings.TrimSpace(update.Role),
-		SourceRunID:   strings.TrimSpace(update.SourceRunID),
 		Packet:        normalizeCoagentSourcePacketPayload(update.Packet),
 	}
 	raw, _ := json.Marshal(payload)
@@ -468,7 +520,6 @@ func validateExistingWorkerUpdate(existing, want types.CoagentSourcePacket) erro
 		existing.TargetAgentID != want.TargetAgentID ||
 		existing.ChannelID != want.ChannelID ||
 		existing.Role != want.Role ||
-		existing.SourceRunID != want.SourceRunID ||
 		existing.Content != want.Content ||
 		!reflect.DeepEqual(normalizeCoagentSourcePacketPayload(existing.Packet), normalizeCoagentSourcePacketPayload(want.Packet)) {
 		return fmt.Errorf("update_id %s already exists with different payload", want.UpdateID)

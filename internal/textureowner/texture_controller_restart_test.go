@@ -28,47 +28,42 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 		agentID = "texture:" + docID
 	)
 	now := time.Now().UTC()
-	if err := s1.CreateDocument(ctx, types.Document{
-		DocID: docID, OwnerID: ownerID, Title: "Restart target", CreatedAt: now, UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("create document: %v", err)
-	}
-	if err := s1.CreateRevision(ctx, types.Revision{
-		RevisionID:  "rev-texture-restart",
-		DocID:       docID,
-		OwnerID:     ownerID,
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "user",
-		Content:     "Durable content before restart",
-		CreatedAt:   now,
-	}); err != nil {
-		t.Fatalf("create revision: %v", err)
-	}
-	update := types.CoagentSourcePacket{
-		UpdateID:      "update-texture-restart",
-		OwnerID:       ownerID,
-		AgentID:       "researcher:texture-restart",
-		TargetAgentID: agentID,
-		ChannelID:     docID,
-		Role:          "researcher",
-		Packet: types.CoagentSourcePacketPayload{
-			SchemaVersion: types.CoagentSourcePacketSchemaV1,
-			Kind:          "evidence_update",
-			Summary:       "durable finding",
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: "sandbox-texture-restart", CommandID: "start-texture-restart",
+		TrajectoryID: "trajectory-texture-restart", Kind: types.TrajectoryKindDocument,
+		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + docID},
+		InitialWork: types.WorkItemRecord{
+			WorkItemID: "work-texture-restart", Objective: "incorporate durable finding", AssignedAgentID: agentID,
 		},
-		Content:   "Durable finding",
-		CreatedAt: now.Add(time.Millisecond),
+		InitialDocument: types.Document{DocID: docID, Title: "Restart target"},
+		InitialRevision: types.Revision{
+			RevisionID: "rev-texture-restart", AuthorKind: types.AuthorUser, AuthorLabel: "user",
+			Content: "Durable content before restart",
+		},
+		Agent: types.AgentRecord{
+			AgentID: agentID, OwnerID: ownerID, ComputerID: "sandbox-texture-restart", SandboxID: "sandbox-texture-restart",
+			Profile: "texture", Role: "texture", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
+		},
 	}
-	message := types.ChannelMessage{
-		ChannelID:   docID,
-		FromAgentID: update.AgentID,
-		ToAgentID:   agentID,
-		Role:        update.Role,
-		Content:     update.Content,
-		Timestamp:   update.CreatedAt,
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	if _, err := s1.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start durable lifecycle: %v", err)
 	}
-	if _, _, err := s1.DispatchWorkerUpdate(ctx, update, &message); err != nil {
-		t.Fatalf("dispatch durable update: %v", err)
+	packet := types.CoagentSourcePacketPayload{
+		SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "durable finding",
+	}
+	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, "Durable finding")
+	queue := types.QueueLifecycleUpdateRequest{
+		OwnerID: ownerID, ComputerID: "sandbox-texture-restart", CommandID: "queue-texture-restart",
+		TrajectoryID: start.TrajectoryID, TargetAgentID: agentID,
+		ProducerAgentID: "researcher:texture-restart", ProducerUpdateID: "update-texture-restart",
+		UpdateID: "update-texture-restart", ChannelID: docID, Role: "researcher",
+		Packet: packet, Content: "Durable finding", PayloadDigest: payloadDigest,
+	}
+	queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
+	if _, err := s1.QueueLifecycleUpdate(ctx, queue); err != nil {
+		t.Fatalf("queue durable update: %v", err)
 	}
 	if err := s1.Close(); err != nil {
 		t.Fatalf("close first store: %v", err)
@@ -86,7 +81,7 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
 	}, s2, events.NewEventBus(), provider.NewStubProvider(0))
-	rt.SetDispatchActor(func(context.Context, string, string, string, string, string) error { return nil })
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	t.Cleanup(rt.Stop)
 
 	NewHandler(rt).Start(ctx)

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -18,19 +17,7 @@ func TestUpdateCoagentAcceptsResearcherEvidenceUpdateSourcePacket(t *testing.T) 
 	ctx := context.Background()
 	ownerID := "user-d9-researcher"
 	docID := "doc-d9-researcher"
-	now := time.Now().UTC()
-	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   currentTextureAgentID(docID),
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		Profile:   agentprofile.Texture,
-		Role:      agentprofile.Texture,
-		ChannelID: docID,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("upsert texture agent: %v", err)
-	}
+	seedDurableTextureSubject(t, s, ownerID, docID)
 	researcherRun := d9CoagentRun("run-d9-researcher", ownerID, "researcher:d9", agentprofile.Researcher, docID, "")
 	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(researcherRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
@@ -179,19 +166,7 @@ func TestUpdateCoagentCanonicalizesSourceContractAliases(t *testing.T) {
 	ctx := context.Background()
 	ownerID := "user-d9-source-alias"
 	docID := "doc-d9-source-alias"
-	now := time.Now().UTC()
-	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   currentTextureAgentID(docID),
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		Profile:   agentprofile.Texture,
-		Role:      agentprofile.Texture,
-		ChannelID: docID,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("upsert texture agent: %v", err)
-	}
+	seedDurableTextureSubject(t, s, ownerID, docID)
 	run := d9CoagentRun("run-d9-source-alias", ownerID, "researcher:d9-source-alias", agentprofile.Researcher, docID, "")
 	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",

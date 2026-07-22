@@ -35,6 +35,22 @@ func TestGuestSignerAllowsOnlyTypedReceiptsAndPersistsRetry(t *testing.T) {
 	}
 }
 
+func TestGuestSignerScopesExecutionIdentityIssuer(t *testing.T) {
+	now := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
+	handler := testHandler(t, ModeGuestCore, now)
+	request := SignReceiptRequest{
+		ReceiptKind: "ExecutionIdentity", Issuer: "choir-sandbox", IssuedAt: now.Format(time.RFC3339Nano),
+		KindFields: map[string]any{"computer_id": "computer-1", "nonce": "nonce-bound-client-challenge"},
+	}
+	if response := invoke(t, handler, "/v1/sign-receipt", request); response.Code != http.StatusOK {
+		t.Fatalf("execution identity refused: %d %s", response.Code, response.Body.String())
+	}
+	request.Issuer = "choir-updater"
+	if response := invoke(t, handler, "/v1/sign-receipt", request); response.Code != http.StatusBadRequest {
+		t.Fatalf("updater minted execution identity: %d", response.Code)
+	}
+}
+
 func TestVerifierSignerCannotSignUpdaterReceipt(t *testing.T) {
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
 	handler := testHandler(t, ModeVerifier, now)

@@ -62,6 +62,12 @@ type Document struct {
 	// OwnerID is the authenticated user who owns this document.
 	OwnerID string `json:"owner_id"`
 
+	// ComputerID scopes the durable artifact within the owner's computer.
+	ComputerID string `json:"computer_id,omitempty"`
+
+	// TrajectoryID binds lifecycle-authored document changes to one durable trajectory.
+	TrajectoryID string `json:"trajectory_id,omitempty"`
+
 	// Title is the document title.
 	Title string `json:"title"`
 
@@ -74,6 +80,10 @@ type Document struct {
 
 	// UpdatedAt is when the document was last modified.
 	UpdatedAt time.Time `json:"updated_at"`
+
+	// ArchivedAt records logical archival without erasing the document,
+	// immutable revision history, source graph, or lifecycle evidence.
+	ArchivedAt *time.Time `json:"archived_at,omitempty"`
 }
 
 // Revision represents an immutable snapshot of document content at a point
@@ -93,6 +103,9 @@ type Revision struct {
 
 	// OwnerID is the document owner (denormalized for query efficiency).
 	OwnerID string `json:"owner_id"`
+
+	// ComputerID scopes the immutable revision within the owner's computer.
+	ComputerID string `json:"computer_id,omitempty"`
 
 	// AuthorKind is who created this revision (user or appagent).
 	AuthorKind AuthorKind `json:"author_kind"`
@@ -142,6 +155,9 @@ type Revision struct {
 	// ParentRevisionID is the revision this one was based on. Empty for
 	// the first revision of a document.
 	ParentRevisionID string `json:"parent_revision_id,omitempty"`
+
+	// TrajectoryID binds lifecycle-authored revisions to one durable trajectory.
+	TrajectoryID string `json:"trajectory_id,omitempty"`
 
 	// RevisionHash is the tamper-evident hash for this revision, chaining its
 	// canonical body/source/provenance substrate to the parent revision's hash

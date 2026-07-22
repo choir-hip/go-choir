@@ -1087,39 +1087,20 @@ func (h *Handler) handleTextureDeleteDocument(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-
-	if err := h.cancelTextureActorForDeletedDocument(r.Context(), docID, ownerID); err != nil {
-		log.Printf("texture api: cancel actor before deleting document %s: %v", docID, err)
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+	document, err := h.Store.ArchiveTextureDocumentAuthority(r.Context(), docID, ownerID)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		case errors.Is(err, store.ErrLifecycleInvalidTransition), errors.Is(err, store.ErrConcurrentStateChange):
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		default:
+			log.Printf("texture api: archive document %s: %v", docID, err)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to archive document"})
+		}
 		return
 	}
-
-	if err := h.Store.DeleteDocument(r.Context(), docID, ownerID); err != nil {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
-		return
-	}
-
-	writeAPIJSON(w, http.StatusOK, map[string]bool{"ok": true})
-}
-
-func (h *Handler) cancelTextureActorForDeletedDocument(ctx context.Context, docID, ownerID string) error {
-	mutation, err := h.pendingAgentMutationByDoc(ctx, docID, ownerID)
-	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		return fmt.Errorf("load pending Texture actor: %w", err)
-	}
-	if mutation != nil {
-		if _, err := h.Core.CancelRunTrajectory(ctx, mutation.RunID, ownerID); err != nil {
-			return fmt.Errorf("cancel Texture actor trajectory: %w", err)
-		}
-		if err := h.Store.CancelAgentMutation(ctx, mutation.RunID); err != nil {
-			return fmt.Errorf("mark Texture actor mutation cancelled: %w", err)
-		}
-		return nil
-	}
-	if err := h.Core.CancelAgent(ctx, currentTextureAgentID(docID), ownerID); err != nil && !strings.Contains(err.Error(), "agent not found:") {
-		return fmt.Errorf("cancel Texture actor: %w", err)
-	}
-	return nil
+	writeAPIJSON(w, http.StatusOK, map[string]any{"ok": true, "archived_at": document.ArchivedAt})
 }
 
 // HandleTextureRevisions handles POST and GET
@@ -1158,6 +1139,12 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 	doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		return
+	}
+	if strings.TrimSpace(doc.TrajectoryID) != "" {
+		writeAPIJSON(w, http.StatusConflict, apiError{
+			Error: "lifecycle-authored documents accept revisions only through the durable lifecycle",
+		})
 		return
 	}
 
@@ -1875,6 +1862,10 @@ func (h *Handler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
+	if strings.TrimSpace(doc.TrajectoryID) != "" {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle-authored documents cannot be restored outside the durable lifecycle"})
+		return
+	}
 	sourceRev, err := h.Store.GetRevision(r.Context(), strings.TrimSpace(req.RevisionID), ownerID)
 	if err != nil || sourceRev.DocID != docID {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
@@ -2089,7 +2080,11 @@ func (h *Handler) HandleTestTextureWorkerUpdate(w http.ResponseWriter, r *http.R
 		return
 	}
 	targetAgentID := currentTextureAgentID(req.DocID)
-	if _, err := h.Store.GetAgent(r.Context(), targetAgentID); err != nil {
+	if h.Core == nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "computer identity unavailable"})
+		return
+	}
+	if _, err := h.Store.GetAgentByScope(r.Context(), ownerID, h.Core.TextureSandboxID(), targetAgentID); err != nil {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "Texture agent is not initialized for this document"})
 		return
 	}

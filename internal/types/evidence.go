@@ -136,20 +136,39 @@ type CoagentPacketActionSafety struct {
 	FileMutation  string `json:"file_mutation,omitempty"`
 }
 
+type UpdateDisposition string
+
+const (
+	UpdatePending      UpdateDisposition = "pending"
+	UpdateIncorporated UpdateDisposition = "incorporated"
+	UpdateRejected     UpdateDisposition = "rejected"
+	UpdateCancelled    UpdateDisposition = "cancelled"
+	UpdateLate         UpdateDisposition = "late"
+)
+
 // CoagentSourcePacket is the persisted delivery envelope for one addressed
 // source packet. The Packet field is the canonical update_coagent payload; the
 // surrounding fields are runtime-owned delivery/idempotency metadata.
 type CoagentSourcePacket struct {
 	UpdateID            string                     `json:"update_id"`
+	ProducerUpdateID    string                     `json:"producer_update_id,omitempty"`
 	OwnerID             string                     `json:"owner_id"`
+	ComputerID          string                     `json:"computer_id"`
 	AgentID             string                     `json:"agent_id"`
 	TargetAgentID       string                     `json:"target_agent_id"`
 	ChannelID           string                     `json:"channel_id"`
 	MessageSeq          int64                      `json:"message_seq"`
 	TrajectoryID        string                     `json:"trajectory_id,omitempty"`
+	WorkItemID          string                     `json:"work_item_id,omitempty"`
 	Role                string                     `json:"role,omitempty"`
 	SourceRunID         string                     `json:"source_run_id,omitempty"`
 	SourceOutcomeSHA256 string                     `json:"source_outcome_sha256,omitempty"`
+	PayloadDigest       string                     `json:"payload_digest,omitempty"`
+	Disposition         UpdateDisposition          `json:"disposition,omitempty"`
+	DispositionRef      string                     `json:"disposition_ref,omitempty"`
+	DispositionReason   string                     `json:"disposition_reason,omitempty"`
+	LifecycleVersion    int64                      `json:"lifecycle_version,omitempty"`
+	ReducerSeq          int64                      `json:"reducer_seq,omitempty"`
 	Packet              CoagentSourcePacketPayload `json:"packet"`
 	Content             string                     `json:"content"`
 	CreatedAt           time.Time                  `json:"created_at"`

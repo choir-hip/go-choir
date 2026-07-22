@@ -46,6 +46,10 @@ var ErrStaleDocumentHead = errors.New("stale document head")
 // loses a compare-and-set race against a newer stored record.
 var ErrConcurrentStateChange = errors.New("concurrent state change")
 
+// ErrLifecycleAuthorityRequired is returned when a legacy writer attempts to
+// mutate state owned by the durable lifecycle reducer.
+var ErrLifecycleAuthorityRequired = errors.New("durable lifecycle authority required")
+
 // ErrInvalidTextureRevision is returned when a Texture revision write fails
 // structured body/source validation before persistence.
 var ErrInvalidTextureRevision = errors.New("invalid texture revision")
@@ -688,6 +692,7 @@ func Open(dbPath string) (*Store, error) {
 	// Apply the texture schema to the embedded Dolt workspace.
 	log.Printf("store: open phase=texture-schema status=starting")
 	if err := s.EnsureTextureSchema(); err != nil {
+		log.Printf("ERROR EnsureTextureSchema failed: %v", err)
 		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: bootstrap texture: %w", err)
 	}
@@ -903,9 +908,9 @@ func (s *Store) UpsertAgent(ctx context.Context, rec types.AgentRecord) error {
 	return s.UpsertAgentOG(ctx, rec)
 }
 
-// GetAgent returns the agent with the given ID.
-func (s *Store) GetAgent(ctx context.Context, agentID string) (types.AgentRecord, error) {
-	return s.GetAgentOG(ctx, agentID)
+// GetAgentByScope returns an agent by the complete durable identity tuple.
+func (s *Store) GetAgentByScope(ctx context.Context, ownerID, computerID, agentID string) (types.AgentRecord, error) {
+	return s.GetAgentByScopeOG(ctx, ownerID, computerID, agentID)
 }
 
 func runTrajectoryID(rec types.RunRecord) string {
@@ -1022,6 +1027,9 @@ func (s *Store) unmarkWorkerUpdatesDelivered(ctx context.Context, ownerID, targe
 			continue
 		}
 		if rec.TargetAgentID != targetAgentID {
+			continue
+		}
+		if rec.LifecycleVersion > 0 {
 			continue
 		}
 		rec.DeliveredToRunID = ""
@@ -2007,7 +2015,11 @@ func (s *Store) ListPendingWorkerUpdatesAll(ctx context.Context, limit int) ([]t
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
-		if rec.DeliveredToRunID != "" {
+		if rec.LifecycleVersion > 0 {
+			if rec.Disposition != types.UpdatePending {
+				continue
+			}
+		} else if rec.DeliveredToRunID != "" {
 			continue
 		}
 		updates = append(updates, rec)
@@ -2056,7 +2068,11 @@ func (s *Store) ListCoagentMailboxBacklog(ctx context.Context, ownerID, targetAg
 		if rec.OwnerID != ownerID {
 			continue
 		}
-		if rec.DeliveredToRunID != "" && rec.MessageSeq <= cursor {
+		if rec.LifecycleVersion > 0 {
+			if rec.Disposition != types.UpdatePending {
+				continue
+			}
+		} else if rec.DeliveredToRunID != "" && rec.MessageSeq <= cursor {
 			continue
 		}
 		updates = append(updates, rec)
@@ -2100,12 +2116,18 @@ func (s *Store) ListCoagentMailboxBacklogAll(ctx context.Context, limit int) ([]
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
-		cursor, _, _, cursorErr := s.GetCoagentMailboxCursor(ctx, rec.OwnerID, rec.TargetAgentID)
-		if cursorErr != nil {
-			return nil, fmt.Errorf("query coagent mailbox backlog all: read cursor for %s/%s: %w", rec.OwnerID, rec.TargetAgentID, cursorErr)
-		}
-		if rec.DeliveredToRunID != "" && rec.MessageSeq <= cursor {
-			continue
+		if rec.LifecycleVersion > 0 {
+			if rec.Disposition != types.UpdatePending {
+				continue
+			}
+		} else {
+			cursor, _, _, cursorErr := s.GetCoagentMailboxCursor(ctx, rec.OwnerID, rec.TargetAgentID)
+			if cursorErr != nil {
+				return nil, fmt.Errorf("query coagent mailbox backlog all: read cursor for %s/%s: %w", rec.OwnerID, rec.TargetAgentID, cursorErr)
+			}
+			if rec.DeliveredToRunID != "" && rec.MessageSeq <= cursor {
+				continue
+			}
 		}
 		updates = append(updates, rec)
 	}
@@ -2146,7 +2168,11 @@ func (s *Store) CountPendingWorkerUpdatesByTrajectory(ctx context.Context, owner
 		if rec.OwnerID != ownerID {
 			continue
 		}
-		if rec.DeliveredToRunID == "" {
+		if rec.LifecycleVersion > 0 {
+			if rec.Disposition == types.UpdatePending {
+				count++
+			}
+		} else if rec.DeliveredToRunID == "" {
 			count++
 		}
 	}
@@ -2181,6 +2207,9 @@ func (s *Store) MarkWorkerUpdatesDelivered(ctx context.Context, ownerID, targetA
 		}
 		if rec.TargetAgentID != targetAgentID {
 			continue // not addressed to this agent
+		}
+		if rec.LifecycleVersion > 0 {
+			continue
 		}
 		if rec.DeliveredToRunID != "" {
 			continue // already delivered
@@ -2247,6 +2276,9 @@ func (s *Store) computeAndPersistCoagentMailboxCursor(ctx context.Context, owner
 		if rec.OwnerID != ownerID {
 			continue
 		}
+		if rec.LifecycleVersion > 0 {
+			continue
+		}
 		if rec.MessageSeq <= 0 {
 			continue
 		}
@@ -2304,6 +2336,13 @@ func (s *Store) refreshCoagentMailboxCursorOG(ctx context.Context, ownerID, agen
 // existing update without duplicating delivery.
 func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.CoagentSourcePacket, message *types.ChannelMessage) (types.CoagentSourcePacket, bool, error) {
 	// Serialize the entire dispatch path to preserve idempotency:
+	if strings.TrimSpace(update.ComputerID) != "" && strings.TrimSpace(update.TrajectoryID) != "" {
+		if _, err := s.GetLifecycleTrajectory(ctx, update.OwnerID, update.ComputerID, update.TrajectoryID); err == nil {
+			return types.CoagentSourcePacket{}, false, ErrLifecycleAuthorityRequired
+		} else if !errors.Is(err, ErrNotFound) {
+			return types.CoagentSourcePacket{}, false, err
+		}
+	}
 	// the dedupe check and the channel message sequence allocation
 	// must be in the same critical section so two concurrent retries
 	// can't both pass the dedupe check and both append messages.
@@ -2335,7 +2374,11 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.CoagentSo
 			maxSeq = msg.Seq
 		}
 	}
-	message.Seq = maxSeq + 1
+	if update.MessageSeq > 0 {
+		message.Seq = update.MessageSeq
+	} else {
+		message.Seq = maxSeq + 1
+	}
 	if message.Timestamp.IsZero() {
 		message.Timestamp = time.Now().UTC()
 	}

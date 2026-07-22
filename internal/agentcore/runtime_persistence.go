@@ -40,12 +40,33 @@ func persistSubmittedRun(ctx context.Context, st runSubmissionStore, bus *events
 	if err := st.CreateRun(ctx, *rec); err != nil {
 		return fmt.Errorf("persist run: %w", err)
 	}
+	return persistSubmittedRunProjections(ctx, st, bus, rec, promptLen, traceStore)
+}
+
+func persistLifecycleSubmittedRun(ctx context.Context, st *store.Store, bus *events.EventBus, rec *types.RunRecord, promptLen int, traceStore trace.Store) error {
+	if st == nil {
+		return fmt.Errorf("runtime store is required")
+	}
+	if rec == nil {
+		return fmt.Errorf("run record is required")
+	}
+	req := types.ReplaceLifecycleActivationRequest{
+		OwnerID: rec.OwnerID, ComputerID: rec.SandboxID, CommandID: "activation:" + rec.RunID,
+		TrajectoryID: rec.TrajectoryID, AgentID: rec.AgentID, Run: *rec,
+	}
+	req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
+	if _, err := st.ReplaceLifecycleActivation(ctx, req); err != nil {
+		return fmt.Errorf("replace durable activation: %w", err)
+	}
+	return persistSubmittedRunProjections(ctx, st, bus, rec, promptLen, traceStore)
+}
+
+func persistSubmittedRunProjections(ctx context.Context, st runSubmissionStore, bus *events.EventBus, rec *types.RunRecord, promptLen int, traceStore trace.Store) error {
 	if mutation := agentMutationForRun(rec); mutation != nil {
 		if err := st.CreateAgentMutation(ctx, *mutation); err != nil {
 			log.Printf("runtime: texture agent revision run %s: create mutation: %v", rec.RunID, err)
 		}
 	}
-
 	promptLenPayload, _ := json.Marshal(map[string]int{"prompt_length": promptLen})
 	evRec := &types.EventRecord{
 		EventID:      uuid.New().String(),
@@ -68,11 +89,7 @@ func persistSubmittedRun(ctx context.Context, st runSubmissionStore, bus *events
 		}
 	}
 	if bus != nil {
-		bus.Publish(events.RuntimeEvent{
-			Record: *evRec,
-			Actor:  events.ActorRuntime,
-			Cause:  events.CauseTaskLifecycle,
-		})
+		bus.Publish(events.RuntimeEvent{Record: *evRec, Actor: events.ActorRuntime, Cause: events.CauseTaskLifecycle})
 	}
 	return nil
 }

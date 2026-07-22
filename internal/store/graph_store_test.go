@@ -28,7 +28,7 @@ func TestOGUpsertAndGetAgent(t *testing.T) {
 		t.Fatalf("upsert agent: %v", err)
 	}
 
-	got, err := s.GetAgentOG(ctx, "agent-og-1")
+	got, err := s.GetAgentByScopeOG(ctx, rec.OwnerID, rec.SandboxID, rec.AgentID)
 	if err != nil {
 		t.Fatalf("get agent: %v", err)
 	}
@@ -43,6 +43,30 @@ func TestOGUpsertAndGetAgent(t *testing.T) {
 	}
 	if got.Role != rec.Role {
 		t.Errorf("role: got %q, want %q", got.Role, rec.Role)
+	}
+}
+
+func TestGetAgentByScopeSeparatesComputers(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for _, rec := range []types.AgentRecord{
+		{AgentID: "processor:doc-1", OwnerID: "owner-og", ComputerID: "computer-a", SandboxID: "computer-a", Profile: "processor", Role: "processor", ChannelID: "channel-a", CreatedAt: now, UpdatedAt: now},
+		{AgentID: "processor:doc-1", OwnerID: "owner-og", ComputerID: "computer-b", SandboxID: "computer-b", Profile: "processor", Role: "processor", ChannelID: "channel-b", CreatedAt: now, UpdatedAt: now},
+	} {
+		if err := s.UpsertAgentOG(ctx, rec); err != nil {
+			t.Fatalf("upsert scoped agent: %v", err)
+		}
+	}
+	got, err := s.GetAgentByScopeOG(ctx, "owner-og", "computer-b", "processor:doc-1")
+	if err != nil {
+		t.Fatalf("get scoped agent: %v", err)
+	}
+	if got.ChannelID != "channel-b" {
+		t.Fatalf("channel_id = %q, want channel-b", got.ChannelID)
+	}
+	if _, err := s.GetAgentByScopeOG(ctx, "owner-og", "computer-c", "processor:doc-1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing scope error = %v, want ErrNotFound", err)
 	}
 }
 
@@ -71,7 +95,7 @@ func TestOGUpsertAgentUpdate(t *testing.T) {
 		t.Fatalf("upsert agent (update): %v", err)
 	}
 
-	got, err := s.GetAgentOG(ctx, "agent-og-2")
+	got, err := s.GetAgentByScopeOG(ctx, rec.OwnerID, rec.SandboxID, rec.AgentID)
 	if err != nil {
 		t.Fatalf("get agent: %v", err)
 	}
@@ -367,7 +391,7 @@ func TestOGGetAgentNotFound(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 
-	_, err := s.GetAgentOG(ctx, "no-such-agent")
+	_, err := s.GetAgentByScopeOG(ctx, "owner-missing", "computer-missing", "no-such-agent")
 	if err == nil {
 		t.Error("expected error for missing agent")
 	}

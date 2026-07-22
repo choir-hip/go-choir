@@ -170,7 +170,7 @@ func (rt *Runtime) terminalOutcomeRequesterTarget(ctx context.Context, rec *type
 	if targetAgentID == "" {
 		return "", "", false, nil
 	}
-	if target, err := rt.store.GetAgent(ctx, targetAgentID); err == nil {
+	if target, err := rt.store.GetAgentByScope(ctx, rec.OwnerID, rec.SandboxID, targetAgentID); err == nil {
 		if strings.TrimSpace(target.ChannelID) != "" {
 			channelID = strings.TrimSpace(target.ChannelID)
 		}

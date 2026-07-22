@@ -623,6 +623,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/shell/bootstrap":
 		h.HandleBootstrap(w, r)
 		return
+	case path == "/api/acceptance/execution-identity":
+		h.HandleExecutionIdentity(w, r)
+		return
 	case path == "/api/compute/status":
 		h.HandleComputeStatus(w, r)
 		return

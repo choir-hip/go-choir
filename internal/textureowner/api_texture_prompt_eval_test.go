@@ -139,7 +139,7 @@ func promptEvalTestSetup(t *testing.T, policyPath string) (*agentcore.Runtime, *
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
 	}, s, bus, provider.NewStubProvider(0), agentcore.WithContentService(contentowner.NewService(s, bus)))
-	core.SetDispatchActor(func(ctx context.Context, _ string, kind, content, _ string, _ string) error {
+	core.SetDispatchActor(func(ctx context.Context, _, _, _ string, kind, content, _, _ string) error {
 		if kind != "initial_dispatch" || strings.TrimSpace(content) == "" {
 			return nil
 		}

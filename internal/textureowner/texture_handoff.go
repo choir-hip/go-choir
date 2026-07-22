@@ -12,6 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provider"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -37,22 +38,28 @@ type HandoffRequest struct {
 
 // ConductorDecision is the durable prompt-bar result that opens Texture.
 type ConductorDecision struct {
-	Action               string `json:"action"`
-	App                  string `json:"app,omitempty"`
-	Title                string `json:"title,omitempty"`
-	SeedPrompt           string `json:"seed_prompt,omitempty"`
-	InitialContent       string `json:"initial_content,omitempty"`
-	CreateInitialVersion *bool  `json:"create_initial_version,omitempty"`
-	Message              string `json:"message,omitempty"`
-	SourceURL            string `json:"source_url,omitempty"`
-	MediaType            string `json:"media_type,omitempty"`
-	AppHint              string `json:"app_hint,omitempty"`
-	ContentID            string `json:"content_id,omitempty"`
-	DocID                string `json:"doc_id,omitempty"`
-	UserRevisionID       string `json:"user_revision_id,omitempty"`
-	FramingRevisionID    string `json:"framing_revision_id,omitempty"`
-	InitialRevisionID    string `json:"initial_revision_id,omitempty"`
-	InitialLoopID        string `json:"initial_loop_id,omitempty"`
+	Action               string   `json:"action"`
+	App                  string   `json:"app,omitempty"`
+	Title                string   `json:"title,omitempty"`
+	SeedPrompt           string   `json:"seed_prompt,omitempty"`
+	InitialContent       string   `json:"initial_content,omitempty"`
+	CreateInitialVersion *bool    `json:"create_initial_version,omitempty"`
+	Message              string   `json:"message,omitempty"`
+	SourceURL            string   `json:"source_url,omitempty"`
+	MediaType            string   `json:"media_type,omitempty"`
+	AppHint              string   `json:"app_hint,omitempty"`
+	ContentID            string   `json:"content_id,omitempty"`
+	DocID                string   `json:"doc_id,omitempty"`
+	UserRevisionID       string   `json:"user_revision_id,omitempty"`
+	FramingRevisionID    string   `json:"framing_revision_id,omitempty"`
+	InitialRevisionID    string   `json:"initial_revision_id,omitempty"`
+	InitialLoopID        string   `json:"initial_loop_id,omitempty"`
+	CommandID            string   `json:"command_id,omitempty"`
+	TrajectoryID         string   `json:"trajectory_id,omitempty"`
+	SubjectID            string   `json:"subject_id,omitempty"`
+	ObligationIDs        []string `json:"obligation_ids,omitempty"`
+	ReducerSeq           int64    `json:"reducer_seq,omitempty"`
+	SnapshotCursor       int64    `json:"snapshot_cursor,omitempty"`
 }
 
 // HandoffDecision records the durable Texture objects created or reused by a handoff.
@@ -175,81 +182,18 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 	decision.InitialContent = ""
 	initialContent = ""
 	_ = initialContent
-	doc := types.Document{
-		DocID:     uuid.NewString(),
-		OwnerID:   rec.OwnerID,
-		Title:     decision.Title,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-	if strings.TrimSpace(doc.Title) == "" {
-		doc.Title = "Texture"
-	}
-	if err := h.Store.CreateDocument(ctx, doc); err != nil {
-		return ConductorDecision{}, fmt.Errorf("create texture document: %w", err)
-	}
-
 	routeSeedPrompt := firstNonEmptyString(
 		strings.TrimSpace(decision.SeedPrompt),
 		provider.ConductorSeedPrompt(rec),
 		strings.TrimSpace(rec.Prompt),
 		metadataStringValue(rec.Metadata, "seed_prompt"),
 	)
-	userRevisionMetadata := map[string]any{
-		"seed_prompt":                       routeSeedPrompt,
-		"conductor_loop_id":                 rec.RunID,
-		"trajectory_id":                     trajectoryIDForRun(rec),
-		modelpolicy.MetadataPolicyOverlayID: metadataString(rec.Metadata, modelpolicy.MetadataPolicyOverlayID),
-		"owner_email":                       metadataString(rec.Metadata, "owner_email"),
-		"created_from":                      "conductor",
-		"source":                            "user_prompt",
-		"revision_role":                     "input",
-		"input_origin":                      "user_prompt",
-		"texture_version":                   "v0",
-		"prompt_unix_ts":                    now.Unix(),
-	}
 	userRevisionContent := routeSeedPrompt
 	if metadataStringValue(rec.Metadata, "input_source") == "prompt_bar" {
 		if promptText := strings.TrimSpace(metadataStringValue(rec.Metadata, "seed_prompt")); promptText != "" {
 			userRevisionContent = promptText
 		}
 	}
-	userRevMeta, _ := json.Marshal(userRevisionMetadata)
-	userRev := types.Revision{
-		RevisionID:  uuid.NewString(),
-		DocID:       doc.DocID,
-		OwnerID:     rec.OwnerID,
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: rec.OwnerID,
-		Content:     userRevisionContent,
-		Citations:   json.RawMessage("[]"),
-		Metadata:    userRevMeta,
-		CreatedAt:   now,
-	}
-	if err := h.Store.CreateRevision(ctx, userRev); err != nil {
-		return ConductorDecision{}, fmt.Errorf("create user prompt Texture revision: %w", err)
-	}
-	h.emitTextureDocumentRevisionEventForRun(ctx, rec, userRev)
-
-	doc.CurrentRevisionID = userRev.RevisionID
-	if err := h.Store.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   currentTextureAgentID(doc.DocID),
-		OwnerID:   rec.OwnerID,
-		SandboxID: h.Core.TextureSandboxID(),
-		Profile:   agentprofile.Texture,
-		Role:      agentprofile.Texture,
-		ChannelID: doc.DocID,
-		CreatedAt: now,
-		UpdatedAt: time.Now().UTC(),
-	}); err != nil {
-		return ConductorDecision{}, fmt.Errorf("persist Texture appagent: %w", err)
-	}
-	decision.DocID = doc.DocID
-	decision.UserRevisionID = userRev.RevisionID
-	if decision.InitialRevisionID == "" {
-		decision.InitialRevisionID = userRev.RevisionID
-	}
-
 	initialPrompt := strings.TrimSpace(objective)
 	if initialPrompt == "" {
 		initialPrompt = routeSeedPrompt
@@ -257,6 +201,77 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 	if initialPrompt == "" {
 		initialPrompt = "Create the first useful current-state version of this Texture document."
 	}
+	commandID := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_command_id"))
+	if commandID == "" {
+		return ConductorDecision{}, fmt.Errorf("start Texture lifecycle: durable command identity unavailable")
+	}
+	lifecycleKey := "choir:texture:lifecycle:" + commandID
+	docID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":document")).String()
+	revisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":revision:v0")).String()
+	workItemID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":work:initial")).String()
+	trajectoryID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":trajectory")).String()
+	computerID := strings.TrimSpace(h.Core.TextureSandboxID())
+	if computerID == "" {
+		return ConductorDecision{}, fmt.Errorf("start Texture lifecycle: computer identity unavailable")
+	}
+	doc := types.Document{
+		DocID: docID, OwnerID: rec.OwnerID, ComputerID: computerID, TrajectoryID: trajectoryID,
+		Title: decision.Title, CreatedAt: now, UpdatedAt: now,
+	}
+	if strings.TrimSpace(doc.Title) == "" {
+		doc.Title = "Texture"
+	}
+	userRevisionMetadata := map[string]any{
+		"seed_prompt": routeSeedPrompt, "conductor_loop_id": rec.RunID,
+		"trajectory_id": trajectoryID, modelpolicy.MetadataPolicyOverlayID: metadataString(rec.Metadata, modelpolicy.MetadataPolicyOverlayID),
+		"owner_email": metadataString(rec.Metadata, "owner_email"), "created_from": "conductor",
+		"source": "user_prompt", "revision_role": "input", "input_origin": "user_prompt",
+		"texture_version": "v0", "prompt_unix_ts": now.Unix(),
+	}
+	userRevMeta, _ := json.Marshal(userRevisionMetadata)
+	userRev := types.Revision{
+		RevisionID: revisionID, DocID: doc.DocID, OwnerID: rec.OwnerID, ComputerID: computerID, TrajectoryID: trajectoryID,
+		AuthorKind: types.AuthorUser, AuthorLabel: rec.OwnerID, Content: userRevisionContent,
+		Citations: json.RawMessage("[]"), Metadata: userRevMeta, CreatedAt: now,
+	}
+	agentID := currentTextureAgentID(doc.DocID)
+	start := types.StartLifecycleRequest{
+		OwnerID: rec.OwnerID, ComputerID: computerID,
+		CommandID: lifecycleKey, TrajectoryID: trajectoryID,
+		Kind:        types.TrajectoryKindTask,
+		SubjectRefs: map[string]string{"artifact": "texture://documents/" + doc.DocID},
+		SettlementRule: types.SettlementRule{
+			RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"},
+		},
+		InitialWork: types.WorkItemRecord{
+			WorkItemID: workItemID, Objective: initialPrompt, AssignedAgentID: agentID,
+			AuthorityProfile: agentprofile.Texture,
+		},
+		InitialDocument: doc, InitialRevision: userRev,
+		Agent: types.AgentRecord{
+			AgentID: agentID, OwnerID: rec.OwnerID, ComputerID: computerID, SandboxID: computerID,
+			Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: doc.DocID,
+			CreatedAt: now, UpdatedAt: now,
+		},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	started, err := h.Store.StartLifecycle(ctx, start)
+	if err != nil {
+		return ConductorDecision{}, fmt.Errorf("start Texture lifecycle: %w", err)
+	}
+	doc, userRev = *started.Document, *started.Revision
+	h.emitTextureDocumentRevisionEventForRun(ctx, rec, userRev)
+	decision.DocID = doc.DocID
+	decision.UserRevisionID = userRev.RevisionID
+	if decision.InitialRevisionID == "" {
+		decision.InitialRevisionID = userRev.RevisionID
+	}
+	decision.CommandID = start.CommandID
+	decision.TrajectoryID = started.Trajectory.TrajectoryID
+	decision.SubjectID = started.Agent.AgentID
+	decision.ObligationIDs = []string{started.WorkItem.WorkItemID}
+	decision.ReducerSeq = started.Trajectory.ReducerSeq
+	decision.SnapshotCursor = started.Trajectory.ReducerSeq
 	initialRun, err := h.submitTextureAgentRevisionRun(ctx, doc, rec.OwnerID, textureAgentRevisionRequest{
 		Intent: "initial_conductor_workflow",
 		Prompt: initialPrompt,
@@ -270,6 +285,7 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 	if rec.Metadata == nil {
 		rec.Metadata = make(map[string]any)
 	}
+	rec.Metadata["trajectory_id"] = trajectoryID
 	rec.Metadata["doc_id"] = decision.DocID
 	rec.Metadata["user_revision_id"] = decision.UserRevisionID
 	rec.Metadata["initial_revision_id"] = decision.InitialRevisionID

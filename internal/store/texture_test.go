@@ -324,8 +324,8 @@ func TestTextureDeleteDocument(t *testing.T) {
 		t.Fatalf("CreateDocument: %v", err)
 	}
 
-	if err := s.DeleteDocument(ctx, "doc-1", "user-1"); err != nil {
-		t.Fatalf("DeleteDocument: %v", err)
+	if err := s.deleteDocumentPhysicalForTest(ctx, "doc-1", "user-1"); err != nil {
+		t.Fatalf("deleteDocumentPhysicalForTest: %v", err)
 	}
 
 	_, err := s.GetDocument(ctx, "doc-1", "user-1")

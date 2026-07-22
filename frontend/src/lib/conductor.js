@@ -10,10 +10,11 @@ export async function submitConductorPrompt(text) {
     throw new Error('Prompt is required');
   }
 
+  const commandId = crypto.randomUUID();
   const res = await fetchWithRenewal('/api/prompt-bar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: prompt }),
+    body: JSON.stringify({ text: prompt, command_id: commandId }),
   });
 
   if (!res.ok) {

@@ -49,6 +49,7 @@ type computeComputer struct {
 
 type computeImmutableIdentity struct {
 	ComputerVersion         computerversion.ComputerVersion `json:"computer_version"`
+	CodeCommit              string                          `json:"code_commit"`
 	RouteGeneration         uint64                          `json:"route_generation"`
 	RouteReceiptID          string                          `json:"route_receipt_id"`
 	TransitionKind          routeledger.TransitionKind      `json:"transition_kind"`
@@ -244,11 +245,11 @@ func (h *Handler) currentImmutableIdentity(ctx context.Context, userID, desktopI
 	}
 	receipt := resolution.LatestReceipt
 	version := resolution.Slot.Current
-	if !version.Valid() || receipt.Validate() != nil || resolution.Slot.ID != slotID || receipt.ID != resolution.Slot.LatestReceiptID || receipt.New != version || receipt.CommittedGeneration != resolution.Slot.Generation {
+	if !version.Valid() || receipt.Validate() != nil || resolution.Slot.ID != slotID || receipt.ID != resolution.Slot.LatestReceiptID || receipt.New != version || receipt.CommittedGeneration != resolution.Slot.Generation || resolution.CodeClosure.Ref != version.CodeRef || len(resolution.CodeClosure.SourceCommit) != 40 {
 		return nil, fmt.Errorf("route slot and receipt evidence do not join")
 	}
 	return &computeImmutableIdentity{
-		ComputerVersion: version, RouteGeneration: resolution.Slot.Generation,
+		ComputerVersion: version, CodeCommit: resolution.CodeClosure.SourceCommit, RouteGeneration: resolution.Slot.Generation,
 		RouteReceiptID: string(receipt.ID), TransitionKind: receipt.Kind,
 		ApprovalRef: string(receipt.ApprovalRef), PromotionCertificateRef: string(receipt.PromotionCertificateRef), Joined: true,
 	}, nil

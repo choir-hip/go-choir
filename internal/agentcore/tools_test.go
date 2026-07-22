@@ -613,7 +613,7 @@ func TestBootBindsExplicitUpdateAcrossDispatchBeforeToolResultCrashWindow(t *tes
 	if err := s.UpdateRun(ctx, rec); err != nil {
 		t.Fatalf("persist terminal researcher run: %v", err)
 	}
-	rt.SetDispatchActor(func(context.Context, string, string, string, string, string) error {
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
 		return nil
 	})
 	rt.reconcileTerminalRunOutcomes(ctx)
@@ -634,7 +634,7 @@ func TestBootBindsExplicitUpdateAcrossDispatchBeforeToolResultCrashWindow(t *tes
 	}
 }
 
-func TestDerivedWorkerUpdateIDIncludesSourceRun(t *testing.T) {
+func TestDerivedWorkerUpdateIDSurvivesReplaceableSourceRun(t *testing.T) {
 	base := types.CoagentSourcePacket{
 		OwnerID:       "owner-update-id",
 		AgentID:       "researcher:update-id",
@@ -648,8 +648,8 @@ func TestDerivedWorkerUpdateIDIncludesSourceRun(t *testing.T) {
 	second := base
 	second.SourceRunID = "run-update-id-second"
 
-	if firstID, secondID := deriveWorkerUpdateID(first), deriveWorkerUpdateID(second); firstID == secondID {
-		t.Fatalf("different producer runs derived the same update ID %q", firstID)
+	if firstID, secondID := deriveWorkerUpdateID(first), deriveWorkerUpdateID(second); firstID != secondID {
+		t.Fatalf("replaceable producer runs changed durable update ID: %q != %q", firstID, secondID)
 	}
 }
 
@@ -841,7 +841,7 @@ func TestBootReconciliationIsIdempotentForTerminalResearcherOutcome(t *testing.T
 	if err := s.CreateRun(ctx, rec); err != nil {
 		t.Fatalf("create terminal researcher restart fixture: %v", err)
 	}
-	rt.SetDispatchActor(func(context.Context, string, string, string, string, string) error {
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
 		return nil
 	})
 
@@ -907,7 +907,7 @@ func TestBootTerminalRepairSynthesizesGenericChildrenAndWakesTargetOnce(t *testi
 		}
 	}
 	var wakes atomic.Int32
-	rt.SetDispatchActor(func(context.Context, string, string, string, string, string) error {
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
 		wakes.Add(1)
 		return nil
 	})

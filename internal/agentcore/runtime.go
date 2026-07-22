@@ -90,7 +90,7 @@ type Runtime struct {
 	// sets. When the business logic needs to start a run or wake an agent,
 	// it calls this function. If nil, activate() panics — there is no
 	// fallback path. The actor runtime is the only execution substrate.
-	dispatchActor func(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error
+	dispatchActor func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error
 
 	desktopState                *desktopstate.Handler
 	content                     *contentowner.Service
@@ -154,7 +154,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 // The actor runtime adapter calls this during construction. When set,
 // activate() sends actor messages through this function. If not set,
 // activate() panics — there is no fallback path.
-func (rt *Runtime) SetDispatchActor(fn func(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error) {
+func (rt *Runtime) SetDispatchActor(fn func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error) {
 	rt.dispatchActor = fn
 }
 
@@ -176,7 +176,7 @@ func (rt *Runtime) activate(rec *types.RunRecord) {
 		panic("runtime: activate called with empty AgentID")
 	}
 	trajectoryID := metadataStringValue(rec.Metadata, runMetadataTrajectoryID)
-	if err := rt.dispatchActor(context.Background(), agentID, "initial_dispatch", rec.RunID, trajectoryID, ""); err != nil {
+	if err := rt.dispatchActor(context.Background(), rec.OwnerID, rec.SandboxID, agentID, "initial_dispatch", rec.RunID, trajectoryID, ""); err != nil {
 		log.Printf("runtime: activate dispatch for run %s: %v", rec.RunID, err)
 	}
 }
@@ -530,7 +530,6 @@ func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWa
 // in-process activations are marked passivated, then durable update backlog and
 // assigned open trajectory work are swept to re-warm cold actors.
 func (rt *Runtime) Start(ctx context.Context) {
-	go rt.reconcileSelfDevelopmentMaterialization(context.Background())
 	rt.passivateInterruptedActivations(ctx)
 	rt.recoverOpenWirePublicationClaims(ctx)
 	terminalOutcomeTargets := rt.reconcileTerminalRunOutcomes(ctx)
@@ -632,6 +631,9 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 	runID := uuid.New().String()
 	metadata = ensureDesktopID(metadata, nil, metadataStringValue(metadata, runMetadataDesktopID))
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, nil)
+	if agentprofile.Canonical(agentRec.Profile) == agentprofile.Conductor && metadataStringValue(metadata, "lifecycle_command_id") == "" {
+		metadata["lifecycle_command_id"] = uuid.NewString()
+	}
 	if strings.TrimSpace(agentRec.ChannelID) == "" {
 		agentRec.ChannelID = runID
 	}
@@ -658,10 +660,24 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 		UpdatedAt:        now,
 		Metadata:         metadata,
 	}
-	rt.stampAndMintTrajectory(ctx, rec)
-
-	if err := persistSubmittedRun(ctx, rt.store, rt.bus, agentRec, rec, len(prompt), rt.traceStore); err != nil {
-		return nil, err
+	rec.TrajectoryID = trajectoryIDForRun(rec)
+	existingAgent, existingAgentErr := rt.store.GetAgentByScope(ctx, ownerID, rt.cfg.SandboxID, rec.AgentID)
+	if existingAgentErr == nil && existingAgent.LifecycleVersion > 0 {
+		if rec.TrajectoryID == "" || existingAgent.ChannelID != rec.ChannelID ||
+			existingAgent.Profile != rec.AgentProfile || existingAgent.Role != rec.AgentRole {
+			return nil, fmt.Errorf("durable activation binding mismatch")
+		}
+		if err := persistLifecycleSubmittedRun(ctx, rt.store, rt.bus, rec, len(prompt), rt.traceStore); err != nil {
+			return nil, err
+		}
+	} else {
+		if existingAgentErr != nil && !errors.Is(existingAgentErr, store.ErrNotFound) {
+			return nil, fmt.Errorf("resolve run subject: %w", existingAgentErr)
+		}
+		rt.stampAndMintTrajectory(ctx, rec)
+		if err := persistSubmittedRun(ctx, rt.store, rt.bus, agentRec, rec, len(prompt), rt.traceStore); err != nil {
+			return nil, err
+		}
 	}
 	if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Processor {
 		if _, err := rt.beginWireProcessorDecisionWorkItem(ctx, rec); err != nil {
@@ -687,6 +703,9 @@ func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, own
 	metadata = ensureDesktopID(metadata, nil, metadataStringValue(metadata, runMetadataDesktopID))
 	metadata = ensureTrajectoryID(metadata, nil, runID)
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, nil)
+	if agentprofile.Canonical(agentRec.Profile) == agentprofile.Conductor && metadataStringValue(metadata, "lifecycle_command_id") == "" {
+		metadata["lifecycle_command_id"] = uuid.NewString()
+	}
 	if strings.TrimSpace(agentRec.ChannelID) == "" {
 		agentRec.ChannelID = runID
 	}
@@ -1264,6 +1283,24 @@ func (rt *Runtime) cancelTrajectoryAuthority(ctx context.Context, ownerID, traje
 	if ownerID == "" || trajectoryID == "" {
 		return types.TrajectoryRecord{}, fmt.Errorf("cancel trajectory: owner_id and trajectory_id are required")
 	}
+	computerID := strings.TrimSpace(rt.TextureSandboxID())
+	if computerID != "" {
+		if trajectory, lifecycleErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID); lifecycleErr == nil {
+			if trajectory.Status != types.TrajectoryLive {
+				return trajectory, nil
+			}
+			cancel := types.CancelLifecycleRequest{
+				OwnerID: ownerID, ComputerID: computerID,
+				CommandID:    "lifecycle-cancel:" + trajectoryID,
+				TrajectoryID: trajectoryID, Reason: "owner cancellation",
+			}
+			cancel.CommandDigest, _ = store.ComputeCancelLifecycleDigest(cancel)
+			result, cancelErr := rt.store.CancelLifecycleTrajectory(ctx, cancel)
+			return result.Trajectory, cancelErr
+		} else if !errors.Is(lifecycleErr, store.ErrNotFound) {
+			return types.TrajectoryRecord{}, lifecycleErr
+		}
+	}
 	return rt.store.CancelTrajectoryAuthority(ctx, ownerID, trajectoryID)
 }
 
@@ -1294,6 +1331,12 @@ func (rt *Runtime) drainCancelledTrajectoryActivations(ctx context.Context, owne
 		return cancelled, fmt.Errorf("list active trajectory activations: %w", err)
 	}
 	for _, run := range active {
+		if rt.dispatchActor == nil {
+			return cancelled, fmt.Errorf("deliver trajectory cancellation: actor runtime is unavailable")
+		}
+		if err := rt.dispatchActor(drainCtx, run.OwnerID, run.SandboxID, run.AgentID, "cancel", run.RunID, trajectoryID, ""); err != nil {
+			return cancelled, fmt.Errorf("deliver trajectory cancellation for run %s: %w", run.RunID, err)
+		}
 		if err := rt.CancelRun(drainCtx, run.RunID, ownerID); err != nil {
 			if strings.Contains(err.Error(), "cannot cancel run in") {
 				continue
@@ -1657,7 +1700,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActor(ctx context.Context, workItems
 	} else if found {
 		return &resident, nil
 	}
-	agent, err := rt.store.GetAgent(ctx, agentID)
+	agent, err := rt.store.GetAgentByScope(ctx, ownerID, firstNonEmpty(first.ComputerID, rt.TextureSandboxID()), agentID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, nil

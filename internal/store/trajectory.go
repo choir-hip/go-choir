@@ -71,6 +71,11 @@ func (s *Store) ListTrajectoriesByOwner(ctx context.Context, ownerID string, lim
 // Repeating the stored status is idempotent; a terminal trajectory cannot be
 // rewritten to a different terminal status.
 func (s *Store) UpdateTrajectoryStatus(ctx context.Context, ownerID, trajectoryID string, status types.TrajectoryStatus) (types.TrajectoryRecord, error) {
+	if exists, err := s.lifecycleTrajectoryExists(ctx, ownerID, trajectoryID); err != nil {
+		return types.TrajectoryRecord{}, err
+	} else if exists {
+		return types.TrajectoryRecord{}, ErrLifecycleAuthorityRequired
+	}
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
 	return s.UpdateTrajectoryStatusOG(ctx, ownerID, trajectoryID, status)
@@ -79,6 +84,11 @@ func (s *Store) UpdateTrajectoryStatus(ctx context.Context, ownerID, trajectoryI
 // CancelTrajectoryAuthority atomically cancels a live trajectory and every
 // open work item on it. Terminal trajectories are returned unchanged.
 func (s *Store) CancelTrajectoryAuthority(ctx context.Context, ownerID, trajectoryID string) (types.TrajectoryRecord, error) {
+	if exists, err := s.lifecycleTrajectoryExists(ctx, ownerID, trajectoryID); err != nil {
+		return types.TrajectoryRecord{}, err
+	} else if exists {
+		return types.TrajectoryRecord{}, ErrLifecycleAuthorityRequired
+	}
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
 	return s.cancelTrajectoryAuthorityOG(ctx, ownerID, trajectoryID)
@@ -89,6 +99,11 @@ func (s *Store) CancelTrajectoryAuthority(ctx context.Context, ownerID, trajecto
 // Merge patches are serialized within one Store instance so concurrent callers
 // cannot drop each other's keys by overwriting the whole JSON object.
 func (s *Store) UpdateTrajectorySubjectRefs(ctx context.Context, ownerID, trajectoryID string, patch map[string]string) (types.TrajectoryRecord, error) {
+	if exists, err := s.lifecycleTrajectoryExists(ctx, ownerID, trajectoryID); err != nil {
+		return types.TrajectoryRecord{}, err
+	} else if exists {
+		return types.TrajectoryRecord{}, ErrLifecycleAuthorityRequired
+	}
 	if len(patch) == 0 {
 		return s.GetTrajectory(ctx, ownerID, trajectoryID)
 	}

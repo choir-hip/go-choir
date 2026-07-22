@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
@@ -15,13 +16,22 @@ import (
 
 type promptBarSubmitRequest struct {
 	Text string `json:"text"`
+	CommandID string `json:"command_id,omitempty"`
 }
 
 type promptBarSubmitResponse struct {
-	SubmissionID string         `json:"submission_id"`
-	State        types.RunState `json:"state"`
-	CreatedAt    string         `json:"created_at"`
-	StatusURL    string         `json:"status_url"`
+	SubmissionID   string         `json:"submission_id"`
+	State          types.RunState `json:"state"`
+	CreatedAt      string         `json:"created_at"`
+	StatusURL      string         `json:"status_url"`
+	CommandID      string         `json:"command_id,omitempty"`
+	TrajectoryID   string         `json:"trajectory_id,omitempty"`
+	DocID          string         `json:"doc_id,omitempty"`
+	RevisionID     string         `json:"revision_id,omitempty"`
+	SubjectID      string         `json:"subject_id,omitempty"`
+	ObligationIDs  []string       `json:"obligation_ids,omitempty"`
+	ReducerSeq     int64          `json:"reducer_seq,omitempty"`
+	SnapshotCursor int64          `json:"snapshot_cursor,omitempty"`
 }
 
 type promptBarSubmissionStatusResponse struct {
@@ -58,6 +68,10 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "text is required"})
 		return
 	}
+	commandID := strings.TrimSpace(req.CommandID)
+	if commandID == "" {
+		commandID = uuid.NewString()
+	}
 
 	requestedApp := agentprofile.Texture
 	var sourceURL, mediaType, appHint string
@@ -74,6 +88,7 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		"seed_prompt":            text,
 		"initial_document_title": title,
 		"submission_surface":     "prompt_bar",
+		"lifecycle_command_id": commandID,
 	}
 	if ownerEmail := authenticatedUserEmail(r); ownerEmail != "" {
 		metadata["owner_email"] = ownerEmail
@@ -83,12 +98,13 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		metadata["content_media_type"] = mediaType
 		metadata["content_app_hint"] = appHint
 	}
+	var handoff HandoffDecision
 	rec, err := h.Core.CompletePromptBarDecision(r.Context(), text, ownerID, metadata, agentcore.PromptBarDecisionSpec{
 		Action: "open_app", App: requestedApp, Title: title,
 		SourceURL: sourceURL, MediaType: mediaType, AppHint: appHint,
 	})
 	if err == nil && requestedApp == agentprofile.Texture {
-		_, err = h.EnsureTextureHandoff(r.Context(), rec, HandoffRequest{
+		handoff, err = h.EnsureTextureHandoff(r.Context(), rec, HandoffRequest{
 			Kind: HandoffKindUserPrompt, CallerProfile: agentprofile.Conductor,
 			Objective: text, Title: title,
 		})
@@ -103,6 +119,10 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		State:        rec.State,
 		CreatedAt:    rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 		StatusURL:    "/api/prompt-bar/submissions/" + rec.RunID,
+		CommandID:    handoff.Conductor.CommandID, TrajectoryID: handoff.Conductor.TrajectoryID,
+		DocID: handoff.Conductor.DocID, RevisionID: handoff.Conductor.UserRevisionID,
+		SubjectID: handoff.Conductor.SubjectID, ObligationIDs: handoff.Conductor.ObligationIDs,
+		ReducerSeq: handoff.Conductor.ReducerSeq, SnapshotCursor: handoff.Conductor.SnapshotCursor,
 	})
 }
 

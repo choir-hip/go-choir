@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -390,6 +391,76 @@ func TestDoltStorePutBatch(t *testing.T) {
 	edges, _ := store.ListEdges(ctx, EdgeFilter{FromID: obj1.CanonicalID, Limit: 10})
 	if len(edges) != 1 {
 		t.Errorf("expected 1 edge, got %d", len(edges))
+	}
+}
+
+func TestDoltStorePutBatchConditionalIsAtomic(t *testing.T) {
+	db := openTestDoltDB(t)
+	store := NewDoltStore(db)
+	ctx := context.Background()
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	now := time.Now().UTC()
+	current := Object{
+		CanonicalID: "obj:choir.trajectory:owner:key-current",
+		ObjectKind:  "choir.trajectory",
+		OwnerID:     "owner",
+		VersionID:   "v1",
+		ContentHash: "sha256:v1",
+		Body:        []byte(`{"version":1}`),
+		Metadata:    json.RawMessage(`{}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := store.PutObject(ctx, current); err != nil {
+		t.Fatalf("seed object: %v", err)
+	}
+
+	next := current
+	next.VersionID = "v2"
+	next.ContentHash = "sha256:v2"
+	next.Body = []byte(`{"version":2}`)
+	created := Object{
+		CanonicalID: "obj:choir.work_item:owner:key-created",
+		ObjectKind:  "choir.work_item",
+		OwnerID:     "owner",
+		VersionID:   "v1",
+		ContentHash: "sha256:created",
+		Body:        []byte(`{}`),
+		Metadata:    json.RawMessage(`{}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := store.PutBatchConditional(ctx, []ObjectCondition{
+		{CanonicalID: current.CanonicalID, Exists: true, ExpectedVersionID: "v1"},
+		{CanonicalID: created.CanonicalID, Exists: false},
+	}, Batch{Objects: []Object{next, created}}); err != nil {
+		t.Fatalf("conditional batch: %v", err)
+	}
+
+	staleWrite := next
+	staleWrite.VersionID = "v3"
+	staleWrite.ContentHash = "sha256:v3"
+	orphan := created
+	orphan.CanonicalID = "obj:choir.work_item:owner:key-orphan"
+	err := store.PutBatchConditional(ctx, []ObjectCondition{
+		{CanonicalID: current.CanonicalID, Exists: true, ExpectedVersionID: "v1"},
+		{CanonicalID: orphan.CanonicalID, Exists: false},
+	}, Batch{Objects: []Object{staleWrite, orphan}})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("stale conditional error = %v, want ErrConflict", err)
+	}
+	got, err := store.GetObject(ctx, current.CanonicalID)
+	if err != nil {
+		t.Fatalf("get current: %v", err)
+	}
+	if got.VersionID != "v2" {
+		t.Fatalf("current version = %q, want v2", got.VersionID)
+	}
+	if _, err := store.GetObject(ctx, orphan.CanonicalID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("orphan lookup error = %v, want ErrNotFound", err)
 	}
 }
 

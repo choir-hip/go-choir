@@ -211,14 +211,14 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 
 // dispatch is the function hook that the runtime core calls to send actor
 // messages. It is set via rt.SetDispatchActor(a.dispatch).
-func (a *Adapter) dispatch(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
-	toAgentID = strings.TrimSpace(toAgentID)
-	if toAgentID == "" {
-		return fmt.Errorf("actorruntime: dispatch: empty toAgentID")
+func (a *Adapter) dispatch(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
+	ownerID, computerID, toAgentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(toAgentID)
+	if ownerID == "" || computerID == "" || toAgentID == "" {
+		return fmt.Errorf("actorruntime: dispatch: owner_id, computer_id, and to_agent_id are required")
 	}
 	u := actor.Update{
 		UpdateID:     uuid.New().String(),
-		ToAgentID:    toAgentID,
+		ToAgentID:    scopedActorMailboxID(ownerID, computerID, toAgentID),
 		FromAgentID:  fromAgentID,
 		Kind:         kind,
 		Content:      content,
@@ -292,19 +292,28 @@ func (a *Adapter) BindTextureOwner(owner *textureowner.Handler) error {
 // Start keeps actor delivery paused while the generic core and concrete Texture
 // owner reconcile durable state. Only after both scans finish are boot
 // dispatches released and the actor log swept.
-func (a *Adapter) Start(ctx context.Context) {
+func (a *Adapter) Start(ctx context.Context) error {
+	backlogs, err := a.log.AgentsWithBacklog(ctx)
+	if err != nil {
+		return fmt.Errorf("actorruntime: inspect durable mailbox identities: %w", err)
+	}
+	for _, mailboxID := range backlogs {
+		if _, _, _, err := parseScopedActorMailboxID(mailboxID); err != nil {
+			return fmt.Errorf("actorruntime: unsupported legacy durable mailbox %q: %w", mailboxID, err)
+		}
+	}
 	a.Runtime.Start(ctx)
 	if a.textureOwner != nil {
 		a.textureOwner.Start(ctx)
 	}
 	if err := a.flushBootDispatches(ctx); err != nil {
-		log.Printf("actorruntime: boot dispatch flush stopped: %v", err)
-		return
+		return fmt.Errorf("actorruntime: boot dispatch flush: %w", err)
 	}
 	if err := a.actorRT.Sweep(ctx); err != nil {
-		log.Printf("actorruntime: boot sweep: %v", err)
+		return fmt.Errorf("actorruntime: boot sweep: %w", err)
 	}
 	a.startOnce.Do(func() { a.started = true })
+	return nil
 }
 
 // Stop gracefully shuts down the actor runtime and the runtime core.

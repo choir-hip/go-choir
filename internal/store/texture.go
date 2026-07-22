@@ -663,6 +663,71 @@ func (s *Store) UpdateDocument(ctx context.Context, doc types.Document) error {
 	return s.UpdateTextureDocumentOG(ctx, doc)
 }
 
+// ArchiveTextureDocumentAuthority is the product deletion boundary. It records
+// logical archival and preserves revision, source, and lifecycle evidence.
+func (s *Store) ArchiveTextureDocumentAuthority(ctx context.Context, docID, ownerID string) (types.Document, error) {
+	docID, ownerID = strings.TrimSpace(docID), strings.TrimSpace(ownerID)
+	if docID == "" || ownerID == "" {
+		return types.Document{}, ErrNotFound
+	}
+	document, err := s.GetDocument(ctx, docID, ownerID)
+	if err != nil {
+		return types.Document{}, err
+	}
+	if document.ArchivedAt != nil {
+		return document, nil
+	}
+	if trajectoryID := strings.TrimSpace(document.TrajectoryID); trajectoryID != "" {
+		trajectory, getErr := s.GetLifecycleTrajectory(ctx, ownerID, document.ComputerID, trajectoryID)
+		if getErr != nil {
+			return types.Document{}, getErr
+		}
+		if trajectory.Status == types.TrajectoryLive {
+			return types.Document{}, ErrLifecycleInvalidTransition
+		}
+		request := types.ArchiveLifecycleArtifactRequest{
+			OwnerID:                  ownerID,
+			ComputerID:               document.ComputerID,
+			CommandID:                "archive:" + docID + ":" + document.CurrentRevisionID,
+			TrajectoryID:             trajectoryID,
+			ExpectedLifecycleVersion: trajectory.LifecycleVersion,
+			ExpectedHeadRevisionID:   document.CurrentRevisionID,
+			Reason:                   "owner archived document",
+		}
+		request.CommandDigest, err = ComputeArchiveLifecycleArtifactDigest(request)
+		if err != nil {
+			return types.Document{}, err
+		}
+		result, archiveErr := s.ArchiveLifecycleArtifact(ctx, request)
+		if archiveErr != nil {
+			return types.Document{}, archiveErr
+		}
+		if result.Document == nil {
+			return types.Document{}, fmt.Errorf("archive texture document: reducer returned no document")
+		}
+		return *result.Document, nil
+	}
+
+	s.textureRevMu.Lock()
+	defer s.textureRevMu.Unlock()
+	document, err = s.GetDocument(ctx, docID, ownerID)
+	if err != nil {
+		return types.Document{}, err
+	}
+	if document.ArchivedAt != nil {
+		return document, nil
+	}
+	if strings.TrimSpace(document.TrajectoryID) != "" {
+		return types.Document{}, ErrConcurrentStateChange
+	}
+	now := time.Now().UTC()
+	document.ArchivedAt, document.UpdatedAt = &now, now
+	if err := s.UpdateTextureDocumentOG(ctx, document); err != nil {
+		return types.Document{}, err
+	}
+	return document, nil
+}
+
 // GetDocumentAlias resolves a file-browser alias to its canonical document ID.
 func (s *Store) GetDocumentAlias(ctx context.Context, ownerID, sourcePath string) (string, error) {
 	row := s.textureHandle().QueryRowContext(ctx,
@@ -729,9 +794,26 @@ func (s *Store) UpsertDocumentAlias(ctx context.Context, ownerID, sourcePath, do
 	return nil
 }
 
-// DeleteDocument deletes a document and all its revisions. It is scoped
-// to the given owner.
-func (s *Store) DeleteDocument(ctx context.Context, docID, ownerID string) error {
+// deleteDocumentPhysicalForTest is isolated migration/test tooling. Product
+// deletion uses ArchiveTextureDocumentAuthority and never erases history.
+func (s *Store) deleteDocumentPhysicalForTest(ctx context.Context, docID, ownerID string) error {
+	docObj, err := s.ogGetByKey(ctx, ogKindTexDoc, "doc_id", docID)
+	if err != nil {
+		if errors.Is(err, objectgraph.ErrNotFound) {
+			return fmt.Errorf("%w: document %s for owner %s", ErrNotFound, docID, ownerID)
+		}
+		return fmt.Errorf("delete texture document: %w", err)
+	}
+	var existing types.Document
+	if err := ogDecode(docObj, &existing); err != nil {
+		return fmt.Errorf("delete texture document: %w", err)
+	}
+	if existing.OwnerID != ownerID {
+		return fmt.Errorf("%w: document %s for owner %s", ErrNotFound, docID, ownerID)
+	}
+	if strings.TrimSpace(existing.TrajectoryID) != "" {
+		return ErrLifecycleAuthorityRequired
+	}
 	// Delete revisions from OG. Use a large limit to avoid truncation
 	// for documents with many revisions.
 	revs, err := s.ListTextureRevisionsByDocOG(ctx, ownerID, docID, 100000)
@@ -774,20 +856,6 @@ func (s *Store) DeleteDocument(ctx context.Context, docID, ownerID string) error
 	)
 
 	// Delete the document from OG.
-	docObj, err := s.ogGetByKey(ctx, ogKindTexDoc, "doc_id", docID)
-	if err != nil {
-		if err == objectgraph.ErrNotFound {
-			return fmt.Errorf("%w: document %s for owner %s", ErrNotFound, docID, ownerID)
-		}
-		return fmt.Errorf("delete texture document: %w", err)
-	}
-	var existing types.Document
-	if err := ogDecode(docObj, &existing); err != nil {
-		return fmt.Errorf("delete texture document: %w", err)
-	}
-	if existing.OwnerID != ownerID {
-		return fmt.Errorf("%w: document %s for owner %s", ErrNotFound, docID, ownerID)
-	}
 	return s.ogDelete(ctx, docObj.CanonicalID)
 }
 
@@ -823,6 +891,9 @@ func (s *Store) CreateRevisionWithSourceGraph(ctx context.Context, rev types.Rev
 }
 
 func (s *Store) createRevision(ctx context.Context, rev types.Revision, graph TextureSourceGraphWriteSet) error {
+	if strings.TrimSpace(rev.TrajectoryID) != "" {
+		return ErrLifecycleAuthorityRequired
+	}
 	preparedRev, bodyDocJSON, sourceEntitiesJSON, err := prepareTextureRevisionV2(rev)
 	if err != nil {
 		return err
@@ -844,6 +915,9 @@ func (s *Store) createRevision(ctx context.Context, rev types.Revision, graph Te
 	doc, err := s.GetTextureDocumentOG(ctx, rev.OwnerID, rev.DocID)
 	if err != nil {
 		return fmt.Errorf("%w: document %s for owner %s", ErrNotFound, rev.DocID, rev.OwnerID)
+	}
+	if strings.TrimSpace(doc.TrajectoryID) != "" {
+		return ErrLifecycleAuthorityRequired
 	}
 	currentHead := strings.TrimSpace(doc.CurrentRevisionID)
 	expectedHead := strings.TrimSpace(rev.ParentRevisionID)

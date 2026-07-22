@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -160,6 +161,45 @@ func (s *DoltStore) ListObjects(ctx context.Context, filter ListFilter) ([]Objec
 	return out, nil
 }
 
+// ReadObjectSnapshot returns the complete owner/computer object scope from one
+// serializable read transaction. Callers filter the immutable result in memory
+// so state and its event watermark cannot come from different commits.
+func (s *DoltStore) ReadObjectSnapshot(ctx context.Context, ownerID, computerID string) ([]Object, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	if ownerID == "" || computerID == "" {
+		return nil, fmt.Errorf("objectgraph dolt: snapshot owner_id and computer_id are required")
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable, ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: begin snapshot tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.QueryContext(ctx, `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
+		FROM og_objects WHERE owner_id = ? AND computer_id = ? ORDER BY canonical_id`, ownerID, computerID)
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: query snapshot: %w", err)
+	}
+	defer rows.Close()
+	var objects []Object
+	for rows.Next() {
+		obj, scanErr := scanDoltObject(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		objects = append(objects, obj)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: iterate snapshot: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: snapshot commit: %w", err)
+	}
+	return objects, nil
+}
+
 func (s *DoltStore) PutEdge(ctx context.Context, edge Edge) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
@@ -227,15 +267,72 @@ func (s *DoltStore) ListEdges(ctx context.Context, filter EdgeFilter) ([]Edge, e
 // PutBatch writes a batch of objects and edges atomically in a single
 // transaction.
 func (s *DoltStore) PutBatch(ctx context.Context, batch Batch) error {
+	return s.putBatch(ctx, nil, batch)
+}
+
+// PutBatchConditional compares object versions and writes the batch in the
+// same transaction. Conditions are locked in caller-supplied deterministic
+// order; lifecycle reducers sort them by canonical ID before calling.
+func (s *DoltStore) PutBatchConditional(ctx context.Context, conditions []ObjectCondition, batch Batch) error {
+	return s.putBatch(ctx, conditions, batch)
+}
+
+func (s *DoltStore) putBatch(ctx context.Context, conditions []ObjectCondition, batch Batch) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return fmt.Errorf("objectgraph dolt: begin batch tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	orderedConditions := append([]ObjectCondition(nil), conditions...)
+	sort.Slice(orderedConditions, func(i, j int) bool {
+		return strings.TrimSpace(orderedConditions[i].CanonicalID) < strings.TrimSpace(orderedConditions[j].CanonicalID)
+	})
+	seen := make(map[string]struct{}, len(orderedConditions))
+	for _, condition := range orderedConditions {
+		id := strings.TrimSpace(condition.CanonicalID)
+		if id == "" {
+			return fmt.Errorf("objectgraph dolt: empty conditional canonical_id")
+		}
+		if _, duplicate := seen[id]; duplicate {
+			return fmt.Errorf("objectgraph dolt: duplicate condition %s", id)
+		}
+		seen[id] = struct{}{}
+
+		var versionID, contentHash string
+		err := tx.QueryRowContext(ctx,
+			`SELECT version_id, content_hash FROM og_objects WHERE canonical_id = ? FOR UPDATE`,
+			id,
+		).Scan(&versionID, &contentHash)
+		switch {
+		case err == sql.ErrNoRows && !condition.Exists:
+			continue
+		case err == sql.ErrNoRows:
+			return fmt.Errorf("%w: object %s does not exist", ErrConflict, id)
+		case err != nil:
+			return fmt.Errorf("objectgraph dolt: compare object %s: %w", id, err)
+		case !condition.Exists:
+			return fmt.Errorf("%w: object %s already exists", ErrConflict, id)
+		case condition.ExpectedVersionID != "" && versionID != condition.ExpectedVersionID:
+			return fmt.Errorf("%w: object %s version is %q, expected %q", ErrConflict, id, versionID, condition.ExpectedVersionID)
+		case condition.ExpectedContentHash != "" && contentHash != condition.ExpectedContentHash:
+			return fmt.Errorf("%w: object %s content is %q, expected %q", ErrConflict, id, contentHash, condition.ExpectedContentHash)
+		}
+	}
+
+	if err := putBatchTx(ctx, tx, batch); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("objectgraph dolt: batch commit: %w", err)
+	}
+	return nil
+}
+
+func putBatchTx(ctx context.Context, tx *sql.Tx, batch Batch) error {
 	for _, obj := range batch.Objects {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO og_objects
 			(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
@@ -273,10 +370,6 @@ func (s *DoltStore) PutBatch(ctx context.Context, batch Batch) error {
 			edge.CreatedAt.UTC(), edge.Tombstone); err != nil {
 			return fmt.Errorf("objectgraph dolt: batch put edge %s: %w", edge.EdgeID, err)
 		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("objectgraph dolt: batch commit: %w", err)
 	}
 	return nil
 }

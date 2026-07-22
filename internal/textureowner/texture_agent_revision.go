@@ -98,6 +98,17 @@ func (h *Handler) HandleTextureAgentRevision(w http.ResponseWriter, r *http.Requ
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
+	if strings.TrimSpace(doc.TrajectoryID) != "" {
+		snapshot, snapshotErr := h.Store.GetLifecycleSnapshot(r.Context(), ownerID, doc.ComputerID, doc.TrajectoryID)
+		if snapshotErr != nil {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "durable lifecycle state is unavailable"})
+			return
+		}
+		if snapshot.Trajectory.Status != types.TrajectoryLive {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "durable lifecycle is terminal; open new work before revising"})
+			return
+		}
+	}
 
 	// Check for an existing pending agent mutation on this document.
 	// If one exists, return the existing run ID instead of creating a new
@@ -161,12 +172,31 @@ func (h *Handler) HandleTextureCancelAgentRevision(w http.ResponseWriter, r *htt
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-	if _, err := h.Store.GetDocument(r.Context(), docID, ownerID); err != nil {
+	doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
+	lifecycleCancelled := false
+	if strings.TrimSpace(doc.TrajectoryID) != "" {
+		cancel := types.CancelLifecycleRequest{
+			OwnerID: ownerID, ComputerID: doc.ComputerID,
+			CommandID:    "lifecycle-cancel:" + doc.TrajectoryID,
+			TrajectoryID: doc.TrajectoryID, Reason: "owner cancellation",
+		}
+		cancel.CommandDigest, _ = store.ComputeCancelLifecycleDigest(cancel)
+		if _, err := h.Store.CancelLifecycleTrajectory(r.Context(), cancel); err != nil {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+			return
+		}
+		lifecycleCancelled = true
+	}
 	mutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, ownerID)
 	if err != nil {
+		if errors.Is(err, store.ErrNotFound) && lifecycleCancelled {
+			writeAPIJSON(w, http.StatusOK, textureCancelRevisionResponse{DocID: docID, Status: "cancelled", Resumable: true})
+			return
+		}
 		if errors.Is(err, store.ErrNotFound) {
 			writeAPIJSON(w, http.StatusOK, textureCancelRevisionResponse{DocID: docID, Status: "no_pending_revision", Resumable: true})
 			return
@@ -176,7 +206,11 @@ func (h *Handler) HandleTextureCancelAgentRevision(w http.ResponseWriter, r *htt
 		return
 	}
 	if mutation == nil {
-		writeAPIJSON(w, http.StatusOK, textureCancelRevisionResponse{DocID: docID, Status: "no_pending_revision", Resumable: true})
+		status := "no_pending_revision"
+		if lifecycleCancelled {
+			status = "cancelled"
+		}
+		writeAPIJSON(w, http.StatusOK, textureCancelRevisionResponse{DocID: docID, Status: status, Resumable: true})
 		return
 	}
 	cancelled, err := h.Core.CancelRunTrajectory(r.Context(), mutation.RunID, ownerID)
@@ -438,6 +472,23 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		"original_prompt":      strings.TrimSpace(req.Prompt),
 		"texture_context_mode": contextMode,
 		"texture_prompt_chars": len(agentPrompt),
+	}
+	if trajectoryID := strings.TrimSpace(doc.TrajectoryID); trajectoryID != "" {
+		runMetadata["trajectory_id"] = trajectoryID
+		runMetadata["lifecycle_trajectory_id"] = trajectoryID
+		snapshot, snapshotErr := rt.Store.GetLifecycleSnapshot(ctx, ownerID, strings.TrimSpace(doc.ComputerID), trajectoryID)
+		if snapshotErr != nil {
+			return nil, fmt.Errorf("load lifecycle work for Texture revision: %w", snapshotErr)
+		}
+		for _, work := range snapshot.WorkItems {
+			if work.Status == types.WorkItemOpen && work.AssignedAgentID == currentTextureAgentID(doc.DocID) {
+				runMetadata["lifecycle_work_item_id"] = work.WorkItemID
+				break
+			}
+		}
+		if _, ok := runMetadata["lifecycle_work_item_id"]; !ok {
+			return nil, fmt.Errorf("load lifecycle work for Texture revision: no open assigned work")
+		}
 	}
 	if rt != nil && rt.Core != nil && rt.Core.TextureActorParkIdle() > 0 {
 		runMetadata["actor_park_on_idle"] = true

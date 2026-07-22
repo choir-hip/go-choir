@@ -65,19 +65,6 @@ func (h *Handler) ensureCoagentTextureRevisionRoute(ctx context.Context, parentR
 		return coagentTextureRouteDecision{}, err
 	}
 
-	if err := h.Store.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   currentTextureAgentID(doc.DocID),
-		OwnerID:   ownerID,
-		SandboxID: parentRec.SandboxID,
-		Profile:   agentprofile.Texture,
-		Role:      agentprofile.Texture,
-		ChannelID: doc.DocID,
-		CreatedAt: now,
-		UpdatedAt: time.Now().UTC(),
-	}); err != nil {
-		return coagentTextureRouteDecision{}, fmt.Errorf("persist texture appagent: %w", err)
-	}
-
 	prompt := buildCoagentTextureRevisionPrompt(parentRec, req, doc, created, sourceEntities)
 	if callerProfile == agentprofile.Reconciler {
 		if existing, found, err := h.existingReconcilerTextureHandoff(ctx, parentRec, doc.DocID); err != nil {
@@ -148,26 +135,39 @@ func (h *Handler) coagentTextureTargetDocument(ctx context.Context, parentRec *t
 	channelID := strings.TrimSpace(req.ChannelID)
 	if channelID != "" {
 		if doc, err := h.Store.GetDocument(ctx, channelID, ownerID); err == nil {
+			if strings.TrimSpace(doc.TrajectoryID) == "" || strings.TrimSpace(doc.ComputerID) == "" {
+				return types.Document{}, false, "", fmt.Errorf("existing Texture document is not bound to durable lifecycle authority")
+			}
+			if _, agentErr := h.Store.GetAgentByScope(ctx, ownerID, doc.ComputerID, currentTextureAgentID(doc.DocID)); agentErr != nil {
+				return types.Document{}, false, "", fmt.Errorf("load bound Texture subject: %w", agentErr)
+			}
 			return doc, false, "", nil
 		} else if err != store.ErrNotFound {
 			return types.Document{}, false, "", fmt.Errorf("lookup texture document %s: %w", channelID, err)
 		}
 	}
 
+	commandSeed := firstNonEmpty(
+		metadataString(parentRec.Metadata, "lifecycle_command_id"),
+		metadataString(parentRec.Metadata, "source_network_request_id"),
+		metadataString(parentRec.Metadata, "ingestion_handoff_request_id"),
+	)
+	computerID := strings.TrimSpace(parentRec.SandboxID)
+	if commandSeed == "" || computerID == "" {
+		return types.Document{}, false, "", fmt.Errorf("create Texture lifecycle: durable command and computer identity are required")
+	}
+	lifecycleKey := "choir:texture:source:" + commandSeed
+	docID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":document")).String()
+	trajectoryID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":trajectory")).String()
+	seedRevisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":revision:v0")).String()
+	workItemID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":work:initial")).String()
 	title := coagentTextureTitle(req)
 	doc := types.Document{
-		DocID:     uuid.New().String(),
-		OwnerID:   ownerID,
-		Title:     title,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-	if err := h.Store.CreateDocument(ctx, doc); err != nil {
-		return types.Document{}, false, "", fmt.Errorf("create texture document: %w", err)
+		DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
+		Title: title, CreatedAt: now, UpdatedAt: now,
 	}
 
 	seedContent := coagentTextureSeedContent(parentRec, req, sourceEntities)
-	seedRevisionID := uuid.New().String()
 	bodyDoc, sourceEntitiesJSON, projectedContent, err := markdownLineageStructuredRevision(doc.DocID, seedRevisionID, seedContent, sourceEntities, nil)
 	if err != nil {
 		return types.Document{}, false, "", fmt.Errorf("create texture seed body_doc: %w", err)
@@ -199,27 +199,37 @@ func (h *Handler) coagentTextureTargetDocument(ctx context.Context, parentRec *t
 	}
 	seedMeta, _ := json.Marshal(seedMetaMap)
 	seedRev := types.Revision{
-		RevisionID: seedRevisionID,
-		DocID:      doc.DocID,
-		OwnerID:    ownerID,
-		AuthorKind: types.AuthorAppAgent,
-		AuthorLabel: strings.TrimSpace(firstNonEmpty(
-			parentRec.AgentID,
-			agentprofile.Canonical(req.CallerProfile),
-		)),
-		Content:        projectedContent,
-		BodyDoc:        bodyDoc,
-		SourceEntities: sourceEntitiesJSON,
-		Citations:      json.RawMessage("[]"),
-		Metadata:       seedMeta,
-		CreatedAt:      now,
+		RevisionID: seedRevisionID, DocID: doc.DocID, OwnerID: ownerID,
+		ComputerID: computerID, TrajectoryID: trajectoryID,
+		AuthorKind:  types.AuthorAppAgent,
+		AuthorLabel: strings.TrimSpace(firstNonEmpty(parentRec.AgentID, agentprofile.Canonical(req.CallerProfile))),
+		Content:     projectedContent, BodyDoc: bodyDoc, SourceEntities: sourceEntitiesJSON,
+		Citations: json.RawMessage("[]"), Metadata: seedMeta, CreatedAt: now,
 	}
-	if err := h.Store.CreateRevision(ctx, seedRev); err != nil {
-		return types.Document{}, false, "", fmt.Errorf("create texture seed revision: %w", err)
+	agentID := currentTextureAgentID(doc.DocID)
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: lifecycleKey,
+		TrajectoryID: trajectoryID, Kind: types.TrajectoryKindTask,
+		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + doc.DocID},
+		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		InitialWork: types.WorkItemRecord{
+			WorkItemID: workItemID, Objective: firstNonEmpty(strings.TrimSpace(req.Objective), "Produce the requested Texture artifact."),
+			AssignedAgentID: agentID, AuthorityProfile: agentprofile.Texture,
+		},
+		InitialDocument: doc, InitialRevision: seedRev,
+		Agent: types.AgentRecord{
+			AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+			Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: doc.DocID,
+			CreatedAt: now, UpdatedAt: now,
+		},
 	}
-	doc.CurrentRevisionID = seedRevisionID
-	h.emitTextureDocumentRevisionEventForRun(ctx, parentRec, seedRev)
-	return doc, true, seedRevisionID, nil
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	started, err := h.Store.StartLifecycle(ctx, start)
+	if err != nil {
+		return types.Document{}, false, "", fmt.Errorf("start Texture source lifecycle: %w", err)
+	}
+	h.emitTextureDocumentRevisionEventForRun(ctx, parentRec, *started.Revision)
+	return *started.Document, true, started.Revision.RevisionID, nil
 }
 
 func coagentTextureTitle(req coagentTextureRouteRequest) string {

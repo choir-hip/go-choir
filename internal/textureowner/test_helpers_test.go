@@ -62,7 +62,7 @@ func testAPISetup(t *testing.T, maildURLs ...string) (*agentcore.Runtime, *Handl
 		SupervisionInterval: time.Hour,
 		MaildURL:            maildURL,
 	}, s, bus, provider.NewStubProvider(0), agentcore.WithContentService(contentowner.NewService(s, bus)))
-	core.SetDispatchActor(func(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
+	core.SetDispatchActor(func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
 		switch kind {
 		case "initial_dispatch":
 			runID := strings.TrimSpace(content)
@@ -75,7 +75,7 @@ func testAPISetup(t *testing.T, maildURLs ...string) (*agentcore.Runtime, *Handl
 				}()
 			}
 		case "coagent_result":
-			agent, err := s.GetAgent(ctx, toAgentID)
+			agent, err := s.GetAgentByScope(ctx, ownerID, computerID, toAgentID)
 			if err == nil {
 				if _, err := core.ReconcileCoagentWake(ctx, agent.OwnerID, toAgentID); err != nil {
 					log.Printf("test dispatch: reconcile coagent wake for %s: %v", toAgentID, err)
