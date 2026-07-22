@@ -270,28 +270,28 @@ execution:
 
 now:
   status: working
-  slice: D-landing-guest-identity-convergence
-  question: "Does exact identity require an immutable ComputerVersion source commit to equal the current platform deployment commit?"
+  slice: D-landing-lifecycle-acceptance
+  question: "Can an interim artifact revision preserve material work while a replaceable activation passivates?"
   reconciliation:
-    observed_at: 2026-07-22T11:31:00Z
-    source_ref: refs/remotes/origin/main@5511865d295edbf3732cb631864b864746e52df5
-    deploy_identity: "CI run 29913604978 and deploy job 88903087127 passed; guest authentication and activation receipt now succeed, and the public verifier advances to the final host/guest/route/CI join before refusing."
+    observed_at: 2026-07-22T11:35:00Z
+    source_ref: refs/remotes/origin/main@47e877d3d0741dd7080f3bbdee14b3d6ec2315f9
+    deploy_identity: "CI run 29914854032 and Node B deploy passed. Public `choir identity` returned joined=true with host, guest, deployment, package, closure, route, realization, epoch 112, and signatures bound; current executable commit is 47e877d3d0741dd7080f3bbdee14b3d6ec2315f9 and the independently versioned active route source commit remains 7122f2799be4458f4b925be11990321c7e70ffc4."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "2026-07-21T21:03:29Z git worktree/status inventory: canonical main clean; architecture-recovery clean; terminal-outcome-closure and definition-v1-1 dirt preserved forbidden; other clean/historical worktrees untouched"
     status: reconciled
   candidate:
     id: convergence-durable-work-runtime-03
-    state: route_identity_join_candidate
-    ref: working-tree-code-diff-excluding-definition@sha256:589ad445cfb4db35f1cf2a6fb749a6d280a44c10c26e70c3ad009231cd0e544c
+    state: deployed_lifecycle_acceptance_failed
+    ref: refs/heads/main@47e877d3d0741dd7080f3bbdee14b3d6ec2315f9
     owner: owner-and-current-session
     base: a8f849f1bfb74978ba6cd64e60f30313c260e762
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
     scope: "Phase C protected paths only; effects OFF and uninjected"
-    observed_problem: "Structural assessment after three identity iterations: the final predicate conflates two intentionally independent identities. Host, guest, packages, and deploy receipt all identify current executable commit 5511865d, while the immutable active ComputerVersion route correctly identifies its accepted source_commit 7122f2799be4458f4b925be11990321c7e70ffc4. Requiring route source_commit == deployment target can only pass by performing a route promotion, which this Definition explicitly excludes. The route already fate-shares through its immutable code/artifact refs, full source commit, vmctl realization, canonical route digest, latest route receipt, and platform-control signature."
-    repair_evidence: "The identity predicate now validates both commits as full lowercase Git identities, requires exact deployment equality for host binary/deploy marker/package and guest binary/activation receipt, and treats the immutable route source commit as independently versioned evidence. The route remains in the canonical digest and platform-control attestation. Regression coverage accepts a distinct valid route commit and rejects missing or malformed route commits plus every deployment mismatch; focused proxy tests pass. The candidate also selects canonical guest image rebuild and active refresh so proxy and guest executable commits converge at the new target; Nix parse and deploy classification pass."
-    remaining_error: "Commit and deploy route identity join candidate 589ad44, then require the clean no-SSH signed identity command to succeed."
+    observed_problem: "Deployed product trace 8ffb5862-0ff6-5620-961b-54196e04a277 reproduced a substrate authority bug. The initial Texture activation honestly wrote an interim model-prior scaffold that explicitly names missing official evidence and an open material evidence obligation, then passivated. Nevertheless commitTextureToolEdit unconditionally supplied WorkItemID and WorkResultRef to ApplyLifecycleUpdate, so reducer event 5 terminalized the only work item as completed. No researcher had been spawned and no grounded update existed. The live trajectory was then inert: the supported POST /api/texture/documents/99d51aaf-0b6f-5580-a7df-cf85cf59b2c3/revise path returned HTTP 500 because submitTextureAgentRevisionRun correctly requires open assigned work. This is not a prompt-only symptom: artifact revision is still implicitly settling work without an explicit native completion decision."
+    repair_evidence: "No repair exists yet. Existing substrate already supports the correct cut: spawn_agent creates a separate material WorkItem, ApplyLifecycleUpdate accepts optional work settlement, lifecycle snapshots preserve open work, and revision submission resumes only against open assigned work. The superseded behavior is the unconditional WorkItemID/WorkResultRef assignment in internal/textureowner/tools_texture.go. Candidate repair must make work completion explicit in the Texture edit command, default non-settling, preserve interim/open work across passivation, and prove a later grounded update can wake and settle."
+    remaining_error: "Documented deployed acceptance failure precedes repair as required. Build a focused explicit native work-disposition cutover, then repeat the same public lifecycle trace before restart/cancellation acceptance."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -301,9 +301,9 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: ["successful CI/deploy https://github.com/choir-hip/go-choir/actions/runs/29913604978", "deploy job 88903087127", "public identity HTTP 503 execution identity host, guest, route, and CI join unavailable", "active route code_ref code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380 source_commit=7122f2799be4458f4b925be11990321c7e70ffc4", "deployment/guest commit 5511865d295edbf3732cb631864b864746e52df5"]
-  blocker_or_risk: "Red identity predicate repair is locally verified but not deployed. It removes only impossible cross-object equality and preserves route digest/signature binding and all executable deployment equalities. Rollback is the prior host package and deploy receipt; route state is untouched."
-  next_action: "Commit and push route identity join candidate 589ad44, monitor CI/deploy and active refresh, then rerun public identity acceptance."
+  evidence_refs: ["successful CI/deploy https://github.com/choir-hip/go-choir/actions/runs/29914854032", "public signed identity joined=true at executable commit 47e877d3d0741dd7080f3bbdee14b3d6ec2315f9 and active epoch 112", "trivial lifecycle cf02f1bd-b318-5ca0-aa29-a06e7d23d3af reducer_seq=5 activation completed, work completed, artifact update incorporated", "evidence lifecycle 8ffb5862-0ff6-5620-961b-54196e04a277 reducer_seq=5 activation completed, model_prior_interim head 5613bbde-de84-54f5-ad14-aeac807d1be6, only work incorrectly completed, no researcher update", "public revise HTTP 500 after premature work completion"]
+  blocker_or_risk: "Red durable-work authority defect blocks finish acceptance. Rollback remains deployed 47e877d3 and its prior ComputerVersion/NixOS/deploy receipts; effects stayed OFF and no checkpoint, route, updater, publication, or self-development mutation occurred. Heresy delta discovered: revision writer still implicitly completed work. Introduced: none. Repaired: not yet."
+  next_action: "Commit this problem receipt before repair code, then replace implicit revision settlement with an explicit native work disposition and focused regression proof."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
