@@ -271,27 +271,27 @@ execution:
 now:
   status: working
   slice: D-landing-guest-identity-convergence
-  question: "Can the accepted common-commit identity contract be exercised after a host-only deployment left the active guest on the prior executable commit?"
+  question: "Why does the exact-commit refreshed guest still refuse its signed execution identity endpoint?"
   reconciliation:
-    observed_at: 2026-07-22T10:44:00Z
-    source_ref: refs/remotes/origin/main@cc89b31e56b8d9822116845574f60f3eeaedcf7a
-    deploy_identity: "CI run 29911604457 and deploy job 88895740617 passed and published a complete cc89b31e receipt. Public `choir identity` nevertheless refused with HTTP 502 because the active guest still serves sandbox commit 0df14123 while host, receipt, and canonical main are cc89b31e."
+    observed_at: 2026-07-22T11:03:00Z
+    source_ref: refs/remotes/origin/main@363c32d5c18b0eaaf0449978251c0b58b32c4eb9
+    deploy_identity: "CI run 29912587626 and deploy job 88898928152 passed; active VM candidate-fleet-e15cb89f25d963c220319b7b advanced to epoch 110 and serves sandbox commit 363c32d5, matching the complete host deployment receipt. Public identity still refuses at the guest boundary."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "2026-07-21T21:03:29Z git worktree/status inventory: canonical main clean; architecture-recovery clean; terminal-outcome-closure and definition-v1-1 dirt preserved forbidden; other clean/historical worktrees untouched"
     status: reconciled
   candidate:
     id: convergence-durable-work-runtime-03
-    state: guest_convergence_candidate
-    ref: working-tree-code-diff-excluding-definition@sha256:ad931c43a55519ff3c8a2a6e9b7561d4a700688bd1a0bf2a1d56593c6e8946f9
+    state: deployed_identity_incomplete
+    ref: refs/heads/main@363c32d5c18b0eaaf0449978251c0b58b32c4eb9
     owner: owner-and-current-session
     base: a8f849f1bfb74978ba6cd64e60f30313c260e762
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
     scope: "Phase C protected paths only; effects OFF and uninjected"
-    observed_problem: "The successful cc89b31e deployment selected host OS activation but explicitly skipped active computer refresh because the canonical guest image input was unchanged. The public signed identity verifier correctly rejected the resulting mixed executable identity: Node B diagnostics found active VM candidate-fleet-e15cb89f25d963c220319b7b at epoch 109 serving sandbox commit 0df1412312deac4ee896bef5c4c0cc0f4f963287 while deploy-receipt.json, host packages, and checkout identify cc89b31e."
-    repair_evidence: "The canonical guest Nix module now makes explicit that buildCommit participates in signed executable identity. Its path classification selects host OS build, canonical guest image rebuild, vmctl restart, and active computer refresh. `nix-instantiate --parse nix/sandbox-vm.nix` and the deploy classifier both passed locally."
-    remaining_error: "Commit and deploy guest convergence candidate ad931c4, then require the clean no-SSH signed identity command to succeed before lifecycle acceptance."
+    observed_problem: "Two independent guest-boundary prerequisites are missing. First, proxy HandleExecutionIdentity creates a direct HTTP request but calls setTrustedAuthHeaders, which sets X-Proxy-Trusted-User for a reverse-proxy Director that is never invoked; a direct Node B probe reproduced 401 with that header and passed authentication with X-Authenticated-User. Second, the authenticated guest then returns 503 incomplete identity because buildinfo intentionally ignores CHOIR_DEPLOYED_COMMIT without an activation receipt; guest health confirms build.commit=363c32d5 and no deployed_commit, while sandbox-vm.nix sets only the ignored environment value and no CHOIR_DEPLOY_RECEIPT_PATH."
+    repair_evidence: "Problem documented before repair. The source fixes are bounded: inject the authenticated user header on the newly constructed direct guest request, and generate a guest-local boot activation receipt bound to immutable buildCommit for buildinfo to consume. The public platform attestation, host deployment receipt, vmctl/route join, guest-core signature, and common-commit comparison remain independent and fail-closed."
+    remaining_error: "Implement both bounded guest-boundary repairs with focused tests, deploy a new canonical guest image, and rerun public no-SSH identity."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -301,9 +301,9 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: ["successful CI/deploy https://github.com/choir-hip/go-choir/actions/runs/29911604457", "deploy job 88895740617", "/var/lib/go-choir/deploy-receipt.json@cc89b31e", "public `go run ./cmd/choir identity --host https://choir.news` HTTP 502 execution identity guest refused", "active guest candidate-fleet-e15cb89f25d963c220319b7b epoch 109 health build.commit=0df1412312deac4ee896bef5c4c0cc0f4f963287"]
-  blocker_or_risk: "Red exact-identity convergence candidate is locally valid but not deployed. Active refresh restarts the stable computer; rollback remains the retained prior ComputerVersion route/receipt and prior NixOS/deploy receipts."
-  next_action: "Commit and push guest convergence candidate ad931c4, monitor CI/deploy and refresh, then rerun public identity acceptance."
+  evidence_refs: ["successful CI/deploy https://github.com/choir-hip/go-choir/actions/runs/29912587626", "deploy job 88898928152", "active guest epoch 110 health build.commit=363c32d5c18b0eaaf0449978251c0b58b32c4eb9", "direct guest X-Proxy-Trusted-User probe HTTP 401 authentication required", "direct guest X-Authenticated-User probe HTTP 503 incomplete executable/realization/epoch/closure/deploy identity", "public choir identity HTTP 502 execution identity guest refused"]
+  blocker_or_risk: "Red exact-identity endpoint remains fail-closed. Repair must not reinstate environment-only activation authority: the guest must expose a structured activation receipt, and acceptance still requires its signed evidence to join host receipt, vmctl, route, executable, and common commit."
+  next_action: "Commit this second identity problem receipt, then repair direct guest authentication and guest boot activation receipt wiring."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
