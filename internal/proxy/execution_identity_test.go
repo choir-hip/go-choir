@@ -201,28 +201,30 @@ func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 	}
 }
 
-func TestExecutionIdentityCommitsJoinRejectsEveryMismatch(t *testing.T) {
+func TestExecutionIdentityCommitsJoinKeepsRouteIdentityIndependent(t *testing.T) {
 	const commit = "1234567890abcdef1234567890abcdef12345678"
+	const routeCommit = "abcdef1234567890abcdef1234567890abcdef12"
 	matching := buildinfo.Info{Commit: commit, DeployedCommit: commit}
-	if !executionIdentityCommitsJoin(commit, matching, commit, commit, matching) {
-		t.Fatal("matching identity commits were refused")
+	if !executionIdentityCommitsJoin(commit, matching, commit, routeCommit, matching) {
+		t.Fatal("independently versioned route identity was refused")
 	}
 	tests := map[string]struct {
 		target, hostEmbedded, route string
 		host, guest                 buildinfo.Info
 	}{
-		"target":         {target: "abcdef", host: matching, hostEmbedded: commit, route: commit, guest: matching},
-		"host build":     {target: commit, host: buildinfo.Info{Commit: strings.Repeat("a", 40), DeployedCommit: commit}, hostEmbedded: commit, route: commit, guest: matching},
-		"host deployed":  {target: commit, host: buildinfo.Info{Commit: commit, DeployedCommit: strings.Repeat("a", 40)}, hostEmbedded: commit, route: commit, guest: matching},
-		"host package":   {target: commit, host: matching, hostEmbedded: strings.Repeat("a", 40), route: commit, guest: matching},
-		"route":          {target: commit, host: matching, hostEmbedded: commit, route: strings.Repeat("a", 40), guest: matching},
-		"guest build":    {target: commit, host: matching, hostEmbedded: commit, route: commit, guest: buildinfo.Info{Commit: strings.Repeat("a", 40), DeployedCommit: commit}},
-		"guest deployed": {target: commit, host: matching, hostEmbedded: commit, route: commit, guest: buildinfo.Info{Commit: commit, DeployedCommit: strings.Repeat("a", 40)}},
+		"target":         {target: "abcdef", host: matching, hostEmbedded: commit, route: routeCommit, guest: matching},
+		"host build":     {target: commit, host: buildinfo.Info{Commit: strings.Repeat("a", 40), DeployedCommit: commit}, hostEmbedded: commit, route: routeCommit, guest: matching},
+		"host deployed":  {target: commit, host: buildinfo.Info{Commit: commit, DeployedCommit: strings.Repeat("a", 40)}, hostEmbedded: commit, route: routeCommit, guest: matching},
+		"host package":   {target: commit, host: matching, hostEmbedded: strings.Repeat("a", 40), route: routeCommit, guest: matching},
+		"route missing":  {target: commit, host: matching, hostEmbedded: commit, route: "", guest: matching},
+		"route invalid":  {target: commit, host: matching, hostEmbedded: commit, route: strings.Repeat("g", 40), guest: matching},
+		"guest build":    {target: commit, host: matching, hostEmbedded: commit, route: routeCommit, guest: buildinfo.Info{Commit: strings.Repeat("a", 40), DeployedCommit: commit}},
+		"guest deployed": {target: commit, host: matching, hostEmbedded: commit, route: routeCommit, guest: buildinfo.Info{Commit: commit, DeployedCommit: strings.Repeat("a", 40)}},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			if executionIdentityCommitsJoin(test.target, test.host, test.hostEmbedded, test.route, test.guest) {
-				t.Fatal("mismatched identity commits were accepted")
+				t.Fatal("invalid identity join was accepted")
 			}
 		})
 	}

@@ -297,17 +297,33 @@ func (h *Handler) attestExecutionIdentity(
 	return attestation, nil
 }
 
-// HandleExecutionIdentity joins guest-core evidence to the independently
-// resolved vmctl realization, immutable ComputerVersion route, host build, CI
-// deployment receipt, NixOS closure, and service executable inventory.
+// executionIdentityFullCommit validates a Git source identity without
+// conflating independently versioned platform and ComputerVersion commits.
+func executionIdentityFullCommit(commit string) bool {
+	if len(commit) != 40 {
+		return false
+	}
+	for _, r := range commit {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
 func executionIdentityCommitsJoin(target string, host buildinfo.Info, hostEmbeddedCommit, routeCommit string, guest buildinfo.Info) bool {
 	target = strings.TrimSpace(target)
-	return len(target) == 40 &&
+	routeCommit = strings.TrimSpace(routeCommit)
+	return executionIdentityFullCommit(target) &&
+		executionIdentityFullCommit(routeCommit) &&
 		host.Commit == target && host.DeployedCommit == target &&
-		hostEmbeddedCommit == target && routeCommit == target &&
+		hostEmbeddedCommit == target &&
 		guest.Commit == target && guest.DeployedCommit == target
 }
 
+// HandleExecutionIdentity joins guest-core evidence to the independently
+// resolved vmctl realization, immutable ComputerVersion route, host build, CI
+// deployment receipt, NixOS closure, and service executable inventory.
 func (h *Handler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})

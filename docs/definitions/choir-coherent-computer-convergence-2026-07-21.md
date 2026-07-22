@@ -282,16 +282,16 @@ now:
     status: reconciled
   candidate:
     id: convergence-durable-work-runtime-03
-    state: deployed_identity_incomplete
-    ref: refs/heads/main@5511865d295edbf3732cb631864b864746e52df5
+    state: route_identity_join_candidate
+    ref: working-tree-code-diff-excluding-definition@sha256:589ad445cfb4db35f1cf2a6fb749a6d280a44c10c26e70c3ad009231cd0e544c
     owner: owner-and-current-session
     base: a8f849f1bfb74978ba6cd64e60f30313c260e762
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
     scope: "Phase C protected paths only; effects OFF and uninjected"
     observed_problem: "Structural assessment after three identity iterations: the final predicate conflates two intentionally independent identities. Host, guest, packages, and deploy receipt all identify current executable commit 5511865d, while the immutable active ComputerVersion route correctly identifies its accepted source_commit 7122f2799be4458f4b925be11990321c7e70ffc4. Requiring route source_commit == deployment target can only pass by performing a route promotion, which this Definition explicitly excludes. The route already fate-shares through its immutable code/artifact refs, full source commit, vmctl realization, canonical route digest, latest route receipt, and platform-control signature."
-    repair_evidence: "Problem documented before repair. Substrate classification: identity-join predicate, not route state. The bounded correction is to require a valid full route source commit and preserve it in the signed/digested inventory, while retaining exact equality among host binary, host package, deployment receipt, guest binary, and guest activation receipt. No route/checkpoint mutation is authorized."
-    remaining_error: "Correct the predicate and its regression test, deploy, and rerun public no-SSH identity; do not mutate the accepted ComputerVersion route."
+    repair_evidence: "The identity predicate now validates both commits as full lowercase Git identities, requires exact deployment equality for host binary/deploy marker/package and guest binary/activation receipt, and treats the immutable route source commit as independently versioned evidence. The route remains in the canonical digest and platform-control attestation. Regression coverage accepts a distinct valid route commit and rejects missing or malformed route commits plus every deployment mismatch; focused proxy tests pass. The candidate also selects canonical guest image rebuild and active refresh so proxy and guest executable commits converge at the new target; Nix parse and deploy classification pass."
+    remaining_error: "Commit and deploy route identity join candidate 589ad44, then require the clean no-SSH signed identity command to succeed."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -302,8 +302,8 @@ now:
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
   evidence_refs: ["successful CI/deploy https://github.com/choir-hip/go-choir/actions/runs/29913604978", "deploy job 88903087127", "public identity HTTP 503 execution identity host, guest, route, and CI join unavailable", "active route code_ref code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380 source_commit=7122f2799be4458f4b925be11990321c7e70ffc4", "deployment/guest commit 5511865d295edbf3732cb631864b864746e52df5"]
-  blocker_or_risk: "Red identity substrate conflates independently versioned platform deployment and immutable ComputerVersion. Repair must preserve full route identity and signature binding while removing only the impossible equality; route promotion remains forbidden."
-  next_action: "Commit this structural problem receipt, then repair the identity predicate and regression test without mutating route state."
+  blocker_or_risk: "Red identity predicate repair is locally verified but not deployed. It removes only impossible cross-object equality and preserves route digest/signature binding and all executable deployment equalities. Rollback is the prior host package and deploy receipt; route state is untouched."
+  next_action: "Commit and push route identity join candidate 589ad44, monitor CI/deploy and active refresh, then rerun public identity acceptance."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
