@@ -282,16 +282,16 @@ now:
     status: reconciled
   candidate:
     id: convergence-durable-work-runtime-03
-    state: deployed_identity_incomplete
-    ref: refs/heads/main@cc89b31e56b8d9822116845574f60f3eeaedcf7a
+    state: guest_convergence_candidate
+    ref: working-tree-code-diff-excluding-definition@sha256:ad931c43a55519ff3c8a2a6e9b7561d4a700688bd1a0bf2a1d56593c6e8946f9
     owner: owner-and-current-session
     base: a8f849f1bfb74978ba6cd64e60f30313c260e762
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
     scope: "Phase C protected paths only; effects OFF and uninjected"
     observed_problem: "The successful cc89b31e deployment selected host OS activation but explicitly skipped active computer refresh because the canonical guest image input was unchanged. The public signed identity verifier correctly rejected the resulting mixed executable identity: Node B diagnostics found active VM candidate-fleet-e15cb89f25d963c220319b7b at epoch 109 serving sandbox commit 0df1412312deac4ee896bef5c4c0cc0f4f963287 while deploy-receipt.json, host packages, and checkout identify cc89b31e."
-    repair_evidence: "Problem documented before repair. The common-commit identity contract requires one deployment that selects canonical guest image rebuild and active refresh at the same target commit; acceptance remains fail-closed until the clean client succeeds."
-    remaining_error: "Trigger a canonical guest image build/refresh, monitor CI/deploy, and retry the no-SSH signed identity command."
+    repair_evidence: "The canonical guest Nix module now makes explicit that buildCommit participates in signed executable identity. Its path classification selects host OS build, canonical guest image rebuild, vmctl restart, and active computer refresh. `nix-instantiate --parse nix/sandbox-vm.nix` and the deploy classifier both passed locally."
+    remaining_error: "Commit and deploy guest convergence candidate ad931c4, then require the clean no-SSH signed identity command to succeed before lifecycle acceptance."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -302,8 +302,8 @@ now:
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
   evidence_refs: ["successful CI/deploy https://github.com/choir-hip/go-choir/actions/runs/29911604457", "deploy job 88895740617", "/var/lib/go-choir/deploy-receipt.json@cc89b31e", "public `go run ./cmd/choir identity --host https://choir.news` HTTP 502 execution identity guest refused", "active guest candidate-fleet-e15cb89f25d963c220319b7b epoch 109 health build.commit=0df1412312deac4ee896bef5c4c0cc0f4f963287"]
-  blocker_or_risk: "Red exact-identity surface is correctly fail-closed but not accepted. A guest refresh can restart the stable computer; rollback remains the currently retained ComputerVersion route/receipt and prior NixOS/deploy receipts."
-  next_action: "Commit this guest identity mismatch receipt before repair, then select canonical guest image refresh at one target commit and rerun public identity acceptance."
+  blocker_or_risk: "Red exact-identity convergence candidate is locally valid but not deployed. Active refresh restarts the stable computer; rollback remains the retained prior ComputerVersion route/receipt and prior NixOS/deploy receipts."
+  next_action: "Commit and push guest convergence candidate ad931c4, monitor CI/deploy and refresh, then rerun public identity acceptance."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21

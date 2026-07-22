@@ -19,6 +19,8 @@
 # the kernel, rootfs, and store disk from the microvm runner outputs.
 # It does NOT use the microvm runner scripts directly because vmmanager
 # needs per-VM networking, port assignment, and lifecycle control.
+# buildCommit is part of the guest's signed executable identity; rebuilding
+# this closure converges active guests with the deployment receipt.
 { config, lib, pkgs, goChoirPackages, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
 
 let
