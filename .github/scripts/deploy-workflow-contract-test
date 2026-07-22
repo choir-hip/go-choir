@@ -32,6 +32,8 @@ require 'sandbox_runtime_commit=$(artifact_manifest_commit /var/lib/go-choir/ser
 require 'source scripts/node-b-sync-service-pointers'
 require 'package_path=$(resolve_service_package_from_unit "$service")'
 require 'package_commit=$(verify_artifact_manifest "$package_path/share/go-choir/build.json" "$service")'
+require 'service_commit=$(printf '\''%s'\'' "$receipt_artifacts" | jq -er --arg service "$service" '\''.[$service] | select(.status == "active") | .commit'\'')'
+reject 'service_commit=$(curl -fsS --max-time 5 "http://127.0.0.1:${port}/health" | jq -er '\''.build.commit'\'')'
 reject 'package_path=$(readlink -f "/var/lib/go-choir/services/${service}")'
 require 'wait_for_sandbox_commit "$refresh_sandbox_url" "$refresh_vm_id" "$sandbox_runtime_commit"'
 require 'select((.snapshot_kind // "") == "constructed-computer-version")'
