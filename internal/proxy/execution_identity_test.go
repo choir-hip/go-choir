@@ -41,6 +41,10 @@ func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 		PrivateKey: guestPrivateKey,
 	}
 	guest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Authenticated-User") != ownerID {
+			http.Error(w, "authenticated user unavailable", http.StatusUnauthorized)
+			return
+		}
 		issuedAt := time.Now().UTC()
 		expiresAt := issuedAt.Add(2 * time.Minute)
 		identity := map[string]any{

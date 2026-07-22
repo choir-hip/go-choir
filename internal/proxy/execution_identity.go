@@ -353,6 +353,7 @@ func (h *Handler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Request
 		return
 	}
 	h.setTrustedAuthHeaders(upstreamRequest, authResult)
+	upstreamRequest.Header.Set("X-Authenticated-User", authResult.UserID)
 	response, err := http.DefaultClient.Do(upstreamRequest)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "execution identity guest unavailable"})

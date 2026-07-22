@@ -240,12 +240,21 @@ EOF
       Type = "oneshot";
       RemainAfterExit = true;
     };
+    path = [ pkgs.coreutils pkgs.jq ];
     script = ''
       set -euo pipefail
       ENV_FILE="/run/go-choir-sandbox.env"
       : > "$ENV_FILE"
       UPDATER_ENV_FILE="/run/go-choir-updater.env"
       : > "$UPDATER_ENV_FILE"
+      GUEST_DEPLOY_RECEIPT="/run/go-choir-guest-deploy-receipt.json"
+      activated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+      jq -n \
+        --arg commit "${buildCommit}" \
+        --arg activated_at "$activated_at" \
+        '{schema_version: 1, target_commit: $commit, activated_at: $activated_at, artifacts: {sandbox: {commit: $commit, status: "active"}}}' \
+        > "$GUEST_DEPLOY_RECEIPT"
+      chmod 0444 "$GUEST_DEPLOY_RECEIPT"
 
       # Parse kernel cmdline parameters from vmmanager.
       for param in $(cat /proc/cmdline); do
@@ -601,6 +610,7 @@ EOF
       CHOIR_PRIVACY_KEY_FILE = "/mnt/persistent/choir-credentials/privacy-key";
       CHOIR_KERNEL_CAPABILITY_PROBE = "/run/choir/kernel-capabilities.json";
       CHOIR_GUEST_IMAGE_MANIFEST = guestImageManifest;
+      CHOIR_DEPLOY_RECEIPT_PATH = "/run/go-choir-guest-deploy-receipt.json";
       CHOIR_KERNEL_CONFIG = config.boot.kernelPackages.kernel.configfile;
       CHOIR_GUEST_SIGNER_SOCKET = "/run/choir-signers/guest-core/signer.sock";
       CHOIR_SELF_DEVELOPMENT_G0_RECEIPT = genesisG0Receipt;
@@ -657,10 +667,6 @@ EOF
       CHOIR_CAPSULE_STATE_DIR = "/run/choir/capsules";
       CHOIR_CAPSULE_SOURCE_ROOT = "/mnt/persistent/files/Source/platform";
       CHOIR_CAPSULE_LOWER_ROOT = "/";
-      # Guest health is part of staging acceptance. Stamp the source revision
-      # into the VM runtime so refreshed active computers can prove which guest
-      # image they are serving, even though they do not mount host deploy.env.
-      CHOIR_DEPLOYED_COMMIT = buildCommit;
       GIT_AUTHOR_NAME = "Choir Capsule";
       GIT_AUTHOR_EMAIL = "capsule@choir.local";
       GIT_COMMITTER_NAME = "Choir Capsule";
