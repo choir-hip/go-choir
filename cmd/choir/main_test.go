@@ -283,7 +283,7 @@ func TestIdentityVerifiesJoinedGuestAndPlatformAttestations(t *testing.T) {
 		vmctlIdentity := map[string]any{"computer_id": "computer-test", "vm_id": "vm-test", "epoch": 1, "state": "active"}
 		route := json.RawMessage(`{"code_commit":"1234567890abcdef1234567890abcdef12345678"}`)
 		hostBuild := json.RawMessage(`{"service":"proxy","commit":"1234567890abcdef1234567890abcdef12345678","deployed_commit":"1234567890abcdef1234567890abcdef12345678"}`)
-		deployment := json.RawMessage(`{"target_commit":"1234567890abcdef1234567890abcdef12345678","host_identity":{"canonical_ref":"refs/heads/main@1234567890abcdef1234567890abcdef12345678","nixos_closure_digest":"sha256:nixos","services":{"proxy":{"role":"proxy","package_digest":"sha256:proxy","embedded_commit":"1234567890abcdef1234567890abcdef12345678"}}}}`)
+		deployment := json.RawMessage(`{"target_commit":"1234567890abcdef1234567890abcdef12345678","artifacts":{"proxy":{"commit":"1234567890abcdef1234567890abcdef12345678","status":"active"}},"host_identity":{"canonical_ref":"refs/heads/main@1234567890abcdef1234567890abcdef12345678","nixos_closure_digest":"sha256:nixos","services":{"proxy":{"role":"proxy","package_digest":"sha256:proxy","embedded_commit":"1234567890abcdef1234567890abcdef12345678"}}}}`)
 		guestDigest, _ := executionIdentityCLIDigest(guestReceipt)
 		routeDigest, _ := executionIdentityCLIDigest(route)
 		hostDigest, _ := executionIdentityCLIDigest(hostBuild)
@@ -338,6 +338,49 @@ func TestIdentityRefusesUnjoinedGuestEnvelope(t *testing.T) {
 	code := run([]string{"identity", "--host=" + stub.URL}, &out, &errOut)
 	if code != 1 || !strings.Contains(errOut.String(), "platform identity join refused") {
 		t.Fatalf("code=%d stderr=%q, want joined-identity refusal", code, errOut.String())
+	}
+}
+
+func TestExecutionIdentityCLICommonCommitAllowsBoundMixedGeneration(t *testing.T) {
+	const targetCommit = "1234567890abcdef1234567890abcdef12345678"
+	const hostCommit = "abcdef1234567890abcdef1234567890abcdef12"
+	const guestCommit = "fedcba0987654321fedcba0987654321fedcba09"
+	signed := &executionIdentityCLIEnvelope{Identity: map[string]any{
+		"build": map[string]any{"commit": guestCommit, "deployed_commit": guestCommit},
+	}}
+	host := json.RawMessage(`{"service":"proxy","commit":"` + hostCommit + `"}`)
+	deployment := json.RawMessage(`{
+		"target_commit":"` + targetCommit + `",
+		"artifacts":{"gateway":{"commit":"` + targetCommit + `","status":"active"}},
+		"host_identity":{
+			"canonical_ref":"refs/heads/main@` + targetCommit + `",
+			"nixos_closure_digest":"sha256:nixos",
+			"services":{
+				"proxy":{"role":"proxy","package_digest":"sha256:proxy","embedded_commit":"` + hostCommit + `"},
+				"auth":{"role":"auth","package_digest":"sha256:auth","embedded_commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+			}
+		}
+	}`)
+	if got, ok := executionIdentityCLICommonCommit(signed, host, deployment); !ok || got != targetCommit {
+		t.Fatalf("mixed-generation identity = (%q, %v), want target and accepted", got, ok)
+	}
+
+	staleMetadata := json.RawMessage(`{"service":"proxy","commit":"` + hostCommit + `","deployed_commit":"` + targetCommit + `"}`)
+	if _, ok := executionIdentityCLICommonCommit(signed, staleMetadata, deployment); ok {
+		t.Fatal("unselected proxy with deployment metadata was accepted")
+	}
+
+	selectedStalePair := json.RawMessage(`{
+		"target_commit":"` + targetCommit + `",
+		"artifacts":{"proxy":{"commit":"` + targetCommit + `","status":"active"}},
+		"host_identity":{
+			"canonical_ref":"refs/heads/main@` + targetCommit + `",
+			"nixos_closure_digest":"sha256:nixos",
+			"services":{"proxy":{"role":"proxy","package_digest":"sha256:proxy","embedded_commit":"` + hostCommit + `"}}
+		}
+	}`)
+	if _, ok := executionIdentityCLICommonCommit(signed, staleMetadata, selectedStalePair); ok {
+		t.Fatal("selected proxy with stale runtime/package pair was accepted")
 	}
 }
 

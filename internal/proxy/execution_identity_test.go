@@ -22,6 +22,7 @@ import (
 
 func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 	const commit = "1234567890abcdef1234567890abcdef12345678"
+	const targetCommit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	var ownerID string
 	const computerID = "computer-identity-join"
 	const vmID = "vm-identity-join"
@@ -135,7 +136,7 @@ func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 	handler.cfg.CorpusdURL = platformServer.URL
 
 	receiptPath := filepath.Join(t.TempDir(), "deploy-receipt.json")
-	receipt := `{"schema_version":1,"target_commit":"` + commit + `","activated_at":"2026-07-21T00:00:00Z","github":{"run_id":"123","run_attempt":"1"},"artifacts":{"proxy":{"commit":"` + commit + `","status":"active"}},"host_identity":{"canonical_ref":"refs/heads/main@` + commit + `","checkout_head":"` + commit + `","checkout_clean":true,"nixos_closure":"/nix/store/system","nixos_closure_digest":"sha256:nixos","services":{"proxy":{"package_path":"/nix/store/proxy","package_digest":"sha256:proxy","embedded_commit":"` + commit + `"}}}}`
+	receipt := `{"schema_version":1,"target_commit":"` + targetCommit + `","activated_at":"2026-07-21T00:00:00Z","github":{"run_id":"123","run_attempt":"1"},"artifacts":{"gateway":{"commit":"` + targetCommit + `","status":"active"}},"host_identity":{"canonical_ref":"refs/heads/main@` + targetCommit + `","checkout_head":"` + targetCommit + `","checkout_clean":true,"nixos_closure":"/nix/store/system","nixos_closure_digest":"sha256:nixos","services":{"proxy":{"package_path":"/nix/store/proxy","package_digest":"sha256:proxy","embedded_commit":"` + commit + `"}}}}`
 	if err := os.WriteFile(receiptPath, []byte(receipt), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -170,6 +171,9 @@ func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 		}) != nil {
 		t.Fatalf("platform identity attestation did not verify: %+v", joined.PlatformAttestation)
 	}
+	if joined.PlatformAttestation.Receipt.KindFields["deployed_commit"] != targetCommit {
+		t.Fatalf("platform deployed commit = %v, want coordinator target %s", joined.PlatformAttestation.Receipt.KindFields["deployed_commit"], targetCommit)
+	}
 	handler.platformSignerDigest = "sha256:wrong"
 	badRequest := httptest.NewRequest(http.MethodGet, request.URL.String(), nil)
 	badRequest.Header.Set("Authorization", "Bearer "+apiSecret)
@@ -201,30 +205,61 @@ func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 	}
 }
 
-func TestExecutionIdentityCommitsJoinKeepsRouteIdentityIndependent(t *testing.T) {
-	const commit = "1234567890abcdef1234567890abcdef12345678"
-	const routeCommit = "abcdef1234567890abcdef1234567890abcdef12"
-	matching := buildinfo.Info{Commit: commit, DeployedCommit: commit}
-	if !executionIdentityCommitsJoin(commit, matching, commit, routeCommit, matching) {
-		t.Fatal("independently versioned route identity was refused")
+func TestExecutionIdentityCommitsJoinAllowsBoundMixedGeneration(t *testing.T) {
+	const targetCommit = "1234567890abcdef1234567890abcdef12345678"
+	const hostCommit = "abcdef1234567890abcdef1234567890abcdef12"
+	const guestCommit = "fedcba0987654321fedcba0987654321fedcba09"
+	const routeCommit = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	mixed := deploymentIdentityReceipt{
+		TargetCommit: targetCommit,
+		Artifacts: map[string]json.RawMessage{
+			"gateway": json.RawMessage(`{"commit":"1234567890abcdef1234567890abcdef12345678","status":"active"}`),
+		},
+		HostIdentity: hostDeploymentIdentity{Services: map[string]hostServiceIdentity{
+			"proxy": {EmbeddedCommit: hostCommit},
+		}},
 	}
+	host := buildinfo.Info{Service: "proxy", Commit: hostCommit}
+	guest := buildinfo.Info{Commit: guestCommit, DeployedCommit: guestCommit}
+	if !executionIdentityCommitsJoin(mixed, host, routeCommit, guest) {
+		t.Fatal("bound mixed-generation identity was refused")
+	}
+
+	selected := mixed
+	selected.Artifacts = map[string]json.RawMessage{
+		"proxy": json.RawMessage(`{"commit":"1234567890abcdef1234567890abcdef12345678","status":"active"}`),
+	}
+	selected.HostIdentity.Services = map[string]hostServiceIdentity{
+		"proxy": {EmbeddedCommit: targetCommit},
+	}
+	selectedHost := buildinfo.Info{Service: "proxy", Commit: targetCommit, DeployedCommit: targetCommit}
+	if !executionIdentityCommitsJoin(selected, selectedHost, routeCommit, guest) {
+		t.Fatal("selected proxy identity at target commit was refused")
+	}
+	selectedStaleInventory := selected
+	selectedStaleInventory.HostIdentity.Services = map[string]hostServiceIdentity{
+		"proxy": {EmbeddedCommit: hostCommit},
+	}
+
 	tests := map[string]struct {
-		target, hostEmbedded, route string
-		host, guest                 buildinfo.Info
+		receipt deploymentIdentityReceipt
+		host    buildinfo.Info
+		route   string
+		guest   buildinfo.Info
 	}{
-		"target":         {target: "abcdef", host: matching, hostEmbedded: commit, route: routeCommit, guest: matching},
-		"host build":     {target: commit, host: buildinfo.Info{Commit: strings.Repeat("a", 40), DeployedCommit: commit}, hostEmbedded: commit, route: routeCommit, guest: matching},
-		"host deployed":  {target: commit, host: buildinfo.Info{Commit: commit, DeployedCommit: strings.Repeat("a", 40)}, hostEmbedded: commit, route: routeCommit, guest: matching},
-		"host package":   {target: commit, host: matching, hostEmbedded: strings.Repeat("a", 40), route: routeCommit, guest: matching},
-		"route missing":  {target: commit, host: matching, hostEmbedded: commit, route: "", guest: matching},
-		"route invalid":  {target: commit, host: matching, hostEmbedded: commit, route: strings.Repeat("g", 40), guest: matching},
-		"guest build":    {target: commit, host: matching, hostEmbedded: commit, route: routeCommit, guest: buildinfo.Info{Commit: strings.Repeat("a", 40), DeployedCommit: commit}},
-		"guest deployed": {target: commit, host: matching, hostEmbedded: commit, route: routeCommit, guest: buildinfo.Info{Commit: commit, DeployedCommit: strings.Repeat("a", 40)}},
+		"invalid target":        {receipt: func() deploymentIdentityReceipt { r := mixed; r.TargetCommit = "abcdef"; return r }(), host: host, route: routeCommit, guest: guest},
+		"host package mismatch": {receipt: mixed, host: buildinfo.Info{Service: "proxy", Commit: strings.Repeat("a", 40)}, route: routeCommit, guest: guest},
+		"unselected deployed":   {receipt: mixed, host: buildinfo.Info{Service: "proxy", Commit: hostCommit, DeployedCommit: targetCommit}, route: routeCommit, guest: guest},
+		"route invalid":         {receipt: mixed, host: host, route: strings.Repeat("g", 40), guest: guest},
+		"guest invalid":         {receipt: mixed, host: host, route: routeCommit, guest: buildinfo.Info{Commit: strings.Repeat("g", 40), DeployedCommit: strings.Repeat("g", 40)}},
+		"guest deployed":        {receipt: mixed, host: host, route: routeCommit, guest: buildinfo.Info{Commit: guestCommit, DeployedCommit: targetCommit}},
+		"selected host stale":   {receipt: selected, host: host, route: routeCommit, guest: guest},
+		"selected pair stale":   {receipt: selectedStaleInventory, host: buildinfo.Info{Service: "proxy", Commit: hostCommit, DeployedCommit: targetCommit}, route: routeCommit, guest: guest},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			if executionIdentityCommitsJoin(test.target, test.host, test.hostEmbedded, test.route, test.guest) {
-				t.Fatal("invalid identity join was accepted")
+			if executionIdentityCommitsJoin(test.receipt, test.host, test.route, test.guest) {
+				t.Fatal("conflicting identity join was accepted")
 			}
 		})
 	}

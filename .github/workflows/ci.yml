@@ -1390,37 +1390,60 @@ jobs:
             fi
             nixos_closure_digest=$(nix hash path --type sha256 "$nixos_closure")
             nixos_closure_digest="sha256:${nixos_closure_digest#sha256-}"
-            # Service runners execute atomically copied packages under
-            # /var/lib, so that mutable runtime path cannot be the immutable
-            # package identity. Resolve each package from either this deploy's
-            # Nix result or the activated systemd wrapper and verify its build
-            # manifest before publishing the receipt.
+            # Service runners execute atomically copied packages under /var/lib.
+            # Bind those live bytes back to an immutable Nix package by digest;
+            # a leftover build result or the unit's fallback package is not
+            # evidence unless it exactly matches the active copied tree.
             source scripts/node-b-sync-service-pointers
             host_services='{}'
             for service in auth proxy vmctl gateway corpusd maild sourcecycled; do
+              active_path="/var/lib/go-choir/services/${service}"
+              active_commit=$(artifact_manifest_commit "$active_path/share/go-choir/build.json" "$service")
+              active_digest=$(nix hash path --type sha256 "$active_path")
               package_path=
               candidate="/tmp/go-choir-service-${service}-result"
               if [ -e "$candidate" ]; then
                 candidate_path=$(readlink -f "$candidate")
                 candidate_commit=$(artifact_manifest_commit "$candidate_path/share/go-choir/build.json" "$service" 2>/dev/null || true)
-                if [ "$candidate_commit" = "$DEPLOY_COMMIT" ]; then
+                candidate_digest=$(nix hash path --type sha256 "$candidate_path" 2>/dev/null || true)
+                if [ "$candidate_commit" = "$active_commit" ] && [ "$candidate_digest" = "$active_digest" ]; then
                   package_path="$candidate_path"
                 fi
               fi
               if [ -z "$package_path" ]; then
-                package_path=$(resolve_service_package_from_unit "$service")
+                fallback_path=$(resolve_service_package_from_unit "$service")
+                fallback_commit=$(artifact_manifest_commit "$fallback_path/share/go-choir/build.json" "$service" 2>/dev/null || true)
+                fallback_digest=$(nix hash path --type sha256 "$fallback_path" 2>/dev/null || true)
+                if [ "$fallback_commit" = "$active_commit" ] && [ "$fallback_digest" = "$active_digest" ]; then
+                  package_path="$fallback_path"
+                fi
               fi
-              package_commit=$(verify_artifact_manifest "$package_path/share/go-choir/build.json" "$service")
-              package_digest=$(nix hash path --type sha256 "$package_path")
-              package_digest="sha256:${package_digest#sha256-}"
-              service_commit=$(printf '%s' "$receipt_artifacts" | jq -er --arg service "$service" '.[$service] | select(.status == "active") | .commit')
-              if [ -z "$package_path" ] || [[ "$package_path" != /nix/store/* ]] || [[ "$package_digest" != sha256:* ]] ||
-                [ "$package_commit" != "$DEPLOY_COMMIT" ] || [ "$service_commit" != "$DEPLOY_COMMIT" ]; then
-                echo "Host service identity is incomplete for ${service}: package=${package_path:-missing} package_commit=${package_commit:-missing} service_commit=${service_commit:-missing}" >&2
+              if [ -z "$package_path" ]; then
+                echo "No immutable Nix package matches active service ${service}: commit=${active_commit} digest=sha256:${active_digest#sha256-}" >&2
+                exit 1
+              fi
+              package_commit="$active_commit"
+              package_digest="sha256:${active_digest#sha256-}"
+              selected_service=false
+              for identity_service in "${identity_services[@]}"; do
+                if [ "$identity_service" = "$service" ]; then
+                  selected_service=true
+                  break
+                fi
+              done
+              if [ "$selected_service" = "true" ]; then
+                service_commit=$(printf '%s' "$receipt_artifacts" | jq -er --arg service "$service" '.[$service] | select(.status == "active") | .commit')
+                if [ "$package_commit" != "$DEPLOY_COMMIT" ] || [ "$service_commit" != "$DEPLOY_COMMIT" ]; then
+                  echo "Selected host service identity conflicts for ${service}: package_commit=${package_commit:-missing} service_commit=${service_commit:-missing} target_commit=${DEPLOY_COMMIT}" >&2
+                  exit 1
+                fi
+              fi
+              if [ -z "$package_path" ] || [[ "$package_path" != /nix/store/* ]] || [[ "$package_digest" != sha256:* ]]; then
+                echo "Host service identity is incomplete for ${service}: package=${package_path:-missing} package_commit=${package_commit:-missing}" >&2
                 exit 1
               fi
               host_services=$(printf '%s' "$host_services" |
-                jq --arg service "$service" --arg path "$package_path" --arg digest "$package_digest" --arg commit "$service_commit" \
+                jq --arg service "$service" --arg path "$package_path" --arg digest "$package_digest" --arg commit "$package_commit" \
                   '. + {($service): {package_path: $path, package_digest: $digest, embedded_commit: $commit}}')
             done
             host_identity=$(jq -n \

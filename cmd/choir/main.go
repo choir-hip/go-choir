@@ -513,6 +513,18 @@ func executionIdentityCLIDigest(value any) (string, error) {
 
 const executionIdentityCLIAudience = "choir.news/acceptance/execution-identity"
 
+func executionIdentityCLIFullCommit(commit string) bool {
+	if len(commit) != 40 {
+		return false
+	}
+	for _, r := range commit {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
 func executionIdentityCLICommonCommit(signed *executionIdentityCLIEnvelope, hostRaw, deploymentRaw json.RawMessage) (string, bool) {
 	if signed == nil {
 		return "", false
@@ -520,6 +532,10 @@ func executionIdentityCLICommonCommit(signed *executionIdentityCLIEnvelope, host
 	var host buildinfo.Info
 	var deployment struct {
 		TargetCommit string `json:"target_commit"`
+		Artifacts    map[string]struct {
+			Commit string `json:"commit"`
+			Status string `json:"status"`
+		} `json:"artifacts"`
 		HostIdentity struct {
 			CanonicalRef       string `json:"canonical_ref"`
 			NixOSClosureDigest string `json:"nixos_closure_digest"`
@@ -536,15 +552,29 @@ func executionIdentityCLICommonCommit(signed *executionIdentityCLIEnvelope, host
 	target := strings.TrimSpace(deployment.TargetCommit)
 	build, ok := signed.Identity["build"].(map[string]any)
 	proxy := deployment.HostIdentity.Services["proxy"]
-	if !ok || len(target) != 40 || host.Commit != target || host.DeployedCommit != target ||
-		fmt.Sprint(build["commit"]) != target || fmt.Sprint(build["deployed_commit"]) != target ||
+	guestCommit := strings.TrimSpace(fmt.Sprint(build["commit"]))
+	guestDeployedCommit := strings.TrimSpace(fmt.Sprint(build["deployed_commit"]))
+	if !ok || !executionIdentityCLIFullCommit(target) ||
+		!executionIdentityCLIFullCommit(host.Commit) ||
+		!executionIdentityCLIFullCommit(proxy.EmbeddedCommit) ||
+		host.Service != "proxy" || host.Commit != proxy.EmbeddedCommit ||
+		!executionIdentityCLIFullCommit(guestCommit) || guestDeployedCommit != guestCommit ||
 		deployment.HostIdentity.CanonicalRef != "refs/heads/main@"+target ||
 		!strings.HasPrefix(deployment.HostIdentity.NixOSClosureDigest, "sha256:") ||
-		proxy.Role != "proxy" || !strings.HasPrefix(proxy.PackageDigest, "sha256:") || proxy.EmbeddedCommit != target {
+		proxy.Role != "proxy" || !strings.HasPrefix(proxy.PackageDigest, "sha256:") {
+		return "", false
+	}
+	if artifact, selected := deployment.Artifacts["proxy"]; selected {
+		if artifact.Commit != target || artifact.Status != "active" ||
+			host.Commit != target || host.DeployedCommit != target {
+			return "", false
+		}
+	} else if strings.TrimSpace(host.DeployedCommit) != "" {
 		return "", false
 	}
 	for role, service := range deployment.HostIdentity.Services {
-		if service.Role != role || !strings.HasPrefix(service.PackageDigest, "sha256:") || service.EmbeddedCommit != target {
+		if service.Role != role || !strings.HasPrefix(service.PackageDigest, "sha256:") ||
+			!executionIdentityCLIFullCommit(service.EmbeddedCommit) {
 			return "", false
 		}
 	}

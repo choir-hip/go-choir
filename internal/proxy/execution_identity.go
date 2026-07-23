@@ -111,13 +111,13 @@ func readDeploymentIdentityReceipt() (json.RawMessage, deploymentIdentityReceipt
 		return nil, deploymentIdentityReceipt{}, err
 	}
 	proxy := receipt.HostIdentity.Services["proxy"]
-	if receipt.SchemaVersion != 1 || len(receipt.TargetCommit) != 40 || receipt.Github.RunID == "" ||
+	if receipt.SchemaVersion != 1 || !executionIdentityFullCommit(receipt.TargetCommit) || receipt.Github.RunID == "" ||
 		receipt.HostIdentity.CanonicalRef != "refs/heads/main@"+receipt.TargetCommit ||
 		receipt.HostIdentity.CheckoutHead != receipt.TargetCommit || !receipt.HostIdentity.CheckoutClean ||
 		!strings.HasPrefix(receipt.HostIdentity.NixOSClosure, "/nix/store/") ||
 		!strings.HasPrefix(receipt.HostIdentity.NixOSClosureDigest, "sha256:") ||
 		!strings.HasPrefix(proxy.PackagePath, "/nix/store/") || !strings.HasPrefix(proxy.PackageDigest, "sha256:") ||
-		len(proxy.EmbeddedCommit) != 40 {
+		!executionIdentityFullCommit(proxy.EmbeddedCommit) {
 		return nil, deploymentIdentityReceipt{}, fmt.Errorf("deployment receipt is incomplete or conflicting")
 	}
 	publicReceipt, err := publicDeploymentIdentityReceipt(receipt)
@@ -231,6 +231,7 @@ func (h *Handler) attestExecutionIdentity(
 	route *computeImmutableIdentity,
 	hostBuild buildinfo.Info,
 	deploymentReceipt json.RawMessage,
+	deployedCommit string,
 	expectedPlatformSignerDigest string,
 ) (executionIdentityPlatformAttestation, error) {
 	guestDigest, err := canonicalIdentityDigest(guest.Receipt)
@@ -255,7 +256,7 @@ func (h *Handler) attestExecutionIdentity(
 	}
 	requestBody := map[string]any{
 		"schema": executionIdentitySchemaV1, "nonce": guest.Identity.Nonce,
-		"deployed_commit": hostBuild.Commit,
+		"deployed_commit": deployedCommit,
 		"computer_id":     guest.Identity.ComputerID, "realization_id": guest.Identity.RealizationID,
 		"vm_epoch": guest.Identity.VMEpoch, "guest_receipt_digest": guestDigest,
 		"audience": executionIdentityAudience,
@@ -311,14 +312,33 @@ func executionIdentityFullCommit(commit string) bool {
 	return true
 }
 
-func executionIdentityCommitsJoin(target string, host buildinfo.Info, hostEmbeddedCommit, routeCommit string, guest buildinfo.Info) bool {
-	target = strings.TrimSpace(target)
+func executionIdentityCommitsJoin(receipt deploymentIdentityReceipt, host buildinfo.Info, routeCommit string, guest buildinfo.Info) bool {
+	target := strings.TrimSpace(receipt.TargetCommit)
 	routeCommit = strings.TrimSpace(routeCommit)
-	return executionIdentityFullCommit(target) &&
-		executionIdentityFullCommit(routeCommit) &&
-		host.Commit == target && host.DeployedCommit == target &&
-		hostEmbeddedCommit == target &&
-		guest.Commit == target && guest.DeployedCommit == target
+	proxy := receipt.HostIdentity.Services["proxy"]
+	if !executionIdentityFullCommit(target) ||
+		!executionIdentityFullCommit(routeCommit) ||
+		!executionIdentityFullCommit(host.Commit) ||
+		!executionIdentityFullCommit(proxy.EmbeddedCommit) ||
+		host.Service != "proxy" ||
+		host.Commit != proxy.EmbeddedCommit ||
+		!executionIdentityFullCommit(guest.Commit) ||
+		guest.DeployedCommit != guest.Commit {
+		return false
+	}
+	rawArtifact, selected := receipt.Artifacts["proxy"]
+	if !selected {
+		return strings.TrimSpace(host.DeployedCommit) == ""
+	}
+	var artifact struct {
+		Commit string `json:"commit"`
+		Status string `json:"status"`
+	}
+	if json.Unmarshal(rawArtifact, &artifact) != nil {
+		return false
+	}
+	return artifact.Commit == target && artifact.Status == "active" &&
+		host.Commit == target && host.DeployedCommit == target
 }
 
 // HandleExecutionIdentity joins guest-core evidence to the independently
@@ -403,13 +423,12 @@ func (h *Handler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Request
 	}
 	receiptRaw, receipt, err := readDeploymentIdentityReceipt()
 	hostBuild := buildinfo.Snapshot("proxy")
-	hostProxy := receipt.HostIdentity.Services["proxy"]
-	if err != nil || !executionIdentityCommitsJoin(receipt.TargetCommit, hostBuild, hostProxy.EmbeddedCommit, routeIdentity.CodeCommit, guest.Identity.Build) {
+	if err != nil || !executionIdentityCommitsJoin(receipt, hostBuild, routeIdentity.CodeCommit, guest.Identity.Build) {
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity host, guest, route, and CI join unavailable"})
 		return
 	}
 	vmctlIdentity := map[string]any{"computer_id": ownership.ComputerID, "vm_id": ownership.VMID, "epoch": ownership.Epoch, "state": ownership.State}
-	platformAttestation, err := h.attestExecutionIdentity(r, guest, vmctlIdentity, routeIdentity, hostBuild, receiptRaw, expectedPlatformSignerDigest)
+	platformAttestation, err := h.attestExecutionIdentity(r, guest, vmctlIdentity, routeIdentity, hostBuild, receiptRaw, receipt.TargetCommit, expectedPlatformSignerDigest)
 	if err != nil {
 		log.Printf("proxy execution identity: platform attestation: %v", err)
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity platform attestation unavailable"})
