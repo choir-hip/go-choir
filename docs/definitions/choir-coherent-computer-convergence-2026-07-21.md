@@ -269,29 +269,30 @@ execution:
     exit: "This Definition is complete, main is clean, staging is identified and healthy, and exactly one successor may become executable."
 
 now:
-  status: candidate_reviewed
+  status: problem_documented
   slice: D-land-deploy-and-prove
-  question: "Does the frozen canonical-route-absence repair deploy an ordinary clean-owner computer on the same host/guest commit without weakening protected immutable routing?"
+  question: "Why does the newly booted same-deployment ordinary guest refuse nonce-bound execution identity after clean bootstrap succeeds?"
   reconciliation:
-    observed_at: 2026-07-23T22:44:00Z
-    source_ref: refs/remotes/origin/main@6df1651f
-    deploy_identity: "Accepted staging remains host cc85f099 with preserved immutable guest 32302b65 epoch 129. The route-absence problem receipt is committed at 6df1651f; the reviewed repair candidate is not yet deployed."
+    observed_at: 2026-07-23T23:13:30Z
+    source_ref: refs/remotes/origin/main@4a33fff0487a069066350f665f47d2f835ca533b
+    deploy_identity: "GitHub Actions 30051002959 passed all selected CI gates and deployed 4a33fff0 to Node B; /health reports proxy build/deployed_commit 4a33fff0."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
-    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir contains only the reviewed route/deployment candidate against clean origin/main@6df1651f; protected unrelated worktrees remain untouched."
+    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir was clean after push; this update is the required code-free problem receipt. Protected unrelated worktrees remain untouched."
     status: reconciled
   accepted_deployment:
-    source_commit: cc85f099ea5e7bf1bb21591755d2f8be8d48a231
-    ci_ref: "GitHub Actions 30040695413 passed every selected source/build gate and Node B deployment."
-    environment_identity: "Signed choir.execution_identity.v1 joined=true identifies host/deployment cc85f099 and the deliberately preserved immutable guest 32302b65 at candidate-fleet-e15cb89f25d963c220319b7b epoch 129."
-    rollback_ref: "Activation receipt previous deployment 32302b652ea7522e1d3cd0b21fde8b82f0449b40; immutable guest ComputerVersion remains separately rollback-capable."
+    source_commit: 4a33fff0487a069066350f665f47d2f835ca533b
+    ci_ref: "GitHub Actions 30051002959 passed; Deploy to Staging job 89354924805 passed."
+    environment_identity: "Host /health is exact at 4a33fff0. Clean owner 94cc12ef-be55-4dd0-9689-5916d20de988 booted vm-f5ba58035a19f9d7d72a029ed06adcbb epoch 8197 through canonical route_absent."
+    rollback_ref: "origin/main@6df1651f; accepted prior deployment cc85f099; preserved constructed guest 32302b65 epoch 129."
   observed_product_evidence:
-    - "The accepted deployment classified candidate-fleet-e15cb89f25d963c220319b7b from canonical route/evidence as constructed, preserved its code/artifact/disk binding, found no mutable active computers, and recorded sandbox=installed plus active_computers=empty without mutating the immutable realization."
-    - "A clean browser client registered a new owner, but /api/shell/bootstrap returned 502 because canonical route absence was not connected to ordinary mutable ownership allocation."
-  observed_problem: "The code-free 6df1651f receipt established that canonical route absence was unwired on the ordinary product boot path."
-  policy_resolution_ref: "The frozen candidate maps only canonical ErrSlotNotFound to typed route_absent; malformed, unavailable, unknown-field, trailing, non-joining, strict immutable, self-development, maild, and universal-wire paths fail closed. Present routes require exact route/evidence/VMID construction joins. HandleResolve serializes route resolution through assignment against the sole production route mutation lock."
-  blocker_or_risk: "Mission completion remains blocked on landing and deployed acceptance. Source review cannot prove the SQL-ledger clean-owner boot, same-commit guest identity, restart reconstruction, cancellation delivery, or client conformance."
-  latest_blocker_or_risk: "Mutation class red. Protected surfaces: canonical route/evidence authority, vmctl ownership/start admission, deployment refresh selection, guest executable identity, and universal-wire routing. Admissible evidence: frozen source review plus Node B signed identity and clean-client deployed lifecycle proof. Rollback: origin/main@6df1651f and accepted activation cc85f099/guest 32302b65. Conjecture delta: canonical negative authority can coexist with strict immutable execution only when every protected caller opts into the correct route contract. Heresy delta: discovered unwired absence and non-joined lifecycle admission; introduced none; repaired in candidate, not yet deployment-proven."
-  next_action: "Commit and push frozen candidate 796fd35d4639c22ee305ffbb6049bff5f394985aac040b52f464a8065725c191, monitor exact CI/deploy identity, then prove clean ordinary bootstrap and same-commit guest execution before rerunning lifecycle acceptance."
+    - "A clean browser client registered route-acceptance-4a33fff0-1784848249103@example.com; /api/shell/bootstrap returned 200 from vm-f5ba58035a19f9d7d72a029ed06adcbb and the desktop became ready."
+    - "/api/compute/status returned status ok, active primary epoch 8197, runtime ready, and immutable_identity.route_absent=true joined=false. This proves the route-absence repair through the SQL-ledger product path."
+    - "A newly minted acceptance:read key bound to that owner reached /api/acceptance/execution-identity, but the host returned 502 execution identity guest refused on repeated nonce-bound requests; keys were revoked after each probe."
+  observed_problem: "The route-absence boot succeeds, but the clean ordinary guest returns a non-200 response for its signed execution-identity endpoint. The host currently discards the guest status/body, so no-SSH evidence cannot distinguish incomplete executable/deploy/closure identity, signer unavailability, or another guest refusal."
+  policy_resolution_ref: "Problem-documentation-first requires this receipt before any diagnostics or runtime repair. Preserve fail-closed identity acceptance; expose only bounded sanitized guest refusal diagnostics, identify the missing join at source, and do not weaken signature, nonce, closure, deployment, or VMID checks."
+  blocker_or_risk: "Mission completion remains blocked: the ordinary computer is usable, but same-commit signed host/guest identity is unproved, so lifecycle and restart acceptance cannot be credited."
+  latest_blocker_or_risk: "Mutation class red. Protected surfaces: guest execution identity, platform attestation, deployment identity, and acceptance. Admissible evidence: bounded no-SSH diagnostic plus signed joined identity. Rollback: 4a33fff0 to 6df1651f or prior accepted cc85f099. Conjecture delta: product usability and executable identity are independent acceptance axes. Heresy delta: discovered guest refusal hidden behind a generic host 502; introduced none; repaired route absence, not identity."
+  next_action: "Add bounded no-SSH guest refusal diagnostics without weakening the verifier, reproduce the exact missing identity prerequisite, repair it at source, independently review, then land and rerun the same clean-client identity proof."
 receipts:
   - id: durable-work-contract-gate-2026-07-21
     boundary: define
@@ -454,6 +455,16 @@ receipts:
     problem_ref: "The existing RouteResolution.route_absent contract was unwired: the handler emitted 404, the client rejected it, and proxy bootstrap failed before vmctl could create an ordinary ownership."
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; clean deployed product evidence; frozen red-surface review"
     candidate_or_evidence_refs: [/tmp/choir-cc85-identity.json, /tmp/choir-cc85-trivial-start.json, /tmp/choir-cc85-trivial-snapshot.json, /tmp/agentic-consensus-20260723-183626/manifest.tsv, artifact://2036, artifact://2042]
+
+  - id: ordinary-guest-execution-identity-refused-2026-07-23
+    boundary: land
+    commit_or_artifact: pending_code_free_receipt
+    proof_refs: ["GitHub Actions 30051002959", "Deploy to Staging job 89354924805", "https://choir.news/health reports 4a33fff0", "clean browser owner 94cc12ef-be55-4dd0-9689-5916d20de988", "bootstrap vm-f5ba58035a19f9d7d72a029ed06adcbb status 200", "compute status active epoch 8197 route_absent=true runtime ready", "acceptance endpoint 502 execution identity guest refused"]
+    rollback_ref: "origin/main@6df1651f; accepted prior deployment cc85f099 and constructed guest 32302b65 epoch 129"
+    disposition: "Problem documented before diagnostics or runtime repair. Route-absence acceptance passed; executable identity remains fail-closed and unaccepted."
+    problem_ref: "Clean ordinary guest refuses signed execution identity while the host erases the actionable guest refusal reason."
+    authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; deployed clean-client evidence"
+    candidate_or_evidence_refs: [artifact://2053]
 
 view:
   path: http://127.0.0.1:8788/
