@@ -271,27 +271,27 @@ execution:
 now:
   status: blocked_incomplete
   slice: D-land-deploy-and-prove
-  question: "Will a clean retry distinguish hosted store-shard wall-clock variance from a reproducible source failure?"
+  question: "Can retained legacy actor mailboxes whose scoped AgentRecord is absent be bound from an independent durable owner/computer witness without guessing or losing backlog?"
   reconciliation:
-    observed_at: 2026-07-23T10:30:54Z
-    source_ref: refs/remotes/origin/main@4d69567c9cd92eb2255de78387fcc945c4d8f809
-    deploy_identity: "GitHub Actions run 29998711216 did not deploy 4d69567c: every selected gate except race non-runtime shard 0 passed; the isolated internal/store package hit its 600-second package timeout while TestUpdateRunPreservesLegacyTrajectoryIndexOnReactivation was active. The prior signed accepted deployment remains 676f0772 epoch 114."
+    observed_at: 2026-07-23T11:29:52Z
+    source_ref: refs/remotes/origin/main@abf49d22f730dab67074e88b46461ea064a74c16
+    deploy_identity: "Forced GitHub Actions run 30001463915 passed source/build gates and attempted Node B deployment of abf49d22. Active-computer refresh timed out because two guests repeatedly refused actor-runtime startup: retained UUID mailboxes had no matching scoped AgentRecord on the current computer. The prior signed accepted deployment remains 676f0772 epoch 114; incomplete receipt /var/lib/go-choir/deploy-failures/30001463915-1.json was recorded."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 contains only this code-free hosted-timeout receipt after origin/main@4d69567c; protected unrelated worktrees remain untouched."
+    worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 is clean at origin/main@abf49d22; protected unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: convergence-durable-work-runtime-26
-    state: landed_ci_retry_required
-    ref: refs/remotes/origin/main@4d69567c9cd92eb2255de78387fcc945c4d8f809
+    id: convergence-durable-work-runtime-27
+    state: deployed_migration_scope_witness_required
+    ref: refs/remotes/origin/main@abf49d22f730dab67074e88b46461ea064a74c16
     owner: owner-and-current-session
-    base: 8063b5ff
+    base: abf49d22
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_runtime_candidate: refs/remotes/origin/main@129a3d989d6c1e32cc95530e96f31dee0984d94d
-    scope: "Phase D landed mailbox migration and test-only restart oracle correction; effects OFF."
-    observed_problem: "The repaired restart oracle passed its hosted shard, but the isolated internal/store race package exhausted the existing 600-second package timeout. Hosted evidence names no failed store assertion and reports one test merely active at timeout. That exact test passed locally under race three times in 24 seconds. The immediately prior hosted store shard passed the same source-bearing migration commit."
-    repair_evidence: "No code repair is authorized by this timing-only receipt. Retry the failed hosted jobs unchanged; diagnose or change CI only if the timeout reproduces."
-    remaining_error: "Pass hosted CI on the unchanged accepted source, deploy to Node B, verify signed host/guest identity and retained migration delivery, repeat stop/start, and finish public lifecycle/cancellation/client acceptance."
+    scope: "Phase D retained-mailbox migration repair only; effects OFF."
+    observed_problem: "The migration assumes every legacy actor mailbox has one scoped AgentRecord on the current computer. Node B retained UUID mailboxes 00dba6bf-6c03-4fce-853d-087e3f08a72d and 04914cf9-4951-4174-bb63-341c07c55ac7 but ResolveLegacyAgentScope found no matching scoped AgentRecord, so runtime startup failed closed and deployment refresh timed out."
+    repair_evidence: "No repair is committed after this receipt. A repair must derive owner/computer scope from an independent durable identity witness, require exactly one match, preserve processed/unprocessed updates and snapshots atomically, and continue to refuse missing or ambiguous identity."
+    remaining_error: "Implement and review exact-one durable scope recovery for retained mailboxes without AgentRecord rows, pass focused migration/restart races and hosted CI, deploy to Node B, verify signed host/guest identity and retained delivery, then finish public lifecycle/cancellation/client acceptance."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -340,10 +340,10 @@ now:
     - "GitHub Actions 29997288005 failed race non-runtime shard 1 only: TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog observed a distinct follow-on initial_dispatch in the same mailbox after the seeded run completed. Exact local race reproduction failed 2 of 10 iterations with the same mismatched update-ID evidence."
     - "/tmp/agentic-consensus-20260723-061202/manifest.tsv: Codex and OMP GPT-5.5 independently ACCEPT exact test-only candidate digest dc38362bf0b979e45bab67ee18cfa425df94f8c81b0c2d68618cad9230dfca82; no blocking findings."
     - "The repaired focused restart race passed count=20; the complete internal/actorruntime race package and git diff --check passed."
-    - "GitHub Actions 29998711216 passed the repaired non-runtime shard 1 and every selected gate except isolated internal/store race shard 0, which reached its 600-second package timeout without a failed assertion. The named active test passed locally under race count=3 in 24 seconds; the prior hosted store shard passed."
-  blocker_or_risk: "Hosted CI blocks deployment. Current evidence is timing-only and does not establish a source defect; an unchanged failed-job retry is the next discriminating probe."
-  latest_blocker_or_risk: "Protected surfaces remain actor SQLite update/snapshot identity, scoped owner/computer authority, restart replay, deployment activation, and retained delivery. Rollback remains accepted deployment 676f0772 epoch 114. Heresy delta: discovered hosted store-suite wall-clock instability; introduced no runtime heresy; no repair is justified before reproduction."
-  next_action: "Commit this code-free timeout receipt alone, rerun the failed jobs for 4d69567c unchanged, and continue deployment only if the source gates pass."
+    - "Forced GitHub Actions run 30001463915 passed source/build gates and attempted Node B deployment of abf49d22; active-computer refresh timed out after guests repeatedly refused retained UUID mailboxes whose scoped AgentRecord was absent. Incomplete receipt /var/lib/go-choir/deploy-failures/30001463915-1.json was recorded."
+  blocker_or_risk: "Retained actor SQLite state and object-graph agent identity do not share complete historical coverage. Startup correctly refuses to guess, but the accepted migration has no secondary exact-owner witness for a mailbox whose AgentRecord is absent."
+  latest_blocker_or_risk: "Protected surfaces remain actor SQLite update/snapshot identity, scoped owner/computer authority, restart replay, deployment activation, and retained delivery. Rollback remains accepted deployment 676f0772 epoch 114. Heresy delta: discovered incomplete historical AgentRecord coverage; introduced no new runtime heresy; repair must fail closed unless one durable witness binds the legacy mailbox."
+  next_action: "Commit this code-free deployment receipt alone. Then identify the narrowest existing durable owner/computer witness for legacy actor IDs, add exact-one migration with atomic preservation, run focused race/restart proof and independent review, and repeat the landing loop."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
