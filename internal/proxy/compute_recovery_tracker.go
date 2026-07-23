@@ -2,6 +2,8 @@ package proxy
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"time"
 )
@@ -18,6 +20,7 @@ type computeRecoveryStatus struct {
 	StartedAt  string `json:"started_at,omitempty"`
 	UpdatedAt  string `json:"updated_at,omitempty"`
 	FinishedAt string `json:"finished_at,omitempty"`
+	Code       string `json:"code,omitempty"`
 	Message    string `json:"message,omitempty"`
 }
 
@@ -123,6 +126,19 @@ func (t *computeRecoveryTracker) snapshot(userID, desktopID string) (*computeRec
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	op := t.ops[computeRecoveryKey(userID, desktopID)]
+	return snapshotComputeRecoveryOperation(op)
+}
+
+func (t *computeRecoveryTracker) snapshotOperation(op *computeRecoveryOperation) (*computeRecoveryStatus, computeComputer, *computeRuntimeStatus, error, bool) {
+	if t == nil {
+		return nil, computeComputer{}, nil, nil, false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return snapshotComputeRecoveryOperation(op)
+}
+
+func snapshotComputeRecoveryOperation(op *computeRecoveryOperation) (*computeRecoveryStatus, computeComputer, *computeRuntimeStatus, error, bool) {
 	if op == nil {
 		return nil, computeComputer{}, nil, nil, false
 	}
@@ -137,7 +153,26 @@ func (t *computeRecoveryTracker) snapshot(userID, desktopID string) (*computeRec
 		status.FinishedAt = op.finished.Format(time.RFC3339)
 	}
 	if op.err != nil {
-		status.Message = "current computer recovery failed"
+		status.Code, status.Message = computeRecoveryFailure(op.err)
 	}
 	return &status, op.current, op.runtime, op.err, true
+}
+
+func computeRecoveryFailure(err error) (string, string) {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "recovery_timeout", "Current computer recovery timed out."
+	}
+	text := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(text, "route"):
+		return "route_unavailable", "The immutable computer route is unavailable."
+	case strings.Contains(text, "credential"):
+		return "credential_unavailable", "The computer realization credential is unavailable."
+	case strings.Contains(text, "already in progress"):
+		return "refresh_in_progress", "Another computer refresh is already in progress."
+	case strings.Contains(text, "guest ready"), strings.Contains(text, "guest health"):
+		return "guest_not_ready", "The retained computer did not become healthy after refresh."
+	default:
+		return "refresh_failed", "The retained computer could not be refreshed."
+	}
 }

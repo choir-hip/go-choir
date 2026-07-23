@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -3329,7 +3330,7 @@ func TestComputeRecoveryWakeRefreshesUnreachableCurrentComputer(t *testing.T) {
 	}
 }
 
-func TestComputeRecoveryWakeKeepsObservationWhenUnreachableRefreshFails(t *testing.T) {
+func TestComputeRecoveryWakeReportsUnreachableRefreshFailure(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate ed25519 key: %v", err)
@@ -3390,24 +3391,102 @@ func TestComputeRecoveryWakeKeepsObservationWhenUnreachableRefreshFails(t *testi
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
 	w := httptest.NewRecorder()
 	handler.HandleAPI(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("compute recovery = %d, want 200 body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("compute recovery = %d, want 502 body=%s", w.Code, w.Body.String())
 	}
 	if !refreshCalled.Load() {
 		t.Fatal("expected recovery to attempt refresh")
 	}
-	var result computeRecoveryResponse
-	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
-		t.Fatalf("decode recovery response: %v", err)
+	statusReq := httptest.NewRequest(http.MethodGet, "/api/compute/status", nil)
+	statusReq.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	statusW := httptest.NewRecorder()
+	handler.HandleAPI(statusW, statusReq)
+	if statusW.Code != http.StatusOK {
+		t.Fatalf("compute status = %d, want 200 body=%s", statusW.Code, statusW.Body.String())
 	}
-	if !result.OK {
-		t.Fatal("recovery response ok=false")
+	var status computeStatusResponse
+	if err := json.NewDecoder(statusW.Body).Decode(&status); err != nil {
+		t.Fatalf("decode compute status: %v", err)
 	}
-	if result.Runtime == nil || result.Runtime.Reachable {
-		t.Fatalf("runtime after failed refresh = %+v, want unreachable observation", result.Runtime)
+	if status.Recovery == nil || status.Recovery.Active || status.Recovery.Status != "failed" ||
+		status.Recovery.Code != "refresh_failed" || status.Recovery.Message != "The retained computer could not be refreshed." {
+		t.Fatalf("recovery status = %+v, want bounded failed refresh diagnostic", status.Recovery)
 	}
-	if result.CurrentComputer.State != string(vmctl.VMStateActive) {
-		t.Fatalf("current computer state = %s, want active observation", result.CurrentComputer.State)
+	if strings.Contains(strings.ToLower(status.Recovery.Message), "vmctl") {
+		t.Fatalf("recovery status leaked raw vmctl error: %+v", status.Recovery)
+	}
+	if status.Runtime == nil || status.Runtime.Reachable {
+		t.Fatalf("runtime after failed refresh = %+v, want unreachable observation", status.Runtime)
+	}
+	if status.CurrentComputer.State != string(vmctl.VMStateActive) {
+		t.Fatalf("current computer state = %s, want retained active observation", status.CurrentComputer.State)
+	}
+}
+
+func TestRunComputeRecoveryRejectsStalePreRefreshHealth(t *testing.T) {
+	oldSandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}))
+	t.Cleanup(oldSandbox.Close)
+
+	vmctlMux := http.NewServeMux()
+	vmctlMux.HandleFunc("/internal/vmctl/lookup", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"vm_id": "vm-unready", "user_id": "owner-unready", "desktop_id": vmctl.PrimaryDesktopID,
+			"kind": string(vmctl.VMKindInteractive), "warmness_class": "primary",
+			"sandbox_url": oldSandbox.URL, "state": string(vmctl.VMStateFailed), "epoch": 8,
+		})
+	})
+	vmctlMux.HandleFunc("/internal/vmctl/refresh", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"vm_id": "vm-unready", "user_id": "owner-unready", "desktop_id": vmctl.PrimaryDesktopID,
+			"kind": string(vmctl.VMKindInteractive), "warmness_class": "primary",
+			"state": string(vmctl.VMStateActive), "epoch": 9,
+		})
+	})
+	vmctlServer := httptest.NewServer(vmctlMux)
+	t.Cleanup(vmctlServer.Close)
+
+	handler, err := NewHandler(&Config{
+		AllowDirectSandboxForTests: true, Port: "0", SandboxURL: oldSandbox.URL,
+		AuthPublicKeyPath: "/unused/in/test", VmctlURL: vmctlServer.URL,
+	}, nil)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+	current, runtimeStatus, recoveryErr := handler.runComputeRecovery(context.Background(), "owner-unready", vmctl.PrimaryDesktopID)
+	if recoveryErr == nil || !strings.Contains(recoveryErr.Error(), "guest health unavailable") {
+		t.Fatalf("recovery error = %v, want guest health refusal", recoveryErr)
+	}
+	if current.State != string(vmctl.VMStateActive) || runtimeStatus != nil {
+		t.Fatalf("recovery observation = current=%+v runtime=%+v, want active with no new-realization health", current, runtimeStatus)
+	}
+}
+
+func TestComputeRecoveryWaiterSnapshotsOriginalOperation(t *testing.T) {
+	tracker := newComputeRecoveryTracker()
+	first := tracker.startOrJoin("owner", vmctl.PrimaryDesktopID, "wake_current_computer", func(context.Context) computeRecoveryRunResult {
+		return computeRecoveryRunResult{Err: errors.New("first refresh failed")}
+	})
+	<-first.done
+
+	releaseSecond := make(chan struct{})
+	second := tracker.startOrJoin("owner", vmctl.PrimaryDesktopID, "wake_current_computer", func(context.Context) computeRecoveryRunResult {
+		<-releaseSecond
+		return computeRecoveryRunResult{}
+	})
+	defer func() {
+		close(releaseSecond)
+		<-second.done
+	}()
+
+	recovery, _, _, recoveryErr, ok := tracker.snapshotOperation(first)
+	if !ok || recoveryErr == nil || recovery == nil || recovery.Status != "failed" || recovery.Code != "refresh_failed" {
+		t.Fatalf("first operation snapshot = %+v err=%v ok=%v, want original failure", recovery, recoveryErr, ok)
+	}
+	current, _, _, currentErr, ok := tracker.snapshot("owner", vmctl.PrimaryDesktopID)
+	if !ok || currentErr != nil || current == nil || !current.Active || current.Status != "refreshing" {
+		t.Fatalf("current operation snapshot = %+v err=%v ok=%v, want replacement in progress", current, currentErr, ok)
 	}
 }
 

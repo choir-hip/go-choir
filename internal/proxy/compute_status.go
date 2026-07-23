@@ -379,7 +379,7 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 		}
 		select {
 		case <-op.done:
-			recovery, current, runtimeStatus, runErr, _ := h.recoveries.snapshot(authResult.UserID, desktopID)
+			recovery, current, runtimeStatus, runErr, _ := h.recoveries.snapshotOperation(op)
 			if runErr != nil {
 				writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to recover current computer"})
 				return
@@ -394,7 +394,7 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 		case <-r.Context().Done():
 			return
 		case <-time.After(2 * time.Second):
-			recovery, current, runtimeStatus, _, _ := h.recoveries.snapshot(authResult.UserID, desktopID)
+			recovery, current, runtimeStatus, _, _ := h.recoveries.snapshotOperation(op)
 			if current.DesktopID == "" {
 				current = computeComputerFromFields(
 					desktopID,
@@ -534,23 +534,30 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID stri
 		own.State == string(vmctl.VMStateFailed) ||
 		(runtimeStatus != nil && !runtimeStatus.Reachable))
 	if shouldRefresh {
+		runtimeStatus = nil
 		refreshed, refreshErr := h.vmctlClient.RefreshDesktopContext(ctx, userID, desktopID)
 		if refreshErr != nil {
 			log.Printf("proxy compute recovery: refresh unreachable current computer desktop=%s: %v", desktopID, refreshErr)
-		} else {
-			current = computeComputerFromFields(
-				refreshed.DesktopID,
-				string(refreshed.Kind),
-				refreshed.State,
-				refreshed.WarmnessClass,
-				0,
-				"",
-				"",
-			)
-			if refreshed.SandboxURL != "" {
-				runtimeStatus = h.probeRuntimeHealthForTarget(refreshed.SandboxURL)
-			}
+			return current, runtimeStatus, fmt.Errorf("refresh current computer: %w", refreshErr)
 		}
+		current = computeComputerFromFields(
+			refreshed.DesktopID,
+			string(refreshed.Kind),
+			refreshed.State,
+			refreshed.WarmnessClass,
+			0,
+			"",
+			"",
+		)
+		if refreshed.SandboxURL != "" {
+			runtimeStatus = h.probeRuntimeHealthForTarget(refreshed.SandboxURL)
+		}
+	}
+	if current.State != string(vmctl.VMStateActive) {
+		return current, runtimeStatus, fmt.Errorf("refreshed computer state is %s", current.State)
+	}
+	if runtimeStatus == nil || !runtimeStatus.Reachable {
+		return current, runtimeStatus, fmt.Errorf("guest health unavailable after refresh")
 	}
 	return current, runtimeStatus, nil
 }
