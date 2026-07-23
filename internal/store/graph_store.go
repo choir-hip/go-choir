@@ -264,36 +264,85 @@ func (s *Store) UpsertAgentOG(ctx context.Context, rec types.AgentRecord) error 
 	if rec.OwnerID == "" || rec.ComputerID == "" || rec.AgentID == "" {
 		return fmt.Errorf("store: upsert agent requires owner_id, computer_id, and agent_id")
 	}
-	if strings.HasPrefix(rec.AgentID, "texture:") {
+	if strings.HasPrefix(rec.AgentID, "texture:") || rec.LifecycleVersion > 0 || strings.TrimSpace(rec.ActiveRunID) != "" {
 		return ErrLifecycleAuthorityRequired
 	}
-	if rec.LifecycleVersion > 0 {
-		return ErrLifecycleAuthorityRequired
+	if s.ogStore == nil {
+		return fmt.Errorf("store: object graph not initialized")
 	}
-	if existing, err := s.GetAgentByScopeOG(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID); err == nil {
-		if existing.LifecycleVersion > 0 {
-			return ErrLifecycleAuthorityRequired
-		}
-	} else if !errors.Is(err, ErrNotFound) {
+	canonicalID, err := scopedAgentCanonicalID(rec.OwnerID, rec.ComputerID, rec.AgentID)
+	if err != nil {
 		return err
 	}
-	now := rec.UpdatedAt
-	if now.IsZero() {
-		now = time.Now().UTC()
-		rec.UpdatedAt = now
+	for attempt := 0; attempt < 8; attempt++ {
+		now := rec.UpdatedAt
+		if now.IsZero() {
+			now = time.Now().UTC()
+		}
+		candidate := rec
+		candidate.UpdatedAt = now
+		metadata := map[string]any{}
+		condition := objectgraph.ObjectCondition{CanonicalID: canonicalID}
+		createdAt := candidate.CreatedAt
+		existingObj, getErr := s.ogStore.GetObject(ctx, canonicalID)
+		switch {
+		case getErr == nil:
+			existing, decodeErr := decodeLifecycleObject[types.AgentRecord](existingObj)
+			if decodeErr != nil {
+				return decodeErr
+			}
+			if existing.LifecycleVersion > 0 {
+				return ErrLifecycleAuthorityRequired
+			}
+			if strings.TrimSpace(existing.ActiveRunID) != "" &&
+				(candidate.Profile != existing.Profile ||
+					candidate.Role != existing.Role ||
+					candidate.ChannelID != existing.ChannelID) {
+				return ErrLifecycleAuthorityRequired
+			}
+			candidate.ActiveRunID = existing.ActiveRunID
+			if candidate.CreatedAt.IsZero() {
+				candidate.CreatedAt = existing.CreatedAt
+			}
+			createdAt = existingObj.CreatedAt
+			if err := json.Unmarshal(existingObj.Metadata, &metadata); err != nil {
+				return fmt.Errorf("store: decode agent metadata: %w", err)
+			}
+			condition = objectgraph.ObjectCondition{
+				CanonicalID: canonicalID, Exists: true, ExpectedContentHash: existingObj.ContentHash,
+			}
+		case errors.Is(getErr, objectgraph.ErrNotFound):
+			if candidate.CreatedAt.IsZero() {
+				candidate.CreatedAt = now
+			}
+			createdAt = candidate.CreatedAt
+		default:
+			return getErr
+		}
+		metadata["agent_id"] = candidate.AgentID
+		metadata["computer_id"] = candidate.ComputerID
+		metadata["sandbox_id"] = candidate.SandboxID
+		metadata["profile"] = candidate.Profile
+		metadata["role"] = candidate.Role
+		metadata["channel_id"] = candidate.ChannelID
+		metadata["created_at"] = candidate.CreatedAt.UTC().Format(time.RFC3339Nano)
+		metadata["updated_at"] = now.UTC().Format(time.RFC3339Nano)
+		obj, buildErr := lifecycleObject(
+			ogKindAgent, candidate.OwnerID, candidate.ComputerID, candidate.AgentID,
+			candidate, metadata, createdAt, now,
+		)
+		if buildErr != nil {
+			return buildErr
+		}
+		if err := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{condition}, objectgraph.Batch{Objects: []objectgraph.Object{obj}}); err != nil {
+			if errors.Is(err, objectgraph.ErrConflict) {
+				continue
+			}
+			return err
+		}
+		return nil
 	}
-	metadata := map[string]any{
-		"agent_id":    rec.AgentID,
-		"computer_id": rec.ComputerID,
-		"sandbox_id":  rec.SandboxID,
-		"profile":     rec.Profile,
-		"role":        rec.Role,
-		"channel_id":  rec.ChannelID,
-		"created_at":  rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at":  now.UTC().Format(time.RFC3339Nano),
-	}
-	_, err := s.ogPut(ctx, ogKindAgent, rec.OwnerID, scopedAgentIdentityKey(rec.ComputerID, rec.AgentID), rec, metadata, now)
-	return err
+	return ErrConcurrentStateChange
 }
 
 // GetAgentByScopeOG retrieves an agent by its complete durable identity.

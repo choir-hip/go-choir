@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -74,6 +75,10 @@ type Runtime struct {
 	// section, concurrent retries can both miss the persisted handoff identity
 	// and activate duplicate runs.
 	internalIngestionSubmissionMu sync.Mutex
+	// lifecycleWorkReconcileMu makes the active-run check and replacement
+	// creation one process-local critical section across terminal hooks and
+	// boot/periodic sweeps.
+	lifecycleWorkReconcileMu sync.Mutex
 
 	wg           sync.WaitGroup
 	toolRegistry *toolregistry.ToolRegistry
@@ -1813,6 +1818,81 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 	}
 }
 
+func (rt *Runtime) lifecycleActivationBindingsEligible(ctx context.Context, rec *types.RunRecord) (bool, error) {
+	if rt == nil || rt.store == nil || rec == nil {
+		return false, nil
+	}
+	workItemIDs := metadataStringSlice(rec.Metadata["work_item_ids"])
+	if singular := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")); singular != "" && !slices.Contains(workItemIDs, singular) {
+		workItemIDs = append(workItemIDs, singular)
+	}
+	if len(workItemIDs) == 0 {
+		return true, nil
+	}
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	computerID := strings.TrimSpace(rec.SandboxID)
+	trajectoryID := strings.TrimSpace(rec.TrajectoryID)
+	agentID := strings.TrimSpace(rec.AgentID)
+	if ownerID == "" || computerID == "" || trajectoryID == "" || agentID == "" {
+		return false, nil
+	}
+	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return false, err
+	}
+	currentWork := make(map[string]types.WorkItemRecord, len(snapshot.WorkItems))
+	for _, item := range snapshot.WorkItems {
+		currentWork[strings.TrimSpace(item.WorkItemID)] = item
+	}
+	pendingTerminal := make(map[string]bool)
+	for _, update := range snapshot.Updates {
+		if strings.TrimSpace(update.AgentID) == agentID &&
+			update.Disposition == types.UpdatePending &&
+			update.WorkDisposition != "" && update.WorkDisposition != types.WorkItemOpen {
+			pendingTerminal[strings.TrimSpace(update.WorkItemID)] = true
+		}
+	}
+	seen := make(map[string]struct{}, len(workItemIDs))
+	for _, workItemID := range workItemIDs {
+		workItemID = strings.TrimSpace(workItemID)
+		if workItemID == "" {
+			return false, nil
+		}
+		if _, duplicate := seen[workItemID]; duplicate {
+			continue
+		}
+		seen[workItemID] = struct{}{}
+		work, found := currentWork[workItemID]
+		if !found || work.Status != types.WorkItemOpen ||
+			strings.TrimSpace(work.OwnerID) != ownerID ||
+			firstNonEmpty(strings.TrimSpace(work.ComputerID), computerID) != computerID ||
+			strings.TrimSpace(work.TrajectoryID) != trajectoryID ||
+			strings.TrimSpace(work.AssignedAgentID) != agentID ||
+			pendingTerminal[workItemID] {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (rt *Runtime) passivateInterruptedLifecycleActivation(ctx context.Context, rec *types.RunRecord) error {
+	passivated := *rec
+	passivated.State = types.RunPassivated
+	passivated.UpdatedAt = time.Now().UTC()
+	passivated.FinishedAt = nil
+	req := types.ReplaceLifecycleActivationRequest{
+		OwnerID: passivated.OwnerID, ComputerID: passivated.SandboxID,
+		CommandID:    "lifecycle-passivate-interrupted:" + passivated.RunID,
+		TrajectoryID: passivated.TrajectoryID, AgentID: passivated.AgentID, Run: passivated,
+	}
+	req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
+	if _, err := rt.store.ReplaceLifecycleActivation(ctx, req); err != nil {
+		return err
+	}
+	*rec = passivated
+	return nil
+}
+
 // rewarmInterruptedLifecycleActivations closes the projection-before-dispatch
 // crash window. Initial actor dispatch is keyed by RunID, so replay is durable
 // and idempotent when the pre-crash dispatch already reached the actor log.
@@ -1832,6 +1912,19 @@ func (rt *Runtime) rewarmInterruptedLifecycleActivations(ctx context.Context) {
 		}
 		for i := range runs {
 			rec := &runs[i]
+			eligible, eligibilityErr := rt.lifecycleActivationBindingsEligible(ctx, rec)
+			if eligibilityErr != nil {
+				log.Printf("runtime: boot lifecycle rewarm: validate run %s bindings: %v", rec.RunID, eligibilityErr)
+				continue
+			}
+			if !eligible {
+				if passivateErr := rt.passivateInterruptedLifecycleActivation(ctx, rec); passivateErr != nil {
+					log.Printf("runtime: boot lifecycle rewarm: passivate stale run %s: %v", rec.RunID, passivateErr)
+					continue
+				}
+				log.Printf("runtime: passivated stale lifecycle run %s before restart dispatch", rec.RunID)
+				continue
+			}
 			rt.activate(rec)
 			log.Printf("runtime: re-dispatched lifecycle run %s (state=%s) after restart", rec.RunID, state)
 		}
@@ -1918,7 +2011,7 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 	if rt == nil || rt.store == nil {
 		return
 	}
-	items, err := rt.store.ListOpenAssignedWorkItems(ctx, 0)
+	items, err := rt.store.ListOpenAssignedLifecycleWorkItems(ctx, rt.TextureSandboxID(), 0)
 	if err != nil {
 		log.Printf("runtime: boot work-item sweep: %v", err)
 		return
@@ -1972,15 +2065,61 @@ func (rt *Runtime) sweepPassivatedSpawnedCoagentWork(ctx context.Context) {
 }
 
 func (rt *Runtime) reconcileAssignedWorkItemActor(ctx context.Context, workItems []types.WorkItemRecord) (*types.RunRecord, error) {
+	return rt.reconcileAssignedWorkItemActorWithSource(ctx, workItems, "trajectory_work_item_sweep")
+}
+
+func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context, workItems []types.WorkItemRecord, requestSource string) (*types.RunRecord, error) {
 	if rt == nil || rt.store == nil || len(workItems) == 0 {
 		return nil, nil
 	}
+	rt.lifecycleWorkReconcileMu.Lock()
+	reconcileLocked := true
+	defer func() {
+		if reconcileLocked {
+			rt.lifecycleWorkReconcileMu.Unlock()
+		}
+	}()
 	first := workItems[0]
 	ownerID := strings.TrimSpace(first.OwnerID)
 	agentID := strings.TrimSpace(first.AssignedAgentID)
 	trajectoryID := strings.TrimSpace(first.TrajectoryID)
-	if ownerID == "" || agentID == "" || trajectoryID == "" {
+	computerID := firstNonEmpty(strings.TrimSpace(first.ComputerID), rt.TextureSandboxID())
+	if ownerID == "" || agentID == "" || trajectoryID == "" || computerID == "" {
 		return nil, nil
+	}
+	if first.LifecycleVersion > 0 {
+		snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+		if err != nil {
+			return nil, fmt.Errorf("load assigned work-item lifecycle snapshot: %w", err)
+		}
+		currentWork := make(map[string]types.WorkItemRecord, len(snapshot.WorkItems))
+		for _, item := range snapshot.WorkItems {
+			currentWork[strings.TrimSpace(item.WorkItemID)] = item
+		}
+		pendingTerminal := make(map[string]bool)
+		for _, update := range snapshot.Updates {
+			if update.AgentID == agentID && update.Disposition == types.UpdatePending &&
+				update.WorkDisposition != "" && update.WorkDisposition != types.WorkItemOpen {
+				pendingTerminal[update.WorkItemID] = true
+			}
+		}
+		filtered := workItems[:0]
+		for _, stale := range workItems {
+			item, found := currentWork[strings.TrimSpace(stale.WorkItemID)]
+			if found && item.Status == types.WorkItemOpen &&
+				strings.TrimSpace(item.OwnerID) == ownerID &&
+				firstNonEmpty(strings.TrimSpace(item.ComputerID), computerID) == computerID &&
+				strings.TrimSpace(item.TrajectoryID) == trajectoryID &&
+				strings.TrimSpace(item.AssignedAgentID) == agentID &&
+				!pendingTerminal[item.WorkItemID] {
+				filtered = append(filtered, item)
+			}
+		}
+		workItems = filtered
+		if len(workItems) == 0 {
+			return nil, nil
+		}
+		first = workItems[0]
 	}
 	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
 		return nil, fmt.Errorf("check resident assigned work-item actor: %w", err)
@@ -1996,7 +2135,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActor(ctx context.Context, workItems
 	}
 	profile := agentprofile.Canonical(firstNonEmpty(agent.Profile, first.AuthorityProfile))
 	switch profile {
-	case agentprofile.Researcher, agentprofile.Processor, agentprofile.Reconciler:
+	case agentprofile.Texture, agentprofile.Researcher, agentprofile.Processor, agentprofile.Reconciler:
 	default:
 		return nil, nil
 	}
@@ -2016,8 +2155,11 @@ func (rt *Runtime) reconcileAssignedWorkItemActor(ctx context.Context, workItems
 		runMetadataAgentRole:    role,
 		runMetadataAgentID:      agentID,
 		runMetadataTrajectoryID: trajectoryID,
-		"request_source":        "trajectory_work_item_sweep",
+		"request_source":        firstNonEmpty(strings.TrimSpace(requestSource), "trajectory_work_item_sweep"),
 		"work_item_ids":         ids,
+	}
+	if len(ids) == 1 {
+		metadata["lifecycle_work_item_id"] = ids[0]
 	}
 	if channelID != "" {
 		metadata[runMetadataChannelID] = channelID
@@ -2027,6 +2169,8 @@ func (rt *Runtime) reconcileAssignedWorkItemActor(ctx context.Context, workItems
 	if err != nil {
 		return nil, err
 	}
+	rt.lifecycleWorkReconcileMu.Unlock()
+	reconcileLocked = false
 	rt.activate(rec)
 	return rec, nil
 }
@@ -2034,7 +2178,10 @@ func (rt *Runtime) reconcileAssignedWorkItemActor(ctx context.Context, workItems
 func buildAssignedWorkItemPrompt(workItems []types.WorkItemRecord) string {
 	var b strings.Builder
 	b.WriteString("Resume the open trajectory work item records assigned to you.\n")
-	b.WriteString("These durable obligations were discovered during runtime boot recovery; process them or report blockers with update_coagent.\n")
+	b.WriteString("These durable obligations remain open in canonical state. Before ending this activation, call update_coagent with work_disposition=completed only when the assigned lifecycle work is fully satisfied; otherwise send work_disposition=open with a precise blocker. Final text and RunRecord completion do not settle work.\n")
+	if len(workItems) > 1 {
+		b.WriteString("This activation carries multiple work items. Every update_coagent call must set work_item_id to the specific item it addresses.\n")
+	}
 	for i, item := range workItems {
 		b.WriteString("\nWork item ")
 		b.WriteString(fmt.Sprintf("%d", i+1))
@@ -2067,6 +2214,52 @@ func buildAssignedWorkItemPrompt(workItems []types.WorkItemRecord) string {
 		b.WriteString("\n")
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func (rt *Runtime) continueOpenLifecycleWorkAfterTerminal(ctx context.Context, rec *types.RunRecord) (*types.RunRecord, error) {
+	if rt == nil || rt.store == nil || rec == nil || rec.State != types.RunCompleted {
+		return nil, nil
+	}
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	computerID := strings.TrimSpace(rec.SandboxID)
+	agentID := strings.TrimSpace(rec.AgentID)
+	if ownerID == "" || computerID == "" || agentID == "" {
+		return nil, nil
+	}
+	workItemIDs := metadataStringSlice(rec.Metadata["work_item_ids"])
+	if singular := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")); singular != "" && !slices.Contains(workItemIDs, singular) {
+		workItemIDs = append(workItemIDs, singular)
+	}
+	if len(workItemIDs) == 0 {
+		return nil, nil
+	}
+	trajectoryID := strings.TrimSpace(metadataStringValue(rec.Metadata, runMetadataTrajectoryID))
+	openWork := make([]types.WorkItemRecord, 0, len(workItemIDs))
+	seen := make(map[string]struct{}, len(workItemIDs))
+	for _, workItemID := range workItemIDs {
+		workItemID = strings.TrimSpace(workItemID)
+		if workItemID == "" {
+			continue
+		}
+		if _, duplicate := seen[workItemID]; duplicate {
+			continue
+		}
+		seen[workItemID] = struct{}{}
+		work, err := rt.store.GetLifecycleWorkItem(ctx, ownerID, computerID, workItemID)
+		if errors.Is(err, store.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("load terminal activation work item %s: %w", workItemID, err)
+		}
+		if trajectoryID != "" && strings.TrimSpace(work.TrajectoryID) != trajectoryID {
+			return nil, fmt.Errorf("terminal activation work item %s changed trajectory", workItemID)
+		}
+		if work.Status == types.WorkItemOpen && strings.TrimSpace(work.AssignedAgentID) == agentID {
+			openWork = append(openWork, work)
+		}
+	}
+	return rt.reconcileAssignedWorkItemActorWithSource(ctx, openWork, "terminal_activation_work_recovery")
 }
 
 // executeActivation runs one activation body using the configured provider.
@@ -2324,6 +2517,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		"output_tokens": usage.OutputTokens,
 	})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
+	if _, continueErr := rt.continueOpenLifecycleWorkAfterTerminal(persistCtx, rec); continueErr != nil {
+		log.Printf("runtime: continue open lifecycle work after run %s: %v", rec.RunID, continueErr)
+	}
 	if shouldLogWireLifecycle(rec) {
 		preview := rec.Result
 		if len(preview) > 160 {
@@ -2502,6 +2698,9 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	}
 	resultLenPayload, _ := json.Marshal(map[string]int{"result_length": len(result)})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
+	if _, continueErr := rt.continueOpenLifecycleWorkAfterTerminal(persistCtx, rec); continueErr != nil {
+		log.Printf("runtime: continue open lifecycle work after run %s: %v", rec.RunID, continueErr)
+	}
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
 
 }

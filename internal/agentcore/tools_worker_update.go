@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ type submitCoagentUpdateArgs struct {
 	AgentID          string `json:"agent_id,omitempty"`
 	ChannelID        string `json:"channel_id,omitempty"`
 	ProducerUpdateID string `json:"producer_update_id,omitempty"`
+	WorkItemID       string `json:"work_item_id,omitempty"`
 	WorkDisposition  string `json:"work_disposition,omitempty"`
 	types.CoagentSourcePacketPayload
 }
@@ -34,13 +36,14 @@ type submitCoagentUpdateArgs struct {
 func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 	return toolregistry.Tool{
 		Name:        "update_coagent",
-		Description: "Append one addressed coagent source packet and wake the target actor. The canonical packet shape is schema_version, kind, summary, claims, sources, actions, questions, and notes. Texture may cite/embed only packet.sources; Super may execute only kind=execution_request packets with actions. For lifecycle work, supply a stable random UUIDv4 producer_update_id and reuse it on exact retries. UUIDv4 prevents timestamp/provider/run identity encoding; runtime derives update_id. Set work_disposition=open for interim checkpoints and completed only when this packet fully satisfies assigned lifecycle work; run completion alone never settles work.",
+		Description: "Append one addressed coagent source packet and wake the target actor. The canonical packet shape is schema_version, kind, summary, claims, sources, actions, questions, and notes. Texture may cite/embed only packet.sources; Super may execute only kind=execution_request packets with actions. For lifecycle work, supply a stable random UUIDv4 producer_update_id and reuse it on exact retries. UUIDv4 prevents timestamp/provider/run identity encoding; runtime derives update_id. Set work_disposition=open for interim checkpoints and completed only when this packet fully satisfies assigned lifecycle work; run completion alone never settles work. When one activation carries multiple assigned work items, set work_item_id to the item this update addresses.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"schema_version":     map[string]any{"type": "string", "enum": []string{types.CoagentSourcePacketSchemaV1}},
 			"kind":               map[string]any{"type": "string", "enum": []string{"evidence_update", "execution_request", "execution_result", "blocker", "question", "proposal", "decision_request"}},
 			"summary":            map[string]any{"type": "string"},
 			"agent_id":           map[string]any{"type": "string", "description": "Required for researcher deliveries: the addressed Texture coagent id (texture:<doc_id>). Other roles should set the addressed owning coagent id when not implicit."},
 			"producer_update_id": map[string]any{"type": "string", "format": "uuid", "description": "Canonical random UUIDv4 producer-command identity required for lifecycle updates. Reuse on exact retry; generate a new UUIDv4 for a later checkpoint."},
+			"work_item_id":       map[string]any{"type": "string", "description": "Assigned lifecycle work item addressed by this update. Required when the activation carries multiple work_item_ids; if the activation carries one item, omission selects that item."},
 			"channel_id":         map[string]any{"type": "string"},
 			"work_disposition":   map[string]any{"type": "string", "enum": []string{"open", "completed"}, "description": "Optional native producer work consequence for lifecycle updates; omission preserves assigned work as open. Use completed only when this update fully satisfies that work."},
 			"claims": map[string]any{
@@ -277,9 +280,30 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 				if digestErr != nil {
 					return "", digestErr
 				}
+				requestedWorkItemID := strings.TrimSpace(in.WorkItemID)
 				workItemID := ""
 				if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil {
-					workItemID = strings.TrimSpace(metadataStringValue(runRec.Metadata, "lifecycle_work_item_id"))
+					assignedWorkItemIDs := metadataStringSlice(runRec.Metadata["work_item_ids"])
+					singularWorkItemID := strings.TrimSpace(metadataStringValue(runRec.Metadata, "lifecycle_work_item_id"))
+					if singularWorkItemID != "" {
+						if len(assignedWorkItemIDs) > 0 && !slices.Contains(assignedWorkItemIDs, singularWorkItemID) {
+							return "", fmt.Errorf("update_coagent lifecycle activation has inconsistent assigned work metadata")
+						}
+						if !slices.Contains(assignedWorkItemIDs, singularWorkItemID) {
+							assignedWorkItemIDs = append(assignedWorkItemIDs, singularWorkItemID)
+						}
+					}
+					if requestedWorkItemID == "" {
+						if len(assignedWorkItemIDs) != 1 {
+							return "", fmt.Errorf("update_coagent lifecycle activation with multiple assigned work items requires work_item_id")
+						}
+						workItemID = strings.TrimSpace(assignedWorkItemIDs[0])
+					} else {
+						if !slices.Contains(assignedWorkItemIDs, requestedWorkItemID) {
+							return "", fmt.Errorf("update_coagent work_item_id is not assigned to this lifecycle activation")
+						}
+						workItemID = requestedWorkItemID
+					}
 				}
 				if workItemID == "" {
 					return "", fmt.Errorf("update_coagent lifecycle work disposition requires assigned lifecycle work")
@@ -902,6 +926,7 @@ func rejectLegacyUpdateCoagentFields(raw json.RawMessage) error {
 		"agent_id":           true,
 		"channel_id":         true,
 		"producer_update_id": true,
+		"work_item_id":       true,
 		"work_disposition":   true,
 		"schema_version":     true,
 		"kind":               true,

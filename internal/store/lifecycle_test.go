@@ -1471,6 +1471,481 @@ func TestLifecycleReplaceActivationWritesProjectionWithoutAdvancingReducer(t *te
 		t.Fatalf("activation replay = %+v, %v", replay, err)
 	}
 }
+
+func TestLifecycleActivationAdmissionUsesCanonicalAgentCAS(t *testing.T) {
+	s := openTestStore(t)
+	peer := &Store{ogStore: s.ogStore, ogReadStore: s.ogReadStore}
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	started, err := s.StartLifecycle(ctx, start)
+	if err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	newRequest := func(runID string) types.ReplaceLifecycleActivationRequest {
+		now := time.Now().UTC()
+		run := types.RunRecord{
+			RunID: runID, AgentID: started.Agent.AgentID, ChannelID: started.Agent.ChannelID,
+			TrajectoryID: start.TrajectoryID, AgentProfile: started.Agent.Profile, AgentRole: started.Agent.Role,
+			OwnerID: start.OwnerID, SandboxID: start.ComputerID, State: types.RunPending,
+			Prompt: "resume durable work", CreatedAt: now, UpdatedAt: now,
+			Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID},
+		}
+		req := types.ReplaceLifecycleActivationRequest{
+			OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+			CommandID: "command-" + runID, TrajectoryID: start.TrajectoryID,
+			AgentID: started.Agent.AgentID, Run: run,
+		}
+		req.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(req)
+		return req
+	}
+	requests := []types.ReplaceLifecycleActivationRequest{newRequest("run-activation-cas-a"), newRequest("run-activation-cas-b")}
+	type result struct {
+		index int
+		err   error
+	}
+	results := make(chan result, len(requests))
+	for i, candidate := range requests {
+		target := s
+		if i == 1 {
+			target = peer
+		}
+		go func(index int, st *Store, req types.ReplaceLifecycleActivationRequest) {
+			_, projectErr := st.ReplaceLifecycleActivation(ctx, req)
+			results <- result{index: index, err: projectErr}
+		}(i, target, candidate)
+	}
+	first, second := <-results, <-results
+	outcomes := []result{first, second}
+	winner := -1
+	for _, outcome := range outcomes {
+		if outcome.err == nil {
+			if winner >= 0 {
+				t.Fatalf("independent stores admitted duplicate active runs: %+v", outcomes)
+			}
+			winner = outcome.index
+			continue
+		}
+		if !errors.Is(outcome.err, ErrConcurrentStateChange) && !errors.Is(outcome.err, ErrLifecycleInvalidTransition) {
+			t.Fatalf("activation admission error = %v, want canonical conflict", outcome.err)
+		}
+	}
+	if winner < 0 {
+		t.Fatalf("no activation won canonical admission: %+v", outcomes)
+	}
+	loser := 1 - winner
+	activeRunID := func(snapshot types.LifecycleSnapshot) string {
+		for _, agent := range snapshot.Agents {
+			if agent.AgentID == started.Agent.AgentID {
+				return agent.ActiveRunID
+			}
+		}
+		return ""
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatalf("load activation snapshot: %v", err)
+	}
+	if got := activeRunID(snapshot); got != requests[winner].Run.RunID {
+		t.Fatalf("agent active_run_id = %q, want %q", got, requests[winner].Run.RunID)
+	}
+
+	terminal := requests[winner]
+	terminal.CommandID += "-terminal"
+	terminal.Run.State = types.RunCompleted
+	finishedAt := time.Now().UTC()
+	terminal.Run.UpdatedAt, terminal.Run.FinishedAt = finishedAt, &finishedAt
+	terminal.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(terminal)
+	if _, err := s.ProjectTerminalLifecycleRun(ctx, terminal); err != nil {
+		t.Fatalf("project winning terminal run: %v", err)
+	}
+	if _, err := peer.ReplaceLifecycleActivation(ctx, requests[loser]); err != nil {
+		t.Fatalf("matching terminal projection did not release activation admission: %v", err)
+	}
+	snapshot, err = s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatalf("reload activation snapshot: %v", err)
+	}
+	if got := activeRunID(snapshot); got != requests[loser].Run.RunID {
+		t.Fatalf("replacement active_run_id = %q, want %q", got, requests[loser].Run.RunID)
+	}
+}
+
+func TestBlockedLifecycleActivationReleasesCanonicalAdmission(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	started, err := s.StartLifecycle(ctx, start)
+	if err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	newRequest := func(runID string, state types.RunState) types.ReplaceLifecycleActivationRequest {
+		now := time.Now().UTC()
+		run := types.RunRecord{
+			RunID: runID, AgentID: started.Agent.AgentID, ChannelID: started.Agent.ChannelID,
+			TrajectoryID: start.TrajectoryID, AgentProfile: started.Agent.Profile, AgentRole: started.Agent.Role,
+			OwnerID: start.OwnerID, SandboxID: start.ComputerID, State: state,
+			Prompt: "resume durable work", CreatedAt: now, UpdatedAt: now,
+			Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID},
+		}
+		req := types.ReplaceLifecycleActivationRequest{
+			OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+			CommandID: "command-" + runID + "-" + string(state), TrajectoryID: start.TrajectoryID,
+			AgentID: started.Agent.AgentID, Run: run,
+		}
+		req.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(req)
+		return req
+	}
+	active := newRequest("run-blocked-release", types.RunPending)
+	if _, err := s.ReplaceLifecycleActivation(ctx, active); err != nil {
+		t.Fatalf("activate run: %v", err)
+	}
+	blocked := newRequest(active.Run.RunID, types.RunBlocked)
+	blocked.Run.CreatedAt = active.Run.CreatedAt
+	blocked.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(blocked)
+	if _, err := s.ReplaceLifecycleActivation(ctx, blocked); err != nil {
+		t.Fatalf("project blocked run: %v", err)
+	}
+	replacement := newRequest("run-after-blocked-release", types.RunPending)
+	if _, err := s.ReplaceLifecycleActivation(ctx, replacement); err != nil {
+		t.Fatalf("blocked activation retained canonical admission: %v", err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatalf("load activation snapshot: %v", err)
+	}
+	for _, agent := range snapshot.Agents {
+		if agent.AgentID == started.Agent.AgentID && agent.ActiveRunID != replacement.Run.RunID {
+			t.Fatalf("replacement active_run_id = %q, want %q", agent.ActiveRunID, replacement.Run.RunID)
+		}
+	}
+}
+
+func TestBlockedLifecycleProjectionAfterSettlementReleasesCanonicalAdmission(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	started, err := s.StartLifecycle(ctx, start)
+	if err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	now := time.Now().UTC()
+	active := types.ReplaceLifecycleActivationRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "command-settled-blocked-running", TrajectoryID: start.TrajectoryID,
+		AgentID: started.Agent.AgentID,
+		Run: types.RunRecord{
+			RunID: "run-settled-blocked", AgentID: started.Agent.AgentID, ChannelID: started.Agent.ChannelID,
+			TrajectoryID: start.TrajectoryID, AgentProfile: started.Agent.Profile, AgentRole: started.Agent.Role,
+			OwnerID: start.OwnerID, SandboxID: start.ComputerID, State: types.RunRunning,
+			Prompt: "finish durable work", CreatedAt: now, UpdatedAt: now,
+			Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID},
+		},
+	}
+	active.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(active)
+	if _, err := s.ReplaceLifecycleActivation(ctx, active); err != nil {
+		t.Fatalf("activate running lifecycle: %v", err)
+	}
+	settleWork := types.SettleLifecycleWorkRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "command-settled-blocked-work", TrajectoryID: start.TrajectoryID,
+		WorkItemID: start.InitialWork.WorkItemID, ResultRef: "texture://settled-blocked/result",
+		ActingAgentID: started.Agent.AgentID,
+	}
+	settleWork.CommandDigest, _ = ComputeSettleLifecycleWorkDigest(settleWork)
+	settledWork, err := s.SettleLifecycleWork(ctx, settleWork)
+	if err != nil {
+		t.Fatalf("settle lifecycle work: %v", err)
+	}
+	settleTrajectory := types.SettleLifecycleTrajectoryRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "command-settled-blocked-trajectory", TrajectoryID: start.TrajectoryID,
+		ExpectedLifecycleVersion: settledWork.Trajectory.LifecycleVersion,
+		ExpectedHeadRevisionID:   start.InitialRevision.RevisionID,
+	}
+	settleTrajectory.CommandDigest, _ = ComputeSettleLifecycleTrajectoryDigest(settleTrajectory)
+	if _, err := s.SettleLifecycleTrajectory(ctx, settleTrajectory); err != nil {
+		t.Fatalf("settle lifecycle trajectory: %v", err)
+	}
+	blocked := active
+	blocked.CommandID = "command-settled-blocked-outcome"
+	blocked.Run.State = types.RunBlocked
+	blocked.Run.UpdatedAt = now.Add(time.Second)
+	blocked.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(blocked)
+	if _, err := s.ProjectTerminalLifecycleRun(ctx, blocked); err != nil {
+		t.Fatalf("project blocked run after settlement: %v", err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatalf("load settled blocked snapshot: %v", err)
+	}
+	if snapshot.Activation.State != types.RunBlocked {
+		t.Fatalf("settled blocked activation = %+v, want blocked", snapshot.Activation)
+	}
+	for _, agent := range snapshot.Agents {
+		if agent.AgentID == started.Agent.AgentID && agent.ActiveRunID != "" {
+			t.Fatalf("settled blocked active_run_id = %q, want released", agent.ActiveRunID)
+		}
+	}
+}
+
+func TestLifecycleActiveRunIDIsReducerOwnedAcrossOtherAgentWriters(t *testing.T) {
+	t.Run("generic upsert preserves canonical activation", func(t *testing.T) {
+		s := openTestStore(t)
+		ctx := context.Background()
+		start := lifecycleStartFixture()
+		started, err := s.StartLifecycle(ctx, start)
+		if err != nil {
+			t.Fatalf("start lifecycle: %v", err)
+		}
+		const agentID = "researcher-active-run-authority"
+		const channelID = "researcher-active-run-channel"
+		const workItemID = "work-active-run-authority"
+		agent := types.AgentRecord{
+			AgentID: agentID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, SandboxID: start.ComputerID,
+			Profile: "researcher", Role: "researcher", ChannelID: channelID,
+		}
+		if err := s.UpsertAgent(ctx, agent); err != nil {
+			t.Fatalf("seed generic agent: %v", err)
+		}
+		open := types.OpenLifecycleWorkRequest{
+			OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+			CommandID: "command-open-active-run-authority", TrajectoryID: start.TrajectoryID,
+			WorkItem: types.WorkItemRecord{
+				WorkItemID: workItemID, Objective: "prove reducer-owned activation",
+				AssignedAgentID: agentID, AuthorityProfile: "researcher",
+			},
+		}
+		open.CommandDigest, _ = ComputeOpenLifecycleWorkDigest(open)
+		if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
+			t.Fatalf("open researcher work: %v", err)
+		}
+		now := time.Now().UTC()
+		run := types.RunRecord{
+			RunID: "run-active-run-authority", AgentID: agentID, ChannelID: channelID,
+			TrajectoryID: start.TrajectoryID, AgentProfile: "researcher", AgentRole: "researcher",
+			OwnerID: start.OwnerID, SandboxID: start.ComputerID, State: types.RunPending,
+			Prompt: "resume durable research", CreatedAt: now, UpdatedAt: now,
+			Metadata: map[string]any{"lifecycle_work_item_id": workItemID},
+		}
+		activate := types.ReplaceLifecycleActivationRequest{
+			OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+			CommandID: "command-active-run-authority", TrajectoryID: start.TrajectoryID,
+			AgentID: agentID, Run: run,
+		}
+		activate.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(activate)
+		if _, err := s.ReplaceLifecycleActivation(ctx, activate); err != nil {
+			t.Fatalf("activate researcher: %v", err)
+		}
+		for name, mutate := range map[string]func(*types.AgentRecord){
+			"profile": func(candidate *types.AgentRecord) { candidate.Profile = "processor" },
+			"role":    func(candidate *types.AgentRecord) { candidate.Role = "processor" },
+			"channel": func(candidate *types.AgentRecord) { candidate.ChannelID = "other-channel" },
+		} {
+			t.Run("reject active "+name+" mutation", func(t *testing.T) {
+				candidate := agent
+				mutate(&candidate)
+				if err := s.UpsertAgent(ctx, candidate); !errors.Is(err, ErrLifecycleAuthorityRequired) {
+					t.Fatalf("active %s mutation error = %v, want ErrLifecycleAuthorityRequired", name, err)
+				}
+			})
+		}
+		agent.UpdatedAt = now.Add(time.Second)
+		if err := s.UpsertAgent(ctx, agent); err != nil {
+			t.Fatalf("generic upsert while active: %v", err)
+		}
+		stored, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, agentID)
+		if err != nil || stored.ActiveRunID != run.RunID {
+			t.Fatalf("generic upsert active_run_id = %q, %v; want %q", stored.ActiveRunID, err, run.RunID)
+		}
+		terminal := activate
+		terminal.CommandID = "command-active-run-authority-terminal"
+		terminal.Run.State = types.RunCompleted
+		finishedAt := now.Add(2 * time.Second)
+		terminal.Run.UpdatedAt, terminal.Run.FinishedAt = finishedAt, &finishedAt
+		terminal.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(terminal)
+		agent.UpdatedAt = now.Add(3 * time.Second)
+		peer := &Store{ogStore: s.ogStore, ogReadStore: s.ogReadStore}
+		startRace := make(chan struct{})
+		results := make(chan error, 2)
+		go func() {
+			<-startRace
+			_, projectErr := s.ProjectTerminalLifecycleRun(ctx, terminal)
+			results <- projectErr
+		}()
+		go func() {
+			<-startRace
+			results <- peer.UpsertAgent(ctx, agent)
+		}()
+		close(startRace)
+		for range 2 {
+			if err := <-results; err != nil {
+				t.Fatalf("terminal/upsert race: %v", err)
+			}
+		}
+		stored, err = s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, agentID)
+		if err != nil || stored.ActiveRunID != "" {
+			t.Fatalf("terminal/upsert race active_run_id = %q, %v; want released", stored.ActiveRunID, err)
+		}
+		agent.ActiveRunID = "caller-injected-run"
+		if err := s.UpsertAgent(ctx, agent); !errors.Is(err, ErrLifecycleAuthorityRequired) {
+			t.Fatalf("caller active_run_id injection error = %v, want ErrLifecycleAuthorityRequired", err)
+		}
+		if started.Agent == nil {
+			t.Fatal("started lifecycle omitted agent")
+		}
+	})
+
+	t.Run("lifecycle start preserves existing activation and rejects injection", func(t *testing.T) {
+		s := openTestStore(t)
+		ctx := context.Background()
+		start := lifecycleStartFixture()
+		now := time.Now().UTC()
+		storedAgent := start.Agent
+		storedAgent.OwnerID, storedAgent.ComputerID, storedAgent.SandboxID = start.OwnerID, start.ComputerID, start.ComputerID
+		storedAgent.ActiveRunID = "run-start-preserves-active"
+		storedAgent.CreatedAt, storedAgent.UpdatedAt = now, now
+		agentObj, err := lifecycleObject(
+			ogKindAgent, start.OwnerID, start.ComputerID, storedAgent.AgentID, storedAgent,
+			lifecycleMetadata("agent_id", storedAgent.AgentID, start.ComputerID, start.TrajectoryID, 0), now, now,
+		)
+		if err != nil {
+			t.Fatalf("build existing active agent: %v", err)
+		}
+		if err := s.ogStore.PutBatchConditional(ctx,
+			[]objectgraph.ObjectCondition{{CanonicalID: agentObj.CanonicalID}},
+			objectgraph.Batch{Objects: []objectgraph.Object{agentObj}},
+		); err != nil {
+			t.Fatalf("seed existing active agent: %v", err)
+		}
+		if _, err := s.StartLifecycle(ctx, start); err != nil {
+			t.Fatalf("start lifecycle with existing active agent: %v", err)
+		}
+		stored, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, storedAgent.AgentID)
+		if err != nil || stored.ActiveRunID != storedAgent.ActiveRunID {
+			t.Fatalf("lifecycle start active_run_id = %q, %v; want %q", stored.ActiveRunID, err, storedAgent.ActiveRunID)
+		}
+		injected := lifecycleStartFixture()
+		injected.CommandID = "command-start-injected-active"
+		injected.TrajectoryID = "trajectory-start-injected-active"
+		injected.InitialWork.WorkItemID = "work-start-injected-active"
+		injected.InitialDocument.DocID = "document-start-injected-active"
+		injected.InitialRevision.RevisionID = "revision-start-injected-active-v0"
+		injected.InitialRevision.DocID = injected.InitialDocument.DocID
+		injected.Agent.ActiveRunID = "caller-injected-run"
+		injected.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(injected)
+		if _, err := s.StartLifecycle(ctx, injected); !errors.Is(err, ErrLifecycleInvalidTransition) {
+			t.Fatalf("injected lifecycle start error = %v, want ErrLifecycleInvalidTransition", err)
+		}
+	})
+}
+
+func TestLifecycleActivationAdmissionRequiresCurrentOpenWork(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		prepare func(*testing.T, *Store, types.StartLifecycleRequest, types.LifecycleResult, string)
+		wantErr bool
+	}{
+		{
+			name: "settled",
+			prepare: func(t *testing.T, s *Store, start types.StartLifecycleRequest, started types.LifecycleResult, workItemID string) {
+				settle := types.SettleLifecycleWorkRequest{
+					OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+					CommandID: "command-settle-activation-admission", TrajectoryID: start.TrajectoryID,
+					WorkItemID: workItemID, ResultRef: "artifact://activation-admission/settled",
+					ActingAgentID: started.Agent.AgentID,
+				}
+				settle.CommandDigest, _ = ComputeSettleLifecycleWorkDigest(settle)
+				if _, err := s.SettleLifecycleWork(context.Background(), settle); err != nil {
+					t.Fatalf("settle bound work: %v", err)
+				}
+			},
+			wantErr: true,
+		},
+		{
+			name: "terminal_pending",
+			prepare: func(t *testing.T, s *Store, start types.StartLifecycleRequest, started types.LifecycleResult, workItemID string) {
+				queue := queueLifecycleUpdateFixture(t, start, "command-queue-activation-terminal-pending")
+				queue.ProducerAgentID = started.Agent.AgentID
+				queue.ProducerUpdateID = "producer-update-activation-terminal-pending"
+				queue.UpdateID = "update-activation-terminal-pending"
+				queue.WorkItemID, queue.WorkDisposition = workItemID, types.WorkItemCompleted
+				queue.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(queue)
+				if _, err := s.QueueLifecycleUpdate(context.Background(), queue); err != nil {
+					t.Fatalf("queue terminal work disposition: %v", err)
+				}
+			},
+			wantErr: true,
+		},
+		{name: "open"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := openTestStore(t)
+			ctx := context.Background()
+			start := lifecycleStartFixture()
+			start.CommandID = "command-start-activation-work-admission-" + tc.name
+			start.TrajectoryID = "trajectory-activation-work-admission-" + tc.name
+			start.InitialWork.WorkItemID = "work-activation-work-admission-root-" + tc.name
+			start.InitialDocument.DocID = "document-activation-work-admission-" + tc.name
+			start.InitialRevision.RevisionID = "revision-activation-work-admission-" + tc.name
+			start.Agent.AgentID = "texture:" + start.InitialDocument.DocID
+			start.Agent.ChannelID = start.InitialDocument.DocID
+			start.SubjectRefs["doc_id"] = start.InitialDocument.DocID
+			start.SubjectRefs["artifact"] = "texture://artifact/activation-work-admission-" + tc.name
+			start.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(start)
+			started, err := s.StartLifecycle(ctx, start)
+			if err != nil {
+				t.Fatalf("start lifecycle: %v", err)
+			}
+			workItemID := "work-activation-admission-" + tc.name
+			open := types.OpenLifecycleWorkRequest{
+				OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+				CommandID: "command-open-" + workItemID, TrajectoryID: start.TrajectoryID,
+				WorkItem: types.WorkItemRecord{
+					WorkItemID: workItemID, Objective: "admit only current open work",
+					AssignedAgentID: started.Agent.AgentID, AuthorityProfile: started.Agent.Profile,
+				},
+			}
+			open.CommandDigest, _ = ComputeOpenLifecycleWorkDigest(open)
+			if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
+				t.Fatalf("open lifecycle work: %v", err)
+			}
+			if tc.prepare != nil {
+				tc.prepare(t, s, start, started, workItemID)
+			}
+			snapshot, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+			if err != nil || snapshot.Trajectory.Status != types.TrajectoryLive {
+				t.Fatalf("activation admission prerequisite trajectory = %+v, %v", snapshot.Trajectory, err)
+			}
+			now := time.Now().UTC()
+			run := types.RunRecord{
+				RunID:   "run-activation-admission-" + tc.name,
+				AgentID: started.Agent.AgentID, ChannelID: started.Agent.ChannelID,
+				TrajectoryID: start.TrajectoryID, AgentProfile: started.Agent.Profile, AgentRole: started.Agent.Role,
+				OwnerID: start.OwnerID, SandboxID: start.ComputerID, State: types.RunPending,
+				Prompt: "resume bound lifecycle work", CreatedAt: now, UpdatedAt: now,
+				Metadata: map[string]any{
+					"lifecycle_work_item_id": workItemID,
+					"work_item_ids":          []string{workItemID},
+				},
+			}
+			replace := types.ReplaceLifecycleActivationRequest{
+				OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+				CommandID:    "command-project-activation-admission-" + tc.name,
+				TrajectoryID: start.TrajectoryID, AgentID: started.Agent.AgentID, Run: run,
+			}
+			replace.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(replace)
+			_, err = s.ReplaceLifecycleActivation(ctx, replace)
+			if tc.wantErr {
+				if !errors.Is(err, ErrLifecycleInvalidTransition) {
+					t.Fatalf("activation error = %v, want ErrLifecycleInvalidTransition", err)
+				}
+			} else if err != nil {
+				t.Fatalf("current open-work activation: %v", err)
+			}
+		})
+	}
+}
+
 func TestLifecycleRunProjectionIsComputerScoped(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

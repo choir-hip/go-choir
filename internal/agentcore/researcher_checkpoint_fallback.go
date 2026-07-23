@@ -56,8 +56,14 @@ func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persis
 	// Durable lifecycle updates are already canonical obligations. Terminal run
 	// state is only their activation projection; it must not synthesize or bind
 	// a second worker-update authority from the RunRecord outcome.
-	if strings.TrimSpace(metadataStringValue(persisted.Metadata, "lifecycle_work_item_id")) != "" {
-		return terminalOutcomeBinding{}, nil
+	hasLifecycleMarker := strings.TrimSpace(metadataStringValue(persisted.Metadata, "lifecycle_work_item_id")) != "" ||
+		len(metadataStringSlice(persisted.Metadata["work_item_ids"])) > 0
+	if hasLifecycleMarker && strings.TrimSpace(persisted.SandboxID) != "" {
+		if _, err := rt.store.GetLifecycleRun(ctx, persisted.OwnerID, persisted.SandboxID, persisted.RunID); err == nil {
+			return terminalOutcomeBinding{}, nil
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return terminalOutcomeBinding{}, fmt.Errorf("resolve terminal run lifecycle authority: %w", err)
+		}
 	}
 	targetAgentID, channelID, ok, err := rt.terminalOutcomeRequesterTarget(ctx, persisted)
 	if err != nil {

@@ -1111,7 +1111,7 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 	}
 	newRun := func(runID, baseRevisionID string) *types.RunRecord {
 		run := &types.RunRecord{
-			RunID: runID, AgentID: agentID, ChannelID: docID, OwnerID: ownerID, SandboxID: computerID,
+			RunID: runID, AgentID: agentID, ChannelID: docID, OwnerID: ownerID, SandboxID: computerID, TrajectoryID: trajectoryID,
 			State: types.RunRunning, Prompt: "Revise the artifact.", CreatedAt: now, UpdatedAt: now,
 			AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
 			Metadata: map[string]any{
@@ -1121,13 +1121,35 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 				runMetadataAgentRole: agentprofile.Texture, runMetadataChannelID: docID,
 			},
 		}
-		if err := s.CreateRun(ctx, *run); err != nil {
-			t.Fatalf("create run %s: %v", runID, err)
+		activate := types.ReplaceLifecycleActivationRequest{
+			OwnerID: ownerID, ComputerID: computerID, CommandID: "activate-" + runID,
+			TrajectoryID: trajectoryID, AgentID: agentID, Run: *run,
+		}
+		activate.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(activate)
+		if _, err := s.ReplaceLifecycleActivation(ctx, activate); err != nil {
+			t.Fatalf("activate run %s: %v", runID, err)
 		}
 		if err := s.CreateAgentMutation(ctx, store.AgentMutation{DocID: docID, RunID: runID, OwnerID: ownerID, ComputerID: computerID, State: "pending", CreatedAt: now}); err != nil {
 			t.Fatalf("create mutation %s: %v", runID, err)
 		}
 		return run
+	}
+	finishRun := func(run *types.RunRecord) {
+		t.Helper()
+		stored, err := s.GetLifecycleRun(ctx, ownerID, computerID, run.RunID)
+		if err != nil {
+			t.Fatalf("load run %s for terminal projection: %v", run.RunID, err)
+		}
+		finishedAt := time.Now().UTC()
+		stored.State, stored.UpdatedAt, stored.FinishedAt = types.RunCompleted, finishedAt, &finishedAt
+		project := types.ReplaceLifecycleActivationRequest{
+			OwnerID: ownerID, ComputerID: computerID, CommandID: "finish-" + run.RunID,
+			TrajectoryID: trajectoryID, AgentID: agentID, Run: stored,
+		}
+		project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+		if _, err := s.ProjectTerminalLifecycleRun(ctx, project); err != nil {
+			t.Fatalf("finish run %s: %v", run.RunID, err)
+		}
 	}
 	omittedRun := newRun("run-explicit-work-omitted", start.InitialRevision.RevisionID)
 	omittedArgs, _ := json.Marshal(editTextureArgs{
@@ -1142,6 +1164,7 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 	if err := json.Unmarshal([]byte(omittedRaw), &omittedResult); err != nil || omittedResult["work_disposition"] != "open" {
 		t.Fatalf("omitted disposition result = %s, err=%v", omittedRaw, err)
 	}
+	finishRun(omittedRun)
 	omittedHead, _ := omittedResult["revision_id"].(string)
 	omittedSnapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
 	if err != nil || len(omittedSnapshot.WorkItems) != 1 ||
@@ -1164,6 +1187,7 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 	if err := json.Unmarshal([]byte(openRaw), &openResult); err != nil || openResult["work_disposition"] != "open" {
 		t.Fatalf("open result = %s, err=%v", openRaw, err)
 	}
+	finishRun(openRun)
 	openSnapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {
 		t.Fatalf("snapshot open revision: %v", err)
@@ -1476,6 +1500,21 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 		})
 		if _, err := registry.Execute(toolregistry.WithExecutionContext(ctx, textureToolExecutionContext(run)), "rewrite_texture", args); err != nil {
 			t.Fatalf("commit scoped edit: %v", err)
+		}
+		terminalRun, err := s.GetLifecycleRun(ctx, ownerID, "computer-b", runID)
+		if err != nil {
+			t.Fatalf("load scoped edit run for terminal projection: %v", err)
+		}
+		finishedAt := time.Now().UTC()
+		terminalRun.State, terminalRun.UpdatedAt, terminalRun.FinishedAt = types.RunCompleted, finishedAt, &finishedAt
+		projectTerminal := types.ReplaceLifecycleActivationRequest{
+			OwnerID: ownerID, ComputerID: "computer-b",
+			CommandID: "project-terminal-" + runID, TrajectoryID: starts["computer-b"].TrajectoryID,
+			AgentID: agentID, Run: terminalRun,
+		}
+		projectTerminal.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(projectTerminal)
+		if _, err := s.ProjectTerminalLifecycleRun(ctx, projectTerminal); err != nil {
+			t.Fatalf("project terminal scoped edit run: %v", err)
 		}
 		snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "computer-b", starts["computer-b"].TrajectoryID)
 		if err != nil {

@@ -540,6 +540,7 @@ type AgentRecord struct {
 	Profile          string    `json:"profile"`
 	Role             string    `json:"role"`
 	ChannelID        string    `json:"channel_id"`
+	ActiveRunID      string    `json:"active_run_id,omitempty"`
 	LifecycleVersion int64     `json:"lifecycle_version,omitempty"`
 	LastReducerSeq   int64     `json:"last_reducer_seq,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`

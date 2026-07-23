@@ -269,29 +269,29 @@ execution:
     exit: "This Definition is complete, main is clean, staging is identified and healthy, and exactly one successor may become executable."
 
 now:
-  status: blocked_incomplete
+  status: ready
   slice: D-land-deploy-and-prove
-  question: "How must a delegated lifecycle activation that returns a final result without a terminal update_coagent disposition be reactivated without letting RunRecord terminality settle native work?"
+  question: "Will the accepted effects-OFF lifecycle candidate preserve canonical activation exclusion and restart rewarm on the signed Node B product path?"
   reconciliation:
-    observed_at: 2026-07-23T03:15:00Z
-    source_ref: refs/remotes/origin/main@676f0772a06f9121ace3d014b853b8f8de844a04
-    deploy_identity: "GitHub Actions run 29975038438 deployed 676f0772a06f9121ace3d014b853b8f8de844a04; signed no-SSH identity joined clean refs/heads/main, all host service embedded commits, guest executable/image/config digests, active computer-03335285269bdba4f94377e56879f9e6, realization epoch 113, and the deployment receipt. Public stop/start receipts advanced the same computer to epoch 114 on the same commit."
+    observed_at: 2026-07-23T08:50:19Z
+    source_ref: refs/remotes/origin/main@f1fb12cbebcd8ab7c4fd027bf1560d0665730f87
+    deploy_identity: "GitHub Actions run 29975038438 deployed 676f0772a06f9121ace3d014b853b8f8de844a04; signed no-SSH identity joined clean refs/heads/main, all host service embedded commits, guest executable/image/config digests, active computer-03335285269bdba4f94377e56879f9e6, realization epoch 113, and the deployment receipt. Public stop/start receipts advanced the same computer to epoch 114 on the same commit. Candidate deployment is not yet claimed."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 was clean at origin/main@676f0772 before this problem receipt; protected unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: convergence-durable-work-runtime-22
-    state: independent_review_repair_required
-    ref: reviewed-rejected-uncommitted-code-diff@sha256:e686575222a4d8fdcf7a0c343bf3f69340d223dbbf5d94f31720445158c79a82
+    id: convergence-durable-work-runtime-23
+    state: accepted_uncommitted
+    ref: accepted-uncommitted-code-diff@sha256:8e8129453dc9c929b13c903ba9135373d3c0962db3fc7ffa3b8d517a62d22abc
     owner: owner-and-current-session
-    base: abe878908121fe62376ca36926db728f0b58780a
+    base: f1fb12cbebcd8ab7c4fd027bf1560d0665730f87
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
-    prior_runtime_candidate: refs/remotes/origin/main@abe878908121fe62376ca36926db728f0b58780a
+    prior_runtime_candidate: refs/remotes/origin/main@f1fb12cbebcd8ab7c4fd027bf1560d0665730f87
     scope: "Phase D canonical activation admission and restart rewarm repair; effects OFF."
-    observed_problem: "Staging proved a completed lifecycle activation could strand open native work. Reviews v13-v21 found and successively repaired lifecycle-excluding inventory, pending-terminal duplication, unusable and ambiguous multi-item binding, RunRecord fallback authority, stale activation admission, restart redispatch bypass, unconfirmed legacy-marker suppression, process-local-only activation exclusion, mutable ActiveRunID projection, missing default Texture restart proof, blocked-run slot retention, non-retried agent CAS conflicts, and settled-trajectory blocked rejection. Review v22 accepted those repairs but found a remaining generic-writer clobber path for non-Texture lifecycle agents: lifecycle activation can assign ActiveRunID to a pre-existing lifecycle-version-zero agent, after which UpsertAgent preserves ActiveRunID but can overwrite profile, role, or channel. Terminal/blocked lifecycle projection then rejects the changed binding before matching release, stranding canonical admission."
-    repair_evidence: "Candidate e6865752 uses pending/running-only canonical slot ownership in the settled-trajectory guard and adds the exact settled-blocked persistence/release regression while preserving every v21 repair. Focused store and runtime race suites passed and all four runtime shards passed. Codex, Cursor, and OpenCode accepted v22. OMP GPT-5.5 traced lifecycle activation of a generic version-zero researcher followed by a mismatched generic upsert to the profile/role guard that precedes canonical release."
-    remaining_error: "While ActiveRunID is non-empty, generic UpsertAgent must not mutate the lifecycle activation binding fields profile, role, or channel. Reject mismatched binding rather than silently preserving caller intent, retain the CAS retry, and add an exact regression proving mismatched generic upsert refusal followed by successful terminal release. Then rerun focused races, shards, and frozen review."
+    observed_problem: "Staging proved a completed lifecycle activation could strand open native work. Reviews v13-v22 exposed and drove repairs for every reproduced authority, binding, admission, projection, retry, and restart defect listed in evidence_refs. No v23 reviewer reproduced a remaining release blocker."
+    repair_evidence: "Candidate 8e812945 rejects generic profile, role, or channel mutation while canonical ActiveRunID is held; preserves matching generic upserts; and proves subsequent matching release under a terminal/upsert CAS race. Pending/running-only slot ownership permits settled-trajectory blocked persistence and release. Focused race loops, direct lifecycle smoke across Store reopen, final runtime shards, and go vet passed. Codex and OMP GPT-5.5 independently accepted the exact frozen v23 candidate; Cursor and OpenCode timed out."
+    remaining_error: "No local or frozen-review blocker remains. Deployment identity and staging product-path repetition remain unproved for this candidate."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -332,9 +332,11 @@ now:
     - "/tmp/agentic-consensus-20260723-034806/manifest.tsv: Cursor, OpenCode, and OMP GPT-5.5 ACCEPT against digest 0a5a223a1ba3a7041dd2e5a84107cae64801aff13be7c8091da2c69551bfcf2f; Codex REPAIR traced RunBlocked retaining canonical admission despite replacement semantics and lifecycle projection failing without retry on benign generic-agent CAS races."
     - "/tmp/agentic-consensus-20260723-040600/manifest.tsv: Cursor, OpenCode, and OMP GPT-5.5 ACCEPT against digest 969ab0928f6cdf865aa4d0bb7e6e3f2e6087b65e7a833e0cd4508d42941ef1bf; Codex REPAIR traced settled-trajectory blocked persistence being rejected by the broader RunState.Active guard before canonical admission release."
     - "/tmp/agentic-consensus-20260723-042238/manifest.tsv: Codex, Cursor, and OpenCode ACCEPT against digest e686575222a4d8fdcf7a0c343bf3f69340d223dbbf5d94f31720445158c79a82; OMP GPT-5.5 REPAIR traced generic UpsertAgent changing profile/role/channel on an active lifecycle-version-zero agent, after which terminal projection rejects before canonical release."
-  blocker_or_risk: "Rejected red repair candidate: a generic UpsertAgent can preserve ActiveRunID while changing the active lifecycle agent's profile, role, or channel. Matching terminal or blocked projection then refuses the altered binding before clearing canonical admission."
-  latest_blocker_or_risk: "Problem documentation first. No repair for the v22 finding is committed before this receipt. Protected surfaces: generic agent writes, canonical activation binding, lifecycle terminal guards, matching release, and CAS retry. Admissible evidence is mismatched-upsert refusal with subsequent terminal release, existing matching generic-upsert and terminal/upsert race proof, settled-blocked projection, runtime shards, frozen acceptance, and staging repetition. Rollback remains origin/main@676f0772 plus deployed ComputerVersion epoch 114."
-  next_action: "Commit this code-free v22 review receipt alone. Then reject generic binding mutation while canonical ActiveRunID is held, add the exact release regression, and rerun the frozen gate."
+    - "/tmp/agentic-consensus-20260723-043935/manifest.tsv: Codex and OMP GPT-5.5 independently ACCEPT against exact digest 8e8129453dc9c929b13c903ba9135373d3c0962db3fc7ffa3b8d517a62d22abc; no blocking findings. Cursor and OpenCode timed out."
+    - "Final focused store races passed count=20, runtime overlap/restart races passed count=10, scripts/go-test-runtime-shards passed all four shards, TestDurableWorkLifecycleSmokeTrace passed across Store reopen, focused product transitions passed count=3, go vet passed, and git diff --check passed."
+  blocker_or_risk: "No accepted-candidate blocker. Residual risk is deployment realism: local Dolt/race/restart proofs do not establish signed Node B host/guest identity or staging behavior."
+  latest_blocker_or_risk: "Protected surfaces: generic agent writes, canonical activation admission and binding, lifecycle terminal projection, restart rewarm, typed update delivery, and matching release. Effects remain OFF. Rollback remains origin/main@676f0772 plus deployed ComputerVersion epoch 114 until the candidate lands and a new rollback ref is captured."
+  next_action: "Commit and push the accepted v23 candidate with this coherent Definition receipt, monitor CI and Node B deployment, verify signed host/guest identity, and repeat the deployed lifecycle/restart/cancellation/client acceptance path."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
@@ -379,6 +381,16 @@ receipts:
       environment_identity: "No deploy by design; choir.news remained at 832ae951e84400a54bd7f8ef52a312e872b5c3ef"
       deployed_acceptance: not_applicable_docs_only
     registry_conformance_ref: "origin/main@c972ce1b6ab4bf4c1d03e7590773082c92c4e9dc; one working mission entrypoint; one active_product_mission; live doccheck passed"
+
+  - id: durable-work-disabled-candidate-2026-07-23
+    boundary: build
+    commit_or_artifact: accepted-uncommitted-code-diff@sha256:8e8129453dc9c929b13c903ba9135373d3c0962db3fc7ffa3b8d517a62d22abc
+    proof_refs: ["panel manifest sha256 cfe8fae629b112a446123bdaf87f7ae8d3b0a990f4c367f9f6ff62f1490c4a91", "Codex ACCEPT sha256 8430922c66c99d78899e8afbd959f845c4b24bb277ae63bb90aaf280c0086cd6", "OMP GPT-5.5 ACCEPT sha256 2820655880a9b0b14c414ca8681b47247b963e385dd1625aa09419b8aec772e7", "scripts/go-test-runtime-shards passed", "focused race loops passed", "TestDurableWorkLifecycleSmokeTrace passed across Store reopen", "go vet and git diff --check passed"]
+    rollback_ref: refs/remotes/origin/main@676f0772a06f9121ace3d014b853b8f8de844a04
+    disposition: "Accepted after v13-v23 frozen review repaired every reproduced authority, admission, restart, and matching-release blocker. Effects remain OFF. Landing and deployed acceptance are still required."
+    problem_ref: "Completed lifecycle activation could strand open canonical work; generic writers and restart projections could duplicate, suppress, or retain activation ownership."
+    authorization_ref: "Owner-ratified bounded generic lifecycle plus accepted contract scope 05"
+    candidate_or_evidence_refs: [/tmp/agentic-consensus-20260723-043935/manifest.tsv, artifact://1473, artifact://1478, artifact://1480]
 
 view:
   path: http://127.0.0.1:8788/

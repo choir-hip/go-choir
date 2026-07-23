@@ -515,6 +515,9 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 	}
 	work.LifecycleVersion, work.LastReducerSeq = 1, 1
 	agent := req.Agent
+	if strings.TrimSpace(agent.ActiveRunID) != "" {
+		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: active_run_id is reducer-owned: %w", ErrLifecycleInvalidTransition)
+	}
 	agent.OwnerID, agent.ComputerID = ownerID, computerID
 	if strings.TrimSpace(agent.Profile) != strings.TrimSpace(agent.Role) {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: agent profile and role must match: %w", ErrLifecycleInvalidTransition)
@@ -633,6 +636,7 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 			return types.LifecycleResult{}, fmt.Errorf("lifecycle start: existing durable subject binding conflicts with %s", agent.AgentID)
 		}
 		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: existingAgent.CanonicalID, Exists: true, ExpectedContentHash: existingAgent.ContentHash})
+		agent.ActiveRunID = storedAgent.ActiveRunID
 		agent.CreatedAt = storedAgent.CreatedAt
 		agentObj, err = lifecycleObject(ogKindAgent, ownerID, computerID, agent.AgentID, agent, agentMeta, existingAgent.CreatedAt, now)
 		if err != nil {
@@ -936,6 +940,48 @@ func (s *Store) GetLifecycleWorkItem(ctx context.Context, ownerID, computerID, w
 		return types.WorkItemRecord{}, err
 	}
 	return decodeLifecycleObject[types.WorkItemRecord](obj)
+}
+
+// ListOpenAssignedLifecycleWorkItems returns every open lifecycle-owned work
+// item assigned in one computer. The boot caller intentionally exhausts all
+// owners so a process restart cannot strand a durable obligation.
+func (s *Store) ListOpenAssignedLifecycleWorkItems(ctx context.Context, computerID string, limit int) ([]types.WorkItemRecord, error) {
+	computerID = strings.TrimSpace(computerID)
+	if computerID == "" {
+		return nil, fmt.Errorf("list open assigned lifecycle work items: computer_id is required")
+	}
+	if limit < 0 {
+		return nil, fmt.Errorf("list open assigned lifecycle work items: limit must not be negative")
+	}
+	objs, err := s.ogListAllObjectsByKind(ctx, ogKindWorkItem)
+	if err != nil {
+		return nil, fmt.Errorf("list open assigned lifecycle work items: %w", err)
+	}
+	items := make([]types.WorkItemRecord, 0, len(objs))
+	for _, obj := range objs {
+		if obj.ComputerID != computerID {
+			continue
+		}
+		item, decodeErr := decodeLifecycleObject[types.WorkItemRecord](obj)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if item.ComputerID != computerID || item.Status != types.WorkItemOpen ||
+			item.LifecycleVersion <= 0 || strings.TrimSpace(item.AssignedAgentID) == "" {
+			continue
+		}
+		items = append(items, item)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].UpdatedAt.Equal(items[j].UpdatedAt) {
+			return items[i].WorkItemID < items[j].WorkItemID
+		}
+		return items[i].UpdatedAt.Before(items[j].UpdatedAt)
+	})
+	if limit > 0 && len(items) > limit {
+		items = items[:limit]
+	}
+	return items, nil
 }
 
 func (s *Store) ListLifecycleEvents(ctx context.Context, ownerID, computerID, trajectoryID string) ([]types.LifecycleEvent, error) {
@@ -1551,7 +1597,81 @@ func (s *Store) OpenLifecycleWork(ctx context.Context, req types.OpenLifecycleWo
 // ReplaceLifecycleActivation atomically advances the durable subject to a new
 // ephemeral run and records that run in the same object-graph transaction.
 func (s *Store) ReplaceLifecycleActivation(ctx context.Context, req types.ReplaceLifecycleActivationRequest) (types.LifecycleResult, error) {
-	return s.projectLifecycleRun(ctx, req)
+	return s.projectLifecycleRunWithRetry(ctx, req)
+}
+
+func lifecycleRunOwnsActivation(state types.RunState) bool {
+	return state == types.RunPending || state == types.RunRunning
+}
+
+func (s *Store) projectLifecycleRunWithRetry(ctx context.Context, req types.ReplaceLifecycleActivationRequest) (types.LifecycleResult, error) {
+	for attempt := 0; attempt < 8; attempt++ {
+		result, err := s.projectLifecycleRun(ctx, req)
+		if !errors.Is(err, ErrConcurrentStateChange) {
+			return result, err
+		}
+	}
+	return types.LifecycleResult{}, ErrConcurrentStateChange
+}
+
+func lifecycleActivationWorkItemIDs(metadata map[string]any) ([]string, error) {
+	if metadata == nil {
+		return nil, nil
+	}
+	ids := make([]string, 0)
+	seen := make(map[string]struct{})
+	appendID := func(value string) error {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return ErrLifecycleInvalidTransition
+		}
+		if _, duplicate := seen[value]; !duplicate {
+			seen[value] = struct{}{}
+			ids = append(ids, value)
+		}
+		return nil
+	}
+	rawList, hasList := metadata["work_item_ids"]
+	if hasList {
+		switch values := rawList.(type) {
+		case []string:
+			for _, value := range values {
+				if err := appendID(value); err != nil {
+					return nil, err
+				}
+			}
+		case []any:
+			for _, raw := range values {
+				value, ok := raw.(string)
+				if !ok {
+					return nil, ErrLifecycleInvalidTransition
+				}
+				if err := appendID(value); err != nil {
+					return nil, err
+				}
+			}
+		default:
+			return nil, ErrLifecycleInvalidTransition
+		}
+		if len(ids) == 0 {
+			return nil, ErrLifecycleInvalidTransition
+		}
+	}
+	if rawSingular, present := metadata["lifecycle_work_item_id"]; present {
+		singular, ok := rawSingular.(string)
+		if !ok || strings.TrimSpace(singular) == "" {
+			return nil, ErrLifecycleInvalidTransition
+		}
+		singular = strings.TrimSpace(singular)
+		if hasList {
+			if _, found := seen[singular]; !found {
+				return nil, ErrLifecycleInvalidTransition
+			}
+		} else if err := appendID(singular); err != nil {
+			return nil, err
+		}
+	}
+	return ids, nil
 }
 
 // ProjectTerminalLifecycleRun records the terminal state of an activation after
@@ -1559,7 +1679,7 @@ func (s *Store) ReplaceLifecycleActivation(ctx context.Context, req types.Replac
 // projection: trajectory, work, update, event, and receipt authority are
 // deliberately untouched.
 func (s *Store) ProjectTerminalLifecycleRun(ctx context.Context, req types.ReplaceLifecycleActivationRequest) (types.LifecycleResult, error) {
-	return s.projectLifecycleRun(ctx, req)
+	return s.projectLifecycleRunWithRetry(ctx, req)
 }
 
 func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecycleActivationRequest) (types.LifecycleResult, error) {
@@ -1584,6 +1704,10 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 		run.AgentID != req.AgentID || run.TrajectoryID != req.TrajectoryID || !run.State.Valid() {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
+	boundWorkItemIDs, bindingErr := lifecycleActivationWorkItemIDs(run.Metadata)
+	if bindingErr != nil {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
 
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
@@ -1594,7 +1718,7 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 	if trajectory.Status == types.TrajectoryCancelled && run.State != types.RunCancelled {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
-	if trajectory.Status != types.TrajectoryLive && run.State.Active() {
+	if trajectory.Status != types.TrajectoryLive && lifecycleRunOwnsActivation(run.State) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	runCanonicalID, err := lifecycleCanonicalID(ogKindRun, ownerID, computerID, run.RunID)
@@ -1628,43 +1752,78 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
 		runCondition,
 	}
-	if errors.Is(getRunErr, objectgraph.ErrNotFound) {
-		agentObj, agentErr := s.lifecycleGetObject(ctx, ogKindAgent, ownerID, computerID, req.AgentID)
-		if agentErr == nil {
-			agent, decodeErr := decodeLifecycleObject[types.AgentRecord](agentObj)
+	if errors.Is(getRunErr, objectgraph.ErrNotFound) && run.State.Active() && len(boundWorkItemIDs) > 0 {
+		updateObjs, updatesErr := s.lifecycleTransitionObjects(ctx, ogKindWorkerUpdate, req.TrajectoryID, ownerID, computerID)
+		if updatesErr != nil {
+			return types.LifecycleResult{}, updatesErr
+		}
+		pendingTerminal := make(map[string]bool)
+		for _, updateObj := range updateObjs {
+			update, decodeErr := decodeLifecycleObject[types.CoagentSourcePacket](updateObj)
 			if decodeErr != nil {
 				return types.LifecycleResult{}, decodeErr
 			}
-			if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != req.AgentID ||
-				strings.TrimSpace(agent.Profile) != strings.TrimSpace(run.AgentProfile) ||
-				strings.TrimSpace(agent.Role) != strings.TrimSpace(run.AgentRole) ||
-				(agent.Profile == "texture" && agent.LifecycleVersion <= 0) {
-				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+			if strings.TrimSpace(update.AgentID) == req.AgentID &&
+				update.Disposition == types.UpdatePending &&
+				update.WorkDisposition != "" && update.WorkDisposition != types.WorkItemOpen {
+				pendingTerminal[strings.TrimSpace(update.WorkItemID)] = true
 			}
-			conditions = append(conditions, objectgraph.ObjectCondition{
-				CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash,
-			})
-		} else if errors.Is(agentErr, ErrNotFound) {
-			workItemIDValue, _ := run.Metadata["lifecycle_work_item_id"].(string)
-			workItemID := strings.TrimSpace(workItemIDValue)
-			if workItemID == "" {
-				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-			}
+		}
+		for _, workItemID := range boundWorkItemIDs {
 			workObj, work, workErr := s.lifecycleWorkObject(ctx, ownerID, computerID, workItemID)
 			if workErr != nil {
 				return types.LifecycleResult{}, workErr
 			}
-			if work.TrajectoryID != req.TrajectoryID || work.Status != types.WorkItemOpen ||
-				strings.TrimSpace(work.AssignedAgentID) != req.AgentID {
+			if work.LifecycleVersion <= 0 || strings.TrimSpace(work.OwnerID) != ownerID ||
+				strings.TrimSpace(work.ComputerID) != computerID ||
+				strings.TrimSpace(work.TrajectoryID) != req.TrajectoryID ||
+				work.Status != types.WorkItemOpen ||
+				strings.TrimSpace(work.AssignedAgentID) != req.AgentID ||
+				pendingTerminal[workItemID] {
 				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 			}
 			conditions = append(conditions, objectgraph.ObjectCondition{
 				CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash,
 			})
-		} else {
-			return types.LifecycleResult{}, agentErr
 		}
 	}
+	agentObj, agentErr := s.lifecycleGetObject(ctx, ogKindAgent, ownerID, computerID, req.AgentID)
+	if agentErr != nil {
+		return types.LifecycleResult{}, agentErr
+	}
+	agent, decodeErr := decodeLifecycleObject[types.AgentRecord](agentObj)
+	if decodeErr != nil {
+		return types.LifecycleResult{}, decodeErr
+	}
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != req.AgentID ||
+		strings.TrimSpace(agent.Profile) != strings.TrimSpace(run.AgentProfile) ||
+		strings.TrimSpace(agent.Role) != strings.TrimSpace(run.AgentRole) ||
+		(agent.Profile == "texture" && agent.LifecycleVersion <= 0) {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	conditions = append(conditions, objectgraph.ObjectCondition{
+		CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash,
+	})
+	previousActiveRunID := strings.TrimSpace(agent.ActiveRunID)
+	if lifecycleRunOwnsActivation(run.State) && previousActiveRunID != "" && previousActiveRunID != run.RunID {
+		previousRunObj, previousRunErr := s.lifecycleGetObject(ctx, ogKindRun, ownerID, computerID, previousActiveRunID)
+		if previousRunErr != nil {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		previousRun, previousDecodeErr := decodeLifecycleObject[types.RunRecord](previousRunObj)
+		if previousDecodeErr != nil {
+			return types.LifecycleResult{}, previousDecodeErr
+		}
+		if lifecycleRunOwnsActivation(previousRun.State) {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+	}
+	if lifecycleRunOwnsActivation(run.State) {
+		agent.ActiveRunID = run.RunID
+	} else if previousActiveRunID == run.RunID {
+		agent.ActiveRunID = ""
+	}
+	agentProjectionChanged := strings.TrimSpace(agent.ActiveRunID) != previousActiveRunID
 
 	runMetadata := map[string]any{
 		"run_id": run.RunID, "agent_id": run.AgentID, "channel_id": run.ChannelID,
@@ -1688,11 +1847,24 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 	}
 	if getRunErr == nil {
 		runObj.CreatedAt = existingRunObj.CreatedAt
-		if runObj.ContentHash == existingRunObj.ContentHash {
+		if runObj.ContentHash == existingRunObj.ContentHash && !agentProjectionChanged {
 			return types.LifecycleResult{Trajectory: trajectory, Replay: true}, nil
 		}
 	}
-	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: []objectgraph.Object{runObj}}); err != nil {
+	objects := []objectgraph.Object{runObj}
+	if agentProjectionChanged {
+		agent.UpdatedAt = run.UpdatedAt.UTC()
+		agentMeta := lifecycleMetadata("agent_id", agent.AgentID, computerID, req.TrajectoryID, agent.LastReducerSeq)
+		agentMeta["channel_id"] = agent.ChannelID
+		updatedAgentObj, agentObjectErr := lifecycleObject(
+			ogKindAgent, ownerID, computerID, agent.AgentID, agent, agentMeta, agentObj.CreatedAt, agent.UpdatedAt,
+		)
+		if agentObjectErr != nil {
+			return types.LifecycleResult{}, agentObjectErr
+		}
+		objects = append(objects, updatedAgentObj)
+	}
+	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects}); err != nil {
 		if errors.Is(err, objectgraph.ErrConflict) {
 			return types.LifecycleResult{}, ErrConcurrentStateChange
 		}

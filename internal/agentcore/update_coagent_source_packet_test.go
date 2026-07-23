@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -84,14 +85,36 @@ func TestUpdateCoagentPersistsExplicitProducerWorkDisposition(t *testing.T) {
 	if _, err := s.OpenLifecycleWork(ctx, producerWork); err != nil {
 		t.Fatalf("open producer lifecycle work: %v", err)
 	}
+	var activeRun *types.RunRecord
 	projectRun := func(run *types.RunRecord) {
 		now := time.Now().UTC()
+		if activeRun != nil {
+			terminal := *activeRun
+			terminal.State = types.RunCompleted
+			terminal.UpdatedAt, terminal.FinishedAt = now, &now
+			release := types.ReplaceLifecycleActivationRequest{
+				OwnerID: ownerID, ComputerID: "sandbox-test",
+				CommandID:    "release-producer-run:" + terminal.RunID,
+				TrajectoryID: trajectoryID, AgentID: terminal.AgentID, Run: terminal,
+			}
+			release.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(release)
+			if _, err := s.ProjectTerminalLifecycleRun(ctx, release); err != nil {
+				t.Fatalf("release lifecycle producer run %s: %v", terminal.RunID, err)
+			}
+		}
 		run.State = types.RunPending
 		run.CreatedAt, run.UpdatedAt = now, now
 		t.Helper()
 		run.TrajectoryID = trajectoryID
 		run.Metadata[runMetadataTrajectoryID] = trajectoryID
 		run.Metadata["lifecycle_work_item_id"] = workID
+		if err := s.UpsertAgent(ctx, types.AgentRecord{
+			AgentID: run.AgentID, OwnerID: ownerID, ComputerID: "sandbox-test", SandboxID: "sandbox-test",
+			Profile: run.AgentProfile, Role: run.AgentRole, ChannelID: run.ChannelID,
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("upsert lifecycle producer agent %s: %v", run.AgentID, err)
+		}
 		project := types.ReplaceLifecycleActivationRequest{
 			OwnerID: ownerID, ComputerID: "sandbox-test",
 			CommandID:    "project-producer-run:" + run.RunID,
@@ -101,6 +124,7 @@ func TestUpdateCoagentPersistsExplicitProducerWorkDisposition(t *testing.T) {
 		if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
 			t.Fatalf("project lifecycle producer run %s: %v", run.RunID, err)
 		}
+		activeRun = run
 	}
 	missing := d9CoagentRun("run-producer-missing-authority", ownerID, producerAgentID, agentprofile.Researcher, docID, "")
 	projectRun(missing)
@@ -281,6 +305,276 @@ func TestSpawnedLifecycleResearcherQueuesOpenAndCompletedUpdates(t *testing.T) {
 	legacyUpdates, err := s.ListWorkerUpdatesBySourceRun(ctx, ownerID, child.RunID)
 	if err != nil || len(legacyUpdates) != 0 {
 		t.Fatalf("terminal lifecycle projection emitted legacy updates: %+v, %v", legacyUpdates, err)
+	}
+	rt.sweepOpenWorkItemActors(ctx)
+	if active, err := s.GetLatestActiveRunByAgent(ctx, ownerID, child.AgentID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("boot sweep created activation despite pending terminal disposition: %+v, %v", active, err)
+	}
+	if replacement, err := rt.continueOpenLifecycleWorkAfterTerminal(ctx, &persisted); err != nil || replacement != nil {
+		t.Fatalf("terminal producer disposition created redundant activation: %+v, %v", replacement, err)
+	}
+}
+
+func TestCompletedLifecycleActivationReactivatesOpenWorkWithoutSettlingFromRunResult(t *testing.T) {
+	tests := []struct {
+		name             string
+		producerUpdateID string
+		requestSource    string
+		boot             bool
+		multiple         bool
+		concurrent       bool
+		settleBefore     bool
+	}{
+		{name: "immediate", producerUpdateID: "55555555-5555-4555-8555-555555555555", requestSource: "terminal_activation_work_recovery"},
+		{name: "boot", producerUpdateID: "66666666-6666-4666-8666-666666666666", requestSource: "trajectory_work_item_sweep", boot: true},
+		{name: "boot_multiple", producerUpdateID: "77777777-7777-4777-8777-777777777777", requestSource: "trajectory_work_item_sweep", boot: true, multiple: true},
+		{name: "immediate_concurrent", producerUpdateID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", requestSource: "terminal_activation_work_recovery", concurrent: true},
+		{name: "immediate_settled_before_reconcile", producerUpdateID: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", requestSource: "terminal_activation_work_recovery", settleBefore: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, s := testRuntime(t)
+			d9InstallTools(t, rt)
+			rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
+				return nil
+			})
+			ctx := context.Background()
+			ownerID := "user-terminal-lifecycle-recovery-" + tc.name
+			docID := "doc-terminal-lifecycle-recovery-" + tc.name
+			trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
+			now := time.Now().UTC()
+			parent := types.RunRecord{
+				RunID: "run-terminal-lifecycle-parent-" + tc.name, AgentID: "texture:" + docID, ChannelID: docID,
+				AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
+				OwnerID: ownerID, SandboxID: "sandbox-test", State: types.RunRunning,
+				TrajectoryID: trajectoryID, CreatedAt: now, UpdatedAt: now,
+				Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataChannelID: docID},
+			}
+			if err := s.CreateRun(ctx, parent); err != nil {
+				t.Fatalf("create lifecycle parent activation: %v", err)
+			}
+			child, err := rt.StartCoagentRun(ctx, parent.RunID, "finish the assigned evidence work", ownerID, map[string]any{
+				runMetadataAgentProfile: agentprofile.Researcher,
+				runMetadataAgentRole:    agentprofile.Researcher,
+				runMetadataChannelID:    docID,
+			})
+			if err != nil {
+				t.Fatalf("start lifecycle researcher: %v", err)
+			}
+			workItemID := metadataStringValue(child.Metadata, "lifecycle_work_item_id")
+			if workItemID == "" {
+				t.Fatal("spawned lifecycle work binding is missing")
+			}
+			secondWorkItemID := ""
+			if tc.multiple {
+				secondWorkItemID = "work-terminal-lifecycle-recovery-second-" + tc.name
+				openSecond := types.OpenLifecycleWorkRequest{
+					OwnerID: ownerID, ComputerID: "sandbox-test",
+					CommandID: "command-open-terminal-lifecycle-recovery-second-" + tc.name, TrajectoryID: trajectoryID,
+					WorkItem: types.WorkItemRecord{
+						WorkItemID: secondWorkItemID, Objective: "verify the second assigned evidence source",
+						AssignedAgentID: child.AgentID, AuthorityProfile: agentprofile.Researcher,
+					},
+				}
+				openSecond.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(openSecond)
+				if _, err := s.OpenLifecycleWork(ctx, openSecond); err != nil {
+					t.Fatalf("open second assigned lifecycle work: %v", err)
+				}
+			}
+			if _, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(
+				toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(child)),
+				"update_coagent",
+				json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"interim evidence only","agent_id":"texture:`+docID+`","channel_id":"`+docID+`","producer_update_id":"`+tc.producerUpdateID+`","work_disposition":"open","claims":[{"text":"interim evidence only"}]}`),
+			); err != nil {
+				t.Fatalf("queue open lifecycle checkpoint: %v", err)
+			}
+
+			terminal := *child
+			terminal.State = types.RunCompleted
+			terminal.Result = "final prose that is not lifecycle authority"
+			finishedAt := time.Now().UTC()
+			terminal.UpdatedAt, terminal.FinishedAt = finishedAt, &finishedAt
+			project := types.ReplaceLifecycleActivationRequest{
+				OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "project-terminal-open-work-recovery-" + tc.name,
+				TrajectoryID: trajectoryID, AgentID: child.AgentID, Run: terminal,
+			}
+			project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+			if _, err := s.ProjectTerminalLifecycleRun(ctx, project); err != nil {
+				t.Fatalf("project terminal lifecycle researcher: %v", err)
+			}
+			persisted, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", child.RunID)
+			if err != nil {
+				t.Fatalf("reload terminal lifecycle researcher: %v", err)
+			}
+			openItems, err := s.ListOpenAssignedLifecycleWorkItems(ctx, "sandbox-test", 0)
+			if err != nil {
+				t.Fatalf("list boot-recoverable lifecycle work: %v", err)
+			}
+			foundOpenWork := false
+			for _, item := range openItems {
+				if item.WorkItemID == workItemID {
+					foundOpenWork = true
+					break
+				}
+			}
+			if !foundOpenWork {
+				t.Fatalf("boot lifecycle work inventory omitted %q: %+v", workItemID, openItems)
+			}
+
+			if tc.settleBefore {
+				settle := types.SettleLifecycleWorkRequest{
+					OwnerID: ownerID, ComputerID: "sandbox-test",
+					CommandID: "command-settle-before-reconcile-" + tc.name, TrajectoryID: trajectoryID,
+					WorkItemID: workItemID, ResultRef: "artifact://terminal-recovery/already-settled",
+					ActingAgentID: child.AgentID,
+				}
+				settle.CommandDigest, _ = store.ComputeSettleLifecycleWorkDigest(settle)
+				if _, err := s.SettleLifecycleWork(ctx, settle); err != nil {
+					t.Fatalf("settle work before reconcile: %v", err)
+				}
+				replacement, err := rt.continueOpenLifecycleWorkAfterTerminal(ctx, &persisted)
+				if err != nil {
+					t.Fatalf("reconcile settled lifecycle work: %v", err)
+				}
+				if replacement != nil {
+					t.Fatalf("settled lifecycle work reactivated from stale inventory: %+v", replacement)
+				}
+				return
+			}
+			var replacement *types.RunRecord
+			if tc.boot {
+				rt.sweepOpenWorkItemActors(ctx)
+				active, found, activeErr := rt.activeRunByAgent(ctx, ownerID, child.AgentID)
+				if activeErr != nil || !found {
+					t.Fatalf("load boot replacement activation: found=%t run=%+v err=%v", found, active, activeErr)
+				}
+				replacement = &active
+			} else if tc.concurrent {
+				type continuationResult struct {
+					run *types.RunRecord
+					err error
+				}
+				results := make(chan continuationResult, 2)
+				for range 2 {
+					go func() {
+						run, continueErr := rt.continueOpenLifecycleWorkAfterTerminal(ctx, &persisted)
+						results <- continuationResult{run: run, err: continueErr}
+					}()
+				}
+				firstResult, secondResult := <-results, <-results
+				if firstResult.err != nil || secondResult.err != nil ||
+					firstResult.run == nil || secondResult.run == nil ||
+					firstResult.run.RunID != secondResult.run.RunID {
+					t.Fatalf("concurrent terminal continuations = (%+v, %v), (%+v, %v); want one activation", firstResult.run, firstResult.err, secondResult.run, secondResult.err)
+				}
+				replacement = firstResult.run
+			} else {
+				replacement, err = rt.continueOpenLifecycleWorkAfterTerminal(ctx, &persisted)
+				if err != nil {
+					t.Fatalf("continue open lifecycle work: %v", err)
+				}
+			}
+			if replacement == nil || replacement.RunID == child.RunID || replacement.State != types.RunPending {
+				t.Fatalf("replacement activation = %+v, want a distinct pending run", replacement)
+			}
+			if tc.multiple {
+				if got := metadataStringValue(replacement.Metadata, "lifecycle_work_item_id"); got != "" {
+					t.Fatalf("multi-item replacement lifecycle_work_item_id = %q, want empty", got)
+				}
+				ids := metadataStringSlice(replacement.Metadata["work_item_ids"])
+				if len(ids) != 2 || !containsString(ids, workItemID) || !containsString(ids, secondWorkItemID) {
+					t.Fatalf("multi-item replacement work_item_ids = %v, want %q and %q", ids, workItemID, secondWorkItemID)
+				}
+			} else if got := metadataStringValue(replacement.Metadata, "lifecycle_work_item_id"); got != workItemID {
+				t.Fatalf("replacement lifecycle_work_item_id = %q, want %q", got, workItemID)
+			}
+			if got := metadataStringValue(replacement.Metadata, "request_source"); got != tc.requestSource {
+				t.Fatalf("replacement request_source = %q, want %q", got, tc.requestSource)
+			}
+			if !strings.Contains(replacement.Prompt, "RunRecord completion do not settle work") ||
+				!strings.Contains(replacement.Prompt, "finish the assigned evidence work") {
+				t.Fatalf("replacement prompt does not require native terminal disposition: %q", replacement.Prompt)
+			}
+			if tc.multiple {
+				updateTool := rt.ToolRegistryForProfile(agentprofile.Researcher)
+				combinedMarkerRun := *replacement
+				combinedMarkerRun.Metadata = make(map[string]any, len(replacement.Metadata)+1)
+				for key, value := range replacement.Metadata {
+					combinedMarkerRun.Metadata[key] = value
+				}
+				combinedMarkerRun.Metadata["lifecycle_work_item_id"] = workItemID
+				updateCtx := toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&combinedMarkerRun))
+				missingWorkID := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"ambiguous multi-item update","agent_id":"texture:` + docID + `","channel_id":"` + docID + `","producer_update_id":"88888888-8888-4888-8888-888888888888","work_disposition":"open","claims":[{"text":"must select one item"}]}`)
+				if _, err := updateTool.Execute(updateCtx, "update_coagent", missingWorkID); err == nil || !strings.Contains(err.Error(), "requires work_item_id") {
+					t.Fatalf("multi-item update without work_item_id error = %v", err)
+				}
+				unassignedWorkID := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"unassigned item update","agent_id":"texture:` + docID + `","channel_id":"` + docID + `","producer_update_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","work_item_id":"work-not-assigned","work_disposition":"open","claims":[{"text":"must reject foreign work"}]}`)
+				if _, err := updateTool.Execute(updateCtx, "update_coagent", unassignedWorkID); err == nil || !strings.Contains(err.Error(), "not assigned") {
+					t.Fatalf("multi-item update for unassigned work error = %v", err)
+				}
+				selectedUpdate := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"second item checkpoint","agent_id":"texture:` + docID + `","channel_id":"` + docID + `","producer_update_id":"99999999-9999-4999-8999-999999999999","work_item_id":"` + secondWorkItemID + `","work_disposition":"open","claims":[{"text":"second item remains open"}]}`)
+				if _, err := updateTool.Execute(updateCtx, "update_coagent", selectedUpdate); err != nil {
+					t.Fatalf("queue selected multi-item lifecycle update: %v", err)
+				}
+				snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
+				if err != nil {
+					t.Fatalf("load multi-item lifecycle snapshot: %v", err)
+				}
+				foundSelectedUpdate := false
+				for _, update := range snapshot.Updates {
+					if update.ProducerUpdateID == "99999999-9999-4999-8999-999999999999" && update.WorkItemID == secondWorkItemID {
+						foundSelectedUpdate = true
+						break
+					}
+				}
+				if !foundSelectedUpdate {
+					t.Fatalf("selected multi-item update missing or misbound: %+v", snapshot.Updates)
+				}
+
+				replacementTerminal := *replacement
+				replacementTerminal.State = types.RunCompleted
+				replacementTerminal.Result = "multi-item prose is still not work authority"
+				replacementFinishedAt := time.Now().UTC()
+				replacementTerminal.UpdatedAt, replacementTerminal.FinishedAt = replacementFinishedAt, &replacementFinishedAt
+				replaceTerminal := types.ReplaceLifecycleActivationRequest{
+					OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "project-terminal-multi-item-recovery-" + tc.name,
+					TrajectoryID: trajectoryID, AgentID: replacement.AgentID, Run: replacementTerminal,
+				}
+				replaceTerminal.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(replaceTerminal)
+				if _, err := s.ProjectTerminalLifecycleRun(ctx, replaceTerminal); err != nil {
+					t.Fatalf("project terminal multi-item replacement: %v", err)
+				}
+				persistedReplacement, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", replacement.RunID)
+				if err != nil {
+					t.Fatalf("reload terminal multi-item replacement: %v", err)
+				}
+				if err := rt.bindTerminalRunOutcome(ctx, &persistedReplacement, false); err != nil {
+					t.Fatalf("bind terminal multi-item lifecycle outcome: %v", err)
+				}
+				legacyUpdates, err := s.ListWorkerUpdatesBySourceRun(ctx, ownerID, replacement.RunID)
+				if err != nil {
+					t.Fatalf("list legacy terminal updates for multi-item lifecycle run: %v", err)
+				}
+				if len(legacyUpdates) != 0 {
+					t.Fatalf("multi-item lifecycle terminal prose synthesized legacy updates: %+v", legacyUpdates)
+				}
+				next, err := rt.continueOpenLifecycleWorkAfterTerminal(ctx, &persistedReplacement)
+				if err != nil {
+					t.Fatalf("continue multi-item lifecycle work: %v", err)
+				}
+				if next == nil || next.RunID == replacement.RunID {
+					t.Fatalf("multi-item terminal continuation = %+v, want a distinct activation", next)
+				}
+				nextIDs := metadataStringSlice(next.Metadata["work_item_ids"])
+				if len(nextIDs) != 2 || !containsString(nextIDs, workItemID) || !containsString(nextIDs, secondWorkItemID) {
+					t.Fatalf("continued multi-item work_item_ids = %v, want both open items", nextIDs)
+				}
+			}
+			work, err := s.GetLifecycleWorkItem(ctx, ownerID, "sandbox-test", workItemID)
+			if err != nil || work.Status != types.WorkItemOpen || work.ResultRef != "" {
+				t.Fatalf("RunRecord result settled lifecycle work: %+v, %v", work, err)
+			}
+		})
 	}
 }
 
@@ -736,6 +1030,193 @@ func schemaObject(t *testing.T, parent map[string]any, key string) map[string]an
 		t.Fatalf("schema key %q = %#v, want object", key, parent[key])
 	}
 	return child
+}
+
+func TestLifecycleRuntimeSubmissionPreservesCanonicalActivationAdmission(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	const ownerID = "user-runtime-active-run-cas"
+	const docID = "doc-runtime-active-run-cas"
+	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
+	const agentID = "researcher-runtime-active-run-cas"
+	const channelID = "researcher-runtime-active-run-channel"
+	const workItemID = "work-runtime-active-run-cas"
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID: agentID, OwnerID: ownerID, ComputerID: rt.TextureSandboxID(), SandboxID: rt.TextureSandboxID(),
+		Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: channelID,
+	}); err != nil {
+		t.Fatalf("seed researcher agent: %v", err)
+	}
+	open := types.OpenLifecycleWorkRequest{
+		OwnerID: ownerID, ComputerID: rt.TextureSandboxID(),
+		CommandID: "command-open-runtime-active-run-cas", TrajectoryID: trajectoryID,
+		WorkItem: types.WorkItemRecord{
+			WorkItemID: workItemID, Objective: "admit exactly one runtime activation",
+			AssignedAgentID: agentID, AuthorityProfile: agentprofile.Researcher,
+		},
+	}
+	open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
+	if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
+		t.Fatalf("open researcher work: %v", err)
+	}
+	peer := testPeerRuntime(t, rt, s)
+	runtimes := []*Runtime{rt, peer}
+	baseMetadata := map[string]any{
+		runMetadataAgentID: agentID, runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole: agentprofile.Researcher, runMetadataChannelID: channelID,
+		runMetadataTrajectoryID: trajectoryID, "lifecycle_work_item_id": workItemID,
+	}
+	type result struct {
+		run *types.RunRecord
+		err error
+	}
+	results := make(chan result, 2)
+	var ready sync.WaitGroup
+	ready.Add(2)
+	start := make(chan struct{})
+	for i := range runtimes {
+		go func(candidate *Runtime) {
+			metadata := make(map[string]any, len(baseMetadata))
+			for key, value := range baseMetadata {
+				metadata[key] = value
+			}
+			ready.Done()
+			<-start
+			run, err := candidate.createRunWithMetadata(ctx, "resume overlapping durable research", ownerID, metadata)
+			results <- result{run: run, err: err}
+		}(runtimes[i])
+	}
+	ready.Wait()
+	close(start)
+	first, second := <-results, <-results
+	outcomes := []result{first, second}
+	var winner *types.RunRecord
+	for _, outcome := range outcomes {
+		if outcome.err == nil {
+			if winner != nil {
+				t.Fatalf("runtime submissions admitted duplicate activations: %+v", outcomes)
+			}
+			winner = outcome.run
+			continue
+		}
+		if !errors.Is(outcome.err, store.ErrConcurrentStateChange) &&
+			!errors.Is(outcome.err, store.ErrLifecycleInvalidTransition) {
+			t.Fatalf("runtime activation conflict = %v", outcome.err)
+		}
+	}
+	if winner == nil {
+		t.Fatalf("runtime submissions admitted no activation: %+v", outcomes)
+	}
+	agent, err := s.GetAgentByScope(ctx, ownerID, rt.TextureSandboxID(), agentID)
+	if err != nil || agent.ActiveRunID != winner.RunID {
+		t.Fatalf("canonical active_run_id = %q, %v; want %q", agent.ActiveRunID, err, winner.RunID)
+	}
+}
+
+func TestRestartRewarmSuppressesTerminalPendingLifecycleBindings(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		multiple     bool
+		wantDispatch int
+	}{
+		{name: "single"},
+		{name: "multi_retains_other_open_item", multiple: true, wantDispatch: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, s := testRuntime(t)
+			ctx := context.Background()
+			ownerID := "user-lifecycle-rewarm-terminal-" + tc.name
+			docID := "doc-lifecycle-rewarm-terminal-" + tc.name
+			trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
+			agentID := currentTextureAgentID(docID)
+			firstWorkItemID := "test-work:" + ownerID + ":" + docID
+			workItemIDs := []string{firstWorkItemID}
+			secondWorkItemID := ""
+			if tc.multiple {
+				secondWorkItemID = "work-lifecycle-rewarm-second-" + tc.name
+				open := types.OpenLifecycleWorkRequest{
+					OwnerID: ownerID, ComputerID: rt.TextureSandboxID(),
+					CommandID: "command-open-lifecycle-rewarm-second-" + tc.name, TrajectoryID: trajectoryID,
+					WorkItem: types.WorkItemRecord{
+						WorkItemID: secondWorkItemID, Objective: "retain the still-open restart binding",
+						AssignedAgentID: agentID, AuthorityProfile: agentprofile.Texture,
+					},
+				}
+				open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
+				if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
+					t.Fatalf("open second lifecycle work: %v", err)
+				}
+				workItemIDs = append(workItemIDs, secondWorkItemID)
+			}
+			now := time.Now().UTC()
+			run := types.RunRecord{
+				RunID:   "run-lifecycle-rewarm-terminal-" + tc.name,
+				AgentID: agentID, OwnerID: ownerID, SandboxID: rt.TextureSandboxID(),
+				ChannelID: docID, TrajectoryID: trajectoryID,
+				State: types.RunRunning, Prompt: "interrupted lifecycle producer",
+				AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
+				CreatedAt: now, UpdatedAt: now,
+				Metadata: map[string]any{
+					runMetadataAgentID: agentID, runMetadataAgentProfile: agentprofile.Texture,
+					runMetadataAgentRole: agentprofile.Texture, runMetadataTrajectoryID: trajectoryID,
+					"work_item_ids": workItemIDs,
+				},
+			}
+			if !tc.multiple {
+				run.Metadata["lifecycle_work_item_id"] = firstWorkItemID
+			}
+			if err := s.CreateRun(ctx, run); err != nil {
+				t.Fatalf("project interrupted lifecycle activation: %v", err)
+			}
+			packet := types.CoagentSourcePacketPayload{
+				SchemaVersion: types.CoagentSourcePacketSchemaV1,
+				Kind:          "evidence_update",
+				Summary:       "terminal typed disposition already queued",
+			}
+			content := "terminal typed disposition already queued"
+			payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+			queue := types.QueueLifecycleUpdateRequest{
+				OwnerID: ownerID, ComputerID: rt.TextureSandboxID(),
+				CommandID:    "command-queue-lifecycle-rewarm-terminal-" + tc.name,
+				TrajectoryID: trajectoryID, TargetAgentID: agentID, ProducerAgentID: agentID,
+				ProducerUpdateID: "producer-lifecycle-rewarm-terminal-" + tc.name,
+				UpdateID:         "update-lifecycle-rewarm-terminal-" + tc.name,
+				ChannelID:        docID, Role: agentprofile.Texture, SourceRunID: run.RunID,
+				Packet: packet, Content: content, PayloadDigest: payloadDigest,
+				WorkDisposition: types.WorkItemCompleted, WorkItemID: firstWorkItemID,
+			}
+			queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
+			if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
+				t.Fatalf("queue terminal lifecycle update: %v", err)
+			}
+			var dispatched []string
+			rt.SetDispatchActor(func(_ context.Context, gotOwnerID, gotComputerID, toAgentID, kind, content, gotTrajectoryID, _ string) error {
+				if kind == "initial_dispatch" && gotOwnerID == ownerID && gotComputerID == rt.TextureSandboxID() &&
+					gotTrajectoryID == trajectoryID && toAgentID == agentID {
+					dispatched = append(dispatched, content)
+				}
+				return nil
+			})
+			rt.Start(ctx)
+			if len(dispatched) != tc.wantDispatch {
+				t.Fatalf("restart lifecycle dispatches = %v, want %d", dispatched, tc.wantDispatch)
+			}
+			stale, err := s.GetLifecycleRun(ctx, ownerID, rt.TextureSandboxID(), run.RunID)
+			if err != nil || stale.State != types.RunPassivated {
+				t.Fatalf("stale restart activation = %+v, %v; want passivated", stale, err)
+			}
+			if tc.multiple {
+				active, found, err := rt.activeRunByAgent(ctx, ownerID, agentID)
+				if err != nil || !found || active.RunID == run.RunID {
+					t.Fatalf("replacement restart activation = found=%t run=%+v err=%v", found, active, err)
+				}
+				ids := metadataStringSlice(active.Metadata["work_item_ids"])
+				if len(ids) != 1 || ids[0] != secondWorkItemID {
+					t.Fatalf("replacement restart work_item_ids = %v, want [%s]", ids, secondWorkItemID)
+				}
+			}
+		})
+	}
 }
 
 func schemaEnumContains(schema map[string]any, want string) bool {

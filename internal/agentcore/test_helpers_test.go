@@ -254,6 +254,21 @@ func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 	return rt, s
 }
 
+func testPeerRuntime(t *testing.T, primary *Runtime, sharedStore *store.Store) *Runtime {
+	t.Helper()
+	if primary == nil || sharedStore == nil {
+		t.Fatal("primary runtime and shared store are required")
+	}
+	bus := events.NewEventBus()
+	peer := New(
+		primary.cfg, sharedStore, bus, provider.NewStubProvider(0),
+		WithContentService(contentowner.NewService(sharedStore, bus)),
+	)
+	setTestDispatch(peer, sharedStore)
+	t.Cleanup(peer.Stop)
+	return peer
+}
+
 // setTestDispatch sets a test dispatch function that executes runs
 // asynchronously. Production uses the actor runtime (actorruntime.New);
 // tests use this minimal dispatch that calls ExecuteActivationSync in a

@@ -448,60 +448,83 @@ func TestRootTerminalRunSkipsOutcomeBindingWithoutStoreLookup(t *testing.T) {
 }
 
 func TestResearcherPlainTerminalResultBindsAddressedOutcome(t *testing.T) {
-	ctx := context.Background()
-	rt, s := testRuntime(t)
-	now := time.Now().UTC()
-	rec := terminalResearcherRunFixture(
-		"run-researcher-plain-terminal",
-		"owner-researcher-plain-terminal",
-		"doc-researcher-plain-terminal",
-		"Plain terminal research result without any research-tool event.",
-		types.RunCompleted,
-		now,
-	)
-	if err := s.CreateRun(ctx, rec); err != nil {
-		t.Fatalf("create terminal researcher run: %v", err)
-	}
+	for _, tc := range []struct {
+		name   string
+		marker func(map[string]any)
+	}{
+		{
+			name: "plural legacy marker",
+			marker: func(metadata map[string]any) {
+				metadata["work_item_ids"] = []string{"legacy-work-item-researcher-plain-terminal"}
+			},
+		},
+		{
+			name: "singular legacy marker",
+			marker: func(metadata map[string]any) {
+				metadata["lifecycle_work_item_id"] = "legacy-work-item-researcher-plain-terminal"
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			rt, s := testRuntime(t)
+			now := time.Now().UTC()
+			suffix := strings.ReplaceAll(tc.name, " ", "-")
+			rec := terminalResearcherRunFixture(
+				"run-researcher-plain-terminal-"+suffix,
+				"owner-researcher-plain-terminal-"+suffix,
+				"doc-researcher-plain-terminal-"+suffix,
+				"Plain terminal research result without any research-tool event.",
+				types.RunCompleted,
+				now,
+			)
+			rec.SandboxID = rt.TextureSandboxID()
+			tc.marker(rec.Metadata)
+			if err := s.CreateRun(ctx, rec); err != nil {
+				t.Fatalf("create terminal researcher run: %v", err)
+			}
 
-	if err := rt.bindTerminalRunOutcome(ctx, &rec, false); err != nil {
-		t.Fatalf("bind terminal researcher outcome: %v", err)
-	}
-	updates, err := s.ListPendingWorkerUpdates(ctx, rec.OwnerID, "texture:"+rec.ChannelID, 10)
-	if err != nil {
-		t.Fatalf("list bound terminal outcomes: %v", err)
-	}
-	if len(updates) != 1 {
-		t.Fatalf("bound updates = %d, want exactly one: %+v", len(updates), updates)
-	}
-	update := updates[0]
-	if update.SourceRunID != rec.RunID {
-		t.Fatalf("source_run_id = %q, want %q", update.SourceRunID, rec.RunID)
-	}
-	wantDigest := types.TerminalRunOutcomeSHA256(rec.RunID, rec.State, rec.Result, rec.Error)
-	if update.SourceOutcomeSHA256 != wantDigest {
-		t.Fatalf("source_outcome_sha256 = %q, want recomputed %q", update.SourceOutcomeSHA256, wantDigest)
-	}
-	if strings.Contains(update.Content, rec.Result) {
-		t.Fatalf("persisted reference envelope copied authoritative result: %q", update.Content)
-	}
-	projected, err := rt.projectTerminalOutcomeContent(ctx, updates)
-	if err != nil {
-		t.Fatalf("project authoritative terminal result: %v", err)
-	}
-	if len(projected) != 1 || !strings.Contains(projected[0].Content, rec.Result) {
-		t.Fatalf("delivery projection omitted authoritative result: %+v", projected)
-	}
-	tampered := append([]types.CoagentSourcePacket(nil), updates...)
-	tampered[0].SourceOutcomeSHA256 = "tampered"
-	if _, err := rt.projectTerminalOutcomeContent(ctx, tampered); err == nil {
-		t.Fatal("tampered terminal outcome digest projected without error")
-	}
-	persisted, err := s.GetWorkerUpdate(ctx, rec.OwnerID, update.UpdateID)
-	if err != nil {
-		t.Fatalf("reload terminal outcome reference: %v", err)
-	}
-	if strings.Contains(persisted.Content, rec.Result) {
-		t.Fatalf("delivery projection mutated persisted envelope: %q", persisted.Content)
+			if err := rt.bindTerminalRunOutcome(ctx, &rec, false); err != nil {
+				t.Fatalf("bind terminal researcher outcome: %v", err)
+			}
+			updates, err := s.ListPendingWorkerUpdates(ctx, rec.OwnerID, "texture:"+rec.ChannelID, 10)
+			if err != nil {
+				t.Fatalf("list bound terminal outcomes: %v", err)
+			}
+			if len(updates) != 1 {
+				t.Fatalf("bound updates = %d, want exactly one: %+v", len(updates), updates)
+			}
+			update := updates[0]
+			if update.SourceRunID != rec.RunID {
+				t.Fatalf("source_run_id = %q, want %q", update.SourceRunID, rec.RunID)
+			}
+			wantDigest := types.TerminalRunOutcomeSHA256(rec.RunID, rec.State, rec.Result, rec.Error)
+			if update.SourceOutcomeSHA256 != wantDigest {
+				t.Fatalf("source_outcome_sha256 = %q, want recomputed %q", update.SourceOutcomeSHA256, wantDigest)
+			}
+			if strings.Contains(update.Content, rec.Result) {
+				t.Fatalf("persisted reference envelope copied authoritative result: %q", update.Content)
+			}
+			projected, err := rt.projectTerminalOutcomeContent(ctx, updates)
+			if err != nil {
+				t.Fatalf("project authoritative terminal result: %v", err)
+			}
+			if len(projected) != 1 || !strings.Contains(projected[0].Content, rec.Result) {
+				t.Fatalf("delivery projection omitted authoritative result: %+v", projected)
+			}
+			tampered := append([]types.CoagentSourcePacket(nil), updates...)
+			tampered[0].SourceOutcomeSHA256 = "tampered"
+			if _, err := rt.projectTerminalOutcomeContent(ctx, tampered); err == nil {
+				t.Fatal("tampered terminal outcome digest projected without error")
+			}
+			persisted, err := s.GetWorkerUpdate(ctx, rec.OwnerID, update.UpdateID)
+			if err != nil {
+				t.Fatalf("reload terminal outcome reference: %v", err)
+			}
+			if strings.Contains(persisted.Content, rec.Result) {
+				t.Fatalf("delivery projection mutated persisted envelope: %q", persisted.Content)
+			}
+		})
 	}
 }
 
