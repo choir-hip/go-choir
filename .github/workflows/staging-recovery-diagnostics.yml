@@ -1,0 +1,52 @@
+name: One-time staging recovery diagnostics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    name: Inspect retained-computer recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.OVH_DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.OVH_NODE_B_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          cat > ~/.ssh/config <<EOF
+          Host go-choir-node-b
+            HostName ${{ secrets.OVH_NODE_B_HOST }}
+            User root
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            ServerAliveInterval 30
+            ServerAliveCountMax 6
+          EOF
+
+      - name: Capture bounded recovery evidence
+        run: |
+          ssh go-choir-node-b 'bash -s' <<'REMOTE_DIAGNOSTICS'
+          set -euo pipefail
+          echo '==> vmctl service state'
+          systemctl show go-choir-vmctl.service \
+            --property=ActiveState,SubState,ExecMainStartTimestamp,ExecMainStatus,NRestarts
+          echo '==> retained computer ownership'
+          curl -fsS -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/list |
+            jq '{ownerships: [.ownerships[] | select(.computer_id == "computer-03335285269bdba4f94377e56879f9e6") | {computer_id,vm_id,desktop_id,state,epoch,sandbox_url,immutable_identity}]}'
+          echo '==> bounded vmctl and guest console journal'
+          journalctl -u go-choir-vmctl.service \
+            --since '2026-07-23 13:45:00 UTC' \
+            --no-pager --output=short-iso --lines=2500 |
+            sed -E \
+              -e 's/(Bearer )[A-Za-z0-9._-]+/\1[REDACTED]/g' \
+              -e 's/((token|secret|private_key|api_key)[=:])[A-Za-z0-9._\/-]+/\1[REDACTED]/Ig'
+          REMOTE_DIAGNOSTICS
+
+      - name: Cleanup SSH
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
