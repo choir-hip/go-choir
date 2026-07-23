@@ -32,6 +32,37 @@ func lifecycleStartFixture() types.StartLifecycleRequest {
 	return req
 }
 
+func lifecycleRunFixture(start types.StartLifecycleRequest, runID string, state types.RunState) types.RunRecord {
+	now := time.Now().UTC()
+	run := types.RunRecord{
+		RunID: runID, AgentID: start.Agent.AgentID, ChannelID: start.Agent.ChannelID,
+		TrajectoryID: start.TrajectoryID, AgentProfile: start.Agent.Profile, AgentRole: start.Agent.Role,
+		OwnerID: start.OwnerID, SandboxID: start.ComputerID, State: state,
+		Prompt: "resume durable work", CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID},
+	}
+	if state.Terminal() {
+		run.FinishedAt = &now
+	}
+	return run
+}
+
+func settleInitialLifecycleWork(t *testing.T, s *Store, start types.StartLifecycleRequest, commandID string) types.LifecycleResult {
+	t.Helper()
+	req := types.SettleLifecycleWorkRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: commandID, TrajectoryID: start.TrajectoryID,
+		WorkItemID: start.InitialWork.WorkItemID, ActingAgentID: start.Agent.AgentID,
+		ResultRef: start.InitialRevision.RevisionID,
+	}
+	req.CommandDigest, _ = ComputeSettleLifecycleWorkDigest(req)
+	result, err := s.SettleLifecycleWork(context.Background(), req)
+	if err != nil {
+		t.Fatalf("settle initial lifecycle work: %v", err)
+	}
+	return result
+}
+
 func TestStartLifecycleRefusesUnknownOrIncompleteSettlementRule(t *testing.T) {
 	s := openTestStore(t)
 	for name, mutate := range map[string]func(*types.StartLifecycleRequest){
@@ -1469,6 +1500,305 @@ func TestLifecycleReplaceActivationWritesProjectionWithoutAdvancingReducer(t *te
 	replay, err := s.ReplaceLifecycleActivation(ctx, replace)
 	if err != nil || !replay.Replay || replay.Trajectory.ReducerSeq != started.Trajectory.ReducerSeq {
 		t.Fatalf("activation replay = %+v, %v", replay, err)
+	}
+}
+
+func TestTerminalRunInvokesCanonicalSettlementReducer(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	run := lifecycleRunFixture(start, "run-terminal-settlement", types.RunPending)
+	if err := s.CreateRun(ctx, run); err != nil {
+		t.Fatalf("create lifecycle run: %v", err)
+	}
+	ready := settleInitialLifecycleWork(t, s, start, "command-work-before-terminal")
+	run.State = types.RunCompleted
+	run.UpdatedAt = time.Now().UTC()
+	run.FinishedAt = &run.UpdatedAt
+	if err := s.UpdateRun(ctx, run); err != nil {
+		t.Fatalf("persist terminal lifecycle run: %v", err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil || snapshot.Trajectory.Status != types.TrajectorySettled ||
+		snapshot.Trajectory.TerminalArtifactHeadRef != start.InitialRevision.RevisionID ||
+		snapshot.Activation.State != types.RunCompleted {
+		t.Fatalf("terminal caller settlement snapshot = %+v, %v", snapshot, err)
+	}
+	settle := types.SettleLifecycleTrajectoryRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: lifecycleTerminalSettlementCommandID(run.RunID), TrajectoryID: start.TrajectoryID,
+		ExpectedLifecycleVersion: ready.Trajectory.LifecycleVersion,
+		ExpectedHeadRevisionID:   start.InitialRevision.RevisionID,
+	}
+	settle.CommandDigest, _ = ComputeSettleLifecycleTrajectoryDigest(settle)
+	receiptObj, err := s.lifecycleGetObject(ctx, ogKindLifecycleCmd, start.OwnerID, start.ComputerID, settle.CommandID)
+	if err != nil {
+		t.Fatalf("load canonical settlement receipt: %v", err)
+	}
+	receipt, err := decodeLifecycleObject[types.LifecycleCommandReceipt](receiptObj)
+	if err != nil || receipt.StoredResult == nil ||
+		receipt.StoredResult.Trajectory.Status != types.TrajectorySettled ||
+		receipt.StoredResult.Trajectory.ReducerSeq != snapshot.Trajectory.ReducerSeq ||
+		receipt.StoredResult.Document == nil || receipt.StoredResult.Document.CurrentRevisionID != start.InitialRevision.RevisionID ||
+		receipt.StoredResult.Revision == nil || receipt.StoredResult.Revision.RevisionID != start.InitialRevision.RevisionID ||
+		len(receipt.StoredResult.Events) != 1 || receipt.StoredResult.Events[0].Kind != types.LifecycleTrajectorySettled {
+		t.Fatalf("stored canonical settlement result = %+v, %v", receipt.StoredResult, err)
+	}
+	replay, err := s.SettleLifecycleTrajectory(ctx, settle)
+	if err != nil || !replay.Replay || replay.Trajectory.Status != types.TrajectorySettled ||
+		replay.Trajectory.ReducerSeq != snapshot.Trajectory.ReducerSeq ||
+		replay.Document == nil || replay.Document.CurrentRevisionID != start.InitialRevision.RevisionID ||
+		replay.Revision == nil || replay.Revision.RevisionID != start.InitialRevision.RevisionID ||
+		len(replay.Events) != 1 || replay.Events[0].Kind != types.LifecycleTrajectorySettled ||
+		replay.Receipt.Kind != types.LifecycleSettleTrajectory {
+		t.Fatalf("canonical settlement receipt replay = %+v, %v", replay, err)
+	}
+}
+
+func TestTerminalRunWithOpenWorkDoesNotSettleTrajectory(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	run := lifecycleRunFixture(start, "run-terminal-open-work", types.RunPending)
+	if err := s.CreateRun(ctx, run); err != nil {
+		t.Fatalf("create lifecycle run: %v", err)
+	}
+	run.State = types.RunFailed
+	run.Error = "provider failed"
+	run.UpdatedAt = time.Now().UTC()
+	run.FinishedAt = &run.UpdatedAt
+	if err := s.UpdateRun(ctx, run); err != nil {
+		t.Fatalf("persist terminal lifecycle run: %v", err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil || snapshot.Trajectory.Status != types.TrajectoryLive ||
+		snapshot.WorkItems[0].Status != types.WorkItemOpen || snapshot.Activation.State != types.RunFailed {
+		t.Fatalf("open-work terminal snapshot = %+v, %v", snapshot, err)
+	}
+	if _, err := s.lifecycleGetObject(ctx, ogKindLifecycleCmd, start.OwnerID, start.ComputerID, lifecycleTerminalSettlementCommandID(run.RunID)); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("open-work terminal run created settlement receipt: %v", err)
+	}
+	for _, event := range snapshot.Events {
+		if event.Kind == types.LifecycleTrajectorySettled {
+			t.Fatalf("open-work terminal run created settlement event: %+v", event)
+		}
+	}
+}
+
+func TestDirectTerminalRunCannotTriggerSettlement(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	settleInitialLifecycleWork(t, s, start, "command-work-before-direct-terminal")
+	run := lifecycleRunFixture(start, "run-direct-terminal", types.RunCompleted)
+	run.Metadata[lifecycleTerminalSettlementKey] = true
+	if err := s.CreateRun(ctx, run); err != nil {
+		t.Fatalf("create direct terminal run: %v", err)
+	}
+	stored, err := s.GetLifecycleRun(ctx, start.OwnerID, start.ComputerID, run.RunID)
+	if err != nil || lifecycleTerminalSettlementRequested(stored) {
+		t.Fatalf("direct terminal run retained injected settlement trigger: %+v, %v", stored, err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil || snapshot.Trajectory.Status != types.TrajectoryLive {
+		t.Fatalf("direct terminal run settled trajectory: %+v, %v", snapshot, err)
+	}
+}
+
+func TestStaleTerminalRunCannotSettleReplacementActivation(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	stale := lifecycleRunFixture(start, "run-stale-terminal", types.RunPending)
+	if err := s.CreateRun(ctx, stale); err != nil {
+		t.Fatalf("create first activation: %v", err)
+	}
+	stale.State = types.RunPassivated
+	stale.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(ctx, stale); err != nil {
+		t.Fatalf("passivate first activation: %v", err)
+	}
+	replacement := lifecycleRunFixture(start, "run-terminal-replacement", types.RunPending)
+	if err := s.CreateRun(ctx, replacement); err != nil {
+		t.Fatalf("create replacement activation: %v", err)
+	}
+	settleInitialLifecycleWork(t, s, start, "command-work-before-stale-terminal")
+	stale.State = types.RunFailed
+	stale.Error = "late failure"
+	stale.UpdatedAt = time.Now().UTC()
+	stale.FinishedAt = &stale.UpdatedAt
+	if err := s.UpdateRun(ctx, stale); err != nil {
+		t.Fatalf("persist stale terminal projection: %v", err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil || snapshot.Trajectory.Status != types.TrajectoryLive ||
+		snapshot.Activation.RunID != replacement.RunID || snapshot.Activation.State != types.RunPending {
+		t.Fatalf("stale terminal displaced replacement: %+v, %v", snapshot, err)
+	}
+}
+
+func TestStaleBlockedTerminalCannotSettleReplacementActivation(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	stale := lifecycleRunFixture(start, "run-stale-blocked", types.RunPending)
+	if err := s.CreateRun(ctx, stale); err != nil {
+		t.Fatalf("create first activation: %v", err)
+	}
+	stale.State = types.RunBlocked
+	stale.Error = "provider unavailable"
+	stale.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(ctx, stale); err != nil {
+		t.Fatalf("block first activation: %v", err)
+	}
+	replacement := lifecycleRunFixture(start, "run-blocked-replacement", types.RunPending)
+	if err := s.CreateRun(ctx, replacement); err != nil {
+		t.Fatalf("create replacement activation: %v", err)
+	}
+	settleInitialLifecycleWork(t, s, start, "command-work-before-stale-blocked-terminal")
+	stale.State = types.RunFailed
+	stale.UpdatedAt = time.Now().UTC()
+	stale.FinishedAt = &stale.UpdatedAt
+	if err := s.UpdateRun(ctx, stale); err != nil {
+		t.Fatalf("persist stale blocked terminal projection: %v", err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil || snapshot.Trajectory.Status != types.TrajectoryLive ||
+		snapshot.Activation.RunID != replacement.RunID || snapshot.Activation.State != types.RunPending {
+		t.Fatalf("stale blocked terminal displaced replacement: %+v, %v", snapshot, err)
+	}
+}
+
+func TestTerminalSettlementCallerSurvivesStoreRestart(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	ctx := context.Background()
+	first, err := Open(path)
+	if err != nil {
+		t.Fatalf("open first store: %v", err)
+	}
+	start := lifecycleStartFixture()
+	if _, err = first.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	run := lifecycleRunFixture(start, "run-terminal-after-restart", types.RunPending)
+	if err = first.CreateRun(ctx, run); err != nil {
+		t.Fatalf("create lifecycle run: %v", err)
+	}
+	settleInitialLifecycleWork(t, first, start, "command-work-before-restart")
+	run.State = types.RunCompleted
+	run.UpdatedAt = time.Now().UTC()
+	run.FinishedAt = &run.UpdatedAt
+	project := types.ReplaceLifecycleActivationRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "command-project-before-restart", TrajectoryID: start.TrajectoryID,
+		AgentID: start.Agent.AgentID, Run: run,
+	}
+	project.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(project)
+	if _, err = first.ProjectTerminalLifecycleRun(ctx, project); err != nil {
+		t.Fatalf("project terminal run before restart: %v", err)
+	}
+	beforeRestart, err := first.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil || beforeRestart.Trajectory.Status != types.TrajectoryLive {
+		t.Fatalf("projection bypassed settlement authority: %+v, %v", beforeRestart, err)
+	}
+	if err = first.Close(); err != nil {
+		t.Fatalf("close after terminal projection: %v", err)
+	}
+	second, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	defer second.Close()
+	if err = second.ReconcileLifecycleSettlementForTerminalRun(ctx, run); err != nil {
+		t.Fatalf("reconcile terminal settlement after restart: %v", err)
+	}
+	snapshot, err := second.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil || snapshot.Trajectory.Status != types.TrajectorySettled ||
+		snapshot.Activation.State != types.RunCompleted {
+		t.Fatalf("restart terminal settlement = %+v, %v", snapshot, err)
+	}
+}
+
+func TestTerminalSettlementRacesCancellationWithoutDualCommit(t *testing.T) {
+	s := openTestStore(t)
+	peer := &Store{ogStore: s.ogStore, ogReadStore: s.ogReadStore}
+	ctx := context.Background()
+	for attempt := 0; attempt < 20; attempt++ {
+
+		start := lifecycleStartFixture()
+		start.CommandID = fmt.Sprintf("command-race-start-%d", attempt)
+		start.TrajectoryID = fmt.Sprintf("trajectory-race-%d", attempt)
+		start.InitialWork.WorkItemID = fmt.Sprintf("work-race-%d", attempt)
+		start.InitialDocument.DocID = fmt.Sprintf("document-race-%d", attempt)
+		start.InitialRevision.RevisionID = fmt.Sprintf("revision-race-%d", attempt)
+		start.SubjectRefs["doc_id"] = start.InitialDocument.DocID
+		start.Agent.AgentID = "texture:" + start.InitialDocument.DocID
+		start.Agent.ChannelID = start.InitialDocument.DocID
+		start.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(start)
+		if _, err := s.StartLifecycle(ctx, start); err != nil {
+			t.Fatalf("start lifecycle race %d: %v", attempt, err)
+		}
+		run := lifecycleRunFixture(start, fmt.Sprintf("run-race-%d", attempt), types.RunPending)
+		if err := s.CreateRun(ctx, run); err != nil {
+			t.Fatalf("create race run %d: %v", attempt, err)
+		}
+		ready := settleInitialLifecycleWork(t, s, start, fmt.Sprintf("command-race-work-%d", attempt))
+		run.State = types.RunCompleted
+		run.UpdatedAt = time.Now().UTC()
+		run.FinishedAt = &run.UpdatedAt
+		cancel := types.CancelLifecycleRequest{
+			OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+			CommandID: fmt.Sprintf("command-race-cancel-%d", attempt), TrajectoryID: start.TrajectoryID,
+			ExpectedLifecycleVersion: ready.Trajectory.LifecycleVersion,
+			ExpectedHeadRevisionID:   start.InitialRevision.RevisionID,
+			Reason:                   "race cancellation",
+		}
+		cancel.CommandDigest, _ = ComputeCancelLifecycleDigest(cancel)
+		updateErr := make(chan error, 1)
+		cancelErr := make(chan error, 1)
+		go func() { updateErr <- s.UpdateRun(ctx, run) }()
+		go func() {
+			_, err := peer.CancelLifecycleTrajectory(ctx, cancel)
+			cancelErr <- err
+		}()
+		projectionErr, cancellationErr := <-updateErr, <-cancelErr
+		snapshot, snapshotErr := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+		if snapshotErr != nil ||
+			(snapshot.Trajectory.Status != types.TrajectorySettled && snapshot.Trajectory.Status != types.TrajectoryCancelled) {
+			t.Fatalf("race %d terminal state = %+v, %v", attempt, snapshot.Trajectory, snapshotErr)
+		}
+		if projectionErr != nil && cancellationErr != nil {
+			t.Fatalf("race %d had no successful terminal authority: update=%v cancel=%v", attempt, projectionErr, cancellationErr)
+		}
+		events, eventErr := s.ListLifecycleEvents(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+		if eventErr != nil {
+			t.Fatalf("list race %d events: %v", attempt, eventErr)
+		}
+		terminalEvents := 0
+		for _, event := range events {
+			if event.Kind == types.LifecycleTrajectorySettled || event.Kind == types.LifecycleTrajectoryCancelled {
+				terminalEvents++
+			}
+		}
+		if terminalEvents != 1 {
+			t.Fatalf("race %d terminal event count = %d, events=%+v", attempt, terminalEvents, events)
+		}
 	}
 }
 

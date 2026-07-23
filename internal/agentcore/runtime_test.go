@@ -1139,6 +1139,117 @@ func TestRestartReDispatchesProjectedLifecycleActivation(t *testing.T) {
 	}
 }
 
+func TestRestartReconcilesDurableTerminalLifecycleSettlementTrigger(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	ownerID, docID := "user-terminal-settlement-restart", "doc-terminal-settlement-restart"
+	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
+	now := time.Now().UTC()
+	run := types.RunRecord{
+		RunID: "run-terminal-settlement-before-restart", AgentID: currentTextureAgentID(docID),
+		OwnerID: ownerID, SandboxID: rt.TextureSandboxID(), ChannelID: docID, TrajectoryID: trajectoryID,
+		State: types.RunPending, Prompt: "complete durable lifecycle", AgentProfile: "texture", AgentRole: "texture",
+		CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{
+			runMetadataAgentID: currentTextureAgentID(docID), runMetadataAgentProfile: "texture",
+			runMetadataAgentRole: "texture", runMetadataTrajectoryID: trajectoryID,
+			"lifecycle_work_item_id": "test-work:" + ownerID + ":" + docID,
+		},
+	}
+	if err := s.CreateRun(ctx, run); err != nil {
+		t.Fatalf("create lifecycle activation: %v", err)
+	}
+	settleWork := types.SettleLifecycleWorkRequest{
+		OwnerID: ownerID, ComputerID: rt.TextureSandboxID(),
+		CommandID: "command-terminal-settlement-work", TrajectoryID: trajectoryID,
+		WorkItemID: "test-work:" + ownerID + ":" + docID, ActingAgentID: currentTextureAgentID(docID),
+		ResultRef: "test-revision:" + ownerID + ":" + docID,
+	}
+	settleWork.CommandDigest, _ = store.ComputeSettleLifecycleWorkDigest(settleWork)
+	if _, err := s.SettleLifecycleWork(ctx, settleWork); err != nil {
+		t.Fatalf("settle lifecycle work: %v", err)
+	}
+	run.State = types.RunCompleted
+	run.UpdatedAt = time.Now().UTC()
+	run.FinishedAt = &run.UpdatedAt
+	project := types.ReplaceLifecycleActivationRequest{
+		OwnerID: ownerID, ComputerID: rt.TextureSandboxID(),
+		CommandID: "command-terminal-projection-before-restart", TrajectoryID: trajectoryID,
+		AgentID: run.AgentID, Run: run,
+	}
+	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ProjectTerminalLifecycleRun(ctx, project); err != nil {
+		t.Fatalf("project terminal lifecycle run: %v", err)
+	}
+	before, err := s.GetLifecycleSnapshot(ctx, ownerID, rt.TextureSandboxID(), trajectoryID)
+	if err != nil || before.Trajectory.Status != types.TrajectoryLive {
+		t.Fatalf("terminal projection settled without reducer caller: %+v, %v", before, err)
+	}
+	genericRuns, err := s.ListAllRunsByState(ctx, types.RunCompleted)
+	if err != nil {
+		t.Fatalf("list generic terminal runs: %v", err)
+	}
+	for _, genericRun := range genericRuns {
+		if genericRun.RunID == run.RunID {
+			t.Fatalf("lifecycle run leaked into generic boot listing: %+v", genericRun)
+		}
+	}
+	lifecycleRuns, err := s.ListLifecycleRunsByState(ctx, ownerID, rt.TextureSandboxID(), types.RunCompleted)
+	if err != nil || len(lifecycleRuns) != 1 || lifecycleRuns[0].RunID != run.RunID {
+		t.Fatalf("lifecycle boot listing = %+v, %v", lifecycleRuns, err)
+	}
+	rt.reconcileTerminalRunOutcomes(ctx)
+	after, err := s.GetLifecycleSnapshot(ctx, ownerID, rt.TextureSandboxID(), trajectoryID)
+	if err != nil || after.Trajectory.Status != types.TrajectorySettled ||
+		after.Activation.State != types.RunCompleted {
+		t.Fatalf("boot settlement reconciliation = %+v, %v", after, err)
+	}
+}
+
+func TestRuntimeTerminalPersistenceSettlesReadyLifecycle(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	ownerID, docID := "user-runtime-terminal-settlement", "doc-runtime-terminal-settlement"
+	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
+	now := time.Now().UTC()
+	run := types.RunRecord{
+		RunID: "run-runtime-terminal-settlement", AgentID: currentTextureAgentID(docID),
+		OwnerID: ownerID, SandboxID: rt.TextureSandboxID(), ChannelID: docID, TrajectoryID: trajectoryID,
+		State: types.RunPending, Prompt: "complete durable lifecycle", AgentProfile: "texture", AgentRole: "texture",
+		CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{
+			runMetadataAgentID: currentTextureAgentID(docID), runMetadataAgentProfile: "texture",
+			runMetadataAgentRole: "texture", runMetadataTrajectoryID: trajectoryID,
+			"lifecycle_work_item_id": "test-work:" + ownerID + ":" + docID,
+		},
+	}
+	if err := s.CreateRun(ctx, run); err != nil {
+		t.Fatalf("create lifecycle activation: %v", err)
+	}
+	settleWork := types.SettleLifecycleWorkRequest{
+		OwnerID: ownerID, ComputerID: rt.TextureSandboxID(),
+		CommandID: "command-runtime-terminal-work", TrajectoryID: trajectoryID,
+		WorkItemID: "test-work:" + ownerID + ":" + docID, ActingAgentID: currentTextureAgentID(docID),
+		ResultRef: "test-revision:" + ownerID + ":" + docID,
+	}
+	settleWork.CommandDigest, _ = store.ComputeSettleLifecycleWorkDigest(settleWork)
+	if _, err := s.SettleLifecycleWork(ctx, settleWork); err != nil {
+		t.Fatalf("settle lifecycle work: %v", err)
+	}
+	run.State = types.RunCompleted
+	run.UpdatedAt = time.Now().UTC()
+	run.FinishedAt = &run.UpdatedAt
+	persisted, err := rt.persistActivationState(ctx, &run)
+	if err != nil || !persisted {
+		t.Fatalf("persist runtime terminal activation: persisted=%t err=%v", persisted, err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, rt.TextureSandboxID(), trajectoryID)
+	if err != nil || snapshot.Trajectory.Status != types.TrajectorySettled ||
+		snapshot.Activation.State != types.RunCompleted {
+		t.Fatalf("runtime terminal settlement = %+v, %v", snapshot, err)
+	}
+}
+
 func TestHealthStartsReady(t *testing.T) {
 	t.Parallel()
 	rt, _ := testRuntime(t)

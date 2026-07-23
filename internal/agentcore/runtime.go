@@ -1941,6 +1941,16 @@ func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) map[string]
 	var pending []types.CoagentSourcePacket
 	queued := map[string]bool{}
 	for _, state := range []types.RunState{types.RunCompleted, types.RunFailed, types.RunCancelled} {
+		lifecycleRuns, lifecycleErr := rt.store.ListLifecycleRunsByState(ctx, "", rt.TextureSandboxID(), state)
+		if lifecycleErr != nil {
+			log.Printf("runtime: boot lifecycle settlement reconciliation: query %s runs: %v", state, lifecycleErr)
+		} else {
+			for i := range lifecycleRuns {
+				if err := rt.store.ReconcileLifecycleSettlementForTerminalRun(ctx, lifecycleRuns[i]); err != nil {
+					log.Printf("runtime: boot lifecycle settlement reconciliation for run %s: %v", lifecycleRuns[i].RunID, err)
+				}
+			}
+		}
 		runs, err := rt.store.ListAllRunsByState(ctx, state)
 		if err != nil {
 			log.Printf("runtime: boot terminal outcome reconciliation: query %s runs: %v", state, err)

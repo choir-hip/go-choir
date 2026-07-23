@@ -1726,9 +1726,11 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 		return types.LifecycleResult{}, err
 	}
 	runCondition := objectgraph.ObjectCondition{CanonicalID: runCanonicalID}
+	var storedRun types.RunRecord
 	existingRunObj, getRunErr := s.lifecycleGraph().GetObject(ctx, runCanonicalID)
 	if getRunErr == nil {
-		storedRun, decodeErr := decodeLifecycleObject[types.RunRecord](existingRunObj)
+		var decodeErr error
+		storedRun, decodeErr = decodeLifecycleObject[types.RunRecord](existingRunObj)
 		if decodeErr != nil {
 			return types.LifecycleResult{}, decodeErr
 		}
@@ -1805,6 +1807,21 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 		CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash,
 	})
 	previousActiveRunID := strings.TrimSpace(agent.ActiveRunID)
+	metadata := make(map[string]any, len(run.Metadata)+1)
+	for key, value := range run.Metadata {
+		if key != lifecycleTerminalSettlementKey {
+			metadata[key] = value
+		}
+	}
+	run.Metadata = metadata
+	settlementRequested := getRunErr == nil && lifecycleTerminalSettlementRequested(storedRun)
+	if trajectory.Status == types.TrajectoryLive && run.State.Terminal() && getRunErr == nil &&
+		lifecycleRunOwnsActivation(storedRun.State) && previousActiveRunID == run.RunID {
+		settlementRequested = true
+	}
+	if settlementRequested {
+		run.Metadata[lifecycleTerminalSettlementKey] = true
+	}
 	if lifecycleRunOwnsActivation(run.State) && previousActiveRunID != "" && previousActiveRunID != run.RunID {
 		previousRunObj, previousRunErr := s.lifecycleGetObject(ctx, ogKindRun, ownerID, computerID, previousActiveRunID)
 		if previousRunErr != nil {
@@ -1831,6 +1848,9 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 		"agent_profile": run.AgentProfile, "agent_role": run.AgentRole, "sandbox_id": run.SandboxID,
 		"state": string(run.State), "created_at": run.CreatedAt.UTC().Format(time.RFC3339Nano),
 		"updated_at": run.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	if settlementRequested {
+		runMetadata[lifecycleTerminalSettlementKey] = true
 	}
 	runBody, err := json.Marshal(run)
 	if err != nil {

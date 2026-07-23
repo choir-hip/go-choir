@@ -946,6 +946,68 @@ func (s *Store) rejectActiveRunOnTerminalTrajectory(ctx context.Context, rec typ
 	return err
 }
 
+const (
+	lifecycleTerminalSettlementAttempts = 8
+	lifecycleTerminalSettlementKey      = "lifecycle_terminal_settlement_requested"
+)
+
+func lifecycleTerminalSettlementCommandID(runID string) string {
+	return "lifecycle-terminal-settlement:" + strings.TrimSpace(runID)
+}
+
+func lifecycleTerminalSettlementRequested(rec types.RunRecord) bool {
+	requested, _ := rec.Metadata[lifecycleTerminalSettlementKey].(bool)
+	return requested
+}
+
+// ReconcileLifecycleSettlementForTerminalRun invokes the canonical settlement
+// reducer for a durable active-to-terminal trigger. The trigger is evidence
+// that a product caller should try; it is not settlement authority.
+func (s *Store) ReconcileLifecycleSettlementForTerminalRun(ctx context.Context, rec types.RunRecord) error {
+	rec.TrajectoryID = runTrajectoryID(rec)
+	stored, err := s.GetLifecycleRun(ctx, rec.OwnerID, rec.SandboxID, rec.RunID)
+	if err != nil {
+		return err
+	}
+	if !stored.State.Terminal() || !lifecycleTerminalSettlementRequested(stored) {
+		return nil
+	}
+	for attempt := 0; attempt < lifecycleTerminalSettlementAttempts; attempt++ {
+		snapshot, snapshotErr := s.GetLifecycleSnapshot(ctx, stored.OwnerID, stored.SandboxID, stored.TrajectoryID)
+		if snapshotErr != nil {
+			return snapshotErr
+		}
+		if snapshot.Trajectory.Status != types.TrajectoryLive {
+			return nil
+		}
+		prospective := snapshot.Trajectory
+		prospective.TerminalArtifactHeadRef = snapshot.Document.CurrentRevisionID
+		ready, readyErr := s.lifecycleSettlementReady(ctx, prospective, nil, nil)
+		if readyErr != nil {
+			return readyErr
+		}
+		if !ready {
+			return nil
+		}
+		req := types.SettleLifecycleTrajectoryRequest{
+			OwnerID:                  stored.OwnerID,
+			ComputerID:               stored.SandboxID,
+			CommandID:                lifecycleTerminalSettlementCommandID(stored.RunID),
+			TrajectoryID:             stored.TrajectoryID,
+			ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+			ExpectedHeadRevisionID:   snapshot.Document.CurrentRevisionID,
+		}
+		req.CommandDigest, _ = ComputeSettleLifecycleTrajectoryDigest(req)
+		if _, err = s.SettleLifecycleTrajectory(ctx, req); err == nil {
+			return nil
+		}
+		if !errors.Is(err, ErrConcurrentStateChange) {
+			return err
+		}
+	}
+	return ErrConcurrentStateChange
+}
+
 func (s *Store) persistLifecycleRun(ctx context.Context, rec types.RunRecord) (bool, error) {
 	rec.TrajectoryID = runTrajectoryID(rec)
 	if strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.SandboxID) == "" || strings.TrimSpace(rec.TrajectoryID) == "" {
@@ -958,6 +1020,7 @@ func (s *Store) persistLifecycleRun(ctx context.Context, rec types.RunRecord) (b
 		}
 		return true, err
 	}
+
 	body, err := json.Marshal(rec)
 	if err != nil {
 		return true, err
@@ -973,7 +1036,15 @@ func (s *Store) persistLifecycleRun(ctx context.Context, rec types.RunRecord) (b
 	} else {
 		_, err = s.ProjectTerminalLifecycleRun(ctx, req)
 	}
-	return true, err
+	if err != nil {
+		return true, err
+	}
+	if rec.State.Terminal() {
+		if reconcileErr := s.ReconcileLifecycleSettlementForTerminalRun(ctx, rec); reconcileErr != nil {
+			log.Printf("store: reconcile terminal lifecycle settlement run=%s: %v", rec.RunID, reconcileErr)
+		}
+	}
+	return true, nil
 }
 
 // CreateRun inserts a new run record.
