@@ -100,6 +100,40 @@ func TestResolveLegacyAgentScopeRequiresExactlyOneOwner(t *testing.T) {
 	}
 }
 
+func TestResolveLegacyAgentScopeUsesUniqueRunWitness(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	const (
+		agentID    = "legacy-agent-without-record"
+		computerID = "computer-a"
+	)
+	for _, runID := range []string{"run-a", "run-b"} {
+		if err := s.CreateRunOG(ctx, types.RunRecord{
+			RunID: runID, AgentID: agentID, OwnerID: "owner-a", SandboxID: computerID,
+			State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("create run witness %s: %v", runID, err)
+		}
+	}
+	got, err := s.ResolveLegacyAgentScopeOG(ctx, computerID, agentID)
+	if err != nil || got.OwnerID != "owner-a" || got.ComputerID != computerID || got.AgentID != agentID {
+		t.Fatalf("resolve run witness: %+v, %v", got, err)
+	}
+	if _, err := s.ResolveLegacyAgentScopeOG(ctx, "computer-b", agentID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("wrong-computer run witness error = %v, want ErrNotFound", err)
+	}
+	if err := s.CreateRunOG(ctx, types.RunRecord{
+		RunID: "run-other-owner", AgentID: agentID, OwnerID: "owner-b", SandboxID: computerID,
+		State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create ambiguous run witness: %v", err)
+	}
+	if _, err := s.ResolveLegacyAgentScopeOG(ctx, computerID, agentID); err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("ambiguous run witness error = %v", err)
+	}
+}
+
 func TestOGUpsertAgentUpdate(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

@@ -271,27 +271,27 @@ execution:
 now:
   status: blocked_incomplete
   slice: D-land-deploy-and-prove
-  question: "Can retained legacy actor mailboxes whose scoped AgentRecord is absent be bound from an independent durable owner/computer witness without guessing or losing backlog?"
+  question: "Will the independently accepted exact-one run-witness migration restore both retained Node B guests without cross-binding mailbox state?"
   reconciliation:
-    observed_at: 2026-07-23T11:29:52Z
-    source_ref: refs/remotes/origin/main@abf49d22f730dab67074e88b46461ea064a74c16
+    observed_at: 2026-07-23T12:18:00Z
+    source_ref: refs/remotes/origin/main@9e423a012fb48b4bd0a6beb2c954beb26b631828
     deploy_identity: "Forced GitHub Actions run 30001463915 passed source/build gates and attempted Node B deployment of abf49d22. Active-computer refresh timed out because two guests repeatedly refused actor-runtime startup: retained UUID mailboxes had no matching scoped AgentRecord on the current computer. The prior signed accepted deployment remains 676f0772 epoch 114; incomplete receipt /var/lib/go-choir/deploy-failures/30001463915-1.json was recorded."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 is clean at origin/main@abf49d22; protected unrelated worktrees remain untouched."
+    worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 contains one accepted retained-mailbox scope-witness candidate after origin/main@9e423a01; protected unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: convergence-durable-work-runtime-27
-    state: deployed_migration_scope_witness_required
-    ref: refs/remotes/origin/main@abf49d22f730dab67074e88b46461ea064a74c16
+    id: convergence-durable-work-runtime-28
+    state: independent_review_accepted_ready_to_land
+    ref: worktree-diff@sha256:244833ffd03fcabe542dde08418a71be433d6e50dc52925a8bc59f0a7213f39a
     owner: owner-and-current-session
-    base: abf49d22
+    base: 9e423a01
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_runtime_candidate: refs/remotes/origin/main@129a3d989d6c1e32cc95530e96f31dee0984d94d
     scope: "Phase D retained-mailbox migration repair only; effects OFF."
-    observed_problem: "The migration assumes every legacy actor mailbox has one scoped AgentRecord on the current computer. Node B retained UUID mailboxes 00dba6bf-6c03-4fce-853d-087e3f08a72d and 04914cf9-4951-4174-bb63-341c07c55ac7 but ResolveLegacyAgentScope found no matching scoped AgentRecord, so runtime startup failed closed and deployment refresh timed out."
-    repair_evidence: "No repair is committed after this receipt. A repair must derive owner/computer scope from an independent durable identity witness, require exactly one match, preserve processed/unprocessed updates and snapshots atomically, and continue to refuse missing or ambiguous identity."
-    remaining_error: "Implement and review exact-one durable scope recovery for retained mailboxes without AgentRecord rows, pass focused migration/restart races and hosted CI, deploy to Node B, verify signed host/guest identity and retained delivery, then finish public lifecycle/cancellation/client acceptance."
+    observed_problem: "The migration assumed every legacy actor mailbox had one scoped AgentRecord on the current computer. Node B retained UUID mailboxes without those rows, so runtime startup failed closed and deployment refresh timed out."
+    repair_evidence: "ResolveLegacyAgentScope now accepts a missing AgentRecord only when every non-tombstoned durable RunRecord witness for that agent and computer names one owner. Any agent/run or run/run owner conflict refuses before the existing atomic SQLite rebind. Focused store and adapter races passed count=10; complete actorruntime race suite and all runtime shards passed; three-member repair review and two-member final-hash confirmation accepted."
+    remaining_error: "Commit and push the accepted source, pass hosted CI, deploy to Node B, verify signed host/guest identity and retained delivery, then finish public lifecycle/cancellation/client acceptance."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -341,9 +341,13 @@ now:
     - "/tmp/agentic-consensus-20260723-061202/manifest.tsv: Codex and OMP GPT-5.5 independently ACCEPT exact test-only candidate digest dc38362bf0b979e45bab67ee18cfa425df94f8c81b0c2d68618cad9230dfca82; no blocking findings."
     - "The repaired focused restart race passed count=20; the complete internal/actorruntime race package and git diff --check passed."
     - "Forced GitHub Actions run 30001463915 passed source/build gates and attempted Node B deployment of abf49d22; active-computer refresh timed out after guests repeatedly refused retained UUID mailboxes whose scoped AgentRecord was absent. Incomplete receipt /var/lib/go-choir/deploy-failures/30001463915-1.json was recorded."
-  blocker_or_risk: "Retained actor SQLite state and object-graph agent identity do not share complete historical coverage. Startup correctly refuses to guess, but the accepted migration has no secondary exact-owner witness for a mailbox whose AgentRecord is absent."
-  latest_blocker_or_risk: "Protected surfaces remain actor SQLite update/snapshot identity, scoped owner/computer authority, restart replay, deployment activation, and retained delivery. Rollback remains accepted deployment 676f0772 epoch 114. Heresy delta: discovered incomplete historical AgentRecord coverage; introduced no new runtime heresy; repair must fail closed unless one durable witness binds the legacy mailbox."
-  next_action: "Commit this code-free deployment receipt alone. Then identify the narrowest existing durable owner/computer witness for legacy actor IDs, add exact-one migration with atomic preservation, run focused race/restart proof and independent review, and repeat the landing loop."
+    - "/tmp/agentic-consensus-20260723-074617/manifest.tsv: Codex and OMP GPT-5.5 independently REPAIRed candidate 72c19220 because a unique AgentRecord could outrank a contradictory RunRecord owner; Cursor accepted."
+    - "/tmp/agentic-consensus-20260723-080441/manifest.tsv sha256:1a0313ad046d33dcba02431671c80986b4ce6e8459c0a40abf0dbd0e89891f7a: Codex, Cursor, and OMP GPT-5.5 ACCEPTed repaired behavior digest 7e9070b81e7329d90288325bc8c7fe8284d5bc323c7311d05814216fd2b7a3bf."
+    - "/tmp/agentic-consensus-20260723-081514/manifest.tsv sha256:f910253bd07a81c67397f7d9897daba407508ddaad9801705a176f93a631e7c5: Codex and OMP GPT-5.5 ACCEPTed final digest 244833ffd03fcabe542dde08418a71be433d6e50dc52925a8bc59f0a7213f39a; only witness-comment corrections followed the three-member behavior review."
+    - "Focused ResolveLegacyAgentScope and adapter migration/refusal race suites passed count=10; complete internal/actorruntime race package and scripts/go-test-runtime-shards passed. A broad internal/store race invocation reached the package's 10-minute default timeout without a failed assertion; focused changed-path store races passed."
+  blocker_or_risk: "Hosted deployment is the remaining discriminator: retained production UUID mailboxes must have one current-computer RunRecord owner witness. Missing or contradictory evidence still fails closed."
+  latest_blocker_or_risk: "Protected surfaces remain actor SQLite update/snapshot identity, scoped owner/computer authority, restart replay, deployment activation, and retained delivery. Rollback remains accepted deployment 676f0772 epoch 114. Heresy delta: discovered incomplete historical AgentRecord coverage; repaired exact-one recovery from independent durable run witnesses; introduced no known runtime heresy."
+  next_action: "Commit and push the independently accepted candidate, monitor CI and Node B deployment, verify exact host/guest identity and retained mailbox delivery, then run lifecycle, restart, cancellation, and client conformance acceptance."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21

@@ -822,6 +822,49 @@ func TestAdapterStartMigratesUniqueLegacyUnscopedMailbox(t *testing.T) {
 	}
 }
 
+func TestAdapterStartMigratesLegacyMailboxFromRunWitness(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "legacy-run-witness.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	cfg := provideriface.Config{SandboxID: "sandbox-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
+	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
+	t.Cleanup(func() {
+		adapter.Stop()
+		adapter.cleanupLog()
+		_ = s.Close()
+	})
+	now := time.Now().UTC()
+	const (
+		agentID = "legacy-agent-without-record"
+		ownerID = "legacy-owner"
+	)
+	if err := s.CreateRun(ctx, types.RunRecord{
+		RunID: "legacy-run-witness", AgentID: agentID, OwnerID: ownerID, SandboxID: cfg.SandboxID,
+		State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create legacy run witness: %v", err)
+	}
+	if err := adapter.log.SaveSnapshot(ctx, agentID, []byte(`{"phase":"parked"}`)); err != nil {
+		t.Fatalf("save legacy snapshot: %v", err)
+	}
+	if err := adapter.Start(ctx); err != nil {
+		t.Fatalf("start with run-witness legacy mailbox: %v", err)
+	}
+	scopedID := scopedActorMailboxID(ownerID, cfg.SandboxID, agentID)
+	identities, err := adapter.log.MailboxIdentities(ctx)
+	if err != nil || len(identities) != 1 || identities[0] != scopedID {
+		t.Fatalf("mailbox identities after startup: %q, %v; want [%q]", identities, err, scopedID)
+	}
+	memory, err := adapter.log.LoadSnapshot(ctx, scopedID)
+	if err != nil || string(memory) != `{"phase":"parked"}` {
+		t.Fatalf("scoped snapshot after startup: %q, %v", memory, err)
+	}
+}
+
 func TestAdapterStartMigratesLegacyMailboxWithoutPendingBacklog(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -919,6 +962,61 @@ func TestAdapterStartRefusesAmbiguousLegacyUnscopedMailbox(t *testing.T) {
 	}
 	if legacy, err := adapter.log.Unprocessed(ctx, "legacy-unscoped-agent"); err != nil || len(legacy) != 1 {
 		t.Fatalf("legacy backlog changed after refusal: %+v, %v", legacy, err)
+	}
+}
+
+func TestAdapterStartRefusesConflictingAgentAndRunWitnesses(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "conflicting-witness-mailbox.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	cfg := provideriface.Config{SandboxID: "sandbox-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
+	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
+	t.Cleanup(func() {
+		adapter.Stop()
+		adapter.cleanupLog()
+		_ = s.Close()
+	})
+	now := time.Now().UTC()
+	const agentID = "legacy-conflicting-agent"
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID: agentID, OwnerID: "owner-a", ComputerID: cfg.SandboxID, SandboxID: cfg.SandboxID,
+		Profile: "processor", Role: "processor", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert agent witness: %v", err)
+	}
+	if err := s.CreateRun(ctx, types.RunRecord{
+		RunID: "conflicting-run", AgentID: agentID, OwnerID: "owner-b", SandboxID: cfg.SandboxID,
+		State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create conflicting run witness: %v", err)
+	}
+	if appended, err := adapter.log.Append(ctx, actor.Update{
+		UpdateID: "retained-update", ToAgentID: agentID, CreatedAt: now,
+	}); err != nil || !appended {
+		t.Fatalf("append legacy update: appended=%v err=%v", appended, err)
+	}
+	if err := adapter.log.SaveSnapshot(ctx, agentID, []byte(`{"phase":"parked"}`)); err != nil {
+		t.Fatalf("save legacy snapshot: %v", err)
+	}
+	if err := adapter.Start(ctx); err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("startup error = %v, want conflicting witness refusal", err)
+	}
+	if backlog, err := adapter.log.Unprocessed(ctx, agentID); err != nil || len(backlog) != 1 {
+		t.Fatalf("legacy backlog changed after refusal: %+v, %v", backlog, err)
+	}
+	memory, err := adapter.log.LoadSnapshot(ctx, agentID)
+	if err != nil || string(memory) != `{"phase":"parked"}` {
+		t.Fatalf("legacy snapshot changed after refusal: %q, %v", memory, err)
+	}
+	for _, ownerID := range []string{"owner-a", "owner-b"} {
+		scopedID := scopedActorMailboxID(ownerID, cfg.SandboxID, agentID)
+		if scopedMemory, err := adapter.log.LoadSnapshot(ctx, scopedID); err != nil || scopedMemory != nil {
+			t.Fatalf("scoped snapshot created for %s after refusal: %q, %v", ownerID, scopedMemory, err)
+		}
 	}
 }
 

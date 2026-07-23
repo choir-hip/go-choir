@@ -376,8 +376,9 @@ func (s *Store) GetAgentByScopeOG(ctx context.Context, ownerID, computerID, agen
 }
 
 // ResolveLegacyAgentScopeOG resolves a pre-scoping mailbox identity only when
-// exactly one durable agent with that ID exists on the current computer. It is
-// a migration seam, not transition authority; ambiguity fails closed.
+// every surviving agent and run witness names one owner on the current
+// computer. It is a migration seam, not transition authority; ambiguity fails
+// closed.
 func (s *Store) ResolveLegacyAgentScopeOG(ctx context.Context, computerID, agentID string) (types.AgentRecord, error) {
 	computerID, agentID = strings.TrimSpace(computerID), strings.TrimSpace(agentID)
 	if computerID == "" || agentID == "" {
@@ -425,10 +426,47 @@ func (s *Store) ResolveLegacyAgentScopeOG(ctx context.Context, computerID, agent
 		}
 		after = next
 	}
-	if match == nil {
+
+	// Some pre-scoping computers retain actor mailboxes after their old agent
+	// row has disappeared. Runs are independent durable owner/computer witnesses
+	// for the executing agent. Every surviving witness must name one owner;
+	// never prefer an agent row over a contradictory run.
+	runObjects, err := s.ogListAllByMetadata(ctx, ogKindRun, "agent_id", agentID)
+	if err != nil {
+		return types.AgentRecord{}, err
+	}
+	ownerID := ""
+	if match != nil {
+		ownerID = strings.TrimSpace(match.OwnerID)
+	}
+	for _, obj := range runObjects {
+		if obj.Tombstone {
+			continue
+		}
+		var run types.RunRecord
+		if err := ogDecode(obj, &run); err != nil {
+			return types.AgentRecord{}, err
+		}
+		if strings.TrimSpace(run.AgentID) != agentID ||
+			strings.TrimSpace(run.SandboxID) != computerID ||
+			strings.TrimSpace(run.OwnerID) == "" {
+			continue
+		}
+		candidateOwner := strings.TrimSpace(run.OwnerID)
+		if ownerID != "" && ownerID != candidateOwner {
+			return types.AgentRecord{}, fmt.Errorf("store: legacy agent scope is ambiguous for computer %q agent %q", computerID, agentID)
+		}
+		ownerID = candidateOwner
+	}
+	if match != nil {
+		return *match, nil
+	}
+	if ownerID == "" {
 		return types.AgentRecord{}, fmt.Errorf("store: legacy agent scope not found for computer %q agent %q: %w", computerID, agentID, ErrNotFound)
 	}
-	return *match, nil
+	return types.AgentRecord{
+		AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+	}, nil
 }
 
 // =========================================================================
