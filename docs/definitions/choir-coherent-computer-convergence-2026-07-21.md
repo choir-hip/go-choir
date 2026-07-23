@@ -271,27 +271,27 @@ execution:
 now:
   status: blocked_incomplete
   slice: D-land-deploy-and-prove
-  question: "Will a forced full deployment install the already accepted retained-mailbox migration that the successful proxy-only differential deployment skipped after its earlier sandbox deployment failed?"
+  question: "What product-path evidence can distinguish Firecracker launch, guest boot, networking, sandbox startup, and retained-mailbox migration failure without SSH or journal access?"
   reconciliation:
-    observed_at: 2026-07-23T13:20:16Z
-    source_ref: refs/remotes/origin/main@00aeedb72d1ed5b59b46d89872fd2967f7ce81ff
-    deploy_identity: "GitHub Actions run 30009380170 passed every selected gate and deployed proxy from 00aeedb7. Public /health reports proxy commit/deployed_commit 00aeedb7. The signed identity endpoint fails closed because no guest is active. The retained primary computer computer-03335285269bdba4f94377e56879f9e6 remains failed at epoch 116: scoped lifecycle start returned 502 after 60 seconds; public wake recovery ran for 62 seconds and reported ready while /api/compute/status still reported the computer failed; scoped stop then returned 502. The deploy skipped sandbox and active-computer refresh because the accepted mailbox migration landed in earlier commit fd7e871d whose deployment failed, while this push's differential classified only the proxy/workflow repair."
+    observed_at: 2026-07-23T14:20:03Z
+    source_ref: refs/remotes/origin/main@696b118ac874545219ba6d13c440e3d9f3d47bb6
+    deploy_identity: "Forced-full GitHub Actions run 3001019521 passed every selected gate and installed the accepted sandbox migration from c3683a98, but its active-computer refresh timed out. Recovery-diagnostic run 30014414949 passed and deployed proxy 696b118a. Public /api/compute/status still reports retained primary computer-03335285269bdba4f94377e56879f9e6 failed at epoch 116 with no runtime; signed execution identity therefore fails closed. A post-deploy wake operation ended recovery_timeout at 2026-07-23T14:20:03Z instead of falsely reporting ready."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
-    policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 is clean at origin/main@fd7e871d; protected unrelated worktrees remain untouched."
+    policy_resolution_ref: "Dead-End Escalation and no-SSH operability standing question: three retained-computer recovery iterations did not converge, so another symptom patch is unauthorized without a structural assessment and owner direction."
+    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir is clean after origin/main@696b118a; protected unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: differential-deploy-receipt-repair-01
-    state: deployed_proxy_identity_repair_sandbox_migration_not_installed
-    ref: refs/remotes/origin/main@00aeedb72d1ed5b59b46d89872fd2967f7ce81ff
+    id: retained-computer-recovery-blocker-01
+    state: blocked_incomplete
+    ref: refs/remotes/origin/main@696b118ac874545219ba6d13c440e3d9f3d47bb6
     owner: owner-and-current-session
-    base: 45d1ef33
-    accepted_contract: "A deployment receipt distinguishes the tested coordinator target commit from each active immutable service package's own embedded commit. Selected services must match target and live health; every published immutable package must digest-match the active copied runtime. Public and CLI identity join component-local package/runtime pairs instead of requiring unrelated components to share one source commit."
-    prior_runtime_candidate: refs/remotes/origin/main@fd7e871dcb77aceb3c0ccbc2e64626f7cfbd328e
-    scope: "Phase D deployment-receipt publication and exact-identity verification only; no durable-work reducer semantics and effects remain OFF."
-    observed_problem: "The differential deploy correctly updated only gateway and sandbox, but activation receipt publication required all seven host services to equal DEPLOY_COMMIT. The public proxy and CLI identity verifiers repeated the same conflation. The first repair review also found stale /tmp Nix results could be published without proving they matched the active /var/lib service bytes."
-    repair_evidence: "The publisher now hashes each active copied service tree and accepts a candidate/fallback immutable Nix package only on equal manifest commit and NAR digest; selected services additionally require target-matching active receipts. It records each active service's actual embedded commit. Proxy and CLI verification require host runtime=recorded proxy package, guest build=guest deployment, independent valid route identity, and target equality only for a selected proxy. The platform attestation binds the coordinator target separately from component commits. Focused workflow and mixed-generation proxy/CLI tests pass."
-    remaining_error: "Force a full main deployment so the already accepted sandbox mailbox migration is installed, recover the retained computer without replacing its durable disk, verify signed host/guest identity and retained delivery, then finish public lifecycle/cancellation/client acceptance."
+    base: 676f0772
+    accepted_contract: "Recovery may report ready only from a refreshed active realization with freshly observed reachable guest health. Failure diagnostics exposed to owners are bounded and do not leak raw vmctl internals. The persistent computer and disk remain the recovery object."
+    prior_runtime_candidate: refs/remotes/origin/main@c3683a98e52c9b22b5005c4caf8dc3bf3aff0a33
+    scope: "Phase D recovery truthfulness and diagnosis only; durable-work reducer semantics remain accepted, effects remain OFF, and no replacement computer or disk is authorized."
+    observed_problem: "After the accepted migration was installed by a forced full deploy, vmctl could not make the retained computer healthy. The public path previously swallowed refresh failure, reused stale health, and reported ready; 696b118a repairs those false-success paths, isolates concurrent recovery waiters, and returns a bounded recovery_timeout. It still cannot expose the underlying boot-stage failure."
+    repair_evidence: "Focused recovery tests passed count=10 and complete internal/proxy tests passed. Independent exact-hash review at /tmp/agentic-consensus-20260723-100608/manifest.tsv ACCEPTed sha256:b1848241e0c2c38429ab9619e9fb01e3db9b12dfb0dd6cb9b581c1e946a25f57. GitHub Actions 30014414949 passed; deployed wake now fails closed with recovery_timeout."
+    remaining_error: "Lifecycle, restart, retained delivery, cancellation, browser/CLI conformance, and exact guest identity acceptance cannot run while the retained computer has no healthy realization. The product has no no-SSH evidence that localizes the failure among Firecracker launch, guest boot, host networking, sandbox startup, or retained-state migration."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -349,11 +349,14 @@ now:
     - "/tmp/agentic-consensus-20260723-083618/manifest.tsv: Codex, Cursor, and OMP GPT-5.5 unanimously REPAIRed frozen diff 1015e13f66fd575bf6495c2ea89c3fb89e3a764218d925254f4a8de036b4b09c. All traced target-commit conflation into public/CLI identity; Codex and Cursor also found the publisher could prefer an unmatched stale Nix result."
     - "/tmp/agentic-consensus-20260723-084742/manifest.tsv: Codex, Cursor, and OMP GPT-5.5 unanimously REPAIRed frozen diff d827e10c4cf6092ebdc79d0ac2e91d458da78512a83266d55e388abed9d6ffcb. Codex/Cursor found selected proxy could be stale despite target metadata; Codex/OMP found platform attestation and CLI disagreed on mixed-generation deployed_commit; Codex found the Definition's common-commit clause contradicted the repair."
     - "/tmp/agentic-consensus-20260723-085603/manifest.tsv sha256:b04feb4ba058eae636aa70c302d55518d589539be2301de3667a9d6a86c5e9b1: Codex and OMP GPT-5.5 independently ACCEPTed exact repaired diff 8b0060ad15b69fa86bcf95c2238e3abe90dc04e1a869dc424f273d509e4793e5 with no blocking findings."
-    - "GitHub Actions 30009380170 passed all selected gates and deployed proxy 00aeedb7 to Node B. Public /health reports proxy commit/deployed_commit 00aeedb7, but the successful differential run explicitly skipped sandbox and active-computer refresh."
+    - "GitHub Actions 30009380170 passed all selected gates and deployed proxy 00aeedb7 to Node B. Public /health reported proxy commit/deployed_commit 00aeedb7, but the successful differential run explicitly skipped sandbox and active-computer refresh."
     - "At 2026-07-23T13:20:16Z, scoped lifecycle start for retained computer computer-03335285269bdba4f94377e56879f9e6 returned 502 after 60 seconds; public wake recovery reported ready after 62 seconds while /api/compute/status still reported failed epoch 116; scoped stop also returned 502. Signed /api/acceptance/execution-identity correctly returned 503 with no active guest."
-  blocker_or_risk: "The accepted retained-mailbox migration is present on main but not in Node B's sandbox runtime: its first deployment failed and the later successful differential deploy classified only the newest proxy/workflow delta. This is a deployment-selection gap, not evidence that the reviewed migration is wrong. The existing workflow_dispatch force-all route is the narrowest repair."
-  latest_blocker_or_risk: "Mutation class red. Protected surfaces: deployment activation identity, persistent-computer recovery, retained delivery, and run acceptance. CI 30009380170 and public proxy health passed; public guest identity and lifecycle acceptance remain blocked by the retained computer's failed epoch 116. Rollback remains accepted deployment 676f0772 epoch 114. Heresy delta: discovered an uninstalled accepted migration after a failed differential deployment and a recovery response that reports ready despite retained failed state; introduced no known runtime heresy."
-  next_action: "Commit this problem receipt before repair, dispatch one forced full main deployment, monitor Node B, recover the same retained computer and verify signed identity/delivery, then run lifecycle, restart, cancellation, and client conformance acceptance."
+    - "Forced-full GitHub Actions run 3001019521 passed all selected gates, updated the sandbox package pointer from the current NixOS closure, and attempted active-computer refresh; refresh timed out and the retained computer remained failed at epoch 116. This disproved the uninstalled-migration hypothesis."
+    - "/tmp/agentic-consensus-20260723-100608/manifest.tsv: Codex and OMP GPT-5.5 independently ACCEPTed the final recovery-truth candidate sha256:b1848241e0c2c38429ab9619e9fb01e3db9b12dfb0dd6cb9b581c1e946a25f57 after stale pre-refresh health was cleared."
+    - "GitHub Actions 30014414949 passed and deployed proxy 696b118a. A fresh owner-scoped wake returned 202, then /api/compute/status recorded recovery status failed, code recovery_timeout, message Current computer recovery timed out, with current computer failed at epoch 116 and runtime null. Temporary key ak_48823802-38a8-493f-acc7-486f25e25874 was revoked."
+  blocker_or_risk: "Substrate blocker in persistent-computer recovery observability, not a proved durable-work reducer defect. Dependency graph: owner-scoped recovery API -> proxy recovery tracker -> vmctl RefreshDesktopContext -> ownership registry RecoverVMForDesktop -> vmmanager RefreshVMWithConfig -> Firecracker fresh boot -> guest health -> sandbox startup/migration. VMInstance retains no last boot error or console excerpt; Firecracker stdout/stderr are routed only to the vmctl service journal. The owner-visible path therefore knows only timeout and cannot select a source repair."
+  latest_blocker_or_risk: "Mutation class red. Protected surfaces: persistent-computer recovery, retained delivery, signed execution identity, deployment activation, and run acceptance. Heresy delta: discovered and repaired false-ready recovery, stale-health reuse, waiter operation replacement, and raw diagnostic leakage; discovered but did not repair absent no-SSH boot-stage evidence. Rollback remains accepted deployment 676f0772 epoch 114. Three recovery iterations—failed differential activation, forced-full activation, and truthfully diagnosed wake—did not converge."
+  next_action: "Owner must choose the next authorized structural probe. Recommended: add a bounded owner-scoped no-SSH boot diagnostic sourced from vmmanager's exact failed stage plus a redacted fixed-size Firecracker/guest console tail, prove it on a disposable guest, then retry this same retained computer. Alternative: authorize a one-time Node B service-log inspection as evidence, without treating SSH/journal access as product acceptance. Do not patch migration, replace the computer, or attempt a fourth blind refresh."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
@@ -444,6 +447,23 @@ receipts:
     problem_ref: "internal/store race package exhausted its 600-second hosted timeout while one test remained active."
     authorization_ref: "Owner-ratified bounded generic lifecycle plus hosted CI evidence"
     candidate_or_evidence_refs: [artifact://1558, artifact://1561]
+  - id: retained-computer-recovery-blocked-2026-07-23
+    boundary: land
+    commit_or_artifact: refs/remotes/origin/main@696b118ac874545219ba6d13c440e3d9f3d47bb6
+    proof_refs: ["GitHub Actions forced-full run 3001019521 passed and refresh timed out", "GitHub Actions recovery-diagnostic run 30014414949 passed", "public compute status at 2026-07-23T14:20:03Z: current failed epoch 116, runtime null, recovery failed code recovery_timeout", "independent final review /tmp/agentic-consensus-20260723-100608/manifest.tsv", "accepted recovery candidate sha256 b1848241e0c2c38429ab9619e9fb01e3db9b12dfb0dd6cb9b581c1e946a25f57", "temporary acceptance key ak_48823802-38a8-493f-acc7-486f25e25874 revoked"]
+    rollback_ref: "accepted deployment 676f0772a06f9121ace3d014b853b8f8de844a04 epoch 114"
+    disposition: "Blocked incomplete after the third recovery iteration. False-ready behavior is repaired and deployed; the retained computer remains failed. No further blind refresh or symptom repair is authorized by Dead-End Escalation."
+    problem_ref: "Owner-visible recovery lacks bounded boot-stage and console evidence; exact failure remains unlocalizable without forbidden SSH/journal inspection."
+    authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md Dead-End Escalation; standing no-SSH operability question"
+    candidate_or_evidence_refs: [/tmp/choir-recovery-diagnosed.json, /tmp/agentic-consensus-20260723-100608/manifest.tsv, artifact://1711]
+    landing:
+      source_commit: 696b118ac874545219ba6d13c440e3d9f3d47bb6
+      ci_ref: "GitHub Actions 30014414949: success"
+      deploy_ref: "Node B proxy deployed by run 30014414949; sandbox migration installed by forced-full run 3001019521"
+      environment_identity: "Host proxy 696b118a; guest identity unavailable because retained computer has no healthy runtime"
+      deployed_acceptance: "Recovery truthfulness passed; lifecycle/restart/delivery/cancellation/client acceptance blocked"
+    registry_conformance_ref: "Definition remains sole active mission and is explicitly blocked_incomplete; registries require no successor change."
+
 
 view:
   path: http://127.0.0.1:8788/
