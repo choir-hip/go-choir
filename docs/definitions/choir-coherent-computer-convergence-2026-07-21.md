@@ -271,28 +271,27 @@ execution:
 now:
   status: problem_documented
   slice: D-land-deploy-and-prove
-  question: "Which native terminal transition must invoke the existing SettleLifecycleTrajectory reducer so a product-created lifecycle becomes settled rather than remaining live after all work and updates terminalize?"
+  question: "How can Node B restart vmctl during a runtime deployment without trying to recreate a retained guest on a TAP device still held by the surviving Firecracker process?"
   reconciliation:
-    observed_at: 2026-07-23T16:07:00Z
-    source_ref: refs/remotes/origin/main@32302b652ea7522e1d3cd0b21fde8b82f0449b40
-    deploy_identity: "Signed no-SSH identity joined proxy, sandbox guest, vmctl, deployment receipt, route, and platform attestation on 32302b652ea7522e1d3cd0b21fde8b82f0449b40. Retained computer computer-03335285269bdba4f94377e56879f9e6 restarted through epochs 125-127."
+    observed_at: 2026-07-23T19:00:00Z
+    source_ref: refs/remotes/origin/main@d845c56a
+    deploy_identity: "Settlement repair d845c56a passed every selected CI source/build gate in GitHub Actions 30034969790, but Node B deployment failed before activation receipt. The last accepted joined deployment remains 32302b652ea7522e1d3cd0b21fde8b82f0449b40."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
-    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir is clean at origin/main@32302b65; protected unrelated worktrees remain untouched."
+    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir contains only this code-free problem receipt after pushed source commit d845c56a; protected unrelated worktrees remain untouched."
     status: reconciled
   accepted_deployment:
     source_commit: 32302b652ea7522e1d3cd0b21fde8b82f0449b40
     ci_ref: "GitHub Actions 30020798551 passed every selected source/build gate and Node B deployment."
-    environment_identity: "choir.execution_identity.v1 joined=true; host commit, host deployed_commit, guest commit, guest deployed_commit, and deployment target all equal 32302b652ea7522e1d3cd0b21fde8b82f0449b40; vmctl active epoch 127; route digest sha256:c2c219a1c9a7b311fad8567b128a12b1456a2178de62088a5ec0dea11edcfe6a."
-    rollback_ref: "origin/main@9dcbb949 for the mailbox convergence repair; accepted deployment 676f0772 epoch 114 remains the pre-kernel fallback."
+    environment_identity: "choir.execution_identity.v1 joined=true on 32302b652ea7522e1d3cd0b21fde8b82f0449b40 at retained-computer epoch 127 before the failed d845c56a deployment attempt."
+    rollback_ref: "Node B deploy-receipt-previous.json identifies 696b118a; accepted deployment 32302b65 is the pre-attempt product baseline; origin/main@5cd42558 is the settlement-repair source rollback."
   observed_product_evidence:
-    - "Retained trajectory ba70399f-fe93-55cd-80d0-888aa75fb26b reconstructed head 1c9bcfff-a108-537e-929a-82ae7b1f65fe, open obligations, incorporated evidence, and pending updates after restart; a later owner cancellation produced reducer sequence 13, cancelled all three work items and three pending updates, cancelled activation 0171394f-2ad3-4c8a-9911-d62f10cce557, replayed idempotently, and remained cancelled after epoch-127 restart."
-    - "Pre-revision trajectory 311c9ff7-4e4c-5b4e-aa9d-0ae0218619f1 cancelled at lifecycle version 2 with only trajectory_started and trajectory_cancelled events. Waiting trajectory f692f98e-b924-54ab-b50a-838bf18d071f cancelled with two open work items and one pending update. Headless CLI snapshots and the authenticated desktop both observed the retained artifact/client state; the desktop reported Online."
-    - "Trivial trajectory a2064e77-8a23-5b8e-844b-31ff21cb17ee created revision 9111a218-82a4-5b55-af45-0cf3e61043ea, incorporated its typed update, and completed its sole work item."
-  observed_problem: "The trivial trajectory remains status live at lifecycle version 3 and reducer sequence 4 after its activation completed, its only work item became completed, its only update became incorporated, and the artifact subject ref was present. The final event is work_settled; no trajectory_settled event follows. Repository-wide caller inspection finds SettleLifecycleTrajectory only in the store implementation and tests, with no production caller or public command. The reducer exists but the product cannot reach it."
-  policy_resolution_ref: "Problem-documentation-first requires this code-free receipt before connecting settlement. The repair must use the existing canonical reducer and preserve explicit cancellation, owner/computer scope, CAS preconditions, restart replay, and effects OFF."
-  blocker_or_risk: "Mission completion is blocked: deployed_durable_work_lifecycle and deployed_delivery_and_settlement are not satisfied while terminal work can strand a live trajectory. This is a substrate authority-wiring defect, not a client-display issue."
-  latest_blocker_or_risk: "Mutation class red. Protected surfaces: trajectory/work/update authority, reducer sequencing, restart projection, public lifecycle observation, and run acceptance. Conjecture delta: a complete reducer without a product caller is not executable authority. Heresy delta: discovered unreachable canonical settlement; introduced none; repaired none in this receipt."
-  next_action: "Map the native terminal projection path, connect exactly one production caller to SettleLifecycleTrajectory with reducer-derived CAS inputs and deterministic command identity, prove stale/race/restart behavior, obtain independent frozen review, then land and repeat deployed trivial/heavy/restart/cancellation/client acceptance."
+    - "The settlement candidate d845c56a makes an admitted pending/running activation's first terminal projection durably mark a reducer-attempt trigger in the same run/agent CAS; immediate and boot callers invoke only canonical SettleLifecycleTrajectory readiness authority. Focused race/restart loops, full store/agentcore/textureowner tests, vet, runtime shards, and unanimous frozen review accepted SHA-256 30af0971ebedaccd6a694322ab9dc89fe388e9cdf415b6b048c7f9cb31ab01cb."
+    - "GitHub Actions 30034969790 passed Plan CI, docs truth, heresy detector, every race shard, Go vet/build, differential SBOM acceptance, and rolling-flake publication."
+  observed_problem: "Deploy job 89303540955 restarted vmctl for the runtime-impacting change. Shutdown timed out while the retained candidate-fleet Firecracker process survived for reattach. New vmctl then killed the orphaned process and immediately attempted to recreate the same VM, but Firecracker refused TAP vm-rvnt3drdofhm with EBUSY. vmctl never became healthy; proxy degraded; :8083 health timed out; the deploy recorded /var/lib/go-choir/deploy-failures/30034969790-1.json and did not publish an activation receipt."
+  policy_resolution_ref: "Problem-documentation-first requires this code-free receipt before any deployment/restart repair. The failure is on the protected vmctl/retained-computer surface; do not claim settlement acceptance or infer deployment from the Node B checkout."
+  blocker_or_risk: "Mission completion remains blocked. The source repair passed CI but is not accepted on staging, and the retained computer may now be failed or unavailable. This is a VM lifecycle substrate failure exposed by the required runtime deployment, not evidence against the settlement reducer."
+  latest_blocker_or_risk: "Mutation class red. Protected surfaces: vmctl shutdown/reattach, retained-computer realization, TAP ownership, deployment activation receipt, and staging health. Conjecture delta: process survival for reattach is unsafe unless vmctl can prove and adopt the surviving process/TAP atomically; killing then immediately recreating can leave kernel network ownership busy. Heresy delta: discovered restart ownership gap; introduced none in this receipt; repaired none."
+  next_action: "Use no-SSH deployment/recovery evidence to inspect the retained computer and failed realization, determine whether the existing recovery workflow can safely clear or adopt stale process/TAP ownership, then rerun deployment only through an artifact-verifying route. Do not patch vmctl until the failure is localized and an existing replacement/recovery path is checked."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
@@ -417,6 +416,25 @@ receipts:
       environment_identity: "Joined host/guest/vmctl/deployment commit 32302b65, retained computer epoch 127, route digest sha256:c2c219a1c9a7b311fad8567b128a12b1456a2178de62088a5ec0dea11edcfe6a"
       deployed_acceptance: "Identity, restart reconstruction, delivery, cancellation, adaptive depth, and UI/headless observation passed; settlement failed."
     registry_conformance_ref: "Definition remains sole active mission at problem_documented; no successor is promoted."
+
+  - id: durable-settlement-trigger-candidate-2026-07-23
+    boundary: build
+    commit_or_artifact: refs/remotes/origin/main@d845c56a
+    proof_refs: ["frozen diff sha256 30af0971ebedaccd6a694322ab9dc89fe388e9cdf415b6b048c7f9cb31ab01cb", "final panel /tmp/agentic-consensus-20260723-143523/manifest.tsv: Codex ACCEPT 0.94, Cursor ACCEPT 0.88, OMP GPT-5.5 ACCEPT high", "focused settlement race tests count=10", "runtime boot/product tests count=10", "full store+agentcore+textureowner tests and vet", "scripts/go-test-runtime-shards passed", "GitHub Actions 30034969790 source/build gates passed"]
+    rollback_ref: refs/remotes/origin/main@5cd42558bd60161c529277f34cd2fe2b6c52a8cf
+    disposition: "Source candidate accepted and pushed. Run terminality remains only a durable attempt trigger; SettleLifecycleTrajectory retains sole semantic authority. Staging acceptance is blocked by vmctl restart failure."
+    problem_ref: refs/remotes/origin/main@5cd42558
+    authorization_ref: "Owner-ratified durable-work Definition; code-free deployed settlement problem receipt; unanimous frozen red-surface review"
+    candidate_or_evidence_refs: [/tmp/agentic-consensus-20260723-143523/manifest.tsv, artifact://1907, artifact://1909]
+  - id: staging-vmctl-tap-restart-failure-2026-07-23
+    boundary: land
+    commit_or_artifact: pending_code_free_receipt
+    proof_refs: ["GitHub Actions run 30034969790 job 89303540955", "incomplete deployment receipt /var/lib/go-choir/deploy-failures/30034969790-1.json", "deploy diagnostics: vmctl shutdown context deadline exceeded; surviving candidate-fleet Firecracker killed; replacement failed opening vm-rvnt3drdofhm with EBUSY; vmctl health timed out"]
+    rollback_ref: "accepted deployment 32302b652ea7522e1d3cd0b21fde8b82f0449b40 epoch 127; source rollback origin/main@5cd42558"
+    disposition: "Problem documented before recovery or repair. Source/build gates passed, but d845c56a has no staging activation receipt and no deployed acceptance claim."
+    problem_ref: "vmctl restart cannot safely transition retained Firecracker/TAP ownership when shutdown times out and the old process survives for reattach."
+    authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; deploy failure evidence"
+    candidate_or_evidence_refs: [artifact://1919, artifact://1920]
 
 view:
   path: http://127.0.0.1:8788/
