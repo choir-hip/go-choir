@@ -271,27 +271,27 @@ execution:
 now:
   status: blocked_incomplete
   slice: D-land-deploy-and-prove
-  question: "Will the independently accepted exact-one run-witness migration restore both retained Node B guests without cross-binding mailbox state?"
+  question: "Can a differential host-service deployment publish a truthful mixed-generation activation receipt without requiring unchanged services to embed the target commit?"
   reconciliation:
-    observed_at: 2026-07-23T12:18:00Z
-    source_ref: refs/remotes/origin/main@9e423a012fb48b4bd0a6beb2c954beb26b631828
-    deploy_identity: "Forced GitHub Actions run 30001463915 passed source/build gates and attempted Node B deployment of abf49d22. Active-computer refresh timed out because two guests repeatedly refused actor-runtime startup: retained UUID mailboxes had no matching scoped AgentRecord on the current computer. The prior signed accepted deployment remains 676f0772 epoch 114; incomplete receipt /var/lib/go-choir/deploy-failures/30001463915-1.json was recorded."
+    observed_at: 2026-07-23T12:32:52Z
+    source_ref: refs/remotes/origin/main@fd7e871dcb77aceb3c0ccbc2e64626f7cfbd328e
+    deploy_identity: "GitHub Actions run 30006496316 passed all source/build gates, built and activated gateway plus sandbox from fd7e871d, and found no active computers needing refresh. Final receipt publication then rejected unchanged auth at abf49d22 because it required every host service package to embed fd7e871d. The prior signed accepted deployment remains 676f0772 epoch 114; incomplete receipt /var/lib/go-choir/deploy-failures/30006496316-1.json was recorded."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 contains one accepted retained-mailbox scope-witness candidate after origin/main@9e423a01; protected unrelated worktrees remain untouched."
+    worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 is clean at origin/main@fd7e871d; protected unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: convergence-durable-work-runtime-28
-    state: independent_review_accepted_ready_to_land
-    ref: worktree-diff@sha256:244833ffd03fcabe542dde08418a71be433d6e50dc52925a8bc59f0a7213f39a
+    id: differential-deploy-receipt-repair-01
+    state: problem_documented
+    ref: none
     owner: owner-and-current-session
-    base: 9e423a01
-    accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
-    prior_runtime_candidate: refs/remotes/origin/main@129a3d989d6c1e32cc95530e96f31dee0984d94d
-    scope: "Phase D retained-mailbox migration repair only; effects OFF."
-    observed_problem: "The migration assumed every legacy actor mailbox had one scoped AgentRecord on the current computer. Node B retained UUID mailboxes without those rows, so runtime startup failed closed and deployment refresh timed out."
-    repair_evidence: "ResolveLegacyAgentScope now accepts a missing AgentRecord only when every non-tombstoned durable RunRecord witness for that agent and computer names one owner. Any agent/run or run/run owner conflict refuses before the existing atomic SQLite rebind. Focused store and adapter races passed count=10; complete actorruntime race suite and all runtime shards passed; three-member repair review and two-member final-hash confirmation accepted."
-    remaining_error: "Commit and push the accepted source, pass hosted CI, deploy to Node B, verify signed host/guest identity and retained delivery, then finish public lifecycle/cancellation/client acceptance."
+    base: fd7e871d
+    accepted_contract: "A deployment receipt must distinguish the tested coordinator target commit from each activated immutable service package's own embedded commit."
+    prior_runtime_candidate: refs/remotes/origin/main@fd7e871dcb77aceb3c0ccbc2e64626f7cfbd328e
+    scope: "Phase D deployment-receipt publication only; no runtime lifecycle semantics and effects remain OFF."
+    observed_problem: "The differential deploy correctly updated only gateway and sandbox, but activation receipt publication called verify_artifact_manifest for all seven host services. That helper requires DEPLOY_COMMIT, so the unchanged auth package at abf49d22 made a valid mixed-generation deployment impossible to record."
+    repair_evidence: "Not yet implemented. The repair must verify every service package manifest and immutable digest, require selected services to match DEPLOY_COMMIT and active receipt artifacts, and preserve each unchanged service's actual embedded commit."
+    remaining_error: "Land this code-free problem receipt first, repair and independently review the receipt publisher, pass hosted CI, deploy to Node B, verify signed host/guest identity and retained delivery, then finish public lifecycle/cancellation/client acceptance."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -345,9 +345,10 @@ now:
     - "/tmp/agentic-consensus-20260723-080441/manifest.tsv sha256:1a0313ad046d33dcba02431671c80986b4ce6e8459c0a40abf0dbd0e89891f7a: Codex, Cursor, and OMP GPT-5.5 ACCEPTed repaired behavior digest 7e9070b81e7329d90288325bc8c7fe8284d5bc323c7311d05814216fd2b7a3bf."
     - "/tmp/agentic-consensus-20260723-081514/manifest.tsv sha256:f910253bd07a81c67397f7d9897daba407508ddaad9801705a176f93a631e7c5: Codex and OMP GPT-5.5 ACCEPTed final digest 244833ffd03fcabe542dde08418a71be433d6e50dc52925a8bc59f0a7213f39a; only witness-comment corrections followed the three-member behavior review."
     - "Focused ResolveLegacyAgentScope and adapter migration/refusal race suites passed count=10; complete internal/actorruntime race package and scripts/go-test-runtime-shards passed. A broad internal/store race invocation reached the package's 10-minute default timeout without a failed assertion; focused changed-path store races passed."
-  blocker_or_risk: "Hosted deployment is the remaining discriminator: retained production UUID mailboxes must have one current-computer RunRecord owner witness. Missing or contradictory evidence still fails closed."
-  latest_blocker_or_risk: "Protected surfaces remain actor SQLite update/snapshot identity, scoped owner/computer authority, restart replay, deployment activation, and retained delivery. Rollback remains accepted deployment 676f0772 epoch 114. Heresy delta: discovered incomplete historical AgentRecord coverage; repaired exact-one recovery from independent durable run witnesses; introduced no known runtime heresy."
-  next_action: "Commit and push the independently accepted candidate, monitor CI and Node B deployment, verify exact host/guest identity and retained mailbox delivery, then run lifecycle, restart, cancellation, and client conformance acceptance."
+    - "GitHub Actions 30006496316 passed every selected source/build gate and activated gateway plus sandbox from fd7e871d. Receipt publication failed because unchanged auth still embedded abf49d22 while the publisher required all host services to embed fd7e871d; incomplete receipt /var/lib/go-choir/deploy-failures/30006496316-1.json was recorded."
+  blocker_or_risk: "Deployment receipt publication conflates the coordinator target commit with every service's embedded source commit, so differential service deployment cannot publish truthful identity."
+  latest_blocker_or_risk: "Mutation class red. Protected surface: deployment activation identity and run acceptance. Admissible evidence: workflow contract tests, independent frozen review, hosted deployment receipt, public signed identity, and deployed lifecycle proof. Rollback remains accepted deployment 676f0772 epoch 114. Heresy delta: discovered receipt target/service identity conflation; introduced no repair yet; prior exact-one mailbox recovery remains accepted but undeployed."
+  next_action: "Commit this code-free failure receipt alone. Then repair receipt publication to preserve actual per-service immutable identities while requiring only selected services to match the target commit; review, land, and repeat the full deployment and acceptance loop."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
