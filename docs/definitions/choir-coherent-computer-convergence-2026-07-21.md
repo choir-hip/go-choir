@@ -271,19 +271,19 @@ execution:
 now:
   status: blocked_incomplete
   slice: D-land-deploy-and-prove
-  question: "Can a differential host-service deployment publish a truthful mixed-generation activation receipt without requiring unchanged services to embed the target commit?"
+  question: "Will a forced full deployment install the already accepted retained-mailbox migration that the successful proxy-only differential deployment skipped after its earlier sandbox deployment failed?"
   reconciliation:
-    observed_at: 2026-07-23T12:32:52Z
-    source_ref: refs/remotes/origin/main@fd7e871dcb77aceb3c0ccbc2e64626f7cfbd328e
-    deploy_identity: "GitHub Actions run 30006496316 passed all source/build gates, built and activated gateway plus sandbox from fd7e871d, and found no active computers needing refresh. Final receipt publication then rejected unchanged auth at abf49d22 because it required every host service package to embed fd7e871d. The prior signed accepted deployment remains 676f0772 epoch 114; incomplete receipt /var/lib/go-choir/deploy-failures/30006496316-1.json was recorded."
+    observed_at: 2026-07-23T13:20:16Z
+    source_ref: refs/remotes/origin/main@00aeedb72d1ed5b59b46d89872fd2967f7ce81ff
+    deploy_identity: "GitHub Actions run 30009380170 passed every selected gate and deployed proxy from 00aeedb7. Public /health reports proxy commit/deployed_commit 00aeedb7. The signed identity endpoint fails closed because no guest is active. The retained primary computer computer-03335285269bdba4f94377e56879f9e6 remains failed at epoch 116: scoped lifecycle start returned 502 after 60 seconds; public wake recovery ran for 62 seconds and reported ready while /api/compute/status still reported the computer failed; scoped stop then returned 502. The deploy skipped sandbox and active-computer refresh because the accepted mailbox migration landed in earlier commit fd7e871d whose deployment failed, while this push's differential classified only the proxy/workflow repair."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 is clean at origin/main@fd7e871d; protected unrelated worktrees remain untouched."
     status: reconciled
   candidate:
     id: differential-deploy-receipt-repair-01
-    state: independent_review_accepted_ready_to_land
-    ref: worktree-diff@sha256:8b0060ad15b69fa86bcf95c2238e3abe90dc04e1a869dc424f273d509e4793e5
+    state: deployed_proxy_identity_repair_sandbox_migration_not_installed
+    ref: refs/remotes/origin/main@00aeedb72d1ed5b59b46d89872fd2967f7ce81ff
     owner: owner-and-current-session
     base: 45d1ef33
     accepted_contract: "A deployment receipt distinguishes the tested coordinator target commit from each active immutable service package's own embedded commit. Selected services must match target and live health; every published immutable package must digest-match the active copied runtime. Public and CLI identity join component-local package/runtime pairs instead of requiring unrelated components to share one source commit."
@@ -291,7 +291,7 @@ now:
     scope: "Phase D deployment-receipt publication and exact-identity verification only; no durable-work reducer semantics and effects remain OFF."
     observed_problem: "The differential deploy correctly updated only gateway and sandbox, but activation receipt publication required all seven host services to equal DEPLOY_COMMIT. The public proxy and CLI identity verifiers repeated the same conflation. The first repair review also found stale /tmp Nix results could be published without proving they matched the active /var/lib service bytes."
     repair_evidence: "The publisher now hashes each active copied service tree and accepts a candidate/fallback immutable Nix package only on equal manifest commit and NAR digest; selected services additionally require target-matching active receipts. It records each active service's actual embedded commit. Proxy and CLI verification require host runtime=recorded proxy package, guest build=guest deployment, independent valid route identity, and target equality only for a selected proxy. The platform attestation binds the coordinator target separately from component commits. Focused workflow and mixed-generation proxy/CLI tests pass."
-    remaining_error: "Land the accepted candidate, pass hosted CI, deploy to Node B, verify signed host/guest identity and retained delivery, then finish public lifecycle/cancellation/client acceptance."
+    remaining_error: "Force a full main deployment so the already accepted sandbox mailbox migration is installed, recover the retained computer without replacing its durable disk, verify signed host/guest identity and retained delivery, then finish public lifecycle/cancellation/client acceptance."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -349,9 +349,11 @@ now:
     - "/tmp/agentic-consensus-20260723-083618/manifest.tsv: Codex, Cursor, and OMP GPT-5.5 unanimously REPAIRed frozen diff 1015e13f66fd575bf6495c2ea89c3fb89e3a764218d925254f4a8de036b4b09c. All traced target-commit conflation into public/CLI identity; Codex and Cursor also found the publisher could prefer an unmatched stale Nix result."
     - "/tmp/agentic-consensus-20260723-084742/manifest.tsv: Codex, Cursor, and OMP GPT-5.5 unanimously REPAIRed frozen diff d827e10c4cf6092ebdc79d0ac2e91d458da78512a83266d55e388abed9d6ffcb. Codex/Cursor found selected proxy could be stale despite target metadata; Codex/OMP found platform attestation and CLI disagreed on mixed-generation deployed_commit; Codex found the Definition's common-commit clause contradicted the repair."
     - "/tmp/agentic-consensus-20260723-085603/manifest.tsv sha256:b04feb4ba058eae636aa70c302d55518d589539be2301de3667a9d6a86c5e9b1: Codex and OMP GPT-5.5 independently ACCEPTed exact repaired diff 8b0060ad15b69fa86bcf95c2238e3abe90dc04e1a869dc424f273d509e4793e5 with no blocking findings."
-  blocker_or_risk: "Hosted deployment remains the discriminator. Node B may lack a retained immutable Nix package whose digest matches an active service copied by an earlier incomplete deployment; that must fail closed and be repaired by rebuilding the affected service, not by inventing identity."
-  latest_blocker_or_risk: "Mutation class red. Protected surfaces: deployment activation identity and run acceptance. Local workflow checks, full proxy/CLI packages, go vet, doccheck, and exact-hash independent review passed. Rollback remains accepted deployment 676f0772 epoch 114. Heresy delta: discovered and repaired target/service identity conflation, stale-candidate false binding, selected-proxy false acceptance, and server/CLI attestation disagreement; introduced no known runtime heresy."
-  next_action: "Commit and push the accepted candidate, monitor CI and Node B deployment, verify exact mixed-generation host/guest identity and retained mailbox delivery, then run lifecycle, restart, cancellation, and client conformance acceptance."
+    - "GitHub Actions 30009380170 passed all selected gates and deployed proxy 00aeedb7 to Node B. Public /health reports proxy commit/deployed_commit 00aeedb7, but the successful differential run explicitly skipped sandbox and active-computer refresh."
+    - "At 2026-07-23T13:20:16Z, scoped lifecycle start for retained computer computer-03335285269bdba4f94377e56879f9e6 returned 502 after 60 seconds; public wake recovery reported ready after 62 seconds while /api/compute/status still reported failed epoch 116; scoped stop also returned 502. Signed /api/acceptance/execution-identity correctly returned 503 with no active guest."
+  blocker_or_risk: "The accepted retained-mailbox migration is present on main but not in Node B's sandbox runtime: its first deployment failed and the later successful differential deploy classified only the newest proxy/workflow delta. This is a deployment-selection gap, not evidence that the reviewed migration is wrong. The existing workflow_dispatch force-all route is the narrowest repair."
+  latest_blocker_or_risk: "Mutation class red. Protected surfaces: deployment activation identity, persistent-computer recovery, retained delivery, and run acceptance. CI 30009380170 and public proxy health passed; public guest identity and lifecycle acceptance remain blocked by the retained computer's failed epoch 116. Rollback remains accepted deployment 676f0772 epoch 114. Heresy delta: discovered an uninstalled accepted migration after a failed differential deployment and a recovery response that reports ready despite retained failed state; introduced no known runtime heresy."
+  next_action: "Commit this problem receipt before repair, dispatch one forced full main deployment, monitor Node B, recover the same retained computer and verify signed identity/delivery, then run lifecycle, restart, cancellation, and client conformance acceptance."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
