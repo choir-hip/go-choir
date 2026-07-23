@@ -269,29 +269,29 @@ execution:
     exit: "This Definition is complete, main is clean, staging is identified and healthy, and exactly one successor may become executable."
 
 now:
-  status: blocked_incomplete
+  status: problem_documented
   slice: D-land-deploy-and-prove
-  question: "What product-path evidence can distinguish Firecracker launch, guest boot, networking, sandbox startup, and retained-mailbox migration failure without SSH or journal access?"
+  question: "Restore the audited production constructor deleted by the later self-development cutover, or prove a complete replacement exists and wire every creation/recovery caller to it."
   reconciliation:
-    observed_at: 2026-07-23T14:20:03Z
-    source_ref: refs/remotes/origin/main@696b118ac874545219ba6d13c440e3d9f3d47bb6
-    deploy_identity: "Forced-full GitHub Actions run 3001019521 passed every selected gate and installed the accepted sandbox migration from c3683a98, but its active-computer refresh timed out. Recovery-diagnostic run 30014414949 passed and deployed proxy 696b118a. Public /api/compute/status still reports retained primary computer-03335285269bdba4f94377e56879f9e6 failed at epoch 116 with no runtime; signed execution identity therefore fails closed. A post-deploy wake operation ended recovery_timeout at 2026-07-23T14:20:03Z instead of falsely reporting ready."
-    authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
-    policy_resolution_ref: "Dead-End Escalation and no-SSH operability standing question: three retained-computer recovery iterations did not converge, so another symptom patch is unauthorized without a structural assessment and owner direction."
-    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir is clean after origin/main@696b118a; protected unrelated worktrees remain untouched."
+    observed_at: 2026-07-23T14:34:00Z
+    source_ref: refs/remotes/origin/main@1c589fd9d680499b276746e241478a6988316116
+    deploy_identity: "Node B proxy runs 696b118a; retained primary computer-03335285269bdba4f94377e56879f9e6 remains failed at epoch 116 with no runtime. Forced-full run 3001019521 installed current sandbox bytes but could not refresh the computer. Docs-only run 30015674959 passed."
+    authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md]
+    policy_resolution_ref: "Owner authorized both one-time Node B log inspection and durable no-SSH diagnostics. Deletion-first and existing-fix rules require assessing restoration of the accepted constructor before patching retained-image refresh."
+    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir was clean at origin/main@1c589fd9 before this code-free receipt; protected unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: retained-computer-recovery-blocker-01
-    state: blocked_incomplete
-    ref: refs/remotes/origin/main@696b118ac874545219ba6d13c440e3d9f3d47bb6
+    id: construction-cutover-regression-01
+    state: problem_documented
+    ref: none
     owner: owner-and-current-session
-    base: 676f0772
-    accepted_contract: "Recovery may report ready only from a refreshed active realization with freshly observed reachable guest health. Failure diagnostics exposed to owners are bounded and do not leak raw vmctl internals. The persistent computer and disk remain the recovery object."
-    prior_runtime_candidate: refs/remotes/origin/main@c3683a98e52c9b22b5005c4caf8dc3bf3aff0a33
-    scope: "Phase D recovery truthfulness and diagnosis only; durable-work reducer semantics remain accepted, effects remain OFF, and no replacement computer or disk is authorized."
-    observed_problem: "After the accepted migration was installed by a forced full deploy, vmctl could not make the retained computer healthy. The public path previously swallowed refresh failure, reused stale health, and reported ready; 696b118a repairs those false-success paths, isolates concurrent recovery waiters, and returns a bounded recovery_timeout. It still cannot expose the underlying boot-stage failure."
-    repair_evidence: "Focused recovery tests passed count=10 and complete internal/proxy tests passed. Independent exact-hash review at /tmp/agentic-consensus-20260723-100608/manifest.tsv ACCEPTed sha256:b1848241e0c2c38429ab9619e9fb01e3db9b12dfb0dd6cb9b581c1e946a25f57. GitHub Actions 30014414949 passed; deployed wake now fails closed with recovery_timeout."
-    remaining_error: "Lifecycle, restart, retained delivery, cancellation, browser/CLI conformance, and exact guest identity acceptance cannot run while the retained computer has no healthy realization. The product has no no-SSH evidence that localizes the failure among Firecracker launch, guest boot, host networking, sandbox startup, or retained-state migration."
+    base: refs/remotes/origin/main@1c589fd9d680499b276746e241478a6988316116
+    accepted_contract: "ComputerVersion is the durable computer. Creation and recovery call one production materializer that resolves immutable CodeRef and ArtifactProgramRef, instantiates a fresh disposable disk/realization, verifies observations, and routes only accepted output. A prior data.img is never a construction input or required recovery authority."
+    prior_runtime_candidate: refs/remotes/origin/main@ab89a200
+    scope: "Restore or connect the smallest complete audited construction path, add bounded owner-visible boot-stage evidence, and recover the same persistent computer; effects remain OFF and no replacement semantic authority is authorized."
+    observed_problem: "The audited-construction Definition closed complete on 2026-07-17. Commit 7d635330 on 2026-07-19 then deleted production_materializer.go, realization_verifier.go, vmmanager_boundary.go, vmctl construction launcher/handler, promotion execution, and sandbox construction observations while introducing the disabled self-development cutover. Current diskinstantiation has no production caller. Current RecoverVMForDesktop and RefreshVMForDesktop preserve the same VMID and data.img and invoke vmmanager RecoverVM/RefreshVM; vmmanager recreates only when its in-memory instance is absent and reuses StateDir/<vmID>/data.img. The completed constructor was not merely incomplete; it was later removed without a conforming replacement, reintroducing the heresy its terminal receipt claimed closed."
+    repair_evidence: "Code-free structural trace: git show --stat 0dc3fea3 and ab89a200 identify the accepted constructor; git show --stat 7d635330 identifies its deletion; current source has no internal/diskinstantiation import and no production materializer symbol. Runtime failure is consistent with this regression but exact boot failure still requires the authorized log probe."
+    remaining_error: "Current production cannot honestly claim zero-realization reconstruction, corrupted-disk recovery, fleet constructor cutover, or no-SSH construction inspection. The retained computer may be failing because refresh still depends on its opaque mutable disk; exact diagnosis is pending bounded Node B logs."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -354,9 +354,11 @@ now:
     - "Forced-full GitHub Actions run 3001019521 passed all selected gates, updated the sandbox package pointer from the current NixOS closure, and attempted active-computer refresh; refresh timed out and the retained computer remained failed at epoch 116. This disproved the uninstalled-migration hypothesis."
     - "/tmp/agentic-consensus-20260723-100608/manifest.tsv: Codex and OMP GPT-5.5 independently ACCEPTed the final recovery-truth candidate sha256:b1848241e0c2c38429ab9619e9fb01e3db9b12dfb0dd6cb9b581c1e946a25f57 after stale pre-refresh health was cleared."
     - "GitHub Actions 30014414949 passed and deployed proxy 696b118a. A fresh owner-scoped wake returned 202, then /api/compute/status recorded recovery status failed, code recovery_timeout, message Current computer recovery timed out, with current computer failed at epoch 116 and runtime null. Temporary key ak_48823802-38a8-493f-acc7-486f25e25874 was revoked."
-  blocker_or_risk: "Substrate blocker in persistent-computer recovery observability, not a proved durable-work reducer defect. Dependency graph: owner-scoped recovery API -> proxy recovery tracker -> vmctl RefreshDesktopContext -> ownership registry RecoverVMForDesktop -> vmmanager RefreshVMWithConfig -> Firecracker fresh boot -> guest health -> sandbox startup/migration. VMInstance retains no last boot error or console excerpt; Firecracker stdout/stderr are routed only to the vmctl service journal. The owner-visible path therefore knows only timeout and cannot select a source repair."
-  latest_blocker_or_risk: "Mutation class red. Protected surfaces: persistent-computer recovery, retained delivery, signed execution identity, deployment activation, and run acceptance. Heresy delta: discovered and repaired false-ready recovery, stale-health reuse, waiter operation replacement, and raw diagnostic leakage; discovered but did not repair absent no-SSH boot-stage evidence. Rollback remains accepted deployment 676f0772 epoch 114. Three recovery iterations—failed differential activation, forced-full activation, and truthfully diagnosed wake—did not converge."
-  next_action: "Owner must choose the next authorized structural probe. Recommended: add a bounded owner-scoped no-SSH boot diagnostic sourced from vmmanager's exact failed stage plus a redacted fixed-size Firecracker/guest console tail, prove it on a disposable guest, then retry this same retained computer. Alternative: authorize a one-time Node B service-log inspection as evidence, without treating SSH/journal access as product acceptance. Do not patch migration, replace the computer, or attempt a fourth blind refresh."
+    - "Structural trace at origin/main@1c589fd9: accepted constructor commits 0dc3fea3 and ab89a200 added production_materializer.go, realization_verifier.go, vmmanager_boundary.go, vmctl construction launcher/handler and promotion execution; later commit 7d635330 deleted all of those surfaces."
+    - "Current internal/diskinstantiation has no production import. RecoverVMForDesktop/RefreshVMForDesktop preserve VMID and call vmmanager recovery/refresh; vmmanager reuses StateDir/<vmID>/data.img. This violates the completed construction mission's zero-realization and corrupted-data.img recovery contracts."
+  blocker_or_risk: "Substrate regression: production ComputerVersion construction was deleted after its accepted mission and no conforming replacement is wired. The visible timeout is a symptom of recovery falling back to retained-realization refresh. Separate observability gap: VMInstance retains no last boot error or bounded console excerpt; Firecracker stdout/stderr flow only to the vmctl service journal."
+  latest_blocker_or_risk: "Mutation class red. Protected surfaces: ComputerVersion, disk instantiation, vmctl/Firecracker lifecycle, route promotion, persistent-computer recovery, retained delivery, signed identity, and acceptance. Heresy delta: discovered reintroduction of durable_legacy_opaque data.img recovery and removal of the audited constructor; introduced none in this receipt. Rollback for source repair is origin/main@1c589fd9; accepted deployment fallback remains 676f0772 epoch 114."
+  next_action: "Use the owner-authorized one-time Node B log probe to identify the immediate failure. In parallel, freeze a restoration contract from the accepted 0dc3fea3/ab89a200 implementation against current authority boundaries; do not patch retained-image refresh as the final recovery architecture. Then add bounded product-path boot diagnostics, restore or connect the constructor, prove a disposable candidate, and recover this same persistent computer from ComputerVersion without reading its failed data.img."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
