@@ -269,29 +269,29 @@ execution:
     exit: "This Definition is complete, main is clean, staging is identified and healthy, and exactly one successor may become executable."
 
 now:
-  status: working
-  slice: C-build-disabled-candidate
-  question: "Can lifecycle source identity and pending-update wake become reducer-enforced and computer-scoped, while every typed browser client preserves the terminal-artifact/current-document dual-head contract?"
+  status: blocked_incomplete
+  slice: D-land-deploy-and-prove
+  question: "How must a delegated lifecycle activation that returns a final result without a terminal update_coagent disposition be reactivated without letting RunRecord terminality settle native work?"
   reconciliation:
-    observed_at: 2026-07-22T21:44:55Z
-    source_ref: refs/remotes/origin/main@48b50edad7e63958ffd5fb5ff1a5773d41e911ea
-    deploy_identity: "Node B remains on executable commit 47e877d3d0741dd7080f3bbdee14b3d6ec2315f9 with independently versioned active route source commit 7122f2799be4458f4b925be11990321c7e70ffc4; repaired candidate is local only."
+    observed_at: 2026-07-23T03:15:00Z
+    source_ref: refs/remotes/origin/main@676f0772a06f9121ace3d014b853b8f8de844a04
+    deploy_identity: "GitHub Actions run 29975038438 deployed 676f0772a06f9121ace3d014b853b8f8de844a04; signed no-SSH identity joined clean refs/heads/main, all host service embedded commits, guest executable/image/config digests, active computer-03335285269bdba4f94377e56879f9e6, realization epoch 113, and the deployment receipt. Public stop/start receipts advanced the same computer to epoch 114 on the same commit."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "Canonical worktree on convergence/kernel-contract-01; 50 intentional candidate paths dirty, no untracked files; protected unrelated worktrees remain untouched."
+    worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 was clean at origin/main@676f0772 before this problem receipt; protected unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: convergence-durable-work-runtime-08
-    state: independent_review_repair_required
-    ref: reviewed-rejected-uncommitted-code-diff@sha256:114a3a14b33f1495f339079975d5ecba21a4844b86bd90183c8ac840964336b2
+    id: convergence-durable-work-runtime-12
+    state: landed_acceptance_failed
+    ref: refs/remotes/origin/main@676f0772a06f9121ace3d014b853b8f8de844a04
     owner: owner-and-current-session
     base: 48b50edad7e63958ffd5fb5ff1a5773d41e911ea
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
-    scope: "Phase C protected paths only; effects OFF and uninjected."
-    observed_problem: "Frozen four-agent review rejected candidate 114a3a14 after prior terminal-head, lifecycle reader, restart, race, and typed-client repairs. Cursor reproduced desktop dual-head collapse: TextureEditor renders and later parents from pinned snapshot.head_revision instead of newer current_document_head. OMP GPT-5.5 traced production lifecycle activation to the legacy mailbox backlog, which deliberately excludes lifecycle updates, while a scoped injector exists but is unwired. Codex reproduced two source-graph authority failures: lifecycle normalization trusts caller-computed canonical IDs that may omit ComputerID, and direct legacy get/existence readers expose lifecycle source records."
-    repair_evidence: "Candidate 114a3a14 locally repairs every previously recorded candidate-07 blocker: terminal LifecycleSnapshot pins TerminalArtifactHeadRef while exposing CurrentDocumentHead; unbound post-terminal revision CAS preserves reducer sequence/events/work; lifecycle run/trajectory/work/update readers are computer-scoped or exclude lifecycle projections; production actor dispatch/resume/cancel uses canonical lifecycle run lookup; Texture mutation identity and migration include ComputerID. Focused store/Texture/race/restart tests, affected package suites, CLI/server tests, frontend build, go vet, and runtime shards 0 and 1 passed. Runtime shard 2 passed agentcore then hung in textureowner and was killed at the 30-minute command deadline. Independent review remained REPAIR: Cursor, Codex, and OMP GPT-5.5 each supplied reproducible source paths; OpenCode timed out."
-    remaining_error: "Candidate 114a3a14 is rejected. Make desktop display and revision parenting prefer CurrentDocumentHead while retaining HeadRevision only as terminal lifecycle identity. Wire production lifecycle activation to ListPendingLifecycleUpdates using owner+computer+agent scope. Derive or validate lifecycle source entity/ref canonical IDs inside the reducer and make legacy direct source getters/existence checks reject computer-scoped rows. Add exact regressions, diagnose the shard-2 textureowner hang, rerun focused/race/shard proof, and freeze a new independent-review candidate."
+    scope: "Phase D staging acceptance; effects OFF."
+    observed_problem: "Staging trajectory ba70399f-fe93-55cd-80d0-888aa75fb26b proved initial/interim revision, one researcher obligation, pending typed evidence, public computer restart from epoch 113 to 114, reducer reconstruction at cursor 5, and exactly-once incorporation into revision 1c9bcfff-a108-537e-929a-82ae7b1f65fe. The delegated researcher activation 648ee191-591c-4fe6-b8e0-c01c34f7e0ac then completed with a substantive final result after sending only an earlier work_disposition=open checkpoint. Run terminality correctly did not settle native work, but no supported path reactivated the same assigned open obligation to require its terminal typed update; both root and researcher work remained open."
+    repair_evidence: "Not yet repaired. The failure is deployed and reproducible from the public lifecycle snapshot: trajectory lifecycle_version 7, reducer cursor 8, researcher update upd-7440d21e83d22deddcac6349a77bccd7 incorporated once with work_disposition=open, delegated RunRecord completed, and work item de9eb8f3-5e1b-55ec-8bfb-3408884e1835 still open."
+    remaining_error: "Make the runtime reactivate an assigned open lifecycle work item when its replaceable activation terminates without a terminal typed disposition. Preserve the invariant that RunRecord result/state is never semantic work authority; the resumed activation must emit a new stable producer update with completed/rejected/cancelled disposition through the lifecycle reducer. Add an exact regression, then repeat deployed restart, terminal delivery, settlement, duplicate/late, cancellation, and UI/headless conformance."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -319,9 +319,12 @@ now:
     - "/tmp/agentic-consensus-20260722-212414/manifest.tsv: Cursor ACCEPT and Codex REPAIR against digest d69400445a291448faedc9eed5b4f4095051ff996cb69d6af4f670324e082663; Codex reproduced RunRunning initial-dispatch restart replay being marked processed without resuming."
     - "/tmp/agentic-consensus-20260722-215257/manifest.tsv: Codex and Cursor ACCEPT against digest 12d668ac59a0601662a49d7fbe15838f331dc5cc4bcea6295e3ed80f5b4e34f7; OMP GPT-5.5 completed without a substantive verdict and OpenCode timed out."
     - "Exact regressions now cover conditional lifecycle title projection, computer-scoped memory reconstruction, pending projection-before-dispatch recovery, deterministic dispatch identity, and end-to-end RunRunning recovery from an unprocessed actor-log row."
-  blocker_or_risk: "Problem receipt: v10 independently reproduced three red defects in the local candidate: lifecycle title PUT called the guarded legacy writer; a crash after lifecycle run projection but before actor dispatch could strand an open obligation; and actor memory selected by owner/agent without ComputerID. Protected surfaces: document projection authority, lifecycle activation restart, actor durable delivery, and private computer state. No defect was deployed. Admissible evidence is exact API, scoped-memory, and durable actor-log restart regression under race plus complete focused packages and shard proof."
-  latest_blocker_or_risk: "Problem receipt: after the first restart repair, v11 reproduced a narrower loss: boot re-dispatched RunRunning, deterministic resend correctly deduplicated, but the original unprocessed actor row was marked processed because initial-dispatch handled only RunPending. The repaired candidate executes pending or running sequentially, remains a no-op for terminal/passivated runs, and passes an end-to-end fresh-Adapter regression from canonical RunRunning plus unprocessed actor log to completed run plus empty backlog. v12 Codex and Cursor accept the exact frozen patch. Rollback remains source 48b50eda and deployed executable 47e877d3. Heresy delta discovered: title projection bypass, unscoped memory, and two restart-loss windows; introduced: none deployed; repaired: local candidate only until landing and staging proof."
-  next_action: "Commit this code-free problem/review receipt alone, then commit the independently accepted implementation patch unchanged, push both to origin/main, monitor CI/deploy, verify exact Node B host/guest identity, and run deployed lifecycle/restart/cancellation/dual-client acceptance with effects OFF."
+    - "GitHub Actions 29975038438 passed every selected race/spec/frontend gate and deployed origin/main@676f0772a06f9121ace3d014b853b8f8de844a04 to Node B."
+    - "Signed public identity joined host, guest, vmctl route, deployment receipt, and platform attestation at epochs 113 and 114 on commit 676f0772a06f9121ace3d014b853b8f8de844a04."
+    - "Staging trajectory ba70399f-fe93-55cd-80d0-888aa75fb26b retained interim head 1dbf4d2a-fef5-5b23-b745-0374556e6a00, two open obligations, and pending evidence update upd-7440d21e83d22deddcac6349a77bccd7 across a signed public stop/start; boot woke activation a0c70767-522f-4acd-ae5c-c37ee95df809 and incorporated that update exactly once into head 1c9bcfff-a108-537e-929a-82ae7b1f65fe."
+  blocker_or_risk: "Deployed red acceptance failure on durable actor delivery and native work settlement: a delegated lifecycle activation may complete after emitting only a non-terminal checkpoint. The canonical work item remains open, which is authority-safe, but no immediate supported recovery activation is created to demand a terminal typed disposition. This strands settlement until an unrelated restart/sweep or manual intervention."
+  latest_blocker_or_risk: "Problem documentation first. No repair code follows before this receipt is committed. Protected surfaces: durable actor delivery, trajectory obligations, typed update disposition, restart recovery, and work settlement. Admissible repair evidence is an exact terminal-activation/open-work regression proving reactivation without RunRecord settlement, focused race/package proof, independent frozen review, and repetition on staging. Rollback remains accepted origin/main@676f0772 and prior deployed ComputerVersion/epoch 113."
+  next_action: "Commit this code-free deployed-failure receipt alone. Then repair activation recovery at the canonical runtime/work boundary, freeze and independently review the source candidate, land through CI, and repeat all remaining Phase D acceptance with effects OFF."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
