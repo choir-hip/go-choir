@@ -155,9 +155,9 @@ func (l *SQLiteLog) RebindMailbox(ctx context.Context, legacyID, scopedID string
 	return l.RebindMailboxes(ctx, []MailboxRebind{{LegacyID: legacyID, ScopedID: scopedID}})
 }
 
-// RebindMailboxes atomically moves a complete set of actor update histories
-// and snapshots. It validates every source and destination before mutating any
-// identity, so one conflict refuses the whole migration plan.
+// RebindMailboxes atomically converges a complete set of legacy actor update
+// histories and snapshots onto scoped identities. Mixed source/destination
+// state is merged so interrupted or cross-generation migrations can restart.
 func (l *SQLiteLog) RebindMailboxes(ctx context.Context, plan []MailboxRebind) (bool, error) {
 	legacyIDs := make(map[string]struct{}, len(plan))
 	scopedIDs := make(map[string]struct{}, len(plan))
@@ -182,21 +182,16 @@ func (l *SQLiteLog) RebindMailboxes(ctx context.Context, plan []MailboxRebind) (
 
 	active := make([]MailboxRebind, 0, len(plan))
 	for _, rebind := range plan {
-		var legacyUpdateCount, legacySnapshotCount, scopedUpdateCount, scopedSnapshotCount int
+		var legacyUpdateCount, legacySnapshotCount int
 		if err := tx.QueryRowContext(ctx, `SELECT
 			(SELECT COUNT(*) FROM actor_updates WHERE to_agent_id = ?),
-			(SELECT COUNT(*) FROM actor_snapshots WHERE agent_id = ?),
-			(SELECT COUNT(*) FROM actor_updates WHERE to_agent_id = ?),
 			(SELECT COUNT(*) FROM actor_snapshots WHERE agent_id = ?)`,
-			rebind.LegacyID, rebind.LegacyID, rebind.ScopedID, rebind.ScopedID,
-		).Scan(&legacyUpdateCount, &legacySnapshotCount, &scopedUpdateCount, &scopedSnapshotCount); err != nil {
+			rebind.LegacyID, rebind.LegacyID,
+		).Scan(&legacyUpdateCount, &legacySnapshotCount); err != nil {
 			return false, fmt.Errorf("actor log inspect mailbox identities: %w", err)
 		}
 		if legacyUpdateCount == 0 && legacySnapshotCount == 0 {
 			continue
-		}
-		if scopedUpdateCount > 0 || scopedSnapshotCount > 0 {
-			return false, fmt.Errorf("actor log rebind destination %q already exists", rebind.ScopedID)
 		}
 		active = append(active, rebind)
 	}
@@ -207,9 +202,20 @@ func (l *SQLiteLog) RebindMailboxes(ctx context.Context, plan []MailboxRebind) (
 		if err != nil {
 			return false, fmt.Errorf("actor log rebind updates: %w", err)
 		}
-		snapshotResult, err := tx.ExecContext(ctx, `UPDATE actor_snapshots SET agent_id = ? WHERE agent_id = ?`, rebind.ScopedID, rebind.LegacyID)
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO actor_snapshots (agent_id, memory, updated_at)
+			SELECT ?, memory, updated_at FROM actor_snapshots WHERE agent_id = ?
+			ON CONFLICT(agent_id) DO UPDATE SET
+				memory = excluded.memory,
+				updated_at = excluded.updated_at
+			WHERE excluded.updated_at > actor_snapshots.updated_at`,
+			rebind.ScopedID, rebind.LegacyID,
+		); err != nil {
+			return false, fmt.Errorf("actor log merge snapshot: %w", err)
+		}
+		snapshotResult, err := tx.ExecContext(ctx, `DELETE FROM actor_snapshots WHERE agent_id = ?`, rebind.LegacyID)
 		if err != nil {
-			return false, fmt.Errorf("actor log rebind snapshot: %w", err)
+			return false, fmt.Errorf("actor log remove legacy snapshot: %w", err)
 		}
 		updateCount, err := updateResult.RowsAffected()
 		if err != nil {

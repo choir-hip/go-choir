@@ -757,32 +757,35 @@ func TestSQLiteLogRebindMailboxPreservesUpdatesAndSnapshot(t *testing.T) {
 	}
 }
 
-func TestSQLiteLogRebindMailboxRefusesSnapshotConflictAtomically(t *testing.T) {
+func TestSQLiteLogRebindMailboxMixedSnapshotsKeepsNewestDestination(t *testing.T) {
 	log := testLog(t)
 	ctx := context.Background()
-	if appended, err := log.Append(ctx, Update{UpdateID: "legacy-update", ToAgentID: "legacy", CreatedAt: time.Now().UTC()}); err != nil || !appended {
-		t.Fatalf("append legacy update: appended=%v err=%v", appended, err)
-	}
 	if err := log.SaveSnapshot(ctx, "legacy", []byte("legacy-memory")); err != nil {
 		t.Fatalf("save legacy snapshot: %v", err)
 	}
 	if err := log.SaveSnapshot(ctx, "scoped", []byte("scoped-memory")); err != nil {
 		t.Fatalf("save scoped snapshot: %v", err)
 	}
-	if migrated, err := log.RebindMailbox(ctx, "legacy", "scoped"); err == nil || migrated {
-		t.Fatalf("conflicting rebind: migrated=%v err=%v", migrated, err)
+	legacyAt := time.Date(2026, time.July, 23, 1, 0, 0, 0, time.UTC)
+	scopedAt := legacyAt.Add(time.Minute)
+	if _, err := log.db.ExecContext(ctx, `UPDATE actor_snapshots SET updated_at = CASE agent_id WHEN 'legacy' THEN ? ELSE ? END`, legacyAt, scopedAt); err != nil {
+		t.Fatalf("set snapshot times: %v", err)
 	}
-	updates, err := log.Unprocessed(ctx, "legacy")
-	if err != nil || len(updates) != 1 {
-		t.Fatalf("legacy update changed after refusal: %+v, %v", updates, err)
+	if migrated, err := log.RebindMailbox(ctx, "legacy", "scoped"); err != nil || !migrated {
+		t.Fatalf("merge snapshots: migrated=%v err=%v", migrated, err)
 	}
-	memory, err := log.LoadSnapshot(ctx, "legacy")
-	if err != nil || string(memory) != "legacy-memory" {
-		t.Fatalf("legacy snapshot changed after refusal: %q, %v", memory, err)
+	if memory, err := log.LoadSnapshot(ctx, "legacy"); err != nil || memory != nil {
+		t.Fatalf("legacy snapshot after merge: %q, %v", memory, err)
+	}
+	if memory, err := log.LoadSnapshot(ctx, "scoped"); err != nil || string(memory) != "scoped-memory" {
+		t.Fatalf("scoped snapshot after merge: %q, %v", memory, err)
+	}
+	if migrated, err := log.RebindMailbox(ctx, "legacy", "scoped"); err != nil || migrated {
+		t.Fatalf("repeated merge: migrated=%v err=%v", migrated, err)
 	}
 }
 
-func TestSQLiteLogRebindMailboxRefusesUpdateDestinationConflictAtomically(t *testing.T) {
+func TestSQLiteLogRebindMailboxMergesDestinationUpdates(t *testing.T) {
 	log := testLog(t)
 	ctx := context.Background()
 	for _, update := range []Update{
@@ -793,12 +796,34 @@ func TestSQLiteLogRebindMailboxRefusesUpdateDestinationConflictAtomically(t *tes
 			t.Fatalf("append %s: appended=%v err=%v", update.UpdateID, appended, err)
 		}
 	}
-	if migrated, err := log.RebindMailbox(ctx, "legacy", "scoped"); err == nil || migrated {
-		t.Fatalf("conflicting rebind: migrated=%v err=%v", migrated, err)
+	if migrated, err := log.RebindMailbox(ctx, "legacy", "scoped"); err != nil || !migrated {
+		t.Fatalf("merge updates: migrated=%v err=%v", migrated, err)
 	}
 	legacy, legacyErr := log.Unprocessed(ctx, "legacy")
 	scoped, scopedErr := log.Unprocessed(ctx, "scoped")
-	if legacyErr != nil || scopedErr != nil || len(legacy) != 1 || len(scoped) != 1 {
-		t.Fatalf("backlogs changed after refusal: legacy=%+v (%v), scoped=%+v (%v)", legacy, legacyErr, scoped, scopedErr)
+	if legacyErr != nil || scopedErr != nil || len(legacy) != 0 || len(scoped) != 2 {
+		t.Fatalf("backlogs after merge: legacy=%+v (%v), scoped=%+v (%v)", legacy, legacyErr, scoped, scopedErr)
+	}
+}
+
+func TestSQLiteLogRebindMailboxMixedSnapshotsMovesNewerLegacy(t *testing.T) {
+	log := testLog(t)
+	ctx := context.Background()
+	if err := log.SaveSnapshot(ctx, "legacy", []byte("legacy-memory")); err != nil {
+		t.Fatalf("save legacy snapshot: %v", err)
+	}
+	if err := log.SaveSnapshot(ctx, "scoped", []byte("scoped-memory")); err != nil {
+		t.Fatalf("save scoped snapshot: %v", err)
+	}
+	scopedAt := time.Date(2026, time.July, 23, 1, 0, 0, 0, time.UTC)
+	legacyAt := scopedAt.Add(time.Minute)
+	if _, err := log.db.ExecContext(ctx, `UPDATE actor_snapshots SET updated_at = CASE agent_id WHEN 'legacy' THEN ? ELSE ? END`, legacyAt, scopedAt); err != nil {
+		t.Fatalf("set snapshot times: %v", err)
+	}
+	if migrated, err := log.RebindMailbox(ctx, "legacy", "scoped"); err != nil || !migrated {
+		t.Fatalf("merge snapshots: migrated=%v err=%v", migrated, err)
+	}
+	if memory, err := log.LoadSnapshot(ctx, "scoped"); err != nil || string(memory) != "legacy-memory" {
+		t.Fatalf("scoped snapshot after merge: %q, %v", memory, err)
 	}
 }

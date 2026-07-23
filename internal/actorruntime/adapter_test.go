@@ -1020,10 +1020,10 @@ func TestAdapterStartRefusesConflictingAgentAndRunWitnesses(t *testing.T) {
 	}
 }
 
-func TestAdapterStartLegacyMailboxBatchConflictMutatesNone(t *testing.T) {
+func TestAdapterLegacyMailboxMigrationConvergesMixedBatchAndRepeats(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "batch-conflict-mailbox.db")
+	dbPath := filepath.Join(dir, "mixed-mailbox.db")
 	s, err := store.Open(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
@@ -1058,18 +1058,22 @@ func TestAdapterStartLegacyMailboxBatchConflictMutatesNone(t *testing.T) {
 	if appended, err := adapter.log.Append(ctx, actor.Update{
 		UpdateID: "scoped-destination-update", ToAgentID: secondScopedID, CreatedAt: now,
 	}); err != nil || !appended {
-		t.Fatalf("append destination conflict: appended=%v err=%v", appended, err)
+		t.Fatalf("append mixed destination update: appended=%v err=%v", appended, err)
 	}
-	if err := adapter.Start(ctx); err == nil || !strings.Contains(err.Error(), "destination") {
-		t.Fatalf("startup error = %v, want batch destination refusal", err)
+	for attempt := 1; attempt <= 2; attempt++ {
+		if err := adapter.migrateLegacyActorMailboxes(ctx); err != nil {
+			t.Fatalf("migration attempt %d: %v", attempt, err)
+		}
 	}
 	firstScopedID := scopedActorMailboxID(first.OwnerID, first.ComputerID, first.AgentID)
 	firstLegacy, firstErr := adapter.log.Unprocessed(ctx, first.AgentID)
-	firstScoped, scopedErr := adapter.log.Unprocessed(ctx, firstScopedID)
+	firstScoped, firstScopedErr := adapter.log.Unprocessed(ctx, firstScopedID)
 	secondLegacy, secondErr := adapter.log.Unprocessed(ctx, second.AgentID)
-	if firstErr != nil || scopedErr != nil || secondErr != nil || len(firstLegacy) != 1 || len(firstScoped) != 0 || len(secondLegacy) != 1 {
-		t.Fatalf("batch conflict partially migrated: first legacy=%+v (%v), first scoped=%+v (%v), second legacy=%+v (%v)",
-			firstLegacy, firstErr, firstScoped, scopedErr, secondLegacy, secondErr)
+	secondScoped, secondScopedErr := adapter.log.Unprocessed(ctx, secondScopedID)
+	if firstErr != nil || firstScopedErr != nil || secondErr != nil || secondScopedErr != nil ||
+		len(firstLegacy) != 0 || len(firstScoped) != 1 || len(secondLegacy) != 0 || len(secondScoped) != 2 {
+		t.Fatalf("mailboxes after convergence: first legacy=%+v (%v), first scoped=%+v (%v), second legacy=%+v (%v), second scoped=%+v (%v)",
+			firstLegacy, firstErr, firstScoped, firstScopedErr, secondLegacy, secondErr, secondScoped, secondScopedErr)
 	}
 }
 
