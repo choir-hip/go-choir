@@ -287,11 +287,11 @@ now:
   observed_product_evidence:
     - "The settlement candidate d845c56a makes an admitted pending/running activation's first terminal projection durably mark a reducer-attempt trigger in the same run/agent CAS; immediate and boot callers invoke only canonical SettleLifecycleTrajectory readiness authority. Focused race/restart loops, full store/agentcore/textureowner tests, vet, runtime shards, and unanimous frozen review accepted SHA-256 30af0971ebedaccd6a694322ab9dc89fe388e9cdf415b6b048c7f9cb31ab01cb."
     - "GitHub Actions 30034969790 passed Plan CI, docs truth, heresy detector, every race shard, Go vet/build, differential SBOM acceptance, and rolling-flake publication."
-  observed_problem: "Deploy job 89303540955 restarted vmctl for the runtime-impacting change. Shutdown timed out while the retained candidate-fleet Firecracker process survived for reattach. New vmctl then killed the orphaned process and immediately attempted to recreate the same VM, but Firecracker refused TAP vm-rvnt3drdofhm with EBUSY. vmctl never became healthy; proxy degraded; :8083 health timed out; the deploy recorded /var/lib/go-choir/deploy-failures/30034969790-1.json and did not publish an activation receipt."
-  policy_resolution_ref: "Problem-documentation-first requires this code-free receipt before any deployment/restart repair. The failure is on the protected vmctl/retained-computer surface; do not claim settlement acceptance or infer deployment from the Node B checkout."
-  blocker_or_risk: "Mission completion remains blocked. The source repair passed CI but is not accepted on staging, and the retained computer may now be failed or unavailable. This is a VM lifecycle substrate failure exposed by the required runtime deployment, not evidence against the settlement reducer."
-  latest_blocker_or_risk: "Mutation class red. Protected surfaces: vmctl shutdown/reattach, retained-computer realization, TAP ownership, deployment activation receipt, and staging health. Conjecture delta: process survival for reattach is unsafe unless vmctl can prove and adopt the surviving process/TAP atomically; killing then immediately recreating can leave kernel network ownership busy. Heresy delta: discovered restart ownership gap; introduced none in this receipt; repaired none."
-  next_action: "Use no-SSH deployment/recovery evidence to inspect the retained computer and failed realization, determine whether the existing recovery workflow can safely clear or adopt stale process/TAP ownership, then rerun deployment only through an artifact-verifying route. Do not patch vmctl until the failure is localized and an existing replacement/recovery path is checked."
+  observed_problem: "Deploy attempt 1 restarted vmctl after a shutdown timeout and failed recreating the retained VM because its TAP remained EBUSY. Attempt 2 restored vmctl and epoch 129, but the classifier had selected sandbox as a service-pointer artifact without the canonical guest boot closure; the workflow called nonexistent /internal/runtime/refresh, then full-refreshed the old boot closure and correctly refused its 32302b65 identity. Frozen repair review then found that the workflow's constructed ComputerVersion exclusion reads snapshot_kind/construction fields that /internal/vmctl/list does not expose, so an immutable active candidate would be misclassified as mutable and sent to refresh."
+  policy_resolution_ref: "Problem-documentation-first requires this code-free receipt before changing the vmctl list contract or deployment route. Use the existing authoritative ownership snapshot fields; no second registry or client-side inference."
+  blocker_or_risk: "Mission completion remains blocked. The source repair passed CI but is not accepted on staging. Deployment must not refresh constructed ComputerVersion realizations, and it must deploy sandbox runtime changes through an artifact route the guest can actually execute."
+  latest_blocker_or_risk: "Mutation class red. Protected surfaces: vmctl ownership inventory, constructed ComputerVersion immutability, retained-computer realization, guest boot/runtime identity, deployment receipt, and staging health. Conjecture delta: a workflow exclusion is not protection unless the authoritative API carries the discriminator it tests. Heresy delta: discovered nonexistent hot-refresh route and unwired immutable-candidate exclusion; introduced none in this receipt; repaired none."
+  next_action: "Expose the existing persisted constructed-ownership discriminator and immutable construction refs through /internal/vmctl/list, ratchet the real handler response, then complete the frozen deployment repair: every sandbox artifact uses the canonical guest boot closure, nonexistent hot refresh is deleted, constructed candidates are excluded, mutable computers full-refresh, and exact identity gates activation."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
@@ -435,6 +435,16 @@ receipts:
     problem_ref: "vmctl restart cannot safely transition retained Firecracker/TAP ownership when shutdown times out and the old process survives for reattach."
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; deploy failure evidence"
     candidate_or_evidence_refs: [artifact://1919, artifact://1920]
+
+  - id: constructed-computer-refresh-exclusion-unwired-2026-07-23
+    boundary: land
+    commit_or_artifact: pending_code_free_receipt
+    proof_refs: ["GitHub Actions run 30034969790 attempt 2 job 89305362383", "signed identity after failed attempt: retained mutable computer active at epoch 129 on old commit 32302b65", "frozen deployment review /tmp/agentic-consensus-20260723-151406/manifest.tsv OMP GPT-5.5 REPAIR", "internal/vmctl/handlers.go ownershipResponse omits snapshot_kind, construction_version, and construction_disk_receipt_id consumed by .github/workflows/ci.yml"]
+    rollback_ref: "accepted deployment 32302b652ea7522e1d3cd0b21fde8b82f0449b40 epoch 127; recovered old-code realization epoch 129"
+    disposition: "Problem documented before API/deploy repair. The current workflow's jq exclusion cannot distinguish immutable constructed candidates from mutable active computers."
+    problem_ref: "Deployment refresh protection reads fields absent from the authoritative vmctl list response, so constructed ComputerVersion realizations can enter the mutable refresh path."
+    authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; independent frozen review"
+    candidate_or_evidence_refs: [artifact://1929, artifact://1930, /tmp/agentic-consensus-20260723-151406/manifest.tsv]
 
 view:
   path: http://127.0.0.1:8788/
