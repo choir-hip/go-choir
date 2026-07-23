@@ -158,6 +158,148 @@ func TestSelfDevelopmentRouteProjectionRequiresExactPlatformCertificate(t *testi
 	}
 }
 
+func TestHandleListClassifiesConstructedOwnershipFromRouteEvidence(t *testing.T) {
+	now := time.Date(2026, 7, 23, 20, 0, 0, 0, time.UTC)
+	code, err := computerversion.NewCodeClosure(strings.Repeat("1", 40), []computerversion.CodeArtifact{{
+		Name: "bundle", SHA256: repeatedHex('a'), URI: "artifact+sha256://" + repeatedHex('a') + "/bundle",
+	}}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := computerversion.NewArtifactProgram([]computerversion.ArtifactProgramEntry{{
+		Kind: "capsule_effect_bundle", ContentSHA256: repeatedHex('a'), ArtifactURI: "artifact+sha256://" + repeatedHex('a') + "/bundle",
+	}}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	version := computerversion.ComputerVersion{CodeRef: code.Ref, ArtifactProgramRef: program.Ref}
+	catalog := &projectionInputCatalog{
+		codes:    map[computerversion.CodeRef]computerversion.CodeClosure{code.Ref: code},
+		programs: map[computerversion.ArtifactProgramRef]computerversion.ArtifactProgram{program.Ref: program},
+	}
+	ledger := routeledger.NewMemoryLedger()
+	authority, err := newMemoryRouteAuthority(ledger, catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := NewOwnershipRegistry("http://127.0.0.1:8085")
+	ownership, err := registry.ResolveOrAssignDesktop("owner", PrimaryDesktopID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slotID, _ := routeledger.RouteSlotID(ownership.UserID, ownership.DesktopID)
+	ownerApproval, _ := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidenceApproval, slotID, version, json.RawMessage(`{"decision":"approved","signature":"owner"}`), now)
+	verification := map[string]any{
+		"verification_receipt_id": "verification:sha256:" + repeatedHex('e'),
+		"verifier":                "independent-production-realization-verifier",
+		"computer_version":        version,
+		"disk_receipt_id":         "disk-instantiation:sha256:" + repeatedHex('d'),
+		"vm_id":                   ownership.VMID,
+	}
+	certificatePayload, _ := json.Marshal(map[string]any{
+		"kind":          "verified_route_bootstrap",
+		"route_slot_id": slotID,
+		"verification":  verification,
+		"approval_ref":  ownerApproval.Ref,
+	})
+	certificate, _ := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidencePromotionCertificate, slotID, version, certificatePayload, now)
+	gatePayload, _ := json.Marshal(map[string]any{
+		"candidate_id":       "route-bootstrap:sha256:" + repeatedHex('c'),
+		"owner_approval_ref": ownerApproval.Ref,
+		"verification":       verification,
+	})
+	gate, _ := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidenceApproval, slotID, version, gatePayload, now)
+	if _, _, err := ledger.TransitionWithEvidence(t.Context(), routeledger.TransitionCommand{
+		RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: version,
+		ApprovalRef: routeledger.ApprovalRef(gate.Ref), PromotionCertificateRef: routeledger.PromotionCertificateRef(certificate.Ref),
+		IdempotencyKey: "idempotency:constructed-list",
+	}, []routeledger.AuthorizationEvidence{gate, ownerApproval, certificate}); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(registry)
+	handler.SetRouteAuthority(authority)
+	request := httptest.NewRequest(http.MethodGet, "/internal/vmctl/list", nil)
+	request.Header.Set("X-Internal-Caller", "true")
+	response := httptest.NewRecorder()
+	handler.HandleList(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", response.Code, response.Body.String())
+	}
+	var result struct {
+		Ownerships []ownershipResponse `json:"ownerships"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Ownerships) != 1 {
+		t.Fatalf("ownerships=%d, want 1", len(result.Ownerships))
+	}
+	got := result.Ownerships[0]
+	if got.ComputerID != ownership.ComputerID || got.SnapshotKind != "constructed-computer-version" ||
+		got.ConstructionVersion == nil || *got.ConstructionVersion != version ||
+		got.ConstructionDiskReceiptID != "disk-instantiation:sha256:"+repeatedHex('d') {
+		t.Fatalf("constructed ownership response=%+v", got)
+	}
+	unknown, err := registry.ResolveOrAssignDesktop("ordinary-owner", PrimaryDesktopID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request = httptest.NewRequest(http.MethodGet, "/internal/vmctl/list", nil)
+	request.Header.Set("X-Internal-Caller", "true")
+	response = httptest.NewRecorder()
+	handler.HandleList(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("mixed no-route list status=%d body=%s", response.Code, response.Body.String())
+	}
+	result.Ownerships = nil
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	var ordinary ownershipResponse
+	for _, listed := range result.Ownerships {
+		if listed.VMID == unknown.VMID {
+			ordinary = listed
+			break
+		}
+	}
+	if ordinary.VMID != unknown.VMID || ordinary.SnapshotKind != "" || ordinary.ConstructionVersion != nil || ordinary.ConstructionDiskReceiptID != "" {
+		t.Fatalf("no-route mutable ownership response=%+v", ordinary)
+	}
+	unknownSlotID, _ := routeledger.RouteSlotID(unknown.UserID, unknown.DesktopID)
+	unknownApproval, _ := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidenceApproval, unknownSlotID, version, json.RawMessage(`{"bootstrap":"approval"}`), now)
+	unknownCertificate, _ := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidencePromotionCertificate, unknownSlotID, version, json.RawMessage(`{"bootstrap":"certificate"}`), now)
+	if _, _, err := ledger.TransitionWithEvidence(t.Context(), routeledger.TransitionCommand{
+		RouteSlotID: unknownSlotID, Kind: routeledger.TransitionBootstrap, New: version,
+		ApprovalRef: routeledger.ApprovalRef(unknownApproval.Ref), PromotionCertificateRef: routeledger.PromotionCertificateRef(unknownCertificate.Ref),
+		IdempotencyKey: "idempotency:unknown-list",
+	}, []routeledger.AuthorizationEvidence{unknownApproval, unknownCertificate}); err != nil {
+		t.Fatal(err)
+	}
+	request = httptest.NewRequest(http.MethodGet, "/internal/vmctl/list", nil)
+	request.Header.Set("X-Internal-Caller", "true")
+	response = httptest.NewRecorder()
+	handler.HandleList(response, request)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unknown evidence list status=%d body=%s, want fail-closed 503", response.Code, response.Body.String())
+	}
+}
+
+func TestHandleListFailsClosedWithoutRequiredRouteAuthority(t *testing.T) {
+	registry := NewOwnershipRegistry("http://127.0.0.1:8085")
+	if _, err := registry.ResolveOrAssignDesktop("owner", PrimaryDesktopID); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(registry)
+	handler.RequireRouteAuthority()
+	request := httptest.NewRequest(http.MethodGet, "/internal/vmctl/list", nil)
+	request.Header.Set("X-Internal-Caller", "true")
+	response := httptest.NewRecorder()
+	handler.HandleList(response, request)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("list status=%d body=%s, want fail-closed 503", response.Code, response.Body.String())
+	}
+}
+
 func repeatedHex(value byte) string {
 	return strings.Repeat(string(value), 64)
 }

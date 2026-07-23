@@ -24,6 +24,7 @@ type RouteResolution struct {
 
 type routeAuthorityReader interface {
 	Resolve(context.Context, string) (routeledger.Slot, routeledger.TransitionReceipt, error)
+	ResolveAuthorizationEvidence(context.Context, string) (routeledger.AuthorizationEvidence, error)
 }
 
 type RouteAuthority struct {
@@ -66,6 +67,116 @@ func (a *RouteAuthority) Resolve(ctx context.Context, slotID string) (RouteResol
 		return RouteResolution{}, err
 	}
 	return RouteResolution{Slot: slot, LatestReceipt: receipt, CodeClosure: closure, ArtifactProgram: program}, nil
+}
+
+type constructedVerification struct {
+	ID            string                          `json:"verification_receipt_id"`
+	Verifier      string                          `json:"verifier"`
+	Version       computerversion.ComputerVersion `json:"computer_version"`
+	DiskReceiptID string                          `json:"disk_receipt_id"`
+	VMID          string                          `json:"vm_id"`
+}
+
+type constructedBootstrapCertificate struct {
+	Kind         string                  `json:"kind"`
+	RouteSlotID  string                  `json:"route_slot_id"`
+	Verification constructedVerification `json:"verification"`
+	ApprovalRef  string                  `json:"approval_ref"`
+}
+
+type constructedRouteExecution struct {
+	CandidateID      string                  `json:"candidate_id"`
+	OwnerApprovalRef string                  `json:"owner_approval_ref"`
+	Verification     constructedVerification `json:"verification"`
+}
+
+type constructedPromotionCertificate struct {
+	RouteSlot     string                          `json:"route_slot"`
+	Candidate     computerversion.ComputerVersion `json:"candidate"`
+	EvidenceRef   string                          `json:"evidence_ref"`
+	OwnerApproved bool                            `json:"owner_approved"`
+}
+
+// constructedOwnershipIdentity recovers the immutable construction binding
+// from the canonical route/evidence ledger. Ownership JSON intentionally does
+// not duplicate this authority.
+func (a *RouteAuthority) constructedOwnershipIdentity(ctx context.Context, ownerID, desktopID, vmID string) (*computerversion.ComputerVersion, string, bool, error) {
+	if a == nil || a.ledger == nil {
+		return nil, "", false, fmt.Errorf("route/evidence authority is unavailable")
+	}
+	slotID, err := routeledger.RouteSlotID(ownerID, desktopID)
+	if err != nil {
+		return nil, "", false, err
+	}
+	slot, receipt, err := a.ledger.Resolve(ctx, slotID)
+	if errors.Is(err, routeledger.ErrSlotNotFound) {
+		return nil, "", false, nil
+	}
+	if err != nil {
+		return nil, "", false, fmt.Errorf("resolve ownership route: %w", err)
+	}
+	gate, err := a.ledger.ResolveAuthorizationEvidence(ctx, string(receipt.ApprovalRef))
+	if err != nil {
+		return nil, "", false, fmt.Errorf("resolve route execution evidence: %w", err)
+	}
+	certificate, err := a.ledger.ResolveAuthorizationEvidence(ctx, string(receipt.PromotionCertificateRef))
+	if err != nil {
+		return nil, "", false, fmt.Errorf("resolve route certificate evidence: %w", err)
+	}
+	if gate.Kind != routeledger.AuthorizationEvidenceApproval ||
+		certificate.Kind != routeledger.AuthorizationEvidencePromotionCertificate ||
+		gate.Ref != string(receipt.ApprovalRef) ||
+		certificate.Ref != string(receipt.PromotionCertificateRef) ||
+		gate.RouteSlotID != slot.ID || certificate.RouteSlotID != slot.ID ||
+		!routeledger.SameVersion(gate.ComputerVersion, slot.Current) ||
+		!routeledger.SameVersion(certificate.ComputerVersion, slot.Current) {
+		return nil, "", false, fmt.Errorf("ownership %s route/evidence refs do not join", vmID)
+	}
+
+	var execution constructedRouteExecution
+	if err := json.Unmarshal(gate.Payload, &execution); err != nil ||
+		strings.TrimSpace(execution.CandidateID) == "" ||
+		strings.TrimSpace(execution.OwnerApprovalRef) == "" {
+		return nil, "", false, fmt.Errorf("ownership %s has unrecognized route execution evidence", vmID)
+	}
+	ownerApproval, err := a.ledger.ResolveAuthorizationEvidence(ctx, execution.OwnerApprovalRef)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("resolve constructed owner approval evidence: %w", err)
+	}
+	if ownerApproval.Kind != routeledger.AuthorizationEvidenceApproval ||
+		ownerApproval.Ref != execution.OwnerApprovalRef ||
+		ownerApproval.RouteSlotID != slot.ID ||
+		!routeledger.SameVersion(ownerApproval.ComputerVersion, slot.Current) {
+		return nil, "", false, fmt.Errorf("constructed ownership %s owner approval join failed", vmID)
+	}
+
+	var bootstrap constructedBootstrapCertificate
+	if err := json.Unmarshal(certificate.Payload, &bootstrap); err == nil && bootstrap.Kind == "verified_route_bootstrap" {
+		if bootstrap.RouteSlotID != slot.ID ||
+			bootstrap.ApprovalRef != execution.OwnerApprovalRef ||
+			bootstrap.Verification != execution.Verification {
+			return nil, "", false, fmt.Errorf("constructed ownership %s bootstrap certificate join failed", vmID)
+		}
+	} else {
+		var promotion constructedPromotionCertificate
+		if err := json.Unmarshal(certificate.Payload, &promotion); err != nil ||
+			promotion.RouteSlot != slot.ID ||
+			!routeledger.SameVersion(promotion.Candidate, slot.Current) ||
+			promotion.EvidenceRef != execution.Verification.ID ||
+			!promotion.OwnerApproved {
+			return nil, "", false, fmt.Errorf("constructed ownership %s promotion certificate join failed", vmID)
+		}
+	}
+	verification := execution.Verification
+	if strings.TrimSpace(verification.ID) == "" ||
+		verification.Verifier != "independent-production-realization-verifier" ||
+		!routeledger.SameVersion(verification.Version, slot.Current) ||
+		strings.TrimSpace(verification.DiskReceiptID) == "" ||
+		strings.TrimSpace(verification.VMID) != strings.TrimSpace(vmID) {
+		return nil, "", false, fmt.Errorf("constructed ownership %s verification join failed", vmID)
+	}
+	version := slot.Current
+	return &version, verification.DiskReceiptID, true, nil
 }
 
 func (a *RouteAuthority) resolveVersionInputs(ctx context.Context, version computerversion.ComputerVersion) (computerversion.CodeClosure, computerversion.ArtifactProgram, error) {

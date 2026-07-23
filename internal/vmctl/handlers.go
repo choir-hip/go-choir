@@ -58,19 +58,22 @@ type resolveResponse struct {
 
 // ownershipResponse is the JSON response for ownership queries.
 type ownershipResponse struct {
-	VMID          string             `json:"vm_id"`
-	ComputerID    string             `json:"computer_id"`
-	UserID        string             `json:"user_id"`
-	DesktopID     string             `json:"desktop_id"`
-	Kind          VMKind             `json:"kind,omitempty"`
-	WarmnessClass string             `json:"warmness_class,omitempty"`
-	SandboxURL    string             `json:"sandbox_url"`
-	State         string             `json:"state"`
-	CreatedAt     string             `json:"created_at"`
-	LastActiveAt  string             `json:"last_active_at"`
-	Epoch         int64              `json:"epoch"`
-	StoppedBy     string             `json:"stopped_by,omitempty"`
-	DataImage     *dataImageResponse `json:"data_image,omitempty"`
+	VMID                      string                           `json:"vm_id"`
+	ComputerID                string                           `json:"computer_id"`
+	UserID                    string                           `json:"user_id"`
+	DesktopID                 string                           `json:"desktop_id"`
+	Kind                      VMKind                           `json:"kind,omitempty"`
+	WarmnessClass             string                           `json:"warmness_class,omitempty"`
+	SandboxURL                string                           `json:"sandbox_url"`
+	State                     string                           `json:"state"`
+	CreatedAt                 string                           `json:"created_at"`
+	LastActiveAt              string                           `json:"last_active_at"`
+	Epoch                     int64                            `json:"epoch"`
+	StoppedBy                 string                           `json:"stopped_by,omitempty"`
+	DataImage                 *dataImageResponse               `json:"data_image,omitempty"`
+	SnapshotKind              string                           `json:"snapshot_kind,omitempty"`
+	ConstructionVersion       *computerversion.ComputerVersion `json:"construction_version,omitempty"`
+	ConstructionDiskReceiptID string                           `json:"construction_disk_receipt_id,omitempty"`
 }
 
 type reclaimResponse struct {
@@ -757,21 +760,45 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.routeAuthorityRequired && h.routeAuthority == nil {
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "classify immutable ownerships: route/evidence authority is unavailable"})
+		return
+	}
+
 	ownerships := h.registry.ListOwnerships()
 	result := make([]ownershipResponse, 0, len(ownerships))
 	for _, own := range ownerships {
+		var constructionVersion *computerversion.ComputerVersion
+		var diskReceiptID string
+		var constructed bool
+		if h.routeAuthority != nil && own.State == VMStateActive && (own.Kind == "" || own.Kind == VMKindInteractive) {
+			var err error
+			constructionVersion, diskReceiptID, constructed, err = h.routeAuthority.constructedOwnershipIdentity(r.Context(), own.UserID, own.DesktopID, own.VMID)
+			if err != nil {
+				writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: fmt.Sprintf("classify immutable active ownership %s: %v", own.VMID, err)})
+				return
+			}
+		}
+		snapshotKind := ""
+		if constructed {
+			snapshotKind = "constructed-computer-version"
+		}
 		result = append(result, ownershipResponse{
-			VMID:          own.VMID,
-			UserID:        own.UserID,
-			DesktopID:     own.DesktopID,
-			Kind:          own.Kind,
-			WarmnessClass: string(h.registry.WarmnessClassForOwnership(own)),
-			SandboxURL:    own.SandboxURL,
-			State:         string(own.State),
-			CreatedAt:     own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-			LastActiveAt:  own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
-			Epoch:         own.Epoch,
-			StoppedBy:     own.StoppedBy,
+			VMID:                      own.VMID,
+			ComputerID:                own.ComputerID,
+			UserID:                    own.UserID,
+			DesktopID:                 own.DesktopID,
+			Kind:                      own.Kind,
+			WarmnessClass:             string(h.registry.WarmnessClassForOwnership(own)),
+			SandboxURL:                own.SandboxURL,
+			State:                     string(own.State),
+			CreatedAt:                 own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+			LastActiveAt:              own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
+			Epoch:                     own.Epoch,
+			StoppedBy:                 own.StoppedBy,
+			SnapshotKind:              snapshotKind,
+			ConstructionVersion:       constructionVersion,
+			ConstructionDiskReceiptID: diskReceiptID,
 		})
 	}
 

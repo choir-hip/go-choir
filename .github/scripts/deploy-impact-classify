@@ -141,7 +141,7 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> host OS activation and immutable service-pointer synchronization"
       continue
       ;;
-    docs/*|.github/*|skills/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go|internal/*/testdata/*)
+    docs/*|.github/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go|internal/*/testdata/*)
       add_explanation "$path -> ignored (docs/workflow/test artifact)"
       continue
       ;;
@@ -297,6 +297,10 @@ for path in "${changed[@]}"; do
       add_host_service "sandbox"
       add_explanation "$path -> sandbox search runtime package"
       ;;
+    skills/*)
+      add_host_service "sandbox"
+      add_explanation "$path -> sandbox runtime skill package"
+      ;;
     nix/sandbox-vm.nix)
       mark_guest_boot_contract
       add_explanation "$path -> canonical guest image"
@@ -335,6 +339,26 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> unknown deployed path: conservative host + canonical guest image"
       ;;
   esac
+done
+
+# A canonical guest boot refresh executes the sandbox package fetched from the
+# host pointer. Rebuild that package at the same deployment commit so refreshed
+# guests never combine a new boot closure with a stale executable.
+if [[ "$deploy_active_vm_refresh" == "true" ]]; then
+  add_host_service "sandbox"
+  add_explanation "canonical guest boot refresh -> sandbox runtime package at the same commit"
+fi
+
+# A sandbox package is executable inside the guest, not a host-service-only
+# artifact. Until a proved in-guest runtime replacement endpoint exists, every
+# sandbox selection must rebuild the canonical guest boot closure and refresh
+# mutable active computers from that closure.
+for service in "${host_services[@]}"; do
+  if [[ "$service" == "sandbox" ]]; then
+    mark_guest_boot_contract
+    add_explanation "sandbox runtime selected -> canonical guest boot closure + active VM refresh"
+    break
+  fi
 done
 
 if [[ -n "$output_file" ]]; then

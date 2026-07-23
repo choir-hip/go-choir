@@ -558,12 +558,12 @@ jobs:
               echo "deploy_needed=true"
               echo "deploy_host=true"
               echo "deploy_frontend=true"
-              echo "deploy_host_service=false"
+              echo "deploy_host_service=true"
               echo "deploy_host_os=true"
               echo "deploy_vmctl_restart=true"
               echo "deploy_active_vm_refresh=true"
-              echo "host_services="
-              echo "class_explanation=manual workflow_dispatch forced host/frontend staging deploy with active VM refresh"
+              echo "host_services=sandbox"
+              echo "class_explanation=manual workflow_dispatch forced host/frontend staging deploy with same-commit sandbox package and active VM refresh"
             } >> "$GITHUB_OUTPUT"
             echo "Staging deploy forced by manual workflow_dispatch."
             exit 0
@@ -1137,13 +1137,17 @@ jobs:
               sandbox_commit=$(verify_artifact_manifest /var/lib/go-choir/services/sandbox/share/go-choir/build.json sandbox)
               record_receipt_artifact sandbox "$sandbox_commit" installed
             fi
-            if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ] || [ "$sandbox_service_selected" = "true" ]; then
-              sandbox_runtime_commit=$(artifact_manifest_commit /var/lib/go-choir/services/sandbox/share/go-choir/build.json sandbox)
-              if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
-                echo "==> Refreshing active interactive computers onto deployed VM boot contract"
-              else
-                echo "==> Hot-refreshing active interactive computers onto deployed sandbox runtime package"
-              fi
+            if [ "$sandbox_service_selected" = "true" ] && [ "${DEPLOY_ACTIVE_VM_REFRESH}" != "true" ]; then
+              echo "Sandbox runtime selected without canonical guest boot refresh; refusing an undeployable service-pointer-only artifact" >&2
+              exit 1
+            fi
+            if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ] && [ "$sandbox_service_selected" != "true" ]; then
+              echo "Canonical guest boot refresh selected without a same-commit sandbox runtime package" >&2
+              exit 1
+            fi
+            if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
+              sandbox_runtime_commit=$sandbox_commit
+              echo "==> Refreshing active interactive computers onto deployed VM boot contract"
               ownerships_json=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list)
               mapfile -t immutable_active_interactive < <(printf '%s' "$ownerships_json" | jq -r '
                 .ownerships[]
@@ -1170,56 +1174,30 @@ jobs:
               else
                 refresh_pids=()
                 refresh_status=0
-                max_parallel_refresh=4
-                if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
-                  max_parallel_refresh=1
-                fi
+                max_parallel_refresh=1
                 for record in "${active_interactive[@]}"; do
                   IFS=$'\t' read -r refresh_user_id refresh_desktop_id refresh_vm_id refresh_sandbox_url <<< "$record"
                   (
-                    if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
-                      echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
-                      payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id, desktop_id:$desktop_id}')
-                      refresh_body="/tmp/go-choir-vm-refresh-${refresh_vm_id}.json"
-                      refresh_http_status=$(timeout 300 curl -sS -o "$refresh_body" -w '%{http_code}' --retry 2 --retry-delay 2 --retry-all-errors \
-                        -H "X-Internal-Caller: true" \
-                        -H "Content-Type: application/json" \
-                        -d "$payload" \
-                        http://127.0.0.1:8083/internal/vmctl/refresh || printf 'curl_error_%s' "$?")
-                      if [[ ! "$refresh_http_status" =~ ^2[0-9][0-9]$ ]]; then
-                        echo "    Refresh failed for ${refresh_vm_id} user ${refresh_user_id} desktop ${refresh_desktop_id}: ${refresh_http_status}" >&2
-                        if [ -s "$refresh_body" ]; then
-                          sed 's/^/      response: /' "$refresh_body" >&2
-                        fi
-                        exit 1
+                    echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
+                    payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id, desktop_id:$desktop_id}')
+                    refresh_body="/tmp/go-choir-vm-refresh-${refresh_vm_id}.json"
+                    refresh_http_status=$(timeout 300 curl -sS -o "$refresh_body" -w '%{http_code}' --retry 2 --retry-delay 2 --retry-all-errors \
+                      -H "X-Internal-Caller: true" \
+                      -H "Content-Type: application/json" \
+                      -d "$payload" \
+                      http://127.0.0.1:8083/internal/vmctl/refresh || printf 'curl_error_%s' "$?")
+                    if [[ ! "$refresh_http_status" =~ ^2[0-9][0-9]$ ]]; then
+                      echo "    Refresh failed for ${refresh_vm_id} user ${refresh_user_id} desktop ${refresh_desktop_id}: ${refresh_http_status}" >&2
+                      if [ -s "$refresh_body" ]; then
+                        sed 's/^/      response: /' "$refresh_body" >&2
                       fi
-                      refreshed_sandbox_url=$(jq -r '.sandbox_url // empty' "$refresh_body" 2>/dev/null || true)
-                      if [ -n "$refreshed_sandbox_url" ]; then
-                        refresh_sandbox_url="$refreshed_sandbox_url"
-                      fi
-                      echo "    Refreshed ${refresh_vm_id}"
-                    else
-                      echo "    Hot-refreshing sandbox runtime in ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
-                      hot_status=$(curl -sS -o /tmp/go-choir-hot-refresh-"${refresh_vm_id}".json -w '%{http_code}' --max-time 20 \
-                        -H "X-Internal-Caller: true" \
-                        -X POST \
-                        "${refresh_sandbox_url}/internal/runtime/refresh" || true)
-                      if [ "$hot_status" -lt 200 ] || [ "$hot_status" -ge 300 ]; then
-                        echo "    Hot-refresh endpoint unavailable for ${refresh_vm_id} (HTTP ${hot_status}); falling back to one full VM refresh"
-                        payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id, desktop_id:$desktop_id}')
-                        fallback_body="/tmp/go-choir-vm-refresh-fallback-${refresh_vm_id}.json"
-                        timeout 240 curl -fsS -o "$fallback_body" --retry 2 --retry-delay 2 --retry-all-errors \
-                          -H "X-Internal-Caller: true" \
-                          -H "Content-Type: application/json" \
-                          -d "$payload" \
-                          http://127.0.0.1:8083/internal/vmctl/refresh
-                        refreshed_sandbox_url=$(jq -r '.sandbox_url // empty' "$fallback_body" 2>/dev/null || true)
-                        if [ -n "$refreshed_sandbox_url" ]; then
-                          refresh_sandbox_url="$refreshed_sandbox_url"
-                        fi
-                        echo "    Refreshed ${refresh_vm_id}"
-                      fi
+                      exit 1
                     fi
+                    refreshed_sandbox_url=$(jq -r '.sandbox_url // empty' "$refresh_body" 2>/dev/null || true)
+                    if [ -n "$refreshed_sandbox_url" ]; then
+                      refresh_sandbox_url="$refreshed_sandbox_url"
+                    fi
+                    echo "    Refreshed ${refresh_vm_id}"
                     wait_for_sandbox_commit "$refresh_sandbox_url" "$refresh_vm_id" "$sandbox_runtime_commit"
                   ) &
                   refresh_pids+=("$!")
@@ -1238,11 +1216,12 @@ jobs:
                   exit "$refresh_status"
                 fi
               fi
-              if [ "$sandbox_service_selected" = "true" ]; then
+              if [ "${#active_interactive[@]}" -gt 0 ]; then
                 record_receipt_artifact sandbox "$DEPLOY_COMMIT" active
-              fi
-              if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
                 record_receipt_artifact active_computers "$DEPLOY_COMMIT" active
+              else
+                echo "    No mutable active interactive computers were refreshed; immutable realizations remain untouched"
+                record_receipt_artifact active_computers "$DEPLOY_COMMIT" empty
               fi
             else
               echo "==> Skipping active computer refresh; ordinary guest image and sandbox runtime package unchanged"
