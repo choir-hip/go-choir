@@ -55,7 +55,14 @@ func (a *RouteAuthority) Resolve(ctx context.Context, slotID string) (RouteResol
 	if a == nil || a.ledger == nil || a.inputs == nil {
 		return RouteResolution{}, fmt.Errorf("vmctl route authority: not configured")
 	}
-	slot, receipt, err := a.ledger.Resolve(ctx, strings.TrimSpace(slotID))
+	slotID = strings.TrimSpace(slotID)
+	if _, _, err := routeledger.ParseRouteSlotID(slotID); err != nil {
+		return RouteResolution{}, err
+	}
+	slot, receipt, err := a.ledger.Resolve(ctx, slotID)
+	if errors.Is(err, routeledger.ErrSlotNotFound) {
+		return RouteResolution{RouteAbsent: true}, nil
+	}
 	if err != nil {
 		return RouteResolution{}, err
 	}
@@ -256,19 +263,43 @@ func (a *RouteAuthority) PinArtifactProgram(ctx context.Context, program compute
 	return catalog.PinArtifactProgram(ctx, program)
 }
 
-func (h *Handler) requireComputerVersionRoute(ctx context.Context, userID, desktopID string) error {
+func (h *Handler) resolveComputerVersionRoute(ctx context.Context, userID, desktopID string) (RouteResolution, bool, error) {
 	if h.routeAuthority == nil {
 		if h.routeAuthorityRequired {
-			return fmt.Errorf("vmctl: ComputerVersion route authority is required but unavailable")
+			return RouteResolution{}, false, fmt.Errorf("vmctl: ComputerVersion route authority is required but unavailable")
 		}
-		return nil
+		return RouteResolution{}, false, nil
 	}
 	slotID, err := routeledger.RouteSlotID(userID, desktopID)
 	if err != nil {
+		return RouteResolution{}, false, err
+	}
+	resolution, err := h.routeAuthority.Resolve(ctx, slotID)
+	if err != nil {
+		return RouteResolution{}, true, fmt.Errorf("vmctl: immutable ComputerVersion route %s unavailable: %w", slotID, err)
+	}
+	if resolution.RouteAbsent &&
+		userID == UniversalWirePlatformOwnerID && desktopID == UniversalWirePlatformDesktopID {
+		return RouteResolution{}, true, fmt.Errorf("vmctl: platform computer requires an immutable ComputerVersion route")
+	}
+	return resolution, true, nil
+}
+
+func (h *Handler) requireComputerVersionRoute(ctx context.Context, userID, desktopID string) error {
+	resolution, known, err := h.resolveComputerVersionRoute(ctx, userID, desktopID)
+	if err != nil || !known || resolution.RouteAbsent {
 		return err
 	}
-	if _, err := h.routeAuthority.Resolve(ctx, slotID); err != nil {
-		return fmt.Errorf("vmctl: immutable ComputerVersion route %s unavailable: %w", slotID, err)
+	ownership := h.registry.GetOwnershipForDesktop(userID, desktopID)
+	if ownership == nil {
+		return fmt.Errorf("vmctl: immutable ComputerVersion route has no matching realized ownership")
+	}
+	_, _, constructed, err := h.routeAuthority.constructedOwnershipIdentity(ctx, userID, desktopID, ownership.VMID)
+	if err != nil {
+		return fmt.Errorf("vmctl: immutable ComputerVersion route does not join realized ownership: %w", err)
+	}
+	if !constructed {
+		return fmt.Errorf("vmctl: immutable ComputerVersion route does not join realized ownership")
 	}
 	return nil
 }

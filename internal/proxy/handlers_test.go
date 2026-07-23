@@ -3027,6 +3027,30 @@ func TestCurrentImmutableIdentityJoinsRedactedProductEvidence(t *testing.T) {
 	}
 }
 
+func TestCurrentImmutableIdentityAcceptsCanonicalRouteAbsence(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(vmctl.RouteResolution{RouteAbsent: true})
+	}))
+	defer server.Close()
+	handler := &Handler{vmctlClient: vmctl.NewClient(server.URL)}
+
+	if err := handler.ensureComputerVersionRoute(t.Context(), "ordinary-owner", "primary"); err != nil {
+		t.Fatalf("canonical route absence blocked ordinary boot: %v", err)
+	}
+	if err := handler.ensureComputerVersionRoute(
+		t.Context(), vmctl.UniversalWirePlatformOwnerID, vmctl.UniversalWirePlatformDesktopID,
+	); err == nil {
+		t.Fatal("canonical route absence authorized the universal-wire platform path")
+	}
+	identity, err := handler.currentImmutableIdentity(t.Context(), "ordinary-owner", "primary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identity == nil || !identity.RouteAbsent || identity.Joined || identity.CodeCommit != "" {
+		t.Fatalf("route-absent identity=%+v", identity)
+	}
+}
+
 func TestComputeStatusDoesNotCreateOwnershipAndRedactsIdentity(t *testing.T) {
 	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
 	client := vmctl.NewClient(vmctlSrv.URL)

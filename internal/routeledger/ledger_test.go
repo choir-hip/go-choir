@@ -22,6 +22,22 @@ const (
 	testCertificateRef PromotionCertificateRef = "certificate:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 )
 
+func TestParseRouteSlotIDRejectsNonCanonicalComponents(t *testing.T) {
+	for _, slotID := range []string{
+		"computer:owner\ninjected:primary",
+		"computer:owner:primary\x00",
+		"computer: owner:primary",
+	} {
+		if _, _, err := ParseRouteSlotID(slotID); err == nil {
+			t.Fatalf("ParseRouteSlotID(%q) accepted non-canonical input", slotID)
+		}
+	}
+	ownerID, computerID, err := ParseRouteSlotID("computer:owner:primary")
+	if err != nil || ownerID != "owner" || computerID != "primary" {
+		t.Fatalf("canonical route slot parse=(%q,%q,%v)", ownerID, computerID, err)
+	}
+}
+
 func TestMemoryLedgerTransitionContract(t *testing.T) {
 	ledger := NewMemoryLedger()
 	slotID := mustSlotID(t, "owner-a", "primary")

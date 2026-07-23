@@ -184,17 +184,44 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
-	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+	if h.routeAuthority != nil {
+		h.routeAuthority.mutationMu.Lock()
+		defer h.routeAuthority.mutationMu.Unlock()
+	}
+	route, routeKnown, err := h.resolveComputerVersionRoute(r.Context(), req.UserID, req.DesktopID)
+	if err != nil {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 		return
 	}
-	if req.UserID == UniversalWirePlatformOwnerID && req.DesktopID == UniversalWirePlatformDesktopID {
-		if err := h.registry.EnsureUniversalWirePlatformComputer(r.Context()); err != nil {
-			log.Printf("vmctl: resolve platform computer failed: %v", err)
-			writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "failed to resolve platform computer"})
+	expectedVMID := ""
+	if routeKnown && !route.RouteAbsent {
+		existing := h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID)
+		if existing == nil {
+			writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{
+				Error: "immutable ComputerVersion route has no matching realized ownership",
+			})
 			return
 		}
-		own := h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID)
+		_, _, constructed, joinErr := h.routeAuthority.constructedOwnershipIdentity(
+			r.Context(), req.UserID, req.DesktopID, existing.VMID,
+		)
+		if joinErr != nil || !constructed {
+			writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{
+				Error: "immutable ComputerVersion route does not join realized ownership",
+			})
+			return
+		}
+		expectedVMID = existing.VMID
+	}
+	if req.UserID == UniversalWirePlatformOwnerID && req.DesktopID == UniversalWirePlatformDesktopID {
+		var own *VMOwnership
+		if routeKnown && !route.RouteAbsent {
+			own, err = h.registry.resolveExistingDesktopContext(r.Context(), req.UserID, req.DesktopID, expectedVMID)
+		} else {
+			if err = h.registry.EnsureUniversalWirePlatformComputer(r.Context()); err == nil {
+				own = h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID)
+			}
+		}
 		if own == nil {
 			log.Printf("vmctl: resolve platform computer lookup failed after ensure")
 			writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "failed to resolve platform computer"})
@@ -219,10 +246,19 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	own, err := h.registry.ResolveOrAssignDesktopContext(r.Context(), req.UserID, req.DesktopID)
+	var own *VMOwnership
+	if routeKnown && !route.RouteAbsent {
+		own, err = h.registry.resolveExistingDesktopContext(r.Context(), req.UserID, req.DesktopID, expectedVMID)
+	} else {
+		own, err = h.registry.ResolveOrAssignDesktopContext(r.Context(), req.UserID, req.DesktopID)
+	}
 	if err != nil {
 		log.Printf("vmctl: resolve failed for user %s desktop %s: %v", req.UserID, req.DesktopID, err)
-		writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "failed to resolve VM"})
+		status := http.StatusInternalServerError
+		if routeKnown && !route.RouteAbsent {
+			status = http.StatusConflict
+		}
+		writeVMCTLJSON(w, status, vmctlErrorResponse{Error: "failed to resolve VM"})
 		return
 	}
 

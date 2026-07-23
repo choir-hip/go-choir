@@ -221,7 +221,7 @@ func TestExecutionIdentityCommitsJoinAllowsBoundMixedGeneration(t *testing.T) {
 	}
 	host := buildinfo.Info{Service: "proxy", Commit: hostCommit}
 	guest := buildinfo.Info{Commit: guestCommit, DeployedCommit: guestCommit}
-	if !executionIdentityCommitsJoin(mixed, host, routeCommit, guest) {
+	if !executionIdentityCommitsJoin(mixed, host, routeCommit, false, guest) {
 		t.Fatal("bound mixed-generation identity was refused")
 	}
 
@@ -233,8 +233,34 @@ func TestExecutionIdentityCommitsJoinAllowsBoundMixedGeneration(t *testing.T) {
 		"proxy": {EmbeddedCommit: targetCommit},
 	}
 	selectedHost := buildinfo.Info{Service: "proxy", Commit: targetCommit, DeployedCommit: targetCommit}
-	if !executionIdentityCommitsJoin(selected, selectedHost, routeCommit, guest) {
+	if !executionIdentityCommitsJoin(selected, selectedHost, routeCommit, false, guest) {
 		t.Fatal("selected proxy identity at target commit was refused")
+	}
+	routeAbsent := selected
+	routeAbsent.Artifacts = map[string]json.RawMessage{
+		"proxy":   json.RawMessage(`{"commit":"1234567890abcdef1234567890abcdef12345678","status":"active"}`),
+		"sandbox": json.RawMessage(`{"commit":"1234567890abcdef1234567890abcdef12345678","status":"installed"}`),
+	}
+	ordinaryGuest := buildinfo.Info{Commit: targetCommit, DeployedCommit: targetCommit}
+	if !executionIdentityCommitsJoin(routeAbsent, selectedHost, "", true, ordinaryGuest) {
+		t.Fatal("same-commit route-absent identity was refused")
+	}
+	if executionIdentityCommitsJoin(routeAbsent, selectedHost, "", true, guest) {
+		t.Fatal("route-absent identity accepted a guest outside the deployed boot closure")
+	}
+	routeAbsentNoProxy := routeAbsent
+	routeAbsentNoProxy.Artifacts = map[string]json.RawMessage{
+		"sandbox": json.RawMessage(`{"commit":"1234567890abcdef1234567890abcdef12345678","status":"installed"}`),
+	}
+	if executionIdentityCommitsJoin(routeAbsentNoProxy, selectedHost, "", true, ordinaryGuest) {
+		t.Fatal("route-absent identity accepted a missing proxy artifact")
+	}
+	routeAbsentStaleHost := buildinfo.Info{Service: "proxy", Commit: hostCommit}
+	if executionIdentityCommitsJoin(routeAbsent, routeAbsentStaleHost, "", true, ordinaryGuest) {
+		t.Fatal("route-absent identity accepted a stale proxy host")
+	}
+	if executionIdentityCommitsJoin(routeAbsent, selectedHost, routeCommit, true, ordinaryGuest) {
+		t.Fatal("route-absent identity accepted a route commit")
 	}
 	selectedStaleInventory := selected
 	selectedStaleInventory.HostIdentity.Services = map[string]hostServiceIdentity{
@@ -258,7 +284,7 @@ func TestExecutionIdentityCommitsJoinAllowsBoundMixedGeneration(t *testing.T) {
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			if executionIdentityCommitsJoin(test.receipt, test.host, test.route, test.guest) {
+			if executionIdentityCommitsJoin(test.receipt, test.host, test.route, false, test.guest) {
 				t.Fatal("conflicting identity join was accepted")
 			}
 		})

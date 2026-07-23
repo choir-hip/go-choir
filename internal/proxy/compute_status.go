@@ -55,6 +55,7 @@ type computeImmutableIdentity struct {
 	TransitionKind          routeledger.TransitionKind      `json:"transition_kind"`
 	ApprovalRef             string                          `json:"approval_ref"`
 	PromotionCertificateRef string                          `json:"promotion_certificate_ref"`
+	RouteAbsent             bool                            `json:"route_absent,omitempty"`
 	Joined                  bool                            `json:"joined"`
 }
 
@@ -239,9 +240,12 @@ func (h *Handler) currentImmutableIdentity(ctx context.Context, userID, desktopI
 	if err != nil {
 		return nil, err
 	}
-	resolution, err := h.vmctlClient.ResolveComputerVersionRoute(ctx, slotID)
+	resolution, err := h.vmctlClient.ResolveComputerVersionRouteOrAbsent(ctx, slotID)
 	if err != nil {
 		return nil, err
+	}
+	if resolution.RouteAbsent {
+		return &computeImmutableIdentity{RouteAbsent: true}, nil
 	}
 	receipt := resolution.LatestReceipt
 	version := resolution.Slot.Current

@@ -1038,8 +1038,13 @@ func (h *Handler) ensureComputerVersionRoute(ctx context.Context, userID, deskto
 	if err != nil {
 		return err
 	}
-	if _, err := h.vmctlClient.ResolveComputerVersionRoute(ctx, routeSlotID); err != nil {
+	resolution, err := h.vmctlClient.ResolveComputerVersionRouteOrAbsent(ctx, routeSlotID)
+	if err != nil {
 		return fmt.Errorf("resolve immutable ComputerVersion route %s: %w", routeSlotID, err)
+	}
+	if resolution.RouteAbsent &&
+		userID == vmctl.UniversalWirePlatformOwnerID && desktopID == vmctl.UniversalWirePlatformDesktopID {
+		return fmt.Errorf("platform computer requires an immutable ComputerVersion route")
 	}
 	return nil
 }

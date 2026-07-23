@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
@@ -15,6 +16,19 @@ import (
 )
 
 func (c *Client) ResolveComputerVersionRoute(ctx context.Context, routeSlotID string) (RouteResolution, error) {
+	resolution, err := c.ResolveComputerVersionRouteOrAbsent(ctx, routeSlotID)
+	if err != nil {
+		return RouteResolution{}, err
+	}
+	if resolution.RouteAbsent {
+		return RouteResolution{}, fmt.Errorf("vmctl client: immutable ComputerVersion route %s is absent", routeSlotID)
+	}
+	return resolution, nil
+}
+
+// ResolveComputerVersionRouteOrAbsent is the opt-in read used by ordinary
+// bootstrap and status paths, where canonical route absence is authoritative.
+func (c *Client) ResolveComputerVersionRouteOrAbsent(ctx context.Context, routeSlotID string) (RouteResolution, error) {
 	if c == nil || c.httpClient == nil {
 		return RouteResolution{}, fmt.Errorf("vmctl client: route client is not configured")
 	}
@@ -47,8 +61,13 @@ func (c *Client) ResolveComputerVersionRoute(ctx context.Context, routeSlotID st
 		return RouteResolution{}, fmt.Errorf("vmctl client: ComputerVersion route resolution failed with status %s", resp.Status)
 	}
 	var resolution RouteResolution
-	if err := json.Unmarshal(body, &resolution); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&resolution); err != nil {
 		return RouteResolution{}, fmt.Errorf("vmctl client: decode ComputerVersion route response: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return RouteResolution{}, fmt.Errorf("vmctl client: decode ComputerVersion route response: trailing content")
 	}
 	if err := validateRouteResolution(routeSlotID, resolution); err != nil {
 		return RouteResolution{}, err
@@ -57,6 +76,16 @@ func (c *Client) ResolveComputerVersionRoute(ctx context.Context, routeSlotID st
 }
 
 func validateRouteResolution(routeSlotID string, resolution RouteResolution) error {
+	if resolution.RouteAbsent {
+		if !reflect.DeepEqual(resolution.Slot, routeledger.Slot{}) ||
+			!reflect.DeepEqual(resolution.LatestReceipt, routeledger.TransitionReceipt{}) ||
+			resolution.TransitionReceipt != nil ||
+			!reflect.DeepEqual(resolution.CodeClosure, computerversion.CodeClosure{}) ||
+			!reflect.DeepEqual(resolution.ArtifactProgram, computerversion.ArtifactProgram{}) {
+			return fmt.Errorf("vmctl client: route-absent response carried route authority")
+		}
+		return nil
+	}
 	if !resolution.Slot.Current.Valid() || resolution.Slot.ID != routeSlotID ||
 		resolution.LatestReceipt.RouteSlotID != routeSlotID ||
 		resolution.LatestReceipt.ID != resolution.Slot.LatestReceiptID ||
@@ -137,8 +166,13 @@ func (c *Client) postComputerVersionControl(ctx context.Context, endpoint string
 		}
 		return fmt.Errorf("vmctl client: ComputerVersion control failed with status %s", resp.Status)
 	}
-	if err := json.Unmarshal(body, output); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(output); err != nil {
 		return fmt.Errorf("vmctl client: decode ComputerVersion control response: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return fmt.Errorf("vmctl client: decode ComputerVersion control response: trailing content")
 	}
 	return nil
 }

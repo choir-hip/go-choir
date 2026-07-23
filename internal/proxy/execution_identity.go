@@ -312,18 +312,42 @@ func executionIdentityFullCommit(commit string) bool {
 	return true
 }
 
-func executionIdentityCommitsJoin(receipt deploymentIdentityReceipt, host buildinfo.Info, routeCommit string, guest buildinfo.Info) bool {
+func executionIdentityCommitsJoin(receipt deploymentIdentityReceipt, host buildinfo.Info, routeCommit string, routeAbsent bool, guest buildinfo.Info) bool {
 	target := strings.TrimSpace(receipt.TargetCommit)
 	routeCommit = strings.TrimSpace(routeCommit)
 	proxy := receipt.HostIdentity.Services["proxy"]
 	if !executionIdentityFullCommit(target) ||
-		!executionIdentityFullCommit(routeCommit) ||
 		!executionIdentityFullCommit(host.Commit) ||
 		!executionIdentityFullCommit(proxy.EmbeddedCommit) ||
 		host.Service != "proxy" ||
 		host.Commit != proxy.EmbeddedCommit ||
 		!executionIdentityFullCommit(guest.Commit) ||
 		guest.DeployedCommit != guest.Commit {
+		return false
+	}
+	if routeAbsent {
+		rawSandbox, selected := receipt.Artifacts["sandbox"]
+		var sandbox struct {
+			Commit string `json:"commit"`
+			Status string `json:"status"`
+		}
+		if routeCommit != "" || guest.Commit != target || !selected ||
+			json.Unmarshal(rawSandbox, &sandbox) != nil ||
+			sandbox.Commit != target || (sandbox.Status != "installed" && sandbox.Status != "active") {
+			return false
+		}
+		rawProxy, proxySelected := receipt.Artifacts["proxy"]
+		var proxyArtifact struct {
+			Commit string `json:"commit"`
+			Status string `json:"status"`
+		}
+		return proxySelected &&
+			json.Unmarshal(rawProxy, &proxyArtifact) == nil &&
+			proxyArtifact.Commit == target &&
+			proxyArtifact.Status == "active" &&
+			host.Commit == target &&
+			host.DeployedCommit == target
+	} else if !executionIdentityFullCommit(routeCommit) {
 		return false
 	}
 	rawArtifact, selected := receipt.Artifacts["proxy"]
@@ -423,7 +447,7 @@ func (h *Handler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Request
 	}
 	receiptRaw, receipt, err := readDeploymentIdentityReceipt()
 	hostBuild := buildinfo.Snapshot("proxy")
-	if err != nil || !executionIdentityCommitsJoin(receipt, hostBuild, routeIdentity.CodeCommit, guest.Identity.Build) {
+	if err != nil || !executionIdentityCommitsJoin(receipt, hostBuild, routeIdentity.CodeCommit, routeIdentity.RouteAbsent, guest.Identity.Build) {
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity host, guest, route, and CI join unavailable"})
 		return
 	}

@@ -104,8 +104,13 @@ func RouteSlotID(ownerID, computerID string) (string, error) {
 }
 
 func ParseRouteSlotID(slotID string) (ownerID, computerID string, err error) {
-	parts := strings.Split(strings.TrimSpace(slotID), ":")
+	slotID = strings.TrimSpace(slotID)
+	parts := strings.Split(slotID, ":")
 	if len(parts) != 3 || parts[0] != "computer" || parts[1] == "" || parts[2] == "" {
+		return "", "", fmt.Errorf("route ledger: invalid route slot ID")
+	}
+	canonical, err := RouteSlotID(parts[1], parts[2])
+	if err != nil || canonical != slotID {
 		return "", "", fmt.Errorf("route ledger: invalid route slot ID")
 	}
 	return parts[1], parts[2], nil

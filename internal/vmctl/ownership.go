@@ -1193,6 +1193,14 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*V
 // request context is canceled. The first boot caller is allowed to keep
 // booting the VM so a later retry can reuse the completed assignment.
 func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, userID, desktopID string) (*VMOwnership, error) {
+	return r.resolveDesktopContext(ctx, userID, desktopID, true, "")
+}
+
+func (r *OwnershipRegistry) resolveExistingDesktopContext(ctx context.Context, userID, desktopID, expectedVMID string) (*VMOwnership, error) {
+	return r.resolveDesktopContext(ctx, userID, desktopID, false, expectedVMID)
+}
+
+func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, desktopID string, allowAssignment bool, expectedVMID string) (*VMOwnership, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -1202,6 +1210,10 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 
 	// Check if the desktop already has an active ownership.
 	if own, ok := r.ownerships[key]; ok {
+		if !allowAssignment && strings.TrimSpace(own.VMID) != strings.TrimSpace(expectedVMID) {
+			r.mu.Unlock()
+			return nil, fmt.Errorf("realized VM ownership changed for routed computer %s/%s", userID, desktopID)
+		}
 		if err := r.rejectRefreshConflictLocked(key); err != nil {
 			r.mu.Unlock()
 			return nil, err
@@ -1221,7 +1233,7 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 				current := r.ownerships[key]
 				if current == nil || current.VMID != snapshot.VMID || !current.IsReady() {
 					r.mu.Unlock()
-					return r.ResolveOrAssignDesktopContext(ctx, userID, desktopID)
+					return r.resolveDesktopContext(ctx, userID, desktopID, allowAssignment, expectedVMID)
 				}
 				if info != nil {
 					current.SandboxURL = info.HostURL
@@ -1294,7 +1306,7 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 				for _, ch := range waiters {
 					ch <- nil
 				}
-				return r.ResolveOrAssignDesktopContext(ctx, userID, desktopID)
+				return r.resolveDesktopContext(ctx, userID, desktopID, allowAssignment, expectedVMID)
 			}
 			if info != nil {
 				current.SandboxURL = info.HostURL
@@ -1318,6 +1330,10 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 			return result, nil
 		}
 
+	}
+	if !allowAssignment {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("no realized VM ownership for routed computer %s/%s", userID, desktopID)
 	}
 
 	// Check if a VM assignment is already in progress for this user/desktop.

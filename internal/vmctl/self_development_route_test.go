@@ -218,6 +218,9 @@ func TestHandleListClassifiesConstructedOwnershipFromRouteEvidence(t *testing.T)
 	}
 	handler := NewHandler(registry)
 	handler.SetRouteAuthority(authority)
+	if err := handler.AuthorizeComputerVersionRoute(t.Context(), ownership.UserID, ownership.DesktopID); err != nil {
+		t.Fatalf("joined constructed ownership was not authorized: %v", err)
+	}
 	request := httptest.NewRequest(http.MethodGet, "/internal/vmctl/list", nil)
 	request.Header.Set("X-Internal-Caller", "true")
 	response := httptest.NewRecorder()
@@ -239,6 +242,13 @@ func TestHandleListClassifiesConstructedOwnershipFromRouteEvidence(t *testing.T)
 		got.ConstructionVersion == nil || *got.ConstructionVersion != version ||
 		got.ConstructionDiskReceiptID != "disk-instantiation:sha256:"+repeatedHex('d') {
 		t.Fatalf("constructed ownership response=%+v", got)
+	}
+	request = httptest.NewRequest(http.MethodPost, "/internal/vmctl/resolve", strings.NewReader(`{"user_id":"owner","desktop_id":"primary"}`))
+	request.Header.Set("X-Internal-Caller", "true")
+	response = httptest.NewRecorder()
+	handler.HandleResolve(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("joined constructed resolve status=%d body=%s", response.Code, response.Body.String())
 	}
 	unknown, err := registry.ResolveOrAssignDesktop("ordinary-owner", PrimaryDesktopID)
 	if err != nil {
@@ -300,6 +310,157 @@ func TestHandleListFailsClosedWithoutRequiredRouteAuthority(t *testing.T) {
 	}
 }
 
+func TestResolveComputerVersionRouteReturnsTypedCanonicalAbsence(t *testing.T) {
+	ledger := routeledger.NewMemoryLedger()
+	catalog := &projectionInputCatalog{
+		codes:    map[computerversion.CodeRef]computerversion.CodeClosure{},
+		programs: map[computerversion.ArtifactProgramRef]computerversion.ArtifactProgram{},
+	}
+	authority, err := newMemoryRouteAuthority(ledger, catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(NewOwnershipRegistry("http://127.0.0.1:8085"))
+	handler.SetRouteAuthority(authority)
+	server := httptest.NewServer(http.HandlerFunc(handler.HandleResolveComputerVersionRoute))
+	defer server.Close()
+
+	slotID, err := routeledger.RouteSlotID("ordinary-owner", PrimaryDesktopID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolution, err := NewClient(server.URL).ResolveComputerVersionRouteOrAbsent(t.Context(), slotID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resolution.RouteAbsent {
+		t.Fatalf("route resolution=%+v, want canonical absence", resolution)
+	}
+	if _, err := NewClient(server.URL).ResolveComputerVersionRoute(t.Context(), slotID); err == nil {
+		t.Fatal("strict immutable-route client accepted canonical absence")
+	}
+	tampered := resolution
+	tampered.Slot.ID = slotID
+	if err := validateRouteResolution(slotID, tampered); err == nil {
+		t.Fatal("route-absent response carrying route authority was accepted")
+	}
+	if err := handler.AuthorizeComputerVersionRoute(t.Context(), "ordinary-owner", PrimaryDesktopID); err != nil {
+		t.Fatalf("ordinary route absence was refused: %v", err)
+	}
+	if err := handler.AuthorizeComputerVersionRoute(t.Context(), UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID); err == nil {
+		t.Fatal("shared route guard accepted platform route absence")
+	}
+	platformRequest := httptest.NewRequest(http.MethodPost, "/internal/vmctl/resolve", strings.NewReader(
+		`{"user_id":"`+UniversalWirePlatformOwnerID+`","desktop_id":"`+UniversalWirePlatformDesktopID+`"}`,
+	))
+	platformRequest.Header.Set("X-Internal-Caller", "true")
+	platformResponse := httptest.NewRecorder()
+	handler.HandleResolve(platformResponse, platformRequest)
+	if platformResponse.Code != http.StatusConflict {
+		t.Fatalf("route-absent platform resolve status=%d body=%s, want 409", platformResponse.Code, platformResponse.Body.String())
+	}
+	if got := handler.registry.GetOwnershipForDesktop(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID); got != nil {
+		t.Fatalf("route-absent platform resolve allocated %+v", got)
+	}
+	malformed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"route_absent":true} {}`))
+	}))
+	defer malformed.Close()
+	if _, err := NewClient(malformed.URL).ResolveComputerVersionRouteOrAbsent(t.Context(), slotID); err == nil {
+		t.Fatal("route client accepted trailing JSON content")
+	}
+}
+
+func TestHandleResolveRefusesRoutedComputerWithoutRealizedOwnership(t *testing.T) {
+	now := time.Date(2026, 7, 23, 20, 0, 0, 0, time.UTC)
+	code, err := computerversion.NewCodeClosure(strings.Repeat("a", 40), []computerversion.CodeArtifact{{
+		Name: "bundle", SHA256: repeatedHex('b'), URI: "artifact+sha256://" + repeatedHex('b') + "/bundle",
+	}}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := computerversion.NewArtifactProgram([]computerversion.ArtifactProgramEntry{{
+		Kind: "capsule_effect_bundle", ContentSHA256: repeatedHex('b'), ArtifactURI: "artifact+sha256://" + repeatedHex('b') + "/bundle",
+	}}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	version := computerversion.ComputerVersion{CodeRef: code.Ref, ArtifactProgramRef: program.Ref}
+	catalog := &projectionInputCatalog{
+		codes:    map[computerversion.CodeRef]computerversion.CodeClosure{code.Ref: code},
+		programs: map[computerversion.ArtifactProgramRef]computerversion.ArtifactProgram{program.Ref: program},
+	}
+	ledger := routeledger.NewMemoryLedger()
+	authority, err := newMemoryRouteAuthority(ledger, catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slotID, err := routeledger.RouteSlotID("routed-owner", PrimaryDesktopID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ledger.Transition(t.Context(), routeledger.TransitionCommand{
+		RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: version,
+		ApprovalRef:             routeledger.ApprovalRef("approval:sha256:" + repeatedHex('c')),
+		PromotionCertificateRef: routeledger.PromotionCertificateRef("certificate:sha256:" + repeatedHex('d')),
+		IdempotencyKey:          "idempotency:routed-without-ownership",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(NewOwnershipRegistry("http://127.0.0.1:8085"))
+	handler.SetRouteAuthority(authority)
+	request := httptest.NewRequest(http.MethodPost, "/internal/vmctl/resolve", strings.NewReader(`{"user_id":"routed-owner","desktop_id":"primary"}`))
+	request.Header.Set("X-Internal-Caller", "true")
+	response := httptest.NewRecorder()
+	handler.HandleResolve(response, request)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("routed missing-ownership resolve status=%d body=%s, want 409", response.Code, response.Body.String())
+	}
+	if got := handler.registry.GetOwnershipForDesktop("routed-owner", PrimaryDesktopID); got != nil {
+		t.Fatalf("routed missing-ownership resolve allocated %+v", got)
+	}
+	if err := handler.AuthorizeComputerVersionRoute(t.Context(), "routed-owner", PrimaryDesktopID); err == nil {
+		t.Fatal("shared route guard accepted routed computer without realized ownership")
+	}
+	mismatched, err := handler.registry.ResolveOrAssignDesktop("routed-owner", PrimaryDesktopID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request = httptest.NewRequest(http.MethodPost, "/internal/vmctl/resolve", strings.NewReader(`{"user_id":"routed-owner","desktop_id":"primary"}`))
+	request.Header.Set("X-Internal-Caller", "true")
+	response = httptest.NewRecorder()
+	handler.HandleResolve(response, request)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("nonjoining routed ownership status=%d body=%s, want 409", response.Code, response.Body.String())
+	}
+	if err := handler.AuthorizeComputerVersionRoute(t.Context(), "routed-owner", PrimaryDesktopID); err == nil {
+		t.Fatal("shared route guard accepted nonjoining routed ownership")
+	}
+	if got := handler.registry.GetOwnershipForDesktop("routed-owner", PrimaryDesktopID); got == nil || got.VMID != mismatched.VMID {
+		t.Fatalf("nonjoining routed ownership mutated: got=%+v want vm_id=%s", got, mismatched.VMID)
+	}
+}
+
 func repeatedHex(value byte) string {
 	return strings.Repeat(string(value), 64)
+}
+
+func TestPostComputerVersionControlRejectsUnknownAndTrailingContent(t *testing.T) {
+	for name, body := range map[string]string{
+		"unknown":  `{"route_absent":true,"unexpected":true}`,
+		"trailing": `{"route_absent":true} {}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			defer server.Close()
+			var resolution RouteResolution
+			if err := NewClient(server.URL).postComputerVersionControl(
+				t.Context(), server.URL, map[string]string{"request": "test"}, &resolution,
+			); err == nil {
+				t.Fatalf("accepted malformed control response %q", body)
+			}
+		})
+	}
 }
