@@ -271,28 +271,28 @@ execution:
 now:
   status: problem_documented
   slice: D-land-deploy-and-prove
-  question: "Why does the newly booted same-deployment ordinary guest refuse nonce-bound execution identity after clean bootstrap succeeds?"
+  question: "Why is the guest-core signer unavailable on a newly allocated ordinary computer until the first stop/wake cycle?"
   reconciliation:
-    observed_at: 2026-07-23T23:13:30Z
-    source_ref: refs/remotes/origin/main@4a33fff0487a069066350f665f47d2f835ca533b
-    deploy_identity: "GitHub Actions 30051002959 passed all selected CI gates and deployed 4a33fff0 to Node B; /health reports proxy build/deployed_commit 4a33fff0."
+    observed_at: 2026-07-23T23:41:00Z
+    source_ref: refs/remotes/origin/main@6dfa50f9b4d686a7386974cd218c07a58102a24a
+    deploy_identity: "GitHub Actions 30053220948 and Deploy to Staging job 89360249948 passed; /health reports proxy build/deployed_commit 6dfa50f9."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
-    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir was clean after push; this update is the required code-free problem receipt. Protected unrelated worktrees remain untouched."
+    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir was clean after the diagnostic push; this update is the required code-free problem receipt. Protected unrelated worktrees remain untouched."
     status: reconciled
   accepted_deployment:
-    source_commit: 4a33fff0487a069066350f665f47d2f835ca533b
-    ci_ref: "GitHub Actions 30051002959 passed; Deploy to Staging job 89354924805 passed."
-    environment_identity: "Host /health is exact at 4a33fff0. Clean owner 94cc12ef-be55-4dd0-9689-5916d20de988 booted vm-f5ba58035a19f9d7d72a029ed06adcbb epoch 8197 through canonical route_absent."
-    rollback_ref: "origin/main@6df1651f; accepted prior deployment cc85f099; preserved constructed guest 32302b65 epoch 129."
+    source_commit: 6dfa50f9b4d686a7386974cd218c07a58102a24a
+    ci_ref: "GitHub Actions 30053220948 passed; Deploy to Staging job 89360249948 passed."
+    environment_identity: "Host /health is exact at 6dfa50f9. Clean owner 1dad4a1e-0593-4f8d-9b79-02001780a5c6 booted vm-22f645cfc53279ce196d20f66158ea48 epoch 8199 through canonical route_absent."
+    rollback_ref: "origin/main@6d8bdf8f; accepted deployed route repair 4a33fff0; prior accepted cc85f099."
   observed_product_evidence:
-    - "A clean browser client registered route-acceptance-4a33fff0-1784848249103@example.com; /api/shell/bootstrap returned 200 from vm-f5ba58035a19f9d7d72a029ed06adcbb and the desktop became ready."
-    - "/api/compute/status returned status ok, active primary epoch 8197, runtime ready, and immutable_identity.route_absent=true joined=false. This proves the route-absence repair through the SQL-ledger product path."
-    - "A newly minted acceptance:read key bound to that owner reached /api/acceptance/execution-identity, but the host returned 502 execution identity guest refused on repeated nonce-bound requests; keys were revoked after each probe."
-  observed_problem: "The route-absence boot succeeds, but the clean ordinary guest returns a non-200 response for its signed execution-identity endpoint. The host currently discards the guest status/body, so no-SSH evidence cannot distinguish incomplete executable/deploy/closure identity, signer unavailability, or another guest refusal."
-  policy_resolution_ref: "Problem-documentation-first requires this receipt before any diagnostics or runtime repair. Preserve fail-closed identity acceptance; expose only bounded sanitized guest refusal diagnostics, identify the missing join at source, and do not weaken signature, nonce, closure, deployment, or VMID checks."
-  blocker_or_risk: "Mission completion remains blocked: the ordinary computer is usable, but same-commit signed host/guest identity is unproved, so lifecycle and restart acceptance cannot be credited."
-  latest_blocker_or_risk: "Mutation class red. Protected surfaces: guest execution identity, platform attestation, deployment identity, and acceptance. Admissible evidence: bounded no-SSH diagnostic plus signed joined identity. Rollback: 4a33fff0 to 6df1651f or prior accepted cc85f099. Conjecture delta: product usability and executable identity are independent acceptance axes. Heresy delta: discovered guest refusal hidden behind a generic host 502; introduced none; repaired route absence, not identity."
-  next_action: "Land independently accepted bounded diagnostic candidate 7b0e4038b17f51382710a0d84150c534f97ebdb56a67d96508cacb88fdc7e623, reproduce the exact guest refusal without SSH, then repair the missing identity prerequisite at source and rerun the same clean-client proof."
+    - "The deployed bounded diagnostic changed the opaque 502 into upstream_status 503 with reason execution identity signer unavailable; acceptance keys were revoked after every probe."
+    - "A clean same-deployment browser owner booted vm-22f645cfc53279ce196d20f66158ea48 epoch 8199 and reached runtime ready, but repeated signed identity probes still reported signer unavailable."
+    - "After the public stop_current_computer/wake_current_computer cycle advanced the same computer to epoch 8200, the signer answered; the host then reached the stricter commit/deployment join and refused because the current deployment receipt did not select the sandbox artifact."
+  observed_problem: "Runtime readiness does not fate-share guest-core signer readiness on first allocation. The signer becomes available after the first reboot, proving the key/socket path can work but making initial execution identity and updater signing nondeterministic."
+  policy_resolution_ref: "Problem-documentation-first requires this receipt before repair. Make signer readiness a prerequisite of updater/runtime readiness and preserve fail-closed signature, nonce, closure, deployment, route, and VMID verification."
+  blocker_or_risk: "Mission completion remains blocked: a same-deployment clean computer is usable, but first-boot signer readiness and a deployment selecting both proxy and sandbox are required before signed identity can join."
+  latest_blocker_or_risk: "Mutation class red. Protected surfaces: guest signer startup, updater/runtime readiness, execution identity, deployment identity, and acceptance. Admissible evidence: clean first-boot signed identity plus restart identity on an exact deployment selecting proxy and sandbox. Rollback: 6dfa50f9 to 6d8bdf8f or accepted 4a33fff0. Conjecture delta: runtime ready without its signing authority is not product readiness. Heresy delta: discovered signer/runtime startup non-fate-sharing; introduced none; repaired diagnostic opacity only."
+  next_action: "Gate updater and runtime startup on a responsive guest-core signer, verify the boot unit contract, independently review, deploy a candidate selecting proxy and sandbox, then rerun clean first-boot and restart identity proofs."
 receipts:
   - id: durable-work-contract-gate-2026-07-21
     boundary: define
@@ -465,6 +465,16 @@ receipts:
     problem_ref: "Clean ordinary guest refuses signed execution identity while the host erases the actionable guest refusal reason."
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; deployed clean-client evidence; frozen red-surface review"
     candidate_or_evidence_refs: [artifact://2053, artifact://2057, /tmp/agentic-consensus-20260723-192350/manifest.tsv]
+
+  - id: first-boot-guest-signer-unavailable-2026-07-23
+    boundary: land
+    commit_or_artifact: pending_code_free_receipt
+    proof_refs: ["GitHub Actions 30053220948", "Deploy to Staging job 89360249948", "https://choir.news/health reports 6dfa50f9", "clean owner 1dad4a1e-0593-4f8d-9b79-02001780a5c6", "vm-22f645cfc53279ce196d20f66158ea48 epoch 8199 runtime ready", "502 guest refused / upstream 503 execution identity signer unavailable", "public stop/wake epoch 8200", "post-restart 503 execution identity host, guest, route, and CI join unavailable"]
+    rollback_ref: "origin/main@6d8bdf8f; deployed 6dfa50f9; accepted route repair 4a33fff0"
+    disposition: "Problem documented before signer startup repair. First-boot runtime readiness is unaccepted because signer readiness does not fate-share it."
+    problem_ref: "A newly allocated ordinary computer reports runtime ready before guest-core signer readiness; the signer becomes available only after the first stop/wake."
+    authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; deployed clean-client evidence"
+    candidate_or_evidence_refs: [artifact://2068]
 
 view:
   path: http://127.0.0.1:8788/
