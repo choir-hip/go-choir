@@ -271,28 +271,28 @@ execution:
 now:
   status: problem_documented
   slice: D-land-deploy-and-prove
-  question: "How can Node B restart vmctl during a runtime deployment without trying to recreate a retained guest on a TAP device still held by the surviving Firecracker process?"
+  question: "How can a newly registered owner boot the deployed ordinary guest when canonical route authority proves that no immutable ComputerVersion route exists?"
   reconciliation:
-    observed_at: 2026-07-23T19:00:00Z
-    source_ref: refs/remotes/origin/main@d845c56a
-    deploy_identity: "Settlement repair d845c56a passed every selected CI source/build gate in GitHub Actions 30034969790, but Node B deployment failed before activation receipt. The last accepted joined deployment remains 32302b652ea7522e1d3cd0b21fde8b82f0449b40."
+    observed_at: 2026-07-23T20:38:55Z
+    source_ref: refs/remotes/origin/main@cc85f099
+    deploy_identity: "GitHub Actions 30040695413 passed every selected CI gate and deployed cc85f099 to Node B. The activation receipt identifies the same-commit host closure/services and installed sandbox package, records active_computers=empty, and preserves the active immutable 32302b65 ComputerVersion at epoch 129."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
-    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir contains only this code-free problem receipt after pushed source commit d845c56a; protected unrelated worktrees remain untouched."
+    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir is clean at cc85f099 before this code-free problem receipt; protected unrelated worktrees remain untouched."
     status: reconciled
   accepted_deployment:
-    source_commit: 32302b652ea7522e1d3cd0b21fde8b82f0449b40
-    ci_ref: "GitHub Actions 30020798551 passed every selected source/build gate and Node B deployment."
-    environment_identity: "choir.execution_identity.v1 joined=true on 32302b652ea7522e1d3cd0b21fde8b82f0449b40 at retained-computer epoch 127 before the failed d845c56a deployment attempt."
-    rollback_ref: "Node B deploy-receipt-previous.json identifies 696b118a; accepted deployment 32302b65 is the pre-attempt product baseline; origin/main@5cd42558 is the settlement-repair source rollback."
+    source_commit: cc85f099ea5e7bf1bb21591755d2f8be8d48a231
+    ci_ref: "GitHub Actions 30040695413 passed every selected source/build gate and Node B deployment."
+    environment_identity: "Signed choir.execution_identity.v1 joined=true identifies host/deployment cc85f099 and the deliberately preserved immutable guest 32302b65 at candidate-fleet-e15cb89f25d963c220319b7b epoch 129."
+    rollback_ref: "Activation receipt previous deployment 32302b652ea7522e1d3cd0b21fde8b82f0449b40; immutable guest ComputerVersion remains separately rollback-capable."
   observed_product_evidence:
-    - "The settlement candidate d845c56a makes an admitted pending/running activation's first terminal projection durably mark a reducer-attempt trigger in the same run/agent CAS; immediate and boot callers invoke only canonical SettleLifecycleTrajectory readiness authority. Focused race/restart loops, full store/agentcore/textureowner tests, vet, runtime shards, and unanimous frozen review accepted SHA-256 30af0971ebedaccd6a694322ab9dc89fe388e9cdf415b6b048c7f9cb31ab01cb."
-    - "GitHub Actions 30034969790 passed Plan CI, docs truth, heresy detector, every race shard, Go vet/build, differential SBOM acceptance, and rolling-flake publication."
-  observed_problem: "Deploy attempt 1 restarted vmctl after a shutdown timeout and failed recreating the retained VM because its TAP remained EBUSY. Attempt 2 restored vmctl and epoch 129, but the classifier had selected sandbox as a service-pointer artifact without the canonical guest boot closure; the workflow called nonexistent /internal/runtime/refresh, then full-refreshed the old boot closure and correctly refused its 32302b65 identity. Frozen repair review then found that the workflow's constructed ComputerVersion exclusion reads snapshot_kind/construction fields that /internal/vmctl/list does not expose, so an immutable active candidate would be misclassified as mutable and sent to refresh."
-  policy_resolution_ref: "Problem-documentation-first requires this code-free receipt before changing the vmctl list contract or deployment route. Use the existing authoritative ownership snapshot fields; no second registry or client-side inference."
-  blocker_or_risk: "Mission completion remains blocked. The source repair passed CI but is not accepted on staging. Deployment must not refresh constructed ComputerVersion realizations, and it must deploy sandbox runtime changes through an artifact route the guest can actually execute."
-  latest_blocker_or_risk: "Mutation class red. Protected surfaces: vmctl ownership inventory, constructed ComputerVersion immutability, retained-computer realization, guest boot/runtime identity, deployment receipt, and staging health. Conjecture delta: a workflow exclusion is not protection unless the authoritative API carries the discriminator it tests. Heresy delta: discovered nonexistent hot-refresh route and unwired immutable-candidate exclusion; introduced none in this receipt; repaired none."
-  next_action: "Expose the existing persisted constructed-ownership discriminator and immutable construction refs through /internal/vmctl/list, ratchet the real handler response, then complete the frozen deployment repair: every sandbox artifact uses the canonical guest boot closure, nonexistent hot refresh is deleted, constructed candidates are excluded, mutable computers full-refresh, and exact identity gates activation."
-
+    - "The accepted deployment classified candidate-fleet-e15cb89f25d963c220319b7b from canonical route/evidence as constructed, preserved its code/artifact/disk binding, found no mutable active computers, and recorded sandbox=installed plus active_computers=empty without mutating the immutable realization."
+    - "A clean browser client registered a new owner and waited five minutes, but /api/shell/bootstrap returned 502. /api/compute/status returned degraded with current state unknown and warning that computer:02df6610-7c72-4fe5-b53d-381602c56776:primary has no route-ledger slot."
+    - "The retained immutable guest remains usable but correctly serves sandbox commit 32302b65. A new trivial lifecycle completed its work and incorporated its revision but remained live at lifecycle version 3/reducer sequence 4, confirming that the d845c56a settlement trigger is not exercised by that preserved old ComputerVersion."
+  observed_problem: "Canonical route absence is not wired as the intended authoritative legacy-mutable negative on the product boot path. RouteResolution already has route_absent, and ownership classification now treats ErrSlotNotFound as mutable, but HandleResolveComputerVersionRoute returns 404, the vmctl client rejects it, and proxy ensureComputerVersionRoute refuses bootstrap before ordinary ownership can boot the same-commit deployed guest."
+  policy_resolution_ref: "Problem-documentation-first requires this code-free receipt before connecting the existing route_absent contract. Preserve one route authority: only a successful canonical lookup may select immutable ComputerVersion execution; canonical slot absence may select ordinary mutable boot; malformed, unavailable, or non-joining route evidence must still fail closed."
+  blocker_or_risk: "Mission completion remains blocked. The deployment repair is accepted, but no clean ordinary staging computer can start, while the only active immutable computer correctly retains the prior executable."
+  latest_blocker_or_risk: "Mutation class red. Protected surfaces: route authority, clean-owner computer bootstrap, immutable ComputerVersion execution, guest executable identity, and deployed lifecycle acceptance. Conjecture delta: an explicit canonical absence proof is necessary to keep strict immutable routing compatible with ordinary baseline computers. Heresy delta: discovered an existing route_absent contract unwired on the product path; introduced none; repaired none."
+  next_action: "Connect ErrSlotNotFound to the existing typed route_absent resolution, teach the client and proxy gate to accept only that canonical negative, ratchet missing-versus-malformed/unavailable behavior, then land and prove a clean ordinary computer boots the same-commit guest before rerunning lifecycle acceptance."
 receipts:
   - id: durable-work-contract-gate-2026-07-21
     boundary: define
@@ -445,6 +445,16 @@ receipts:
     problem_ref: "Deployment refresh protection reads fields absent from the authoritative vmctl list response, so constructed ComputerVersion realizations can enter the mutable refresh path."
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; independent frozen review"
     candidate_or_evidence_refs: [artifact://1929, artifact://1930, /tmp/agentic-consensus-20260723-151406/manifest.tsv]
+
+  - id: ordinary-computer-route-absence-unwired-2026-07-23
+    boundary: land
+    commit_or_artifact: pending_code_free_receipt
+    proof_refs: ["GitHub Actions 30040695413 and deployment job 89322435623 passed", "/tmp/choir-cc85-identity.json joined host cc85f099 to preserved immutable guest 32302b65 epoch 129", "/tmp/choir-cc85-trivial-snapshot.json remained live after completed work/revision", "clean browser registration /api/shell/bootstrap=502 and /api/compute/status warning route ledger slot not found"]
+    rollback_ref: "accepted deployment cc85f099; prior activation receipt 32302b65; preserved immutable guest 32302b65 epoch 129"
+    disposition: "Problem documented before route/client repair. Deployment is healthy and immutable preservation is correct, but canonical route absence cannot reach the ordinary mutable boot path."
+    problem_ref: "The existing RouteResolution.route_absent contract is unwired: the handler emits 404, the client rejects it, and proxy bootstrap fails before vmctl can create an ordinary ownership."
+    authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; clean deployed product evidence"
+    candidate_or_evidence_refs: [/tmp/choir-cc85-identity.json, /tmp/choir-cc85-trivial-start.json, /tmp/choir-cc85-trivial-snapshot.json]
 
 view:
   path: http://127.0.0.1:8788/
