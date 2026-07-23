@@ -55,6 +55,20 @@ let
     runtimeInputs = [ pkgs.coreutils ];
     text = builtins.readFile ../scripts/guest-signer-state-project;
   };
+  guestSignerReadiness = pkgs.writeShellApplication {
+    name = "choir-guest-signer-ready";
+    runtimeInputs = [ pkgs.coreutils pkgs.curl ];
+    text = ''
+      while true; do
+        if curl --fail --silent --max-time 1 \
+          --unix-socket /run/choir-signers/guest-core/signer.sock \
+          http://localhost/v1/public-key >/dev/null; then
+          exit 0
+        fi
+        sleep 0.1
+      done
+    '';
+  };
 
 
 
@@ -458,9 +472,12 @@ EOF
       User = "choir-guest-signer";
       Group = "choir-guest-signer";
       ExecStart = "${goChoirPackages.receiptSigner}/bin/choir-receipt-signer --mode guest-core --socket /run/choir-signers/guest-core/signer.sock --startup-status /run/choir-signer-status/guest-core/startup-stage --key /mnt/persistent/choir-signers/guest-core/key.ed25519 --state-root /mnt/persistent/choir-signers/guest-core/receipts";
+      ExecStartPost = "${guestSignerReadiness}/bin/choir-guest-signer-ready";
       EnvironmentFile = [ "-/run/go-choir-updater.env" ];
       Restart = "on-failure";
+      RestartMode = "direct";
       RestartSec = 1;
+      TimeoutStartSec = 0;
       UMask = "0077";
       NoNewPrivileges = true;
       CapabilityBoundingSet = [ ];
@@ -599,9 +616,10 @@ EOF
   systemd.services.go-choir-sandbox = {
     description = "go-choir Sandbox Runtime (VM guest)";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-verifier-signer.service" ];
+    after = [ "network-online.target" "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-guest-receipt-signer.service" "go-choir-verifier-signer.service" ];
     wants = [ "network-online.target" ];
-    requires = [ "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-verifier-signer.service" ];
+    requires = [ "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-guest-receipt-signer.service" "go-choir-verifier-signer.service" ];
+    bindsTo = [ "go-choir-guest-receipt-signer.service" ];
     environment = {
       CHOIR_COMPUTER_CREDENTIAL_FILE = "/run/choir-bootstrap/computer-event-envelope";
       CHOIR_REVOCATION_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/revocation-capability";
