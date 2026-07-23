@@ -269,29 +269,29 @@ execution:
     exit: "This Definition is complete, main is clean, staging is identified and healthy, and exactly one successor may become executable."
 
 now:
-  status: ready
+  status: blocked_incomplete
   slice: D-land-deploy-and-prove
-  question: "Will the accepted atomic legacy-mailbox migration restore Node B startup while preserving retained delivery, scoped authority, and restart idempotence?"
+  question: "How should restart acceptance distinguish consumption of the seeded durable dispatch from legitimate follow-on work in the same actor mailbox?"
   reconciliation:
-    observed_at: 2026-07-23T09:54:32Z
-    source_ref: refs/remotes/origin/main@42a517bc104bc16fedb94a6ab4547648fc622b09
-    deploy_identity: "GitHub Actions run 29992782043 failed Node B deployment of 23672e5879b850cd31a97db63d7140aa530cb55d on retained unscoped mailbox processor-v2:processor-climate-us-rss. The prior signed accepted deployment remains 676f0772 epoch 114 until this reviewed repair lands."
+    observed_at: 2026-07-23T10:09:13Z
+    source_ref: refs/remotes/origin/main@129a3d989d6c1e32cc95530e96f31dee0984d94d
+    deploy_identity: "GitHub Actions run 29997288005 did not deploy 129a3d98: race non-runtime shard 1 failed TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog. The prior signed accepted deployment remains 676f0772 epoch 114."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 was clean at origin/main@676f0772 before this problem receipt; protected unrelated worktrees remain untouched."
+    worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 contains only this code-free failure receipt after origin/main@129a3d98; protected unrelated worktrees remain untouched."
     status: reconciled
   candidate:
     id: convergence-durable-work-runtime-25
-    state: independent_review_accepted
-    ref: accepted-uncommitted-code-diff@sha256:b5eed3da687aa7a3d03a03b100cd8d1b10b28ca29f0b4f6de583f153deb27d34
+    state: landed_ci_repair_required
+    ref: refs/remotes/origin/main@129a3d989d6c1e32cc95530e96f31dee0984d94d
     owner: owner-and-current-session
     base: 42a517bc104bc16fedb94a6ab4547648fc622b09
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_runtime_candidate: refs/remotes/origin/main@23672e5879b850cd31a97db63d7140aa530cb55d
-    scope: "Phase D deployed legacy-mailbox convergence repair; effects OFF."
-    observed_problem: "The scoped mailbox cutover safely refused one retained unscoped actor identity and blocked Node B activation. Actor updates and snapshots needed one authority-preserving migration before runtime startup."
-    repair_evidence: "The accepted candidate enumerates pending, processed-only, and snapshot-only identities; resolves every legacy source to exactly one non-tombstoned AgentRecord on the current ComputerID; validates the complete plan; atomically rebinds all updates and snapshots in one SQLite transaction; refuses ambiguity, missing authority, duplicates, and destination conflicts before any mutation; and retains a scoped-only post-check before actor startup. Focused race tests passed ten iterations, runtime shards passed, and Codex plus OMP GPT-5.5 independently accepted exact digest b5eed3da."
-    remaining_error: "Land the reviewed candidate, pass hosted CI, deploy to Node B, verify signed host/guest identity, prove the retained update survives migration, repeat stop/start, and finish the public lifecycle/cancellation/client acceptance."
+    scope: "Phase D landed legacy-mailbox convergence repair plus hosted acceptance-test correction; effects OFF."
+    observed_problem: "Hosted race execution exposed a false restart assertion: after the seeded initial dispatch completed its target run, the test required the entire actor mailbox to be empty even though that activation may legitimately enqueue a distinct follow-on dispatch. The hosted failure retained only a different update ID; the seeded update was no longer pending. The exact race test reproduced locally twice in ten iterations."
+    repair_evidence: "No repair is committed after this receipt. The narrow repair must wait for the seeded deterministic update ID to leave the unprocessed set without treating unrelated follow-on mailbox work as failure, then pass repeated race execution and hosted CI."
+    remaining_error: "Repair the false assertion, pass repeated focused race execution and hosted CI, deploy to Node B, verify signed host/guest identity and retained migration delivery, repeat stop/start, and finish public lifecycle/cancellation/client acceptance."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -337,9 +337,10 @@ now:
     - "GitHub Actions 29992782043 passed all selected source gates but Deploy to Staging job 89162135653 failed after guest refresh: actor runtime startup refused retained mailbox processor-v2:processor-climate-us-rss as an unsupported legacy durable mailbox; incomplete receipt /var/lib/go-choir/deploy-failures/29992782043-1.json was recorded."
     - "/tmp/agentic-consensus-20260723-054649/manifest.tsv: Codex and OMP GPT-5.5 ACCEPT against exact candidate digest b5eed3da687aa7a3d03a03b100cd8d1b10b28ca29f0b4f6de583f153deb27d34; no blocking findings."
     - "Focused actor/store/actorruntime race tests passed count=10; scripts/go-test-runtime-shards passed all four shards; go vet and git diff --check passed."
-  blocker_or_risk: "No local or frozen-review blocker remains. Deployment is still unproved: retained Node B state is the admissible evidence for the migration, delivery, and restart claims."
-  latest_blocker_or_risk: "Protected surfaces: actor SQLite update/snapshot identity, scoped owner/computer authority, restart replay, deployment activation, and retained delivery. Rollback remains accepted deployment 676f0772 epoch 114. Heresy delta: discovered legacy durable identities can survive as pending, processed-only, or snapshot-only state; introduced none in the accepted candidate; repaired startup refusal without dropping or guessing authority."
-  next_action: "Commit and push the accepted runtime-25 candidate with this coherent Definition receipt, monitor CI and Node B deployment, verify signed identity, then repeat deployed lifecycle, restart, cancellation-delivery, and client conformance acceptance."
+    - "GitHub Actions 29997288005 failed race non-runtime shard 1 only: TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog observed a distinct follow-on initial_dispatch in the same mailbox after the seeded run completed. Exact local race reproduction failed 2 of 10 iterations with the same mismatched update-ID evidence."
+  blocker_or_risk: "Hosted CI blocks deployment. The runtime migration itself has no new reproduced defect; the acceptance test conflates consumption of one durable update with global mailbox quiescence."
+  latest_blocker_or_risk: "Protected surfaces remain actor SQLite update/snapshot identity, scoped owner/computer authority, restart replay, deployment activation, and retained delivery. Rollback remains accepted deployment 676f0772 epoch 114. Heresy delta: discovered a test oracle that rejected legitimate follow-on mailbox work; introduced no runtime heresy; repaired none after this receipt."
+  next_action: "Commit this code-free CI failure receipt alone. Then narrow the restart assertion to the seeded update identity, rerun focused race acceptance, push the repair, and resume CI/deployment proof."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
@@ -403,6 +404,15 @@ receipts:
     problem_ref: "Node B deployment 29992782043 failed on retained unscoped mailbox processor-v2:processor-climate-us-rss."
     authorization_ref: "Owner-ratified bounded generic lifecycle plus code-free problem receipt 42a517bc"
     candidate_or_evidence_refs: [/tmp/agentic-consensus-20260723-054649/manifest.tsv, artifact://1522, artifact://1527]
+  - id: restart-acceptance-oracle-problem-2026-07-23
+    boundary: build
+    commit_or_artifact: pending_code_free_receipt
+    proof_refs: ["GitHub Actions run 29997288005 race non-runtime shard 1", "artifact://1536", "local go test -race count=10 failed 2/10 with distinct follow-on update IDs"]
+    rollback_ref: refs/remotes/origin/main@676f0772a06f9121ace3d014b853b8f8de844a04
+    disposition: "Problem documented before repair. The seeded restart dispatch was consumed, but the test rejected a different follow-on dispatch sharing the mailbox."
+    problem_ref: "TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog asserted mailbox-wide emptiness instead of seeded update consumption."
+    authorization_ref: "Owner-ratified bounded generic lifecycle plus hosted CI evidence"
+    candidate_or_evidence_refs: [artifact://1536, artifact://1539]
 
 view:
   path: http://127.0.0.1:8788/
