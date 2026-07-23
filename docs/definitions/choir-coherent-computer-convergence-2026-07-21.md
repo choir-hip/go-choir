@@ -269,29 +269,29 @@ execution:
     exit: "This Definition is complete, main is clean, staging is identified and healthy, and exactly one successor may become executable."
 
 now:
-  status: ready
+  status: blocked_incomplete
   slice: D-land-deploy-and-prove
-  question: "Will the accepted effects-OFF lifecycle candidate preserve canonical activation exclusion and restart rewarm on the signed Node B product path?"
+  question: "How can the existing scoped actor-mailbox implementation migrate one retained unscoped backlog identity without dropping or cross-binding its durable update?"
   reconciliation:
-    observed_at: 2026-07-23T08:50:19Z
-    source_ref: refs/remotes/origin/main@f1fb12cbebcd8ab7c4fd027bf1560d0665730f87
-    deploy_identity: "GitHub Actions run 29975038438 deployed 676f0772a06f9121ace3d014b853b8f8de844a04; signed no-SSH identity joined clean refs/heads/main, all host service embedded commits, guest executable/image/config digests, active computer-03335285269bdba4f94377e56879f9e6, realization epoch 113, and the deployment receipt. Public stop/start receipts advanced the same computer to epoch 114 on the same commit. Candidate deployment is not yet claimed."
+    observed_at: 2026-07-23T09:13:06Z
+    source_ref: refs/remotes/origin/main@23672e5879b850cd31a97db63d7140aa530cb55d
+    deploy_identity: "GitHub Actions run 29992782043 passed the selected CI gates and attempted Node B deployment of 23672e5879b850cd31a97db63d7140aa530cb55d. The refreshed public guest opened its stores, reconstructed effects OFF, then refused startup on retained unscoped actor mailbox processor-v2:processor-climate-us-rss. Deployment recorded /var/lib/go-choir/deploy-failures/29992782043-1.json and did not publish an accepted receipt; the prior signed accepted deployment remains 676f0772 epoch 114."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 was clean at origin/main@676f0772 before this problem receipt; protected unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: convergence-durable-work-runtime-23
-    state: accepted_uncommitted
-    ref: accepted-uncommitted-code-diff@sha256:8e8129453dc9c929b13c903ba9135373d3c0962db3fc7ffa3b8d517a62d22abc
+    id: convergence-durable-work-runtime-24
+    state: deployed_repair_required
+    ref: refs/remotes/origin/main@23672e5879b850cd31a97db63d7140aa530cb55d
     owner: owner-and-current-session
-    base: f1fb12cbebcd8ab7c4fd027bf1560d0665730f87
+    base: 23672e5879b850cd31a97db63d7140aa530cb55d
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
-    prior_runtime_candidate: refs/remotes/origin/main@f1fb12cbebcd8ab7c4fd027bf1560d0665730f87
-    scope: "Phase D canonical activation admission and restart rewarm repair; effects OFF."
-    observed_problem: "Staging proved a completed lifecycle activation could strand open native work. Reviews v13-v22 exposed and drove repairs for every reproduced authority, binding, admission, projection, retry, and restart defect listed in evidence_refs. No v23 reviewer reproduced a remaining release blocker."
-    repair_evidence: "Candidate 8e812945 rejects generic profile, role, or channel mutation while canonical ActiveRunID is held; preserves matching generic upserts; and proves subsequent matching release under a terminal/upsert CAS race. Pending/running-only slot ownership permits settled-trajectory blocked persistence and release. Focused race loops, direct lifecycle smoke across Store reopen, final runtime shards, and go vet passed. Codex and OMP GPT-5.5 independently accepted the exact frozen v23 candidate; Cursor and OpenCode timed out."
-    remaining_error: "No local or frozen-review blocker remains. Deployment identity and staging product-path repetition remain unproved for this candidate."
+    prior_runtime_candidate: refs/remotes/origin/main@23672e5879b850cd31a97db63d7140aa530cb55d
+    scope: "Phase D deployed legacy-mailbox convergence repair; effects OFF."
+    observed_problem: "The accepted lifecycle candidate reached Node B but the refreshed guest cannot start because Adapter.Start deliberately refuses a retained pre-scoping actor backlog identity. The newer scoped mailbox implementation is wired for all new dispatches, but no durable migration exists for already-persisted actor_updates or actor_snapshots rows. This is a substrate deployment blocker, not a lifecycle reducer failure."
+    repair_evidence: "CI run 29992782043 passed Plan CI Lanes, Go Vet + Test + Build, all selected race shards, docs truth, heresy detector, and SBOM acceptance. Node B logs prove store open and effects-OFF reconstruction before the exact startup refusal. The deploy failure receipt preserves rollback evidence."
+    remaining_error: "Add a one-time fail-closed mailbox rebind that resolves the legacy agent to exactly one owner within the current ComputerID, atomically migrates pending actor_updates and any snapshot to the scoped owner/computer/agent key, refuses ambiguity or destination conflicts, then retains the scoped-only startup guard. Prove idempotence, snapshot preservation, ambiguous refusal, and production startup."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -334,9 +334,10 @@ now:
     - "/tmp/agentic-consensus-20260723-042238/manifest.tsv: Codex, Cursor, and OpenCode ACCEPT against digest e686575222a4d8fdcf7a0c343bf3f69340d223dbbf5d94f31720445158c79a82; OMP GPT-5.5 REPAIR traced generic UpsertAgent changing profile/role/channel on an active lifecycle-version-zero agent, after which terminal projection rejects before canonical release."
     - "/tmp/agentic-consensus-20260723-043935/manifest.tsv: Codex and OMP GPT-5.5 independently ACCEPT against exact digest 8e8129453dc9c929b13c903ba9135373d3c0962db3fc7ffa3b8d517a62d22abc; no blocking findings. Cursor and OpenCode timed out."
     - "Final focused store races passed count=20, runtime overlap/restart races passed count=10, scripts/go-test-runtime-shards passed all four shards, TestDurableWorkLifecycleSmokeTrace passed across Store reopen, focused product transitions passed count=3, go vet passed, and git diff --check passed."
-  blocker_or_risk: "No accepted-candidate blocker. Residual risk is deployment realism: local Dolt/race/restart proofs do not establish signed Node B host/guest identity or staging behavior."
-  latest_blocker_or_risk: "Protected surfaces: generic agent writes, canonical activation admission and binding, lifecycle terminal projection, restart rewarm, typed update delivery, and matching release. Effects remain OFF. Rollback remains origin/main@676f0772 plus deployed ComputerVersion epoch 114 until the candidate lands and a new rollback ref is captured."
-  next_action: "Commit and push the accepted v23 candidate with this coherent Definition receipt, monitor CI and Node B deployment, verify signed host/guest identity, and repeat the deployed lifecycle/restart/cancellation/client acceptance path."
+    - "GitHub Actions 29992782043 passed all selected source gates but Deploy to Staging job 89162135653 failed after guest refresh: actor runtime startup refused retained mailbox processor-v2:processor-climate-us-rss as an unsupported legacy durable mailbox; incomplete receipt /var/lib/go-choir/deploy-failures/29992782043-1.json was recorded."
+  blocker_or_risk: "Deployed startup blocker: a retained unscoped actor backlog row predates scoped owner/computer mailbox identities. Refusing it is safe but leaves the stable computer unavailable; dropping or guessing its owner would violate durable delivery and authority isolation."
+  latest_blocker_or_risk: "Problem documentation first. No mailbox migration repair is committed before this receipt. Protected surfaces: actor SQLite backlog/snapshot identity, scoped owner/computer authority, restart replay, deployment activation, and retained delivery. Admissible evidence is exact one-owner rebind, ambiguity/destination-conflict refusal, snapshot and update preservation, idempotent restart, runtime shards, CI, signed staging identity, and repeated durable lifecycle acceptance. Rollback remains accepted deployment 676f0772 epoch 114."
+  next_action: "Commit this code-free deployment failure receipt alone. Then connect the existing scoped mailbox implementation to an atomic fail-closed legacy rebind, rerun local and frozen gates, land, and repeat Node B deployment."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
