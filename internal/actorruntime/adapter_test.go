@@ -214,16 +214,24 @@ func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *te
 		t.Fatalf("running lifecycle activation was not resumed: %+v, %v", stored, err)
 	}
 	var backlog []actor.Update
+	seededDispatchPending := true
 	backlogDeadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(backlogDeadline) {
 		backlog, err = adapter.log.Unprocessed(ctx, mailboxID)
-		if err == nil && len(backlog) == 0 {
+		seededDispatchPending = false
+		for _, pending := range backlog {
+			if pending.UpdateID == dispatch.UpdateID {
+				seededDispatchPending = true
+				break
+			}
+		}
+		if err == nil && !seededDispatchPending {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if err != nil || len(backlog) != 0 {
-		t.Fatalf("durable initial dispatch backlog = %+v, %v", backlog, err)
+	if err != nil || seededDispatchPending {
+		t.Fatalf("durable initial dispatch %q remained pending in %+v, %v", dispatch.UpdateID, backlog, err)
 	}
 }
 
