@@ -303,7 +303,7 @@ func (h *Handler) HandleTextureSemanticCompare(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "document id is required"})
 		return
 	}
-	doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
@@ -317,12 +317,12 @@ func (h *Handler) HandleTextureSemanticCompare(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "source and target revisions are required"})
 		return
 	}
-	sourceRev, err := h.Store.GetRevision(r.Context(), sourceID, ownerID)
+	sourceRev, err := h.getTextureRevision(r.Context(), ownerID, sourceID)
 	if err != nil || sourceRev.DocID != docID {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "source revision not found"})
 		return
 	}
-	targetRev, err := h.Store.GetRevision(r.Context(), targetID, ownerID)
+	targetRev, err := h.getTextureRevision(r.Context(), ownerID, targetID)
 	if err != nil || targetRev.DocID != docID {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "target revision not found"})
 		return
@@ -387,12 +387,12 @@ func (h *Handler) HandleTextureMergePreview(w http.ResponseWriter, r *http.Reque
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
 		return
 	}
-	sourceRev, err := h.Store.GetRevision(r.Context(), strings.TrimSpace(req.SourceRevisionID), ownerID)
+	sourceRev, err := h.getTextureRevision(r.Context(), ownerID, strings.TrimSpace(req.SourceRevisionID))
 	if err != nil || sourceRev.DocID != docID {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "source revision not found"})
 		return
 	}
-	targetRev, err := h.Store.GetRevision(r.Context(), strings.TrimSpace(req.TargetRevisionID), ownerID)
+	targetRev, err := h.getTextureRevision(r.Context(), ownerID, strings.TrimSpace(req.TargetRevisionID))
 	if err != nil || targetRev.DocID != docID {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "target revision not found"})
 		return
@@ -481,12 +481,12 @@ func (h *Handler) HandleTextureAcceptMerge(w http.ResponseWriter, r *http.Reques
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "merge content is required"})
 		return
 	}
-	targetRev, err := h.Store.GetRevision(r.Context(), strings.TrimSpace(req.TargetRevisionID), ownerID)
+	targetRev, err := h.getTextureRevision(r.Context(), ownerID, strings.TrimSpace(req.TargetRevisionID))
 	if err != nil || targetRev.DocID != docID {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "target revision not found"})
 		return
 	}
-	doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
@@ -528,7 +528,7 @@ func (h *Handler) HandleTextureAcceptMerge(w http.ResponseWriter, r *http.Reques
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "failed to accept merge; document head may have changed"})
 		return
 	}
-	storedRev, err := h.Store.GetRevision(r.Context(), rev.RevisionID, ownerID)
+	storedRev, err := h.getTextureRevision(r.Context(), ownerID, rev.RevisionID)
 	if err != nil {
 		log.Printf("texture api: load accepted merge revision: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load accepted merge revision"})

@@ -47,7 +47,7 @@ func (h *APIHandler) HandleTrajectoriesRoot(w http.ResponseWriter, r *http.Reque
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	trajectories, err := h.rt.store.ListTrajectoriesByOwner(r.Context(), ownerID, 200)
+	trajectories, err := h.rt.ListTrajectoriesByOwner(r.Context(), ownerID, 200)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list trajectories"})
 		return

@@ -87,7 +87,13 @@ func (rt *Runtime) syncWireTextureDocumentToCorpusd(ctx context.Context, corpusd
 	if corpusdURL == "" {
 		return fmt.Errorf("corpusd URL is required")
 	}
-	revs, err := rt.store.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 10000)
+	var revs []types.Revision
+	var err error
+	if computerID := strings.TrimSpace(doc.ComputerID); computerID != "" {
+		revs, err = rt.store.ListRevisionsByScope(ctx, doc.DocID, doc.OwnerID, computerID, 10000)
+	} else {
+		revs, err = rt.store.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 10000)
+	}
 	if err != nil {
 		return fmt.Errorf("list wire texture revisions for sync: %w", err)
 	}

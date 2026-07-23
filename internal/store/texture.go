@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -123,12 +124,13 @@ CREATE TABLE IF NOT EXISTS texture_agent_mutations (
 	doc_id              VARCHAR(255) NOT NULL,
 	loop_id             VARCHAR(255) NOT NULL,
 	owner_id            VARCHAR(255) NOT NULL,
+	computer_id         VARCHAR(255) NOT NULL DEFAULT '',
 	state               VARCHAR(64) NOT NULL DEFAULT 'pending',
 	scheduled_message_seq BIGINT NOT NULL DEFAULT 0,
 	revision_id         VARCHAR(255) NOT NULL DEFAULT '',
 	created_at          DATETIME NOT NULL,
 	completed_at        DATETIME,
-	PRIMARY KEY (doc_id, loop_id)
+	PRIMARY KEY (owner_id, computer_id, doc_id, loop_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_texture_mutations_doc ON texture_agent_mutations(doc_id);
@@ -412,6 +414,15 @@ func (s *Store) bootstrapTexture() error {
 	if err := s.ensureTextureColumn("texture_agent_mutations", "scheduled_message_seq", "BIGINT NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
+	if err := s.ensureTextureColumn("texture_agent_mutations", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureTextureAgentMutationPrimaryKey(); err != nil {
+		return err
+	}
+	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_mutations_scope ON texture_agent_mutations(owner_id, computer_id, doc_id, state)`); err != nil {
+		return fmt.Errorf("create texture mutation scope index: %w", err)
+	}
 	if err := s.ensureTextureColumn("texture_revisions", "version_number", "BIGINT NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
@@ -454,6 +465,42 @@ WHERE table_schema = DATABASE()
 	}
 	if _, err := s.textureHandle().Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, name, ddl)); err != nil {
 		return fmt.Errorf("alter %s add %s: %w", table, name, err)
+	}
+	return nil
+}
+
+func (s *Store) ensureTextureAgentMutationPrimaryKey() error {
+	rows, err := s.textureHandle().Query(`
+SELECT column_name
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'texture_agent_mutations'
+  AND index_name = 'PRIMARY'
+ORDER BY seq_in_index`)
+	if err != nil {
+		return fmt.Errorf("inspect texture agent mutation primary key: %w", err)
+	}
+	defer rows.Close()
+	var columns []string
+	for rows.Next() {
+		var column string
+		if err := rows.Scan(&column); err != nil {
+			return fmt.Errorf("scan texture agent mutation primary key: %w", err)
+		}
+		columns = append(columns, column)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate texture agent mutation primary key: %w", err)
+	}
+	want := []string{"owner_id", "computer_id", "doc_id", "loop_id"}
+	if slices.Equal(columns, want) {
+		return nil
+	}
+	if _, err := s.textureHandle().Exec(`
+ALTER TABLE texture_agent_mutations
+DROP PRIMARY KEY,
+ADD PRIMARY KEY (owner_id, computer_id, doc_id, loop_id)`); err != nil {
+		return fmt.Errorf("scope texture agent mutation primary key: %w", err)
 	}
 	return nil
 }
@@ -509,6 +556,12 @@ func (s *Store) ListDocumentsByOwner(ctx context.Context, ownerID string, limit 
 		limit = 50
 	}
 	return s.ListTextureDocumentsByOwnerOG(ctx, ownerID, limit)
+}
+func (s *Store) ListDocumentsByScope(ctx context.Context, ownerID, computerID string, limit int) ([]types.Document, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	return s.ListTextureDocumentsByScopeOG(ctx, ownerID, computerID, limit)
 }
 
 // ListAllDocuments returns documents across owners ordered by updated_at
@@ -663,14 +716,52 @@ func (s *Store) UpdateDocument(ctx context.Context, doc types.Document) error {
 	return s.UpdateTextureDocumentOG(ctx, doc)
 }
 
-// ArchiveTextureDocumentAuthority is the product deletion boundary. It records
-// logical archival and preserves revision, source, and lifecycle evidence.
-func (s *Store) ArchiveTextureDocumentAuthority(ctx context.Context, docID, ownerID string) (types.Document, error) {
-	docID, ownerID = strings.TrimSpace(docID), strings.TrimSpace(ownerID)
+// UpdateTextureDocumentTitleAuthority is the sole product writer for document
+// title projections. Lifecycle documents use a scoped conditional object-graph
+// write; legacy documents retain their current revision unchanged.
+func (s *Store) UpdateTextureDocumentTitleAuthority(ctx context.Context, docID, ownerID, computerID, title string) (types.Document, error) {
+	docID, ownerID, computerID = strings.TrimSpace(docID), strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
 	if docID == "" || ownerID == "" {
 		return types.Document{}, ErrNotFound
 	}
+	if computerID != "" {
+		document, err := s.UpdateLifecycleDocumentTitleAuthority(ctx, ownerID, computerID, docID, title)
+		if err == nil || !errors.Is(err, ErrNotFound) {
+			return document, err
+		}
+	}
+
+	s.textureRevMu.Lock()
+	defer s.textureRevMu.Unlock()
 	document, err := s.GetDocument(ctx, docID, ownerID)
+	if err != nil {
+		return types.Document{}, err
+	}
+	if strings.TrimSpace(document.TrajectoryID) != "" {
+		return types.Document{}, ErrLifecycleAuthorityRequired
+	}
+	document.Title, document.UpdatedAt = title, time.Now().UTC()
+	if err := s.UpdateTextureDocumentOG(ctx, document); err != nil {
+		return types.Document{}, err
+	}
+	return document, nil
+}
+
+// ArchiveTextureDocumentAuthority is the product deletion boundary. It records
+// logical archival and preserves revision, source, and lifecycle evidence.
+func (s *Store) ArchiveTextureDocumentAuthority(ctx context.Context, docID, ownerID, computerID string) (types.Document, error) {
+	docID, ownerID, computerID = strings.TrimSpace(docID), strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	if docID == "" || ownerID == "" {
+		return types.Document{}, ErrNotFound
+	}
+	var document types.Document
+	var err error
+	if computerID != "" {
+		document, err = s.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+	}
+	if computerID == "" || errors.Is(err, ErrNotFound) {
+		document, err = s.GetDocument(ctx, docID, ownerID)
+	}
 	if err != nil {
 		return types.Document{}, err
 	}
@@ -970,7 +1061,7 @@ func (s *Store) createRevision(ctx context.Context, rev types.Revision, graph Te
 		return fmt.Errorf("texture revision: object graph not initialized")
 	}
 	now := rev.CreatedAt.UTC()
-	revisionObj, err := lifecycleSourceGraphObject(ogKindTexRev, rev.OwnerID, rev.RevisionID, rev, map[string]any{
+	revisionObj, err := unscopedGraphObject(ogKindTexRev, rev.OwnerID, rev.RevisionID, rev, map[string]any{
 		"revision_id": rev.RevisionID, "doc_id": rev.DocID, "author_kind": string(rev.AuthorKind),
 		"author_label": rev.AuthorLabel, "version_number": rev.VersionNumber,
 		"parent_revision_id": rev.ParentRevisionID, "revision_hash": rev.RevisionHash,
@@ -1103,6 +1194,9 @@ func (s *Store) GetRevisionUnscoped(ctx context.Context, revisionID string) (typ
 	if err := ogDecode(obj, &rec); err != nil {
 		return types.Revision{}, err
 	}
+	if strings.TrimSpace(rec.ComputerID) != "" || strings.TrimSpace(rec.TrajectoryID) != "" {
+		return types.Revision{}, ErrLifecycleAuthorityRequired
+	}
 	return rec, nil
 }
 
@@ -1114,6 +1208,34 @@ func (s *Store) ListRevisionsByDoc(ctx context.Context, docID, ownerID string, l
 		limit = 50
 	}
 	return s.ListTextureRevisionsByDocOG(ctx, ownerID, docID, limit)
+}
+func (s *Store) ListRevisionsByScope(ctx context.Context, docID, ownerID, computerID string, limit int) ([]types.Revision, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	return s.ListTextureRevisionsByScopeOG(ctx, ownerID, computerID, docID, limit)
+}
+
+func (s *Store) CountRevisionsByScope(ctx context.Context, docID, ownerID, computerID string) (int, error) {
+	revs, err := s.ListTextureRevisionsByScopeOG(ctx, ownerID, computerID, docID, 100000)
+	if err != nil {
+		return 0, fmt.Errorf("count scoped texture revisions: %w", err)
+	}
+	return len(revs), nil
+}
+
+func (s *Store) CurrentVersionNumberByScope(ctx context.Context, docID, ownerID, computerID string) (int, error) {
+	revs, err := s.ListTextureRevisionsByScopeOG(ctx, ownerID, computerID, docID, 100000)
+	if err != nil {
+		return -1, fmt.Errorf("query current scoped texture revision version number: %w", err)
+	}
+	maxVersion := -1
+	for _, revision := range revs {
+		if revision.VersionNumber > maxVersion {
+			maxVersion = revision.VersionNumber
+		}
+	}
+	return maxVersion, nil
 }
 
 func (s *Store) CountRevisionsByDoc(ctx context.Context, docID, ownerID string) (int, error) {
@@ -1143,16 +1265,30 @@ func (s *Store) CurrentVersionNumberByDoc(ctx context.Context, docID, ownerID st
 
 // ----- History -----
 
+func (s *Store) GetHistory(ctx context.Context, docID, ownerID string, limit int) ([]types.HistoryEntry, error) {
+	return s.getHistory(ctx, docID, ownerID, "", limit)
+}
+
+func (s *Store) GetHistoryByScope(ctx context.Context, docID, ownerID, computerID string, limit int) ([]types.HistoryEntry, error) {
+	return s.getHistory(ctx, docID, ownerID, computerID, limit)
+}
+
 // GetHistory returns the revision history for a document from committed Dolt
 // snapshots. dolt_history_og_objects identifies an addressable commit for each
 // immutable revision object; AS OF resolves the revision body at that commit.
 // The explicit parent chain still defines ordering, avoiding timestamp ties.
-func (s *Store) GetHistory(ctx context.Context, docID, ownerID string, limit int) ([]types.HistoryEntry, error) {
+func (s *Store) getHistory(ctx context.Context, docID, ownerID, computerID string, limit int) ([]types.HistoryEntry, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 
-	doc, err := s.GetDocument(ctx, docID, ownerID)
+	var doc types.Document
+	var err error
+	if strings.TrimSpace(computerID) != "" {
+		doc, err = s.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+	} else {
+		doc, err = s.GetDocument(ctx, docID, ownerID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1198,7 +1334,9 @@ func (s *Store) GetHistory(ctx context.Context, docID, ownerID string, limit int
 			_ = rows.Close()
 			return nil, fmt.Errorf("decode native texture history preview: %w", err)
 		}
-		if snapshot.preview.OwnerID == ownerID && snapshot.preview.DocID == docID {
+		if snapshot.preview.OwnerID == ownerID && snapshot.preview.DocID == docID &&
+			((strings.TrimSpace(computerID) == "" && strings.TrimSpace(snapshot.preview.ComputerID) == "") ||
+				strings.TrimSpace(snapshot.preview.ComputerID) == strings.TrimSpace(computerID)) {
 			snapshots[snapshot.preview.RevisionID] = snapshot
 		}
 	}
@@ -1491,24 +1629,30 @@ func mergeSections(sections []types.DiffSection) []types.DiffSection {
 // attribution distinguishing whether the last editor was the user or the
 // agent (VAL-ETEXT-009).
 func (s *Store) GetBlame(ctx context.Context, revisionID, ownerID string) (types.BlameResult, error) {
-	// First verify owner scope.
-	headRev, err := s.GetRevision(ctx, revisionID, ownerID)
+	head, err := s.GetRevision(ctx, revisionID, ownerID)
 	if err != nil {
 		return types.BlameResult{}, err
 	}
+	return s.getBlame(ctx, head)
+}
 
-	// Collect the revision chain from head backward.
-	chain, err := s.collectRevisionChain(ctx, headRev)
+func (s *Store) GetBlameByScope(ctx context.Context, revisionID, ownerID, computerID string) (types.BlameResult, error) {
+	head, err := s.GetLifecycleRevision(ctx, ownerID, computerID, revisionID)
+	if err != nil {
+		return types.BlameResult{}, err
+	}
+	return s.getBlame(ctx, head)
+}
+
+func (s *Store) getBlame(ctx context.Context, head types.Revision) (types.BlameResult, error) {
+	chain, err := s.collectRevisionChain(ctx, head)
 	if err != nil {
 		return types.BlameResult{}, fmt.Errorf("collect revision chain: %w", err)
 	}
-
-	sections := computeBlame(chain, headRev)
-
 	return types.BlameResult{
-		RevisionID: revisionID,
-		DocID:      headRev.DocID,
-		Sections:   sections,
+		RevisionID: head.RevisionID,
+		DocID:      head.DocID,
+		Sections:   computeBlame(chain, head),
 	}, nil
 }
 
@@ -1528,7 +1672,13 @@ func (s *Store) collectRevisionChain(ctx context.Context, head types.Revision) (
 		}
 		seen[parentID] = true
 
-		parent, err := s.GetRevisionUnscoped(ctx, parentID)
+		var parent types.Revision
+		var err error
+		if computerID := strings.TrimSpace(head.ComputerID); computerID != "" {
+			parent, err = s.GetLifecycleRevision(ctx, head.OwnerID, computerID, parentID)
+		} else {
+			parent, err = s.GetRevisionUnscoped(ctx, parentID)
+		}
 		if err != nil {
 			// Missing parent; stop the chain.
 			break
@@ -1845,6 +1995,7 @@ type AgentMutation struct {
 	DocID               string     `json:"doc_id"`
 	RunID               string     `json:"loop_id"`
 	OwnerID             string     `json:"owner_id"`
+	ComputerID          string     `json:"computer_id,omitempty"`
 	State               string     `json:"state"` // "pending", "sleeping", "completed", "failed", "deferred"
 	ScheduledMessageSeq int64      `json:"scheduled_message_seq,omitempty"`
 	RevisionID          string     `json:"revision_id,omitempty"`
@@ -1859,20 +2010,21 @@ type TextureControllerCheckpoint struct {
 	UpdatedAt            time.Time
 }
 
-// CreateAgentMutation records a new in-flight appagent mutation. It uses
-// INSERT IGNORE so that duplicate (doc_id, loop_id) pairs are silently
-// ignored, supporting idempotent run creation (VAL-CROSS-122).
+// CreateAgentMutation records a new in-flight appagent mutation. Scoped rows
+// are idempotent by owner, computer, document, and run; empty computer scope is
+// reserved for legacy rows.
 func (s *Store) CreateAgentMutation(ctx context.Context, m AgentMutation) error {
 	var completedAt any
 	if m.CompletedAt != nil {
 		completedAt = m.CompletedAt.UTC().Format(time.RFC3339Nano)
 	}
 	_, err := s.textureHandle().ExecContext(ctx,
-		`INSERT IGNORE INTO texture_agent_mutations (doc_id, loop_id, owner_id, state, scheduled_message_seq, revision_id, created_at, completed_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		m.DocID,
-		m.RunID,
-		m.OwnerID,
+		`INSERT IGNORE INTO texture_agent_mutations (doc_id, loop_id, owner_id, computer_id, state, scheduled_message_seq, revision_id, created_at, completed_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		strings.TrimSpace(m.DocID),
+		strings.TrimSpace(m.RunID),
+		strings.TrimSpace(m.OwnerID),
+		strings.TrimSpace(m.ComputerID),
 		m.State,
 		m.ScheduledMessageSeq,
 		m.RevisionID,
@@ -1889,14 +2041,14 @@ func (s *Store) CreateAgentMutation(ctx context.Context, m AgentMutation) error 
 // document, if one exists. This is used to return the existing run ID
 // when a retry/renewal occurs, preventing duplicate mutation submissions
 // (VAL-CROSS-122).
-func (s *Store) GetPendingAgentMutationByDoc(ctx context.Context, docID, ownerID string) (*AgentMutation, error) {
+func (s *Store) GetPendingAgentMutationByDoc(ctx context.Context, ownerID, computerID, docID string) (*AgentMutation, error) {
 	row := s.textureHandle().QueryRowContext(ctx,
-		`SELECT doc_id, loop_id, owner_id, state, scheduled_message_seq, revision_id, created_at, completed_at
+		`SELECT doc_id, loop_id, owner_id, computer_id, state, scheduled_message_seq, revision_id, created_at, completed_at
 		   FROM texture_agent_mutations
-		  WHERE doc_id = ? AND owner_id = ? AND state = 'pending'
+		  WHERE owner_id = ? AND computer_id = ? AND doc_id = ? AND state = 'pending'
 		  ORDER BY created_at DESC
 		  LIMIT 1`,
-		docID, ownerID,
+		strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(docID),
 	)
 	return scanAgentMutation(row)
 }
@@ -1904,12 +2056,13 @@ func (s *Store) GetPendingAgentMutationByDoc(ctx context.Context, docID, ownerID
 // GetAgentMutationByRun returns the agent mutation for a specific run ID.
 // This is used during run completion to check if the revision has already
 // been created (VAL-CROSS-122: no duplicate canonical revision).
-func (s *Store) GetAgentMutationByRun(ctx context.Context, runID string) (*AgentMutation, error) {
+func (s *Store) GetAgentMutationByRun(ctx context.Context, ownerID, computerID, runID string) (*AgentMutation, error) {
 	row := s.textureHandle().QueryRowContext(ctx,
-		`SELECT doc_id, loop_id, owner_id, state, scheduled_message_seq, revision_id, created_at, completed_at
+		`SELECT doc_id, loop_id, owner_id, computer_id, state, scheduled_message_seq, revision_id, created_at, completed_at
 		   FROM texture_agent_mutations
-		  WHERE loop_id = ?`,
-		runID,
+		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ?
+		  LIMIT 1`,
+		strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(runID),
 	)
 	return scanAgentMutation(row)
 }
@@ -1918,13 +2071,15 @@ func (s *Store) GetAgentMutationByRun(ctx context.Context, runID string) (*Agent
 // a still-active Texture mutation without closing the run. Multi-revision
 // Texture actors use the row as run-liveness/idempotency state; the revision
 // rows themselves are the per-write commit records.
-func (s *Store) RecordAgentMutationRevision(ctx context.Context, runID, revisionID string) error {
+func (s *Store) RecordAgentMutationRevision(ctx context.Context, ownerID, computerID, runID, revisionID string) error {
 	result, err := s.textureHandle().ExecContext(ctx,
 		`UPDATE texture_agent_mutations
 		    SET revision_id = ?
-		  WHERE loop_id = ? AND state = 'pending'`,
+		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`,
 		revisionID,
-		runID,
+		strings.TrimSpace(ownerID),
+		strings.TrimSpace(computerID),
+		strings.TrimSpace(runID),
 	)
 	if err != nil {
 		return fmt.Errorf("record texture agent mutation revision: %w", err)
@@ -1944,17 +2099,19 @@ func (s *Store) RecordAgentMutationRevision(ctx context.Context, runID, revision
 // mutation is no longer pending.
 var ErrMutationAlreadyCompleted = errors.New("agent mutation already completed")
 
-func (s *Store) CompleteAgentMutation(ctx context.Context, runID, revisionID string) error {
+func (s *Store) CompleteAgentMutation(ctx context.Context, ownerID, computerID, runID, revisionID string) error {
 	now := time.Now().UTC()
 	result, err := s.textureHandle().ExecContext(ctx,
 		`UPDATE texture_agent_mutations
 		    SET state = 'completed',
 		        revision_id = ?,
 		        completed_at = ?
-		  WHERE loop_id = ? AND state = 'pending'`,
+		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`,
 		revisionID,
 		now.Format(time.RFC3339Nano),
-		runID,
+		strings.TrimSpace(ownerID),
+		strings.TrimSpace(computerID),
+		strings.TrimSpace(runID),
 	)
 	if err != nil {
 		return fmt.Errorf("complete texture agent mutation: %w", err)
@@ -1972,15 +2129,17 @@ func (s *Store) CompleteAgentMutation(ctx context.Context, runID, revisionID str
 // DeferAgentMutation marks a Texture run as intentionally completed without a
 // document write because it delegated to workers and is waiting for their
 // updates to wake the next revision run.
-func (s *Store) DeferAgentMutation(ctx context.Context, runID string) error {
+func (s *Store) DeferAgentMutation(ctx context.Context, ownerID, computerID, runID string) error {
 	now := time.Now().UTC()
 	_, err := s.textureHandle().ExecContext(ctx,
 		`UPDATE texture_agent_mutations
 		    SET state = 'deferred',
 		        completed_at = ?
-		  WHERE loop_id = ? AND state = 'pending'`,
+		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`,
 		now.Format(time.RFC3339Nano),
-		runID,
+		strings.TrimSpace(ownerID),
+		strings.TrimSpace(computerID),
+		strings.TrimSpace(runID),
 	)
 	if err != nil {
 		return fmt.Errorf("defer texture agent mutation: %w", err)
@@ -2033,15 +2192,17 @@ func (s *Store) UpsertTextureControllerCheckpoint(ctx context.Context, checkpoin
 }
 
 // FailAgentMutation marks an agent mutation as failed.
-func (s *Store) FailAgentMutation(ctx context.Context, runID string) error {
+func (s *Store) FailAgentMutation(ctx context.Context, ownerID, computerID, runID string) error {
 	now := time.Now().UTC()
 	_, err := s.textureHandle().ExecContext(ctx,
 		`UPDATE texture_agent_mutations
 		    SET state = 'failed',
 		        completed_at = ?
-		  WHERE loop_id = ? AND state = 'pending'`,
+		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`,
 		now.Format(time.RFC3339Nano),
-		runID,
+		strings.TrimSpace(ownerID),
+		strings.TrimSpace(computerID),
+		strings.TrimSpace(runID),
 	)
 	if err != nil {
 		return fmt.Errorf("fail texture agent mutation: %w", err)
@@ -2052,15 +2213,17 @@ func (s *Store) FailAgentMutation(ctx context.Context, runID string) error {
 // CancelAgentMutation marks an agent mutation as cancelled by the owner while
 // preserving the current document head so the user can resume with a later
 // revision request.
-func (s *Store) CancelAgentMutation(ctx context.Context, runID string) error {
+func (s *Store) CancelAgentMutation(ctx context.Context, ownerID, computerID, runID string) error {
 	now := time.Now().UTC()
 	_, err := s.textureHandle().ExecContext(ctx,
 		`UPDATE texture_agent_mutations
 		    SET state = 'cancelled',
 		        completed_at = ?
-		  WHERE loop_id = ? AND state = 'pending'`,
+		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`,
 		now.Format(time.RFC3339Nano),
-		runID,
+		strings.TrimSpace(ownerID),
+		strings.TrimSpace(computerID),
+		strings.TrimSpace(runID),
 	)
 	if err != nil {
 		return fmt.Errorf("cancel texture agent mutation: %w", err)
@@ -2072,15 +2235,17 @@ func (s *Store) CancelAgentMutation(ctx context.Context, runID string) error {
 // no longer active. This prevents stale pending rows from keeping the Texture
 // editor in a perpetual "Revising..." state after recovery or missed completion
 // reconciliation.
-func (s *Store) MarkAgentMutationStale(ctx context.Context, runID string) error {
+func (s *Store) MarkAgentMutationStale(ctx context.Context, ownerID, computerID, runID string) error {
 	now := time.Now().UTC()
 	_, err := s.textureHandle().ExecContext(ctx,
 		`UPDATE texture_agent_mutations
 		    SET state = 'stale_activation',
 		        completed_at = ?
-		  WHERE loop_id = ? AND state = 'pending'`,
+		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`,
 		now.Format(time.RFC3339Nano),
-		runID,
+		strings.TrimSpace(ownerID),
+		strings.TrimSpace(computerID),
+		strings.TrimSpace(runID),
 	)
 	if err != nil {
 		return fmt.Errorf("mark stale texture agent mutation: %w", err)
@@ -2090,17 +2255,19 @@ func (s *Store) MarkAgentMutationStale(ctx context.Context, runID string) error 
 
 // SleepAgentMutation records that a durable Texture actor has quiesced after
 // writing a revision and can be reactivated on later mailbox input.
-func (s *Store) SleepAgentMutation(ctx context.Context, runID string) error {
+func (s *Store) SleepAgentMutation(ctx context.Context, ownerID, computerID, runID string) error {
 	now := time.Now().UTC()
 	result, err := s.textureHandle().ExecContext(ctx,
 		`UPDATE texture_agent_mutations
 		    SET state = 'sleeping',
 		        completed_at = ?
-		  WHERE loop_id = ?
+		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ?
 		    AND state = 'pending'
 		    AND revision_id <> ''`,
 		now.Format(time.RFC3339Nano),
-		runID,
+		strings.TrimSpace(ownerID),
+		strings.TrimSpace(computerID),
+		strings.TrimSpace(runID),
 	)
 	if err != nil {
 		return fmt.Errorf("sleep texture agent mutation: %w", err)
@@ -2118,7 +2285,7 @@ func (s *Store) SleepAgentMutation(ctx context.Context, runID string) error {
 // ReactivateAgentMutation reopens a stale or sleeping mutation for the same
 // durable Texture actor activation. It intentionally does not revive completed,
 // failed, cancelled, or deferred mutations.
-func (s *Store) ReactivateAgentMutation(ctx context.Context, runID string, scheduledMessageSeq int64) error {
+func (s *Store) ReactivateAgentMutation(ctx context.Context, ownerID, computerID, runID string, scheduledMessageSeq int64) error {
 	now := time.Now().UTC()
 	result, err := s.textureHandle().ExecContext(ctx,
 		`UPDATE texture_agent_mutations
@@ -2126,11 +2293,13 @@ func (s *Store) ReactivateAgentMutation(ctx context.Context, runID string, sched
 		        scheduled_message_seq = ?,
 		        completed_at = NULL,
 		        created_at = ?
-		  WHERE loop_id = ?
+		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ?
 		    AND state IN ('stale_activation', 'sleeping')`,
 		scheduledMessageSeq,
 		now.Format(time.RFC3339Nano),
-		runID,
+		strings.TrimSpace(ownerID),
+		strings.TrimSpace(computerID),
+		strings.TrimSpace(runID),
 	)
 	if err != nil {
 		return fmt.Errorf("reactivate texture agent mutation: %w", err)
@@ -2340,6 +2509,7 @@ func scanAgentMutation(row interface{ Scan(...any) error }) (*AgentMutation, err
 		&m.DocID,
 		&m.RunID,
 		&m.OwnerID,
+		&m.ComputerID,
 		&m.State,
 		&m.ScheduledMessageSeq,
 		&m.RevisionID,

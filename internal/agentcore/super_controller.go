@@ -35,7 +35,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	} else if found {
 		return &resident, nil
 	}
-	if active, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, agentID); err == nil {
+	if active, err := rt.latestActiveRunByAgent(ctx, ownerID, agentID); err == nil {
 		if active.State == types.RunBlocked {
 			blockedActive = &active
 		}
@@ -83,7 +83,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		metadata["worker_update_ids"] = updateIDs
 	}
 	if first.AgentID != "" {
-		if requester, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, first.AgentID); err == nil {
+		if requester, err := rt.latestActiveRunByAgent(ctx, ownerID, first.AgentID); err == nil {
 			metadata["requested_by_run_id"] = requester.RunID
 			if metadataStringValue(requester.Metadata, "agent_profile") != "" && metadata["requested_by_profile"] == "" {
 				metadata["requested_by_profile"] = metadataStringValue(requester.Metadata, "agent_profile")
@@ -189,6 +189,13 @@ func (rt *Runtime) completeSuccessfulRunWorkItems(ctx context.Context, rec *type
 	ownerID := strings.TrimSpace(rec.OwnerID)
 	if ownerID == "" {
 		return nil
+	}
+	if strings.TrimSpace(rec.SandboxID) != "" && strings.TrimSpace(rec.TrajectoryID) != "" {
+		if _, err := rt.store.GetLifecycleTrajectory(ctx, ownerID, rec.SandboxID, rec.TrajectoryID); err == nil {
+			return nil
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return err
+		}
 	}
 	for _, workItemID := range metadataStringSlice(rec.Metadata["work_item_ids"]) {
 		workItemID = strings.TrimSpace(workItemID)
@@ -510,6 +517,25 @@ func (rt *Runtime) coagentUpdateTurnInjector(rec *types.RunRecord) toolregistry.
 	return rt.coagentUpdateTurnInjectorWithInitialPhase(rec, "")
 }
 
+func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.RunRecord, ownerID, agentID string, limit int) ([]types.CoagentSourcePacket, error) {
+	lifecycleRun := false
+	if rec != nil && strings.TrimSpace(rec.OwnerID) != "" && strings.TrimSpace(rec.SandboxID) != "" && strings.TrimSpace(rec.RunID) != "" {
+		if _, err := rt.store.GetLifecycleRun(ctx, rec.OwnerID, rec.SandboxID, rec.RunID); err == nil {
+			lifecycleRun = true
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return nil, fmt.Errorf("resolve lifecycle run authority: %w", err)
+		}
+	}
+	if lifecycleRun {
+		computerID := strings.TrimSpace(rec.SandboxID)
+		if computerID == "" {
+			return nil, fmt.Errorf("list pending lifecycle updates: computer_id is required")
+		}
+		return rt.store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, agentID, limit)
+	}
+	return rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
+}
+
 func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecord, initialPhase string) toolregistry.InjectUserTurnsFunc {
 	if rt == nil || rt.store == nil || rec == nil || !runSupportsCoagentUpdateInjection(rec) {
 		return nil
@@ -532,7 +558,7 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 		}
 	}
 	return func(finalCheckpoint bool) ([]json.RawMessage, error) {
-		updates, err := rt.store.ListCoagentMailboxBacklog(context.Background(), ownerID, agentID, 100)
+		updates, err := rt.pendingCoagentUpdatesForRun(context.Background(), rec, ownerID, agentID, 100)
 		if err != nil {
 			return nil, fmt.Errorf("list pending update_coagent turns: %w", err)
 		}
@@ -597,7 +623,7 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) toolregistry.ToolLoop
 	}
 	return func(ctx context.Context, state toolregistry.ToolLoopParkState) (toolregistry.ToolLoopParkResult, error) {
 		ready := func() (bool, error) {
-			updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
+			updates, err := rt.pendingCoagentUpdatesForRun(ctx, rec, ownerID, agentID, 100)
 			if err != nil {
 				return false, fmt.Errorf("list pending update_coagent records for park wait: %w", err)
 			}
@@ -665,7 +691,7 @@ func (rt *Runtime) prependInitialCoagentUpdatePackets(ctx context.Context, rec *
 			seen[id] = true
 		}
 	}
-	updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
+	updates, err := rt.pendingCoagentUpdatesForRun(ctx, rec, ownerID, agentID, 100)
 	if err != nil {
 		return messages, fmt.Errorf("list pending coagent updates for cold delivery: %w", err)
 	}

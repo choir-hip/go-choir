@@ -646,7 +646,7 @@ func TestCancelledRequestDoesNotInterruptPostAuthorityActivationDrain(t *testing
 	}
 	cancel()
 
-	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, ownerID, trajectoryID)
+	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, ownerID, "sandbox-test", trajectoryID)
 	if err != nil {
 		t.Fatalf("drain after request cancellation: %v", err)
 	}

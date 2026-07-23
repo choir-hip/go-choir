@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -23,21 +24,25 @@ func RegisterCoagentUpdateTools(registry *toolregistry.ToolRegistry, rt *Runtime
 }
 
 type submitCoagentUpdateArgs struct {
-	AgentID   string `json:"agent_id,omitempty"`
-	ChannelID string `json:"channel_id,omitempty"`
+	AgentID          string `json:"agent_id,omitempty"`
+	ChannelID        string `json:"channel_id,omitempty"`
+	ProducerUpdateID string `json:"producer_update_id,omitempty"`
+	WorkDisposition  string `json:"work_disposition,omitempty"`
 	types.CoagentSourcePacketPayload
 }
 
 func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 	return toolregistry.Tool{
 		Name:        "update_coagent",
-		Description: "Append one addressed coagent source packet and wake the target actor. The canonical packet shape is schema_version, kind, summary, claims, sources, actions, questions, and notes. Texture may cite/embed only packet.sources; Super may execute only kind=execution_request packets with actions. Runtime derives update_id; do not send update_id or legacy findings/evidence_ids/evidence/artifacts/refs/tests/proposals/capability_requests fields.",
+		Description: "Append one addressed coagent source packet and wake the target actor. The canonical packet shape is schema_version, kind, summary, claims, sources, actions, questions, and notes. Texture may cite/embed only packet.sources; Super may execute only kind=execution_request packets with actions. For lifecycle work, supply a stable random UUIDv4 producer_update_id and reuse it on exact retries. UUIDv4 prevents timestamp/provider/run identity encoding; runtime derives update_id. Set work_disposition=open for interim checkpoints and completed only when this packet fully satisfies assigned lifecycle work; run completion alone never settles work.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"schema_version": map[string]any{"type": "string", "enum": []string{types.CoagentSourcePacketSchemaV1}},
-			"kind":           map[string]any{"type": "string", "enum": []string{"evidence_update", "execution_request", "execution_result", "blocker", "question", "proposal", "decision_request"}},
-			"summary":        map[string]any{"type": "string"},
-			"agent_id":       map[string]any{"type": "string", "description": "Required for researcher deliveries: the addressed Texture coagent id (texture:<doc_id>). Other roles should set the addressed owning coagent id when not implicit."},
-			"channel_id":     map[string]any{"type": "string"},
+			"schema_version":     map[string]any{"type": "string", "enum": []string{types.CoagentSourcePacketSchemaV1}},
+			"kind":               map[string]any{"type": "string", "enum": []string{"evidence_update", "execution_request", "execution_result", "blocker", "question", "proposal", "decision_request"}},
+			"summary":            map[string]any{"type": "string"},
+			"agent_id":           map[string]any{"type": "string", "description": "Required for researcher deliveries: the addressed Texture coagent id (texture:<doc_id>). Other roles should set the addressed owning coagent id when not implicit."},
+			"producer_update_id": map[string]any{"type": "string", "format": "uuid", "description": "Canonical random UUIDv4 producer-command identity required for lifecycle updates. Reuse on exact retry; generate a new UUIDv4 for a later checkpoint."},
+			"channel_id":         map[string]any{"type": "string"},
+			"work_disposition":   map[string]any{"type": "string", "enum": []string{"open", "completed"}, "description": "Optional native producer work consequence for lifecycle updates; omission preserves assigned work as open. Use completed only when this update fully satisfies that work."},
 			"claims": map[string]any{
 				"type": "array",
 				"items": map[string]any{
@@ -165,6 +170,7 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode update_coagent args: %w", err)
 			}
+			workDisposition := strings.TrimSpace(in.WorkDisposition)
 			packet := normalizeCoagentSourcePacketPayload(in.CoagentSourcePacketPayload)
 			if err := validateCoagentSourcePacketPayload(packet); err != nil {
 				return "", err
@@ -179,13 +185,14 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 			}
 
 			update := types.CoagentSourcePacket{
-				OwnerID:     ownerID,
-				ComputerID:  computerID,
-				AgentID:     agentID,
-				Role:        nonEmpty(role, configuredAgentProfileForRun(toolregistry.ExecutionContextFrom(ctx).RunRecord)),
-				SourceRunID: runID,
-				Packet:      packet,
-				CreatedAt:   time.Now().UTC(),
+				OwnerID:         ownerID,
+				ComputerID:      computerID,
+				AgentID:         agentID,
+				Role:            nonEmpty(role, configuredAgentProfileForRun(toolregistry.ExecutionContextFrom(ctx).RunRecord)),
+				SourceRunID:     runID,
+				Packet:          packet,
+				CreatedAt:       time.Now().UTC(),
+				WorkDisposition: types.WorkItemStatus(workDisposition),
 			}
 			targetAgentID, targetChannelID, err := resolveFindingsTarget(ctx, rt, strings.TrimSpace(in.AgentID))
 			if err != nil {
@@ -210,17 +217,46 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 				return "", fmt.Errorf("update_coagent could not resolve channel_id")
 			}
 
+			runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord
 			trajectoryID := ""
-			if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil && runRec.Metadata != nil {
-				if id, _ := runRec.Metadata[runMetadataTrajectoryID].(string); strings.TrimSpace(id) != "" {
-					trajectoryID = strings.TrimSpace(id)
+			if runRec != nil && runRec.Metadata != nil {
+				trajectoryID = strings.TrimSpace(metadataStringValue(runRec.Metadata, runMetadataTrajectoryID))
+			}
+			lifecycleTrajectory := false
+			if runRec != nil && strings.TrimSpace(runRec.RunID) != "" {
+				lifecycleRun, lifecycleErr := rt.store.GetLifecycleRun(ctx, ownerID, computerID, runRec.RunID)
+				if lifecycleErr == nil {
+					trajectoryID = strings.TrimSpace(lifecycleRun.TrajectoryID)
+					if trajectoryID == "" {
+						return "", fmt.Errorf("resolve lifecycle run authority: trajectory_id is required")
+					}
+					lifecycleTrajectory = true
+				} else if !errors.Is(lifecycleErr, store.ErrNotFound) {
+					return "", fmt.Errorf("resolve lifecycle run authority: %w", lifecycleErr)
 				}
 			}
 
 			update.TargetAgentID = targetAgentID
 			update.ChannelID = channelID
 			update.TrajectoryID = trajectoryID
-			update.UpdateID = deriveWorkerUpdateID(update)
+			if lifecycleTrajectory {
+				producerUpdateID := strings.TrimSpace(in.ProducerUpdateID)
+				if producerUpdateID == "" {
+					return "", fmt.Errorf("update_coagent lifecycle update requires producer_update_id")
+				}
+				parsedProducerUpdateID, parseErr := uuid.Parse(producerUpdateID)
+				if parseErr != nil || parsedProducerUpdateID.Version() != uuid.Version(4) || parsedProducerUpdateID.String() != producerUpdateID {
+					return "", fmt.Errorf("update_coagent producer_update_id must be a canonical random UUIDv4")
+				}
+				if workDisposition == "" {
+					workDisposition = string(types.WorkItemOpen)
+					update.WorkDisposition = types.WorkItemOpen
+				}
+				update.ProducerUpdateID = producerUpdateID
+				update.UpdateID = deriveLifecycleWorkerUpdateID(update, producerUpdateID)
+			} else {
+				update.UpdateID = deriveWorkerUpdateID(update)
+			}
 			update.Content = buildWorkerUpdateMessage(update)
 
 			message := &types.ChannelMessage{
@@ -236,49 +272,42 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 			}
 			var stored types.CoagentSourcePacket
 			var created bool
-			if trajectoryID != "" {
-				if _, lifecycleErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID); lifecycleErr == nil {
-					payloadDigest, digestErr := store.ComputeLifecycleUpdatePayloadDigest(update.Packet, update.Content)
-					if digestErr != nil {
-						return "", digestErr
+			if lifecycleTrajectory {
+				payloadDigest, digestErr := store.ComputeLifecycleUpdatePayloadDigest(update.Packet, update.Content)
+				if digestErr != nil {
+					return "", digestErr
+				}
+				workItemID := ""
+				if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil {
+					workItemID = strings.TrimSpace(metadataStringValue(runRec.Metadata, "lifecycle_work_item_id"))
+				}
+				if workItemID == "" {
+					return "", fmt.Errorf("update_coagent lifecycle work disposition requires assigned lifecycle work")
+				}
+				queue := types.QueueLifecycleUpdateRequest{
+					OwnerID: ownerID, ComputerID: computerID,
+					CommandID:    "lifecycle-queue:" + update.UpdateID,
+					TrajectoryID: trajectoryID, TargetAgentID: targetAgentID, ProducerAgentID: agentID,
+					ProducerUpdateID: update.ProducerUpdateID, UpdateID: update.UpdateID,
+					ChannelID: update.ChannelID, Role: update.Role, SourceRunID: update.SourceRunID,
+					Packet: update.Packet, Content: update.Content, PayloadDigest: payloadDigest,
+					WorkDisposition: types.WorkItemStatus(workDisposition), WorkItemID: workItemID,
+				}
+				queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
+				queued, queueErr := rt.store.QueueLifecycleUpdate(ctx, queue)
+				if queueErr != nil {
+					return "", fmt.Errorf("queue durable lifecycle update: %w", queueErr)
+				}
+				if queued.Update == nil {
+					return "", fmt.Errorf("queue durable lifecycle update: reducer returned no update projection")
+				}
+				stored = *queued.Update
+				created = !queued.Replay
+				if stored.Disposition == types.UpdatePending {
+					if created {
+						rt.emitChannelMessageEvent(ctx, *message, ownerID)
 					}
-					workItemID := ""
-					if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil {
-						workItemID = strings.TrimSpace(metadataStringValue(runRec.Metadata, "lifecycle_work_item_id"))
-					}
-					queue := types.QueueLifecycleUpdateRequest{
-						OwnerID: ownerID, ComputerID: computerID,
-						CommandID:    "lifecycle-queue:" + update.UpdateID,
-						TrajectoryID: trajectoryID, TargetAgentID: targetAgentID, ProducerAgentID: agentID,
-						ProducerUpdateID: update.UpdateID, UpdateID: update.UpdateID,
-						ChannelID: update.ChannelID, Role: update.Role, SourceRunID: update.SourceRunID,
-						Packet: update.Packet, Content: update.Content, PayloadDigest: payloadDigest,
-						WorkItemID: workItemID,
-					}
-					queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
-					queued, queueErr := rt.store.QueueLifecycleUpdate(ctx, queue)
-					if queueErr != nil {
-						return "", fmt.Errorf("queue durable lifecycle update: %w", queueErr)
-					}
-					if queued.Update == nil {
-						return "", fmt.Errorf("queue durable lifecycle update: reducer returned no update projection")
-					}
-					stored = *queued.Update
-					created = !queued.Replay
-					if stored.Disposition == types.UpdatePending {
-						if created {
-							rt.emitChannelMessageEvent(ctx, *message, ownerID)
-						}
-						rt.wakeUpdatedCoagent(ctx, stored)
-					}
-				} else if !errors.Is(lifecycleErr, store.ErrNotFound) {
-					return "", fmt.Errorf("load durable lifecycle trajectory: %w", lifecycleErr)
-				} else {
-					var dispatchErr error
-					stored, created, dispatchErr = rt.store.DispatchWorkerUpdate(ctx, update, message)
-					if dispatchErr != nil {
-						return "", dispatchErr
-					}
+					rt.wakeUpdatedCoagent(ctx, stored)
 				}
 			} else {
 				var dispatchErr error
@@ -490,6 +519,23 @@ func appendCoagentActionSection(b *strings.Builder, actions []types.CoagentPacke
 		}
 		b.WriteString("\n")
 	}
+}
+
+func deriveLifecycleWorkerUpdateID(update types.CoagentSourcePacket, producerUpdateID string) string {
+	payload := struct {
+		OwnerID          string `json:"owner_id"`
+		AgentID          string `json:"agent_id"`
+		TargetAgentID    string `json:"target_agent_id"`
+		TrajectoryID     string `json:"trajectory_id"`
+		ProducerUpdateID string `json:"producer_update_id"`
+	}{
+		OwnerID: strings.TrimSpace(update.OwnerID), AgentID: strings.TrimSpace(update.AgentID),
+		TargetAgentID: strings.TrimSpace(update.TargetAgentID), TrajectoryID: strings.TrimSpace(update.TrajectoryID),
+		ProducerUpdateID: strings.TrimSpace(producerUpdateID),
+	}
+	raw, _ := json.Marshal(payload)
+	sum := sha256.Sum256(raw)
+	return "upd-" + hex.EncodeToString(sum[:])[:32]
 }
 
 func deriveWorkerUpdateID(update types.CoagentSourcePacket) string {
@@ -853,16 +899,18 @@ func rejectLegacyUpdateCoagentFields(raw json.RawMessage) error {
 		return fmt.Errorf("decode update_coagent args: %w", err)
 	}
 	allowed := map[string]bool{
-		"agent_id":       true,
-		"channel_id":     true,
-		"schema_version": true,
-		"kind":           true,
-		"summary":        true,
-		"claims":         true,
-		"sources":        true,
-		"actions":        true,
-		"questions":      true,
-		"notes":          true,
+		"agent_id":           true,
+		"channel_id":         true,
+		"producer_update_id": true,
+		"work_disposition":   true,
+		"schema_version":     true,
+		"kind":               true,
+		"summary":            true,
+		"claims":             true,
+		"sources":            true,
+		"actions":            true,
+		"questions":          true,
+		"notes":              true,
 	}
 	legacy := map[string]bool{
 		"update_id":           true,
@@ -874,6 +922,16 @@ func rejectLegacyUpdateCoagentFields(raw json.RawMessage) error {
 		"tests":               true,
 		"proposals":           true,
 		"capability_requests": true,
+	}
+	if rawDisposition, present := fields["work_disposition"]; present {
+		var value any
+		if err := json.Unmarshal(rawDisposition, &value); err != nil {
+			return fmt.Errorf("decode update_coagent work_disposition: %w", err)
+		}
+		disposition, ok := value.(string)
+		if !ok || (strings.TrimSpace(disposition) != "open" && strings.TrimSpace(disposition) != "completed") {
+			return fmt.Errorf("update_coagent work_disposition must be open or completed when present")
+		}
 	}
 	for key := range fields {
 		key = strings.TrimSpace(key)

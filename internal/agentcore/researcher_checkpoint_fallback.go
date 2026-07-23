@@ -30,7 +30,7 @@ func (rt *Runtime) bindTerminalRunOutcome(ctx context.Context, rec *types.RunRec
 		!terminalOutcomeCapableProfile(agentProfileForRun(rec)) {
 		return nil
 	}
-	persisted, err := rt.store.GetRun(ctx, rec.RunID)
+	persisted, err := rt.getRunForComputer(ctx, rec.OwnerID, rec.RunID)
 	if err != nil {
 		return fmt.Errorf("reload terminal run %s: %w", rec.RunID, err)
 	}
@@ -51,6 +51,12 @@ func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persis
 	// Only delegated child runs owe a terminal outcome to a requester. Root
 	// runs have no addressed parent and must never synthesize mailbox traffic.
 	if strings.TrimSpace(persisted.RequestedByRunID) == "" {
+		return terminalOutcomeBinding{}, nil
+	}
+	// Durable lifecycle updates are already canonical obligations. Terminal run
+	// state is only their activation projection; it must not synthesize or bind
+	// a second worker-update authority from the RunRecord outcome.
+	if strings.TrimSpace(metadataStringValue(persisted.Metadata, "lifecycle_work_item_id")) != "" {
 		return terminalOutcomeBinding{}, nil
 	}
 	targetAgentID, channelID, ok, err := rt.terminalOutcomeRequesterTarget(ctx, persisted)
@@ -155,7 +161,7 @@ func (rt *Runtime) terminalOutcomeRequesterTarget(ctx context.Context, rec *type
 	}
 	targetAgentID := strings.TrimSpace(metadataStringValue(rec.Metadata, "requested_by_agent_id"))
 	channelID := strings.TrimSpace(metadataStringValue(rec.Metadata, runMetadataChannelID))
-	parent, parentErr := rt.store.GetRun(ctx, rec.RequestedByRunID)
+	parent, parentErr := rt.getRunForComputer(ctx, rec.OwnerID, rec.RequestedByRunID)
 	if parentErr != nil && !errors.Is(parentErr, store.ErrNotFound) {
 		return "", "", false, fmt.Errorf("resolve terminal outcome requester run %s: %w", rec.RequestedByRunID, parentErr)
 	}

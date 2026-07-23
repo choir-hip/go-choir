@@ -825,7 +825,27 @@ func (rt *Handler) evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx con
 	if textureAgentID == "" || ownerID == "" {
 		return nil, nil
 	}
-	updates, err := rt.Store.ListCoagentMailboxBacklog(ctx, ownerID, textureAgentID, limit)
+	computerID := ""
+	if rt.Core != nil {
+		computerID = strings.TrimSpace(rt.Core.TextureSandboxID())
+	}
+	subject, subjectErr := rt.Store.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
+	var updates []types.CoagentSourcePacket
+	var err error
+	if subjectErr == nil && subject.LifecycleVersion > 0 {
+		updates, err = rt.Store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, textureAgentID, limit)
+	} else {
+		updates, err = rt.Store.ListCoagentMailboxBacklog(ctx, ownerID, textureAgentID, limit)
+		if err == nil {
+			legacy := updates[:0]
+			for _, update := range updates {
+				if update.LifecycleVersion <= 0 {
+					legacy = append(legacy, update)
+				}
+			}
+			updates = legacy
+		}
+	}
 	if err != nil || len(updates) == 0 {
 		return nil, nil
 	}

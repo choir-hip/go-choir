@@ -139,6 +139,39 @@ func TestTextureRevisionAPICommitsLifecycleBoundHeadThroughReducer(t *testing.T)
 	if _, err := rt.Store().StartLifecycle(t.Context(), start); err != nil {
 		t.Fatalf("start lifecycle: %v", err)
 	}
+	getRequest := textureRequest(t, http.MethodGet, "/api/texture/documents/"+start.InitialDocument.DocID, nil)
+	getResponse := httptest.NewRecorder()
+	handler.handleTextureGetDocument(getResponse, getRequest, start.InitialDocument.DocID)
+	if getResponse.Code != http.StatusOK {
+		t.Fatalf("get lifecycle document status = %d body=%s", getResponse.Code, getResponse.Body.String())
+	}
+	var document textureDocumentResponse
+	if err := json.NewDecoder(getResponse.Body).Decode(&document); err != nil ||
+		document.TrajectoryID != start.TrajectoryID {
+		t.Fatalf("lifecycle document response omitted authority: %+v, %v", document, err)
+	}
+	updateRequest := textureRequest(t, http.MethodPut, "/api/texture/documents/"+start.InitialDocument.DocID, textureUpdateDocRequest{
+		Title: "Renamed lifecycle artifact",
+	})
+	updateResponse := httptest.NewRecorder()
+	handler.handleTextureUpdateDocument(updateResponse, updateRequest, start.InitialDocument.DocID)
+	if updateResponse.Code != http.StatusOK {
+		t.Fatalf("rename lifecycle document status = %d body=%s", updateResponse.Code, updateResponse.Body.String())
+	}
+	var renamed textureDocumentResponse
+	if err := json.NewDecoder(updateResponse.Body).Decode(&renamed); err != nil || renamed.Title != "Renamed lifecycle artifact" {
+		t.Fatalf("unexpected renamed lifecycle document: %+v, %v", renamed, err)
+	}
+	renamedSnapshot, err := rt.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatalf("get renamed lifecycle snapshot: %v", err)
+	}
+	if renamedSnapshot.Document.Title != renamed.Title ||
+		renamedSnapshot.Document.CurrentRevisionID != start.InitialRevision.RevisionID ||
+		renamedSnapshot.Trajectory.ReducerSeq != 1 ||
+		renamedSnapshot.Trajectory.LifecycleVersion != 1 {
+		t.Fatalf("title projection mutated lifecycle authority: %+v", renamedSnapshot)
+	}
 	request := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", textureCreateRevisionRequest{
 		Content: "Owner-authored", ParentRevisionID: start.InitialRevision.RevisionID,
 		IdempotencyKey: "public-revision-command", ExpectedLifecycleVersion: 1,
@@ -172,5 +205,45 @@ func TestTextureRevisionAPICommitsLifecycleBoundHeadThroughReducer(t *testing.T)
 	var replayed textureRevisionResponse
 	if err := json.NewDecoder(replayResponse.Body).Decode(&replayed); err != nil || replayed.RevisionID != revision.RevisionID {
 		t.Fatalf("unexpected lifecycle revision replay: %+v, %v", replayed, err)
+	}
+	cancel := types.CancelLifecycleRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "cancel-public-revision",
+		TrajectoryID: start.TrajectoryID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+		ExpectedHeadRevisionID: revision.RevisionID, Reason: "finish public lifecycle",
+	}
+	cancel.CommandDigest, _ = store.ComputeCancelLifecycleDigest(cancel)
+	cancelled, err := rt.Store().CancelLifecycleTrajectory(t.Context(), cancel)
+	if err != nil {
+		t.Fatalf("cancel lifecycle: %v", err)
+	}
+	postTerminalRequest := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", textureCreateRevisionRequest{
+		Content: "Independent post-terminal edit", ParentRevisionID: revision.RevisionID,
+		IdempotencyKey: "public-unbound-revision-command", ExpectedLifecycleVersion: cancelled.Trajectory.LifecycleVersion,
+	})
+	postTerminalResponse := httptest.NewRecorder()
+	handler.HandleTextureRevisions(postTerminalResponse, postTerminalRequest)
+	if postTerminalResponse.Code != http.StatusCreated {
+		t.Fatalf("create post-terminal revision status = %d body=%s", postTerminalResponse.Code, postTerminalResponse.Body.String())
+	}
+	var postTerminalRevision textureRevisionResponse
+	if err := json.NewDecoder(postTerminalResponse.Body).Decode(&postTerminalRevision); err != nil {
+		t.Fatalf("decode post-terminal revision: %v", err)
+	}
+	terminalSnapshot, err := rt.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatalf("get terminal lifecycle snapshot: %v", err)
+	}
+	if terminalSnapshot.HeadRevision.RevisionID != revision.RevisionID ||
+		terminalSnapshot.Document.CurrentRevisionID != postTerminalRevision.RevisionID ||
+		terminalSnapshot.CurrentDocumentHead == nil ||
+		terminalSnapshot.CurrentDocumentHead.RevisionID != postTerminalRevision.RevisionID ||
+		terminalSnapshot.Trajectory.TerminalArtifactHeadRef != revision.RevisionID {
+		t.Fatalf("post-terminal document edit moved accepted lifecycle head: %+v", terminalSnapshot)
+	}
+	deleteRequest := textureRequest(t, http.MethodDelete, "/api/texture/documents/"+start.InitialDocument.DocID, nil)
+	deleteResponse := httptest.NewRecorder()
+	handler.handleTextureDeleteDocument(deleteResponse, deleteRequest, start.InitialDocument.DocID)
+	if deleteResponse.Code != http.StatusOK {
+		t.Fatalf("archive lifecycle document status = %d body=%s", deleteResponse.Code, deleteResponse.Body.String())
 	}
 }

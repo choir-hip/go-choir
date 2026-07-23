@@ -160,6 +160,13 @@ export async function deleteDocument(docId) {
   return res.json();
 }
 
+export function lifecycleCurrentDocumentRevisionID(snapshot) {
+  return snapshot?.current_document_head?.revision_id
+    || snapshot?.document?.current_revision_id
+    || snapshot?.head_revision?.revision_id
+    || '';
+}
+
 export async function createRevision(docId, { content, bodyDoc, sourceEntities, authorKind, authorLabel, citations, metadata, parentRevisionId, allowRebase = false }) {
   const body = {
     content,
@@ -195,7 +202,7 @@ export async function createRevision(docId, { content, bodyDoc, sourceEntities, 
     const lifecycle = await lifecycleRes.json();
     body.idempotency_key = crypto.randomUUID();
     body.expected_lifecycle_version = lifecycle?.trajectory?.lifecycle_version;
-    body.parent_revision_id = parentRevisionId || lifecycle?.head_revision?.revision_id;
+    body.parent_revision_id = parentRevisionId || lifecycleCurrentDocumentRevisionID(lifecycle);
   }
 
 

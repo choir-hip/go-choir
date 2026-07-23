@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -94,6 +95,13 @@ func persistSubmittedRunProjections(ctx context.Context, st runSubmissionStore, 
 	return nil
 }
 
+func agentMutationComputerID(rec *types.RunRecord) string {
+	if rec == nil || strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) == "" {
+		return ""
+	}
+	return strings.TrimSpace(rec.SandboxID)
+}
+
 func agentMutationForRun(rec *types.RunRecord) *store.AgentMutation {
 	if rec == nil || !runHasProfile(rec, agentprofile.Texture) {
 		return nil
@@ -117,6 +125,7 @@ func agentMutationForRun(rec *types.RunRecord) *store.AgentMutation {
 		DocID:               docID,
 		RunID:               rec.RunID,
 		OwnerID:             rec.OwnerID,
+		ComputerID:          agentMutationComputerID(rec),
 		State:               "pending",
 		ScheduledMessageSeq: scheduledSeq,
 		CreatedAt:           rec.CreatedAt,

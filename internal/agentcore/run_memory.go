@@ -79,12 +79,13 @@ func (m *runMemoryManager) seedActorMemorySnapshot(ctx context.Context) error {
 		return nil
 	}
 	ownerID := strings.TrimSpace(m.rec.OwnerID)
+	computerID := strings.TrimSpace(m.rec.SandboxID)
 	agentID := strings.TrimSpace(m.rec.AgentID)
 	runID := strings.TrimSpace(m.rec.RunID)
-	if ownerID == "" || agentID == "" || runID == "" {
+	if ownerID == "" || computerID == "" || agentID == "" || runID == "" {
 		return nil
 	}
-	sourceRunID, priorEntries, err := m.store.LatestActorRunMemoryEntries(ctx, ownerID, agentID, runID)
+	sourceRunID, priorEntries, err := m.store.LatestActorRunMemoryEntries(ctx, ownerID, computerID, agentID, runID)
 	if err != nil {
 		if errors.Is(err, runtimestore.ErrNotFound) {
 			return nil

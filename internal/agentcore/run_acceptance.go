@@ -75,7 +75,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		return types.RunAcceptanceRecord{}, fmt.Errorf("synthesize run acceptance: trajectory_id or loop_id is required")
 	}
 	if in.TrajectoryID == "" {
-		run, err := rt.store.GetRun(ctx, in.RunID)
+		run, err := rt.getRunForComputer(ctx, ownerID, in.RunID)
 		if err != nil {
 			return types.RunAcceptanceRecord{}, fmt.Errorf("synthesize run acceptance: load source run: %w", err)
 		}
@@ -85,7 +85,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		in.TrajectoryID = traceTrajectoryIDForRun(run)
 	}
 
-	runs, err := rt.store.ListRunsByOwner(ctx, ownerID, 1000)
+	runs, err := rt.ListRunsByOwner(ctx, ownerID, 1000)
 	if err != nil {
 		return types.RunAcceptanceRecord{}, fmt.Errorf("synthesize run acceptance: list runs: %w", err)
 	}

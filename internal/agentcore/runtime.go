@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -198,7 +199,7 @@ func (rt *Runtime) ExecuteActivationSync(ctx context.Context, rec *types.RunReco
 	runCtx, cancel := context.WithTimeout(ctx, rt.cfg.ActivationBudget)
 
 	rt.runningMu.Lock()
-	stored, err := rt.store.GetRun(context.Background(), rec.RunID)
+	stored, err := rt.getRunForComputer(context.Background(), rec.OwnerID, rec.RunID)
 	if err == nil && stored.State.Terminal() {
 		rt.runningMu.Unlock()
 		cancel()
@@ -530,11 +531,13 @@ func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWa
 	}
 }
 
-// Start begins runtime boot recovery. On boot, no actors are resident; previous
-// in-process activations are marked passivated, then durable update backlog and
-// assigned open trajectory work are swept to re-warm cold actors.
+// Start begins runtime boot recovery. On boot, legacy in-process activations
+// are passivated. Lifecycle activations are re-dispatched from their canonical
+// pending/running run projections, then durable backlog and assigned work are
+// swept to re-warm cold actors.
 func (rt *Runtime) Start(ctx context.Context) {
 	rt.passivateInterruptedActivations(ctx)
+	rt.rewarmInterruptedLifecycleActivations(ctx)
 	rt.recoverOpenWirePublicationClaims(ctx)
 	terminalOutcomeTargets := rt.reconcileTerminalRunOutcomes(ctx)
 	rt.sweepPassivatedSpawnedCoagentWork(ctx)
@@ -706,7 +709,7 @@ func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, own
 	runID := uuid.New().String()
 	if commandID := strings.TrimSpace(metadataStringValue(metadata, "lifecycle_command_id")); commandID != "" {
 		runID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{"choir:prompt-bar", ownerID, rt.cfg.SandboxID, commandID}, ":"))).String()
-		existing, existingErr := rt.store.GetRunByOwner(ctx, ownerID, runID)
+		existing, existingErr := rt.getRunForComputer(ctx, ownerID, runID)
 		if existingErr == nil {
 			if existing.Prompt != prompt || metadataStringValue(existing.Metadata, "lifecycle_command_id") != commandID {
 				return nil, fmt.Errorf("%w: stored submission does not match request", ErrPromptCommandConflict)
@@ -766,11 +769,32 @@ func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, own
 	return rec, nil
 }
 
+func (rt *Runtime) getRunForComputer(ctx context.Context, ownerID, runID string) (types.RunRecord, error) {
+	computerID := strings.TrimSpace(rt.cfg.SandboxID)
+	if computerID != "" {
+		if rec, err := rt.store.GetLifecycleRun(ctx, ownerID, computerID, runID); err == nil {
+			return rec, nil
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return types.RunRecord{}, err
+		}
+	}
+	rec, err := rt.store.GetRunByOwner(ctx, ownerID, runID)
+	if err != nil {
+		return types.RunRecord{}, err
+	}
+	if strings.TrimSpace(rec.SandboxID) != "" &&
+		(strings.TrimSpace(rec.TrajectoryID) != "" || metadataStringValue(rec.Metadata, runMetadataTrajectoryID) != "") &&
+		strings.TrimSpace(rec.SandboxID) != computerID {
+		return types.RunRecord{}, store.ErrNotFound
+	}
+	return rec, nil
+}
+
 // GetRun returns a run by ID, scoped to the given owner. If the run does
 // not exist or does not belong to the owner, it returns ErrNotFound
 // (VAL-RUNTIME-006: caller-scoped).
 func (rt *Runtime) GetRun(ctx context.Context, runID, ownerID string) (*types.RunRecord, error) {
-	rec, err := rt.store.GetRunByOwner(ctx, ownerID, runID)
+	rec, err := rt.getRunForComputer(ctx, ownerID, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -789,7 +813,7 @@ func (rt *Runtime) GetRun(ctx context.Context, runID, ownerID string) (*types.Ru
 // execution.
 func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objective, ownerID string, constraints map[string]any) (*types.RunRecord, error) {
 	// Validate that the requesting run exists.
-	requesterRec, err := rt.store.GetRun(ctx, requesterRunID)
+	requesterRec, err := rt.getRunForComputer(ctx, ownerID, requesterRunID)
 	if err != nil {
 		if err == store.ErrNotFound {
 			return nil, fmt.Errorf("requester run not found: %s", requesterRunID)
@@ -943,14 +967,26 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		Metadata:         metadata,
 	}
 	rt.stampAndMintTrajectory(ctx, rec)
-	if item, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, &requesterRec, "spawned_work_item_id"); err != nil {
+	spawnedWork, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, &requesterRec, "spawned_work_item_id")
+	if err != nil {
 		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist spawned coagent work item: %w", err))
-	} else if item.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
+	}
+	if spawnedWork.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
 		log.Printf("runtime: spawned coagent work item not created for run=%s profile=%s trajectory=%s agent=%s requested_by=%s",
 			rec.RunID, agentprofile.Canonical(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
 	}
-
-	if err := rt.store.CreateRun(ctx, *rec); err != nil {
+	if spawnedWork.LifecycleVersion > 0 {
+		rec.TrajectoryID = spawnedWork.TrajectoryID
+		project := types.ReplaceLifecycleActivationRequest{
+			OwnerID: ownerID, ComputerID: rec.SandboxID,
+			CommandID:    "lifecycle-project-spawned-run:" + rec.RunID,
+			TrajectoryID: rec.TrajectoryID, AgentID: rec.AgentID, Run: *rec,
+		}
+		project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+		if _, err := rt.store.ReplaceLifecycleActivation(ctx, project); err != nil {
+			return nil, releaseCoSuperSlotClaim(fmt.Errorf("project spawned lifecycle run: %w", err))
+		}
+	} else if err := rt.store.CreateRun(ctx, *rec); err != nil {
 		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist coagent run: %w", err))
 	}
 	rt.createAgentMutationForRun(ctx, rec)
@@ -1000,7 +1036,7 @@ func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 		return types.WorkItemRecord{}, nil
 	}
 	if requester == nil {
-		if loaded, err := rt.store.GetRun(ctx, requesterRunID); err == nil && loaded.OwnerID == ownerID {
+		if loaded, err := rt.getRunForComputer(ctx, ownerID, requesterRunID); err == nil && loaded.OwnerID == ownerID {
 			requester = &loaded
 			rec.Metadata = inheritTextureRequesterMetadata(rec.Metadata, requester)
 		}
@@ -1023,8 +1059,9 @@ func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 	copyMetadataStringToDetails(rec.Metadata, details, "requested_by_profile")
 	copyMetadataStringToDetails(rec.Metadata, details, "requested_by_agent_id")
 	copyMetadataStringToDetails(rec.Metadata, details, "requested_by_run_id")
-	return rt.store.CreateWorkItem(ctx, types.WorkItemRecord{
+	work := types.WorkItemRecord{
 		OwnerID:              ownerID,
+		ComputerID:           strings.TrimSpace(rec.SandboxID),
 		TrajectoryID:         trajectoryID,
 		Objective:            objective,
 		Reason:               "spawn_agent coagent objective",
@@ -1033,7 +1070,28 @@ func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 		CreatedByRunID:       requesterRunID,
 		ObjectiveFingerprint: "spawned_coagent:" + workitem.ObjectiveFingerprint(ownerID, trajectoryID, rec.RunID, objective),
 		Details:              details,
-	})
+	}
+	if work.ComputerID != "" {
+		if _, lifecycleErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, work.ComputerID, trajectoryID); lifecycleErr == nil {
+			work.WorkItemID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("choir:lifecycle:spawned-work:"+ownerID+":"+trajectoryID+":"+rec.RunID)).String()
+			open := types.OpenLifecycleWorkRequest{
+				OwnerID: ownerID, ComputerID: work.ComputerID,
+				CommandID: "lifecycle-open-spawned-work:" + rec.RunID, TrajectoryID: trajectoryID, WorkItem: work,
+			}
+			open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
+			opened, openErr := rt.store.OpenLifecycleWork(ctx, open)
+			if openErr != nil {
+				return types.WorkItemRecord{}, openErr
+			}
+			if opened.WorkItem == nil {
+				return types.WorkItemRecord{}, fmt.Errorf("open spawned lifecycle work returned no work item")
+			}
+			return *opened.WorkItem, nil
+		} else if !errors.Is(lifecycleErr, store.ErrNotFound) {
+			return types.WorkItemRecord{}, lifecycleErr
+		}
+	}
+	return rt.store.CreateWorkItem(ctx, work)
 }
 
 func inheritTextureRequesterMetadata(metadata map[string]any, requesterRun *types.RunRecord) map[string]any {
@@ -1093,6 +1151,9 @@ func (rt *Runtime) ensureSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 	}
 	rec.Metadata = cloneMetadata(rec.Metadata)
 	rec.Metadata["work_item_ids"] = appendUniqueString(metadataStringSlice(rec.Metadata["work_item_ids"]), item.WorkItemID)
+	if item.LifecycleVersion > 0 {
+		rec.Metadata["lifecycle_work_item_id"] = item.WorkItemID
+	}
 	if strings.TrimSpace(metadataKey) != "" {
 		rec.Metadata[metadataKey] = item.WorkItemID
 	}
@@ -1218,7 +1279,7 @@ func (rt *Runtime) CancelRun(ctx context.Context, runID, ownerID string) error {
 // against activation state writes, so a late provider return cannot replace it.
 func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason string) error {
 	rt.runningMu.Lock()
-	rec, err := rt.store.GetRunByOwner(ctx, ownerID, runID)
+	rec, err := rt.getRunForComputer(ctx, ownerID, runID)
 	if err != nil {
 		rt.runningMu.Unlock()
 		if err == store.ErrNotFound {
@@ -1227,8 +1288,12 @@ func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason st
 		return fmt.Errorf("lookup run: %w", err)
 	}
 	if rec.State.Terminal() {
-		rt.runningMu.Unlock()
-		return fmt.Errorf("cannot cancel run in %s state", rec.State)
+		trajectoryID := strings.TrimSpace(trajectoryIDForRun(&rec))
+		trajectory, trajectoryErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, rec.SandboxID, trajectoryID)
+		if trajectoryErr != nil || trajectory.Status != types.TrajectoryCancelled {
+			rt.runningMu.Unlock()
+			return fmt.Errorf("cannot cancel run in %s state", rec.State)
+		}
 	}
 
 	now := time.Now().UTC()
@@ -1261,7 +1326,7 @@ func (rt *Runtime) persistActivationState(ctx context.Context, rec *types.RunRec
 	rt.runningMu.Lock()
 	defer rt.runningMu.Unlock()
 
-	stored, err := rt.store.GetRun(context.Background(), rec.RunID)
+	stored, err := rt.getRunForComputer(context.Background(), rec.OwnerID, rec.RunID)
 	if err != nil {
 		return false, err
 	}
@@ -1282,7 +1347,7 @@ func (rt *Runtime) CancelAgent(ctx context.Context, agentID, ownerID string) err
 	} else if found {
 		return rt.CancelRun(ctx, resident.RunID, ownerID)
 	}
-	rec, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, agentID)
+	rec, err := rt.latestActiveRunByAgent(ctx, ownerID, agentID)
 	if err != nil {
 		if err == store.ErrNotFound {
 			return fmt.Errorf("agent not found: %s", agentID)
@@ -1363,7 +1428,7 @@ func (rt *Runtime) CancelTrajectoryCommand(ctx context.Context, trajectoryID, ow
 	if result.Trajectory.Status != types.TrajectoryCancelled {
 		return result, nil, nil
 	}
-	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(trajectoryID))
+	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, strings.TrimSpace(ownerID), result.Trajectory.ComputerID, strings.TrimSpace(trajectoryID))
 	return result, cancelled, err
 }
 
@@ -1380,25 +1445,61 @@ func (rt *Runtime) CancelTrajectory(ctx context.Context, trajectoryID, ownerID s
 		return trajectory, nil, nil
 	}
 
-	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(trajectoryID))
+	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, strings.TrimSpace(ownerID), trajectory.ComputerID, strings.TrimSpace(trajectoryID))
 	return trajectory, cancelled, err
 }
 
-func (rt *Runtime) drainCancelledTrajectoryActivations(ctx context.Context, ownerID, trajectoryID string) ([]string, error) {
+func (rt *Runtime) drainCancelledTrajectoryActivations(ctx context.Context, ownerID, computerID, trajectoryID string) ([]string, error) {
 	drainCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), trajectoryActivationDrainTimeout)
 	defer cancel()
 
 	cancelled := []string{}
-	active, err := rt.store.ListActiveRunsByTrajectory(drainCtx, ownerID, trajectoryID, 0)
+	computerID = strings.TrimSpace(computerID)
+	var active []types.RunRecord
+	var err error
+	if computerID != "" {
+		active, err = rt.store.ListActiveLifecycleRunsByTrajectory(drainCtx, ownerID, computerID, trajectoryID, 0)
+	} else {
+		active, err = rt.store.ListActiveRunsByTrajectory(drainCtx, ownerID, trajectoryID, 0)
+	}
+	if err == nil && len(active) == 0 && computerID != "" {
+		// Legacy trajectories may carry a run SandboxID without a scoped
+		// lifecycle authority. Lifecycle projections are excluded from this
+		// owner-only compatibility query.
+		active, err = rt.store.ListActiveRunsByTrajectory(drainCtx, ownerID, trajectoryID, 0)
+	}
 	if err != nil {
 		return cancelled, fmt.Errorf("list active trajectory activations: %w", err)
 	}
-	for _, run := range active {
-		if rt.dispatchActor == nil {
-			return cancelled, fmt.Errorf("deliver trajectory cancellation: actor runtime is unavailable")
+	// Legacy trajectories have no computer identity; infer it only for their
+	// activation updates. Lifecycle trajectories always arrive scoped.
+	if computerID == "" && len(active) > 0 {
+		computerID = strings.TrimSpace(active[0].SandboxID)
+	}
+	if computerID != "" {
+		snapshot, snapshotErr := rt.store.GetLifecycleSnapshot(drainCtx, ownerID, computerID, trajectoryID)
+		if snapshotErr == nil && snapshot.Activation.RunID != "" && snapshot.Activation.State != types.RunCancelled {
+			found := false
+			for _, run := range active {
+				found = found || run.RunID == snapshot.Activation.RunID
+			}
+			if !found {
+				latest, getErr := rt.getRunForComputer(drainCtx, ownerID, snapshot.Activation.RunID)
+				if getErr != nil {
+					return cancelled, fmt.Errorf("load latest trajectory activation: %w", getErr)
+				}
+				active = append(active, latest)
+			}
 		}
-		if err := rt.dispatchActor(drainCtx, run.OwnerID, run.SandboxID, run.AgentID, "cancel", run.RunID, trajectoryID, ""); err != nil {
-			return cancelled, fmt.Errorf("deliver trajectory cancellation for run %s: %w", run.RunID, err)
+	}
+	for _, run := range active {
+		if run.State.Active() {
+			if rt.dispatchActor == nil {
+				return cancelled, fmt.Errorf("deliver trajectory cancellation: actor runtime is unavailable")
+			}
+			if err := rt.dispatchActor(drainCtx, run.OwnerID, run.SandboxID, run.AgentID, "cancel", run.RunID, trajectoryID, ""); err != nil {
+				return cancelled, fmt.Errorf("deliver trajectory cancellation for run %s: %w", run.RunID, err)
+			}
 		}
 		if err := rt.CancelRun(drainCtx, run.RunID, ownerID); err != nil {
 			if strings.Contains(err.Error(), "cannot cancel run in") {
@@ -1422,7 +1523,7 @@ func (rt *Runtime) CancelRunTrajectory(ctx context.Context, runID, ownerID strin
 	if runID == "" || ownerID == "" {
 		return nil, fmt.Errorf("cancel trajectory: run_id and owner_id are required")
 	}
-	rec, err := rt.store.GetRunByOwner(ctx, ownerID, runID)
+	rec, err := rt.getRunForComputer(ctx, ownerID, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -1440,10 +1541,108 @@ func (rt *Runtime) CancelRunTrajectory(ctx context.Context, runID, ownerID strin
 	return cancelled, err
 }
 
+// ListTrajectoriesByOwner returns recent legacy trajectories plus canonical
+// lifecycle trajectories scoped to this runtime's computer.
+func (rt *Runtime) ListTrajectoriesByOwner(ctx context.Context, ownerID string, limit int) ([]types.TrajectoryRecord, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	legacy, err := rt.store.ListTrajectoriesByOwner(ctx, ownerID, limit)
+	if err != nil {
+		return nil, err
+	}
+	computerID := strings.TrimSpace(rt.cfg.SandboxID)
+	if computerID == "" {
+		return legacy, nil
+	}
+	lifecycle, err := rt.store.ListLifecycleTrajectoriesByOwner(ctx, ownerID, computerID, limit)
+	if err != nil {
+		return nil, err
+	}
+	trajectories := make([]types.TrajectoryRecord, 0, len(legacy)+len(lifecycle))
+	seen := make(map[string]struct{}, len(legacy)+len(lifecycle))
+	for _, trajectory := range append(lifecycle, legacy...) {
+		if trajectory.LifecycleVersion > 0 && trajectory.ComputerID != computerID {
+			continue
+		}
+		if _, ok := seen[trajectory.TrajectoryID]; ok {
+			continue
+		}
+		seen[trajectory.TrajectoryID] = struct{}{}
+		trajectories = append(trajectories, trajectory)
+	}
+	sort.Slice(trajectories, func(i, j int) bool {
+		if !trajectories[i].UpdatedAt.Equal(trajectories[j].UpdatedAt) {
+			return trajectories[i].UpdatedAt.After(trajectories[j].UpdatedAt)
+		}
+		return trajectories[i].TrajectoryID < trajectories[j].TrajectoryID
+	})
+	if len(trajectories) > limit {
+		trajectories = trajectories[:limit]
+	}
+	return trajectories, nil
+}
+
 // ListRunsByOwner returns recent runs for the given owner, ordered by
 // creation time descending.
 func (rt *Runtime) ListRunsByOwner(ctx context.Context, ownerID string, limit int) ([]types.RunRecord, error) {
-	return rt.store.ListRunsByOwner(ctx, ownerID, limit)
+	if limit <= 0 {
+		limit = 50
+	}
+	legacy, err := rt.store.ListRunsByOwner(ctx, ownerID, limit)
+	if err != nil {
+		return nil, err
+	}
+	computerID := strings.TrimSpace(rt.cfg.SandboxID)
+	if computerID == "" {
+		return legacy, nil
+	}
+	lifecycle, err := rt.store.ListLifecycleRunsByOwner(ctx, ownerID, computerID, limit)
+	if err != nil {
+		return nil, err
+	}
+	runs := append(legacy, lifecycle...)
+	sort.Slice(runs, func(i, j int) bool {
+		if !runs[i].CreatedAt.Equal(runs[j].CreatedAt) {
+			return runs[i].CreatedAt.After(runs[j].CreatedAt)
+		}
+		return runs[i].RunID < runs[j].RunID
+	})
+	if len(runs) > limit {
+		runs = runs[:limit]
+	}
+	return runs, nil
+}
+
+// ListRunsByChannel returns recent runs for one channel, including canonical
+// lifecycle projections for this runtime's computer.
+func (rt *Runtime) ListRunsByChannel(ctx context.Context, ownerID, channelID string, limit int) ([]types.RunRecord, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	legacy, err := rt.store.ListRunsByChannel(ctx, ownerID, channelID, limit)
+	if err != nil {
+		return nil, err
+	}
+	computerID := strings.TrimSpace(rt.cfg.SandboxID)
+	if computerID == "" {
+		return legacy, nil
+	}
+	lifecycle, err := rt.store.ListLifecycleRunsByChannel(ctx, ownerID, computerID, channelID, limit)
+	if err != nil {
+		return nil, err
+	}
+	runs := append(legacy, lifecycle...)
+	sort.Slice(runs, func(i, j int) bool {
+		if !runs[i].CreatedAt.Equal(runs[j].CreatedAt) {
+			return runs[i].CreatedAt.After(runs[j].CreatedAt)
+		}
+		return runs[i].RunID < runs[j].RunID
+	})
+	if len(runs) > limit {
+		runs = runs[:limit]
+	}
+	return runs, nil
 }
 
 // HealthState returns the current runtime health state.
@@ -1599,7 +1798,7 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 				}
 				progressed = true
 				if runHasProfile(rec, agentprofile.Texture) {
-					if err := rt.store.MarkAgentMutationStale(ctx, rec.RunID); err != nil {
+					if err := rt.store.MarkAgentMutationStale(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil {
 						log.Printf("runtime: boot passivation: stale mutation %s: %v", rec.RunID, err)
 					}
 				}
@@ -1610,6 +1809,31 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 			if !progressed {
 				break
 			}
+		}
+	}
+}
+
+// rewarmInterruptedLifecycleActivations closes the projection-before-dispatch
+// crash window. Initial actor dispatch is keyed by RunID, so replay is durable
+// and idempotent when the pre-crash dispatch already reached the actor log.
+func (rt *Runtime) rewarmInterruptedLifecycleActivations(ctx context.Context) {
+	if rt == nil || rt.store == nil {
+		return
+	}
+	computerID := strings.TrimSpace(rt.TextureSandboxID())
+	if computerID == "" {
+		return
+	}
+	for _, state := range []types.RunState{types.RunPending, types.RunRunning} {
+		runs, err := rt.store.ListLifecycleRunsByState(ctx, "", computerID, state)
+		if err != nil {
+			log.Printf("runtime: boot lifecycle rewarm: query %s runs: %v", state, err)
+			continue
+		}
+		for i := range runs {
+			rec := &runs[i]
+			rt.activate(rec)
+			log.Printf("runtime: re-dispatched lifecycle run %s (state=%s) after restart", rec.RunID, state)
 		}
 	}
 }
@@ -2176,7 +2400,7 @@ func (rt *Runtime) sleepTextureMutationAfterIdle(ctx context.Context, rec *types
 	if rt == nil || rt.store == nil || rec == nil {
 		return nil
 	}
-	mutation, err := rt.store.GetAgentMutationByRun(ctx, rec.RunID)
+	mutation, err := rt.store.GetAgentMutationByRun(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 	if err != nil {
 		return fmt.Errorf("get texture mutation for idle passivation: %w", err)
 	}
@@ -2190,18 +2414,18 @@ func (rt *Runtime) sleepTextureMutationAfterIdle(ctx context.Context, rec *types
 				rec.Metadata = map[string]any{}
 			}
 			rec.Metadata["current_revision_id"] = revisionID
-			if err := rt.store.SleepAgentMutation(ctx, rec.RunID); err != nil && err != store.ErrMutationAlreadyCompleted {
+			if err := rt.store.SleepAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil && err != store.ErrMutationAlreadyCompleted {
 				return err
 			}
 			return nil
 		}
 		if rt.textureRunRequestedWorkers(ctx, rec) {
-			if err := rt.store.DeferAgentMutation(ctx, rec.RunID); err != nil {
+			if err := rt.store.DeferAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil {
 				return err
 			}
 			return nil
 		}
-		_ = rt.store.FailAgentMutation(ctx, rec.RunID)
+		_ = rt.store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 		if rec.Metadata == nil {
 			rec.Metadata = map[string]any{}
 		}
@@ -2607,7 +2831,7 @@ func (rt *Runtime) latestActorToolLoopBudgetSpend(ctx context.Context, ownerID, 
 	if ownerID == "" || agentID == "" {
 		return spend, false, nil
 	}
-	sourceRunID, _, err := rt.store.LatestActorRunMemoryEntries(ctx, ownerID, agentID, "")
+	sourceRunID, _, err := rt.store.LatestActorRunMemoryEntries(ctx, ownerID, rt.TextureSandboxID(), agentID, "")
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return spend, false, nil
@@ -2851,7 +3075,7 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 		return nil
 	}
 
-	mutation, err := rt.store.GetAgentMutationByRun(persistCtx, rec.RunID)
+	mutation, err := rt.store.GetAgentMutationByRun(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 	if err != nil {
 		log.Printf("runtime: texture agent revision run %s: get mutation: %v", rec.RunID, err)
 		return nil
@@ -2868,7 +3092,7 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 	}
 
 	if strings.TrimSpace(mutation.RevisionID) != "" {
-		if err := rt.store.CompleteAgentMutation(persistCtx, rec.RunID, mutation.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
+		if err := rt.store.CompleteAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, mutation.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
 			log.Printf("runtime: texture agent revision run %s: complete written mutation: %v", rec.RunID, err)
 			return nil
 		}
@@ -2876,14 +3100,14 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 	}
 
 	if rt.textureRunRequestedWorkers(persistCtx, rec) {
-		if err := rt.store.DeferAgentMutation(persistCtx, rec.RunID); err != nil {
+		if err := rt.store.DeferAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil {
 			log.Printf("runtime: texture agent revision run %s: defer no-edit mutation: %v", rec.RunID, err)
 			return nil
 		}
 		log.Printf("runtime: texture agent revision run %s requested workers and completed without document edit; waiting for worker updates", rec.RunID)
 		return nil
 	}
-	_ = rt.store.FailAgentMutation(persistCtx, rec.RunID)
+	_ = rt.store.FailAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 	if rec.Metadata == nil {
 		rec.Metadata = map[string]any{}
 	}
@@ -2936,7 +3160,7 @@ func (rt *Runtime) channelHasGroundedHistory(ctx context.Context, ownerID, chann
 	if channelID == "" {
 		return false, nil
 	}
-	runs, err := rt.store.ListRunsByChannel(ctx, ownerID, channelID, 500)
+	runs, err := rt.ListRunsByChannel(ctx, ownerID, channelID, 500)
 	if err != nil {
 		return false, err
 	}
@@ -3071,19 +3295,19 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	// close the mutation on the latest stored revision.
 	if runHasProfile(rec, agentprofile.Texture) {
 		failedNoWrite := true
-		if mutation, mutationErr := rt.store.GetAgentMutationByRun(persistCtx, rec.RunID); mutationErr != nil {
+		if mutation, mutationErr := rt.store.GetAgentMutationByRun(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID); mutationErr != nil {
 			log.Printf("runtime: texture agent revision run %s: get mutation after failure: %v", rec.RunID, mutationErr)
 		} else if mutation != nil {
 			if strings.TrimSpace(mutation.RevisionID) != "" {
-				if completeErr := rt.store.CompleteAgentMutation(persistCtx, rec.RunID, mutation.RevisionID); completeErr != nil && completeErr != store.ErrMutationAlreadyCompleted {
+				if completeErr := rt.store.CompleteAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, mutation.RevisionID); completeErr != nil && completeErr != store.ErrMutationAlreadyCompleted {
 					log.Printf("runtime: texture agent revision run %s: complete written mutation after failure: %v", rec.RunID, completeErr)
 				}
 				failedNoWrite = false
 			} else {
-				_ = rt.store.FailAgentMutation(persistCtx, rec.RunID)
+				_ = rt.store.FailAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 			}
 		} else {
-			_ = rt.store.FailAgentMutation(persistCtx, rec.RunID)
+			_ = rt.store.FailAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 		}
 		if failedNoWrite {
 			if rec.Metadata == nil {
@@ -3228,6 +3452,24 @@ func (rt *Runtime) appendTraceEvent(ctx context.Context, evRec *types.EventRecor
 	}
 }
 
+func (rt *Runtime) latestActiveRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	agentID = strings.TrimSpace(agentID)
+	if ownerID == "" || agentID == "" {
+		return types.RunRecord{}, store.ErrNotFound
+	}
+	if computerID := strings.TrimSpace(rt.cfg.SandboxID); computerID != "" {
+		rec, err := rt.store.GetLatestActiveLifecycleRunByAgent(ctx, ownerID, computerID, agentID)
+		if err == nil {
+			return rec, nil
+		}
+		if !errors.Is(err, store.ErrNotFound) {
+			return types.RunRecord{}, err
+		}
+	}
+	return rt.store.GetLatestActiveRunByAgent(ctx, ownerID, agentID)
+}
+
 // activeRunByAgent is the store-backed replacement for the old in-memory
 // residentRunByAgent. It queries the store for the latest executing run
 // (pending or running, NOT blocked) for an agent. Blocked runs are excluded
@@ -3241,7 +3483,7 @@ func (rt *Runtime) activeRunByAgent(ctx context.Context, ownerID, agentID string
 	if ownerID == "" || agentID == "" {
 		return types.RunRecord{}, false, nil
 	}
-	rec, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, agentID)
+	rec, err := rt.latestActiveRunByAgent(ctx, ownerID, agentID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return types.RunRecord{}, false, nil

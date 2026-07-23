@@ -569,7 +569,7 @@ func persistentEmailAgentID(ownerID string) string {
 
 func listCoagentRunsByRequester(t *testing.T, s *store.Store, ownerID, requesterRunID string, limit int) []types.RunRecord {
 	t.Helper()
-	runs, err := s.ListRunsByOwner(context.Background(), ownerID, limit)
+	runs, err := s.ListLifecycleRunsByOwner(context.Background(), ownerID, "sandbox-test", limit)
 	if err != nil {
 		t.Fatalf("list runs by owner: %v", err)
 	}

@@ -3,6 +3,7 @@ package actorruntime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/actor"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/textureowner"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -75,8 +77,8 @@ func (h *actorHandler) handleInitialDispatch(ctx context.Context, u actor.Update
 	if err != nil {
 		return nil, fmt.Errorf("actorruntime: load run %s for initial dispatch: %w", runID, err)
 	}
-	if rec.State != types.RunPending {
-		// Already started or completed — nothing to do.
+	if rec.State != types.RunPending && rec.State != types.RunRunning {
+		// Terminal/passivated runs were already handled by an earlier dispatch.
 		return nil, nil
 	}
 	h.rt.ExecuteActivationSync(ctx, &rec)
@@ -236,7 +238,14 @@ func (h *actorHandler) scopedRunForUpdate(ctx context.Context, update actor.Upda
 	if err != nil {
 		return types.RunRecord{}, err
 	}
-	rec, err := h.rt.Store().GetRunByOwner(ctx, ownerID, strings.TrimSpace(runID))
+	rec, err := h.rt.Store().GetLifecycleRun(ctx, ownerID, computerID, strings.TrimSpace(runID))
+	if err == nil {
+		return rec, nil
+	}
+	if !errors.Is(err, store.ErrNotFound) {
+		return types.RunRecord{}, err
+	}
+	rec, err = h.rt.Store().GetRunByOwner(ctx, ownerID, strings.TrimSpace(runID))
 	if err != nil {
 		return types.RunRecord{}, err
 	}

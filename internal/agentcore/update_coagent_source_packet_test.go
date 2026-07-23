@@ -3,10 +3,13 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -19,6 +22,7 @@ func TestUpdateCoagentAcceptsResearcherEvidenceUpdateSourcePacket(t *testing.T) 
 	docID := "doc-d9-researcher"
 	seedDurableTextureSubject(t, s, ownerID, docID)
 	researcherRun := d9CoagentRun("run-d9-researcher", ownerID, "researcher:d9", agentprofile.Researcher, docID, "")
+	researcherRun.Metadata[runMetadataTrajectoryID] = "legacy-trajectory-d9-researcher"
 	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(researcherRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
@@ -54,6 +58,229 @@ func TestUpdateCoagentAcceptsResearcherEvidenceUpdateSourcePacket(t *testing.T) 
 	}
 	if strings.Contains(stored.Content, "Findings:") || strings.Contains(stored.Content, "Evidence IDs:") {
 		t.Fatalf("human projection retained legacy sections: %q", stored.Content)
+	}
+}
+
+func TestUpdateCoagentPersistsExplicitProducerWorkDisposition(t *testing.T) {
+	rt, s := testRuntime(t)
+	d9InstallTools(t, rt)
+	ctx := context.Background()
+	const (
+		ownerID = "user-producer-work-disposition"
+		docID   = "doc-producer-work-disposition"
+		workID  = "work-producer-work-disposition"
+	)
+	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
+	producerAgentID := "researcher:producer-work-disposition"
+	producerWork := types.OpenLifecycleWorkRequest{
+		OwnerID: ownerID, ComputerID: "sandbox-test",
+		CommandID: "command-open-producer-work-disposition", TrajectoryID: trajectoryID,
+		WorkItem: types.WorkItemRecord{
+			WorkItemID: workID, Objective: "produce lifecycle evidence",
+			AssignedAgentID: producerAgentID, AuthorityProfile: agentprofile.Researcher,
+		},
+	}
+	producerWork.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(producerWork)
+	if _, err := s.OpenLifecycleWork(ctx, producerWork); err != nil {
+		t.Fatalf("open producer lifecycle work: %v", err)
+	}
+	projectRun := func(run *types.RunRecord) {
+		now := time.Now().UTC()
+		run.State = types.RunPending
+		run.CreatedAt, run.UpdatedAt = now, now
+		t.Helper()
+		run.TrajectoryID = trajectoryID
+		run.Metadata[runMetadataTrajectoryID] = trajectoryID
+		run.Metadata["lifecycle_work_item_id"] = workID
+		project := types.ReplaceLifecycleActivationRequest{
+			OwnerID: ownerID, ComputerID: "sandbox-test",
+			CommandID:    "project-producer-run:" + run.RunID,
+			TrajectoryID: trajectoryID, AgentID: run.AgentID, Run: *run,
+		}
+		project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+		if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+			t.Fatalf("project lifecycle producer run %s: %v", run.RunID, err)
+		}
+	}
+	missing := d9CoagentRun("run-producer-missing-authority", ownerID, producerAgentID, agentprofile.Researcher, docID, "")
+	projectRun(missing)
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(
+		toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(missing)),
+		"update_coagent",
+		json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"missing authority fields","agent_id":"texture:`+docID+`"}`),
+	); err == nil {
+		t.Fatal("lifecycle update accepted omitted producer_update_id")
+	}
+	for name, producerUpdateID := range map[string]string{
+		"run": missing.RunID, "timestamp": "2026-07-22T13:00:00Z",
+		"uuid_v1": "6ba7b810-9dad-11d1-80b4-00c04fd430c8", "opaque": "producer-open",
+	} {
+		t.Run("producer_identity_"+name, func(t *testing.T) {
+			raw := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"invalid producer identity","agent_id":"texture:` + docID + `","producer_update_id":"` + producerUpdateID + `","work_disposition":"open"}`)
+			if _, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(missing)), "update_coagent", raw); err == nil {
+				t.Fatalf("lifecycle update accepted forbidden producer identity %q", producerUpdateID)
+			}
+		})
+	}
+	execute := func(runID, disposition, summary string) types.CoagentSourcePacket {
+		t.Helper()
+		run := d9CoagentRun(runID, ownerID, producerAgentID, agentprofile.Researcher, docID, "")
+		projectRun(run)
+		producerUpdateID := map[string]string{
+			"open": "11111111-1111-4111-8111-111111111111", "completed": "22222222-2222-4222-8222-222222222222",
+		}[disposition]
+		_, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(
+			toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)),
+			"update_coagent",
+			json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"`+summary+`","agent_id":"texture:`+docID+`","channel_id":"`+docID+`","producer_update_id":"`+producerUpdateID+`","work_disposition":"`+disposition+`","claims":[{"text":"`+summary+`"}]}`),
+		)
+		if err != nil {
+			t.Fatalf("update_coagent %s: %v", disposition, err)
+		}
+		stored, err := s.GetLifecycleUpdate(ctx, ownerID, "sandbox-test", trajectoryID, currentTextureAgentID(docID), producerAgentID, producerUpdateID)
+		if err != nil {
+			t.Fatalf("get %s update: %v", disposition, err)
+		}
+		return stored
+	}
+	omittedRun := d9CoagentRun("run-producer-omitted", ownerID, producerAgentID, agentprofile.Researcher, docID, "")
+	omittedRun.Metadata[runMetadataTrajectoryID] = trajectoryID
+	omittedRun.Metadata["lifecycle_work_item_id"] = workID
+	projectRun(omittedRun)
+	_, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(
+		toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(omittedRun)),
+		"update_coagent",
+		json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"omitted disposition remains open","agent_id":"texture:`+docID+`","channel_id":"`+docID+`","producer_update_id":"33333333-3333-4333-8333-333333333333","claims":[{"text":"omitted disposition remains open"}]}`),
+	)
+	if err != nil {
+		t.Fatalf("update_coagent omitted disposition: %v", err)
+	}
+	omitted, err := s.GetLifecycleUpdate(ctx, ownerID, "sandbox-test", trajectoryID, currentTextureAgentID(docID), producerAgentID, "33333333-3333-4333-8333-333333333333")
+	if err != nil || omitted.WorkDisposition != types.WorkItemOpen || omitted.WorkItemID != workID {
+		t.Fatalf("omitted disposition did not preserve assigned open work: %+v, %v", omitted, err)
+	}
+	work, err := s.GetLifecycleWorkItem(ctx, ownerID, "sandbox-test", workID)
+	if err != nil || work.Status != types.WorkItemOpen {
+		t.Fatalf("omitted disposition settled assigned work: %+v, %v", work, err)
+	}
+	open := execute("run-producer-open", "open", "interim evidence remains incomplete")
+	if open.WorkDisposition != types.WorkItemOpen || open.WorkItemID != workID {
+		t.Fatalf("open checkpoint omitted assigned open work consequence: %+v", open)
+	}
+	completed := execute("run-producer-completed", "completed", "assigned evidence work is complete")
+	if completed.WorkDisposition != types.WorkItemCompleted || completed.WorkItemID != workID {
+		t.Fatalf("completed checkpoint omitted explicit work consequence: %+v", completed)
+	}
+	if completed.UpdateID == open.UpdateID || completed.ProducerUpdateID == open.ProducerUpdateID {
+		t.Fatalf("distinct producer commands reused update identity: open=%+v completed=%+v", open, completed)
+	}
+}
+
+func TestUpdateCoagentRefusesPresentInvalidWorkDisposition(t *testing.T) {
+	rt, _ := testRuntime(t)
+	d9InstallTools(t, rt)
+	run := d9CoagentRun("run-invalid-producer-disposition", "owner-invalid-producer-disposition", "researcher:invalid", agentprofile.Researcher, "doc-invalid", "")
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run))
+	for name, value := range map[string]string{"null": "null", "blank": `" "`, "unknown": `"done"`} {
+		t.Run(name, func(t *testing.T) {
+			raw := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"invalid","agent_id":"texture:doc-invalid","work_disposition":` + value + `}`)
+			if _, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(ctx, "update_coagent", raw); err == nil {
+				t.Fatalf("update_coagent accepted invalid work disposition: %s", raw)
+			}
+		})
+	}
+}
+
+func TestSpawnedLifecycleResearcherQueuesOpenAndCompletedUpdates(t *testing.T) {
+	rt, s := testRuntime(t)
+	d9InstallTools(t, rt)
+	ctx := context.Background()
+	const (
+		ownerID = "user-spawned-lifecycle-researcher"
+		docID   = "doc-spawned-lifecycle-researcher"
+	)
+	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
+	now := time.Now().UTC()
+	parent := types.RunRecord{
+		RunID: "run-spawned-lifecycle-parent", AgentID: "texture:" + docID, ChannelID: docID,
+		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
+		OwnerID: ownerID, SandboxID: "sandbox-test", State: types.RunRunning,
+		TrajectoryID: trajectoryID, CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataChannelID: docID},
+	}
+	if err := s.CreateRun(ctx, parent); err != nil {
+		t.Fatalf("create lifecycle parent activation: %v", err)
+	}
+	child, err := rt.StartCoagentRun(ctx, parent.RunID, "research the durable subject", ownerID, map[string]any{
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
+		runMetadataChannelID:    docID,
+	})
+	if err != nil {
+		t.Fatalf("spawn lifecycle researcher: %v", err)
+	}
+	workItemID := metadataStringValue(child.Metadata, "lifecycle_work_item_id")
+	if workItemID == "" || !containsString(metadataStringSlice(child.Metadata["work_item_ids"]), workItemID) {
+		t.Fatalf("spawned lifecycle work binding missing: %+v", child.Metadata)
+	}
+	execute := func(producerUpdateID, disposition string) {
+		t.Helper()
+		raw := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"` + disposition + ` lifecycle checkpoint","agent_id":"texture:` + docID + `","channel_id":"` + docID + `","producer_update_id":"` + producerUpdateID + `","work_disposition":"` + disposition + `","claims":[{"text":"` + disposition + ` lifecycle checkpoint"}]}`)
+		if _, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(
+			toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(child)),
+			"update_coagent", raw,
+		); err != nil {
+			t.Fatalf("queue %s spawned lifecycle update: %v", disposition, err)
+		}
+	}
+	execute("33333333-3333-4333-8333-333333333333", "open")
+	execute("44444444-4444-4444-8444-444444444444", "completed")
+	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
+	if err != nil {
+		t.Fatalf("snapshot spawned lifecycle updates: %v", err)
+	}
+	if len(snapshot.Updates) != 2 {
+		t.Fatalf("spawned lifecycle updates = %+v, want two", snapshot.Updates)
+	}
+	for _, update := range snapshot.Updates {
+		if update.AgentID != child.AgentID || update.WorkItemID != workItemID ||
+			(update.WorkDisposition != types.WorkItemOpen && update.WorkDisposition != types.WorkItemCompleted) {
+			t.Fatalf("spawned lifecycle update lost producer work binding: %+v", update)
+		}
+	}
+	var assignedWork types.WorkItemRecord
+	for _, work := range snapshot.WorkItems {
+		if work.WorkItemID == workItemID {
+			assignedWork = work
+		}
+	}
+	if assignedWork.Status != types.WorkItemOpen || assignedWork.AssignedAgentID != child.AgentID {
+		t.Fatalf("spawned lifecycle work changed before Texture disposition: %+v", assignedWork)
+	}
+	terminal := *child
+	terminal.State = types.RunCompleted
+	terminal.Result = "research complete"
+	finishedAt := time.Now().UTC()
+	terminal.UpdatedAt, terminal.FinishedAt = finishedAt, &finishedAt
+	project := types.ReplaceLifecycleActivationRequest{
+		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "project-terminal-spawned-researcher",
+		TrajectoryID: trajectoryID, AgentID: child.AgentID, Run: terminal,
+	}
+	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ProjectTerminalLifecycleRun(ctx, project); err != nil {
+		t.Fatalf("project terminal lifecycle researcher: %v", err)
+	}
+	persisted, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", child.RunID)
+	if err != nil {
+		t.Fatalf("reload terminal lifecycle researcher: %v", err)
+	}
+	binding, err := rt.ensurePersistedTerminalRunOutcome(ctx, &persisted)
+	if err != nil || binding.Present || binding.Wake {
+		t.Fatalf("terminal lifecycle projection synthesized update authority: %+v, %v", binding, err)
+	}
+	legacyUpdates, err := s.ListWorkerUpdatesBySourceRun(ctx, ownerID, child.RunID)
+	if err != nil || len(legacyUpdates) != 0 {
+		t.Fatalf("terminal lifecycle projection emitted legacy updates: %+v, %v", legacyUpdates, err)
 	}
 }
 
@@ -345,6 +572,130 @@ func TestUpdateCoagentAcceptsSuperExecutionResultSourcesAndTextureCollatesPacket
 		if strings.Contains(source.Target.URI, "prose-only") {
 			t.Fatalf("packet source was scraped from prose: %#v", stored.Packet.Sources)
 		}
+	}
+}
+
+func TestLifecycleRunInjectorReadsComputerScopedPendingUpdates(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	const (
+		ownerID = "user-lifecycle-injector"
+		docID   = "doc-lifecycle-injector"
+	)
+	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
+	targetAgentID := currentTextureAgentID(docID)
+	packet := types.CoagentSourcePacketPayload{
+		SchemaVersion: "coagent_source_packet.v1",
+		Kind:          "evidence_update",
+		Summary:       "computer-scoped lifecycle update",
+	}
+	req := types.QueueLifecycleUpdateRequest{
+		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "queue-lifecycle-injector",
+		TrajectoryID: trajectoryID, TargetAgentID: targetAgentID, ProducerAgentID: "researcher:lifecycle-injector",
+		ProducerUpdateID: "producer-lifecycle-injector", UpdateID: "update-lifecycle-injector",
+		Packet: packet, Content: "scoped lifecycle content", Disposition: types.UpdatePending,
+	}
+	req.PayloadDigest, _ = store.ComputeLifecycleUpdatePayloadDigest(req.Packet, req.Content)
+	req.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(req)
+	if _, err := s.QueueLifecycleUpdate(ctx, req); err != nil {
+		t.Fatalf("queue lifecycle update: %v", err)
+	}
+	now := time.Now().UTC()
+	rec := &types.RunRecord{
+		RunID: "run-lifecycle-injector", OwnerID: ownerID, AgentID: targetAgentID,
+		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
+		SandboxID: "sandbox-test", ChannelID: docID, TrajectoryID: trajectoryID,
+		State: types.RunPending, CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: agentprofile.Texture,
+			runMetadataAgentID:      targetAgentID,
+		},
+	}
+	project := types.ReplaceLifecycleActivationRequest{
+		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "activation:" + rec.RunID,
+		TrajectoryID: trajectoryID, AgentID: targetAgentID, Run: *rec,
+	}
+	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatalf("project lifecycle activation: %v", err)
+	}
+	if legacy, err := s.ListCoagentMailboxBacklog(ctx, ownerID, targetAgentID, 10); err != nil || len(legacy) != 0 {
+		t.Fatalf("legacy mailbox exposed lifecycle update: %+v, %v", legacy, err)
+	}
+	inject := rt.coagentUpdateTurnInjector(rec)
+	if inject == nil {
+		t.Fatal("lifecycle coagent update injector is nil")
+	}
+	messages, err := inject(false)
+	if err != nil {
+		t.Fatalf("inject lifecycle update: %v", err)
+	}
+	if len(messages) != 1 || !strings.Contains(string(messages[0]), "scoped lifecycle content") {
+		t.Fatalf("lifecycle update messages = %s", messages)
+	}
+}
+
+func TestPendingCoagentUpdatesRejectsLifecycleMarkerAsAuthority(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	const (
+		ownerID       = "user-legacy-marker-injector"
+		targetAgentID = "texture:legacy-marker-injector"
+	)
+	update := types.CoagentSourcePacket{
+		UpdateID: "update-legacy-marker-injector", OwnerID: ownerID,
+		AgentID: "researcher:legacy-marker-injector", TargetAgentID: targetAgentID,
+		ChannelID: "doc-legacy-marker-injector", TrajectoryID: "legacy-trajectory-marker-injector",
+		Role: agentprofile.Researcher,
+		Packet: types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "evidence_update", Summary: "legacy marker update",
+		},
+		Content: "legacy marker content", CreatedAt: time.Now().UTC(),
+	}
+	message := &types.ChannelMessage{
+		ChannelID: update.ChannelID, FromAgentID: update.AgentID, ToAgentID: update.TargetAgentID,
+		TrajectoryID: update.TrajectoryID, Role: update.Role, Content: update.Content, Timestamp: update.CreatedAt,
+	}
+	if _, created, err := s.DispatchWorkerUpdate(ctx, update, message); err != nil || !created {
+		t.Fatalf("dispatch legacy marker update: created=%t err=%v", created, err)
+	}
+	rec := d9CoagentRun("run-legacy-marker-injector", ownerID, targetAgentID, agentprofile.Texture, update.ChannelID, "")
+	rec.Metadata["lifecycle_work_item_id"] = "legacy-work-item"
+	pending, err := rt.pendingCoagentUpdatesForRun(ctx, rec, ownerID, targetAgentID, 10)
+	if err != nil {
+		t.Fatalf("list marker-only legacy updates: %v", err)
+	}
+	if len(pending) != 1 || pending[0].UpdateID != update.UpdateID {
+		t.Fatalf("marker-only run selected lifecycle authority: %+v", pending)
+	}
+}
+
+func TestUpdateCoagentRejectsTrajectoryMarkerAsLifecycleAuthority(t *testing.T) {
+	rt, s := testRuntime(t)
+	d9InstallTools(t, rt)
+	ctx := context.Background()
+	const (
+		ownerID = "user-legacy-producer-lifecycle-collision"
+		docID   = "doc-legacy-producer-lifecycle-collision"
+	)
+	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
+	legacy := d9CoagentRun(
+		"run-legacy-producer-lifecycle-collision", ownerID,
+		"researcher:legacy-producer-lifecycle-collision", agentprofile.Researcher, docID, "",
+	)
+	legacy.Metadata[runMetadataTrajectoryID] = trajectoryID
+	raw := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"legacy producer remains legacy","agent_id":"texture:` + docID + `","channel_id":"` + docID + `","claims":[{"text":"legacy producer remains legacy"}]}`)
+	_, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(
+		toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(legacy)),
+		"update_coagent", raw,
+	)
+	if !errors.Is(err, store.ErrLifecycleAuthorityRequired) {
+		t.Fatalf("marker-only legacy producer error = %v, want legacy writer authority refusal", err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
+	if err != nil || len(snapshot.Updates) != 0 {
+		t.Fatalf("marker-only legacy producer queued lifecycle update: %+v, %v", snapshot.Updates, err)
 	}
 }
 

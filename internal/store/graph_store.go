@@ -24,6 +24,7 @@ const (
 	ogKindWorkerUpdate   = objectgraph.ObjectKind("choir.worker_update")
 	ogKindLifecycleEvent = objectgraph.ObjectKind("choir.lifecycle_event")
 	ogKindLifecycleCmd   = objectgraph.ObjectKind("choir.lifecycle_command")
+	ogKindLifecycleSeq   = objectgraph.ObjectKind("choir.lifecycle_sequence")
 	ogKindInboxDeliv     = objectgraph.ObjectKind("choir.inbox_delivery")
 	ogKindRunMemory      = objectgraph.ObjectKind("choir.run_memory_entry")
 	ogKindRunAccept      = objectgraph.ObjectKind("choir.run_acceptance")
@@ -152,6 +153,33 @@ func (s *Store) ogListAllByMetadataPageSize(ctx context.Context, kind objectgrap
 		nextCursor := page[len(page)-1].CanonicalID
 		if nextCursor == "" || nextCursor <= afterCanonicalID {
 			return nil, fmt.Errorf("store: metadata page did not advance canonical ID cursor")
+		}
+		objects = append(objects, page...)
+		afterCanonicalID = nextCursor
+	}
+}
+
+func (s *Store) ogListAllObjectsByKind(ctx context.Context, kind objectgraph.ObjectKind) ([]objectgraph.Object, error) {
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return nil, fmt.Errorf("store: object graph not initialized")
+	}
+	var objects []objectgraph.Object
+	afterCanonicalID := ""
+	for {
+		page, err := store.ListObjectsPage(ctx, string(kind), afterCanonicalID, ogMetadataPageSize)
+		if err != nil {
+			return nil, err
+		}
+		if len(page) == 0 {
+			return objects, nil
+		}
+		nextCursor := page[len(page)-1].CanonicalID
+		if nextCursor == "" || nextCursor <= afterCanonicalID {
+			return nil, fmt.Errorf("store: object page did not advance canonical ID cursor")
 		}
 		objects = append(objects, page...)
 		afterCanonicalID = nextCursor
@@ -373,6 +401,27 @@ func (s *Store) getRunObjectByOwnerOG(ctx context.Context, ownerID, runID string
 	return obj, nil
 }
 
+func lifecycleRunProjection(obj objectgraph.Object, _ types.RunRecord) bool {
+	return strings.TrimSpace(obj.ComputerID) != ""
+}
+
+func (s *Store) getLegacyRunObjectByID(ctx context.Context, runID string) (objectgraph.Object, error) {
+	objs, err := s.ogListAllByMetadata(ctx, ogKindRun, "run_id", strings.TrimSpace(runID))
+	if err != nil {
+		return objectgraph.Object{}, err
+	}
+	for _, obj := range objs {
+		var rec types.RunRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return objectgraph.Object{}, err
+		}
+		if rec.RunID == strings.TrimSpace(runID) && !lifecycleRunProjection(obj, rec) {
+			return obj, nil
+		}
+	}
+	return objectgraph.Object{}, ErrNotFound
+}
+
 // GetRunByOwnerOG retrieves a run directly by its owner-scoped canonical ID.
 func (s *Store) GetRunByOwnerOG(ctx context.Context, ownerID, runID string) (types.RunRecord, error) {
 	obj, err := s.getRunObjectByOwnerOG(ctx, ownerID, runID)
@@ -388,11 +437,8 @@ func (s *Store) GetRunByOwnerOG(ctx context.Context, ownerID, runID string) (typ
 
 // GetRunOG retrieves a run by ID from the object graph.
 func (s *Store) GetRunOG(ctx context.Context, runID string) (types.RunRecord, error) {
-	obj, err := s.ogGetByKey(ctx, ogKindRun, "run_id", runID)
+	obj, err := s.getLegacyRunObjectByID(ctx, runID)
 	if err != nil {
-		if err == objectgraph.ErrNotFound {
-			return types.RunRecord{}, ErrNotFound
-		}
 		return types.RunRecord{}, err
 	}
 	var rec types.RunRecord
@@ -411,7 +457,7 @@ func (s *Store) UpdateRunOG(ctx context.Context, rec types.RunRecord) error {
 	var existing objectgraph.Object
 	var err error
 	if rec.OwnerID == "" {
-		existing, err = s.ogGetByKey(ctx, ogKindRun, "run_id", rec.RunID)
+		existing, err = s.getLegacyRunObjectByID(ctx, rec.RunID)
 	} else {
 		existing, err = s.getRunObjectByOwnerOG(ctx, rec.OwnerID, rec.RunID)
 	}
@@ -466,21 +512,32 @@ func (s *Store) ListRunsByOwnerOG(ctx context.Context, ownerID string, limit int
 	if limit <= 0 {
 		limit = 100
 	}
-	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:    ogKindRun,
-		OwnerID: ownerID,
-		Limit:   limit,
-	})
+	objs, err := s.ogListAllObjectsByKind(ctx, ogKindRun)
 	if err != nil {
 		return nil, err
 	}
-	runs := make([]types.RunRecord, 0, len(objs))
+	runs := make([]types.RunRecord, 0, min(limit, len(objs)))
 	for _, obj := range objs {
+		if obj.OwnerID != ownerID {
+			continue
+		}
 		var rec types.RunRecord
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
+		if lifecycleRunProjection(obj, rec) {
+			continue
+		}
 		runs = append(runs, rec)
+	}
+	sort.Slice(runs, func(i, j int) bool {
+		if !runs[i].CreatedAt.Equal(runs[j].CreatedAt) {
+			return runs[i].CreatedAt.After(runs[j].CreatedAt)
+		}
+		return runs[i].RunID < runs[j].RunID
+	})
+	if len(runs) > limit {
+		runs = runs[:limit]
 	}
 	return runs, nil
 }
@@ -491,17 +548,12 @@ func (s *Store) ListRunsByStateOG(ctx context.Context, state types.RunState, lim
 	if limit <= 0 {
 		limit = 100
 	}
-	objs, err := s.ogListByMetadata(ctx, ogKindRun, "state", string(state), limit)
+	runs, err := s.ListAllRunsByStateOG(ctx, state)
 	if err != nil {
 		return nil, err
 	}
-	runs := make([]types.RunRecord, 0, len(objs))
-	for _, obj := range objs {
-		var rec types.RunRecord
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
-		}
-		runs = append(runs, rec)
+	if len(runs) > limit {
+		runs = runs[:limit]
 	}
 	return runs, nil
 }
@@ -522,6 +574,9 @@ func (s *Store) listAllRunsByStateOG(ctx context.Context, state types.RunState, 
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
+		if lifecycleRunProjection(obj, rec) {
+			continue
+		}
 		runs = append(runs, rec)
 	}
 	return runs, nil
@@ -533,27 +588,29 @@ func (s *Store) ListAllRunsOG(ctx context.Context, limit int) ([]types.RunRecord
 	if limit <= 0 {
 		limit = 50
 	}
-	store := s.ogReadStore
-	if store == nil {
-		store = s.ogStore
-	}
-	if store == nil {
-		return nil, fmt.Errorf("store: object graph not initialized")
-	}
-	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:  ogKindRun,
-		Limit: limit,
-	})
+	objs, err := s.ogListAllObjectsByKind(ctx, ogKindRun)
 	if err != nil {
 		return nil, err
 	}
-	runs := make([]types.RunRecord, 0, len(objs))
+	runs := make([]types.RunRecord, 0, min(limit, len(objs)))
 	for _, obj := range objs {
 		var rec types.RunRecord
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
+		if lifecycleRunProjection(obj, rec) {
+			continue
+		}
 		runs = append(runs, rec)
+	}
+	sort.Slice(runs, func(i, j int) bool {
+		if !runs[i].CreatedAt.Equal(runs[j].CreatedAt) {
+			return runs[i].CreatedAt.After(runs[j].CreatedAt)
+		}
+		return runs[i].RunID < runs[j].RunID
+	})
+	if len(runs) > limit {
+		runs = runs[:limit]
 	}
 	return runs, nil
 }
@@ -725,6 +782,9 @@ func (s *Store) GetTrajectoryOG(ctx context.Context, ownerID, trajectoryID strin
 	if err := ogDecode(obj, &rec); err != nil {
 		return types.TrajectoryRecord{}, err
 	}
+	if rec.LifecycleVersion > 0 {
+		return types.TrajectoryRecord{}, ErrNotFound
+	}
 	return rec, nil
 }
 
@@ -733,21 +793,32 @@ func (s *Store) ListTrajectoriesByOwnerOG(ctx context.Context, ownerID string, l
 	if limit <= 0 {
 		limit = 100
 	}
-	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:    ogKindTrajectory,
-		OwnerID: ownerID,
-		Limit:   limit,
-	})
+	objs, err := s.ogListAllObjectsByKind(ctx, ogKindTrajectory)
 	if err != nil {
 		return nil, err
 	}
+	sort.Slice(objs, func(i, j int) bool {
+		if !objs[i].UpdatedAt.Equal(objs[j].UpdatedAt) {
+			return objs[i].UpdatedAt.After(objs[j].UpdatedAt)
+		}
+		return objs[i].CanonicalID < objs[j].CanonicalID
+	})
 	trajs := make([]types.TrajectoryRecord, 0, len(objs))
 	for _, obj := range objs {
+		if obj.OwnerID != ownerID {
+			continue
+		}
 		var rec types.TrajectoryRecord
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
+		if rec.LifecycleVersion > 0 {
+			continue
+		}
 		trajs = append(trajs, rec)
+		if len(trajs) == limit {
+			break
+		}
 	}
 	return trajs, nil
 }
@@ -907,6 +978,9 @@ func (s *Store) GetWorkItemOG(ctx context.Context, ownerID, workItemID string) (
 	if err := ogDecode(obj, &rec); err != nil {
 		return types.WorkItemRecord{}, err
 	}
+	if rec.LifecycleVersion > 0 {
+		return types.WorkItemRecord{}, ErrNotFound
+	}
 	return rec, nil
 }
 
@@ -921,6 +995,9 @@ func (s *Store) ListWorkItemsByTrajectoryOG(ctx context.Context, ownerID, trajec
 		var rec types.WorkItemRecord
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
+		}
+		if rec.LifecycleVersion > 0 {
+			continue
 		}
 		if rec.OwnerID != ownerID {
 			continue
@@ -1194,10 +1271,9 @@ func (s *Store) CreateWorkerUpdateOG(ctx context.Context, rec types.CoagentSourc
 
 // GetWorkerUpdateOG retrieves a worker update by ID, scoped to the given owner.
 func (s *Store) GetWorkerUpdateOG(ctx context.Context, ownerID, updateID string) (types.CoagentSourcePacket, error) {
-	// Use ogListByMetadata to find all updates with this update_id, then
-	// filter by owner. This avoids the ogGetByKey single-match limitation
-	// which could return another owner's record with the same update_id.
-	objs, err := s.ogListByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "update_id", updateID, 100)
+	// Exhaust matching update IDs before filtering by owner and lifecycle
+	// authority. A limited pre-filter window can hide the valid legacy record.
+	objs, err := s.ogListAllByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "update_id", updateID)
 	if err != nil {
 		return types.CoagentSourcePacket{}, err
 	}
@@ -1208,6 +1284,9 @@ func (s *Store) GetWorkerUpdateOG(ctx context.Context, ownerID, updateID string)
 		var rec types.CoagentSourcePacket
 		if err := ogDecode(obj, &rec); err != nil {
 			return types.CoagentSourcePacket{}, err
+		}
+		if rec.LifecycleVersion > 0 {
+			continue
 		}
 		return rec, nil
 	}
@@ -1226,6 +1305,9 @@ func (s *Store) ListWorkerUpdatesBySourceRunOG(ctx context.Context, ownerID, sou
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
+		if rec.LifecycleVersion > 0 {
+			continue
+		}
 		if rec.OwnerID == ownerID && rec.SourceRunID == sourceRunID {
 			updates = append(updates, rec)
 		}
@@ -1238,20 +1320,32 @@ func (s *Store) ListWorkerUpdatesByTrajectoryOG(ctx context.Context, ownerID, tr
 	if limit <= 0 {
 		limit = 100
 	}
-	objs, err := s.ogListByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "trajectory_id", trajectoryID, limit)
+	objs, err := s.ogListAllByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "trajectory_id", trajectoryID)
 	if err != nil {
 		return nil, err
 	}
 	packets := make([]types.CoagentSourcePacket, 0, len(objs))
+	sort.Slice(objs, func(i, j int) bool {
+		if !objs[i].UpdatedAt.Equal(objs[j].UpdatedAt) {
+			return objs[i].UpdatedAt.After(objs[j].UpdatedAt)
+		}
+		return objs[i].CanonicalID < objs[j].CanonicalID
+	})
 	for _, obj := range objs {
 		var rec types.CoagentSourcePacket
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
+		if rec.LifecycleVersion > 0 {
+			continue
+		}
 		if rec.OwnerID != ownerID {
 			continue
 		}
 		packets = append(packets, rec)
+		if len(packets) == limit {
+			break
+		}
 	}
 	return packets, nil
 }
@@ -1262,12 +1356,9 @@ func (s *Store) ListPendingWorkerUpdatesOG(ctx context.Context, ownerID, targetA
 	if limit <= 0 {
 		limit = 100
 	}
-	// Fetch a large window since ogListByMetadata orders by updated_at DESC.
-	// We need all matching records to filter out delivered ones and then
-	// sort by created_at before applying the caller's limit. Using a small
-	// limit can miss older undelivered records when many delivered records
-	// are more recently updated.
-	objs, err := s.ogListByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "target_agent_id", targetAgentID, 100000)
+	// Exhaust the target keyset before excluding lifecycle and delivered rows;
+	// applying a fixed window first can mask an older valid legacy update.
+	objs, err := s.ogListAllByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "target_agent_id", targetAgentID)
 	if err != nil {
 		return nil, err
 	}
@@ -1281,10 +1372,9 @@ func (s *Store) ListPendingWorkerUpdatesOG(ctx context.Context, ownerID, targetA
 			continue
 		}
 		if rec.LifecycleVersion > 0 {
-			if rec.Disposition != types.UpdatePending {
-				continue
-			}
-		} else if rec.DeliveredToRunID != "" {
+			continue
+		}
+		if rec.DeliveredToRunID != "" {
 			continue
 		}
 		packets = append(packets, rec)
@@ -1633,6 +1723,9 @@ func (s *Store) GetTextureDocumentOG(ctx context.Context, ownerID, docID string)
 	if rec.OwnerID != ownerID {
 		return types.Document{}, ErrNotFound
 	}
+	if strings.TrimSpace(rec.TrajectoryID) != "" {
+		return types.Document{}, ErrLifecycleAuthorityRequired
+	}
 	return rec, nil
 }
 
@@ -1641,22 +1734,56 @@ func (s *Store) ListTextureDocumentsByOwnerOG(ctx context.Context, ownerID strin
 	if limit <= 0 {
 		limit = 100
 	}
-	// Sort decoded document timestamps before applying the caller's limit.
-	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:    ogKindTexDoc,
-		OwnerID: ownerID,
-		Limit:   100000,
-	})
+	objs, err := s.ogListAllObjectsByKind(ctx, ogKindTexDoc)
 	if err != nil {
 		return nil, err
 	}
 	docs := make([]types.Document, 0, len(objs))
 	for _, obj := range objs {
+		if obj.OwnerID != ownerID {
+			continue
+		}
 		var rec types.Document
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
+		if strings.TrimSpace(rec.TrajectoryID) != "" {
+			continue
+		}
 		docs = append(docs, rec)
+	}
+	sort.Slice(docs, func(i, j int) bool { return docs[i].UpdatedAt.After(docs[j].UpdatedAt) })
+	if len(docs) > limit {
+		docs = docs[:limit]
+	}
+	return docs, nil
+}
+
+// ListTextureDocumentsByScopeOG lists every document visible to one computer.
+func (s *Store) ListTextureDocumentsByScopeOG(ctx context.Context, ownerID, computerID string, limit int) ([]types.Document, error) {
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	if ownerID == "" || computerID == "" {
+		return nil, fmt.Errorf("list texture documents by scope: owner_id and computer_id are required")
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.ogListAllObjectsByKind(ctx, ogKindTexDoc)
+	if err != nil {
+		return nil, err
+	}
+	docs := make([]types.Document, 0, len(objs))
+	for _, obj := range objs {
+		if obj.OwnerID != ownerID || strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
+		var rec types.Document
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(rec.ComputerID) == computerID {
+			docs = append(docs, rec)
+		}
 	}
 	sort.Slice(docs, func(i, j int) bool { return docs[i].UpdatedAt.After(docs[j].UpdatedAt) })
 	if len(docs) > limit {
@@ -1671,11 +1798,7 @@ func (s *Store) ListAllTextureDocumentsOG(ctx context.Context, limit int) ([]typ
 	if limit <= 0 {
 		limit = 500
 	}
-	// Sort decoded document timestamps before applying the caller's limit.
-	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:  ogKindTexDoc,
-		Limit: 100000,
-	})
+	objs, err := s.ogListAllObjectsByKind(ctx, ogKindTexDoc)
 	if err != nil {
 		return nil, err
 	}
@@ -1684,6 +1807,9 @@ func (s *Store) ListAllTextureDocumentsOG(ctx context.Context, limit int) ([]typ
 		var rec types.Document
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
+		}
+		if strings.TrimSpace(rec.TrajectoryID) != "" {
+			continue
 		}
 		docs = append(docs, rec)
 	}
@@ -1792,6 +1918,9 @@ func (s *Store) GetTextureRevisionOG(ctx context.Context, ownerID, revisionID st
 	if rec.OwnerID != ownerID {
 		return types.Revision{}, ErrNotFound
 	}
+	if strings.TrimSpace(rec.ComputerID) != "" || strings.TrimSpace(rec.TrajectoryID) != "" {
+		return types.Revision{}, ErrLifecycleAuthorityRequired
+	}
 	return rec, nil
 }
 
@@ -1800,7 +1929,7 @@ func (s *Store) ListTextureRevisionsByDocOG(ctx context.Context, ownerID, docID 
 	if limit <= 0 {
 		limit = 1000
 	}
-	objs, err := s.ogListByMetadata(ctx, ogKindTexRev, "doc_id", docID, limit)
+	objs, err := s.ogListAllByMetadata(ctx, ogKindTexRev, "doc_id", docID)
 	if err != nil {
 		return nil, err
 	}
@@ -1813,11 +1942,52 @@ func (s *Store) ListTextureRevisionsByDocOG(ctx context.Context, ownerID, docID 
 		if rec.OwnerID != ownerID {
 			continue
 		}
+		if strings.TrimSpace(rec.ComputerID) != "" || strings.TrimSpace(rec.TrajectoryID) != "" {
+			continue
+		}
 		revisions = append(revisions, rec)
 	}
 	sort.Slice(revisions, func(i, j int) bool {
 		return revisions[i].VersionNumber > revisions[j].VersionNumber
 	})
+	if len(revisions) > limit {
+		revisions = revisions[:limit]
+	}
+	return revisions, nil
+}
+
+// ListTextureRevisionsByScopeOG lists revisions visible to one computer.
+func (s *Store) ListTextureRevisionsByScopeOG(ctx context.Context, ownerID, computerID, docID string, limit int) ([]types.Revision, error) {
+	ownerID, computerID, docID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(docID)
+	if ownerID == "" || computerID == "" || docID == "" {
+		return nil, fmt.Errorf("list texture revisions by scope: owner_id, computer_id, and doc_id are required")
+	}
+	if limit <= 0 {
+		limit = 1000
+	}
+	objs, err := s.ogListAllByMetadata(ctx, ogKindTexRev, "doc_id", docID)
+	if err != nil {
+		return nil, err
+	}
+	revisions := make([]types.Revision, 0, len(objs))
+	for _, obj := range objs {
+		if obj.OwnerID != ownerID || strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
+		var rec types.Revision
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(rec.ComputerID) == computerID && rec.DocID == docID {
+			revisions = append(revisions, rec)
+		}
+	}
+	sort.Slice(revisions, func(i, j int) bool {
+		return revisions[i].VersionNumber > revisions[j].VersionNumber
+	})
+	if len(revisions) > limit {
+		revisions = revisions[:limit]
+	}
 	return revisions, nil
 }
 
@@ -2301,9 +2471,15 @@ func (s *Store) GetTextureSourceEntityOG(ctx context.Context, canonicalID, versi
 		}
 		return TextureSourceEntityGraphRecord{}, err
 	}
+	if strings.TrimSpace(obj.ComputerID) != "" {
+		return TextureSourceEntityGraphRecord{}, ErrNotFound
+	}
 	var rec TextureSourceEntityGraphRecord
 	if err := ogDecode(obj, &rec); err != nil {
 		return TextureSourceEntityGraphRecord{}, err
+	}
+	if strings.TrimSpace(rec.ComputerID) != "" {
+		return TextureSourceEntityGraphRecord{}, ErrNotFound
 	}
 	return rec, nil
 }
@@ -2313,22 +2489,29 @@ func (s *Store) GetTextureSourceEntityOG(ctx context.Context, canonicalID, versi
 // we filter to only texture source entities by checking for the
 // entity_version_key metadata field that texture source entities carry.
 func (s *Store) ListTextureSourceEntitiesByOwnerOG(ctx context.Context, ownerID string, limit int) ([]TextureSourceEntityGraphRecord, error) {
+	return s.ListTextureSourceEntitiesByScopeOG(ctx, ownerID, "", limit)
+}
+
+func (s *Store) ListTextureSourceEntitiesByScopeOG(ctx context.Context, ownerID, computerID string, limit int) ([]TextureSourceEntityGraphRecord, error) {
 	if limit <= 0 {
 		limit = 500
 	}
-	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:    TextureSourceEntityObjectKind,
-		OwnerID: ownerID,
-		Limit:   limit,
-	})
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	objs, err := s.ogListAllObjectsByKind(ctx, TextureSourceEntityObjectKind)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]TextureSourceEntityGraphRecord, 0, len(objs))
+	sort.Slice(objs, func(i, j int) bool {
+		if !objs[i].UpdatedAt.Equal(objs[j].UpdatedAt) {
+			return objs[i].UpdatedAt.After(objs[j].UpdatedAt)
+		}
+		return objs[i].CanonicalID < objs[j].CanonicalID
+	})
+	out := make([]TextureSourceEntityGraphRecord, 0, min(limit, len(objs)))
 	for _, obj := range objs {
-		// Skip non-texture source entities (e.g. sourcecycled web captures)
-		// that share the choir.source_entity kind but don't carry the
-		// entity_version_key metadata field.
+		if obj.OwnerID != ownerID || strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
 		var meta map[string]any
 		if err := json.Unmarshal(obj.Metadata, &meta); err != nil {
 			return nil, fmt.Errorf("list texture source entities: parse metadata: %w", err)
@@ -2340,21 +2523,34 @@ func (s *Store) ListTextureSourceEntitiesByOwnerOG(ctx context.Context, ownerID 
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
+		if rec.OwnerID != ownerID || strings.TrimSpace(rec.ComputerID) != computerID {
+			continue
+		}
 		out = append(out, rec)
+		if len(out) >= limit {
+			break
+		}
 	}
 	return out, nil
 }
 
 // TextureSourceEntityVersionExistsOG checks if a source entity version exists in OG.
 func (s *Store) TextureSourceEntityVersionExistsOG(ctx context.Context, canonicalID, versionID string) (bool, error) {
-	_, err := s.ogGetByKey(ctx, TextureSourceEntityObjectKind, "entity_version_key", entityVersionKey(canonicalID, versionID))
-	if err == nil {
-		return true, nil
-	}
+	obj, err := s.ogGetByKey(ctx, TextureSourceEntityObjectKind, "entity_version_key", entityVersionKey(canonicalID, versionID))
 	if err == objectgraph.ErrNotFound {
 		return false, nil
 	}
-	return false, err
+	if err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(obj.ComputerID) != "" {
+		return false, nil
+	}
+	var rec TextureSourceEntityGraphRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(rec.ComputerID) == "", nil
 }
 
 // PutTextureSourceRefOG stores a texture source ref in the object graph.
@@ -2387,35 +2583,50 @@ func (s *Store) PutTextureSourceRefOG(ctx context.Context, rec TextureSourceRefG
 
 // TextureSourceRefVersionExistsOG checks if a source ref version exists in OG.
 func (s *Store) TextureSourceRefVersionExistsOG(ctx context.Context, canonicalID, versionID string) (bool, error) {
-	_, err := s.ogGetByKey(ctx, TextureSourceRefObjectKind, "ref_version_key", canonicalID+"\x00"+versionID)
-	if err == nil {
-		return true, nil
-	}
+	obj, err := s.ogGetByKey(ctx, TextureSourceRefObjectKind, "ref_version_key", canonicalID+"\x00"+versionID)
 	if err == objectgraph.ErrNotFound {
 		return false, nil
 	}
-	return false, err
+	if err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(obj.ComputerID) != "" {
+		return false, nil
+	}
+	var rec TextureSourceRefGraphRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(rec.ComputerID) == "", nil
 }
 
 // ListTextureSourceRefsByRevisionOG lists source refs for a specific revision.
 func (s *Store) ListTextureSourceRefsByRevisionOG(ctx context.Context, ownerID, docID, revisionID string, limit int) ([]TextureSourceRefGraphRecord, error) {
+	return s.ListTextureSourceRefsByRevisionAndScopeOG(ctx, ownerID, "", docID, revisionID, limit)
+}
+
+func (s *Store) ListTextureSourceRefsByRevisionAndScopeOG(ctx context.Context, ownerID, computerID, docID, revisionID string, limit int) ([]TextureSourceRefGraphRecord, error) {
 	if limit <= 0 {
 		limit = 500
 	}
-	objs, err := s.ogListByMetadata(ctx, TextureSourceRefObjectKind, "texture_revision_id", revisionID, limit)
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	objs, err := s.ogListAllByMetadata(ctx, TextureSourceRefObjectKind, "texture_revision_id", revisionID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]TextureSourceRefGraphRecord, 0, len(objs))
+	out := make([]TextureSourceRefGraphRecord, 0, min(limit, len(objs)))
 	for _, obj := range objs {
 		var rec TextureSourceRefGraphRecord
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
-		if rec.OwnerID != ownerID || rec.DocID != docID {
+		if rec.OwnerID != ownerID || strings.TrimSpace(rec.ComputerID) != computerID || rec.DocID != docID {
 			continue
 		}
 		out = append(out, rec)
+		if len(out) >= limit {
+			break
+		}
 	}
 	return out, nil
 }

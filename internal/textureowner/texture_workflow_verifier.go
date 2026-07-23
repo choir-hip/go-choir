@@ -41,10 +41,11 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 		return report, fmt.Errorf("owner_id, trajectory_id, and prompt_submission_id are required")
 	}
 
-	conductor, err := rt.Store.GetRun(ctx, submissionID)
+	storedConductor, err := rt.Core.GetRun(ctx, submissionID, ownerID)
 	if err != nil {
 		return report, fmt.Errorf("load prompt submission run: %w", err)
 	}
+	conductor := *storedConductor
 	if conductor.OwnerID != ownerID {
 		return report, fmt.Errorf("prompt submission owner = %q, want %q", conductor.OwnerID, ownerID)
 	}
@@ -67,7 +68,7 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	if decision.Action != "open_app" || !isTextureDecisionApp(decision.App) || strings.TrimSpace(decision.DocID) == "" {
 		return report, fmt.Errorf("conductor did not route to Texture: %+v", decision)
 	}
-	doc, err := rt.Store.GetDocument(ctx, decision.DocID, ownerID)
+	doc, err := rt.getTextureDocument(ctx, ownerID, decision.DocID)
 	if err != nil {
 		return report, fmt.Errorf("load routed texture document: %w", err)
 	}
@@ -198,7 +199,7 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 		guarantee("verification command result matches structured worker tests")
 	}
 
-	revisions, err := rt.Store.ListRevisionsByDoc(ctx, doc.DocID, ownerID, 200)
+	revisions, err := rt.listTextureRevisions(ctx, ownerID, doc.DocID, 200)
 	if err != nil {
 		return report, fmt.Errorf("list Texture revisions: %w", err)
 	}

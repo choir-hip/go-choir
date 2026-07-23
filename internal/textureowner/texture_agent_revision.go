@@ -84,7 +84,7 @@ func (h *Handler) HandleTextureAgentRevision(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Verify the document exists and belongs to this owner.
-	doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
@@ -105,7 +105,7 @@ func (h *Handler) HandleTextureAgentRevision(w http.ResponseWriter, r *http.Requ
 	// If one exists, return the existing run ID instead of creating a new
 	// mutation. This prevents duplicate canonical revisions when
 	// renewal/retry occurs mid-mutation (VAL-CROSS-122).
-	existing, err := h.pendingAgentMutationByDoc(r.Context(), docID, ownerID)
+	existing, err := h.pendingAgentMutationByDoc(r.Context(), ownerID, doc.ComputerID, docID)
 	if err != nil {
 		log.Printf("texture api: check pending mutation: %v", err)
 	} else if existing != nil {
@@ -145,37 +145,36 @@ func (h *Handler) HandleTextureAgentRevision(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-func (h *Handler) pendingAgentMutationByDoc(ctx context.Context, docID, ownerID string) (*store.AgentMutation, error) {
-	mutation, err := h.Store.GetPendingAgentMutationByDoc(ctx, docID, ownerID)
+func (h *Handler) pendingAgentMutationByDoc(ctx context.Context, ownerID, computerID, docID string) (*store.AgentMutation, error) {
+	mutation, err := h.Store.GetPendingAgentMutationByDoc(ctx, ownerID, computerID, docID)
 	if err != nil || mutation == nil {
 		return mutation, err
 	}
-	run, runErr := h.Core.GetRun(ctx, mutation.RunID, ownerID)
-	if runErr == nil && !run.State.Terminal() {
-		// The Texture actor is still resident (running or parked). A long-running
-		// actor keeps its single pending mutation across many canonical revisions,
-		// so it must not be reconciled/completed here. Completing a live actor's
-		// mutation would lock it out of further writes (its next write fails the
-		// pending-state gate in commitTextureToolEdit). Reconcile is cleanup for
-		// terminal/missing runs only.
+	var run types.RunRecord
+	if strings.TrimSpace(computerID) != "" {
+		run, err = h.Store.GetLifecycleRun(ctx, ownerID, computerID, mutation.RunID)
+	} else {
+		runPtr, runErr := h.Core.GetRun(ctx, mutation.RunID, ownerID)
+		err = runErr
+		if runPtr != nil {
+			run = *runPtr
+		}
+	}
+	if err == nil && !run.State.Terminal() {
+		// A long-running Texture actor keeps one pending mutation across
+		// revisions; cleanup applies only to terminal or missing runs.
 		return mutation, nil
 	}
-	// The run is terminal or unresolvable. Clean up its pending mutation: if the
-	// canonical head is the appagent write this run produced, complete the
-	// mutation; otherwise (for a confirmed terminal run) mark it stale so a fresh
-	// revision can start.
 	reconciled, reconcileErr := h.reconcilePendingMutationFromDocumentHead(ctx, mutation)
 	if reconcileErr != nil {
 		log.Printf("texture api: reconcile pending mutation %s from document head: %v", mutation.RunID, reconcileErr)
 	} else if reconciled {
 		return nil, nil
 	}
-	if runErr != nil {
-		// Could not resolve the run; leave the pending mutation as-is rather than
-		// marking a possibly-transient lookup failure stale.
+	if err != nil {
 		return mutation, nil
 	}
-	if err := h.Store.MarkAgentMutationStale(ctx, mutation.RunID); err != nil {
+	if err := h.Store.MarkAgentMutationStale(ctx, mutation.OwnerID, mutation.ComputerID, mutation.RunID); err != nil {
 		log.Printf("texture api: mark stale pending mutation %s: %v", mutation.RunID, err)
 		return mutation, nil
 	}
@@ -186,14 +185,14 @@ func (h *Handler) reconcilePendingMutationFromDocumentHead(ctx context.Context, 
 	if mutation == nil || strings.TrimSpace(mutation.RunID) == "" || strings.TrimSpace(mutation.DocID) == "" || strings.TrimSpace(mutation.OwnerID) == "" {
 		return false, nil
 	}
-	doc, err := h.Store.GetDocument(ctx, mutation.DocID, mutation.OwnerID)
+	doc, err := h.getTextureDocument(ctx, mutation.OwnerID, mutation.DocID)
 	if err != nil {
 		return false, err
 	}
 	if strings.TrimSpace(doc.CurrentRevisionID) == "" {
 		return false, nil
 	}
-	rev, err := h.Store.GetRevision(ctx, doc.CurrentRevisionID, mutation.OwnerID)
+	rev, err := h.getTextureRevision(ctx, mutation.OwnerID, doc.CurrentRevisionID)
 	if err != nil {
 		return false, err
 	}
@@ -204,7 +203,7 @@ func (h *Handler) reconcilePendingMutationFromDocumentHead(ctx context.Context, 
 	if !isTextureWriteToolName(metadataStringValue(meta, "source")) || metadataStringValue(meta, "loop_id") != mutation.RunID {
 		return false, nil
 	}
-	if err := h.Store.CompleteAgentMutation(ctx, mutation.RunID, rev.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
+	if err := h.Store.CompleteAgentMutation(ctx, mutation.OwnerID, mutation.ComputerID, mutation.RunID, rev.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
 		return false, err
 	}
 	return true, nil
@@ -298,7 +297,7 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	var currentRevision types.Revision
 	var currentRevisionLoaded bool
 	if doc.CurrentRevisionID != "" {
-		rev, err := rt.Store.GetRevision(ctx, doc.CurrentRevisionID, ownerID)
+		rev, err := rt.getTextureRevision(ctx, ownerID, doc.CurrentRevisionID)
 		if err == nil {
 			currentRevision = rev
 			currentRevisionLoaded = true
@@ -310,7 +309,7 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	}
 	var previousRevision *types.Revision
 	if currentRevisionLoaded && currentRevision.ParentRevisionID != "" {
-		prev, err := rt.Store.GetRevision(ctx, currentRevision.ParentRevisionID, ownerID)
+		prev, err := rt.getTextureRevision(ctx, ownerID, currentRevision.ParentRevisionID)
 		if err == nil {
 			previousRevision = &prev
 		}
@@ -473,6 +472,7 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		DocID:               doc.DocID,
 		RunID:               rec.RunID,
 		OwnerID:             ownerID,
+		ComputerID:          agentMutationComputerID(rec),
 		State:               "pending",
 		ScheduledMessageSeq: scheduledMessageSeq,
 		CreatedAt:           time.Now().UTC(),
@@ -843,7 +843,7 @@ func (rt *Handler) recentWorkerMessages(ctx context.Context, ownerID, channelID 
 	if err != nil {
 		return nil, err
 	}
-	runs, err := rt.Store.ListRunsByChannel(ctx, ownerID, channelID, 200)
+	runs, err := rt.Core.ListRunsByChannel(ctx, ownerID, channelID, 200)
 	if err != nil {
 		return nil, err
 	}
@@ -868,7 +868,7 @@ func (rt *Handler) recentWorkerMessages(ctx context.Context, ownerID, channelID 
 }
 
 func (rt *Handler) userRevisionDiffSummaries(ctx context.Context, ownerID, docID string, limit int) ([]string, error) {
-	revs, err := rt.Store.ListRevisionsByDoc(ctx, docID, ownerID, limit)
+	revs, err := rt.listTextureRevisions(ctx, ownerID, docID, limit)
 	if err != nil {
 		return nil, err
 	}

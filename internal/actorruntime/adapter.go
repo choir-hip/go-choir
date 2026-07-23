@@ -209,6 +209,15 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	return a
 }
 
+func actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, content string) string {
+	if kind == "initial_dispatch" && strings.TrimSpace(content) != "" {
+		return uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join(
+			[]string{"choir:initial-dispatch", ownerID, computerID, toAgentID, strings.TrimSpace(content)}, "\x00",
+		))).String()
+	}
+	return uuid.New().String()
+}
+
 // dispatch is the function hook that the runtime core calls to send actor
 // messages. It is set via rt.SetDispatchActor(a.dispatch).
 func (a *Adapter) dispatch(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
@@ -216,8 +225,9 @@ func (a *Adapter) dispatch(ctx context.Context, ownerID, computerID, toAgentID, 
 	if ownerID == "" || computerID == "" || toAgentID == "" {
 		return fmt.Errorf("actorruntime: dispatch: owner_id, computer_id, and to_agent_id are required")
 	}
+	updateID := actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, content)
 	u := actor.Update{
-		UpdateID:     uuid.New().String(),
+		UpdateID:     updateID,
 		ToAgentID:    scopedActorMailboxID(ownerID, computerID, toAgentID),
 		FromAgentID:  fromAgentID,
 		Kind:         kind,

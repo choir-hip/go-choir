@@ -74,6 +74,10 @@ func BuildTextureSourceEntityCanonicalID(ownerID, ownerScope, sourceKind, target
 }
 
 func BuildTextureSourceRefCanonicalID(ownerID, revisionID, occurrenceKey string) (string, error) {
+	return BuildTextureSourceRefCanonicalIDByScope(ownerID, "", revisionID, occurrenceKey)
+}
+
+func BuildTextureSourceRefCanonicalIDByScope(ownerID, computerID, revisionID, occurrenceKey string) (string, error) {
 	revisionID = strings.TrimSpace(revisionID)
 	occurrenceKey = strings.TrimSpace(occurrenceKey)
 	if revisionID == "" {
@@ -82,7 +86,11 @@ func BuildTextureSourceRefCanonicalID(ownerID, revisionID, occurrenceKey string)
 	if occurrenceKey == "" {
 		return "", fmt.Errorf("occurrence key is required")
 	}
-	return objectgraph.BuildCanonicalID(TextureSourceRefObjectKind, ownerID, objectgraph.StableSuffixFromKey(revisionID+"\x00"+occurrenceKey))
+	identity := revisionID + "\x00" + occurrenceKey
+	if computerID = strings.TrimSpace(computerID); computerID != "" {
+		identity = computerID + "\x00" + identity
+	}
+	return objectgraph.BuildCanonicalID(TextureSourceRefObjectKind, ownerID, objectgraph.StableSuffixFromKey(identity))
 }
 
 func TextureSourceGraphVersionID(kind objectgraph.ObjectKind, body []byte, metadata json.RawMessage) (string, string, json.RawMessage, error) {
@@ -98,19 +106,31 @@ func TextureSourceGraphVersionID(kind objectgraph.ObjectKind, body []byte, metad
 }
 
 func (s *Store) ListTextureSourceEntities(ctx context.Context, ownerID string) ([]TextureSourceEntityGraphRecord, error) {
-	// Use a large limit to preserve unbounded list semantics from the
-	// old SQL path which returned all matching rows.
-	return s.ListTextureSourceEntitiesByOwnerOG(ctx, ownerID, 100000)
+	return s.ListTextureSourceEntitiesByScopeOG(ctx, ownerID, "", 100000)
+}
+
+func (s *Store) ListTextureSourceEntitiesByScope(ctx context.Context, ownerID, computerID string) ([]TextureSourceEntityGraphRecord, error) {
+	return s.ListTextureSourceEntitiesByScopeOG(ctx, ownerID, computerID, 100000)
 }
 
 func (s *Store) ListTextureSourceRefsForRevision(ctx context.Context, ownerID, docID, revisionID string) ([]TextureSourceRefGraphRecord, error) {
-	// Use a large limit to preserve unbounded list semantics from the
-	// old SQL path which returned all matching rows.
-	return s.ListTextureSourceRefsByRevisionOG(ctx, ownerID, docID, revisionID, 100000)
+	return s.ListTextureSourceRefsByRevisionAndScopeOG(ctx, ownerID, "", docID, revisionID, 100000)
+}
+
+func (s *Store) ListTextureSourceRefsForRevisionByScope(ctx context.Context, ownerID, computerID, docID, revisionID string) ([]TextureSourceRefGraphRecord, error) {
+	return s.ListTextureSourceRefsByRevisionAndScopeOG(ctx, ownerID, computerID, docID, revisionID, 100000)
 }
 
 func (s *Store) ListTextureSourceEntitiesForRevision(ctx context.Context, ownerID, docID, revisionID string) ([]TextureSourceEntityGraphRecord, error) {
-	refs, err := s.ListTextureSourceRefsForRevision(ctx, ownerID, docID, revisionID)
+	return s.listTextureSourceEntitiesForRevision(ctx, ownerID, "", docID, revisionID)
+}
+
+func (s *Store) ListTextureSourceEntitiesForRevisionByScope(ctx context.Context, ownerID, computerID, docID, revisionID string) ([]TextureSourceEntityGraphRecord, error) {
+	return s.listTextureSourceEntitiesForRevision(ctx, ownerID, computerID, docID, revisionID)
+}
+
+func (s *Store) listTextureSourceEntitiesForRevision(ctx context.Context, ownerID, computerID, docID, revisionID string) ([]TextureSourceEntityGraphRecord, error) {
+	refs, err := s.ListTextureSourceRefsForRevisionByScope(ctx, ownerID, computerID, docID, revisionID)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +139,7 @@ func (s *Store) ListTextureSourceEntitiesForRevision(ctx context.Context, ownerI
 		pinned[entityVersionKey(ref.SourceEntityCanonicalID, ref.SourceEntityVersionID)] = true
 	}
 
-	entities, err := s.ListTextureSourceEntities(ctx, ownerID)
+	entities, err := s.ListTextureSourceEntitiesByScope(ctx, ownerID, computerID)
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +159,10 @@ func (s *Store) ListTextureSourceEntitiesForRevision(ctx context.Context, ownerI
 }
 
 func (s *Store) ListTextureSourceGraphForRevisions(ctx context.Context, ownerID, docID string, revisionIDs []string) (map[string]TextureSourceGraphWriteSet, error) {
+	return s.ListTextureSourceGraphForRevisionsByScope(ctx, ownerID, "", docID, revisionIDs)
+}
+
+func (s *Store) ListTextureSourceGraphForRevisionsByScope(ctx context.Context, ownerID, computerID, docID string, revisionIDs []string) (map[string]TextureSourceGraphWriteSet, error) {
 	ids, wanted := normalizeTextureSourceGraphRevisionIDs(revisionIDs)
 	out := make(map[string]TextureSourceGraphWriteSet, len(ids))
 	for _, revisionID := range ids {
@@ -148,7 +172,7 @@ func (s *Store) ListTextureSourceGraphForRevisions(ctx context.Context, ownerID,
 		return out, nil
 	}
 
-	refsByRevision, err := s.listTextureSourceRefsForRevisions(ctx, ownerID, docID, ids)
+	refsByRevision, err := s.listTextureSourceRefsForRevisions(ctx, ownerID, computerID, docID, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +187,7 @@ func (s *Store) ListTextureSourceGraphForRevisions(ctx context.Context, ownerID,
 		}
 	}
 
-	entities, err := s.ListTextureSourceEntities(ctx, ownerID)
+	entities, err := s.ListTextureSourceEntitiesByScope(ctx, ownerID, computerID)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +249,7 @@ func (s *Store) writeTextureSourceGraph(ctx context.Context, rev types.Revision,
 	var writtenRefKeys []string
 	knownEntities := make(map[string]bool, len(graph.SourceEntities))
 	for _, rec := range graph.SourceEntities {
-		normalized, err := normalizeTextureSourceEntityGraphRecord(rec, rev.OwnerID, rev.CreatedAt)
+		normalized, err := normalizeTextureSourceEntityGraphRecord(rec, rev.OwnerID, rev.ComputerID, rev.CreatedAt)
 		if err != nil {
 			// Roll back partial writes before returning.
 			s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
@@ -282,13 +306,21 @@ func (s *Store) writeTextureSourceGraph(ctx context.Context, rev types.Revision,
 	return createdEntityKeys, writtenRefKeys, nil
 }
 
-func normalizeTextureSourceEntityGraphRecord(rec TextureSourceEntityGraphRecord, ownerID string, createdAt time.Time) (TextureSourceEntityGraphRecord, error) {
+func normalizeTextureSourceEntityGraphRecord(rec TextureSourceEntityGraphRecord, ownerID, computerID string, createdAt time.Time) (TextureSourceEntityGraphRecord, error) {
 	rec.OwnerID = strings.TrimSpace(rec.OwnerID)
 	if rec.OwnerID == "" {
 		rec.OwnerID = ownerID
 	}
 	if rec.OwnerID != ownerID {
 		return TextureSourceEntityGraphRecord{}, fmt.Errorf("owner_id %q does not match revision owner %q", rec.OwnerID, ownerID)
+	}
+	rec.ComputerID = strings.TrimSpace(rec.ComputerID)
+	computerID = strings.TrimSpace(computerID)
+	if rec.ComputerID == "" {
+		rec.ComputerID = computerID
+	}
+	if rec.ComputerID != computerID {
+		return TextureSourceEntityGraphRecord{}, fmt.Errorf("computer_id %q does not match revision computer %q", rec.ComputerID, computerID)
 	}
 	kind, parsedOwner, _, err := objectgraph.ParseCanonicalID(rec.CanonicalID)
 	if err != nil {
@@ -328,6 +360,14 @@ func normalizeTextureSourceRefGraphRecord(rec TextureSourceRefGraphRecord, rev t
 	}
 	if rec.OwnerID != rev.OwnerID {
 		return TextureSourceRefGraphRecord{}, fmt.Errorf("owner_id %q does not match revision owner %q", rec.OwnerID, rev.OwnerID)
+	}
+	rec.ComputerID = strings.TrimSpace(rec.ComputerID)
+	revisionComputerID := strings.TrimSpace(rev.ComputerID)
+	if rec.ComputerID == "" {
+		rec.ComputerID = revisionComputerID
+	}
+	if rec.ComputerID != revisionComputerID {
+		return TextureSourceRefGraphRecord{}, fmt.Errorf("computer_id %q does not match revision computer %q", rec.ComputerID, revisionComputerID)
 	}
 	if strings.TrimSpace(rec.DocID) == "" {
 		rec.DocID = rev.DocID
@@ -603,7 +643,7 @@ func defaultTextureGraphTime(candidate, fallback time.Time) time.Time {
 	return time.Now().UTC()
 }
 
-func (s *Store) listTextureSourceRefsForRevisions(ctx context.Context, ownerID, docID string, revisionIDs []string) (map[string][]TextureSourceRefGraphRecord, error) {
+func (s *Store) listTextureSourceRefsForRevisions(ctx context.Context, ownerID, computerID, docID string, revisionIDs []string) (map[string][]TextureSourceRefGraphRecord, error) {
 	ids, wanted := normalizeTextureSourceGraphRevisionIDs(revisionIDs)
 	out := make(map[string][]TextureSourceRefGraphRecord, len(ids))
 	for _, revisionID := range ids {
@@ -615,7 +655,7 @@ func (s *Store) listTextureSourceRefsForRevisions(ctx context.Context, ownerID, 
 	for _, revisionID := range ids {
 		// Pass a large limit to preserve the old SQL `IN (...)` unbounded
 		// semantics. Limit 0 would be rewritten to 500 by the OG helper.
-		refs, err := s.ListTextureSourceRefsByRevisionOG(ctx, ownerID, docID, revisionID, 100000)
+		refs, err := s.ListTextureSourceRefsByRevisionAndScopeOG(ctx, ownerID, computerID, docID, revisionID, 100000)
 		if err != nil {
 			return nil, fmt.Errorf("query texture source refs for revisions: %w", err)
 		}

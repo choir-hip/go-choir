@@ -1,11 +1,14 @@
 package textureowner
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"net/mail"
+	"sort"
 	"strings"
 	"sync"
 
@@ -56,6 +59,132 @@ func NewHandler(core *agentcore.Runtime) *Handler {
 		ModelPolicy: core.TextureModelPolicy(),
 		Provider:    core.TextureProvider(),
 	}
+}
+
+func (h *Handler) getTextureDocument(ctx context.Context, ownerID, docID string) (types.Document, error) {
+	if h == nil || h.Store == nil {
+		return types.Document{}, fmt.Errorf("texture store unavailable")
+	}
+	computerID := ""
+	if h.Core != nil {
+		computerID = strings.TrimSpace(h.Core.TextureSandboxID())
+	}
+	if computerID != "" {
+		doc, err := h.Store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+		if err == nil {
+			return doc, nil
+		}
+		if !errors.Is(err, store.ErrNotFound) {
+			return types.Document{}, err
+		}
+	}
+	doc, err := h.Store.GetDocument(ctx, docID, ownerID)
+	if err != nil {
+		return types.Document{}, err
+	}
+	if strings.TrimSpace(doc.TrajectoryID) != "" {
+		return types.Document{}, store.ErrLifecycleAuthorityRequired
+	}
+	return doc, nil
+}
+
+func (h *Handler) getTextureRevision(ctx context.Context, ownerID, revisionID string) (types.Revision, error) {
+	if h == nil || h.Store == nil {
+		return types.Revision{}, fmt.Errorf("texture store unavailable")
+	}
+	computerID := ""
+	if h.Core != nil {
+		computerID = strings.TrimSpace(h.Core.TextureSandboxID())
+	}
+	if computerID != "" {
+		revision, err := h.Store.GetLifecycleRevision(ctx, ownerID, computerID, revisionID)
+		if err == nil {
+			return revision, nil
+		}
+		if !errors.Is(err, store.ErrNotFound) {
+			return types.Revision{}, err
+		}
+	}
+	revision, err := h.Store.GetRevision(ctx, revisionID, ownerID)
+	if err != nil {
+		return types.Revision{}, err
+	}
+	if strings.TrimSpace(revision.TrajectoryID) != "" {
+		return types.Revision{}, store.ErrLifecycleAuthorityRequired
+	}
+	return revision, nil
+}
+func (h *Handler) listTextureDocuments(ctx context.Context, ownerID string, limit int) ([]types.Document, error) {
+	if h == nil || h.Store == nil {
+		return nil, fmt.Errorf("texture store unavailable")
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	legacy, err := h.Store.ListDocumentsByOwner(ctx, ownerID, limit)
+	if err != nil {
+		return nil, err
+	}
+	computerID := ""
+	if h.Core != nil {
+		computerID = strings.TrimSpace(h.Core.TextureSandboxID())
+	}
+	if computerID == "" {
+		return legacy, nil
+	}
+	scoped, err := h.Store.ListDocumentsByScope(ctx, ownerID, computerID, limit)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool, len(scoped))
+	docs := append([]types.Document(nil), scoped...)
+	for _, doc := range scoped {
+		seen[doc.DocID] = true
+	}
+	for _, doc := range legacy {
+		if !seen[doc.DocID] {
+			docs = append(docs, doc)
+		}
+	}
+	sort.Slice(docs, func(i, j int) bool { return docs[i].UpdatedAt.After(docs[j].UpdatedAt) })
+	if len(docs) > limit {
+		docs = docs[:limit]
+	}
+	return docs, nil
+}
+
+func (h *Handler) listTextureRevisions(ctx context.Context, ownerID, docID string, limit int) ([]types.Revision, error) {
+	doc, err := h.getTextureDocument(ctx, ownerID, docID)
+	if err != nil {
+		return nil, err
+	}
+	if computerID := strings.TrimSpace(doc.ComputerID); computerID != "" {
+		return h.Store.ListRevisionsByScope(ctx, docID, ownerID, computerID, limit)
+	}
+	return h.Store.ListRevisionsByDoc(ctx, docID, ownerID, limit)
+}
+
+func (h *Handler) getTextureHistory(ctx context.Context, ownerID, docID string, limit int) ([]types.HistoryEntry, error) {
+	doc, err := h.getTextureDocument(ctx, ownerID, docID)
+	if err != nil {
+		return nil, err
+	}
+	if computerID := strings.TrimSpace(doc.ComputerID); computerID != "" {
+		revisions, err := h.Store.ListRevisionsByScope(ctx, docID, ownerID, computerID, limit)
+		if err != nil {
+			return nil, err
+		}
+		entries := make([]types.HistoryEntry, 0, len(revisions))
+		for _, revision := range revisions {
+			entries = append(entries, types.HistoryEntry{
+				RevisionID: revision.RevisionID, DocID: revision.DocID,
+				AuthorKind: revision.AuthorKind, AuthorLabel: revision.AuthorLabel,
+				CreatedAt: revision.CreatedAt, ParentRevisionID: revision.ParentRevisionID,
+			})
+		}
+		return entries, nil
+	}
+	return h.Store.GetHistory(ctx, docID, ownerID, limit)
 }
 
 type apiError struct {

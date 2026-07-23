@@ -156,8 +156,8 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 		return ConductorDecision{}, fmt.Errorf("texture lifecycle unavailable")
 	}
 
-	if current, err := h.Store.GetRun(ctx, rec.RunID); err == nil {
-		mergeStoredConductorRoute(rec, current)
+	if current, err := h.Core.GetRun(ctx, rec.RunID, rec.OwnerID); err == nil {
+		mergeStoredConductorRoute(rec, *current)
 	}
 
 	var parsedDecision ConductorDecision

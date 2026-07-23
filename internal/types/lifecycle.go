@@ -59,31 +59,46 @@ type StartLifecycleRequest struct {
 	Agent              AgentRecord       `json:"agent"`
 }
 
+type ApplyLifecycleRelatedUpdate struct {
+	TargetAgentID    string            `json:"target_agent_id"`
+	ProducerAgentID  string            `json:"producer_agent_id"`
+	ProducerUpdateID string            `json:"producer_update_id"`
+	UpdateID         string            `json:"update_id"`
+	Disposition      UpdateDisposition `json:"disposition"`
+	DispositionRef   string            `json:"disposition_ref"`
+	WorkDisposition  WorkItemStatus    `json:"work_disposition,omitempty"`
+	WorkItemID       string            `json:"work_item_id,omitempty"`
+	WorkResultRef    string            `json:"work_result_ref,omitempty"`
+	Reason           string            `json:"reason,omitempty"`
+}
+
 type ApplyLifecycleUpdateRequest struct {
-	OwnerID                   string                     `json:"owner_id"`
-	ComputerID                string                     `json:"computer_id"`
-	CommandID                 string                     `json:"command_id"`
-	CommandDigest             string                     `json:"command_digest"`
-	TrajectoryID              string                     `json:"trajectory_id"`
-	TargetAgentID             string                     `json:"target_agent_id"`
-	ProducerAgentID           string                     `json:"producer_agent_id"`
-	ProducerUpdateID          string                     `json:"producer_update_id"`
-	UpdateID                  string                     `json:"update_id"`
-	MessageSeq                int64                      `json:"message_seq,omitempty"`
-	ChannelID                 string                     `json:"channel_id,omitempty"`
-	Role                      string                     `json:"role,omitempty"`
-	SourceRunID               string                     `json:"source_run_id,omitempty"`
-	Packet                    CoagentSourcePacketPayload `json:"packet"`
-	Content                   string                     `json:"content"`
-	Disposition               UpdateDisposition          `json:"disposition"`
-	Revision                  Revision                   `json:"revision,omitempty"`
-	WorkItemID                string                     `json:"work_item_id,omitempty"`
-	WorkResultRef             string                     `json:"work_result_ref,omitempty"`
-	SubjectRefs               map[string]string          `json:"subject_refs,omitempty"`
-	Reason                    string                     `json:"reason,omitempty"`
-	PayloadDigest             string                     `json:"payload_digest"`
-	ReferenceExistingArtifact bool                       `json:"reference_existing_artifact,omitempty"`
-	DispositionRef            string                     `json:"disposition_ref"`
+	OwnerID                   string                        `json:"owner_id"`
+	ComputerID                string                        `json:"computer_id"`
+	CommandID                 string                        `json:"command_id"`
+	CommandDigest             string                        `json:"command_digest"`
+	TrajectoryID              string                        `json:"trajectory_id"`
+	TargetAgentID             string                        `json:"target_agent_id"`
+	ProducerAgentID           string                        `json:"producer_agent_id"`
+	ProducerUpdateID          string                        `json:"producer_update_id"`
+	UpdateID                  string                        `json:"update_id"`
+	MessageSeq                int64                         `json:"message_seq,omitempty"`
+	ChannelID                 string                        `json:"channel_id,omitempty"`
+	Role                      string                        `json:"role,omitempty"`
+	SourceRunID               string                        `json:"source_run_id,omitempty"`
+	Packet                    CoagentSourcePacketPayload    `json:"packet"`
+	Content                   string                        `json:"content"`
+	Disposition               UpdateDisposition             `json:"disposition"`
+	Revision                  Revision                      `json:"revision,omitempty"`
+	WorkDisposition           WorkItemStatus                `json:"work_disposition,omitempty"`
+	WorkItemID                string                        `json:"work_item_id,omitempty"`
+	WorkResultRef             string                        `json:"work_result_ref,omitempty"`
+	SubjectRefs               map[string]string             `json:"subject_refs,omitempty"`
+	Reason                    string                        `json:"reason,omitempty"`
+	PayloadDigest             string                        `json:"payload_digest"`
+	ReferenceExistingArtifact bool                          `json:"reference_existing_artifact,omitempty"`
+	DispositionRef            string                        `json:"disposition_ref"`
+	RelatedUpdates            []ApplyLifecycleRelatedUpdate `json:"related_updates,omitempty"`
 }
 
 type QueueLifecycleUpdateRequest ApplyLifecycleUpdateRequest
@@ -138,6 +153,7 @@ type SettleLifecycleWorkRequest struct {
 	CommandDigest string `json:"command_digest"`
 	TrajectoryID  string `json:"trajectory_id"`
 	WorkItemID    string `json:"work_item_id"`
+	ActingAgentID string `json:"acting_agent_id"`
 	ResultRef     string `json:"result_ref"`
 }
 
@@ -148,6 +164,7 @@ type RefuseLifecycleWorkRequest struct {
 	CommandDigest string `json:"command_digest"`
 	TrajectoryID  string `json:"trajectory_id"`
 	WorkItemID    string `json:"work_item_id"`
+	ActingAgentID string `json:"acting_agent_id"`
 	RefusalRef    string `json:"refusal_ref"`
 	Reason        string `json:"reason"`
 }
@@ -181,6 +198,7 @@ type CommitLifecycleArtifactHeadRequest struct {
 	TrajectoryID             string   `json:"trajectory_id"`
 	ExpectedLifecycleVersion int64    `json:"expected_lifecycle_version"`
 	ExpectedHeadRevisionID   string   `json:"expected_head_revision_id"`
+	Unbound                  bool     `json:"unbound,omitempty"`
 	Revision                 Revision `json:"revision"`
 }
 
@@ -259,17 +277,18 @@ type LifecycleActivationProjection struct {
 }
 
 type LifecycleSnapshot struct {
-	Trajectory     TrajectoryRecord              `json:"trajectory"`
-	WorkItems      []WorkItemRecord              `json:"work_items"`
-	Agents         []AgentRecord                 `json:"agents"`
-	Schema         string                        `json:"schema"`
-	Activation     LifecycleActivationProjection `json:"activation"`
-	Updates        []CoagentSourcePacket         `json:"updates"`
-	Document       Document                      `json:"document"`
-	HeadRevision   Revision                      `json:"head_revision"`
-	Events         []LifecycleEvent              `json:"events"`
-	SnapshotCursor int64                         `json:"snapshot_cursor"`
-	Watermark      int64                         `json:"watermark"`
+	Trajectory          TrajectoryRecord              `json:"trajectory"`
+	WorkItems           []WorkItemRecord              `json:"work_items"`
+	Agents              []AgentRecord                 `json:"agents"`
+	Activation          LifecycleActivationProjection `json:"activation"`
+	Schema              string                        `json:"schema"`
+	CurrentDocumentHead *Revision                     `json:"current_document_head,omitempty"`
+	Updates             []CoagentSourcePacket         `json:"updates"`
+	Document            Document                      `json:"document"`
+	HeadRevision        Revision                      `json:"head_revision"`
+	Events              []LifecycleEvent              `json:"events"`
+	SnapshotCursor      int64                         `json:"snapshot_cursor"`
+	Watermark           int64                         `json:"watermark"`
 }
 
 type LifecycleEventPage struct {

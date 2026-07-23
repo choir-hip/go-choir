@@ -35,8 +35,30 @@ func (h *Handler) coagentUpdateTurnInjector(rec *types.RunRecord) toolregistry.I
 	if ownerID == "" || targetAgentID == "" {
 		return nil
 	}
+	computerID := strings.TrimSpace(rec.SandboxID)
+	subject, subjectErr := h.Store.GetAgentByScope(context.Background(), ownerID, computerID, targetAgentID)
+	durableLifecycle := subjectErr == nil && subject.LifecycleVersion > 0
+	lifecycleRequired := metadataStringValue(rec.Metadata, "lifecycle_work_item_id") != ""
 	return func(finalCheckpoint bool) ([]json.RawMessage, error) {
-		updates, err := h.Store.ListCoagentMailboxBacklog(context.Background(), ownerID, targetAgentID, 100)
+		if lifecycleRequired && !durableLifecycle {
+			return nil, fmt.Errorf("load scoped lifecycle Texture subject: %w", subjectErr)
+		}
+		var updates []types.CoagentSourcePacket
+		var err error
+		if durableLifecycle {
+			updates, err = h.Store.ListPendingLifecycleUpdates(context.Background(), ownerID, computerID, targetAgentID, 100)
+		} else {
+			updates, err = h.Store.ListCoagentMailboxBacklog(context.Background(), ownerID, targetAgentID, 100)
+			if err == nil {
+				legacy := updates[:0]
+				for _, update := range updates {
+					if update.LifecycleVersion <= 0 {
+						legacy = append(legacy, update)
+					}
+				}
+				updates = legacy
+			}
+		}
 		if err != nil || len(updates) == 0 {
 			return nil, err
 		}
@@ -66,6 +88,13 @@ func (h *Handler) coagentUpdateTurnInjector(rec *types.RunRecord) toolregistry.I
 	}
 }
 
+func agentMutationComputerID(rec *types.RunRecord) string {
+	if rec == nil || strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) == "" {
+		return ""
+	}
+	return strings.TrimSpace(rec.SandboxID)
+}
+
 func (h *Handler) createAgentMutationForRun(ctx context.Context, rec *types.RunRecord) {
 	if h == nil || h.Store == nil || rec == nil {
 		return
@@ -75,7 +104,7 @@ func (h *Handler) createAgentMutationForRun(ctx context.Context, rec *types.RunR
 		return
 	}
 	_ = h.Store.CreateAgentMutation(ctx, store.AgentMutation{
-		DocID: docID, RunID: rec.RunID, OwnerID: rec.OwnerID, State: "pending",
+		DocID: docID, RunID: rec.RunID, OwnerID: rec.OwnerID, ComputerID: agentMutationComputerID(rec), State: "pending",
 		ScheduledMessageSeq: int64(metadataIntValue(rec.Metadata, "scheduled_message_seq")), CreatedAt: time.Now().UTC(),
 	})
 }

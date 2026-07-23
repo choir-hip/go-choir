@@ -199,7 +199,7 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 		t.Fatalf("prompt creation should start a product-path texture run %q; runs=%+v", result.InitialRunID, runs)
 	}
 	waitForRunTerminalState(t, rt, result.InitialRunID, "user-alice", 5*time.Second)
-	if mutation, err := s.GetPendingAgentMutationByDoc(ctx, result.DocID, "user-alice"); err != nil {
+	if mutation, err := s.GetPendingAgentMutationByDoc(ctx, "user-alice", "sandbox-test", result.DocID); err != nil {
 		t.Fatalf("get pending mutation: %v", err)
 	} else if mutation != nil {
 		t.Fatalf("initial texture run should not leave a dangling pending mutation after completion, got %+v", mutation)
@@ -449,8 +449,6 @@ func TestSystemPromptForSuperEnforcesCapsuleDevelopment(t *testing.T) {
 		}
 	}
 }
-
-
 
 func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	t.Parallel()
@@ -1102,6 +1100,42 @@ func TestInterruptedActivationPassivationDrainsBatches(t *testing.T) {
 				t.Fatalf("%s state = %q, want %q", runID, got.State, types.RunPassivated)
 			}
 		}
+	}
+}
+func TestRestartReDispatchesProjectedLifecycleActivation(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	ownerID, docID := "user-lifecycle-restart", "doc-lifecycle-restart"
+	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
+	now := time.Now().UTC()
+	run := types.RunRecord{
+		RunID: "run-lifecycle-projection-before-dispatch", AgentID: currentTextureAgentID(docID),
+		OwnerID: ownerID, SandboxID: rt.TextureSandboxID(), ChannelID: docID, TrajectoryID: trajectoryID,
+		State: types.RunPending, Prompt: "resume durable lifecycle obligation", AgentProfile: "texture", AgentRole: "texture",
+		CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{
+			runMetadataAgentID: currentTextureAgentID(docID), runMetadataAgentProfile: "texture",
+			runMetadataAgentRole: "texture", runMetadataTrajectoryID: trajectoryID,
+			"lifecycle_work_item_id": "test-work:" + ownerID + ":" + docID,
+		},
+	}
+	if err := s.CreateRun(ctx, run); err != nil {
+		t.Fatalf("project lifecycle activation: %v", err)
+	}
+	var dispatched []string
+	rt.SetDispatchActor(func(_ context.Context, gotOwnerID, gotComputerID, _ string, kind, content, gotTrajectoryID, _ string) error {
+		if kind == "initial_dispatch" && gotOwnerID == ownerID && gotComputerID == rt.TextureSandboxID() && gotTrajectoryID == trajectoryID {
+			dispatched = append(dispatched, content)
+		}
+		return nil
+	})
+	rt.rewarmInterruptedLifecycleActivations(ctx)
+	if len(dispatched) != 1 || dispatched[0] != run.RunID {
+		t.Fatalf("restart lifecycle dispatches = %v, want [%s]", dispatched, run.RunID)
+	}
+	stored, err := s.GetLifecycleRun(ctx, ownerID, rt.TextureSandboxID(), run.RunID)
+	if err != nil || stored.State != types.RunPending {
+		t.Fatalf("restart mutated lifecycle run projection: %+v, %v", stored, err)
 	}
 }
 

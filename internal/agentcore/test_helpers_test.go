@@ -267,7 +267,10 @@ func setTestDispatch(rt *Runtime, s *store.Store) {
 				return nil
 			}
 			go func() {
-				rec, err := s.GetRun(ctx, runID)
+				rec, err := s.GetLifecycleRun(ctx, ownerID, computerID, runID)
+				if err != nil {
+					rec, err = s.GetRunByOwner(ctx, ownerID, runID)
+				}
 				if err != nil {
 					return
 				}

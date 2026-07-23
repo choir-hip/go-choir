@@ -108,7 +108,7 @@ func TestTextureRunProjectsLifecycleEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start Texture run: %v", err)
 	}
-	progress := waitForTextureLifecycleEvent(t, rt, rec.RunID, types.EventTextureAgentRevisionProgress)
+	progress := waitForTextureLifecycleEvent(t, rt, "user-texture-events", rec.RunID, types.EventTextureAgentRevisionProgress)
 	var progressPayload map[string]string
 	if err := json.Unmarshal(progress.Payload, &progressPayload); err != nil {
 		t.Fatalf("decode Texture progress: %v", err)
@@ -141,7 +141,7 @@ func TestTextureRunProjectsLifecycleEvents(t *testing.T) {
 		t.Fatalf("create failing Texture run: %v", err)
 	}
 	rt.handleExecutionError(context.Background(), &failed, errors.New("provider failed"))
-	failure := waitForTextureLifecycleEvent(t, rt, failed.RunID, types.EventTextureAgentRevisionFailed)
+	failure := waitForTextureLifecycleEvent(t, rt, "user-texture-events", failed.RunID, types.EventTextureAgentRevisionFailed)
 	var failurePayload map[string]string
 	if err := json.Unmarshal(failure.Payload, &failurePayload); err != nil {
 		t.Fatalf("decode Texture failure: %v", err)
@@ -153,7 +153,7 @@ func TestTextureRunProjectsLifecycleEvents(t *testing.T) {
 	}
 }
 
-func waitForTextureLifecycleEvent(t *testing.T, rt *Runtime, runID string, kind types.EventKind) types.EventRecord {
+func waitForTextureLifecycleEvent(t *testing.T, rt *Runtime, ownerID, runID string, kind types.EventKind) types.EventRecord {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
@@ -168,6 +168,7 @@ func waitForTextureLifecycleEvent(t *testing.T, rt *Runtime, runID string, kind 
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for Texture lifecycle event %q", kind)
+	run, runErr := rt.GetRun(context.Background(), runID, ownerID)
+	t.Fatalf("timed out waiting for Texture lifecycle event %q; run=%+v err=%v", kind, run, runErr)
 	return types.EventRecord{}
 }

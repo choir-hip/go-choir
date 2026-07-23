@@ -25,7 +25,7 @@ func (rt *Handler) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 
 	// Carry forward durable keys from the parent revision metadata.
 	if doc.CurrentRevisionID != "" {
-		if parentRev, err := rt.Store.GetRevision(context.Background(), doc.CurrentRevisionID, ownerID); err == nil {
+		if parentRev, err := rt.getTextureRevision(context.Background(), ownerID, doc.CurrentRevisionID); err == nil {
 			parentMeta := decodeRevisionMetadata(parentRev.Metadata)
 			for _, key := range durableMetadataKeys {
 				if val, ok := parentMeta[key]; ok && hasNonEmptyTextureMetadataValue(val) {
@@ -197,7 +197,7 @@ func (rt *Handler) workerUpdateRevisionMetadata(ctx context.Context, ownerID, do
 		if !textureAgentIDMatchesDoc(message.ToAgentID, docID) {
 			continue
 		}
-		eligible, err := rt.isEligibleWorkerMessage(ctx, docID, message, cache)
+		eligible, err := rt.isEligibleWorkerMessage(ctx, ownerID, docID, message, cache)
 		if err != nil {
 			log.Printf("runtime: classify texture worker update for metadata: %v", err)
 			continue
@@ -263,11 +263,11 @@ func (rt *Handler) previousTextureWorkerMetadataSeq(ctx context.Context, ownerID
 	if rt == nil || rt.Store == nil {
 		return 0
 	}
-	doc, err := rt.Store.GetDocument(ctx, docID, ownerID)
+	doc, err := rt.getTextureDocument(ctx, ownerID, docID)
 	if err != nil || strings.TrimSpace(doc.CurrentRevisionID) == "" {
 		return 0
 	}
-	rev, err := rt.Store.GetRevision(ctx, doc.CurrentRevisionID, ownerID)
+	rev, err := rt.getTextureRevision(ctx, ownerID, doc.CurrentRevisionID)
 	if err != nil {
 		return 0
 	}

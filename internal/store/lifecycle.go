@@ -19,8 +19,45 @@ var (
 	ErrLifecycleCursorExpired     = errors.New("lifecycle cursor expired")
 )
 
+type lifecycleSequence struct {
+	TrajectoryID string `json:"trajectory_id"`
+	ReducerSeq   int64  `json:"reducer_seq"`
+}
+
+func lifecycleTerminalTrajectoryRef(trajectoryID string) string {
+	return "trajectory:" + strings.TrimSpace(trajectoryID)
+}
+
 func lifecycleScopedKey(computerID, key string) string {
 	return strings.TrimSpace(computerID) + "\x00" + strings.TrimSpace(key)
+}
+
+func (s *Store) nextPostTerminalSequence(ctx context.Context, ownerID, computerID string, trajectory types.TrajectoryRecord, now time.Time) (int64, objectgraph.Object, objectgraph.ObjectCondition, error) {
+	sequenceObj, err := s.lifecycleGetObject(ctx, ogKindLifecycleSeq, ownerID, computerID, trajectory.TrajectoryID)
+	sequence := lifecycleSequence{TrajectoryID: trajectory.TrajectoryID, ReducerSeq: trajectory.ReducerSeq}
+	createdAt := now
+	condition := objectgraph.ObjectCondition{}
+	if err == nil {
+		if sequence, err = decodeLifecycleObject[lifecycleSequence](sequenceObj); err != nil {
+			return 0, objectgraph.Object{}, objectgraph.ObjectCondition{}, err
+		}
+		if sequence.TrajectoryID != trajectory.TrajectoryID || sequence.ReducerSeq < trajectory.ReducerSeq {
+			return 0, objectgraph.Object{}, objectgraph.ObjectCondition{}, ErrLifecycleInvalidTransition
+		}
+		createdAt = sequenceObj.CreatedAt
+		condition = objectgraph.ObjectCondition{CanonicalID: sequenceObj.CanonicalID, Exists: true, ExpectedContentHash: sequenceObj.ContentHash}
+	} else if !errors.Is(err, ErrNotFound) {
+		return 0, objectgraph.Object{}, objectgraph.ObjectCondition{}, err
+	}
+	sequence.ReducerSeq++
+	updated, err := lifecycleObject(ogKindLifecycleSeq, ownerID, computerID, trajectory.TrajectoryID, sequence, lifecycleMetadata("trajectory_id", trajectory.TrajectoryID, computerID, trajectory.TrajectoryID, sequence.ReducerSeq), createdAt, now)
+	if err != nil {
+		return 0, objectgraph.Object{}, objectgraph.ObjectCondition{}, err
+	}
+	if condition.CanonicalID == "" {
+		condition.CanonicalID = updated.CanonicalID
+	}
+	return sequence.ReducerSeq, updated, condition, nil
 }
 
 func lifecycleDigest(value any) (string, error) {
@@ -54,17 +91,96 @@ func ComputeStartLifecycleRequestDigest(req types.StartLifecycleRequest) (string
 	return lifecycleDigest(req)
 }
 
-func ComputeApplyLifecycleUpdateDigest(req types.ApplyLifecycleUpdateRequest) (string, error) {
+func normalizeApplyLifecycleRevisionDigest(revision *types.Revision) error {
+	revision.OwnerID, revision.ComputerID, revision.CreatedAt = "", "", time.Time{}
+	if len(revision.Provenance) == 0 {
+		return nil
+	}
+	var provenance map[string]any
+	if err := json.Unmarshal(revision.Provenance, &provenance); err != nil {
+		return fmt.Errorf("apply lifecycle revision provenance: %w", err)
+	}
+	delete(provenance, "authored_at")
+	normalized, err := json.Marshal(provenance)
+	if err != nil {
+		return fmt.Errorf("normalize apply lifecycle revision provenance: %w", err)
+	}
+	revision.Provenance = normalized
+	return nil
+}
+
+func normalizeApplyLifecycleSourceGraphDigest(graph TextureSourceGraphWriteSet) TextureSourceGraphWriteSet {
+	normalized := TextureSourceGraphWriteSet{
+		SourceEntities: append([]TextureSourceEntityGraphRecord(nil), graph.SourceEntities...),
+		SourceRefs:     append([]TextureSourceRefGraphRecord(nil), graph.SourceRefs...),
+	}
+	for i := range normalized.SourceEntities {
+		normalized.SourceEntities[i].OwnerID = ""
+		normalized.SourceEntities[i].ComputerID = ""
+		normalized.SourceEntities[i].CreatedAt = time.Time{}
+	}
+	for i := range normalized.SourceRefs {
+		normalized.SourceRefs[i].OwnerID = ""
+		normalized.SourceRefs[i].ComputerID = ""
+		normalized.SourceRefs[i].CreatedAt = time.Time{}
+	}
+	return normalized
+}
+
+func normalizeApplyLifecycleDigestRequest(req types.ApplyLifecycleUpdateRequest) (types.ApplyLifecycleUpdateRequest, error) {
 	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
+	req.UpdateID, req.ChannelID, req.Role, req.SourceRunID, req.Content = "", "", "", "", ""
+	req.MessageSeq = 0
+	req.Packet = types.CoagentSourcePacketPayload{}
+	if err := normalizeApplyLifecycleRevisionDigest(&req.Revision); err != nil {
+		return req, err
+	}
+	req.WorkItemID = strings.TrimSpace(req.WorkItemID)
+	var err error
+	if req.WorkDisposition, err = normalizeUpdateWorkDisposition(req.WorkDisposition); err != nil {
+		return req, err
+	}
+	req.RelatedUpdates = append([]types.ApplyLifecycleRelatedUpdate(nil), req.RelatedUpdates...)
+	for i := range req.RelatedUpdates {
+		related := &req.RelatedUpdates[i]
+		related.TargetAgentID = strings.TrimSpace(related.TargetAgentID)
+		related.ProducerAgentID = strings.TrimSpace(related.ProducerAgentID)
+		related.ProducerUpdateID = strings.TrimSpace(related.ProducerUpdateID)
+		related.UpdateID = strings.TrimSpace(related.UpdateID)
+		related.UpdateID = ""
+		related.DispositionRef = strings.TrimSpace(related.DispositionRef)
+		related.WorkItemID = strings.TrimSpace(related.WorkItemID)
+		related.WorkResultRef = strings.TrimSpace(related.WorkResultRef)
+		related.Reason = strings.TrimSpace(related.Reason)
+		if related.WorkDisposition, err = normalizeUpdateWorkDisposition(related.WorkDisposition); err != nil {
+			return req, err
+		}
+	}
+	sort.Slice(req.RelatedUpdates, func(i, j int) bool {
+		left := req.RelatedUpdates[i].TargetAgentID + "\x00" + req.RelatedUpdates[i].ProducerAgentID + "\x00" + req.RelatedUpdates[i].ProducerUpdateID
+		right := req.RelatedUpdates[j].TargetAgentID + "\x00" + req.RelatedUpdates[j].ProducerAgentID + "\x00" + req.RelatedUpdates[j].ProducerUpdateID
+		return left < right
+	})
+	return req, nil
+}
+
+func ComputeApplyLifecycleUpdateDigest(req types.ApplyLifecycleUpdateRequest) (string, error) {
+	req, err := normalizeApplyLifecycleDigestRequest(req)
+	if err != nil {
+		return "", err
+	}
 	return lifecycleDigest(req)
 }
 
 func ComputeApplyLifecycleUpdateWithSourceGraphDigest(req types.ApplyLifecycleUpdateRequest, graph TextureSourceGraphWriteSet) (string, error) {
-	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
+	req, err := normalizeApplyLifecycleDigestRequest(req)
+	if err != nil {
+		return "", err
+	}
 	return lifecycleDigest(struct {
 		Request types.ApplyLifecycleUpdateRequest `json:"request"`
 		Graph   TextureSourceGraphWriteSet        `json:"source_graph"`
-	}{Request: req, Graph: graph})
+	}{Request: req, Graph: normalizeApplyLifecycleSourceGraphDigest(graph)})
 }
 
 func ComputeCommitLifecycleArtifactHeadDigest(req types.CommitLifecycleArtifactHeadRequest) (string, error) {
@@ -95,17 +211,31 @@ func ComputeRecordLifecycleRefsDigest(req types.RecordLifecycleRefsRequest) (str
 }
 
 func ComputeQueueLifecycleUpdateDigest(req types.QueueLifecycleUpdateRequest) (string, error) {
-	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
-	return lifecycleDigest(req)
+	workDisposition, err := normalizeUpdateWorkDisposition(req.WorkDisposition)
+	if err != nil {
+		return "", err
+	}
+	return lifecycleDigest(struct {
+		CommandID, TrajectoryID, TargetAgentID, ProducerAgentID string
+		ProducerUpdateID, PayloadDigest, WorkItemID             string
+		WorkDisposition                                         types.WorkItemStatus
+	}{
+		CommandID: strings.TrimSpace(req.CommandID), TrajectoryID: strings.TrimSpace(req.TrajectoryID),
+		TargetAgentID: strings.TrimSpace(req.TargetAgentID), ProducerAgentID: strings.TrimSpace(req.ProducerAgentID),
+		ProducerUpdateID: strings.TrimSpace(req.ProducerUpdateID), PayloadDigest: strings.TrimSpace(req.PayloadDigest),
+		WorkItemID: strings.TrimSpace(req.WorkItemID), WorkDisposition: workDisposition,
+	})
 }
 
 func ComputeSettleLifecycleWorkDigest(req types.SettleLifecycleWorkRequest) (string, error) {
 	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
+	req.ActingAgentID = strings.TrimSpace(req.ActingAgentID)
 	return lifecycleDigest(req)
 }
 
 func ComputeRefuseLifecycleWorkDigest(req types.RefuseLifecycleWorkRequest) (string, error) {
 	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
+	req.ActingAgentID = strings.TrimSpace(req.ActingAgentID)
 	return lifecycleDigest(req)
 }
 func ComputeSettleLifecycleTrajectoryDigest(req types.SettleLifecycleTrajectoryRequest) (string, error) {
@@ -562,6 +692,243 @@ func (s *Store) GetLifecycleRevision(ctx context.Context, ownerID, computerID, r
 	}
 	return decodeLifecycleObject[types.Revision](obj)
 }
+func (s *Store) GetLifecycleRun(ctx context.Context, ownerID, computerID, runID string) (types.RunRecord, error) {
+	obj, err := s.lifecycleGetObject(ctx, ogKindRun, ownerID, computerID, runID)
+	if err != nil {
+		return types.RunRecord{}, err
+	}
+	run, err := decodeLifecycleObject[types.RunRecord](obj)
+	if err != nil {
+		return types.RunRecord{}, err
+	}
+	if run.OwnerID != strings.TrimSpace(ownerID) || run.SandboxID != strings.TrimSpace(computerID) || run.RunID != strings.TrimSpace(runID) {
+		return types.RunRecord{}, ErrLifecycleInvalidTransition
+	}
+	return run, nil
+}
+
+// UpdateLifecycleDocumentTitleAuthority changes only the owner-visible title
+// projection. It preserves lifecycle state, artifact head, and reducer
+// sequencing while conditionally replacing the scoped document object.
+func (s *Store) UpdateLifecycleDocumentTitleAuthority(ctx context.Context, ownerID, computerID, docID, title string) (types.Document, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	if err != nil {
+		return types.Document{}, err
+	}
+	docID = strings.TrimSpace(docID)
+	if docID == "" {
+		return types.Document{}, ErrNotFound
+	}
+
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
+	documentObj, err := s.lifecycleGetObject(ctx, ogKindTexDoc, ownerID, computerID, docID)
+	if err != nil {
+		return types.Document{}, err
+	}
+	document, err := decodeLifecycleObject[types.Document](documentObj)
+	if err != nil {
+		return types.Document{}, err
+	}
+	now := time.Now().UTC()
+	document.Title, document.UpdatedAt = title, now
+	var metadata map[string]any
+	if err := json.Unmarshal(documentObj.Metadata, &metadata); err != nil {
+		return types.Document{}, fmt.Errorf("decode lifecycle document metadata: %w", err)
+	}
+	metadata["title"], metadata["updated_at"] = title, now.Format(time.RFC3339Nano)
+	updated, err := lifecycleObject(ogKindTexDoc, ownerID, computerID, docID, document, metadata, documentObj.CreatedAt, now)
+	if err != nil {
+		return types.Document{}, err
+	}
+	condition := objectgraph.ObjectCondition{
+		CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash,
+	}
+	if err := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{condition}, objectgraph.Batch{Objects: []objectgraph.Object{updated}}); err != nil {
+		if errors.Is(err, objectgraph.ErrConflict) {
+			return types.Document{}, ErrConcurrentStateChange
+		}
+		return types.Document{}, err
+	}
+	return document, nil
+}
+
+// ListLifecycleRunsByState returns lifecycle-owned runs in one computer with
+// the requested state. A non-empty ownerID narrows the result; the boot
+// recovery caller intentionally exhausts all owners. Legacy runs are excluded.
+func (s *Store) ListLifecycleRunsByState(ctx context.Context, ownerID, computerID string, state types.RunState) ([]types.RunRecord, error) {
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	if computerID == "" {
+		return nil, fmt.Errorf("list lifecycle runs: computer_id is required")
+	}
+	if !state.Valid() {
+		return nil, fmt.Errorf("list lifecycle runs: invalid state %q", state)
+	}
+	objs, err := s.ogListAllByMetadata(ctx, ogKindRun, "state", string(state))
+	if err != nil {
+		return nil, fmt.Errorf("list lifecycle runs: %w", err)
+	}
+	runs := make([]types.RunRecord, 0, len(objs))
+	for _, obj := range objs {
+		if (ownerID != "" && obj.OwnerID != ownerID) || obj.ComputerID != computerID {
+			continue
+		}
+		run, decodeErr := decodeLifecycleObject[types.RunRecord](obj)
+		if decodeErr != nil || !lifecycleRunProjection(obj, run) ||
+			(ownerID != "" && run.OwnerID != ownerID) || run.SandboxID != computerID || run.State != state {
+			continue
+		}
+		runs = append(runs, run)
+	}
+	sort.Slice(runs, func(i, j int) bool {
+		if runs[i].CreatedAt.Equal(runs[j].CreatedAt) {
+			return runs[i].RunID < runs[j].RunID
+		}
+		return runs[i].CreatedAt.Before(runs[j].CreatedAt)
+	})
+	return runs, nil
+}
+
+func (s *Store) ListLifecycleTrajectoriesByOwner(ctx context.Context, ownerID, computerID string, limit int) ([]types.TrajectoryRecord, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("lifecycle trajectories: object graph not initialized")
+	}
+	objs, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	trajectories := make([]types.TrajectoryRecord, 0)
+	for _, obj := range objs {
+		if obj.ObjectKind != ogKindTrajectory {
+			continue
+		}
+		trajectory, decodeErr := decodeLifecycleObject[types.TrajectoryRecord](obj)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if trajectory.OwnerID == ownerID && trajectory.ComputerID == computerID && trajectory.LifecycleVersion > 0 {
+			trajectories = append(trajectories, trajectory)
+		}
+	}
+	sort.Slice(trajectories, func(i, j int) bool {
+		if !trajectories[i].UpdatedAt.Equal(trajectories[j].UpdatedAt) {
+			return trajectories[i].UpdatedAt.After(trajectories[j].UpdatedAt)
+		}
+		return trajectories[i].TrajectoryID < trajectories[j].TrajectoryID
+	})
+	if limit > 0 && len(trajectories) > limit {
+		trajectories = trajectories[:limit]
+	}
+	return trajectories, nil
+}
+
+func (s *Store) ListLifecycleRunsByOwner(ctx context.Context, ownerID, computerID string, limit int) ([]types.RunRecord, error) {
+	return s.listLifecycleRunsByScope(ctx, ownerID, computerID, limit, nil)
+}
+
+func (s *Store) ListLifecycleRunsByChannel(ctx context.Context, ownerID, computerID, channelID string, limit int) ([]types.RunRecord, error) {
+	channelID = strings.TrimSpace(channelID)
+	if channelID == "" {
+		return nil, ErrLifecycleInvalidTransition
+	}
+	return s.listLifecycleRunsByScope(ctx, ownerID, computerID, limit, func(run types.RunRecord) bool {
+		return strings.TrimSpace(run.ChannelID) == channelID
+	})
+}
+
+func (s *Store) listLifecycleRunsByScope(ctx context.Context, ownerID, computerID string, limit int, match func(types.RunRecord) bool) ([]types.RunRecord, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("lifecycle runs: object graph not initialized")
+	}
+	objs, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]types.RunRecord, 0)
+	for _, obj := range objs {
+		if obj.ObjectKind != ogKindRun {
+			continue
+		}
+		run, decodeErr := decodeLifecycleObject[types.RunRecord](obj)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if run.OwnerID == ownerID && run.SandboxID == computerID && (match == nil || match(run)) {
+			runs = append(runs, run)
+		}
+	}
+	sort.Slice(runs, func(i, j int) bool {
+		if !runs[i].CreatedAt.Equal(runs[j].CreatedAt) {
+			return runs[i].CreatedAt.After(runs[j].CreatedAt)
+		}
+		return runs[i].RunID < runs[j].RunID
+	})
+	if limit > 0 && len(runs) > limit {
+		runs = runs[:limit]
+	}
+	return runs, nil
+}
+
+func (s *Store) ListActiveLifecycleRunsByTrajectory(ctx context.Context, ownerID, computerID, trajectoryID string, limit int) ([]types.RunRecord, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	trajectoryID = strings.TrimSpace(trajectoryID)
+	if trajectoryID == "" {
+		return nil, ErrLifecycleInvalidTransition
+	}
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("lifecycle runs: object graph not initialized")
+	}
+	objs, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]types.RunRecord, 0)
+	for _, obj := range objs {
+		if obj.ObjectKind != ogKindRun {
+			continue
+		}
+		run, decodeErr := decodeLifecycleObject[types.RunRecord](obj)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if run.OwnerID == ownerID && run.SandboxID == computerID && run.TrajectoryID == trajectoryID && run.State.Active() {
+			runs = append(runs, run)
+		}
+	}
+	sort.Slice(runs, func(i, j int) bool {
+		if !runs[i].CreatedAt.Equal(runs[j].CreatedAt) {
+			return runs[i].CreatedAt.Before(runs[j].CreatedAt)
+		}
+		return runs[i].RunID < runs[j].RunID
+	})
+	if limit > 0 && len(runs) > limit {
+		runs = runs[:limit]
+	}
+	return runs, nil
+}
 
 func (s *Store) GetLifecycleWorkItem(ctx context.Context, ownerID, computerID, workItemID string) (types.WorkItemRecord, error) {
 	obj, err := s.lifecycleGetObject(ctx, ogKindWorkItem, ownerID, computerID, workItemID)
@@ -781,17 +1148,13 @@ func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, t
 			if decodeErr != nil {
 				return types.LifecycleSnapshot{}, decodeErr
 			}
-			if document.TrajectoryID == trajectoryID {
-				documents[document.DocID] = document
-			}
+			documents[document.DocID] = document
 		case ogKindTexRev:
 			revision, decodeErr := decodeLifecycleObject[types.Revision](obj)
 			if decodeErr != nil {
 				return types.LifecycleSnapshot{}, decodeErr
 			}
-			if revision.TrajectoryID == trajectoryID {
-				revisions[revision.RevisionID] = revision
-			}
+			revisions[revision.RevisionID] = revision
 		case ogKindWorkItem:
 			work, decodeErr := decodeLifecycleObject[types.WorkItemRecord](obj)
 			if decodeErr != nil {
@@ -843,11 +1206,22 @@ func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, t
 	if !ok {
 		return types.LifecycleSnapshot{}, fmt.Errorf("lifecycle snapshot: bound document %q not found", docID)
 	}
-	head, ok := revisions[document.CurrentRevisionID]
+	headRevisionID := document.CurrentRevisionID
+	if snapshot.Trajectory.Status != types.TrajectoryLive && strings.TrimSpace(snapshot.Trajectory.TerminalArtifactHeadRef) != "" {
+		headRevisionID = snapshot.Trajectory.TerminalArtifactHeadRef
+	}
+	head, ok := revisions[headRevisionID]
 	if !ok {
-		return types.LifecycleSnapshot{}, fmt.Errorf("lifecycle snapshot: bound head revision %q not found", document.CurrentRevisionID)
+		return types.LifecycleSnapshot{}, fmt.Errorf("lifecycle snapshot: bound head revision %q not found", headRevisionID)
 	}
 	snapshot.Document, snapshot.HeadRevision = document, head
+	if document.CurrentRevisionID != headRevisionID {
+		current, currentOK := revisions[document.CurrentRevisionID]
+		if !currentOK {
+			return types.LifecycleSnapshot{}, fmt.Errorf("lifecycle snapshot: current document head revision %q not found", document.CurrentRevisionID)
+		}
+		snapshot.CurrentDocumentHead = &current
+	}
 	sort.Slice(snapshot.WorkItems, func(i, j int) bool { return snapshot.WorkItems[i].WorkItemID < snapshot.WorkItems[j].WorkItemID })
 	sort.Slice(snapshot.Agents, func(i, j int) bool { return snapshot.Agents[i].AgentID < snapshot.Agents[j].AgentID })
 	sort.Slice(snapshot.Updates, func(i, j int) bool {
@@ -1113,12 +1487,24 @@ func (s *Store) OpenLifecycleWork(ctx context.Context, req types.OpenLifecycleWo
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	assignedAgent, err := s.requireLifecycleAssignedAgent(ctx, ownerID, computerID, work.AssignedAgentID)
-	if err != nil {
-		return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: assigned agent: %w", err)
-	}
-	if strings.TrimSpace(work.AuthorityProfile) != strings.TrimSpace(assignedAgent.Profile) {
-		return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: authority profile does not match assigned agent: %w", ErrLifecycleInvalidTransition)
+	assignedAgent, agentErr := s.requireLifecycleAssignedAgent(ctx, ownerID, computerID, work.AssignedAgentID)
+	var resultAgent *types.AgentRecord
+	if errors.Is(agentErr, ErrNotFound) {
+		switch strings.TrimSpace(work.AuthorityProfile) {
+		case "researcher", "processor", "reconciler":
+		default:
+			return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: assigned agent profile: %w", ErrLifecycleInvalidTransition)
+		}
+		if strings.HasPrefix(work.AssignedAgentID, "texture:") {
+			return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: assigned agent: %w", ErrLifecycleInvalidTransition)
+		}
+	} else if agentErr != nil {
+		return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: assigned agent: %w", agentErr)
+	} else {
+		if strings.TrimSpace(work.AuthorityProfile) != strings.TrimSpace(assignedAgent.Profile) {
+			return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: authority profile does not match assigned agent: %w", ErrLifecycleInvalidTransition)
+		}
+		resultAgent = &assignedAgent
 	}
 	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, req.TrajectoryID)
 	if err != nil {
@@ -1156,14 +1542,27 @@ func (s *Store) OpenLifecycleWork(ctx context.Context, req types.OpenLifecycleWo
 		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
 		{CanonicalID: workObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
 	}
-	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, []objectgraph.Object{trajectoryUpdated, workObj, eventObj, receiptObj}, types.LifecycleResult{
-		Receipt: receipt, Trajectory: trajectory, WorkItem: &work, Events: []types.LifecycleEvent{event},
+	objects := []objectgraph.Object{trajectoryUpdated, workObj, eventObj, receiptObj}
+	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, types.LifecycleResult{
+		Receipt: receipt, Trajectory: trajectory, WorkItem: &work, Agent: resultAgent, Events: []types.LifecycleEvent{event},
 	})
 }
 
 // ReplaceLifecycleActivation atomically advances the durable subject to a new
 // ephemeral run and records that run in the same object-graph transaction.
 func (s *Store) ReplaceLifecycleActivation(ctx context.Context, req types.ReplaceLifecycleActivationRequest) (types.LifecycleResult, error) {
+	return s.projectLifecycleRun(ctx, req)
+}
+
+// ProjectTerminalLifecycleRun records the terminal state of an activation after
+// its trajectory has already become terminal. It updates only the run
+// projection: trajectory, work, update, event, and receipt authority are
+// deliberately untouched.
+func (s *Store) ProjectTerminalLifecycleRun(ctx context.Context, req types.ReplaceLifecycleActivationRequest) (types.LifecycleResult, error) {
+	return s.projectLifecycleRun(ctx, req)
+}
+
+func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecycleActivationRequest) (types.LifecycleResult, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
 	if err != nil {
 		return types.LifecycleResult{}, err
@@ -1181,41 +1580,92 @@ func (s *Store) ReplaceLifecycleActivation(ctx context.Context, req types.Replac
 	run := req.Run
 	run.RunID, run.OwnerID, run.AgentID = strings.TrimSpace(run.RunID), strings.TrimSpace(run.OwnerID), strings.TrimSpace(run.AgentID)
 	run.SandboxID, run.TrajectoryID = strings.TrimSpace(run.SandboxID), strings.TrimSpace(run.TrajectoryID)
-	if run.RunID == "" || run.OwnerID != ownerID || run.SandboxID != computerID || run.AgentID != req.AgentID || run.TrajectoryID != req.TrajectoryID || !run.State.Active() {
-		return types.LifecycleResult{}, fmt.Errorf("lifecycle replace activation: run scope, subject, trajectory, and active state must match the command")
+	if run.RunID == "" || run.OwnerID != ownerID || run.SandboxID != computerID ||
+		run.AgentID != req.AgentID || run.TrajectoryID != req.TrajectoryID || !run.State.Valid() {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
-	if replay, found, replayErr := s.replayLifecycleCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || replayErr != nil {
-		return replay, replayErr
-	}
 	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, ownerID, computerID, req.TrajectoryID)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if trajectory.Status != types.TrajectoryLive {
+	if trajectory.Status == types.TrajectoryCancelled && run.State != types.RunCancelled {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
-	agentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, ownerID, computerID, req.AgentID)
+	if trajectory.Status != types.TrajectoryLive && run.State.Active() {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	runCanonicalID, err := lifecycleCanonicalID(ogKindRun, ownerID, computerID, run.RunID)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	agent, err := decodeLifecycleObject[types.AgentRecord](agentObj)
-	if err != nil {
-		return types.LifecycleResult{}, err
-	}
-	if agent.LifecycleVersion <= 0 || agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != req.AgentID {
+	runCondition := objectgraph.ObjectCondition{CanonicalID: runCanonicalID}
+	existingRunObj, getRunErr := s.lifecycleGraph().GetObject(ctx, runCanonicalID)
+	if getRunErr == nil {
+		storedRun, decodeErr := decodeLifecycleObject[types.RunRecord](existingRunObj)
+		if decodeErr != nil {
+			return types.LifecycleResult{}, decodeErr
+		}
+		if storedRun.OwnerID != ownerID || storedRun.SandboxID != computerID ||
+			storedRun.TrajectoryID != req.TrajectoryID || storedRun.AgentID != req.AgentID {
+			return types.LifecycleResult{}, ErrLifecycleCommandConflict
+		}
+		if storedRun.State.Terminal() && storedRun.State != run.State &&
+			!(trajectory.Status == types.TrajectoryCancelled && run.State == types.RunCancelled) {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		run.CreatedAt = storedRun.CreatedAt
+		runCondition.Exists, runCondition.ExpectedContentHash = true, existingRunObj.ContentHash
+	} else if !errors.Is(getRunErr, objectgraph.ErrNotFound) {
+		return types.LifecycleResult{}, getRunErr
+	} else if trajectory.Status != types.TrajectoryLive {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 
-	now := time.Now().UTC()
-	nextSeq := trajectory.ReducerSeq + 1
-	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = nextSeq, trajectory.LifecycleVersion+1, now
-	trajectoryUpdated, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, req.TrajectoryID, trajectory, lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, nextSeq), trajectoryObj.CreatedAt, now)
-	if err != nil {
-		return types.LifecycleResult{}, err
+	conditions := []objectgraph.ObjectCondition{
+		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
+		runCondition,
 	}
+	if errors.Is(getRunErr, objectgraph.ErrNotFound) {
+		agentObj, agentErr := s.lifecycleGetObject(ctx, ogKindAgent, ownerID, computerID, req.AgentID)
+		if agentErr == nil {
+			agent, decodeErr := decodeLifecycleObject[types.AgentRecord](agentObj)
+			if decodeErr != nil {
+				return types.LifecycleResult{}, decodeErr
+			}
+			if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != req.AgentID ||
+				strings.TrimSpace(agent.Profile) != strings.TrimSpace(run.AgentProfile) ||
+				strings.TrimSpace(agent.Role) != strings.TrimSpace(run.AgentRole) ||
+				(agent.Profile == "texture" && agent.LifecycleVersion <= 0) {
+				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+			}
+			conditions = append(conditions, objectgraph.ObjectCondition{
+				CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash,
+			})
+		} else if errors.Is(agentErr, ErrNotFound) {
+			workItemIDValue, _ := run.Metadata["lifecycle_work_item_id"].(string)
+			workItemID := strings.TrimSpace(workItemIDValue)
+			if workItemID == "" {
+				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+			}
+			workObj, work, workErr := s.lifecycleWorkObject(ctx, ownerID, computerID, workItemID)
+			if workErr != nil {
+				return types.LifecycleResult{}, workErr
+			}
+			if work.TrajectoryID != req.TrajectoryID || work.Status != types.WorkItemOpen ||
+				strings.TrimSpace(work.AssignedAgentID) != req.AgentID {
+				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+			}
+			conditions = append(conditions, objectgraph.ObjectCondition{
+				CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash,
+			})
+		} else {
+			return types.LifecycleResult{}, agentErr
+		}
+	}
+
 	runMetadata := map[string]any{
 		"run_id": run.RunID, "agent_id": run.AgentID, "channel_id": run.ChannelID,
 		"requested_by_run_id": run.RequestedByRunID, "trajectory_id": run.TrajectoryID,
@@ -1231,48 +1681,24 @@ func (s *Store) ReplaceLifecycleActivation(ctx context.Context, req types.Replac
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	runCanonicalID, err := objectgraph.BuildCanonicalID(ogKindRun, ownerID, objectgraph.StableSuffixFromKey(run.RunID))
-	if err != nil {
-		return types.LifecycleResult{}, err
-	}
 	runObj := objectgraph.Object{
 		CanonicalID: runCanonicalID, ObjectKind: ogKindRun, OwnerID: ownerID, ComputerID: computerID,
 		ContentHash: objectgraph.ContentHash(ogKindRun, runBody, runMetadataJSON), Body: runBody, Metadata: runMetadataJSON,
 		CreatedAt: run.CreatedAt.UTC(), UpdatedAt: run.UpdatedAt.UTC(),
 	}
-	event := types.LifecycleEvent{
-		EventID: req.CommandID + ":1", OwnerID: ownerID, ComputerID: computerID, TrajectoryID: req.TrajectoryID,
-		Kind: types.LifecycleActivationReplaced, ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: nextSeq,
-		CommandID: req.CommandID, CommandDigest: req.CommandDigest, ArtifactRefs: []string{"run:" + run.RunID}, CreatedAt: now,
+	if getRunErr == nil {
+		runObj.CreatedAt = existingRunObj.CreatedAt
+		if runObj.ContentHash == existingRunObj.ContentHash {
+			return types.LifecycleResult{Trajectory: trajectory, Replay: true}, nil
+		}
 	}
-	eventObj, err := lifecycleObject(ogKindLifecycleEvent, ownerID, computerID, event.EventID, event, lifecycleMetadata("event_id", event.EventID, computerID, req.TrajectoryID, nextSeq), now, now)
-	if err != nil {
+	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: []objectgraph.Object{runObj}}); err != nil {
+		if errors.Is(err, objectgraph.ErrConflict) {
+			return types.LifecycleResult{}, ErrConcurrentStateChange
+		}
 		return types.LifecycleResult{}, err
 	}
-	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID, req.CommandID, req.CommandDigest, types.LifecycleReplaceActivation, nextSeq, []objectgraph.Object{eventObj})
-	if err != nil {
-		return types.LifecycleResult{}, err
-	}
-	edgeMetadata := json.RawMessage(`{}`)
-	runAgentEdgeID, err := objectgraph.BuildEdgeID(runObj.CanonicalID, agentObj.CanonicalID, ogEdgeRunAgent, edgeMetadata)
-	if err != nil {
-		return types.LifecycleResult{}, err
-	}
-	runTrajectoryEdgeID, err := objectgraph.BuildEdgeID(runObj.CanonicalID, trajectoryUpdated.CanonicalID, ogEdgeRunTrajectory, edgeMetadata)
-	if err != nil {
-		return types.LifecycleResult{}, err
-	}
-	conditions := []objectgraph.ObjectCondition{
-		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
-		{CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash},
-		{CanonicalID: runObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
-	}
-	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions,
-		[]objectgraph.Object{trajectoryUpdated, runObj, eventObj, receiptObj},
-		types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &agent, Events: []types.LifecycleEvent{event}},
-		objectgraph.Edge{EdgeID: runAgentEdgeID, FromID: runObj.CanonicalID, ToID: agentObj.CanonicalID, Kind: ogEdgeRunAgent, Metadata: edgeMetadata, CreatedAt: now},
-		objectgraph.Edge{EdgeID: runTrajectoryEdgeID, FromID: runObj.CanonicalID, ToID: trajectoryUpdated.CanonicalID, Kind: ogEdgeRunTrajectory, Metadata: edgeMetadata, CreatedAt: now},
-	)
+	return types.LifecycleResult{Trajectory: trajectory}, nil
 }
 
 func (s *Store) AmendLifecycleWork(ctx context.Context, req types.AmendLifecycleWorkRequest) (types.LifecycleResult, error) {
@@ -1289,6 +1715,7 @@ func (s *Store) AmendLifecycleWork(ctx context.Context, req types.AmendLifecycle
 	if err := requireLifecycleDigest(req.CommandDigest, computedDigest, digestErr); err != nil {
 		return types.LifecycleResult{}, err
 	}
+
 	if req.WorkItemID == "" || req.ExpectedLifecycleVersion <= 0 {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle amend work: work_item_id and expected_lifecycle_version are required")
 	}
@@ -1460,6 +1887,30 @@ func (s *Store) RecordLifecycleRefs(ctx context.Context, req types.RecordLifecyc
 	})
 }
 
+func normalizeUpdateWorkDisposition(value types.WorkItemStatus) (types.WorkItemStatus, error) {
+	disposition := types.WorkItemStatus(strings.TrimSpace(string(value)))
+	switch disposition {
+	case "", types.WorkItemOpen, types.WorkItemCompleted, types.WorkItemRefused:
+		return disposition, nil
+	default:
+		return "", fmt.Errorf("lifecycle update work_disposition must be open, completed, or refused")
+	}
+}
+
+func validateUpdateWorkConsequence(disposition types.WorkItemStatus, workItemID, operation string) error {
+	hasWorkItem := strings.TrimSpace(workItemID) != ""
+	if disposition == types.WorkItemCompleted || disposition == types.WorkItemRefused {
+		if !hasWorkItem {
+			return fmt.Errorf("%s: terminal work disposition requires work_item_id", operation)
+		}
+		return nil
+	}
+	if hasWorkItem && disposition == "" {
+		return fmt.Errorf("%s: work_item_id requires explicit work disposition", operation)
+	}
+	return nil
+}
+
 func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecycleUpdateRequest) (types.LifecycleResult, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
 	if err != nil {
@@ -1470,6 +1921,14 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	req.TrajectoryID, req.UpdateID = strings.TrimSpace(req.TrajectoryID), strings.TrimSpace(req.UpdateID)
 	req.TargetAgentID, req.ProducerAgentID = strings.TrimSpace(req.TargetAgentID), strings.TrimSpace(req.ProducerAgentID)
 	req.ProducerUpdateID, req.PayloadDigest = strings.TrimSpace(req.ProducerUpdateID), strings.TrimSpace(req.PayloadDigest)
+	req.WorkItemID = strings.TrimSpace(req.WorkItemID)
+	req.WorkDisposition, err = normalizeUpdateWorkDisposition(req.WorkDisposition)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if err := validateUpdateWorkConsequence(req.WorkDisposition, req.WorkItemID, "lifecycle queue update"); err != nil {
+		return types.LifecycleResult{}, err
+	}
 	if err := validateLifecycleCommand(req.CommandID, req.CommandDigest, req.TrajectoryID); err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -1490,6 +1949,9 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
+	if replay, found, replayErr := s.replayLifecycleCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || replayErr != nil {
+		return replay, replayErr
+	}
 	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, ownerID, computerID, req.TrajectoryID)
 	if err != nil {
 		return types.LifecycleResult{}, err
@@ -1510,39 +1972,33 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if existing, getErr := s.lifecycleGraph().GetObject(ctx, updateCanonicalID); getErr == nil {
-		stored, decodeErr := decodeLifecycleObject[types.CoagentSourcePacket](existing)
+	if existingObj, getErr := s.lifecycleGraph().GetObject(ctx, updateCanonicalID); getErr == nil {
+		stored, decodeErr := decodeLifecycleObject[types.CoagentSourcePacket](existingObj)
 		if decodeErr != nil {
 			return types.LifecycleResult{}, decodeErr
 		}
-		if stored.PayloadDigest != req.PayloadDigest {
+		if stored.PayloadDigest != req.PayloadDigest || strings.TrimSpace(stored.WorkItemID) != req.WorkItemID ||
+			stored.WorkDisposition != req.WorkDisposition {
 			return types.LifecycleResult{}, ErrLifecycleCommandConflict
 		}
 		return types.LifecycleResult{Trajectory: trajectory, Agent: &agent, Update: &stored, Replay: true}, nil
 	} else if !errors.Is(getErr, objectgraph.ErrNotFound) {
 		return types.LifecycleResult{}, getErr
 	}
-	if replay, found, replayErr := s.replayLifecycleCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || replayErr != nil {
-		return replay, replayErr
-	}
 	now := time.Now().UTC()
 	if trajectory.Status != types.TrajectoryLive {
-		events, listErr := s.ListLifecycleEvents(ctx, ownerID, computerID, req.TrajectoryID)
-		if listErr != nil {
-			return types.LifecycleResult{}, listErr
-		}
-		nextSeq := trajectory.ReducerSeq + 1
-		if len(events) > 0 && events[len(events)-1].ReducerSeq >= nextSeq {
-			nextSeq = events[len(events)-1].ReducerSeq + 1
+		nextSeq, sequenceUpdated, sequenceCondition, sequenceErr := s.nextPostTerminalSequence(ctx, ownerID, computerID, trajectory, now)
+		if sequenceErr != nil {
+			return types.LifecycleResult{}, sequenceErr
 		}
 		update := types.CoagentSourcePacket{
 			UpdateID: req.UpdateID, ProducerUpdateID: req.ProducerUpdateID,
 			OwnerID: ownerID, ComputerID: computerID, AgentID: req.ProducerAgentID,
 			TargetAgentID: req.TargetAgentID, TrajectoryID: req.TrajectoryID,
 			ChannelID: req.ChannelID, Role: req.Role, SourceRunID: req.SourceRunID,
-			WorkItemID:    req.WorkItemID,
-			MessageSeq:    nextSeq,
-			PayloadDigest: req.PayloadDigest, Disposition: types.UpdateLate,
+			WorkItemID: req.WorkItemID, WorkDisposition: req.WorkDisposition,
+			MessageSeq: nextSeq, PayloadDigest: req.PayloadDigest,
+			Disposition: types.UpdateLate, DispositionRef: lifecycleTerminalTrajectoryRef(req.TrajectoryID),
 			DispositionReason: "trajectory is terminal", LifecycleVersion: 1, ReducerSeq: nextSeq,
 			Packet: req.Packet, Content: req.Content, CreatedAt: now,
 		}
@@ -1568,12 +2024,28 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 			return types.LifecycleResult{}, buildErr
 		}
 		conditions := []objectgraph.ObjectCondition{
+			sequenceCondition,
 			{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
 			{CanonicalID: updateObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
 		}
-		return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, []objectgraph.Object{updateObj, eventObj, receiptObj}, types.LifecycleResult{
+		return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, []objectgraph.Object{sequenceUpdated, updateObj, eventObj, receiptObj}, types.LifecycleResult{
 			Receipt: receipt, Trajectory: trajectory, Agent: &agent, Update: &update, Events: []types.LifecycleEvent{event},
 		})
+	}
+	var workCondition *objectgraph.ObjectCondition
+	if req.WorkItemID != "" {
+		workObj, work, workErr := s.lifecycleWorkObject(ctx, ownerID, computerID, req.WorkItemID)
+		if workErr != nil {
+			return types.LifecycleResult{}, workErr
+		}
+		if work.TrajectoryID != req.TrajectoryID || work.Status != types.WorkItemOpen ||
+			strings.TrimSpace(work.AssignedAgentID) != req.ProducerAgentID {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		condition := objectgraph.ObjectCondition{
+			CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash,
+		}
+		workCondition = &condition
 	}
 	nextSeq := trajectory.ReducerSeq + 1
 	update := types.CoagentSourcePacket{
@@ -1581,7 +2053,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		OwnerID: ownerID, ComputerID: computerID, AgentID: req.ProducerAgentID,
 		TargetAgentID: req.TargetAgentID, TrajectoryID: req.TrajectoryID,
 		ChannelID: req.ChannelID, Role: req.Role, SourceRunID: req.SourceRunID,
-		WorkItemID:    req.WorkItemID,
+		WorkItemID: req.WorkItemID, WorkDisposition: req.WorkDisposition,
 		PayloadDigest: req.PayloadDigest, Disposition: types.UpdatePending,
 		MessageSeq:       nextSeq,
 		LifecycleVersion: 1, ReducerSeq: nextSeq, Packet: req.Packet,
@@ -1623,10 +2095,13 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		{CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash},
 		{CanonicalID: updateObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
 	}
+	if workCondition != nil {
+		conditions = append(conditions, *workCondition)
+	}
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, []objectgraph.Object{trajectoryUpdated, agentUpdated, updateObj, eventObj, receiptObj}, types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &agent, Update: &update, Events: []types.LifecycleEvent{event}})
 }
 
-func lifecycleSourceGraphObject(kind objectgraph.ObjectKind, ownerID, identityKey string, body any, metadata map[string]any, now time.Time) (objectgraph.Object, error) {
+func unscopedGraphObject(kind objectgraph.ObjectKind, ownerID, identityKey string, body any, metadata map[string]any, now time.Time) (objectgraph.Object, error) {
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {
 		return objectgraph.Object{}, err
@@ -1650,17 +2125,74 @@ func lifecycleSourceGraphObject(kind objectgraph.ObjectKind, ownerID, identityKe
 	}, nil
 }
 
+func lifecycleSourceGraphCanonicalID(kind objectgraph.ObjectKind, ownerID, computerID, identityKey string) (string, error) {
+	return objectgraph.BuildCanonicalID(kind, ownerID, objectgraph.StableSuffixFromKey(lifecycleScopedKey(computerID, identityKey)))
+}
+
+func lifecycleSourceGraphObject(kind objectgraph.ObjectKind, ownerID, computerID, identityKey string, body any, metadata map[string]any, now time.Time) (objectgraph.Object, error) {
+	metadata["computer_id"] = computerID
+	obj, err := unscopedGraphObject(kind, ownerID, lifecycleScopedKey(computerID, identityKey), body, metadata, now)
+	if err != nil {
+		return objectgraph.Object{}, err
+	}
+	obj.ComputerID = computerID
+	return obj, nil
+}
+
+func validateLifecycleSourceEntityIdentity(rec TextureSourceEntityGraphRecord) error {
+	var metadata struct {
+		SourceKind string `json:"source_kind"`
+		Target     struct {
+			Identity string `json:"identity"`
+		} `json:"target"`
+	}
+	if err := json.Unmarshal(rec.Metadata, &metadata); err != nil {
+		return fmt.Errorf("lifecycle source entity identity metadata: %w", err)
+	}
+	ownerScope := rec.OwnerID + "\x00" + rec.ComputerID
+	expected, err := BuildTextureSourceEntityCanonicalID(rec.OwnerID, ownerScope, metadata.SourceKind, metadata.Target.Identity)
+	if err != nil {
+		return fmt.Errorf("lifecycle source entity identity: %w", err)
+	}
+	if rec.CanonicalID != expected {
+		return fmt.Errorf("lifecycle source entity canonical_id %q does not match computer-scoped identity %q", rec.CanonicalID, expected)
+	}
+	return nil
+}
+
+func validateLifecycleSourceRefIdentity(rec TextureSourceRefGraphRecord) error {
+	var metadata struct {
+		IdentityKey string `json:"identity_key"`
+	}
+	if err := json.Unmarshal(rec.Metadata, &metadata); err != nil {
+		return fmt.Errorf("lifecycle source ref identity metadata: %w", err)
+	}
+	expected, err := BuildTextureSourceRefCanonicalIDByScope(rec.OwnerID, rec.ComputerID, rec.TextureRevisionID, metadata.IdentityKey)
+	if err != nil {
+		return fmt.Errorf("lifecycle source ref identity: %w", err)
+	}
+	if rec.CanonicalID != expected {
+		return fmt.Errorf("lifecycle source ref canonical_id %q does not match computer-scoped identity %q", rec.CanonicalID, expected)
+	}
+	return nil
+}
+
 func (s *Store) lifecycleSourceGraphBatch(ctx context.Context, rev types.Revision, graph TextureSourceGraphWriteSet, now time.Time) ([]objectgraph.Object, []objectgraph.ObjectCondition, error) {
 	objects := make([]objectgraph.Object, 0, len(graph.SourceEntities)+len(graph.SourceRefs))
 	conditions := make([]objectgraph.ObjectCondition, 0, len(graph.SourceEntities)+len(graph.SourceRefs)*2)
 	entityIDs := make(map[string]objectgraph.Object, len(graph.SourceEntities))
 	for _, input := range graph.SourceEntities {
-		rec, err := normalizeTextureSourceEntityGraphRecord(input, rev.OwnerID, now)
+		rec, err := normalizeTextureSourceEntityGraphRecord(input, rev.OwnerID, rev.ComputerID, now)
 		if err != nil {
 			return nil, nil, err
 		}
+		if rec.ComputerID != "" {
+			if err := validateLifecycleSourceEntityIdentity(rec); err != nil {
+				return nil, nil, err
+			}
+		}
 		identityKey := rec.CanonicalID + "\x00" + rec.VersionID
-		obj, err := lifecycleSourceGraphObject(TextureSourceEntityObjectKind, rec.OwnerID, identityKey, rec, map[string]any{
+		obj, err := lifecycleSourceGraphObject(TextureSourceEntityObjectKind, rec.OwnerID, rec.ComputerID, identityKey, rec, map[string]any{
 			"canonical_id": rec.CanonicalID, "version_id": rec.VersionID,
 			"entity_version_key": entityVersionKey(rec.CanonicalID, rec.VersionID),
 			"created_at":         rec.CreatedAt.UTC().Format(time.RFC3339Nano),
@@ -1687,9 +2219,14 @@ func (s *Store) lifecycleSourceGraphBatch(ctx context.Context, rev types.Revisio
 		if err != nil {
 			return nil, nil, err
 		}
+		if rec.ComputerID != "" {
+			if err := validateLifecycleSourceRefIdentity(rec); err != nil {
+				return nil, nil, err
+			}
+		}
 		entityKey := entityVersionKey(rec.SourceEntityCanonicalID, rec.SourceEntityVersionID)
 		if _, ok := entityIDs[entityKey]; !ok {
-			entityCanonicalID, buildErr := objectgraph.BuildCanonicalID(TextureSourceEntityObjectKind, rec.OwnerID, objectgraph.StableSuffixFromKey(rec.SourceEntityCanonicalID+"\x00"+rec.SourceEntityVersionID))
+			entityCanonicalID, buildErr := lifecycleSourceGraphCanonicalID(TextureSourceEntityObjectKind, rec.OwnerID, rec.ComputerID, rec.SourceEntityCanonicalID+"\x00"+rec.SourceEntityVersionID)
 			if buildErr != nil {
 				return nil, nil, buildErr
 			}
@@ -1700,7 +2237,7 @@ func (s *Store) lifecycleSourceGraphBatch(ctx context.Context, rev types.Revisio
 			conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: entityObj.CanonicalID, Exists: true, ExpectedContentHash: entityObj.ContentHash})
 		}
 		identityKey := rec.CanonicalID + "\x00" + rec.VersionID
-		obj, err := lifecycleSourceGraphObject(TextureSourceRefObjectKind, rec.OwnerID, identityKey, rec, map[string]any{
+		obj, err := lifecycleSourceGraphObject(TextureSourceRefObjectKind, rec.OwnerID, rec.ComputerID, identityKey, rec, map[string]any{
 			"canonical_id": rec.CanonicalID, "version_id": rec.VersionID, "ref_version_key": identityKey,
 			"doc_id": rec.DocID, "texture_revision_id": rec.TextureRevisionID,
 			"created_at": rec.CreatedAt.UTC().Format(time.RFC3339Nano),
@@ -1744,8 +2281,11 @@ func (s *Store) CommitLifecycleArtifactHead(ctx context.Context, req types.Commi
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if trajectory.Status != types.TrajectoryLive || trajectory.LifecycleVersion != req.ExpectedLifecycleVersion {
+	if trajectory.LifecycleVersion != req.ExpectedLifecycleVersion {
 		return types.LifecycleResult{}, ErrConcurrentStateChange
+	}
+	if (trajectory.Status == types.TrajectoryLive) == req.Unbound {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
 	if docID == "" {
@@ -1772,7 +2312,12 @@ func (s *Store) CommitLifecycleArtifactHead(ctx context.Context, req types.Commi
 	}
 	now := time.Now().UTC()
 	revision := req.Revision
-	revision.OwnerID, revision.ComputerID, revision.TrajectoryID = ownerID, computerID, req.TrajectoryID
+	revision.OwnerID, revision.ComputerID = ownerID, computerID
+	if req.Unbound {
+		revision.TrajectoryID = ""
+	} else {
+		revision.TrajectoryID = req.TrajectoryID
+	}
 	revision.DocID, revision.ParentRevisionID = docID, req.ExpectedHeadRevisionID
 	revision.CreatedAt = now
 	revision, _, _, err = prepareTextureRevisionV2(revision)
@@ -1785,6 +2330,9 @@ func (s *Store) CommitLifecycleArtifactHead(ctx context.Context, req types.Commi
 	}
 	if err != nil {
 		return types.LifecycleResult{}, err
+	}
+	if req.Unbound {
+		return s.commitUnboundTextureArtifactHead(ctx, req, trajectoryObj, trajectory, documentObj, document, headObj, revision, now)
 	}
 	nextSeq := trajectory.ReducerSeq + 1
 	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = nextSeq, trajectory.LifecycleVersion+1, now
@@ -1842,6 +2390,82 @@ func (s *Store) CommitLifecycleArtifactHead(ctx context.Context, req types.Commi
 	)
 }
 
+func (s *Store) commitUnboundTextureArtifactHead(
+	ctx context.Context,
+	req types.CommitLifecycleArtifactHeadRequest,
+	trajectoryObj objectgraph.Object,
+	trajectory types.TrajectoryRecord,
+	documentObj objectgraph.Object,
+	document types.Document,
+	headObj objectgraph.Object,
+	revision types.Revision,
+	now time.Time,
+) (types.LifecycleResult, error) {
+	ownerID, computerID := req.OwnerID, req.ComputerID
+	nextSeq, sequenceUpdated, sequenceCondition, sequenceErr := s.nextPostTerminalSequence(ctx, ownerID, computerID, trajectory, now)
+	if sequenceErr != nil {
+		return types.LifecycleResult{}, sequenceErr
+	}
+	revisionMeta := lifecycleMetadata("revision_id", revision.RevisionID, computerID, "", nextSeq)
+	revisionMeta["doc_id"], revisionMeta["revision_hash"] = document.DocID, revision.RevisionHash
+	revisionObj, err := lifecycleObject(ogKindTexRev, ownerID, computerID, revision.RevisionID, revision, revisionMeta, now, now)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	documentMeta := lifecycleMetadata("doc_id", document.DocID, computerID, req.TrajectoryID, nextSeq)
+	documentMeta["current_revision_id"] = revision.RevisionID
+	documentUpdated, err := lifecycleObject(ogKindTexDoc, ownerID, computerID, document.DocID, document, documentMeta, documentObj.CreatedAt, now)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	event := types.LifecycleEvent{
+		EventID: req.CommandID + ":" + fmt.Sprintf("%d", nextSeq), OwnerID: ownerID, ComputerID: computerID,
+		TrajectoryID: req.TrajectoryID, Kind: types.LifecycleArtifactHeadAdvanced,
+		ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: nextSeq,
+		CommandID: req.CommandID, CommandDigest: req.CommandDigest,
+		ArtifactRefs: []string{document.DocID, revision.RevisionID}, CreatedAt: now,
+	}
+	eventObj, err := lifecycleObject(ogKindLifecycleEvent, ownerID, computerID, event.EventID, event, lifecycleMetadata("event_id", event.EventID, computerID, req.TrajectoryID, nextSeq), now, now)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	receipt, receiptObj, err := s.lifecycleTransitionReceipt(
+		now, ownerID, computerID, req.TrajectoryID, req.CommandID, req.CommandDigest,
+		types.LifecycleCommitArtifactHead, nextSeq, []objectgraph.Object{eventObj},
+	)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	edgeMetadata := json.RawMessage(`{}`)
+	documentEdgeID, err := objectgraph.BuildEdgeID(revisionObj.CanonicalID, documentUpdated.CanonicalID, ogEdgeDocRevision, edgeMetadata)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	parentEdgeID, err := objectgraph.BuildEdgeID(revisionObj.CanonicalID, headObj.CanonicalID, ogEdgeRevParent, edgeMetadata)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	conditions := []objectgraph.ObjectCondition{
+		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
+		{CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash},
+		{CanonicalID: headObj.CanonicalID, Exists: true, ExpectedContentHash: headObj.ContentHash},
+		{CanonicalID: revisionObj.CanonicalID},
+		{CanonicalID: eventObj.CanonicalID},
+		{CanonicalID: receiptObj.CanonicalID},
+		sequenceCondition,
+	}
+	result := types.LifecycleResult{
+		Receipt: receipt, Trajectory: trajectory, Document: &document, Revision: &revision,
+		Events: []types.LifecycleEvent{event},
+	}
+	return s.commitLifecycleTransition(
+		ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions,
+		[]objectgraph.Object{documentUpdated, revisionObj, eventObj, receiptObj, sequenceUpdated}, result,
+		objectgraph.Edge{EdgeID: documentEdgeID, FromID: revisionObj.CanonicalID, ToID: documentUpdated.CanonicalID, Kind: ogEdgeDocRevision, Metadata: edgeMetadata, CreatedAt: now},
+		objectgraph.Edge{EdgeID: parentEdgeID, FromID: revisionObj.CanonicalID, ToID: headObj.CanonicalID, Kind: ogEdgeRevParent, Metadata: edgeMetadata, CreatedAt: now},
+	)
+}
+
 func (s *Store) ApplyLifecycleUpdate(ctx context.Context, req types.ApplyLifecycleUpdateRequest) (types.LifecycleResult, error) {
 	return s.applyLifecycleUpdate(ctx, req, TextureSourceGraphWriteSet{}, false)
 }
@@ -1860,6 +2484,65 @@ func (s *Store) applyLifecycleUpdate(ctx context.Context, req types.ApplyLifecyc
 	req.TrajectoryID, req.UpdateID = strings.TrimSpace(req.TrajectoryID), strings.TrimSpace(req.UpdateID)
 	req.TargetAgentID, req.ProducerAgentID = strings.TrimSpace(req.TargetAgentID), strings.TrimSpace(req.ProducerAgentID)
 	req.ProducerUpdateID, req.PayloadDigest = strings.TrimSpace(req.ProducerUpdateID), strings.TrimSpace(req.PayloadDigest)
+	req.WorkItemID = strings.TrimSpace(req.WorkItemID)
+	req.WorkDisposition, err = normalizeUpdateWorkDisposition(req.WorkDisposition)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if err := validateUpdateWorkConsequence(req.WorkDisposition, req.WorkItemID, "lifecycle apply update"); err != nil {
+		return types.LifecycleResult{}, err
+	}
+	req.RelatedUpdates = append([]types.ApplyLifecycleRelatedUpdate(nil), req.RelatedUpdates...)
+	seenRelatedUpdates := map[string]struct{}{}
+	seenWorkItems := map[string]struct{}{}
+	if req.WorkItemID != "" && req.WorkDisposition != types.WorkItemOpen {
+		seenWorkItems[req.WorkItemID] = struct{}{}
+	}
+	for i := range req.RelatedUpdates {
+		related := &req.RelatedUpdates[i]
+		related.TargetAgentID = strings.TrimSpace(related.TargetAgentID)
+		related.ProducerAgentID = strings.TrimSpace(related.ProducerAgentID)
+		related.ProducerUpdateID = strings.TrimSpace(related.ProducerUpdateID)
+		related.UpdateID = strings.TrimSpace(related.UpdateID)
+		related.DispositionRef = strings.TrimSpace(related.DispositionRef)
+		related.WorkItemID = strings.TrimSpace(related.WorkItemID)
+		related.WorkResultRef = strings.TrimSpace(related.WorkResultRef)
+		related.Reason = strings.TrimSpace(related.Reason)
+		related.WorkDisposition, err = normalizeUpdateWorkDisposition(related.WorkDisposition)
+		if err != nil {
+			return types.LifecycleResult{}, err
+		}
+		if err := validateUpdateWorkConsequence(related.WorkDisposition, related.WorkItemID, "lifecycle apply related update"); err != nil {
+			return types.LifecycleResult{}, err
+		}
+		if related.TargetAgentID == "" || related.ProducerAgentID == "" || related.ProducerUpdateID == "" || related.UpdateID == "" {
+			return types.LifecycleResult{}, fmt.Errorf("lifecycle apply related update: target_agent_id, producer_agent_id, producer_update_id, and update_id are required")
+		}
+		if related.TargetAgentID != req.TargetAgentID ||
+			(related.Disposition != types.UpdateIncorporated && related.Disposition != types.UpdateRejected) {
+			return types.LifecycleResult{}, fmt.Errorf("lifecycle apply related update must explicitly incorporate or reject an update for the primary target")
+		}
+		if related.Disposition == types.UpdateRejected && related.Reason == "" {
+			return types.LifecycleResult{}, fmt.Errorf("lifecycle apply related rejected update requires reason")
+		}
+		relatedKey := related.TargetAgentID + "\x00" + related.ProducerAgentID + "\x00" + related.ProducerUpdateID
+		if _, duplicate := seenRelatedUpdates[relatedKey]; duplicate ||
+			(related.TargetAgentID == req.TargetAgentID && related.ProducerAgentID == req.ProducerAgentID && related.ProducerUpdateID == req.ProducerUpdateID) {
+			return types.LifecycleResult{}, fmt.Errorf("lifecycle apply related update is duplicated")
+		}
+		seenRelatedUpdates[relatedKey] = struct{}{}
+		if related.WorkItemID != "" && related.WorkDisposition != types.WorkItemOpen {
+			if _, duplicate := seenWorkItems[related.WorkItemID]; duplicate {
+				return types.LifecycleResult{}, fmt.Errorf("lifecycle apply related updates reuse terminal work_item_id %q", related.WorkItemID)
+			}
+			seenWorkItems[related.WorkItemID] = struct{}{}
+		}
+	}
+	sort.Slice(req.RelatedUpdates, func(i, j int) bool {
+		left := req.RelatedUpdates[i].TargetAgentID + "\x00" + req.RelatedUpdates[i].ProducerAgentID + "\x00" + req.RelatedUpdates[i].ProducerUpdateID
+		right := req.RelatedUpdates[j].TargetAgentID + "\x00" + req.RelatedUpdates[j].ProducerAgentID + "\x00" + req.RelatedUpdates[j].ProducerUpdateID
+		return left < right
+	})
 	if err := validateLifecycleCommand(req.CommandID, req.CommandDigest, req.TrajectoryID); err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -1900,6 +2583,9 @@ func (s *Store) applyLifecycleUpdate(ctx context.Context, req types.ApplyLifecyc
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
+	if trajectory.Status != types.TrajectoryLive {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
 	agentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, ownerID, computerID, req.TargetAgentID)
 	if err != nil {
 		return types.LifecycleResult{}, err
@@ -1930,6 +2616,14 @@ func (s *Store) applyLifecycleUpdate(ctx context.Context, req types.ApplyLifecyc
 		update.TargetAgentID != req.TargetAgentID {
 		return types.LifecycleResult{}, ErrLifecycleCommandConflict
 	}
+	expectedWorkDisposition := update.WorkDisposition
+	if requestedDisposition == types.UpdateRejected && expectedWorkDisposition != types.WorkItemOpen {
+		expectedWorkDisposition = types.WorkItemRefused
+	}
+	if strings.TrimSpace(update.WorkItemID) != req.WorkItemID ||
+		expectedWorkDisposition != req.WorkDisposition {
+		return types.LifecycleResult{}, ErrLifecycleCommandConflict
+	}
 	if update.Disposition != "" && update.Disposition != types.UpdatePending {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
@@ -1937,15 +2631,10 @@ func (s *Store) applyLifecycleUpdate(ctx context.Context, req types.ApplyLifecyc
 
 	now := time.Now().UTC()
 	nextSeq := trajectory.ReducerSeq + 1
-	late := trajectory.Status != types.TrajectoryLive
 	update.Disposition = requestedDisposition
 	eventKind := types.LifecycleUpdateApplied
 	if requestedDisposition == types.UpdateRejected {
 		eventKind = types.LifecycleUpdateRejected
-	}
-	if late {
-		update.Disposition = types.UpdateLate
-		eventKind = types.LifecycleUpdateLate
 	}
 	update.DispositionRef = strings.TrimSpace(req.DispositionRef)
 	update.DispositionReason = strings.TrimSpace(req.Reason)
@@ -1958,7 +2647,7 @@ func (s *Store) applyLifecycleUpdate(ctx context.Context, req types.ApplyLifecyc
 	var resultDocument *types.Document
 	var resultRevision *types.Revision
 	artifactRefs := []string{}
-	if !late && requestedDisposition == types.UpdateIncorporated && req.ReferenceExistingArtifact {
+	if requestedDisposition == types.UpdateIncorporated && req.ReferenceExistingArtifact {
 		docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
 		documentObj, getErr := s.lifecycleGetObject(ctx, ogKindTexDoc, ownerID, computerID, docID)
 		if getErr != nil {
@@ -1988,7 +2677,7 @@ func (s *Store) applyLifecycleUpdate(ctx context.Context, req types.ApplyLifecyc
 		)
 		artifactRefs = []string{docID, document.CurrentRevisionID}
 		resultDocument, resultRevision = &document, &head
-	} else if !late && requestedDisposition == types.UpdateIncorporated {
+	} else if requestedDisposition == types.UpdateIncorporated {
 		docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
 		if docID == "" || strings.TrimSpace(req.Revision.RevisionID) == "" {
 			return types.LifecycleResult{}, fmt.Errorf("lifecycle incorporate update: doc_id subject and revision_id are required")
@@ -2071,7 +2760,7 @@ func (s *Store) applyLifecycleUpdate(ctx context.Context, req types.ApplyLifecyc
 		}
 		artifactRefs = []string{docID, revision.RevisionID}
 		resultDocument, resultRevision = &document, &revision
-	} else if !late && requestedDisposition == types.UpdateRejected && update.DispositionRef == "" {
+	} else if requestedDisposition == types.UpdateRejected && update.DispositionRef == "" {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle reject update: disposition_ref is required")
 	}
 	if trajectory.SubjectRefs == nil {
@@ -2092,13 +2781,24 @@ func (s *Store) applyLifecycleUpdate(ctx context.Context, req types.ApplyLifecyc
 	events := []types.LifecycleEvent{event}
 	mutationSeq := nextSeq
 	var resultWork *types.WorkItemRecord
-	if !late && strings.TrimSpace(req.WorkItemID) != "" {
+	if req.WorkItemID != "" && req.WorkDisposition != types.WorkItemOpen {
+		if requestedDisposition == types.UpdateIncorporated && req.WorkDisposition != types.WorkItemCompleted {
+			return types.LifecycleResult{}, fmt.Errorf("lifecycle incorporate update work consequence requires completed work_disposition")
+		}
+		if requestedDisposition == types.UpdateRejected && req.WorkDisposition != types.WorkItemRefused {
+			return types.LifecycleResult{}, fmt.Errorf("lifecycle reject update work consequence requires refused work_disposition")
+		}
+	}
+	if strings.TrimSpace(req.WorkItemID) != "" && req.WorkDisposition != types.WorkItemOpen {
 		workObj, work, getErr := s.lifecycleWorkObject(ctx, ownerID, computerID, strings.TrimSpace(req.WorkItemID))
 		if getErr != nil {
 			return types.LifecycleResult{}, getErr
 		}
 		if work.TrajectoryID != req.TrajectoryID || workItemTerminal(work.Status) {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		if strings.TrimSpace(work.AssignedAgentID) != req.ProducerAgentID {
+			return types.LifecycleResult{}, fmt.Errorf("lifecycle update work consequence producer %q does not own assigned work %q: %w", req.ProducerAgentID, work.WorkItemID, ErrLifecycleInvalidTransition)
 		}
 		mutationSeq++
 		workEventKind := types.LifecycleWorkSettled
@@ -2131,13 +2831,140 @@ func (s *Store) applyLifecycleUpdate(ctx context.Context, req types.ApplyLifecyc
 		})
 		resultWork = &work
 	}
+	for _, related := range req.RelatedUpdates {
+		relatedKey := req.TrajectoryID + "\x00" + related.TargetAgentID + "\x00" + related.ProducerAgentID + "\x00" + related.ProducerUpdateID
+		relatedCanonicalID, getErr := lifecycleCanonicalID(ogKindWorkerUpdate, ownerID, computerID, relatedKey)
+		if getErr != nil {
+			return types.LifecycleResult{}, getErr
+		}
+		relatedObj, getErr := s.lifecycleGraph().GetObject(ctx, relatedCanonicalID)
+		if errors.Is(getErr, objectgraph.ErrNotFound) {
+			return types.LifecycleResult{}, ErrNotFound
+		}
+		if getErr != nil {
+			return types.LifecycleResult{}, getErr
+		}
+		relatedUpdate, decodeErr := decodeLifecycleObject[types.CoagentSourcePacket](relatedObj)
+		if decodeErr != nil {
+			return types.LifecycleResult{}, decodeErr
+		}
+		if relatedUpdate.UpdateID != related.UpdateID ||
+			relatedUpdate.ProducerUpdateID != related.ProducerUpdateID ||
+			relatedUpdate.AgentID != related.ProducerAgentID ||
+			relatedUpdate.TargetAgentID != related.TargetAgentID ||
+			strings.TrimSpace(relatedUpdate.WorkItemID) != related.WorkItemID {
+			return types.LifecycleResult{}, ErrLifecycleCommandConflict
+		}
+		expectedWorkDisposition := relatedUpdate.WorkDisposition
+		if related.Disposition == types.UpdateRejected && expectedWorkDisposition != types.WorkItemOpen {
+			expectedWorkDisposition = types.WorkItemRefused
+		}
+		if related.WorkDisposition != expectedWorkDisposition {
+			return types.LifecycleResult{}, ErrLifecycleCommandConflict
+		}
+		if relatedUpdate.Disposition != "" && relatedUpdate.Disposition != types.UpdatePending {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		dispositionRef := related.DispositionRef
+		if dispositionRef == "" {
+			dispositionRef = strings.TrimSpace(req.DispositionRef)
+		}
+		if dispositionRef == "" || dispositionRef != strings.TrimSpace(req.DispositionRef) {
+			return types.LifecycleResult{}, ErrLifecycleCommandConflict
+		}
+		mutationSeq++
+		relatedUpdate.Disposition = related.Disposition
+		relatedUpdate.DispositionRef = dispositionRef
+		relatedUpdate.DispositionReason = related.Reason
+		relatedUpdate.LifecycleVersion++
+		relatedUpdate.ReducerSeq = mutationSeq
+		relatedMeta := lifecycleMetadata("update_id", related.UpdateID, computerID, req.TrajectoryID, mutationSeq)
+		relatedMeta["producer_update_id"] = related.ProducerUpdateID
+		relatedMeta["target_agent_id"] = related.TargetAgentID
+		relatedUpdated, buildErr := lifecycleObject(ogKindWorkerUpdate, ownerID, computerID, relatedKey, relatedUpdate, relatedMeta, relatedObj.CreatedAt, now)
+		if buildErr != nil {
+			return types.LifecycleResult{}, buildErr
+		}
+		artifactConditions = append(artifactConditions, objectgraph.ObjectCondition{
+			CanonicalID: relatedObj.CanonicalID, Exists: true, ExpectedContentHash: relatedObj.ContentHash,
+		})
+		artifactObjects = append(artifactObjects, relatedUpdated)
+		updateEventKind := types.LifecycleUpdateApplied
+		if related.Disposition == types.UpdateRejected {
+			updateEventKind = types.LifecycleUpdateRejected
+		}
+		events = append(events, types.LifecycleEvent{
+			EventID: req.CommandID + ":" + fmt.Sprintf("%d", len(events)+1),
+			OwnerID: ownerID, ComputerID: computerID, TrajectoryID: req.TrajectoryID,
+			UpdateID: related.UpdateID, WorkItemID: related.WorkItemID, Kind: updateEventKind,
+			ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: mutationSeq,
+			CommandID: req.CommandID, CommandDigest: req.CommandDigest,
+			ArtifactRefs: artifactRefs, Reason: related.Reason, CreatedAt: now,
+		})
+		if related.WorkItemID == "" {
+			continue
+		}
+		relatedWorkObj, relatedWork, workErr := s.lifecycleWorkObject(ctx, ownerID, computerID, related.WorkItemID)
+		if workErr != nil {
+			return types.LifecycleResult{}, workErr
+		}
+		if relatedWork.TrajectoryID != req.TrajectoryID || workItemTerminal(relatedWork.Status) {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		if strings.TrimSpace(relatedWork.AssignedAgentID) != related.ProducerAgentID {
+			return types.LifecycleResult{}, fmt.Errorf("lifecycle related update producer %q does not own assigned work %q: %w", related.ProducerAgentID, relatedWork.WorkItemID, ErrLifecycleInvalidTransition)
+		}
+		if related.WorkDisposition == types.WorkItemOpen {
+			if related.WorkItemID != req.WorkItemID || req.WorkDisposition == types.WorkItemOpen {
+				artifactConditions = append(artifactConditions, objectgraph.ObjectCondition{
+					CanonicalID: relatedWorkObj.CanonicalID, Exists: true, ExpectedContentHash: relatedWorkObj.ContentHash,
+				})
+			}
+			continue
+		}
+		artifactConditions = append(artifactConditions, objectgraph.ObjectCondition{
+			CanonicalID: relatedWorkObj.CanonicalID, Exists: true, ExpectedContentHash: relatedWorkObj.ContentHash,
+		})
+		mutationSeq++
+		workEventKind := types.LifecycleWorkSettled
+		workEventRefs := []string{}
+		if related.Disposition == types.UpdateRejected {
+			if related.WorkDisposition != types.WorkItemRefused {
+				return types.LifecycleResult{}, fmt.Errorf("lifecycle reject related update work consequence requires refused disposition")
+			}
+			relatedWork.Status, relatedWork.Reason, relatedWork.ResultRef = types.WorkItemRefused, related.Reason, dispositionRef
+			workEventKind = types.LifecycleWorkRefused
+			workEventRefs = append(workEventRefs, relatedWork.ResultRef)
+		} else {
+			if related.WorkDisposition != types.WorkItemCompleted || related.WorkResultRef == "" {
+				return types.LifecycleResult{}, fmt.Errorf("lifecycle incorporate related update terminal work consequence requires completed disposition and work_result_ref")
+			}
+			relatedWork.Status, relatedWork.ResultRef = types.WorkItemCompleted, related.WorkResultRef
+			workEventRefs = append(workEventRefs, relatedWork.ResultRef)
+		}
+		relatedWork.LifecycleVersion++
+		relatedWork.LastReducerSeq, relatedWork.UpdatedAt = mutationSeq, now
+		relatedWorkUpdated, buildErr := lifecycleObject(ogKindWorkItem, ownerID, computerID, relatedWork.WorkItemID, relatedWork, lifecycleMetadata("work_item_id", relatedWork.WorkItemID, computerID, req.TrajectoryID, mutationSeq), relatedWorkObj.CreatedAt, now)
+		if buildErr != nil {
+			return types.LifecycleResult{}, buildErr
+		}
+		artifactObjects = append(artifactObjects, relatedWorkUpdated)
+		events = append(events, types.LifecycleEvent{
+			EventID: req.CommandID + ":" + fmt.Sprintf("%d", len(events)+1),
+			OwnerID: ownerID, ComputerID: computerID, TrajectoryID: req.TrajectoryID,
+			WorkItemID: relatedWork.WorkItemID, UpdateID: related.UpdateID, Kind: workEventKind,
+			ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: mutationSeq,
+			CommandID: req.CommandID, CommandDigest: req.CommandDigest,
+			ArtifactRefs: workEventRefs, Reason: relatedWork.Reason, CreatedAt: now,
+		})
+	}
 	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = mutationSeq, trajectory.LifecycleVersion+1, now
 	agent.LastReducerSeq, agent.LifecycleVersion, agent.UpdatedAt = mutationSeq, agent.LifecycleVersion+1, now
 	trajectoryUpdated, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, req.TrajectoryID, trajectory, lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, trajectory.ReducerSeq), trajectoryObj.CreatedAt, now)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	agentUpdated, err := lifecycleObject(ogKindAgent, ownerID, computerID, agent.AgentID, agent, lifecycleMetadata("agent_id", agent.AgentID, computerID, req.TrajectoryID, nextSeq), agentObj.CreatedAt, now)
+	agentUpdated, err := lifecycleObject(ogKindAgent, ownerID, computerID, agent.AgentID, agent, lifecycleMetadata("agent_id", agent.AgentID, computerID, req.TrajectoryID, mutationSeq), agentObj.CreatedAt, now)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -2177,7 +3004,7 @@ func (s *Store) applyLifecycleUpdate(ctx context.Context, req types.ApplyLifecyc
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, WorkItem: resultWork, Agent: &agent, Document: resultDocument, Revision: resultRevision, Events: events}, artifactEdges...)
 }
 
-func (s *Store) settleOrRefuseLifecycleWork(ctx context.Context, ownerID, computerID, commandID, digest, trajectoryID, workItemID, resultRef, reason string, refusal bool) (types.LifecycleResult, error) {
+func (s *Store) settleOrRefuseLifecycleWork(ctx context.Context, ownerID, computerID, commandID, digest, trajectoryID, workItemID, actingAgentID, resultRef, reason string, refusal bool) (types.LifecycleResult, error) {
 	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {
 		return types.LifecycleResult{}, err
@@ -2191,6 +3018,9 @@ func (s *Store) settleOrRefuseLifecycleWork(ctx context.Context, ownerID, comput
 	}
 	if work.TrajectoryID != trajectoryID || workItemTerminal(work.Status) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	if strings.TrimSpace(actingAgentID) == "" || strings.TrimSpace(work.AssignedAgentID) != strings.TrimSpace(actingAgentID) {
+		return types.LifecycleResult{}, fmt.Errorf("lifecycle resolve work actor %q does not own assigned work %q: %w", actingAgentID, work.WorkItemID, ErrLifecycleInvalidTransition)
 	}
 	now := time.Now().UTC()
 	nextSeq := trajectory.ReducerSeq + 1
@@ -2258,9 +3088,12 @@ func (s *Store) SettleLifecycleWork(ctx context.Context, req types.SettleLifecyc
 	req.OwnerID, req.ComputerID = ownerID, computerID
 	req.CommandID, req.CommandDigest = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest)
 	req.TrajectoryID, req.WorkItemID = strings.TrimSpace(req.TrajectoryID), strings.TrimSpace(req.WorkItemID)
-	req.ResultRef = strings.TrimSpace(req.ResultRef)
+	req.ActingAgentID, req.ResultRef = strings.TrimSpace(req.ActingAgentID), strings.TrimSpace(req.ResultRef)
 	if err := validateLifecycleCommand(req.CommandID, req.CommandDigest, req.TrajectoryID); err != nil {
 		return types.LifecycleResult{}, err
+	}
+	if req.ActingAgentID == "" {
+		return types.LifecycleResult{}, fmt.Errorf("lifecycle settle work: acting_agent_id is required")
 	}
 	computedDigest, digestErr := ComputeSettleLifecycleWorkDigest(req)
 	if err := requireLifecycleDigest(req.CommandDigest, computedDigest, digestErr); err != nil {
@@ -2271,7 +3104,7 @@ func (s *Store) SettleLifecycleWork(ctx context.Context, req types.SettleLifecyc
 	if replay, found, replayErr := s.replayLifecycleCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || replayErr != nil {
 		return replay, replayErr
 	}
-	return s.settleOrRefuseLifecycleWork(ctx, ownerID, computerID, strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest), strings.TrimSpace(req.TrajectoryID), strings.TrimSpace(req.WorkItemID), req.ResultRef, "", false)
+	return s.settleOrRefuseLifecycleWork(ctx, ownerID, computerID, strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest), strings.TrimSpace(req.TrajectoryID), strings.TrimSpace(req.WorkItemID), req.ActingAgentID, req.ResultRef, "", false)
 }
 
 func (s *Store) RefuseLifecycleWork(ctx context.Context, req types.RefuseLifecycleWorkRequest) (types.LifecycleResult, error) {
@@ -2281,7 +3114,8 @@ func (s *Store) RefuseLifecycleWork(ctx context.Context, req types.RefuseLifecyc
 	}
 	req.OwnerID, req.ComputerID = ownerID, computerID
 	req.CommandID, req.CommandDigest = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest)
-	req.TrajectoryID, req.WorkItemID, req.Reason, req.RefusalRef = strings.TrimSpace(req.TrajectoryID), strings.TrimSpace(req.WorkItemID), strings.TrimSpace(req.Reason), strings.TrimSpace(req.RefusalRef)
+	req.TrajectoryID, req.WorkItemID, req.ActingAgentID = strings.TrimSpace(req.TrajectoryID), strings.TrimSpace(req.WorkItemID), strings.TrimSpace(req.ActingAgentID)
+	req.Reason, req.RefusalRef = strings.TrimSpace(req.Reason), strings.TrimSpace(req.RefusalRef)
 	if err := validateLifecycleCommand(req.CommandID, req.CommandDigest, req.TrajectoryID); err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -2289,15 +3123,15 @@ func (s *Store) RefuseLifecycleWork(ctx context.Context, req types.RefuseLifecyc
 	if err := requireLifecycleDigest(req.CommandDigest, computedDigest, digestErr); err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if req.Reason == "" || req.RefusalRef == "" {
-		return types.LifecycleResult{}, fmt.Errorf("lifecycle refuse work: reason and refusal_ref are required")
+	if req.ActingAgentID == "" || req.Reason == "" || req.RefusalRef == "" {
+		return types.LifecycleResult{}, fmt.Errorf("lifecycle refuse work: acting_agent_id, reason, and refusal_ref are required")
 	}
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
 	if replay, found, replayErr := s.replayLifecycleCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || replayErr != nil {
 		return replay, replayErr
 	}
-	return s.settleOrRefuseLifecycleWork(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, req.TrajectoryID, req.WorkItemID, req.RefusalRef, req.Reason, true)
+	return s.settleOrRefuseLifecycleWork(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, req.TrajectoryID, req.WorkItemID, req.ActingAgentID, req.RefusalRef, req.Reason, true)
 }
 
 // CancelLifecycleTrajectory atomically cancels the trajectory, every open work
@@ -2477,17 +3311,15 @@ func (s *Store) ArchiveLifecycleArtifact(ctx context.Context, req types.ArchiveL
 	}
 
 	now := time.Now().UTC()
-	nextSeq := trajectory.ReducerSeq + 1
+	nextSeq, sequenceUpdated, sequenceCondition, sequenceErr := s.nextPostTerminalSequence(ctx, ownerID, computerID, trajectory, now)
+	if sequenceErr != nil {
+		return types.LifecycleResult{}, sequenceErr
+	}
 	document.ArchivedAt, document.UpdatedAt = &now, now
-	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = nextSeq, trajectory.LifecycleVersion+1, now
 	documentMeta := lifecycleMetadata("doc_id", docID, computerID, req.TrajectoryID, nextSeq)
 	documentMeta["current_revision_id"] = document.CurrentRevisionID
 	documentMeta["archived_at"] = now.Format(time.RFC3339Nano)
 	documentUpdated, err := lifecycleObject(ogKindTexDoc, ownerID, computerID, docID, document, documentMeta, documentObj.CreatedAt, now)
-	if err != nil {
-		return types.LifecycleResult{}, err
-	}
-	trajectoryUpdated, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, req.TrajectoryID, trajectory, lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, nextSeq), trajectoryObj.CreatedAt, now)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -2507,13 +3339,14 @@ func (s *Store) ArchiveLifecycleArtifact(ctx context.Context, req types.ArchiveL
 		return types.LifecycleResult{}, err
 	}
 	conditions := []objectgraph.ObjectCondition{
+		sequenceCondition,
 		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
 		{CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash},
 		{CanonicalID: headObj.CanonicalID, Exists: true, ExpectedContentHash: headObj.ContentHash},
 		{CanonicalID: eventObj.CanonicalID},
 		{CanonicalID: receiptObj.CanonicalID},
 	}
-	objects := []objectgraph.Object{trajectoryUpdated, documentUpdated, eventObj, receiptObj}
+	objects := []objectgraph.Object{sequenceUpdated, documentUpdated, eventObj, receiptObj}
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, types.LifecycleResult{
 		Receipt: receipt, Trajectory: trajectory, Document: &document, Revision: &head, Events: []types.LifecycleEvent{event},
 	})
@@ -2626,6 +3459,7 @@ func (s *Store) CancelLifecycleTrajectory(ctx context.Context, req types.CancelL
 			continue
 		}
 		update.Disposition, update.DispositionReason = types.UpdateCancelled, strings.TrimSpace(req.Reason)
+		update.DispositionRef = lifecycleTerminalTrajectoryRef(req.TrajectoryID)
 		update.LifecycleVersion, update.ReducerSeq = update.LifecycleVersion+1, nextSeq
 		meta := lifecycleMetadata("update_id", update.UpdateID, computerID, req.TrajectoryID, nextSeq)
 		meta["producer_update_id"] = update.ProducerUpdateID

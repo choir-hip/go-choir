@@ -129,6 +129,32 @@ func TestRunMemoryInitializeSeedsPriorActorSnapshot(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("append older completed memory: %v", err)
 	}
+	otherComputerFinishedAt := now.Add(3 * time.Second)
+	otherComputer := types.RunRecord{
+		RunID:      "other-computer-memory-activation",
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		SandboxID:  "sandbox-other",
+		State:      types.RunCompleted,
+		Prompt:     "newer context from another computer",
+		Result:     "done elsewhere",
+		CreatedAt:  now.Add(3 * time.Second),
+		UpdatedAt:  now.Add(3 * time.Second),
+		FinishedAt: &otherComputerFinishedAt,
+	}
+	if err := s.CreateRun(ctx, otherComputer); err != nil {
+		t.Fatalf("create other-computer run: %v", err)
+	}
+	if _, err := s.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
+		RunID:   otherComputer.RunID,
+		OwnerID: ownerID,
+		AgentID: agentID,
+		Kind:    types.RunMemoryEntryMessage,
+		Role:    "user",
+		Message: json.RawMessage(`{"role":"user","content":"cross-computer memory must never seed this activation"}`),
+	}); err != nil {
+		t.Fatalf("append other-computer memory: %v", err)
+	}
 	blocked := types.RunRecord{
 		RunID:     "blocked-memory-activation",
 		AgentID:   agentID,

@@ -62,7 +62,7 @@ func (rt *Handler) ReconcileActorWake(ctx context.Context, ownerID, computerID, 
 	if docID == "" {
 		return nil, fmt.Errorf("resolve Texture actor wake: invalid Texture agent id")
 	}
-	doc, err := rt.Store.GetDocument(ctx, docID, ownerID)
+	doc, err := rt.getTextureDocument(ctx, ownerID, docID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve Texture actor wake: document not found: %w", err)
 	}
@@ -86,7 +86,7 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 		return nil, nil
 	}
 	textureAgentID := currentTextureAgentID(docID)
-	doc, err := rt.Store.GetDocument(ctx, docID, ownerID)
+	doc, err := rt.getTextureDocument(ctx, ownerID, docID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, nil
@@ -99,7 +99,7 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 	if _, err := rt.Store.GetAgentByScope(ctx, ownerID, doc.ComputerID, textureAgentID); err != nil {
 		return nil, fmt.Errorf("load durable Texture subject: %w", err)
 	}
-	if _, found, err := rt.Core.TextureActiveRunByAgent(ctx, ownerID, textureAgentID); err != nil {
+	if _, found, err := rt.Core.TextureActiveRunByAgent(ctx, ownerID, doc.ComputerID, textureAgentID); err != nil {
 		return nil, fmt.Errorf("check resident Texture loop: %w", err)
 	} else if found {
 		return nil, nil
@@ -111,7 +111,7 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 	if len(updates) == 0 {
 		return nil, nil
 	}
-	if mutation, err := rt.Store.GetPendingAgentMutationByDoc(ctx, docID, ownerID); err == nil && mutation != nil {
+	if mutation, err := rt.Store.GetPendingAgentMutationByDoc(ctx, ownerID, doc.ComputerID, docID); err == nil && mutation != nil {
 		rt.scheduleTextureWorkerWake(ownerID, docID, "")
 		return nil, nil
 	} else if err != nil {
@@ -147,7 +147,7 @@ func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types
 	if ownerID == "" || docID == "" || textureAgentID == "" {
 		return nil, false, nil
 	}
-	rec, err := rt.Store.GetLatestPassivatedRunByAgent(ctx, ownerID, textureAgentID)
+	rec, err := rt.Store.GetLatestPassivatedLifecycleRunByAgent(ctx, ownerID, doc.ComputerID, textureAgentID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, false, nil
@@ -158,7 +158,7 @@ func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types
 		strings.TrimSpace(metadataStringValue(rec.Metadata, "doc_id")) != docID {
 		return nil, false, nil
 	}
-	if mutation, err := rt.Store.GetAgentMutationByRun(ctx, rec.RunID); err != nil {
+	if mutation, err := rt.Store.GetAgentMutationByRun(ctx, ownerID, doc.ComputerID, rec.RunID); err != nil {
 		return nil, false, fmt.Errorf("lookup passivated Texture mutation: %w", err)
 	} else if mutation != nil && mutation.State == "completed" {
 		return nil, false, nil
@@ -189,7 +189,7 @@ func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types
 	rec.Result = ""
 	rec.FinishedAt = nil
 	rec.UpdatedAt = time.Now().UTC()
-	if err := rt.Store.ReactivateAgentMutation(ctx, rec.RunID, scheduledSeq); err != nil && !errors.Is(err, store.ErrMutationAlreadyCompleted) {
+	if err := rt.Store.ReactivateAgentMutation(ctx, ownerID, doc.ComputerID, rec.RunID, scheduledSeq); err != nil && !errors.Is(err, store.ErrMutationAlreadyCompleted) {
 		return nil, false, err
 	}
 	if err := rt.Store.UpdateRun(ctx, rec); err != nil {
@@ -217,7 +217,7 @@ func (rt *Handler) latestEligibleWorkerMessage(ctx context.Context, ownerID, cha
 			if message.Seq > cursor {
 				cursor = message.Seq
 			}
-			ok, err := rt.isEligibleWorkerMessage(ctx, channelID, message, cache)
+			ok, err := rt.isEligibleWorkerMessage(ctx, ownerID, channelID, message, cache)
 			if err != nil {
 				return types.ChannelMessage{}, false, err
 			}
@@ -234,7 +234,7 @@ func (rt *Handler) latestEligibleWorkerMessage(ctx context.Context, ownerID, cha
 	return latest, found, nil
 }
 
-func (rt *Handler) isEligibleWorkerMessage(ctx context.Context, docID string, message types.ChannelMessage, cache map[string]bool) (bool, error) {
+func (rt *Handler) isEligibleWorkerMessage(ctx context.Context, ownerID, docID string, message types.ChannelMessage, cache map[string]bool) (bool, error) {
 	if strings.TrimSpace(message.ToAgentID) != "texture:"+strings.TrimSpace(docID) {
 		return false, nil
 	}
@@ -245,7 +245,7 @@ func (rt *Handler) isEligibleWorkerMessage(ctx context.Context, docID string, me
 	if cached, ok := cache[runID]; ok {
 		return cached, nil
 	}
-	run, err := rt.Store.GetRun(ctx, runID)
+	run, err := rt.Core.GetRun(ctx, runID, ownerID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			cache[runID] = false
@@ -253,7 +253,7 @@ func (rt *Handler) isEligibleWorkerMessage(ctx context.Context, docID string, me
 		}
 		return false, err
 	}
-	switch agentProfileForRun(&run) {
+	switch agentProfileForRun(run) {
 	case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:
 		cache[runID] = true
 		return true, nil

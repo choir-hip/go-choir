@@ -940,8 +940,41 @@ func (s *Store) rejectActiveRunOnTerminalTrajectory(ctx context.Context, rec typ
 	return err
 }
 
+func (s *Store) persistLifecycleRun(ctx context.Context, rec types.RunRecord) (bool, error) {
+	rec.TrajectoryID = runTrajectoryID(rec)
+	if strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.SandboxID) == "" || strings.TrimSpace(rec.TrajectoryID) == "" {
+		return false, nil
+	}
+	trajectory, err := s.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.SandboxID, rec.TrajectoryID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return false, nil
+		}
+		return true, err
+	}
+	body, err := json.Marshal(rec)
+	if err != nil {
+		return true, err
+	}
+	req := types.ReplaceLifecycleActivationRequest{
+		OwnerID: rec.OwnerID, ComputerID: rec.SandboxID,
+		CommandID:    "lifecycle-activation:" + strings.TrimPrefix(objectgraph.SHA256(body), "sha256:"),
+		TrajectoryID: rec.TrajectoryID, AgentID: rec.AgentID, Run: rec,
+	}
+	req.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(req)
+	if trajectory.Status == types.TrajectoryLive {
+		_, err = s.ReplaceLifecycleActivation(ctx, req)
+	} else {
+		_, err = s.ProjectTerminalLifecycleRun(ctx, req)
+	}
+	return true, err
+}
+
 // CreateRun inserts a new run record.
 func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
+	if handled, err := s.persistLifecycleRun(ctx, rec); handled {
+		return err
+	}
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
 	rec.TrajectoryID = runTrajectoryID(rec)
@@ -964,6 +997,9 @@ func (s *Store) GetRunByOwner(ctx context.Context, ownerID, runID string) (types
 
 // UpdateRun updates an existing run record.
 func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
+	if handled, err := s.persistLifecycleRun(ctx, rec); handled {
+		return err
+	}
 	if !rec.State.Active() {
 		return s.UpdateRunOG(ctx, rec)
 	}
@@ -1001,7 +1037,7 @@ func (s *Store) UpdateRunAndMarkWorkerUpdatesDelivered(ctx context.Context, rec 
 			return err
 		}
 	}
-	if err := s.UpdateRunOG(ctx, rec); err != nil {
+	if err := s.UpdateRun(ctx, rec); err != nil {
 		// Rollback: unmark the worker updates if the run update failed,
 		// so the mailbox cursor doesn't consume them while the run
 		// remains non-terminal. Use context.Background() because the
@@ -1078,6 +1114,9 @@ func (s *Store) ListRunsByIngestionHandoff(ctx context.Context, ownerID, profile
 		if err := ogDecode(object, &rec); err != nil {
 			return nil, err
 		}
+		if lifecycleRunProjection(object, rec) {
+			continue
+		}
 		if strings.TrimSpace(rec.OwnerID) != ownerID ||
 			!strings.EqualFold(strings.TrimSpace(rec.AgentProfile), profile) ||
 			strings.TrimSpace(rec.RequestedByRunID) != "" {
@@ -1120,6 +1159,9 @@ func (s *Store) ListRunsBySelfDevelopmentOperation(ctx context.Context, ownerID,
 		if err := ogDecode(object, &rec); err != nil {
 			return nil, err
 		}
+		if lifecycleRunProjection(object, rec) {
+			continue
+		}
 		boundID, _ := rec.Metadata["self_development_operation_id"].(string)
 		if strings.TrimSpace(rec.OwnerID) == ownerID && strings.TrimSpace(rec.RequestedByRunID) == "" && strings.TrimSpace(boundID) == operationID {
 			runs = append(runs, rec)
@@ -1156,30 +1198,32 @@ func (s *Store) ListRunsByChannel(ctx context.Context, ownerID, channelID string
 	if limit <= 0 {
 		limit = 100
 	}
-	// Fetch a large window since ogListByMetadata orders by updated_at
-	// DESC and we need to filter by owner_id before applying the limit.
-	// Using limit*4 could miss runs when channel IDs are shared across
-	// owners.
-	objs, err := s.ogListByMetadata(ctx, ogKindRun, "channel_id", channelID, 100000)
+	objs, err := s.ogListAllByMetadata(ctx, ogKindRun, "channel_id", channelID)
 	if err != nil {
 		return nil, err
 	}
 	runs := make([]types.RunRecord, 0, len(objs))
 	for _, obj := range objs {
+		if obj.OwnerID != ownerID {
+			continue
+		}
 		var rec types.RunRecord
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
-		if rec.OwnerID != ownerID {
-			continue
-		}
-		if rec.ChannelID != channelID {
+		if lifecycleRunProjection(obj, rec) || rec.ChannelID != channelID {
 			continue
 		}
 		runs = append(runs, rec)
-		if len(runs) >= limit {
-			break
+	}
+	sort.Slice(runs, func(i, j int) bool {
+		if !runs[i].CreatedAt.Equal(runs[j].CreatedAt) {
+			return runs[i].CreatedAt.After(runs[j].CreatedAt)
 		}
+		return runs[i].RunID < runs[j].RunID
+	})
+	if len(runs) > limit {
+		runs = runs[:limit]
 	}
 	return runs, nil
 }
@@ -1206,6 +1250,9 @@ func (s *Store) ListActiveRunsByTrajectory(ctx context.Context, ownerID, traject
 		var rec types.RunRecord
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
+		}
+		if lifecycleRunProjection(obj, rec) {
+			continue
 		}
 		if rec.TrajectoryID == "" {
 			rec.TrajectoryID = runTrajectoryID(rec)
@@ -1502,7 +1549,7 @@ func (s *Store) CountActiveCoSuperSlots(ctx context.Context, ownerID, trajectory
 
 // GetLatestActiveRunByAgent returns the most recent non-terminal run for an agent.
 func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
-	objs, err := s.ogListByMetadata(ctx, ogKindRun, "agent_id", agentID, 200)
+	objs, err := s.ogListAllByMetadata(ctx, ogKindRun, "agent_id", agentID)
 	if err != nil {
 		return types.RunRecord{}, err
 	}
@@ -1511,6 +1558,9 @@ func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID 
 		var rec types.RunRecord
 		if err := ogDecode(objs[i], &rec); err != nil {
 			return types.RunRecord{}, err
+		}
+		if lifecycleRunProjection(objs[i], rec) {
+			continue
 		}
 		if rec.OwnerID != ownerID {
 			continue
@@ -1533,7 +1583,7 @@ func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID 
 // for an actor identity. Durable actor reactivation uses this before minting a
 // replacement run.
 func (s *Store) GetLatestPassivatedRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
-	objs, err := s.ogListByMetadata(ctx, ogKindRun, "agent_id", agentID, 200)
+	objs, err := s.ogListAllByMetadata(ctx, ogKindRun, "agent_id", agentID)
 	if err != nil {
 		return types.RunRecord{}, err
 	}
@@ -1542,6 +1592,9 @@ func (s *Store) GetLatestPassivatedRunByAgent(ctx context.Context, ownerID, agen
 		var rec types.RunRecord
 		if err := ogDecode(objs[i], &rec); err != nil {
 			return types.RunRecord{}, err
+		}
+		if lifecycleRunProjection(objs[i], rec) {
+			continue
 		}
 		if rec.OwnerID != ownerID {
 			continue
@@ -1558,6 +1611,59 @@ func (s *Store) GetLatestPassivatedRunByAgent(ctx context.Context, ownerID, agen
 		return types.RunRecord{}, ErrNotFound
 	}
 	return *latest, nil
+}
+
+func (s *Store) latestLifecycleRunByAgent(ctx context.Context, ownerID, computerID, agentID string, match func(types.RunState) bool) (types.RunRecord, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	if err != nil {
+		return types.RunRecord{}, err
+	}
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return types.RunRecord{}, ErrLifecycleInvalidTransition
+	}
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return types.RunRecord{}, fmt.Errorf("lifecycle runs: object graph not initialized")
+	}
+	objs, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	if err != nil {
+		return types.RunRecord{}, err
+	}
+	var latest *types.RunRecord
+	for _, obj := range objs {
+		if obj.ObjectKind != ogKindRun {
+			continue
+		}
+		rec, decodeErr := decodeLifecycleObject[types.RunRecord](obj)
+		if decodeErr != nil {
+			return types.RunRecord{}, decodeErr
+		}
+		if rec.OwnerID != ownerID || rec.SandboxID != computerID || rec.AgentID != agentID || !match(rec.State) {
+			continue
+		}
+		if latest == nil || rec.UpdatedAt.After(latest.UpdatedAt) {
+			copy := rec
+			latest = &copy
+		}
+	}
+	if latest == nil {
+		return types.RunRecord{}, ErrNotFound
+	}
+	return *latest, nil
+}
+
+func (s *Store) GetLatestActiveLifecycleRunByAgent(ctx context.Context, ownerID, computerID, agentID string) (types.RunRecord, error) {
+	return s.latestLifecycleRunByAgent(ctx, ownerID, computerID, agentID, types.RunState.Active)
+}
+
+func (s *Store) GetLatestPassivatedLifecycleRunByAgent(ctx context.Context, ownerID, computerID, agentID string) (types.RunRecord, error) {
+	return s.latestLifecycleRunByAgent(ctx, ownerID, computerID, agentID, func(state types.RunState) bool {
+		return state == types.RunPassivated
+	})
 }
 
 func (s *Store) listRunsWhere(ctx context.Context, where string, args []any, limit int) ([]types.RunRecord, error) {
@@ -1997,15 +2103,9 @@ func (s *Store) ListPendingWorkerUpdatesAll(ctx context.Context, limit int) ([]t
 	if limit <= 0 {
 		limit = 500
 	}
-	// Fetch a large window since ListObjects orders by updated_at DESC.
-	// We need all pending records to sort by created_at and then apply
-	// the caller's limit in memory. Using a small limit can miss older
-	// undelivered records when many delivered records are more recently
-	// updated.
-	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:  objectgraph.ObjectKind("choir.worker_update"),
-		Limit: 100000,
-	})
+	// Exhaust the kind before excluding lifecycle and delivered rows; applying a
+	// fixed window first can mask older valid legacy updates.
+	objs, err := s.ogListAllObjectsByKind(ctx, objectgraph.ObjectKind("choir.worker_update"))
 	if err != nil {
 		return nil, fmt.Errorf("query pending worker updates: %w", err)
 	}
@@ -2016,10 +2116,9 @@ func (s *Store) ListPendingWorkerUpdatesAll(ctx context.Context, limit int) ([]t
 			return nil, err
 		}
 		if rec.LifecycleVersion > 0 {
-			if rec.Disposition != types.UpdatePending {
-				continue
-			}
-		} else if rec.DeliveredToRunID != "" {
+			continue
+		}
+		if rec.DeliveredToRunID != "" {
 			continue
 		}
 		updates = append(updates, rec)
@@ -2052,10 +2151,9 @@ func (s *Store) ListCoagentMailboxBacklog(ctx context.Context, ownerID, targetAg
 	if cursorErr != nil {
 		return nil, fmt.Errorf("list coagent mailbox backlog: read cursor: %w", cursorErr)
 	}
-	// Fetch a large window since ogListByMetadata orders by updated_at DESC,
-	// not by message_seq. We need all matching records to sort by message_seq
-	// and then apply the caller's limit in memory.
-	objs, err := s.ogListByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "target_agent_id", targetAgentID, 10000)
+	// Exhaust the target keyset before excluding lifecycle rows and applying
+	// cursor/order/limit semantics in memory.
+	objs, err := s.ogListAllByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "target_agent_id", targetAgentID)
 	if err != nil {
 		return nil, fmt.Errorf("query coagent mailbox backlog: %w", err)
 	}
@@ -2068,11 +2166,12 @@ func (s *Store) ListCoagentMailboxBacklog(ctx context.Context, ownerID, targetAg
 		if rec.OwnerID != ownerID {
 			continue
 		}
+		// Durable lifecycle mailboxes are computer-scoped and must be consumed
+		// through ListPendingLifecycleUpdates.
 		if rec.LifecycleVersion > 0 {
-			if rec.Disposition != types.UpdatePending {
-				continue
-			}
-		} else if rec.DeliveredToRunID != "" && rec.MessageSeq <= cursor {
+			continue
+		}
+		if rec.DeliveredToRunID != "" && rec.MessageSeq <= cursor {
 			continue
 		}
 		updates = append(updates, rec)
@@ -2114,24 +2213,23 @@ func (s *Store) ListCoagentMailboxBacklogAll(ctx context.Context, limit int) ([]
 			if err := ogDecode(obj, &rec); err != nil {
 				return nil, err
 			}
+			// Lifecycle subjects are re-warmed through their scoped registry;
+			// this owner/agent-only sweep is legacy mailbox authority.
 			if rec.LifecycleVersion > 0 {
-				if rec.Disposition != types.UpdatePending {
-					continue
+				continue
+			}
+			key := rec.OwnerID + "\x00" + rec.TargetAgentID
+			cursor, found := cursorByTarget[key]
+			if !found {
+				var cursorErr error
+				cursor, _, _, cursorErr = s.GetCoagentMailboxCursor(ctx, rec.OwnerID, rec.TargetAgentID)
+				if cursorErr != nil {
+					return nil, fmt.Errorf("query coagent mailbox backlog all: read cursor for %s/%s: %w", rec.OwnerID, rec.TargetAgentID, cursorErr)
 				}
-			} else {
-				key := rec.OwnerID + "\x00" + rec.TargetAgentID
-				cursor, found := cursorByTarget[key]
-				if !found {
-					var cursorErr error
-					cursor, _, _, cursorErr = s.GetCoagentMailboxCursor(ctx, rec.OwnerID, rec.TargetAgentID)
-					if cursorErr != nil {
-						return nil, fmt.Errorf("query coagent mailbox backlog all: read cursor for %s/%s: %w", rec.OwnerID, rec.TargetAgentID, cursorErr)
-					}
-					cursorByTarget[key] = cursor
-				}
-				if rec.DeliveredToRunID != "" && rec.MessageSeq <= cursor {
-					continue
-				}
+				cursorByTarget[key] = cursor
+			}
+			if rec.DeliveredToRunID != "" && rec.MessageSeq <= cursor {
+				continue
 			}
 			updates = append(updates, rec)
 		}
@@ -2164,7 +2262,7 @@ func (s *Store) ListCoagentMailboxBacklogAll(ctx context.Context, limit int) ([]
 // CountPendingWorkerUpdatesByTrajectory returns undelivered updates for the
 // silent-stall oracle.
 func (s *Store) CountPendingWorkerUpdatesByTrajectory(ctx context.Context, ownerID, trajectoryID string) (int, error) {
-	objs, err := s.ogListByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "trajectory_id", trajectoryID, 10000)
+	objs, err := s.ogListAllByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "trajectory_id", trajectoryID)
 	if err != nil {
 		return 0, fmt.Errorf("count pending worker updates by trajectory: %w", err)
 	}
@@ -2178,10 +2276,9 @@ func (s *Store) CountPendingWorkerUpdatesByTrajectory(ctx context.Context, owner
 			continue
 		}
 		if rec.LifecycleVersion > 0 {
-			if rec.Disposition == types.UpdatePending {
-				count++
-			}
-		} else if rec.DeliveredToRunID == "" {
+			continue
+		}
+		if rec.DeliveredToRunID == "" {
 			count++
 		}
 	}
@@ -2242,9 +2339,9 @@ func (s *Store) GetCoagentMailboxCursor(ctx context.Context, ownerID, agentID st
 	if ownerID == "" || agentID == "" {
 		return 0, "", false, fmt.Errorf("get coagent mailbox cursor: owner_id and agent_id are required")
 	}
-	// Read the persisted cursor from OG. Search by agent_id and filter
-	// by owner_id, since multiple owners can have the same agent_id.
-	objs, err := s.ogListByMetadata(ctx, ogKindCoagentMail, "agent_id", agentID, 100)
+	// Exhaust matching agent IDs before filtering by owner. A limited
+	// pre-filter window can hide this owner's cursor behind other owners.
+	objs, err := s.ogListAllByMetadata(ctx, ogKindCoagentMail, "agent_id", agentID)
 	if err != nil {
 		return 0, "", false, fmt.Errorf("get coagent mailbox cursor: %w", err)
 	}
@@ -2269,7 +2366,7 @@ func (s *Store) GetCoagentMailboxCursor(ctx context.Context, ownerID, agentID st
 // computeAndPersistCoagentMailboxCursor computes the cursor from worker
 // update delivery state and persists it to OG.
 func (s *Store) computeAndPersistCoagentMailboxCursor(ctx context.Context, ownerID, agentID string) (int64, string, bool, error) {
-	objs, err := s.ogListByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "target_agent_id", agentID, 10000)
+	objs, err := s.ogListAllByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "target_agent_id", agentID)
 	if err != nil {
 		return 0, "", false, fmt.Errorf("compute coagent mailbox cursor: %w", err)
 	}

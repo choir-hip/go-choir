@@ -25,7 +25,7 @@ func (rt *Runtime) verifyRequiredChildRuns(ctx context.Context, rec *types.RunRe
 	if required <= 0 {
 		return nil
 	}
-	runs, err := rt.store.ListRunsByOwner(ctx, rec.OwnerID, 500)
+	runs, err := rt.ListRunsByOwner(ctx, rec.OwnerID, 500)
 	if err != nil {
 		return fmt.Errorf("verify required child runs: %w", err)
 	}
@@ -50,7 +50,7 @@ func (rt *Runtime) verifyRequiredTextureRevisions(ctx context.Context, rec *type
 	if required <= 0 {
 		return nil
 	}
-	runs, err := rt.store.ListRunsByOwner(ctx, rec.OwnerID, 500)
+	runs, err := rt.ListRunsByOwner(ctx, rec.OwnerID, 500)
 	if err != nil {
 		return fmt.Errorf("verify required Texture revisions: list runs: %w", err)
 	}
@@ -65,7 +65,10 @@ func (rt *Runtime) verifyRequiredTextureRevisions(ctx context.Context, rec *type
 		if docID == "" {
 			continue
 		}
-		revisions, err := rt.store.ListRevisionsByDoc(ctx, docID, rec.OwnerID, 200)
+		revisions, err := rt.store.ListRevisionsByScope(ctx, docID, rec.OwnerID, rec.SandboxID, 200)
+		if err == nil && len(revisions) == 0 {
+			revisions, err = rt.store.ListRevisionsByDoc(ctx, docID, rec.OwnerID, 200)
+		}
 		if err != nil {
 			return fmt.Errorf("verify required Texture revisions for doc %s: %w", docID, err)
 		}
@@ -97,7 +100,7 @@ func (rt *Runtime) awaitRequiredTextureRevisions(ctx context.Context, rec *types
 		if err := rt.verifyRequiredTextureRevisions(ctx, rec); err == nil {
 			return nil
 		}
-		runs, err := rt.store.ListRunsByOwner(ctx, rec.OwnerID, 500)
+		runs, err := rt.ListRunsByOwner(ctx, rec.OwnerID, 500)
 		if err != nil {
 			return fmt.Errorf("await required Texture revisions: list runs: %w", err)
 		}
@@ -150,7 +153,7 @@ func (rt *Runtime) awaitRequiredChildRuns(ctx context.Context, rec *types.RunRec
 		if err := rt.verifyRequiredChildRuns(ctx, rec); err == nil {
 			return rt.awaitRequiredTextureRevisions(ctx, rec, timeout)
 		}
-		runs, err := rt.store.ListRunsByOwner(ctx, rec.OwnerID, 500)
+		runs, err := rt.ListRunsByOwner(ctx, rec.OwnerID, 500)
 		if err != nil {
 			return fmt.Errorf("await required child runs: %w", err)
 		}
@@ -216,7 +219,7 @@ func newCancelAgentTool(rt *Runtime) toolregistry.Tool {
 				if !found {
 					return "", fmt.Errorf("agent not active in caller trajectory: %s", in.AgentID)
 				}
-				slotRun, err := rt.store.GetRun(ctx, strings.TrimSpace(slot.RunID))
+				slotRun, err := rt.getRunForComputer(ctx, ownerID, strings.TrimSpace(slot.RunID))
 				if err != nil {
 					return "", fmt.Errorf("lookup co-super slot run before cancel: %w", err)
 				}
@@ -232,7 +235,7 @@ func newCancelAgentTool(rt *Runtime) toolregistry.Tool {
 				} else if found {
 					target = resident
 				} else {
-					latest, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, agentID)
+					latest, err := rt.latestActiveRunByAgent(ctx, ownerID, agentID)
 					if err != nil {
 						if err == store.ErrNotFound {
 							return "", fmt.Errorf("agent not found: %s", in.AgentID)

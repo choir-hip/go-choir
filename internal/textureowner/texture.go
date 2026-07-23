@@ -145,6 +145,7 @@ type textureDocumentResponse struct {
 	DocID                string `json:"doc_id"`
 	OwnerID              string `json:"owner_id"`
 	Title                string `json:"title"`
+	TrajectoryID         string `json:"trajectory_id,omitempty"`
 	CurrentRevisionID    string `json:"current_revision_id,omitempty"`
 	CurrentVersionNumber int    `json:"current_version_number"`
 	CreatedAt            string `json:"created_at"`
@@ -613,7 +614,7 @@ func (h *Handler) HandleTextureImportMarkdownLineage(w http.ResponseWriter, r *h
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create markdown lineage revision"})
 			return
 		}
-		storedRev, err := h.Store.GetRevision(r.Context(), rev.RevisionID, ownerID)
+		storedRev, err := h.getTextureRevision(r.Context(), ownerID, rev.RevisionID)
 		if err != nil {
 			log.Printf("texture api: reload markdown lineage revision %s: %v", rev.RevisionID, err)
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load created revision"})
@@ -676,7 +677,7 @@ func (h *Handler) HandleTextureOpenFile(w http.ResponseWriter, r *http.Request) 
 
 	docID, err := h.Store.GetDocumentAlias(r.Context(), ownerID, sourcePath)
 	if err == nil {
-		doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+		doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 		if err != nil {
 			log.Printf("texture api: resolve aliased document %s: %v", docID, err)
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to open aliased document"})
@@ -773,7 +774,7 @@ func (h *Handler) HandleTextureEnsureManifest(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "document id is required"})
 		return
 	}
-	doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
@@ -821,7 +822,7 @@ func (h *Handler) HandleTextureExportDocument(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "unsupported export format"})
 		return
 	}
-	doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
@@ -834,7 +835,7 @@ func (h *Handler) HandleTextureExportDocument(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document has no current revision"})
 		return
 	}
-	rev, err := h.Store.GetRevision(r.Context(), revisionID, ownerID)
+	rev, err := h.getTextureRevision(r.Context(), ownerID, revisionID)
 	if err != nil || rev.DocID != doc.DocID {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
 		return
@@ -869,7 +870,7 @@ func (h *Handler) HandleTextureListDocuments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	docs, err := h.Store.ListDocumentsByOwner(r.Context(), ownerID, 50)
+	docs, err := h.listTextureDocuments(r.Context(), ownerID, 50)
 	if err != nil {
 		log.Printf("texture api: list documents: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list documents"})
@@ -930,7 +931,7 @@ func (h *Handler) HandleInternalTextureDocument(w http.ResponseWriter, r *http.R
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
-	doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
@@ -957,7 +958,7 @@ func (h *Handler) HandleInternalTextureRevision(w http.ResponseWriter, r *http.R
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
 		return
 	}
-	rev, err := h.Store.GetRevision(r.Context(), revisionID, ownerID)
+	rev, err := h.getTextureRevision(r.Context(), ownerID, revisionID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
 		return
@@ -1027,12 +1028,12 @@ func (h *Handler) handleTextureGetDocument(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
-	pendingMutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, ownerID)
+	pendingMutation, err := h.pendingAgentMutationByDoc(r.Context(), ownerID, doc.ComputerID, docID)
 	if err != nil {
 		log.Printf("texture api: get pending mutation for document: %v", err)
 	}
@@ -1058,29 +1059,30 @@ func (h *Handler) handleTextureUpdateDocument(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
-
-	doc.Title = req.Title
-	doc.UpdatedAt = time.Now().UTC()
-
-	if err := h.Store.UpdateDocument(r.Context(), doc); err != nil {
-		log.Printf("texture api: update document: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to update document"})
+	computerID := strings.TrimSpace(doc.ComputerID)
+	if computerID == "" && h.Core != nil {
+		computerID = strings.TrimSpace(h.Core.TextureSandboxID())
+	}
+	doc, err = h.Store.UpdateTextureDocumentTitleAuthority(r.Context(), docID, ownerID, computerID, req.Title)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		case errors.Is(err, store.ErrLifecycleInvalidTransition), errors.Is(err, store.ErrConcurrentStateChange):
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		default:
+			log.Printf("texture api: update document: %v", err)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to update document"})
+		}
 		return
 	}
 
-	writeAPIJSON(w, http.StatusOK, textureDocumentResponse{
-		DocID:             doc.DocID,
-		OwnerID:           doc.OwnerID,
-		Title:             doc.Title,
-		CurrentRevisionID: doc.CurrentRevisionID,
-		CreatedAt:         doc.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		UpdatedAt:         doc.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
-	})
+	writeAPIJSON(w, http.StatusOK, h.textureDocumentResponse(r.Context(), doc))
 }
 
 func (h *Handler) handleTextureDeleteDocument(w http.ResponseWriter, r *http.Request, docID string) {
@@ -1089,7 +1091,11 @@ func (h *Handler) handleTextureDeleteDocument(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-	document, err := h.Store.ArchiveTextureDocumentAuthority(r.Context(), docID, ownerID)
+	computerID := ""
+	if h.Core != nil {
+		computerID = strings.TrimSpace(h.Core.TextureSandboxID())
+	}
+	document, err := h.Store.ArchiveTextureDocumentAuthority(r.Context(), docID, ownerID, computerID)
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrNotFound):
@@ -1138,7 +1144,7 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 	}
 
 	// Verify the document exists and belongs to this owner.
-	doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
@@ -1176,7 +1182,7 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 	var parentRev types.Revision
 	var hasParentRev bool
 	if strings.TrimSpace(parentID) != "" {
-		if rev, err := h.Store.GetRevision(r.Context(), parentID, ownerID); err == nil {
+		if rev, err := h.getTextureRevision(r.Context(), ownerID, parentID); err == nil {
 			parentRev = rev
 			hasParentRev = true
 			var stabilized bool
@@ -1224,11 +1230,17 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 	}
 
 	if lifecycleBound {
+		snapshot, snapshotErr := h.Store.GetLifecycleSnapshot(r.Context(), ownerID, doc.ComputerID, doc.TrajectoryID)
+		if snapshotErr != nil {
+			log.Printf("texture api: load lifecycle for revision: %v", snapshotErr)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load lifecycle revision authority"})
+			return
+		}
 		command := types.CommitLifecycleArtifactHeadRequest{
 			OwnerID: ownerID, ComputerID: doc.ComputerID,
 			CommandID:    "public-head:" + strings.TrimSpace(req.IdempotencyKey),
 			TrajectoryID: doc.TrajectoryID, ExpectedLifecycleVersion: req.ExpectedLifecycleVersion,
-			ExpectedHeadRevisionID: parentID, Revision: rev,
+			ExpectedHeadRevisionID: parentID, Unbound: snapshot.Trajectory.Status != types.TrajectoryLive, Revision: rev,
 		}
 		commandDigest, digestErr := store.ComputeCommitLifecycleArtifactHeadDigest(command)
 		if digestErr != nil {
@@ -1279,7 +1291,7 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create revision"})
 		return
 	}
-	storedRev, err := h.Store.GetRevision(r.Context(), rev.RevisionID, ownerID)
+	storedRev, err := h.getTextureRevision(r.Context(), ownerID, rev.RevisionID)
 	if err != nil {
 		log.Printf("texture api: load created revision: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load created revision"})
@@ -1291,18 +1303,18 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 }
 
 func (h *Handler) createRebasedUserRevision(ctx context.Context, docID, ownerID string, req textureCreateRevisionRequest, staleParentID string, citations, metadata json.RawMessage, now time.Time) (types.Revision, error) {
-	currentDoc, err := h.Store.GetDocument(ctx, docID, ownerID)
+	currentDoc, err := h.getTextureDocument(ctx, ownerID, docID)
 	if err != nil {
 		return types.Revision{}, fmt.Errorf("load current document for rebase: %w", err)
 	}
 	if strings.TrimSpace(currentDoc.CurrentRevisionID) == "" || strings.TrimSpace(currentDoc.CurrentRevisionID) == staleParentID {
 		return types.Revision{}, fmt.Errorf("document head is not rebaseable")
 	}
-	baseRev, err := h.Store.GetRevision(ctx, staleParentID, ownerID)
+	baseRev, err := h.getTextureRevision(ctx, ownerID, staleParentID)
 	if err != nil {
 		return types.Revision{}, fmt.Errorf("load stale base revision: %w", err)
 	}
-	headRev, err := h.Store.GetRevision(ctx, currentDoc.CurrentRevisionID, ownerID)
+	headRev, err := h.getTextureRevision(ctx, ownerID, currentDoc.CurrentRevisionID)
 	if err != nil {
 		return types.Revision{}, fmt.Errorf("load current head revision: %w", err)
 	}
@@ -1331,7 +1343,7 @@ func (h *Handler) createRebasedUserRevision(ctx context.Context, docID, ownerID 
 	if err := h.Store.CreateRevision(ctx, rev); err != nil {
 		return types.Revision{}, fmt.Errorf("create rebased user revision: %w", err)
 	}
-	storedRev, err := h.Store.GetRevision(ctx, rev.RevisionID, ownerID)
+	storedRev, err := h.getTextureRevision(ctx, ownerID, rev.RevisionID)
 	if err != nil {
 		return types.Revision{}, fmt.Errorf("load rebased user revision: %w", err)
 	}
@@ -1424,24 +1436,36 @@ func (h *Handler) textureDocumentResponse(ctx context.Context, doc types.Documen
 		DocID:             doc.DocID,
 		OwnerID:           doc.OwnerID,
 		Title:             doc.Title,
+		TrajectoryID:      doc.TrajectoryID,
 		CurrentRevisionID: doc.CurrentRevisionID,
 		CreatedAt:         doc.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 		UpdatedAt:         doc.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
 	}
-	count, err := h.Store.CountRevisionsByDoc(ctx, doc.DocID, doc.OwnerID)
+	var count int
+	var err error
+	if computerID := strings.TrimSpace(doc.ComputerID); computerID != "" {
+		count, err = h.Store.CountRevisionsByScope(ctx, doc.DocID, doc.OwnerID, computerID)
+	} else {
+		count, err = h.Store.CountRevisionsByDoc(ctx, doc.DocID, doc.OwnerID)
+	}
 	if err != nil {
 		log.Printf("texture api: count document revisions for recent metadata: %v", err)
 	} else {
 		resp.RevisionCount = count
 	}
-	versionNumber, err := h.Store.CurrentVersionNumberByDoc(ctx, doc.DocID, doc.OwnerID)
+	var versionNumber int
+	if computerID := strings.TrimSpace(doc.ComputerID); computerID != "" {
+		versionNumber, err = h.Store.CurrentVersionNumberByScope(ctx, doc.DocID, doc.OwnerID, computerID)
+	} else {
+		versionNumber, err = h.Store.CurrentVersionNumberByDoc(ctx, doc.DocID, doc.OwnerID)
+	}
 	if err != nil {
 		log.Printf("texture api: get current document version number: %v", err)
 	} else if versionNumber >= 0 {
 		resp.CurrentVersionNumber = versionNumber
 	}
 	if strings.TrimSpace(doc.CurrentRevisionID) != "" {
-		if rev, err := h.Store.GetRevision(ctx, doc.CurrentRevisionID, doc.OwnerID); err == nil {
+		if rev, err := h.getTextureRevision(ctx, doc.OwnerID, doc.CurrentRevisionID); err == nil {
 			resp.LastEditor = rev.AuthorLabel
 			resp.LastAuthorKind = string(rev.AuthorKind)
 			resp.CurrentVersionNumber = rev.VersionNumber
@@ -1474,22 +1498,30 @@ func revisionResponseFromRecord(rev types.Revision) textureRevisionResponse {
 
 func (h *Handler) revisionResponseFromRecord(ctx context.Context, rev types.Revision) textureRevisionResponse {
 	resp := revisionResponseFromRecord(rev)
-	h.attachTextureSourceGraphObjects(ctx, &resp)
+	h.attachTextureSourceGraphObjects(ctx, rev, &resp)
 	return resp
 }
 
-func (h *Handler) attachTextureSourceGraphObjects(ctx context.Context, resp *textureRevisionResponse) {
+func (h *Handler) attachTextureSourceGraphObjects(ctx context.Context, rev types.Revision, resp *textureRevisionResponse) {
 	if h == nil || h.Store == nil || resp == nil {
 		return
 	}
-	entities, err := h.Store.ListTextureSourceEntitiesForRevision(ctx, resp.OwnerID, resp.DocID, resp.RevisionID)
-	if err != nil {
-		log.Printf("texture api: list source entity objects for revision %s: %v", resp.RevisionID, err)
-		return
+	var entities []store.TextureSourceEntityGraphRecord
+	var refs []store.TextureSourceRefGraphRecord
+	var err error
+	if computerID := strings.TrimSpace(rev.ComputerID); computerID != "" {
+		entities, err = h.Store.ListTextureSourceEntitiesForRevisionByScope(ctx, rev.OwnerID, computerID, rev.DocID, rev.RevisionID)
+		if err == nil {
+			refs, err = h.Store.ListTextureSourceRefsForRevisionByScope(ctx, rev.OwnerID, computerID, rev.DocID, rev.RevisionID)
+		}
+	} else {
+		entities, err = h.Store.ListTextureSourceEntitiesForRevision(ctx, rev.OwnerID, rev.DocID, rev.RevisionID)
+		if err == nil {
+			refs, err = h.Store.ListTextureSourceRefsForRevision(ctx, rev.OwnerID, rev.DocID, rev.RevisionID)
+		}
 	}
-	refs, err := h.Store.ListTextureSourceRefsForRevision(ctx, resp.OwnerID, resp.DocID, resp.RevisionID)
 	if err != nil {
-		log.Printf("texture api: list source refs for revision %s: %v", resp.RevisionID, err)
+		log.Printf("texture api: list source graph objects for revision %s: %v", rev.RevisionID, err)
 		return
 	}
 	attachTextureSourceGraphObjectRecords(resp, entities, refs)
@@ -1507,7 +1539,12 @@ func (h *Handler) revisionResponsesFromRecords(ctx context.Context, revs []types
 	graphByRevision := map[string]store.TextureSourceGraphWriteSet{}
 	if h != nil && h.Store != nil {
 		var err error
-		graphByRevision, err = h.Store.ListTextureSourceGraphForRevisions(ctx, graphReadOwnerID, graphDocID, revisionIDs)
+		computerID := strings.TrimSpace(revs[0].ComputerID)
+		if computerID != "" {
+			graphByRevision, err = h.Store.ListTextureSourceGraphForRevisionsByScope(ctx, graphReadOwnerID, computerID, graphDocID, revisionIDs)
+		} else {
+			graphByRevision, err = h.Store.ListTextureSourceGraphForRevisions(ctx, graphReadOwnerID, graphDocID, revisionIDs)
+		}
 		if err != nil {
 			log.Printf("texture api: batch list source graph objects for document %s: %v", graphDocID, err)
 			graphByRevision = map[string]store.TextureSourceGraphWriteSet{}
@@ -1583,7 +1620,7 @@ func (h *Handler) handleTextureListRevisions(w http.ResponseWriter, r *http.Requ
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-	if _, err := h.Store.GetDocument(r.Context(), docID, ownerID); err != nil {
+	if _, err := h.getTextureDocument(r.Context(), ownerID, docID); err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
@@ -1597,7 +1634,7 @@ func (h *Handler) handleTextureListRevisions(w http.ResponseWriter, r *http.Requ
 	if limit > 10000 {
 		limit = 10000
 	}
-	revs, err := h.Store.ListRevisionsByDoc(r.Context(), docID, ownerID, limit)
+	revs, err := h.listTextureRevisions(r.Context(), ownerID, docID, limit)
 	if err != nil {
 		log.Printf("texture api: list revisions: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list revisions"})
@@ -1636,7 +1673,7 @@ func (h *Handler) HandleTextureRevision(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	rev, err := h.Store.GetRevision(r.Context(), revisionID, ownerID)
+	rev, err := h.getTextureRevision(r.Context(), ownerID, revisionID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
 		return
@@ -1665,12 +1702,12 @@ func (h *Handler) HandleTextureHistory(w http.ResponseWriter, r *http.Request) {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-	if _, err := h.Store.GetDocument(r.Context(), docID, ownerID); err != nil {
+	if _, err := h.getTextureDocument(r.Context(), ownerID, docID); err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
 
-	entries, err := h.Store.GetHistory(r.Context(), docID, ownerID, 50)
+	entries, err := h.getTextureHistory(r.Context(), ownerID, docID, 50)
 	if err != nil {
 		log.Printf("texture api: get history: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get history"})
@@ -1704,7 +1741,7 @@ func (h *Handler) HandleTextureDocumentStream(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
@@ -1718,7 +1755,7 @@ func (h *Handler) HandleTextureDocumentStream(w http.ResponseWriter, r *http.Req
 		flusher.Flush()
 	}
 
-	pendingMutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, ownerID)
+	pendingMutation, err := h.pendingAgentMutationByDoc(r.Context(), ownerID, doc.ComputerID, docID)
 	if err != nil {
 		log.Printf("texture api: get pending mutation for stream: %v", err)
 	}
@@ -1761,7 +1798,7 @@ func (h *Handler) HandleTextureDocumentStream(w http.ResponseWriter, r *http.Req
 				}
 				currentRevisionID := streamEvent.CurrentRevisionID
 				if currentRevisionID == "" {
-					updatedDoc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+					updatedDoc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 					if err != nil {
 						log.Printf("texture api: get document after revision create: %v", err)
 						continue
@@ -1778,7 +1815,7 @@ func (h *Handler) HandleTextureDocumentStream(w http.ResponseWriter, r *http.Req
 				continue
 			}
 
-			updatedDoc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+			updatedDoc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 			if err != nil {
 				log.Printf("texture api: get document after synth completion: %v", err)
 				continue
@@ -1899,7 +1936,7 @@ func (h *Handler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
 		return
 	}
-	doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
+	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
@@ -1908,7 +1945,7 @@ func (h *Handler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle-authored documents cannot be restored outside the durable lifecycle"})
 		return
 	}
-	sourceRev, err := h.Store.GetRevision(r.Context(), strings.TrimSpace(req.RevisionID), ownerID)
+	sourceRev, err := h.getTextureRevision(r.Context(), ownerID, strings.TrimSpace(req.RevisionID))
 	if err != nil || sourceRev.DocID != docID {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
 		return
@@ -1950,7 +1987,7 @@ func (h *Handler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "failed to restore revision; document head may have changed"})
 		return
 	}
-	storedRev, err := h.Store.GetRevision(r.Context(), rev.RevisionID, ownerID)
+	storedRev, err := h.getTextureRevision(r.Context(), ownerID, rev.RevisionID)
 	if err != nil {
 		log.Printf("texture api: load restored revision: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load restored revision"})
@@ -1985,10 +2022,10 @@ func (h *Handler) HandleTextureDiagnosis(w http.ResponseWriter, r *http.Request)
 		TexturePath: h.Store.TexturePath(),
 	}
 	if docID != "" {
-		if doc, err := h.Store.GetDocument(r.Context(), docID, ownerID); err == nil {
+		if doc, err := h.getTextureDocument(r.Context(), ownerID, docID); err == nil {
 			docResp := h.textureDocumentResponse(r.Context(), doc)
 			resp.Document = &docResp
-			if revs, err := h.Store.ListRevisionsByDoc(r.Context(), docID, ownerID, limit); err == nil {
+			if revs, err := h.listTextureRevisions(r.Context(), ownerID, docID, limit); err == nil {
 				for _, rev := range revs {
 					resp.RevisionStructures = append(resp.RevisionStructures, revisionStructureSummaryFromRecord(rev))
 					if includeContent {
@@ -2007,12 +2044,12 @@ func (h *Handler) HandleTextureDiagnosis(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if docID != "" {
-		if channelRuns, err := h.Store.ListRunsByChannel(r.Context(), ownerID, docID, limit); err == nil {
+		if channelRuns, err := h.Core.ListRunsByChannel(r.Context(), ownerID, docID, limit); err == nil {
 			resp.Runs = append(resp.Runs, channelRuns...)
 		} else {
 			log.Printf("texture api: list channel diagnosis runs for %s: %v", docID, err)
 		}
-		if ownerRuns, err := h.Store.ListRunsByOwner(r.Context(), ownerID, diagnosisOwnerRunScanLimit(limit)); err == nil {
+		if ownerRuns, err := h.Core.ListRunsByOwner(r.Context(), ownerID, diagnosisOwnerRunScanLimit(limit)); err == nil {
 			var docRuns []types.RunRecord
 			for _, run := range ownerRuns {
 				if runRecordBelongsToTextureDoc(run, docID) {
@@ -2024,7 +2061,7 @@ func (h *Handler) HandleTextureDiagnosis(w http.ResponseWriter, r *http.Request)
 			log.Printf("texture api: list owner runs for document diagnosis %s: %v", docID, err)
 		}
 	}
-	if runs, err := h.Store.ListRunsByOwner(r.Context(), ownerID, limit); err == nil {
+	if runs, err := h.Core.ListRunsByOwner(r.Context(), ownerID, limit); err == nil {
 		resp.Runs = appendUniqueRunRecords(resp.Runs, runs...)
 	}
 	for _, run := range resp.Runs {
@@ -2068,7 +2105,17 @@ func (h *Handler) HandleTextureBlame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	blame, err := h.Store.GetBlame(r.Context(), revisionID, ownerID)
+	revision, err := h.getTextureRevision(r.Context(), ownerID, revisionID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
+		return
+	}
+	var blame types.BlameResult
+	if computerID := strings.TrimSpace(revision.ComputerID); computerID != "" {
+		blame, err = h.Store.GetBlameByScope(r.Context(), revisionID, ownerID, computerID)
+	} else {
+		blame, err = h.Store.GetBlame(r.Context(), revisionID, ownerID)
+	}
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
 		return
@@ -2117,7 +2164,7 @@ func (h *Handler) HandleTestTextureWorkerUpdate(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if _, err := h.Store.GetDocument(r.Context(), req.DocID, ownerID); err != nil {
+	if _, err := h.getTextureDocument(r.Context(), ownerID, req.DocID); err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
@@ -2131,7 +2178,7 @@ func (h *Handler) HandleTestTextureWorkerUpdate(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	runs, err := h.Store.ListRunsByChannel(r.Context(), ownerID, req.DocID, 50)
+	runs, err := h.Core.ListRunsByChannel(r.Context(), ownerID, req.DocID, 50)
 	if err != nil {
 		log.Printf("texture test api: list channel runs for worker update: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to resolve texture agent"})

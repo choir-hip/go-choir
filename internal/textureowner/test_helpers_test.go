@@ -68,7 +68,10 @@ func testAPISetup(t *testing.T, maildURLs ...string) (*agentcore.Runtime, *Handl
 			runID := strings.TrimSpace(content)
 			if runID != "" {
 				go func() {
-					rec, err := s.GetRun(ctx, runID)
+					rec, err := s.GetLifecycleRun(ctx, ownerID, computerID, runID)
+					if err != nil {
+						rec, err = s.GetRunByOwner(ctx, ownerID, runID)
+					}
 					if err == nil {
 						core.ExecuteActivationSync(ctx, &rec)
 					}

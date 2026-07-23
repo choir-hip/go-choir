@@ -91,7 +91,7 @@ reasoning = "medium"
 		t.Fatalf("conductor overlay = %q; metadata=%+v", got, conductor.Metadata)
 	}
 
-	runs, err := core.Store().ListRunsByChannel(context.Background(), "user-alice", resp.DocID, 20)
+	runs, err := core.Store().ListLifecycleRunsByChannel(context.Background(), "user-alice", "sandbox-test", resp.DocID, 20)
 	if err != nil {
 		t.Fatalf("ListRunsByChannel: %v", err)
 	}
@@ -139,11 +139,14 @@ func promptEvalTestSetup(t *testing.T, policyPath string) (*agentcore.Runtime, *
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
 	}, s, bus, provider.NewStubProvider(0), agentcore.WithContentService(contentowner.NewService(s, bus)))
-	core.SetDispatchActor(func(ctx context.Context, _, _, _ string, kind, content, _, _ string) error {
+	core.SetDispatchActor(func(ctx context.Context, ownerID, computerID, _ string, kind, content, _, _ string) error {
 		if kind != "initial_dispatch" || strings.TrimSpace(content) == "" {
 			return nil
 		}
-		rec, err := s.GetRun(ctx, strings.TrimSpace(content))
+		rec, err := s.GetLifecycleRun(ctx, ownerID, computerID, strings.TrimSpace(content))
+		if err != nil {
+			rec, err = s.GetRunByOwner(ctx, ownerID, strings.TrimSpace(content))
+		}
 		if err != nil {
 			return nil
 		}

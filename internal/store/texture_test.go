@@ -1857,7 +1857,7 @@ func TestTextureAgentMutationCreateAndGet(t *testing.T) {
 		t.Fatalf("CreateAgentMutation: %v", err)
 	}
 
-	got, err := s.GetPendingAgentMutationByDoc(ctx, "doc-1", "user-1")
+	got, err := s.GetPendingAgentMutationByDoc(ctx, "user-1", "", "doc-1")
 	if err != nil {
 		t.Fatalf("GetPendingAgentMutationByDoc: %v", err)
 	}
@@ -1887,7 +1887,7 @@ func TestTextureAgentMutationByTask(t *testing.T) {
 		t.Fatalf("CreateAgentMutation: %v", err)
 	}
 
-	got, err := s.GetAgentMutationByRun(ctx, "task-1")
+	got, err := s.GetAgentMutationByRun(ctx, "user-1", "", "task-1")
 	if err != nil {
 		t.Fatalf("GetAgentMutationByRun: %v", err)
 	}
@@ -1915,12 +1915,12 @@ func TestTextureAgentMutationComplete(t *testing.T) {
 	}
 
 	// Complete the mutation.
-	if err := s.CompleteAgentMutation(ctx, "task-1", "rev-agent-1"); err != nil {
+	if err := s.CompleteAgentMutation(ctx, "user-1", "", "task-1", "rev-agent-1"); err != nil {
 		t.Fatalf("CompleteAgentMutation: %v", err)
 	}
 
 	// Verify the mutation is now completed.
-	got, err := s.GetAgentMutationByRun(ctx, "task-1")
+	got, err := s.GetAgentMutationByRun(ctx, "user-1", "", "task-1")
 	if err != nil {
 		t.Fatalf("GetAgentMutationByRun: %v", err)
 	}
@@ -1935,7 +1935,7 @@ func TestTextureAgentMutationComplete(t *testing.T) {
 	}
 
 	// No pending mutation should be found for this doc.
-	pending, err := s.GetPendingAgentMutationByDoc(ctx, "doc-1", "user-1")
+	pending, err := s.GetPendingAgentMutationByDoc(ctx, "user-1", "", "doc-1")
 	if err != nil {
 		t.Fatalf("GetPendingAgentMutationByDoc: %v", err)
 	}
@@ -1960,18 +1960,18 @@ func TestTextureAgentMutationNoDuplicateOnCompletion(t *testing.T) {
 	}
 
 	// Complete once.
-	if err := s.CompleteAgentMutation(ctx, "task-1", "rev-agent-1"); err != nil {
+	if err := s.CompleteAgentMutation(ctx, "user-1", "", "task-1", "rev-agent-1"); err != nil {
 		t.Fatalf("first CompleteAgentMutation: %v", err)
 	}
 
 	// Try to complete again — should fail with ErrMutationAlreadyCompleted.
-	err := s.CompleteAgentMutation(ctx, "task-1", "rev-agent-2")
+	err := s.CompleteAgentMutation(ctx, "user-1", "", "task-1", "rev-agent-2")
 	if err != ErrMutationAlreadyCompleted {
 		t.Errorf("second CompleteAgentMutation: err=%v, want ErrMutationAlreadyCompleted", err)
 	}
 
 	// Verify only the first revision ID was saved.
-	got, _ := s.GetAgentMutationByRun(ctx, "task-1")
+	got, _ := s.GetAgentMutationByRun(ctx, "user-1", "", "task-1")
 	if got.RevisionID != "rev-agent-1" {
 		t.Errorf("RevisionID = %q, want %q (should not be overwritten by second completion)", got.RevisionID, "rev-agent-1")
 	}
@@ -2013,11 +2013,11 @@ func TestTextureAgentMutationFail(t *testing.T) {
 		t.Fatalf("CreateAgentMutation: %v", err)
 	}
 
-	if err := s.FailAgentMutation(ctx, "task-1"); err != nil {
+	if err := s.FailAgentMutation(ctx, "user-1", "", "task-1"); err != nil {
 		t.Fatalf("FailAgentMutation: %v", err)
 	}
 
-	got, _ := s.GetAgentMutationByRun(ctx, "task-1")
+	got, _ := s.GetAgentMutationByRun(ctx, "user-1", "", "task-1")
 	if got.State != "failed" {
 		t.Errorf("State = %q, want %q", got.State, "failed")
 	}
@@ -2037,10 +2037,10 @@ func TestTextureAgentMutationMarkStaleClearsPending(t *testing.T) {
 	if err := s.CreateAgentMutation(ctx, m); err != nil {
 		t.Fatalf("CreateAgentMutation: %v", err)
 	}
-	if err := s.MarkAgentMutationStale(ctx, "task-stale"); err != nil {
+	if err := s.MarkAgentMutationStale(ctx, "user-1", "", "task-stale"); err != nil {
 		t.Fatalf("MarkAgentMutationStale: %v", err)
 	}
-	got, err := s.GetAgentMutationByRun(ctx, "task-stale")
+	got, err := s.GetAgentMutationByRun(ctx, "user-1", "", "task-stale")
 	if err != nil {
 		t.Fatalf("GetAgentMutationByRun: %v", err)
 	}
@@ -2050,7 +2050,7 @@ func TestTextureAgentMutationMarkStaleClearsPending(t *testing.T) {
 	if got.CompletedAt == nil {
 		t.Fatal("CompletedAt is nil, want a timestamp")
 	}
-	pending, err := s.GetPendingAgentMutationByDoc(ctx, "doc-1", "user-1")
+	pending, err := s.GetPendingAgentMutationByDoc(ctx, "user-1", "", "doc-1")
 	if err != nil {
 		t.Fatalf("GetPendingAgentMutationByDoc: %v", err)
 	}
@@ -2075,11 +2075,79 @@ func TestTextureAgentMutationNoCrossUserAccess(t *testing.T) {
 	}
 
 	// user-2 should not see user-1's pending mutation.
-	got, err := s.GetPendingAgentMutationByDoc(ctx, "doc-1", "user-2")
+	got, err := s.GetPendingAgentMutationByDoc(ctx, "user-2", "", "doc-1")
 	if err != nil {
 		t.Fatalf("GetPendingAgentMutationByDoc as user-2: %v", err)
 	}
 	if got != nil {
 		t.Error("user-2 should not see user-1's pending mutation")
+	}
+}
+
+func TestTextureAgentMutationIsComputerScoped(t *testing.T) {
+	s := textureTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for _, computerID := range []string{"computer-a", "computer-b"} {
+		if err := s.CreateAgentMutation(ctx, AgentMutation{
+			DocID: "shared-doc", RunID: "shared-run", OwnerID: "shared-owner",
+			ComputerID: computerID, State: "pending", CreatedAt: now,
+		}); err != nil {
+			t.Fatalf("create mutation for %s: %v", computerID, err)
+		}
+	}
+	if err := s.CompleteAgentMutation(ctx, "shared-owner", "computer-a", "shared-run", "revision-a"); err != nil {
+		t.Fatalf("complete computer A mutation: %v", err)
+	}
+	computerA, err := s.GetAgentMutationByRun(ctx, "shared-owner", "computer-a", "shared-run")
+	if err != nil || computerA == nil || computerA.State != "completed" || computerA.RevisionID != "revision-a" {
+		t.Fatalf("computer A mutation = %+v, %v", computerA, err)
+	}
+	computerB, err := s.GetPendingAgentMutationByDoc(ctx, "shared-owner", "computer-b", "shared-doc")
+	if err != nil || computerB == nil || computerB.State != "pending" || computerB.RevisionID != "" {
+		t.Fatalf("computer B mutation = %+v, %v", computerB, err)
+	}
+}
+
+func TestTextureAgentMutationSchemaMigratesComputerScope(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "legacy-texture-mutation.db")
+	legacy, err := OpenTextureWorkspace(dbPath)
+	if err != nil {
+		t.Fatalf("open legacy fixture: %v", err)
+	}
+	for _, statement := range []string{
+		"DROP INDEX idx_texture_mutations_scope ON texture_agent_mutations",
+		"ALTER TABLE texture_agent_mutations DROP PRIMARY KEY, ADD PRIMARY KEY (doc_id, loop_id)",
+		"ALTER TABLE texture_agent_mutations DROP COLUMN computer_id",
+	} {
+		if _, err := legacy.textureHandle().Exec(statement); err != nil {
+			_ = legacy.Close()
+			t.Fatalf("prepare legacy mutation schema %q: %v", statement, err)
+		}
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatalf("close legacy fixture: %v", err)
+	}
+
+	migrated, err := OpenTextureWorkspace(dbPath)
+	if err != nil {
+		t.Fatalf("reopen migrated fixture: %v", err)
+	}
+	t.Cleanup(func() { _ = migrated.Close() })
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for _, computerID := range []string{"computer-a", "computer-b"} {
+		if err := migrated.CreateAgentMutation(ctx, AgentMutation{
+			DocID: "shared-doc", RunID: "shared-run", OwnerID: "shared-owner",
+			ComputerID: computerID, State: "pending", CreatedAt: now,
+		}); err != nil {
+			t.Fatalf("create migrated mutation for %s: %v", computerID, err)
+		}
+	}
+	for _, computerID := range []string{"computer-a", "computer-b"} {
+		mutation, err := migrated.GetAgentMutationByRun(ctx, "shared-owner", computerID, "shared-run")
+		if err != nil || mutation == nil || mutation.ComputerID != computerID {
+			t.Fatalf("migrated mutation for %s = %+v, %v", computerID, mutation, err)
+		}
 	}
 }

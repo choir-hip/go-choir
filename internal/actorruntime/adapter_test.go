@@ -2,6 +2,7 @@ package actorruntime
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"path/filepath"
 	"reflect"
@@ -121,6 +122,111 @@ func newAdapterTestEnv(t *testing.T) *adapterTestEnv {
 	return &adapterTestEnv{t: t, adapter: adapter, store: s, ctx: ctx, cancel: cancel}
 }
 
+func TestInitialDispatchUpdateIdentityIsStableAndScoped(t *testing.T) {
+	first := actorDispatchUpdateID("owner-a", "computer-a", "agent-a", "initial_dispatch", "run-a")
+	replay := actorDispatchUpdateID("owner-a", "computer-a", "agent-a", "initial_dispatch", "run-a")
+	if first != replay {
+		t.Fatalf("initial dispatch replay IDs differ: %q != %q", first, replay)
+	}
+	for name, changed := range map[string]string{
+		"owner":    actorDispatchUpdateID("owner-b", "computer-a", "agent-a", "initial_dispatch", "run-a"),
+		"computer": actorDispatchUpdateID("owner-a", "computer-b", "agent-a", "initial_dispatch", "run-a"),
+		"agent":    actorDispatchUpdateID("owner-a", "computer-a", "agent-b", "initial_dispatch", "run-a"),
+		"run":      actorDispatchUpdateID("owner-a", "computer-a", "agent-a", "initial_dispatch", "run-b"),
+	} {
+		if changed == first {
+			t.Fatalf("%s scope change reused initial dispatch ID %q", name, first)
+		}
+	}
+}
+func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "restart-running.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	ownerID, docID := "owner-running-restart", "doc-running-restart"
+	queue := seedDurableTextureUpdate(t, s, ctx, "sandbox-test", ownerID, docID, "update-running-restart", "durable update")
+	now := time.Now().UTC()
+	run := types.RunRecord{
+		RunID: "run-running-restart", AgentID: queue.TargetAgentID, OwnerID: ownerID,
+		SandboxID: "sandbox-test", ChannelID: docID, TrajectoryID: queue.TrajectoryID,
+		State: types.RunRunning, Prompt: "resume after process crash", AgentProfile: "texture", AgentRole: "texture",
+		CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{
+			"agent_profile": "texture", "agent_role": "texture", "doc_id": docID,
+			"trajectory_id": queue.TrajectoryID, "lifecycle_work_item_id": "work:" + docID,
+		},
+	}
+	if err := s.CreateRun(ctx, run); err != nil {
+		t.Fatalf("project running lifecycle activation: %v", err)
+	}
+
+	logDB, err := sql.Open("sqlite", actorLogPath(dbPath)+"?_busy_timeout=60000")
+	if err != nil {
+		t.Fatalf("open actor log: %v", err)
+	}
+	actorLog, err := actor.NewSQLiteLog(logDB)
+	if err != nil {
+		_ = logDB.Close()
+		t.Fatalf("initialize actor log: %v", err)
+	}
+	mailboxID := scopedActorMailboxID(ownerID, "sandbox-test", run.AgentID)
+	dispatch := actor.Update{
+		UpdateID:  actorDispatchUpdateID(ownerID, "sandbox-test", run.AgentID, "initial_dispatch", run.RunID),
+		ToAgentID: mailboxID, Kind: "initial_dispatch", Content: run.RunID,
+		TrajectoryID: run.TrajectoryID, CreatedAt: now,
+	}
+	if appended, err := actorLog.Append(ctx, dispatch); err != nil || !appended {
+		_ = logDB.Close()
+		t.Fatalf("seed unprocessed initial dispatch: appended=%v err=%v", appended, err)
+	}
+	if err := logDB.Close(); err != nil {
+		t.Fatalf("close seeded actor log: %v", err)
+	}
+
+	cfg := provideriface.Config{
+		SandboxID: "sandbox-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
+		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+	}
+	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
+	t.Cleanup(func() {
+		adapter.Stop()
+		adapter.cleanupLog()
+	})
+	if err := adapter.Start(ctx); err != nil {
+		t.Fatalf("restart adapter: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	var stored types.RunRecord
+	for time.Now().Before(deadline) {
+		stored, err = s.GetLifecycleRun(ctx, ownerID, "sandbox-test", run.RunID)
+		if err == nil && stored.State == types.RunCompleted {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil || stored.State != types.RunCompleted {
+		t.Fatalf("running lifecycle activation was not resumed: %+v, %v", stored, err)
+	}
+	var backlog []actor.Update
+	backlogDeadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(backlogDeadline) {
+		backlog, err = adapter.log.Unprocessed(ctx, mailboxID)
+		if err == nil && len(backlog) == 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil || len(backlog) != 0 {
+		t.Fatalf("durable initial dispatch backlog = %+v, %v", backlog, err)
+	}
+}
+
 func TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -155,7 +261,7 @@ func TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery(t *testin
 		agentID = "texture:" + docID
 	)
 	seedDurableTextureUpdate(t, s, ctx, "sandbox-startup", ownerID, docID, "update-startup-recovery", "Durable startup finding")
-	if runs, err := s.ListRunsByOwner(ctx, ownerID, 20); err != nil || len(runs) != 0 {
+	if runs, err := s.ListLifecycleRunsByOwner(ctx, ownerID, "sandbox-startup", 20); err != nil || len(runs) != 0 {
 		t.Fatalf("fixture unexpectedly has an activation before startup: %+v, %v", runs, err)
 	}
 
@@ -179,7 +285,7 @@ func TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery(t *testin
 	if agent.OwnerID != ownerID || agent.ChannelID != docID {
 		t.Fatalf("recovered Texture identity = %+v", agent)
 	}
-	runs, err := s.ListRunsByOwner(ctx, ownerID, 20)
+	runs, err := s.ListLifecycleRunsByOwner(ctx, ownerID, "sandbox-startup", 20)
 	if err != nil {
 		t.Fatalf("list startup recovery runs: %v", err)
 	}
@@ -335,7 +441,7 @@ func TestTextureColdWakeRoutesToConcreteOwner(t *testing.T) {
 	if agent.OwnerID != ownerID || agent.ChannelID != docID {
 		t.Fatalf("first-wake Texture identity = %+v", agent)
 	}
-	runs, err := env.store.ListRunsByOwner(env.ctx, ownerID, 20)
+	runs, err := env.store.ListLifecycleRunsByOwner(env.ctx, ownerID, "sandbox-test", 20)
 	if err != nil {
 		t.Fatalf("list Texture runs: %v", err)
 	}
@@ -538,6 +644,65 @@ func TestHandlerUnknownUpdateKind(t *testing.T) {
 	// Memory should be unchanged.
 	if string(resultMem) != string(existingMem) {
 		t.Errorf("memory changed: got %q, want %q (unchanged for unknown kind)", resultMem, existingMem)
+	}
+}
+
+func createLifecycleActorRun(t *testing.T, env *adapterTestEnv, suffix string, state types.RunState) types.RunRecord {
+	t.Helper()
+	ownerID := "owner-lifecycle-" + suffix
+	docID := "doc-lifecycle-" + suffix
+	queue := seedDurableTextureUpdate(t, env.store, env.ctx, "sandbox-test", ownerID, docID, "update-"+suffix, "durable update")
+	now := time.Now().UTC()
+	rec := types.RunRecord{
+		RunID: "run-lifecycle-" + suffix, AgentID: queue.TargetAgentID, OwnerID: ownerID,
+		SandboxID: "sandbox-test", ChannelID: docID, TrajectoryID: queue.TrajectoryID,
+		State: state, Prompt: "execute lifecycle activation", AgentProfile: "texture", AgentRole: "texture",
+		CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{
+			"agent_profile": "texture", "agent_role": "texture", "doc_id": docID,
+			"trajectory_id": queue.TrajectoryID, "lifecycle_work_item_id": "work:" + docID,
+		},
+	}
+	if err := env.store.CreateRun(env.ctx, rec); err != nil {
+		t.Fatalf("create lifecycle actor run: %v", err)
+	}
+	return rec
+}
+
+func TestProductionActorHandlerResolvesLifecycleRunsForDispatchResumeAndCancel(t *testing.T) {
+	env := newAdapterTestEnv(t)
+	handler := newActorHandler(env.adapter.Runtime, nil)
+
+	dispatched := createLifecycleActorRun(t, env, "dispatch", types.RunPending)
+	update := actorUpdate(dispatched.OwnerID, "initial_dispatch", dispatched.AgentID, dispatched.RunID)
+	if _, err := handler.HandleUpdate(env.ctx, update.ToAgentID, update, nil); err != nil {
+		t.Fatalf("dispatch lifecycle activation: %v", err)
+	}
+	stored, err := env.store.GetLifecycleRun(env.ctx, dispatched.OwnerID, dispatched.SandboxID, dispatched.RunID)
+	if err != nil || stored.State != types.RunCompleted {
+		t.Fatalf("dispatched lifecycle run = %+v, %v", stored, err)
+	}
+
+	resumed := createLifecycleActorRun(t, env, "resume", types.RunPassivated)
+	memory, _ := json.Marshal(resumeState{RunID: resumed.RunID, Phase: "parked"})
+	update = actorUpdate(resumed.OwnerID, "coagent_result", resumed.AgentID, "resume")
+	if _, err := handler.HandleUpdate(env.ctx, update.ToAgentID, update, memory); err != nil {
+		t.Fatalf("resume lifecycle activation: %v", err)
+	}
+	stored, err = env.store.GetLifecycleRun(env.ctx, resumed.OwnerID, resumed.SandboxID, resumed.RunID)
+	if err != nil || stored.State != types.RunCompleted {
+		t.Fatalf("resumed lifecycle run = %+v, %v", stored, err)
+	}
+
+	cancelled := createLifecycleActorRun(t, env, "cancel", types.RunPassivated)
+	memory, _ = json.Marshal(resumeState{RunID: cancelled.RunID, Phase: "parked"})
+	update = actorUpdate(cancelled.OwnerID, "cancel", cancelled.AgentID, "")
+	if _, err := handler.HandleUpdate(env.ctx, update.ToAgentID, update, memory); err != nil {
+		t.Fatalf("cancel lifecycle activation: %v", err)
+	}
+	stored, err = env.store.GetLifecycleRun(env.ctx, cancelled.OwnerID, cancelled.SandboxID, cancelled.RunID)
+	if err != nil || stored.State != types.RunCancelled {
+		t.Fatalf("cancelled lifecycle run = %+v, %v", stored, err)
 	}
 }
 

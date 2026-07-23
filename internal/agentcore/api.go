@@ -907,7 +907,7 @@ func (h *APIHandler) HandleRunList(w http.ResponseWriter, r *http.Request) {
 	channelID := strings.TrimSpace(r.URL.Query().Get("channel_id"))
 	var runs []types.RunRecord
 	if channelID != "" {
-		runs, err = h.rt.Store().ListRunsByChannel(r.Context(), ownerID, channelID, limit)
+		runs, err = h.rt.ListRunsByChannel(r.Context(), ownerID, channelID, limit)
 	} else {
 		runs, err = h.rt.ListRunsByOwner(r.Context(), ownerID, limit)
 	}

@@ -20,6 +20,7 @@
     getRevision,
     getTextureDiagnosis,
     listDocuments,
+    lifecycleCurrentDocumentRevisionID,
     listRevisions,
     openDocumentStream,
     previewTextureMerge,
@@ -532,7 +533,7 @@
 
   async function handleLifecycleProjection(snapshot) {
     if (!snapshot || snapshot.trajectory?.trajectory_id !== currentDoc?.trajectory_id) return;
-    const nextHead = snapshot.head_revision?.revision_id || '';
+    const nextHead = lifecycleCurrentDocumentRevisionID(snapshot);
     latestHeadRevisionId = nextHead || latestHeadRevisionId;
     agentPending = snapshot.activation?.state === 'pending' || snapshot.activation?.state === 'running' || snapshot.activation?.state === 'blocked';
     agentRunId = snapshot.activation?.run_id || '';

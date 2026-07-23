@@ -117,22 +117,25 @@ func (s *Store) AppendRunMemoryEntry(ctx context.Context, entry types.RunMemoryE
 }
 
 // LatestActorRunMemoryEntries returns the most recent durable memory log for a
-// prior inactive activation of the same actor identity.
-func (s *Store) LatestActorRunMemoryEntries(ctx context.Context, ownerID, agentID, excludeRunID string) (string, []types.RunMemoryEntry, error) {
+// prior inactive activation of the same computer-scoped actor identity.
+func (s *Store) LatestActorRunMemoryEntries(ctx context.Context, ownerID, computerID, agentID, excludeRunID string) (string, []types.RunMemoryEntry, error) {
 	ownerID = strings.TrimSpace(ownerID)
+	computerID = strings.TrimSpace(computerID)
 	agentID = strings.TrimSpace(agentID)
 	excludeRunID = strings.TrimSpace(excludeRunID)
 	if ownerID == "" {
 		return "", nil, fmt.Errorf("latest actor run memory: owner_id is required")
 	}
+	if computerID == "" {
+		return "", nil, fmt.Errorf("latest actor run memory: computer_id is required")
+	}
 	if agentID == "" {
 		return "", nil, fmt.Errorf("latest actor run memory: agent_id is required")
 	}
 
-	// Find candidate runs from OG, then check for run_memory_entries in SQL.
-	// Use a large limit to avoid missing older runs that have memory
-	// entries when newer runs don't.
-	objs, err := s.ogListByMetadata(ctx, ogKindRun, "agent_id", agentID, 100000)
+	// Exhaust matching agent IDs before owner/state filtering; a fixed
+	// pre-filter window can hide an older activation with durable memory.
+	objs, err := s.ogListAllByMetadata(ctx, ogKindRun, "agent_id", agentID)
 	if err != nil {
 		return "", nil, fmt.Errorf("query latest actor run memory: %w", err)
 	}
@@ -146,7 +149,7 @@ func (s *Store) LatestActorRunMemoryEntries(ctx context.Context, ownerID, agentI
 		if err := ogDecode(obj, &rec); err != nil {
 			continue
 		}
-		if rec.OwnerID != ownerID {
+		if rec.OwnerID != ownerID || rec.SandboxID != computerID {
 			continue
 		}
 		if rec.RunID == excludeRunID {

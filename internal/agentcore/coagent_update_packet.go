@@ -60,7 +60,7 @@ func (rt *Runtime) projectTerminalOutcomeContent(ctx context.Context, updates []
 			continue
 		}
 		sourceRunID := strings.TrimSpace(update.SourceRunID)
-		rec, err := rt.store.GetRun(ctx, sourceRunID)
+		rec, err := rt.getRunForComputer(ctx, update.OwnerID, sourceRunID)
 		if err != nil {
 			return nil, fmt.Errorf("project terminal outcome %s: load source run %s: %w", update.UpdateID, sourceRunID, err)
 		}

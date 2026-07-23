@@ -67,17 +67,18 @@ func (rt *Runtime) TextureSandboxID() string {
 	return rt.cfg.SandboxID
 }
 
-// TextureActiveRunByAgent returns the latest executing run for an actor.
-func (rt *Runtime) TextureActiveRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, bool, error) {
+// TextureActiveRunByAgent returns the latest executing lifecycle run for one computer-scoped actor.
+func (rt *Runtime) TextureActiveRunByAgent(ctx context.Context, ownerID, computerID, agentID string) (types.RunRecord, bool, error) {
 	if rt == nil || rt.store == nil {
 		return types.RunRecord{}, false, nil
 	}
 	ownerID = strings.TrimSpace(ownerID)
+	computerID = strings.TrimSpace(computerID)
 	agentID = strings.TrimSpace(agentID)
-	if ownerID == "" || agentID == "" {
+	if ownerID == "" || computerID == "" || agentID == "" {
 		return types.RunRecord{}, false, nil
 	}
-	rec, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, agentID)
+	rec, err := rt.store.GetLatestActiveLifecycleRunByAgent(ctx, ownerID, computerID, agentID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return types.RunRecord{}, false, nil
@@ -97,7 +98,7 @@ func (rt *Runtime) TextureChannelHasGroundedHistory(ctx context.Context, ownerID
 	if channelID == "" {
 		return false, nil
 	}
-	runs, err := rt.store.ListRunsByChannel(ctx, ownerID, channelID, 500)
+	runs, err := rt.ListRunsByChannel(ctx, ownerID, channelID, 500)
 	if err != nil {
 		return false, err
 	}
@@ -141,7 +142,7 @@ func (rt *Runtime) LatestTextureActorToolLoopBudgetSpend(ctx context.Context, ow
 	if ownerID == "" || agentID == "" {
 		return spend, false, nil
 	}
-	sourceRunID, _, err := rt.store.LatestActorRunMemoryEntries(ctx, ownerID, agentID, "")
+	sourceRunID, _, err := rt.store.LatestActorRunMemoryEntries(ctx, ownerID, rt.TextureSandboxID(), agentID, "")
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return spend, false, nil

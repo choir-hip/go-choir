@@ -160,6 +160,7 @@ type CoagentSourcePacket struct {
 	MessageSeq          int64                      `json:"message_seq"`
 	TrajectoryID        string                     `json:"trajectory_id,omitempty"`
 	WorkItemID          string                     `json:"work_item_id,omitempty"`
+	WorkDisposition     WorkItemStatus             `json:"work_disposition,omitempty"`
 	Role                string                     `json:"role,omitempty"`
 	SourceRunID         string                     `json:"source_run_id,omitempty"`
 	SourceOutcomeSHA256 string                     `json:"source_outcome_sha256,omitempty"`

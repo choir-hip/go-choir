@@ -115,7 +115,7 @@ func (h *Handler) existingReconcilerTextureHandoff(ctx context.Context, parentRe
 	if h == nil || h.Store == nil || parentRec == nil {
 		return types.RunRecord{}, false, nil
 	}
-	runs, err := h.Store.ListRunsByChannel(ctx, parentRec.OwnerID, strings.TrimSpace(docID), 200)
+	runs, err := h.Core.ListRunsByChannel(ctx, parentRec.OwnerID, strings.TrimSpace(docID), 200)
 	if err != nil {
 		return types.RunRecord{}, false, fmt.Errorf("list existing reconciler Texture handoffs: %w", err)
 	}
@@ -134,7 +134,7 @@ func (h *Handler) coagentTextureTargetDocument(ctx context.Context, parentRec *t
 	ownerID := strings.TrimSpace(parentRec.OwnerID)
 	channelID := strings.TrimSpace(req.ChannelID)
 	if channelID != "" {
-		if doc, err := h.Store.GetDocument(ctx, channelID, ownerID); err == nil {
+		if doc, err := h.getTextureDocument(ctx, ownerID, channelID); err == nil {
 			if strings.TrimSpace(doc.TrajectoryID) == "" || strings.TrimSpace(doc.ComputerID) == "" {
 				return types.Document{}, false, "", fmt.Errorf("existing Texture document is not bound to durable lifecycle authority")
 			}
