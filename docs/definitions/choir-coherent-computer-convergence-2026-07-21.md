@@ -269,29 +269,29 @@ execution:
     exit: "This Definition is complete, main is clean, staging is identified and healthy, and exactly one successor may become executable."
 
 now:
-  status: ready
+  status: blocked_incomplete
   slice: D-land-deploy-and-prove
-  question: "Will the accepted mailbox migration and identity-specific restart oracle now pass hosted CI and restore Node B activation without losing retained delivery?"
+  question: "Will a clean retry distinguish hosted store-shard wall-clock variance from a reproducible source failure?"
   reconciliation:
-    observed_at: 2026-07-23T10:09:13Z
-    source_ref: refs/remotes/origin/main@8063b5ff
-    deploy_identity: "GitHub Actions run 29997288005 did not deploy 129a3d98: race non-runtime shard 1 failed a false mailbox-wide restart assertion. The prior signed accepted deployment remains 676f0772 epoch 114."
+    observed_at: 2026-07-23T10:30:54Z
+    source_ref: refs/remotes/origin/main@4d69567c9cd92eb2255de78387fcc945c4d8f809
+    deploy_identity: "GitHub Actions run 29998711216 did not deploy 4d69567c: every selected gate except race non-runtime shard 0 passed; the isolated internal/store package hit its 600-second package timeout while TestUpdateRunPreservesLegacyTrajectoryIndexOnReactivation was active. The prior signed accepted deployment remains 676f0772 epoch 114."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 contains the accepted test-only oracle repair plus this coherent receipt after origin/main@8063b5ff; protected unrelated worktrees remain untouched."
+    worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 contains only this code-free hosted-timeout receipt after origin/main@4d69567c; protected unrelated worktrees remain untouched."
     status: reconciled
   candidate:
     id: convergence-durable-work-runtime-26
-    state: independent_review_accepted
-    ref: accepted-uncommitted-code-diff@sha256:dc38362bf0b979e45bab67ee18cfa425df94f8c81b0c2d68618cad9230dfca82
+    state: landed_ci_retry_required
+    ref: refs/remotes/origin/main@4d69567c9cd92eb2255de78387fcc945c4d8f809
     owner: owner-and-current-session
     base: 8063b5ff
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_runtime_candidate: refs/remotes/origin/main@129a3d989d6c1e32cc95530e96f31dee0984d94d
-    scope: "Phase D test-only hosted acceptance correction over the landed legacy-mailbox convergence repair; effects OFF."
-    observed_problem: "Hosted race execution exposed a false restart assertion: after the seeded initial dispatch completed its target run, the test required the entire actor mailbox to be empty even though that activation may legitimately enqueue a distinct follow-on dispatch. The hosted failure retained only a different update ID; the seeded update was no longer pending. The exact race test reproduced locally twice in ten iterations."
-    repair_evidence: "The accepted candidate waits for the seeded deterministic UpdateID to leave Unprocessed while preserving the target RunCompleted assertion and failing on query errors. The focused race test passed twenty iterations, the complete actorruntime race package passed, git diff --check passed, and Codex plus OMP GPT-5.5 independently accepted exact digest dc38362b with no blockers."
-    remaining_error: "Land the accepted test correction, pass hosted CI, deploy to Node B, verify signed host/guest identity and retained migration delivery, repeat stop/start, and finish public lifecycle/cancellation/client acceptance."
+    scope: "Phase D landed mailbox migration and test-only restart oracle correction; effects OFF."
+    observed_problem: "The repaired restart oracle passed its hosted shard, but the isolated internal/store race package exhausted the existing 600-second package timeout. Hosted evidence names no failed store assertion and reports one test merely active at timeout. That exact test passed locally under race three times in 24 seconds. The immediately prior hosted store shard passed the same source-bearing migration commit."
+    repair_evidence: "No code repair is authorized by this timing-only receipt. Retry the failed hosted jobs unchanged; diagnose or change CI only if the timeout reproduces."
+    remaining_error: "Pass hosted CI on the unchanged accepted source, deploy to Node B, verify signed host/guest identity and retained migration delivery, repeat stop/start, and finish public lifecycle/cancellation/client acceptance."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -340,9 +340,10 @@ now:
     - "GitHub Actions 29997288005 failed race non-runtime shard 1 only: TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog observed a distinct follow-on initial_dispatch in the same mailbox after the seeded run completed. Exact local race reproduction failed 2 of 10 iterations with the same mismatched update-ID evidence."
     - "/tmp/agentic-consensus-20260723-061202/manifest.tsv: Codex and OMP GPT-5.5 independently ACCEPT exact test-only candidate digest dc38362bf0b979e45bab67ee18cfa425df94f8c81b0c2d68618cad9230dfca82; no blocking findings."
     - "The repaired focused restart race passed count=20; the complete internal/actorruntime race package and git diff --check passed."
-  blocker_or_risk: "No local or frozen-review blocker remains. Hosted CI and retained Node B state remain the admissible deployment and migration evidence."
-  latest_blocker_or_risk: "Protected surfaces remain actor SQLite update/snapshot identity, scoped owner/computer authority, restart replay, deployment activation, and retained delivery. Rollback remains accepted deployment 676f0772 epoch 114. Heresy delta: discovered and repaired a test oracle that rejected legitimate follow-on mailbox work; introduced no runtime heresy."
-  next_action: "Commit and push the accepted identity-specific restart oracle with this receipt, monitor hosted CI and Node B deployment, then verify signed identity and repeat deployed lifecycle/restart/cancellation/client acceptance."
+    - "GitHub Actions 29998711216 passed the repaired non-runtime shard 1 and every selected gate except isolated internal/store race shard 0, which reached its 600-second package timeout without a failed assertion. The named active test passed locally under race count=3 in 24 seconds; the prior hosted store shard passed."
+  blocker_or_risk: "Hosted CI blocks deployment. Current evidence is timing-only and does not establish a source defect; an unchanged failed-job retry is the next discriminating probe."
+  latest_blocker_or_risk: "Protected surfaces remain actor SQLite update/snapshot identity, scoped owner/computer authority, restart replay, deployment activation, and retained delivery. Rollback remains accepted deployment 676f0772 epoch 114. Heresy delta: discovered hosted store-suite wall-clock instability; introduced no runtime heresy; no repair is justified before reproduction."
+  next_action: "Commit this code-free timeout receipt alone, rerun the failed jobs for 4d69567c unchanged, and continue deployment only if the source gates pass."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
@@ -424,6 +425,15 @@ receipts:
     problem_ref: refs/remotes/origin/main@8063b5ff
     authorization_ref: "Owner-ratified bounded generic lifecycle plus code-free problem receipt 8063b5ff"
     candidate_or_evidence_refs: [/tmp/agentic-consensus-20260723-061202/manifest.tsv, artifact://1544, artifact://1549]
+  - id: hosted-store-shard-timeout-problem-2026-07-23
+    boundary: build
+    commit_or_artifact: pending_code_free_receipt
+    proof_refs: ["GitHub Actions run 29998711216 job 89178528327", "artifact://1558", "focused local race count=3 passed in 24 seconds"]
+    rollback_ref: refs/remotes/origin/main@676f0772a06f9121ace3d014b853b8f8de844a04
+    disposition: "Problem documented before repair. Evidence is a package wall-clock timeout without a failed assertion; unchanged retry is required before changing source or CI."
+    problem_ref: "internal/store race package exhausted its 600-second hosted timeout while one test remained active."
+    authorization_ref: "Owner-ratified bounded generic lifecycle plus hosted CI evidence"
+    candidate_or_evidence_refs: [artifact://1558, artifact://1561]
 
 view:
   path: http://127.0.0.1:8788/
