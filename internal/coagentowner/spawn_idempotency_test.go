@@ -90,7 +90,7 @@ func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) 
 	if first.LoopID == "" || second.LoopID != first.LoopID {
 		t.Fatalf("handoff loops first=%q second=%q, want one reused child", first.LoopID, second.LoopID)
 	}
-	child, err := s.GetRun(ctx, first.LoopID)
+	child, err := s.GetLifecycleRun(ctx, doc.OwnerID, "sandbox-test", first.LoopID)
 	if err != nil {
 		t.Fatal(err)
 	}
