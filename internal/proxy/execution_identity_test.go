@@ -20,6 +20,27 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
+func TestBoundedIdentityDiagnostic(t *testing.T) {
+	for name, test := range map[string]struct {
+		input string
+		want  string
+	}{
+		"ordinary":         {input: " bounded detail ", want: "bounded detail"},
+		"exact boundary":   {input: strings.Repeat("x", 256), want: strings.Repeat("x", 256)},
+		"oversize":         {input: strings.Repeat("x", 257)},
+		"trimmed oversize": {input: strings.Repeat(" ", 257)},
+		"leading newline":  {input: "\nunsafe"},
+		"interior return":  {input: "unsafe\rdetail"},
+		"trailing nul":     {input: "unsafe\x00"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := boundedIdentityDiagnostic(test.input); got != test.want {
+				t.Fatalf("bounded diagnostic=%q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 	const commit = "1234567890abcdef1234567890abcdef12345678"
 	const targetCommit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -44,6 +65,13 @@ func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 	guest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Authenticated-User") != ownerID {
 			http.Error(w, "authenticated user unavailable", http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Query().Get("refuse") == "true" {
+			writeJSON(w, http.StatusServiceUnavailable, errorResponse{
+				Error:  "execution identity unavailable",
+				Reason: "incomplete or conflicting executable, realization, epoch, closure, or deploy identity",
+			})
 			return
 		}
 		issuedAt := time.Now().UTC()
@@ -173,6 +201,21 @@ func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 	}
 	if joined.PlatformAttestation.Receipt.KindFields["deployed_commit"] != targetCommit {
 		t.Fatalf("platform deployed commit = %v, want coordinator target %s", joined.PlatformAttestation.Receipt.KindFields["deployed_commit"], targetCommit)
+	}
+	refusedRequest := httptest.NewRequest(http.MethodGet, request.URL.String()+"&refuse=true", nil)
+	refusedRequest.Header.Set("Authorization", "Bearer "+apiSecret)
+	refusedResponse := httptest.NewRecorder()
+	handler.HandleAPI(refusedResponse, refusedRequest)
+	if refusedResponse.Code != http.StatusBadGateway {
+		t.Fatalf("guest refusal status=%d body=%s", refusedResponse.Code, refusedResponse.Body.String())
+	}
+	var refused errorResponse
+	if err := json.NewDecoder(refusedResponse.Body).Decode(&refused); err != nil {
+		t.Fatal(err)
+	}
+	if refused.UpstreamStatus != http.StatusServiceUnavailable ||
+		refused.Reason != "execution identity unavailable: incomplete or conflicting executable, realization, epoch, closure, or deploy identity" {
+		t.Fatalf("guest refusal diagnostic=%+v", refused)
 	}
 	handler.platformSignerDigest = "sha256:wrong"
 	badRequest := httptest.NewRequest(http.MethodGet, request.URL.String(), nil)

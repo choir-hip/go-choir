@@ -56,7 +56,9 @@ var (
 
 // errorResponse is a generic JSON error envelope.
 type errorResponse struct {
-	Error string `json:"error"`
+	Error          string `json:"error"`
+	Reason         string `json:"reason,omitempty"`
+	UpstreamStatus int    `json:"upstream_status,omitempty"`
 }
 
 // proxyHealthResponse is the JSON structure returned by the proxy /health

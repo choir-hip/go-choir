@@ -292,7 +292,7 @@ now:
   policy_resolution_ref: "Problem-documentation-first requires this receipt before any diagnostics or runtime repair. Preserve fail-closed identity acceptance; expose only bounded sanitized guest refusal diagnostics, identify the missing join at source, and do not weaken signature, nonce, closure, deployment, or VMID checks."
   blocker_or_risk: "Mission completion remains blocked: the ordinary computer is usable, but same-commit signed host/guest identity is unproved, so lifecycle and restart acceptance cannot be credited."
   latest_blocker_or_risk: "Mutation class red. Protected surfaces: guest execution identity, platform attestation, deployment identity, and acceptance. Admissible evidence: bounded no-SSH diagnostic plus signed joined identity. Rollback: 4a33fff0 to 6df1651f or prior accepted cc85f099. Conjecture delta: product usability and executable identity are independent acceptance axes. Heresy delta: discovered guest refusal hidden behind a generic host 502; introduced none; repaired route absence, not identity."
-  next_action: "Add bounded no-SSH guest refusal diagnostics without weakening the verifier, reproduce the exact missing identity prerequisite, repair it at source, independently review, then land and rerun the same clean-client identity proof."
+  next_action: "Land independently accepted bounded diagnostic candidate 7b0e4038b17f51382710a0d84150c534f97ebdb56a67d96508cacb88fdc7e623, reproduce the exact guest refusal without SSH, then repair the missing identity prerequisite at source and rerun the same clean-client proof."
 receipts:
   - id: durable-work-contract-gate-2026-07-21
     boundary: define
@@ -458,13 +458,13 @@ receipts:
 
   - id: ordinary-guest-execution-identity-refused-2026-07-23
     boundary: land
-    commit_or_artifact: pending_code_free_receipt
-    proof_refs: ["GitHub Actions 30051002959", "Deploy to Staging job 89354924805", "https://choir.news/health reports 4a33fff0", "clean browser owner 94cc12ef-be55-4dd0-9689-5916d20de988", "bootstrap vm-f5ba58035a19f9d7d72a029ed06adcbb status 200", "compute status active epoch 8197 route_absent=true runtime ready", "acceptance endpoint 502 execution identity guest refused"]
-    rollback_ref: "origin/main@6df1651f; accepted prior deployment cc85f099 and constructed guest 32302b65 epoch 129"
-    disposition: "Problem documented before diagnostics or runtime repair. Route-absence acceptance passed; executable identity remains fail-closed and unaccepted."
+    commit_or_artifact: "diagnostic candidate diff sha256 7b0e4038b17f51382710a0d84150c534f97ebdb56a67d96508cacb88fdc7e623"
+    proof_refs: ["GitHub Actions 30051002959", "Deploy to Staging job 89354924805", "https://choir.news/health reports 4a33fff0", "clean browser owner 94cc12ef-be55-4dd0-9689-5916d20de988", "bootstrap vm-f5ba58035a19f9d7d72a029ed06adcbb status 200", "compute status active epoch 8197 route_absent=true runtime ready", "acceptance endpoint 502 execution identity guest refused", "independent frozen review /tmp/agentic-consensus-20260723-192350: Codex ACCEPT, Cursor ACCEPT, OMP GPT-5.5 ACCEPT"]
+    rollback_ref: "origin/main@6d8bdf8f; accepted deployed route repair 4a33fff0; prior accepted cc85f099 and constructed guest 32302b65 epoch 129"
+    disposition: "Problem documented before diagnostics. Bounded acceptance-scoped diagnostic candidate independently accepted; verifier and success status remain fail-closed. Awaiting landing and deployed diagnosis."
     problem_ref: "Clean ordinary guest refuses signed execution identity while the host erases the actionable guest refusal reason."
-    authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; deployed clean-client evidence"
-    candidate_or_evidence_refs: [artifact://2053]
+    authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; deployed clean-client evidence; frozen red-surface review"
+    candidate_or_evidence_refs: [artifact://2053, artifact://2057, /tmp/agentic-consensus-20260723-192350/manifest.tsv]
 
 view:
   path: http://127.0.0.1:8788/

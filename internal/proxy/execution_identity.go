@@ -365,6 +365,13 @@ func executionIdentityCommitsJoin(receipt deploymentIdentityReceipt, host buildi
 		host.Commit == target && host.DeployedCommit == target
 }
 
+func boundedIdentityDiagnostic(value string) string {
+	if value == "" || len(value) > 256 || strings.ContainsAny(value, "\r\n\x00") {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
 // HandleExecutionIdentity joins guest-core evidence to the independently
 // resolved vmctl realization, immutable ComputerVersion route, host build, CI
 // deployment receipt, NixOS closure, and service executable inventory.
@@ -423,7 +430,24 @@ func (h *Handler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Request
 	body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 
 	if err != nil || response.StatusCode != http.StatusOK {
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "execution identity guest refused"})
+		refusal := errorResponse{
+			Error:          "execution identity guest refused",
+			UpstreamStatus: response.StatusCode,
+		}
+		var guestError struct {
+			Error  string `json:"error"`
+			Reason string `json:"reason"`
+		}
+		if err == nil && json.Unmarshal(body, &guestError) == nil {
+			refusal.Reason = boundedIdentityDiagnostic(guestError.Error)
+			if detail := boundedIdentityDiagnostic(guestError.Reason); detail != "" {
+				if refusal.Reason != "" {
+					refusal.Reason += ": "
+				}
+				refusal.Reason += detail
+			}
+		}
+		writeJSON(w, http.StatusBadGateway, refusal)
 		return
 	}
 	var guest guestExecutionIdentityEnvelope
