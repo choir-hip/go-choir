@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,6 +67,35 @@ func TestGetAgentByScopeSeparatesComputers(t *testing.T) {
 		t.Fatalf("channel_id = %q, want channel-b", got.ChannelID)
 	}
 	if _, err := s.GetAgentByScopeOG(ctx, "owner-og", "computer-c", "processor:doc-1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing scope error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestResolveLegacyAgentScopeRequiresExactlyOneOwner(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	base := types.AgentRecord{
+		AgentID: "legacy-agent", OwnerID: "owner-a", ComputerID: "computer-a", SandboxID: "computer-a",
+		Profile: "processor", Role: "processor", ChannelID: "channel-a", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := s.UpsertAgentOG(ctx, base); err != nil {
+		t.Fatalf("upsert unique legacy agent: %v", err)
+	}
+	got, err := s.ResolveLegacyAgentScopeOG(ctx, base.ComputerID, base.AgentID)
+	if err != nil || got.OwnerID != base.OwnerID {
+		t.Fatalf("resolve unique legacy agent: %+v, %v", got, err)
+	}
+	other := base
+	other.OwnerID = "owner-b"
+	other.ChannelID = "channel-b"
+	if err := s.UpsertAgentOG(ctx, other); err != nil {
+		t.Fatalf("upsert ambiguous legacy agent: %v", err)
+	}
+	if _, err := s.ResolveLegacyAgentScopeOG(ctx, base.ComputerID, base.AgentID); err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("ambiguous scope error = %v", err)
+	}
+	if _, err := s.ResolveLegacyAgentScopeOG(ctx, base.ComputerID, "missing-agent"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("missing scope error = %v, want ErrNotFound", err)
 	}
 }

@@ -269,29 +269,29 @@ execution:
     exit: "This Definition is complete, main is clean, staging is identified and healthy, and exactly one successor may become executable."
 
 now:
-  status: blocked_incomplete
+  status: ready
   slice: D-land-deploy-and-prove
-  question: "How can the existing scoped actor-mailbox implementation migrate one retained unscoped backlog identity without dropping or cross-binding its durable update?"
+  question: "Will the accepted atomic legacy-mailbox migration restore Node B startup while preserving retained delivery, scoped authority, and restart idempotence?"
   reconciliation:
-    observed_at: 2026-07-23T09:13:06Z
-    source_ref: refs/remotes/origin/main@23672e5879b850cd31a97db63d7140aa530cb55d
-    deploy_identity: "GitHub Actions run 29992782043 passed the selected CI gates and attempted Node B deployment of 23672e5879b850cd31a97db63d7140aa530cb55d. The refreshed public guest opened its stores, reconstructed effects OFF, then refused startup on retained unscoped actor mailbox processor-v2:processor-climate-us-rss. Deployment recorded /var/lib/go-choir/deploy-failures/29992782043-1.json and did not publish an accepted receipt; the prior signed accepted deployment remains 676f0772 epoch 114."
+    observed_at: 2026-07-23T09:54:32Z
+    source_ref: refs/remotes/origin/main@42a517bc104bc16fedb94a6ab4547648fc622b09
+    deploy_identity: "GitHub Actions run 29992782043 failed Node B deployment of 23672e5879b850cd31a97db63d7140aa530cb55d on retained unscoped mailbox processor-v2:processor-climate-us-rss. The prior signed accepted deployment remains 676f0772 epoch 114 until this reviewed repair lands."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "Canonical worktree convergence/kernel-contract-01 was clean at origin/main@676f0772 before this problem receipt; protected unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: convergence-durable-work-runtime-24
-    state: deployed_repair_required
-    ref: refs/remotes/origin/main@23672e5879b850cd31a97db63d7140aa530cb55d
+    id: convergence-durable-work-runtime-25
+    state: independent_review_accepted
+    ref: accepted-uncommitted-code-diff@sha256:b5eed3da687aa7a3d03a03b100cd8d1b10b28ca29f0b4f6de583f153deb27d34
     owner: owner-and-current-session
-    base: 23672e5879b850cd31a97db63d7140aa530cb55d
+    base: 42a517bc104bc16fedb94a6ab4547648fc622b09
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_runtime_candidate: refs/remotes/origin/main@23672e5879b850cd31a97db63d7140aa530cb55d
     scope: "Phase D deployed legacy-mailbox convergence repair; effects OFF."
-    observed_problem: "The accepted lifecycle candidate reached Node B but the refreshed guest cannot start because Adapter.Start deliberately refuses a retained pre-scoping actor backlog identity. The newer scoped mailbox implementation is wired for all new dispatches, but no durable migration exists for already-persisted actor_updates or actor_snapshots rows. This is a substrate deployment blocker, not a lifecycle reducer failure."
-    repair_evidence: "CI run 29992782043 passed Plan CI Lanes, Go Vet + Test + Build, all selected race shards, docs truth, heresy detector, and SBOM acceptance. Node B logs prove store open and effects-OFF reconstruction before the exact startup refusal. The deploy failure receipt preserves rollback evidence."
-    remaining_error: "Add a one-time fail-closed mailbox rebind that resolves the legacy agent to exactly one owner within the current ComputerID, atomically migrates pending actor_updates and any snapshot to the scoped owner/computer/agent key, refuses ambiguity or destination conflicts, then retains the scoped-only startup guard. Prove idempotence, snapshot preservation, ambiguous refusal, and production startup."
+    observed_problem: "The scoped mailbox cutover safely refused one retained unscoped actor identity and blocked Node B activation. Actor updates and snapshots needed one authority-preserving migration before runtime startup."
+    repair_evidence: "The accepted candidate enumerates pending, processed-only, and snapshot-only identities; resolves every legacy source to exactly one non-tombstoned AgentRecord on the current ComputerID; validates the complete plan; atomically rebinds all updates and snapshots in one SQLite transaction; refuses ambiguity, missing authority, duplicates, and destination conflicts before any mutation; and retains a scoped-only post-check before actor startup. Focused race tests passed ten iterations, runtime shards passed, and Codex plus OMP GPT-5.5 independently accepted exact digest b5eed3da."
+    remaining_error: "Land the reviewed candidate, pass hosted CI, deploy to Node B, verify signed host/guest identity, prove the retained update survives migration, repeat stop/start, and finish the public lifecycle/cancellation/client acceptance."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -335,9 +335,11 @@ now:
     - "/tmp/agentic-consensus-20260723-043935/manifest.tsv: Codex and OMP GPT-5.5 independently ACCEPT against exact digest 8e8129453dc9c929b13c903ba9135373d3c0962db3fc7ffa3b8d517a62d22abc; no blocking findings. Cursor and OpenCode timed out."
     - "Final focused store races passed count=20, runtime overlap/restart races passed count=10, scripts/go-test-runtime-shards passed all four shards, TestDurableWorkLifecycleSmokeTrace passed across Store reopen, focused product transitions passed count=3, go vet passed, and git diff --check passed."
     - "GitHub Actions 29992782043 passed all selected source gates but Deploy to Staging job 89162135653 failed after guest refresh: actor runtime startup refused retained mailbox processor-v2:processor-climate-us-rss as an unsupported legacy durable mailbox; incomplete receipt /var/lib/go-choir/deploy-failures/29992782043-1.json was recorded."
-  blocker_or_risk: "Deployed startup blocker: a retained unscoped actor backlog row predates scoped owner/computer mailbox identities. Refusing it is safe but leaves the stable computer unavailable; dropping or guessing its owner would violate durable delivery and authority isolation."
-  latest_blocker_or_risk: "Problem documentation first. No mailbox migration repair is committed before this receipt. Protected surfaces: actor SQLite backlog/snapshot identity, scoped owner/computer authority, restart replay, deployment activation, and retained delivery. Admissible evidence is exact one-owner rebind, ambiguity/destination-conflict refusal, snapshot and update preservation, idempotent restart, runtime shards, CI, signed staging identity, and repeated durable lifecycle acceptance. Rollback remains accepted deployment 676f0772 epoch 114."
-  next_action: "Commit this code-free deployment failure receipt alone. Then connect the existing scoped mailbox implementation to an atomic fail-closed legacy rebind, rerun local and frozen gates, land, and repeat Node B deployment."
+    - "/tmp/agentic-consensus-20260723-054649/manifest.tsv: Codex and OMP GPT-5.5 ACCEPT against exact candidate digest b5eed3da687aa7a3d03a03b100cd8d1b10b28ca29f0b4f6de583f153deb27d34; no blocking findings."
+    - "Focused actor/store/actorruntime race tests passed count=10; scripts/go-test-runtime-shards passed all four shards; go vet and git diff --check passed."
+  blocker_or_risk: "No local or frozen-review blocker remains. Deployment is still unproved: retained Node B state is the admissible evidence for the migration, delivery, and restart claims."
+  latest_blocker_or_risk: "Protected surfaces: actor SQLite update/snapshot identity, scoped owner/computer authority, restart replay, deployment activation, and retained delivery. Rollback remains accepted deployment 676f0772 epoch 114. Heresy delta: discovered legacy durable identities can survive as pending, processed-only, or snapshot-only state; introduced none in the accepted candidate; repaired startup refusal without dropping or guessing authority."
+  next_action: "Commit and push the accepted runtime-25 candidate with this coherent Definition receipt, monitor CI and Node B deployment, verify signed identity, then repeat deployed lifecycle, restart, cancellation-delivery, and client conformance acceptance."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
@@ -392,6 +394,15 @@ receipts:
     problem_ref: "Completed lifecycle activation could strand open canonical work; generic writers and restart projections could duplicate, suppress, or retain activation ownership."
     authorization_ref: "Owner-ratified bounded generic lifecycle plus accepted contract scope 05"
     candidate_or_evidence_refs: [/tmp/agentic-consensus-20260723-043935/manifest.tsv, artifact://1473, artifact://1478, artifact://1480]
+  - id: legacy-mailbox-migration-candidate-2026-07-23
+    boundary: build
+    commit_or_artifact: accepted-uncommitted-code-diff@sha256:b5eed3da687aa7a3d03a03b100cd8d1b10b28ca29f0b4f6de583f153deb27d34
+    proof_refs: ["panel manifest sha256 7c6295cedfd3b7a17fd7d9732cc6dc74b3b4829e57257d6f0b8a13f3cf688e65", "Codex ACCEPT sha256 d1a8d56a413280859237611f9163f0463b55d326c794305f2d0ffe9449cf89a9", "OMP GPT-5.5 ACCEPT sha256 673bdcc92c18095a99c55f09f09f748f5d9a5bdffb6212842a6105355a2633a7", "focused race tests count=10", "scripts/go-test-runtime-shards passed", "go vet and git diff --check passed"]
+    rollback_ref: refs/remotes/origin/main@676f0772a06f9121ace3d014b853b8f8de844a04
+    disposition: "Accepted after independent review exposed and candidate repaired incomplete identity discovery and per-mailbox partial commits. All legacy identities are now planned before one atomic SQLite rebind; effects remain OFF."
+    problem_ref: "Node B deployment 29992782043 failed on retained unscoped mailbox processor-v2:processor-climate-us-rss."
+    authorization_ref: "Owner-ratified bounded generic lifecycle plus code-free problem receipt 42a517bc"
+    candidate_or_evidence_refs: [/tmp/agentic-consensus-20260723-054649/manifest.tsv, artifact://1522, artifact://1527]
 
 view:
   path: http://127.0.0.1:8788/

@@ -913,6 +913,12 @@ func (s *Store) GetAgentByScope(ctx context.Context, ownerID, computerID, agentI
 	return s.GetAgentByScopeOG(ctx, ownerID, computerID, agentID)
 }
 
+// ResolveLegacyAgentScope resolves a pre-scoping mailbox identity only when it
+// names exactly one durable agent on the current computer.
+func (s *Store) ResolveLegacyAgentScope(ctx context.Context, computerID, agentID string) (types.AgentRecord, error) {
+	return s.ResolveLegacyAgentScopeOG(ctx, computerID, agentID)
+}
+
 func runTrajectoryID(rec types.RunRecord) string {
 	trajectoryID := strings.TrimSpace(rec.TrajectoryID)
 	if trajectoryID != "" {

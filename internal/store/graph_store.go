@@ -375,6 +375,62 @@ func (s *Store) GetAgentByScopeOG(ctx context.Context, ownerID, computerID, agen
 	return rec, nil
 }
 
+// ResolveLegacyAgentScopeOG resolves a pre-scoping mailbox identity only when
+// exactly one durable agent with that ID exists on the current computer. It is
+// a migration seam, not transition authority; ambiguity fails closed.
+func (s *Store) ResolveLegacyAgentScopeOG(ctx context.Context, computerID, agentID string) (types.AgentRecord, error) {
+	computerID, agentID = strings.TrimSpace(computerID), strings.TrimSpace(agentID)
+	if computerID == "" || agentID == "" {
+		return types.AgentRecord{}, fmt.Errorf("store: resolve legacy agent scope requires computer_id and agent_id")
+	}
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return types.AgentRecord{}, fmt.Errorf("store: object graph not initialized")
+	}
+	var match *types.AgentRecord
+	after := ""
+	for {
+		page, err := graph.ListObjectsPage(ctx, string(ogKindAgent), after, 1000)
+		if err != nil {
+			return types.AgentRecord{}, err
+		}
+		for _, obj := range page {
+			if obj.Tombstone || obj.ComputerID != computerID {
+				continue
+			}
+			var candidate types.AgentRecord
+			if err := ogDecode(obj, &candidate); err != nil {
+				return types.AgentRecord{}, err
+			}
+			if strings.TrimSpace(candidate.AgentID) != agentID ||
+				strings.TrimSpace(candidate.ComputerID) != computerID ||
+				strings.TrimSpace(candidate.OwnerID) == "" {
+				continue
+			}
+			if match != nil {
+				return types.AgentRecord{}, fmt.Errorf("store: legacy agent scope is ambiguous for computer %q agent %q", computerID, agentID)
+			}
+			selected := candidate
+			match = &selected
+		}
+		if len(page) < 1000 {
+			break
+		}
+		next := page[len(page)-1].CanonicalID
+		if next == "" || next <= after {
+			return types.AgentRecord{}, fmt.Errorf("store: legacy agent scope pagination did not advance")
+		}
+		after = next
+	}
+	if match == nil {
+		return types.AgentRecord{}, fmt.Errorf("store: legacy agent scope not found for computer %q agent %q: %w", computerID, agentID, ErrNotFound)
+	}
+	return *match, nil
+}
+
 // =========================================================================
 // Runs — object graph implementation
 // =========================================================================

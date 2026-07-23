@@ -711,3 +711,94 @@ func TestLegacySendNoBackpressure(t *testing.T) {
 		t.Fatalf("backlog = %d, want >= 3 (u2,u3,u4 in log)", len(backlog))
 	}
 }
+
+func TestSQLiteLogRebindMailboxPreservesUpdatesAndSnapshot(t *testing.T) {
+	log := testLog(t)
+	ctx := context.Background()
+	legacyID, scopedID := "legacy-agent", "owner\x00computer\x00legacy-agent"
+	if appended, err := log.Append(ctx, Update{UpdateID: "legacy-update", ToAgentID: legacyID, Content: "retained", CreatedAt: time.Now().UTC()}); err != nil || !appended {
+		t.Fatalf("append legacy update: appended=%v err=%v", appended, err)
+	}
+	if appended, err := log.Append(ctx, Update{UpdateID: "processed-update", ToAgentID: legacyID, Content: "settled", CreatedAt: time.Now().UTC()}); err != nil || !appended {
+		t.Fatalf("append processed legacy update: appended=%v err=%v", appended, err)
+	}
+	if err := log.MarkProcessed(ctx, legacyID, "processed-update"); err != nil {
+		t.Fatalf("mark legacy update processed: %v", err)
+	}
+	if err := log.SaveSnapshot(ctx, legacyID, []byte("retained-memory")); err != nil {
+		t.Fatalf("save legacy snapshot: %v", err)
+	}
+	migrated, err := log.RebindMailbox(ctx, legacyID, scopedID)
+	if err != nil || !migrated {
+		t.Fatalf("rebind mailbox: migrated=%v err=%v", migrated, err)
+	}
+	if updates, err := log.Unprocessed(ctx, legacyID); err != nil || len(updates) != 0 {
+		t.Fatalf("legacy updates after rebind: %v, %v", updates, err)
+	}
+	updates, err := log.Unprocessed(ctx, scopedID)
+	if err != nil || len(updates) != 1 || updates[0].UpdateID != "legacy-update" {
+		t.Fatalf("scoped updates after rebind: %+v, %v", updates, err)
+	}
+	memory, err := log.LoadSnapshot(ctx, scopedID)
+	if err != nil || string(memory) != "retained-memory" {
+		t.Fatalf("scoped snapshot after rebind: %q, %v", memory, err)
+	}
+	var processedMailbox string
+	var processedAt sql.NullTime
+	if err := log.db.QueryRowContext(ctx, `SELECT to_agent_id, processed_at FROM actor_updates WHERE update_id = ?`, "processed-update").Scan(&processedMailbox, &processedAt); err != nil {
+		t.Fatalf("load processed update after rebind: %v", err)
+	}
+	if processedMailbox != scopedID || !processedAt.Valid {
+		t.Fatalf("processed update after rebind: mailbox=%q processed=%v", processedMailbox, processedAt.Valid)
+	}
+	migrated, err = log.RebindMailbox(ctx, legacyID, scopedID)
+	if err != nil || migrated {
+		t.Fatalf("idempotent rebind: migrated=%v err=%v", migrated, err)
+	}
+}
+
+func TestSQLiteLogRebindMailboxRefusesSnapshotConflictAtomically(t *testing.T) {
+	log := testLog(t)
+	ctx := context.Background()
+	if appended, err := log.Append(ctx, Update{UpdateID: "legacy-update", ToAgentID: "legacy", CreatedAt: time.Now().UTC()}); err != nil || !appended {
+		t.Fatalf("append legacy update: appended=%v err=%v", appended, err)
+	}
+	if err := log.SaveSnapshot(ctx, "legacy", []byte("legacy-memory")); err != nil {
+		t.Fatalf("save legacy snapshot: %v", err)
+	}
+	if err := log.SaveSnapshot(ctx, "scoped", []byte("scoped-memory")); err != nil {
+		t.Fatalf("save scoped snapshot: %v", err)
+	}
+	if migrated, err := log.RebindMailbox(ctx, "legacy", "scoped"); err == nil || migrated {
+		t.Fatalf("conflicting rebind: migrated=%v err=%v", migrated, err)
+	}
+	updates, err := log.Unprocessed(ctx, "legacy")
+	if err != nil || len(updates) != 1 {
+		t.Fatalf("legacy update changed after refusal: %+v, %v", updates, err)
+	}
+	memory, err := log.LoadSnapshot(ctx, "legacy")
+	if err != nil || string(memory) != "legacy-memory" {
+		t.Fatalf("legacy snapshot changed after refusal: %q, %v", memory, err)
+	}
+}
+
+func TestSQLiteLogRebindMailboxRefusesUpdateDestinationConflictAtomically(t *testing.T) {
+	log := testLog(t)
+	ctx := context.Background()
+	for _, update := range []Update{
+		{UpdateID: "legacy-update", ToAgentID: "legacy", CreatedAt: time.Now().UTC()},
+		{UpdateID: "scoped-update", ToAgentID: "scoped", CreatedAt: time.Now().UTC()},
+	} {
+		if appended, err := log.Append(ctx, update); err != nil || !appended {
+			t.Fatalf("append %s: appended=%v err=%v", update.UpdateID, appended, err)
+		}
+	}
+	if migrated, err := log.RebindMailbox(ctx, "legacy", "scoped"); err == nil || migrated {
+		t.Fatalf("conflicting rebind: migrated=%v err=%v", migrated, err)
+	}
+	legacy, legacyErr := log.Unprocessed(ctx, "legacy")
+	scoped, scopedErr := log.Unprocessed(ctx, "scoped")
+	if legacyErr != nil || scopedErr != nil || len(legacy) != 1 || len(scoped) != 1 {
+		t.Fatalf("backlogs changed after refusal: legacy=%+v (%v), scoped=%+v (%v)", legacy, legacyErr, scoped, scopedErr)
+	}
+}

@@ -299,18 +299,50 @@ func (a *Adapter) BindTextureOwner(owner *textureowner.Handler) error {
 	return nil
 }
 
+func (a *Adapter) migrateLegacyActorMailboxes(ctx context.Context) error {
+	mailboxIDs, err := a.log.MailboxIdentities(ctx)
+	if err != nil {
+		return fmt.Errorf("inspect durable mailbox identities: %w", err)
+	}
+	plan := make([]actor.MailboxRebind, 0)
+	for _, mailboxID := range mailboxIDs {
+		if _, _, _, parseErr := parseScopedActorMailboxID(mailboxID); parseErr == nil {
+			continue
+		}
+		agent, resolveErr := a.store.ResolveLegacyAgentScope(ctx, a.cfg.SandboxID, mailboxID)
+		if resolveErr != nil {
+			return fmt.Errorf("resolve legacy durable mailbox %q: %w", mailboxID, resolveErr)
+		}
+		plan = append(plan, actor.MailboxRebind{
+			LegacyID: mailboxID,
+			ScopedID: scopedActorMailboxID(agent.OwnerID, agent.ComputerID, agent.AgentID),
+		})
+	}
+	migrated, err := a.log.RebindMailboxes(ctx, plan)
+	if err != nil {
+		return fmt.Errorf("rebind legacy durable mailboxes: %w", err)
+	}
+	if migrated {
+		log.Printf("actorruntime: rebound %d legacy durable mailbox identities to owner/computer scope", len(plan))
+	}
+	mailboxIDs, err = a.log.MailboxIdentities(ctx)
+	if err != nil {
+		return fmt.Errorf("verify durable mailbox identities: %w", err)
+	}
+	for _, mailboxID := range mailboxIDs {
+		if _, _, _, err := parseScopedActorMailboxID(mailboxID); err != nil {
+			return fmt.Errorf("unsupported legacy durable mailbox %q: %w", mailboxID, err)
+		}
+	}
+	return nil
+}
+
 // Start keeps actor delivery paused while the generic core and concrete Texture
 // owner reconcile durable state. Only after both scans finish are boot
 // dispatches released and the actor log swept.
 func (a *Adapter) Start(ctx context.Context) error {
-	backlogs, err := a.log.AgentsWithBacklog(ctx)
-	if err != nil {
-		return fmt.Errorf("actorruntime: inspect durable mailbox identities: %w", err)
-	}
-	for _, mailboxID := range backlogs {
-		if _, _, _, err := parseScopedActorMailboxID(mailboxID); err != nil {
-			return fmt.Errorf("actorruntime: unsupported legacy durable mailbox %q: %w", mailboxID, err)
-		}
+	if err := a.migrateLegacyActorMailboxes(ctx); err != nil {
+		return fmt.Errorf("actorruntime: %w", err)
 	}
 	a.Runtime.Start(ctx)
 	if a.textureOwner != nil {

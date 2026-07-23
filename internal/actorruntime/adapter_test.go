@@ -770,7 +770,7 @@ func TestInitialDispatchCannotLoadAnotherOwnersRun(t *testing.T) {
 	}
 }
 
-func TestAdapterStartRefusesLegacyUnscopedMailbox(t *testing.T) {
+func TestAdapterStartMigratesUniqueLegacyUnscopedMailbox(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "legacy-mailbox.db")
@@ -785,13 +785,185 @@ func TestAdapterStartRefusesLegacyUnscopedMailbox(t *testing.T) {
 		adapter.cleanupLog()
 		_ = s.Close()
 	})
+	now := time.Now().UTC()
+	agent := types.AgentRecord{
+		AgentID: "legacy-unscoped-agent", OwnerID: "legacy-owner", ComputerID: cfg.SandboxID, SandboxID: cfg.SandboxID,
+		Profile: "processor", Role: "processor", ChannelID: "legacy-channel", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := s.UpsertAgent(ctx, agent); err != nil {
+		t.Fatalf("upsert legacy agent: %v", err)
+	}
 	if appended, err := adapter.log.Append(ctx, actor.Update{
-		UpdateID: "legacy-update", ToAgentID: "legacy-unscoped-agent", Kind: "coagent_result", CreatedAt: time.Now().UTC(),
+		UpdateID: "legacy-update", ToAgentID: agent.AgentID, Kind: "retained_unknown_kind", CreatedAt: now,
 	}); err != nil || !appended {
 		t.Fatalf("append legacy mailbox: appended=%v err=%v", appended, err)
 	}
-	if err := adapter.Start(ctx); err == nil || !strings.Contains(err.Error(), "unsupported legacy durable mailbox") {
-		t.Fatalf("startup error = %v, want explicit legacy mailbox refusal", err)
+	if err := adapter.log.SaveSnapshot(ctx, agent.AgentID, []byte(`{"phase":"parked"}`)); err != nil {
+		t.Fatalf("save legacy snapshot: %v", err)
+	}
+	if err := adapter.Start(ctx); err != nil {
+		t.Fatalf("start with unique legacy mailbox: %v", err)
+	}
+	scopedID := scopedActorMailboxID(agent.OwnerID, agent.ComputerID, agent.AgentID)
+	if legacy, err := adapter.log.Unprocessed(ctx, agent.AgentID); err != nil || len(legacy) != 0 {
+		t.Fatalf("legacy backlog after startup: %+v, %v", legacy, err)
+	}
+	memory, err := adapter.log.LoadSnapshot(ctx, scopedID)
+	if err != nil || string(memory) != `{"phase":"parked"}` {
+		t.Fatalf("scoped snapshot after startup: %q, %v", memory, err)
+	}
+}
+
+func TestAdapterStartMigratesLegacyMailboxWithoutPendingBacklog(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		seed func(*testing.T, *actor.SQLiteLog, context.Context, string, time.Time)
+	}{
+		{
+			name: "snapshot-only",
+			seed: func(t *testing.T, log *actor.SQLiteLog, ctx context.Context, mailboxID string, _ time.Time) {
+				t.Helper()
+				if err := log.SaveSnapshot(ctx, mailboxID, []byte(`{"phase":"parked"}`)); err != nil {
+					t.Fatalf("save legacy snapshot: %v", err)
+				}
+			},
+		},
+		{
+			name: "processed-only",
+			seed: func(t *testing.T, log *actor.SQLiteLog, ctx context.Context, mailboxID string, now time.Time) {
+				t.Helper()
+				if appended, err := log.Append(ctx, actor.Update{UpdateID: "processed-update", ToAgentID: mailboxID, CreatedAt: now}); err != nil || !appended {
+					t.Fatalf("append processed update: appended=%v err=%v", appended, err)
+				}
+				if err := log.MarkProcessed(ctx, mailboxID, "processed-update"); err != nil {
+					t.Fatalf("mark update processed: %v", err)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			dir := t.TempDir()
+			dbPath := filepath.Join(dir, "legacy-mailbox.db")
+			s, err := store.Open(dbPath)
+			if err != nil {
+				t.Fatalf("open store: %v", err)
+			}
+			cfg := provideriface.Config{SandboxID: "sandbox-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
+			adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
+			t.Cleanup(func() {
+				adapter.Stop()
+				adapter.cleanupLog()
+				_ = s.Close()
+			})
+			now := time.Now().UTC()
+			agent := types.AgentRecord{
+				AgentID: "legacy-unscoped-agent", OwnerID: "legacy-owner", ComputerID: cfg.SandboxID, SandboxID: cfg.SandboxID,
+				Profile: "processor", Role: "processor", ChannelID: "legacy-channel", CreatedAt: now, UpdatedAt: now,
+			}
+			if err := s.UpsertAgent(ctx, agent); err != nil {
+				t.Fatalf("upsert legacy agent: %v", err)
+			}
+			tc.seed(t, adapter.log, ctx, agent.AgentID, now)
+			if err := adapter.Start(ctx); err != nil {
+				t.Fatalf("start with %s legacy mailbox: %v", tc.name, err)
+			}
+			identities, err := adapter.log.MailboxIdentities(ctx)
+			scopedID := scopedActorMailboxID(agent.OwnerID, agent.ComputerID, agent.AgentID)
+			if err != nil || len(identities) != 1 || identities[0] != scopedID {
+				t.Fatalf("mailbox identities after startup: %q, %v; want [%q]", identities, err, scopedID)
+			}
+		})
+	}
+}
+
+func TestAdapterStartRefusesAmbiguousLegacyUnscopedMailbox(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "ambiguous-legacy-mailbox.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	cfg := provideriface.Config{SandboxID: "sandbox-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
+	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
+	t.Cleanup(func() {
+		adapter.Stop()
+		adapter.cleanupLog()
+		_ = s.Close()
+	})
+	now := time.Now().UTC()
+	for _, ownerID := range []string{"owner-a", "owner-b"} {
+		if err := s.UpsertAgent(ctx, types.AgentRecord{
+			AgentID: "legacy-unscoped-agent", OwnerID: ownerID, ComputerID: cfg.SandboxID, SandboxID: cfg.SandboxID,
+			Profile: "processor", Role: "processor", ChannelID: ownerID, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("upsert legacy agent for %s: %v", ownerID, err)
+		}
+	}
+	if appended, err := adapter.log.Append(ctx, actor.Update{
+		UpdateID: "legacy-update", ToAgentID: "legacy-unscoped-agent", Kind: "coagent_result", CreatedAt: now,
+	}); err != nil || !appended {
+		t.Fatalf("append legacy mailbox: appended=%v err=%v", appended, err)
+	}
+	if err := adapter.Start(ctx); err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("startup error = %v, want ambiguous legacy mailbox refusal", err)
+	}
+	if legacy, err := adapter.log.Unprocessed(ctx, "legacy-unscoped-agent"); err != nil || len(legacy) != 1 {
+		t.Fatalf("legacy backlog changed after refusal: %+v, %v", legacy, err)
+	}
+}
+
+func TestAdapterStartLegacyMailboxBatchConflictMutatesNone(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "batch-conflict-mailbox.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	cfg := provideriface.Config{SandboxID: "sandbox-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
+	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
+	t.Cleanup(func() {
+		adapter.Stop()
+		adapter.cleanupLog()
+		_ = s.Close()
+	})
+	now := time.Now().UTC()
+	first := types.AgentRecord{
+		AgentID: "legacy-a", OwnerID: "owner-a", ComputerID: cfg.SandboxID, SandboxID: cfg.SandboxID,
+		Profile: "processor", Role: "processor", ChannelID: "channel-a", CreatedAt: now, UpdatedAt: now,
+	}
+	second := types.AgentRecord{
+		AgentID: "legacy-b", OwnerID: "owner-b", ComputerID: cfg.SandboxID, SandboxID: cfg.SandboxID,
+		Profile: "processor", Role: "processor", ChannelID: "channel-b", CreatedAt: now, UpdatedAt: now,
+	}
+	for _, agent := range []types.AgentRecord{first, second} {
+		if err := s.UpsertAgent(ctx, agent); err != nil {
+			t.Fatalf("upsert legacy agent %s: %v", agent.AgentID, err)
+		}
+		if appended, err := adapter.log.Append(ctx, actor.Update{
+			UpdateID: "update-" + agent.AgentID, ToAgentID: agent.AgentID, CreatedAt: now,
+		}); err != nil || !appended {
+			t.Fatalf("append legacy mailbox %s: appended=%v err=%v", agent.AgentID, appended, err)
+		}
+	}
+	secondScopedID := scopedActorMailboxID(second.OwnerID, second.ComputerID, second.AgentID)
+	if appended, err := adapter.log.Append(ctx, actor.Update{
+		UpdateID: "scoped-destination-update", ToAgentID: secondScopedID, CreatedAt: now,
+	}); err != nil || !appended {
+		t.Fatalf("append destination conflict: appended=%v err=%v", appended, err)
+	}
+	if err := adapter.Start(ctx); err == nil || !strings.Contains(err.Error(), "destination") {
+		t.Fatalf("startup error = %v, want batch destination refusal", err)
+	}
+	firstScopedID := scopedActorMailboxID(first.OwnerID, first.ComputerID, first.AgentID)
+	firstLegacy, firstErr := adapter.log.Unprocessed(ctx, first.AgentID)
+	firstScoped, scopedErr := adapter.log.Unprocessed(ctx, firstScopedID)
+	secondLegacy, secondErr := adapter.log.Unprocessed(ctx, second.AgentID)
+	if firstErr != nil || scopedErr != nil || secondErr != nil || len(firstLegacy) != 1 || len(firstScoped) != 0 || len(secondLegacy) != 1 {
+		t.Fatalf("batch conflict partially migrated: first legacy=%+v (%v), first scoped=%+v (%v), second legacy=%+v (%v)",
+			firstLegacy, firstErr, firstScoped, scopedErr, secondLegacy, secondErr)
 	}
 }
 
