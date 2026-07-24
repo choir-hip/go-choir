@@ -40,17 +40,16 @@ jobs:
             jq '{ownerships: [.ownerships[] | select((.epoch // 0) >= 8197) | {computer_id,vm_id,desktop_id,state,epoch,sandbox_url,immutable_identity}]}'
           echo '==> signer-gated deployment journal'
           journalctl -u go-choir-vmctl.service \
-            --since '2026-07-24 00:05:00 UTC' \
+            --since '20 minutes ago' \
             --no-pager --output=short-iso --lines=3000 |
             sed -E \
               -e 's/(Bearer )[A-Za-z0-9._-]+/\1[REDACTED]/g' \
               -e 's/((token|secret|private_key|api_key)[=:])[A-Za-z0-9._\/-]+/\1[REDACTED]/Ig' |
             grep -E 'choir-receipt-signer|guest signer|guest-signer|startup|vm-|health|ready|failed|error' |
             tail -1200
-          echo '==> unfiltered first-boot dependency window'
+          echo '==> unfiltered recent signer dependency window'
           journalctl -u go-choir-vmctl.service \
-            --since '2026-07-24 00:06:35 UTC' \
-            --until '2026-07-24 00:07:05 UTC' \
+            --since '20 minutes ago' \
             --no-pager --output=short-iso |
             sed -E \
               -e 's/(Bearer )[A-Za-z0-9._-]+/\1[REDACTED]/g' \
@@ -58,14 +57,8 @@ jobs:
             tail -1500
           echo '==> recent VM artifact metadata'
           find /var/lib/go-choir/vm-state -maxdepth 2 -type f \
-            -newermt '2026-07-24 00:05:00 UTC' \
+            -newermt '20 minutes ago' \
             -printf '%TY-%Tm-%TdT%TH:%TM:%TSZ %s %p\n' | sort | tail -200
-          echo '==> failed first-boot signer inode metadata'
-          failed_image=/var/lib/go-choir/vm-state/vm-57d6bb29efbea2ebd64c5384d6be2c58/data.img
-          for path in /choir-signers /choir-signers/guest-core /choir-signers/guest-core/key.ed25519 /choir-signers/guest-core/receipts; do
-            echo "-- $path"
-            debugfs -R "stat $path" "$failed_image" 2>&1 || true
-          done
           REMOTE_DIAGNOSTICS
 
       - name: Cleanup SSH
