@@ -271,28 +271,29 @@ execution:
 now:
   status: problem_documented
   slice: D-land-deploy-and-prove
-  question: "Why does a clean accepted computer fail its first Texture activation after signer-gated boot and restart identity both pass?"
+  question: "Why does restart reconstruction repeatedly launch a generic Texture-shaped activation that cannot revise or settle its bound artifact?"
   reconciliation:
-    observed_at: 2026-07-24T01:38:47Z
+    observed_at: 2026-07-24T02:07:31Z
     source_ref: refs/remotes/origin/main@2fca28c94a39bbcc9bafe623a79b98daabe4a6be
     deploy_identity: "GitHub Actions 300585656141 passed; Deploy to Staging job 89375651491 passed; /health reports proxy build/deployed_commit 2fca28c94a39bbcc9bafe623a79b98daabe4a6be."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
-    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir was clean before this required code-free product-problem receipt. Protected unrelated worktrees remain untouched."
+    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir contains only this required code-free product-problem receipt after the prior provider receipt landed. Protected unrelated worktrees remain untouched."
     status: reconciled
   accepted_deployment:
     source_commit: 2fca28c94a39bbcc9bafe623a79b98daabe4a6be
     ci_ref: "GitHub Actions 300585656141 passed; Deploy to Staging job 89375651491 passed."
-    environment_identity: "Clean owner signer-repair-2fca28c9-1784856712359@example.com booted computer-97a7801d0f0978dc30a99acf3b2a13388 as vm-334f50a5608c54f087c892f87bdf9753 epoch 8208; signed execution identity joined host, deployed commit, guest commit, ComputerID, realization, epoch, executable digest, guest image/config digests, and signer key. Public stop/wake reconstructed epoch 8209 and the same signed joins passed again."
-    rollback_ref: "origin/main@7499cf69; accepted signer-gated deployment 2fca28c9; prior usable runtime 6dfa50f9."
+    environment_identity: "Clean owner signer-repair-2fca28c9-1784856712359@example.com uses computer-97a7801d0f0978dc30a99acf3b2a13388 realized as vm-334f50a5608c54f087c892f87bdf9753. Signed execution identity joined the exact host/guest/config state before restart at epoch 8209 and after public stop/wake at epoch 8210."
+    rollback_ref: "origin/main@6df714bb; deployed runtime 2fca28c9; prior usable runtime 6dfa50f9."
   observed_product_evidence:
-    - "Clean first boot completed and signed execution identity returned 200. Public stop/wake completed and post-restart signed execution identity returned 200 with epoch 8209."
-    - "Prompt submission 34b66223-13b3-58ae-9c9e-ea4e2708fa2d created trajectory 04e79966-b4f6-556d-a361-335f9b1a770c and work item bbde807f-e399-5fc2-a557-3dafd100797d, proving the durable-work start boundary executes."
-    - "Its first Texture activation 14191eb1-9b68-466d-8c3d-dda7dee5b934 failed before any document revision with ChatGPT 401 refresh_token_reused; the trajectory remains live with its work item open and no false settlement."
-  observed_problem: "The clean computer's persisted model policy selects ChatGPT for conductor, Texture, and researcher roles, but the available ChatGPT credential cannot refresh because its refresh token was already consumed. Provider authentication, not signer readiness or lifecycle authority, blocks the deployed lifecycle proof."
-  policy_resolution_ref: "Problem-documentation-first requires this receipt before operational recovery or provider/auth repair. Preserve the failed trajectory as evidence. Use the computer-owned model policy to select an already configured non-ChatGPT provider for acceptance, or restore ChatGPT authentication through its supported owner path; do not weaken lifecycle settlement, execution identity, or signer authority."
-  blocker_or_risk: "Mission completion remains blocked until a real provider activation revises and settles the trivial lifecycle, then the evidence-heavy/restart/delivery/cancellation/client acceptance path passes."
-  latest_blocker_or_risk: "Mutation class red for provider routing and deployed acceptance. Protected surfaces: provider/model routing, durable actor delivery, trajectory/work settlement, signed execution identity, deployment acceptance. Admissible proof: a real provider activation through the public prompt path plus lifecycle snapshot/restart/client evidence. Rollback: restore the prior computer-owned model-policy content; no source rollback is required. Conjecture delta: signer namespace repair is accepted; the next blocker is stale ChatGPT owner credential state. Heresy delta: discovered provider credential failure; introduced none; repaired clean first-boot and restart signer identity."
-  next_action: "Land this code-free problem receipt, switch the clean computer through its public file surface to a configured non-ChatGPT model policy, confirm policy resolution, and rerun the trivial lifecycle from a new prompt."
+    - "After refreshing the supported ChatGPT owner credential, trivial prompt submission 5b3ea18a-b5aa-5e7c-9d3e-714f9b537802 settled trajectory 0021b3c1-b826-525a-98fb-03aec1f9c27c at reducer sequence 5 with a revised artifact, proving the provider path and ordinary lifecycle settlement."
+    - "Evidence-heavy submission f8e31ab3-b4f8-5913-be91-cb9bdfc0f85c created trajectory 624987d7-b19c-5e7b-baac-faf9f1f9b851, artifact 8e806072-0433-5d42-96bf-d72f48e2be43, native Texture work f32beb40-32e2-5891-9682-2c8eff1731e5, and researcher work 1e912df8-bbcd-56b8-856f-24d894774c58."
+    - "Researcher update f6a984bf-ee76-54ce-82e9-59f998af0e59 advanced artifact head to 11f31087-6831-53d9-bfa0-0e9d01ffe2a4 while keeping work open; later updates upd-c7b2dfb13e09d8ca84bd480ffe5f804a and upd-e23dad68d1631ab1ce8f0e06d5076ceb remained pending through public stop/wake from epoch 8209 to 8210."
+    - "Post-restart recovery activations a363b034-83e2-436c-8abf-77f8e43ac7c6 and d09ef274-ee9b-4535-aca5-4a28f5b6be7a both completed without lifecycle progress. Each reported rewrite_texture requires a Texture agent revision run; canonical trajectory remained live at reducer sequence 6, both work items remained open, both typed updates remained pending, and head remained revision 11f31087-6831-53d9-bfa0-0e9d01ffe2a4."
+  observed_problem: "The generic assigned-work recovery path accepts Texture profile work and constructs an ordinary run with agent/profile/trajectory metadata but without the canonical Texture revision-run type, doc_id, or current revision binding. That supersedes the existing Texture-owner ReconcileAgentWake path after restart, so rewrite_texture refuses correctly and terminal completion recursively launches another invalid recovery activation."
+  policy_resolution_ref: "Problem-documentation-first requires this receipt before source repair. Prefer deletion: exclude Texture from generic assigned-work recovery so the already-wired Texture-owner subject reconciliation owns Texture reconstruction and creates a canonical revision run from document state. Do not weaken rewrite_texture validation or synthesize revision authority from run text."
+  blocker_or_risk: "Mission completion remains blocked until the generic recovery path stops claiming Texture work, the existing Texture-owner wake path consumes the pending typed packets after restart, and deployed evidence proves artifact revision, work settlement, restart durability, cancellation, and client conformance."
+  latest_blocker_or_risk: "Mutation class red. Protected surfaces: durable actor delivery, restart reconstruction, Texture canonical writes, trajectory/work settlement, and deployed acceptance. Admissible proof: focused source tests plus a clean deployed evidence-heavy lifecycle spanning public stop/wake and settling through a canonical Texture revision. Rollback: revert the narrow recovery exclusion to origin/main@6df714bb. Conjecture delta: provider authentication is repaired operationally; restart durability exposed a dual recovery-authority bug. Heresy delta: discovered generic recovery claiming Texture revision authority; introduced none; repaired none yet."
+  next_action: "Land this code-free problem receipt, delete Texture from the generic assigned-work recovery profile set, add a focused restart/reconciliation regression, independently review the frozen repair, deploy, and rerun the pending evidence-heavy lifecycle from a clean client."
 receipts:
   - id: durable-work-contract-gate-2026-07-21
     boundary: define
@@ -496,6 +497,16 @@ receipts:
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; deployed clean-client evidence; computer-owned runtime configuration authority"
     candidate_or_evidence_refs: ["run 14191eb1-9b68-466d-8c3d-dda7dee5b934", "trajectory 04e79966-b4f6-556d-a361-335f9b1a770c"]
 
+
+  - id: texture-restart-recovery-authority-conflict-2026-07-24
+    boundary: prove
+    commit_or_artifact: pending_code_free_receipt
+    proof_refs: ["https://choir.news/health reports 2fca28c9", "clean owner signer-repair-2fca28c9-1784856712359@example.com", "computer-97a7801d0f0978dc30a99acf3b2a13388 realization vm-334f50a5608c54f087c892f87bdf9753 epochs 8209 and 8210", "submission f8e31ab3-b4f8-5913-be91-cb9bdfc0f85c", "trajectory 624987d7-b19c-5e7b-baac-faf9f1f9b851 reducer_seq 6", "artifact 8e806072-0433-5d42-96bf-d72f48e2be43 head 11f31087-6831-53d9-bfa0-0e9d01ffe2a4", "pending updates upd-c7b2dfb13e09d8ca84bd480ffe5f804a and upd-e23dad68d1631ab1ce8f0e06d5076ceb", "invalid recovery runs a363b034-83e2-436c-8abf-77f8e43ac7c6 and d09ef274-ee9b-4535-aca5-4a28f5b6be7a"]
+    rollback_ref: "origin/main@6df714bb; deployed runtime 2fca28c9"
+    disposition: "Problem documented before repair. Existing Texture-owner ReconcileAgentWake is the canonical replacement and must own restart reconstruction; generic assigned-work recovery must stop claiming Texture profile work."
+    problem_ref: "Generic assigned-work recovery creates Texture-profile runs without Texture revision identity, so canonical write validation refuses and terminal completion loops without consuming pending typed updates or settling work."
+    authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first and deletion-first; deployed restart evidence; no weakening of Texture write or lifecycle authority"
+    candidate_or_evidence_refs: ["run a363b034-83e2-436c-8abf-77f8e43ac7c6", "run d09ef274-ee9b-4535-aca5-4a28f5b6be7a", "trajectory 624987d7-b19c-5e7b-baac-faf9f1f9b851"]
 view:
   path: http://127.0.0.1:8788/
   generator: "node skills/definition/scripts/dashboard.mjs docs/definitions/choir-coherent-computer-convergence-2026-07-21.md --serve 127.0.0.1:8788 --watch --output /tmp/choir-convergence-definition.html"
