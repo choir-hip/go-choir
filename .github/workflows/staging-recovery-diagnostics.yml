@@ -35,9 +35,10 @@ jobs:
           echo '==> vmctl service state'
           systemctl show go-choir-vmctl.service \
             --property=ActiveState,SubState,ExecMainStartTimestamp,ExecMainStatus,NRestarts
-          echo '==> recent computer ownerships'
-          curl -fsS -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/list |
+          ownership_json="$(curl -fsS -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/list)"
+          printf '%s\n' "$ownership_json" |
             jq '{ownerships: [.ownerships[] | select((.epoch // 0) >= 8197) | {computer_id,vm_id,desktop_id,state,epoch,sandbox_url,immutable_identity}]}'
+          failed_vm="$(printf '%s\n' "$ownership_json" | jq -r '[.ownerships[] | select(.state == "failed" and (.vm_id // "") != "")] | max_by(.epoch // 0) | .vm_id // empty')"
           echo '==> signer-gated deployment journal'
           journalctl -u go-choir-vmctl.service \
             --since '20 minutes ago' \
@@ -59,6 +60,17 @@ jobs:
           find /var/lib/go-choir/vm-state -maxdepth 2 -type f \
             -newermt '20 minutes ago' \
             -printf '%TY-%Tm-%TdT%TH:%TM:%TSZ %s %p\n' | sort | tail -200
+          echo '==> latest failed persistent signer inode shape'
+          failed_image="/var/lib/go-choir/vm-state/$failed_vm/data.img"
+          if [ -n "$failed_vm" ] && [ -f "$failed_image" ]; then
+            for path in /choir-signers /choir-signers/guest-core /choir-signers/guest-core/key.ed25519 /choir-signers/guest-core/receipts; do
+              echo "-- $path"
+              debugfs -R "stat $path" "$failed_image" 2>&1 || true
+            done
+            debugfs -R "ls -l /choir-signers/guest-core" "$failed_image" 2>&1 || true
+          else
+            echo "latest failed VM data image unavailable"
+          fi
           REMOTE_DIAGNOSTICS
 
       - name: Cleanup SSH
