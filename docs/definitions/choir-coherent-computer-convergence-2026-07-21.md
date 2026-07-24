@@ -476,6 +476,16 @@ receipts:
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; deployed clean-client evidence; independent red-surface review"
     candidate_or_evidence_refs: [artifact://2068, artifact://2077, /tmp/agentic-consensus-20260723-194947/manifest.tsv, artifact://2087]
 
+  - id: guest-signer-migration-runtime-directory-race-2026-07-24
+    boundary: land
+    commit_or_artifact: "deployed signer gate 2d645fbb; diagnostic commits bef6238a and 479f08a"
+    proof_refs: ["clean owner signer-diag-bef6238a-1784854545230@example.com", "vm-57d6bb29efbea2ebd64c5384d6be2c58 epoch 8205", "compute recovery_timeout at 2026-07-24T00:57:16Z", "GitHub Actions diagnostic run 30057849893", "artifact://2136 lines 832-862 first launch migration succeeds and signer starts; lines 1190-1201 immediate relaunch migration fails before signer; lines 1571-1618 later launch succeeds; lines 2176-2189 immediate relaunch fails", "nix/sandbox-vm.nix migration unit binds /run/choir through ReadWritePaths and its ExecStartPost writes there without ordering after systemd-tmpfiles-setup.service"]
+    rollback_ref: "origin/main@2d645fbb; last usable runtime 6dfa50f9; accepted route repair 4a33fff0"
+    disposition: "Problem documented before repair. The migration unit has a nondeterministic boot-order dependency on the tmpfiles-created /run/choir directory. The generic systemd failure occurs before script diagnostics, and the alternating launch/relaunch evidence is consistent with namespace setup racing tmpfiles. Add explicit tmpfiles ordering, retain fail-closed signer gating, independently review, deploy, then rerun a clean first-boot and restart identity proof."
+    problem_ref: "The signer migration service can enter mount namespace setup before /run/choir exists; its ReadWritePaths bind then fails before ExecStart, so signer, updater, and runtime startup fail nondeterministically."
+    authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; staging clean-client evidence; no weakening of verifier, identity, or signer authority"
+    candidate_or_evidence_refs: [artifact://2136, "GitHub Actions 30057849893"]
+
 view:
   path: http://127.0.0.1:8788/
   generator: "node skills/definition/scripts/dashboard.mjs docs/definitions/choir-coherent-computer-convergence-2026-07-21.md --serve 127.0.0.1:8788 --watch --output /tmp/choir-convergence-definition.html"
