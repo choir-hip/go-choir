@@ -47,6 +47,15 @@ jobs:
               -e 's/((token|secret|private_key|api_key)[=:])[A-Za-z0-9._\/-]+/\1[REDACTED]/Ig' |
             grep -E 'choir-receipt-signer|guest signer|guest-signer|startup|vm-|health|ready|failed|error' |
             tail -1200
+          echo '==> unfiltered first-boot dependency window'
+          journalctl -u go-choir-vmctl.service \
+            --since '2026-07-24 00:06:35 UTC' \
+            --until '2026-07-24 00:07:05 UTC' \
+            --no-pager --output=short-iso |
+            sed -E \
+              -e 's/(Bearer )[A-Za-z0-9._-]+/\1[REDACTED]/g' \
+              -e 's/((token|secret|private_key|api_key)[=:])[A-Za-z0-9._\/-]+/\1[REDACTED]/Ig' |
+            tail -1500
           echo '==> recent VM artifact metadata'
           find /var/lib/go-choir/vm-state -maxdepth 2 -type f \
             -newermt '2026-07-24 00:05:00 UTC' \
