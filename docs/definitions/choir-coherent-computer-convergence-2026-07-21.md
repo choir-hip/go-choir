@@ -48,11 +48,11 @@ start:
       disposition: discarded
       evidence_ref: "Frozen G1 panel: mutable root/updater authority, exact inventory, and capsule freeze ingress blockers; branch clean at exact remote ref"
     - id: convergence-definition-docs-01
-      ref: /tmp/go-choir-architecture-recovery
+      ref: refs/remotes/origin/main@c972ce1b6ab4bf4c1d03e7590773082c92c4e9dc
       base: refs/remotes/origin/main@7913a3da0343ee03cf32b7622aaf9f2de35ee887
       scope: [docs]
-      disposition: active
-      evidence_ref: "scripts/doccheck live/full, dashboard parser, and frozen review after candidate commit"
+      disposition: incorporated
+      evidence_ref: "Definition activation landed at c972ce1b; terminal closure is the current documentation candidate."
   observed_artifact:
     - claim: "Choir already has persistent computers, embedded Dolt artifacts and trajectories, versioned Texture documents, agents, guest-local capsules, a canonical computer-event path, immutable updater/checkpoint/route components, and public UI/API/CLI surfaces."
       evidence_ref: "Canonical main source plus accepted audited-construction receipts"
@@ -126,7 +126,7 @@ boundaries:
   heresy_delta:
     discovered: "The former mission optimized the hardest effect path before the generic artifact/actor/work authority seams were coherent; Texture research depth and self-development authorization failed at that same boundary."
     introduced: none
-    repaired: "Not until the deployed generic lifecycle passes and competing exercised-path authorities are removed. This docs cutover repairs mission authority only."
+    repaired: "The deployed cutover leaves one canonical artifact/subject/work/update reducer path, routes Texture restart reconstruction only through Texture-owner authority, and proves native settlement/cancellation without effect capability."
 
 kernel_contract:
   frozen_scope: "One Texture-backed durable-work lifecycle on one stable computer. This is a code-free implementation contract, not evidence that the lifecycle exists."
@@ -231,8 +231,8 @@ measures:
   - name: executable_definition_count
     kind: gate
     baseline: "one old active Definition plus a proposed successor"
-    desired: "exactly one active entrypoint in ACTIVE.md, mission-graph.yaml, and doc-authority-manifest.yaml"
-    decision_use: "Refuse all runtime work until registry conformance passes."
+    desired: "Exactly one active entrypoint while this mission executes; zero after completion until an owner-ratified successor is promoted consistently in ACTIVE.md, mission-graph.yaml, and doc-authority-manifest.yaml."
+    decision_use: "Refuse runtime work when registry conformance fails; refuse successor execution while the terminal count is zero."
     cannot_prove: "Product lifecycle correctness or deployed acceptance."
   - name: semantic_authority_count_per_object
     kind: gate
@@ -266,34 +266,40 @@ execution:
     exit: "Every finish acceptance passes with immutable receipts, effects OFF, and prior rollback refs."
   - id: E-close-and-select-next
     purpose: "Record terminal identities, clean all temporary proof output, update registries, and let evidence choose one separately owner-ratified next mission."
-    exit: "This Definition is complete, main is clean, staging is identified and healthy, and exactly one successor may become executable."
+    exit: "This Definition is complete, main is clean, staging is identified and healthy, and no successor is executable unless exactly one owner-ratified Definition is promoted through every registry."
 
 now:
-  status: problem_documented
-  slice: D-land-deploy-and-prove
-  question: "Why does restart reconstruction repeatedly launch a generic Texture-shaped activation that cannot revise or settle its bound artifact?"
+  status: complete
+  slice: E-close-and-select-next
+  question: none
   reconciliation:
-    observed_at: 2026-07-24T02:07:31Z
-    source_ref: refs/remotes/origin/main@2fca28c94a39bbcc9bafe623a79b98daabe4a6be
-    deploy_identity: "GitHub Actions 300585656141 passed; Deploy to Staging job 89375651491 passed; /health reports proxy build/deployed_commit 2fca28c94a39bbcc9bafe623a79b98daabe4a6be."
+    observed_at: 2026-07-24T06:35:50Z
+    source_ref: refs/remotes/origin/main@4ffcae3ab24fba8bc24ce1767e4e638667a50367
+    deploy_identity: "GitHub Actions 30068131971 and Deploy to Staging job 89404692507 passed. /health and signed execution identity join report deployed commit 4ffcae3ab24fba8bc24ce1767e4e638667a50367."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
-    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir contains only this required code-free product-problem receipt after the prior provider receipt landed. Protected unrelated worktrees remain untouched."
+    policy_resolution_ref: not_applicable
+    worktree_inventory_ref: "Canonical worktree contains only the terminal documentation update; unrelated and rejected worktrees remain untouched. Temporary acceptance credentials and binaries are removed."
     status: reconciled
-  accepted_deployment:
-    source_commit: 2fca28c94a39bbcc9bafe623a79b98daabe4a6be
-    ci_ref: "GitHub Actions 300585656141 passed; Deploy to Staging job 89375651491 passed."
-    environment_identity: "Clean owner signer-repair-2fca28c9-1784856712359@example.com uses computer-97a7801d0f0978dc30a99acf3b2a13388 realized as vm-334f50a5608c54f087c892f87bdf9753. Signed execution identity joined the exact host/guest/config state before restart at epoch 8209 and after public stop/wake at epoch 8210."
-    rollback_ref: "origin/main@6df714bb; deployed runtime 2fca28c9; prior usable runtime 6dfa50f9."
-  observed_product_evidence:
-    - "After refreshing the supported ChatGPT owner credential, trivial prompt submission 5b3ea18a-b5aa-5e7c-9d3e-714f9b537802 settled trajectory 0021b3c1-b826-525a-98fb-03aec1f9c27c at reducer sequence 5 with a revised artifact, proving the provider path and ordinary lifecycle settlement."
-    - "Evidence-heavy submission f8e31ab3-b4f8-5913-be91-cb9bdfc0f85c created trajectory 624987d7-b19c-5e7b-baac-faf9f1f9b851, artifact 8e806072-0433-5d42-96bf-d72f48e2be43, native Texture work f32beb40-32e2-5891-9682-2c8eff1731e5, and researcher work 1e912df8-bbcd-56b8-856f-24d894774c58."
-    - "Researcher update f6a984bf-ee76-54ce-82e9-59f998af0e59 advanced artifact head to 11f31087-6831-53d9-bfa0-0e9d01ffe2a4 while keeping work open; later updates upd-c7b2dfb13e09d8ca84bd480ffe5f804a and upd-e23dad68d1631ab1ce8f0e06d5076ceb remained pending through public stop/wake from epoch 8209 to 8210."
-    - "Post-restart recovery activations a363b034-83e2-436c-8abf-77f8e43ac7c6 and d09ef274-ee9b-4535-aca5-4a28f5b6be7a both completed without lifecycle progress. Each reported rewrite_texture requires a Texture agent revision run; canonical trajectory remained live at reducer sequence 6, both work items remained open, both typed updates remained pending, and head remained revision 11f31087-6831-53d9-bfa0-0e9d01ffe2a4."
-  observed_problem: "The generic assigned-work recovery path accepts Texture profile work and constructs an ordinary run with agent/profile/trajectory metadata but without the canonical Texture revision-run type, doc_id, or current revision binding. That supersedes the existing Texture-owner ReconcileAgentWake path after restart, so rewrite_texture refuses correctly and terminal completion recursively launches another invalid recovery activation."
-  policy_resolution_ref: "Problem-documentation-first requires this receipt before source repair. Prefer deletion: exclude Texture from generic assigned-work recovery so the already-wired Texture-owner subject reconciliation owns Texture reconstruction and creates a canonical revision run from document state. Do not weaken rewrite_texture validation or synthesize revision authority from run text."
-  blocker_or_risk: "Mission completion remains blocked until the generic recovery path stops claiming Texture work, the existing Texture-owner wake path consumes the pending typed packets after restart, and deployed evidence proves artifact revision, work settlement, restart durability, cancellation, and client conformance."
-  latest_blocker_or_risk: "Mutation class red. Protected surfaces: durable actor delivery, restart reconstruction, Texture canonical writes, trajectory/work settlement, and deployed acceptance. Admissible proof: focused source tests plus a clean deployed evidence-heavy lifecycle spanning public stop/wake and settling through a canonical Texture revision. Rollback: revert the narrow recovery exclusion to origin/main@6df714bb. Conjecture delta: provider authentication is repaired operationally; restart durability exposed a dual recovery-authority bug. Heresy delta: discovered generic recovery claiming Texture revision authority; introduced none; repaired none yet."
-  next_action: "Land this code-free problem receipt, delete Texture from the generic assigned-work recovery profile set, add a focused restart/reconciliation regression, independently review the frozen repair, deploy, and rerun the pending evidence-heavy lifecycle from a clean client."
+  candidate:
+    id: none
+    state: none
+    ref: none
+    owner: none
+    base: none
+    digest: none
+    scope: []
+  decision:
+    selected: "Settle the durable-computer convergence mission complete without selecting an executable successor."
+    kind: operational
+    status: settled
+    source: formal_check
+    evidence_ref: durable-work-terminal-acceptance-2026-07-24
+    owner_ratification_ref: not_applicable
+    recorded_at: 2026-07-24T06:35:50Z
+    consequence: "The deployed generic durable-work kernel is accepted; effects remain OFF; all successors require separate owner ratification and registry promotion."
+  evidence_refs: ["durable-work-terminal-acceptance-2026-07-24", "GitHub Actions 30068131971", "Deploy to Staging job 89404692507", "ExecutionIdentityJoin receipt 019f92b9-5dd6-7f40-8374-2057bbb2a6ff", "trajectory 3554116c-1e4a-5770-8f4c-8176da8c58e4 reducer_seq 9", "trajectory caa2ce8b-6579-592e-a334-854513c08237 reducer_seq 9"]
+  blocker_or_risk: "No completion blocker. Residual product-quality risk: one acceptance prompt requested a native inline citation, while its settled revision exposed the evidence packet in lifecycle state but no revision source entity. This does not falsify the bounded lifecycle-authority proof and is not promoted into this completed mission."
+  next_action: none
 receipts:
   - id: durable-work-contract-gate-2026-07-21
     boundary: define
@@ -346,7 +352,7 @@ receipts:
     disposition: "Accepted after v13-v23 frozen review repaired every reproduced authority, admission, restart, and matching-release blocker. Effects remain OFF. Landing and deployed acceptance are still required."
     problem_ref: "Completed lifecycle activation could strand open canonical work; generic writers and restart projections could duplicate, suppress, or retain activation ownership."
     authorization_ref: "Owner-ratified bounded generic lifecycle plus accepted contract scope 05"
-    candidate_or_evidence_refs: [/tmp/agentic-consensus-20260723-043935/manifest.tsv, artifact://1473, artifact://1478, artifact://1480]
+    candidate_or_evidence_refs: [/tmp/agentic-consensus-20260723-043935/manifest.tsv, "artifact://1473", "artifact://1478", "artifact://1480"]
   - id: legacy-mailbox-migration-candidate-2026-07-23
     boundary: build
     commit_or_artifact: accepted-uncommitted-code-diff@sha256:b5eed3da687aa7a3d03a03b100cd8d1b10b28ca29f0b4f6de583f153deb27d34
@@ -355,7 +361,7 @@ receipts:
     disposition: "Accepted after independent review exposed and candidate repaired incomplete identity discovery and per-mailbox partial commits. All legacy identities are now planned before one atomic SQLite rebind; effects remain OFF."
     problem_ref: "Node B deployment 29992782043 failed on retained unscoped mailbox processor-v2:processor-climate-us-rss."
     authorization_ref: "Owner-ratified bounded generic lifecycle plus code-free problem receipt 42a517bc"
-    candidate_or_evidence_refs: [/tmp/agentic-consensus-20260723-054649/manifest.tsv, artifact://1522, artifact://1527]
+    candidate_or_evidence_refs: [/tmp/agentic-consensus-20260723-054649/manifest.tsv, "artifact://1522", "artifact://1527"]
   - id: restart-acceptance-oracle-problem-2026-07-23
     boundary: build
     commit_or_artifact: refs/remotes/origin/main@8063b5ff
@@ -364,7 +370,7 @@ receipts:
     disposition: "Problem documented before repair. The seeded restart dispatch was consumed, but the test rejected a different follow-on dispatch sharing the mailbox."
     problem_ref: "TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog asserted mailbox-wide emptiness instead of seeded update consumption."
     authorization_ref: "Owner-ratified bounded generic lifecycle plus hosted CI evidence"
-    candidate_or_evidence_refs: [artifact://1536, artifact://1539]
+    candidate_or_evidence_refs: ["artifact://1536", "artifact://1539"]
   - id: restart-acceptance-oracle-candidate-2026-07-23
     boundary: build
     commit_or_artifact: accepted-uncommitted-code-diff@sha256:dc38362bf0b979e45bab67ee18cfa425df94f8c81b0c2d68618cad9230dfca82
@@ -373,7 +379,7 @@ receipts:
     disposition: "Accepted test-only correction: restart delivery is proved by target completion and consumption of the seeded deterministic dispatch, not by unrelated mailbox quiescence."
     problem_ref: refs/remotes/origin/main@8063b5ff
     authorization_ref: "Owner-ratified bounded generic lifecycle plus code-free problem receipt 8063b5ff"
-    candidate_or_evidence_refs: [/tmp/agentic-consensus-20260723-061202/manifest.tsv, artifact://1544, artifact://1549]
+    candidate_or_evidence_refs: [/tmp/agentic-consensus-20260723-061202/manifest.tsv, "artifact://1544", "artifact://1549"]
   - id: hosted-store-shard-timeout-problem-2026-07-23
     boundary: build
     commit_or_artifact: pending_code_free_receipt
@@ -382,7 +388,7 @@ receipts:
     disposition: "Problem documented before repair. Evidence is a package wall-clock timeout without a failed assertion; unchanged retry is required before changing source or CI."
     problem_ref: "internal/store race package exhausted its 600-second hosted timeout while one test remained active."
     authorization_ref: "Owner-ratified bounded generic lifecycle plus hosted CI evidence"
-    candidate_or_evidence_refs: [artifact://1558, artifact://1561]
+    candidate_or_evidence_refs: ["artifact://1558", "artifact://1561"]
   - id: retained-computer-recovery-blocked-2026-07-23
     boundary: land
     commit_or_artifact: refs/remotes/origin/main@696b118ac874545219ba6d13c440e3d9f3d47bb6
@@ -391,7 +397,7 @@ receipts:
     disposition: "Blocked incomplete after the third recovery iteration. False-ready behavior is repaired and deployed; the retained computer remains failed. No further blind refresh or symptom repair is authorized by Dead-End Escalation."
     problem_ref: "Owner-visible recovery lacks bounded boot-stage and console evidence; exact failure remains unlocalizable without forbidden SSH/journal inspection."
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md Dead-End Escalation; standing no-SSH operability question"
-    candidate_or_evidence_refs: [/tmp/choir-recovery-diagnosed.json, /tmp/agentic-consensus-20260723-100608/manifest.tsv, artifact://1711]
+    candidate_or_evidence_refs: [/tmp/choir-recovery-diagnosed.json, /tmp/agentic-consensus-20260723-100608/manifest.tsv, "artifact://1711"]
     landing:
       source_commit: 696b118ac874545219ba6d13c440e3d9f3d47bb6
       ci_ref: "GitHub Actions 30014414949: success"
@@ -426,7 +432,7 @@ receipts:
     disposition: "Source candidate accepted and pushed. Run terminality remains only a durable attempt trigger; SettleLifecycleTrajectory retains sole semantic authority. Staging acceptance is blocked by vmctl restart failure."
     problem_ref: refs/remotes/origin/main@5cd42558
     authorization_ref: "Owner-ratified durable-work Definition; code-free deployed settlement problem receipt; unanimous frozen red-surface review"
-    candidate_or_evidence_refs: [/tmp/agentic-consensus-20260723-143523/manifest.tsv, artifact://1907, artifact://1909]
+    candidate_or_evidence_refs: [/tmp/agentic-consensus-20260723-143523/manifest.tsv, "artifact://1907", "artifact://1909"]
   - id: staging-vmctl-tap-restart-failure-2026-07-23
     boundary: land
     commit_or_artifact: pending_code_free_receipt
@@ -435,7 +441,7 @@ receipts:
     disposition: "Problem documented before recovery or repair. Source/build gates passed, but d845c56a has no staging activation receipt and no deployed acceptance claim."
     problem_ref: "vmctl restart cannot safely transition retained Firecracker/TAP ownership when shutdown times out and the old process survives for reattach."
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; deploy failure evidence"
-    candidate_or_evidence_refs: [artifact://1919, artifact://1920]
+    candidate_or_evidence_refs: ["artifact://1919", "artifact://1920"]
 
   - id: constructed-computer-refresh-exclusion-unwired-2026-07-23
     boundary: land
@@ -445,7 +451,7 @@ receipts:
     disposition: "Problem documented before API/deploy repair. The current workflow's jq exclusion cannot distinguish immutable constructed candidates from mutable active computers."
     problem_ref: "Deployment refresh protection reads fields absent from the authoritative vmctl list response, so constructed ComputerVersion realizations can enter the mutable refresh path."
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; independent frozen review"
-    candidate_or_evidence_refs: [artifact://1929, artifact://1930, /tmp/agentic-consensus-20260723-151406/manifest.tsv]
+    candidate_or_evidence_refs: ["artifact://1929", "artifact://1930", /tmp/agentic-consensus-20260723-151406/manifest.tsv]
 
   - id: ordinary-computer-route-absence-unwired-2026-07-23
     boundary: land
@@ -455,7 +461,7 @@ receipts:
     disposition: "Problem documented before repair. Candidate reviewed and accepted for landing: two independent ACCEPT verdicts, while the minority requested unsafe reconstruction from missing ownership state; the candidate deliberately fails closed because a bare route cannot prove the disk/VMID ownership realization it binds."
     problem_ref: "The existing RouteResolution.route_absent contract was unwired: the handler emitted 404, the client rejected it, and proxy bootstrap failed before vmctl could create an ordinary ownership."
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; clean deployed product evidence; frozen red-surface review"
-    candidate_or_evidence_refs: [/tmp/choir-cc85-identity.json, /tmp/choir-cc85-trivial-start.json, /tmp/choir-cc85-trivial-snapshot.json, /tmp/agentic-consensus-20260723-183626/manifest.tsv, artifact://2036, artifact://2042]
+    candidate_or_evidence_refs: [/tmp/choir-cc85-identity.json, /tmp/choir-cc85-trivial-start.json, /tmp/choir-cc85-trivial-snapshot.json, /tmp/agentic-consensus-20260723-183626/manifest.tsv, "artifact://2036", "artifact://2042"]
 
   - id: ordinary-guest-execution-identity-refused-2026-07-23
     boundary: land
@@ -465,7 +471,7 @@ receipts:
     disposition: "Problem documented before diagnostics. Bounded acceptance-scoped diagnostic candidate independently accepted; verifier and success status remain fail-closed. Awaiting landing and deployed diagnosis."
     problem_ref: "Clean ordinary guest refuses signed execution identity while the host erases the actionable guest refusal reason."
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; deployed clean-client evidence; frozen red-surface review"
-    candidate_or_evidence_refs: [artifact://2053, artifact://2057, /tmp/agentic-consensus-20260723-192350/manifest.tsv]
+    candidate_or_evidence_refs: ["artifact://2053", "artifact://2057", /tmp/agentic-consensus-20260723-192350/manifest.tsv]
 
   - id: first-boot-guest-signer-unavailable-2026-07-23
     boundary: land
@@ -475,7 +481,7 @@ receipts:
     disposition: "Signer readiness now fate-shares runtime startup, exposing rather than masking the underlying first-boot signer initialization failure. Current clean boot is unavailable; diagnosis and source repair required."
     problem_ref: "A newly allocated ordinary computer cannot make the guest-core signer responsive on its first boot; the prior runtime-ready state was false readiness."
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; deployed clean-client evidence; independent red-surface review"
-    candidate_or_evidence_refs: [artifact://2068, artifact://2077, /tmp/agentic-consensus-20260723-194947/manifest.tsv, artifact://2087]
+    candidate_or_evidence_refs: ["artifact://2068", "artifact://2077", /tmp/agentic-consensus-20260723-194947/manifest.tsv, "artifact://2087"]
 
   - id: guest-signer-migration-runtime-directory-race-2026-07-24
     boundary: land
@@ -485,7 +491,7 @@ receipts:
     disposition: "Problem documented before repair. The initial /run/choir ordering conjecture was rejected: PrivateTmp and normal service defaults already order the unit after tmpfiles. The clean-disk-specific missing namespace source is /mnt/persistent/choir-credentials. Create that root-owned private directory in tmpfiles before signer-isolated units bind it inaccessible; retain fail-closed signer gating; independently review, deploy, then rerun clean first-boot and restart identity proof."
     problem_ref: "A newly allocated persistent disk lacks /mnt/persistent/choir-credentials. Signer-isolated units require that path as a non-optional InaccessiblePaths namespace source before the runtime has a chance to create it, so namespace setup fails before ExecStart and even the OnFailure diagnostic cannot run."
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; staging clean-client evidence; no weakening of verifier, identity, or signer authority"
-    candidate_or_evidence_refs: [artifact://2136, artifact://2151, "GitHub Actions 30057849893", "GitHub Actions 30058356708", "/tmp/agentic-consensus-20260723-210454/manifest.tsv"]
+    candidate_or_evidence_refs: ["artifact://2136", "artifact://2151", "GitHub Actions 30057849893", "GitHub Actions 30058356708", "/tmp/agentic-consensus-20260723-210454/manifest.tsv"]
 
   - id: deployed-chatgpt-refresh-token-reused-2026-07-24
     boundary: prove
@@ -506,7 +512,31 @@ receipts:
     disposition: "Problem documented before repair. Existing Texture-owner ReconcileAgentWake is now the sole restart reconstruction authority: generic recovery defers Texture; owner startup and delivery fail closed without binding; dispatch requires canonical document, run, and mutation revision identity; invalid active, passivated, and orphan mutations cannot mask recovery; sleeping state remains asleep without evidence; cancellation-safe compensation preserves mutation/run consistency. Focused and complete actorruntime, agentcore, and textureowner suites pass. Frozen red-surface panel unanimously ACCEPTED."
     problem_ref: "Generic assigned-work recovery creates Texture-profile runs without Texture revision identity, so canonical write validation refuses and terminal completion loops without consuming pending typed updates or settling work."
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first and deletion-first; deployed restart evidence; no weakening of Texture write or lifecycle authority"
-    candidate_or_evidence_refs: ["run a363b034-83e2-436c-8abf-77f8e43ac7c6", "run d09ef274-ee9b-4535-aca5-4a28f5b6be7a", "trajectory 624987d7-b19c-5e7b-baac-faf9f1f9b851", artifact://2327, artifact://2331, artifact://2332, artifact://2333, "/tmp/agentic-consensus-20260724-005223/manifest.tsv"]
+    candidate_or_evidence_refs: ["run a363b034-83e2-436c-8abf-77f8e43ac7c6", "run d09ef274-ee9b-4535-aca5-4a28f5b6be7a", "trajectory 624987d7-b19c-5e7b-baac-faf9f1f9b851", "artifact://2327", "artifact://2331", "artifact://2332", "artifact://2333", "/tmp/agentic-consensus-20260724-005223/manifest.tsv"]
+  - id: durable-work-terminal-acceptance-2026-07-24
+    boundary: terminal
+    commit_or_artifact: "deployed source 4ffcae3ab24fba8bc24ce1767e4e638667a50367"
+    proof_refs: ["GitHub Actions 30068131971", "Deploy to Staging job 89404692507", "https://choir.news/health deployed_commit 4ffcae3ab24fba8bc24ce1767e4e638667a50367", "ExecutionIdentityJoin receipt 019f92b9-5dd6-7f40-8374-2057bbb2a6ff", "computer-5e6284be0506e89d5147b9095eded50a realization vm-e07bb1f7ef31567568fab8a087176304 epoch 8225", "restart receipt 019f92b5-7755-7dc6-afd1-9f0c856ac94c", "submission 2e864cc0-29b6-5392-a668-c88e70d3c73c", "trajectory 3554116c-1e4a-5770-8f4c-8176da8c58e4 reducer_seq 9", "artifact 445fca2b-a2c4-531d-bfdf-23465cc73f4e head a41e6be6-d016-52aa-8c85-08ed3eb0071b", "typed update upd-06234a1b3c07e4f4f2439f7211b6f1e2 incorporated", "duplicate delivery probe trajectory 29a58562-7d6a-5f09-8df9-45324729426a run 9b4935ce-582b-4bfb-ad7a-d3769d5cac37", "late delivery after activation completion trajectory caa2ce8b-6579-592e-a334-854513c08237 update upd-c6568d366e846d16e49cc7b1d3ab9107", "late-delivery cancellation command public-cancel:late-race-cancel-7ef57e3b-e8cb-4892-a652-d4e7d62f9cde replay true", "pre-revision cancellation 0e6cffc3-a690-5f55-a11d-513b1f8a1e54", "waiting cancellation 3b44e11e-bc2d-57e9-b46b-982a7576d60e", "post-delivery cancellation 98c086fa-2d15-5143-bb65-7c25ec4e1111", "cmd/choir snapshot and cursor replay", "desktop Texture latest revision observation"]
+    rollback_ref: "origin/main@8634c49a; prior deployed Node B commit 26d45fbb; rollback-probe ComputerVersion receipt 018ec0ab-9049-527a-91af-5528c3086ee2; retained ordinary-computer realization"
+    disposition: "Complete. One deployed generic durable-work lifecycle now preserves artifact, subject, obligation, typed-update, cancellation, and settlement authority across runtime restart; desktop and headless clients agree; effects remain OFF."
+    problem_ref: "All documented mission blockers through texture-restart-recovery-authority-conflict-2026-07-24 are repaired for the bounded lifecycle."
+    authorization_ref: "Owner-ratified durable-computer Definition; accepted frozen contract and candidate reviews; deployed signed identity and product-path evidence"
+    candidate_or_evidence_refs: ["commit 4ffcae3ab24fba8bc24ce1767e4e638667a50367", "run 30068131971", "receipt 019f92b9-5dd6-7f40-8374-2057bbb2a6ff", "trajectory 3554116c-1e4a-5770-8f4c-8176da8c58e4", "terminal docs candidate sha256 002f268cc53159c7b8ebd2d9ed860880eed5b3d6f1e326198623ec3150dcc9c1", "/tmp/agentic-consensus-terminal-repaired/manifest.tsv sha256 2d3cb3cabcbbd8c2a5e9e662c78ca06bf7a04ed96a340e04e10c83aa1b2d0c5b", "Devin ACCEPT sha256 e32feb32252c443d425f83fdb83ed31bad9420c3d2262d0a6c90bc2d0a97a1c3", "Gemini ACCEPT sha256 cb3d902052ed77ccea9e1ad8197d29777b79c5fccc2259569c7933d927f25e7c", "OMP GPT-5.5 ACCEPT sha256 245411b53f74472722bc4564df3703ac8ae9db4bd9362bec664daf800a37ba36"]
+    landing:
+      source_commit: 4ffcae3ab24fba8bc24ce1767e4e638667a50367
+      ci_ref: "GitHub Actions 30068131971: success"
+      deploy_ref: "Deploy to Staging job 89404692507: success"
+      environment_identity: "Joined clean host, deployment manifest, platform attestation, guest-core signature, vmctl realization, and guest runtime at epoch 8225."
+      deployed_acceptance: "Acceptance level: deployed durable-work terminal. Lifecycle, restart reconstruction, deterministic delivery/dispositions, three-phase cancellation, adaptive depth, desktop/headless conformance, effects OFF, and rollback receipts passed."
+    mutation_class: red
+    protected_surfaces_touched: [Texture_canonical_writes, durable_actor_delivery, artifact_head, trajectory_obligations, work_settlement, deployment_identity]
+    heresy_delta:
+      discovered: "generic recovery claimed Texture revision authority"
+      introduced: none
+      repaired: "Texture restart reconstruction is exclusively owner-routed and native reducers settle/cancel"
+    conjecture_delta: "Accepted: a small generic durable-work kernel provides process-independent continuity without authorizing self-development effects."
+    human_learning_digest: "Restart correctness required deleting a competing recovery authority, not weakening canonical Texture revision validation. Work closure belongs to typed reducer consequences, never activation completion."
+    registry_conformance_ref: "Terminal authority candidate: docs/ACTIVE.md, docs/mission-graph.yaml, and docs/doc-authority-manifest.yaml expose zero executable Definition entrypoints; scripts/doccheck --mode=live passed on 2026-07-24."
 view:
   path: http://127.0.0.1:8788/
   generator: "node skills/definition/scripts/dashboard.mjs docs/definitions/choir-coherent-computer-convergence-2026-07-21.md --serve 127.0.0.1:8788 --watch --output /tmp/choir-convergence-definition.html"

@@ -212,21 +212,21 @@ nodes:
     title: Converge Choir on One Durable Agentic Computer
     path: docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
     ledger: ''
-    status: working
+    status: settled
     kind: spine
-    entrypoint: true
-    execution_mode: mission_orchestrator
+    entrypoint: false
+    execution_mode: completed_non_executable
     depends_on:
       - choir-audited-autoputer-construction-2026-07-15
       - choir-cli-self-development-2026-07-16
     enables: [choir-in-choir-computer-control-draft-2026-07-18]
     note: >-
-      Sole executable product mission. Reconcile a clean canonical-main
-      baseline, then prove one generic durable-work lifecycle with distinct
-      artifact, activation, obligation/settlement, and effect authorities,
-      restart reconstruction, and equivalent UI/headless observation.
-      Self-development effects remain OFF; universal Texture, MCP, World Wire
-      control, and Choir-in-Choir implementation remain deferred.
+      Completed and accepted on staging on 2026-07-24. Retained as historical
+      evidence for the generic durable-work kernel, restart reconstruction,
+      reducer-owned settlement/cancellation, exact signed identity, and
+      desktop/headless conformance. Effects remained OFF. The Choir-in-Choir
+      successor stays blocked pending separate owner ratification and registry
+      promotion.
     sources:
       - docs/definitions/choir-cli-self-development-2026-07-16.md
       - docs/definitions/choir-audited-autoputer-construction-2026-07-15.md

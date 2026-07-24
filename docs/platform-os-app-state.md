@@ -1,13 +1,14 @@
 # Platform OS And App State
 
 **Status:** canonical platform-level state ledger
-**Last updated:** 2026-07-21
-**Changelog:** Reconciled the executable app inventory against the rejected
-self-development branch and active durable-work convergence mission. Historical
-design material remains in Git history; rejected-branch deletions are not
-silently claimed as canonical-main state.
-**Baseline checked:** accepted staging plus isolated source candidates; fresh
-generic lifecycle acceptance is governed by the active convergence Definition.
+**Last updated:** 2026-07-24
+**Changelog:** Recorded deployed generic durable-work acceptance and completion
+of the convergence Definition. Historical design material remains in Git
+history; rejected-branch deletions are not silently claimed as canonical-main
+state.
+**Baseline checked:** deployed commit `4ffcae3a`; signed host/guest identity,
+restart reconstruction, settlement/cancellation, and desktop/headless lifecycle
+conformance passed. No product Definition is currently executable.
 
 This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,

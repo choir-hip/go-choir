@@ -1,15 +1,15 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-07-21. Every claim is marked **Live**, **Target**, or
+**Last updated:** 2026-07-24. Every claim is marked **Live**, **Target**, or
 **Retired**. The owner-ratified
 [durable-computer convergence Definition](definitions/choir-coherent-computer-convergence-2026-07-21.md)
-is the sole executable top-level product authority. The superseded
+completed deployed acceptance and is historical evidence authority. No
+top-level product Definition is currently executable. The superseded
 [self-development Definition](definitions/choir-cli-self-development-2026-07-16.md),
 completed audited-construction Definition, and OG/Dolt subordinate D-ROUTE,
-detector, and deletion contracts remain evidence. Earlier assessments and
-hard-cutover sources remain absorbed historical evidence.
+detector, and deletion contracts remain evidence.
 Previous revision: 2026-06-11 ontology revision — durable actors, trajectories,
-conjecture vocabulary; see the Ontology section.)
+conjecture vocabulary; see the Ontology section.
 
 This is the current architecture memo for Choir. It is meant to be the first
 document read before changing `texture`, conductor routing, workers, Trace, Dolt,
@@ -59,8 +59,8 @@ explicit Web Lens inspection, Trace as evidence rather than a user app, and
 
 | Subsystem | Status | Current authority boundary |
 | --- | --- | --- |
-| Automatic computer | **Live persistent substrate; generic durable-work convergence active** | Stable computers, audited ComputerVersion construction, lifecycle, canonical events, guest-local capsules, updater recovery, checkpoint routes, and no-SSH inspection are wired. A rejected effects-off self-development candidate exists only as preserved branch evidence. The active Definition first separates artifact, activation, obligation/settlement, and effect authority and proves restart reconstruction. |
-| Choir CLI | **Supported read/control subset; lifecycle parity incomplete** | Submit/read/trajectory/search/Wire/API-key/current-computer commands exist. Self-development controls exist only in the rejected candidate and are not accepted product surface. Distribution, UI/headless durable-work parity, and `/goal` integration remain unproved. |
+| Automatic computer | **Live accepted persistent substrate and generic durable-work kernel** | Stable computers, audited ComputerVersion construction, lifecycle, canonical artifact/subject/work/update reducers, restart reconstruction, native settlement/cancellation, and signed no-SSH inspection are accepted at deployed commit `4ffcae3a`. Effects remain OFF; rejected self-development work is preserved branch evidence only. |
+| Choir CLI | **Accepted lifecycle read/control client** | Submit/read/trajectory/search/Wire/API-key/current-computer commands exist. `lifecycle snapshot` and durable cursor replay matched desktop/browser state in staging acceptance. The CLI does not implement `/goal`; self-development controls exist only in rejected evidence. |
 | Web desktop | **Live** | `frontend/src/lib/apps/registry.ts` is the executable app inventory; this memo and `platform-os-app-state.md` classify behavior and gaps. |
 | macOS desktop | **Buildable wrapper; shipment unproven here** | Wails shell around the Svelte product; distribution/daily-driver status requires dated acceptance evidence. |
 | Choir Base / File Provider | **Substantial tested substrate, product wiring incomplete** | Append-only journal, tree/blob, sync, and API helpers exist. No deployed product service currently owns the API, and Base is not canonical app-state authority. |
@@ -68,7 +68,7 @@ explicit Web Lens inspection, Trace as evidence rather than a user app, and
 | `corpusd` | **Code-present and deployment-wired** | Service/store writer and sanitized public API boundary for publication/World Wire; platform-computer agents remain semantic owners. |
 | `sourcecycled` | **Code-present, deployment-wired experimental adapter** | Poll cycles and queue state are in memory and lost on restart. It hands off/projects durable artifacts; it does not own canonical article meaning. |
 | Capsules | **Live accepted construction substrate; later self-development candidate rejected** | Audited ComputerVersion construction proved guest-local isolation and lifecycle. Additional namespaces/cgroup/seccomp/Landlock/capability/updater work on the rejected branch remains source evidence only; no self-development effect is authorized. |
-| Features/package adoption | **Deleted historical path in the rejected candidate; legacy main residue must not regain authority** | AppChangePackage/AppAdoption cannot authorize self-development. Verify exact canonical-main residue during the active writer/caller inventory rather than claiming rejected-branch deletion as landed state. |
+| Features/package adoption | **Forbidden as authority; exact residue remains historical** | AppChangePackage/AppAdoption cannot authorize self-development. Rejected-branch deletion is not silently claimed as canonical-main state and no successor may revive it as fallback authority. |
 
 `/goal <definition.md>` is an external compatible-harness invocation. Choir's
 CLI, prompt bar, and runtime do not implement an end-to-end Definition runner.
@@ -107,7 +107,7 @@ authority.
 | **settlement** | a trajectory's goal closure, earned by its rule (e.g. publication: published AND listed AND no open work). Replaces root-run completion as liveness truth. |
 | **obligation** | an open work item, blocker, or question on a live trajectory. "Open obligations with no resident assignee" is the stall query — observability, never a planner. |
 | **authority envelope** | a code-enforced profile boundary. Super orchestrates but cannot mutate directly; CoSuper effects are capsule broker verbs; Researcher has typed updates only; VSuper aliases are retired for self-development. |
-| **capsule** | an ephemeral guest-local effect chamber. Canonical source contains an effects-OFF executor and namespace/cgroup/overlay/seccomp/Landlock/broker components, but the exact Node A harness receipts and rejected Round 72 changes are not staging product acceptance. The accepted live boundary is audited ComputerVersion construction; the active convergence Definition authorizes no capsule, updater, checkpoint, or route effect. |
+| **capsule** | an ephemeral guest-local effect chamber. Canonical source contains an effects-OFF executor and namespace/cgroup/overlay/seccomp/Landlock/broker components, but the exact Node A harness receipts and rejected Round 72 changes are not staging product acceptance. The accepted live boundaries are audited ComputerVersion construction and the generic durable-work kernel; no current Definition authorizes capsule, updater, checkpoint, or route effects. |
 | **computer event / acceptance** | the canonical per-ComputerID causal and state-transition record. A frozen bundle remains inert until an authorized acceptance event; updater, checkpoint, and route are projections, not alternate promotion authorities. |
 | **conjecture / hyperthesis / assertion** | the epistemic vocabulary: a claim under test with a named blind edge and scope; an assertion is a supported conjecture with receipts; heresy is a circulating claim whose proof died. |
 
@@ -261,9 +261,9 @@ layer" as the product ontology. The product object is the persistent computer;
 `sandbox` remains an implementation/service name.
 
 Run acceptance records are historical evidence projections. Self-development
-acceptance is defined by canonical computer events, frozen capsule bundles,
-verifier/materialization receipts, checkpoints, route certificates, and the
-active Definition's deployed gate.
+acceptance remains separately defined by canonical computer events, frozen
+capsule bundles, verifier/materialization receipts, checkpoints, route
+certificates, and a future owner-ratified Definition's deployed gate.
 
 The embedded Dolt runtime migration is complete on staging. As of commit
 `c3b1a4b2547d672eadd9b3d74b76ba9371518648`, per-user runtime/control product
@@ -322,8 +322,8 @@ Code-present/current foundations:
 2. Prompt bar, conductor routing, Texture documents/revisions/history/export,
    durable runs/trajectories, Trace projections, computer events, guest-local
    capsules, self-development operations, checkpoints, and route projections
-   form the current source-level product surface. Effects remain default-off
-   until the active Definition authorizes deployed activation.
+   form the current source-level product surface. Effects remain default-off;
+   no current Definition authorizes deployed self-development activation.
 3. Texture already has deterministic backend coverage for document creation,
    revisions, user edits, delegated update integration, stale-result protection,
    source entities, source repairs, attachments, diagnosis, import, export,
@@ -581,9 +581,10 @@ effect occurs through a capability-bound guest-local capsule broker. It never
 receives direct core-VM mutation or host authority.
 
 `worker VM`, `background computer`, and `candidate VM` are obsolete product
-concepts. Their lifecycle/controller/tool/profile/prompt/API code is deleted by
-the active mission. Generic delegated agents remain durable runs/trajectories
-and perform effects only through capsules.
+concepts. Their product authority is retired, but canonical-main code residue
+remains unclaimed pending inventory; rejected-branch deletion is not a landed
+claim. Generic delegated agents remain durable runs/trajectories and may perform
+effects only through a separately accepted capsule path.
 
 ## Computer Model
 

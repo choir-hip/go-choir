@@ -3,18 +3,19 @@
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
 
-## Active Definition — Sole `/goal` Authority
+## Active Definition
 
-[`definitions/choir-coherent-computer-convergence-2026-07-21.md`](definitions/choir-coherent-computer-convergence-2026-07-21.md)
-is the sole executable top-level product Definition. It first reconciles a clean
-canonical-main baseline, preserves the rejected Round 72 candidate and unrelated
-worktrees, then proves one generic durable-work lifecycle: artifact revisions,
-replaceable activations, durable obligations and updates, reducer-owned
-settlement/cancellation, restart reconstruction, and equivalent UI/headless
-observation. Self-development effects remain OFF. Texture depth, MCP, World
-Wire control, and Choir-in-Choir are deferred until this kernel supplies evidence.
+None. The durable-computer convergence mission completed on 2026-07-24. No
+successor is executable until the owner ratifies a Definition and all three
+registries promote it.
 
 ## Completed Definitions — Historical Evidence Authority
+
+The completed
+[`definitions/choir-coherent-computer-convergence-2026-07-21.md`](definitions/choir-coherent-computer-convergence-2026-07-21.md)
+is historical evidence authority for the deployed generic durable-work kernel,
+restart reconstruction, reducer-owned settlement/cancellation, signed identity,
+and desktop/headless conformance. Effects remained OFF.
 
 The superseded-incomplete
 [`definitions/choir-cli-self-development-2026-07-16.md`](definitions/choir-cli-self-development-2026-07-16.md)
@@ -26,7 +27,7 @@ accepted intermediate gates completed the mission.
 [`definitions/choir-audited-autoputer-construction-2026-07-15.md`](definitions/choir-audited-autoputer-construction-2026-07-15.md)
 completed audited fleet-wide `ComputerVersion` construction, D-ROUTE cutover,
 rollback, reconstruction, and no-SSH product inspection. It is historical
-evidence authority, not an executable `/goal` entrypoint. The active convergence Definition inherits its accepted constructor, verifier, route, rollback, and no-SSH receipts.
+evidence authority, not an executable `/goal` entrypoint. The completed convergence Definition inherited its accepted constructor, verifier, route, rollback, and no-SSH receipts.
 
 The superseded
 [`definitions/choir-autoputer-completion-2026-07-14.md`](definitions/choir-autoputer-completion-2026-07-14.md)
@@ -59,8 +60,8 @@ it through all registries before execution.
 [`definitions/choir-in-choir-computer-control-draft-2026-07-18.md`](definitions/choir-in-choir-computer-control-draft-2026-07-18.md)
 remains an owner-authorized, non-executable successor hypothesis. Its target-bound
 computer-to-computer grant and sovereign-recipient rules remain useful, but its
-topology must be reconciled from the generic durable-work kernel after this
-Definition completes. It authorizes no implementation, host access, raw vmctl,
+topology must be reconciled from the completed generic durable-work kernel
+before separate owner ratification. It authorizes no implementation, host access, raw vmctl,
 SSH, shared owner credential, candidate VM, recursive grant chain, or registry
 promotion.
 
@@ -92,32 +93,22 @@ it active work or revising the product umbrella's semantics.
 
 ## Invocation
 
-Invoke only:
-
-```text
-/goal /Users/wiz/go-choir/docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
-```
-
-The completed audited-construction Definition and superseded self-development
-Definition are historical evidence authority. The performance and Choir-in-Choir
-drafts remain blocked and non-executable. One generic durable-work lifecycle is
-the active product mission; no self-development effect is authorized.
+Do not invoke a product `/goal` from this registry. No Definition is currently
+active. The performance and Choir-in-Choir drafts remain blocked and
+non-executable; promoting either requires separate owner ratification and
+three-registry reconciliation.
 
 This index owns no current slice, next action, execution order, resumption,
-completion, mutation, rollback sequencing, or escalation authority. Consult the
-active convergence Definition before execution. Autopaper remains unauthorized.
+completion, mutation, rollback sequencing, or escalation authority. The
+completed convergence Definition is evidence, not an executable entrypoint.
+Autopaper remains unauthorized.
 
-The OG/Dolt/heresy contract supplies the currently deployed D-ROUTE
-corpusd/vmctl CAS mechanics, receipt gates, H031 detection, and deletion bars.
-The newer owner-settled active Definition makes the stable computer's canonical
-event history the semantic authority: vmctl remains the protected lifecycle and
-route-projection actuator, not the origin of promotion. The active A contract
-must reconcile doctrine/ontology without creating a third semantic store.
-
-D-STORE is settled by owner authority: Choir is all-in on Dolt. Storage
-questions about history latency, commit batching, rollback mechanics, ICU/build
-friction, and replication are engineering verification tasks, not a renewed
-database-choice gate.
+The OG/Dolt/heresy contract supplies the deployed D-ROUTE corpusd/vmctl CAS
+mechanics, receipt gates, H031 detection, and deletion bars. The completed
+convergence Definition proves the stable computer's canonical lifecycle state
+as semantic authority: vmctl remains the protected lifecycle and
+route-projection actuator, not the origin of promotion. No successor may create
+a third semantic store.
 
 ## Unowned External Work
 

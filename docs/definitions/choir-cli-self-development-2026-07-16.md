@@ -39,10 +39,10 @@ start:
 
 finish:
   deliver: "Historical mission tombstone preserving exact evidence and refusing further execution."
-  artifact: "A superseded non-executable Definition pointing to the active generic durable-computer convergence Definition."
+  artifact: "A superseded non-executable Definition pointing to the completed historical durable-computer convergence Definition."
   acceptance:
-    - action: "Confirm all three registries mark this mission superseded/non-entrypoint and name the convergence Definition as the sole executable `/goal`."
-      proves: "This file cannot compete with current mission authority."
+    - action: "Confirm all three registries mark this mission superseded/non-entrypoint, mark convergence completed/non-entrypoint, and expose no executable `/goal`."
+      proves: "This file and its completed successor cannot compete with current mission authority."
       evidence_class: documentation_registry_conformance
     - action: "Resolve the rejected candidate and full historical ledger by exact immutable Git refs."
       proves: "Supersession did not erase or launder incomplete work."
@@ -125,8 +125,8 @@ receipts:
     registry_conformance_ref: "ACTIVE.md, mission-graph.yaml, doc-authority-manifest.yaml candidate cutover"
 
 successor:
-  status: selected_active
-  candidate_goal: docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
+  status: completed_non_executable
+  historical_goal: docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
 
 view:
   path: none
@@ -135,4 +135,4 @@ view:
 
 # SUPERSEDED INCOMPLETE — Make Choir Self-Developing
 
-Owner direction on 2026-07-21 ended this mission before deployed product acceptance. Its complete pre-supersession ledger remains addressable at `2526f108a36c498f2f90ac89fcc6e4140685d9d9`; the rejected Round 72 code remains at `5517c2eb5c94678eb4ec323fef2cec34b96f7c6a`. Neither is executable authority. Effects remained OFF. Continue only through the convergence Definition.
+Owner direction on 2026-07-21 ended this mission before deployed product acceptance. Its complete pre-supersession ledger remains addressable at `2526f108a36c498f2f90ac89fcc6e4140685d9d9`; the rejected Round 72 code remains at `5517c2eb5c94678eb4ec323fef2cec34b96f7c6a`. Neither is executable authority. Effects remained OFF. The convergence Definition completed on 2026-07-24 and is now historical evidence; any future mission requires separate owner ratification and registry promotion.

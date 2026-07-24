@@ -270,13 +270,13 @@ documents:
     refresh_triggers: []
 
   - path: docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
-    claim_scope: current
-    is_root: [authority, entry]
-    is_evidence: false
-    annotations: {doc_role: definition, authority: active_product_mission, lifecycle: active, entrypoint: true}
+    claim_scope: historical
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: definition, authority: completed_product_mission, lifecycle: complete, entrypoint: false}
     supersedes: [docs/definitions/choir-cli-self-development-2026-07-16.md]
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/definitions/choir-cli-self-development-2026-07-16.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md]
-    refresh_triggers: [mission_state_change, active_definition_change, deployment_identity_change, durable_actor_delivery_change, artifact_lifecycle_change, trajectory_settlement_change, Texture_public_protocol_change, staging_acceptance]
+    refresh_triggers: [successor_promotion, deployment_identity_change, durable_actor_delivery_change, artifact_lifecycle_change, trajectory_settlement_change, Texture_public_protocol_change]
 
   - path: docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md
     claim_scope: current

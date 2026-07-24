@@ -2,7 +2,7 @@
 title: "CI Re-Enablement and Evidence-Bounded Optimization"
 definition_version: 2
 draft: false
-executable: true
+executable: false
 
 start:
   captured_at: 2026-07-16T04:43:23Z
@@ -128,8 +128,8 @@ boundaries:
     - skills/definition/SKILL.md
     - "Owner request on 2026-07-16 to resume the /goal, investigate why restored CI remains about 30 minutes with an apparently duplicate Race horn, use the agentic-consensus panel, and design a Pareto-efficient workflow."
   must_preserve:
-    - "Autoputer remains the sole executable product Definition; this is a scope-disjoint CI-maintenance entrypoint, not a competing product mission."
-    - "The parent dirty Autoputer Definition and all app/platform source are untouched."
+    - "No product Definition is currently executable; this completed CI-maintenance Definition is not an entrypoint or a competing product mission."
+    - "Historical parent Definition evidence and all app/platform source remain untouched."
     - "high_risk_race and sampled_race derive one authoritative race_selected output consumed by both complete Go matrices and the parent check."
     - "Selected Race substitutes -race on all three non-runtime and all four runtime shards; it is not a reduced sample and does not retain the duplicate parent reusable-workflow horn."
     - "The complete scheduled/manual race.yml route remains available and keeps all runtime and non-runtime package coverage."

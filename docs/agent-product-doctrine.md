@@ -3,11 +3,11 @@
 This file carries product architecture rules for agents working on Choir. It is
 loaded on demand when a mission touches authority boundaries, harness behavior,
 Texture, runtime configuration, product-path verification, or run acceptance.
-Long-running missions now execute as Definition documents (`/goal <doc>.md`);
-see [skills/definition/SKILL.md](../skills/definition/SKILL.md). The active
+Long-running missions execute as Definition documents (`/goal <doc>.md`); see
+[skills/definition/SKILL.md](../skills/definition/SKILL.md). The
 [durable-computer convergence Definition](definitions/choir-coherent-computer-convergence-2026-07-21.md)
-is the sole executable top-level product authority. The superseded self-development
-Definition and completed audited-construction Definition are historical evidence.
+completed on 2026-07-24 and is historical product-evidence authority. No
+top-level product Definition is currently executable.
 It inherits [Choir Doctrine](choir-doctrine.md) and must not become a competing
 doctrine source.
 
@@ -208,11 +208,12 @@ evidence ledger and completion semantics in `skills/definition/SKILL.md` govern
 what counts as settled. `RunAcceptanceRecord` is a historical evidence
 projection for older runs; it is not self-development authority.
 
-The active convergence Definition requires exact source/deploy/host/guest
-identity; artifact, subject/activation, obligation, update-disposition, and work
-settlement refs; restart/reconstruction and cancellation traces; UI/headless
-protocol conformance; authority refusals; rollback; mutation and heresy deltas;
-and residual risks. Self-development effects remain OFF.
+The completed convergence Definition's terminal receipt records exact
+source/deploy/host/guest identity; artifact, subject/activation, obligation,
+update-disposition, and work-settlement refs; restart/reconstruction and
+cancellation traces; UI/headless protocol conformance; authority refusals;
+rollback; mutation and heresy deltas; and residual risk. Self-development
+effects remain OFF.
 
 Do not claim deployed self-development from the superseded Definition, rejected
 Round 72 candidate, AppChangePackage/AppAdoption, RunAcceptance, worker/candidate

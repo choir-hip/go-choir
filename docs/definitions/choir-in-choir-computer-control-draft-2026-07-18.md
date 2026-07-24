@@ -82,7 +82,7 @@ finish:
 
 activation_requirements:
   executable_only_after:
-    - "The active convergence Definition proves one generic durable-work lifecycle with restart reconstruction, typed updates, reducer-owned settlement/cancellation, and equivalent public UI/headless observation. A later effect mission must separately prove capsule-scoped authority before this draft can execute effectful remote control."
+    - "The completed convergence Definition proves one generic durable-work lifecycle with restart reconstruction, typed updates, reducer-owned settlement/cancellation, and equivalent public UI/headless observation. A later effect mission must separately prove capsule-scoped authority before this draft can execute effectful remote control."
     - "The public CLI/API exposes the target-local lifecycle, run, trajectory, refusal, and receipt semantics required here without raw vmctl or internal routes."
     - "The ComputerControlGrant authority, secret-delivery boundary, recursion policy, first two-computer target, rollback, and evidence floor are owner-ratified."
     - "All three registries promote one reconciled successor as the sole executable /goal. This draft is never invoked directly."
@@ -150,14 +150,14 @@ orchestration:
 now:
   status: blocked_incomplete
   slice: "non-executable successor draft"
-  question: "After the generic durable-work kernel and a separately authorized effect boundary are deployed, what exact target-bound grant and computer-addressing contract gives one computer useful control without owner-wide or transitive authority?"
+  question: "What exact target-bound grant and computer-addressing contract gives one computer useful control without owner-wide or transitive authority, and what separately authorized effect boundary executes it?"
   reconciliation:
-    observed_at: 2026-07-21T19:41:58Z
-    source_ref: refs/remotes/origin/main@7913a3da0343ee03cf32b7622aaf9f2de35ee887
-    deploy_identity: "Node B staging host and active guests reported 832ae951e84400a54bd7f8ef52a312e872b5c3ef; no successor behavior claimed"
+    observed_at: 2026-07-24T06:04:09Z
+    source_ref: refs/remotes/origin/main@4ffcae3ab24fba8bc24ce1767e4e638667a50367
+    deploy_identity: "The predecessor generic durable-work kernel passed staging acceptance at commit 4ffcae3a; this successor remains unselected and non-executable."
     authority_identities: [owner_decision:2026-07-18-choir-in-choir-draft, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: "Blocked hypothesis only; no implementation policy selected"
-    worktree_inventory_ref: "Active convergence Definition start.worktree_inventory"
+    worktree_inventory_ref: "Completed convergence Definition terminal receipt"
     status: reconciled
   candidate:
     id: choir-in-choir-computer-control-draft-2026-07-18
@@ -177,8 +177,8 @@ now:
     recorded_at: 2026-07-18T18:43:30Z
     consequence: "Historical 2026-07-18 decision: register this as a non-executable successor and align the then-active self-development Definition toward the capsule/event/CLI substrate it required. The 2026-07-21 supersession keeps this topology as a hypothesis and authorizes no implementation."
   evidence_refs: [cmd/choir/main.go, internal/capsule/roles.go, internal/agentcore/tools_capsule.go, docs/computer-ontology.md, docs/choir-doctrine.md]
-  blocker_or_risk: "The generic durable-work kernel is not deployed or accepted; self-development effects remain OFF; the exact cross-computer grant/addressing contract is intentionally unresolved."
-  next_action: "Keep this draft blocked. After the active convergence Definition completes, reconcile it against deployed durable-work, CLI, capsule, trajectory, and authority evidence before separate owner ratification and registry promotion."
+  blocker_or_risk: "The generic durable-work predecessor is accepted, but self-development effects remain OFF; the target-bound grant/addressing contract, secret-delivery boundary, recursion policy, capsule authority, and first two-computer acceptance path remain unresolved and unratified."
+  next_action: "Keep this draft blocked. Reconcile it against the accepted durable-work, CLI, capsule, trajectory, and authority evidence only after separate owner ratification; then promote through all three registries before execution."
 
 successor:
   status: none_selected
