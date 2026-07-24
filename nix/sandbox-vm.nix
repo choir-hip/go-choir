@@ -384,6 +384,7 @@ EOF
 
   systemd.tmpfiles.rules = [
     "d /mnt/persistent/choir-updater 0700 root root -"
+    "d /mnt/persistent/choir-credentials 0700 root root -"
     "d /run/choir-updater-control 0700 root root -"
     "d /run/choir-runtime-handoff 0700 root root -"
     "d /run/choir 0700 root root -"
