@@ -60,6 +60,12 @@ jobs:
           find /var/lib/go-choir/vm-state -maxdepth 2 -type f \
             -newermt '2026-07-24 00:05:00 UTC' \
             -printf '%TY-%Tm-%TdT%TH:%TM:%TSZ %s %p\n' | sort | tail -200
+          echo '==> failed first-boot signer inode metadata'
+          failed_image=/var/lib/go-choir/vm-state/vm-57d6bb29efbea2ebd64c5384d6be2c58/data.img
+          for path in /choir-signers /choir-signers/guest-core /choir-signers/guest-core/key.ed25519 /choir-signers/guest-core/receipts; do
+            echo "-- $path"
+            debugfs -R "stat $path" "$failed_image" 2>&1 || true
+          done
           REMOTE_DIAGNOSTICS
 
       - name: Cleanup SSH
