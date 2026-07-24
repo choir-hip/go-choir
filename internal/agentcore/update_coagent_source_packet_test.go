@@ -578,6 +578,32 @@ func TestCompletedLifecycleActivationReactivatesOpenWorkWithoutSettlingFromRunRe
 	}
 }
 
+func TestGenericAssignedWorkRecoveryDefersTextureToDocumentOwner(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	ownerID := "user-texture-recovery-authority"
+	docID := "doc-texture-recovery-authority"
+	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
+	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
+	if err != nil {
+		t.Fatalf("load durable Texture lifecycle: %v", err)
+	}
+	if len(snapshot.WorkItems) != 1 {
+		t.Fatalf("Texture lifecycle work items = %d, want 1", len(snapshot.WorkItems))
+	}
+
+	replacement, err := rt.reconcileAssignedWorkItemActorWithSource(ctx, snapshot.WorkItems, "trajectory_work_item_sweep")
+	if err != nil {
+		t.Fatalf("reconcile generic assigned Texture work: %v", err)
+	}
+	if replacement != nil {
+		t.Fatalf("generic recovery claimed Texture revision authority: %+v", replacement)
+	}
+	if _, found, err := rt.activeRunByAgent(ctx, ownerID, currentTextureAgentID(docID)); err != nil || found {
+		t.Fatalf("generic recovery created Texture activation: found=%t err=%v", found, err)
+	}
+}
+
 func TestUpdateCoagentRejectsLegacyFieldsAndExecutionRequestWithoutActions(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
@@ -1113,14 +1139,15 @@ func TestLifecycleRuntimeSubmissionPreservesCanonicalActivationAdmission(t *test
 	}
 }
 
-func TestRestartRewarmSuppressesTerminalPendingLifecycleBindings(t *testing.T) {
+func TestGenericRestartRewarmDefersTexturePendingLifecycleBindingsToDocumentOwner(t *testing.T) {
 	for _, tc := range []struct {
-		name         string
-		multiple     bool
-		wantDispatch int
+		name     string
+		multiple bool
+		terminal bool
 	}{
-		{name: "single"},
-		{name: "multi_retains_other_open_item", multiple: true, wantDispatch: 1},
+		{name: "pending_evidence_update"},
+		{name: "single_terminal", terminal: true},
+		{name: "multi_terminal_retains_other_open_item", multiple: true, terminal: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rt, s := testRuntime(t)
@@ -1183,7 +1210,10 @@ func TestRestartRewarmSuppressesTerminalPendingLifecycleBindings(t *testing.T) {
 				UpdateID:         "update-lifecycle-rewarm-terminal-" + tc.name,
 				ChannelID:        docID, Role: agentprofile.Texture, SourceRunID: run.RunID,
 				Packet: packet, Content: content, PayloadDigest: payloadDigest,
-				WorkDisposition: types.WorkItemCompleted, WorkItemID: firstWorkItemID,
+			}
+			if tc.terminal {
+				queue.WorkDisposition = types.WorkItemCompleted
+				queue.WorkItemID = firstWorkItemID
 			}
 			queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
 			if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
@@ -1198,22 +1228,15 @@ func TestRestartRewarmSuppressesTerminalPendingLifecycleBindings(t *testing.T) {
 				return nil
 			})
 			rt.Start(ctx)
-			if len(dispatched) != tc.wantDispatch {
-				t.Fatalf("restart lifecycle dispatches = %v, want %d", dispatched, tc.wantDispatch)
+			if len(dispatched) != 0 {
+				t.Fatalf("generic restart claimed Texture dispatch authority: %v", dispatched)
 			}
 			stale, err := s.GetLifecycleRun(ctx, ownerID, rt.TextureSandboxID(), run.RunID)
 			if err != nil || stale.State != types.RunPassivated {
 				t.Fatalf("stale restart activation = %+v, %v; want passivated", stale, err)
 			}
-			if tc.multiple {
-				active, found, err := rt.activeRunByAgent(ctx, ownerID, agentID)
-				if err != nil || !found || active.RunID == run.RunID {
-					t.Fatalf("replacement restart activation = found=%t run=%+v err=%v", found, active, err)
-				}
-				ids := metadataStringSlice(active.Metadata["work_item_ids"])
-				if len(ids) != 1 || ids[0] != secondWorkItemID {
-					t.Fatalf("replacement restart work_item_ids = %v, want [%s]", ids, secondWorkItemID)
-				}
+			if active, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil || found {
+				t.Fatalf("generic restart created Texture replacement: found=%t run=%+v err=%v", found, active, err)
 			}
 		})
 	}

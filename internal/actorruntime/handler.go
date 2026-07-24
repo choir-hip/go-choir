@@ -49,6 +49,22 @@ func newActorHandler(rt *agentcore.Runtime, textureOwner *textureowner.Handler) 
 	return &actorHandler{rt: rt, textureOwner: textureOwner}
 }
 
+func textureRunRecord(rec types.RunRecord) bool {
+	if agentprofile.Canonical(rec.AgentProfile) == agentprofile.Texture ||
+		agentprofile.Canonical(rec.AgentRole) == agentprofile.Texture {
+		return true
+	}
+	if rec.Metadata == nil {
+		return false
+	}
+	for _, key := range []string{"agent_profile", "agent_role"} {
+		if value, ok := rec.Metadata[key].(string); ok && agentprofile.Canonical(value) == agentprofile.Texture {
+			return true
+		}
+	}
+	return false
+}
+
 // HandleUpdate is the execution boundary. One call per incoming update.
 // A single run may span many HandleUpdate calls (initial_dispatch → park →
 // coagent_result → park → ... → completion).
@@ -81,6 +97,21 @@ func (h *actorHandler) handleInitialDispatch(ctx context.Context, u actor.Update
 		// Terminal/passivated runs were already handled by an earlier dispatch.
 		return nil, nil
 	}
+	ownerID, computerID, agentID, scopeErr := parseScopedActorMailboxID(u.ToAgentID)
+	if scopeErr != nil {
+		return nil, fmt.Errorf("actorruntime: resolve initial_dispatch scope: %w", scopeErr)
+	}
+	if strings.HasPrefix(agentID, agentprofile.Texture+":") || textureRunRecord(rec) {
+		if h.textureOwner == nil {
+			return nil, fmt.Errorf("actorruntime: Texture owner is not bound")
+		}
+		if strings.TrimSpace(rec.AgentID) != agentID {
+			return nil, fmt.Errorf("actorruntime: Texture initial_dispatch agent mismatch")
+		}
+		if err := h.textureOwner.ValidateActivationAuthority(ctx, ownerID, computerID, agentID, runID); err != nil {
+			return nil, fmt.Errorf("actorruntime: validate Texture initial_dispatch: %w", err)
+		}
+	}
 	h.rt.ExecuteActivationSync(ctx, &rec)
 	return h.memoryFromRunState(&rec)
 }
@@ -93,6 +124,22 @@ func (h *actorHandler) handleInitialDispatch(ctx context.Context, u actor.Update
 // calls ReconcileCoagentWake to create a new run for the coagent update —
 // this handles cold starts (process restart) and first-ever updates.
 func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	_, _, agentID, scopeErr := parseScopedActorMailboxID(u.ToAgentID)
+	if scopeErr != nil {
+		return nil, fmt.Errorf("actorruntime: resolve coagent_result scope: %w", scopeErr)
+	}
+	if strings.HasPrefix(agentID, agentprofile.Texture+":") {
+		if h.textureOwner == nil {
+			return nil, fmt.Errorf("actorruntime: Texture owner is not bound")
+		}
+		// Texture owner validates and reactivates revision-bound memory from
+		// canonical document state. Generic actor memory is not Texture
+		// revision authority and must never bypass that reconciliation.
+		if _, reconcileErr := h.reconcileCoagentWake(ctx, u); reconcileErr != nil {
+			return nil, fmt.Errorf("actorruntime: reconcile Texture coagent wake: %w", reconcileErr)
+		}
+		return nil, nil
+	}
 	rs, err := decodeResumeState(memory)
 	if err != nil {
 		return nil, fmt.Errorf("actorruntime: decode resume state for coagent_result: %w", err)
@@ -112,6 +159,9 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 	rec, err := h.scopedRunForUpdate(ctx, u, rs.RunID)
 	if err != nil {
 		return nil, fmt.Errorf("actorruntime: load parked run %s: %w", rs.RunID, err)
+	}
+	if textureRunRecord(rec) {
+		return nil, fmt.Errorf("actorruntime: Texture run has noncanonical agent identity")
 	}
 	if rec.State == types.RunPassivated || rec.State.Active() {
 		// Reactivate the run. The coagent update is in the store
@@ -176,8 +226,13 @@ func (h *actorHandler) reconcileCoagentWake(ctx context.Context, update actor.Up
 		}
 		return h.textureOwner.ReconcileActorWake(ctx, ownerID, computerID, agentID)
 	}
-	if _, err := h.rt.Store().GetAgentByScope(ctx, ownerID, computerID, agentID); err != nil {
+	agent, err := h.rt.Store().GetAgentByScope(ctx, ownerID, computerID, agentID)
+	if err != nil {
 		return nil, fmt.Errorf("lookup scoped agent for coagent_result: %w", err)
+	}
+	if agentprofile.Canonical(agent.Profile) == agentprofile.Texture ||
+		agentprofile.Canonical(agent.Role) == agentprofile.Texture {
+		return nil, fmt.Errorf("Texture subject has noncanonical agent identity")
 	}
 	return h.rt.ReconcileCoagentWake(ctx, ownerID, agentID)
 }

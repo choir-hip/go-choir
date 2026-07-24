@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -51,23 +52,67 @@ func persistLifecycleSubmittedRun(ctx context.Context, st *store.Store, bus *eve
 	if rec == nil {
 		return fmt.Errorf("run record is required")
 	}
+	mutation := agentMutationForRun(rec)
+	if mutation != nil {
+		if err := st.CreateAgentMutation(ctx, *mutation); err != nil {
+			return fmt.Errorf("persist Texture mutation authority: %w", err)
+		}
+	}
 	req := types.ReplaceLifecycleActivationRequest{
 		OwnerID: rec.OwnerID, ComputerID: rec.SandboxID, CommandID: "activation:" + rec.RunID,
 		TrajectoryID: rec.TrajectoryID, AgentID: rec.AgentID, Run: *rec,
 	}
 	req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
 	if _, err := st.ReplaceLifecycleActivation(ctx, req); err != nil {
+		if mutation != nil {
+			rollbackCtx := context.WithoutCancel(ctx)
+			if staleErr := st.MarkAgentMutationStale(rollbackCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID); staleErr != nil {
+				return fmt.Errorf("replace durable activation: %v; stale unbound mutation: %w", err, staleErr)
+			}
+		}
 		return fmt.Errorf("replace durable activation: %w", err)
 	}
-	return persistSubmittedRunProjections(ctx, st, bus, rec, promptLen, traceStore)
+	if err := persistSubmittedRunEvent(ctx, st, bus, rec, promptLen, traceStore); err != nil {
+		if mutation == nil {
+			return err
+		}
+		rollbackCtx := context.WithoutCancel(ctx)
+		passivated := *rec
+		passivated.State = types.RunPassivated
+		passivated.Error = ""
+		passivated.FinishedAt = nil
+		passivated.UpdatedAt = time.Now().UTC()
+		passivated.Metadata = cloneMetadata(passivated.Metadata)
+		passivated.Metadata["passivated_reason"] = "submission_projection_failed"
+		rollback := types.ReplaceLifecycleActivationRequest{
+			OwnerID: passivated.OwnerID, ComputerID: passivated.SandboxID,
+			CommandID:    "activation-submission-failed:" + passivated.RunID,
+			TrajectoryID: passivated.TrajectoryID, AgentID: passivated.AgentID, Run: passivated,
+		}
+		rollback.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(rollback)
+		if _, rollbackErr := st.ReplaceLifecycleActivation(rollbackCtx, rollback); rollbackErr != nil {
+			return fmt.Errorf("%v; passivate failed submission: %w", err, rollbackErr)
+		}
+		if mutation != nil {
+			if staleErr := st.MarkAgentMutationStale(rollbackCtx, passivated.OwnerID, agentMutationComputerID(&passivated), passivated.RunID); staleErr != nil {
+				return fmt.Errorf("%v; stale failed submission mutation: %w", err, staleErr)
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func persistSubmittedRunProjections(ctx context.Context, st runSubmissionStore, bus *events.EventBus, rec *types.RunRecord, promptLen int, traceStore trace.Store) error {
 	if mutation := agentMutationForRun(rec); mutation != nil {
 		if err := st.CreateAgentMutation(ctx, *mutation); err != nil {
-			log.Printf("runtime: texture agent revision run %s: create mutation: %v", rec.RunID, err)
+			return fmt.Errorf("persist Texture mutation authority: %w", err)
 		}
 	}
+	return persistSubmittedRunEvent(ctx, st, bus, rec, promptLen, traceStore)
+}
+
+func persistSubmittedRunEvent(ctx context.Context, st runSubmissionStore, bus *events.EventBus, rec *types.RunRecord, promptLen int, traceStore trace.Store) error {
 	promptLenPayload, _ := json.Marshal(map[string]int{"prompt_length": promptLen})
 	evRec := &types.EventRecord{
 		EventID:      uuid.New().String(),

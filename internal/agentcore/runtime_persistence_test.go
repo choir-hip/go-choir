@@ -3,6 +3,8 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,10 +15,11 @@ import (
 )
 
 type fakeRunSubmissionStore struct {
-	agents    []types.AgentRecord
-	runs      []types.RunRecord
-	mutations []store.AgentMutation
-	events    []types.EventRecord
+	agents      []types.AgentRecord
+	runs        []types.RunRecord
+	mutations   []store.AgentMutation
+	events      []types.EventRecord
+	mutationErr error
 }
 
 func (s *fakeRunSubmissionStore) UpsertAgent(_ context.Context, agent types.AgentRecord) error {
@@ -30,6 +33,9 @@ func (s *fakeRunSubmissionStore) CreateRun(_ context.Context, rec types.RunRecor
 }
 
 func (s *fakeRunSubmissionStore) CreateAgentMutation(_ context.Context, mutation store.AgentMutation) error {
+	if s.mutationErr != nil {
+		return s.mutationErr
+	}
 	s.mutations = append(s.mutations, mutation)
 	return nil
 }
@@ -104,5 +110,28 @@ func TestPersistSubmittedRunUsesRuntimeStoreInterfaceWithoutDolt(t *testing.T) {
 		}
 	default:
 		t.Fatal("expected submitted event on bus")
+	}
+}
+
+func TestPersistSubmittedRunFailsClosedWithoutTextureMutationAuthority(t *testing.T) {
+	rec := &types.RunRecord{
+		RunID: "run-no-mutation", AgentID: "texture:doc-no-mutation", ChannelID: "doc-no-mutation",
+		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
+		OwnerID: "user-alice", SandboxID: "sandbox-test", State: types.RunPending,
+		Metadata: map[string]any{
+			"type": "texture_agent_revision", "doc_id": "doc-no-mutation",
+		},
+	}
+	agent := types.AgentRecord{
+		AgentID: rec.AgentID, OwnerID: rec.OwnerID, SandboxID: rec.SandboxID,
+		Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: rec.ChannelID,
+	}
+	fake := &fakeRunSubmissionStore{mutationErr: errors.New("mutation store unavailable")}
+	err := persistSubmittedRun(context.Background(), fake, events.NewEventBus(), agent, rec, 0, nil)
+	if err == nil || !strings.Contains(err.Error(), "persist Texture mutation authority") {
+		t.Fatalf("persistence error = %v, want mutation-authority refusal", err)
+	}
+	if len(fake.events) != 0 {
+		t.Fatalf("submitted event persisted without mutation authority: %+v", fake.events)
 	}
 }

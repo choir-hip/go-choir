@@ -1803,7 +1803,7 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 				}
 				progressed = true
 				if runHasProfile(rec, agentprofile.Texture) {
-					if err := rt.store.MarkAgentMutationStale(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil {
+					if err := rt.store.MarkAgentMutationStale(context.WithoutCancel(ctx), rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil {
 						log.Printf("runtime: boot passivation: stale mutation %s: %v", rec.RunID, err)
 					}
 				}
@@ -1820,6 +1820,11 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 
 func (rt *Runtime) lifecycleActivationBindingsEligible(ctx context.Context, rec *types.RunRecord) (bool, error) {
 	if rt == nil || rt.store == nil || rec == nil {
+		return false, nil
+	}
+	if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Texture {
+		// Texture lifecycle activations are reconstructed by textureowner from
+		// canonical document state after generic core recovery.
 		return false, nil
 	}
 	workItemIDs := metadataStringSlice(rec.Metadata["work_item_ids"])
@@ -1888,6 +1893,11 @@ func (rt *Runtime) passivateInterruptedLifecycleActivation(ctx context.Context, 
 	req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
 	if _, err := rt.store.ReplaceLifecycleActivation(ctx, req); err != nil {
 		return err
+	}
+	if runHasProfile(&passivated, agentprofile.Texture) {
+		if err := rt.store.MarkAgentMutationStale(context.WithoutCancel(ctx), passivated.OwnerID, agentMutationComputerID(&passivated), passivated.RunID); err != nil {
+			return fmt.Errorf("passivate interrupted Texture mutation: %w", err)
+		}
 	}
 	*rec = passivated
 	return nil
@@ -2145,7 +2155,12 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 	}
 	profile := agentprofile.Canonical(firstNonEmpty(agent.Profile, first.AuthorityProfile))
 	switch profile {
-	case agentprofile.Texture, agentprofile.Researcher, agentprofile.Processor, agentprofile.Reconciler:
+	case agentprofile.Researcher, agentprofile.Processor, agentprofile.Reconciler:
+		// Texture reconstruction belongs to textureowner.ReconcileAgentWake,
+		// which derives revision authority from the canonical document head.
+		// A generic assigned-work run cannot safely synthesize that authority.
+	case agentprofile.Texture:
+		return nil, nil
 	default:
 		return nil, nil
 	}

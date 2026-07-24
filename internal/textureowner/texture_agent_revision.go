@@ -288,27 +288,36 @@ func (rt *Handler) deliverOwnerRevisionToTextureActor(ctx context.Context, doc t
 	return nil
 }
 
+func textureRevisionMatchesDocument(revision types.Revision, doc types.Document, ownerID string) bool {
+	return strings.TrimSpace(revision.RevisionID) == strings.TrimSpace(doc.CurrentRevisionID) &&
+		strings.TrimSpace(revision.DocID) == strings.TrimSpace(doc.DocID) &&
+		strings.TrimSpace(revision.OwnerID) == strings.TrimSpace(ownerID) &&
+		strings.TrimSpace(revision.ComputerID) == strings.TrimSpace(doc.ComputerID)
+}
+
 func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.Document, ownerID string, req textureAgentRevisionRequest, scheduledMessageSeq int64) (*types.RunRecord, error) {
 	requestIntent := strings.TrimSpace(req.Intent)
 	if requestIntent == "" {
 		requestIntent = "revise"
 	}
 	// Build the backend-owned Texture revision request from current document state.
-	var currentRevision types.Revision
-	var currentRevisionLoaded bool
-	if doc.CurrentRevisionID != "" {
-		rev, err := rt.getTextureRevision(ctx, ownerID, doc.CurrentRevisionID)
-		if err == nil {
-			currentRevision = rev
-			currentRevisionLoaded = true
-		}
+	currentRevisionID := strings.TrimSpace(doc.CurrentRevisionID)
+	if currentRevisionID == "" {
+		return nil, fmt.Errorf("start Texture revision: current_revision_id is required")
+	}
+	currentRevision, err := rt.getTextureRevision(ctx, ownerID, currentRevisionID)
+	if err != nil {
+		return nil, fmt.Errorf("start Texture revision: load current revision: %w", err)
+	}
+	if !textureRevisionMatchesDocument(currentRevision, doc, ownerID) {
+		return nil, fmt.Errorf("start Texture revision: current revision scope mismatch")
 	}
 	metadata := decodeRevisionMetadata(currentRevision.Metadata)
 	if metadata == nil {
 		metadata = map[string]any{}
 	}
 	var previousRevision *types.Revision
-	if currentRevisionLoaded && currentRevision.ParentRevisionID != "" {
+	if currentRevision.ParentRevisionID != "" {
 		prev, err := rt.getTextureRevision(ctx, ownerID, currentRevision.ParentRevisionID)
 		if err == nil {
 			previousRevision = &prev
@@ -316,7 +325,7 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	}
 
 	diffSummary := ""
-	if currentRevisionLoaded && previousRevision != nil {
+	if previousRevision != nil {
 		if diff, err := rt.Store.GetDiff(ctx, previousRevision.RevisionID, currentRevision.RevisionID, ownerID); err == nil {
 			diffSummary = summarizeDiffResult(diff)
 		}
@@ -333,25 +342,23 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		}
 	}
 
-	if currentRevisionLoaded {
-		currentSources := decodeTextureSourceEntities(currentRevision.SourceEntities)
-		mediaSourceEntities, addedMediaSourceEntities, err := rt.registerTextureMediaSourceEntities(ctx, ownerID, currentRevision.Content, currentSources)
-		if err != nil {
-			return nil, err
-		}
-		sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceEntities)
-		evidenceEntities, sourceRejections := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12)
-		if len(evidenceEntities) > 0 {
-			var changedEvidenceEntities bool
-			sourceEntities, changedEvidenceEntities = mergeTextureSourceEntities(sourceEntities, evidenceEntities)
-			changedSourceEntities = changedSourceEntities || changedEvidenceEntities
-		}
-		mergeCoagentSourceRejectionsIntoMetadata(metadata, sourceRejections)
-		if len(sourceEntities) > 0 {
-			metadata[textureAvailableSourceEntitiesKey] = sourceEntities
-			if changedSourceEntities || addedMediaSourceEntities {
-				delete(metadata, "media_source_research_required")
-			}
+	currentSources := decodeTextureSourceEntities(currentRevision.SourceEntities)
+	mediaSourceEntities, addedMediaSourceEntities, err := rt.registerTextureMediaSourceEntities(ctx, ownerID, currentRevision.Content, currentSources)
+	if err != nil {
+		return nil, err
+	}
+	sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceEntities)
+	evidenceEntities, sourceRejections := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12)
+	if len(evidenceEntities) > 0 {
+		var changedEvidenceEntities bool
+		sourceEntities, changedEvidenceEntities = mergeTextureSourceEntities(sourceEntities, evidenceEntities)
+		changedSourceEntities = changedSourceEntities || changedEvidenceEntities
+	}
+	mergeCoagentSourceRejectionsIntoMetadata(metadata, sourceRejections)
+	if len(sourceEntities) > 0 {
+		metadata[textureAvailableSourceEntitiesKey] = sourceEntities
+		if changedSourceEntities || addedMediaSourceEntities {
+			delete(metadata, "media_source_research_required")
 		}
 	}
 	if len(req.SourceEntities) > 0 {
@@ -458,26 +465,9 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		runMetadata["texture_initial_decision_evidence_refs"] = decision.EvidenceRefs
 		runMetadata["texture_initial_decision_next_action"] = decision.NextAction
 	}
-	var (
-		rec *types.RunRecord
-		err error
-	)
-	rec, err = rt.Core.StartRunWithMetadata(ctx, agentPrompt, ownerID, runMetadata)
+	rec, err := rt.Core.StartRunWithMetadata(ctx, agentPrompt, ownerID, runMetadata)
 	if err != nil {
 		return nil, err
-	}
-
-	// Record the agent mutation for idempotency tracking (VAL-CROSS-122).
-	if err := rt.Store.CreateAgentMutation(ctx, store.AgentMutation{
-		DocID:               doc.DocID,
-		RunID:               rec.RunID,
-		OwnerID:             ownerID,
-		ComputerID:          agentMutationComputerID(rec),
-		State:               "pending",
-		ScheduledMessageSeq: scheduledMessageSeq,
-		CreatedAt:           time.Now().UTC(),
-	}); err != nil {
-		log.Printf("texture api: create agent mutation: %v", err)
 	}
 
 	// Emit the texture-specific agent revision started event.

@@ -500,13 +500,13 @@ receipts:
 
   - id: texture-restart-recovery-authority-conflict-2026-07-24
     boundary: prove
-    commit_or_artifact: pending_code_free_receipt
+    commit_or_artifact: "candidate diff sha256 736ce118fe6e9711ad92bc42d0784e00d9f8834112493468b7ec7e397f047583 against origin/main@8634c49a"
     proof_refs: ["https://choir.news/health reports 2fca28c9", "clean owner signer-repair-2fca28c9-1784856712359@example.com", "computer-97a7801d0f0978dc30a99acf3b2a13388 realization vm-334f50a5608c54f087c892f87bdf9753 epochs 8209 and 8210", "submission f8e31ab3-b4f8-5913-be91-cb9bdfc0f85c", "trajectory 624987d7-b19c-5e7b-baac-faf9f1f9b851 reducer_seq 6", "artifact 8e806072-0433-5d42-96bf-d72f48e2be43 head 11f31087-6831-53d9-bfa0-0e9d01ffe2a4", "pending updates upd-c7b2dfb13e09d8ca84bd480ffe5f804a and upd-e23dad68d1631ab1ce8f0e06d5076ceb", "invalid recovery runs a363b034-83e2-436c-8abf-77f8e43ac7c6 and d09ef274-ee9b-4535-aca5-4a28f5b6be7a"]
     rollback_ref: "origin/main@6df714bb; deployed runtime 2fca28c9"
-    disposition: "Problem documented before repair. Existing Texture-owner ReconcileAgentWake is the canonical replacement and must own restart reconstruction; generic assigned-work recovery must stop claiming Texture profile work."
+    disposition: "Problem documented before repair. Existing Texture-owner ReconcileAgentWake is now the sole restart reconstruction authority: generic recovery defers Texture; owner startup and delivery fail closed without binding; dispatch requires canonical document, run, and mutation revision identity; invalid active, passivated, and orphan mutations cannot mask recovery; sleeping state remains asleep without evidence; cancellation-safe compensation preserves mutation/run consistency. Focused and complete actorruntime, agentcore, and textureowner suites pass. Frozen red-surface panel unanimously ACCEPTED."
     problem_ref: "Generic assigned-work recovery creates Texture-profile runs without Texture revision identity, so canonical write validation refuses and terminal completion loops without consuming pending typed updates or settling work."
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first and deletion-first; deployed restart evidence; no weakening of Texture write or lifecycle authority"
-    candidate_or_evidence_refs: ["run a363b034-83e2-436c-8abf-77f8e43ac7c6", "run d09ef274-ee9b-4535-aca5-4a28f5b6be7a", "trajectory 624987d7-b19c-5e7b-baac-faf9f1f9b851"]
+    candidate_or_evidence_refs: ["run a363b034-83e2-436c-8abf-77f8e43ac7c6", "run d09ef274-ee9b-4535-aca5-4a28f5b6be7a", "trajectory 624987d7-b19c-5e7b-baac-faf9f1f9b851", artifact://2327, artifact://2331, artifact://2332, artifact://2333, "/tmp/agentic-consensus-20260724-005223/manifest.tsv"]
 view:
   path: http://127.0.0.1:8788/
   generator: "node skills/definition/scripts/dashboard.mjs docs/definitions/choir-coherent-computer-convergence-2026-07-21.md --serve 127.0.0.1:8788 --watch --output /tmp/choir-convergence-definition.html"

@@ -65,6 +65,18 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 	if _, err := s1.QueueLifecycleUpdate(ctx, queue); err != nil {
 		t.Fatalf("queue durable update: %v", err)
 	}
+	if err := s1.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID: docID, RunID: "orphan-preprojection-run", OwnerID: ownerID,
+		ComputerID: "sandbox-texture-restart", State: "pending", CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("create orphan pre-projection mutation: %v", err)
+	}
+	if err := s1.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID: docID, RunID: "orphan-preprojection-run-newer", OwnerID: ownerID,
+		ComputerID: "sandbox-texture-restart", State: "pending", CreatedAt: now.Add(time.Second),
+	}); err != nil {
+		t.Fatalf("create newer orphan pre-projection mutation: %v", err)
+	}
 	if err := s1.Close(); err != nil {
 		t.Fatalf("close first store: %v", err)
 	}
@@ -91,6 +103,12 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 	}
 	for _, run := range runs {
 		if run.AgentID == agentID && run.ChannelID == docID && run.State == types.RunPending {
+			for _, orphanRunID := range []string{"orphan-preprojection-run", "orphan-preprojection-run-newer"} {
+				orphan, orphanErr := s2.GetAgentMutationByRun(ctx, ownerID, "sandbox-texture-restart", orphanRunID)
+				if orphanErr != nil || orphan == nil || orphan.State != "stale_activation" {
+					t.Fatalf("orphan mutation %s was not staled before recovery: %+v, %v", orphanRunID, orphan, orphanErr)
+				}
+			}
 			return
 		}
 	}

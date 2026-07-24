@@ -158,12 +158,19 @@ func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *te
 		State: types.RunRunning, Prompt: "resume after process crash", AgentProfile: "texture", AgentRole: "texture",
 		CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{
+			"type": "texture_agent_revision", "current_revision_id": "revision:" + docID,
 			"agent_profile": "texture", "agent_role": "texture", "doc_id": docID,
 			"trajectory_id": queue.TrajectoryID, "lifecycle_work_item_id": "work:" + docID,
 		},
 	}
 	if err := s.CreateRun(ctx, run); err != nil {
 		t.Fatalf("project running lifecycle activation: %v", err)
+	}
+	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID: docID, RunID: run.RunID, OwnerID: ownerID, ComputerID: "sandbox-test",
+		State: "pending", RevisionID: "revision:" + docID, CreatedAt: now.Add(-time.Hour),
+	}); err != nil {
+		t.Fatalf("create running Texture mutation: %v", err)
 	}
 
 	logDB, err := sql.Open("sqlite", actorLogPath(dbPath)+"?_busy_timeout=60000")
@@ -194,24 +201,15 @@ func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *te
 		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
 	}
 	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
+	if err := adapter.BindTextureOwner(textureowner.NewHandler(adapter.Runtime)); err != nil {
+		t.Fatalf("bind Texture owner: %v", err)
+	}
 	t.Cleanup(func() {
 		adapter.Stop()
 		adapter.cleanupLog()
 	})
 	if err := adapter.Start(ctx); err != nil {
 		t.Fatalf("restart adapter: %v", err)
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	var stored types.RunRecord
-	for time.Now().Before(deadline) {
-		stored, err = s.GetLifecycleRun(ctx, ownerID, "sandbox-test", run.RunID)
-		if err == nil && stored.State == types.RunCompleted {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if err != nil || stored.State != types.RunCompleted {
-		t.Fatalf("running lifecycle activation was not resumed: %+v, %v", stored, err)
 	}
 	var backlog []actor.Update
 	seededDispatchPending := true
@@ -232,6 +230,13 @@ func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *te
 	}
 	if err != nil || seededDispatchPending {
 		t.Fatalf("durable initial dispatch %q remained pending in %+v, %v", dispatch.UpdateID, backlog, err)
+	}
+	stored, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", run.RunID)
+	mutation, mutationErr := s.GetAgentMutationByRun(ctx, ownerID, "sandbox-test", run.RunID)
+	reactivated, _ := stored.Metadata["actor_reactivated_from_passivated"].(bool)
+	if err != nil || stored.State != types.RunCompleted || !reactivated || mutationErr != nil || mutation == nil ||
+		mutation.State != "completed" || !mutation.CreatedAt.After(now.Add(-time.Minute)) {
+		t.Fatalf("running lifecycle activation was not owner-reactivated: run=%+v mutation=%+v run_err=%v mutation_err=%v", stored, mutation, err, mutationErr)
 	}
 }
 
@@ -298,13 +303,20 @@ func TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery(t *testin
 		t.Fatalf("list startup recovery runs: %v", err)
 	}
 	textureRuns := 0
-	for _, run := range runs {
+	var recovered *types.RunRecord
+	for i := range runs {
+		run := &runs[i]
 		if run.AgentID == agentID && run.ChannelID == docID {
 			textureRuns++
+			recovered = run
 		}
 	}
 	if textureRuns != 1 {
 		t.Fatalf("startup recovery created %d Texture runs, want exactly one: %+v", textureRuns, runs)
+	}
+	if recovered == nil || recovered.Metadata["type"] != "texture_agent_revision" ||
+		recovered.Metadata["doc_id"] != docID {
+		t.Fatalf("startup recovery bypassed canonical Texture revision authority: %+v", recovered)
 	}
 }
 
@@ -461,6 +473,89 @@ func TestTextureColdWakeRoutesToConcreteOwner(t *testing.T) {
 	t.Fatalf("Texture coagent_result did not route to owner run: %+v", runs)
 }
 
+func TestTextureWakeIgnoresGenericParkedMemoryAndRoutesToDocumentOwner(t *testing.T) {
+	env := newAdapterTestEnv(t)
+	env.adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
+		return nil
+	})
+
+	const (
+		ownerID = "user-texture-stale-memory"
+		docID   = "doc-texture-stale-memory"
+		agentID = "texture:" + docID
+	)
+	update := seedDurableTextureUpdate(t, env.store, env.ctx, "sandbox-test", ownerID, docID, "update-texture-stale-memory", "Durable Texture wake")
+	now := time.Now().UTC()
+	canonical := types.RunRecord{
+		RunID: "run-texture-canonical-passivated", AgentID: agentID, OwnerID: ownerID,
+		SandboxID: "sandbox-test", ChannelID: docID, TrajectoryID: update.TrajectoryID,
+		State: types.RunPassivated, Prompt: "canonical Texture revision memory",
+		AgentProfile: "texture", AgentRole: "texture",
+		CreatedAt: now.Add(-time.Minute), UpdatedAt: now.Add(-time.Minute),
+		Metadata: map[string]any{
+			"type":                "texture_agent_revision",
+			"doc_id":              docID,
+			"current_revision_id": "revision:before-successful-write",
+			"agent_profile":       "texture",
+			"agent_role":          "texture",
+			"trajectory_id":       update.TrajectoryID,
+		},
+	}
+	if err := env.store.CreateRun(env.ctx, canonical); err != nil {
+		t.Fatalf("create canonical passivated Texture run: %v", err)
+	}
+	if err := env.store.CreateAgentMutation(env.ctx, store.AgentMutation{
+		DocID: docID, RunID: canonical.RunID, OwnerID: ownerID, ComputerID: "sandbox-test",
+		State: "pending", RevisionID: "revision:" + docID, CreatedAt: now.Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("create post-write pending Texture mutation: %v", err)
+	}
+	stale := types.RunRecord{
+		RunID: "run-texture-stale-generic", AgentID: agentID, OwnerID: ownerID,
+		SandboxID: "sandbox-test", ChannelID: docID, TrajectoryID: update.TrajectoryID,
+		State: types.RunRunning, Prompt: "generic Texture recovery without revision authority",
+		AgentProfile: "texture", AgentRole: "texture",
+		CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{
+			"agent_profile": "texture",
+			"agent_role":    "texture",
+			"trajectory_id": update.TrajectoryID,
+		},
+	}
+	if err := env.store.CreateRun(env.ctx, stale); err != nil {
+		t.Fatalf("create stale generic Texture run: %v", err)
+	}
+	memory, err := json.Marshal(resumeState{RunID: stale.RunID, Phase: "parked"})
+	if err != nil {
+		t.Fatalf("encode stale Texture memory: %v", err)
+	}
+
+	handler := newActorHandler(env.adapter.Runtime, textureowner.NewHandler(env.adapter.Runtime))
+	returned, err := handler.HandleUpdate(env.ctx, agentID, actorUpdate(ownerID, "coagent_result", agentID, update.Content), memory)
+	if err != nil {
+		t.Fatalf("route stale Texture memory through owner: %v", err)
+	}
+	if returned != nil {
+		t.Fatalf("stale generic Texture memory survived owner reconciliation: %v", returned)
+	}
+	storedStale, err := env.store.GetLifecycleRun(env.ctx, ownerID, "sandbox-test", stale.RunID)
+	if err != nil || storedStale.State != types.RunPassivated {
+		t.Fatalf("stale generic Texture run changed: %+v, %v", storedStale, err)
+	}
+	storedCanonical, err := env.store.GetLifecycleRun(env.ctx, ownerID, "sandbox-test", canonical.RunID)
+	if err != nil || storedCanonical.State != types.RunPending ||
+		storedCanonical.Metadata["current_revision_id"] != "revision:"+docID {
+		t.Fatalf("canonical post-write Texture run was not reactivated at current head: %+v, %v", storedCanonical, err)
+	}
+	runs, err := env.store.ListLifecycleRunsByOwner(env.ctx, ownerID, "sandbox-test", 20)
+	if err != nil {
+		t.Fatalf("list reconciled Texture runs: %v", err)
+	}
+	if len(runs) != 2 {
+		t.Fatalf("Texture owner minted a replacement instead of reusing canonical memory: %+v", runs)
+	}
+}
+
 func TestTextureColdWakeFailsClosedWithoutOwner(t *testing.T) {
 	env := newAdapterTestEnv(t)
 	_, err := newActorHandler(env.adapter.Runtime, nil).reconcileCoagentWake(
@@ -468,6 +563,29 @@ func TestTextureColdWakeFailsClosedWithoutOwner(t *testing.T) {
 	)
 	if err == nil || err.Error() != "Texture owner is not bound" {
 		t.Fatalf("Texture wake error = %v, want explicit unbound-owner failure", err)
+	}
+	memory, marshalErr := json.Marshal(resumeState{RunID: "run-stale-generic-texture", Phase: "parked"})
+	if marshalErr != nil {
+		t.Fatalf("encode stale Texture memory: %v", marshalErr)
+	}
+	_, err = newActorHandler(env.adapter.Runtime, nil).HandleUpdate(
+		env.ctx,
+		"texture:doc-texture-wake",
+		actorUpdate("owner-texture", "coagent_result", "texture:doc-texture-wake", ""),
+		memory,
+	)
+	if err == nil || !strings.Contains(err.Error(), "Texture owner is not bound") {
+		t.Fatalf("parked Texture wake error = %v, want explicit unbound-owner failure", err)
+	}
+	invalid := createLifecycleActorRun(t, env, "unbound-dispatch", types.RunPending)
+	initial := actorUpdate(invalid.OwnerID, "initial_dispatch", invalid.AgentID, invalid.RunID)
+	if _, err = newActorHandler(env.adapter.Runtime, nil).HandleUpdate(env.ctx, initial.ToAgentID, initial, nil); err == nil ||
+		!strings.Contains(err.Error(), "Texture owner is not bound") {
+		t.Fatalf("unbound Texture initial dispatch error = %v, want fail-closed owner requirement", err)
+	}
+	seedDurableTextureUpdate(t, env.store, env.ctx, "sandbox-test", "owner-start-unbound", "doc-start-unbound", "update-start-unbound", "durable update")
+	if err := env.adapter.Start(env.ctx); err == nil || !strings.Contains(err.Error(), "Texture owner is not bound for durable subject") {
+		t.Fatalf("unbound Texture startup error = %v, want fail-closed owner requirement", err)
 	}
 }
 
@@ -677,38 +795,17 @@ func createLifecycleActorRun(t *testing.T, env *adapterTestEnv, suffix string, s
 	return rec
 }
 
-func TestProductionActorHandlerResolvesLifecycleRunsForDispatchResumeAndCancel(t *testing.T) {
+func TestProductionActorHandlerCancelsLifecycleRun(t *testing.T) {
 	env := newAdapterTestEnv(t)
 	handler := newActorHandler(env.adapter.Runtime, nil)
 
-	dispatched := createLifecycleActorRun(t, env, "dispatch", types.RunPending)
-	update := actorUpdate(dispatched.OwnerID, "initial_dispatch", dispatched.AgentID, dispatched.RunID)
-	if _, err := handler.HandleUpdate(env.ctx, update.ToAgentID, update, nil); err != nil {
-		t.Fatalf("dispatch lifecycle activation: %v", err)
-	}
-	stored, err := env.store.GetLifecycleRun(env.ctx, dispatched.OwnerID, dispatched.SandboxID, dispatched.RunID)
-	if err != nil || stored.State != types.RunCompleted {
-		t.Fatalf("dispatched lifecycle run = %+v, %v", stored, err)
-	}
-
-	resumed := createLifecycleActorRun(t, env, "resume", types.RunPassivated)
-	memory, _ := json.Marshal(resumeState{RunID: resumed.RunID, Phase: "parked"})
-	update = actorUpdate(resumed.OwnerID, "coagent_result", resumed.AgentID, "resume")
-	if _, err := handler.HandleUpdate(env.ctx, update.ToAgentID, update, memory); err != nil {
-		t.Fatalf("resume lifecycle activation: %v", err)
-	}
-	stored, err = env.store.GetLifecycleRun(env.ctx, resumed.OwnerID, resumed.SandboxID, resumed.RunID)
-	if err != nil || stored.State != types.RunCompleted {
-		t.Fatalf("resumed lifecycle run = %+v, %v", stored, err)
-	}
-
 	cancelled := createLifecycleActorRun(t, env, "cancel", types.RunPassivated)
-	memory, _ = json.Marshal(resumeState{RunID: cancelled.RunID, Phase: "parked"})
-	update = actorUpdate(cancelled.OwnerID, "cancel", cancelled.AgentID, "")
+	memory, _ := json.Marshal(resumeState{RunID: cancelled.RunID, Phase: "parked"})
+	update := actorUpdate(cancelled.OwnerID, "cancel", cancelled.AgentID, "")
 	if _, err := handler.HandleUpdate(env.ctx, update.ToAgentID, update, memory); err != nil {
 		t.Fatalf("cancel lifecycle activation: %v", err)
 	}
-	stored, err = env.store.GetLifecycleRun(env.ctx, cancelled.OwnerID, cancelled.SandboxID, cancelled.RunID)
+	stored, err := env.store.GetLifecycleRun(env.ctx, cancelled.OwnerID, cancelled.SandboxID, cancelled.RunID)
 	if err != nil || stored.State != types.RunCancelled {
 		t.Fatalf("cancelled lifecycle run = %+v, %v", stored, err)
 	}

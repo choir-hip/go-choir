@@ -29,6 +29,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/actor"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -343,6 +344,19 @@ func (a *Adapter) migrateLegacyActorMailboxes(ctx context.Context) error {
 func (a *Adapter) Start(ctx context.Context) error {
 	if err := a.migrateLegacyActorMailboxes(ctx); err != nil {
 		return fmt.Errorf("actorruntime: %w", err)
+	}
+	if a.textureOwner == nil {
+		subjects, err := a.Runtime.Store().ListLifecycleSubjects(ctx, a.Runtime.TextureSandboxID())
+		if err != nil {
+			return fmt.Errorf("actorruntime: inspect durable Texture subjects: %w", err)
+		}
+		for _, subject := range subjects {
+			if agentprofile.Canonical(subject.Profile) == agentprofile.Texture ||
+				agentprofile.Canonical(subject.Role) == agentprofile.Texture ||
+				strings.HasPrefix(strings.TrimSpace(subject.AgentID), agentprofile.Texture+":") {
+				return fmt.Errorf("actorruntime: Texture owner is not bound for durable subject %s", subject.AgentID)
+			}
+		}
 	}
 	a.Runtime.Start(ctx)
 	if a.textureOwner != nil {
