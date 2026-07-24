@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   inspect:
-    name: Inspect retained-computer recovery
+    name: Inspect first-boot guest signer
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -28,31 +28,29 @@ jobs:
             ServerAliveCountMax 6
           EOF
 
-      - name: Capture bounded recovery evidence
+      - name: Capture bounded signer startup evidence
         run: |
           ssh go-choir-node-b 'bash -s' <<'REMOTE_DIAGNOSTICS'
           set -euo pipefail
           echo '==> vmctl service state'
           systemctl show go-choir-vmctl.service \
             --property=ActiveState,SubState,ExecMainStartTimestamp,ExecMainStatus,NRestarts
-          echo '==> retained computer ownership'
+          echo '==> recent computer ownerships'
           curl -fsS -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/list |
-            jq '{ownerships: [.ownerships[] | select((.computer_id // .immutable_identity.computer_id) == "computer-03335285269bdba4f94377e56879f9e6") | {computer_id,vm_id,desktop_id,state,epoch,sandbox_url,immutable_identity}]}'
-          echo '==> persisted retained computer ownership'
-          jq '{saved_at, ownerships: [.ownerships[] | select((.computer_id // .immutable_identity.computer_id) == "computer-03335285269bdba4f94377e56879f9e6") | {computer_id,vm_id,desktop_id,state,epoch,sandbox_url,immutable_identity}]}' \
-            /var/lib/go-choir/vm-state/ownerships.json
-          echo '==> exact failed-refresh journal window'
+            jq '{ownerships: [.ownerships[] | select((.epoch // 0) >= 8197) | {computer_id,vm_id,desktop_id,state,epoch,sandbox_url,immutable_identity}]}'
+          echo '==> signer-gated deployment journal'
           journalctl -u go-choir-vmctl.service \
-            --since '2026-07-23 14:18:30 UTC' --until '2026-07-23 14:21:00 UTC' \
-            --no-pager --output=short-iso --lines=1200 |
+            --since '2026-07-24 00:05:00 UTC' \
+            --no-pager --output=short-iso --lines=3000 |
             sed -E \
               -e 's/(Bearer )[A-Za-z0-9._-]+/\1[REDACTED]/g' \
-              -e 's/((token|secret|private_key|api_key)[=:])[A-Za-z0-9._\/-]+/\1[REDACTED]/Ig'
-          echo '==> failed-refresh artifact metadata'
+              -e 's/((token|secret|private_key|api_key)[=:])[A-Za-z0-9._\/-]+/\1[REDACTED]/Ig' |
+            grep -E 'choir-receipt-signer|guest signer|guest-signer|startup|vm-|health|ready|failed|error' |
+            tail -1200
+          echo '==> recent VM artifact metadata'
           find /var/lib/go-choir/vm-state -maxdepth 2 -type f \
-            \( -path '*vm-refreshing*' -o -newermt '2026-07-23 14:18:30 UTC' \) \
-            ! -newermt '2026-07-23 14:21:00 UTC' \
-            -printf '%TY-%Tm-%TdT%TH:%TM:%TSZ %s %p\n' | sort | head -200
+            -newermt '2026-07-24 00:05:00 UTC' \
+            -printf '%TY-%Tm-%TdT%TH:%TM:%TSZ %s %p\n' | sort | tail -200
           REMOTE_DIAGNOSTICS
 
       - name: Cleanup SSH
