@@ -271,28 +271,28 @@ execution:
 now:
   status: problem_documented
   slice: D-land-deploy-and-prove
-  question: "Why does the guest-core signer fail to become responsive on the first boot even when runtime readiness now waits for it?"
+  question: "Why does a clean accepted computer fail its first Texture activation after signer-gated boot and restart identity both pass?"
   reconciliation:
-    observed_at: 2026-07-24T00:10:00Z
-    source_ref: refs/remotes/origin/main@2d645fbb0b3a75267e946e02166d0510a418de6d
-    deploy_identity: "GitHub Actions 30054568071 and Deploy to Staging job 89363588024 passed; /health reports proxy build/deployed_commit 2d645fbb."
+    observed_at: 2026-07-24T01:38:47Z
+    source_ref: refs/remotes/origin/main@2fca28c94a39bbcc9bafe623a79b98daabe4a6be
+    deploy_identity: "GitHub Actions 300585656141 passed; Deploy to Staging job 89375651491 passed; /health reports proxy build/deployed_commit 2fca28c94a39bbcc9bafe623a79b98daabe4a6be."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
-    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir was clean after the signer gate push; this update is the required code-free deployment-problem receipt. Protected unrelated worktrees remain untouched."
+    worktree_inventory_ref: "Canonical worktree /Users/wiz/go-choir was clean before this required code-free product-problem receipt. Protected unrelated worktrees remain untouched."
     status: reconciled
   accepted_deployment:
-    source_commit: 2d645fbb0b3a75267e946e02166d0510a418de6d
-    ci_ref: "GitHub Actions 30054568071 passed; Deploy to Staging job 89363588024 passed."
-    environment_identity: "Host /health is exact at 2d645fbb. Clean browser registration signer-proof-2d645fbb-1784851603895@example.com completed, but its newly allocated computer never reached shell bootstrap or compute status."
-    rollback_ref: "origin/main@61372ba8; last usable deployed runtime 6dfa50f9; accepted route repair 4a33fff0."
+    source_commit: 2fca28c94a39bbcc9bafe623a79b98daabe4a6be
+    ci_ref: "GitHub Actions 300585656141 passed; Deploy to Staging job 89375651491 passed."
+    environment_identity: "Clean owner signer-repair-2fca28c9-1784856712359@example.com booted computer-97a7801d0f0978dc30a99acf3b2a13388 as vm-334f50a5608c54f087c892f87bdf9753 epoch 8208; signed execution identity joined host, deployed commit, guest commit, ComputerID, realization, epoch, executable digest, guest image/config digests, and signer key. Public stop/wake reconstructed epoch 8209 and the same signed joins passed again."
+    rollback_ref: "origin/main@7499cf69; accepted signer-gated deployment 2fca28c9; prior usable runtime 6dfa50f9."
   observed_product_evidence:
-    - "The independently accepted candidate made guest signer responsiveness an unbounded fail-closed ExecStartPost gate with RestartMode=direct; updater and runtime require the signer and runtime binds to it."
-    - "On an exact 2d645fbb clean registration, authentication completed but desktop readiness remained false; /api/shell/bootstrap and /api/compute/status each exceeded explicit 15-second client deadlines after more than five minutes."
-    - "This converts the prior false-ready state into an honest blocked boot, but proves the underlying first-boot signer failure remains unrepaired."
-  observed_problem: "The signer readiness gate is semantically correct but not sufficient: the guest-core signer itself cannot complete first-boot startup. A retained key/state or boot-order prerequisite makes the second boot work, while the pristine first boot remains blocked."
-  policy_resolution_ref: "Problem-documentation-first requires this receipt before changing signer initialization. Use bounded Node B workflow diagnostics to inspect the failed guest unit and startup stage without treating host SSH as product acceptance; repair the first-boot prerequisite at source, preserve the readiness gate, and retest a newly allocated computer."
-  blocker_or_risk: "Mission completion remains blocked and current staging regresses clean first boot. Roll back if diagnosis cannot produce a reviewed source repair immediately."
-  latest_blocker_or_risk: "Mutation class red. Protected surfaces: guest signer state initialization, updater/runtime readiness, deployment and acceptance. Admissible repair proof: clean first-boot shell plus signed identity, then restart identity. Rollback: 2d645fbb to 61372ba8 or 6dfa50f9. Conjecture delta: fail-closed gating exposed a latent first-boot initialization defect rather than repairing it. Heresy delta: discovered first-boot signer initialization failure; introduced clean-boot unavailability by gating; repaired false readiness only."
-  next_action: "Capture bounded failed-unit/startup-stage evidence through the staging diagnostics workflow, repair the exact first-boot signer prerequisite, independently review, deploy, and rerun clean first-boot and restart signed identity."
+    - "Clean first boot completed and signed execution identity returned 200. Public stop/wake completed and post-restart signed execution identity returned 200 with epoch 8209."
+    - "Prompt submission 34b66223-13b3-58ae-9c9e-ea4e2708fa2d created trajectory 04e79966-b4f6-556d-a361-335f9b1a770c and work item bbde807f-e399-5fc2-a557-3dafd100797d, proving the durable-work start boundary executes."
+    - "Its first Texture activation 14191eb1-9b68-466d-8c3d-dda7dee5b934 failed before any document revision with ChatGPT 401 refresh_token_reused; the trajectory remains live with its work item open and no false settlement."
+  observed_problem: "The clean computer's persisted model policy selects ChatGPT for conductor, Texture, and researcher roles, but the available ChatGPT credential cannot refresh because its refresh token was already consumed. Provider authentication, not signer readiness or lifecycle authority, blocks the deployed lifecycle proof."
+  policy_resolution_ref: "Problem-documentation-first requires this receipt before operational recovery or provider/auth repair. Preserve the failed trajectory as evidence. Use the computer-owned model policy to select an already configured non-ChatGPT provider for acceptance, or restore ChatGPT authentication through its supported owner path; do not weaken lifecycle settlement, execution identity, or signer authority."
+  blocker_or_risk: "Mission completion remains blocked until a real provider activation revises and settles the trivial lifecycle, then the evidence-heavy/restart/delivery/cancellation/client acceptance path passes."
+  latest_blocker_or_risk: "Mutation class red for provider routing and deployed acceptance. Protected surfaces: provider/model routing, durable actor delivery, trajectory/work settlement, signed execution identity, deployment acceptance. Admissible proof: a real provider activation through the public prompt path plus lifecycle snapshot/restart/client evidence. Rollback: restore the prior computer-owned model-policy content; no source rollback is required. Conjecture delta: signer namespace repair is accepted; the next blocker is stale ChatGPT owner credential state. Heresy delta: discovered provider credential failure; introduced none; repaired clean first-boot and restart signer identity."
+  next_action: "Land this code-free problem receipt, switch the clean computer through its public file surface to a configured non-ChatGPT model policy, confirm policy resolution, and rerun the trivial lifecycle from a new prompt."
 receipts:
   - id: durable-work-contract-gate-2026-07-21
     boundary: define
@@ -485,6 +485,16 @@ receipts:
     problem_ref: "A newly allocated persistent disk lacks /mnt/persistent/choir-credentials. Signer-isolated units require that path as a non-optional InaccessiblePaths namespace source before the runtime has a chance to create it, so namespace setup fails before ExecStart and even the OnFailure diagnostic cannot run."
     authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; staging clean-client evidence; no weakening of verifier, identity, or signer authority"
     candidate_or_evidence_refs: [artifact://2136, artifact://2151, "GitHub Actions 30057849893", "GitHub Actions 30058356708", "/tmp/agentic-consensus-20260723-210454/manifest.tsv"]
+
+  - id: deployed-chatgpt-refresh-token-reused-2026-07-24
+    boundary: prove
+    commit_or_artifact: pending_code_free_receipt
+    proof_refs: ["GitHub Actions 300585656141", "Deploy to Staging job 89375651491", "https://choir.news/health reports 2fca28c9", "clean owner signer-repair-2fca28c9-1784856712359@example.com", "computer-97a7801d0f0978dc30a99acf3b2a13388 realization vm-334f50a5608c54f087c892f87bdf9753 epochs 8208 and 8209", "signed execution identity returned 200 before and after public stop/wake", "submission 34b66223-13b3-58ae-9c9e-ea4e2708fa2d", "trajectory 04e79966-b4f6-556d-a361-335f9b1a770c", "work item bbde807f-e399-5fc2-a557-3dafd100797d", "activation 14191eb1-9b68-466d-8c3d-dda7dee5b934 failed with ChatGPT 401 refresh_token_reused"]
+    rollback_ref: "restore prior /mnt/persistent/files/System/model-policy.toml; source remains origin/main@2fca28c9"
+    disposition: "Problem documented before operational recovery. Signer-gated clean boot and restart identity pass; the failed provider activation leaves canonical work live and open rather than falsely settling."
+    problem_ref: "The clean computer-owned model policy selects ChatGPT roles while the available ChatGPT refresh token has already been consumed, so the first Texture activation fails before revision."
+    authorization_ref: "Owner-ratified durable-computer mission; AGENTS.md problem-documentation-first; deployed clean-client evidence; computer-owned runtime configuration authority"
+    candidate_or_evidence_refs: ["run 14191eb1-9b68-466d-8c3d-dda7dee5b934", "trajectory 04e79966-b4f6-556d-a361-335f9b1a770c"]
 
 view:
   path: http://127.0.0.1:8788/
