@@ -69,6 +69,23 @@ let
       done
     '';
   };
+  guestSignerFailureDiagnostics = pkgs.writeShellScript "choir-guest-signer-failure-diagnostics" ''
+    set -euo pipefail
+    unit=go-choir-guest-receipt-signer-state-migration.service
+    echo "choir-guest-signer: migration unit failure diagnostics"
+    ${pkgs.systemd}/bin/systemctl show "$unit" \
+      --property=Result \
+      --property=ExecMainCode \
+      --property=ExecMainStatus \
+      --property=ExecStart \
+      --property=ExecStartPost || true
+    ${pkgs.systemd}/bin/journalctl \
+      --boot=0 \
+      --unit="$unit" \
+      --lines=20 \
+      --no-pager \
+      --output=short-monotonic || true
+  '';
 
 
 
@@ -440,12 +457,15 @@ EOF
   systemd.services.go-choir-guest-receipt-signer-state-migration = {
     description = "Normalize retained guest-core signer state ownership";
     before = [ "go-choir-guest-receipt-signer.service" ];
+    onFailure = [ "go-choir-guest-receipt-signer-failure-diagnostics.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
       User = "root";
       Group = "root";
       ExecStart = "${guestSignerStateMigration}/bin/choir-guest-signer-state-migrate /mnt/persistent/choir-signers/guest-core choir-guest-signer choir-guest-signer";
+      StandardOutput = "journal+console";
+      StandardError = "journal+console";
       ExecStartPost = "${guestSignerStateProjection}/bin/choir-guest-signer-state-project /mnt/persistent/choir-signers/guest-core/key.ed25519 /run/choir 64";
       UMask = "0077";
       NoNewPrivileges = true;
@@ -455,6 +475,27 @@ EOF
       PrivateDevices = true;
       ReadWritePaths = [ "/mnt/persistent/choir-signers/guest-core" "/run/choir" ];
       InaccessiblePaths = [ "/mnt/persistent/choir-signers/verifier" "/mnt/persistent/choir-updater" "/mnt/persistent/choir-credentials" "/run/choir-signers" "/run/choir-verifier" "/run/choir-updater-control" "/run/choir-runtime-handoff" "/run/choir-bootstrap" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
+      RestrictAddressFamilies = [ "AF_UNIX" ];
+      LockPersonality = true;
+      RestrictSUIDSGID = true;
+      SystemCallFilter = [ "~@debug" ];
+    };
+  };
+
+  systemd.services.go-choir-guest-receipt-signer-failure-diagnostics = {
+    description = "Expose bounded guest-core signer migration failure evidence";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = guestSignerFailureDiagnostics;
+      StandardOutput = "journal+console";
+      StandardError = "journal+console";
+      NoNewPrivileges = true;
+      CapabilityBoundingSet = [ ];
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+      PrivateDevices = true;
+      InaccessiblePaths = [ "/mnt/persistent/choir-signers" "/mnt/persistent/choir-updater" "/mnt/persistent/choir-credentials" "/run/choir-signers" "/run/choir-verifier" "/run/choir-updater-control" "/run/choir-runtime-handoff" "/run/choir-bootstrap" "/run/dbus/system_bus_socket" ];
       RestrictAddressFamilies = [ "AF_UNIX" ];
       LockPersonality = true;
       RestrictSUIDSGID = true;
