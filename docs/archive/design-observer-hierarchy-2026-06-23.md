@@ -1,6 +1,41 @@
 # Design: Observer Hierarchy and Self-Learning
 
+> **ARCHIVED / HISTORICAL CONTEXT.** This document is an archived pre-kernel
+> design note. The current home for the supervision design intent is
+> [docs/supervision-protocol.md](../supervision-protocol.md) (Target scope)
+> and [docs/current-architecture.md](../current-architecture.md). This note
+> remains in Git history as the source the current design maps onto; the
+> archive is not current authority.
+
 This document addresses the question of who watches the meta-conductor, and how the supervision hierarchy terminates without infinite recursion. It is part of the conceptual refactor docset.
+
+## Revision 2026-07-31 — Supervision at the Level of Ideas
+
+Re-visioning alignment. The layered model below is still the intended shape and
+remains partly hypothetical; it is updated to the current product reality.
+The current Target design is maintained in
+[docs/supervision-protocol.md](../supervision-protocol.md).
+
+- Every layer observes **projections of the same tape**, not separate worlds.
+  The object graph is a materialized projection maintained by deterministic
+  reducers (see [why-texture](../why-texture-2026-06-15.md)); each layer runs a
+  different query over it, so adding a layer costs a query, not a copy of the
+  world.
+- The unit of supervision is the **semantic state update**. Each meaningful
+  change to standing state advances the supervised appagent's texture to a new
+  version. The trajectory supervisor and meta-conductor read snapshot
+  projections (artifact head, obligations, update dispositions, reducer
+  sequence) rather than scraping prose or action streams.
+- **Observation is authenticated and multi-agent.** An external agent (codex,
+  another Choir thread) and the logged-in owner observe or interact with the
+  same operating computer given credentials. The logged-in `choir.news` UI is
+  one observer surface; the api/cli are others.
+- The hierarchy terminates at the **user as root observer** — the owner of the
+  computer and the source of intention — and the self-learning layer is
+  event-driven and sparse, so no infinite tower forms. This is unchanged.
+- The accepted [kernel](../definitions/choir-coherent-computer-convergence-2026-07-21.md)
+  supplies the durable vocabulary this design anticipated: trajectories,
+  typed updates, work items, settlement, and reducer-owned state.
 
 ## 1. The hierarchy
 

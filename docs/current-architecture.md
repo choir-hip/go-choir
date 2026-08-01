@@ -84,16 +84,17 @@ available in Git history. The runtime protocols are model-checked in `specs/`
 **Transitional honesty (revised 2026-07-07):** the actor cutover is further
 along than earlier revisions of this paragraph claimed. **Live (2026-07):** the
 actor runtime is fully wired and is the *only* execution substrate — the
-`dispatchActor` hook panics if nil, with no legacy fallback path
-(internal/runtime/runtime.go); cold-start, coagent wake, cancel, park-resume,
-and the tool loop all run through the actor; warm delivery is a Go channel, not
-DB polling (H030 repaired). `internal/runtime` is the live business-logic layer
-(~106K LOC of tool loops, texture state machine, wire synthesis, run memory)
-awaiting *extraction and deletion*, not a zombie awaiting wiring. **Retired
-(residue still in tree):** parent/child run control and RunContinuations are
-named heresies (H001–H008). They have no current execution assignment and must
-receive no new callers; any future mutation requires explicit active-Definition
-authority.
+`dispatchActor` hook panics if nil, with no legacy fallback path; cold-start,
+coagent wake, cancel, park-resume, and the tool loop all run through the
+actor; warm delivery is a Go channel, not DB polling (H030 repaired).
+`internal/runtime` was dissolved in commit `c791a0ae` (2026-07-14): the live
+business-logic layer (tool loops, texture state machine, wire synthesis, run
+memory) now lives in `internal/agentcore`, `internal/textureowner`, and
+`internal/coagentowner`, with the actor runtime substrate in
+`internal/actorruntime` and `internal/actor`. **Retired (residue still in
+tree):** parent/child run control and RunContinuations are named heresies
+(H001–H008). They have no current execution assignment and must receive no new
+callers; any future mutation requires explicit active-Definition authority.
 
 | Term | Meaning |
 |---|---|
@@ -551,6 +552,21 @@ it needs prompts, dynamic behavior, or canonical state. Appagents mutate their
 own typed app state through product APIs. They do not get broad shell or
 arbitrary filesystem mutation by default.
 
+**Target (owner re-visioning 2026-07-31):** `appagent` is not desktop-bound.
+An appagent is a durable entity that (a) has its own subapi, (b) can access
+shared system resources under explicit auth, and (c) is a projection of the
+audit log. Agents — external agents such as codex, other Choir threads, and the
+owner — drive the operating computer through the Choir api/cli; multiple agent
+threads and the logged-in owner observe or interact with the same computer
+given credentials. The web desktop is one projection of the substrate, not the
+ontology. Supervision advances a texture to a new version per semantic state
+update; the tape (command digests, `ReducerSeq`, replay cursor, signed
+`computerevent` chain) is primary, and the object graph, checkpoints,
+snapshots, and UI surfaces are materialized projections maintained by
+deterministic reducers. See
+[why-texture](why-texture-2026-06-15.md) and the
+[vision re-visioning](archive/vision-choir-category-texture-transclusion-v0.md).
+
 Every desktop app that has user-visible view state must participate in the
 shared app-state protocol. The shell owns a universal `app_context` persistence
 path for each window: apps hydrate from the context they receive, emit typed
@@ -585,6 +601,21 @@ concepts. Their product authority is retired, but canonical-main code residue
 remains unclaimed pending inventory; rejected-branch deletion is not a landed
 claim. Generic delegated agents remain durable runs/trajectories and may perform
 effects only through a separately accepted capsule path.
+
+### Target: Trajectory Supervision Protocol
+
+**Target (owner re-visioning 2026-07-31, design in
+[supervision-protocol.md](supervision-protocol.md)):** a typed, durable
+protocol-health layer observes the kernel's snapshot projections (artifact
+head, obligations, update dispositions, reducer sequence) and emits addressed
+findings — never canonical edits. It enforces the single-writer invariant by
+construction: the supervisor's only outputs are supervision objects (findings,
+messages, work obligations, settlement records), and "all threads clear" is
+the kernel's deterministic settlement query, not an informal phrase. Observation is
+at the level of ideas (each semantic state update advances a texture to a new
+version), and the hierarchy terminates at the owner as root observer with an
+event-driven, sparse self-learning layer — no infinite observer tower. This
+layer is unbuilt; the archive design notes remain the pre-kernel source.
 
 ## Computer Model
 

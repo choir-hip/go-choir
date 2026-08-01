@@ -672,3 +672,66 @@ func TestScanBrokenCurrentDocLinksFindsMissingTarget(t *testing.T) {
 		t.Fatalf("scanBrokenCurrentDocLinks() = %#v, want one R9 warning", warnings)
 	}
 }
+
+func TestScanHeresyTermsWordBoundary(t *testing.T) {
+	terms := []string{"lease", "lease_seconds", "continuation-level", "Trace app", "/api/continuations", "worker lease"}
+	tests := []struct {
+		name    string
+		content string
+		want    int
+	}{
+		{
+			name:    "lease does not match releases",
+			content: "Checkpoints, releases, and route projections are reconstructions.",
+			want:    0,
+		},
+		{
+			name:    "lease does not match please",
+			content: "please read the current architecture first.",
+			want:    0,
+		},
+		{
+			name:    "standalone lease still flagged",
+			content: "The lease concept has no callers.",
+			want:    1,
+		},
+		{
+			name:    "lease_seconds matches only whole identifier",
+			content: "lease_seconds names a capacity unit.",
+			want:    1,
+		},
+		{
+			name:    "continuation-level matches whole term",
+			content: "the `continuation-level` class is under review.",
+			want:    1,
+		},
+		{
+			name:    "quoted api path still matches",
+			content: "The old route was /api/continuations.",
+			want:    1,
+		},
+		{
+			name:    "multiword surface term matches",
+			content: "The Trace app direction has no current surface.",
+			want:    1,
+		},
+		{
+			name:    "split-line qualifier suppresses bare term",
+			content: "Do not claim\n`continuation-level`\nwithout run-memory evidence.\n`continuation-level` remains transitional residue, not a target.",
+			want:    0,
+		},
+		{
+			name:    "bare term without nearby qualifier flagged",
+			content: "The worker lease\nvalue is used.\nNothing nearby qualifies it.",
+			want:    2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			warnings := scanHeresyTerms("docs/x.md", tt.content, terms)
+			if len(warnings) != tt.want {
+				t.Fatalf("scanHeresyTerms(%q) = %d warnings, want %d: %#v", tt.content, len(warnings), tt.want, warnings)
+			}
+		})
+	}
+}

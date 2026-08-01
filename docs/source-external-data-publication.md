@@ -201,7 +201,7 @@ record with source/fetch identity, hashes, and policy outcome. Deduplication may
 then create a reversible `duplicate_of`, cluster, or suppression-for-synthesis
 decision that records model, threshold, nearest object, score, and time.
 
-**Current conformance gap:** `internal/runtime/qdrant_dedup.go` uses
+**Current conformance gap:** `internal/agentcore/qdrant_dedup.go` uses
 Qdrant/Ollama similarity before object-graph projection and drops matching
 items from that projection; only logs/counts preserve the decision. This is
 code-present experimental behavior, not canonical evidence semantics. Until it

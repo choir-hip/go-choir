@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v2"
@@ -1434,22 +1435,97 @@ func countFindings(findings []heresyFinding, key func(heresyFinding) string) map
 func scanHeresyTerms(path, content string, terms []string) []warning {
 	var warnings []warning
 	lines := strings.Split(content, "\n")
+	patterns := cachedHeresyPatterns(terms)
 	for i, line := range lines {
-		if allowedHeresyLine(line) {
+		if allowedHeresyLine(line) || heresyLineContextAllowed(lines, i) {
 			continue
 		}
-		for _, term := range terms {
-			if term != "" && strings.Contains(line, term) {
-				warnings = append(warnings, warning{Rule: "H1", Severity: "warning", Path: path, Line: i + 1, Message: fmt.Sprintf("retired vocabulary %q appears in a current or mixed non-evidence claim", term), Hint: "label as historical/target/deprecated, move to evidence, or update the current claim"})
+		for _, pat := range patterns {
+			if pat.Re != nil && pat.Re.MatchString(line) {
+				warnings = append(warnings, warning{Rule: "H1", Severity: "warning", Path: path, Line: i + 1, Message: fmt.Sprintf("retired vocabulary %q appears in a current or mixed non-evidence claim", pat.Term), Hint: "label as historical/target/deprecated, move to evidence, or update the current claim"})
 			}
 		}
 	}
 	return warnings
 }
 
+// heresyLineContextAllowed treats a line as qualified when a nearby line
+// (within three lines) carries an explicit heresy qualifier. This prevents
+// split-line prose such as a backtick-quoted term on its own line from being
+// flagged when the "residue"/"transitional" qualifier sits on a following or
+// preceding line. It checks only the detector's own allow words, never the
+// scanned vocabulary itself.
+func heresyLineContextAllowed(lines []string, i int) bool {
+	lo := i - 3
+	if lo < 0 {
+		lo = 0
+	}
+	hi := i + 3
+	if hi >= len(lines) {
+		hi = len(lines) - 1
+	}
+	for j := lo; j <= hi; j++ {
+		if j == i {
+			continue
+		}
+		if allowedHeresyLine(lines[j]) {
+			return true
+		}
+	}
+	return false
+}
+
+type heresyPattern struct {
+	Term string
+	Re   *regexp.Regexp
+}
+
+var heresyPatternCache = struct {
+	sync.Mutex
+	m map[string]*regexp.Regexp
+}{m: map[string]*regexp.Regexp{}}
+
+// cachedHeresyPatterns returns a word-boundary-aware regex per detector term.
+// Identifier-like terms are matched at word boundaries so "lease" does not
+// false-positive inside "releases" or "please"; terms that begin or end with
+// non-word characters (e.g. "/api/continuations") fall back to plain
+// substring matching.
+func cachedHeresyPatterns(terms []string) []heresyPattern {
+	patterns := make([]heresyPattern, 0, len(terms))
+	for _, term := range terms {
+		if term == "" {
+			patterns = append(patterns, heresyPattern{})
+			continue
+		}
+		heresyPatternCache.Lock()
+		re, ok := heresyPatternCache.m[term]
+		heresyPatternCache.Unlock()
+		if !ok {
+			quoted := regexp.QuoteMeta(term)
+			start, end := term[0], term[len(term)-1]
+			if isWordChar(start) {
+				quoted = `\b` + quoted
+			}
+			if isWordChar(end) {
+				quoted = quoted + `\b`
+			}
+			re = regexp.MustCompile(quoted)
+			heresyPatternCache.Lock()
+			heresyPatternCache.m[term] = re
+			heresyPatternCache.Unlock()
+		}
+		patterns = append(patterns, heresyPattern{Term: term, Re: re})
+	}
+	return patterns
+}
+
+func isWordChar(b byte) bool {
+	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
+}
+
 func allowedHeresyLine(line string) bool {
 	lower := strings.ToLower(line)
-	for _, term := range []string{"historical", "deprecated", "retired", "detector", "residue", "transitional", "target-only", "target architecture", "successor", "not endorsed", "quoted", "evidence", "forbidden pattern", "bad pattern", "banned pattern", "deletion gate", "successor pattern"} {
+	for _, term := range []string{"historical", "deprecated", "retired", "deleted", "detector", "residue", "transitional", "target-only", "target architecture", "successor", "not endorsed", "quoted", "evidence", "forbidden pattern", "bad pattern", "banned pattern", "deletion gate", "successor pattern"} {
 		if strings.Contains(lower, term) {
 			return true
 		}

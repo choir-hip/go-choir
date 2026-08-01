@@ -30,16 +30,23 @@ framing.
 | H027 | Trace app residue | `Trace app`, `Trace UI`, `Open Trace`, `appId: "trace"`, `data-trace-app` | 0 current product-surface hits | Trace evidence remains valid; Trace app/dashboard direction is retired. |
 | H028 | raw Terminal app residue | `Terminal app`, `raw Terminal`, `manual terminal`, `/api/terminal/ws`, `appId: "terminal"` | 0 current product-surface hits | Super Console/zot is the repair surface; PTY terms may remain hidden implementation detail. |
 | H029 | Browser source-gathering residue | `Browser app`, `BrowserApp`, `browser_sessions`, `AppHint: "browser"`, `open_surface: "browser"` | 0 current product-surface hits | Browser names may remain only as transitional implementation names for Web Lens/source work. |
+| H023 | synchronous control-plane polling | `pollInternalWorkerRun`, `time.After(500 * time.Millisecond)` | 0 active control hits | Foreground supervision should receive a durable handle; blocking poll loops are forbidden. |
+| H024a | trivial first patch as hidden work-state | `delta_chars`, first-revision metadata after an owner work request | 0 trivial-patch hits | Long-running Texture work must record honest work-state; review-level detector until machine-checkable. |
+| H024b | model-invented coagent update IDs | `update_id` required in model-facing schema | 0 model-invented hits | Implemented: runtime mints/derives `update_id` (doctrine I2c). Detector confirms no schema requires model-authored ids. |
+| H025 | dead parent/child result-channel API | `PostChildResult`, `PostChildError`, `WaitForChildResult` | 0 production hits | Unused compatibility surfaces must be deleted, not documented around. |
 | H030 | actor runtime database polling | `log.Unprocessed` | 0 active warm-loop hits | Repaired 2026-06-27; remaining hits should be cold-start replay, post-drain overflow, or Sweep boot recovery, not warm-loop polling. Registry row update only. |
 | H031 | route resolves to VM/desktop identity | `UniversalWirePlatformOwnerID`, `UniversalWirePlatformDesktopID`, `ResolveDesktopContext`, `route_profile` | 0 product-route hits | See `docs/choir-doctrine.md` H031; Banned Patterns list #16. The `route_profile` hits need allowlist context for the parser implementation itself and tests. |
+| structural | logic-level residue families | (no grep; review-level) | n/a | H013 overclaim, H015 residency short-circuit, H016 active-run fallback, H017 blockers not durable, H018 assignment not materialized, H020 mixed current/target, H021 stale doctrine. These need model-checked specs or review detectors, not string patterns. |
 | I4 | destructive embedded rollback guard | `CALL DOLT_RESET`, `DoltPromotionAdapter` | 0 production hits | The obsolete adapter is deleted; destructive embedded-main reset or adapter-symbol reintroduction is inadmissible. enforce: zero; exclude: docs/**, README.md, AGENTS.md, scripts/**, specs/**, *_test.go |
 | framing | retired root ontology | `personal writing system`, `publishing system`, `AI workspace`, `workflow app`, `StoryGraph`, `chat` | 0 current-root hits | Surface or historical usage is acceptable when explicitly labeled. |
 
 ## Baseline Counts
 
 Captured with fixed-string `rg` across `README.md`, `AGENTS.md`, `docs`,
-`internal/runtime/prompt_defaults`, selected frontend/source/test directories,
-and selected runtime/store/type/proxy directories on 2026-06-13:
+`internal/agentcore`, `internal/runtimeprompts`, selected frontend/source/test
+directories, and selected runtime/store/type/proxy directories on 2026-06-13.
+(The historical `internal/runtime/prompt_defaults` path was dissolved in
+`c791a0ae`; agent prompts now live in `internal/runtimeprompts/overlays`.)
 
 | Pattern | Count |
 | --- | ---: |

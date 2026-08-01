@@ -5,6 +5,14 @@ every session. It inherits [Choir Doctrine](docs/choir-doctrine.md) and must not
 become a competing doctrine source. When they conflict, follow Choir Doctrine
 unless this file is carrying a newer explicitly promoted operating update.
 
+Product direction: the vision is the automatic computer — a persistent computer
+for supervised self-development first, the World Wire downstream
+([docs/choir-vision.md](docs/choir-vision.md), argued in
+[docs/signal-is-sparse-not-the-learner-2026-08-01.md](docs/signal-is-sparse-not-the-learner-2026-08-01.md)).
+The README is the open-source front door; this file is the operating contract,
+and [docs/choir-doctrine.md](docs/choir-doctrine.md) is the normative
+architecture. Do not let this file drift into doctrine.
+
 Before authoring or executing any mission Definition, read
 [docs/standing-questions.md](docs/standing-questions.md) — the pre-flight
 question set (decision provenance, settled-decision conformance, deletion
@@ -93,72 +101,39 @@ Classify every mission/change by mutation class before editing:
 Do not count newly discovered heresies as regressions, and do not count
 discovery alone as repair.
 
-## Check for Existing Fixes
+## Convergence Before Patching
 
-Before debugging a bug in subsystem X, search for replacement or alternative
-implementations of X in the codebase. If one exists:
+Most bug churn in this repo shares one cause: patching a symptom instead of
+fixing the substrate. Before you add code, run this check in order.
 
-- Is it wired in?
-- If not, is the bug you're debugging a symptom of the old implementation that
-  the new one would fix?
-- Is connecting the existing fix cheaper than patching the old code?
+**Classify substrate vs symptom.** A *substrate* problem lives in a foundational
+layer (concurrency model, message delivery, data persistence, runtime engine,
+provider interface, VM lifecycle, event bus). A *symptom* problem lives in code
+that runs on top of a substrate.
 
-If a replacement exists and is not wired in, document the connection opportunity
-before patching the old code. Connecting an existing fix is preferred over
-patching code that is already superseded.
+**Check for an existing replacement.** Before debugging subsystem X, search for
+a replacement or alternative implementation of X. If one exists and is not
+wired in, connecting it is preferred over patching the old code — the bug you
+are chasing may be a symptom of the superseded implementation. Document the
+connection opportunity before patching.
 
-## Root Cause Clustering
+**Prefer deletion over addition.** Ask what can be removed instead of added.
+Would deleting the patched code and connecting the replacement be safer than
+patching? Patching superseded code extends the life of code that should be
+removed.
 
-When you document 3+ bugs in the same subsystem within one week, stop patching.
-Write a root cause clustering assessment before the next fix:
+**Apply Root Cause Clustering.** When you document 3+ bugs in the same subsystem
+within one week, stop patching. Write a clustering assessment before the next
+fix: do these bugs share a common cause? Is there existing code that addresses
+the root cause but isn't wired in? If 3+ symptoms trace to the same substrate,
+the next action is substrate-level, not symptom-level.
 
-- Do these bugs share a common cause?
-- Is there existing code that addresses the root cause but isn't wired in?
-- Is the substrate itself broken, and are you patching symptoms on top of it?
-
-Apply the substrate-vs-symptom classification (below) to each bug in the
-cluster. If 3+ symptoms trace to the same substrate, the next action is
-substrate-level, not symptom-level.
-
-## Substrate vs Symptom Classification
-
-When documenting a problem, classify it:
-
-- **Substrate:** the bug is in a foundational layer (concurrency model,
-  message delivery, data persistence, runtime engine, provider interface,
-  VM lifecycle, event bus).
-- **Symptom:** the bug is in code that runs on top of a substrate.
-
-If you document 3+ symptom bugs traced to the same substrate, apply Root Cause
-Clustering before patching the next symptom. The substrate fix may already exist
-and just need wiring.
-
-## Dead-End Escalation
-
-If you've been working on the same problem for 3+ iterations or 2+ days without
-convergence, stop patching. Write a structural assessment:
-
-- What's the dependency graph around the problem?
-- Is there a substrate-level fix that would eliminate the problem class?
-- Are you debugging symptoms because the substrate is broken?
-- Does a replacement implementation exist that isn't wired in?
-
-Escalate to the human with the assessment. Do not attempt another incremental
-patch without explicit direction. Continuing to patch after non-convergence is a
-known failure mode, not persistence.
-
-## Deletion-First Heuristic
-
-Before adding code to fix a bug, ask:
-
-- Is the code being patched already superseded by a replacement?
-- Would deleting the code being patched and connecting the replacement be safer
-  than patching?
-- What can be removed instead of added?
-
-Prefer connecting an existing replacement over patching superseded code. Prefer
-deletion over addition when both resolve the bug. Patching superseded code
-extends the life of code that should be removed.
+**Escalate on dead ends.** If you've been working on the same problem for 3+
+iterations or 2+ days without convergence, stop patching. Write a structural
+assessment — dependency graph, whether a substrate-level fix would eliminate the
+problem class, whether a replacement exists unwired — and escalate to the human.
+Do not attempt another incremental patch without explicit direction; continuing
+after non-convergence is a known failure mode, not persistence.
 
 ## Problem Documentation First
 

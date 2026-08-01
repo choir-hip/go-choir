@@ -8,6 +8,22 @@ documents:
     witnesses: [docs/choir-doctrine.md, docs/heresy-detectors.md]
     refresh_triggers: [doctrine_change, protected_surface_change]
 
+  - path: docs/choir-vision.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations: {doc_role: vision, authority: support, lifecycle: living}
+    witnesses: [docs/choir-vision.md, docs/choir-doctrine.md, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
+    refresh_triggers: [doctrine_change, product_vision_change]
+
+  - path: docs/signal-is-sparse-not-the-learner-2026-08-01.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: vision, authority: support, lifecycle: living}
+    witnesses: [docs/signal-is-sparse-not-the-learner-2026-08-01.md, docs/choir-vision.md]
+    refresh_triggers: [product_vision_change, doctrine_change]
+
   - path: AGENTS.md
     claim_scope: current
     is_root: [authority, entry]
@@ -85,7 +101,7 @@ documents:
     is_root: []
     is_evidence: false
     annotations: {doc_role: current_state, authority: domain_invariant, lifecycle: living}
-    witnesses: [docs/runtime-invariants.md, internal/runtime, internal/store]
+    witnesses: [docs/runtime-invariants.md, internal/agentcore, internal/store]
     refresh_triggers: [runtime_authority_change, prompt_default_change]
 
   - path: docs/texture-agentic-invariants-2026-06-13.md
@@ -93,7 +109,7 @@ documents:
     is_root: []
     is_evidence: false
     annotations: {doc_role: doctrine, authority: domain_invariant, lifecycle: living}
-    witnesses: [docs/texture-agentic-invariants-2026-06-13.md, internal/runtime, frontend]
+    witnesses: [docs/texture-agentic-invariants-2026-06-13.md, internal/textureowner, frontend]
     refresh_triggers: [texture_authority_change, texture_tool_change]
 
   - path: docs/source-external-data-publication.md
@@ -128,6 +144,14 @@ documents:
     witnesses: [docs/why-texture-2026-06-15.md, docs/choir-doctrine.md]
     refresh_triggers: [texture_ontology_change]
 
+  - path: docs/supervision-protocol.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: design, authority: target_design, lifecycle: living}
+    witnesses: [docs/supervision-protocol.md, docs/current-architecture.md, docs/choir-doctrine.md]
+    refresh_triggers: [durable_work_kernel_change, trajectory_settlement_change]
+
   - path: docs/agent-product-doctrine.md
     claim_scope: current
     is_root: []
@@ -141,7 +165,7 @@ documents:
     is_root: []
     is_evidence: false
     annotations: {doc_role: domain_invariant, authority: domain_invariant, lifecycle: living}
-    witnesses: [docs/choir-prompting-invariants.md, docs/choir-doctrine.md, internal/runtime]
+    witnesses: [docs/choir-prompting-invariants.md, docs/choir-doctrine.md, internal/agentcore, internal/runtimeprompts]
     refresh_triggers: [prompt_contract_change]
 
   - path: docs/memo-problem-documentation-first.md

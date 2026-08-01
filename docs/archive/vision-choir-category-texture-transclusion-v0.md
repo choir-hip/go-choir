@@ -3,6 +3,73 @@
 **Date:** 2026-06-28
 **Status:** vision document — architecture direction, not an implementation plan
 
+## Revision 2026-07-31 — The Operating Computer, the Tape, and Supervision
+
+> **Supersession note.** This document was written before the durable-work kernel
+> was frozen, ratified, and accepted on staging. Read this banner first. The body
+> below is the historical vision this banner reframes. Where they conflict, this
+> banner and the newer documents it cites are current.
+
+### What endures
+
+The **Audited Computer** section is the enduring core of this document and is
+now partly real: a per-user persistent computer, embedded Dolt as canonical
+state, typed state transitions, and the durable-work kernel. The product is the
+**operating computer** (an "autoputer"), not the news platform. The news
+platform framing in this body — autopapers, editions, wire, renderers — was the
+original first-application lens and is superseded; **autopaper is tabled and
+unauthorized** (registry `SEM-08`). The general substrate claim stands: one
+versioned-artifact system serves the computer, its projections, and eventually
+publication.
+
+### The tape is primary
+
+The **audit log is the authority**; everything else is a projection. Every
+semantic state change is a typed transaction appended to the tape. The object
+graph, textures, checkpoints, snapshots, run records, and UI surfaces are
+**materialized projections** maintained by deterministic **reducers** — a
+reducer being the function that computes a projection from the tape
+(`projection = fold(tape)`). The kernel already implements the durable-work
+portion of this: command digests, per-trajectory `ReducerSeq`, a replay cursor,
+and restart reconstruction from embedded Dolt. `computerevent` is the other,
+signed per-computer portion. The old framing "the tape IS the program; the
+computer is the fixpoint of the program" is exactly this stance. Full
+replay-completeness — rebuilding any projection from an empty store by folding —
+is the long-term target, not a prerequisite for the current work.
+
+### appagent, reconceived
+
+`appagent` was originally scoped to the web-desktop model. It need not be. An
+**appagent is a durable entity that (a) has its own subapi, (b) can access
+shared system resources under explicit auth, and (c) is a projection of the
+audit log** — a standing, versioned, legible artifact of its own semantics.
+`texture` is the first appagent and the version-native control plane, but the
+shape is not desktop-bound. An agent — an external agent like codex, another
+Choir thread, or the owner — drives the operating computer by calling the
+Choir api/cli; other agents and the logged-in owner observe or interact with
+the *same* computer given credentials. This is the Choir-in-Choir and
+multi-agent observation model.
+
+### Supervision at the level of ideas, not actions
+
+A human cannot pay attention to the action level of a long-running automatic
+computer. The unit of supervision is the **semantic state update**: a
+meaningful change to the standing state of a thing. Each semantic state update
+advances its appagent's texture to a new version, and the logged-in `choir.news`
+UI supervises by reading the updated texture. Supervision happens where the work
+lives and learns — the artifact — not in the transcript. This is the concrete
+implementation of "Idea-Level Supervision" in `docs/why-texture-2026-06-15.md`.
+
+### Lineage
+
+- `docs/why-texture-2026-06-15.md` — Texture ontology, reducers, the kernel, and
+  supervision (current orientation seed; carries this re-visioning forward).
+- `docs/current-architecture.md` — Live/Target/Retired current-state claims.
+- `docs/computer-ontology.md` — the computer, sandbox-as-implementation, and
+  promotion ontology.
+- `docs/definitions/choir-coherent-computer-convergence-2026-07-21.md` — the
+  ratified durable-work kernel contract.
+
 ## The One Idea
 
 Texture is a generic versioned document with transclusion. That is the entire

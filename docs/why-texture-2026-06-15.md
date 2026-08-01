@@ -8,6 +8,12 @@ inherits [choir-doctrine.md](choir-doctrine.md) and the operating contract in
 mission must propagate through code, prompts, tests, UI, docs, and the docs
 checker.
 
+**Revision 2026-07-31:** re-visioning additions — the tape-primary stance,
+"what is a reducer / what is the kernel", the reconceived `appagent`, and
+supervision via semantic state updates. These sections are current and carry
+the [vision](archive/vision-choir-category-texture-transclusion-v0.md)
+re-visioning forward.
+
 ## Spine
 
 Turn-thread interfaces organize around the conversation. Texture organizes
@@ -59,6 +65,14 @@ Long-running autonomous work cannot be supervised action by action. Showing
 every agent message overloads the owner. Hiding every agent message creates
 invisible state. Texture escapes that fork by turning agent work into evidence
 for an evolving artifact.
+
+The unit of supervision is the **semantic state update**: a meaningful change
+to the standing state of a thing. Each semantic state update advances Texture
+to a new version. The logged-in UI supervises the operating computer by reading
+the updated Texture — the standing artifact — not by watching the action or
+transcript stream. A human supervises at the level of ideas because that is the
+level the artifact carries: what is believed, what changed the belief, what is
+uncertain, what evidence bears on it, what decision is required.
 
 Action-level corrections do not compound well. Idea-level corrections do.
 
@@ -157,6 +171,74 @@ surfaced from that work.
 Texture does not require a cold protocol cathedral before the product path
 works. The minimal protocol should be learned from working implementation and
 canonized only after proof.
+
+## The Tape Is Primary
+
+The **audit log is the authority**; everything else is a projection. Every
+semantic state change is a typed transaction appended to the tape. The object
+graph, Texture revisions, checkpoints, snapshots, run records, and UI surfaces
+are materialized projections maintained by deterministic reducers. The vision's
+old framing holds: "the tape IS the program; the computer is the fixpoint of
+the program." Texture is the standing, versioned projection of its slice of the
+tape — which is why Texture is the right supervision surface: it shows the
+state the tape computes, not the tape's raw emissions.
+
+The kernel already implements the durable-work portion of the tape: command
+digests for idempotency, a per-trajectory `ReducerSeq`, a replay cursor, and
+restart reconstruction from embedded Dolt. `computerevent` is the signed
+per-computer portion. Replay-completeness — rebuilding any projection from an
+empty store by folding the tape — is the long-term target, not a prerequisite
+for the current liveness work.
+
+## Reducers and the Kernel
+
+Two words that arrive in the codebase from the accepted
+[kernel contract](definitions/choir-coherent-computer-convergence-2026-07-21.md)
+deserve plain definitions.
+
+**A reducer** is the function that computes a projection from the tape. Two
+flavors exist in the code, and they are converging on one:
+
+- *Reducer as replay-fold:* `computerevent.Reduce` folds an event chain into a
+  projected head. This is the pure form of `projection = fold(tape)`.
+- *Reducer as CAS-writer:* the kernel's single-authority write path. Each
+  durable object has exactly one canonical head/reducer; reducers enforce
+  stale-head checks, typed delivery, cancellation, settlement preconditions,
+  and effect authorization. Instances: `CommitTextureHeadAuthority`,
+  `StartDurableWorkAuthority`, `ApplyTypedUpdateAuthority`,
+  `SettleTrajectoryAuthority`, `CancelTrajectoryAuthority`.
+
+The two flavors are the same concept at different trust distances: the
+CAS-writer is the transactional interpreter of the tape; the replay-fold is the
+tape recomputed from scratch. Both enforce the "one authority per object"
+invariant. You invented this concept — the vision called it "the fixpoint of
+the program." The codebase named it.
+
+**The kernel** is the durable-work substrate under Texture: the ratified
+contract that one Texture-backed durable-work lifecycle runs on one stable
+computer. It exists because artifact revision, provider run, durable actor,
+trajectory/work settlement, and authorized effect did not compose into one
+honest product lifecycle. It solves the problem class whose symptom we just
+found in the Texture liveness regression: work stranding, run completion
+settling work, dual authorities, delivery loss across restarts. Its
+single-authority reducers, restart reconstruction, and typed update
+dispositions are what keep Texture alive, resumable, and supervisable.
+
+## appagent, Reconceived
+
+`appagent` was originally scoped to the web-desktop model. It need not be. An
+**appagent is a durable entity that (a) has its own subapi, (b) can access
+shared system resources under explicit auth, and (c) is a projection of the
+audit log** — a standing, versioned, legible artifact of its own semantics.
+`texture` is the first appagent and the version-native control plane, but the
+shape is not desktop-bound.
+
+The operating computer is driven by agents calling the Choir api/cli. An
+external agent (codex, another Choir thread, the owner) authenticates and
+issues commands; other agents and the logged-in owner observe or interact with
+the *same* computer given credentials. The logged-in `choir.news` UI
+supervises by reading updated appagent textures. The web desktop is one
+projection of this substrate, not the ontology.
 
 ## Out Of Scope
 

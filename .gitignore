@@ -72,3 +72,6 @@ specs/states/
 
 # Local tool caches (e.g. transient GOCACHE pointed at repo root)
 .cache/
+
+# Agentic consensus session diagnostics (prompts, transcripts, manifests)
+.agentic-consensus/

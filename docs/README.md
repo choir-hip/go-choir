@@ -45,6 +45,10 @@ Read a relevant domain contract in depth before touching its protected surface.
 
 - [`choir-doctrine.md`](choir-doctrine.md) is the normative optimization target,
   conjecture set, evidence semantics, and heresy inventory.
+- [`choir-vision.md`](choir-vision.md) is the product north star — the automatic
+  computer, supervised self-development first, the World Wire downstream.
+  Mission sequencing flows from it; it is not doctrine and defers to
+  [`choir-doctrine.md`](choir-doctrine.md) on conflict.
 - [`semantic-registry.md`](semantic-registry.md) is the small semantic map. It
   deliberately excludes deployment facts, service names, mutable work state,
   and unpromoted architecture decisions.

@@ -15,46 +15,40 @@ skill://agentic-consensus/agentic-consensus-runner.sh
 
 Use the script instead of hand-assembling commands unless the user explicitly requests a one-off command. The script handles panel selection, model overrides, parallel execution, output capture, and a manifest.
 
-## Adaptive Panel Catalog
+## Default Panel
 
-The runner preflights local CLI binaries and the exact model ids reported by
-`omp models` before selecting or launching anything. Its default `balanced`
-profile selects up to five available routes, preferring distinct provider
-families first. Catalog entries declare quality, speed, cost, and review traits;
-the manifest records those traits, selection rationale, preflight evidence,
-effective model/route identity, and the deadline used.
+The default panel is:
 
-The balanced priority order is:
+1. `codex` CLI with its configured default model.
+2. Devin CLI/API with its configured default model/agent (currently free-tier `swe-1-6-slow`; lowest-capability route but free, so it still adds an independent opinion).
+3. Cursor `agent` CLI with its configured default model.
+4. `opencode` CLI with its configured default model.
+5. OMP `openai-codex/gpt-5.6-sol` with `--thinking medium`.
+6. OMP `google-antigravity/gemini-3.6-flash` with `--thinking high`.
+7. OMP `cursor/cursor-grok-4.5-high` with `--thinking high`.
+8. OMP `opencode-zen/deepseek-v4-flash-free` with `--thinking high` — the best value route (free tier, ~200K context), and the current default model role in OMP.
 
-1. OMP `google-antigravity/gemini-3.5-flash`: fast, low-cost Google perspective.
-2. `codex` CLI: high-quality OpenAI review route.
-3. OMP `cursor/cursor-grok-4.5-high`: high-quality Cursor/Grok review route.
-4. Devin CLI/API: high-quality, thorough independent agent route.
-5. `opencode` CLI: fast, lower-cost configurable route.
-6. Claude, Cursor, and OMP GPT anchors are deterministic fallbacks or additional
-   routes when availability and the selected profile permit them.
+`claude` is supported but intentionally excluded from the default panel because its token rate limits are lower. Add it explicitly with `--include claude,...` when needed. Claude's configured default tracks the current `opus` tier, so no model override is needed.
 
-This is a priority catalog, not a claim that every member ran. Missing CLIs and
-OMP models are recorded in `manifest.tsv` and do not consume a member deadline.
-External CLIs intentionally use their configured default model unless the user
-passes an override. Since those defaults are not reliably listable, the
-manifest identifies them as `configured-default` and gives each an auditable
-CLI-default route. OMP entries are pinned and preflighted by exact model id.
+External CLIs intentionally use their default model unless the user asks for a model override. OMP entries are pinned because they are the stable built-in comparison anchors.
 
-Profiles:
+### GPT-5.6 tier ladder
 
-- `balanced` (default): up to five provider-diverse routes; 120–210 second
-  deadlines according to each member's declared speed.
-- `fast`: up to three fast/diverse routes; 60–90 second deadlines.
-- `thorough` (also accepted as `deep`): up to eight distinct effective routes;
-  240–360 second deadlines.
+The three GPT-5.6 tiers are separate models on the same generation, priced per tier:
 
-`--timeout-seconds N` explicitly replaces all profile deadlines. `--include`
-uses the exact supported ids in the supplied order, bypasses profile size
-limits, and still preflights every requested member. `--exclude` wins over
-either adaptive or explicit inclusion. Adaptive selection suppresses duplicate
-effective model routes. Explicit inclusion preserves a requested duplicate and
-records that rationale rather than silently changing the request.
+| id | model | default thinking | role |
+| --- | --- | --- | --- |
+| `omp-gpt56-sol` | `openai-codex/gpt-5.6-sol` | `medium` | flagship; hardest reasoning |
+| `omp-gpt56-terra` | `openai-codex/gpt-5.6-terra` | `xhigh` | balanced; GPT-5.5-class at lower cost |
+| `omp-gpt56-luna` | `openai-codex/gpt-5.6-luna` | `max` | fastest/cheapest; weak long-context recall |
+
+Sol is the strongest, Terra is the everyday workhorse, Luna is the cost champion. All three are callable; for the hardest problems run all three as a GPT-5.6 sub-panel:
+
+```bash
+skill://agentic-consensus/agentic-consensus-runner.sh \
+  --include omp-gpt56-sol,omp-gpt56-terra,omp-gpt56-luna \
+  --prompt-file .agentic-consensus/prompt.md
+```
 
 Supported runner ids:
 
@@ -64,9 +58,12 @@ devin
 claude
 cursor
 opencode
-omp-gpt55
-omp-gemini35
+omp-gpt56-sol
+omp-gpt56-terra
+omp-gpt56-luna
+omp-gemini36
 omp-cursor-grok45
+omp-deepseek-v4-flash-free
 ```
 
 ## Verified CLI Invocation Contracts
@@ -125,6 +122,7 @@ Notes:
 
 - `--permission-mode auto` auto-approves read-only tools.
 - Help says non-interactive mode disables workspace-trust prompting by default.
+- Devin is currently on free tier `swe-1-6-slow`: the slowest, lowest-capability route in the panel. Keep it for its free independent opinion, but do not let its verdict override a demonstrated local fact.
 
 ### Claude CLI
 
@@ -152,6 +150,7 @@ Notes:
 - `--permission-mode plan` makes the run read-only/planning-oriented.
 - `--no-session-persistence` avoids saving sessions.
 - Use `--output-format json` only when downstream parsing needs Claude's JSON wrapper; the runner defaults to text for uniform raw outputs.
+- Claude's configured default auto-updates to the current `opus` tier, so no `--claude-model` is needed unless you want to pin something else.
 
 ### Cursor Agent CLI
 
@@ -221,26 +220,30 @@ omp -p --model MODEL --thinking LEVEL --no-session "PROMPT"
 Runner contracts:
 
 ```bash
-omp -p --mode text --model openai-codex/gpt-5.5 --thinking high --no-session "$PROMPT"
-omp -p --mode text --model google-antigravity/gemini-3.5-flash --thinking high --no-session "$PROMPT"
+omp -p --mode text --model openai-codex/gpt-5.6-sol --thinking medium --no-session "$PROMPT"
+omp -p --mode text --model google-antigravity/gemini-3.6-flash --thinking high --no-session "$PROMPT"
 omp -p --mode text --model cursor/cursor-grok-4.5-high --thinking high --no-session "$PROMPT"
+omp -p --mode text --model opencode-zen/deepseek-v4-flash-free --thinking high --no-session "$PROMPT"
 ```
 
-Before fanout, the runner calls `omp models` once and requires an exact
-provider/model identity, reconstructed from the provider section and model row
-when the listing is tabular. It also passes `--auto-approve` and the
-selected member deadline through `--max-time`, so a tool call cannot block on
-an invisible approval prompt or outlive the outer GNU `timeout` bound.
+The runner also passes `--auto-approve` and `--max-time` to OMP so a tool call
+cannot block on an invisible approval prompt or run without a deadline.
 
 Optional overrides:
 
 ```bash
---omp-gpt55-model MODEL
---omp-gpt55-thinking LEVEL
+--omp-gpt56-sol-model MODEL
+--omp-gpt56-sol-thinking LEVEL
+--omp-gpt56-terra-model MODEL
+--omp-gpt56-terra-thinking LEVEL
+--omp-gpt56-luna-model MODEL
+--omp-gpt56-luna-thinking LEVEL
 --omp-gemini-model MODEL
 --omp-gemini-thinking LEVEL
 --omp-cursor-grok-model MODEL
 --omp-cursor-grok-thinking LEVEL
+--omp-deepseek-model MODEL
+--omp-deepseek-thinking LEVEL
 --no-tools-omp
 ```
 
@@ -248,51 +251,49 @@ Notes:
 
 - Do not use `--no-tools` for OMP if the OMP agent needs to see skills; OMP only lists skills when the `read` tool is available.
 - Use `--no-tools-omp` for pure opinion prompts where tool use would be wasteful.
+- Model IDs are `provider/model` exactly as `omp models` lists them (e.g. `openai-codex/gpt-5.6-sol`, `opencode-zen/deepseek-v4-flash-free`).
 
 ## Runner Usage
 
-Consensus panels are finite but usually slow. In OMP, launch the bundled runner
-as a finite background command, or use the equivalent supervised background
-facility in another harness. If no supervised facility exists, run the
-documented runner command in the foreground rather than skipping a required
-panel. Continue independent implementation, documentation, or verification
-while it runs. Wait or poll only when its adjudication blocks the next decision,
-and always wait before making that gate-dependent decision.
-
-Balanced adaptive panel:
+Basic default panel (convergent mode, the historical default):
 
 ```bash
 skill://agentic-consensus/agentic-consensus-runner.sh \
-  --profile balanced \
   --prompt "Review this plan for correctness and hidden risks."
+```
+
+Divergent mode with lens seeding — expand the option space and give each
+panelist a different starting angle so the panel does not cluster on one framing:
+
+```bash
+skill://agentic-consensus/agentic-consensus-runner.sh \
+  --mode divergent \
+  --lenses "newcomer,architect,skeptic,historian,operator,investor,maintainer" \
+  --prompt-file .agentic-consensus/prompt.md
+```
+
+Lateral mode — break the frame, invert hidden assumptions, import analogies:
+
+```bash
+skill://agentic-consensus/agentic-consensus-runner.sh \
+  --mode lateral \
+  --prompt-file .agentic-consensus/prompt.md
 ```
 
 Long prompt from file:
 
 ```bash
 skill://agentic-consensus/agentic-consensus-runner.sh \
-  --prompt-file /tmp/consensus-prompt.md \
+  --prompt-file .agentic-consensus/prompt.md \
   --cwd /path/to/repo
-```
-
-Fast or deep review:
-
-```bash
-skill://agentic-consensus/agentic-consensus-runner.sh \
-  --profile fast \
-  --prompt-file /tmp/consensus-prompt.md
-
-skill://agentic-consensus/agentic-consensus-runner.sh \
-  --profile deep \
-  --prompt-file /tmp/consensus-prompt.md
 ```
 
 Run a subset:
 
 ```bash
 skill://agentic-consensus/agentic-consensus-runner.sh \
-  --include omp-cursor-grok45,codex,claude,opencode \
-  --prompt-file /tmp/consensus-prompt.md
+  --include codex,claude,opencode,omp-gpt56-sol \
+  --prompt-file .agentic-consensus/prompt.md
 ```
 
 Exclude unavailable or unwanted agents:
@@ -300,7 +301,7 @@ Exclude unavailable or unwanted agents:
 ```bash
 skill://agentic-consensus/agentic-consensus-runner.sh \
   --exclude devin,cursor \
-  --prompt-file /tmp/consensus-prompt.md
+  --prompt-file .agentic-consensus/prompt.md
 ```
 
 Override selected models:
@@ -309,8 +310,8 @@ Override selected models:
 skill://agentic-consensus/agentic-consensus-runner.sh \
   --claude-model opus \
   --opencode-model anthropic/claude-sonnet-4-5 \
-  --omp-cursor-grok-model cursor/cursor-grok-4.5-high \
-  --prompt-file /tmp/consensus-prompt.md
+  --cursor-model gpt-5 \
+  --prompt-file .agentic-consensus/prompt.md
 ```
 
 Dry-run exact commands:
@@ -332,83 +333,111 @@ skill://agentic-consensus/agentic-consensus-runner.sh --list-agents
 The script writes:
 
 ```text
-<out-dir>/prompt.md      exact prompt sent to members
-<out-dir>/manifest.tsv   catalog traits, selection/preflight reasons, effective identity,
-                         deadline, status, exit code, duration, output path, and command
-<out-dir>/preflight-omp-models.txt
-                         exact OMP listing that drove model preflight, when OMP is present
-<out-dir>/<member>.out   combined stdout/stderr for each selected run
-<out-dir>/<member>.cmd   shell-quoted command for reproducibility
+<out-dir>/prompt.md      exact prompt sent to agents
+<out-dir>/manifest.tsv   agent, status, exit code, duration, output path, command
+<out-dir>/<agent>.out    combined stdout/stderr for each run
+<out-dir>/<agent>.cmd    shell-quoted command for reproducibility
 ```
 
 Default output directory:
 
 ```text
-/tmp/agentic-consensus-YYYYmmdd-HHMMSS
+$CWD/.agentic-consensus/agentic-consensus-YYYYmmdd-HHMMSS
 ```
 
 Use `--out-dir DIR` to pin the location.
 
-`/tmp` is session diagnostics, not resumable evidence. When resumption or audit
-requires durability, archive the prompt, manifest, candidate identity,
-adjudicated findings, and reviewer-health telemetry under a durable referenced
-identity. Raw transcripts need not become their own Git commit.
+The `.agentic-consensus/` folder is repo-local session diagnostics and is meant
+to be gitignored (add `.agentic-consensus/` to the repo `.gitignore`). It is not
+resumable evidence. When resumption or audit requires durability, archive the
+prompt, manifest, candidate identity, adjudicated findings, and reviewer-health
+telemetry under a durable referenced identity. Raw transcripts need not become
+their own Git commit.
 
-Member deadlines come from the selected profile and declared speed trait:
-60–90 seconds for fast, 120–210 for balanced, and 240–360 for thorough.
-Override all of them with `--timeout-seconds N`. The runner requires GNU
-`timeout` (provided by `coreutils`), verifies that implementation before a real
-launch, and fails rather than running an unbounded member.
+Every agent has a 180-second hard deadline by default. Override it with
+`--timeout-seconds N`.
 
-Manifest result statuses:
+Manifest statuses:
 
 ```text
-ok                         selected member completed with exit 0
-failed                     selected member command exited non-zero
-failed-non-substantive-output
-                           command exited 0 but produced only whitespace/progress chatter (runner code 65)
-timed-out                  GNU timeout killed the member at its deadline
-skipped-missing-cli        explicitly selected member lacked its CLI
-skipped-missing-model      explicitly selected OMP model was not listed
-skipped-preflight-error    explicitly selected OMP route could not be preflighted
-not-selected               candidate was excluded, unavailable, duplicate, or beyond the profile limit
-dry-run                    selected command was rendered but not executed
+ok                   agent completed with exit 0
+failed               agent command exited non-zero
+timed-out            agent exceeded its hard deadline
+skipped-missing-cli  required CLI binary was not found
+dry-run              command was rendered but not executed
 ```
 
-An exit code alone is not enough to count a panel opinion. After a zero exit,
-the runner strips ANSI/control whitespace and rejects output containing no
-content beyond blank lines or standalone `Working`, `Thinking`, `Loading`,
-`Connecting`, `Starting`, or `Initializing` progress chatter (with optional
-spinner marks, spaces, periods, or an ellipsis). The raw output remains
-unchanged for diagnosis, while the manifest records
-`failed-non-substantive-output` with validation exit code `65`.
+Default exit behavior:
 
-The separate `selected`, `selection_reason`, `preflight_status`, and
-`preflight_reason` fields distinguish an adaptive fallback from a requested
-member that could not run. Default exit behavior:
-
-- adaptive profiles fail only if a selected runnable member fails or no member
-  can run; unavailable candidates are visible but are not selected failures,
-- explicit `--include` fails if any non-excluded requested member fails
-  preflight or execution,
-- otherwise the runner exits `0` only when every selected member succeeds.
+- exits `1` if any selected agent fails or is missing,
+- exits `0` only if every selected agent succeeds.
 
 Use `--keep-going` when a partial panel is acceptable:
 
 ```bash
 skill://agentic-consensus/agentic-consensus-runner.sh \
   --keep-going \
-  --prompt-file /tmp/consensus-prompt.md
+  --prompt-file .agentic-consensus/prompt.md
 ```
 
-Focused deterministic verification:
+## Thinking Modes
+
+Consensus has three thinking modes, selected with `--mode`. The default is
+`convergent` (the historical behavior). The mode is a preamble the runner
+injects ahead of your prompt, plus a synthesis change on your side.
+
+| Mode | Purpose | What the panel does | Synthesis |
+| --- | --- | --- | --- |
+| `convergent` | Decide | Returns a verdict, findings, dissent, risks, confidence. | Standard template below. |
+| `divergent` | Expand | Maximizes the number of distinct, well-formed options or framings. Contradictory options are a feature. No ranking. | Cluster the options into families; report the dimensions of disagreement, not a single winner. |
+| `lateral` | Break the frame | Names the hidden assumption, reframes the question, imports an analogy, and objects to its own reframe. | Collect the reframes; each reframe is a candidate lens, not a verdict. |
+
+`convergent` answers a question. `divergent` generates the option space that
+questions get asked about. `lateral` changes which question is being asked. Use
+divergent or lateral first when a surface or direction is stale or contested,
+then converge on the generated space.
+
+### Divergent mode
 
 ```bash
-bash skills/agentic-consensus/test-agentic-consensus-runner.sh
+skill://agentic-consensus/agentic-consensus-runner.sh \
+  --mode divergent \
+  --lenses "newcomer,architect,skeptic,historian,operator,investor,maintainer" \
+  --prompt-file .agentic-consensus/prompt.md
 ```
 
-The test supplies stub CLIs and tabular `omp models` listings; it does not call
-remote agents.
+Without `--lenses`, a divergent panel drawn from one model family will still
+cluster on one angle (the plurality problem: same family, same blind spots).
+Lenses are assigned round-robin, one per panelist, and each panelist is told
+the lens orients them but does not confine them. Pass as many lenses as
+panelists for full spread.
+
+Divergent output is synthesized by clustering, not by averaging. Group the
+returned options into families, name each family, record the sharpest variant
+in it, and report the dimensions along which the families genuinely differ.
+Then run a convergent pass on the surviving families.
+
+### Lateral mode
+
+```bash
+skill://agentic-consensus/agentic-consensus-runner.sh \
+  --mode lateral \
+  --prompt-file .agentic-consensus/prompt.md
+```
+
+Use when the discussion is stuck, over-literal, or reusing one frame. Lateral
+output is a set of reframes; each names the assumption it rejected and what
+would change in practice. Do not accept any single reframe as a decision;
+carry the reframes into a convergent pass.
+
+### Lens list conventions
+
+For an open-source surface relanguage, the seven-lens set
+`newcomer,architect,skeptic,historian,operator,investor,maintainer` is a useful
+default: it spans first-impression, systems, adversarial, lineage,
+day-to-day-use, capital, and contribution perspectives. For a code review use
+`correctness,security,maintainability,performance,test-gaps,rollback`. For a
+product direction use `user,distribution,monetization,safety,operations,vision`.
 
 ## Prompt Construction
 
@@ -494,20 +523,25 @@ natural Define boundary.
 For any other consensus task:
 
 1. Build a prompt file when the prompt is long, quote-heavy, or includes diffs.
-2. Run the bundled script with the chosen panel.
+2. Run the bundled script with the chosen panel and `--mode`.
 3. Read the manifest and successful outputs; treat intentional partial-panel
    failures as metadata.
-4. Synthesize and locally verify high-impact claims.
+4. Synthesize according to the mode and locally verify high-impact claims.
 
 ## Synthesis Template
 
-Return this structure unless the user asks for another format:
+Return this structure unless the user asks for another format, or unless the
+run used divergent or lateral mode (see Thinking Modes above — divergent
+synthesis clusters, lateral synthesis collects reframes):
 
 ```text
 # Agentic Consensus
 
 ## Panel
 - <agent/model>: <ran/skipped/failed> <reason if skipped/failed>
+
+## Mode
+- convergent / divergent / lateral
 
 ## Consensus
 - <finding agreed by 2+ agents>
@@ -553,3 +587,11 @@ Use the full default panel when:
 - the code touches auth, payments, secrets, migrations, deployments, concurrency, or data loss,
 - the user asks for review before landing,
 - the team needs dissent or confidence calibration.
+
+Use `--mode divergent` (with lenses) when the direction or surface is stale,
+contested, or has never been freshly argued: relanguages, product framing,
+naming, or any time you want the option space before the verdict. Use
+`--mode lateral` when the discussion is stuck in one frame. For an
+open-source README or AGENTS.md relanguage specifically, run divergent first
+with newcomer/architect/skeptic/historian/operator/investor/maintainer lenses,
+then converge on the surviving families.

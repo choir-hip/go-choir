@@ -1,5 +1,45 @@
 # Design: Conductor Supervision Protocol
 
+> **ARCHIVED / HISTORICAL CONTEXT.** This document is an archived pre-kernel
+> design note. The current home for the supervision design intent is
+> [docs/supervision-protocol.md](../supervision-protocol.md) (Target scope)
+> and [docs/current-architecture.md](../current-architecture.md). This note
+> remains in Git history as the source the current design maps onto; the
+> archive is not current authority.
+
+## Revision 2026-07-31 — Mapping onto the accepted kernel
+
+Re-visioning alignment. This protocol design is still the intended shape for a
+durable supervision layer and remains partly hypothetical; it now maps onto the
+accepted durable-work kernel instead of prefiguring it. The current Target
+design is maintained in [docs/supervision-protocol.md](../supervision-protocol.md).
+
+- The **observation schema** (§4) reads materialized **snapshot projections**,
+  not prose: artifact head, obligations, update dispositions, reducer sequence
+  (the kernel's public lifecycle snapshot). Observations are typed and
+  append-only; delivery/cursor/checkpoint rows are projections and never
+  acknowledge semantic state.
+- The **finding/verdict schema** (§5) is the kernel's typed-update vocabulary:
+  a finding is a durable object with a fingerprint, and its resolution is an
+  update disposition (`pending → incorporated | rejected | cancelled | late`).
+  "All threads clear" is a settlement query over no open work and no
+  non-terminal updates — which the kernel's
+  [settlement rule](../definitions/choir-coherent-computer-convergence-2026-07-21.md)
+  already defines deterministically.
+- The supervisor **never writes canonical artifacts** (§2) — this now matches
+  the kernel's single-writer invariant: `CommitTextureHeadAuthority` and the
+  trajectory/update/work reducers are the only writers; the supervisor emits
+  findings and addressed messages, which are themselves typed updates or work
+  obligations on the trajectory.
+- **Supervision is at the level of ideas**: the supervisor and the logged-in
+  UI observe semantic state updates (each a new texture version), never the
+  action stream. See the
+  [observer-hierarchy](design-observer-hierarchy-2026-06-23.md) re-visioning
+  and [why-texture](../why-texture-2026-06-15.md).
+- The symptom list in §1 is the pre-kernel form of the liveness regression we
+  still fight: "Texture revisions stall without explanation" is exactly the
+  stranded-work class the current liveness fix targets.
+
 ## 1. Problem
 
 Choir has multiple actors operating on a shared object graph — Texture, researcher, super, appagents, and the user. The orchestration model is still changing because there is no explicit, durable supervision layer. The symptoms are:

@@ -18,8 +18,14 @@ artifacts. The superseded theory source remains available in Git history.
 - **Claim:** Texture agents cannot spawn co-super or vsuper; spawn targets are
   exactly `[researcher]`, enforced at call time; super is reachable only via
   `request_super_execution` (routes to the persistent super, never spawns).
-- **Receipts:** `internal/runtime/tool_profiles.go:223-229` (AllowedDelegateTargets),
-  `tool_profiles.go:314` (canDelegateTo), `tools_texture.go:194-237`.
+- **Receipts:** `internal/coagentowner/spawn_tool.go` (spawn_agent tool gated
+  by `AllowedDelegateTargets`; `canonicalTargets` restricts roles),
+  `internal/agentprofile/agentprofile.go` (`AllowedDelegateTargets` per
+  profile), `internal/agentcore/tool_profiles.go:313` (registry assembly),
+  `internal/agentcore/runtime.go:3365` (`request_super_execution` routing).
+  *(Historical receipts `internal/runtime/tool_profiles.go:223-229`,
+  `tool_profiles.go:314`, `tools_texture.go:194-237` moved/dissolved in commit
+  `c791a0ae`.)*
 - **Scope:** tool-level enforcement only. Does NOT cover continuation-path
   authority handoffs (that is the M2–M4 cutover work).
 - **Invalidation triggers:** any change to RegisterCoAgentTools or roleSpec.
@@ -64,9 +70,13 @@ artifacts. The superseded theory source remains available in Git history.
   the approve transition; the Features Activate click records it), and a
   freshness CAS blocks promotion when the foreground lineage moved since
   verification.
-- **Receipts:** commit 77f65651; `internal/runtime/app_promotion.go`
-  (ApproveAppAdoption, promoteFreshnessCAS); comprehensive test asserts
+- **Receipts:** commit 77f65651; `internal/computerversion/promotion_certificate.go`
+  (`PromotionCertificate`, `OwnerApproved` gate at `Validate`), `internal/vmctl/route_authority.go`
+  (route authority requires `owner_approved` promotion certificate); comprehensive test asserts
   premature promote → 400; unit tests cover fresh/moved/legacy.
+  *(Historical receipt `internal/runtime/app_promotion.go` was deleted in the
+  runtime dissolution `c791a0ae`; the approval-gate semantics moved to the
+  certificate/route authority above.)*
 - **Scope:** the two guards. Promotion still does not deploy anything real
   (route flip unconsumed) — that claim awaits M6.
 
