@@ -126,3 +126,53 @@ nondestructive projection rebuild. Events are never deleted or rewritten.
 - `discovered`: H032, dual semantic tape for Texture and lifecycle state.
 - `introduced`: none by this evidence record.
 - `repaired`: none; discovery and Definition authoring are not repair.
+
+## Frozen implementation review blockers — 2026-08-04
+
+The first runtime candidate was frozen at base
+`ecb43cfab6d5c206b62d4dada38843c2c46216bd` with staged binary-diff digest
+`sha256:715854040d022f7a007b66ca9a21217ad33786eb8e3f18a23b27fb128c051804`.
+An independent read-only review returned `REPAIR` with high confidence. The
+successful reviewer was `openai-codex/gpt-5.6-sol`; three other panel routes
+timed out after ten minutes and therefore supplied no verdict.
+
+The candidate is not executable authority for these observed reasons:
+
+1. Caller-side evidence/import payloads are randomly encrypted and pinned before
+   the canonical command reservation. A crash between pin and reservation makes
+   an exact retry generate a second ciphertext/ref and leaves the first pin
+   orphaned. The appender's frozen transaction-envelope retry does not cover
+   those referenced payloads.
+2. `trajectory_settled` accepts Texture authority and requires only Super's
+   proposal. The reducer has no fresh owner acceptance bound to the exact Super
+   proposal, current semantic heads, and snapshot digest.
+3. `revise_artifact` permits nullable semantic expectations, and the reducer
+   does not require the submitted parent revision and fulfilled intent to equal
+   the current heads. A stale owner command can therefore become canonical.
+4. The configured twelve-event model cannot reach a three-assignment closed
+   settlement trace; candidate verification is Super-authored rather than
+   independently verified; and no reachability coverage proves the claimed
+   settlement/promotion states were exercised.
+5. The runtime exposes only assignment opening, attempt start/result, and
+   message projection to Super. No production tool can author cancellation,
+   disposition, belief, finding, dissent, reconciliation, decision proposal,
+   or settlement proposal, so the promised product-path trajectory cannot reach
+   the reducer's closed states even if the reducer is correct.
+6. The global compatibility-floor write switch is process-environment-only and
+   enabled by default. The current deployment path cannot first deploy a
+   forward-readable disabled floor, rehearse refusal/rebuild, and then
+   deliberately enable the first new supervision event.
+
+These are substrate findings, not six independent symptoms: the candidate split
+one supervision command across caller-owned pinning, appender reservation, and
+an incomplete model-facing tool surface. Repair must move the complete logical
+command—including referenced payload descriptors—behind one reservation/freeze
+boundary, require dual fresh settlement authority, close semantic head checks,
+make the full typed transition surface reachable, and land in disabled-floor
+then enabled-release order.
+
+Belief-state update: H032 remains discovered but unrepaired. The one-tape
+appender/projection direction is still supported; the first implementation
+candidate is rejected until the six blockers above have focused receipts and a
+new frozen digest. Heresy delta remains `discovered=[H032]`,
+`introduced=[]`, `repaired=[]`.
