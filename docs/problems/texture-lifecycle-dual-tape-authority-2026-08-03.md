@@ -359,3 +359,45 @@ product-path complete” is falsified; the one-tape reducer/appender conjecture
 remains supported by its accepted local evidence. Heresy delta:
 `discovered` = supervised handoff guard precedence and tool-loop provider
 authority loss; `introduced` = none by this observation; `repaired` = none.
+
+## Deployed handoff root-cause cluster — 2026-08-04
+
+The first problem checkpoint identified the observed refusal but understated
+the substrate gap. Reinspection of the exact deployed source and the failed
+Texture run establishes one connected authority/delivery cluster:
+
+1. `newUpdateCoagentTool` discovers the lifecycle-bound run and returns
+   `ErrSupervisionAuthorityRequired` before checking whether that same
+   trajectory has the canonical supervision projection. The closed append
+   branch is therefore unreachable for every supervised Texture run.
+2. `resolveCoagentFindingsTarget` resolves a run's Texture channel before an
+   explicit target actor. A Texture `execution_request` that names persistent
+   Super is consequently rewritten to the current Texture actor.
+3. `appendSupervisedUpdate` records `actor_message_recorded` on the canonical
+   tape, but persistent-Super cold wake and tool-loop injection still read the
+   legacy worker-update mailbox. No consumer projects the canonical private
+   packet back into an addressed actor turn, and no restart sweep can recover
+   the post-append/pre-dispatch gap.
+
+These are not three independent edge cases. The replacement one-tape writer
+exists, but the product handoff still enters and exits through the superseded
+mailbox authority. Repair must connect the closed transaction to an addressed,
+idempotent, restart-recoverable actor delivery projection derived from the
+canonical message/result/research artifact. It must not restore a lifecycle
+writer or treat actor delivery state as semantic authority.
+
+The deployed provider receipt remains a separate continuity blocker: the
+DeepSeek-selected Texture completed its first tool turn, then the fallback
+chain surfaced the invalid ChatGPT credential on the next provider turn.
+The next proof must expose the selected and fallback provider attempts rather
+than infer the failed primary from the terminal fallback error.
+
+Mutation class for the repair remains `red`. Protected surfaces are closed
+supervision append, private-artifact recovery, actor delivery, persistent Super
+wake, model/provider routing, and run acceptance. Admissible evidence is a
+focused restart regression plus a fresh exact-commit deployed
+Texture-to-Super-to-three-CoSuper trajectory and owner settlement. Rollback is
+source revert and restoration of the disposable staging model-policy backup.
+Heresy delta: `discovered` adds the explicit-target rewrite and missing
+canonical delivery consumer; `introduced` remains none by observation;
+`repaired` remains none.

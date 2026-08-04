@@ -176,10 +176,10 @@ measures:
 
 now:
   status: blocked_incomplete
-  slice: "The one-tape candidate is deployed at the exact accepted source, but fresh product-path proof exposed supervised handoff and provider-continuity blockers before fan-out."
-  question: "Can the closed supervised update path and one selected provider survive a complete deployed Texture-to-Super tool loop?"
+  slice: "The exact deployed one-tape writer is not connected end to end: lifecycle refusal masks the closed branch, explicit Super addressing rewrites to Texture, canonical messages have no restart-recoverable actor consumer, and provider fallback obscures the selected-provider failure."
+  question: "Can one closed supervision transaction drive idempotent, restart-recoverable Texture-to-Super and CoSuper-to-Super delivery while the selected provider remains observable across every tool-loop turn?"
   reconciliation:
-    observed_at: 2026-08-04T20:35:00Z
+    observed_at: 2026-08-04T20:47:21Z
     source_ref: 248e4692595534df9843dff37a00a4146f3d570f
     deploy_identity: "choir.news proxy, sandbox, and vmctl report 248e4692595534df9843dff37a00a4146f3d570f after CI run 30947754942 completed successfully"
     authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@248e4692, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@248e4692]
@@ -204,8 +204,8 @@ now:
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may now execute schema/caller/migration candidate work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
   evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "CI run 30947754942", "staging Texture runs 4f1014e5-3fc3-494b-a2db-8b3a7c1f7578 and 03de15ce-77ad-4eb3-b633-468f4d43e8ee", specs/texture_supervision.tla, internal/agentcore/tools_worker_update.go, internal/agentcore/runtime.go, internal/computerevent/appender.go, internal/store/supervision_projection.go]
-  blocker_or_risk: "Exact deployed acceptance cannot start fan-out: lifecycle-bound supervised Texture calls are refused before the closed append branch, and a DeepSeek-resolved Texture run falls back to the broken ChatGPT credential after tool iterations. No owner settlement, rollback rehearsal, registry closure, or H032 repair claim is admissible."
-  next_action: "Land this problem-first checkpoint, repair closed supervised update precedence and provider continuity with focused regressions, re-review the frozen repair, then repeat exact staging prompt/Texture/Super/fan-out/owner-settlement proof."
+  blocker_or_risk: "Exact deployed acceptance cannot start fan-out: supervised lifecycle calls are refused before the closed append, explicit Super targeting resolves to Texture, canonical message/result artifacts do not feed the actor wake/injection path or restart sweep, and a DeepSeek-resolved run terminates through the broken ChatGPT fallback without preserving the primary failure. No owner settlement, rollback rehearsal, registry closure, or H032 repair claim is admissible."
+  next_action: "Land this expanded problem-first checkpoint; connect canonical private artifacts to idempotent actor delivery and restart recovery without a second semantic tape; preserve explicit Super targeting; expose provider-attempt failure order; re-review the frozen repair; then repeat exact staging Texture/Super/fan-out/owner-settlement proof."
 
 receipts:
   - id: texture-tape-definition-round-1
