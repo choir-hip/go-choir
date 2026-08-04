@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -261,7 +262,7 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 		},
 	}
 	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
-	started, err := h.Store.StartLifecycle(ctx, start)
+	started, err := h.startSupervisionTrajectory(ctx, start)
 	if err != nil {
 		return ConductorDecision{}, fmt.Errorf("start Texture lifecycle: %w", err)
 	}
@@ -276,6 +277,7 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 	decision.Schema = types.DurableWorkSchemaV1
 	decision.StartRequestDigest = start.StartRequestDigest
 	decision.TrajectoryID = started.Trajectory.TrajectoryID
+
 	if started.Agent != nil && started.WorkItem != nil {
 		decision.SubjectID = started.Agent.AgentID
 		decision.ObligationIDs = []string{started.WorkItem.WorkItemID}
@@ -448,4 +450,209 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
+}
+func (h *Handler) startSupervisionTrajectory(ctx context.Context, start types.StartLifecycleRequest) (types.LifecycleResult, error) {
+	if h == nil || h.Core == nil || h.Store == nil {
+		return types.LifecycleResult{}, fmt.Errorf("start supervision trajectory: authority unavailable")
+	}
+	intentID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(start.CommandID+":intent:v1")).String()
+	revisionMetadata := start.InitialRevision.Metadata
+	if len(revisionMetadata) == 0 {
+		revisionMetadata = json.RawMessage(`{}`)
+	}
+	if !json.Valid(revisionMetadata) || revisionMetadata[0] != '{' {
+		return types.LifecycleResult{}, fmt.Errorf("start supervision trajectory: revision metadata must be a JSON object")
+	}
+	metadataDigest := computerevent.DigestBytes(append(append([]byte(nil), revisionMetadata...), []byte(start.InitialRevision.Content)...))
+	subjectRefs := make(map[string]string, len(start.SubjectRefs)+1)
+	for key, value := range start.SubjectRefs {
+		subjectRefs[key] = value
+	}
+	subjectRefs["doc_id"] = start.InitialDocument.DocID
+	sourceGraph, err := json.Marshal(map[string]any{
+		"body_doc": start.InitialRevision.BodyDoc, "source_entities": start.InitialRevision.SourceEntities,
+		"citations": start.InitialRevision.Citations, "metadata": revisionMetadata,
+	})
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	mutationBodies := []struct {
+		kind string
+		body any
+	}{
+		{"trajectory_started", map[string]any{
+			"trajectory_kind": string(start.Kind), "subject_refs": subjectRefs,
+			"intent_revision_id": intentID, "artifact_id": start.InitialDocument.DocID,
+			"artifact_revision_id": start.InitialRevision.RevisionID, "texture_actor_id": start.Agent.AgentID,
+			"initial_assignment_ids": []string{start.InitialWork.WorkItemID}, "objective": start.InitialWork.Objective,
+		}},
+		{"intent_revised", map[string]any{
+			"intent_revision_id": intentID, "parent_intent_revision_id": nil,
+			"intent": start.InitialWork.Objective, "material": false, "affected_targets": []any{},
+		}},
+		{"texture_revision", map[string]any{
+			"artifact_id": start.InitialDocument.DocID, "revision_id": start.InitialRevision.RevisionID,
+			"title": start.InitialDocument.Title, "parent_revision_id": nil, "content": start.InitialRevision.Content,
+			"source_graph": json.RawMessage(sourceGraph), "metadata": revisionMetadata, "metadata_digest": metadataDigest,
+			"narrative_kind": "owner_edit", "fulfills_intent_revision_id": intentID,
+		}},
+	}
+	mutations := make([]computerevent.SupervisionMutation, 0, len(mutationBodies))
+	for _, item := range mutationBodies {
+		raw, err := json.Marshal(item.body)
+		if err != nil {
+			return types.LifecycleResult{}, err
+		}
+		mutations = append(mutations, computerevent.SupervisionMutation{Kind: item.kind, Body: raw})
+	}
+	transaction := computerevent.SupervisionTransaction{
+		Schema: computerevent.SupervisionSchemaV1, Reducer: computerevent.SupervisionReducerV1,
+		DigestRecipe: computerevent.SupervisionDigestRecipeV1, TransactionID: start.CommandID,
+		TransactionClass: "open_trajectory", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		TrajectoryID: start.TrajectoryID, CommandID: start.CommandID, CommandDigest: computerevent.ZeroHead,
+		Actor:     computerevent.SupervisionActor{ActorID: start.Agent.AgentID, Role: "texture", AuthorityRef: "texture:trajectory:" + start.TrajectoryID},
+		Mutations: mutations,
+	}
+	if _, _, err := h.Core.AppendSupervisionTransaction(ctx, transaction); err != nil {
+		return types.LifecycleResult{}, err
+	}
+	snapshot, err := h.Store.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	result := types.LifecycleResult{
+		Trajectory: snapshot.Trajectory, Document: &snapshot.Document,
+		Revision: &snapshot.HeadRevision, Events: snapshot.Events,
+	}
+	for index := range snapshot.WorkItems {
+		if snapshot.WorkItems[index].WorkItemID == start.InitialWork.WorkItemID {
+			result.WorkItem = &snapshot.WorkItems[index]
+			break
+		}
+	}
+	for index := range snapshot.Agents {
+		if snapshot.Agents[index].AgentID == start.Agent.AgentID {
+			result.Agent = &snapshot.Agents[index]
+			break
+		}
+	}
+	return result, nil
+}
+
+func (h *Handler) appendTextureRevision(ctx context.Context, doc types.Document, revision types.Revision, commandID string, actor computerevent.SupervisionActor) (types.Revision, error) {
+	if h == nil || h.Core == nil || h.Store == nil {
+		return types.Revision{}, fmt.Errorf("append Texture revision: authority unavailable")
+	}
+	if strings.TrimSpace(doc.ComputerID) == "" || strings.TrimSpace(doc.TrajectoryID) == "" {
+		return types.Revision{}, h.refuseLegacyTextureWriter("append Texture revision without supervision scope")
+	}
+	snapshot, err := h.Store.GetSupervisionProjectionSnapshot(ctx, doc.OwnerID, doc.ComputerID, doc.TrajectoryID)
+	if err != nil {
+		return types.Revision{}, fmt.Errorf("append Texture revision: load supervision snapshot: %w", err)
+	}
+	if snapshot.Archived || snapshot.Settled || snapshot.IntentRevisionID == "" || snapshot.ArtifactHeadRevisionID == "" || snapshot.CanonicalEventHead == "" {
+		return types.Revision{}, fmt.Errorf("append Texture revision: supervised artifact is not revisable")
+	}
+	textureActorID := currentTextureAgentID(doc.DocID)
+	switch actor.Role {
+	case "owner":
+		if actor.ActorID != doc.OwnerID || actor.AuthorityRef != "owner:"+doc.OwnerID {
+			return types.Revision{}, fmt.Errorf("append Texture revision: invalid owner authority")
+		}
+	case "texture":
+		if actor.ActorID != textureActorID || actor.AuthorityRef != "texture:trajectory:"+doc.TrajectoryID {
+			return types.Revision{}, fmt.Errorf("append Texture revision: invalid Texture authority")
+		}
+	default:
+		return types.Revision{}, fmt.Errorf("append Texture revision: unsupported actor role %q", actor.Role)
+	}
+	metadata := revision.Metadata
+	if len(metadata) == 0 {
+		metadata = json.RawMessage(`{}`)
+	}
+	if !json.Valid(metadata) || metadata[0] != '{' {
+		return types.Revision{}, fmt.Errorf("append Texture revision: revision metadata must be a JSON object")
+	}
+	sourceGraph, err := json.Marshal(map[string]any{
+		"body_doc": revision.BodyDoc, "source_entities": revision.SourceEntities,
+		"citations": revision.Citations, "metadata": metadata,
+	})
+	if err != nil {
+		return types.Revision{}, fmt.Errorf("append Texture revision: source graph: %w", err)
+	}
+	narrativeKind := "owner_edit"
+	if actor.Role == "texture" {
+		narrativeKind = "texture_synthesis"
+	}
+	revisionBody, err := json.Marshal(map[string]any{
+		"artifact_id": doc.DocID, "revision_id": revision.RevisionID, "title": doc.Title,
+		"parent_revision_id": snapshot.ArtifactHeadRevisionID, "content": revision.Content, "source_graph": json.RawMessage(sourceGraph),
+		"metadata":        metadata,
+		"metadata_digest": computerevent.DigestBytes(append(append([]byte(nil), metadata...), []byte(revision.Content)...)),
+		"narrative_kind":  narrativeKind, "fulfills_intent_revision_id": snapshot.IntentRevisionID,
+	})
+	if err != nil {
+		return types.Revision{}, fmt.Errorf("append Texture revision: encode transaction body: %w", err)
+	}
+	parentID := snapshot.ArtifactHeadRevisionID
+	revision.ParentRevisionID = parentID
+	revision.ComputerID = doc.ComputerID
+	revision.TrajectoryID = doc.TrajectoryID
+	lifecycleVersion := uint64(snapshot.LifecycleVersion)
+	transaction := computerevent.SupervisionTransaction{
+		Schema: computerevent.SupervisionSchemaV1, Reducer: computerevent.SupervisionReducerV1,
+		DigestRecipe: computerevent.SupervisionDigestRecipeV1, TransactionID: commandID,
+		TransactionClass: "revise_artifact", OwnerID: doc.OwnerID, ComputerID: doc.ComputerID,
+		TrajectoryID: doc.TrajectoryID, CommandID: commandID, CommandDigest: computerevent.ZeroHead,
+		Actor: actor,
+		Expected: computerevent.SupervisionExpected{
+			CanonicalEventHead: &snapshot.CanonicalEventHead,
+			LifecycleVersion:   &lifecycleVersion, IntentRevisionID: &snapshot.IntentRevisionID,
+			ArtifactHeadRevisionID: &snapshot.ArtifactHeadRevisionID,
+		},
+		Mutations: []computerevent.SupervisionMutation{{Kind: "texture_revision", Body: revisionBody}},
+	}
+	if _, _, err := h.Core.AppendSupervisionTransaction(ctx, transaction); err != nil {
+		return types.Revision{}, err
+	}
+	next, err := h.Store.GetLifecycleRevision(ctx, doc.OwnerID, doc.ComputerID, revision.RevisionID)
+	if err != nil {
+		return types.Revision{}, fmt.Errorf("append Texture revision: load projected revision: %w", err)
+	}
+	return next, nil
+}
+
+func (h *Handler) startTextureOwnerDocument(ctx context.Context, ownerID, title string, now time.Time) (types.Document, error) {
+	if h == nil || h.Core == nil {
+		return types.Document{}, fmt.Errorf("start Texture document: authority unavailable")
+	}
+	computerID := strings.TrimSpace(h.Core.TextureSandboxID())
+	if computerID == "" {
+		return types.Document{}, fmt.Errorf("start Texture document: Texture computer identity unavailable")
+	}
+	docID, trajectoryID := uuid.NewString(), uuid.NewString()
+	revisionID, workItemID := uuid.NewString(), uuid.NewString()
+	doc := types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: title, CreatedAt: now, UpdatedAt: now}
+	revision := types.Revision{
+		RevisionID: revisionID, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
+		AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "# " + title + "\n", Citations: json.RawMessage("[]"), Metadata: json.RawMessage(`{}`), CreatedAt: now,
+	}
+	agentID := currentTextureAgentID(docID)
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "texture-owner-document:" + docID, TrajectoryID: trajectoryID,
+		Kind: types.TrajectoryKindTask, SubjectRefs: map[string]string{"artifact": "texture://documents/" + docID},
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		InitialWork:     types.WorkItemRecord{WorkItemID: workItemID, Objective: "Maintain Texture document " + title, AssignedAgentID: agentID, AuthorityProfile: agentprofile.Texture},
+		InitialDocument: doc, InitialRevision: revision,
+		Agent: types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	result, err := h.startSupervisionTrajectory(ctx, start)
+	if err != nil || result.Document == nil {
+		if err == nil {
+			err = fmt.Errorf("start Texture document: projected document unavailable")
+		}
+		return types.Document{}, err
+	}
+	return *result.Document, nil
 }

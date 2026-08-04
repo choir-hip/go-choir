@@ -224,7 +224,7 @@ func (h *Handler) coagentTextureTargetDocument(ctx context.Context, parentRec *t
 		},
 	}
 	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
-	started, err := h.Store.StartLifecycle(ctx, start)
+	started, err := h.startSupervisionTrajectory(ctx, start)
 	if err != nil {
 		return types.Document{}, false, "", fmt.Errorf("start Texture source lifecycle: %w", err)
 	}

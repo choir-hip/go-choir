@@ -34,6 +34,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/zot"
 )
 
@@ -205,8 +206,44 @@ func Run() {
 			computerID, eventClient, db, eventClient,
 			computerevent.EventHeadReceiptVerifier{Keys: credentials.KeyResolver()},
 		)
+		var startupManifest updater.ReleaseManifest
+		var replayDigest string
+		if err == nil && !computerevent.SupervisionWritesDisabled() {
+			err = fmt.Errorf("sandbox: supervision writes must be disabled for private tape replay")
+		}
 		if err == nil {
-			err = appender.Reconstruct(bootstrapCtx, eventClient)
+			startupManifest, err = updater.ReadCurrentManifest(strings.TrimSpace(os.Getenv("CHOIR_UPDATER_ROOT")))
+			if err == nil && startupManifest.Supervision == nil {
+				err = fmt.Errorf("sandbox: startup manifest lacks supervision compatibility floor")
+			}
+		}
+		if err == nil {
+			err = appender.RebuildPrivateProjectionFromPinnedSource(bootstrapCtx, privateCipher)
+		}
+		if err == nil {
+			replayDigest, err = db.SupervisionProjectionSemanticDigest(bootstrapCtx, computerID)
+		}
+		if err == nil && !computerevent.SupervisionWritesDisabled() {
+			err = fmt.Errorf("sandbox: supervision writes were enabled during private tape replay")
+		}
+		if err == nil {
+			err = appender.RebuildPrivateProjectionFromPinnedSource(bootstrapCtx, privateCipher)
+		}
+		if err == nil {
+			var replayRepeatDigest string
+			replayRepeatDigest, err = db.SupervisionProjectionSemanticDigest(bootstrapCtx, computerID)
+			if err == nil && replayRepeatDigest != replayDigest {
+				err = fmt.Errorf("sandbox: private tape replay semantic digest mismatch")
+			}
+		}
+		if err == nil {
+			compatibility := *startupManifest.Supervision
+			coreOpts = append(coreOpts, agentcore.WithStartupSupervisionReplayAttestation(agentcore.StartupSupervisionReplayAttestation{
+				Marker: startupManifest.Marker, EventSchemaVersion: startupManifest.EventSchemaVersion,
+				ReducerVersion: startupManifest.ReducerVersion, ReleaseDigest: startupManifest.ContentDigest,
+				Supervision: compatibility, SupervisionWritesDisabled: true,
+				PrivateTapeReplaySemanticDigest: replayDigest, ProjectionSemanticDigest: replayDigest,
+			}))
 		}
 		if err == nil {
 			for _, lifecycleReceipt := range credentials.PendingLifecycleReceipts() {

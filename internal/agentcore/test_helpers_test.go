@@ -3,6 +3,8 @@ package agentcore
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -14,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
@@ -28,27 +31,168 @@ import (
 func seedDurableTextureSubject(t *testing.T, s *store.Store, ownerID, docID string) string {
 	t.Helper()
 	agentID := currentTextureAgentID(docID)
-	now := time.Now().UTC()
-	req := types.StartLifecycleRequest{
-		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "test-start:" + ownerID + ":" + docID,
-		TrajectoryID: "test-trajectory:" + ownerID + ":" + docID, Kind: types.TrajectoryKindDocument,
-		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
-		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID},
-		InitialWork:     types.WorkItemRecord{WorkItemID: "test-work:" + ownerID + ":" + docID, Objective: "process durable updates", AssignedAgentID: agentID},
-		InitialDocument: types.Document{DocID: docID, Title: "Durable test subject"},
-		InitialRevision: types.Revision{
-			RevisionID: "test-revision:" + ownerID + ":" + docID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "Initial durable test content",
-		},
-		Agent: types.AgentRecord{
-			AgentID: agentID, OwnerID: ownerID, ComputerID: "sandbox-test", SandboxID: "sandbox-test",
-			Profile: "texture", Role: "texture", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
+	computerID := "sandbox-test"
+	trajectoryID := "test-trajectory:" + ownerID + ":" + docID
+	commandID := "test-start:" + ownerID + ":" + docID
+	workID := "test-work:" + ownerID + ":" + docID
+	revisionID := "test-revision:" + ownerID + ":" + docID
+	objective := "process durable updates"
+	content := "Initial durable test content"
+
+	mutation := func(kind string, body map[string]any) computerevent.SupervisionMutation {
+		raw, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("encode %s mutation: %v", kind, err)
+		}
+		return computerevent.SupervisionMutation{Kind: kind, Body: raw}
+	}
+	transaction := computerevent.SupervisionTransaction{
+		Schema: computerevent.SupervisionSchemaV1, Reducer: computerevent.SupervisionReducerV1,
+		DigestRecipe: computerevent.SupervisionDigestRecipeV1, TransactionID: commandID,
+		TransactionClass: "open_trajectory", OwnerID: ownerID, ComputerID: computerID,
+		TrajectoryID: trajectoryID, CommandID: commandID, CommandDigest: computerevent.ZeroHead,
+		Actor: computerevent.SupervisionActor{ActorID: agentID, Role: "texture", AuthorityRef: "texture:trajectory:" + trajectoryID},
+		Mutations: []computerevent.SupervisionMutation{
+			mutation("trajectory_started", map[string]any{
+				"trajectory_kind": string(types.TrajectoryKindDocument), "subject_refs": map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+				"intent_revision_id": revisionID, "artifact_id": docID, "artifact_revision_id": revisionID,
+				"texture_actor_id": agentID, "initial_assignment_ids": []string{workID}, "objective": objective,
+			}),
+			mutation("intent_revised", map[string]any{
+				"intent_revision_id": revisionID, "parent_intent_revision_id": nil, "intent": objective,
+				"material": false, "affected_targets": []string{},
+			}),
+			mutation("texture_revision", map[string]any{
+				"artifact_id": docID, "revision_id": revisionID, "title": "Durable test subject",
+				"parent_revision_id": nil, "content": content, "source_graph": map[string]any{}, "metadata": map[string]any{},
+				"metadata_digest": computerevent.DigestBytes([]byte(content)), "narrative_kind": "texture_synthesis",
+				"fulfills_intent_revision_id": revisionID,
+			}),
 		},
 	}
-	req.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(req)
-	if _, err := s.StartLifecycle(context.Background(), req); err != nil {
+	digest, err := transaction.ComputeCommandDigest()
+	if err != nil {
+		t.Fatalf("digest supervision fixture: %v", err)
+	}
+	transaction.CommandDigest = digest
+
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("create supervision fixture signer: %v", err)
+	}
+	signer := computerevent.SigningKey{
+		SignerRef:  computerevent.SignerRef{SignerDomain: "corpusd", KeyID: "fixture"},
+		PrivateKey: privateKey,
+	}
+	canonicalHead, err := s.Head(context.Background(), computerID)
+	if err != nil {
+		t.Fatalf("read supervision fixture head: %v", err)
+	}
+	cas := &testSupervisionCAS{head: canonicalHead, signer: signer}
+	pinner := testSupervisionPinner{signer: signer}
+	verifier := computerevent.EventHeadReceiptVerifier{Keys: testSupervisionKeyResolver{key: publicKey}}
+	appender, err := computerevent.NewComputerEventAppender(computerID, pinner, s, cas, verifier)
+	if err != nil {
+		t.Fatalf("create supervision fixture appender: %v", err)
+	}
+	if canonicalHead == nil {
+		eventID, err := computerevent.NewEventID()
+		if err != nil {
+			t.Fatalf("create supervision fixture genesis identity: %v", err)
+		}
+		stateCommitment := computerevent.DigestBytes([]byte("fixture-state:" + ownerID + ":" + docID))
+		genesis := computerevent.Event{
+			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
+			EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+			IdempotencyKey: "fixture-genesis:" + ownerID + ":" + docID, ActorProfile: "runtime",
+			AuthorityRef: "authority:test", PayloadCommitment: stateCommitment, PrivacyClass: "private",
+			ReducerVersion: computerevent.ReducerVersionV1, ResultingEffectiveCommitment: stateCommitment,
+		}
+		if _, err := appender.AppendNew(context.Background(), genesis, computerevent.TransitionInput{TargetStateCommitment: stateCommitment}, nil); err != nil {
+			t.Fatalf("seed supervision fixture genesis: %v", err)
+		}
+	}
+	cipher, err := computerevent.LoadGuestPrivateArtifactCipher(filepath.Join(t.TempDir(), "privacy-key.json"), computerID, true)
+	if err != nil {
+		t.Fatalf("create supervision fixture cipher: %v", err)
+	}
+	event := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, ComputerID: computerID,
+		EventKind: computerevent.EventSupervisionTransaction, PrivacyClass: "private",
+		ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	if _, _, err := appender.AppendNewSupervisionTransaction(context.Background(), event, computerevent.TransitionInput{}, transaction, cipher); err != nil {
 		t.Fatalf("seed durable Texture subject: %v", err)
 	}
-	return req.TrajectoryID
+	return trajectoryID
+}
+
+type testSupervisionKeyResolver struct{ key ed25519.PublicKey }
+
+func (r testSupervisionKeyResolver) ResolveReceiptKey(string, string, string, uint64, time.Time) (ed25519.PublicKey, error) {
+	return r.key, nil
+}
+
+type testSupervisionPinner struct{ signer computerevent.SigningKey }
+
+func (p testSupervisionPinner) PinEvent(_ context.Context, computerID string, canonicalEvent []byte, requestCommitment string) (computerevent.PinResult, error) {
+	digest := computerevent.DigestBytes(canonicalEvent)
+	receipt, err := computerevent.NewSignedReceipt("PinReceipt", "corpusd", map[string]any{
+		"computer_id": computerID, "artifact_digest": digest, "request_commitment": requestCommitment,
+	}, []computerevent.SigningKey{p.signer}, time.Now().UTC())
+	return computerevent.PinResult{ArtifactDigest: digest, Receipt: receipt}, err
+}
+
+func (p testSupervisionPinner) PreparePrivatePayload(ctx context.Context, cipher *computerevent.PrivateArtifactCipher, computerID, eventID, mediaType string, plaintext []byte) ([]byte, computerevent.PrivateArtifactMetadata, error) {
+	return cipher.Encrypt(ctx, computerID, eventID, mediaType, "private", plaintext)
+}
+
+func (p testSupervisionPinner) PinPrivatePayload(ctx context.Context, cipher *computerevent.PrivateArtifactCipher, computerID, eventID string, envelope []byte, pinIntentCommitment string) (computerevent.PinResult, error) {
+	if _, metadata, err := cipher.Decrypt(ctx, envelope, computerID, eventID); err != nil {
+		return computerevent.PinResult{}, err
+	} else {
+		digest := computerevent.DigestBytes(envelope)
+		receipt, err := computerevent.NewSignedReceipt("PinReceipt", "corpusd", map[string]any{
+			"computer_id": computerID, "artifact_digest": digest, "media_type": metadata.MediaType,
+			"privacy_class": "private", "pin_intent_commitment": pinIntentCommitment,
+		}, []computerevent.SigningKey{p.signer}, time.Now().UTC())
+		return computerevent.PinResult{ArtifactDigest: digest, Receipt: receipt}, err
+	}
+}
+
+type testSupervisionCAS struct {
+	head   *computerevent.Head
+	signer computerevent.SigningKey
+}
+
+func (c *testSupervisionCAS) Head(context.Context, string) (*computerevent.Head, error) {
+	if c.head == nil {
+		return nil, nil
+	}
+	head := *c.head
+	return &head, nil
+}
+
+func (c *testSupervisionCAS) CompareAndSwap(_ context.Context, request computerevent.CASRequest) (computerevent.Receipt, error) {
+	if (c.head == nil && request.Event.PreviousHead != computerevent.ZeroHead) ||
+		(c.head != nil && request.Event.PreviousHead != c.head.CanonicalEventHead) {
+		return computerevent.Receipt{}, computerevent.ErrCASConflict
+	}
+	receipt, err := computerevent.NewSignedReceipt("EventHeadReceipt", "corpusd", map[string]any{
+		"computer_id": request.Event.ComputerID, "previous_head": request.Event.PreviousHead,
+		"event_digest": request.EventDigest, "sequence": request.Event.Sequence,
+		"event_kind": request.Event.EventKind, "request_commitment": request.Event.RequestCommitment,
+		"pin_receipt_digests": append([]string{request.EventPinReceiptDigest}, request.PayloadPinReceiptDigests...),
+		"desired_event_head":  request.Next.DesiredEventHead, "effective_event_head": request.Next.EffectiveEventHead,
+		"pending_transition_ref": request.Next.PendingTransitionRef, "desired_state_commitment": request.Next.DesiredStateCommitment,
+		"effective_state_commitment": request.Next.EffectiveStateCommitment,
+	}, []computerevent.SigningKey{c.signer}, time.Now().UTC())
+	if err != nil {
+		return computerevent.Receipt{}, err
+	}
+	head := request.Next
+	c.head = &head
+	return receipt, nil
 }
 
 func containsString(values []string, want string) bool {

@@ -156,31 +156,8 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 		if authorityErr := rt.ValidateActivationAuthority(ctx, ownerID, doc.ComputerID, textureAgentID, active.RunID); authorityErr == nil {
 			return nil, nil
 		}
-		cleanupCtx := context.WithoutCancel(ctx)
-		passivated := active
-		passivated.State = types.RunPassivated
-		passivated.Error = ""
-		passivated.FinishedAt = nil
-		passivated.UpdatedAt = time.Now().UTC()
-		passivated.Metadata = cloneMetadata(passivated.Metadata)
-		passivated.Metadata["passivated_reason"] = "invalid_texture_activation_authority"
-		req := types.ReplaceLifecycleActivationRequest{
-			OwnerID: ownerID, ComputerID: doc.ComputerID,
-			CommandID:    "texture-owner-passivate-invalid:" + passivated.RunID,
-			TrajectoryID: passivated.TrajectoryID, AgentID: passivated.AgentID, Run: passivated,
-		}
-		req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
-		if _, replaceErr := rt.Store.ReplaceLifecycleActivation(cleanupCtx, req); replaceErr != nil {
-			return nil, fmt.Errorf("passivate invalid active Texture run: %w", replaceErr)
-		}
-		mutation, mutationErr := rt.Store.GetAgentMutationByRun(cleanupCtx, ownerID, doc.ComputerID, passivated.RunID)
-		if mutationErr != nil {
-			return nil, fmt.Errorf("load invalid active Texture mutation: %w", mutationErr)
-		}
-		if mutation != nil && mutation.State == "pending" {
-			if staleErr := rt.Store.MarkAgentMutationStale(cleanupCtx, ownerID, doc.ComputerID, passivated.RunID); staleErr != nil {
-				return nil, fmt.Errorf("stale invalid active Texture mutation: %w", staleErr)
-			}
+		if err := rt.refuseLegacyTextureWriter("replace Texture lifecycle activation"); err != nil {
+			return nil, err
 		}
 	}
 	updates, err := rt.Store.ListPendingLifecycleUpdates(ctx, ownerID, doc.ComputerID, textureAgentID, 100)
@@ -311,17 +288,8 @@ func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types
 	rec.Result = ""
 	rec.FinishedAt = nil
 	rec.UpdatedAt = time.Now().UTC()
-	if err := rt.Store.ReactivateAgentMutation(ctx, ownerID, doc.ComputerID, rec.RunID, scheduledSeq); err != nil {
-		if errors.Is(err, store.ErrMutationAlreadyCompleted) {
-			return nil, false, nil
-		}
-		return nil, false, fmt.Errorf("reactivate passivated Texture mutation: %w", err)
-	}
-	if err := rt.Store.UpdateRun(ctx, *rec); err != nil {
-		if rollbackErr := rt.Store.MarkAgentMutationStale(context.WithoutCancel(ctx), ownerID, doc.ComputerID, rec.RunID); rollbackErr != nil {
-			return nil, false, fmt.Errorf("reactivate passivated Texture run: %v; restore mutation authority: %w", err, rollbackErr)
-		}
-		return nil, false, fmt.Errorf("reactivate passivated Texture run: %w", err)
+	if err := rt.refuseLegacyTextureWriter("reactivate Texture lifecycle run"); err != nil {
+		return nil, false, err
 	}
 	rt.Core.ActivateRun(rec)
 	return rec, true, nil

@@ -3,6 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,6 +66,229 @@ func TestInventoryBaselineAndRegressions(t *testing.T) {
 			assertDiagnostic(t, err, tc.diagnostic)
 		})
 	}
+}
+
+func TestSupervisionMutationCallerDetectorClassifiesClosedAuthorityCategories(t *testing.T) {
+	tests := []struct {
+		name          string
+		path          string
+		source        string
+		want          SupervisionMutationCallerCategory
+		wantViolation bool
+	}{
+		{
+			name: "canonical transaction appender",
+			path: "internal/agentcore/supervision.go",
+			source: `package agentcore
+func appendCanonical(a interface{ AppendNewSupervisionTransaction() }) { a.AppendNewSupervisionTransaction() }`,
+			want: SupervisionCanonicalService,
+		},
+		{
+			name: "canonical appender internal recovery",
+			path: "internal/computerevent/appender.go",
+			source: `package computerevent
+func recover(a interface{ AppendNewSupervisionTransaction() }) { a.AppendNewSupervisionTransaction() }`,
+			want: SupervisionCanonicalService,
+		},
+		{
+			name: "appender lookalike remains unauthorized",
+			path: "internal/computerevent/appender_helper.go",
+			source: `package computerevent
+func recover(a interface{ AppendNewSupervisionTransaction() }) { a.AppendNewSupervisionTransaction() }`,
+			want:          SupervisionUnauthorizedWriter,
+			wantViolation: true,
+		},
+		{
+			name: "reducer private apply",
+			path: "internal/store/supervision_projection.go",
+			source: `package store
+func apply(s interface{ ApplyLifecycleUpdateWithSourceGraph() }) { s.ApplyLifecycleUpdateWithSourceGraph() }`,
+			want: SupervisionReducerPrivateProjection,
+		},
+		{
+			name: "explicit legacy projection import builder",
+			path: "internal/store/projection_import.go",
+			source: `package store
+func BuildProjectionImportV1(s interface{ CreateRevision() }) { s.CreateRevision() }`,
+			want: SupervisionMigrationOnly,
+		},
+		{
+			name: "exact wire publication ledger",
+			path: "internal/agentcore/wire_publication.go",
+			source: `package agentcore
+func publish(s interface{ CreateWorkItem() }) { s.CreateWorkItem() }`,
+			want: SupervisionUnrelatedLedger,
+		},
+		{
+			name: "non-ledger write in wire publication remains unauthorized",
+			path: "internal/agentcore/wire_publication.go",
+			source: `package agentcore
+func publish(s interface{ UpsertDocumentAlias() }) { s.UpsertDocumentAlias() }`,
+			want:          SupervisionUnauthorizedWriter,
+			wantViolation: true,
+		},
+		{
+			name: "wire publication lookalike remains unauthorized",
+			path: "internal/agentcore/wire_publication_helper.go",
+			source: `package agentcore
+func publish(s interface{ CreateWorkItem() }) { s.CreateWorkItem() }`,
+			want:          SupervisionUnauthorizedWriter,
+			wantViolation: true,
+		},
+		{
+			name: "expanded evidence writer remains unauthorized",
+			path: "internal/agentcore/evidence.go",
+			source: `package agentcore
+func record(s interface{ CreateEvidence() }) { s.CreateEvidence() }`,
+			want:          SupervisionUnauthorizedWriter,
+			wantViolation: true,
+		},
+		{
+			name: "supervision refusal guard dominates mutation",
+			path: "internal/agentcore/refusal.go",
+			source: `package agentcore
+func refuse(rt interface{ refuseLegacySupervisionWrite() error }, s interface{ CreateRevision() }) error {
+	if err := rt.refuseLegacySupervisionWrite(); err != nil { return err }
+	s.CreateRevision()
+	return nil
+}`,
+			want: SupervisionDeterministicRefusal,
+		},
+		{
+			name: "texture refusal guard dominates mutation",
+			path: "internal/textureowner/refusal.go",
+			source: `package textureowner
+func refuse(h interface{ refuseLegacyTextureWriter() error }, s interface{ CreateRevision() }) {
+	if err := h.refuseLegacyTextureWriter(); err != nil { return }
+	s.CreateRevision()
+}`,
+			want: SupervisionDeterministicRefusal,
+		},
+		{
+			name: "guard without return does not authorize mutation",
+			path: "internal/textureowner/no_return.go",
+			source: `package textureowner
+func refuse(h interface{ refuseLegacyTextureWriter() error }, s interface{ CreateRevision() }) {
+	if err := h.refuseLegacyTextureWriter(); err != nil { observe(err) }
+	s.CreateRevision()
+}
+func observe(error) {}`,
+			want:          SupervisionUnauthorizedWriter,
+			wantViolation: true,
+		},
+		{
+			name: "late guard does not authorize mutation",
+			path: "internal/agentcore/late_refusal.go",
+			source: `package agentcore
+func refuse(rt interface{ refuseLegacySupervisionWrite() error }, s interface{ CreateRevision() }) error {
+	s.CreateRevision()
+	if err := rt.refuseLegacySupervisionWrite(); err != nil { return err }
+	return nil
+}`,
+			want:          SupervisionUnauthorizedWriter,
+			wantViolation: true,
+		},
+		{
+			name: "conditional absent-state guard bypass does not authorize mutation",
+			path: "internal/agentcore/conditional_refusal.go",
+			source: `package agentcore
+func refuse(run *struct{}, rt interface{ refuseLegacySupervisionWrite() error }, s interface{ CreateRevision() }) error {
+	if run != nil {
+		if err := rt.refuseLegacySupervisionWrite(); err != nil { return err }
+	}
+	s.CreateRevision()
+	return nil
+}`,
+			want:          SupervisionUnauthorizedWriter,
+			wantViolation: true,
+		},
+		{
+			name: "error identifier mention does not authorize mutation",
+			path: "internal/textureowner/error_identifier.go",
+			source: `package textureowner
+var ErrSupervisionAuthorityRequired error
+func refuse(s interface{ CreateRevision() }) error {
+	if ErrSupervisionAuthorityRequired != nil { return ErrSupervisionAuthorityRequired }
+	s.CreateRevision()
+	return nil
+}`,
+			want:          SupervisionUnauthorizedWriter,
+			wantViolation: true,
+		},
+		{
+			name: "derived manifest alias projection",
+			path: "internal/textureowner/texture_import.go",
+			source: `package textureowner
+func ensureTextureManifest(ctx any, st interface{ UpsertDocumentAlias(any, any, any, any, any) }, ownerID string, doc types.Document) {
+	sourcePath := ""
+	st.UpsertDocumentAlias(ctx, ownerID, sourcePath, doc.DocID, nil)
+}`,
+			want: SupervisionDerivedCompatibilityProjection,
+		},
+		{
+			name: "non-derived alias writer remains unauthorized",
+			path: "internal/textureowner/texture_import.go",
+			source: `package textureowner
+func persistAlias(s interface{ UpsertDocumentAlias() }) { s.UpsertDocumentAlias() }`,
+			want:          SupervisionUnauthorizedWriter,
+			wantViolation: true,
+		},
+		{
+			name: "deterministic manifest allocation is derived",
+			path: "internal/textureowner/texture_import.go",
+			source: `package textureowner
+func ensureTextureManifest(ctx any, st any, ownerID string, doc types.Document) { allocateTextureManifestPath() }
+func allocateTextureManifestPath() {}`,
+			want: SupervisionDerivedCompatibilityProjection,
+		},
+		{
+			name: "independent lifecycle event remains hard violation",
+			path: "internal/store/lifecycle.go",
+			source: `package store
+func legacy() { lifecycleObject(ogKindLifecycleEvent) }`,
+			want:          SupervisionIndependentLifecycleEvent,
+			wantViolation: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			category := classifyFixtureSupervisionMutation(t, tc.path, tc.source)
+			if category != tc.want {
+				t.Fatalf("category = %q, want %q", category, tc.want)
+			}
+			err := validateSupervisionMutationCallers([]SupervisionMutationCaller{{ID: tc.name, Category: category}})
+			if tc.wantViolation {
+				assertDiagnostic(t, err, string(tc.want))
+			} else if err != nil {
+				t.Fatalf("accepted category %q rejected: %v", category, err)
+			}
+		})
+	}
+}
+
+func classifyFixtureSupervisionMutation(t *testing.T, path, source string) SupervisionMutationCallerCategory {
+	t.Helper()
+	file, err := parser.ParseFile(token.NewFileSet(), path, source, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var categories []SupervisionMutationCallerCategory
+	ast.Inspect(file, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		category, tracked := classifySupervisionMutationCaller(path, file, call, calledMethod(call))
+		if tracked {
+			categories = append(categories, category)
+		}
+		return true
+	})
+	if len(categories) != 1 {
+		t.Fatalf("tracked categories = %#v, want exactly one", categories)
+	}
+	return categories[0]
 }
 
 func TestInventoryRejectsDispositionErrors(t *testing.T) {

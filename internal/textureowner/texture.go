@@ -35,6 +35,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -142,33 +143,35 @@ type textureDocumentExportResponse struct {
 
 // textureDocumentResponse is the JSON response for GET /api/texture/documents/{id}.
 type textureDocumentResponse struct {
-	DocID                string `json:"doc_id"`
-	OwnerID              string `json:"owner_id"`
-	Title                string `json:"title"`
-	TrajectoryID         string `json:"trajectory_id,omitempty"`
-	CurrentRevisionID    string `json:"current_revision_id,omitempty"`
-	CurrentVersionNumber int    `json:"current_version_number"`
-	CreatedAt            string `json:"created_at"`
-	UpdatedAt            string `json:"updated_at"`
-	RevisionCount        int    `json:"revision_count"`
-	LastEditor           string `json:"last_editor,omitempty"`
-	LastAuthorKind       string `json:"last_author_kind,omitempty"`
-	AgentRevisionPending bool   `json:"agent_revision_pending,omitempty"`
-	AgentRevisionRunID   string `json:"agent_revision_run_id,omitempty"`
+	DocID                string                               `json:"doc_id"`
+	OwnerID              string                               `json:"owner_id"`
+	Title                string                               `json:"title"`
+	TrajectoryID         string                               `json:"trajectory_id,omitempty"`
+	CurrentRevisionID    string                               `json:"current_revision_id,omitempty"`
+	CurrentVersionNumber int                                  `json:"current_version_number"`
+	CreatedAt            string                               `json:"created_at"`
+	UpdatedAt            string                               `json:"updated_at"`
+	RevisionCount        int                                  `json:"revision_count"`
+	LastEditor           string                               `json:"last_editor,omitempty"`
+	LastAuthorKind       string                               `json:"last_author_kind,omitempty"`
+	AgentRevisionPending bool                                 `json:"agent_revision_pending,omitempty"`
+	AgentRevisionRunID   string                               `json:"agent_revision_run_id,omitempty"`
+	Supervision          *types.SupervisionProjectionSnapshot `json:"supervision,omitempty"`
 }
 
 // textureDocumentStreamEvent is the hidden transport envelope sent over the
 // document-scoped SSE stream. The editor consumes document lifecycle changes
 // from this stream but does not render raw agent chatter.
 type textureDocumentStreamEvent struct {
-	Kind              string `json:"kind"`
-	DocID             string `json:"doc_id"`
-	LoopID            string `json:"loop_id,omitempty"`
-	RevisionID        string `json:"revision_id,omitempty"`
-	CurrentRevisionID string `json:"current_revision_id,omitempty"`
-	Pending           bool   `json:"pending,omitempty"`
-	Phase             string `json:"phase,omitempty"`
-	Error             string `json:"error,omitempty"`
+	Kind              string                               `json:"kind"`
+	DocID             string                               `json:"doc_id"`
+	LoopID            string                               `json:"loop_id,omitempty"`
+	RevisionID        string                               `json:"revision_id,omitempty"`
+	CurrentRevisionID string                               `json:"current_revision_id,omitempty"`
+	Pending           bool                                 `json:"pending,omitempty"`
+	Phase             string                               `json:"phase,omitempty"`
+	Error             string                               `json:"error,omitempty"`
+	Supervision       *types.SupervisionProjectionSnapshot `json:"supervision,omitempty"`
 }
 
 // textureUpdateDocRequest is the JSON payload for PUT /api/texture/documents/{id}.
@@ -392,7 +395,7 @@ func canonicalizeAliasedTextureDocumentTitle(ctx context.Context, st *store.Stor
 	}
 	doc.Title = nextTitle
 	doc.UpdatedAt = updatedAt
-	return st.UpdateDocument(ctx, *doc)
+	return fmt.Errorf("%w: canonical supervision transaction required for canonicalize Texture document title", store.ErrLifecycleAuthorityRequired)
 }
 
 func writeSSEData(w http.ResponseWriter, payload any) {
@@ -434,16 +437,8 @@ func (h *Handler) HandleTextureCreateDocument(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	now := time.Now().UTC()
-	doc := types.Document{
-		DocID:     uuid.New().String(),
-		OwnerID:   ownerID,
-		Title:     req.Title,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-
-	if err := h.Store.CreateDocument(r.Context(), doc); err != nil {
+	doc, err := h.startTextureOwnerDocument(r.Context(), ownerID, strings.TrimSpace(req.Title), time.Now().UTC())
+	if err != nil {
 		log.Printf("texture api: create document: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create document"})
 		return
@@ -536,6 +531,10 @@ func (h *Handler) HandleTextureImportMarkdownLineage(w http.ResponseWriter, r *h
 		}
 		resolvedVersions = append(resolvedVersions, resolved)
 	}
+	if err := h.refuseLegacyTextureWriter("import Markdown lineage"); err != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		return
+	}
 
 	now := time.Now().UTC()
 	doc := types.Document{
@@ -545,7 +544,7 @@ func (h *Handler) HandleTextureImportMarkdownLineage(w http.ResponseWriter, r *h
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	if err := h.Store.CreateDocument(r.Context(), doc); err != nil {
+	if err := h.refuseLegacyTextureWriter("import Markdown lineage"); err != nil {
 		log.Printf("texture api: create markdown lineage document: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create document"})
 		return
@@ -609,7 +608,7 @@ func (h *Handler) HandleTextureImportMarkdownLineage(w http.ResponseWriter, r *h
 			ParentRevisionID: parentID,
 			CreatedAt:        versionNow,
 		}
-		if err := h.Store.CreateRevision(r.Context(), rev); err != nil {
+		if err := h.refuseLegacyTextureWriter("import Markdown lineage revision"); err != nil {
 			log.Printf("texture api: create markdown lineage revision %s[%d]: %v", sourcePath, i, err)
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create markdown lineage revision"})
 			return
@@ -625,7 +624,7 @@ func (h *Handler) HandleTextureImportMarkdownLineage(w http.ResponseWriter, r *h
 		parentID = rev.RevisionID
 		doc.CurrentRevisionID = rev.RevisionID
 	}
-	if err := h.Store.UpsertDocumentAlias(r.Context(), ownerID, sourcePath, doc.DocID, now); err != nil {
+	if err := h.refuseLegacyTextureWriter("persist Markdown lineage alias"); err != nil {
 		log.Printf("texture api: upsert markdown lineage alias %s -> %s: %v", sourcePath, doc.DocID, err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to persist document alias"})
 		return
@@ -695,6 +694,10 @@ func (h *Handler) HandleTextureOpenFile(w http.ResponseWriter, r *http.Request) 
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to resolve file alias"})
 		return
 	}
+	if err := h.refuseLegacyTextureWriter("open imported Texture file"); err != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		return
+	}
 
 	now := time.Now().UTC()
 	projection := buildTextureFileImportProjection(sourcePath, req.InitialContent)
@@ -715,7 +718,7 @@ func (h *Handler) HandleTextureOpenFile(w http.ResponseWriter, r *http.Request) 
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	if err := h.Store.CreateDocument(r.Context(), doc); err != nil {
+	if err := h.refuseLegacyTextureWriter("open aliased Texture document"); err != nil {
 		log.Printf("texture api: create aliased document: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create aliased document"})
 		return
@@ -730,12 +733,12 @@ func (h *Handler) HandleTextureOpenFile(w http.ResponseWriter, r *http.Request) 
 		Metadata:    buildFileOpenTextureMetadata(projection, original),
 		CreatedAt:   now,
 	}
-	if err := h.Store.CreateRevision(r.Context(), rev); err != nil {
+	if err := h.refuseLegacyTextureWriter("open aliased Texture revision"); err != nil {
 		log.Printf("texture api: create aliased initial revision: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create aliased initial revision"})
 		return
 	}
-	if err := h.Store.UpsertDocumentAlias(r.Context(), ownerID, sourcePath, doc.DocID, now); err != nil {
+	if err := h.refuseLegacyTextureWriter("persist Texture document alias"); err != nil {
 		log.Printf("texture api: upsert file alias %s -> %s: %v", sourcePath, doc.DocID, err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to persist file alias"})
 		return
@@ -1043,6 +1046,17 @@ func (h *Handler) handleTextureGetDocument(w http.ResponseWriter, r *http.Reques
 	if pendingMutation != nil {
 		resp.AgentRevisionRunID = pendingMutation.RunID
 	}
+	if doc.ComputerID != "" && doc.TrajectoryID != "" {
+		supervision, supervisionErr := h.Store.GetSupervisionProjectionSnapshot(r.Context(), ownerID, doc.ComputerID, doc.TrajectoryID)
+		if supervisionErr == nil {
+			supervisionCopy := supervision
+			resp.Supervision = &supervisionCopy
+		} else if !errors.Is(supervisionErr, store.ErrNotFound) {
+			log.Printf("texture api: load supervision projection: %v", supervisionErr)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load supervision projection"})
+			return
+		}
+	}
 	writeAPIJSON(w, http.StatusOK, resp)
 }
 
@@ -1064,24 +1078,33 @@ func (h *Handler) handleTextureUpdateDocument(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
-	computerID := strings.TrimSpace(doc.ComputerID)
-	if computerID == "" && h.Core != nil {
-		computerID = strings.TrimSpace(h.Core.TextureSandboxID())
-	}
-	doc, err = h.Store.UpdateTextureDocumentTitleAuthority(r.Context(), docID, ownerID, computerID, req.Title)
-	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
-		case errors.Is(err, store.ErrLifecycleInvalidTransition), errors.Is(err, store.ErrConcurrentStateChange):
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-		default:
-			log.Printf("texture api: update document: %v", err)
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to update document"})
-		}
+	if strings.TrimSpace(req.Title) == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "title is required"})
 		return
 	}
-
+	if strings.TrimSpace(doc.ComputerID) == "" || strings.TrimSpace(doc.TrajectoryID) == "" {
+		err := h.refuseLegacyTextureWriter("update Texture document title")
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		return
+	}
+	head, err := h.getTextureRevision(r.Context(), ownerID, doc.CurrentRevisionID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "document head is unavailable"})
+		return
+	}
+	doc.Title = strings.TrimSpace(req.Title)
+	next := head
+	next.RevisionID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("texture-title:"+doc.DocID+"\x00"+doc.Title+"\x00"+head.RevisionID)).String()
+	next.CreatedAt = time.Now().UTC()
+	if _, err := h.appendTextureRevision(r.Context(), doc, next, "texture-title:"+next.RevisionID, computerevent.SupervisionActor{
+		ActorID: ownerID, Role: "owner", AuthorityRef: "owner:" + ownerID,
+	}); err != nil {
+		log.Printf("texture api: update document title: %v", err)
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		return
+	}
+	doc.CurrentRevisionID = next.RevisionID
+	doc.UpdatedAt = next.CreatedAt
 	writeAPIJSON(w, http.StatusOK, h.textureDocumentResponse(r.Context(), doc))
 }
 
@@ -1091,24 +1114,80 @@ func (h *Handler) handleTextureDeleteDocument(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-	computerID := ""
-	if h.Core != nil {
-		computerID = strings.TrimSpace(h.Core.TextureSandboxID())
-	}
-	document, err := h.Store.ArchiveTextureDocumentAuthority(r.Context(), docID, ownerID, computerID)
+	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
-		case errors.Is(err, store.ErrLifecycleInvalidTransition), errors.Is(err, store.ErrConcurrentStateChange):
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-		default:
-			log.Printf("texture api: archive document %s: %v", docID, err)
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to archive document"})
-		}
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
-	writeAPIJSON(w, http.StatusOK, map[string]any{"ok": true, "archived_at": document.ArchivedAt})
+	if strings.TrimSpace(doc.ComputerID) == "" || strings.TrimSpace(doc.TrajectoryID) == "" {
+		err := h.refuseLegacyTextureWriter("archive unimported Texture document")
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		return
+	}
+	snapshot, err := h.Store.GetSupervisionProjectionSnapshot(r.Context(), ownerID, doc.ComputerID, doc.TrajectoryID)
+	if err != nil {
+		log.Printf("texture api: load archive supervision snapshot: %v", err)
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "supervision projection is unavailable"})
+		return
+	}
+	if snapshot.Archived {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if !snapshot.Settled || snapshot.CanonicalEventHead == "" || snapshot.IntentRevisionID == "" ||
+		snapshot.ArtifactHeadRevisionID == "" || snapshot.ArtifactHeadRevisionID != doc.CurrentRevisionID {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "only the current head of a settled supervised document may be archived"})
+		return
+	}
+	if err := appendTextureArchive(r.Context(), h.Core, doc, snapshot, ownerID); err != nil {
+		log.Printf("texture api: archive supervised document: %v", err)
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type textureArchiveAppender interface {
+	AppendSupervisionTransactionWithPrivateArtifacts(context.Context, computerevent.SupervisionTransaction, []computerevent.PrivateSupervisionArtifactPayload) (computerevent.Receipt, string, []computerevent.PrivateSupervisionArtifact, error)
+}
+
+func appendTextureArchive(ctx context.Context, appender textureArchiveAppender, doc types.Document, snapshot types.SupervisionProjectionSnapshot, ownerID string) error {
+	lifecycleVersion := uint64(snapshot.LifecycleVersion)
+	commandID := "texture-archive:" + doc.TrajectoryID + ":" + snapshot.ArtifactHeadRevisionID
+	bindingID := "texture-archive-reason:" + doc.TrajectoryID + ":" + snapshot.ArtifactHeadRevisionID
+	reason, err := json.Marshal(map[string]string{
+		"schema": "choir.texture_archive_reason.v1", "owner_id": ownerID, "document_id": doc.DocID,
+		"trajectory_id": doc.TrajectoryID, "head_revision_id": snapshot.ArtifactHeadRevisionID, "reason": "owner_requested_delete",
+	})
+	if err != nil {
+		return fmt.Errorf("encode archive reason: %w", err)
+	}
+	body, err := json.Marshal(map[string]string{
+		"artifact_id": doc.DocID, "head_revision_id": snapshot.ArtifactHeadRevisionID,
+		"reason_artifact_ref": computerevent.SupervisionArtifactPlaceholder(bindingID),
+	})
+	if err != nil {
+		return fmt.Errorf("encode archive transaction: %w", err)
+	}
+	transaction := computerevent.SupervisionTransaction{
+		Schema: computerevent.SupervisionSchemaV1, Reducer: computerevent.SupervisionReducerV1,
+		DigestRecipe: computerevent.SupervisionDigestRecipeV1, TransactionID: commandID,
+		TransactionClass: "archive_artifact", OwnerID: ownerID, ComputerID: doc.ComputerID,
+		TrajectoryID: doc.TrajectoryID, CommandID: commandID, CommandDigest: computerevent.ZeroHead,
+		Actor: computerevent.SupervisionActor{ActorID: ownerID, Role: "owner", AuthorityRef: "owner:" + ownerID},
+		Expected: computerevent.SupervisionExpected{
+			CanonicalEventHead: &snapshot.CanonicalEventHead, LifecycleVersion: &lifecycleVersion,
+			IntentRevisionID: &snapshot.IntentRevisionID, ArtifactHeadRevisionID: &snapshot.ArtifactHeadRevisionID,
+		},
+		Mutations: []computerevent.SupervisionMutation{{Kind: "artifact_archived", Body: body}},
+	}
+	if appender == nil {
+		return fmt.Errorf("archive supervision authority unavailable")
+	}
+	_, _, _, err = appender.AppendSupervisionTransactionWithPrivateArtifacts(ctx, transaction, []computerevent.PrivateSupervisionArtifactPayload{{
+		BindingID: bindingID, Plaintext: reason, MediaType: computerevent.SupervisionEvidenceMediaTypeV1,
+	}})
+	return err
 }
 
 // HandleTextureRevisions handles POST and GET
@@ -1230,45 +1309,49 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 	}
 
 	if lifecycleBound {
-		snapshot, snapshotErr := h.Store.GetLifecycleSnapshot(r.Context(), ownerID, doc.ComputerID, doc.TrajectoryID)
-		if snapshotErr != nil {
-			log.Printf("texture api: load lifecycle for revision: %v", snapshotErr)
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load lifecycle revision authority"})
-			return
-		}
-		command := types.CommitLifecycleArtifactHeadRequest{
-			OwnerID: ownerID, ComputerID: doc.ComputerID,
-			CommandID:    "public-head:" + strings.TrimSpace(req.IdempotencyKey),
-			TrajectoryID: doc.TrajectoryID, ExpectedLifecycleVersion: req.ExpectedLifecycleVersion,
-			ExpectedHeadRevisionID: parentID, Unbound: snapshot.Trajectory.Status != types.TrajectoryLive, Revision: rev,
-		}
-		commandDigest, digestErr := store.ComputeCommitLifecycleArtifactHeadDigest(command)
-		if digestErr != nil {
-			log.Printf("texture api: digest lifecycle revision command: %v", digestErr)
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle revision payload"})
-			return
-		}
-		command.CommandDigest = commandDigest
-		result, commitErr := h.Store.CommitLifecycleArtifactHead(r.Context(), command)
-		if commitErr != nil {
-			if errors.Is(commitErr, store.ErrConcurrentStateChange) || errors.Is(commitErr, store.ErrLifecycleCommandConflict) || errors.Is(commitErr, store.ErrLifecycleInvalidTransition) {
-				writeAPIJSON(w, http.StatusConflict, apiError{Error: commitErr.Error()})
-			} else {
-				log.Printf("texture api: commit lifecycle revision: %v", commitErr)
-				writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to commit lifecycle revision"})
+		if existing, existingErr := h.Store.GetLifecycleRevision(r.Context(), ownerID, doc.ComputerID, revisionID); existingErr == nil {
+			if existing.DocID != rev.DocID || existing.ParentRevisionID != rev.ParentRevisionID || existing.Content != rev.Content ||
+				!bytes.Equal(existing.BodyDoc, rev.BodyDoc) || !bytes.Equal(existing.SourceEntities, rev.SourceEntities) ||
+				!bytes.Equal(existing.Citations, rev.Citations) || !bytes.Equal(existing.Metadata, rev.Metadata) {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: "idempotency key is already bound to a different revision"})
+				return
 			}
+			h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, existing)
+			writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), existing))
+			return
+		} else if !errors.Is(existingErr, store.ErrNotFound) {
+			log.Printf("texture api: load idempotent lifecycle revision: %v", existingErr)
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "supervision projection is unavailable"})
 			return
 		}
-		if result.Revision == nil {
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "lifecycle revision result unavailable"})
+	}
+
+	if lifecycleBound {
+		projected, projectionErr := h.Store.GetSupervisionProjectionSnapshot(r.Context(), ownerID, doc.ComputerID, doc.TrajectoryID)
+		if projectionErr != nil {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "supervision projection is unavailable"})
 			return
 		}
-		h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, *result.Revision)
-		writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), *result.Revision))
+		if projected.LifecycleVersion != req.ExpectedLifecycleVersion || projected.ArtifactHeadRevisionID != parentID {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "document head changed; reload the latest version before saving"})
+			return
+		}
+	}
+	if lifecycleBound {
+		storedRev, appendErr := h.appendTextureRevision(r.Context(), doc, rev, "public-head:"+strings.TrimSpace(req.IdempotencyKey), computerevent.SupervisionActor{
+			ActorID: ownerID, Role: "owner", AuthorityRef: "owner:" + ownerID,
+		})
+		if appendErr != nil {
+			log.Printf("texture api: append supervised revision: %v", appendErr)
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: appendErr.Error()})
+			return
+		}
+		h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, storedRev)
+		writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), storedRev))
 		return
 	}
 
-	if err := h.Store.CreateRevision(r.Context(), rev); err != nil {
+	if err := h.refuseLegacyTextureWriter("create Texture revision"); err != nil {
 		log.Printf("texture api: create revision: %v", err)
 		if errors.Is(err, store.ErrStaleDocumentHead) {
 			if req.AllowRebase && parentID != "" && len(strings.TrimSpace(string(req.BodyDoc))) == 0 {
@@ -1340,7 +1423,7 @@ func (h *Handler) createRebasedUserRevision(ctx context.Context, docID, ownerID 
 		ParentRevisionID: headRev.RevisionID,
 		CreatedAt:        now,
 	}
-	if err := h.Store.CreateRevision(ctx, rev); err != nil {
+	if err := h.refuseLegacyTextureWriter("create rebased Texture revision"); err != nil {
 		return types.Revision{}, fmt.Errorf("create rebased user revision: %w", err)
 	}
 	storedRev, err := h.getTextureRevision(ctx, ownerID, rev.RevisionID)
@@ -1746,6 +1829,18 @@ func (h *Handler) HandleTextureDocumentStream(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
+	var supervision *types.SupervisionProjectionSnapshot
+	if doc.ComputerID != "" && doc.TrajectoryID != "" {
+		projected, projectionErr := h.Store.GetSupervisionProjectionSnapshot(r.Context(), ownerID, doc.ComputerID, doc.TrajectoryID)
+		if projectionErr == nil {
+			projectedCopy := projected
+			supervision = &projectedCopy
+		} else if !errors.Is(projectionErr, store.ErrNotFound) {
+			log.Printf("texture api: load supervision projection for stream: %v", projectionErr)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load supervision projection"})
+			return
+		}
+	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -1770,6 +1865,7 @@ func (h *Handler) HandleTextureDocumentStream(w http.ResponseWriter, r *http.Req
 			}
 			return pendingMutation.RunID
 		}(),
+		Supervision: supervision,
 	})
 
 	ch := h.Bus.SubscribeWithBuffer(128)
@@ -1941,18 +2037,14 @@ func (h *Handler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
-	if strings.TrimSpace(doc.TrajectoryID) != "" {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle-authored documents cannot be restored outside the durable lifecycle"})
+	if strings.TrimSpace(doc.ComputerID) == "" || strings.TrimSpace(doc.TrajectoryID) == "" {
+		err := h.refuseLegacyTextureWriter("restore unimported Texture revision")
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
 		return
 	}
 	sourceRev, err := h.getTextureRevision(r.Context(), ownerID, strings.TrimSpace(req.RevisionID))
 	if err != nil || sourceRev.DocID != docID {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
-		return
-	}
-	if err := h.canonicalizeAliasedTextureDocumentTitle(r.Context(), ownerID, &doc, time.Now().UTC()); err != nil {
-		log.Printf("texture api: canonicalize restore document title: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to canonicalize document title"})
 		return
 	}
 	metadata := mergeTextureRevisionMetadata(sourceRev.Metadata, map[string]any{
@@ -1971,7 +2063,7 @@ func (h *Handler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http.Re
 		})
 	}
 	rev := types.Revision{
-		RevisionID:       uuid.New().String(),
+		RevisionID:       uuid.NewSHA1(uuid.NameSpaceOID, []byte("texture-restore:"+docID+"\x00"+sourceRev.RevisionID+"\x00"+doc.CurrentRevisionID+"\x00"+strings.TrimSpace(req.Mode))).String(),
 		DocID:            docID,
 		OwnerID:          ownerID,
 		AuthorKind:       types.AuthorUser,
@@ -1982,15 +2074,12 @@ func (h *Handler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http.Re
 		ParentRevisionID: doc.CurrentRevisionID,
 		CreatedAt:        time.Now().UTC(),
 	}
-	if err := h.Store.CreateRevision(r.Context(), rev); err != nil {
-		log.Printf("texture api: restore revision: %v", err)
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "failed to restore revision; document head may have changed"})
-		return
-	}
-	storedRev, err := h.getTextureRevision(r.Context(), ownerID, rev.RevisionID)
-	if err != nil {
-		log.Printf("texture api: load restored revision: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load restored revision"})
+	storedRev, appendErr := h.appendTextureRevision(r.Context(), doc, rev, "texture-restore:"+rev.RevisionID, computerevent.SupervisionActor{
+		ActorID: ownerID, Role: "owner", AuthorityRef: "owner:" + ownerID,
+	})
+	if appendErr != nil {
+		log.Printf("texture api: append restored revision: %v", appendErr)
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: appendErr.Error()})
 		return
 	}
 	h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, storedRev)

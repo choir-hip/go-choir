@@ -91,7 +91,7 @@ reasoning = "medium"
 		t.Fatalf("conductor overlay = %q; metadata=%+v", got, conductor.Metadata)
 	}
 
-	runs, err := core.Store().ListLifecycleRunsByChannel(context.Background(), "user-alice", "sandbox-test", resp.DocID, 20)
+	runs, err := core.Store().ListRunsByChannel(context.Background(), "user-alice", resp.DocID, 20)
 	if err != nil {
 		t.Fatalf("ListRunsByChannel: %v", err)
 	}
@@ -131,6 +131,7 @@ func promptEvalTestSetup(t *testing.T, policyPath string) (*agentcore.Runtime, *
 		t.Fatalf("open store: %v", err)
 	}
 	bus := events.NewEventBus()
+	appender, cipher := newTextureTestEventAppender(t, s, dir)
 	core := agentcore.New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
@@ -138,7 +139,11 @@ func promptEvalTestSetup(t *testing.T, policyPath string) (*agentcore.Runtime, *
 		ModelPolicyPath:     policyPath,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
-	}, s, bus, provider.NewStubProvider(0), agentcore.WithContentService(contentowner.NewService(s, bus)))
+	}, s, bus, provider.NewStubProvider(0),
+		agentcore.WithContentService(contentowner.NewService(s, bus)),
+		agentcore.WithComputerEventAppender(appender),
+		agentcore.WithPrivateArtifactCipher(cipher),
+	)
 	core.SetDispatchActor(func(ctx context.Context, ownerID, computerID, _ string, kind, content, _, _ string) error {
 		if kind != "initial_dispatch" || strings.TrimSpace(content) == "" {
 			return nil

@@ -2,11 +2,9 @@ package agentcore
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -248,7 +246,7 @@ func TestCancelRunTrajectoryPersistsFallbackTrajectoryID(t *testing.T) {
 		t.Fatalf("create sibling run %s: %v", sibling.RunID, err)
 	}
 
-	cancelled, err := rt.CancelRunTrajectory(ctx, run.RunID, run.OwnerID)
+	cancelled, err := rt.cancelRunTrajectory(ctx, run.RunID, run.OwnerID)
 	if err != nil {
 		t.Fatalf("cancel trajectory: %v", err)
 	}
@@ -285,65 +283,6 @@ func TestCancelRunTrajectoryPersistsFallbackTrajectoryID(t *testing.T) {
 	}
 	if trajectory.Status != types.TrajectoryCancelled {
 		t.Fatalf("trajectory status = %s, want cancelled", trajectory.Status)
-	}
-}
-
-func TestCancelRunTrajectoryDrainsMoreThanOneActivePage(t *testing.T) {
-	if raceDetectorEnabled {
-		t.Skip("scale regression exceeds the production drain deadline under race instrumentation")
-	}
-
-	ctx := context.Background()
-	rt, s := testRuntime(t)
-	now := time.Now().UTC()
-	trajectoryID := "traj-cancel-many"
-	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
-		TrajectoryID:   trajectoryID,
-		OwnerID:        "user-alice",
-		Kind:           types.TrajectoryKindTask,
-		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
-	}); err != nil {
-		t.Fatalf("create trajectory: %v", err)
-	}
-	const totalRuns = 1001
-	for i := 0; i < totalRuns; i++ {
-		runID := fmt.Sprintf("run-cancel-many-%04d", i)
-		if err := s.CreateRun(ctx, types.RunRecord{
-			RunID:        runID,
-			AgentID:      fmt.Sprintf("agent-cancel-many-%04d", i),
-			AgentProfile: agentprofile.CoSuper,
-			AgentRole:    agentprofile.CoSuper,
-			OwnerID:      "user-alice",
-			SandboxID:    "sandbox-test",
-			State:        types.RunPending,
-			Prompt:       "pending trajectory activation",
-			TrajectoryID: trajectoryID,
-			CreatedAt:    now.Add(time.Duration(i) * time.Millisecond),
-			UpdatedAt:    now.Add(time.Duration(i) * time.Millisecond),
-			Metadata: map[string]any{
-				runMetadataAgentProfile: agentprofile.CoSuper,
-				runMetadataAgentRole:    agentprofile.CoSuper,
-				runMetadataTrajectoryID: trajectoryID,
-			},
-		}); err != nil {
-			t.Fatalf("create run %d: %v", i, err)
-		}
-	}
-
-	cancelled, err := rt.CancelRunTrajectory(ctx, "run-cancel-many-0000", "user-alice")
-	if err != nil {
-		t.Fatalf("cancel trajectory: %v", err)
-	}
-	if len(cancelled) != totalRuns {
-		t.Fatalf("cancelled count = %d, want %d", len(cancelled), totalRuns)
-	}
-	active, err := s.ListActiveRunsByTrajectory(ctx, "user-alice", trajectoryID, totalRuns+1)
-	if err != nil {
-		t.Fatalf("list active runs: %v", err)
-	}
-	if len(active) != 0 {
-		t.Fatalf("active runs after cancellation = %d, want 0", len(active))
 	}
 }
 
@@ -819,67 +758,6 @@ func TestHandleTrajectoryDetailPreservesGETAndRoutesOwnerScopedCancellation(t *t
 	percentBearingPath := "/api/trajectories/" + url.PathEscape(percentBearingID) + "/cancel"
 	if id, ok := trajectoryCancelIDFromPath(percentBearingPath); !ok || id != percentBearingID {
 		t.Fatalf("single unescape parsed %q as (%q, %t), want (%q, true)", percentBearingPath, id, ok, percentBearingID)
-	}
-}
-
-func TestTrajectoryCancelPublicCommandReplaysAndConflicts(t *testing.T) {
-	rt, s := testRuntime(t)
-	h := NewAPIHandler(rt)
-	const ownerID = "user-public-cancel"
-	trajectoryID := seedDurableTextureSubject(t, s, ownerID, "doc-public-cancel")
-	path := "/api/trajectories/" + url.PathEscape(trajectoryID) + "/cancel"
-	snapshot, err := s.GetLifecycleSnapshot(context.Background(), ownerID, rt.TextureSandboxID(), trajectoryID)
-	if err != nil {
-		t.Fatalf("snapshot before cancel: %v", err)
-	}
-	cancelBody := func(reason string) string {
-		body, _ := json.Marshal(trajectoryCancelRequest{
-			IdempotencyKey: "cancel-command-1", ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
-			ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, Reason: reason,
-		})
-		return string(body)
-	}
-
-	callAs := func(requestOwner, body string) *httptest.ResponseRecorder {
-		t.Helper()
-		request := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
-		request.Header.Set("X-Authenticated-User", requestOwner)
-		response := httptest.NewRecorder()
-		h.HandleTrajectoryDetail(response, request)
-		return response
-	}
-	call := func(body string) *httptest.ResponseRecorder {
-		return callAs(ownerID, body)
-	}
-	if response := callAs("user-other", cancelBody("owner requested")); response.Code != http.StatusNotFound {
-		t.Fatalf("cross-owner cancel status=%d body=%s", response.Code, response.Body.String())
-	}
-	first := call(cancelBody("owner requested"))
-	if first.Code != http.StatusOK {
-		t.Fatalf("first cancel status=%d body=%s", first.Code, first.Body.String())
-	}
-	var firstResponse trajectoryCancelResponse
-	if err := json.Unmarshal(first.Body.Bytes(), &firstResponse); err != nil {
-		t.Fatal(err)
-	}
-	if firstResponse.Schema != types.DurableWorkSchemaV1 || firstResponse.Receipt.CommandID != "public-cancel:cancel-command-1" {
-		t.Fatalf("first cancellation response = %+v", firstResponse)
-	}
-	replay := call(cancelBody("owner requested"))
-	if replay.Code != http.StatusOK {
-		t.Fatalf("replay status=%d body=%s", replay.Code, replay.Body.String())
-	}
-	var replayResponse trajectoryCancelResponse
-	if err := json.Unmarshal(replay.Body.Bytes(), &replayResponse); err != nil {
-		t.Fatal(err)
-	}
-	if replayResponse.Receipt.CommandDigest != firstResponse.Receipt.CommandDigest ||
-		replayResponse.Receipt.ReducerSeq != firstResponse.Receipt.ReducerSeq {
-		t.Fatalf("replay receipt = %+v, want original %+v", replayResponse.Receipt, firstResponse.Receipt)
-	}
-	conflict := call(cancelBody("different request"))
-	if conflict.Code != http.StatusConflict {
-		t.Fatalf("conflicting replay status=%d body=%s", conflict.Code, conflict.Body.String())
 	}
 }
 

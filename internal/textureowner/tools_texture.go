@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
@@ -397,50 +398,70 @@ func newRecordTextureDecisionTool(rt *Handler) toolregistry.Tool {
 			if docID == "" {
 				return "", fmt.Errorf("doc_id is required when the Texture run is not document-scoped")
 			}
-			if _, err := rt.getTextureDocument(ctx, rec.OwnerID, docID); err != nil {
-				return "", fmt.Errorf("get texture document for decision: %w", err)
-			}
-			// One decision record per (run, kind, reason). The deterministic initial
-			// decision recorder may already have stored an equivalent note before the
-			// loop, and the model may also call this tool; recording the identical
-			// decision twice in one run is never useful, so dedupe idempotently.
-			if existing, err := rt.Store.ListTextureDecisionsByDocument(ctx, rec.OwnerID, docID, 100); err == nil {
-				for _, prior := range existing {
-					if prior.RunID == rec.RunID && prior.DecisionKind == decisionKind && prior.Reason == reason {
-						return toolregistry.ResultJSON(map[string]any{
-							"decision_id":   prior.DecisionID,
-							"doc_id":        prior.DocID,
-							"decision_kind": prior.DecisionKind,
-							"status":        "recorded",
-							"created_at":    prior.CreatedAt.Format(time.RFC3339Nano),
-						})
-					}
-				}
-			}
+			decisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(rec.RunID+"\x00"+decisionKind+"\x00"+reason)).String()
 			now := time.Now().UTC()
 			decision := types.TextureDecisionRecord{
-				DecisionID:   uuid.NewString(),
-				OwnerID:      rec.OwnerID,
-				DocID:        docID,
-				RunID:        rec.RunID,
-				TrajectoryID: trajectoryIDForRun(rec),
-				ActorID:      rec.AgentID,
-				DecisionKind: decisionKind,
-				Reason:       reason,
-				EvidenceRefs: trimNonEmpty(in.EvidenceRefs),
-				NextAction:   strings.TrimSpace(in.NextAction),
-				CreatedAt:    now,
+				DecisionID: decisionID, OwnerID: rec.OwnerID, DocID: docID, RunID: rec.RunID,
+				TrajectoryID: trajectoryIDForRun(rec), ActorID: rec.AgentID, DecisionKind: decisionKind,
+				Reason: reason, EvidenceRefs: trimNonEmpty(in.EvidenceRefs),
+				NextAction: strings.TrimSpace(in.NextAction), CreatedAt: now,
 			}
-			if err := rt.Store.CreateTextureDecision(ctx, decision); err != nil {
-				return "", err
+			doc, err := rt.getTextureDocument(ctx, rec.OwnerID, docID)
+			if err != nil {
+				return "", fmt.Errorf("load supervised Texture decision document: %w", err)
 			}
-			rt.emitTextureDecisionRecordedEvent(ctx, rec, decision)
+			if doc.ComputerID == "" || doc.TrajectoryID == "" || rt.Core == nil {
+				return "", rt.refuseLegacyTextureWriter("record Texture decision")
+			}
+			snapshot, err := rt.Store.GetSupervisionProjectionSnapshot(ctx, rec.OwnerID, doc.ComputerID, doc.TrajectoryID)
+			if err != nil {
+				return "", fmt.Errorf("load Texture decision supervision state: %w", err)
+			}
+			for _, existing := range snapshot.Control.Messages {
+				if existing.ID == decisionID {
+					return toolregistry.ResultJSON(map[string]any{
+						"decision_id": decision.DecisionID, "doc_id": decision.DocID,
+						"decision_kind": decision.DecisionKind, "status": "recorded",
+					})
+				}
+			}
+			payload, err := json.Marshal(decision)
+			if err != nil {
+				return "", fmt.Errorf("encode Texture decision payload: %w", err)
+			}
+			bindingID := decisionID + ":payload"
+			payloadRef := computerevent.SupervisionArtifactPlaceholder(bindingID)
+			toActorID := rec.OwnerID
+			body, err := json.Marshal(map[string]any{
+				"message_id": decisionID, "from_actor_id": rec.AgentID, "to_role": "owner",
+				"to_actor_id": toActorID, "channel_id": docID, "payload_artifact_ref": payloadRef, "material": false,
+			})
+			if err != nil {
+				return "", fmt.Errorf("encode Texture decision transaction: %w", err)
+			}
+			lifecycleVersion := uint64(snapshot.LifecycleVersion)
+			transaction := computerevent.SupervisionTransaction{
+				Schema: computerevent.SupervisionSchemaV1, Reducer: computerevent.SupervisionReducerV1,
+				DigestRecipe: computerevent.SupervisionDigestRecipeV1, TransactionID: decisionID,
+				TransactionClass: "record_message", OwnerID: rec.OwnerID, ComputerID: doc.ComputerID,
+				TrajectoryID: doc.TrajectoryID, CommandID: decisionID, CommandDigest: computerevent.ZeroHead,
+				Actor: computerevent.SupervisionActor{ActorID: rec.AgentID, Role: "texture", AuthorityRef: "texture:trajectory:" + doc.TrajectoryID},
+				Expected: computerevent.SupervisionExpected{
+					CanonicalEventHead: &snapshot.CanonicalEventHead, LifecycleVersion: &lifecycleVersion,
+					IntentRevisionID: &snapshot.IntentRevisionID, ArtifactHeadRevisionID: &snapshot.ArtifactHeadRevisionID,
+				},
+				Mutations: []computerevent.SupervisionMutation{{Kind: "actor_message_recorded", Body: body}},
+			}
+			if _, _, _, err := rt.Core.AppendSupervisionTransactionWithPrivateArtifacts(ctx, transaction, []computerevent.PrivateSupervisionArtifactPayload{{
+				BindingID: bindingID, Plaintext: payload, MediaType: "application/vnd.choir.texture-decision.v1+json",
+			}}); err != nil {
+				return "", fmt.Errorf("record Texture decision supervision transaction: %w", err)
+			}
 			return toolregistry.ResultJSON(map[string]any{
 				"decision_id":   decision.DecisionID,
 				"doc_id":        decision.DocID,
 				"decision_kind": decision.DecisionKind,
 				"status":        "recorded",
-				"created_at":    decision.CreatedAt.Format(time.RFC3339Nano),
 			})
 		}}
 }
@@ -587,10 +608,15 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	if err != nil {
 		return types.Revision{}, fmt.Errorf("get texture document: %w", err)
 	}
-	if strings.TrimSpace(doc.TrajectoryID) == "" {
-		if err := rt.canonicalizeAliasedTextureDocumentTitle(ctx, rec.OwnerID, &doc, time.Now().UTC()); err != nil {
-			return types.Revision{}, fmt.Errorf("canonicalize texture document title: %w", err)
-		}
+	if strings.TrimSpace(doc.TrajectoryID) == "" || strings.TrimSpace(doc.ComputerID) == "" {
+		_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
+		return types.Revision{}, fmt.Errorf("create Texture revision: %w", rt.refuseLegacyTextureWriter("unimported legacy Texture document"))
+	}
+	if doc.ComputerID != computerID || rec.TrajectoryID != doc.TrajectoryID ||
+		(metadataStringValue(rec.Metadata, "trajectory_id") != "" &&
+			metadataStringValue(rec.Metadata, "trajectory_id") != doc.TrajectoryID) {
+		_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
+		return types.Revision{}, fmt.Errorf("create Texture revision: run scope does not match supervised document")
 	}
 	if strings.TrimSpace(doc.CurrentRevisionID) == "" {
 		return types.Revision{}, fmt.Errorf("document has no current revision")
@@ -630,13 +656,6 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		return types.Revision{}, err
 	}
 
-	canonicalPath := ""
-	if strings.TrimSpace(doc.TrajectoryID) == "" {
-		canonicalPath, err = rt.ensureCanonicalTextureProjectionPath(ctx, rec.OwnerID, doc)
-		if err != nil {
-			return types.Revision{}, fmt.Errorf("ensure canonical texture projection path: %w", err)
-		}
-	}
 	consumedThroughSeq := rt.textureWorkerUpdateCommitSeq(ctx, rec, doc.DocID, mutation)
 	revMeta := addTextureEditRevisionMetadata(rt.buildAppagentRevisionMetadata(ctx, rec, doc, rec.OwnerID, mutation, consumedThroughSeq), materialized, rec)
 	if materialized.Content == currentRevision.Content {
@@ -648,11 +667,6 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 			return types.Revision{}, fmt.Errorf("initial model-prior Texture revision must change prompt content before first paint is stored")
 		}
 	}
-	if canonicalPath != "" {
-		revMeta = mergeTextureRevisionMetadata(revMeta, map[string]any{
-			canonicalTextureSourcePathMetadataKey: canonicalPath,
-		})
-	}
 	revMeta = sanitizeTextureToolRevisionMetadata(revMeta)
 	now := time.Now().UTC()
 	rev := types.Revision{
@@ -661,6 +675,7 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		OwnerID:          rec.OwnerID,
 		AuthorKind:       types.AuthorAppAgent,
 		AuthorLabel:      "appagent",
+		Content:          materialized.Content,
 		BodyDoc:          materialized.BodyDoc,
 		SourceEntities:   materialized.SourceEntities,
 		Citations:        json.RawMessage("[]"),
@@ -669,119 +684,33 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		ParentRevisionID: baseRevisionID,
 		CreatedAt:        now,
 	}
-	if strings.TrimSpace(doc.TrajectoryID) != "" {
-		workDisposition := strings.TrimSpace(in.WorkDisposition)
-		if workDisposition == "" {
-			workDisposition = string(types.WorkItemOpen)
-		}
-		workItemID := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id"))
-		if workItemID == "" {
-			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-			return types.Revision{}, fmt.Errorf("create Texture revision: lifecycle work identity missing")
-		}
-		agentID := strings.TrimSpace(rec.AgentID)
-		expectedAgentID := currentTextureAgentID(doc.DocID)
-		if agentID == "" || agentID != expectedAgentID {
-			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-			return types.Revision{}, fmt.Errorf("create Texture revision: run agent %q does not own lifecycle subject %q", agentID, expectedAgentID)
-		}
-		rev.RevisionID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
-			"choir:texture:lifecycle-revision", doc.TrajectoryID, baseRevisionID, objectgraph.SHA256(materialized.BodyDoc),
-		}, ":"))).String()
-		rev.ComputerID = strings.TrimSpace(doc.ComputerID)
-		graph, err := textureToolSourceGraphWriteSet(rev, materialized, rec)
-		if err != nil {
-			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-			return types.Revision{}, fmt.Errorf("build Texture source graph shadow write: %w", err)
-		}
-		producerUpdateID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{"choir:texture:lifecycle-update", doc.TrajectoryID, workItemID, baseRevisionID, objectgraph.SHA256(materialized.BodyDoc)}, ":"))).String()
-		packet := types.CoagentSourcePacketPayload{
-			SchemaVersion: types.CoagentSourcePacketSchemaV1,
-			Kind:          "artifact_revision", Summary: "Texture appagent produced a candidate artifact revision",
-		}
-		payloadDigest, digestErr := store.ComputeLifecycleUpdatePayloadDigest(packet, materialized.Content)
-		if digestErr != nil {
-			return types.Revision{}, fmt.Errorf("digest Texture lifecycle update: %w", digestErr)
-		}
-		queue := types.QueueLifecycleUpdateRequest{
-			OwnerID: rec.OwnerID, ComputerID: doc.ComputerID,
-			CommandID:    "texture-lifecycle-queue:" + producerUpdateID,
-			TrajectoryID: doc.TrajectoryID, TargetAgentID: agentID, ProducerAgentID: agentID,
-			ProducerUpdateID: producerUpdateID, UpdateID: producerUpdateID,
-			Packet: packet, Content: materialized.Content, PayloadDigest: payloadDigest,
-			WorkDisposition: types.WorkItemStatus(workDisposition), WorkItemID: workItemID,
-		}
-		queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
-		if _, err := rt.Store.QueueLifecycleUpdate(ctx, queue); err != nil {
-			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-			return types.Revision{}, fmt.Errorf("queue Texture lifecycle revision: %w", err)
-		}
-		apply := types.ApplyLifecycleUpdateRequest(queue)
-		apply.CommandID = "texture-lifecycle-apply:" + producerUpdateID
-		apply.Disposition, apply.DispositionRef = types.UpdateIncorporated, rev.RevisionID
-		apply.Revision = rev
-		if workDisposition == string(types.WorkItemCompleted) {
-			apply.WorkDisposition = types.WorkItemCompleted
-			apply.WorkItemID, apply.WorkResultRef = workItemID, rev.RevisionID
-		}
-		if len(in.UpdateDispositions) > 0 {
-			snapshot, snapshotErr := rt.Store.GetLifecycleSnapshot(ctx, rec.OwnerID, doc.ComputerID, doc.TrajectoryID)
-			if snapshotErr != nil {
-				return types.Revision{}, fmt.Errorf("load pending lifecycle updates: %w", snapshotErr)
-			}
-			pendingByID := make(map[string]types.CoagentSourcePacket, len(snapshot.Updates))
-			for _, pending := range snapshot.Updates {
-				if pending.UpdateID != queue.UpdateID && pending.Disposition == types.UpdatePending {
-					pendingByID[pending.UpdateID] = pending
-				}
-			}
-			for _, decision := range in.UpdateDispositions {
-				pending, ok := pendingByID[decision.UpdateID]
-				if !ok || pending.TargetAgentID != agentID {
-					_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-					return types.Revision{}, fmt.Errorf("Texture update disposition %q does not name a pending addressed lifecycle update", decision.UpdateID)
-				}
-				related := types.ApplyLifecycleRelatedUpdate{
-					TargetAgentID: pending.TargetAgentID, ProducerAgentID: pending.AgentID,
-					ProducerUpdateID: pending.ProducerUpdateID, UpdateID: pending.UpdateID,
-					Disposition: types.UpdateDisposition(decision.Disposition), DispositionRef: rev.RevisionID,
-					WorkDisposition: pending.WorkDisposition, WorkItemID: pending.WorkItemID,
-					Reason: decision.Reason,
-				}
-				if related.WorkItemID != "" && pending.WorkDisposition == types.WorkItemCompleted {
-					related.WorkResultRef = rev.RevisionID
-					if related.Disposition == types.UpdateRejected {
-						related.WorkDisposition = types.WorkItemRefused
-					}
-				}
-				apply.RelatedUpdates = append(apply.RelatedUpdates, related)
-			}
-		}
-		apply.CommandDigest = ""
-		apply.CommandDigest, _ = store.ComputeApplyLifecycleUpdateWithSourceGraphDigest(apply, graph)
-		if _, err := rt.Store.ApplyLifecycleUpdateWithSourceGraph(ctx, apply, graph); err != nil {
-			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-			return types.Revision{}, fmt.Errorf("apply Texture lifecycle revision: %w", err)
-		}
-	} else {
-		graph, graphErr := textureToolSourceGraphWriteSet(rev, materialized, rec)
-		if graphErr != nil {
-			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-			return types.Revision{}, fmt.Errorf("build Texture source graph shadow write: %w", graphErr)
-		}
-		if err := rt.Store.CreateRevisionWithSourceGraph(ctx, rev, graph); err != nil {
-			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-			return types.Revision{}, fmt.Errorf("create Texture revision: %w", err)
-		}
-	}
 	var storedRev types.Revision
-	if durableLifecycle {
-		storedRev, err = rt.Store.GetLifecycleRevision(ctx, rec.OwnerID, computerID, rev.RevisionID)
-	} else {
-		storedRev, err = rt.Store.GetRevision(ctx, rev.RevisionID, rec.OwnerID)
+	workItemID := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id"))
+	if workItemID == "" {
+		_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
+		return types.Revision{}, fmt.Errorf("create Texture revision: supervision assignment identity missing")
 	}
+	agentID := strings.TrimSpace(rec.AgentID)
+	expectedAgentID := currentTextureAgentID(doc.DocID)
+	if agentID == "" || agentID != expectedAgentID {
+		_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
+		return types.Revision{}, fmt.Errorf("create Texture revision: run agent %q does not own supervised subject %q", agentID, expectedAgentID)
+	}
+	revisionMaterialDigest := objectgraph.SHA256([]byte(strings.Join([]string{
+		materialized.Content, string(materialized.BodyDoc), string(materialized.SourceEntities), string(rev.Metadata),
+	}, "\x00")))
+	rev.RevisionID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
+		"choir:texture:supervision-revision", doc.TrajectoryID, workItemID, rec.RunID, baseRevisionID, revisionMaterialDigest,
+	}, ":"))).String()
+	rev.ComputerID = strings.TrimSpace(doc.ComputerID)
+	commandID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
+		"choir:texture:supervision-revision-command", doc.TrajectoryID, workItemID, rec.RunID, baseRevisionID, revisionMaterialDigest,
+	}, ":"))).String()
+	storedRev, err = rt.appendTextureRevision(ctx, doc, rev, commandID, computerevent.SupervisionActor{
+		ActorID: agentID, Role: "texture", AuthorityRef: "texture:trajectory:" + doc.TrajectoryID,
+	})
 	if err != nil {
-		return types.Revision{}, fmt.Errorf("load created Texture revision: %w", err)
+		return types.Revision{}, fmt.Errorf("create canonical Texture revision: %w", err)
 	}
 	if err := rt.Store.RecordAgentMutationRevision(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, rev.RevisionID); err != nil {
 		if err != store.ErrMutationAlreadyCompleted {

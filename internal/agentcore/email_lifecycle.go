@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -67,6 +67,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	if ownerID == "" {
 		return nil, fmt.Errorf("owner_id is required")
 	}
+
 	docID := strings.TrimSpace(in.DocID)
 	revisionID := strings.TrimSpace(in.RevisionID)
 	sourceHash := strings.TrimSpace(in.SourceContentHash)
@@ -99,28 +100,74 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 
 	agentID := persistentEmailAgentID(ownerID)
 	now := time.Now().UTC()
-	runID := uuid.NewString()
-	if err := rt.store.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   agentID,
-		OwnerID:   ownerID,
-		SandboxID: rt.cfg.SandboxID,
-		Profile:   agentprofile.Email,
-		Role:      agentprofile.Email,
-		ChannelID: agentID,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}); err != nil {
-		return nil, fmt.Errorf("persist email appagent: %w", err)
-	}
-
 	fromAlias := cleanEmailDraftFromAlias(in.FromAlias)
-	draftID := "email-draft-request-" + uuid.NewString()
-	versionID := "email-draft-version-" + uuid.NewString()
 	draftVersionHash := emailDraftVersionHash(fromAlias, toAddresses, in.CCAddresses, in.BCCAddresses, subject, body, docID, revisionID, sourceHash)
 	risk := detectEmailDraftPolicyRisk(subject, body, toAddresses, in.CCAddresses, in.BCCAddresses)
 	status := "draft_pending_owner_approval"
 	if risk != "" {
 		status = "blocked_risk_alert_required"
+	}
+	trajectoryID := trajectoryIDForRun(parent)
+	snapshot, err := rt.store.GetSupervisionProjectionSnapshot(ctx, ownerID, parent.SandboxID, trajectoryID)
+	if err != nil {
+		return nil, fmt.Errorf("load email draft supervision state: %w", err)
+	}
+	payload, err := json.Marshal(map[string]any{
+		"doc_id": docID, "revision_id": revisionID, "source_content_hash": sourceHash,
+		"from_alias": fromAlias, "to_addresses": toAddresses,
+		"cc_addresses": normalizeEmailAddressList(in.CCAddresses), "bcc_addresses": normalizeEmailAddressList(in.BCCAddresses),
+		"subject": subject, "body_text": body, "source_refs": in.SourceRefs, "approval_mode": approvalMode,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("encode email draft supervision payload: %w", err)
+	}
+	identity := strings.TrimPrefix(computerevent.DigestBytes(payload), "sha256:")
+	messageID := "email-draft-request-" + identity
+	runID := "email-draft-run-" + identity
+	draftID := messageID
+	versionID := "email-draft-version-" + identity
+	messageRecorded := false
+	for _, existing := range snapshot.Control.Messages {
+		if existing.ID == messageID {
+			messageRecorded = true
+			break
+		}
+	}
+	if !messageRecorded {
+		bindingID := messageID + ":payload"
+		payloadRef := computerevent.SupervisionArtifactPlaceholder(bindingID)
+		mutationBody, err := json.Marshal(map[string]any{
+			"message_id": messageID, "from_actor_id": parent.AgentID, "to_role": "owner",
+			"to_actor_id": ownerID, "channel_id": docID, "payload_artifact_ref": payloadRef, "material": false,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("encode email draft supervision transaction: %w", err)
+		}
+		lifecycleVersion := uint64(snapshot.LifecycleVersion)
+		transaction := computerevent.SupervisionTransaction{
+			Schema: computerevent.SupervisionSchemaV1, Reducer: computerevent.SupervisionReducerV1,
+			DigestRecipe: computerevent.SupervisionDigestRecipeV1, TransactionID: messageID,
+			TransactionClass: "record_message", OwnerID: ownerID, ComputerID: parent.SandboxID,
+			TrajectoryID: trajectoryID, CommandID: messageID, CommandDigest: computerevent.ZeroHead,
+			Actor: computerevent.SupervisionActor{ActorID: parent.AgentID, Role: "texture", AuthorityRef: "texture:trajectory:" + trajectoryID},
+			Expected: computerevent.SupervisionExpected{
+				CanonicalEventHead: &snapshot.CanonicalEventHead, LifecycleVersion: &lifecycleVersion,
+				IntentRevisionID: &snapshot.IntentRevisionID, ArtifactHeadRevisionID: &snapshot.ArtifactHeadRevisionID,
+			},
+			Mutations: []computerevent.SupervisionMutation{{Kind: "actor_message_recorded", Body: mutationBody}},
+		}
+		if _, _, _, err := rt.AppendSupervisionTransactionWithPrivateArtifacts(ctx, transaction, []computerevent.PrivateSupervisionArtifactPayload{{
+			BindingID: bindingID, Plaintext: payload, MediaType: "application/vnd.choir.email-draft-request.v1+json",
+		}}); err != nil {
+			return nil, fmt.Errorf("record email draft supervision transaction: %w", err)
+		}
+	}
+	if err := rt.store.UpsertAgent(ctx, types.AgentRecord{
+		AgentID: agentID, OwnerID: ownerID, SandboxID: rt.cfg.SandboxID,
+		Profile: agentprofile.Email, Role: agentprofile.Email, ChannelID: agentID,
+		CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		return nil, fmt.Errorf("persist email appagent: %w", err)
 	}
 
 	result := map[string]any{
@@ -141,6 +188,22 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		"send_authorized":       false,
 		"maild_send_attempted":  false,
 		"maild_draft_persisted": false,
+		"agent_id":              agentID,
+		"loop_id":               runID,
+		"channel_id":            agentID,
+		"profile":               agentprofile.Email,
+	}
+	if existing, err := rt.store.GetRun(ctx, runID); err == nil {
+		if existing.OwnerID != ownerID {
+			return nil, fmt.Errorf("email draft replay owner mismatch")
+		}
+		var replayed map[string]any
+		if err := json.Unmarshal([]byte(existing.Result), &replayed); err != nil {
+			return nil, fmt.Errorf("decode email draft replay result: %w", err)
+		}
+		return replayed, nil
+	} else if err != store.ErrNotFound {
+		return nil, fmt.Errorf("load email draft replay: %w", err)
 	}
 	if risk != "" {
 		result["risk_code"] = risk
@@ -274,10 +337,6 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		"draft_id":   draftID,
 		"version_id": versionID,
 	}))
-	result["agent_id"] = agentID
-	result["loop_id"] = runID
-	result["channel_id"] = agentID
-	result["profile"] = agentprofile.Email
 	return result, nil
 }
 

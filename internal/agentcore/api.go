@@ -23,6 +23,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/workitem"
 )
 
@@ -234,20 +235,24 @@ type internalRunEventAppendResponse struct {
 // (VAL-RUNTIME-001). The active provider name is included so operators
 // can distinguish real-provider paths from stub/canned paths.
 type runtimeHealthResponse struct {
-	Status                string                   `json:"status"`
-	Service               string                   `json:"service"`
-	SandboxID             string                   `json:"sandbox_id"`
-	RuntimeHealth         types.RuntimeHealthState `json:"runtime_health"`
-	RunningRuns           int                      `json:"running_runs"`
-	RunningProcessorRuns  int                      `json:"running_processor_runs"`
-	ResearcherCount       int                      `json:"researcher_count"`
-	ActiveProvider        string                   `json:"active_provider"`
-	PersistentDisk        *persistentdisk.Status   `json:"persistent_disk,omitempty"`
-	Build                 buildinfo.Info           `json:"build"`
-	SelfDevelopmentMarker string                   `json:"self_development_marker,omitempty"`
-	EventSchemaVersion    uint64                   `json:"event_schema_version,omitempty"`
-	ReducerVersion        uint64                   `json:"reducer_version,omitempty"`
-	ReleaseDigest         string                   `json:"release_digest,omitempty"`
+	Status                          string                            `json:"status"`
+	Service                         string                            `json:"service"`
+	SandboxID                       string                            `json:"sandbox_id"`
+	RuntimeHealth                   types.RuntimeHealthState          `json:"runtime_health"`
+	RunningRuns                     int                               `json:"running_runs"`
+	RunningProcessorRuns            int                               `json:"running_processor_runs"`
+	ResearcherCount                 int                               `json:"researcher_count"`
+	ActiveProvider                  string                            `json:"active_provider"`
+	PersistentDisk                  *persistentdisk.Status            `json:"persistent_disk,omitempty"`
+	Build                           buildinfo.Info                    `json:"build"`
+	SelfDevelopmentMarker           string                            `json:"self_development_marker,omitempty"`
+	EventSchemaVersion              uint64                            `json:"event_schema_version,omitempty"`
+	ReducerVersion                  uint64                            `json:"reducer_version,omitempty"`
+	ReleaseDigest                   string                            `json:"release_digest,omitempty"`
+	Supervision                     *updater.SupervisionCompatibility `json:"supervision_compatibility,omitempty"`
+	SupervisionWritesDisabled       bool                              `json:"supervision_writes_disabled"`
+	PrivateTapeReplaySemanticDigest string                            `json:"private_tape_replay_semantic_digest,omitempty"`
+	ProjectionSemanticDigest        string                            `json:"projection_semantic_digest,omitempty"`
 }
 
 // APIHandler provides HTTP handlers for the runtime API endpoints.
@@ -1022,6 +1027,18 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	resp.EventSchemaVersion = h.rt.selfdevStartupEventSchema
 	resp.ReducerVersion = h.rt.selfdevStartupReducer
 	resp.ReleaseDigest = h.rt.selfdevStartupReleaseDigest
+	if attestation := h.rt.startupSupervisionReplay; attestation != nil {
+		resp.SelfDevelopmentMarker = attestation.Marker
+		resp.EventSchemaVersion = attestation.EventSchemaVersion
+		resp.ReducerVersion = attestation.ReducerVersion
+		resp.ReleaseDigest = attestation.ReleaseDigest
+		compatibility := attestation.Supervision
+		compatibility.PrivatePayloadMedia = append([]string(nil), compatibility.PrivatePayloadMedia...)
+		resp.Supervision = &compatibility
+		resp.SupervisionWritesDisabled = attestation.SupervisionWritesDisabled
+		resp.PrivateTapeReplaySemanticDigest = attestation.PrivateTapeReplaySemanticDigest
+		resp.ProjectionSemanticDigest = attestation.ProjectionSemanticDigest
+	}
 	if usage, err := persistentdisk.Statfs(filepath.Dir(h.rt.cfg.StorePath)); err == nil {
 		status := persistentdisk.StatusFromGuestUsage(usage)
 		resp.PersistentDisk = &status

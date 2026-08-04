@@ -291,6 +291,32 @@ func (s *DoltStore) putBatch(ctx context.Context, conditions []ObjectCondition, 
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if err := checkBatchConditionsTx(ctx, tx, conditions); err != nil {
+		return err
+	}
+
+	if err := putBatchTx(ctx, tx, batch); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("objectgraph dolt: batch commit: %w", err)
+	}
+	return nil
+}
+
+// PutBatchConditionalTx applies a conditional batch inside a caller-owned SQL
+// transaction. The caller is responsible for commit or rollback.
+func (s *DoltStore) PutBatchConditionalTx(ctx context.Context, tx *sql.Tx, conditions []ObjectCondition, batch Batch) error {
+	if s == nil || s.db == nil || tx == nil {
+		return fmt.Errorf("objectgraph dolt: nil store or transaction")
+	}
+	if err := checkBatchConditionsTx(ctx, tx, conditions); err != nil {
+		return err
+	}
+	return putBatchTx(ctx, tx, batch)
+}
+
+func checkBatchConditionsTx(ctx context.Context, tx *sql.Tx, conditions []ObjectCondition) error {
 	orderedConditions := append([]ObjectCondition(nil), conditions...)
 	sort.Slice(orderedConditions, func(i, j int) bool {
 		return strings.TrimSpace(orderedConditions[i].CanonicalID) < strings.TrimSpace(orderedConditions[j].CanonicalID)
@@ -325,13 +351,6 @@ func (s *DoltStore) putBatch(ctx context.Context, conditions []ObjectCondition, 
 		case condition.ExpectedContentHash != "" && contentHash != condition.ExpectedContentHash:
 			return fmt.Errorf("%w: object %s content is %q, expected %q", ErrConflict, id, contentHash, condition.ExpectedContentHash)
 		}
-	}
-
-	if err := putBatchTx(ctx, tx, batch); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("objectgraph dolt: batch commit: %w", err)
 	}
 	return nil
 }

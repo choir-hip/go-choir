@@ -24,6 +24,15 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 	case "/api/texture/markdown-lineage/import":
 		h.HandleTextureImportMarkdownLineage(w, r)
 		return
+	case "/api/texture/supervision/import":
+		h.HandleTextureSupervisionImport(w, r)
+		return
+	case "/api/texture/supervision/command":
+		h.HandleTextureSupervisionCommand(w, r)
+		return
+	case "/api/texture/supervision/rebuild":
+		h.HandleTextureSupervisionRebuild(w, r)
+		return
 	}
 	if strings.HasPrefix(path, textureRevisionsPathPrefix) {
 		if strings.HasSuffix(path, "/blame") {

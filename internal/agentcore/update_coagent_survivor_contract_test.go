@@ -205,7 +205,7 @@ func TestSurvivorContract_SuperExecutesOnlyExecutionRequestPackets(t *testing.T)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
 	ownerID := "user-survivor-super-gate"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	superAgent, err := rt.ensurePersistentSuperAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("ensure persistent super: %v", err)
 	}
@@ -325,7 +325,7 @@ func TestSurvivorContract_SuperSettlesNonExecutionRequestPackets(t *testing.T) {
 	d9InstallTools(t, rt)
 	ctx := context.Background()
 	ownerID := "user-survivor-settle"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	superAgent, err := rt.ensurePersistentSuperAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("ensure persistent super: %v", err)
 	}
@@ -376,7 +376,7 @@ func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *test
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	ownerID := "user-survivor-settle-mixed"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	superAgent, err := rt.ensurePersistentSuperAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("ensure persistent super: %v", err)
 	}
@@ -474,7 +474,7 @@ func TestSurvivorContract_SuperExecutesBeforeSettledNonExecutionBacklog(t *testi
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	ownerID := "user-survivor-settle-reversed"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	superAgent, err := rt.ensurePersistentSuperAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("ensure persistent super: %v", err)
 	}

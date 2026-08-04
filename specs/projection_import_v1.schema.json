@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://choir.news/schemas/projection_import_v1.schema.json",
+  "title": "Choir Supervision Projection Import V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "reducer_version", "owner_id", "computer_id", "source_dolt_commit",
+    "source_projection_digest", "legacy_lifecycle_watermark", "cutover_barrier",
+    "objects", "edges", "explicit_refusals", "snapshot", "projection_digest"
+  ],
+  "properties": {
+    "schema": {"const": "choir.supervision_projection_import.v1"},
+    "reducer_version": {"const": "supervision/v1"},
+    "owner_id": {"$ref": "#/$defs/id"},
+    "computer_id": {"$ref": "#/$defs/id"},
+    "source_dolt_commit": {"$ref": "#/$defs/id"},
+    "source_projection_digest": {"$ref": "#/$defs/digest"},
+    "legacy_lifecycle_watermark": {"type": "integer", "minimum": 0},
+    "cutover_barrier": {"$ref": "#/$defs/cutover_barrier"},
+    "objects": {
+      "type": "array", "maxItems": 100000, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/import_object"}
+    },
+    "edges": {
+      "type": "array", "maxItems": 200000, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/import_edge"}
+    },
+    "explicit_refusals": {
+      "type": "array", "maxItems": 100000, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/import_refusal"}
+    },
+    "snapshot": {
+      "type": "object",
+      "required": ["trajectory", "intent_revision_id", "work_items", "agents", "updates", "document", "head_revision", "source_entities", "source_refs"]
+    },
+    "projection_digest": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "nullable_id": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/id"}]},
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "artifact_ref": {"oneOf": [
+      {"type": "string", "pattern": "^artifact:sha256:[0-9a-f]{64}$"},
+      {"type": "string", "pattern": "^choir:supervision-artifact:[0-9a-f]{64}$"}
+    ]},
+    "id_array": {
+      "type": "array", "maxItems": 256, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/id"}
+    },
+    "empty_id_array": {
+      "type": "array", "maxItems": 0
+    },
+    "artifact_ref_array": {
+      "type": "array", "maxItems": 256, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/artifact_ref"}
+    },
+    "cutover_barrier": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "writes_disabled_at", "admission_watermark", "active_run_ids", "active_attempt_ids",
+        "pending_delivery_ids", "slot_claim_ids", "agent_mutation_ids", "command_receipt_ids",
+        "drain_receipt_refs", "quiescence_receipt_ref"
+      ],
+      "properties": {
+        "writes_disabled_at": {"type": "string", "format": "date-time"},
+        "admission_watermark": {"type": "integer", "minimum": 0},
+        "active_run_ids": {"$ref": "#/$defs/empty_id_array"},
+        "active_attempt_ids": {"$ref": "#/$defs/empty_id_array"},
+        "pending_delivery_ids": {"$ref": "#/$defs/empty_id_array"},
+        "slot_claim_ids": {"$ref": "#/$defs/empty_id_array"},
+        "agent_mutation_ids": {"$ref": "#/$defs/empty_id_array"},
+        "command_receipt_ids": {"$ref": "#/$defs/id_array"},
+        "drain_receipt_refs": {"$ref": "#/$defs/artifact_ref_array"},
+        "quiescence_receipt_ref": {"$ref": "#/$defs/artifact_ref"}
+      }
+    },
+    "import_object": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "canonical_id", "content_hash", "body"],
+      "properties": {
+        "kind": {"enum": ["trajectory", "document", "revision", "assignment", "agent", "update", "source_entity", "source_ref"]},
+        "canonical_id": {"$ref": "#/$defs/id"},
+        "content_hash": {"$ref": "#/$defs/digest"},
+        "body": {}
+      }
+    },
+    "import_edge": {
+      "type": "object", "additionalProperties": false,
+      "required": ["edge_id", "from_id", "to_id", "kind", "content_hash"],
+      "properties": {
+        "edge_id": {"$ref": "#/$defs/id"},
+        "from_id": {"$ref": "#/$defs/id"},
+        "to_id": {"$ref": "#/$defs/id"},
+        "kind": {"enum": ["document_revision", "trajectory_artifact", "trajectory_assignment", "revision_source_ref"]},
+        "content_hash": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "import_refusal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["legacy_kind", "legacy_id", "reason", "content_hash"],
+      "properties": {
+        "legacy_kind": {"$ref": "#/$defs/id"},
+        "legacy_id": {"$ref": "#/$defs/id"},
+        "reason": {"enum": ["unrelated_ledger", "derived_recovery_state", "duplicate_projection", "invalid_scope", "unmapped_state_blocks_import"]},
+        "content_hash": {"$ref": "#/$defs/digest"}
+      }
+    }
+  }
+}

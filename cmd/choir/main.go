@@ -30,6 +30,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 const (
@@ -76,6 +77,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runComputer(rest, stdout, stderr)
 	case "identity":
 		return runExecutionIdentity(rest, stdout, stderr)
+	case "supervision":
+		return runSupervision(rest, stdout, stderr)
 	case "api-key":
 		return runAPIKey(rest, stdout, stderr)
 	case "self-dev":
@@ -113,6 +116,7 @@ Commands:
   texture history <doc>  List revision history for a document (metadata only)
   texture revisions <doc>  List revisions with full content bodies
   search <query>      Search the corpus
+  supervision command --file <json>  Append one owner-authorized supervision command
   run start <text>    Submit a prompt to the conductor (starts a run)
   run status <id>     Get the status of a prompt-bar submission
   run list            List recent owner-scoped runs
@@ -243,14 +247,24 @@ func envOr(key, def string) string {
 // out. If body is non-nil it is JSON-encoded and sent as the request body.
 // On non-2xx it returns an error with the response body.
 func (c *client) do(method, path string, body any, out any) error {
-	url := c.host + path
-	var reqBody io.Reader
+	var raw []byte
 	if body != nil {
-		raw, err := json.Marshal(body)
+		var err error
+		raw, err = json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("encode request body: %w", err)
 		}
-		reqBody = bytes.NewReader(raw)
+	}
+	return c.doRaw(method, path, raw, out)
+}
+
+// doRaw performs an authenticated JSON request without re-encoding the body.
+// File-backed command envelopes therefore retain their caller-supplied bytes.
+func (c *client) doRaw(method, path string, body []byte, out any) error {
+	url := c.host + path
+	var reqBody io.Reader
+	if body != nil {
+		reqBody = bytes.NewReader(body)
 	}
 	req, err := http.NewRequest(method, url, reqBody)
 	if err != nil {
@@ -708,10 +722,21 @@ func validateDurableWorkResponse(raw json.RawMessage) error {
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return err
 	}
-	if envelope.Schema != "choir.durable_work.v1" {
+	switch envelope.Schema {
+	case "choir.durable_work.v1":
+		return nil
+	case "choir.supervision_transaction.v1":
+		var snapshot types.SupervisionProjectionSnapshot
+		if err := json.Unmarshal(raw, &snapshot); err != nil {
+			return err
+		}
+		if snapshot.TrajectoryID == "" || snapshot.ComputerID == "" || snapshot.CanonicalEventHead == "" || snapshot.SnapshotCursor < 0 {
+			return fmt.Errorf("invalid supervision projection")
+		}
+		return nil
+	default:
 		return fmt.Errorf("unsupported lifecycle schema %q", envelope.Schema)
 	}
-	return nil
 }
 
 func runLifecycle(args []string, stdout, stderr io.Writer) int {
@@ -834,6 +859,42 @@ func runTexture(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "choir texture: unknown subcommand %q\n", sub)
 		return 2
 	}
+}
+
+// ---- supervision ----
+
+func runSupervision(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 || args[0] != "command" {
+		fmt.Fprintln(stderr, "choir supervision: subcommand required (command)")
+		return 2
+	}
+	fs := flag.NewFlagSet("choir supervision command", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	file := fs.String("file", "", "JSON supervision command request")
+	c, err := newClient(fs, args[1:], stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir supervision command: %v\n", err)
+		return 2
+	}
+	if len(fs.Args()) != 0 || strings.TrimSpace(*file) == "" {
+		fmt.Fprintln(stderr, "choir supervision command: --file is required")
+		return 2
+	}
+	raw, err := os.ReadFile(strings.TrimSpace(*file))
+	if err != nil {
+		fmt.Fprintf(stderr, "choir supervision command: read command file: %v\n", err)
+		return 2
+	}
+	if trimmed := bytes.TrimSpace(raw); len(trimmed) == 0 || trimmed[0] != '{' || !json.Valid(trimmed) {
+		fmt.Fprintln(stderr, "choir supervision command: command file must contain one JSON object")
+		return 2
+	}
+	var response json.RawMessage
+	if err := c.doRaw(http.MethodPost, "/api/texture/supervision/command", raw, &response); err != nil {
+		fmt.Fprintf(stderr, "choir supervision command: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, response)
 }
 
 // ---- search ----

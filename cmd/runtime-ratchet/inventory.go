@@ -87,6 +87,374 @@ type Entry struct {
 	ProductionCallers []string `yaml:"production_callers,omitempty"`
 }
 
+// SupervisionMutationCallerCategory is the closed source-level disposition
+// vocabulary for a production Texture/lifecycle semantic write.
+type SupervisionMutationCallerCategory string
+
+const (
+	SupervisionCanonicalService               SupervisionMutationCallerCategory = "canonical_service"
+	SupervisionReducerPrivateProjection       SupervisionMutationCallerCategory = "reducer_private_projection"
+	SupervisionDerivedCompatibilityProjection SupervisionMutationCallerCategory = "derived_compatibility_projection"
+	SupervisionMigrationOnly                  SupervisionMutationCallerCategory = "migration_only"
+	SupervisionUnrelatedLedger                SupervisionMutationCallerCategory = "unrelated_ledger"
+	SupervisionDeterministicRefusal           SupervisionMutationCallerCategory = "deterministic_refusal"
+	SupervisionUnauthorizedWriter             SupervisionMutationCallerCategory = "unauthorized_semantic_writer"
+	SupervisionIndependentLifecycleEvent      SupervisionMutationCallerCategory = "independent_lifecycle_event_writer"
+)
+
+// SupervisionMutationCaller identifies one non-test source caller of a
+// Texture/lifecycle semantic write. It deliberately records source identity,
+// rather than attempting to infer runtime data flow, so that a new alternate
+// writer is visible at review time.
+type SupervisionMutationCaller struct {
+	ID       string
+	Category SupervisionMutationCallerCategory
+}
+
+var supervisionSemanticMutationMethods = map[string]bool{
+	"ApplyLifecycleUpdateWithSourceGraph":        true,
+	"AppendChannelMessage":                       true,
+	"ArchiveLifecycleArtifact":                   true,
+	"ArchiveTextureDocumentAuthority":            true,
+	"CancelLifecycleTrajectory":                  true,
+	"CommitLifecycleArtifactHead":                true,
+	"CreateDocument":                             true,
+	"CreateEvidence":                             true,
+	"CreateRevision":                             true,
+	"CreateTextureDecision":                      true,
+	"CreateTrajectoryIfAbsent":                   true,
+	"CreateWorkItem":                             true,
+	"ProjectTerminalLifecycleRun":                true,
+	"QueueLifecycleUpdate":                       true,
+	"RecordLifecycleRefs":                        true,
+	"ReconcileLifecycleSettlementForTerminalRun": true,
+	"ReplaceLifecycleActivation":                 true,
+	"SettleLifecycleTrajectory":                  true,
+	"StartLifecycle":                             true,
+	"UpdateDocument":                             true,
+	"UpdateLifecycleDocumentTitleAuthority":      true,
+	"UpdateTextureDocumentTitleAuthority":        true,
+	"UpdateWorkItemDetails":                      true,
+	"UpdateWorkItemStatus":                       true,
+	"UpsertDocumentAlias":                        true,
+	"allocateTextureManifestPath":                true,
+}
+
+func scanSupervisionMutationCallers(root string, files []string) ([]SupervisionMutationCaller, error) {
+	fset := token.NewFileSet()
+	callers := []SupervisionMutationCaller{}
+	for _, path := range files {
+		if filepath.Ext(path) != ".go" {
+			continue
+		}
+		rel := slashRel(root, path)
+		if strings.HasSuffix(rel, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			return nil, fmt.Errorf("parse %s for supervision mutation authority: %w", rel, err)
+		}
+		ast.Inspect(file, func(node ast.Node) bool {
+			call, ok := node.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			method := calledMethod(call)
+			if method == "" {
+				return true
+			}
+			category, tracked := classifySupervisionMutationCaller(rel, file, call, method)
+			if !tracked {
+				return true
+			}
+			position := fset.Position(call.Pos())
+			id := rel + ":" + enclosingFunction(file, call.Pos()) + ":" + method + ":" + strconv.Itoa(position.Line)
+			callers = append(callers, SupervisionMutationCaller{ID: id, Category: category})
+			return true
+		})
+	}
+	sort.Slice(callers, func(i, j int) bool { return callers[i].ID < callers[j].ID })
+	return callers, nil
+}
+
+func calledMethod(call *ast.CallExpr) string {
+	switch fn := call.Fun.(type) {
+	case *ast.SelectorExpr:
+		return fn.Sel.Name
+	case *ast.Ident:
+		return fn.Name
+	default:
+		return ""
+	}
+}
+
+func classifySupervisionMutationCaller(rel string, file *ast.File, call *ast.CallExpr, method string) (SupervisionMutationCallerCategory, bool) {
+	if method == "lifecycleObject" && len(call.Args) > 0 && exprString(call.Args[0]) == "ogKindLifecycleEvent" {
+		if strings.HasPrefix(rel, "internal/store/supervision_projection") {
+			return SupervisionReducerPrivateProjection, true
+		}
+		return SupervisionIndependentLifecycleEvent, true
+	}
+	if method == "AppendNewSupervisionTransaction" {
+		if strings.HasPrefix(rel, "internal/agentcore/") || rel == "internal/computerevent/appender.go" {
+			return SupervisionCanonicalService, true
+		}
+		return SupervisionUnauthorizedWriter, true
+	}
+	if method == "AppendSupervisionTransaction" {
+		if strings.HasPrefix(rel, "internal/agentcore/") || strings.HasPrefix(rel, "internal/textureowner/") || rel == "internal/computerevent/appender.go" {
+			return SupervisionCanonicalService, true
+		}
+		return SupervisionUnauthorizedWriter, true
+	}
+	if !supervisionSemanticMutationMethods[method] {
+		return "", false
+	}
+	if strings.HasPrefix(rel, "internal/store/supervision_projection") {
+		return SupervisionReducerPrivateProjection, true
+	}
+	if rel == "internal/agentcore/wire_publication.go" && wirePublicationLedgerMutationMethods[method] {
+		return SupervisionUnrelatedLedger, true
+	}
+	if isDerivedCompatibilityProjection(rel, file, call, method) {
+		return SupervisionDerivedCompatibilityProjection, true
+	}
+	if isLegacyProjectionImportBuilder(rel, file, call.Pos()) {
+		return SupervisionMigrationOnly, true
+	}
+	if functionRefusesSupervisionAuthority(file, call.Pos()) {
+		return SupervisionDeterministicRefusal, true
+	}
+	if strings.HasPrefix(rel, "internal/agentcore/") || strings.HasPrefix(rel, "internal/textureowner/") || strings.HasPrefix(rel, "internal/store/") {
+		return SupervisionUnauthorizedWriter, true
+	}
+	return SupervisionUnrelatedLedger, true
+}
+
+var wirePublicationLedgerMutationMethods = map[string]bool{
+	"CreateWorkItem":        true,
+	"UpdateWorkItemDetails": true,
+	"UpdateWorkItemStatus":  true,
+}
+
+func isDerivedCompatibilityProjection(rel string, file *ast.File, call *ast.CallExpr, method string) bool {
+	if rel != "internal/textureowner/texture_import.go" || !isEventDerivedTextureManifest(file, call.Pos()) {
+		return false
+	}
+	if method == "allocateTextureManifestPath" {
+		return true
+	}
+	return method == "UpsertDocumentAlias" &&
+		len(call.Args) == 5 &&
+		exprString(call.Args[2]) == "sourcePath" &&
+		exprString(call.Args[3]) == "doc.DocID"
+}
+
+func isEventDerivedTextureManifest(file *ast.File, pos token.Pos) bool {
+	for _, declaration := range file.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Recv != nil || function.Name.Name != "ensureTextureManifest" ||
+			function.Pos() > pos || pos > function.End() ||
+			function.Type.Params == nil || len(function.Type.Params.List) != 4 {
+			continue
+		}
+		document := function.Type.Params.List[3]
+		if len(document.Names) == 1 && document.Names[0].Name == "doc" && exprString(document.Type) == "types.Document" {
+			return true
+		}
+	}
+	return false
+}
+
+func isLegacyProjectionImportBuilder(rel string, file *ast.File, pos token.Pos) bool {
+	return rel == "internal/store/projection_import.go" &&
+		enclosingFunction(file, pos) == "BuildProjectionImportV1"
+}
+
+func functionRefusesSupervisionAuthority(file *ast.File, pos token.Pos) bool {
+	var scope *ast.BlockStmt
+	ast.Inspect(file, func(node ast.Node) bool {
+		switch function := node.(type) {
+		case *ast.FuncDecl:
+			if function.Body != nil && function.Pos() <= pos && pos <= function.End() {
+				scope = function.Body
+			}
+		case *ast.FuncLit:
+			if function.Body != nil && function.Pos() <= pos && pos <= function.End() {
+				scope = function.Body
+			}
+		}
+		return true
+	})
+	return scope != nil && refusalGuardDominatesMutation(scope.List, pos)
+}
+
+func refusalGuardDominatesMutation(statements []ast.Stmt, pos token.Pos) bool {
+	dominates := false
+	for _, statement := range statements {
+		if statement.End() < pos {
+			dominates = dominates || isLegacyRefusalGuard(statement)
+			continue
+		}
+		if statement.Pos() <= pos && pos <= statement.End() {
+			return dominates || refusalGuardDominatesWithin(statement, pos)
+		}
+	}
+	return false
+}
+
+func refusalGuardDominatesWithin(statement ast.Stmt, pos token.Pos) bool {
+	switch statement := statement.(type) {
+	case *ast.BlockStmt:
+		return refusalGuardDominatesMutation(statement.List, pos)
+	case *ast.IfStmt:
+		if statement.Body != nil && statement.Body.Pos() <= pos && pos <= statement.Body.End() {
+			return refusalGuardDominatesMutation(statement.Body.List, pos)
+		}
+		if statement.Else != nil && statement.Else.Pos() <= pos && pos <= statement.Else.End() {
+			return refusalGuardDominatesWithin(statement.Else, pos)
+		}
+	case *ast.ForStmt:
+		if statement.Body != nil && statement.Body.Pos() <= pos && pos <= statement.Body.End() {
+			return refusalGuardDominatesMutation(statement.Body.List, pos)
+		}
+	case *ast.RangeStmt:
+		if statement.Body != nil && statement.Body.Pos() <= pos && pos <= statement.Body.End() {
+			return refusalGuardDominatesMutation(statement.Body.List, pos)
+		}
+	case *ast.SwitchStmt:
+		for _, clause := range statement.Body.List {
+			if clause.Pos() <= pos && pos <= clause.End() {
+				return refusalGuardDominatesWithin(clause, pos)
+			}
+		}
+	case *ast.TypeSwitchStmt:
+		for _, clause := range statement.Body.List {
+			if clause.Pos() <= pos && pos <= clause.End() {
+				return refusalGuardDominatesWithin(clause, pos)
+			}
+		}
+	case *ast.SelectStmt:
+		for _, clause := range statement.Body.List {
+			if clause.Pos() <= pos && pos <= clause.End() {
+				return refusalGuardDominatesWithin(clause, pos)
+			}
+		}
+	case *ast.CaseClause:
+		return refusalGuardDominatesMutation(statement.Body, pos)
+	case *ast.CommClause:
+		return refusalGuardDominatesMutation(statement.Body, pos)
+	case *ast.LabeledStmt:
+		return refusalGuardDominatesWithin(statement.Stmt, pos)
+	}
+	return false
+}
+
+func isLegacyRefusalGuard(statement ast.Stmt) bool {
+	guard, ok := statement.(*ast.IfStmt)
+	if !ok || !blockAlwaysReturns(guard.Body) {
+		return false
+	}
+	if assignment, ok := guard.Init.(*ast.AssignStmt); ok && len(assignment.Lhs) == 1 && len(assignment.Rhs) == 1 {
+		identifier, ok := assignment.Lhs[0].(*ast.Ident)
+		call, ok := assignment.Rhs[0].(*ast.CallExpr)
+		return ok && callIsLegacyRefusal(call) && isErrorCheckForIdentifier(guard.Cond, identifier.Name)
+	}
+	call, ok := errorCheckCall(guard.Cond)
+	return ok && callIsLegacyRefusal(call)
+}
+
+func callIsLegacyRefusal(call *ast.CallExpr) bool {
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	return selector.Sel.Name == "refuseLegacySupervisionWrite" || selector.Sel.Name == "refuseLegacyTextureWriter"
+}
+
+func isErrorCheckForIdentifier(condition ast.Expr, identifier string) bool {
+	binary, ok := condition.(*ast.BinaryExpr)
+	if !ok || binary.Op != token.NEQ {
+		return false
+	}
+	return (isIdentifier(binary.X, identifier) && isNil(binary.Y)) || (isNil(binary.X) && isIdentifier(binary.Y, identifier))
+}
+
+func errorCheckCall(condition ast.Expr) (*ast.CallExpr, bool) {
+	binary, ok := condition.(*ast.BinaryExpr)
+	if !ok || binary.Op != token.NEQ {
+		return nil, false
+	}
+	if call, ok := binary.X.(*ast.CallExpr); ok && isNil(binary.Y) {
+		return call, true
+	}
+	if call, ok := binary.Y.(*ast.CallExpr); ok && isNil(binary.X) {
+		return call, true
+	}
+	return nil, false
+}
+
+func isIdentifier(expression ast.Expr, want string) bool {
+	identifier, ok := expression.(*ast.Ident)
+	return ok && identifier.Name == want
+}
+
+func isNil(expression ast.Expr) bool {
+	identifier, ok := expression.(*ast.Ident)
+	return ok && identifier.Name == "nil"
+}
+
+func blockAlwaysReturns(block *ast.BlockStmt) bool {
+	if block == nil {
+		return false
+	}
+	for _, statement := range block.List {
+		switch statement := statement.(type) {
+		case *ast.ReturnStmt:
+			return true
+		case *ast.BlockStmt:
+			if blockAlwaysReturns(statement) {
+				return true
+			}
+		case *ast.IfStmt:
+			if statement.Else != nil && blockAlwaysReturns(statement.Body) && statementAlwaysReturns(statement.Else) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func statementAlwaysReturns(statement ast.Stmt) bool {
+	switch statement := statement.(type) {
+	case *ast.BlockStmt:
+		return blockAlwaysReturns(statement)
+	case *ast.ReturnStmt:
+		return true
+	case *ast.IfStmt:
+		return statement.Else != nil && blockAlwaysReturns(statement.Body) && statementAlwaysReturns(statement.Else)
+	default:
+		return false
+	}
+}
+
+func validateSupervisionMutationCallers(callers []SupervisionMutationCaller) error {
+	var violations []string
+	for _, caller := range callers {
+		switch caller.Category {
+		case SupervisionCanonicalService, SupervisionReducerPrivateProjection, SupervisionDerivedCompatibilityProjection, SupervisionMigrationOnly, SupervisionUnrelatedLedger, SupervisionDeterministicRefusal:
+			continue
+		default:
+			violations = append(violations, caller.ID+": "+string(caller.Category))
+		}
+	}
+	if len(violations) == 0 {
+		return nil
+	}
+	return fmt.Errorf("supervision mutation authority violations:\n  - %s", strings.Join(violations, "\n  - "))
+}
+
 var compatibilityRE = regexp.MustCompile(`(?i)\b(deprecated|compatib(?:ility|le)|legacy|old runtime|new runtime)\b`)
 
 func scanRepository(root string) (Inventory, error) {
@@ -222,6 +590,9 @@ func scanRuntimeAST(rel string, file *ast.File, fset *token.FileSet, isTest bool
 			if ast.IsExported(d.Name.Name) {
 				kind := "func"
 				if d.Recv != nil && len(d.Recv.List) > 0 {
+					if !exportedReceiverType(d.Recv.List[0].Type) {
+						continue
+					}
 					kind = "method(" + exprString(d.Recv.List[0].Type) + ")"
 				}
 				inv.Exports = append(inv.Exports, Entry{ID: rel + ":" + kind + ":" + d.Name.Name, Disposition: domainDisposition(rel)})
@@ -243,6 +614,7 @@ func scanRuntimeAST(rel string, file *ast.File, fset *token.FileSet, isTest bool
 			}
 		}
 	}
+
 	if isTest {
 		return nil
 	}
@@ -274,6 +646,20 @@ func scanRuntimeAST(rel string, file *ast.File, fset *token.FileSet, isTest bool
 		}
 	}
 	return nil
+}
+func exportedReceiverType(expr ast.Expr) bool {
+	switch typed := expr.(type) {
+	case *ast.Ident:
+		return ast.IsExported(typed.Name)
+	case *ast.StarExpr:
+		return exportedReceiverType(typed.X)
+	case *ast.IndexExpr:
+		return exportedReceiverType(typed.X)
+	case *ast.IndexListExpr:
+		return exportedReceiverType(typed.X)
+	default:
+		return false
+	}
 }
 
 func scanProductionTools(rel string, file *ast.File, inv *Inventory) error {

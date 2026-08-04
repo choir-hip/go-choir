@@ -4,12 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
-	"time"
-
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"strings"
 )
 
 type textureCoagentUpdatePacket struct {
@@ -95,16 +92,9 @@ func agentMutationComputerID(rec *types.RunRecord) string {
 	return strings.TrimSpace(rec.SandboxID)
 }
 
-func (h *Handler) createAgentMutationForRun(ctx context.Context, rec *types.RunRecord) {
-	if h == nil || h.Store == nil || rec == nil {
-		return
+func (h *Handler) createAgentMutationForRun(ctx context.Context, rec *types.RunRecord) error {
+	if h == nil || rec == nil {
+		return nil
 	}
-	docID := firstNonEmpty(metadataStringValue(rec.Metadata, "doc_id"), rec.ChannelID)
-	if docID == "" {
-		return
-	}
-	_ = h.Store.CreateAgentMutation(ctx, store.AgentMutation{
-		DocID: docID, RunID: rec.RunID, OwnerID: rec.OwnerID, ComputerID: agentMutationComputerID(rec), State: "pending",
-		ScheduledMessageSeq: int64(metadataIntValue(rec.Metadata, "scheduled_message_seq")), CreatedAt: time.Now().UTC(),
-	})
+	return h.refuseLegacyTextureWriter("create Texture agent mutation")
 }

@@ -163,6 +163,10 @@ func (rt *Runtime) updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx cont
 	if rec == nil {
 		return nil
 	}
+
+	if err := rt.refuseLegacySupervisionWrite(ctx, rec.OwnerID, rec.SandboxID, trajectoryIDForRun(rec), "record run completion"); err != nil {
+		return err
+	}
 	updateIDs := coagentUpdateIDsForRun(rec)
 	if runHasProfile(rec, agentprofile.Texture) {
 		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
@@ -190,12 +194,11 @@ func (rt *Runtime) completeSuccessfulRunWorkItems(ctx context.Context, rec *type
 	if ownerID == "" {
 		return nil
 	}
-	if strings.TrimSpace(rec.SandboxID) != "" && strings.TrimSpace(rec.TrajectoryID) != "" {
-		if _, err := rt.store.GetLifecycleTrajectory(ctx, ownerID, rec.SandboxID, rec.TrajectoryID); err == nil {
+	if err := rt.refuseLegacySupervisionWrite(ctx, ownerID, rec.SandboxID, rec.TrajectoryID, "complete supervised work item"); err != nil {
+		if errors.Is(err, ErrSupervisionAuthorityRequired) {
 			return nil
-		} else if !errors.Is(err, store.ErrNotFound) {
-			return err
 		}
+		return err
 	}
 	for _, workItemID := range metadataStringSlice(rec.Metadata["work_item_ids"]) {
 		workItemID = strings.TrimSpace(workItemID)

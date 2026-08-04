@@ -304,9 +304,9 @@ documents:
 
   - path: docs/definitions/choir-texture-tape-supervision-2026-08-03.md
     claim_scope: current
-    is_root: [entry]
+    is_root: [authority, entry]
     is_evidence: false
-    annotations: {doc_role: definition_entrypoint, authority: owner_ratified_mission_orchestrator, lifecycle: working, entrypoint: true}
+    annotations: {doc_role: definition, authority: owner_ratified_mission_orchestrator, lifecycle: working, entrypoint: true}
     witnesses: [docs/evidence/texture-tape-definition-consensus-2026-08-03.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, docs/choir-vision.md, docs/supervision-protocol.md, internal/computerevent, internal/capsule, internal/selfdev, internal/store/lifecycle.go, internal/textureowner]
     refresh_triggers: [owner_definition_ratification, staging_identity_change, computer_event_authority_change, Texture_projection_change, lifecycle_reducer_change, semantic_rebase_contract_change, registry_promotion]
 

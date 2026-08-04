@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -51,25 +52,45 @@ type privateKeyring interface {
 
 type guestPrivacyKeyring struct {
 	computerID string
-	material   privateKeyMaterial
+	currentKey privateKeyMaterial
+	keys       map[string]privateKeyMaterial
 }
 
 type guestPrivacyKeyFile struct {
-	Version    int    `json:"version"`
-	ComputerID string `json:"computer_id"`
-	Key        string `json:"key"`
+	Version        int      `json:"version"`
+	ComputerID     string   `json:"computer_id"`
+	Key            string   `json:"key"`
+	HistoricalKeys []string `json:"historical_keys,omitempty"`
 }
 
 func newPrivateArtifactCipher(computerID, encodedKey string) (*PrivateArtifactCipher, error) {
+	return newPrivateArtifactCipherWithHistoricalKeys(computerID, encodedKey, nil)
+}
+
+func newPrivateArtifactCipherWithHistoricalKeys(computerID, encodedKey string, historicalKeys []string) (*PrivateArtifactCipher, error) {
 	raw, err := base64.RawStdEncoding.DecodeString(strings.TrimSpace(encodedKey))
 	if err != nil || len(raw) != chacha20poly1305.KeySize || strings.TrimSpace(computerID) == "" {
 		return nil, fmt.Errorf("privacy keyring: invalid guest key")
 	}
-	var key [chacha20poly1305.KeySize]byte
-	copy(key[:], raw)
+	var current [chacha20poly1305.KeySize]byte
+	copy(current[:], raw)
+	currentMaterial := privateKeyMaterial{digest: DigestBytes(raw), key: current}
+	materials := map[string]privateKeyMaterial{currentMaterial.digest: currentMaterial}
+	for _, encodedHistorical := range historicalKeys {
+		historicalRaw, err := base64.RawStdEncoding.DecodeString(strings.TrimSpace(encodedHistorical))
+		if err != nil || len(historicalRaw) != chacha20poly1305.KeySize {
+			return nil, fmt.Errorf("privacy keyring: invalid historical guest key")
+		}
+		var historical [chacha20poly1305.KeySize]byte
+		copy(historical[:], historicalRaw)
+		material := privateKeyMaterial{digest: DigestBytes(historicalRaw), key: historical}
+		if _, duplicate := materials[material.digest]; duplicate {
+			return nil, fmt.Errorf("privacy keyring: duplicate historical guest key")
+		}
+		materials[material.digest] = material
+	}
 	return &PrivateArtifactCipher{keys: &guestPrivacyKeyring{
-		computerID: computerID,
-		material:   privateKeyMaterial{digest: DigestBytes(raw), key: key},
+		computerID: computerID, currentKey: currentMaterial, keys: materials,
 	}}, nil
 }
 
@@ -106,7 +127,7 @@ func LoadGuestPrivateArtifactCipher(path, computerID string, allowCreate bool) (
 	if err != nil || !bytes.Equal(canonical, raw) || keyFile.Version != 1 || keyFile.ComputerID != computerID {
 		return nil, fmt.Errorf("privacy keyring: guest key binding mismatch")
 	}
-	return newPrivateArtifactCipher(computerID, keyFile.Key)
+	return newPrivateArtifactCipherWithHistoricalKeys(computerID, keyFile.Key, keyFile.HistoricalKeys)
 }
 
 func createGuestPrivacyKey(path, computerID string) ([]byte, error) {
@@ -150,14 +171,18 @@ func (k *guestPrivacyKeyring) current(_ context.Context, computerID string) (pri
 	if k == nil || computerID != k.computerID {
 		return privateKeyMaterial{}, fmt.Errorf("privacy keyring: computer binding mismatch")
 	}
-	return k.material, nil
+	return k.currentKey, nil
 }
 
 func (k *guestPrivacyKeyring) resolve(_ context.Context, computerID, digest string) (privateKeyMaterial, error) {
-	if k == nil || computerID != k.computerID || digest != k.material.digest {
+	if k == nil || computerID != k.computerID {
 		return privateKeyMaterial{}, fmt.Errorf("privacy keyring: key version unavailable")
 	}
-	return k.material, nil
+	material, ok := k.keys[digest]
+	if !ok {
+		return privateKeyMaterial{}, fmt.Errorf("privacy keyring: key version unavailable")
+	}
+	return material, nil
 }
 
 type PrivateArtifactCipher struct {
@@ -165,7 +190,43 @@ type PrivateArtifactCipher struct {
 }
 
 func (c *PrivateArtifactCipher) Encrypt(ctx context.Context, computerID, eventID, mediaType, privacyClass string, plaintext []byte) ([]byte, PrivateArtifactMetadata, error) {
-	if c == nil || c.keys == nil || computerID == "" || eventID == "" || mediaType == "" || privacyClass != "private" {
+	nonce := make([]byte, chacha20poly1305.NonceSizeX)
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, PrivateArtifactMetadata{}, fmt.Errorf("private artifact cipher: nonce: %w", err)
+	}
+	return c.encryptWithNonce(ctx, computerID, eventID, mediaType, privacyClass, plaintext, nonce)
+}
+
+// EncryptSupervisionDeterministic produces one stable ciphertext for a reserved
+// supervision binding. The binding must not be used before the enclosing
+// command digest has been durably reserved.
+func (c *PrivateArtifactCipher) EncryptSupervisionDeterministic(ctx context.Context, computerID, bindingID, mediaType string, plaintext []byte) ([]byte, PrivateArtifactMetadata, error) {
+	if c == nil || c.keys == nil || computerID == "" || bindingID == "" || mediaType == "" || len(plaintext) == 0 {
+		return nil, PrivateArtifactMetadata{}, fmt.Errorf("private artifact cipher: complete supervision metadata is required")
+	}
+	material, err := c.keys.current(ctx, computerID)
+	if err != nil {
+		return nil, PrivateArtifactMetadata{}, err
+	}
+	seed, err := CanonicalJSON(map[string]string{
+		"domain":           "choir.supervision-private-nonce.v1",
+		"computer_id":      computerID,
+		"binding_id":       bindingID,
+		"media_type":       mediaType,
+		"plaintext_digest": DigestBytes(plaintext),
+		"key_version":      material.digest,
+	})
+	if err != nil {
+		return nil, PrivateArtifactMetadata{}, fmt.Errorf("private artifact cipher: canonical supervision nonce seed: %w", err)
+	}
+	sum := sha256.Sum256(seed)
+	nonce := make([]byte, chacha20poly1305.NonceSizeX)
+	copy(nonce, sum[:chacha20poly1305.NonceSizeX])
+	return c.encryptWithNonce(ctx, computerID, bindingID, mediaType, "private", plaintext, nonce)
+}
+
+func (c *PrivateArtifactCipher) encryptWithNonce(ctx context.Context, computerID, eventID, mediaType, privacyClass string, plaintext, nonce []byte) ([]byte, PrivateArtifactMetadata, error) {
+	if c == nil || c.keys == nil || computerID == "" || eventID == "" || mediaType == "" || privacyClass != "private" || len(nonce) != chacha20poly1305.NonceSizeX {
 		return nil, PrivateArtifactMetadata{}, fmt.Errorf("private artifact cipher: complete private metadata is required")
 	}
 	material, err := c.keys.current(ctx, computerID)
@@ -179,10 +240,6 @@ func (c *PrivateArtifactCipher) Encrypt(ctx context.Context, computerID, eventID
 	aead, err := chacha20poly1305.NewX(material.key[:])
 	if err != nil {
 		return nil, PrivateArtifactMetadata{}, err
-	}
-	nonce := make([]byte, chacha20poly1305.NonceSizeX)
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, PrivateArtifactMetadata{}, fmt.Errorf("private artifact cipher: nonce: %w", err)
 	}
 	metadata := PrivateArtifactMetadata{
 		Version: privateArtifactVersionV1, ComputerID: computerID, EventID: eventID,

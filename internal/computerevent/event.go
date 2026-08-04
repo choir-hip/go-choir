@@ -40,6 +40,7 @@ const (
 	EventCheckpointPublished    EventKind = "checkpoint_published"
 	EventRouteProjectionUpdated EventKind = "route_projection_updated"
 	EventLifecycleObserved      EventKind = "lifecycle_observed"
+	EventSupervisionTransaction EventKind = "supervision_transaction"
 	EventKeyRotated             EventKind = "key_rotated"
 	EventKeyRevoked             EventKind = "key_revoked"
 	EventRecoveryRecorded       EventKind = "recovery_recorded"
@@ -52,8 +53,8 @@ var validEventKinds = map[EventKind]struct{}{
 	EventEffectAccepted: {}, EventEffectRejected: {}, EventMaterializationStarted: {},
 	EventMaterializationApplied: {}, EventMaterializationFailed: {}, EventRollbackRequested: {},
 	EventRollbackApplied: {}, EventResearcherUpdate: {}, EventCheckpointPublished: {},
-	EventRouteProjectionUpdated: {}, EventLifecycleObserved: {}, EventKeyRotated: {},
-	EventKeyRevoked: {}, EventRecoveryRecorded: {},
+	EventRouteProjectionUpdated: {}, EventLifecycleObserved: {}, EventSupervisionTransaction: {},
+	EventKeyRotated: {}, EventKeyRevoked: {}, EventRecoveryRecorded: {},
 }
 
 // Event is the complete V1 semantic event envelope. Event bodies contain no
@@ -185,6 +186,15 @@ func nonNilStrings(values []string) []string {
 		return []string{}
 	}
 	return values
+}
+
+func appendUniqueString(values []string, value string) []string {
+	for _, existing := range values {
+		if existing == value {
+			return nonNilStrings(values)
+		}
+	}
+	return append(nonNilStrings(values), value)
 }
 
 func IsSHA256(value string) bool {

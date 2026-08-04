@@ -36,12 +36,13 @@ const (
 // Handler owns Texture's HTTP and lifecycle behavior while using agentcore as
 // the concrete execution substrate.
 type Handler struct {
-	Core        *agentcore.Runtime
-	Store       *store.Store
-	Bus         *events.EventBus
-	Content     *contentowner.Service
-	ModelPolicy *modelpolicy.Manager
-	Provider    provideriface.Provider
+	Core                         *agentcore.Runtime
+	Store                        *store.Store
+	Bus                          *events.EventBus
+	Content                      *contentowner.Service
+	ModelPolicy                  *modelpolicy.Manager
+	Provider                     provideriface.Provider
+	rebuildSupervisionProjection func(context.Context) error
 
 	textureEditMu sync.Mutex
 }
@@ -59,6 +60,13 @@ func NewHandler(core *agentcore.Runtime) *Handler {
 		ModelPolicy: core.TextureModelPolicy(),
 		Provider:    core.TextureProvider(),
 	}
+}
+
+// refuseLegacyTextureWriter is the closed-cutover boundary for paths that do
+// not have the scoped snapshot and authority needed to form a transaction.
+// Callers must refuse before a legacy store writer can mutate Texture state.
+func (h *Handler) refuseLegacyTextureWriter(operation string) error {
+	return fmt.Errorf("%w: canonical supervision transaction required for %s", store.ErrLifecycleAuthorityRequired, operation)
 }
 
 func (h *Handler) getTextureDocument(ctx context.Context, ownerID, docID string) (types.Document, error) {

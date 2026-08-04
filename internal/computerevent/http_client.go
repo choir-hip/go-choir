@@ -107,10 +107,13 @@ func (c *HTTPClient) PinPrivatePayload(ctx context.Context, cipher *PrivateArtif
 	if c == nil || cipher == nil {
 		return PinResult{}, fmt.Errorf("computer event client: private artifact cipher is required")
 	}
-	if _, _, err := cipher.Decrypt(ctx, envelope, computerID, eventID); err != nil {
+	if _, metadata, err := cipher.Decrypt(ctx, envelope, computerID, eventID); err != nil {
 		return PinResult{}, fmt.Errorf("computer event client: private envelope authentication failed: %w", err)
+	} else if metadata.ComputerID != computerID || metadata.EventID != eventID || metadata.PrivacyClass != "private" || metadata.MediaType == "" {
+		return PinResult{}, fmt.Errorf("computer event client: private envelope metadata mismatch")
+	} else {
+		return c.pinPayload(ctx, computerID, envelope, metadata.MediaType, "private", pinIntentCommitment)
 	}
-	return c.pinPayload(ctx, computerID, envelope, PrivateArtifactMediaType, "private", pinIntentCommitment)
 }
 
 func (c *HTTPClient) PinNonPrivatePayload(ctx context.Context, computerID string, payload []byte, mediaType, privacyClass, requestCommitment string) (PinResult, error) {
@@ -140,6 +143,33 @@ func (c *HTTPClient) Events(ctx context.Context, computerID string, afterSequenc
 		records = []DurableEvent{}
 	}
 	return records, err
+}
+
+// PrivateArtifact fetches one authenticated corpusd-retained private envelope
+// and its signed PinReceipt for reconstruction. The caller verifies the digest,
+// receipt, and envelope metadata before decrypting.
+func (c *HTTPClient) PrivateArtifact(ctx context.Context, computerID, artifactDigest string) ([]byte, PinResult, error) {
+	if !IsSHA256(artifactDigest) {
+		return nil, PinResult{}, fmt.Errorf("computer event client: invalid private artifact digest")
+	}
+	query := url.Values{"computer_id": []string{computerID}}
+	var response struct {
+		ArtifactDigest string  `json:"artifact_digest"`
+		EnvelopeBase64 string  `json:"envelope_base64"`
+		Receipt        Receipt `json:"pin_receipt"`
+	}
+	_, err := c.do(ctx, http.MethodGet, "/internal/computers/artifacts/"+artifactDigest+"?"+query.Encode(), nil, &response)
+	if err != nil {
+		return nil, PinResult{}, err
+	}
+	if response.ArtifactDigest != artifactDigest {
+		return nil, PinResult{}, fmt.Errorf("computer event client: fetched private artifact digest mismatch")
+	}
+	envelope, err := base64.RawStdEncoding.DecodeString(response.EnvelopeBase64)
+	if err != nil {
+		return nil, PinResult{}, fmt.Errorf("computer event client: decode private artifact: %w", err)
+	}
+	return envelope, PinResult{ArtifactDigest: response.ArtifactDigest, Receipt: response.Receipt}, nil
 }
 
 func (c *HTTPClient) do(ctx context.Context, method, path string, body any, response any) (int, error) {

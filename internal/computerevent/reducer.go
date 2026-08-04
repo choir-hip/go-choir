@@ -169,8 +169,8 @@ func isCausalEvent(kind EventKind) bool {
 		EventToolInvoked, EventToolReturned, EventArtifactProduced,
 		EventEffectProposed, EventVerificationRecorded, EventEffectRejected,
 		EventCheckpointPublished, EventRouteProjectionUpdated,
-		EventLifecycleObserved, EventKeyRotated, EventKeyRevoked,
-		EventRecoveryRecorded:
+		EventLifecycleObserved, EventSupervisionTransaction, EventKeyRotated,
+		EventKeyRevoked, EventRecoveryRecorded:
 		return true
 	default:
 		return false

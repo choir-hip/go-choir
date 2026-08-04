@@ -5,15 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/server"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	pathpkg "path"
 	"strings"
-
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/server"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 const (
@@ -167,6 +167,9 @@ func validateProductAPIToolRoute(method, requestURI string) error {
 	if err != nil {
 		return err
 	}
+	if productAPIToolProtectedSupervisionPath(u.Path) {
+		return fmt.Errorf("product_api_request refuses supervision authority route %s", u.Path)
+	}
 	path := u.Path
 	for _, blocked := range []string{
 		"/internal/",
@@ -194,4 +197,18 @@ func validateProductAPIToolRoute(method, requestURI string) error {
 		}
 	}
 	return fmt.Errorf("product_api_request route %s is not in the product-path allowlist", path)
+}
+
+func productAPIToolProtectedSupervisionPath(raw string) bool {
+	path := pathpkg.Clean("/" + strings.TrimPrefix(raw, "/"))
+	for _, protected := range []string{
+		"/api/texture/supervision/command",
+		"/api/texture/supervision/import",
+		"/api/texture/supervision/rebuild",
+	} {
+		if path == protected || strings.HasPrefix(path, protected+"/") {
+			return true
+		}
+	}
+	return false
 }

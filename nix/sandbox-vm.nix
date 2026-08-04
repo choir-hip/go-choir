@@ -676,6 +676,10 @@ EOF
       CHOIR_SELF_DEVELOPMENT_G0_RECEIPT = genesisG0Receipt;
       CHOIR_SELF_DEVELOPMENT_G1_RECEIPT = genesisG1Receipt;
       CHOIR_SELF_DEVELOPMENT_G1_CANDIDATE_REF = genesisCandidateRef;
+      # Compatibility-floor release: the schema/reducer may replay supervision
+      # events, but this candidate must not emit them until staging proves that
+      # rollback to this exact release remains forward-readable.
+      CHOIR_SUPERVISION_WRITES_DISABLED = "1";
       PATH = lib.mkForce (lib.makeBinPath (with pkgs; [
         bash
         coreutils

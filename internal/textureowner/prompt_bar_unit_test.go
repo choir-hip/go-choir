@@ -124,8 +124,8 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) 
 		t.Fatalf("decode response: %v", err)
 	}
 	if resp.CommandID == "" || resp.TrajectoryID == "" || resp.DocID == "" || resp.RevisionID == "" ||
-		resp.SubjectID == "" || len(resp.ObligationIDs) != 1 || resp.ReducerSeq != 1 || resp.SnapshotCursor != 1 {
-		t.Fatalf("prompt response missing atomic lifecycle identity: %+v", resp)
+		resp.SubjectID == "" || len(resp.ObligationIDs) != 1 || resp.ReducerSeq != 3 || resp.SnapshotCursor != 3 {
+		t.Fatalf("prompt response violated canonical Texture open identity: %+v", resp)
 	}
 	conductor, err := rt.GetRun(context.Background(), resp.SubmissionID, "user-alice")
 	if err != nil {
@@ -158,17 +158,22 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) 
 	if done.State != types.RunCompleted {
 		t.Fatalf("initial texture state = %q, want completed", done.State)
 	}
-	decisions, err := rt.Store().ListTextureDecisionsByDocument(context.Background(), "user-alice", decision.DocID, 10)
+	decisionProjection, err := rt.Store().GetSupervisionProjectionSnapshot(context.Background(), "user-alice", rt.TextureSandboxID(), resp.TrajectoryID)
 	if err != nil {
-		t.Fatalf("list decisions: %v", err)
+		t.Fatalf("get decision projection: %v", err)
 	}
-	if len(decisions) != 1 {
-		t.Fatalf("decision count = %d, want 1: %+v", len(decisions), decisions)
+	if len(decisionProjection.Control.Decisions) != 1 {
+		t.Fatalf("decision count = %d, want 1: %+v", len(decisionProjection.Control.Decisions), decisionProjection.Control.Decisions)
 	}
-	if decisions[0].RunID != decision.InitialLoopID ||
-		decisions[0].DecisionKind != "no_worker_needed" ||
-		decisions[0].Reason != "M3.2 staging proof: user supplied the needed content and requested no research or execution worker." {
-		t.Fatalf("decision record = %+v", decisions[0])
+	var decisionBody struct {
+		OwnerActorID        string `json:"owner_actor_id"`
+		DecisionArtifactRef string `json:"decision_artifact_ref"`
+	}
+	if err := json.Unmarshal(decisionProjection.Control.Decisions[0].Body, &decisionBody); err != nil {
+		t.Fatal(err)
+	}
+	if decisionBody.OwnerActorID != "user-alice" || !strings.HasPrefix(decisionBody.DecisionArtifactRef, "artifact:sha256:") {
+		t.Fatalf("canonical owner decision = %+v", decisionBody)
 	}
 	seedRev, err := rt.Store().GetLifecycleRevision(context.Background(), "user-alice", rt.TextureSandboxID(), decision.UserRevisionID)
 	if err != nil {
@@ -397,8 +402,9 @@ func TestHandlePromptBarStableCommandReplaysOneLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(snapshot.WorkItems) != 1 || len(snapshot.Agents) != 1 || snapshot.Activation.RunID != firstDecision.InitialLoopID {
-		t.Fatalf("replayed lifecycle duplicated durable subjects: %+v", snapshot)
+	if len(snapshot.WorkItems) != 1 || len(snapshot.Agents) != 1 ||
+		snapshot.WorkItems[0].WorkItemID != first.ObligationIDs[0] || snapshot.Agents[0].AgentID != first.SubjectID {
+		t.Fatalf("replayed command duplicated canonical supervision subjects: %+v", snapshot)
 	}
 	if snapshot.Document.Title == prompt || len(strings.Fields(snapshot.Document.Title)) > 9 {
 		t.Fatalf("document title was not bounded from owner input: %q", snapshot.Document.Title)

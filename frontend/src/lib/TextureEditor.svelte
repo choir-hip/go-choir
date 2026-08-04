@@ -33,7 +33,7 @@
     WIRE_PLATFORM_READ_OWNER,
   } from './texture.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
-  import { getLifecycleSnapshot, observeLifecycle } from './lifecycle.js';
+  import { getLifecycleSnapshot, observeLifecycle, projectSupervisionPanel } from './lifecycle.js';
   import { previewTextureDocument } from './public-preview-data';
   import TextureCompareMergePanel from './TextureCompareMergePanel.svelte';
   import TexturePublicationResult from './TexturePublicationResult.svelte';
@@ -106,6 +106,8 @@
   let editorBodyDoc = null;
   let initializedKey = '';
   let latestHeadRevisionId = '';
+  let supervisionSnapshot = null;
+  let supervisionView = null;
   let pendingHeadRevisionId = '';
   let newVersionAvailable = false;
   let streamSource = null;
@@ -513,6 +515,7 @@
   function applyDocumentWorkState(doc) {
     agentPending = !!doc?.agent_revision_pending;
     agentRunId = doc?.agent_revision_run_id || '';
+    supervisionSnapshot = doc?.supervision || null;
     if (agentPending) {
       saveStatus = synthStatusLabel();
     }
@@ -532,12 +535,18 @@
   }
 
   async function handleLifecycleProjection(snapshot) {
-    if (!snapshot || snapshot.trajectory?.trajectory_id !== currentDoc?.trajectory_id) return;
-    const nextHead = lifecycleCurrentDocumentRevisionID(snapshot);
+    if (!snapshot) return;
+    const supervision = snapshot.schema === 'choir.supervision_transaction.v1';
+    const trajectoryId = supervision ? snapshot.trajectory_id : snapshot.trajectory?.trajectory_id;
+    if (trajectoryId !== currentDoc?.trajectory_id) return;
+    if (supervision) supervisionSnapshot = snapshot;
+    const nextHead = supervision ? snapshot.artifact_head_revision_id : lifecycleCurrentDocumentRevisionID(snapshot);
     latestHeadRevisionId = nextHead || latestHeadRevisionId;
-    agentPending = snapshot.activation?.state === 'pending' || snapshot.activation?.state === 'running' || snapshot.activation?.state === 'blocked';
-    agentRunId = snapshot.activation?.run_id || '';
-    if (agentPending) saveStatus = synthStatusLabel();
+    if (!supervision) {
+      agentPending = snapshot.activation?.state === 'pending' || snapshot.activation?.state === 'running' || snapshot.activation?.state === 'blocked';
+      agentRunId = snapshot.activation?.run_id || '';
+      if (agentPending) saveStatus = synthStatusLabel();
+    }
     if (nextHead && currentRevision?.revision_id !== nextHead) {
       await applyHeadChange(nextHead);
     }
@@ -1846,6 +1855,7 @@
   $: editEvidence = sourceEditEvidence(currentRevision, sourceDiagnosis);
   $: renderedMarkdown = renderDocumentHTML(editorValue);
   $: syncEditorSurface(renderedMarkdown);
+  $: supervisionView = projectSupervisionPanel(supervisionSnapshot);
 
   onMount(() => {
     if (!initializedKey) {
@@ -1964,6 +1974,223 @@
       on:publish-confirm={handlePublishCurrent}
       on:publish-cancel={() => (publishMenuOpen = false)}
     />
+
+    {#if supervisionView}
+      <aside
+        class="supervision-panel"
+        data-texture-supervision
+        data-supervision-state={supervisionView.state}
+        data-supervision-intent-id={supervisionView.intentRevisionID}
+        data-supervision-artifact-head={supervisionView.artifactHeadRevisionID}
+        data-supervision-canonical-head={supervisionView.canonicalEventHead}
+        data-supervision-lifecycle-version={supervisionView.lifecycleVersion ?? undefined}
+        data-supervision-snapshot-cursor={supervisionView.snapshotCursor ?? undefined}
+        data-supervision-overflow-count={supervisionView.overflowCount}
+        aria-label="Trajectory supervision orientation"
+      >
+        <header class="supervision-heading">
+          <div>
+            <span class="supervision-kicker">Owner supervision</span>
+            <h2>Trajectory orientation</h2>
+          </div>
+          <div class="supervision-state" role="status" aria-label={`Supervision state: ${supervisionView.stateLabel}`}>
+            <span data-supervision-lifecycle-state>{supervisionView.stateLabel}</span>
+            <span aria-label={supervisionView.snapshotCursor === null ? 'Snapshot cursor not recorded' : `Snapshot event ${supervisionView.snapshotCursor}`}>
+              event {supervisionView.snapshotCursor ?? 'not recorded'}
+            </span>
+          </div>
+        </header>
+
+        <div class="supervision-orientation">
+          <section
+            class="supervision-intent"
+            data-supervision-current-intent
+            aria-label="Current intent"
+          >
+            <span class="supervision-label">Current intent</span>
+            <p>{supervisionView.intent?.summary || 'Intent text is not present in this snapshot.'}</p>
+            <code data-supervision-exact-id>{supervisionView.intentRevisionID || 'Intent revision not recorded'}</code>
+            {#if supervisionView.latestDelta}
+              <p class="supervision-delta" data-supervision-latest-delta>
+                Latest delta · {supervisionView.latestDelta.summary}
+              </p>
+            {/if}
+          </section>
+
+          <dl class="supervision-heads" aria-label="Canonical supervision heads">
+            <div>
+              <dt>Artifact head</dt>
+              <dd><code data-supervision-exact-ref>{supervisionView.artifactHeadRevisionID || 'Not recorded'}</code></dd>
+            </div>
+            <div>
+              <dt>Lifecycle</dt>
+              <dd>version {supervisionView.lifecycleVersion ?? 'not recorded'}</dd>
+            </div>
+            <div>
+              <dt>Canonical tape head</dt>
+              <dd><code data-supervision-exact-ref>{supervisionView.canonicalEventHead || 'Not recorded'}</code></dd>
+            </div>
+          </dl>
+        </div>
+
+        {#if supervisionView.belief}
+          <div
+            class="supervision-belief"
+            data-supervision-belief
+            data-supervision-entry-id={supervisionView.belief.id}
+            aria-label="Super current belief"
+          >
+            <span class="supervision-label">Super believes</span>
+            <span>{supervisionView.belief.summary}</span>
+            {#if supervisionView.belief.id}<code data-supervision-exact-id>{supervisionView.belief.id}</code>{/if}
+          </div>
+        {/if}
+
+        <div class="supervision-control-grid" aria-label="Material supervision controls">
+          {#each supervisionView.controlGroups as group (group.key)}
+            <section
+              class:requires-attention={group.key !== 'obligations' && group.count > 0}
+              data-supervision-control-group={group.key}
+              data-supervision-count={group.count}
+              aria-label={`${group.label}: ${group.count}`}
+            >
+              <header>
+                <h3>{group.label}</h3>
+                <strong>{group.count}</strong>
+              </header>
+              {#if group.preview.length}
+                <ul>
+                  {#each group.preview as entry (`${entry.kind}:${entry.id}`)}
+                    <li
+                      data-supervision-entry-kind={entry.kind}
+                      data-supervision-entry-id={entry.id}
+                      data-supervision-entry-status={entry.status || undefined}
+                    >
+                      <span>{entry.summary}</span>
+                      {#if entry.statusLabel}<em>{entry.statusLabel}</em>{/if}
+                      {#if entry.id}<code data-supervision-exact-id>{entry.id}</code>{/if}
+                    </li>
+                  {/each}
+                </ul>
+                {#if group.hiddenCount}
+                  <p class="supervision-more">+{group.hiddenCount} in drilldown</p>
+                {/if}
+              {:else if group.count > 0}
+                <p class="supervision-missing">{group.count} flagged; entries are outside this bounded snapshot.</p>
+              {:else}
+                <p class="supervision-clear">
+                  {supervisionView.overflowCount ? 'None shown in bounded snapshot' : 'None recorded'}
+                </p>
+              {/if}
+            </section>
+          {/each}
+        </div>
+
+        <div class="supervision-resolution" aria-label="Rebase settlement and archive state">
+          <span data-supervision-rebase-state>
+            Rebase · {supervisionView.rebase.length ? `${supervisionView.rebase.length} open` : supervisionView.overflowCount ? 'none shown; snapshot bounded' : 'clear'}
+          </span>
+          <span
+            data-supervision-settlement-state={supervisionView.settled ? 'settled' : supervisionView.settlement ? 'proposed' : 'open'}
+          >
+            Settlement · {supervisionView.settled ? 'settled' : supervisionView.settlement ? 'proposed' : 'open'}
+          </span>
+          <span data-supervision-archive-state={supervisionView.archived ? 'archived' : 'live'}>
+            Archive · {supervisionView.archived ? 'archived' : 'live'}
+          </span>
+          {#if supervisionView.settlementProposalID}
+            <code data-supervision-exact-id>{supervisionView.settlementProposalID}</code>
+          {/if}
+        </div>
+
+        <details class="supervision-drilldown" data-supervision-drilldown>
+          <summary aria-label="Show supervision work events and provenance">
+            Work, events & provenance
+            {#if supervisionView.overflowCount}
+              <span data-supervision-snapshot-overflow>+{supervisionView.overflowCount} outside snapshot</span>
+            {/if}
+          </summary>
+
+          <div class="supervision-work-grid" aria-label="Assignment attempt result and update statuses">
+            {#each supervisionView.workGroups as group (group.key)}
+              <section
+                data-supervision-work-group={group.key}
+                data-supervision-count={group.count}
+                aria-label={`${group.label}: ${group.count}`}
+              >
+                <h3>{group.label} · {group.count}</h3>
+                {#if group.entries.length}
+                  <ul>
+                    {#each group.entries as entry (`${entry.kind}:${entry.id}`)}
+                      <li
+                        data-supervision-entry-kind={entry.kind}
+                        data-supervision-entry-id={entry.id}
+                        data-supervision-entry-status={entry.status || undefined}
+                      >
+                        <span>{entry.summary}</span>
+                        {#if entry.statusLabel}<em>{entry.statusLabel}</em>{/if}
+                        {#if entry.id}<code data-supervision-exact-id>{entry.id}</code>{/if}
+                      </li>
+                    {/each}
+                  </ul>
+                {:else}
+                  <p>No {group.label.toLowerCase()} in this snapshot.</p>
+                {/if}
+              </section>
+            {/each}
+          </div>
+
+          <section class="supervision-event-log" data-supervision-events aria-label="Bounded supervision event projection">
+            <h3>Projected events · {supervisionView.activity.length}</h3>
+            {#if supervisionView.activity.length}
+              <ol>
+                {#each supervisionView.activity as entry (`${entry.kind}:${entry.id}`)}
+                  <li
+                    data-supervision-entry-kind={entry.kind}
+                    data-supervision-entry-id={entry.id}
+                    data-supervision-entry-status={entry.status || undefined}
+                  >
+                    <span>{entry.summary}</span>
+                    <code data-supervision-exact-id>{entry.id || 'ID not recorded'}</code>
+                  </li>
+                {/each}
+              </ol>
+            {:else}
+              <p>No projected supervision events are present.</p>
+            {/if}
+            {#if supervisionView.hiddenActivityCount}
+              <p class="supervision-more" data-supervision-event-overflow>
+                +{supervisionView.hiddenActivityCount} projected events omitted from this bounded drilldown.
+              </p>
+            {/if}
+          </section>
+
+          <section class="supervision-provenance" data-supervision-provenance aria-label="Exact supervision provenance references">
+            <h3>Exact provenance · {supervisionView.provenance.length}</h3>
+            {#if supervisionView.provenance.length}
+              <ul>
+                {#each supervisionView.provenance as ref (`${ref.entryKind}:${ref.entryID}:${ref.value}`)}
+                  <li
+                    data-supervision-ref={ref.value}
+                    data-supervision-ref-entry-id={ref.entryID}
+                  >
+                    <span>{ref.label || 'Reference'} · {ref.entryID || ref.entryKind}</span>
+                    <code data-supervision-exact-ref>{ref.value}</code>
+                  </li>
+                {/each}
+              </ul>
+            {:else}
+              <p>No artifact or evidence references are present in this snapshot.</p>
+            {/if}
+            {#if supervisionView.hiddenProvenanceCount}
+              <p class="supervision-more" data-supervision-provenance-overflow>
+                +{supervisionView.hiddenProvenanceCount} references omitted from this bounded drilldown.
+              </p>
+            {/if}
+          </section>
+        </details>
+      </aside>
+    {/if}
 
     {#if agentPending}
       <div
@@ -2114,6 +2341,305 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+  }
+
+  .supervision-panel {
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--choir-border-strong);
+    background: var(--choir-surface-pane);
+    color: var(--choir-text-primary);
+    font-family: var(--choir-font-ui);
+  }
+
+  .supervision-heading,
+  .supervision-state,
+  .supervision-belief,
+  .supervision-resolution,
+  .supervision-control-grid section header {
+    display: flex;
+    align-items: center;
+  }
+
+  .supervision-heading {
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem 0.25rem;
+  }
+
+  .supervision-kicker,
+  .supervision-label,
+  .supervision-heads dt {
+    color: var(--choir-text-muted);
+    font-size: 0.68rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .supervision-heading h2,
+  .supervision-control-grid h3,
+  .supervision-work-grid h3,
+  .supervision-event-log h3,
+  .supervision-provenance h3 {
+    margin: 0;
+    color: var(--choir-text-primary);
+  }
+
+  .supervision-heading h2 {
+    font-size: 0.95rem;
+    letter-spacing: -0.01em;
+  }
+
+  .supervision-state {
+    gap: 0.5rem;
+    color: var(--choir-text-muted);
+    font-size: 0.72rem;
+  }
+
+  .supervision-state span:first-child {
+    border-radius: var(--choir-radius-pill);
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
+    padding: 0.2rem 0.5rem;
+    font-weight: 750;
+  }
+
+  .supervision-orientation {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(15rem, 1fr);
+    gap: 0.75rem;
+    padding: 0.25rem 0.75rem 0.5rem;
+  }
+
+  .supervision-intent {
+    min-width: 0;
+  }
+
+  .supervision-intent p {
+    margin: 0.15rem 0;
+    color: var(--choir-text-primary) !important;
+    font-size: 0.82rem;
+    line-height: 1.35;
+  }
+
+  .supervision-intent > p:not(.supervision-delta) {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .supervision-intent .supervision-delta {
+    color: var(--choir-text-muted) !important;
+    font-size: 0.72rem;
+  }
+
+  .supervision-panel code {
+    color: var(--choir-text-muted);
+    font-family: var(--choir-font-mono);
+    font-size: 0.68rem;
+    overflow-wrap: anywhere;
+  }
+
+  .supervision-heads {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+  }
+
+  .supervision-heads div {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: 0.5rem;
+  }
+
+  .supervision-heads dd {
+    min-width: 0;
+    margin: 0;
+    color: var(--choir-text-primary);
+    font-size: 0.72rem;
+  }
+
+  .supervision-belief {
+    gap: 0.5rem;
+    margin: 0 0.75rem 0.5rem;
+    border-left: 0.2rem solid var(--choir-text-accent);
+    background: var(--choir-state-hover);
+    padding: 0.35rem 0.5rem;
+    font-size: 0.76rem;
+  }
+
+  .supervision-belief code {
+    margin-left: auto;
+  }
+
+  .supervision-control-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-top: 1px solid var(--choir-border-strong);
+  }
+
+  .supervision-control-grid > section {
+    min-width: 0;
+    padding: 0.5rem 0.75rem;
+    border-right: 1px solid var(--choir-border-strong);
+  }
+
+  .supervision-control-grid > section:last-child {
+    border-right: 0;
+  }
+
+  .supervision-control-grid > section.requires-attention {
+    background: var(--choir-status-warning-soft);
+  }
+
+  .supervision-control-grid section header {
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .supervision-control-grid h3,
+  .supervision-work-grid h3,
+  .supervision-event-log h3,
+  .supervision-provenance h3 {
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+  }
+
+  .supervision-control-grid strong {
+    color: var(--choir-text-accent);
+    font-size: 0.82rem;
+  }
+
+  .supervision-control-grid ul,
+  .supervision-work-grid ul,
+  .supervision-provenance ul,
+  .supervision-event-log ol {
+    margin: 0.35rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .supervision-control-grid li,
+  .supervision-work-grid li,
+  .supervision-provenance li,
+  .supervision-event-log li {
+    min-width: 0;
+    margin-top: 0.25rem;
+    color: var(--choir-text-primary);
+    font-size: 0.72rem;
+    line-height: 1.3;
+  }
+
+  .supervision-control-grid li span,
+  .supervision-work-grid li span,
+  .supervision-event-log li span {
+    display: block;
+  }
+
+  .supervision-control-grid li code,
+  .supervision-work-grid li code,
+  .supervision-event-log li code {
+    display: block;
+    margin-top: 0.1rem;
+  }
+
+  .supervision-control-grid em,
+  .supervision-work-grid em {
+    display: inline-block;
+    margin-top: 0.1rem;
+    border-radius: var(--choir-radius-pill);
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
+    padding: 0.05rem 0.35rem;
+    font-size: 0.64rem;
+    font-style: normal;
+    font-weight: 750;
+  }
+
+  .supervision-clear,
+  .supervision-missing,
+  .supervision-more,
+  .supervision-work-grid p,
+  .supervision-event-log p,
+  .supervision-provenance p {
+    margin: 0.35rem 0 0;
+    color: var(--choir-text-muted) !important;
+    font-size: 0.68rem;
+    line-height: 1.35;
+  }
+
+  .supervision-resolution {
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    border-top: 1px solid var(--choir-border-strong);
+    padding: 0.35rem 0.75rem;
+    color: var(--choir-text-muted);
+    font-size: 0.7rem;
+  }
+
+  .supervision-resolution code {
+    margin-left: auto;
+  }
+
+  .supervision-drilldown {
+    border-top: 1px solid var(--choir-border-strong);
+  }
+
+  .supervision-drilldown > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.45rem 0.75rem;
+    cursor: pointer;
+    color: var(--choir-text-accent);
+    font-size: 0.72rem;
+    font-weight: 750;
+    list-style-position: inside;
+  }
+
+  .supervision-drilldown > summary:focus-visible {
+    outline: 2px solid var(--choir-state-focus);
+    outline-offset: -2px;
+  }
+
+  .supervision-drilldown > summary span {
+    color: var(--choir-status-warning);
+    font-weight: 650;
+  }
+
+  .supervision-work-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-top: 1px solid var(--choir-border-strong);
+  }
+
+  .supervision-event-log,
+  .supervision-provenance {
+    padding: 0.75rem;
+    border-top: 1px solid var(--choir-border-strong);
+  }
+
+  .supervision-event-log ol {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem 0.75rem;
+  }
+
+  .supervision-provenance li {
+    display: grid;
+    grid-template-columns: minmax(8rem, 0.4fr) minmax(0, 1fr);
+    gap: 0.5rem;
+    padding-top: 0.25rem;
+    border-top: 1px solid var(--choir-border-strong);
+  }
+
+  .supervision-drilldown[open] {
+    max-height: 50vh;
+    overflow: auto;
   }
 
   .work-banner {
@@ -2638,6 +3164,45 @@
   }
 
   @media (max-width: 768px) {
+    .supervision-orientation {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .supervision-control-grid,
+    .supervision-work-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .supervision-control-grid > section:nth-child(2) {
+      border-right: 0;
+    }
+
+    .supervision-control-grid > section:nth-child(n + 3) {
+      border-top: 1px solid var(--choir-border-strong);
+    }
+
+    .supervision-event-log ol {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .supervision-provenance li {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .supervision-heading {
+      align-items: flex-start;
+    }
+
+    .supervision-state {
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
+    .supervision-resolution code,
+    .supervision-belief code {
+      width: 100%;
+      margin-left: 0;
+    }
     .rendered-doc {
       padding: 1rem;
     }

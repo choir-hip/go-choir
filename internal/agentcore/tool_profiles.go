@@ -341,6 +341,12 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterCoagentUpdateTools(superRegistry, rt); err != nil {
 		return err
 	}
+	if err := superRegistry.Register(newOpenSupervisionAssignmentsTool(rt)); err != nil {
+		return err
+	}
+	if err := superRegistry.Register(newRecordSupervisionTransitionTool(rt)); err != nil {
+		return err
+	}
 	if rt.capsuleExecutor != nil {
 		if err := RegisterCapsuleTools(superRegistry); err != nil {
 			return err

@@ -387,6 +387,29 @@ func TestAppenderReconstructsEmbeddedProjectionFromDurableChain(t *testing.T) {
 	}
 }
 
+func TestAppenderPrivateRebuildAcceptsEmptyCanonicalTape(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := SigningKey{SignerRef: SignerRef{SignerDomain: "platform-control", KeyID: "platform-1"}, PrivateKey: privateKey}
+	projection := &memoryProjection{}
+	appender, err := NewComputerEventAppender(testComputerID, memoryPinner{signer: signer}, projection, &memoryCAS{signer: signer}, EventHeadReceiptVerifier{Keys: staticKeyResolver{key: publicKey}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := newPrivateArtifactCipher(testComputerID, base64.RawStdEncoding.EncodeToString(bytes.Repeat([]byte{0x93}, 32)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := appender.RebuildPrivateProjection(context.Background(), emptyPrivateEventSource{}, cipher); err != nil {
+		t.Fatalf("empty private rebuild = %v", err)
+	}
+	if projection.head == nil || projection.head.ComputerID != testComputerID || projection.head.Sequence != 0 {
+		t.Fatalf("empty rebuild zero head = %+v", projection.head)
+	}
+}
+
 func TestEventRejectsNonCanonicalArtifactReferences(t *testing.T) {
 	event := testEvent(t, nil, EventArtifactProduced)
 	event.InputArtifactRefs = []string{testDigestA}
@@ -477,21 +500,33 @@ func (p memoryPinner) PreparePrivatePayload(ctx context.Context, cipher *Private
 }
 
 func (p memoryPinner) PinPrivatePayload(ctx context.Context, cipher *PrivateArtifactCipher, computerID, eventID string, envelope []byte, pinIntentCommitment string) (PinResult, error) {
-	if _, _, err := cipher.Decrypt(ctx, envelope, computerID, eventID); err != nil {
+	if _, metadata, err := cipher.Decrypt(ctx, envelope, computerID, eventID); err != nil {
 		return PinResult{}, err
+	} else {
+		digest := DigestBytes(envelope)
+		receipt, err := NewSignedReceipt("PinReceipt", "corpusd", map[string]any{
+			"computer_id": computerID, "artifact_digest": digest, "media_type": metadata.MediaType,
+			"privacy_class": "private", "pin_intent_commitment": pinIntentCommitment,
+		}, []SigningKey{p.signer}, time.Date(2026, 7, 18, 20, 0, 0, 0, time.UTC))
+		return PinResult{ArtifactDigest: digest, Receipt: receipt}, err
 	}
-	digest := DigestBytes(envelope)
-	receipt, err := NewSignedReceipt("PinReceipt", "corpusd", map[string]any{
-		"computer_id": computerID, "artifact_digest": digest, "media_type": PrivateArtifactMediaType,
-		"privacy_class": "private", "pin_intent_commitment": pinIntentCommitment,
-	}, []SigningKey{p.signer}, time.Date(2026, 7, 18, 20, 0, 0, 0, time.UTC))
-	return PinResult{ArtifactDigest: digest, Receipt: receipt}, err
+}
+
+type memorySupervisionCommand struct {
+	receipt        Receipt
+	artifactDigest string
+	commandDigest  string
+	transaction    SupervisionTransaction
 }
 
 type memoryProjection struct {
-	head             *Head
-	prepared         []CASRequest
-	failFinalizeOnce bool
+	head                *Head
+	prepared            []CASRequest
+	failFinalizeOnce    bool
+	failPinRecordOnce   bool
+	reservations        map[string]string
+	frozenPlans         map[string]FrozenSupervisionPlan
+	supervisionCommands map[string]memorySupervisionCommand
 }
 
 func (p *memoryProjection) Head(context.Context, string) (*Head, error) {
@@ -504,7 +539,7 @@ func (p *memoryProjection) Prepare(_ context.Context, request CASRequest) error 
 func (p *memoryProjection) Prepared(context.Context, string) ([]CASRequest, error) {
 	return append([]CASRequest(nil), p.prepared...), nil
 }
-func (p *memoryProjection) Finalize(_ context.Context, _ string, digest string, _ Receipt) error {
+func (p *memoryProjection) Finalize(_ context.Context, _ string, digest string, receipt Receipt) error {
 	if p.failFinalizeOnce {
 		p.failFinalizeOnce = false
 		return errors.New("injected finalize crash")
@@ -513,6 +548,13 @@ func (p *memoryProjection) Finalize(_ context.Context, _ string, digest string, 
 		if request.EventDigest == digest {
 			p.head = cloneHead(&request.Next)
 			p.prepared = append(p.prepared[:index], p.prepared[index+1:]...)
+			if request.SupervisionTransaction != nil {
+				if p.supervisionCommands == nil {
+					p.supervisionCommands = make(map[string]memorySupervisionCommand)
+				}
+				commandID := request.SupervisionTransaction.CommandID
+				p.supervisionCommands[commandID] = memorySupervisionCommand{receipt: receipt, artifactDigest: request.Event.DecisionRef, commandDigest: request.SupervisionTransaction.CommandDigest, transaction: *request.SupervisionTransaction}
+			}
 			return nil
 		}
 	}
@@ -525,6 +567,115 @@ func (p *memoryProjection) DiscardPrepared(_ context.Context, _ string, digest s
 		}
 	}
 	return nil
+}
+func (p *memoryProjection) ReserveSupervisionCommand(_ context.Context, _, commandID, commandDigest string) (Receipt, string, bool, error) {
+	if p.reservations == nil {
+		p.reservations = make(map[string]string)
+	}
+	if existing, ok := p.reservations[commandID]; ok && existing != commandDigest {
+		return Receipt{}, "", false, ErrSupervisionIdempotencyConflict
+	}
+	p.reservations[commandID] = commandDigest
+	if command, ok := p.supervisionCommands[commandID]; ok {
+		return command.receipt, command.artifactDigest, true, nil
+	}
+	return Receipt{}, "", false, nil
+}
+
+func (p *memoryProjection) PendingSupervisionReservation(_ context.Context, _, commandID string) (bool, error) {
+	if _, finalized := p.supervisionCommands[commandID]; finalized {
+		return false, nil
+	}
+	_, reserved := p.reservations[commandID]
+	return reserved, nil
+}
+func (p *memoryProjection) ReserveFrozenSupervisionInputs(_ context.Context, computerID, commandID, commandDigest string, plan FrozenSupervisionPlan) (Receipt, string, bool, error) {
+	if command, ok := p.supervisionCommands[commandID]; ok {
+		if command.commandDigest != commandDigest {
+			return Receipt{}, "", false, ErrSupervisionIdempotencyConflict
+		}
+		return command.receipt, command.artifactDigest, true, nil
+	}
+	if err := plan.ValidatePrivateInputs(computerID, commandID, commandDigest); err != nil {
+		return Receipt{}, "", false, err
+	}
+	if existing, ok := p.reservations[commandID]; ok && existing != commandDigest {
+		return Receipt{}, "", false, ErrSupervisionIdempotencyConflict
+	}
+	if p.reservations == nil {
+		p.reservations = make(map[string]string)
+	}
+	if p.frozenPlans == nil {
+		p.frozenPlans = make(map[string]FrozenSupervisionPlan)
+	}
+	if existing, ok := p.frozenPlans[commandID]; ok {
+		left, _ := CanonicalJSON(existing)
+		right, _ := CanonicalJSON(plan)
+		if !bytes.Equal(left, right) {
+			return Receipt{}, "", false, ErrSupervisionIdempotencyConflict
+		}
+		return Receipt{}, "", false, nil
+	}
+	p.reservations[commandID] = commandDigest
+	p.frozenPlans[commandID] = plan
+	return Receipt{}, "", false, nil
+}
+
+func (p *memoryProjection) FrozenSupervisionPlan(_ context.Context, _, commandID string) (FrozenSupervisionPlan, bool, error) {
+	plan, ok := p.frozenPlans[commandID]
+	return plan, ok, nil
+}
+
+func (p *memoryProjection) FreezeSupervisionPlan(_ context.Context, _, commandID, commandDigest string, plan FrozenSupervisionPlan) error {
+	if p.reservations[commandID] != commandDigest {
+		return ErrSupervisionIdempotencyConflict
+	}
+	if p.frozenPlans == nil {
+		p.frozenPlans = make(map[string]FrozenSupervisionPlan)
+	}
+	p.frozenPlans[commandID] = plan
+	return nil
+}
+
+func (p *memoryProjection) RebuildComputerEventProjection(_ context.Context, records []DurableEvent, head *Head) error {
+	if len(records) != 0 {
+		return errors.New("unexpected records")
+	}
+	p.head = cloneHead(head)
+	return nil
+}
+
+type emptyPrivateEventSource struct{}
+
+func (emptyPrivateEventSource) Events(context.Context, string, uint64) ([]DurableEvent, error) {
+	return nil, nil
+}
+
+func (emptyPrivateEventSource) PrivateArtifact(context.Context, string, string) ([]byte, PinResult, error) {
+	return nil, PinResult{}, errors.New("unexpected private artifact")
+}
+func (p *memoryProjection) RecordSupervisionPin(_ context.Context, _, commandID, commandDigest string, receipt Receipt) error {
+	if p.failPinRecordOnce {
+		p.failPinRecordOnce = false
+		return errors.New("injected pin receipt persistence crash")
+	}
+	plan, ok := p.frozenPlans[commandID]
+	if !ok || p.reservations[commandID] != commandDigest || plan.PinReceipt != nil {
+		return ErrNeedsProjectionRepair
+	}
+	plan.PinReceipt = &receipt
+	p.frozenPlans[commandID] = plan
+	return nil
+}
+
+func (p *memoryProjection) SupervisionCommand(_ context.Context, _, commandID string) (Receipt, string, string, bool, error) {
+	command, ok := p.supervisionCommands[commandID]
+	return command.receipt, command.artifactDigest, command.commandDigest, ok, nil
+}
+
+func (p *memoryProjection) FinalizedSupervisionTransaction(_ context.Context, _, commandID string) (SupervisionTransaction, bool, error) {
+	command, ok := p.supervisionCommands[commandID]
+	return command.transaction, ok, nil
 }
 
 type memoryCAS struct {

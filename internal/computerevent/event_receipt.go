@@ -61,3 +61,21 @@ func (v EventHeadReceiptVerifier) VerifyEventHeadReceipt(_ context.Context, rece
 	}
 	return nil
 }
+
+// VerifyArtifactPinReceipt authenticates the corpusd receipt binding an
+// externally fetched content-addressed private envelope to its computer.
+func (v EventHeadReceiptVerifier) VerifyArtifactPinReceipt(_ context.Context, receipt Receipt, computerID, artifactDigest string) error {
+	if v.Keys == nil {
+		return fmt.Errorf("artifact pin receipt: key resolver is required")
+	}
+	if receipt.ReceiptKind != "PinReceipt" || receipt.Issuer != "corpusd" {
+		return fmt.Errorf("artifact pin receipt: wrong kind or issuer")
+	}
+	if err := receipt.Verify(v.Keys); err != nil {
+		return err
+	}
+	if receipt.KindFields["computer_id"] != computerID || receipt.KindFields["artifact_digest"] != artifactDigest || receipt.KindFields["privacy_class"] != "private" {
+		return fmt.Errorf("artifact pin receipt: scope mismatch")
+	}
+	return nil
+}

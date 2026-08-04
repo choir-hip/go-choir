@@ -39,7 +39,7 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 	ctx := context.Background()
 	ownerID := "user-alice"
 	trajectoryID := "traj-update-restart"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	superAgent, err := rt.ensurePersistentSuperAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("ensure super agent: %v", err)
 	}
@@ -1660,7 +1660,7 @@ func TestTrajectoryObligationsReportPendingUpdateCoagent(t *testing.T) {
 	ctx := context.Background()
 	ownerID := "user-alice"
 	trajectoryID := "traj-update-stall"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	superAgent, err := rt.ensurePersistentSuperAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("ensure super agent: %v", err)
 	}

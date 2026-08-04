@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -30,13 +31,254 @@ func (s *fakeServiceManager) CleanupRecoveryCredential(context.Context) error {
 	return nil
 }
 
-type fakeHealthProber struct{ failDigest string }
+type fakeHealthProber struct {
+	failDigest  string
+	attestation HealthAttestation
+}
 
-func (p fakeHealthProber) Probe(_ context.Context, digest string, _ ReleaseManifest) ([]string, error) {
-	if digest == p.failDigest {
-		return nil, errors.New("probe failed")
+func validHealthAttestation(observation string) HealthAttestation {
+	return HealthAttestation{
+		ObservationArtifactDigests:      []string{observation},
+		Supervision:                     CurrentSupervisionCompatibility(),
+		SupervisionWritesDisabled:       true,
+		PrivateTapeReplaySemanticDigest: strings.Repeat("e", 64),
+		ProjectionSemanticDigest:        strings.Repeat("e", 64),
 	}
-	return []string{strings.Repeat("f", 64)}, nil
+}
+
+func (p fakeHealthProber) Probe(_ context.Context, digest string, _ ReleaseManifest) (HealthAttestation, error) {
+	if digest == p.failDigest {
+		return HealthAttestation{}, errors.New("probe failed")
+	}
+	if p.attestation.PrivateTapeReplaySemanticDigest != "" {
+		return p.attestation, nil
+	}
+	return validHealthAttestation(strings.Repeat("f", 64)), nil
+}
+
+func TestSupervisionCompatibilityFloorIsExact(t *testing.T) {
+	current := CurrentSupervisionCompatibility()
+	if err := verifySupervisionCompatibility(current); err != nil {
+		t.Fatal(err)
+	}
+	legacyJSON, err := json.Marshal(ReleaseManifest{})
+	if err != nil || strings.Contains(string(legacyJSON), "supervision_compatibility") {
+		t.Fatalf("legacy manifest compatibility field was not omitted: %s, %v", legacyJSON, err)
+	}
+	withFloor, err := FinalizeManifest(ReleaseManifest{Supervision: &current})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reFinalized, err := FinalizeManifest(withFloor)
+	if err != nil || reFinalized.ContentDigest != withFloor.ContentDigest {
+		t.Fatalf("supervision manifest digest was not stable: %+v, %v", reFinalized, err)
+	}
+	floorJSON, err := json.Marshal(withFloor)
+	if err != nil || strings.Count(string(floorJSON), `"supervision_compatibility"`) != 1 {
+		t.Fatalf("supervision compatibility was not encoded exactly once: %s, %v", floorJSON, err)
+	}
+	missing := current
+	missing.ProjectionImportSchema = ""
+	if err := verifySupervisionCompatibility(missing); err == nil {
+		t.Fatal("missing projection import schema was accepted")
+	}
+	reordered := current
+	reordered.PrivatePayloadMedia = []string{
+		computerevent.ProjectionImportMediaTypeV1,
+		computerevent.SupervisionTransactionMediaTypeV1,
+	}
+	if err := verifySupervisionCompatibility(reordered); err == nil {
+		t.Fatal("reordered private payload compatibility was accepted")
+	}
+}
+
+func pinManifestForTest(t *testing.T, root, source string, manifest ReleaseManifest) string {
+	t.Helper()
+	releaseDir := filepath.Join(root, "releases", manifest.ContentDigest)
+	for _, file := range manifest.Files {
+		content, err := os.ReadFile(filepath.Join(source, filepath.FromSlash(file.Path)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.Join(releaseDir, filepath.FromSlash(file.Path))
+		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target, content, os.FileMode(file.Mode)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	encoded, err := computerevent.CanonicalJSON(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(releaseDir, "release-manifest.json"), encoded, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	return releaseDir
+}
+
+func TestReadLegacyManifestWithoutSupervisionFloor(t *testing.T) {
+	root := t.TempDir()
+	request := updaterRequestFixture(t, root, "computer-test", "realization-test", "legacy-release", "legacy-idem", "legacy release")
+	legacy := request.Manifest
+	legacy.Supervision = nil
+	var err error
+	legacy, err = FinalizeManifest(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinManifestForTest(t, root, request.SourceDir, legacy)
+
+	got, releaseDir, err := ReadPinnedManifest(root, legacy.ContentDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if releaseDir == "" || got.Supervision != nil || got.ContentDigest != legacy.ContentDigest {
+		t.Fatalf("legacy manifest was not preserved for selection: %+v at %q", got, releaseDir)
+	}
+	reFinalized, err := FinalizeManifest(got)
+	if err != nil || reFinalized.ContentDigest != legacy.ContentDigest {
+		t.Fatalf("legacy manifest digest changed after decode: %+v, %v", reFinalized, err)
+	}
+}
+
+func TestUpdaterRefusesNewApplyWithoutForwardReadableFloor(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	service := &fakeServiceManager{}
+	engine, err := New(root, "computer-test", "realization-test", service, fakeHealthProber{}, testReceiptSigner{key: computerevent.SigningKey{
+		SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := updaterRequestFixture(t, root, "computer-test", "realization-test", "missing-floor", "missing-floor-idem", "new release")
+	request.Manifest.Supervision = nil
+	request.Manifest, err = FinalizeManifest(request.Manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.RequestCommitment, err = ComputeApplyRequestCommitment(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := engine.Apply(context.Background(), request); err == nil || !strings.Contains(err.Error(), "supervision compatibility floor is required") {
+		t.Fatalf("new apply without supervision floor error = %v", err)
+	}
+	if service.restarts != 0 || service.recoveries != 0 {
+		t.Fatalf("new apply without floor mutated service: restarts=%d recoveries=%d", service.restarts, service.recoveries)
+	}
+	if _, err := os.Lstat(filepath.Join(root, "current")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("new apply without floor changed current pointer: %v", err)
+	}
+}
+
+func TestUpdaterRejectsHealthWithoutWriteDisabledReplayAttestation(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	service := &fakeServiceManager{}
+	attestation := validHealthAttestation(strings.Repeat("f", 64))
+	attestation.SupervisionWritesDisabled = false
+	engine, err := New(root, "computer-test", "realization-test", service, fakeHealthProber{attestation: attestation}, testReceiptSigner{key: computerevent.SigningKey{
+		SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := updaterRequestFixture(t, root, "computer-test", "realization-test", "unattested", "unattested-idem", "unattested release")
+
+	result, err := engine.Apply(context.Background(), request)
+	if err == nil || !strings.Contains(err.Error(), "health private supervision replay attestation is invalid") || result.Outcome != "failed" {
+		t.Fatalf("unattested apply result=%+v err=%v", result, err)
+	}
+	if service.cleanups != 0 {
+		t.Fatalf("unattested apply completed recovery cleanup: %d", service.cleanups)
+	}
+}
+
+func TestRollbackEligibilityAcceptsExactForwardReadableFloor(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	service := &fakeServiceManager{}
+	engine, err := New(root, "computer-test", "realization-test", service, fakeHealthProber{}, testReceiptSigner{key: computerevent.SigningKey{
+		SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prior := updaterRequestFixture(t, root, "computer-test", "realization-test", "compatible-prior", "compatible-idem", "prior release")
+	priorDir := filepath.Join(root, "releases", prior.Manifest.ContentDigest)
+	if err := engine.stageRelease(prior.SourceDir, priorDir, prior.Manifest); err != nil {
+		t.Fatal(err)
+	}
+
+	receipt, err := engine.restorePrior(context.Background(), prior, priorDir, prior.Manifest.ContentDigest, strings.Repeat("f", 64), errors.New("target failed"), time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt == nil || service.recoveries != 1 || service.cleanups != 1 {
+		t.Fatalf("compatible rollback did not restart and attest: receipt=%+v recoveries=%d cleanups=%d", receipt, service.recoveries, service.cleanups)
+	}
+	if current, _, err := engine.currentRelease(); err != nil || current != prior.Manifest.ContentDigest {
+		t.Fatalf("compatible rollback current release = %q, %v", current, err)
+	}
+}
+
+func TestRollbackEligibilityRefusesLegacyManifestBeforeServiceMutation(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	service := &fakeServiceManager{}
+	engine, err := New(root, "computer-test", "realization-test", service, fakeHealthProber{}, testReceiptSigner{key: computerevent.SigningKey{
+		SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := updaterRequestFixture(t, root, "computer-test", "realization-test", "failed-target", "target-idem", "target release")
+	targetDir := filepath.Join(root, "releases", target.Manifest.ContentDigest)
+	if err := engine.stageRelease(target.SourceDir, targetDir, target.Manifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.swapCurrent(targetDir); err != nil {
+		t.Fatal(err)
+	}
+	legacyRequest := updaterRequestFixture(t, root, "computer-test", "realization-test", "legacy-prior", "legacy-idem", "legacy prior")
+	legacy := legacyRequest.Manifest
+	legacy.Supervision = nil
+	legacy, err = FinalizeManifest(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyDir := pinManifestForTest(t, root, legacyRequest.SourceDir, legacy)
+
+	receipt, err := engine.restorePrior(context.Background(), target, legacyDir, legacy.ContentDigest, target.Manifest.ContentDigest, errors.New("target failed"), time.Now().UTC())
+	if err == nil || !strings.Contains(err.Error(), "rollback candidate is below supervision compatibility floor") {
+		t.Fatalf("legacy rollback candidate error = %v", err)
+	}
+	if receipt != nil || service.restarts != 0 || service.recoveries != 0 || service.cleanups != 0 {
+		t.Fatalf("legacy rollback mutated service: receipt=%+v restarts=%d recoveries=%d cleanups=%d", receipt, service.restarts, service.recoveries, service.cleanups)
+	}
+	if current, _, currentErr := engine.currentRelease(); currentErr != nil || current != target.Manifest.ContentDigest {
+		t.Fatalf("legacy rollback swapped pointer: current=%q err=%v", current, currentErr)
+	}
 }
 
 func TestUpdaterAppliesIdempotentlyAndRestoresPriorHealthyRelease(t *testing.T) {
@@ -123,15 +365,15 @@ func (m *processRestartManager) CleanupRecoveryCredential(context.Context) error
 
 type processHealthProber struct{ output string }
 
-func (p processHealthProber) Probe(ctx context.Context, _ string, manifest ReleaseManifest) ([]string, error) {
+func (p processHealthProber) Probe(ctx context.Context, _ string, manifest ReleaseManifest) (HealthAttestation, error) {
 	for {
 		raw, err := os.ReadFile(p.output)
 		if err == nil && strings.TrimSpace(string(raw)) == manifest.Marker {
-			return []string{computerevent.DigestBytes(raw)}, nil
+			return validHealthAttestation(computerevent.DigestBytes(raw)), nil
 		}
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return HealthAttestation{}, ctx.Err()
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
@@ -194,7 +436,7 @@ func TestUpdaterRejectsSymlinkManifestEntryBeforePointerMutation(t *testing.T) {
 	if err := os.Symlink("/etc/passwd", filepath.Join(source, "choir")); err != nil {
 		t.Fatal(err)
 	}
-	manifest := ReleaseManifest{Version: 1, ComputerID: "computer-test", AcceptedEventHead: strings.Repeat("a", 64), CodeRef: "code", ArtifactProgramRef: "program", EventSchemaVersion: 1, ReducerVersion: 1, Marker: "bad", Files: []ManifestFile{{Path: "choir", SHA256: strings.Repeat("b", 64), Mode: 0o555}}}
+	manifest := ReleaseManifest{Version: 1, ComputerID: "computer-test", AcceptedEventHead: strings.Repeat("a", 64), CodeRef: "code", ArtifactProgramRef: "program", EventSchemaVersion: 1, ReducerVersion: 1, Supervision: currentSupervisionCompatibilityPtr(), Marker: "bad", Files: []ManifestFile{{Path: "choir", SHA256: strings.Repeat("b", 64), Mode: 0o555}}}
 	unsigned, err := computerevent.CanonicalJSON(manifest)
 	if err != nil {
 		t.Fatal(err)
@@ -266,7 +508,7 @@ func updaterRequestFixture(t *testing.T, updaterRoot, computerID, realizationID,
 	}
 	manifest := ReleaseManifest{
 		Version: 1, ComputerID: computerID, AcceptedEventHead: strings.Repeat("a", 64), CodeRef: "code:" + operationID,
-		ArtifactProgramRef: "artifact-program:" + operationID, EventSchemaVersion: 1, ReducerVersion: 1, Marker: operationID,
+		ArtifactProgramRef: "artifact-program:" + operationID, EventSchemaVersion: 1, ReducerVersion: 1, Supervision: currentSupervisionCompatibilityPtr(), Marker: operationID,
 		Files: []ManifestFile{{Path: "bin/choir", SHA256: fileDigest, Mode: 0o555}},
 	}
 	unsigned, err := computerevent.CanonicalJSON(manifest)

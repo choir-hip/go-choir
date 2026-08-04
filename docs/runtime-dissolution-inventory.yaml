@@ -3,56 +3,50 @@ canonical_parent: 0f905ffcfeba3db85f0958382d9beb68f013a498
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 127
-    production_files: 70
-    test_files: 57
-    production_loc: 34520
-    test_loc: 45484
-    exports: 812
-    export_caller_edges: 272
-    initial_unused_export_debt: 10
-    routes: 2
-    tools: 50
+    go_files: 126
+    production_files: 71
+    test_files: 55
+    production_loc: 33236
+    test_loc: 21945
+    exports: 520
+    export_caller_edges: 304
+    initial_unused_export_debt: 5
+    routes: 0
+    tools: 39
     production_importers: 0
     wrappers: 0
-    compatibility_markers: 6
-    store_calls: 362
+    compatibility_markers: 18
+    store_calls: 345
     interface_candidates: 4
-    citers: 1330
+    citers: 1293
 files:
-    - id: internal/agentcore/agent_tools_test.go [test]
-      disposition: tools
-      loc: 6829
     - id: internal/agentcore/api.go [production]
       disposition: api
-      loc: 1057
-    - id: internal/agentcore/api_app_promotion.go [production]
-      disposition: promotion
-      loc: 859
-    - id: internal/agentcore/api_candidate_package_intake.go [production]
-      disposition: candidate_package
-      loc: 431
-    - id: internal/agentcore/api_test.go [test]
+      loc: 1061
+    - id: internal/agentcore/api_execution_identity.go [production]
       disposition: api
-      loc: 2387
+      loc: 144
+    - id: internal/agentcore/api_execution_identity_test.go [test]
+      disposition: api
+      loc: 127
+    - id: internal/agentcore/api_health_attestation_test.go [test]
+      disposition: api
+      loc: 44
+    - id: internal/agentcore/api_self_development.go [production]
+      disposition: api
+      loc: 1188
+    - id: internal/agentcore/api_self_development_test.go [test]
+      disposition: api
+      loc: 664
     - id: internal/agentcore/api_trajectory.go [production]
       disposition: api
-      loc: 126
-    - id: internal/agentcore/app_promotion_build_test.go [test]
-      disposition: promotion
-      loc: 251
-    - id: internal/agentcore/app_promotion_test.go [test]
-      disposition: promotion
-      loc: 646
-    - id: internal/agentcore/candidate_package_intake_test.go [test]
-      disposition: candidate_package
-      loc: 3378
+      loc: 306
     - id: internal/agentcore/channel_store.go [production]
       disposition: lifecycle
-      loc: 76
+      loc: 79
     - id: internal/agentcore/coagent_update_packet.go [production]
       disposition: core
-      loc: 145
+      loc: 186
     - id: internal/agentcore/coagent_update_packet_test.go [test]
       disposition: core
       loc: 117
@@ -62,27 +56,21 @@ files:
     - id: internal/agentcore/content_prompt_test.go [test]
       disposition: content
       loc: 139
-    - id: internal/agentcore/delegate_worker_update_fallback.go [production]
-      disposition: core
-      loc: 1025
-    - id: internal/agentcore/delegate_worker_update_fallback_test.go [test]
-      disposition: core
-      loc: 116
     - id: internal/agentcore/email_lifecycle.go [production]
       disposition: core
-      loc: 576
+      loc: 635
     - id: internal/agentcore/failure_isolation_test.go [test]
       disposition: core
       loc: 1133
     - id: internal/agentcore/internal_run_event_api_test.go [test]
       disposition: lifecycle
-      loc: 171
+      loc: 174
     - id: internal/agentcore/internal_run_idempotency_test.go [test]
       disposition: lifecycle
       loc: 371
     - id: internal/agentcore/lifecycle_authority_test.go [test]
       disposition: core
-      loc: 205
+      loc: 279
     - id: internal/agentcore/live_ws.go [production]
       disposition: core
       loc: 189
@@ -91,7 +79,7 @@ files:
       loc: 122
     - id: internal/agentcore/podcast.go [production]
       disposition: podcast
-      loc: 448
+      loc: 460
     - id: internal/agentcore/podcast_test.go [test]
       disposition: podcast
       loc: 159
@@ -103,7 +91,7 @@ files:
       loc: 60
     - id: internal/agentcore/prompts.go [production]
       disposition: model
-      loc: 237
+      loc: 233
     - id: internal/agentcore/prompts_test.go [test]
       disposition: model
       loc: 122
@@ -116,42 +104,48 @@ files:
     - id: internal/agentcore/qdrant_runtime.go [production]
       disposition: core
       loc: 70
+    - id: internal/agentcore/race_disabled_test.go [test]
+      disposition: core
+      loc: 5
+    - id: internal/agentcore/race_enabled_test.go [test]
+      disposition: core
+      loc: 5
     - id: internal/agentcore/researcher_checkpoint_fallback.go [production]
       disposition: research
-      loc: 289
+      loc: 278
     - id: internal/agentcore/run_acceptance.go [production]
       disposition: lifecycle
-      loc: 1411
+      loc: 874
     - id: internal/agentcore/run_acceptance_build_identity_test.go [test]
       disposition: lifecycle
-      loc: 192
+      loc: 27
     - id: internal/agentcore/run_memory.go [production]
       disposition: lifecycle
-      loc: 1303
+      loc: 1304
     - id: internal/agentcore/run_memory_integration_test.go [test]
       disposition: lifecycle
       loc: 454
     - id: internal/agentcore/run_memory_test.go [test]
       disposition: lifecycle
-      loc: 443
+      loc: 469
     - id: internal/agentcore/runtime.go [production]
       disposition: lifecycle
-      loc: 3035
+      loc: 4039
     - id: internal/agentcore/runtime_persistence.go [production]
       disposition: lifecycle
-      loc: 107
+      loc: 119
     - id: internal/agentcore/runtime_persistence_test.go [test]
       disposition: lifecycle
-      loc: 108
-    - id: internal/agentcore/runtime_refresh.go [production]
-      disposition: lifecycle
-      loc: 53
-    - id: internal/agentcore/runtime_refresh_test.go [test]
-      disposition: lifecycle
-      loc: 61
+      loc: 137
     - id: internal/agentcore/runtime_test.go [test]
       disposition: lifecycle
-      loc: 1736
+      loc: 1793
+    - id: internal/agentcore/self_development_decision_binding.go [production]
+      disposition: core
+      loc: 93
+    - id: internal/agentcore/self_development_materializer.go [production]
+      disposition: core
+      loc: 554
     - id: internal/agentcore/skill_context.go [production]
       disposition: core
       loc: 128
@@ -163,28 +157,34 @@ files:
       loc: 508
     - id: internal/agentcore/super_controller.go [production]
       disposition: core
-      loc: 739
-    - id: internal/agentcore/super_failure_fallback_test.go [test]
+      loc: 779
+    - id: internal/agentcore/supervision_execution.go [production]
       disposition: core
-      loc: 195
+      loc: 209
+    - id: internal/agentcore/supervision_execution_test.go [test]
+      disposition: core
+      loc: 40
     - id: internal/agentcore/test_helpers_test.go [test]
       disposition: core
-      loc: 355
+      loc: 494
     - id: internal/agentcore/texture_canonical_api.go [production]
       disposition: texture
       loc: 18
     - id: internal/agentcore/texture_lifecycle_api.go [production]
       disposition: texture
-      loc: 185
+      loc: 186
     - id: internal/agentcore/texture_model_api.go [production]
       disposition: texture
       loc: 51
     - id: internal/agentcore/texture_tool_api.go [production]
       disposition: texture
-      loc: 59
+      loc: 42
     - id: internal/agentcore/tool_profiles.go [production]
       disposition: tools
-      loc: 499
+      loc: 437
+    - id: internal/agentcore/tool_profiles_authority_test.go [test]
+      disposition: tools
+      loc: 39
     - id: internal/agentcore/toolloop_test.go [test]
       disposition: tools
       loc: 405
@@ -193,37 +193,37 @@ files:
       loc: 898
     - id: internal/agentcore/tools_capsule.go [production]
       disposition: tools
-      loc: 527
+      loc: 790
     - id: internal/agentcore/tools_coagent.go [production]
       disposition: tools
-      loc: 268
+      loc: 257
     - id: internal/agentcore/tools_coagent_completion_test.go [test]
       disposition: tools
       loc: 207
     - id: internal/agentcore/tools_coding.go [production]
       disposition: tools
-      loc: 630
+      loc: 275
     - id: internal/agentcore/tools_evidence.go [production]
       disposition: evidence
-      loc: 232
+      loc: 227
     - id: internal/agentcore/tools_researcher.go [production]
       disposition: research
-      loc: 267
-    - id: internal/agentcore/tools_shipper.go [production]
+      loc: 225
+    - id: internal/agentcore/tools_supervision_assignments.go [production]
       disposition: tools
-      loc: 362
+      loc: 237
+    - id: internal/agentcore/tools_supervision_assignments_test.go [test]
+      disposition: tools
+      loc: 19
     - id: internal/agentcore/tools_test.go [test]
       disposition: tools
-      loc: 1261
-    - id: internal/agentcore/tools_vmctl.go [production]
-      disposition: tools
-      loc: 2487
+      loc: 1273
     - id: internal/agentcore/tools_wire_processor.go [production]
       disposition: wire
       loc: 98
     - id: internal/agentcore/tools_worker_update.go [production]
       disposition: tools
-      loc: 999
+      loc: 1075
     - id: internal/agentcore/trace_helpers.go [production]
       disposition: core
       loc: 259
@@ -232,31 +232,31 @@ files:
       loc: 348
     - id: internal/agentcore/trajectory.go [production]
       disposition: core
-      loc: 143
+      loc: 166
     - id: internal/agentcore/trajectory_test.go [test]
       disposition: core
-      loc: 923
+      loc: 800
     - id: internal/agentcore/universal_wire.go [production]
       disposition: wire
       loc: 28
     - id: internal/agentcore/update_coagent_cutover_test.go [test]
       disposition: core
-      loc: 2207
+      loc: 2118
     - id: internal/agentcore/update_coagent_source_packet_test.go [test]
       disposition: core
-      loc: 471
+      loc: 525
     - id: internal/agentcore/update_coagent_survivor_contract_test.go [test]
       disposition: core
-      loc: 598
+      loc: 562
     - id: internal/agentcore/value_helpers.go [production]
       disposition: core
-      loc: 257
+      loc: 317
     - id: internal/agentcore/wire_metadata.go [production]
       disposition: wire
       loc: 41
     - id: internal/agentcore/wire_platform_publish.go [production]
       disposition: wire
-      loc: 260
+      loc: 271
     - id: internal/agentcore/wire_processor_decision_test.go [test]
       disposition: wire
       loc: 299
@@ -280,67 +280,73 @@ files:
       loc: 152
     - id: internal/textureowner/api_texture_prompt_eval_test.go [test]
       disposition: texture
-      loc: 168
+      loc: 176
     - id: internal/textureowner/coagent_injection.go [production]
       disposition: texture
-      loc: 81
+      loc: 100
     - id: internal/textureowner/coagent_route.go [production]
       disposition: texture
-      loc: 596
+      loc: 606
     - id: internal/textureowner/email_appagent_tools_test.go [test]
       disposition: texture
-      loc: 572
+      loc: 402
     - id: internal/textureowner/handler.go [production]
       disposition: texture
-      loc: 239
+      loc: 376
     - id: internal/textureowner/prompt_bar.go [production]
       disposition: texture
-      loc: 149
+      loc: 179
     - id: internal/textureowner/prompt_bar_unit_test.go [test]
       disposition: texture
-      loc: 346
+      loc: 412
     - id: internal/textureowner/router.go [production]
       disposition: texture
+      loc: 90
+    - id: internal/textureowner/supervision_api.go [production]
+      disposition: texture
+      loc: 316
+    - id: internal/textureowner/supervision_api_test.go [test]
+      disposition: texture
       loc: 83
+    - id: internal/textureowner/supervision_command_api_test.go [test]
+      disposition: texture
+      loc: 216
     - id: internal/textureowner/test_helpers_test.go [test]
       disposition: texture
-      loc: 117
+      loc: 244
     - id: internal/textureowner/texture.go [production]
       disposition: texture
-      loc: 2170
+      loc: 2343
     - id: internal/textureowner/texture_agent_revision.go [production]
       disposition: texture
-      loc: 1299
+      loc: 1136
     - id: internal/textureowner/texture_controller.go [production]
       disposition: texture
-      loc: 268
-    - id: internal/textureowner/texture_controller_restart_test.go [test]
-      disposition: texture
-      loc: 103
+      loc: 360
     - id: internal/textureowner/texture_decision_test.go [test]
       disposition: texture
-      loc: 176
+      loc: 49
     - id: internal/textureowner/texture_diagnosis.go [production]
       disposition: texture
       loc: 216
     - id: internal/textureowner/texture_evidence_sources.go [production]
       disposition: texture
-      loc: 833
+      loc: 853
     - id: internal/textureowner/texture_evidence_sources_test.go [test]
       disposition: texture
-      loc: 787
+      loc: 604
     - id: internal/textureowner/texture_handoff.go [production]
       disposition: texture
-      loc: 409
+      loc: 658
     - id: internal/textureowner/texture_handoff_test.go [test]
       disposition: texture
-      loc: 27
+      loc: 244
     - id: internal/textureowner/texture_identity_test.go [test]
       disposition: texture
       loc: 49
     - id: internal/textureowner/texture_import.go [production]
       disposition: texture
-      loc: 647
+      loc: 649
     - id: internal/textureowner/texture_lineage.go [production]
       disposition: texture
       loc: 572
@@ -349,49 +355,40 @@ files:
       loc: 65
     - id: internal/textureowner/texture_live_llm_workflow_test.go [test]
       disposition: texture
-      loc: 505
+      loc: 433
     - id: internal/textureowner/texture_media_sources.go [production]
       disposition: texture
       loc: 899
     - id: internal/textureowner/texture_merge.go [production]
       disposition: texture
-      loc: 535
+      loc: 502
     - id: internal/textureowner/texture_prompt_unit_test.go [test]
       disposition: texture
       loc: 791
     - id: internal/textureowner/texture_proposals.go [production]
       disposition: texture
-      loc: 193
+      loc: 120
     - id: internal/textureowner/texture_revision_metadata.go [production]
       disposition: texture
       loc: 411
     - id: internal/textureowner/texture_structure.go [production]
       disposition: texture
       loc: 358
-    - id: internal/textureowner/texture_structured_revision_test.go [test]
-      disposition: texture
-      loc: 123
     - id: internal/textureowner/texture_task_types.go [production]
       disposition: texture
       loc: 219
-    - id: internal/textureowner/texture_test.go [test]
-      disposition: texture
-      loc: 9698
     - id: internal/textureowner/texture_tool_unit_test.go [test]
       disposition: texture
-      loc: 1082
+      loc: 985
     - id: internal/textureowner/texture_workflow_verifier.go [production]
       disposition: texture
-      loc: 624
-    - id: internal/textureowner/texture_workflow_verifier_test.go [test]
-      disposition: texture
-      loc: 744
+      loc: 621
     - id: internal/textureowner/tool_loop_policy.go [production]
       disposition: texture
       loc: 81
     - id: internal/textureowner/tools_texture.go [production]
       disposition: texture
-      loc: 1960
+      loc: 1939
     - id: internal/textureowner/tools_texture_provenance_test.go [test]
       disposition: texture
       loc: 66
@@ -402,156 +399,10 @@ files:
       disposition: texture
       loc: 192
 exports:
-    - id: internal/agentcore/agent_tools_test.go:func:TestChannelCastDoesNotCreateWakeDelivery
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestCoagentToolsSupportAddressedCastAcrossProfiles
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestConcurrentConductorTextureSpawnsShareRoute
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestConductorCanSpawnTextureAndTextureCanSpawnResearcher
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestDelegateWorkerVMMarksCompletedVSuperWithoutExportOrUpdateIncomplete
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestDelegateWorkerVMMarksPackageRequiredVSuperWithoutPackageIncomplete
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestDelegateWorkerVMRefusesSameRuntimeWithoutIsolation
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestDelegateWorkerVMReportsFailedWorkerRunWithoutSynchronousRetry
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestDelegateWorkerVMReturnsFailedRunEvidence
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestDelegateWorkerVMReturnsSubmitFailureEvidence
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestDelegateWorkerVMReturnsTimeoutRunEvidence
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestDelegationAllowlistsAndEvidenceTools
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestFinishWorkerDelegationActiveIncludesWorkerEvidence
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestFinishWorkerDelegationDoesNotMirrorLegacyWorkerSubmitUpdate
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveTexture
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestForegroundSuperMutationGuardBlocksWritableTools
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestInstallDefaultAgentToolsProfiles
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestMergeFollowedWorkerChildRunStatesPreservesRefreshedState
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestPersistentSuperInboxBashRequiresCoagentUpdate
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestPollInternalWorkerRunRetriesTransientConnectionReset
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestPollInternalWorkerRunRetriesTransientNotFound
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestPollInternalWorkerRunRetriesTransientStatusCode
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestPollInternalWorkerRunRetriesTransientStatusTimeout
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestPrepareRemoteWorkerRepoBootstrapPrefersConfiguredBaseOverGitHead
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestPrepareRemoteWorkerRepoBootstrapUsesConfiguredSourceOutsideGit
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestProcessorAndReconcilerProfilesDelegateToTextureOnly
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestPublishAppChangePackageToolPublishesWithoutGitHubPush
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestRedirectWorkerDelegationIsNotInstalled
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestRequestSuperExecutionDedupesDifferentObjectivesInSameTextureRun
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestRequestSuperExecutionDedupesSameTextureRun
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestRequestSuperExecutionFreshTextureChannelBypassesOldActorCursor
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestResearcherReadContentItemReturnsPrivateSourceArtifact
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestResearcherWebSearchFallsBackToProxyGatewayURL
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestResearcherWebSearchRoutesThroughGateway
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestResearcherWebSearchWithoutGatewayIsUnavailable
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestStartWorkerDelegationPreloadsReferencedAppChangePackage
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSubmitWorkerUpdateFallsBackToTextureChannelWhenExplicitTargetMissing
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSubmitWorkerUpdateUsesTextureRequesterMetadataWhenAgentMissing
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSubmitWorkerUpdateUsesTextureRequesterOverExplicitAgent
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSuperDelegateWorkerVMDedupesSameWorkerAcrossTrajectoryRuns
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSuperDelegateWorkerVMDedupesSameWorkerInRun
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSuperFailureAfterDelegateSynthesizesWorkerUpdate
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSuperForkDesktopClonesStateAndPublishRequestsVM
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSuperRequestWorkerVMDedupesSameRunByMachineClass
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSuperRequestWorkerVMNormalizesStandardMachineClass
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSuperRequestWorkerVMReplacesUnreachableLeaseAfterDelegateFailure
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSuperRequestWorkerVMReturnsTypedHandle
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSuperRequestWorkerVMReusesActiveLeaseUnlessParallelAllowed
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestSuperSkipLevelCastRequiresCopiedVSuper
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestVSuperCancelAgentDoesNotCancelExportedChild
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestVSuperPublishAppChangePackageReusesChildPackage
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestVSuperSpawnAgentEnforcesActiveChildBudget
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestVSuperSpawnAgentReusesActiveCoSuperSlot
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestVSuperVerifierSpawnRequiresCompletedImplementation
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestVerifierCoSuperCannotPublishAppChangePackage
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestWorkerRepoBootstrapPromptIncludesHumanEvidenceBrowserContract
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:func:TestWorkerVSuperDelegateContractPreventsCheckoutRaces
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:method(*blockingExecuteProvider):Execute
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:method(*blockingExecuteProvider):ProviderName
-      disposition: tools
-    - id: internal/agentcore/agent_tools_test.go:method(*blockingExecuteProvider):RuntimeProviderPolicy
-      disposition: tools
     - id: internal/agentcore/api.go:func:NewAPIHandler
       disposition: api
       production_callers:
         - internal/sandbox/run.go
-    - id: internal/agentcore/api.go:method(*APIHandler):HandleCancel
-      disposition: api
-      production_callers:
-        - internal/apihandler/routes.go
     - id: internal/agentcore/api.go:method(*APIHandler):HandleHealth
       disposition: api
       production_callers:
@@ -604,123 +455,58 @@ exports:
       disposition: api
       production_callers:
         - internal/apihandler/routes.go
+    - id: internal/agentcore/api.go:method(*APIHandler):HandleRunResource
+      disposition: api
+      production_callers:
+        - internal/apihandler/routes.go
     - id: internal/agentcore/api.go:type:APIHandler
       disposition: api
       production_callers:
         - internal/agentcore/api.go
-        - internal/agentcore/api_app_promotion.go
-        - internal/agentcore/api_candidate_package_intake.go
+        - internal/agentcore/api_execution_identity.go
+        - internal/agentcore/api_self_development.go
         - internal/agentcore/api_trajectory.go
         - internal/agentcore/live_ws.go
         - internal/agentcore/podcast.go
         - internal/agentcore/prompts.go
-        - internal/agentcore/runtime_refresh.go
         - internal/apihandler/routes.go
-    - id: internal/agentcore/api_app_promotion.go:method(*APIHandler):HandleAppAdoptionDetail
-      disposition: promotion
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/agentcore/api_app_promotion.go:method(*APIHandler):HandleAppAdoptionsRoot
-      disposition: promotion
+    - id: internal/agentcore/api_execution_identity.go:method(*APIHandler):HandleExecutionIdentity
+      disposition: api
       production_callers:
         - internal/apihandler/routes.go
-    - id: internal/agentcore/api_app_promotion.go:method(*APIHandler):HandleAppChangePackageDetail
-      disposition: promotion
+    - id: internal/agentcore/api_execution_identity_test.go:func:TestExecutionIdentityFailsClosedWithoutExactDeploymentInputs
+      disposition: api
+    - id: internal/agentcore/api_execution_identity_test.go:func:TestExecutionIdentityRequiresAuthenticationAndSafeNonce
+      disposition: api
+    - id: internal/agentcore/api_execution_identity_test.go:func:TestExecutionIdentityReturnsNonceBoundGuestSignature
+      disposition: api
+    - id: internal/agentcore/api_health_attestation_test.go:func:TestHealthServesImmutableStartupReplayAttestation
+      disposition: api
+    - id: internal/agentcore/api_self_development.go:method(*APIHandler):HandleComputersRouter
+      disposition: api
       production_callers:
         - internal/apihandler/routes.go
-    - id: internal/agentcore/api_app_promotion.go:method(*APIHandler):HandleAppChangePackagesRoot
-      disposition: promotion
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/agentcore/api_app_promotion.go:method(*APIHandler):HandleComputersRouter
-      disposition: promotion
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/agentcore/api_app_promotion.go:method(*APIHandler):HandleInternalAppChangePackageDetail
-      disposition: promotion
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/agentcore/api_app_promotion.go:method(*APIHandler):HandleInternalAppChangePackagesRoot
-      disposition: promotion
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/agentcore/api_candidate_package_intake.go:func:RegisterCandidatePackageIntakeRoutes
-      disposition: candidate_package
-    - id: internal/agentcore/api_candidate_package_intake.go:method(*APIHandler):HandleCandidatePackageIntakeDetail
-      disposition: candidate_package
-      production_callers:
-        - internal/agentcore/api_candidate_package_intake.go
-    - id: internal/agentcore/api_candidate_package_intake.go:method(*APIHandler):HandleCandidatePackageIntakesRoot
-      disposition: candidate_package
-      production_callers:
-        - internal/agentcore/api_candidate_package_intake.go
-    - id: internal/agentcore/api_candidate_package_intake.go:method(*APIHandler):HandleCandidatePackageReviewSurfaceReadOnly
-      disposition: candidate_package
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/agentcore/api_test.go:func:TestAuthenticateUserMissing
+    - id: internal/agentcore/api_self_development_test.go:func:TestConcurrentExactRetriesRepairOneRequestedOperationRun
       disposition: api
-    - id: internal/agentcore/api_test.go:func:TestAuthenticateUserPresent
+    - id: internal/agentcore/api_self_development_test.go:func:TestExactTerminalDecisionReplayDoesNotDependOnLaterCurrentMode
       disposition: api
-    - id: internal/agentcore/api_test.go:func:TestHandleHealthDegraded
+    - id: internal/agentcore/api_self_development_test.go:func:TestFinalizedDecisionBindingRejectsCrossAuthorityJoinsAndAllowsAcceptedDescendants
       disposition: api
-    - id: internal/agentcore/api_test.go:func:TestHandleHealthFailed
+    - id: internal/agentcore/api_self_development_test.go:func:TestFinalizedStartEventRepairsMissingOperationWithoutCurrentMode
       disposition: api
-    - id: internal/agentcore/api_test.go:func:TestHandleHealthReady
+    - id: internal/agentcore/api_self_development_test.go:func:TestGenesisAuthoritySeparatesReviewedCandidateFromDeployedRelease
       disposition: api
-    - id: internal/agentcore/api_test.go:func:TestHandleHealthReflectsRunningTasks
+    - id: internal/agentcore/api_self_development_test.go:func:TestGuestStartRefusesAbsentModeBeforeAnyEffect
       disposition: api
-    - id: internal/agentcore/api_test.go:func:TestHandleHealthReportsBridgeProvider
+    - id: internal/agentcore/api_self_development_test.go:func:TestKernelCapabilityUnavailableResponseIsTypedAndNonSecret
       disposition: api
-    - id: internal/agentcore/api_test.go:func:TestHandleInternalRunStatusIncludesExplicitNoStoryTerminalBranch
+    - id: internal/agentcore/api_self_development_test.go:func:TestMaterializerBindsBundleToDurableOperationIdentity
       disposition: api
-    - id: internal/agentcore/api_test.go:func:TestHandleInternalRunStatusIncludesProcessorResolutionTerminalBranch
+    - id: internal/agentcore/api_self_development_test.go:func:TestRecoveredStartEventRequiresExactCausalBinding
       disposition: api
-    - id: internal/agentcore/api_test.go:func:TestHandleInternalRunStatusIncludesTrajectoryObligations
+    - id: internal/agentcore/api_self_development_test.go:func:TestSelfDevelopmentDecisionRecoversAfterCanonicalAppendBeforeOperationProjection
       disposition: api
-    - id: internal/agentcore/api_test.go:func:TestHandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolutionCompletes
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestHandleModelPolicyResolveUsesOverlayFile
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestHandlePromptBarCreatesServerOwnedConductorRun
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestHandlePromptBarRejectsBrowserRuntimeMetadata
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestHandleRunListOwnerScoped
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestHandleTextureDocumentsRootUsesTextureRoutes
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestInternalRuntimeRunRoutesRequireInternalCallerAndConstrainProfiles
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestPromptBarSubmissionDoesNotActivateIngestionEvent
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestProviderFailureDoesNotCrashRuntime
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestRegisteredPromptBarRouteAcceptsIntentOnly
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestRegisteredPublicRoutesExcludeLegacyRuntimeAPIs
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestRunAcceptanceSynthesizeAcceptsDirectProductAdoptionEvidence
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestRunAcceptanceSynthesizeAcceptsRuntimeSupervisionWithoutAppPackage
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestRunAcceptanceSynthesizeAcceptsSourcePackageWithoutRecipientAdoption
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestRunAcceptanceSynthesizeCountsTimedOutDelegateWithReviewableExport
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestRunAcceptanceSynthesizeDerivesExportLevelRecord
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestRunAcceptanceSynthesizeDoesNotAcceptPromptTextureOnlySmoke
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestRunAcceptanceSynthesizePreservesStructuredFailedAndPendingDelegateEvidence
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestRunAcceptanceSynthesizeRecordsPendingWorkerDelegateInvocation
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestRunAcceptanceSynthesizeRecordsWorkerDelegateBlocker
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestRunAcceptanceSynthesizeRequiresAdoptionPromotionForPromotionLevel
-      disposition: api
-    - id: internal/agentcore/api_test.go:func:TestSupervisorRecoveryVisible
+    - id: internal/agentcore/api_self_development_test.go:func:TestSelfDevelopmentRollbackCreatesOneHeadBoundPendingOperation
       disposition: api
     - id: internal/agentcore/api_trajectory.go:method(*APIHandler):HandleTrajectoriesRoot
       disposition: api
@@ -734,66 +520,6 @@ exports:
       disposition: api
       production_callers:
         - internal/apihandler/routes.go
-    - id: internal/agentcore/app_promotion_build_test.go:func:TestAppAdoptionRequiresActualRecipientBuild
-      disposition: promotion
-    - id: internal/agentcore/app_promotion_build_test.go:func:TestAppAdoptionVerificationLeavesStartedEvidenceOnBuildFailure
-      disposition: promotion
-    - id: internal/agentcore/app_promotion_test.go:func:TestAppChangePackageMigratesAcrossCandidateComputers
-      disposition: promotion
-    - id: internal/agentcore/app_promotion_test.go:func:TestAppChangePackageRejectsPrivateSourceMarkers
-      disposition: promotion
-    - id: internal/agentcore/app_promotion_test.go:func:TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview
-      disposition: promotion
-    - id: internal/agentcore/app_promotion_test.go:func:TestAppChangePackageReviewEvidenceReturnsRedactedPackageScopedAcceptances
-      disposition: promotion
-    - id: internal/agentcore/app_promotion_test.go:func:TestInternalAppChangePackageDetailRequiresInternalCaller
-      disposition: promotion
-    - id: internal/agentcore/app_promotion_test.go:func:TestPrivateAppChangePackageIsNotVisibleAcrossOwners
-      disposition: promotion
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakeAdoptionBoundaryRouteBindsApprovedIntakeWithoutPromotionSideEffects
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakeAdoptionBoundaryRouteRejectsUnsafeTransitions
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakeAdoptionReviewRouteCreatesOwnerReviewWithoutPromotionSideEffects
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakeAdoptionReviewRouteRejectsUnsafeTransitions
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakeDeployedReviewHandlerServesOnlyReviewSurface
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakeOptInRoutesCreateListAndGetOwnerScopedRecord
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakePromotionSwitchAcceptanceEvidenceRouteAcceptsOnlyLocalLineageProof
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakePromotionSwitchAcceptanceEvidenceRouteBlocksIncompleteLocalLineageProof
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakePromotionSwitchNormalizesRouteProfile
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakePromotionSwitchReviewSurfaceRouteRejectsWithoutMutation
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakePromotionSwitchReviewSurfaceRouteReturnsReadOnlyProductSurface
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakePromotionSwitchRollbackRollForwardRouteRejectsUnsafeTransitions
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakePromotionSwitchRouteRejectsUnsafeTransitions
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakePromotionSwitchRouteRollsBackAndRollsForwardSourceLineage
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakePromotionSwitchRouteSwitchesSourceLineageWithoutPublishingPackage
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakePublicationDraftRouteCreatesPrivateDraftPackageWithoutAdoptionSideEffects
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakePublicationDraftRouteRejectsUnsafeTransitions
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakeReviewRouteApprovesPendingOwnerRecord
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakeReviewRouteRejectsPendingOwnerRecord
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakeReviewRouteRejectsUnsafeTransitions
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestCandidatePackageIntakeRoutesRejectUnauthenticatedAndUnsafeRequests
-      disposition: candidate_package
-    - id: internal/agentcore/candidate_package_intake_test.go:func:TestRegisterCandidatePackageIntakeRoutesPanicsWhenDeployedEnvSet
-      disposition: candidate_package
     - id: internal/agentcore/channel_store.go:method(*Runtime):ChannelCast
       disposition: lifecycle
       production_callers:
@@ -845,18 +571,12 @@ exports:
       disposition: core
     - id: internal/agentcore/concurrent_workers_test.go:func:TestConcurrentWorkers_TasksActuallyRunConcurrently
       disposition: core
-    - id: internal/agentcore/concurrent_workers_test.go:method(*conditionalFailProvider):Execute
-      disposition: core
-    - id: internal/agentcore/concurrent_workers_test.go:method(*conditionalFailProvider):ProviderName
-      disposition: core
     - id: internal/agentcore/content_prompt_test.go:func:TestPromptBarBareURLDoesNotRequireProvider
       disposition: content
     - id: internal/agentcore/content_prompt_test.go:func:TestPromptBarBareURLRoutesToDisplayApp
       disposition: content
     - id: internal/agentcore/content_prompt_test.go:func:TestPromptBarContextualURLRoutesToTexture
       disposition: content
-    - id: internal/agentcore/delegate_worker_update_fallback_test.go:func:TestDelegateWorkerCheckpointUpdatePreservesTypedAppChangePackages
-      disposition: core
     - id: internal/agentcore/failure_isolation_test.go:func:TestCancellation_CancelNonExistentTask
       disposition: core
     - id: internal/agentcore/failure_isolation_test.go:func:TestCancellation_CancelOtherUsersTask
@@ -919,11 +639,11 @@ exports:
       disposition: core
     - id: internal/agentcore/lifecycle_authority_test.go:func:TestIdlePassivationCannotOverwriteCancelledRun
       disposition: core
+    - id: internal/agentcore/lifecycle_authority_test.go:func:TestLegacySupervisionWriteRefusalFailsClosedWhenSupervisionWritesDisabled
+      disposition: core
     - id: internal/agentcore/lifecycle_authority_test.go:func:TestRunListAndCancelRoutesAreWiredAndOwnerScoped
       disposition: core
-    - id: internal/agentcore/lifecycle_authority_test.go:method(*lateCompletionProvider):Execute
-      disposition: core
-    - id: internal/agentcore/lifecycle_authority_test.go:method(*lateCompletionProvider):ProviderName
+    - id: internal/agentcore/lifecycle_authority_test.go:func:TestRuntimeRunListsIncludeLifecycleProjectionWithinComputerScope
       disposition: core
     - id: internal/agentcore/live_ws.go:method(*APIHandler):HandleLiveWS
       disposition: core
@@ -998,10 +718,6 @@ exports:
       disposition: lifecycle
     - id: internal/agentcore/run_acceptance_build_identity_test.go:func:TestAcceptanceServingCommitPrefersCompiledArtifactIdentity
       disposition: lifecycle
-    - id: internal/agentcore/run_acceptance_build_identity_test.go:func:TestAppPromotionCheckpointsCorrelateLegacyVerificationWithoutAdoptionID
-      disposition: lifecycle
-    - id: internal/agentcore/run_acceptance_build_identity_test.go:func:TestAppPromotionCheckpointsTolerateCompletedVerificationAndRollForward
-      disposition: lifecycle
     - id: internal/agentcore/run_memory.go:var:ErrContextOverflowRecoveryFailed
       disposition: lifecycle
       production_callers:
@@ -1021,10 +737,6 @@ exports:
     - id: internal/agentcore/run_memory_integration_test.go:func:TestRuntimeRunMemoryOverflowRetriesOnceThenCompletes
       disposition: lifecycle
     - id: internal/agentcore/run_memory_integration_test.go:func:TestRuntimeRunMemoryThresholdCompaction
-      disposition: lifecycle
-    - id: internal/agentcore/run_memory_integration_test.go:method(*runMemoryOverflowRetrievalProvider):CallWithTools
-      disposition: lifecycle
-    - id: internal/agentcore/run_memory_integration_test.go:method(*runtimeOverflowProvider):CallWithTools
       disposition: lifecycle
     - id: internal/agentcore/run_memory_test.go:func:TestBuildRunMemoryContextUsesLatestCompaction
       disposition: lifecycle
@@ -1048,6 +760,10 @@ exports:
       disposition: lifecycle
       production_callers:
         - internal/actorruntime/adapter.go
+    - id: internal/agentcore/runtime.go:func:WithComputerEventAppender
+      disposition: lifecycle
+      production_callers:
+        - internal/sandbox/run.go
     - id: internal/agentcore/runtime.go:func:WithContentService
       disposition: lifecycle
       production_callers:
@@ -1056,40 +772,50 @@ exports:
       disposition: lifecycle
       production_callers:
         - internal/sandbox/run.go
+    - id: internal/agentcore/runtime.go:func:WithPrivateArtifactCipher
+      disposition: lifecycle
+      production_callers:
+        - internal/sandbox/run.go
+    - id: internal/agentcore/runtime.go:func:WithStartupSupervisionReplayAttestation
+      disposition: lifecycle
+      production_callers:
+        - internal/sandbox/run.go
     - id: internal/agentcore/runtime.go:func:WithTraceStore
       disposition: lifecycle
       production_callers:
         - internal/actorruntime/adapter.go
-    - id: internal/agentcore/runtime.go:method(*Runtime):CancelAgent
+    - id: internal/agentcore/runtime.go:method(*Runtime):AppendSupervisionTransaction
       disposition: lifecycle
       production_callers:
-        - internal/textureowner/texture.go
+        - internal/agentcore/tools_supervision_assignments.go
+        - internal/textureowner/texture_handoff.go
+    - id: internal/agentcore/runtime.go:method(*Runtime):AppendSupervisionTransactionWithPrivateArtifacts
+      disposition: lifecycle
+      production_callers:
+        - internal/agentcore/email_lifecycle.go
+        - internal/agentcore/runtime.go
+        - internal/agentcore/supervision_execution.go
+        - internal/agentcore/tools_supervision_assignments.go
+        - internal/textureowner/supervision_api.go
+        - internal/textureowner/tools_texture.go
     - id: internal/agentcore/runtime.go:method(*Runtime):CancelRun
       disposition: lifecycle
       production_callers:
         - internal/agentcore/api.go
         - internal/agentcore/runtime.go
         - internal/agentcore/tools_coagent.go
-    - id: internal/agentcore/runtime.go:method(*Runtime):CancelRunTrajectory
-      disposition: lifecycle
-      production_callers:
-        - internal/textureowner/texture.go
-        - internal/textureowner/texture_agent_revision.go
     - id: internal/agentcore/runtime.go:method(*Runtime):CancelTrajectory
       disposition: lifecycle
       production_callers:
-        - internal/agentcore/api_trajectory.go
         - internal/agentcore/runtime.go
+    - id: internal/agentcore/runtime.go:method(*Runtime):CancelTrajectoryCommand
+      disposition: lifecycle
+      production_callers:
+        - internal/agentcore/api_trajectory.go
     - id: internal/agentcore/runtime.go:method(*Runtime):DispatchActorActive
       disposition: lifecycle
       production_callers:
         - internal/textureowner/texture_controller.go
-    - id: internal/agentcore/runtime.go:method(*Runtime):EnsurePersistentSuperAgent
-      disposition: lifecycle
-      production_callers:
-        - internal/agentcore/delegate_worker_update_fallback.go
-        - internal/textureowner/texture_proposals.go
-        - internal/textureowner/tools_texture.go
     - id: internal/agentcore/runtime.go:method(*Runtime):EventBus
       disposition: lifecycle
       production_callers:
@@ -1105,19 +831,50 @@ exports:
         - internal/agentcore/api.go
         - internal/textureowner/prompt_bar.go
         - internal/textureowner/texture_agent_revision.go
+        - internal/textureowner/texture_controller.go
+        - internal/textureowner/texture_handoff.go
+        - internal/textureowner/texture_workflow_verifier.go
     - id: internal/agentcore/runtime.go:method(*Runtime):HealthState
       disposition: lifecycle
       production_callers:
         - internal/agentcore/api.go
+    - id: internal/agentcore/runtime.go:method(*Runtime):ImportLegacySupervisionProjection
+      disposition: lifecycle
+      production_callers:
+        - internal/textureowner/supervision_api.go
+    - id: internal/agentcore/runtime.go:method(*Runtime):ListRunsByChannel
+      disposition: lifecycle
+      production_callers:
+        - internal/agentcore/api.go
+        - internal/agentcore/runtime.go
+        - internal/agentcore/texture_lifecycle_api.go
+        - internal/textureowner/coagent_route.go
+        - internal/textureowner/texture.go
+        - internal/textureowner/texture_agent_revision.go
     - id: internal/agentcore/runtime.go:method(*Runtime):ListRunsByOwner
       disposition: lifecycle
       production_callers:
         - internal/agentcore/api.go
+        - internal/agentcore/run_acceptance.go
+        - internal/agentcore/tools_coagent.go
+        - internal/textureowner/texture.go
         - internal/textureowner/texture_workflow_verifier.go
+    - id: internal/agentcore/runtime.go:method(*Runtime):ListTrajectoriesByOwner
+      disposition: lifecycle
+      production_callers:
+        - internal/agentcore/api_trajectory.go
+    - id: internal/agentcore/runtime.go:method(*Runtime):PinPrivateEvidenceArtifact
+      disposition: lifecycle
+      production_callers:
+        - internal/agentcore/tools_evidence.go
     - id: internal/agentcore/runtime.go:method(*Runtime):PromptStore
       disposition: lifecycle
       production_callers:
         - internal/agentcore/prompts.go
+    - id: internal/agentcore/runtime.go:method(*Runtime):RebuildSupervisionProjection
+      disposition: lifecycle
+      production_callers:
+        - internal/textureowner/supervision_api.go
     - id: internal/agentcore/runtime.go:method(*Runtime):RunningCount
       disposition: lifecycle
       production_callers:
@@ -1148,6 +905,7 @@ exports:
       disposition: lifecycle
       production_callers:
         - internal/agentcore/api.go
+        - internal/agentcore/api_self_development.go
         - internal/agentcore/runtime.go
         - internal/agentcore/wire_reconciler_debounce.go
         - internal/textureowner/texture_agent_revision.go
@@ -1158,21 +916,26 @@ exports:
     - id: internal/agentcore/runtime.go:method(*Runtime):Store
       disposition: lifecycle
       production_callers:
+        - internal/actorruntime/adapter.go
         - internal/actorruntime/handler.go
         - internal/agentcore/api.go
+        - internal/agentcore/api_trajectory.go
         - internal/agentcore/live_ws.go
         - internal/agentcore/podcast.go
         - internal/sandbox/run.go
         - internal/textureowner/handler.go
+    - id: internal/agentcore/runtime.go:type:LegacyProjectionImportResult
+      disposition: lifecycle
+      production_callers:
+        - internal/agentcore/runtime.go
     - id: internal/agentcore/runtime.go:type:Runtime
       disposition: lifecycle
       production_callers:
         - internal/actorruntime/adapter.go
         - internal/actorruntime/handler.go
         - internal/agentcore/api.go
-        - internal/agentcore/api_app_promotion.go
         - internal/agentcore/channel_store.go
-        - internal/agentcore/delegate_worker_update_fallback.go
+        - internal/agentcore/coagent_update_packet.go
         - internal/agentcore/email_lifecycle.go
         - internal/agentcore/product_events.go
         - internal/agentcore/qdrant_dedup.go
@@ -1180,8 +943,10 @@ exports:
         - internal/agentcore/researcher_checkpoint_fallback.go
         - internal/agentcore/run_acceptance.go
         - internal/agentcore/runtime.go
+        - internal/agentcore/self_development_materializer.go
         - internal/agentcore/skill_context.go
         - internal/agentcore/super_controller.go
+        - internal/agentcore/supervision_execution.go
         - internal/agentcore/texture_canonical_api.go
         - internal/agentcore/texture_lifecycle_api.go
         - internal/agentcore/texture_model_api.go
@@ -1190,8 +955,7 @@ exports:
         - internal/agentcore/tools_coagent.go
         - internal/agentcore/tools_evidence.go
         - internal/agentcore/tools_researcher.go
-        - internal/agentcore/tools_shipper.go
-        - internal/agentcore/tools_vmctl.go
+        - internal/agentcore/tools_supervision_assignments.go
         - internal/agentcore/tools_wire_processor.go
         - internal/agentcore/tools_worker_update.go
         - internal/agentcore/trajectory.go
@@ -1206,23 +970,26 @@ exports:
         - internal/actorruntime/adapter.go
         - internal/agentcore/runtime.go
         - internal/sandbox/run.go
-    - id: internal/agentcore/runtime_persistence_test.go:func:TestPersistSubmittedRunUsesRuntimeStoreInterfaceWithoutDolt
-      disposition: lifecycle
-    - id: internal/agentcore/runtime_persistence_test.go:method(*fakeRunSubmissionStore):AppendEvent
-      disposition: lifecycle
-    - id: internal/agentcore/runtime_persistence_test.go:method(*fakeRunSubmissionStore):CreateAgentMutation
-      disposition: lifecycle
-    - id: internal/agentcore/runtime_persistence_test.go:method(*fakeRunSubmissionStore):CreateRun
-      disposition: lifecycle
-    - id: internal/agentcore/runtime_persistence_test.go:method(*fakeRunSubmissionStore):UpsertAgent
-      disposition: lifecycle
-    - id: internal/agentcore/runtime_refresh.go:method(*APIHandler):HandleInternalRuntimeRefresh
+    - id: internal/agentcore/runtime.go:type:StartupSupervisionReplayAttestation
       disposition: lifecycle
       production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/agentcore/runtime_refresh_test.go:func:TestHandleInternalRuntimeRefreshRequiresInternalCaller
+        - internal/agentcore/runtime.go
+        - internal/sandbox/run.go
+    - id: internal/agentcore/runtime.go:var:ErrPromptCommandConflict
       disposition: lifecycle
-    - id: internal/agentcore/runtime_refresh_test.go:func:TestHandleInternalRuntimeRefreshSchedulesServiceRestart
+      production_callers:
+        - internal/agentcore/runtime.go
+        - internal/textureowner/prompt_bar.go
+    - id: internal/agentcore/runtime.go:var:ErrSupervisionAuthorityRequired
+      disposition: lifecycle
+      production_callers:
+        - internal/agentcore/researcher_checkpoint_fallback.go
+        - internal/agentcore/runtime.go
+        - internal/agentcore/super_controller.go
+        - internal/agentcore/tools_worker_update.go
+    - id: internal/agentcore/runtime_persistence_test.go:func:TestPersistSubmittedRunFailsClosedWithoutTextureMutationAuthority
+      disposition: lifecycle
+    - id: internal/agentcore/runtime_persistence_test.go:func:TestPersistSubmittedRunUsesRuntimeStoreInterfaceWithoutDolt
       disposition: lifecycle
     - id: internal/agentcore/runtime_test.go:func:TestBridgeProviderEventsContainRealMarker
       disposition: lifecycle
@@ -1268,13 +1035,17 @@ exports:
       disposition: lifecycle
     - id: internal/agentcore/runtime_test.go:func:TestProviderStubEmitsProgress
       disposition: lifecycle
+    - id: internal/agentcore/runtime_test.go:func:TestRestartReDispatchesProjectedLifecycleActivation
+      disposition: lifecycle
+    - id: internal/agentcore/runtime_test.go:func:TestRestartReconcilesDurableTerminalLifecycleSettlementTrigger
+      disposition: lifecycle
     - id: internal/agentcore/runtime_test.go:func:TestRuntimeRemainsAvailableAfterProviderFailure
+      disposition: lifecycle
+    - id: internal/agentcore/runtime_test.go:func:TestRuntimeTerminalPersistenceSettlesReadyLifecycle
       disposition: lifecycle
     - id: internal/agentcore/runtime_test.go:func:TestSetHealthNoOpForSameState
       disposition: lifecycle
     - id: internal/agentcore/runtime_test.go:func:TestSetHealthTransitionsVisible
-      disposition: lifecycle
-    - id: internal/agentcore/runtime_test.go:func:TestStartCoagentRunInheritsWorkerRepoMetadata
       disposition: lifecycle
     - id: internal/agentcore/runtime_test.go:func:TestSubmitTaskPersistsToStore
       disposition: lifecycle
@@ -1282,7 +1053,7 @@ exports:
       disposition: lifecycle
     - id: internal/agentcore/runtime_test.go:func:TestSystemPromptForResearcherForcesEarlyHandoff
       disposition: lifecycle
-    - id: internal/agentcore/runtime_test.go:func:TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch
+    - id: internal/agentcore/runtime_test.go:func:TestSystemPromptForSuperEnforcesCapsuleDevelopment
       disposition: lifecycle
     - id: internal/agentcore/runtime_test.go:func:TestSystemPromptForTextureDefaultsToResearch
       disposition: lifecycle
@@ -1295,12 +1066,6 @@ exports:
     - id: internal/agentcore/runtime_test.go:func:TestTaskCompletesSuccessfully
       disposition: lifecycle
     - id: internal/agentcore/runtime_test.go:func:TestTaskRecoveryAcrossRestart
-      disposition: lifecycle
-    - id: internal/agentcore/runtime_test.go:func:TestWorkerRepoBootstrapContextReachesVSuperAndCoSuper
-      disposition: lifecycle
-    - id: internal/agentcore/runtime_test.go:method(*mockBridgeProvider):Execute
-      disposition: lifecycle
-    - id: internal/agentcore/runtime_test.go:method(*mockBridgeProvider):ProviderName
       disposition: lifecycle
     - id: internal/agentcore/streaming_test.go:func:TestStreamingCancellationStopsEmission
       disposition: core
@@ -1318,17 +1083,15 @@ exports:
       disposition: core
     - id: internal/agentcore/streaming_test.go:func:TestStreamingWithEmptyChunks
       disposition: core
-    - id: internal/agentcore/streaming_test.go:method(*streamingProvider):Execute
-      disposition: core
-    - id: internal/agentcore/streaming_test.go:method(*streamingProvider):ProviderName
-      disposition: core
     - id: internal/agentcore/super_controller.go:method(*Runtime):ReconcileCoagentWake
       disposition: core
       production_callers:
         - internal/actorruntime/handler.go
-    - id: internal/agentcore/super_failure_fallback_test.go:func:TestRuntimeSynthesizesTextureBlockerWhenSuperFailsBeforeDelegation
+    - id: internal/agentcore/supervision_execution_test.go:func:TestStoredSupervisionObservedBasePreservesAttemptBase
       disposition: core
-    - id: internal/agentcore/super_failure_fallback_test.go:func:TestRuntimeSynthesizesWorkerDelegationUpdateAfterStartWorkerDelegation
+    - id: internal/agentcore/supervision_execution_test.go:func:TestSupervisionAttemptShapeSecondAttemptIsCanonicalRetry
+      disposition: core
+    - id: internal/agentcore/supervision_execution_test.go:func:TestSupervisionAttemptShapeUsesUnboundedLineage
       disposition: core
     - id: internal/agentcore/texture_canonical_api.go:method(*Runtime):TextureContentService
       disposition: texture
@@ -1366,7 +1129,17 @@ exports:
     - id: internal/agentcore/texture_lifecycle_api.go:method(*Runtime):TextureSandboxID
       disposition: texture
       production_callers:
+        - internal/actorruntime/adapter.go
+        - internal/agentcore/api_trajectory.go
+        - internal/agentcore/runtime.go
+        - internal/agentcore/super_controller.go
+        - internal/agentcore/texture_lifecycle_api.go
+        - internal/agentcore/tools_worker_update.go
+        - internal/textureowner/handler.go
+        - internal/textureowner/supervision_api.go
+        - internal/textureowner/texture.go
         - internal/textureowner/texture_controller.go
+        - internal/textureowner/texture_evidence_sources.go
         - internal/textureowner/texture_handoff.go
     - id: internal/agentcore/texture_lifecycle_api.go:type:TextureActorToolLoopBudgetSpend
       disposition: texture
@@ -1391,24 +1164,9 @@ exports:
         - internal/agentcore/texture_model_api.go
         - internal/textureowner/api_texture_prompt_eval.go
         - internal/textureowner/prompt_bar.go
-    - id: internal/agentcore/texture_tool_api.go:method(*Runtime):EmitChannelMessageEvent
-      disposition: texture
-      production_callers:
-        - internal/textureowner/texture_agent_revision.go
-        - internal/textureowner/tools_texture.go
-    - id: internal/agentcore/texture_tool_api.go:method(*Runtime):ReconcilePersistentSuperActor
-      disposition: texture
-      production_callers:
-        - internal/textureowner/texture_proposals.go
-        - internal/textureowner/tools_texture.go
     - id: internal/agentcore/texture_tool_api.go:method(*Runtime):RecordTextureEmailDraftRequest
       disposition: texture
       production_callers:
-        - internal/textureowner/tools_texture.go
-    - id: internal/agentcore/texture_tool_api.go:method(*Runtime):WakeUpdatedCoagent
-      disposition: texture
-      production_callers:
-        - internal/textureowner/texture_agent_revision.go
         - internal/textureowner/tools_texture.go
     - id: internal/agentcore/texture_tool_api.go:type:TextureEmailDraftRequest
       disposition: texture
@@ -1425,17 +1183,13 @@ exports:
         - internal/agentcore/prompts.go
         - internal/sandbox/run.go
         - internal/textureowner/texture.go
+    - id: internal/agentcore/tool_profiles_authority_test.go:func:TestSelfDevelopmentRolesExposeOnlyCapsuleEffects
+      disposition: tools
     - id: internal/agentcore/toolloop_test.go:func:TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool
       disposition: tools
     - id: internal/agentcore/toolloop_test.go:func:TestRuntimeWithToolRegistryEmitsToolEvents
       disposition: tools
     - id: internal/agentcore/toolloop_test.go:func:TestRuntimeWithToolRegistryUsesToolLoop
-      disposition: tools
-    - id: internal/agentcore/toolloop_test.go:method(*capturingToolChoiceProvider):CallWithTools
-      disposition: tools
-    - id: internal/agentcore/toolloop_test.go:method(*mockToolLoopProvider):CallCount
-      disposition: tools
-    - id: internal/agentcore/toolloop_test.go:method(*mockToolLoopProvider):CallWithTools
       disposition: tools
     - id: internal/agentcore/toolloopvalidation_test.go:func:TestToolLoopEndToEndWithRuntime
       disposition: tools
@@ -1457,17 +1211,22 @@ exports:
       disposition: tools
     - id: internal/agentcore/toolloopvalidation_test.go:func:TestToolLoopWithMultipleToolsRegistered
       disposition: tools
-    - id: internal/agentcore/toolloopvalidation_test.go:method(*messageCapturingProvider):CallWithTools
-      disposition: tools
     - id: internal/agentcore/tools_capsule.go:func:RegisterCapsuleExecTools
       disposition: tools
+      production_callers:
+        - internal/agentcore/tool_profiles.go
     - id: internal/agentcore/tools_capsule.go:func:RegisterCapsuleTools
       disposition: tools
+      production_callers:
+        - internal/agentcore/tool_profiles.go
     - id: internal/agentcore/tools_capsule.go:func:WithCapsuleCtx
       disposition: tools
+      production_callers:
+        - internal/agentcore/runtime.go
     - id: internal/agentcore/tools_capsule.go:type:CapsuleToolCtx
       disposition: tools
       production_callers:
+        - internal/agentcore/runtime.go
         - internal/agentcore/tools_capsule.go
     - id: internal/agentcore/tools_coagent.go:func:RegisterCoAgentTools
       disposition: tools
@@ -1477,14 +1236,6 @@ exports:
       disposition: tools
     - id: internal/agentcore/tools_coagent_completion_test.go:func:TestRequiredTextureRevisionRejectsCompletedChildWithoutCanonicalWrite
       disposition: tools
-    - id: internal/agentcore/tools_coding.go:func:RegisterCodingTools
-      disposition: tools
-      production_callers:
-        - internal/agentcore/tool_profiles.go
-    - id: internal/agentcore/tools_coding.go:func:RegisterFileTools
-      disposition: tools
-      production_callers:
-        - internal/agentcore/tool_profiles.go
     - id: internal/agentcore/tools_coding.go:func:RegisterReadOnlyFileTools
       disposition: tools
       production_callers:
@@ -1501,25 +1252,23 @@ exports:
       disposition: evidence
       production_callers:
         - internal/agentcore/tool_profiles.go
-    - id: internal/agentcore/tools_shipper.go:func:RegisterShipperTools
+    - id: internal/agentcore/tools_supervision_assignments_test.go:func:TestTransitionPrivateArtifactPlaceholderUsesReservedBindingIdentity
       disposition: tools
-      production_callers:
-        - internal/agentcore/tool_profiles.go
-    - id: internal/agentcore/tools_test.go:func:TestDelegateRequiresAppChangePackageHonorsExplicitNegativeInstruction
+    - id: internal/agentcore/tools_test.go:func:TestBootBindsExplicitUpdateAcrossDispatchBeforeToolResultCrashWindow
+      disposition: tools
+    - id: internal/agentcore/tools_test.go:func:TestBootReconciliationIsIdempotentForTerminalResearcherOutcome
+      disposition: tools
+    - id: internal/agentcore/tools_test.go:func:TestBootTerminalRepairSynthesizesGenericChildrenAndWakesTargetOnce
+      disposition: tools
+    - id: internal/agentcore/tools_test.go:func:TestDerivedWorkerUpdateIDSurvivesReplaceableSourceRun
       disposition: tools
     - id: internal/agentcore/tools_test.go:func:TestExecuteTools
-      disposition: tools
-    - id: internal/agentcore/tools_test.go:func:TestExecuteToolsCoSuperSkipsDuplicateAppChangePackagePublish
       disposition: tools
     - id: internal/agentcore/tools_test.go:func:TestExecuteToolsCoSuperSkipsDuplicateBashCommand
       disposition: tools
     - id: internal/agentcore/tools_test.go:func:TestExecuteToolsConductorTextureRouteSkipsOtherSpawn
       disposition: tools
     - id: internal/agentcore/tools_test.go:func:TestExecuteToolsDoesNotCapResearcherSearchBatch
-      disposition: tools
-    - id: internal/agentcore/tools_test.go:func:TestExecuteToolsDoesNotHiddenChainWorkerDelegation
-      disposition: tools
-    - id: internal/agentcore/tools_test.go:func:TestExecuteToolsDoesNotPropagateHiddenWorkerDelegationBlocker
       disposition: tools
     - id: internal/agentcore/tools_test.go:func:TestExecuteToolsDoesNotSkipTextureEditAfterFailedAttempt
       disposition: tools
@@ -1537,40 +1286,22 @@ exports:
       disposition: tools
     - id: internal/agentcore/tools_test.go:func:TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn
       disposition: tools
-    - id: internal/agentcore/tools_test.go:func:TestExecuteToolsSuperSkipsDuplicateStartWorkerDelegation
+    - id: internal/agentcore/tools_test.go:func:TestExecuteToolsSuperSkipsDuplicateCoordinationSideEffects
       disposition: tools
-    - id: internal/agentcore/tools_test.go:func:TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects
-      disposition: tools
-    - id: internal/agentcore/tools_test.go:func:TestExplicitAppChangePackageConstraintsFromRunPrompt
-      disposition: tools
-    - id: internal/agentcore/tools_test.go:func:TestResearcherCompletionSynthesizesCheckpointAfterSavedEvidence
-      disposition: tools
-    - id: internal/agentcore/tools_test.go:func:TestResearcherFailureSynthesizesCheckpointAfterSearch
+    - id: internal/agentcore/tools_test.go:func:TestResearcherPlainTerminalResultBindsAddressedOutcome
       disposition: tools
     - id: internal/agentcore/tools_test.go:func:TestResearcherSourceSearchCallsSourceServiceAPI
       disposition: tools
     - id: internal/agentcore/tools_test.go:func:TestResearcherSourceSearchWithoutConfiguredAPIIsUnavailable
       disposition: tools
-    - id: internal/agentcore/tools_test.go:func:TestToolCommandEnvAddsConfiguredBrowserToolDirsToPath
+    - id: internal/agentcore/tools_test.go:func:TestResearcherTerminalOutcomeRequiresDurableTerminalRun
       disposition: tools
-    - id: internal/agentcore/tools_test.go:func:TestToolCommandEnvUsesPersistentScratchRoot
+    - id: internal/agentcore/tools_test.go:func:TestRootTerminalRunSkipsOutcomeBindingWithoutStoreLookup
       disposition: tools
-    - id: internal/agentcore/tools_test.go:func:TestWorkerRunEventSummaryExposesSpawnAndChannelEvidence
+    - id: internal/agentcore/tools_test.go:func:TestSuperExplicitFinalUpdateIsBoundInPlace
       disposition: tools
-    - id: internal/agentcore/tools_vmctl.go:func:RegisterVMControlTools
+    - id: internal/agentcore/tools_test.go:func:TestTerminalOutcomeIgnoresExplicitUpdateToNonRequester
       disposition: tools
-      production_callers:
-        - internal/agentcore/tool_profiles.go
-    - id: internal/agentcore/tools_vmctl.go:method(*workerRunPollError):Error
-      disposition: tools
-    - id: internal/agentcore/tools_vmctl.go:method(workerVMLeaseKey):Matches
-      disposition: tools
-      production_callers:
-        - internal/agentcore/tools_vmctl.go
-    - id: internal/agentcore/tools_vmctl.go:method(workerVMLeaseKey):Valid
-      disposition: tools
-      production_callers:
-        - internal/agentcore/tools_vmctl.go
     - id: internal/agentcore/tools_wire_processor.go:func:RegisterWireProcessorTools
       disposition: wire
       production_callers:
@@ -1593,18 +1324,6 @@ exports:
       disposition: core
     - id: internal/agentcore/trace_wiring_test.go:func:TestStopClosesTraceStore
       disposition: core
-    - id: internal/agentcore/trace_wiring_test.go:method(*stubTraceStore):Append
-      disposition: core
-    - id: internal/agentcore/trace_wiring_test.go:method(*stubTraceStore):Close
-      disposition: core
-    - id: internal/agentcore/trace_wiring_test.go:method(*stubTraceStore):Get
-      disposition: core
-    - id: internal/agentcore/trace_wiring_test.go:method(*stubTraceStore):ListByOwner
-      disposition: core
-    - id: internal/agentcore/trace_wiring_test.go:method(*stubTraceStore):ListByRun
-      disposition: core
-    - id: internal/agentcore/trace_wiring_test.go:method(*stubTraceStore):ListByTrajectory
-      disposition: core
     - id: internal/agentcore/trajectory.go:func:EvaluateTrajectorySettlement
       disposition: core
       production_callers:
@@ -1619,8 +1338,6 @@ exports:
       disposition: core
       production_callers:
         - internal/agentcore/trajectory.go
-    - id: internal/agentcore/trajectory_test.go:func:TestCancelRunTrajectoryDrainsMoreThanOneActivePage
-      disposition: core
     - id: internal/agentcore/trajectory_test.go:func:TestCancelRunTrajectoryPersistsFallbackTrajectoryID
       disposition: core
     - id: internal/agentcore/trajectory_test.go:func:TestCancelTrajectoryIsOwnerScopedTerminalizesAuthorityAndActiveRuns
@@ -1651,11 +1368,11 @@ exports:
       disposition: core
     - id: internal/agentcore/update_coagent_cutover_test.go:func:TestStartCoagentRunCompletesSpawnedWorkItem
       disposition: core
+    - id: internal/agentcore/update_coagent_cutover_test.go:func:TestStartPassivatesAndRefusesEffectsCapableAssignedWork
+      disposition: core
     - id: internal/agentcore/update_coagent_cutover_test.go:func:TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog
       disposition: core
     - id: internal/agentcore/update_coagent_cutover_test.go:func:TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork
-      disposition: core
-    - id: internal/agentcore/update_coagent_cutover_test.go:func:TestStartSweepsAssignedOpenWorkItemsAfterPassivation
       disposition: core
     - id: internal/agentcore/update_coagent_cutover_test.go:func:TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog
       disposition: core
@@ -1669,9 +1386,9 @@ exports:
       disposition: core
     - id: internal/agentcore/update_coagent_cutover_test.go:func:TestUpdateCoagentWarmActivationInjectsPendingTurn
       disposition: core
-    - id: internal/agentcore/update_coagent_cutover_test.go:func:TestVSuperCoSuperSlotReusedByTrajectorySlot
+    - id: internal/agentcore/update_coagent_source_packet_test.go:func:TestGenericAssignedWorkRecoveryDefersTextureToDocumentOwner
       disposition: core
-    - id: internal/agentcore/update_coagent_cutover_test.go:method(*warmUpdateInjectionProvider):CallWithTools
+    - id: internal/agentcore/update_coagent_source_packet_test.go:func:TestPendingCoagentUpdatesRejectsLifecycleMarkerAsAuthority
       disposition: core
     - id: internal/agentcore/update_coagent_source_packet_test.go:func:TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets
       disposition: core
@@ -1680,6 +1397,8 @@ exports:
     - id: internal/agentcore/update_coagent_source_packet_test.go:func:TestUpdateCoagentAcceptsSuperExecutionResultSourcesAndTextureCollatesPacketSourcesOnly
       disposition: core
     - id: internal/agentcore/update_coagent_source_packet_test.go:func:TestUpdateCoagentCanonicalizesSourceContractAliases
+      disposition: core
+    - id: internal/agentcore/update_coagent_source_packet_test.go:func:TestUpdateCoagentRefusesPresentInvalidWorkDisposition
       disposition: core
     - id: internal/agentcore/update_coagent_source_packet_test.go:func:TestUpdateCoagentRejectsLegacyFieldsAndExecutionRequestWithoutActions
       disposition: core
@@ -1767,10 +1486,6 @@ exports:
       disposition: texture
     - id: internal/textureowner/email_appagent_tools_test.go:func:TestCoagentCastCannotAddressEmailAppagentDirectly
       disposition: texture
-    - id: internal/textureowner/email_appagent_tools_test.go:func:TestEditTextureEmailProseDoesNotForceEmailAppagentContinuation
-      disposition: texture
-    - id: internal/textureowner/email_appagent_tools_test.go:func:TestGroundedEmailArtifactDoesNotForceEmailAppagentContinuation
-      disposition: texture
     - id: internal/textureowner/email_appagent_tools_test.go:func:TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent
       disposition: texture
     - id: internal/textureowner/email_appagent_tools_test.go:func:TestTextureRequestEmailDraftCreatesTraceVisibleEmailAgentRun
@@ -1794,6 +1509,7 @@ exports:
         - internal/textureowner/handler.go
         - internal/textureowner/prompt_bar.go
         - internal/textureowner/router.go
+        - internal/textureowner/supervision_api.go
         - internal/textureowner/texture.go
         - internal/textureowner/texture_agent_revision.go
         - internal/textureowner/texture_controller.go
@@ -1815,13 +1531,15 @@ exports:
       disposition: texture
       production_callers:
         - internal/apihandler/routes.go
+    - id: internal/textureowner/prompt_bar_unit_test.go:func:TestHandlePromptBarExplicitEffectPromptStartsWithTextureWithoutEffectActor
+      disposition: texture
     - id: internal/textureowner/prompt_bar_unit_test.go:func:TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture
       disposition: texture
-    - id: internal/textureowner/prompt_bar_unit_test.go:func:TestHandlePromptBarExplicitSuperExecutionStartsWithTextureWithoutAutomaticSuper
-      disposition: texture
-    - id: internal/textureowner/prompt_bar_unit_test.go:func:TestHandlePromptBarOperationalProofInitialRunStartsWithTexture
+    - id: internal/textureowner/prompt_bar_unit_test.go:func:TestHandlePromptBarOperationalProofStartsWithTextureAndNoEffectActor
       disposition: texture
     - id: internal/textureowner/prompt_bar_unit_test.go:func:TestHandlePromptBarResearcherMentionDoesNotSetRoutingFlag
+      disposition: texture
+    - id: internal/textureowner/prompt_bar_unit_test.go:func:TestHandlePromptBarStableCommandReplaysOneLifecycle
       disposition: texture
     - id: internal/textureowner/prompt_bar_unit_test.go:func:TestHandlePromptBarTextureRouteCompletesConductorSynchronously
       disposition: texture
@@ -1833,6 +1551,42 @@ exports:
       disposition: texture
       production_callers:
         - internal/apihandler/routes.go
+    - id: internal/textureowner/supervision_api.go:method(*Handler):HandleTextureSupervisionCommand
+      disposition: texture
+      production_callers:
+        - internal/textureowner/router.go
+    - id: internal/textureowner/supervision_api.go:method(*Handler):HandleTextureSupervisionImport
+      disposition: texture
+      production_callers:
+        - internal/textureowner/router.go
+    - id: internal/textureowner/supervision_api.go:method(*Handler):HandleTextureSupervisionRebuild
+      disposition: texture
+      production_callers:
+        - internal/textureowner/router.go
+    - id: internal/textureowner/supervision_api_test.go:func:TestTextureSupervisionImportDerivesStableCommandID
+      disposition: texture
+    - id: internal/textureowner/supervision_api_test.go:func:TestTextureSupervisionImportRouteRequiresOwnerAndTrajectory
+      disposition: texture
+    - id: internal/textureowner/supervision_api_test.go:func:TestTextureSupervisionRebuildAllowsTrustedInternalCaller
+      disposition: texture
+    - id: internal/textureowner/supervision_api_test.go:func:TestTextureSupervisionRebuildRejectsOrdinaryAuthenticatedUser
+      disposition: texture
+    - id: internal/textureowner/supervision_api_test.go:func:TestTextureSupervisionRebuildRouteRequiresOwner
+      disposition: texture
+    - id: internal/textureowner/supervision_command_api_test.go:func:TestTextureSupervisionCommandMapsStaleExpectedToConflict
+      disposition: texture
+    - id: internal/textureowner/supervision_command_api_test.go:func:TestTextureSupervisionCommandPinsLogicalOwnerDecisionAndRecoversRetryArtifacts
+      disposition: texture
+    - id: internal/textureowner/supervision_command_api_test.go:func:TestTextureSupervisionCommandRejectsChangedBodyForCommandID
+      disposition: texture
+    - id: internal/textureowner/supervision_command_api_test.go:func:TestTextureSupervisionCommandRejectsDigestMismatchBeforeAppend
+      disposition: texture
+    - id: internal/textureowner/supervision_command_api_test.go:func:TestTextureSupervisionCommandRejectsPrePinnedArtifactReference
+      disposition: texture
+    - id: internal/textureowner/supervision_command_api_test.go:func:TestTextureSupervisionCommandRequiresAuthenticationAndRejectsAuthorityInjection
+      disposition: texture
+    - id: internal/textureowner/test_helpers_test.go:func:TestStartSupervisionTrajectoryProjectsLifecycleSnapshot
+      disposition: texture
     - id: internal/textureowner/test_helpers_test.go:type:Runtime
       disposition: texture
     - id: internal/textureowner/texture.go:method(*Handler):HandleInternalTextureDocument
@@ -1911,14 +1665,11 @@ exports:
       disposition: texture
       production_callers:
         - internal/textureowner/router.go
-    - id: internal/textureowner/texture_agent_revision.go:method(*Handler):HandleTextureCancelAgentRevision
-      disposition: texture
-      production_callers:
-        - internal/textureowner/router.go
     - id: internal/textureowner/texture_controller.go:method(*Handler):ReconcileActorWake
       disposition: texture
       production_callers:
         - internal/actorruntime/handler.go
+        - internal/textureowner/texture_controller.go
     - id: internal/textureowner/texture_controller.go:method(*Handler):ReconcileAgentWake
       disposition: texture
       production_callers:
@@ -1927,11 +1678,12 @@ exports:
       disposition: texture
       production_callers:
         - internal/actorruntime/adapter.go
-    - id: internal/textureowner/texture_controller_restart_test.go:func:TestTextureOwnerStartRecoversDurableWakeAfterRestart
+    - id: internal/textureowner/texture_controller.go:method(*Handler):ValidateActivationAuthority
       disposition: texture
-    - id: internal/textureowner/texture_decision_test.go:func:TestRecordTextureDecisionToolPersistsAndEmitsReadableEvent
-      disposition: texture
-    - id: internal/textureowner/texture_decision_test.go:func:TestTextureDiagnosisAndTraceLogsIncludeDecisionRecords
+      production_callers:
+        - internal/actorruntime/handler.go
+        - internal/textureowner/texture_controller.go
+    - id: internal/textureowner/texture_decision_test.go:func:TestRecordTextureDecisionToolAppendsCanonicalOwnerMessage
       disposition: texture
     - id: internal/textureowner/texture_evidence_sources_test.go:func:TestCoagentPacketContentIDSourceHydratesImportedText
       disposition: texture
@@ -1954,8 +1706,6 @@ exports:
     - id: internal/textureowner/texture_evidence_sources_test.go:func:TestEvidenceSummaryEntityAllowsNativeCitationWithoutQuoteMatch
       disposition: texture
     - id: internal/textureowner/texture_evidence_sources_test.go:func:TestPendingUpdateRefsBecomeSourceEntities
-      disposition: texture
-    - id: internal/textureowner/texture_evidence_sources_test.go:func:TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation
       disposition: texture
     - id: internal/textureowner/texture_evidence_sources_test.go:func:TestTextureCoagentSourceRefsSurviveInjectionAndDelivery
       disposition: texture
@@ -1995,6 +1745,7 @@ exports:
     - id: internal/textureowner/texture_handoff.go:type:HandoffDecision
       disposition: texture
       production_callers:
+        - internal/textureowner/prompt_bar.go
         - internal/textureowner/texture_handoff.go
     - id: internal/textureowner/texture_handoff.go:type:HandoffKind
       disposition: texture
@@ -2007,7 +1758,15 @@ exports:
         - internal/textureowner/api_texture_prompt_eval.go
         - internal/textureowner/prompt_bar.go
         - internal/textureowner/texture_handoff.go
+    - id: internal/textureowner/texture_handoff_test.go:func:TestAppendTextureArchiveUsesReservationBoundReasonPayload
+      disposition: texture
     - id: internal/textureowner/texture_handoff_test.go:func:TestEnsureTextureHandoffCorpusWakeRequiresChannelID
+      disposition: texture
+    - id: internal/textureowner/texture_handoff_test.go:func:TestOwnerRevisionUsesOwnerActorAndRefusesStaleHead
+      disposition: texture
+    - id: internal/textureowner/texture_handoff_test.go:func:TestTextureDeleteRefusesUnimportedLegacyDocument
+      disposition: texture
+    - id: internal/textureowner/texture_handoff_test.go:func:TestTextureToolAppendsCanonicalRevisionAndRefusesUnimportedLegacyDocument
       disposition: texture
     - id: internal/textureowner/texture_identity_test.go:func:TestTextureActorIdentityCompatibility
       disposition: texture
@@ -2017,7 +1776,7 @@ exports:
       disposition: texture
     - id: internal/textureowner/texture_live_llm_workflow_test.go:func:TestLiveLLMProviderInfo
       disposition: texture
-    - id: internal/textureowner/texture_live_llm_workflow_test.go:func:TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture
+    - id: internal/textureowner/texture_live_llm_workflow_test.go:func:TestLiveLLMWorkflowWithFakeSearchGatewayResearchTextureEffectsOff
       disposition: texture
     - id: internal/textureowner/texture_merge.go:method(*Handler):HandleTextureAcceptMerge
       disposition: texture
@@ -2073,308 +1832,6 @@ exports:
       disposition: texture
       production_callers:
         - internal/apihandler/routes.go
-    - id: internal/textureowner/texture_structured_revision_test.go:func:TestTextureRevisionAPIAcceptsStructuredBodyAndRejectsLegacySourceSyntax
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestBuildAgentRevisionRequestRequiresSuperContinuationForActiveWorker
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestCoagentUpdateTurnInjectorSupportsTexture
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestDirectTextureReviseWritesWorkStateBeforeDelegatingResearch
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestEditTextureExplicitResearcherDoesNotDuplicateExistingResearcher
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestEditTextureExplicitResearcherDoesNotForceSpawnAfterSuperBase
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestEditTextureExplicitResearcherDoesNotForceSpawnContinuation
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestEditTextureExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestEditTextureExplicitResearcherFromSeedPromptSurvivesRequestIntent
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestEditTextureInitialWorkingRevisionDoesNotSmuggleRequiredContinuation
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestHandleInternalTextureProposalDeliveryRecordsAuthorInbox
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestHandleTestTextureWorkerUpdateUsesStructuredToolPath
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestInitialTextureDecisionPromptRejectsPrematureEditBeforeDecision
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestInitialTextureNoOpPatchRetriesIntoUsefulDraft
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestInitialTextureRevisionRejectsNoOpPromptCopy
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestInitialTextureRunDefaultsMinimalEditContextFromActivation
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestInitialTextureRunWritesBeforeSpawningResearcher
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestMediaSourceRefToSourceEntityUsesTypedEvidenceStates
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestResearcherUpdateWakeUsesSameDebouncedPath
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestRestartRecoveryReactivatesInterruptedTextureRun
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestSubmitWorkerUpdateWakeUsesSameDebouncedPath
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPIAuthGating
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPICitationsMetadataRoundTrip
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPICreateDocument
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPICreateDocumentAuth
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPICreateRevisionCanonicalizesAliasedImportedDocumentTitle
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPICreateRevisionIgnoresAppAgentAuthorFields
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPICreateRevisionUserEdit
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPIGetBlame
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPIGetDiff
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPIGetDocument
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPIGetHistory
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPIIgnoresInvalidAuthorKind
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPIListDocuments
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPIListRevisionsReturnsDurableVersionNumbersPastFifty
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAPISnapshotDoesNotMutateHead
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionAcceptsReviseEventWithoutPrompt
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionAppliesStructuredEdit
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionAuthRequired
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionCreatesCanonicalRevision
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionDeliversOwnerRequestToResidentActor
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionDocumentNotFound
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionIgnoresProviderFinalJSONEdit
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionIgnoresRawStubProviderResult
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionInheritsConductorTrajectoryFromRevisionMetadata
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionMutationCompletedOnlyOnce
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionNoDuplicateOnRenewalRetry
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionNoWorkerAuthorship
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionPreservesUserAndAppAgentAttribution
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionProgressEvents
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionRegistersMediaSourceEntities
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionRejectsMalformedEditTextureToolCall
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAgentRevisionWrongOwner
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureAppagentEditCanonicalizesAliasedMarkdownTitle
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureApplyEditsRejectsLegacyReplace
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureCreateRevisionRebasesAllowedStaleUserDraft
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureCreateRevisionRejectsStaleHead
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureCreatedResearcherEvidenceWakesTextureV2
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureCreatedSuperEvidenceWakesTextureV2
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureCurrentEventsPromptCanOpenProbePathWithoutCompletionGuard
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureDeleteDocumentCancelsPendingActorTrajectory
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureDiagnosisCanOmitRevisionContentForStructureEvidence
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureDiagnosisIncludesDocumentChannelRuns
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureDiagnosisReportsCurrentRevisionVersion
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureDocumentResponseReconcilesPendingMutationFromCurrentHead
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureDocumentResponseReportsPendingAgentMutation
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureDocumentStreamEmitsHeadChangeAfterAgentRevision
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureDocumentStreamEmitsHeadChangeAfterUserRevision
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureDocumentStreamSendsSnapshot
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureEnsureManifestCreatesAliasAndFile
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureEnsureManifestReusesExistingAlias
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureIdlePassivatesAndResumesSameRun
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureIdlePassivationEventCarriesDocumentStreamCompletionPayload
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureImportMarkdownLineageCreatesRevisionHistory
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureImportMarkdownLineageRejectsExistingAlias
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureImportMarkdownLineageRejectsMissingContentItem
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureImportMarkdownLineageRejectsUnknownCitationEntity
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureImportMarkdownLineageResolvesCitationMarkers
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureImportMarkdownLineageUsesExistingContentItems
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureImportedMarkdownRevisionUsesTextureProjectionAndPreservesCollapsedTable
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureMarkdownStructureStabilizationAllowsExplicitTableDeletion
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureMarkdownStructureStabilizationHandlesPartialTableContexts
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureMarkdownStructureStabilizationRepairsMalformedTableTailRow
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureMarkdownTableRowParserHandlesEscapedPipes
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureOpenFileImportsDocxAndPDFBytesFromFilesRoot
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureOpenFilePreservesDocxAndPDFOriginalArtifacts
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureOpenFileResolvesCanonicalAlias
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTexturePlainTextImportCarriesMigrationMetadataToFirstDurableRevision
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTexturePromptNarrativeResearcherWordsDoNotSelectPolicyBranch
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTexturePromptSteersCurrentEventsToResearcherNotSuper
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureRestoreRevisionNormalizesMalformedTableTailRows
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureSeededStochasticWorkflowContracts
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureShortcutFileKindPreservesLegacyTextureCompatibility
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureSourceGapRepairCanOmitNoSourceNeededMarker
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureSourceGapRepairCreatesRevision
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureSourceGapRepairPreservesUnrepairedGaps
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureSourceGapRepairRejectsUnknownEntity
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureStaleAgentRevisionRejectsEditAfterUserEdit
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureStreamEventMapsProgressSeparatelyFromStarted
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureStreamEventMapsTexturePassivationToSynthCompleted
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureSystemPromptSharesChoirCoreContext
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureUpdateCoagentDuringActiveRevisionTriggersSameRunFollowUp
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureUserSaveAndAgentRevisePreserveSourcesAndTableShape
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureUserSaveRemovesDuplicateMarkdownTableSeparator
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureWakeStartsIntegrationForCompletedThreadHistory
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureWorkerMessageAutoWakeBatchesRapidMessages
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureWorkerMessageAutoWakeCreatesFollowUpRevision
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureWorkerMessageDebounceUsesFakeClock
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureWorkerUpdateRevisionRejectsNoOpPatch
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:func:TestTextureWorkerWakeRequeuesWhileMutationPending
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*fakeTextureWakeTimer):Stop
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*finalTextProvider):Execute
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*finalTextProvider):ProviderName
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*revisionPromptEchoProvider):CallWithTools
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*revisionPromptEchoProvider):Execute
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*revisionPromptEchoProvider):ProviderName
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*stochasticWorkflowProvider):CallWithTools
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*stochasticWorkflowProvider):Execute
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*stochasticWorkflowProvider):ProviderName
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureAgenticResearchProvider):CallWithTools
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureAgenticResearchProvider):Execute
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureAgenticResearchProvider):ProviderName
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureDecisionThenEditProvider):CallWithTools
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureDecisionThenEditProvider):Execute
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureDecisionThenEditProvider):ProviderName
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureEditToolProvider):CallWithTools
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureEditToolProvider):Execute
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureEditToolProvider):ProviderName
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureInitialNoOpThenDraftProvider):CallWithTools
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureInitialNoOpThenDraftProvider):Execute
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureInitialNoOpThenDraftProvider):ProviderName
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureMinimalEditProvider):CallWithTools
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureMinimalEditProvider):Execute
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureMinimalEditProvider):ProviderName
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureParkResidentProvider):CallWithTools
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureParkResidentProvider):Execute
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureParkResidentProvider):ProviderName
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureResearchEvidenceLoopProvider):CallWithTools
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureResearchEvidenceLoopProvider):Execute
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureResearchEvidenceLoopProvider):ProviderName
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureSuperEvidenceLoopProvider):CallWithTools
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureSuperEvidenceLoopProvider):Execute
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureSuperEvidenceLoopProvider):ProviderName
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureWriteAndResearchProvider):CallWithTools
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureWriteAndResearchProvider):Execute
-      disposition: texture
-    - id: internal/textureowner/texture_test.go:method(*textureWriteAndResearchProvider):ProviderName
-      disposition: texture
     - id: internal/textureowner/texture_tool_unit_test.go:func:TestApplyTextureModelMergeEditsStripsVisibleProvenance
       disposition: texture
     - id: internal/textureowner/texture_tool_unit_test.go:func:TestCleanTextureToolContentPreservesOrdinaryText
@@ -2391,11 +1848,11 @@ exports:
       disposition: texture
     - id: internal/textureowner/texture_tool_unit_test.go:func:TestTextureEditRevisionMetadataRecordsOperationEvidence
       disposition: texture
+    - id: internal/textureowner/texture_tool_unit_test.go:func:TestTextureEditToolsRefusePresentInvalidWorkDisposition
+      disposition: texture
     - id: internal/textureowner/texture_tool_unit_test.go:func:TestTextureSemanticMergePromotesModelSummaryToSuggestion
       disposition: texture
     - id: internal/textureowner/texture_tool_unit_test.go:func:TestTextureSemanticMergeUsesProviderBackedJSON
-      disposition: texture
-    - id: internal/textureowner/texture_tool_unit_test.go:func:TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase
       disposition: texture
     - id: internal/textureowner/texture_tool_unit_test.go:func:TestTextureToolMarkSourceUnusedAllowsUncitedEntity
       disposition: texture
@@ -2411,6 +1868,8 @@ exports:
       disposition: texture
     - id: internal/textureowner/texture_tool_unit_test.go:func:TestTextureToolSourceGraphDuplicateLegacyIDsResolveToSharedGraphEntity
       disposition: texture
+    - id: internal/textureowner/texture_tool_unit_test.go:func:TestTextureToolSourceGraphUsesComputerScopedIdentity
+      disposition: texture
     - id: internal/textureowner/texture_tool_unit_test.go:func:TestTextureToolSourceGraphUsesTargetIdentityNotGeneratedLegacyID
       disposition: texture
     - id: internal/textureowner/texture_tool_unit_test.go:func:TestTextureToolSourceGraphWritesSourceRefEdgesPinnedToRevisionAndSourceVersion
@@ -2423,12 +1882,6 @@ exports:
       disposition: texture
     - id: internal/textureowner/texture_tool_unit_test.go:func:TestTextureToolStructuredUpdatePreservesSourceRefs
       disposition: texture
-    - id: internal/textureowner/texture_tool_unit_test.go:method(*semanticMergeTestProvider):CallWithTools
-      disposition: texture
-    - id: internal/textureowner/texture_tool_unit_test.go:method(*semanticMergeTestProvider):Execute
-      disposition: texture
-    - id: internal/textureowner/texture_tool_unit_test.go:method(*semanticMergeTestProvider):ProviderName
-      disposition: texture
     - id: internal/textureowner/texture_workflow_verifier.go:method(*Handler):VerifyTextureWorkflow
       disposition: texture
     - id: internal/textureowner/texture_workflow_verifier.go:type:TextureWorkflowVerificationOptions
@@ -2439,14 +1892,6 @@ exports:
       disposition: texture
       production_callers:
         - internal/textureowner/texture_workflow_verifier.go
-    - id: internal/textureowner/texture_workflow_verifier_test.go:func:TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic
-      disposition: texture
-    - id: internal/textureowner/texture_workflow_verifier_test.go:func:TestTextureRevisionCausalityAllowsManyRevisionsFromOneLoop
-      disposition: texture
-    - id: internal/textureowner/texture_workflow_verifier_test.go:func:TestVerifyTextureWorkflowDeterministicEventLog
-      disposition: texture
-    - id: internal/textureowner/texture_workflow_verifier_test.go:func:TestVerifyTextureWorkflowSeededStochasticOrdering
-      disposition: texture
     - id: internal/textureowner/tools_texture.go:func:RegisterTools
       disposition: texture
       production_callers:
@@ -2458,8 +1903,6 @@ exports:
     - id: internal/textureowner/universal_wire_test.go:func:TestRuntimeTextureReadsRemainOwnerScopedAfterWireCutover
       disposition: wire
 initial_unused_export_debt:
-    - id: internal/agentcore/api_candidate_package_intake.go:func:RegisterCandidatePackageIntakeRoutes
-      disposition: delete
     - id: internal/agentcore/channel_store.go:method(*Runtime):ChannelPost
       disposition: delete
     - id: internal/agentcore/channel_store.go:method(*Runtime):ChannelRead
@@ -2468,21 +1911,9 @@ initial_unused_export_debt:
       disposition: delete
     - id: internal/agentcore/runtime.go:method(*Runtime):StartRun
       disposition: delete
-    - id: internal/agentcore/tools_capsule.go:func:RegisterCapsuleExecTools
-      disposition: delete
-    - id: internal/agentcore/tools_capsule.go:func:RegisterCapsuleTools
-      disposition: delete
-    - id: internal/agentcore/tools_capsule.go:func:WithCapsuleCtx
-      disposition: delete
-    - id: internal/agentcore/tools_vmctl.go:method(*workerRunPollError):Error
-      disposition: delete
     - id: internal/textureowner/texture_workflow_verifier.go:method(*Handler):VerifyTextureWorkflow
       disposition: delete
-routes:
-    - id: internal/agentcore/api_candidate_package_intake.go:HandleFunc:/api/candidate-package-intakes/:h.HandleCandidatePackageIntakeDetail
-      disposition: candidate_package
-    - id: internal/agentcore/api_candidate_package_intake.go:HandleFunc:/api/candidate-package-intakes:h.HandleCandidatePackageIntakesRoot
-      disposition: candidate_package
+routes: []
 tools:
     - id: internal/agentcore/tools_capsule.go:Tool:capsule_exec
       disposition: tools
@@ -2498,29 +1929,21 @@ tools:
       disposition: tools
     - id: internal/agentcore/tools_capsule.go:Tool:inspect_capsule
       disposition: tools
+    - id: internal/agentcore/tools_capsule.go:Tool:inspect_self_development_bundle
+      disposition: tools
     - id: internal/agentcore/tools_capsule.go:Tool:list_capsules
       disposition: tools
-    - id: internal/agentcore/tools_capsule.go:Tool:mint_capability
+    - id: internal/agentcore/tools_capsule.go:Tool:record_self_development_verification
       disposition: tools
     - id: internal/agentcore/tools_capsule.go:Tool:spawn_capsule
       disposition: tools
     - id: internal/agentcore/tools_coagent.go:Tool:cancel_agent
-      disposition: tools
-    - id: internal/agentcore/tools_coding.go:Tool:bash
-      disposition: tools
-    - id: internal/agentcore/tools_coding.go:Tool:edit_file
-      disposition: tools
-    - id: internal/agentcore/tools_coding.go:Tool:git_diff
-      disposition: tools
-    - id: internal/agentcore/tools_coding.go:Tool:git_status
       disposition: tools
     - id: internal/agentcore/tools_coding.go:Tool:glob
       disposition: tools
     - id: internal/agentcore/tools_coding.go:Tool:grep
       disposition: tools
     - id: internal/agentcore/tools_coding.go:Tool:read_file
-      disposition: tools
-    - id: internal/agentcore/tools_coding.go:Tool:write_file
       disposition: tools
     - id: internal/agentcore/tools_evidence.go:Tool:get_run_memory_entry
       disposition: evidence
@@ -2530,21 +1953,9 @@ tools:
       disposition: evidence
     - id: internal/agentcore/tools_evidence.go:Tool:save_evidence
       disposition: evidence
-    - id: internal/agentcore/tools_shipper.go:Tool:publish_app_change_package
+    - id: internal/agentcore/tools_supervision_assignments.go:Tool:open_supervision_assignments
       disposition: tools
-    - id: internal/agentcore/tools_vmctl.go:Tool:cancel_worker_delegation
-      disposition: tools
-    - id: internal/agentcore/tools_vmctl.go:Tool:finish_worker_delegation
-      disposition: tools
-    - id: internal/agentcore/tools_vmctl.go:Tool:fork_desktop
-      disposition: tools
-    - id: internal/agentcore/tools_vmctl.go:Tool:observe_worker_delegation
-      disposition: tools
-    - id: internal/agentcore/tools_vmctl.go:Tool:publish_desktop
-      disposition: tools
-    - id: internal/agentcore/tools_vmctl.go:Tool:request_worker_vm
-      disposition: tools
-    - id: internal/agentcore/tools_vmctl.go:Tool:start_worker_delegation
+    - id: internal/agentcore/tools_supervision_assignments.go:Tool:record_supervision_transition
       disposition: tools
     - id: internal/agentcore/tools_wire_processor.go:Tool:record_wire_processor_decision
       disposition: wire
@@ -2580,24 +1991,46 @@ tools:
       disposition: texture
     - id: internal/textureowner/tools_texture.go:Tool:request_email_draft
       disposition: texture
-    - id: internal/textureowner/tools_texture.go:Tool:request_super_execution
-      disposition: texture
     - id: internal/textureowner/tools_texture.go:Tool:rewrite_texture
       disposition: texture
 production_importers: []
 wrappers: []
 compatibility_markers:
-    - id: internal/agentcore/runtime.go:1988:This is the legacy execution path used when no tool registry is configured
+    - id: internal/agentcore/api_trajectory.go:24:The projection is omitted for unrelated legacy trajectories.
       disposition: delete
-    - id: internal/agentcore/runtime.go:99:New creates a new Runtime with the given config, store, event bus, and
+    - id: internal/agentcore/api_trajectory.go:262:through to the legacy lifecycle canceller for canonical work.
       disposition: delete
-    - id: internal/agentcore/tools_capsule.go:297:This preserves backward compatibility with existing callers.
+    - id: 'internal/agentcore/runtime.go:1036:refuseLegacySupervisionWrite makes the legacy lifecycle boundary explicit:'
+      disposition: delete
+    - id: internal/agentcore/runtime.go:151:New creates a new Runtime with the given config, store, event bus, and
+      disposition: delete
+    - id: internal/agentcore/runtime.go:1720:Legacy trajectories may carry a run SandboxID without a scoped
+      disposition: delete
+    - id: internal/agentcore/runtime.go:1722:owner-only compatibility query.
+      disposition: delete
+    - id: internal/agentcore/runtime.go:1728:Legacy trajectories have no computer identity; infer it only for their
+      disposition: delete
+    - id: internal/agentcore/runtime.go:1802:ListTrajectoriesByOwner returns recent legacy trajectories plus canonical
+      disposition: delete
+    - id: internal/agentcore/runtime.go:2177:canonical attempt authority. The legacy activation table cannot
+      disposition: delete
+    - id: internal/agentcore/runtime.go:2901:This is the legacy execution path used when no tool registry is configured
+      disposition: delete
+    - id: internal/agentcore/runtime.go:49:ErrSupervisionAuthorityRequired refuses a legacy writer before it can
+      disposition: delete
+    - id: internal/agentcore/runtime.go:565:quiescent legacy lifecycle projection into one canonical transaction.
+      disposition: delete
+    - id: internal/agentcore/runtime.go:752:Start begins runtime boot recovery. On boot, legacy in-process activations
       disposition: delete
     - id: internal/agentcore/universal_wire.go:12:Accept both the new "corpusd_route_path" key and the legacy
       disposition: delete
     - id: internal/agentcore/universal_wire.go:13:"platformd_route_path" key for backward compatibility with existing
       disposition: delete
-    - id: internal/textureowner/tools_texture.go:1633:source_ref display_mode enum after the hard cutover. Legacy expanded
+    - id: internal/textureowner/handler.go:67:Callers must refuse before a legacy store writer can mutate Texture state.
+      disposition: delete
+    - id: internal/textureowner/supervision_api.go:55:HandleTextureSupervisionImport imports one owner-scoped legacy trajectory
+      disposition: delete
+    - id: internal/textureowner/tools_texture.go:1612:source_ref display_mode enum after the hard cutover. Legacy expanded
       disposition: delete
 store_calls:
     - id: internal/agentcore/api.go:HandleInternalRunEvents:internal/store.method:Store.ListEvents
@@ -2610,29 +2043,71 @@ store_calls:
       disposition: read
     - id: internal/agentcore/api.go:HandleRunAcceptancesRoot:internal/store.method:Store.ListRunAcceptancesByTrajectory
       disposition: read
-    - id: internal/agentcore/api.go:HandleRunList:internal/store.method:Store.ListRunsByChannel
-      disposition: read
     - id: internal/agentcore/api.go:handleInternalRunEventAppend:internal/store.method:Store.AppendEvent
       disposition: lifecycle
     - id: internal/agentcore/api.go:runStatusWithTrajectory:internal/store.method:Store.FindWorkItemByFingerprint
       disposition: read
-    - id: internal/agentcore/api_app_promotion.go:HandleAppAdoptionDetail:internal/store.method:Store.GetAppAdoption
+    - id: internal/agentcore/api_self_development.go:decideSelfDevelopmentOperation:internal/store.method:Store.EventByIdempotency
       disposition: read
-    - id: internal/agentcore/api_app_promotion.go:HandleAppAdoptionsRoot:internal/store.method:Store.ListAppAdoptions
+    - id: internal/agentcore/api_self_development.go:decideSelfDevelopmentOperation:internal/store.method:Store.EventByIdempotency#2
       disposition: read
-    - id: internal/agentcore/api_app_promotion.go:HandleAppChangePackageDetail:internal/store.method:Store.GetAppChangePackageForViewer
+    - id: internal/agentcore/api_self_development.go:decideSelfDevelopmentOperation:internal/store.method:Store.FinalizedDecisionForOperation
       disposition: read
-    - id: internal/agentcore/api_app_promotion.go:HandleAppChangePackagesRoot:internal/store.method:Store.ListAppChangePackages
+    - id: internal/agentcore/api_self_development.go:decideSelfDevelopmentOperation:internal/store.method:Store.FinalizedDecisionForOperation#2
       disposition: read
-    - id: internal/agentcore/api_app_promotion.go:HandleInternalAppChangePackageDetail:internal/store.method:Store.GetAppChangePackageForViewer
+    - id: internal/agentcore/api_self_development.go:decideSelfDevelopmentOperation:internal/store.method:Store.Head
       disposition: read
-    - id: internal/agentcore/api_app_promotion.go:appAdoptionUIPreviewRoot:internal/store.method:Store.GetAppAdoption
+    - id: internal/agentcore/api_self_development.go:ensureSelfDevelopmentRun:internal/store.method:Store.ListRunsBySelfDevelopmentOperation
       disposition: read
-    - id: internal/agentcore/api_app_promotion.go:handleAppChangePackageReviewEvidence:internal/store.method:Store.GetAppChangePackageForViewer
+    - id: internal/agentcore/api_self_development.go:handleSelfDevelopmentRoute:internal/store.method:Store.EventByDigest
       disposition: read
-    - id: internal/agentcore/api_app_promotion.go:handleAppChangePackageReviewEvidence:internal/store.method:Store.GetRunAcceptanceByID
+    - id: internal/agentcore/api_self_development.go:importSelfDevelopmentGenesis:internal/store.method:Store.EventByIdempotency
       disposition: read
-    - id: internal/agentcore/api_trajectory.go:HandleTrajectoriesRoot:internal/store.method:Store.ListTrajectoriesByOwner
+    - id: internal/agentcore/api_self_development.go:importSelfDevelopmentGenesis:internal/store.method:Store.EventByIdempotency#2
+      disposition: read
+    - id: internal/agentcore/api_self_development.go:importSelfDevelopmentGenesis:internal/store.method:Store.EventByIdempotency#3
+      disposition: read
+    - id: internal/agentcore/api_self_development.go:importSelfDevelopmentGenesis:internal/store.method:Store.Head
+      disposition: read
+    - id: internal/agentcore/api_self_development.go:importSelfDevelopmentGenesis:internal/store.method:Store.Head#2
+      disposition: read
+    - id: internal/agentcore/api_self_development.go:importSelfDevelopmentGenesis:internal/store.method:Store.Head#3
+      disposition: read
+    - id: internal/agentcore/api_self_development.go:importSelfDevelopmentGenesis:internal/store.method:Store.Head#4
+      disposition: read
+    - id: internal/agentcore/api_self_development.go:recordGenesisBaseline:internal/store.method:Store.EventByIdempotency
+      disposition: read
+    - id: internal/agentcore/api_self_development.go:recordGenesisBaseline:internal/store.method:Store.EventReceiptByIdempotency
+      disposition: read
+    - id: internal/agentcore/api_self_development.go:recordGenesisBaseline:internal/store.method:Store.Head
+      disposition: read
+    - id: internal/agentcore/api_self_development.go:startSelfDevelopmentOperation:internal/store.method:Store.EventByIdempotency
+      disposition: read
+    - id: internal/agentcore/api_self_development.go:startSelfDevelopmentOperation:internal/store.method:Store.EventByIdempotency#2
+      disposition: read
+    - id: internal/agentcore/api_self_development.go:startSelfDevelopmentRollback:internal/store.method:Store.EventByDigest
+      disposition: read
+    - id: internal/agentcore/api_self_development.go:startSelfDevelopmentRollback:internal/store.method:Store.EventByIdempotency
+      disposition: read
+    - id: internal/agentcore/api_self_development.go:startSelfDevelopmentRollback:internal/store.method:Store.Head
+      disposition: read
+    - id: internal/agentcore/api_self_development.go:startSelfDevelopmentRollback:internal/store.method:Store.Head#2
+      disposition: read
+    - id: internal/agentcore/api_trajectory.go:HandleTrajectoryCancel:internal/store.method:Store.GetLifecycleSnapshot
+      disposition: read
+    - id: internal/agentcore/api_trajectory.go:HandleTrajectoryCancel:internal/store.method:Store.GetSupervisionProjectionSnapshot
+      disposition: read
+    - id: internal/agentcore/api_trajectory.go:HandleTrajectoryDetail:internal/store.method:Store.GetLifecycleSnapshot
+      disposition: read
+    - id: internal/agentcore/api_trajectory.go:HandleTrajectoryDetail:internal/store.method:Store.GetSupervisionProjectionSnapshot
+      disposition: read
+    - id: internal/agentcore/api_trajectory.go:HandleTrajectoryDetail:internal/store.method:Store.GetSupervisionProjectionSnapshot#2
+      disposition: read
+    - id: internal/agentcore/api_trajectory.go:HandleTrajectoryDetail:internal/store.method:Store.ListLifecycleEventPage
+      disposition: read
+    - id: internal/agentcore/api_trajectory.go:streamLifecycleEvents:internal/store.method:Store.GetSupervisionProjectionSnapshot
+      disposition: read
+    - id: internal/agentcore/api_trajectory.go:streamLifecycleEvents:internal/store.method:Store.ListLifecycleEventPage
       disposition: read
     - id: internal/agentcore/channel_store.go:ChannelCast:internal/store.method:Store.AppendChannelMessage
       disposition: lifecycle
@@ -2640,18 +2115,12 @@ store_calls:
       disposition: read
     - id: internal/agentcore/channel_store.go:ChannelRead:internal/store.method:Store.ListChannelMessages
       disposition: read
-    - id: internal/agentcore/delegate_worker_update_fallback.go:dispatchDelegateWorkerUpdate:internal/store.method:Store.DispatchWorkerUpdate
-      disposition: lifecycle
-    - id: internal/agentcore/delegate_worker_update_fallback.go:enqueueDelegateWorkerSuperContinuation:internal/store.method:Store.DispatchWorkerUpdate
-      disposition: lifecycle
-    - id: internal/agentcore/delegate_worker_update_fallback.go:synthesizeDelegateWorkerUpdateCheckpoint:internal/store.method:Store.ListEvents
-      disposition: read
-    - id: internal/agentcore/delegate_worker_update_fallback.go:synthesizeDelegateWorkerUpdateOnSuperFailure:internal/store.method:Store.ListEvents
-      disposition: read
-    - id: internal/agentcore/delegate_worker_update_fallback.go:synthesizeSuperFailureUpdate:internal/store.method:Store.ListEvents
-      disposition: read
     - id: internal/agentcore/email_lifecycle.go:recordEmailDraftRequest:internal/store.method:Store.CreateRun
       disposition: lifecycle
+    - id: internal/agentcore/email_lifecycle.go:recordEmailDraftRequest:internal/store.method:Store.GetRun
+      disposition: read
+    - id: internal/agentcore/email_lifecycle.go:recordEmailDraftRequest:internal/store.method:Store.GetSupervisionProjectionSnapshot
+      disposition: read
     - id: internal/agentcore/email_lifecycle.go:recordEmailDraftRequest:internal/store.method:Store.UpsertAgent
       disposition: lifecycle
     - id: internal/agentcore/live_ws.go:HandleLiveWS:internal/store.method:Store.ListEventsByOwnerAfter
@@ -2672,13 +2141,17 @@ store_calls:
       disposition: lifecycle
     - id: internal/agentcore/product_events.go:EmitProductEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle
-    - id: internal/agentcore/researcher_checkpoint_fallback.go:synthesizeResearcherUpdateIfMissing:internal/store.method:Store.ListEvents
+    - id: internal/agentcore/researcher_checkpoint_fallback.go:ensurePersistedTerminalRunOutcome:internal/store.method:Store.BindWorkerUpdateTerminalOutcome
+      disposition: lifecycle
+    - id: internal/agentcore/researcher_checkpoint_fallback.go:ensurePersistedTerminalRunOutcome:internal/store.method:Store.DispatchWorkerUpdate
+      disposition: lifecycle
+    - id: internal/agentcore/researcher_checkpoint_fallback.go:ensurePersistedTerminalRunOutcome:internal/store.method:Store.GetWorkerUpdate
       disposition: read
-    - id: internal/agentcore/run_acceptance.go:SynthesizeRunAcceptance:internal/store.method:Store.GetRun
+    - id: internal/agentcore/researcher_checkpoint_fallback.go:ensurePersistedTerminalRunOutcome:internal/store.method:Store.ListWorkerUpdatesBySourceRun
+      disposition: read
+    - id: internal/agentcore/researcher_checkpoint_fallback.go:terminalOutcomeRequesterTarget:internal/store.method:Store.GetAgentByScope
       disposition: read
     - id: internal/agentcore/run_acceptance.go:SynthesizeRunAcceptance:internal/store.method:Store.ListEventsByTrajectory
-      disposition: read
-    - id: internal/agentcore/run_acceptance.go:SynthesizeRunAcceptance:internal/store.method:Store.ListRunsByOwner
       disposition: read
     - id: internal/agentcore/run_acceptance.go:SynthesizeRunAcceptance:internal/store.method:Store.UpsertRunAcceptance
       disposition: lifecycle
@@ -2700,19 +2173,21 @@ store_calls:
       disposition: lifecycle
     - id: internal/agentcore/run_memory.go:seedActorMemorySnapshot:internal/store.method:Store.LatestActorRunMemoryEntries
       disposition: read
-    - id: internal/agentcore/runtime.go:CancelAgent:internal/store.method:Store.GetLatestActiveRunByAgent
-      disposition: read
-    - id: internal/agentcore/runtime.go:CancelRunTrajectory:internal/store.method:Store.GetRun
-      disposition: read
-    - id: internal/agentcore/runtime.go:CancelRunTrajectory:internal/store.method:Store.UpdateRun
+    - id: internal/agentcore/runtime.go:ImportLegacySupervisionProjection:internal/store.method:Store.AcquireLegacyProjectionImportBarrier
       disposition: lifecycle
-    - id: internal/agentcore/runtime.go:EnsurePersistentSuperAgent:internal/store.method:Store.UpsertAgent
+    - id: internal/agentcore/runtime.go:ImportLegacySupervisionProjection:internal/store.method:Store.BuildProjectionImportV1
       disposition: lifecycle
-    - id: internal/agentcore/runtime.go:ExecuteActivationSync:internal/store.method:Store.GetRun
+    - id: internal/agentcore/runtime.go:ListRunsByChannel:internal/store.method:Store.ListLifecycleRunsByChannel
       disposition: read
-    - id: internal/agentcore/runtime.go:GetRun:internal/store.method:Store.GetRun
+    - id: internal/agentcore/runtime.go:ListRunsByChannel:internal/store.method:Store.ListRunsByChannel
+      disposition: read
+    - id: internal/agentcore/runtime.go:ListRunsByOwner:internal/store.method:Store.ListLifecycleRunsByOwner
       disposition: read
     - id: internal/agentcore/runtime.go:ListRunsByOwner:internal/store.method:Store.ListRunsByOwner
+      disposition: read
+    - id: internal/agentcore/runtime.go:ListTrajectoriesByOwner:internal/store.method:Store.ListLifecycleTrajectoriesByOwner
+      disposition: read
+    - id: internal/agentcore/runtime.go:ListTrajectoriesByOwner:internal/store.method:Store.ListTrajectoriesByOwner
       disposition: read
     - id: internal/agentcore/runtime.go:RunningCountByProfile:internal/store.method:Store.ListRunsByState
       disposition: read
@@ -2722,7 +2197,7 @@ store_calls:
       disposition: lifecycle
     - id: internal/agentcore/runtime.go:StartCoagentRun:internal/store.method:Store.CreateRun
       disposition: lifecycle
-    - id: internal/agentcore/runtime.go:StartCoagentRun:internal/store.method:Store.GetRun
+    - id: internal/agentcore/runtime.go:StartCoagentRun:internal/store.method:Store.GetAgentByScope
       disposition: read
     - id: internal/agentcore/runtime.go:StartCoagentRun:internal/store.method:Store.ReleaseCoSuperSlotClaim
       disposition: lifecycle
@@ -2730,34 +2205,52 @@ store_calls:
       disposition: lifecycle
     - id: internal/agentcore/runtime.go:activeCoSuperSlotRun:internal/store.method:Store.ActiveCoSuperSlotRun
       disposition: read
-    - id: internal/agentcore/runtime.go:activeRunByAgent:internal/store.method:Store.GetLatestActiveRunByAgent
+    - id: internal/agentcore/runtime.go:cancelRunTrajectory:internal/store.method:Store.UpdateRun
+      disposition: lifecycle
+    - id: internal/agentcore/runtime.go:cancelTrajectoryAuthority:internal/store.method:Store.GetLifecycleTrajectory
       disposition: read
-    - id: internal/agentcore/runtime.go:cancelTrajectoryAuthority:internal/store.method:Store.CancelTrajectoryAuthority
+    - id: internal/agentcore/runtime.go:cancelTrajectoryAuthorityCommand:internal/store.method:Store.CancelTrajectoryAuthority
       disposition: lifecycle
     - id: internal/agentcore/runtime.go:channelHasGroundedHistory:internal/store.method:Store.ListChannelMessages
-      disposition: read
-    - id: internal/agentcore/runtime.go:channelHasGroundedHistory:internal/store.method:Store.ListRunsByChannel
       disposition: read
     - id: internal/agentcore/runtime.go:completePromptBarDecisionRun:internal/store.method:Store.CreateRun
       disposition: lifecycle
     - id: internal/agentcore/runtime.go:completePromptBarDecisionRun:internal/store.method:Store.UpsertAgent
       disposition: lifecycle
+    - id: internal/agentcore/runtime.go:continueOpenLifecycleWorkAfterTerminal:internal/store.method:Store.GetLifecycleWorkItem
+      disposition: read
     - id: internal/agentcore/runtime.go:createAgentMutationForRun:internal/store.method:Store.CreateAgentMutation
       disposition: lifecycle
+    - id: internal/agentcore/runtime.go:createRunWithMetadata:internal/store.method:Store.CreateRun
+      disposition: lifecycle
+    - id: internal/agentcore/runtime.go:createRunWithMetadata:internal/store.method:Store.GetAgentByScope
+      disposition: read
+    - id: internal/agentcore/runtime.go:createRunWithMetadata:internal/store.method:Store.GetSupervisionProjectionSnapshot
+      disposition: read
     - id: internal/agentcore/runtime.go:createSpawnedCoagentWorkItem:internal/store.method:Store.CreateWorkItem
       disposition: wire
-    - id: internal/agentcore/runtime.go:createSpawnedCoagentWorkItem:internal/store.method:Store.GetRun
+    - id: internal/agentcore/runtime.go:drainCancelledTrajectoryActivations:internal/store.method:Store.GetLifecycleSnapshot
+      disposition: read
+    - id: internal/agentcore/runtime.go:drainCancelledTrajectoryActivations:internal/store.method:Store.ListActiveLifecycleRunsByTrajectory
       disposition: read
     - id: internal/agentcore/runtime.go:drainCancelledTrajectoryActivations:internal/store.method:Store.ListActiveRunsByTrajectory
+      disposition: read
+    - id: internal/agentcore/runtime.go:drainCancelledTrajectoryActivations:internal/store.method:Store.ListActiveRunsByTrajectory#2
       disposition: read
     - id: internal/agentcore/runtime.go:emitEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle
     - id: internal/agentcore/runtime.go:enforceCoSuperSlotBudget:internal/store.method:Store.CountActiveCoSuperSlots
       disposition: read
-    - id: internal/agentcore/runtime.go:enforceVSuperVerifierSequencing:internal/store.method:Store.CoSuperSlotRun
+    - id: internal/agentcore/runtime.go:enforceSuperVerifierSequencing:internal/store.method:Store.CoSuperSlotRun
       disposition: read
+    - id: internal/agentcore/runtime.go:ensurePersistentSuperAgent:internal/store.method:Store.UpsertAgent
+      disposition: lifecycle
     - id: internal/agentcore/runtime.go:executeWithToolLoop:internal/store.method:Store.UpdateRun
       disposition: lifecycle
+    - id: internal/agentcore/runtime.go:getRunForComputer:internal/store.method:Store.GetLifecycleRun
+      disposition: read
+    - id: internal/agentcore/runtime.go:getRunForComputer:internal/store.method:Store.GetRunByOwner
+      disposition: read
     - id: internal/agentcore/runtime.go:handleExecutionError:internal/store.method:Store.CompleteAgentMutation
       disposition: lifecycle
     - id: internal/agentcore/runtime.go:handleExecutionError:internal/store.method:Store.FailAgentMutation
@@ -2776,13 +2269,15 @@ store_calls:
       disposition: read
     - id: internal/agentcore/runtime.go:inheritRequesterMetadataFromWorkItem:internal/store.method:Store.GetRun
       disposition: read
+    - id: internal/agentcore/runtime.go:latestActiveRunByAgent:internal/store.method:Store.GetLatestActiveLifecycleRunByAgent
+      disposition: read
+    - id: internal/agentcore/runtime.go:latestActiveRunByAgent:internal/store.method:Store.GetLatestActiveRunByAgent
+      disposition: read
     - id: internal/agentcore/runtime.go:latestActorToolLoopBudgetSpend:internal/store.method:Store.LatestActorRunMemoryEntries
       disposition: read
     - id: internal/agentcore/runtime.go:latestActorToolLoopBudgetSpend:internal/store.method:Store.ListEvents
       disposition: read
-    - id: internal/agentcore/runtime.go:latestTrajectoryCoSuperAppChangePackage:internal/store.method:Store.CoSuperSlotRun
-      disposition: read
-    - id: internal/agentcore/runtime.go:latestTrajectoryCoSuperAppChangePackage:internal/store.method:Store.ListEvents
+    - id: internal/agentcore/runtime.go:lifecycleActivationBindingsEligible:internal/store.method:Store.GetLifecycleSnapshot
       disposition: read
     - id: internal/agentcore/runtime.go:passivateInterruptedActivations:internal/store.method:Store.ListRunsByState
       disposition: read
@@ -2790,17 +2285,37 @@ store_calls:
       disposition: lifecycle
     - id: internal/agentcore/runtime.go:passivateInterruptedActivations:internal/store.method:Store.UpdateRun
       disposition: lifecycle
-    - id: internal/agentcore/runtime.go:persistActivationState:internal/store.method:Store.GetRun
+    - id: internal/agentcore/runtime.go:persistActivationState:internal/store.method:Store.GetSupervisionProjectionSnapshot
       disposition: read
+    - id: internal/agentcore/runtime.go:persistActivationState:internal/store.method:Store.UpdateRun
+      disposition: lifecycle
     - id: internal/agentcore/runtime.go:persistEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle
     - id: internal/agentcore/runtime.go:processorRunOccupiesAdmission:internal/store.method:Store.FindWorkItemByFingerprint
       disposition: read
-    - id: internal/agentcore/runtime.go:reconcileAssignedWorkItemActor:internal/store.method:Store.GetAgent
+    - id: internal/agentcore/runtime.go:reconcileAssignedWorkItemActorWithSource:internal/store.method:Store.GetAgentByScope
+      disposition: read
+    - id: internal/agentcore/runtime.go:reconcileAssignedWorkItemActorWithSource:internal/store.method:Store.GetLifecycleSnapshot
+      disposition: read
+    - id: internal/agentcore/runtime.go:reconcileTerminalRunOutcomes:internal/store.method:Store.ListAllRunsByState
+      disposition: read
+    - id: internal/agentcore/runtime.go:reconcileTerminalRunOutcomes:internal/store.method:Store.ListLifecycleRunsByState
+      disposition: read
+    - id: internal/agentcore/runtime.go:recordCanonicalInitialTextureDecision:internal/store.method:Store.GetSupervisionProjectionSnapshot
       disposition: read
     - id: internal/agentcore/runtime.go:recordExplicitInitialTextureDecisionIfNeeded:internal/store.method:Store.CreateTextureDecision
       disposition: wire
+    - id: internal/agentcore/runtime.go:recordExplicitInitialTextureDecisionIfNeeded:internal/store.method:Store.GetSupervisionProjectionSnapshot
+      disposition: read
     - id: internal/agentcore/runtime.go:recordExplicitInitialTextureDecisionIfNeeded:internal/store.method:Store.ListTextureDecisionsByDocument
+      disposition: read
+    - id: internal/agentcore/runtime.go:recordExplicitInitialTextureDecisionIfNeeded:internal/store.method:Store.UpdateRun
+      disposition: lifecycle
+    - id: internal/agentcore/runtime.go:refuseLegacySupervisionWrite:internal/store.method:Store.GetLifecycleTrajectory
+      disposition: read
+    - id: internal/agentcore/runtime.go:refuseLegacySupervisionWrite:internal/store.method:Store.GetSupervisionProjectionSnapshot
+      disposition: read
+    - id: internal/agentcore/runtime.go:rewarmInterruptedLifecycleActivations:internal/store.method:Store.ListLifecycleRunsByState
       disposition: read
     - id: internal/agentcore/runtime.go:sleepTextureMutationAfterIdle:internal/store.method:Store.DeferAgentMutation
       disposition: lifecycle
@@ -2810,7 +2325,7 @@ store_calls:
       disposition: read
     - id: internal/agentcore/runtime.go:sleepTextureMutationAfterIdle:internal/store.method:Store.SleepAgentMutation
       disposition: lifecycle
-    - id: internal/agentcore/runtime.go:sweepOpenWorkItemActors:internal/store.method:Store.ListOpenAssignedWorkItems
+    - id: internal/agentcore/runtime.go:sweepOpenWorkItemActors:internal/store.method:Store.ListOpenAssignedLifecycleWorkItems
       disposition: read
     - id: internal/agentcore/runtime.go:sweepPassivatedSpawnedCoagentWork:internal/store.method:Store.ListRunsByState
       disposition: read
@@ -2818,25 +2333,47 @@ store_calls:
       disposition: lifecycle
     - id: internal/agentcore/runtime.go:sweepPendingUpdateActors:internal/store.method:Store.ListCoagentMailboxBacklogAll
       disposition: read
-    - id: internal/agentcore/runtime.go:terminalizeRun:internal/store.method:Store.GetRun
+    - id: internal/agentcore/runtime.go:terminalizeRun:internal/store.method:Store.GetLifecycleTrajectory
       disposition: read
     - id: internal/agentcore/runtime.go:terminalizeRun:internal/store.method:Store.UpdateRun
       disposition: lifecycle
     - id: internal/agentcore/runtime.go:textureRunRequestedWorkers:internal/store.method:Store.ListEvents
       disposition: read
-    - id: internal/agentcore/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/agentcore.runSubmissionStore.AppendEvent
-      disposition: lifecycle
-    - id: internal/agentcore/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/agentcore.runSubmissionStore.CreateAgentMutation
-      disposition: lifecycle
     - id: internal/agentcore/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/agentcore.runSubmissionStore.CreateRun
       disposition: lifecycle
     - id: internal/agentcore/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/agentcore.runSubmissionStore.UpsertAgent
       disposition: lifecycle
+    - id: internal/agentcore/runtime_persistence.go:persistSubmittedRunEvent:internal/store.interface:internal/agentcore.runSubmissionStore.AppendEvent
+      disposition: lifecycle
+    - id: internal/agentcore/runtime_persistence.go:persistSubmittedRunProjections:internal/store.interface:internal/agentcore.runSubmissionStore.CreateAgentMutation
+      disposition: lifecycle
+    - id: internal/agentcore/self_development_materializer.go:materializeSelfDevelopmentOperation:internal/store.method:Store.EventByIdempotency
+      disposition: read
+    - id: internal/agentcore/self_development_materializer.go:materializeSelfDevelopmentOperation:internal/store.method:Store.Head
+      disposition: read
+    - id: internal/agentcore/self_development_materializer.go:recordMaterializationApplied:internal/store.method:Store.EventByIdempotency
+      disposition: read
+    - id: internal/agentcore/self_development_materializer.go:recordMaterializationApplied:internal/store.method:Store.EventByIdempotency#2
+      disposition: read
+    - id: internal/agentcore/self_development_materializer.go:recordMaterializationApplied:internal/store.method:Store.EventByIdempotency#3
+      disposition: read
+    - id: internal/agentcore/self_development_materializer.go:recordMaterializationApplied:internal/store.method:Store.EventReceiptByIdempotency
+      disposition: read
+    - id: internal/agentcore/self_development_materializer.go:recordMaterializationApplied:internal/store.method:Store.EventReceiptByIdempotency#2
+      disposition: read
+    - id: internal/agentcore/self_development_materializer.go:recordMaterializationApplied:internal/store.method:Store.Head
+      disposition: read
+    - id: internal/agentcore/self_development_materializer.go:recordMaterializationApplied:internal/store.method:Store.Head#2
+      disposition: read
+    - id: internal/agentcore/self_development_materializer.go:recordMaterializationApplied:internal/store.method:Store.Head#3
+      disposition: read
+    - id: internal/agentcore/self_development_materializer.go:recordMaterializationFailed:internal/store.method:Store.EventByIdempotency
+      disposition: read
+    - id: internal/agentcore/self_development_materializer.go:recordMaterializationFailed:internal/store.method:Store.Head
+      disposition: read
+    - id: internal/agentcore/self_development_materializer.go:recoverSelfDevelopmentDecision:internal/store.method:Store.FinalizedDecisionForOperation
+      disposition: read
     - id: internal/agentcore/super_controller.go:assignedOpenWorkItemsForAgentTrajectory:internal/store.method:Store.ListWorkItemsByTrajectory
-      disposition: read
-    - id: internal/agentcore/super_controller.go:coagentParkWaiter:internal/store.method:Store.ListCoagentMailboxBacklog
-      disposition: read
-    - id: internal/agentcore/super_controller.go:coagentUpdateTurnInjectorWithInitialPhase:internal/store.method:Store.ListCoagentMailboxBacklog
       disposition: read
     - id: internal/agentcore/super_controller.go:completeSuccessfulRunWorkItems:internal/store.method:Store.UpdateWorkItemStatus
       disposition: wire
@@ -2844,13 +2381,13 @@ store_calls:
       disposition: read
     - id: internal/agentcore/super_controller.go:markPersistentSuperRunUpdatesDelivered:internal/store.method:Store.MarkWorkerUpdatesDelivered
       disposition: lifecycle
-    - id: internal/agentcore/super_controller.go:prependInitialCoagentUpdatePackets:internal/store.method:Store.ListCoagentMailboxBacklog
+    - id: internal/agentcore/super_controller.go:pendingCoagentUpdatesForRun:internal/store.method:Store.GetLifecycleRun
       disposition: read
-    - id: internal/agentcore/super_controller.go:reconcilePersistentSuperActor:internal/store.method:Store.GetLatestActiveRunByAgent
+    - id: internal/agentcore/super_controller.go:pendingCoagentUpdatesForRun:internal/store.method:Store.ListCoagentMailboxBacklog
       disposition: read
-    - id: internal/agentcore/super_controller.go:reconcilePersistentSuperActor:internal/store.method:Store.GetLatestActiveRunByAgent#2
+    - id: internal/agentcore/super_controller.go:pendingCoagentUpdatesForRun:internal/store.method:Store.ListPendingLifecycleUpdates
       disposition: read
-    - id: internal/agentcore/super_controller.go:reconcileUpdatedCoagentActor:internal/store.method:Store.GetAgent
+    - id: internal/agentcore/super_controller.go:reconcileUpdatedCoagentActor:internal/store.method:Store.GetAgentByScope
       disposition: read
     - id: internal/agentcore/super_controller.go:reconcileUpdatedCoagentActor:internal/store.method:Store.ListCoagentMailboxBacklog
       disposition: read
@@ -2862,33 +2399,27 @@ store_calls:
       disposition: lifecycle
     - id: internal/agentcore/super_controller.go:updateRunAndMarkSuccessfulCoagentActivationDelivered:internal/store.method:Store.UpdateRunAndMarkWorkerUpdatesDelivered
       disposition: lifecycle
+    - id: internal/agentcore/supervision_execution.go:appendSupervisedUpdate:internal/store.method:Store.GetAgentByScope
+      disposition: read
+    - id: internal/agentcore/supervision_execution.go:appendSupervisedUpdate:internal/store.method:Store.GetSupervisionAssignmentLineage
+      disposition: read
+    - id: internal/agentcore/supervision_execution.go:appendSupervisionAttemptStart:internal/store.method:Store.GetSupervisionAssignmentLineage
+      disposition: read
+    - id: internal/agentcore/supervision_execution.go:supervisionSnapshotForRun:internal/store.method:Store.GetSupervisionProjectionSnapshot
+      disposition: read
     - id: internal/agentcore/texture_lifecycle_api.go:LatestTextureActorToolLoopBudgetSpend:internal/store.method:Store.LatestActorRunMemoryEntries
       disposition: read
     - id: internal/agentcore/texture_lifecycle_api.go:LatestTextureActorToolLoopBudgetSpend:internal/store.method:Store.ListEvents
       disposition: read
-    - id: internal/agentcore/texture_lifecycle_api.go:TextureActiveRunByAgent:internal/store.method:Store.GetLatestActiveRunByAgent
+    - id: internal/agentcore/texture_lifecycle_api.go:TextureActiveRunByAgent:internal/store.method:Store.GetLatestActiveLifecycleRunByAgent
       disposition: read
     - id: internal/agentcore/texture_lifecycle_api.go:TextureChannelHasGroundedHistory:internal/store.method:Store.ListChannelMessages
       disposition: read
-    - id: internal/agentcore/texture_lifecycle_api.go:TextureChannelHasGroundedHistory:internal/store.method:Store.ListRunsByChannel
-      disposition: read
-    - id: internal/agentcore/tools_coagent.go:awaitRequiredChildRuns:internal/store.method:Store.ListRunsByOwner
-      disposition: read
-    - id: internal/agentcore/tools_coagent.go:awaitRequiredTextureRevisions:internal/store.method:Store.ListRunsByOwner
-      disposition: read
     - id: internal/agentcore/tools_coagent.go:newCancelAgentTool:internal/store.method:Store.CoSuperSlotByAgentAndTrajectory
-      disposition: read
-    - id: internal/agentcore/tools_coagent.go:newCancelAgentTool:internal/store.method:Store.GetLatestActiveRunByAgent
-      disposition: read
-    - id: internal/agentcore/tools_coagent.go:newCancelAgentTool:internal/store.method:Store.GetRun
-      disposition: read
-    - id: internal/agentcore/tools_coagent.go:newCancelAgentTool:internal/store.method:Store.ListEvents
-      disposition: read
-    - id: internal/agentcore/tools_coagent.go:verifyRequiredChildRuns:internal/store.method:Store.ListRunsByOwner
       disposition: read
     - id: internal/agentcore/tools_coagent.go:verifyRequiredTextureRevisions:internal/store.method:Store.ListRevisionsByDoc
       disposition: read
-    - id: internal/agentcore/tools_coagent.go:verifyRequiredTextureRevisions:internal/store.method:Store.ListRunsByOwner
+    - id: internal/agentcore/tools_coagent.go:verifyRequiredTextureRevisions:internal/store.method:Store.ListRevisionsByScope
       disposition: read
     - id: internal/agentcore/tools_evidence.go:newGetRunMemoryEntryTool:internal/store.method:Store.GetRunMemoryEntry
       disposition: read
@@ -2896,33 +2427,21 @@ store_calls:
       disposition: read
     - id: internal/agentcore/tools_evidence.go:newReadEvidenceTool:internal/store.method:Store.GetEvidence
       disposition: read
-    - id: internal/agentcore/tools_evidence.go:newSaveEvidenceTool:internal/store.method:Store.CreateEvidence
-      disposition: lifecycle
     - id: internal/agentcore/tools_researcher.go:emitChannelMessageEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle
-    - id: internal/agentcore/tools_researcher.go:ensureFindingEvidence:internal/store.method:Store.CreateEvidence
-      disposition: lifecycle
-    - id: internal/agentcore/tools_researcher.go:ensureFindingEvidence:internal/store.method:Store.GetEvidence
+    - id: internal/agentcore/tools_researcher.go:resolveCoagentFindingsTarget:internal/store.method:Store.GetAgentByScope
       disposition: read
-    - id: internal/agentcore/tools_researcher.go:resolveCoagentFindingsTarget:internal/store.method:Store.GetAgent
+    - id: internal/agentcore/tools_researcher.go:resolveCoagentFindingsTarget:internal/store.method:Store.GetAgentByScope#2
       disposition: read
-    - id: internal/agentcore/tools_researcher.go:resolveCoagentFindingsTarget:internal/store.method:Store.GetAgent#2
-      disposition: read
-    - id: internal/agentcore/tools_researcher.go:resolveResearcherFindingsTarget:internal/store.method:Store.GetAgent
-      disposition: read
-    - id: internal/agentcore/tools_vmctl.go:listWorkerToolEventsForCurrentScope:internal/store.method:Store.ListEvents
-      disposition: read
-    - id: internal/agentcore/tools_vmctl.go:listWorkerToolEventsForCurrentScope:internal/store.method:Store.ListEventsByTrajectory
-      disposition: read
-    - id: internal/agentcore/tools_vmctl.go:mirrorWorkerSubmitUpdates:internal/store.method:Store.DispatchWorkerUpdate
-      disposition: lifecycle
-    - id: internal/agentcore/tools_vmctl.go:preloadWorkerAppChangePackages:internal/store.method:Store.GetAppChangePackageForViewer
+    - id: internal/agentcore/tools_researcher.go:resolveResearcherFindingsTarget:internal/store.method:Store.GetAgentByScope
       disposition: read
     - id: internal/agentcore/tools_worker_update.go:enforceCoagentUpdateAuthority:internal/store.method:Store.CoSuperSlotByAgent
       disposition: read
     - id: internal/agentcore/tools_worker_update.go:newUpdateCoagentTool:internal/store.method:Store.DispatchWorkerUpdate
       disposition: lifecycle
-    - id: internal/agentcore/tools_worker_update.go:newUpdateCoagentTool:internal/store.method:Store.GetAgent
+    - id: internal/agentcore/tools_worker_update.go:newUpdateCoagentTool:internal/store.method:Store.GetAgentByScope
+      disposition: read
+    - id: internal/agentcore/tools_worker_update.go:newUpdateCoagentTool:internal/store.method:Store.GetLifecycleRun
       disposition: read
     - id: internal/agentcore/trajectory.go:TrajectoryObligations:internal/store.method:Store.CountPendingWorkerUpdatesByTrajectory
       disposition: read
@@ -2935,6 +2454,8 @@ store_calls:
     - id: internal/agentcore/wire_platform_publish.go:persistWirePlatformPublicationRef:internal/store.method:Store.PatchRevisionMetadata
       disposition: wire
     - id: internal/agentcore/wire_platform_publish.go:syncWireTextureDocumentToCorpusd:internal/store.method:Store.ListRevisionsByDoc
+      disposition: read
+    - id: internal/agentcore/wire_platform_publish.go:syncWireTextureDocumentToCorpusd:internal/store.method:Store.ListRevisionsByScope
       disposition: read
     - id: internal/agentcore/wire_publication.go:beginWireProcessorDecisionWorkItem:internal/store.method:Store.CreateWorkItem
       disposition: wire
@@ -2992,51 +2513,47 @@ store_calls:
       disposition: read
     - id: internal/agentcore/wire_reconciler_debounce.go:wirePublishBatchDocumentContext:internal/store.method:Store.GetRevision#2
       disposition: read
+    - id: internal/textureowner/coagent_injection.go:coagentUpdateTurnInjector:internal/store.method:Store.GetAgentByScope
+      disposition: read
     - id: internal/textureowner/coagent_injection.go:coagentUpdateTurnInjector:internal/store.method:Store.ListCoagentMailboxBacklog
       disposition: read
-    - id: internal/textureowner/coagent_injection.go:createAgentMutationForRun:internal/store.method:Store.CreateAgentMutation
-      disposition: lifecycle
+    - id: internal/textureowner/coagent_injection.go:coagentUpdateTurnInjector:internal/store.method:Store.ListPendingLifecycleUpdates
+      disposition: read
     - id: internal/textureowner/coagent_route.go:coagentTextureSourceEntities:internal/store.method:Store.GetContentItem
       disposition: read
-    - id: internal/textureowner/coagent_route.go:coagentTextureTargetDocument:internal/store.method:Store.CreateDocument
-      disposition: wire
-    - id: internal/textureowner/coagent_route.go:coagentTextureTargetDocument:internal/store.method:Store.CreateRevision
-      disposition: wire
-    - id: internal/textureowner/coagent_route.go:coagentTextureTargetDocument:internal/store.method:Store.GetDocument
+    - id: internal/textureowner/coagent_route.go:coagentTextureTargetDocument:internal/store.method:Store.GetAgentByScope
       disposition: read
-    - id: internal/textureowner/coagent_route.go:ensureCoagentTextureRevisionRoute:internal/store.method:Store.UpsertAgent
-      disposition: lifecycle
-    - id: internal/textureowner/coagent_route.go:existingReconcilerTextureHandoff:internal/store.method:Store.ListRunsByChannel
+    - id: internal/textureowner/handler.go:getTextureDocument:internal/store.method:Store.GetDocument
       disposition: read
-    - id: internal/textureowner/texture.go:HandleInternalTextureDocument:internal/store.method:Store.GetDocument
+    - id: internal/textureowner/handler.go:getTextureDocument:internal/store.method:Store.GetLifecycleDocument
       disposition: read
-    - id: internal/textureowner/texture.go:HandleInternalTextureRevision:internal/store.method:Store.GetRevision
+    - id: internal/textureowner/handler.go:getTextureHistory:internal/store.method:Store.GetHistory
       disposition: read
-    - id: internal/textureowner/texture.go:HandleTestTextureWorkerUpdate:internal/store.method:Store.GetAgent
+    - id: internal/textureowner/handler.go:getTextureHistory:internal/store.method:Store.ListRevisionsByScope
       disposition: read
-    - id: internal/textureowner/texture.go:HandleTestTextureWorkerUpdate:internal/store.method:Store.GetDocument
+    - id: internal/textureowner/handler.go:getTextureRevision:internal/store.method:Store.GetLifecycleRevision
       disposition: read
-    - id: internal/textureowner/texture.go:HandleTestTextureWorkerUpdate:internal/store.method:Store.ListRunsByChannel
+    - id: internal/textureowner/handler.go:getTextureRevision:internal/store.method:Store.GetRevision
+      disposition: read
+    - id: internal/textureowner/handler.go:listTextureDocuments:internal/store.method:Store.ListDocumentsByOwner
+      disposition: read
+    - id: internal/textureowner/handler.go:listTextureDocuments:internal/store.method:Store.ListDocumentsByScope
+      disposition: read
+    - id: internal/textureowner/handler.go:listTextureRevisions:internal/store.method:Store.ListRevisionsByDoc
+      disposition: read
+    - id: internal/textureowner/handler.go:listTextureRevisions:internal/store.method:Store.ListRevisionsByScope
+      disposition: read
+    - id: internal/textureowner/texture.go:HandleTestTextureWorkerUpdate:internal/store.method:Store.GetAgentByScope
       disposition: read
     - id: internal/textureowner/texture.go:HandleTextureBlame:internal/store.method:Store.GetBlame
       disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureCreateDocument:internal/store.method:Store.CreateDocument
-      disposition: wire
-    - id: internal/textureowner/texture.go:HandleTextureDiagnosis:internal/store.method:Store.GetDocument
+    - id: internal/textureowner/texture.go:HandleTextureBlame:internal/store.method:Store.GetBlameByScope
       disposition: read
     - id: internal/textureowner/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListChannelMessages
       disposition: read
     - id: internal/textureowner/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListEventsByOwner
       disposition: read
     - id: internal/textureowner/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListEvidenceByAgent
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListRevisionsByDoc
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListRunsByChannel
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListRunsByOwner
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListRunsByOwner#2
       disposition: read
     - id: internal/textureowner/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListTextureDecisionsByDocument
       disposition: read
@@ -3046,171 +2563,91 @@ store_calls:
       disposition: read
     - id: internal/textureowner/texture.go:HandleTextureDiff:internal/store.method:Store.GetDiff
       disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureDocumentStream:internal/store.method:Store.GetDocument
+    - id: internal/textureowner/texture.go:HandleTextureDocumentStream:internal/store.method:Store.GetSupervisionProjectionSnapshot
       disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureDocumentStream:internal/store.method:Store.GetDocument#2
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureDocumentStream:internal/store.method:Store.GetDocument#3
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureEnsureManifest:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureExportDocument:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureExportDocument:internal/store.method:Store.GetRevision
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureHistory:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureHistory:internal/store.method:Store.GetHistory
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.CreateDocument
-      disposition: wire
-    - id: internal/textureowner/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.CreateRevision
-      disposition: wire
     - id: internal/textureowner/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.GetDocumentAlias
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.GetRevision
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.UpsertDocumentAlias
-      disposition: wire
-    - id: internal/textureowner/texture.go:HandleTextureListDocuments:internal/store.method:Store.ListDocumentsByOwner
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureOpenFile:internal/store.method:Store.CreateDocument
-      disposition: wire
-    - id: internal/textureowner/texture.go:HandleTextureOpenFile:internal/store.method:Store.CreateRevision
-      disposition: wire
-    - id: internal/textureowner/texture.go:HandleTextureOpenFile:internal/store.method:Store.GetDocument
       disposition: read
     - id: internal/textureowner/texture.go:HandleTextureOpenFile:internal/store.method:Store.GetDocumentAlias
       disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureOpenFile:internal/store.method:Store.UpsertDocumentAlias
-      disposition: wire
-    - id: internal/textureowner/texture.go:HandleTextureRestoreRevision:internal/store.method:Store.CreateRevision
-      disposition: wire
-    - id: internal/textureowner/texture.go:HandleTextureRestoreRevision:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureRestoreRevision:internal/store.method:Store.GetRevision
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureRestoreRevision:internal/store.method:Store.GetRevision#2
-      disposition: read
-    - id: internal/textureowner/texture.go:HandleTextureRevision:internal/store.method:Store.GetRevision
-      disposition: read
     - id: internal/textureowner/texture.go:attachTextureSourceGraphObjects:internal/store.method:Store.ListTextureSourceEntitiesForRevision
+      disposition: read
+    - id: internal/textureowner/texture.go:attachTextureSourceGraphObjects:internal/store.method:Store.ListTextureSourceEntitiesForRevisionByScope
       disposition: read
     - id: internal/textureowner/texture.go:attachTextureSourceGraphObjects:internal/store.method:Store.ListTextureSourceRefsForRevision
       disposition: read
-    - id: internal/textureowner/texture.go:cancelTextureActorForDeletedDocument:internal/store.method:Store.CancelAgentMutation
-      disposition: lifecycle
+    - id: internal/textureowner/texture.go:attachTextureSourceGraphObjects:internal/store.method:Store.ListTextureSourceRefsForRevisionByScope
+      disposition: read
     - id: internal/textureowner/texture.go:canonicalizeAliasedTextureDocumentTitle:internal/store.method:Store.GetDocumentAliasSourcePath
       disposition: read
-    - id: internal/textureowner/texture.go:canonicalizeAliasedTextureDocumentTitle:internal/store.method:Store.UpdateDocument
-      disposition: wire
-    - id: internal/textureowner/texture.go:createRebasedUserRevision:internal/store.method:Store.CreateRevision
-      disposition: wire
-    - id: internal/textureowner/texture.go:createRebasedUserRevision:internal/store.method:Store.GetDocument
+    - id: internal/textureowner/texture.go:handleTextureCreateRevision:internal/store.method:Store.GetLifecycleRevision
       disposition: read
-    - id: internal/textureowner/texture.go:createRebasedUserRevision:internal/store.method:Store.GetRevision
+    - id: internal/textureowner/texture.go:handleTextureCreateRevision:internal/store.method:Store.GetSupervisionProjectionSnapshot
       disposition: read
-    - id: internal/textureowner/texture.go:createRebasedUserRevision:internal/store.method:Store.GetRevision#2
+    - id: internal/textureowner/texture.go:handleTextureDeleteDocument:internal/store.method:Store.GetSupervisionProjectionSnapshot
       disposition: read
-    - id: internal/textureowner/texture.go:createRebasedUserRevision:internal/store.method:Store.GetRevision#3
+    - id: internal/textureowner/texture.go:handleTextureGetDocument:internal/store.method:Store.GetSupervisionProjectionSnapshot
       disposition: read
-    - id: internal/textureowner/texture.go:handleTextureCreateRevision:internal/store.method:Store.CreateRevision
-      disposition: wire
-    - id: internal/textureowner/texture.go:handleTextureCreateRevision:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/texture.go:handleTextureCreateRevision:internal/store.method:Store.GetRevision
-      disposition: read
-    - id: internal/textureowner/texture.go:handleTextureCreateRevision:internal/store.method:Store.GetRevision#2
-      disposition: read
-    - id: internal/textureowner/texture.go:handleTextureDeleteDocument:internal/store.method:Store.DeleteDocument
-      disposition: wire
-    - id: internal/textureowner/texture.go:handleTextureGetDocument:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/texture.go:handleTextureListRevisions:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/texture.go:handleTextureListRevisions:internal/store.method:Store.ListRevisionsByDoc
-      disposition: read
-    - id: internal/textureowner/texture.go:handleTextureUpdateDocument:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/texture.go:handleTextureUpdateDocument:internal/store.method:Store.UpdateDocument
-      disposition: wire
     - id: internal/textureowner/texture.go:revisionResponsesFromRecords:internal/store.method:Store.ListTextureSourceGraphForRevisions
+      disposition: read
+    - id: internal/textureowner/texture.go:revisionResponsesFromRecords:internal/store.method:Store.ListTextureSourceGraphForRevisionsByScope
       disposition: read
     - id: internal/textureowner/texture.go:textureDocumentResponse:internal/store.method:Store.CountRevisionsByDoc
       disposition: read
+    - id: internal/textureowner/texture.go:textureDocumentResponse:internal/store.method:Store.CountRevisionsByScope
+      disposition: read
     - id: internal/textureowner/texture.go:textureDocumentResponse:internal/store.method:Store.CurrentVersionNumberByDoc
       disposition: read
-    - id: internal/textureowner/texture.go:textureDocumentResponse:internal/store.method:Store.GetRevision
+    - id: internal/textureowner/texture.go:textureDocumentResponse:internal/store.method:Store.CurrentVersionNumberByScope
       disposition: read
-    - id: internal/textureowner/texture_agent_revision.go:HandleTextureAgentRevision:internal/store.method:Store.GetDocument
+    - id: internal/textureowner/texture_agent_revision.go:HandleTextureAgentRevision:internal/store.method:Store.GetLifecycleSnapshot
       disposition: read
-    - id: internal/textureowner/texture_agent_revision.go:HandleTextureCancelAgentRevision:internal/store.method:Store.CancelAgentMutation
-      disposition: lifecycle
-    - id: internal/textureowner/texture_agent_revision.go:HandleTextureCancelAgentRevision:internal/store.method:Store.GetDocument
+    - id: internal/textureowner/texture_agent_revision.go:pendingAgentMutationByDoc:internal/store.method:Store.GetLifecycleRun
       disposition: read
-    - id: internal/textureowner/texture_agent_revision.go:deliverOwnerRevisionToTextureActor:internal/store.method:Store.DispatchWorkerUpdate
-      disposition: lifecycle
-    - id: internal/textureowner/texture_agent_revision.go:emitTextureAgentEvent:internal/store.method:Store.AppendEvent
-      disposition: lifecycle
-    - id: internal/textureowner/texture_agent_revision.go:emitTextureDecisionRecordedEvent:internal/store.method:Store.AppendEvent
-      disposition: lifecycle
-    - id: internal/textureowner/texture_agent_revision.go:emitTextureDocumentRevisionEvent:internal/store.method:Store.AppendEvent
-      disposition: lifecycle
-    - id: internal/textureowner/texture_agent_revision.go:emitTextureDocumentRevisionEventForRun:internal/store.method:Store.AppendEvent
-      disposition: lifecycle
     - id: internal/textureowner/texture_agent_revision.go:pendingAgentMutationByDoc:internal/store.method:Store.GetPendingAgentMutationByDoc
       disposition: read
     - id: internal/textureowner/texture_agent_revision.go:pendingAgentMutationByDoc:internal/store.method:Store.MarkAgentMutationStale
       disposition: lifecycle
     - id: internal/textureowner/texture_agent_revision.go:recentWorkerMessages:internal/store.method:Store.ListChannelMessages
       disposition: read
-    - id: internal/textureowner/texture_agent_revision.go:recentWorkerMessages:internal/store.method:Store.ListRunsByChannel
-      disposition: read
     - id: internal/textureowner/texture_agent_revision.go:reconcilePendingMutationFromDocumentHead:internal/store.method:Store.CompleteAgentMutation
-      disposition: lifecycle
-    - id: internal/textureowner/texture_agent_revision.go:reconcilePendingMutationFromDocumentHead:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/texture_agent_revision.go:reconcilePendingMutationFromDocumentHead:internal/store.method:Store.GetRevision
-      disposition: read
-    - id: internal/textureowner/texture_agent_revision.go:submitTextureAgentRevisionRun:internal/store.method:Store.CreateAgentMutation
       disposition: lifecycle
     - id: internal/textureowner/texture_agent_revision.go:submitTextureAgentRevisionRun:internal/store.method:Store.GetDiff
       disposition: read
-    - id: internal/textureowner/texture_agent_revision.go:submitTextureAgentRevisionRun:internal/store.method:Store.GetRevision
-      disposition: read
-    - id: internal/textureowner/texture_agent_revision.go:submitTextureAgentRevisionRun:internal/store.method:Store.GetRevision#2
+    - id: internal/textureowner/texture_agent_revision.go:submitTextureAgentRevisionRun:internal/store.method:Store.GetLifecycleSnapshot
       disposition: read
     - id: internal/textureowner/texture_agent_revision.go:userRevisionDiffSummaries:internal/store.method:Store.GetDiff
       disposition: read
-    - id: internal/textureowner/texture_agent_revision.go:userRevisionDiffSummaries:internal/store.method:Store.ListRevisionsByDoc
+    - id: internal/textureowner/texture_controller.go:ReconcileActorWake:internal/store.method:Store.GetAgentByScope
       disposition: read
-    - id: internal/textureowner/texture_controller.go:ReconcileActorWake:internal/store.method:Store.GetAgent
-      disposition: read
-    - id: internal/textureowner/texture_controller.go:ReconcileActorWake:internal/store.method:Store.ListAllDocuments
-      disposition: read
-    - id: internal/textureowner/texture_controller.go:ReconcileActorWake:internal/store.method:Store.UpsertAgent
-      disposition: lifecycle
-    - id: internal/textureowner/texture_controller.go:ReconcileAgentWake:internal/store.method:Store.GetDocument
+    - id: internal/textureowner/texture_controller.go:ReconcileAgentWake:internal/store.method:Store.GetAgentByScope
       disposition: read
     - id: internal/textureowner/texture_controller.go:ReconcileAgentWake:internal/store.method:Store.GetPendingAgentMutationByDoc
       disposition: read
-    - id: internal/textureowner/texture_controller.go:ReconcileAgentWake:internal/store.method:Store.ListCoagentMailboxBacklog
+    - id: internal/textureowner/texture_controller.go:ReconcileAgentWake:internal/store.method:Store.ListPendingLifecycleUpdates
       disposition: read
-    - id: internal/textureowner/texture_controller.go:Start:internal/store.method:Store.ListAllDocuments
+    - id: internal/textureowner/texture_controller.go:ReconcileAgentWake:internal/store.method:Store.MarkAgentMutationStale
+      disposition: lifecycle
+    - id: internal/textureowner/texture_controller.go:Start:internal/store.method:Store.ListLifecycleSubjects
       disposition: read
-    - id: internal/textureowner/texture_controller.go:isEligibleWorkerMessage:internal/store.method:Store.GetRun
+    - id: internal/textureowner/texture_controller.go:ValidateActivationAuthority:internal/store.method:Store.GetAgentMutationByRun
+      disposition: read
+    - id: internal/textureowner/texture_controller.go:ValidateActivationAuthority:internal/store.method:Store.GetLifecycleRun
       disposition: read
     - id: internal/textureowner/texture_controller.go:latestEligibleWorkerMessage:internal/store.method:Store.ListChannelMessages
       disposition: read
     - id: internal/textureowner/texture_controller.go:reactivatePassivatedTextureRun:internal/store.method:Store.GetAgentMutationByRun
       disposition: read
-    - id: internal/textureowner/texture_controller.go:reactivatePassivatedTextureRun:internal/store.method:Store.GetLatestPassivatedRunByAgent
+    - id: internal/textureowner/texture_controller.go:reactivatePassivatedTextureRun:internal/store.method:Store.GetAgentMutationByRun#2
       disposition: read
-    - id: internal/textureowner/texture_controller.go:reactivatePassivatedTextureRun:internal/store.method:Store.ReactivateAgentMutation
+    - id: internal/textureowner/texture_controller.go:reactivatePassivatedTextureRun:internal/store.method:Store.ListLifecycleRunsByChannel
+      disposition: read
+    - id: internal/textureowner/texture_controller.go:reactivatePassivatedTextureRun:internal/store.method:Store.MarkAgentMutationStale
       disposition: lifecycle
-    - id: internal/textureowner/texture_controller.go:reactivatePassivatedTextureRun:internal/store.method:Store.UpdateRun
-      disposition: lifecycle
+    - id: internal/textureowner/texture_evidence_sources.go:evidenceSourceEntitiesAndRejectionsFromPendingUpdates:internal/store.method:Store.GetAgentByScope
+      disposition: read
     - id: internal/textureowner/texture_evidence_sources.go:evidenceSourceEntitiesAndRejectionsFromPendingUpdates:internal/store.method:Store.ListCoagentMailboxBacklog
+      disposition: read
+    - id: internal/textureowner/texture_evidence_sources.go:evidenceSourceEntitiesAndRejectionsFromPendingUpdates:internal/store.method:Store.ListPendingLifecycleUpdates
       disposition: read
     - id: internal/textureowner/texture_evidence_sources.go:evidenceSourceEntitiesFromWorkerUpdateIDs:internal/store.method:Store.GetWorkerUpdate
       disposition: read
@@ -3218,16 +2655,16 @@ store_calls:
       disposition: read
     - id: internal/textureowner/texture_evidence_sources.go:sourceEntityFromWorkerUpdateRef:internal/store.method:Store.GetEvidence
       disposition: read
-    - id: internal/textureowner/texture_handoff.go:ensureConductorTextureRoute:internal/store.method:Store.CreateDocument
-      disposition: wire
-    - id: internal/textureowner/texture_handoff.go:ensureConductorTextureRoute:internal/store.method:Store.CreateRevision
-      disposition: wire
-    - id: internal/textureowner/texture_handoff.go:ensureConductorTextureRoute:internal/store.method:Store.GetRun
+    - id: internal/textureowner/texture_handoff.go:appendTextureRevision:internal/store.method:Store.GetLifecycleRevision
+      disposition: read
+    - id: internal/textureowner/texture_handoff.go:appendTextureRevision:internal/store.method:Store.GetSupervisionProjectionSnapshot
+      disposition: read
+    - id: internal/textureowner/texture_handoff.go:ensureConductorTextureRoute:internal/store.method:Store.GetLifecycleSnapshot
       disposition: read
     - id: internal/textureowner/texture_handoff.go:ensureConductorTextureRoute:internal/store.method:Store.UpdateRun
       disposition: lifecycle
-    - id: internal/textureowner/texture_handoff.go:ensureConductorTextureRoute:internal/store.method:Store.UpsertAgent
-      disposition: lifecycle
+    - id: internal/textureowner/texture_handoff.go:startSupervisionTrajectory:internal/store.method:Store.GetLifecycleSnapshot
+      disposition: read
     - id: internal/textureowner/texture_import.go:allocateTextureManifestPath:internal/store.method:Store.GetDocumentAlias
       disposition: read
     - id: internal/textureowner/texture_import.go:ensureTextureManifest:internal/store.method:Store.GetDocumentAliasSourcePath
@@ -3238,105 +2675,65 @@ store_calls:
       disposition: read
     - id: internal/textureowner/texture_lineage.go:resolveMarkdownLineageVersion:internal/store.method:Store.GetContentItem
       disposition: read
-    - id: internal/textureowner/texture_merge.go:HandleTextureAcceptMerge:internal/store.method:Store.CreateRevision
-      disposition: wire
-    - id: internal/textureowner/texture_merge.go:HandleTextureAcceptMerge:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/texture_merge.go:HandleTextureAcceptMerge:internal/store.method:Store.GetRevision
-      disposition: read
-    - id: internal/textureowner/texture_merge.go:HandleTextureAcceptMerge:internal/store.method:Store.GetRevision#2
-      disposition: read
-    - id: internal/textureowner/texture_merge.go:HandleTextureMergePreview:internal/store.method:Store.CreateEvidence
-      disposition: lifecycle
     - id: internal/textureowner/texture_merge.go:HandleTextureMergePreview:internal/store.method:Store.GetDiff
       disposition: read
-    - id: internal/textureowner/texture_merge.go:HandleTextureMergePreview:internal/store.method:Store.GetRevision
-      disposition: read
-    - id: internal/textureowner/texture_merge.go:HandleTextureMergePreview:internal/store.method:Store.GetRevision#2
-      disposition: read
-    - id: internal/textureowner/texture_merge.go:HandleTextureSemanticCompare:internal/store.method:Store.CreateEvidence
-      disposition: lifecycle
     - id: internal/textureowner/texture_merge.go:HandleTextureSemanticCompare:internal/store.method:Store.GetDiff
       disposition: read
-    - id: internal/textureowner/texture_merge.go:HandleTextureSemanticCompare:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/texture_merge.go:HandleTextureSemanticCompare:internal/store.method:Store.GetRevision
-      disposition: read
-    - id: internal/textureowner/texture_merge.go:HandleTextureSemanticCompare:internal/store.method:Store.GetRevision#2
-      disposition: read
-    - id: internal/textureowner/texture_proposals.go:HandleInternalTextureProposalDelivery:internal/store.method:Store.DispatchWorkerUpdate
-      disposition: lifecycle
     - id: internal/textureowner/texture_revision_metadata.go:advanceTextureControllerCheckpoint:internal/store.method:Store.GetTextureControllerCheckpoint
       disposition: read
     - id: internal/textureowner/texture_revision_metadata.go:advanceTextureControllerCheckpoint:internal/store.method:Store.UpsertTextureControllerCheckpoint
       disposition: wire
-    - id: internal/textureowner/texture_revision_metadata.go:buildAppagentRevisionMetadata:internal/store.method:Store.GetRevision
-      disposition: read
     - id: internal/textureowner/texture_revision_metadata.go:markTextureWorkerUpdatesDelivered:internal/store.method:Store.ListCoagentMailboxBacklog
       disposition: read
     - id: internal/textureowner/texture_revision_metadata.go:markTextureWorkerUpdatesDelivered:internal/store.method:Store.MarkWorkerUpdatesDelivered
       disposition: lifecycle
-    - id: internal/textureowner/texture_revision_metadata.go:previousTextureWorkerMetadataSeq:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/texture_revision_metadata.go:previousTextureWorkerMetadataSeq:internal/store.method:Store.GetRevision
-      disposition: read
     - id: internal/textureowner/texture_revision_metadata.go:textureWorkerUpdateCommitSeq:internal/store.method:Store.GetWorkerUpdate
       disposition: read
     - id: internal/textureowner/texture_revision_metadata.go:workerUpdateRevisionMetadata:internal/store.method:Store.GetTextureControllerCheckpoint
       disposition: read
     - id: internal/textureowner/texture_revision_metadata.go:workerUpdateRevisionMetadata:internal/store.method:Store.ListChannelMessages
       disposition: read
-    - id: internal/textureowner/texture_workflow_verifier.go:VerifyTextureWorkflow:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/texture_workflow_verifier.go:VerifyTextureWorkflow:internal/store.method:Store.GetRun
-      disposition: read
     - id: internal/textureowner/texture_workflow_verifier.go:VerifyTextureWorkflow:internal/store.method:Store.ListEventsByTrajectory
-      disposition: read
-    - id: internal/textureowner/texture_workflow_verifier.go:VerifyTextureWorkflow:internal/store.method:Store.ListRevisionsByDoc
       disposition: read
     - id: internal/textureowner/texture_workflow_verifier.go:VerifyTextureWorkflow:internal/store.method:Store.ListWorkerUpdatesByTrajectory
       disposition: read
-    - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.CreateRevisionWithSourceGraph
-      disposition: wire
     - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.FailAgentMutation
       disposition: lifecycle
     - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.FailAgentMutation#2
       disposition: lifecycle
+    - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.FailAgentMutation#3
+      disposition: lifecycle
+    - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.FailAgentMutation#4
+      disposition: lifecycle
+    - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.GetAgentByScope
+      disposition: read
     - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.GetAgentMutationByRun
       disposition: read
     - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.GetDocument
       disposition: read
-    - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.GetRevision
+    - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.GetLifecycleDocument
       disposition: read
-    - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.GetRevision#2
+    - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.GetLifecycleRevision
+      disposition: read
+    - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.GetRevision
       disposition: read
     - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.RecordAgentMutationRevision
       disposition: wire
     - id: internal/textureowner/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.UpsertTextureControllerCheckpoint
       disposition: wire
-    - id: internal/textureowner/tools_texture.go:findExistingSuperExecutionRequest:internal/store.method:Store.ListChannelMessages
+    - id: internal/textureowner/tools_texture.go:newRecordTextureDecisionTool:internal/store.method:Store.GetSupervisionProjectionSnapshot
       disposition: read
-    - id: internal/textureowner/tools_texture.go:newRecordTextureDecisionTool:internal/store.method:Store.CreateTextureDecision
-      disposition: wire
-    - id: internal/textureowner/tools_texture.go:newRecordTextureDecisionTool:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/tools_texture.go:newRecordTextureDecisionTool:internal/store.method:Store.ListTextureDecisionsByDocument
-      disposition: read
-    - id: internal/textureowner/tools_texture.go:requestPersistentSuperExecution:internal/store.method:Store.DispatchWorkerUpdate
-      disposition: lifecycle
 interface_candidates:
-    - id: internal/agentcore/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/agentcore.runSubmissionStore.AppendEvent
-      disposition: lifecycle
-    - id: internal/agentcore/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/agentcore.runSubmissionStore.CreateAgentMutation
-      disposition: lifecycle
     - id: internal/agentcore/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/agentcore.runSubmissionStore.CreateRun
       disposition: lifecycle
     - id: internal/agentcore/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/agentcore.runSubmissionStore.UpsertAgent
       disposition: lifecycle
+    - id: internal/agentcore/runtime_persistence.go:persistSubmittedRunEvent:internal/store.interface:internal/agentcore.runSubmissionStore.AppendEvent
+      disposition: lifecycle
+    - id: internal/agentcore/runtime_persistence.go:persistSubmittedRunProjections:internal/store.interface:internal/agentcore.runSubmissionStore.CreateAgentMutation
+      disposition: lifecycle
 citers:
-    - id: .github/workflows/ci.yml:"${refresh_sandbox_url}/internal/runtime/refresh" || true)
-      disposition: block
-    - id: docs/ACTIVE.md:1. keep `internal/runtime` extinct after its direct `agentcore` and
+    - id: .github/scripts/deploy-workflow-contract-test:reject '/internal/runtime/refresh'
       disposition: block
     - id: docs/archive/actor-runtime-migration-and-agents-md-revision-2026-06-27.md:- `go test ./internal/runtime/...` (sharded) after States 1-5 to catch regressions
       disposition: historical_evidence
@@ -5242,101 +4639,13 @@ citers:
       disposition: historical_evidence
     - id: docs/archive/worktree-review-2026-06-23.md:| `internal/runtime/model_policy_test.go` | +4/-4 |
       disposition: historical_evidence
-    - id: docs/choir-doctrine.md:[internal/runtime/api.go](../internal/runtime/api.go).
-      disposition: block
-    - id: docs/choir-doctrine.md:[internal/runtime/api_spawn_test.go](../internal/runtime/api_spawn_test.go).
-      disposition: block
-    - id: docs/choir-doctrine.md:[internal/runtime/content_extract.go](../internal/runtime/content_extract.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:[internal/runtime/delegate_worker_update_fallback.go](../internal/runtime/delegate_worker_update_fallback.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:[internal/runtime/researcher_checkpoint_fallback.go](../internal/runtime/researcher_checkpoint_fallback.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:[internal/runtime/runtime.go](../internal/runtime/runtime.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:[internal/runtime/super_controller.go](../internal/runtime/super_controller.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:[internal/runtime/texture_agent_revision.go](../internal/runtime/texture_agent_revision.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:[internal/runtime/texture_test.go](../internal/runtime/texture_test.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:[internal/runtime/toolloop_test.go](../internal/runtime/toolloop_test.go).
-      disposition: block
-    - id: docs/choir-doctrine.md:[internal/runtime/tools_product_api.go](../internal/runtime/tools_product_api.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:[internal/runtime/tools_texture.go](../internal/runtime/tools_texture.go).
-      disposition: block
-    - id: docs/choir-doctrine.md:[internal/runtime/tools_vmctl.go](../internal/runtime/tools_vmctl.go).
-      disposition: block
-    - id: docs/choir-doctrine.md:[internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:[internal/runtime/trajectory.go](../internal/runtime/trajectory.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/api.go](../internal/runtime/api.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),#2
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),#3
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),#2
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),#3
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),#4
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),#5
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go).
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/texture_workflow_verifier.go](../internal/runtime/texture_workflow_verifier.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/toolloop.go](../internal/runtime/toolloop.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/tools_researcher.go](../internal/runtime/tools_researcher.go).
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/tools_texture.go](../internal/runtime/tools_texture.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),#2
-      disposition: block
-    - id: docs/choir-doctrine.md:`evidence:` `internal/runtime/continuation.go` (deleted; references retained as provenance),
-      disposition: block
-    - id: docs/choir-doctrine.md:`internal/runtime/api_trace.go` (deleted; references retained as provenance),
-      disposition: block
-    - id: docs/choir-doctrine.md:`internal/runtime/api_trace.go` (deleted; references retained as provenance).
-      disposition: block
-    - id: docs/choir-doctrine.md:`internal/runtime/channels.go`.
-      disposition: block
-    - id: docs/choir-doctrine.md:`internal/runtime/continuation.go` (deleted; references retained as provenance),
-      disposition: block
-    - id: docs/choir-doctrine.md:`internal/runtime/prompt_defaults/texture.md`,
-      disposition: block
-    - id: docs/choir-doctrine.md:`internal/runtime/runtime.go`.
-      disposition: block
-    - id: docs/choir-doctrine.md:`internal/runtime/texture_agent_revision.go`.
-      disposition: block
-    - id: docs/choir-doctrine.md:`internal/runtime/tools_vmctl.go`, `internal/runtime/tools.go`.
-      disposition: block
-    - id: docs/choir-doctrine.md:`internal/runtime/tools_vmctl.go`.
-      disposition: block
-    - id: docs/choir-doctrine.md:`successor pattern:` Candidate = `(CodeRef, forked ArtifactProgramRef)`; speculative effects execute in capsules (`internal/capsule` + `internal/runtime/tools_capsule.go`); promotion = atomic route flip between `ComputerVersion` records.
-      disposition: block
     - id: docs/choir-prompting-invariants.md:- Per-run runtime overlays live in `internal/runtimeprompts/overlays/*.yaml`
       disposition: block
-    - id: docs/computer-ontology.md:`internal/capsule` + `internal/runtime/tools_capsule.go`), whose transactions
+    - id: docs/conjecture-assertion-ledger-2026-06.md:*(Historical receipt `internal/runtime/app_promotion.go` was deleted in the
       disposition: block
-    - id: docs/conjecture-assertion-ledger-2026-06.md:- **Receipts:** `internal/runtime/tool_profiles.go:223-229` (AllowedDelegateTargets),
+    - id: docs/conjecture-assertion-ledger-2026-06.md:*(Historical receipts `internal/runtime/tool_profiles.go:223-229`,
       disposition: block
-    - id: docs/conjecture-assertion-ledger-2026-06.md:- **Receipts:** commit 77f65651; `internal/runtime/app_promotion.go`
-      disposition: block
-    - id: docs/current-architecture.md:(internal/runtime/runtime.go); cold-start, coagent wake, cancel, park-resume,
-      disposition: block
-    - id: docs/current-architecture.md:DB polling (H030 repaired). `internal/runtime` is the live business-logic layer
+    - id: 'docs/current-architecture.md:`internal/runtime` was dissolved in commit `c791a0ae` (2026-07-14): the live'
       disposition: block
     - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:- `internal/runtime/api.go` (typed ingestion handoff idempotency)
       disposition: block
@@ -5780,11 +5089,7 @@ citers:
       disposition: block
     - id: docs/definitions/og-dolt-heresy-completion-2026-07-08.md:rg/sed inspection of cmd/choir/main.go, internal/runtime/texture.go,
       disposition: block
-    - id: 'docs/doc-authority-manifest.yaml:witnesses: [docs/choir-prompting-invariants.md, docs/choir-doctrine.md, internal/runtime]'
-      disposition: block
-    - id: 'docs/doc-authority-manifest.yaml:witnesses: [docs/runtime-invariants.md, internal/runtime, internal/store]'
-      disposition: block
-    - id: 'docs/doc-authority-manifest.yaml:witnesses: [docs/texture-agentic-invariants-2026-06-13.md, internal/runtime, frontend]'
+    - id: 'docs/doc-authority-manifest.yaml:witnesses: [docs/choir-prompting-invariants.md, docs/choir-doctrine.md, internal/agentcore, internal/runtimeprompts]'
       disposition: block
     - id: 'docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md:- `internal/runtime/api_app_promotion.go`: `UpsertAppChangePackage`;'
       disposition: historical_evidence
@@ -5968,9 +5273,33 @@ citers:
       disposition: historical_evidence
     - id: docs/evidence/s3-toolregistry-with-tools-alias-dispatch-2026-07-12.md:`internal/runtime/tools.go` still re-exports `toolregistry.NewToolRegistryWithTools` under a backward-compatibility block. Repository/build-tag-aware search finds exactly one caller, `TestNewToolRegis… [sha256:d5e7ec8f147a481932701e32875b6286b86b633379cee6d77f7812883d1aa2c7]
       disposition: historical_evidence
-    - id: docs/heresy-detectors.md:`internal/runtime/prompt_defaults`, selected frontend/source/test directories,
+    - id: docs/heresy-detectors.md:(The historical `internal/runtime/prompt_defaults` path was dissolved in
       disposition: block
-    - id: docs/source-external-data-publication.md:**Current conformance gap:** `internal/runtime/qdrant_dedup.go` uses
+    - id: docs/heresy-detectors.md:`c791a0ae`; agent prompts now live in `internal/runtimeprompts/overlays`.)
+      disposition: block
+    - id: docs/heresy-detectors.md:`internal/agentcore`, `internal/runtimeprompts`, selected frontend/source/test
+      disposition: block
+    - id: docs/problems/doc-authority-witness-and-heresy-precision-drift-2026-08-01.md:(`internal/runtime/prompt_defaults`).
+      disposition: block
+    - id: docs/problems/doc-authority-witness-and-heresy-precision-drift-2026-08-01.md:(`internal/runtime/qdrant_dedup.go`).
+      disposition: block
+    - id: docs/problems/doc-authority-witness-and-heresy-precision-drift-2026-08-01.md:- `docs/choir-prompting-invariants.md` (witness `internal/runtime`)
+      disposition: block
+    - id: docs/problems/doc-authority-witness-and-heresy-precision-drift-2026-08-01.md:- `docs/runtime-invariants.md` (witness `internal/runtime`)
+      disposition: block
+    - id: docs/problems/doc-authority-witness-and-heresy-precision-drift-2026-08-01.md:- `docs/texture-agentic-invariants-2026-06-13.md` (witness `internal/runtime`)
+      disposition: block
+    - id: docs/problems/doc-authority-witness-and-heresy-precision-drift-2026-08-01.md:- `internal/runtime` matches nothing in `witnessMatches`.
+      disposition: block
+    - id: docs/problems/doc-authority-witness-and-heresy-precision-drift-2026-08-01.md:1. **Stale manifest witnesses.** `internal/runtime` was dissolved in commit
+      disposition: block
+    - id: docs/problems/doc-authority-witness-and-heresy-precision-drift-2026-08-01.md:1. `docs/doc-authority-manifest.yaml` — replace the three `internal/runtime`
+      disposition: block
+    - id: docs/problems/doc-authority-witness-and-heresy-precision-drift-2026-08-01.md:deleted `internal/runtime`, but the manifest witnesses and the heresy detector
+      disposition: block
+    - id: docs/problems/doc-authority-witness-and-heresy-precision-drift-2026-08-01.md:still cite `internal/runtime` as a witness, so doccheck emits three R2
+      disposition: block
+    - id: docs/problems/doc-authority-witness-and-heresy-precision-drift-2026-08-01.md:whose `internal/runtime` paths moved or were deleted.
       disposition: block
     - id: internal/actorruntime/adapter.go:// (internal/runtime).
       disposition: block
@@ -5979,10 +5308,6 @@ citers:
     - id: internal/agentcore/api.go:// HandleInternalRunCancel handles POST /internal/runtime/runs/{id}/cancel.
       disposition: block
     - id: internal/agentcore/api.go:// HandleInternalRunStatus handles GET /internal/runtime/runs/{id}.
-      disposition: block
-    - id: internal/agentcore/api.go:// HandleInternalRunSubmission handles POST /internal/runtime/runs.
-      disposition: block
-    - id: internal/agentcore/runtime_refresh.go:// HandleInternalRuntimeRefresh handles POST /internal/runtime/refresh.
       disposition: block
     - id: internal/provideriface/provider.go:// concurrency behavior. Extracted from internal/runtime so the actorruntime
       disposition: block
