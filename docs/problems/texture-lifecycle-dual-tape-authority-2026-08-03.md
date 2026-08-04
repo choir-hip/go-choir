@@ -277,3 +277,38 @@ the empty state; rebase and settlement references must resolve against
 canonical retained state; and owner authority must be non-delegable through
 agent product tools. H032 remains `discovered` and unrepaired. No runtime repair
 may be counted until a new frozen candidate clears these exact sequences.
+
+## Accepted local implementation candidate — 2026-08-04
+
+The fourth candidate was frozen against
+`a35236a46b99ba955b6d7e4b71311ea02cf210e1` with complete content digest
+`sha256:3f1a3bdd4ed9e4ac00e61b45014d61fc1c134bd937637468dd13a1206fd979cf`
+and committed locally as `f5c4c43e17e3e9b2e6de71170049695361c224bb`.
+AppenderPrivacyReview, ReducerAuthorityReview, and CompatibilityProofReview each
+accepted that exact manifest after focused rechecks.
+
+The candidate repairs the six third-round sequences and two additional
+crash/stale-base sequences found during the final recheck:
+
+1. explicit sequence-zero tape replay boots without inventing a genesis event;
+2. entropy-bearing private inputs and import inputs are frozen atomically with
+   command reservation before any pin or mutable barrier observation;
+3. the global canonical tape head is distinct from each trajectory's observed
+   semantic base;
+4. belief and artifact-premise rebase targets resolve exact current-state
+   digests, and each target must bind the current prior intent before mutation;
+5. settlement evidence must resolve to the retained referenced-artifact
+   registry populated from verified transaction bindings;
+6. Super product API tooling refuses every normalized owner supervision command,
+   import, and rebuild route before authenticated-owner header injection;
+7. rebuild rewinds a locally prepared but canonically absent supervision command
+   to its pinned frozen plan so restart can retry the exact event; and
+8. replay, retry, cancellation/late delivery, rebase, settlement, promotion,
+   startup attestation, disabled-writer, and owner-authority focused checks pass.
+
+This is local repair evidence, not deployed acceptance. HTTPS push failed
+because the configured GitHub token is invalid; SSH authenticated as
+`yusefmosiah` but `choir-hip/go-choir` denied write permission. H032 therefore
+remains `discovered`; its implementation is accepted locally, but `repaired`
+remains pending origin/main, CI, exact staging identity, deployed product-path
+acceptance, rollback, and terminal registry closure.

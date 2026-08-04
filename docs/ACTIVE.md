@@ -6,13 +6,15 @@ corpus and does not make an unverified graph status into a live work claim.
 ## Active Definition
 
 [`definitions/choir-texture-tape-supervision-2026-08-03.md`](definitions/choir-texture-tape-supervision-2026-08-03.md)
-is the sole executable product Definition. It makes the agentic Texture the
-human-bandwidth supervisory projection of the canonical computer tape, repairs
-H032, proves non-effect concurrent CoSuper fan-out and semantic rebase under
-Super, and formalizes the one-composed-candidate capsule promotion seam while
-keeping self-development effects OFF. The owner ratified it after frozen
-agentic-consensus review; current staging reports deployed source
-`794b99c9bf1526ee74a72fec8ba31e0c21df6d16`.
+is the sole current product Definition and is presently
+`blocked_incomplete` on GitHub write authorization. Its independently accepted
+effects-OFF implementation candidate is committed locally as
+`f5c4c43e17e3e9b2e6de71170049695361c224bb`; HTTPS credentials are invalid and
+the available SSH identity lacks write permission to `choir-hip/go-choir`.
+H032 repair, CI, staging deployment, product-path acceptance, rollback, and
+terminal closure remain unclaimed. Staging remains on the previously observed
+pre-implementation identity `794b99c9bf1526ee74a72fec8ba31e0c21df6d16`.
+
 
 ## Completed Definitions — Historical Evidence Authority
 
@@ -98,7 +100,8 @@ it active work or revising the product umbrella's semantics.
 
 ## Invocation
 
-Invoke the sole product mission with:
+After GitHub write authorization is restored, resume the sole product mission
+with:
 
 ```text
 /goal docs/definitions/choir-texture-tape-supervision-2026-08-03.md

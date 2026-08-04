@@ -175,25 +175,25 @@ measures:
     cannot_prove: "A bounded three-way trajectory does not prove throughput or optimal scheduling at arbitrary fan-out; it proves the causal and authority contract."
 
 now:
-  status: working
-  slice: "Repair the third frozen implementation review blockers before landing the one-tape supervision candidate."
-  question: none
+  status: blocked_incomplete
+  slice: "The independently accepted one-tape implementation is committed locally; landing is blocked on GitHub write authorization."
+  question: "Which GitHub credential has write access to choir-hip/go-choir?"
   reconciliation:
-    observed_at: 2026-08-04T14:29:55Z
-    source_ref: 6dd0072fb3daf85a077c97fea2114f9dcf515147
-    deploy_identity: "choir.news remains pre-implementation at the previously observed deployed identity; no staging claim is made by this review checkpoint"
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@6dd0072f, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@6dd0072f]
+    observed_at: 2026-08-04T15:19:08Z
+    source_ref: f5c4c43e17e3e9b2e6de71170049695361c224bb
+    deploy_identity: "choir.news remains pre-implementation; no staging claim is made because the accepted commit could not be pushed"
+    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@f5c4c43e, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@a35236a4]
     policy_resolution_ref: not_applicable; this Definition changes event/projection authority but does not change persistent-agent model/tool policy
-    worktree_inventory_ref: "Complete goal candidate: 110 tracked/untracked paths enumerated by /tmp/texture-tape-candidate-sha256.txt; generated TLC scratch removed; unrelated worktrees remain preserved."
+    worktree_inventory_ref: "Accepted implementation commit f5c4c43e contains all 112 reviewed candidate paths; four goal-owned blocked-landing registry/problem documents are now dirty; unrelated worktrees remain preserved."
     status: reconciled
   candidate:
-    id: texture-tape-supervision-implementation-v3
-    state: rejected
-    ref: docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md#third-frozen-implementation-review-blockers--2026-08-04
+    id: texture-tape-supervision-implementation-v4
+    state: accepted_local_landing_blocked
+    ref: f5c4c43e17e3e9b2e6de71170049695361c224bb
     owner: Main
-    base: 6dd0072fb3daf85a077c97fea2114f9dcf515147
-    digest: "sha256:289580c58dca44ef348adf1c20345d7dc9f8101e993b963365568a9d1c66ebb1"
-    scope: "110 paths in /tmp/texture-tape-candidate-sha256.txt"
+    base: a35236a46b99ba955b6d7e4b71311ea02cf210e1
+    digest: "sha256:3f1a3bdd4ed9e4ac00e61b45014d61fc1c134bd937637468dd13a1206fd979cf"
+    scope: "112 paths in /tmp/texture-tape-candidate-sha256.txt"
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
     kind: architecture
@@ -204,8 +204,8 @@ now:
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may now execute schema/caller/migration candidate work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
   evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, specs/texture_supervision.tla, specs/texture_supervision.cfg, specs/texture_supervision_witness.cfg, docs/evidence/texture-tape-definition-consensus-2026-08-03.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, internal/computerevent/appender.go, internal/store/computer_event_rebuild.go, internal/store/supervision_projection.go, internal/agentcore/runtime.go, internal/apihandler/product_api_tool.go, internal/textureowner/supervision_api.go]
-  blocker_or_risk: "Three independent focused reviewers rejected sha256:289580c58dca44ef348adf1c20345d7dc9f8101e993b963365568a9d1c66ebb1: empty-tape rebuild cannot boot; import reservation can lack a frozen plan; global tape expectation remains trajectory-local; artifact/belief rebase targets lack digest resolution; settlement evidence refs need not exist; and Super can synthesize owner authority through product_api_request. The four-model consensus runner timed out without verdicts."
-  next_action: "Land this code-free problem checkpoint, repair the six source sequences with focused regressions, rerun the frozen candidate review, then proceed to landing only if accepted."
+  blocker_or_risk: "Landing is externally blocked: HTTPS push refused the invalid yusefmosiah GitHub token, and SSH authenticated as yusefmosiah but choir-hip/go-choir denied write permission. CI, deployment, exact staging identity, product-path acceptance, rollback, registry closure, and the terminal H032 repair claim remain pending."
+  next_action: "Restore a GitHub credential with write access to choir-hip/go-choir, push f5c4c43e to origin/main, then complete CI, exact staging identity, deployed supervision acceptance, rollback, and terminal registry closure."
 
 receipts:
   - id: texture-tape-definition-round-1
@@ -257,6 +257,23 @@ receipts:
       environment_identity: no_new_staging_observation
       deployed_acceptance: not_applicable
     registry_conformance_ref: "scripts/doccheck report-only complete before this checkpoint; terminal registry closure remains pending"
+  - id: texture-tape-implementation-review-round-4
+    boundary: implement
+    commit_or_artifact: "accepted candidate sha256:3f1a3bdd4ed9e4ac00e61b45014d61fc1c134bd937637468dd13a1206fd979cf at base a35236a46b99ba955b6d7e4b71311ea02cf210e1; local commit f5c4c43e17e3e9b2e6de71170049695361c224bb"
+    proof_refs: [docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md#accepted-local-implementation-candidate--2026-08-04, "go test ./internal/computerevent ./internal/store ./internal/agentcore ./internal/apihandler ./internal/textureowner -count=1", "TLC base: 87180 generated / 14747 distinct; witness: 264 / 197; six coverage targets reached"]
+    rollback_ref: "Revert f5c4c43e before any deployment; no accepted staging mutation exists."
+    disposition: "accepted independently by AppenderPrivacyReview, ReducerAuthorityReview, and CompatibilityProofReview after exact-hash blocker rechecks; effects remain OFF"
+    problem_ref: docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md
+    authorization_ref: owner_ratification_2026-08-03_take_draft_into_defined_mission
+    candidate_or_evidence_refs: ["sha256:3f1a3bdd4ed9e4ac00e61b45014d61fc1c134bd937637468dd13a1206fd979cf", "/tmp/texture-tape-candidate-sha256.txt"]
+    landing:
+      source_commit: f5c4c43e17e3e9b2e6de71170049695361c224bb
+      ci_ref: "blocked before push: invalid HTTPS token and no SSH write permission"
+      deploy_ref: pending
+      environment_identity: no_new_staging_observation
+      deployed_acceptance: pending
+    registry_conformance_ref: "terminal closure pending successful landing and deployed acceptance"
+
 
 view:
   path: /tmp/choir-texture-tape-supervision.html

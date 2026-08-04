@@ -239,22 +239,22 @@ nodes:
     title: Make Texture the Supervisory Projection of the Computer Tape
     path: docs/definitions/choir-texture-tape-supervision-2026-08-03.md
     ledger: ''
-    status: working
+    status: blocked
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on:
       - choir-coherent-computer-convergence-2026-07-21
     enables: []
     note: >-
-      Sole owner-ratified executable product spine. It repairs the dual semantic
-      tape between ComputerEventAppender and embedded Texture/lifecycle events;
-      makes the agentic Texture the request-fulfilling, human-bandwidth
-      projection of Super-supervised concurrent CoSuper work; proves fan-out,
-      semantic rebase, dissent, and reconstruction; formalizes one composed
-      capsule candidate for later promotion; and keeps all self-development
-      effects OFF. The first active slice freezes the closed
-      schema/reducer/caller/migration candidate before protected implementation.
+      Sole owner-ratified current product spine. Its independently reviewed
+      effects-OFF implementation is committed locally as f5c4c43e but landing
+      is blocked: the HTTPS token is invalid and the available SSH identity
+      lacks write permission to choir-hip/go-choir. H032 repair, CI, exact
+      staging identity, deployed acceptance, rollback, and terminal registry
+      closure remain pending. The candidate makes Texture the human-bandwidth
+      projection of the canonical tape, supervises concurrent non-effect
+      CoSuper work, and preserves the one-composed-candidate successor seam.
     sources:
       - docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md
       - docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
