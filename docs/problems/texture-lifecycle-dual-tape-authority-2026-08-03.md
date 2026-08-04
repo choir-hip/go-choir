@@ -312,3 +312,50 @@ because the configured GitHub token is invalid; SSH authenticated as
 remains `discovered`; its implementation is accepted locally, but `repaired`
 remains pending origin/main, CI, exact staging identity, deployed product-path
 acceptance, rollback, and terminal registry closure.
+
+## Deployed product-path blockers — 2026-08-04
+
+The accepted implementation reached `origin/main` as
+`248e4692595534df9843dff37a00a4146f3d570f`; CI run `30947754942`
+completed successfully, and `choir.news` reported that exact proxy, sandbox,
+and vmctl identity. A fresh passkey owner
+(`4f9662ea-51d5-48d2-90de-71b734d40e5b`) then exercised the prompt/Texture
+product path on computer `vm-58e28a39cda64651f8bca7e9ac2efc52`.
+
+That deployed proof exposed two new blockers before settlement:
+
+1. Texture run `4f1014e5-3fc3-494b-a2db-8b3a7c1f7578` failed its first
+   provider call because the staging ChatGPT refresh token had already been
+   consumed. The owner changed only this disposable computer's
+   `System/model-policy.toml` Texture and Super roles to the already configured
+   `deepseek/deepseek-v4-flash`, preserving the exact original file at
+   `System/model-policy.texture-tape-acceptance-backup.toml`. Texture run
+   `03de15ce-77ad-4eb3-b633-468f4d43e8ee` resolved and recorded DeepSeek in its
+   run metadata, but its post-tool iteration still called the ChatGPT gateway
+   and failed with the same `refresh_token_reused` response. Model selection
+   therefore does not remain authoritative across a multi-turn tool loop.
+2. Source inspection of the exact deployed candidate found a prior authority
+   guard in `update_coagent`: once the caller has a durable lifecycle run,
+   `newUpdateCoagentTool` returns `ErrSupervisionAuthorityRequired` before it
+   evaluates the supervised-trajectory branch that appends the closed
+   transaction. Every prompt-bar Texture trajectory has that lifecycle
+   binding. Texture therefore cannot hand an `execution_request` to persistent
+   Super through the documented product tool, so no deployed three-way
+   assignment fan-out can start even with a healthy provider.
+
+These are product-path failures, not a weaker test gap. The next repair must
+first make closed supervised `update_coagent` handling precede legacy-lifecycle
+refusal while keeping unsupervised lifecycle writes refused, then prove the
+model-policy provider remains fixed across every tool-loop iteration. The
+admissible evidence class remains a fresh deployed prompt/Texture/Super run on
+the exact staging commit, followed by owner settlement; local tests alone
+cannot close either blocker.
+
+Mutation class is `red`. Protected surfaces are the canonical supervision
+appender, persistent Super handoff, provider/model routing, and run acceptance.
+Rollback is source revert plus restoration of the disposable owner's exact
+model-policy backup. Conjecture delta: “the accepted local candidate is
+product-path complete” is falsified; the one-tape reducer/appender conjecture
+remains supported by its accepted local evidence. Heresy delta:
+`discovered` = supervised handoff guard precedence and tool-loop provider
+authority loss; `introduced` = none by this observation; `repaired` = none.

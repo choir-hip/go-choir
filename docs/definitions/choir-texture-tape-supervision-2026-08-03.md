@@ -176,24 +176,24 @@ measures:
 
 now:
   status: blocked_incomplete
-  slice: "The independently accepted one-tape implementation is committed locally; landing is blocked on GitHub write authorization."
-  question: "Which GitHub credential has write access to choir-hip/go-choir?"
+  slice: "The one-tape candidate is deployed at the exact accepted source, but fresh product-path proof exposed supervised handoff and provider-continuity blockers before fan-out."
+  question: "Can the closed supervised update path and one selected provider survive a complete deployed Texture-to-Super tool loop?"
   reconciliation:
-    observed_at: 2026-08-04T15:19:08Z
-    source_ref: f5c4c43e17e3e9b2e6de71170049695361c224bb
-    deploy_identity: "choir.news remains pre-implementation; no staging claim is made because the accepted commit could not be pushed"
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@f5c4c43e, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@a35236a4]
-    policy_resolution_ref: not_applicable; this Definition changes event/projection authority but does not change persistent-agent model/tool policy
-    worktree_inventory_ref: "Accepted implementation commit f5c4c43e contains all 112 reviewed candidate paths; four goal-owned blocked-landing registry/problem documents are now dirty; unrelated worktrees remain preserved."
+    observed_at: 2026-08-04T20:35:00Z
+    source_ref: 248e4692595534df9843dff37a00a4146f3d570f
+    deploy_identity: "choir.news proxy, sandbox, and vmctl report 248e4692595534df9843dff37a00a4146f3d570f after CI run 30947754942 completed successfully"
+    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@248e4692, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@248e4692]
+    policy_resolution_ref: "Disposable staging computer vm-58e28a39cda64651f8bca7e9ac2efc52 resolved Texture and Super to deepseek/deepseek-v4-flash; exact original policy is preserved at System/model-policy.texture-tape-acceptance-backup.toml."
+    worktree_inventory_ref: "origin/main and local main are 248e4692; this problem-first checkpoint owns only the Definition and H032 problem record before runtime repair."
     status: reconciled
   candidate:
-    id: texture-tape-supervision-implementation-v4
-    state: accepted_local_landing_blocked
-    ref: f5c4c43e17e3e9b2e6de71170049695361c224bb
+    id: texture-tape-supervision-deployed-v4
+    state: deployed_acceptance_failed
+    ref: 248e4692595534df9843dff37a00a4146f3d570f
     owner: Main
-    base: a35236a46b99ba955b6d7e4b71311ea02cf210e1
-    digest: "sha256:3f1a3bdd4ed9e4ac00e61b45014d61fc1c134bd937637468dd13a1206fd979cf"
-    scope: "112 paths in /tmp/texture-tape-candidate-sha256.txt"
+    base: f5c4c43e17e3e9b2e6de71170049695361c224bb
+    digest: "source identity 248e4692595534df9843dff37a00a4146f3d570f; prior reviewed implementation digest sha256:3f1a3bdd4ed9e4ac00e61b45014d61fc1c134bd937637468dd13a1206fd979cf"
+    scope: "Accepted implementation plus blocked-landing documentation, deployed through origin/main."
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
     kind: architecture
@@ -203,9 +203,9 @@ now:
     owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may now execute schema/caller/migration candidate work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, specs/texture_supervision.tla, specs/texture_supervision.cfg, specs/texture_supervision_witness.cfg, docs/evidence/texture-tape-definition-consensus-2026-08-03.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, internal/computerevent/appender.go, internal/store/computer_event_rebuild.go, internal/store/supervision_projection.go, internal/agentcore/runtime.go, internal/apihandler/product_api_tool.go, internal/textureowner/supervision_api.go]
-  blocker_or_risk: "Landing is externally blocked: HTTPS push refused the invalid yusefmosiah GitHub token, and SSH authenticated as yusefmosiah but choir-hip/go-choir denied write permission. CI, deployment, exact staging identity, product-path acceptance, rollback, registry closure, and the terminal H032 repair claim remain pending."
-  next_action: "Restore a GitHub credential with write access to choir-hip/go-choir, push f5c4c43e to origin/main, then complete CI, exact staging identity, deployed supervision acceptance, rollback, and terminal registry closure."
+  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "CI run 30947754942", "staging Texture runs 4f1014e5-3fc3-494b-a2db-8b3a7c1f7578 and 03de15ce-77ad-4eb3-b633-468f4d43e8ee", specs/texture_supervision.tla, internal/agentcore/tools_worker_update.go, internal/agentcore/runtime.go, internal/computerevent/appender.go, internal/store/supervision_projection.go]
+  blocker_or_risk: "Exact deployed acceptance cannot start fan-out: lifecycle-bound supervised Texture calls are refused before the closed append branch, and a DeepSeek-resolved Texture run falls back to the broken ChatGPT credential after tool iterations. No owner settlement, rollback rehearsal, registry closure, or H032 repair claim is admissible."
+  next_action: "Land this problem-first checkpoint, repair closed supervised update precedence and provider continuity with focused regressions, re-review the frozen repair, then repeat exact staging prompt/Texture/Super/fan-out/owner-settlement proof."
 
 receipts:
   - id: texture-tape-definition-round-1
