@@ -5,9 +5,14 @@ corpus and does not make an unverified graph status into a live work claim.
 
 ## Active Definition
 
-None. The durable-computer convergence mission completed on 2026-07-24. No
-successor is executable until the owner ratifies a Definition and all three
-registries promote it.
+[`definitions/choir-texture-tape-supervision-2026-08-03.md`](definitions/choir-texture-tape-supervision-2026-08-03.md)
+is the sole executable product Definition. It makes the agentic Texture the
+human-bandwidth supervisory projection of the canonical computer tape, repairs
+H032, proves non-effect concurrent CoSuper fan-out and semantic rebase under
+Super, and formalizes the one-composed-candidate capsule promotion seam while
+keeping self-development effects OFF. The owner ratified it after frozen
+agentic-consensus review; current staging reports deployed source
+`794b99c9bf1526ee74a72fec8ba31e0c21df6d16`.
 
 ## Completed Definitions — Historical Evidence Authority
 
@@ -93,15 +98,21 @@ it active work or revising the product umbrella's semantics.
 
 ## Invocation
 
-Do not invoke a product `/goal` from this registry. No Definition is currently
-active. The performance and Choir-in-Choir drafts remain blocked and
-non-executable; promoting either requires separate owner ratification and
-three-registry reconciliation.
+Invoke the sole product mission with:
+
+```text
+/goal docs/definitions/choir-texture-tape-supervision-2026-08-03.md
+```
+
+The performance and Choir-in-Choir drafts remain blocked and non-executable;
+promoting either requires separate owner ratification and three-registry
+reconciliation. They must not run concurrently with this protected product
+spine.
 
 This index owns no current slice, next action, execution order, resumption,
 completion, mutation, rollback sequencing, or escalation authority. The
-completed convergence Definition is evidence, not an executable entrypoint.
-Autopaper remains unauthorized.
+completed convergence Definition is evidence, not a competing executable
+entrypoint. Autopaper remains unauthorized.
 
 The OG/Dolt/heresy contract supplies the deployed D-ROUTE corpusd/vmctl CAS
 mechanics, receipt gates, H031 detection, and deletion bars. The completed
@@ -113,7 +124,7 @@ a third semantic store.
 ## Unowned External Work
 
 Runtime dissolution, actor/runtime extraction, broader source-system/Wire work,
-full external-agent capsule execution, and ComputerVersion performance optimization have no active Definition. Do not resume
+full external-agent capsule execution, and ComputerVersion performance optimization have no active executable Definition. Do not resume
 deleted plans; any new program must be grounded in current code and staging
 evidence, owner-ratified, and promoted through every registry.
 

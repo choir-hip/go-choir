@@ -69,7 +69,7 @@ documents:
     is_root: [entry]
     is_evidence: false
     annotations: {doc_role: active_work_navigation, authority: derived_support, lifecycle: living}
-    witnesses: [docs/mission-graph.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/definitions/choir-cli-self-development-2026-07-16.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md, docs/definitions/choir-seam-repair-2026-07-10.md]
+    witnesses: [docs/mission-graph.yaml, docs/definitions/choir-texture-tape-supervision-2026-08-03.md, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/definitions/choir-cli-self-development-2026-07-16.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md, docs/definitions/choir-seam-repair-2026-07-10.md]
     refresh_triggers: [active_definition_change, mission_graph_change]
 
   - path: docs/current-architecture.md
@@ -301,6 +301,30 @@ documents:
     supersedes: [docs/definitions/choir-cli-self-development-2026-07-16.md]
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/definitions/choir-cli-self-development-2026-07-16.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md]
     refresh_triggers: [successor_promotion, deployment_identity_change, durable_actor_delivery_change, artifact_lifecycle_change, trajectory_settlement_change, Texture_public_protocol_change]
+
+  - path: docs/definitions/choir-texture-tape-supervision-2026-08-03.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations: {doc_role: definition_entrypoint, authority: owner_ratified_mission_orchestrator, lifecycle: working, entrypoint: true}
+    witnesses: [docs/evidence/texture-tape-definition-consensus-2026-08-03.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, docs/choir-vision.md, docs/supervision-protocol.md, internal/computerevent, internal/capsule, internal/selfdev, internal/store/lifecycle.go, internal/textureowner]
+    refresh_triggers: [owner_definition_ratification, staging_identity_change, computer_event_authority_change, Texture_projection_change, lifecycle_reducer_change, semantic_rebase_contract_change, registry_promotion]
+
+  - path: docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md
+    claim_scope: current
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: substrate_problem_record, authority: observed_source_evidence, lifecycle: living}
+    witnesses: [docs/definitions/choir-texture-tape-supervision-2026-08-03.md, docs/current-architecture.md, docs/choir-doctrine.md, docs/heresy-detectors.md, internal/computerevent/appender.go, internal/store/computer_events.go, internal/store/lifecycle.go, internal/textureowner]
+    refresh_triggers: [computer_event_authority_change, Texture_projection_change, lifecycle_reducer_change, H032_repair_claim]
+
+  - path: docs/evidence/texture-tape-definition-consensus-2026-08-03.md
+    claim_scope: current
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: definition_review_adjudication, authority: owner_authorized_external_review_evidence, lifecycle: settled}
+    witnesses: [docs/definitions/choir-texture-tape-supervision-2026-08-03.md, docs/supervision-protocol.md, internal/computerevent/reducer.go, internal/agentcore/tools_capsule.go, internal/selfdev/operations.go]
+    refresh_triggers: [material_definition_change, capsule_promotion_contract_change, new_reproducible_review_blocker]
 
   - path: docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md
     claim_scope: current

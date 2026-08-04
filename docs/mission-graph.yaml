@@ -219,7 +219,7 @@ nodes:
     depends_on:
       - choir-audited-autoputer-construction-2026-07-15
       - choir-cli-self-development-2026-07-16
-    enables: [choir-in-choir-computer-control-draft-2026-07-18]
+    enables: [choir-texture-tape-supervision-2026-08-03, choir-in-choir-computer-control-draft-2026-07-18]
     note: >-
       Completed and accepted on staging on 2026-07-24. Retained as historical
       evidence for the generic durable-work kernel, restart reconstruction,
@@ -233,6 +233,37 @@ nodes:
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
       - docs/standing-questions.md
+      - docs/ACTIVE.md
+      - AGENTS.md
+  - id: choir-texture-tape-supervision-2026-08-03
+    title: Make Texture the Supervisory Projection of the Computer Tape
+    path: docs/definitions/choir-texture-tape-supervision-2026-08-03.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-coherent-computer-convergence-2026-07-21
+    enables: []
+    note: >-
+      Sole owner-ratified executable product spine. It repairs the dual semantic
+      tape between ComputerEventAppender and embedded Texture/lifecycle events;
+      makes the agentic Texture the request-fulfilling, human-bandwidth
+      projection of Super-supervised concurrent CoSuper work; proves fan-out,
+      semantic rebase, dissent, and reconstruction; formalizes one composed
+      capsule candidate for later promotion; and keeps all self-development
+      effects OFF. The first active slice freezes the closed
+      schema/reducer/caller/migration candidate before protected implementation.
+    sources:
+      - docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md
+      - docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
+      - docs/choir-vision.md
+      - docs/choir-doctrine.md
+      - docs/supervision-protocol.md
+      - docs/standing-questions.md
+      - docs/computer-ontology.md
+      - docs/agent-product-doctrine.md
       - docs/ACTIVE.md
       - AGENTS.md
   - id: choir-in-choir-computer-control-draft-2026-07-18

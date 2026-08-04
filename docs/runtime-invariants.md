@@ -88,10 +88,17 @@ path, its only agent delegation target is `texture`.
 `appagent` owns one user-facing app domain and mutates only typed app state
 through product APIs.
 
-`texture` is the primary appagent and single writer for canonical document
-versions. Workers do not write canonical `texture` text and do not send patches to
-`texture`. They emit updates: findings, evidence, source refs, artifacts,
-branches/commits, previews, tests, questions, constraints, or proposals.
+`texture` is the primary appagent and single semantic authorizer for canonical
+document versions. Canonical document changes must be typed transactions on the
+per-computer event chain and embedded Dolt must be their deterministic
+projection. Texture is responsible for fulfilling the user's document request:
+it agentically writes, messages Researcher or Super, waits, integrates grounded
+results, or records a blocker. Claims about operational work or evidence bind
+exact event-derived refs or remain visibly pending/conjectural. Workers do not write canonical `texture` text and do not send
+patches to `texture`. They emit updates: findings, evidence, source refs,
+artifacts, branches/commits, previews, tests, questions, constraints, or
+proposals. Current direct Texture/lifecycle reducers are H032 implementation
+residue, not an exception to this invariant.
 
 Texture source citation is tri-state (Choir Doctrine I15). Source citations are
 `source_ref` nodes only; the `source_embed` node type is removed. `display_mode`
@@ -104,15 +111,18 @@ guidance is unconditional, driven by the default Style.texture.
 `researcher` reads local context and the web, writes findings/evidence to Dolt,
 and does not own document text.
 
-`super` is the per-user privileged orchestration root. It may orchestrate
-durable delegated runs and capability-bound capsules and inspect their evidence;
-it does not directly mutate the computer, host, route, or canonical event state.
+`super` is the per-user operational supervisor. It decomposes granted intent,
+assigns scoped work, reconciles results and dissent, maintains obligations, and
+proposes decisions/settlement. It may orchestrate durable delegated runs and
+capability-bound capsules and inspect their evidence; it does not directly
+mutate the computer, host, route, or canonical event state.
 
 `vsuper` is retired. Its aliases, profile, prompt, spawn rules, tool grants, and
 runtime paths are deleted; it must not survive as a privileged worker role.
 
-`cosuper` performs scoped effectful work only inside a capability-bound guest
-capsule. It has no host, raw VM, route, canonical event, or acceptance authority.
+`cosuper` is a worker that performs scoped effectful work only inside a
+capability-bound guest capsule. It has no host, raw VM, route, canonical event,
+acceptance, self-settlement, or supervisory authority.
 
 Delegated agents such as researcher, super, cosuper, and future specialized
 roles are durable runs/trajectories with scoped tools. They are not worker
@@ -134,6 +144,16 @@ capsules. A capsule freezes an inert content-addressed effect bundle at an exact
 base event head. Verification and acceptance happen outside the capsule; only
 an accepted event authorizes guest materialization, checkpoint publication, and
 route projection.
+
+CoSuper fan-out does not create branch computers, tapes, or desired-state
+heads. N assignments may execute concurrently, but every attempt/result is
+serially acknowledged on the one computer event chain and remains bound to its
+parent decision, intent, working base, scope, capability policy, and
+idempotency identity. Super dispositions close retry, cancellation, late
+output, dissent, and rebase. Before effect acceptance, selected branch results
+must be integrated into one new current-base `CapsuleEffectBundle` and the
+composed behavior independently verified. Only that exact digest may become the
+single pending desired-state transition.
 
 `worker_vm`, `background_computer`, `candidate_vm`, and `candidate_computer` as
 forked product objects are retired. Generic delegation uses durable
@@ -164,9 +184,11 @@ roles only when explicitly justified. Do not introduce new durable product truth
 into SQLite by default. The current Dolt boundary is maintained here and in
 [computer-ontology.md](computer-ontology.md).
 
-Per-user embedded Dolt holds private product state: app graph, appagent state,
-`texture` document/version content, prompts, local trajectories, findings, evidence
-metadata, and publication staging metadata.
+Per-user embedded Dolt materializes private product projections: app graph,
+appagent state, `texture` document/version content, prompts, local trajectories,
+findings, evidence metadata, and publication staging metadata. For semantic
+state, the canonical per-computer event chain is durable causal authority;
+embedded Dolt may index and reduce it but must not originate a competing tape.
 
 The per-user snapshot filesystem holds files, working trees, uploads, large
 media, build artifacts, generated outputs, and filesystem aliases or materialized
