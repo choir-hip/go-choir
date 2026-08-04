@@ -176,24 +176,24 @@ measures:
 
 now:
   status: working
-  slice: "Freeze the closed supervision transaction/reducer vocabulary, production caller cutover, fan-out lineage, migration import, and compatibility-floor candidate before implementation."
+  slice: "Independently challenge the frozen schema/reducer/caller/import/privacy/compatibility-floor candidate before protected runtime implementation."
   question: none
   reconciliation:
-    observed_at: 2026-08-04T03:03:00Z
-    source_ref: 794b99c9bf1526ee74a72fec8ba31e0c21df6d16
-    deploy_identity: "choir.news /health at 2026-08-04T03:03Z reports deployed_commit 794b99c9bf1526ee74a72fec8ba31e0c21df6d16, built_at 20260801171937, deployed_at 2026-08-01T17:40:57Z"
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, owner_external_consensus_authorization_2026-08-03, docs/choir-doctrine.md@794b99c9, docs/choir-vision.md@794b99c9, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md@794b99c9]
+    observed_at: 2026-08-04T04:33:15Z
+    source_ref: d163a4aaa732e54ad56cbb7fc8a08d3aa8722268
+    deploy_identity: "choir.news /health at 2026-08-04T04:33Z still reports deployed_commit 794b99c9bf1526ee74a72fec8ba31e0c21df6d16, built_at 20260801171937, deployed_at 2026-08-01T17:40:57Z"
+    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, owner_external_consensus_authorization_2026-08-03, docs/choir-doctrine.md@d163a4aa, docs/choir-vision.md@d163a4aa, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md@d163a4aa]
     policy_resolution_ref: not_applicable; this Definition changes event/projection authority but does not change persistent-agent model/tool policy
-    worktree_inventory_ref: "2026-08-04 current main worktree contains only this goal-owned documentation candidate across the paths listed by git status; unrelated dirty worktrees from start remain forbidden and preserved"
+    worktree_inventory_ref: "2026-08-04 main@d163a4aa was clean before this goal created the frozen candidate and current-state update; goal-owned paths are the Definition, one evidence packet, specs/README.md, and the new TLA module/config. Every unrelated worktree remains forbidden and preserved."
     status: reconciled
   candidate:
-    id: none
-    state: none
-    ref: none
-    owner: none
-    base: none
-    digest: none
-    scope: []
+    id: texture-tape-supervision-schema-v1
+    state: frozen
+    ref: docs/evidence/texture-tape-supervision-candidate-2026-08-04.md
+    owner: Main
+    base: d163a4aaa732e54ad56cbb7fc8a08d3aa8722268
+    digest: "sha256:40a100f303dec74962ccc13ee14f89a731206eeb1eb4bba1cfd95b9e3d8b90d1"
+    scope: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, specs/README.md, specs/texture_supervision.tla, specs/texture_supervision.cfg]
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
     kind: architecture
@@ -203,9 +203,9 @@ now:
     owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may now execute schema/caller/migration candidate work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/evidence/texture-tape-definition-consensus-2026-08-03.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, internal/computerevent/appender.go, internal/computerevent/reducer.go, internal/agentcore/tools_capsule.go, internal/store/computer_events.go, internal/store/lifecycle.go]
-  blocker_or_risk: "No blocker. The first implementation candidate must freeze a closed typed schema, caller cutover, migration import, privacy map, and compatibility floor before touching protected runtime code; the current production path has no multi-object event reducer."
-  next_action: "Read-only inventory every production Texture/lifecycle/supervision writer and freeze one disposable schema/reducer/caller-cutover candidate, including fan-out attempt lineage and the property-checked single-composed-candidate promotion seam, before implementation."
+  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, specs/texture_supervision.tla, specs/texture_supervision.cfg, docs/evidence/texture-tape-definition-consensus-2026-08-03.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, internal/computerevent/appender.go, internal/computerevent/reducer.go, internal/objectgraph/dolt_store.go, internal/store/computer_events.go, internal/store/lifecycle.go]
+  blocker_or_risk: "Protected runtime mutation remains blocked on independent adjudication of frozen candidate sha256:40a100f303dec74962ccc13ee14f89a731206eeb1eb4bba1cfd95b9e3d8b90d1. Separately, `scripts/doccheck --mode=live` at 2026-08-04T05:51:03Z found the promoted Definition missing as an authority-root manifest entry: mission graph entrypoints=1, current authority-root product Definitions=0. This registry defect predates runtime implementation and must be repaired only after this code-free problem/candidate boundary."
+  next_action: "Complete the independent challenge of the exact frozen candidate, adjudicate its findings, then repair the documented doc-authority-manifest root mismatch before protected implementation."
 
 receipts:
   - id: texture-tape-definition-round-1

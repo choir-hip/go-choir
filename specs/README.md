@@ -1,8 +1,8 @@
-# specs/ — historical model snapshots
+# specs/ — current and historical formal models
 
-The checked-in TLA+ modules are historical verification artifacts. They do not
-define current Choir product authority or gate the active self-development
-mission.
+Formal models are bounded evidence artifacts. They do not define product
+authority or substitute for code conformance, deployed reconstruction, or
+product-path acceptance.
 
 Current product authority lives in:
 
@@ -10,6 +10,14 @@ Current product authority lives in:
 - `docs/computer-ontology.md`
 - `docs/agent-product-doctrine.md`
 - the active Definition named by `docs/ACTIVE.md`
+
+`texture_supervision.tla` is the current bounded safety model for
+[`choir-texture-tape-supervision-2026-08-03.md`](../docs/definitions/choir-texture-tape-supervision-2026-08-03.md).
+It maps the canonical appender's prepare/CAS/finalize recovery boundary, typed
+assignment and attempt lineage, reconciliation-gated settlement, release-level
+write disablement, and the future one-current-base composed-candidate seam.
+`texture_supervision.cfg` exhaustively checks the declared finite model. Its
+admissible evidence is limited to the named state-machine invariants.
 
 `actor_protocol.tla` and `autoputer_lifecycle.tla` preserve earlier model
 snapshots and their model-checking receipts. Their terminology and topology
