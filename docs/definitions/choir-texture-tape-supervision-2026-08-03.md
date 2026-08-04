@@ -176,24 +176,24 @@ measures:
 
 now:
   status: working
-  slice: "Independently challenge the frozen schema/reducer/caller/import/privacy/compatibility-floor candidate before protected runtime implementation."
+  slice: "Repair the third frozen implementation review blockers before landing the one-tape supervision candidate."
   question: none
   reconciliation:
-    observed_at: 2026-08-04T04:33:15Z
-    source_ref: d163a4aaa732e54ad56cbb7fc8a08d3aa8722268
-    deploy_identity: "choir.news /health at 2026-08-04T04:33Z still reports deployed_commit 794b99c9bf1526ee74a72fec8ba31e0c21df6d16, built_at 20260801171937, deployed_at 2026-08-01T17:40:57Z"
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, owner_external_consensus_authorization_2026-08-03, docs/choir-doctrine.md@d163a4aa, docs/choir-vision.md@d163a4aa, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md@d163a4aa]
+    observed_at: 2026-08-04T14:29:55Z
+    source_ref: 6dd0072fb3daf85a077c97fea2114f9dcf515147
+    deploy_identity: "choir.news remains pre-implementation at the previously observed deployed identity; no staging claim is made by this review checkpoint"
+    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@6dd0072f, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@6dd0072f]
     policy_resolution_ref: not_applicable; this Definition changes event/projection authority but does not change persistent-agent model/tool policy
-    worktree_inventory_ref: "2026-08-04 main@d163a4aa was clean before this goal created the frozen candidate and current-state update; goal-owned paths are the Definition, one evidence packet, specs/README.md, and the new TLA module/config. Every unrelated worktree remains forbidden and preserved."
+    worktree_inventory_ref: "Complete goal candidate: 110 tracked/untracked paths enumerated by /tmp/texture-tape-candidate-sha256.txt; generated TLC scratch removed; unrelated worktrees remain preserved."
     status: reconciled
   candidate:
-    id: texture-tape-supervision-schema-v1
-    state: frozen
-    ref: docs/evidence/texture-tape-supervision-candidate-2026-08-04.md
+    id: texture-tape-supervision-implementation-v3
+    state: rejected
+    ref: docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md#third-frozen-implementation-review-blockers--2026-08-04
     owner: Main
-    base: d163a4aaa732e54ad56cbb7fc8a08d3aa8722268
-    digest: "sha256:40a100f303dec74962ccc13ee14f89a731206eeb1eb4bba1cfd95b9e3d8b90d1"
-    scope: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, specs/README.md, specs/texture_supervision.tla, specs/texture_supervision.cfg]
+    base: 6dd0072fb3daf85a077c97fea2114f9dcf515147
+    digest: "sha256:289580c58dca44ef348adf1c20345d7dc9f8101e993b963365568a9d1c66ebb1"
+    scope: "110 paths in /tmp/texture-tape-candidate-sha256.txt"
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
     kind: architecture
@@ -203,9 +203,9 @@ now:
     owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may now execute schema/caller/migration candidate work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, specs/texture_supervision.tla, specs/texture_supervision.cfg, docs/evidence/texture-tape-definition-consensus-2026-08-03.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, internal/computerevent/appender.go, internal/computerevent/reducer.go, internal/objectgraph/dolt_store.go, internal/store/computer_events.go, internal/store/lifecycle.go]
-  blocker_or_risk: "Protected runtime mutation remains blocked on independent adjudication of frozen candidate sha256:40a100f303dec74962ccc13ee14f89a731206eeb1eb4bba1cfd95b9e3d8b90d1. Separately, `scripts/doccheck --mode=live` at 2026-08-04T05:51:03Z found the promoted Definition missing as an authority-root manifest entry: mission graph entrypoints=1, current authority-root product Definitions=0. This registry defect predates runtime implementation and must be repaired only after this code-free problem/candidate boundary."
-  next_action: "Complete the independent challenge of the exact frozen candidate, adjudicate its findings, then repair the documented doc-authority-manifest root mismatch before protected implementation."
+  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, specs/texture_supervision.tla, specs/texture_supervision.cfg, specs/texture_supervision_witness.cfg, docs/evidence/texture-tape-definition-consensus-2026-08-03.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, internal/computerevent/appender.go, internal/store/computer_event_rebuild.go, internal/store/supervision_projection.go, internal/agentcore/runtime.go, internal/apihandler/product_api_tool.go, internal/textureowner/supervision_api.go]
+  blocker_or_risk: "Three independent focused reviewers rejected sha256:289580c58dca44ef348adf1c20345d7dc9f8101e993b963365568a9d1c66ebb1: empty-tape rebuild cannot boot; import reservation can lack a frozen plan; global tape expectation remains trajectory-local; artifact/belief rebase targets lack digest resolution; settlement evidence refs need not exist; and Super can synthesize owner authority through product_api_request. The four-model consensus runner timed out without verdicts."
+  next_action: "Land this code-free problem checkpoint, repair the six source sequences with focused regressions, rerun the frozen candidate review, then proceed to landing only if accepted."
 
 receipts:
   - id: texture-tape-definition-round-1
@@ -240,6 +240,23 @@ receipts:
       environment_identity: "read-only pre-mission staging identity 794b99c9bf1526ee74a72fec8ba31e0c21df6d16"
       deployed_acceptance: not_applicable
     registry_conformance_ref: "2026-08-04 ACTIVE/mission-graph/doc-authority-manifest aligned on sole working mission_orchestrator entrypoint; dashboard render, doccheck tests/report, dangling-reference scan, diff check, and heresy regression gate passed"
+
+  - id: texture-tape-implementation-review-round-3
+    boundary: implement
+    commit_or_artifact: "rejected candidate sha256:289580c58dca44ef348adf1c20345d7dc9f8101e993b963365568a9d1c66ebb1 at base 6dd0072fb3daf85a077c97fea2114f9dcf515147"
+    proof_refs: [docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md#third-frozen-implementation-review-blockers--2026-08-04]
+    rollback_ref: "No canonical runtime commit or deployment; preserve the worktree candidate while repairing after this code-free checkpoint."
+    disposition: "rejected by AppenderPrivacyReview, ReducerAuthorityReview, and CompatibilityProofReview; external four-model panel timed out without verdicts"
+    problem_ref: docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md
+    authorization_ref: owner_ratification_2026-08-03_take_draft_into_defined_mission
+    candidate_or_evidence_refs: ["sha256:289580c58dca44ef348adf1c20345d7dc9f8101e993b963365568a9d1c66ebb1", "/tmp/texture-tape-implementation-acceptance-review/manifest.tsv"]
+    landing:
+      source_commit: pending_problem_checkpoint
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: no_new_staging_observation
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "scripts/doccheck report-only complete before this checkpoint; terminal registry closure remains pending"
 
 view:
   path: /tmp/choir-texture-tape-supervision.html

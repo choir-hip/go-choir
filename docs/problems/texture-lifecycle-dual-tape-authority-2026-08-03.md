@@ -237,3 +237,43 @@ trajectory reduction, operational closure, semantic rebase, owner attention,
 settlement evidence, replay, updater admission, and UI/API reachability one
 coherent contract. H032 remains `discovered` and unrepaired; no reviewer finding
 is counted as repair.
+
+## Third frozen implementation review blockers — 2026-08-04
+
+The next repaired candidate was frozen against
+`6dd0072fb3daf85a077c97fea2114f9dcf515147` with complete tracked-and-untracked
+content digest
+`sha256:289580c58dca44ef348adf1c20345d7dc9f8101e993b963365568a9d1c66ebb1`.
+Three independent read-only reviewers rejected it. A separate four-model panel
+timed out before returning verdicts and is reviewer-health evidence only.
+
+The candidate remains non-executable for these observed reasons:
+
+1. Empty-tape boot reconstruction passes a nil canonical head to the store
+   rebuild, while the rebuild validator requires an explicit sequence-zero
+   head. A fresh computer therefore fails its unconditional startup replay.
+2. Projection import reserves the command before durably freezing the complete
+   import inputs. A crash in that interval leaves a reserved command with no
+   recoverable frozen plan, and retry cannot regenerate the time-bearing input
+   after write-disable state changes.
+3. The supervision snapshot still exposes a trajectory-local canonical head as
+   the next global tape expectation. An unrelated event for trajectory B makes
+   the next valid command for trajectory A stale.
+4. Material intent rebase validates affected targets only through status-backed
+   entities. Artifact-premise and belief targets required by the contract have
+   no accepted state-digest path and are rejected as unknown.
+5. Settlement evidence validates only artifact-reference syntax. A fabricated
+   digest can support settlement without resolving to retained or pinned
+   evidence on the canonical tape.
+6. The Super-only `product_api_request` tool broadly allows `/api/texture/*`
+   and injects the run owner's authenticated-user header. It can therefore call
+   the owner command endpoint and synthesize owner-authored decision or
+   settlement authority without owner presence.
+
+These findings remain the same authority-closure cluster: global tape position
+must be distinct from trajectory semantic base; every entropy-bearing command
+must freeze before entropy or become exactly recoverable; replay must define
+the empty state; rebase and settlement references must resolve against
+canonical retained state; and owner authority must be non-delegable through
+agent product tools. H032 remains `discovered` and unrepaired. No runtime repair
+may be counted until a new frozen candidate clears these exact sequences.
