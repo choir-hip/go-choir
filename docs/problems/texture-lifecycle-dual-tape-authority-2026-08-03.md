@@ -176,3 +176,64 @@ appender/projection direction is still supported; the first implementation
 candidate is rejected until the six blockers above have focused receipts and a
 new frozen digest. Heresy delta remains `discovered=[H032]`,
 `introduced=[]`, `repaired=[]`.
+
+
+## Second frozen implementation review blockers — 2026-08-04
+
+The repaired candidate was frozen against `d163a4aaa732e54ad56cbb7fc8a08d3aa8722268`
+with tracked binary-diff digest
+`sha256:a3b330278e0a4c63e4c652e4f8a9dd81f0a2a0d643e868dd6b01e8b61e3e6e78`.
+Three independent read-only reviewers rejected it. Their findings are reliable
+source evidence and precede any further repair:
+
+1. Global write disablement still permits a first legacy trajectory write, so
+   the compatibility-floor release is not actually quiescent.
+2. The frozen transaction schema omits `referenced_artifacts` and declares the
+   wrong digest recipe; the projection-import schema does not describe the DTOs
+   emitted by the importer.
+3. The formal rebuild copies the live fingerprint rather than folding tape
+   history, and the branching safety bound cannot reach the protected states
+   whose invariants it claims.
+4. Updater admission trusts manifest literals and a shallow health identity
+   instead of requiring the staged/restored reader to replay the signed private
+   tape and attest semantic equivalence.
+5. Ordinary boot reconstruction cannot hydrate private supervision
+   transactions, so a replacement realization with an empty or behind
+   projection cannot boot after the first supervision event.
+6. Projection import retries do not recover an already accepted command and
+   regenerate time-bearing evidence after an incomplete reservation, causing
+   conflicts instead of returning the original result.
+7. Store preparation inserts the event and binds its command reservation in
+   separate commits, leaving a crash/error state that can advance corpusd while
+   never finalizing locally.
+8. The reducer conflates a trajectory-local cursor with the global computer
+   head, so unrelated interleaved events make the next command stale and make
+   replay fail.
+9. The Super transition tool and owner command endpoint cannot reserve and pin
+   the private artifacts required by their own mutation vocabulary. Fresh
+   cancellation, disposition, decision, acceptance, settlement, and archive
+   commands are therefore unreachable or violate reservation-before-pinning.
+10. Runtime CoSuper dispatch always emits an initial ordinal-one attempt and
+    authorizes against a bounded eight-item owner view; retries and assignments
+    beyond the display bound cannot execute.
+11. Operational status and reconciliation disposition share one state field,
+    so an open assignment or attempt can be made settlement-ready without
+    terminating. A late result also leaves its attempt's older disposition
+    current.
+12. Material rebase does not validate its state digest or invalidate affected
+    target dispositions, allowing pre-revision reconciliation to settle a
+    post-revision trajectory.
+13. Assignment opening does not resolve its parent Super decision; settlement
+    evidence refs need not resolve to retained evidence; and owner-reserved
+    decisions do not create owner-attention obligations.
+14. Initial assignments are hidden from the owner obligation projection even
+    though they block settlement.
+15. Archive projection overwrites canonical document fields, while the ordinary
+    owner DELETE route cannot reach canonical archive authority.
+
+These are one authority-closure cluster, not isolated endpoint bugs. The next
+candidate must make reservation, private pinning, append, global sequencing,
+trajectory reduction, operational closure, semantic rebase, owner attention,
+settlement evidence, replay, updater admission, and UI/API reachability one
+coherent contract. H032 remains `discovered` and unrepaired; no reviewer finding
+is counted as repair.
