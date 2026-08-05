@@ -176,23 +176,23 @@ measures:
 
 now:
   status: in_progress
-  slice: "Canonical source commit f05b4421c96e22820c8891125fddc4e8e886a97a is on origin/main. CI run 30969279117 reached the intended lanes but failed because a test copied Handler after Handler gained a mutex; the repair constructs the authority-free test Handler explicitly instead."
-  question: "Will the test-only repair pass CI, deploy as the exact staging identity, and preserve the accepted one-tape authority, recovery, privacy, and owner-legibility properties on the disposable acceptance computer?"
+  slice: "Canonical source commit 0cf889b12944bf22394d5b0cd2a8eeeafac8dfda is on origin/main. Replacement CI run 30970387427 cleared vet but reproduced the same actorruntime race-shard SQLITE_BUSY while the boot sweep handled the migrated mailbox; the repair now stops the actor scheduler before the migration-only fixture inspects SQLite."
+  question: "Will the deterministic migration-fixture repair pass CI, deploy as the exact staging identity, and preserve the accepted one-tape authority, recovery, privacy, and owner-legibility properties on the disposable acceptance computer?"
   reconciliation:
-    observed_at: 2026-08-05T02:47:16Z
-    source_ref: f05b4421c96e22820c8891125fddc4e8e886a97a
-    deploy_identity: "Last observed staging identity remains the failed-acceptance checkpoint 248e4692595534df9843dff37a00a4146f3d570f; source f05b4421 is not yet deployed."
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@f05b4421, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@f05b4421]
-    worktree_inventory_ref: "Local main and origin/main at f05b4421 plus one goal-owned test repair and this receipt; unrelated worktrees remain untouched."
+    observed_at: 2026-08-05T02:57:51Z
+    source_ref: 0cf889b12944bf22394d5b0cd2a8eeeafac8dfda
+    deploy_identity: "Last observed staging identity remains the failed-acceptance checkpoint 248e4692595534df9843dff37a00a4146f3d570f; source 0cf889b1 is not yet deployed."
+    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@0cf889b1, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@0cf889b1]
+    worktree_inventory_ref: "Local main and origin/main at 0cf889b1 plus one goal-owned migration-fixture repair and this receipt; unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: texture-tape-supervision-ci-repair-v6
+    id: texture-tape-supervision-ci-repair-v7
     state: locally_verified
-    ref: "uncommitted test-only repair at base f05b4421c96e22820c8891125fddc4e8e886a97a"
+    ref: "uncommitted test-only repair at base 0cf889b12944bf22394d5b0cd2a8eeeafac8dfda"
     owner: Main
-    base: f05b4421c96e22820c8891125fddc4e8e886a97a
-    digest: "test repair excluding this Definition receipt: sha256:77f96720a91edbe1785cada193c2d532f9a84994b8560d9a31b78b0c4de7126b"
-    scope: "Avoid copying Handler's synchronization state in the fail-closed source extraction fixture; no production behavior change."
+    base: 0cf889b12944bf22394d5b0cd2a8eeeafac8dfda
+    digest: "test repair excluding this Definition receipt: sha256:da4a59c0ac6160fe4ded33bb9380a2749ba4366e5a90f1d34c63390b3cbeddd5"
+    scope: "Quiesce the actor scheduler before the boot-migration fixture inspects its SQLite log; no production behavior change."
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
     kind: architecture
@@ -202,9 +202,9 @@ now:
     owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may execute schema/caller/migration work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "source commit f05b4421c96e22820c8891125fddc4e8e886a97a on origin/main", "CI run 30969279117: implementation lanes passed; vet failed at texture_evidence_sources_test.go:398", "local go vet ./...: pass", "focused fail-closed source test: pass", "local actorruntime race reproduction count=10: pass", internal/agentcore/super_controller.go, internal/agentcore/supervision_execution.go, internal/computerevent/appender.go, internal/store/supervision_projection.go]
-  blocker_or_risk: "CI retry and deployment remain pending. Run 30969279117 failed the vet lane because a test copied Handler's mutex and the race non-runtime lane on one unreproduced SQLITE_BUSY in an existing actorruntime migration test; the latter passed locally under race for ten repetitions. No production-code blocker is known. Deployed fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, compatibility-floor rollback, and terminal registry closure remain unproved."
-  next_action: "Commit and push the test-only vet repair with this receipt, monitor replacement CI and deployment, verify exact staging identity, then run deployed acceptance and close H032/registries only if every required receipt is obtained."
+  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "source commit 0cf889b12944bf22394d5b0cd2a8eeeafac8dfda on origin/main", "CI run 30969279117: vet failure repaired", "CI run 30970387427 job 92193249199: repeated adapter_test.go:516 SQLITE_BUSY during concurrent boot-sweep handler transaction", "go test -race ./internal/actorruntime -run TestAdapterStartMigratesUniqueLegacyUnscopedMailbox -count=20: pass after scheduler quiescence", internal/agentcore/super_controller.go, internal/agentcore/supervision_execution.go, internal/computerevent/appender.go, internal/store/supervision_projection.go]
+  blocker_or_risk: "A second CI retry and deployment remain pending. The race-shard failure is now source-demonstrably confined to a migration-only fixture inspecting SQLite while Start's actor sweep runs; the fixture repair waits for the scheduler without changing production code. No production-code blocker is known. Deployed fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, compatibility-floor rollback, and terminal registry closure remain unproved."
+  next_action: "Commit and push the test-only race-fixture repair with this receipt, monitor replacement CI and deployment, verify exact staging identity, then run deployed acceptance and close H032/registries only if every required receipt is obtained."
 
 receipts:
   - id: texture-tape-definition-round-1
@@ -282,10 +282,10 @@ receipts:
     authorization_ref: owner_ratification_2026-08-03_take_draft_into_defined_mission
     candidate_or_evidence_refs: ["sha256:d00c069422e3cf214b421803ca49342de762a1e4cb170239f8dec8487d7f55e5", "/tmp/texture-tape-final-delivery-review/manifest.tsv", "/tmp/texture-tape-final-delivery-review/omp-gemini36.out"]
     landing:
-      source_commit: f05b4421c96e22820c8891125fddc4e8e886a97a
-      ci_ref: "GitHub Actions run 30969279117 failed: vet rejected a test-only Handler mutex copy; one race shard also observed an unreproduced SQLITE_BUSY in TestAdapterStartMigratesUniqueLegacyUnscopedMailbox"
+      source_commit: 0cf889b12944bf22394d5b0cd2a8eeeafac8dfda
+      ci_ref: "GitHub Actions run 30970387427: vet repaired; non-runtime race job 92193249199 again observed SQLITE_BUSY at adapter_test.go:516 during the fixture's concurrent boot-sweep inspection"
       deploy_ref: pending_successful_ci
-      environment_identity: "last observed deployed checkpoint 248e4692595534df9843dff37a00a4146f3d570f; f05b4421 not yet deployed"
+      environment_identity: "last observed deployed checkpoint 248e4692595534df9843dff37a00a4146f3d570f; 0cf889b1 not yet deployed"
       deployed_acceptance: pending
     registry_conformance_ref: "terminal closure remains pending successful CI, exact staging identity, deployed acceptance, and compatibility-floor rehearsal"
 

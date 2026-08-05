@@ -507,6 +507,10 @@ func TestAdapterStartMigratesUniqueLegacyUnscopedMailbox(t *testing.T) {
 	if err := adapter.Start(ctx); err != nil {
 		t.Fatalf("start with unique legacy mailbox: %v", err)
 	}
+	// Start also sweeps the migrated backlog. Stop the actor scheduler before
+	// inspecting SQLite so the assertion observes migration, not a concurrent
+	// handler transaction.
+	adapter.actorRT.Stop()
 	scopedID := scopedActorMailboxID(agent.OwnerID, agent.ComputerID, agent.AgentID)
 	if legacy, err := adapter.log.Unprocessed(ctx, agent.AgentID); err != nil || len(legacy) != 0 {
 		t.Fatalf("legacy backlog after startup: %+v, %v", legacy, err)
