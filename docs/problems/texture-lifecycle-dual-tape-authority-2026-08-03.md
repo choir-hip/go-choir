@@ -748,3 +748,44 @@ survive every reducer consumer, not only the wire manifest and producer.
 Heresy delta: `discovered` adds canonical/version collapse during import
 materialization and realization identity loss during trajectory reduction;
 `introduced=[]`; `repaired=[]`.
+
+## Fourth candidate leaves legacy evidence and run authority in realization limbo — 2026-08-05
+
+Two independent read-only reviews rejected frozen candidate
+`sha256:14ca0e8fadca1d6976420c0381829e347f63ed53e0201e54f7ccc76a2d8fc682`
+at base `ff9dd3d9b133b25bda09cb7210b009ef1144939d`. Version-qualified
+import materialization and explicit Texture realization identity repair the
+prior findings, but three remaining consumers still confuse pre-cutover or
+realization-scoped state with canonical target scope.
+
+The import builder deliberately selects generic legacy source graph records
+whose `computer_id` is empty. Rebind leaves those records unscoped, so their
+target materialization remains invisible to the target-computer source readers.
+The manifest needs explicit reversible provenance for source records that were
+unscoped before import, must construct target-scoped identities and bodies, and
+must reverse them exactly when validating the source projection digest.
+
+Initial supervised Texture runs still derive `AgentMutation.ComputerID` from
+the run's realization `SandboxID`. Stable activation validation therefore
+cannot find the mutation authority when stable and realization identities
+differ. The mutation writer must use the backend-stamped stable computer
+identity in run metadata, retaining realization only for scheduling.
+
+Persistent Super recovery first queries canonical lifecycle state, then falls
+back to a generic active run without confirming that its `SandboxID` matches
+the current realization. After realization replacement it can redispatch an
+old-realization run and mailbox on the new runtime. Fallback reuse must require
+the current realization; otherwise recovery must mint a replacement activation.
+
+Mutation class remains `red`. Protected surfaces are migration provenance,
+private evidence visibility, Texture mutation authority, actor scheduling, and
+persistent Super restart recovery. Admissible evidence adds unscoped legacy
+source import readback, stable-scoped initial mutation authority, and
+old-realization active-run refusal before a fifth frozen review. Rollback
+remains disabled activation run `30977754149`; no rejected candidate may be
+deployed. Conjecture delta: compatibility inputs need explicit provenance at
+scope-changing boundaries, and stable canonical authority cannot be inferred
+from realization-scoped scheduling rows. Heresy delta: `discovered` adds
+unscoped imported evidence invisibility, realization-scoped canonical mutation
+authority, and cross-realization active-run reuse; `introduced=[]`;
+`repaired=[]`.
