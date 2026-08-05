@@ -176,22 +176,22 @@ measures:
 
 now:
   status: in_progress
-  slice: "Canonical source 97f3561d now has an accepted exact host deployment receipt from CI run 30973228388, but `active_computers.status=empty`: two constructed computers were correctly preserved and no mutable guest proved the compatibility floor. A red repair candidate binds first startup replay to the immutable guest-image manifest, adds tri-state write-mode control, and compensates every failed explicit transition back to disabled. Two final reviewers found that the first fallback could misattest malformed existing updater state; the refrozen implementation now distinguishes an absent `current` path from every existing/dangling/malformed path and captures compensation inventory selection errors. Candidate sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d."
-  question: "Will the repaired exact release boot one mutable acceptance computer write-disabled, then survive the required enabled/disabled/enabled transition sequence with guest health and failure compensation proving each state?"
+  slice: "The write-mode repair landed as d69e1a6f and preserve-mode deployment is exact and disabled. Forced enable then proved the gate fails closed: the public lifecycle API reported a legacy computer active and signed its stop/start epoch transition, but vmctl had no active mutable ownership. Run 30976735765 rejected enable before activation, forced disabled mode, and published an incomplete failure receipt. This contradictory lifecycle/vmctl authority is now the immediate substrate blocker; a constructed ComputerVersion cannot substitute for mutable compatibility proof."
+  question: "What existing no-SSH product/control path can create or reactivate one disposable mutable vmctl ownership whose exact d69e1a6f guest health can support enabled/disabled/enabled receipts?"
   reconciliation:
-    observed_at: 2026-08-05T04:20:43Z
-    source_ref: 97f3561d521bb925a4a29a2bface73c1011dd35c
-    deploy_identity: "Accepted host deployment receipt from run 30973228388 at 2026-08-05T04:09:18Z: target/check-out/host services 97f3561d; sandbox package installed 97f3561d; active_computers empty, so no mutable guest compatibility proof."
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@97f3561d, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@97f3561d]
-    worktree_inventory_ref: "Local main and origin/main at 97f3561d; the write-mode/startup repair candidate plus this problem/Definition update are goal-owned. Unrelated worktrees remain untouched."
+    observed_at: 2026-08-05T05:12:51Z
+    source_ref: d69e1a6f7e89e71bb7457f5a641e96c1e9c34e80
+    deploy_identity: "Accepted preserve-mode deployment from run 30975427662: exact host and sandbox d69e1a6f, writes disabled, guest proof false, mutable set empty. Rejected enable run 30976735765: no mutable active ownership; compensation succeeded and retained /var/lib/go-choir/deploy-failures/30976735765-1.json."
+    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@d69e1a6f, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@d69e1a6f]
+    worktree_inventory_ref: "Local main and origin/main at d69e1a6f before this problem-first checkpoint; only the goal-owned Definition and problem record are dirty. Unrelated worktrees remain untouched."
     status: reconciled
   candidate:
     id: texture-tape-supervision-write-mode
-    state: accepted_for_landing
-    ref: "uncommitted implementation candidate sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d"
+    state: landed_fail_closed
+    ref: d69e1a6f7e89e71bb7457f5a641e96c1e9c34e80
     owner: Main
     base: 97f3561d521bb925a4a29a2bface73c1011dd35c
-    digest: "sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d over `.github`, `internal`, and `nix` implementation diff"
+    digest: "sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d over reviewed `.github`, `internal`, and `nix` implementation diff"
     scope: "Immutable guest-manifest startup floor, tri-state vmctl boot override, exact guest health attestation, explicit-transition proof gate, and fail-closed deployment compensation. Canonical supervision events remain disabled."
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
@@ -202,9 +202,9 @@ now:
     owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may execute schema/caller/migration work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "implementation diff sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d", "go test -short ./... -count=1: 76 packages pass", "focused sandbox/vmmanager/vmctl tests and vet: pass", "deploy/CI/node-b pointer contract scripts and extracted Bash syntax: pass", "CI run 30973228388 and deploy job 92203495640: exact host receipt 97f3561d, active_computers empty", "/tmp/texture-write-mode-final-review/{codex,omp-gpt56-sol}.out: rejected malformed-existing-current fallback; repaired with Lstat distinction and regression tests", "/tmp/texture-write-mode-blocker-recheck/{codex,omp-gpt56-sol}.out: ACCEPT exact sha256:1d577002 with high confidence", internal/sandbox/run.go, internal/vmmanager/manager.go, nix/node-b.nix, nix/sandbox-vm.nix, .github/workflows/ci.yml]
-  blocker_or_risk: "Staging host identity is accepted at 97f3561d, but no mutable guest has proved compatibility replay or write mode. The exact implementation candidate is independently accepted for landing; push, green CI, mutable guest floor, and same-release disabled/enabled/disabled/enabled receipts remain required. Canonical transaction acceptance, fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, rollback, and terminal registry closure remain pending."
-  next_action: "Commit and push sha256:1d577002, require green CI, deploy in preserve mode, boot one mutable acceptance computer, and execute enabled/disabled/enabled transitions. Any failed explicit transition must leave a compensation receipt and no live unverified writer."
+  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "implementation diff sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d", "go test -short ./... -count=1: 76 packages pass", "CI run 30975427662: success", "deploy job 92210016957: exact preserve-mode host receipt d69e1a6f, writes disabled, active_computers empty", "public lifecycle receipts 019fd049-e6fb-7c4e-9ef5-73885840d1b5, 019fd04a-0409-7783-a9a8-21430b2f3ebc, 019fd04a-6258-7bb6-85e6-8bcaa325d142", "enable run 30976735765 and deploy job 92214123396: rejected no mutable guest, compensation succeeded", "/var/lib/go-choir/deploy-failures/30976735765-1.json"]
+  blocker_or_risk: "No active mutable vmctl ownership exists. The public lifecycle state for a legacy computer can say active and advance an epoch without producing that ownership, so it is not admissible guest proof. Enabled/disabled/enabled receipts, canonical transaction acceptance, fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, rollback, and registry closure remain pending."
+  next_action: "Inventory the existing no-SSH provisioning/reactivation authority for a disposable mutable computer. Prefer wiring an existing path over adding one. Do not weaken the explicit transition gate or treat a constructed ComputerVersion/public lifecycle receipt as mutable guest proof."
 
 receipts:
   - id: texture-tape-definition-round-1
@@ -330,12 +330,29 @@ receipts:
     authorization_ref: owner_ratification_2026-08-03_take_draft_into_defined_mission
     candidate_or_evidence_refs: ["sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d", "/tmp/texture-write-mode-final-review/manifest.tsv"]
     landing:
-      source_commit: pending
-      ci_ref: pending
-      deploy_ref: pending
-      environment_identity: "accepted write-disabled host release 97f3561d; no mutable proof"
-      deployed_acceptance: pending
+      source_commit: d69e1a6f7e89e71bb7457f5a641e96c1e9c34e80
+      ci_ref: "30975427662 success"
+      deploy_ref: "30975427662 / job 92210016957 preserve-mode activation receipt published"
+      environment_identity: "exact host and installed sandbox d69e1a6f; supervision writes disabled; mutable active set empty"
+      deployed_acceptance: fail_closed_pending_mutable_guest
     registry_conformance_ref: "terminal closure remains pending"
+  - id: texture-tape-write-mode-enable-attempt-1
+    boundary: deploy
+    commit_or_artifact: "source d69e1a6f7e89e71bb7457f5a641e96c1e9c34e80; workflow run 30976735765; incomplete receipt /var/lib/go-choir/deploy-failures/30976735765-1.json"
+    proof_refs: ["public lifecycle start/stop/start receipts for computer-03335285269bdba4f94377e56879f9e6", "deploy job 92214123396: no mutable active ownership", "explicit enable rejected before activation", "compensation forced and verified disabled mode"]
+    rollback_ref: "Automated failure compensation restored disabled runtime mode and restarted vmctl; no mutable writer remained to refresh or stop."
+    disposition: "Rejected as enable acceptance. Accepted as fail-closed compensation proof and evidence that public lifecycle active state is not vmctl mutable ownership authority."
+    problem_ref: docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md
+    authorization_ref: owner_ratification_2026-08-03_take_draft_into_defined_mission
+    candidate_or_evidence_refs: ["GitHub Actions run 30976735765", "deploy job 92214123396", "/var/lib/go-choir/deploy-failures/30976735765-1.json"]
+    landing:
+      source_commit: d69e1a6f7e89e71bb7457f5a641e96c1e9c34e80
+      ci_ref: "selected CI gates passed; deploy failed"
+      deploy_ref: rejected_before_activation
+      environment_identity: "host remained exact d69e1a6f; supervision mode compensated to disabled; mutable set empty"
+      deployed_acceptance: rejected
+    registry_conformance_ref: "terminal closure remains pending"
+
 
 
 

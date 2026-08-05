@@ -494,3 +494,37 @@ input (`preserve`, `disabled`, `enabled`) can control a boot-time guest override
 without changing the release artifact. Heresy delta: `discovered` adds the
 mixed-identity refresh failure and absent tracked same-release switch control;
 `introduced=[]`; `repaired=[]`.
+
+## Explicit enable rejected without mutable authority — 2026-08-05
+
+Source `d69e1a6f7e89e71bb7457f5a641e96c1e9c34e80` landed through successful
+CI run `30975427662` and deploy job `92210016957`. Its preserve-mode activation
+receipt bound the host, installed sandbox package, and all selected host
+services to that exact commit while recording
+`supervision_writes_disabled=true`, `guest_health_verified=false`, and
+`active_computers.status=empty`.
+
+The existing public lifecycle route then reported legacy
+`computer-03335285269bdba4f94377e56879f9e6` active, accepted a signed stop/start
+sequence, and advanced its realization epoch from 129 to 130. That did not make
+the computer part of vmctl's active mutable ownership authority: forced
+same-release enable run `30976735765` preserved the one active constructed
+ComputerVersion, found no mutable active computer, and rejected activation with
+`Explicit supervision write mode lacks a refreshed mutable guest health proof`.
+Its EXIT compensation forced disabled mode, restarted vmctl, found no mutable
+writer requiring refresh or stop, and retained
+`/var/lib/go-choir/deploy-failures/30976735765-1.json`.
+
+This is now a distinct authority mismatch, not a write-gate failure. A signed
+public lifecycle receipt can describe a legacy computer as active while the
+vmctl ownership registry has no corresponding active mutable realization.
+Neither that receipt nor a constructed ComputerVersion may be relabeled as the
+mutable guest proof. The next probe must use an existing no-SSH product/control
+path to create or reactivate one disposable mutable vmctl ownership, or add that
+missing operator path only after separate source convergence and review. The
+write gate remains fail-closed and no supervision event was emitted.
+
+Mutation class remains `red`; protected surfaces are lifecycle authority,
+vmctl ownership, deployment mode, and guest boot identity. Rollback succeeded
+to disabled mode. Heresy delta: `discovered` adds contradictory public
+lifecycle versus vmctl-active authority; `introduced=[]`; `repaired=[]`.
