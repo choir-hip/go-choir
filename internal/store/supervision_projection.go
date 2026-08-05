@@ -134,37 +134,32 @@ type SupervisionAssignmentLineage struct {
 	Attempts        []SupervisionAttemptLineage
 }
 
+// SupervisionDeliveryEvent is one unbounded, canonically ordered projection
+// record whose private artifact may need delivery to an actor. It carries the
+// validated mutation body and binding identity, never a second semantic copy
+// of the private payload.
+type SupervisionDeliveryEvent struct {
+	ID               string
+	Kind             string
+	TransactionID    string
+	CommandID        string
+	Sequence         uint64
+	TrajectoryID     string
+	ProjectionCursor uint64
+	Body             json.RawMessage
+	CreatedAt        time.Time
+}
+
 // GetSupervisionAssignmentLineage reads every canonical supervision mutation
 // for an assignment; it never consults the bounded owner snapshot.
 func (s *Store) GetSupervisionAssignmentLineage(ctx context.Context, ownerID, computerID, trajectoryID, assignmentID string) (SupervisionAssignmentLineage, error) {
 	if s == nil || s.ogStore == nil {
 		return SupervisionAssignmentLineage{}, fmt.Errorf("supervision lineage: store unavailable")
 	}
-	var events []supervisionProjectionEvent
-	after := ""
-	for {
-		page, err := s.ogStore.ListObjectsPage(ctx, string(ogKindSupervisionEvent), after, 1000)
-		if err != nil {
-			return SupervisionAssignmentLineage{}, err
-		}
-		for _, obj := range page {
-			if obj.OwnerID != ownerID || obj.ComputerID != computerID {
-				continue
-			}
-			event, err := decodeLifecycleObject[supervisionProjectionEvent](obj)
-			if err != nil {
-				return SupervisionAssignmentLineage{}, err
-			}
-			if event.TrajectoryID == trajectoryID {
-				events = append(events, event)
-			}
-		}
-		if len(page) < 1000 {
-			break
-		}
-		after = page[len(page)-1].CanonicalID
+	events, err := s.listSupervisionProjectionEvents(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return SupervisionAssignmentLineage{}, err
 	}
-	sort.Slice(events, func(i, j int) bool { return events[i].ProjectionCursor < events[j].ProjectionCursor })
 	lineage := SupervisionAssignmentLineage{AssignmentID: assignmentID}
 	attempts := make(map[string]*SupervisionAttemptLineage)
 	for _, event := range events {
@@ -206,6 +201,85 @@ func (s *Store) GetSupervisionAssignmentLineage(ctx context.Context, ownerID, co
 		return SupervisionAssignmentLineage{}, ErrNotFound
 	}
 	return lineage, nil
+}
+
+// ListSupervisionDeliveryEvents returns every canonical delivery and its
+// acknowledgement in append order. The bounded owner projection is deliberately
+// not used for delivery recovery.
+func (s *Store) ListSupervisionDeliveryEvents(ctx context.Context, ownerID, computerID, trajectoryID string) ([]SupervisionDeliveryEvent, error) {
+	events, err := s.listSupervisionProjectionEvents(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return nil, err
+	}
+	deliveries := make([]SupervisionDeliveryEvent, 0, len(events))
+	for _, event := range events {
+		switch event.Mutation.Kind {
+		case "actor_message_recorded", "actor_message_acknowledged", "researcher_packet_recorded", "attempt_result":
+		default:
+			continue
+		}
+		body, err := supervisionBodyMap(event.Mutation.Body)
+		if err != nil {
+			return nil, fmt.Errorf("supervision delivery: decode %s body: %w", event.Mutation.Kind, err)
+		}
+		id, err := supervisionMutationID(event.Mutation.Kind, body)
+		if err != nil {
+			return nil, err
+		}
+		deliveries = append(deliveries, SupervisionDeliveryEvent{
+			ID: id, Kind: event.Mutation.Kind, TransactionID: event.TransactionID,
+			Sequence:  event.Sequence,
+			CommandID: event.CommandID, TrajectoryID: event.TrajectoryID,
+			ProjectionCursor: event.ProjectionCursor, Body: append(json.RawMessage(nil), event.Mutation.Body...),
+			CreatedAt: event.CreatedAt,
+		})
+	}
+	return deliveries, nil
+}
+
+func (s *Store) listSupervisionProjectionEvents(ctx context.Context, ownerID, computerID, trajectoryID string) ([]supervisionProjectionEvent, error) {
+	if s == nil || s.ogStore == nil {
+		return nil, fmt.Errorf("supervision events: store unavailable")
+	}
+	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	trajectoryID = strings.TrimSpace(trajectoryID)
+	if trajectoryID == "" {
+		return nil, fmt.Errorf("supervision events: trajectory_id is required")
+	}
+	events := make([]supervisionProjectionEvent, 0)
+	after := ""
+	for {
+		page, err := s.ogStore.ListObjectsPage(ctx, string(ogKindSupervisionEvent), after, 1000)
+		if err != nil {
+			return nil, err
+		}
+		for _, obj := range page {
+			if obj.OwnerID != ownerID || obj.ComputerID != computerID {
+				continue
+			}
+			event, err := decodeLifecycleObject[supervisionProjectionEvent](obj)
+			if err != nil {
+				return nil, err
+			}
+			if event.TrajectoryID == trajectoryID {
+				events = append(events, event)
+			}
+		}
+		if len(page) < 1000 {
+			break
+		}
+		after = page[len(page)-1].CanonicalID
+	}
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].ProjectionCursor != events[j].ProjectionCursor {
+			return events[i].ProjectionCursor < events[j].ProjectionCursor
+		}
+		return events[i].MutationIndex < events[j].MutationIndex
+	})
+	return events, nil
 }
 
 func (s *Store) applySupervisionProjectionTx(ctx context.Context, tx *sql.Tx, sequence uint64, previousHead, eventDigest string, occurredAt time.Time, transaction computerevent.SupervisionTransaction) error {
@@ -1313,7 +1387,7 @@ func supervisionMutationID(kind string, body map[string]any) (string, error) {
 	keys := map[string][]string{
 		"projection_imported": {"import_digest"}, "trajectory_started": {"intent_revision_id"},
 		"intent_revised": {"intent_revision_id"}, "texture_revision": {"revision_id"},
-		"actor_message_recorded": {"message_id"}, "researcher_packet_recorded": {"packet_id"},
+		"actor_message_recorded": {"message_id"}, "actor_message_acknowledged": {"message_id"}, "researcher_packet_recorded": {"packet_id"},
 		"assignment_opened": {"assignment_id"}, "attempt_started": {"attempt_id"},
 		"attempt_result": {"result_id"}, "super_belief_recorded": {"belief_id"},
 		"super_finding_recorded": {"finding_id"}, "dissent_recorded": {"dissent_id"},

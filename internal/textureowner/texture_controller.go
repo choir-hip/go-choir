@@ -97,15 +97,52 @@ func (rt *Handler) ValidateActivationAuthority(ctx context.Context, ownerID, com
 	if !textureRevisionMatchesDocument(revision, doc, ownerID) {
 		return fmt.Errorf("validate Texture activation: revision authority mismatch")
 	}
-	run, err := rt.Store.GetLifecycleRun(ctx, ownerID, computerID, runID)
+	run, err := rt.Store.GetRunByOwner(ctx, ownerID, runID)
 	if err != nil {
 		return fmt.Errorf("validate Texture activation run: %w", err)
 	}
-	if strings.TrimSpace(run.AgentID) != agentID ||
+	if strings.TrimSpace(run.OwnerID) != ownerID ||
+		strings.TrimSpace(run.SandboxID) != computerID ||
+		strings.TrimSpace(run.AgentID) != agentID ||
 		!isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) ||
 		strings.TrimSpace(metadataStringValue(run.Metadata, "doc_id")) != docID ||
 		strings.TrimSpace(metadataStringValue(run.Metadata, "current_revision_id")) != strings.TrimSpace(doc.CurrentRevisionID) {
 		return fmt.Errorf("validate Texture activation: run authority mismatch")
+	}
+	if metadataStringValue(run.Metadata, "request_source") == "update_coagent" {
+		trajectoryID := strings.TrimSpace(doc.TrajectoryID)
+		if trajectoryID == "" ||
+			metadataStringValue(run.Metadata, "trajectory_id") != trajectoryID ||
+			metadataStringValue(run.Metadata, "lifecycle_work_item_id") == "" {
+			return fmt.Errorf("validate Texture activation: supervision scope mismatch")
+		}
+		deliveryIDs := metadataStringSlice(run.Metadata["supervision_delivery_ids"])
+		if len(deliveryIDs) == 0 {
+			return fmt.Errorf("validate Texture activation: supervision delivery binding missing")
+		}
+		var pending []types.CoagentSourcePacket
+		var err error
+		switch metadataStringValue(run.Metadata, "supervision_delivery_authority") {
+		case "canonical":
+			pending, err = rt.Core.ListPendingCanonicalSupervisionUpdates(ctx, ownerID, computerID, agentID, trajectoryID, 0)
+		case "compatibility":
+			pending, err = rt.Core.ListPendingSupervisionCompatibilityUpdates(ctx, ownerID, computerID, agentID, trajectoryID, 0)
+		default:
+			return fmt.Errorf("validate Texture activation: supervision delivery authority missing")
+		}
+		if err != nil {
+			return fmt.Errorf("validate Texture activation delivery: %w", err)
+		}
+		pendingIDs := make(map[string]bool, len(pending))
+		for _, update := range pending {
+			pendingIDs[strings.TrimSpace(update.UpdateID)] = true
+		}
+		for _, deliveryID := range deliveryIDs {
+			if !pendingIDs[strings.TrimSpace(deliveryID)] {
+				return fmt.Errorf("validate Texture activation: supervision delivery %q is no longer pending", deliveryID)
+			}
+		}
+		return nil
 	}
 	mutation, err := rt.Store.GetAgentMutationByRun(ctx, ownerID, computerID, runID)
 	if err != nil {
@@ -160,12 +197,24 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 			return nil, err
 		}
 	}
-	updates, err := rt.Store.ListPendingLifecycleUpdates(ctx, ownerID, doc.ComputerID, textureAgentID, 100)
+	canonical, err := rt.Core.ListPendingCanonicalSupervisionUpdates(ctx, ownerID, doc.ComputerID, textureAgentID, doc.TrajectoryID, 0)
 	if err != nil {
-		return nil, fmt.Errorf("list pending lifecycle Texture updates: %w", err)
+		return nil, fmt.Errorf("list canonical Texture updates: %w", err)
+	}
+	updates := canonical
+	if len(updates) == 0 {
+		// Existing pre-cutover lifecycle mailboxes remain a read-only
+		// compatibility floor only after canonical authority proves emptiness.
+		updates, err = rt.Core.ListPendingSupervisionCompatibilityUpdates(ctx, ownerID, doc.ComputerID, textureAgentID, doc.TrajectoryID, 0)
+		if err != nil {
+			return nil, fmt.Errorf("list compatibility Texture updates: %w", err)
+		}
 	}
 	var scheduledSeq int64
 	for _, update := range updates {
+		if update.ReducerSeq > scheduledSeq {
+			scheduledSeq = update.ReducerSeq
+		}
 		if update.MessageSeq > scheduledSeq {
 			scheduledSeq = update.MessageSeq
 		}
@@ -191,8 +240,22 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 			return nil, fmt.Errorf("stale unbound pending Texture mutation: %w", staleErr)
 		}
 	}
+	deliveryIDs := make([]string, 0, len(updates))
+	for _, update := range updates {
+		if id := strings.TrimSpace(update.UpdateID); id != "" {
+			deliveryIDs = append(deliveryIDs, id)
+		}
+	}
+	deliveryAuthority := "compatibility"
+	if len(canonical) > 0 {
+		deliveryAuthority = "canonical"
+	}
 	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
 		Intent: "integrate_execution_findings",
+		Provenance: map[string]any{
+			"supervision_delivery_authority": deliveryAuthority,
+			"supervision_delivery_ids":       deliveryIDs,
+		},
 	}, scheduledSeq)
 	if err != nil {
 		return nil, fmt.Errorf("start reconciled Texture revision: %w", err)

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -228,7 +229,7 @@ func TestSurvivorContract_SuperExecutesOnlyExecutionRequestPackets(t *testing.T)
 		t.Fatalf("list super backlog: %v", err)
 	}
 	for _, pkt := range backlog {
-		if persistentSuperExecutableUpdate(pkt) {
+		if persistentSuperRunnableUpdate(pkt) {
 			t.Fatalf("persistentSuperExecutableUpdate admitted non-execution packet %#v", pkt)
 		}
 	}
@@ -373,7 +374,9 @@ func TestSurvivorContract_SuperSettlesNonExecutionRequestPackets(t *testing.T) {
 }
 
 func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *testing.T) {
-	rt, s := testRuntime(t)
+	rt, s := testRuntimeWithProviderAndRegistry(t, provider.NewStubProvider(2*time.Second), nil)
+	installTestSupervisionAppender(t, rt, s)
+	d9InstallTools(t, rt)
 	ctx := context.Background()
 	ownerID := "user-survivor-settle-mixed"
 	superAgent, err := rt.ensurePersistentSuperAgent(ctx, ownerID)
@@ -449,6 +452,7 @@ func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *test
 	if run == nil {
 		t.Fatal("expected execution_request to start a persistent Super run")
 	}
+	*run = waitForRunUpdateIDs(t, rt, run.RunID, ownerID, []string{exec.UpdateID}, 3*time.Second)
 	ids := metadataStringSlice(run.Metadata["worker_update_ids"])
 	if len(ids) != 1 || ids[0] != exec.UpdateID {
 		t.Fatalf("worker_update_ids = %+v, want only executable update %s", ids, exec.UpdateID)
@@ -471,7 +475,9 @@ func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *test
 }
 
 func TestSurvivorContract_SuperExecutesBeforeSettledNonExecutionBacklog(t *testing.T) {
-	rt, s := testRuntime(t)
+	rt, s := testRuntimeWithProviderAndRegistry(t, provider.NewStubProvider(2*time.Second), nil)
+	installTestSupervisionAppender(t, rt, s)
+	d9InstallTools(t, rt)
 	ctx := context.Background()
 	ownerID := "user-survivor-settle-reversed"
 	superAgent, err := rt.ensurePersistentSuperAgent(ctx, ownerID)
@@ -547,6 +553,7 @@ func TestSurvivorContract_SuperExecutesBeforeSettledNonExecutionBacklog(t *testi
 	if run == nil {
 		t.Fatal("expected execution_request to start a persistent Super run")
 	}
+	*run = waitForRunUpdateIDs(t, rt, run.RunID, ownerID, []string{exec.UpdateID}, 3*time.Second)
 	ids := metadataStringSlice(run.Metadata["worker_update_ids"])
 	if len(ids) != 1 || ids[0] != exec.UpdateID {
 		t.Fatalf("worker_update_ids = %+v, want only executable update %s", ids, exec.UpdateID)

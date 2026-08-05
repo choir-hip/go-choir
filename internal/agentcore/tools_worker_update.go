@@ -196,7 +196,27 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 				CreatedAt:       time.Now().UTC(),
 				WorkDisposition: types.WorkItemStatus(workDisposition),
 			}
-			targetAgentID, targetChannelID, err := resolveFindingsTarget(ctx, rt, strings.TrimSpace(in.AgentID))
+			runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord
+			if agentprofile.Canonical(toolregistry.ExecutionContextFrom(ctx).Profile) == agentprofile.Researcher &&
+				strings.TrimSpace(in.AgentID) == "" && runRec != nil {
+				commandID := strings.TrimSpace(in.ProducerUpdateID)
+				if _, parseErr := uuid.Parse(commandID); parseErr == nil {
+					recovered, found, recoverErr := rt.recoverSupervisedUpdate(ctx, runRec, packet, commandID, "", "")
+					if recoverErr != nil {
+						return "", recoverErr
+					}
+					if found {
+						if err := rt.dispatchSupervisionUpdate(ctx, runRec, recovered.TargetAgentID, recovered.UpdateID); err != nil {
+							return "", err
+						}
+						return toolregistry.ResultJSON(map[string]any{
+							"update_id": recovered.UpdateID, "agent_id": recovered.TargetAgentID, "channel_id": recovered.ChannelID,
+							"trajectory_id": trajectoryIDForRun(runRec), "status": "recorded",
+						})
+					}
+				}
+			}
+			targetAgentID, targetChannelID, err := resolveFindingsTarget(ctx, rt, strings.TrimSpace(in.AgentID), packet.Kind)
 			if err != nil {
 				return "", err
 			}
@@ -219,7 +239,6 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 				return "", fmt.Errorf("update_coagent could not resolve channel_id")
 			}
 
-			runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord
 			trajectoryID := ""
 			if runRec != nil && runRec.Metadata != nil {
 				trajectoryID = strings.TrimSpace(metadataStringValue(runRec.Metadata, runMetadataTrajectoryID))
@@ -238,9 +257,6 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 				}
 			}
 
-			if lifecycleTrajectory {
-				return "", fmt.Errorf("%w: update_coagent must append a frozen packet, result, message, or disposition transaction", ErrSupervisionAuthorityRequired)
-			}
 			if runRec != nil {
 				if _, supervised, err := rt.supervisionSnapshotForRun(ctx, runRec); err != nil {
 					return "", err
@@ -258,6 +274,9 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 						"trajectory_id": trajectoryID, "status": "recorded",
 					})
 				}
+			}
+			if lifecycleTrajectory {
+				return "", fmt.Errorf("%w: update_coagent must append a frozen packet, result, message, or disposition transaction", ErrSupervisionAuthorityRequired)
 			}
 			update.TargetAgentID = targetAgentID
 			update.ChannelID = channelID

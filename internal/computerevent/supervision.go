@@ -135,6 +135,11 @@ type actorMessageBody struct {
 	PayloadArtifactRef string  `json:"payload_artifact_ref"`
 	Material           bool    `json:"material"`
 }
+type actorMessageAcknowledgedBody struct {
+	MessageID     string `json:"message_id"`
+	TargetActorID string `json:"target_actor_id"`
+	RunID         string `json:"run_id"`
+}
 type researcherPacketBody struct {
 	PacketID               string   `json:"packet_id"`
 	ResearcherID           string   `json:"researcher_id"`
@@ -275,7 +280,7 @@ type artifactArchivedBody struct {
 var supervisionBodyTypes = map[string]reflect.Type{
 	"projection_imported": reflect.TypeFor[projectionImportedBody](), "trajectory_started": reflect.TypeFor[trajectoryStartedBody](),
 	"intent_revised": reflect.TypeFor[intentRevisedBody](), "texture_revision": reflect.TypeFor[textureRevisionBody](),
-	"actor_message_recorded": reflect.TypeFor[actorMessageBody](), "researcher_packet_recorded": reflect.TypeFor[researcherPacketBody](),
+	"actor_message_recorded": reflect.TypeFor[actorMessageBody](), "actor_message_acknowledged": reflect.TypeFor[actorMessageAcknowledgedBody](), "researcher_packet_recorded": reflect.TypeFor[researcherPacketBody](),
 	"assignment_opened": reflect.TypeFor[assignmentOpenedBody](), "attempt_started": reflect.TypeFor[attemptStartedBody](),
 	"attempt_result": reflect.TypeFor[attemptResultBody](), "super_belief_recorded": reflect.TypeFor[superBeliefBody](),
 	"super_finding_recorded": reflect.TypeFor[superFindingBody](), "dissent_recorded": reflect.TypeFor[dissentBody](),
@@ -295,6 +300,7 @@ var supervisionClassRules = map[string]struct {
 	"revise_intent":         {[]string{"texture", "owner"}, []string{"intent_revised", "disposition_recorded"}, false, map[string]int{"intent_revised": 1}},
 	"revise_artifact":       {[]string{"texture", "owner"}, []string{"texture_revision"}, true, nil},
 	"record_message":        {[]string{"texture", "super"}, []string{"actor_message_recorded"}, true, nil},
+	"acknowledge_message":   {[]string{"texture", "super", "researcher"}, []string{"actor_message_acknowledged"}, false, nil},
 	"record_research":       {[]string{"researcher"}, []string{"researcher_packet_recorded"}, true, nil},
 	"open_assignment":       {[]string{"super"}, []string{"assignment_opened"}, false, nil},
 	"start_attempt":         {[]string{"super", "runtime"}, []string{"attempt_started"}, true, nil},

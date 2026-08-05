@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,10 +28,17 @@ import (
 type Runtime = agentcore.Runtime
 type conductorDecision = ConductorDecision
 
+type textureTestPrivateArtifact struct {
+	envelope []byte
+	pin      computerevent.PinResult
+}
+
 type textureTestEventAuthority struct {
-	store  *store.Store
-	signer computerevent.SigningKey
-	cipher *computerevent.PrivateArtifactCipher
+	store     *store.Store
+	signer    computerevent.SigningKey
+	cipher    *computerevent.PrivateArtifactCipher
+	privateMu *sync.Mutex
+	private   map[string]textureTestPrivateArtifact
 }
 
 func (a textureTestEventAuthority) Head(ctx context.Context, computerID string) (*computerevent.Head, error) {
@@ -71,7 +79,27 @@ func (a textureTestEventAuthority) PinPrivatePayload(ctx context.Context, cipher
 		"computer_id": computerID, "artifact_digest": digest, "media_type": metadata.MediaType,
 		"privacy_class": "private", "pin_intent_commitment": pinIntentCommitment,
 	}, []computerevent.SigningKey{a.signer}, time.Now().UTC())
-	return computerevent.PinResult{ArtifactDigest: digest, Receipt: receipt}, err
+	pin := computerevent.PinResult{ArtifactDigest: digest, Receipt: receipt}
+	if err == nil {
+		a.privateMu.Lock()
+		a.private[digest] = textureTestPrivateArtifact{envelope: append([]byte(nil), envelope...), pin: pin}
+		a.privateMu.Unlock()
+	}
+	return pin, err
+}
+
+func (a textureTestEventAuthority) Events(context.Context, string, uint64) ([]computerevent.DurableEvent, error) {
+	return nil, nil
+}
+
+func (a textureTestEventAuthority) PrivateArtifact(_ context.Context, _ string, digest string) ([]byte, computerevent.PinResult, error) {
+	a.privateMu.Lock()
+	defer a.privateMu.Unlock()
+	artifact, ok := a.private[digest]
+	if !ok {
+		return nil, computerevent.PinResult{}, store.ErrNotFound
+	}
+	return append([]byte(nil), artifact.envelope...), artifact.pin, nil
 }
 
 type textureTestKeyResolver struct{ key ed25519.PublicKey }
@@ -109,7 +137,10 @@ func newTextureTestEventAppender(t *testing.T, s *store.Store, dir string) (*com
 	if err != nil {
 		t.Fatal(err)
 	}
-	authority := textureTestEventAuthority{store: s, signer: signer, cipher: cipher}
+	authority := textureTestEventAuthority{
+		store: s, signer: signer, cipher: cipher,
+		privateMu: &sync.Mutex{}, private: make(map[string]textureTestPrivateArtifact),
+	}
 	appender, err := computerevent.NewComputerEventAppender("sandbox-test", authority, s, authority, computerevent.EventHeadReceiptVerifier{Keys: textureTestKeyResolver{key: publicKey}})
 	if err != nil {
 		t.Fatal(err)

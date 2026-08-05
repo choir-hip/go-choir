@@ -196,11 +196,22 @@ func TestExecuteToolBatchProjectionAndCaps(t *testing.T) {
 	}
 
 	registry = NewToolRegistry()
-	if err := registry.Register(Tool{Name: "large", Func: func(context.Context, json.RawMessage) (string, error) { return strings.Repeat("x", 101*1024), nil }}); err != nil {
+	full := strings.Repeat("x", 101*1024)
+	if err := registry.Register(Tool{Name: "large", Func: func(context.Context, json.RawMessage) (string, error) { return full, nil }}); err != nil {
 		t.Fatal(err)
 	}
-	large := ExecuteToolBatch(context.Background(), registry, []types.ToolCall{{ID: "2", Name: "large"}}, func(types.EventKind, string, json.RawMessage) {})[0]
-	if !strings.Contains(large.Output, "[output truncated — 103424 bytes total, showing first 102400 bytes]") {
-		t.Fatalf("large output suffix missing: len=%d", len(large.Output))
+	var largePayload map[string]any
+	large := ExecuteToolBatch(context.Background(), registry, []types.ToolCall{{ID: "2", Name: "large"}}, func(kind types.EventKind, _ string, raw json.RawMessage) {
+		if kind == types.EventToolResult {
+			_ = json.Unmarshal(raw, &largePayload)
+		}
+	})[0]
+	if large.Output != full {
+		t.Fatalf("batch executor truncated model-visible output: len=%d want=%d", len(large.Output), len(full))
+	}
+	if largePayload["output_len"].(float64) != float64(len(full)) || largePayload["full_output_len"].(float64) != float64(len(full)) ||
+		largePayload["full_output_truncated"] != true || largePayload["full_output_sha256"] == "" ||
+		strings.Contains(largePayload["output"].(string), "[output truncated") == false {
+		t.Fatalf("batch trace payload=%#v", largePayload)
 	}
 }

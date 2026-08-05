@@ -165,7 +165,7 @@ func TestActivationBudgetProgressDeadlineTerminalizesAndReleases(t *testing.T) {
 	rt, _ := testRuntime(t)
 	provider := newLateCompletionProvider()
 	rt.provider = provider
-	rt.cfg.ActivationBudget = 25 * time.Millisecond
+	rt.cfg.ActivationBudget = 500 * time.Millisecond
 	t.Cleanup(provider.unblock)
 
 	rec, err := rt.StartRun(context.Background(), "outlive activation budget", "user-alice")

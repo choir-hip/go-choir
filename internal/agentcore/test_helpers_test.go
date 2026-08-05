@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -89,7 +90,7 @@ func seedDurableTextureSubject(t *testing.T, s *store.Store, ownerID, docID stri
 		t.Fatalf("read supervision fixture head: %v", err)
 	}
 	cas := &testSupervisionCAS{head: canonicalHead, signer: signer}
-	pinner := testSupervisionPinner{signer: signer}
+	pinner := &testSupervisionPinner{signer: signer, private: make(map[string]testSupervisionPrivateArtifact)}
 	verifier := computerevent.EventHeadReceiptVerifier{Keys: testSupervisionKeyResolver{key: publicKey}}
 	appender, err := computerevent.NewComputerEventAppender(computerID, pinner, s, cas, verifier)
 	if err != nil {
@@ -127,15 +128,51 @@ func seedDurableTextureSubject(t *testing.T, s *store.Store, ownerID, docID stri
 	return trajectoryID
 }
 
+func installTestSupervisionAppender(t *testing.T, rt *Runtime, s *store.Store) *testSupervisionPinner {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "corpusd", KeyID: "fixture-runtime"}, PrivateKey: privateKey}
+	head, err := s.Head(context.Background(), rt.TextureSandboxID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinner := &testSupervisionPinner{signer: signer, private: make(map[string]testSupervisionPrivateArtifact)}
+	cas := &testSupervisionCAS{head: head, signer: signer}
+	verifier := computerevent.EventHeadReceiptVerifier{Keys: testSupervisionKeyResolver{key: publicKey}}
+	appender, err := computerevent.NewComputerEventAppender(rt.TextureSandboxID(), pinner, s, cas, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := computerevent.LoadGuestPrivateArtifactCipher(filepath.Join(t.TempDir(), "privacy-key.json"), rt.TextureSandboxID(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.eventAppender = appender
+	rt.privateArtifactCipher = cipher
+	return pinner
+}
+
 type testSupervisionKeyResolver struct{ key ed25519.PublicKey }
 
 func (r testSupervisionKeyResolver) ResolveReceiptKey(string, string, string, uint64, time.Time) (ed25519.PublicKey, error) {
 	return r.key, nil
 }
 
-type testSupervisionPinner struct{ signer computerevent.SigningKey }
+type testSupervisionPrivateArtifact struct {
+	envelope []byte
+	pin      computerevent.PinResult
+}
 
-func (p testSupervisionPinner) PinEvent(_ context.Context, computerID string, canonicalEvent []byte, requestCommitment string) (computerevent.PinResult, error) {
+type testSupervisionPinner struct {
+	mu      sync.Mutex
+	signer  computerevent.SigningKey
+	private map[string]testSupervisionPrivateArtifact
+}
+
+func (p *testSupervisionPinner) PinEvent(_ context.Context, computerID string, canonicalEvent []byte, requestCommitment string) (computerevent.PinResult, error) {
 	digest := computerevent.DigestBytes(canonicalEvent)
 	receipt, err := computerevent.NewSignedReceipt("PinReceipt", "corpusd", map[string]any{
 		"computer_id": computerID, "artifact_digest": digest, "request_commitment": requestCommitment,
@@ -143,11 +180,11 @@ func (p testSupervisionPinner) PinEvent(_ context.Context, computerID string, ca
 	return computerevent.PinResult{ArtifactDigest: digest, Receipt: receipt}, err
 }
 
-func (p testSupervisionPinner) PreparePrivatePayload(ctx context.Context, cipher *computerevent.PrivateArtifactCipher, computerID, eventID, mediaType string, plaintext []byte) ([]byte, computerevent.PrivateArtifactMetadata, error) {
+func (p *testSupervisionPinner) PreparePrivatePayload(ctx context.Context, cipher *computerevent.PrivateArtifactCipher, computerID, eventID, mediaType string, plaintext []byte) ([]byte, computerevent.PrivateArtifactMetadata, error) {
 	return cipher.Encrypt(ctx, computerID, eventID, mediaType, "private", plaintext)
 }
 
-func (p testSupervisionPinner) PinPrivatePayload(ctx context.Context, cipher *computerevent.PrivateArtifactCipher, computerID, eventID string, envelope []byte, pinIntentCommitment string) (computerevent.PinResult, error) {
+func (p *testSupervisionPinner) PinPrivatePayload(ctx context.Context, cipher *computerevent.PrivateArtifactCipher, computerID, eventID string, envelope []byte, pinIntentCommitment string) (computerevent.PinResult, error) {
 	if _, metadata, err := cipher.Decrypt(ctx, envelope, computerID, eventID); err != nil {
 		return computerevent.PinResult{}, err
 	} else {
@@ -156,8 +193,28 @@ func (p testSupervisionPinner) PinPrivatePayload(ctx context.Context, cipher *co
 			"computer_id": computerID, "artifact_digest": digest, "media_type": metadata.MediaType,
 			"privacy_class": "private", "pin_intent_commitment": pinIntentCommitment,
 		}, []computerevent.SigningKey{p.signer}, time.Now().UTC())
-		return computerevent.PinResult{ArtifactDigest: digest, Receipt: receipt}, err
+		pin := computerevent.PinResult{ArtifactDigest: digest, Receipt: receipt}
+		if err == nil {
+			p.mu.Lock()
+			p.private[digest] = testSupervisionPrivateArtifact{envelope: append([]byte(nil), envelope...), pin: pin}
+			p.mu.Unlock()
+		}
+		return pin, err
 	}
+}
+
+func (p *testSupervisionPinner) Events(context.Context, string, uint64) ([]computerevent.DurableEvent, error) {
+	return nil, nil
+}
+
+func (p *testSupervisionPinner) PrivateArtifact(_ context.Context, _ string, digest string) ([]byte, computerevent.PinResult, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	artifact, ok := p.private[digest]
+	if !ok {
+		return nil, computerevent.PinResult{}, store.ErrNotFound
+	}
+	return append([]byte(nil), artifact.envelope...), artifact.pin, nil
 }
 
 type testSupervisionCAS struct {

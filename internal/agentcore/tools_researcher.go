@@ -26,15 +26,40 @@ type researchFindingEvidenceInput struct {
 	Metadata  json.RawMessage `json:"metadata,omitempty"`
 }
 
-func resolveFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID string) (string, string, error) {
-	profile := toolregistry.ExecutionContextFrom(ctx).Profile
-	if profile == "" {
-		if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil {
-			profile = agentProfileForRun(runRec)
-		}
+func resolveFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID string, packetKinds ...string) (string, string, error) {
+	packetKind := ""
+	if len(packetKinds) > 0 {
+		packetKind = packetKinds[0]
+	}
+	execution := toolregistry.ExecutionContextFrom(ctx)
+	profile := agentprofile.Canonical(execution.Profile)
+	if profile == "" && execution.RunRecord != nil {
+		profile = agentprofile.Canonical(agentProfileForRun(execution.RunRecord))
 	}
 	if profile == agentprofile.Researcher {
 		return resolveResearcherFindingsTarget(ctx, rt, explicitAgentID)
+	}
+	if profile == agentprofile.Texture && strings.TrimSpace(packetKind) == "execution_request" {
+		runRec := execution.RunRecord
+		if runRec == nil {
+			return "", "", fmt.Errorf("Texture execution_request requires scoped run context")
+		}
+		expected := persistentSuperAgentID(runRec.OwnerID)
+		if explicitAgentID = strings.TrimSpace(explicitAgentID); explicitAgentID != "" && explicitAgentID != expected {
+			return "", "", fmt.Errorf("Texture execution_request agent_id must name persistent Super %q", expected)
+		}
+		target, err := rt.ensurePersistentSuperAgent(ctx, runRec.OwnerID)
+		if err != nil {
+			return "", "", err
+		}
+		channelID := strings.TrimSpace(metadataStringValue(runRec.Metadata, runMetadataChannelID))
+		if channelID == "" {
+			channelID = strings.TrimSpace(runRec.ChannelID)
+		}
+		if channelID == "" {
+			channelID = strings.TrimSpace(target.ChannelID)
+		}
+		return target.AgentID, channelID, nil
 	}
 	return resolveCoagentFindingsTarget(ctx, rt, explicitAgentID)
 }
@@ -70,48 +95,43 @@ func resolveResearcherFindingsTarget(ctx context.Context, rt *Runtime, explicitA
 
 func resolveCoagentFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID string) (string, string, error) {
 	runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord
-
-	if runRec != nil && agentprofile.IsTexture(metadataStringValue(runRec.Metadata, "requested_by_profile")) {
-		requesterAgentID := metadataStringValue(runRec.Metadata, "requested_by_agent_id")
-		if requesterAgentID != "" {
-			target, err := rt.store.GetAgentByScope(ctx, runRec.OwnerID, runRec.SandboxID, requesterAgentID)
-			if err != nil {
-				if errors.Is(err, store.ErrNotFound) && isTextureAgentID(requesterAgentID) {
-					channelID := metadataStringValue(runRec.Metadata, runMetadataChannelID)
-					if channelID == "" {
-						channelID = docIDFromTextureAgentID(requesterAgentID)
-					}
-					if channelID != "" {
-						return requesterAgentID, channelID, nil
-					}
-				}
-				return "", "", fmt.Errorf("resolve delivery target requester lookup: %w", err)
-			}
-			return requesterAgentID, strings.TrimSpace(target.ChannelID), nil
+	resolveExplicit := func(targetAgentID string) (string, string, error) {
+		targetAgentID = strings.TrimSpace(targetAgentID)
+		if targetAgentID == "" {
+			return "", "", fmt.Errorf("resolve delivery target: agent_id is required")
 		}
-	}
-
-	if runRec != nil {
-		if channelID := strings.TrimSpace(metadataStringValue(runRec.Metadata, runMetadataChannelID)); channelID != "" {
-			return currentTextureAgentID(channelID), channelID, nil
-		}
-	}
-
-	explicitAgentID = strings.TrimSpace(explicitAgentID)
-	if explicitAgentID != "" {
 		if runRec == nil {
 			return "", "", fmt.Errorf("resolve delivery target lookup: missing scoped run context")
 		}
-		target, err := rt.store.GetAgentByScope(ctx, runRec.OwnerID, runRec.SandboxID, explicitAgentID)
+		if targetAgentID == persistentSuperAgentID(runRec.OwnerID) {
+			target, err := rt.ensurePersistentSuperAgent(ctx, runRec.OwnerID)
+			if err != nil {
+				return "", "", err
+			}
+			return target.AgentID, strings.TrimSpace(target.ChannelID), nil
+		}
+		target, err := rt.store.GetAgentByScope(ctx, runRec.OwnerID, runRec.SandboxID, targetAgentID)
 		if err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				if fallbackAgentID, fallbackChannelID := textureDeliveryFallbackFromContext(runRec, explicitAgentID); fallbackAgentID != "" && fallbackChannelID != "" {
+			if errors.Is(err, store.ErrNotFound) && isTextureAgentID(targetAgentID) {
+				if fallbackAgentID, fallbackChannelID := textureDeliveryFallbackFromContext(runRec, targetAgentID); fallbackAgentID != "" && fallbackChannelID != "" {
 					return fallbackAgentID, fallbackChannelID, nil
 				}
 			}
 			return "", "", fmt.Errorf("resolve delivery target lookup: %w", err)
 		}
-		return explicitAgentID, strings.TrimSpace(target.ChannelID), nil
+		return targetAgentID, strings.TrimSpace(target.ChannelID), nil
+	}
+
+	if explicitAgentID = strings.TrimSpace(explicitAgentID); explicitAgentID != "" {
+		return resolveExplicit(explicitAgentID)
+	}
+	if runRec != nil {
+		if requesterAgentID := strings.TrimSpace(metadataStringValue(runRec.Metadata, "requested_by_agent_id")); requesterAgentID != "" {
+			return resolveExplicit(requesterAgentID)
+		}
+		if channelID := strings.TrimSpace(metadataStringValue(runRec.Metadata, runMetadataChannelID)); channelID != "" {
+			return currentTextureAgentID(channelID), channelID, nil
+		}
 	}
 	return "", "", fmt.Errorf("structured delivery requires agent_id, requested_by_agent_id, or a texture channel context")
 }

@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -265,6 +266,7 @@ func TestUpdateCoagentToolSchemaRequiresSourceTargetURIAndVocabularyEnums(t *tes
 
 func TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets(t *testing.T) {
 	rt, s := testRuntime(t)
+	installTestSupervisionAppender(t, rt, s)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
 	ownerID := "user-d9-super-ignore"
@@ -321,6 +323,7 @@ func TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets(t *testing.T) {
 		RunID:        "run-d9-super-ignore-inject",
 		OwnerID:      ownerID,
 		AgentID:      superAgent.AgentID,
+		SandboxID:    rt.TextureSandboxID(),
 		AgentProfile: agentprofile.Super,
 		AgentRole:    agentprofile.Super,
 		ChannelID:    superAgent.ChannelID,
@@ -419,11 +422,8 @@ func TestPendingCoagentUpdatesRejectsLifecycleMarkerAsAuthority(t *testing.T) {
 	rec := d9CoagentRun("run-legacy-marker-injector", ownerID, targetAgentID, agentprofile.Texture, update.ChannelID, "")
 	rec.Metadata["lifecycle_work_item_id"] = "legacy-work-item"
 	pending, err := rt.pendingCoagentUpdatesForRun(ctx, rec, ownerID, targetAgentID, 10)
-	if err != nil {
-		t.Fatalf("list marker-only legacy updates: %v", err)
-	}
-	if len(pending) != 1 || pending[0].UpdateID != update.UpdateID {
-		t.Fatalf("marker-only run selected lifecycle authority: %+v", pending)
+	if !errors.Is(err, ErrSupervisionAuthorityRequired) || len(pending) != 0 {
+		t.Fatalf("marker-only legacy authority without canonical proof: pending=%+v err=%v", pending, err)
 	}
 }
 

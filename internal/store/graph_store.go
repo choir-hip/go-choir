@@ -657,11 +657,34 @@ func (s *Store) ListRunsByOwnerOG(ctx context.Context, ownerID string, limit int
 	if limit <= 0 {
 		limit = 100
 	}
+	runs, err := s.ListAllRunsByOwnerOG(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	if len(runs) > limit {
+		runs = runs[:limit]
+	}
+	return runs, nil
+}
+
+// ListAllRunsByOwnerOG exhausts the legacy owner-scoped run projection.
+func (s *Store) ListAllRunsByOwnerOG(ctx context.Context, ownerID string) ([]types.RunRecord, error) {
+	return s.listEveryRunByOwnerOG(ctx, ownerID, false)
+}
+
+// ListEveryRunByOwnerOG exhausts both canonical computer-scoped and legacy
+// owner-scoped run projections. Delivery recovery uses it because a bounded
+// run window cannot prove that an immutable canonical event was never consumed.
+func (s *Store) ListEveryRunByOwnerOG(ctx context.Context, ownerID string) ([]types.RunRecord, error) {
+	return s.listEveryRunByOwnerOG(ctx, ownerID, true)
+}
+
+func (s *Store) listEveryRunByOwnerOG(ctx context.Context, ownerID string, includeLifecycle bool) ([]types.RunRecord, error) {
 	objs, err := s.ogListAllObjectsByKind(ctx, ogKindRun)
 	if err != nil {
 		return nil, err
 	}
-	runs := make([]types.RunRecord, 0, min(limit, len(objs)))
+	runs := make([]types.RunRecord, 0, len(objs))
 	for _, obj := range objs {
 		if obj.OwnerID != ownerID {
 			continue
@@ -670,7 +693,7 @@ func (s *Store) ListRunsByOwnerOG(ctx context.Context, ownerID string, limit int
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
-		if lifecycleRunProjection(obj, rec) {
+		if !includeLifecycle && lifecycleRunProjection(obj, rec) {
 			continue
 		}
 		runs = append(runs, rec)
@@ -681,9 +704,6 @@ func (s *Store) ListRunsByOwnerOG(ctx context.Context, ownerID string, limit int
 		}
 		return runs[i].RunID < runs[j].RunID
 	})
-	if len(runs) > limit {
-		runs = runs[:limit]
-	}
 	return runs, nil
 }
 

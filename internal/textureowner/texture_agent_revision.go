@@ -286,7 +286,10 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		return nil, err
 	}
 	sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceEntities)
-	evidenceEntities, sourceRejections := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12)
+	evidenceEntities, sourceRejections, err := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), doc.TrajectoryID, 12)
+	if err != nil {
+		return nil, err
+	}
 	if len(evidenceEntities) > 0 {
 		var changedEvidenceEntities bool
 		sourceEntities, changedEvidenceEntities = mergeTextureSourceEntities(sourceEntities, evidenceEntities)

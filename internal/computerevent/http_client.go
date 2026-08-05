@@ -112,7 +112,7 @@ func (c *HTTPClient) PinPrivatePayload(ctx context.Context, cipher *PrivateArtif
 	} else if metadata.ComputerID != computerID || metadata.EventID != eventID || metadata.PrivacyClass != "private" || metadata.MediaType == "" {
 		return PinResult{}, fmt.Errorf("computer event client: private envelope metadata mismatch")
 	} else {
-		return c.pinPayload(ctx, computerID, envelope, metadata.MediaType, "private", pinIntentCommitment)
+		return c.pinPayload(ctx, computerID, envelope, PrivateArtifactMediaType, "private", pinIntentCommitment)
 	}
 }
 

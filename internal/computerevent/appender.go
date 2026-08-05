@@ -1378,6 +1378,48 @@ func (a *ComputerEventAppender) Reconstruct(ctx context.Context, source EventSou
 	return nil
 }
 
+// LoadPrivateSupervisionArtifact fetches one canonical private artifact,
+// verifies its signed pin receipt, and decrypts it under the binding identity
+// frozen by the supervision command. It is the read side used by derived actor
+// delivery and restart recovery; the returned plaintext carries no authority
+// independent of the canonical event that references it.
+func (a *ComputerEventAppender) LoadPrivateSupervisionArtifact(ctx context.Context, refValue, bindingID string, cipher *PrivateArtifactCipher) ([]byte, PrivateArtifactMetadata, error) {
+	if a == nil || cipher == nil || strings.TrimSpace(bindingID) == "" {
+		return nil, PrivateArtifactMetadata{}, fmt.Errorf("computer event appender: private supervision artifact authority unavailable")
+	}
+	ref, err := ParseArtifactRef(strings.TrimSpace(refValue))
+	if err != nil {
+		return nil, PrivateArtifactMetadata{}, fmt.Errorf("computer event appender: parse private supervision artifact: %w", err)
+	}
+	source, ok := a.pins.(PrivateArtifactSource)
+	if !ok {
+		return nil, PrivateArtifactMetadata{}, fmt.Errorf("computer event appender: canonical private artifact source unavailable")
+	}
+	digest := ref.Digest().String()
+	envelope, pin, err := source.PrivateArtifact(ctx, a.computerID, digest)
+	if err != nil {
+		return nil, PrivateArtifactMetadata{}, fmt.Errorf("computer event appender: fetch private supervision artifact: %w", err)
+	}
+	if pin.ArtifactDigest != digest || DigestBytes(envelope) != digest {
+		return nil, PrivateArtifactMetadata{}, fmt.Errorf("computer event appender: private supervision artifact digest mismatch")
+	}
+	verifier, ok := a.verifier.(ArtifactPinReceiptVerifier)
+	if !ok {
+		return nil, PrivateArtifactMetadata{}, fmt.Errorf("computer event appender: artifact pin receipt verifier unavailable")
+	}
+	if err := verifier.VerifyArtifactPinReceipt(ctx, pin.Receipt, a.computerID, digest); err != nil {
+		return nil, PrivateArtifactMetadata{}, fmt.Errorf("computer event appender: verify private supervision artifact receipt: %w", err)
+	}
+	plaintext, metadata, err := cipher.Decrypt(ctx, envelope, a.computerID, strings.TrimSpace(bindingID))
+	if err != nil {
+		return nil, PrivateArtifactMetadata{}, fmt.Errorf("computer event appender: decrypt private supervision artifact: %w", err)
+	}
+	if metadata.ComputerID != a.computerID || metadata.EventID != strings.TrimSpace(bindingID) || metadata.PrivacyClass != "private" {
+		return nil, PrivateArtifactMetadata{}, fmt.Errorf("computer event appender: private supervision artifact metadata mismatch")
+	}
+	return plaintext, metadata, nil
+}
+
 // RebuildPrivateProjectionFromPinnedSource reconstructs solely from the
 // canonical source which already owns pinning and head CAS for this appender.
 // It is the no-SSH repair seam used by the product API.

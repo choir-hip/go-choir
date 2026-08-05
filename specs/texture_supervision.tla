@@ -27,7 +27,7 @@ ProposalStates == {None, "current", "consumed"}
 \* Abstract semantic-plan vocabulary mapped to the closed supervision schema.
 \* update_recorded and terminal_delivery_observed are deliberately absent;
 \* rebase_opened and attempt_cancelled are reducer outputs, not authorable plans.
-Authorable == {"open_trajectory", "intent_revised", "assignment_opened", "attempt_started", "attempt_retried", "attempt_result", "late_result", "assignment_cancelled", "attempt_dispositioned", "result_dispositioned", "rebase_dispositioned", "assignment_closed", "finding_opened", "finding_resolved", "dissent_opened", "dissent_resolved", "owner_attention_opened", "owner_attention_resolved", "evidence_completed", "artifact_head_completed", "compensation_resolved", "texture_owner_settlement_proposed", "super_settlement_proposed", "trajectory_settled", "candidate_composed", "candidate_verified", "candidate_accepted", "candidate_discarded", "composition_failed", "materialization_applied", "materialization_failed"}
+Authorable == {"open_trajectory", "intent_revised", "assignment_opened", "attempt_started", "attempt_retried", "attempt_result", "late_result", "assignment_cancelled", "attempt_dispositioned", "result_dispositioned", "rebase_dispositioned", "assignment_closed", "finding_opened", "finding_resolved", "dissent_opened", "dissent_resolved", "owner_attention_opened", "owner_attention_resolved", "evidence_completed", "artifact_head_completed", "compensation_resolved", "texture_owner_settlement_proposed", "super_settlement_proposed", "trajectory_settled", "candidate_composed", "candidate_verified", "candidate_accepted", "candidate_discarded", "composition_failed", "materialization_applied", "materialization_failed", "actor_message_acknowledged"}
 Derived == {"rebase_opened", "attempt_cancelled"}
 Recorded == Authorable \cup Derived
 Forbidden == {"rollback_requested", "rollback_completed", "effect_accepted", "checkpoint_failed", "route_failed"}
@@ -46,6 +46,7 @@ SimpleSuperKinds == {"finding_opened", "finding_resolved", "dissent_opened", "di
 Plans ==
   UNION {
     {Simple("open_trajectory", "texture", d) : d \in Digests},
+    {Simple("actor_message_acknowledged", "texture", d) : d \in Digests},
     {Plan("intent_revised", "texture", d, None, None, None, None, None, None, None, {}, aa, {}, None, {"intent_revised", "rebase_opened"}) : d \in Digests, aa \in SUBSET Assignments},
     {Plan("assignment_opened", "super", d, a, None, None, None, None, None, None, {}, {}, {}, None, {"assignment_opened"}) : d \in Digests, a \in Assignments},
     {Plan("attempt_started", "super", d, a, t, None, None, None, None, None, {}, {}, {}, None, {"attempt_started"}) : d \in Digests, a \in Assignments, t \in Attempts},

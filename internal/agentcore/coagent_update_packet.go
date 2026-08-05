@@ -142,6 +142,25 @@ func buildCoagentUpdateUserMessages(updates []types.CoagentSourcePacket, deliver
 	return []json.RawMessage{msg}, updateIDs, nil
 }
 
+func isCoagentUpdateUserMessage(message json.RawMessage) bool {
+	var envelope struct {
+		Role    string `json:"role"`
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if json.Unmarshal(message, &envelope) != nil || envelope.Role != "user" {
+		return false
+	}
+	for _, content := range envelope.Content {
+		if content.Type == "text" && strings.Contains(content.Text, `"packet_type":"`+coagentPacketTypeUpdate+`"`) {
+			return true
+		}
+	}
+	return false
+}
+
 func coagentUpdateSourceInstruction(sourceEntities []types.SourceEntity, sourceRejections []coagentSourceRejection) string {
 	if len(sourceEntities) == 0 && len(sourceRejections) == 0 {
 		return ""

@@ -214,6 +214,7 @@ func TestToolLoopFileReadWithRuntime(t *testing.T) {
 	)
 
 	rt, s := testRuntimeWithProviderAndRegistry(t, provider, registry)
+	installTestSupervisionAppender(t, rt, s)
 	defer rt.Stop()
 
 	// Subscribe to events to capture tool events.
@@ -674,6 +675,7 @@ func TestToolLoopEndToEndWithRuntime(t *testing.T) {
 	)
 
 	rt, s := testRuntimeWithProviderAndRegistry(t, provider, registry)
+	installTestSupervisionAppender(t, rt, s)
 	defer rt.Stop()
 
 	// Submit the task.

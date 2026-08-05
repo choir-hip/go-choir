@@ -175,25 +175,24 @@ measures:
     cannot_prove: "A bounded three-way trajectory does not prove throughput or optimal scheduling at arbitrary fan-out; it proves the causal and authority contract."
 
 now:
-  status: blocked_incomplete
-  slice: "The exact deployed one-tape writer is not connected end to end: lifecycle refusal masks the closed branch, explicit Super addressing rewrites to Texture, canonical messages have no restart-recoverable actor consumer, and provider fallback obscures the selected-provider failure."
-  question: "Can one closed supervision transaction drive idempotent, restart-recoverable Texture-to-Super and CoSuper-to-Super delivery while the selected provider remains observable across every tool-loop turn?"
+  status: in_progress
+  slice: "The H032 repair candidate now routes supervised lifecycle calls through the closed append, preserves explicit Super addressing, consumes canonical private deliveries through idempotent actor wake/restart recovery, records durable delivery acknowledgements, keeps canonical Texture writes on the tape, and preserves provider-attempt failures without leaking private tool/provider content."
+  question: "Will the reviewed local repair retain these authority, recovery, privacy, and owner-legibility properties after origin/main CI and exact staging deployment on the disposable acceptance computer?"
   reconciliation:
-    observed_at: 2026-08-04T20:47:21Z
-    source_ref: 248e4692595534df9843dff37a00a4146f3d570f
-    deploy_identity: "choir.news proxy, sandbox, and vmctl report 248e4692595534df9843dff37a00a4146f3d570f after CI run 30947754942 completed successfully"
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@248e4692, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@248e4692]
-    policy_resolution_ref: "Disposable staging computer vm-58e28a39cda64651f8bca7e9ac2efc52 resolved Texture and Super to deepseek/deepseek-v4-flash; exact original policy is preserved at System/model-policy.texture-tape-acceptance-backup.toml."
-    worktree_inventory_ref: "origin/main and local main are 248e4692; this problem-first checkpoint owns only the Definition and H032 problem record before runtime repair."
+    observed_at: 2026-08-05T02:23:06Z
+    source_ref: d163a4aaa732e54ad56cbb7fc8a08d3aa8722268
+    deploy_identity: "Last observed staging identity remains the failed-acceptance checkpoint 248e4692595534df9843dff37a00a4146f3d570f; the local repair is not yet deployed."
+    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@d163a4aa, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@d163a4aa]
+    worktree_inventory_ref: "Local main at d163a4aa plus the goal-owned 44-file repair diff; unrelated worktrees remain untouched; TLC scratch states were removed."
     status: reconciled
   candidate:
-    id: texture-tape-supervision-deployed-v4
-    state: deployed_acceptance_failed
-    ref: 248e4692595534df9843dff37a00a4146f3d570f
+    id: texture-tape-supervision-local-repair-v5
+    state: locally_verified_reviewed
+    ref: "uncommitted candidate at base d163a4aaa732e54ad56cbb7fc8a08d3aa8722268"
     owner: Main
-    base: f5c4c43e17e3e9b2e6de71170049695361c224bb
-    digest: "source identity 248e4692595534df9843dff37a00a4146f3d570f; prior reviewed implementation digest sha256:3f1a3bdd4ed9e4ac00e61b45014d61fc1c134bd937637468dd13a1206fd979cf"
-    scope: "Accepted implementation plus blocked-landing documentation, deployed through origin/main."
+    base: d163a4aaa732e54ad56cbb7fc8a08d3aa8722268
+    digest: "implementation diff excluding this Definition receipt: sha256:d00c069422e3cf214b421803ca49342de762a1e4cb170239f8dec8487d7f55e5"
+    scope: "One-tape delivery/recovery, canonical Texture revision authority, privacy-safe provider/tool traces, full internal tool results, private-envelope transport, formal/schema acknowledgement vocabulary, and regression tests."
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
     kind: architecture
@@ -202,10 +201,10 @@ now:
     evidence_ref: docs/evidence/texture-tape-definition-consensus-2026-08-03.md
     owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
     recorded_at: 2026-08-04T03:03:00Z
-    consequence: "The mission may now execute schema/caller/migration candidate work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "CI run 30947754942", "staging Texture runs 4f1014e5-3fc3-494b-a2db-8b3a7c1f7578 and 03de15ce-77ad-4eb3-b633-468f4d43e8ee", specs/texture_supervision.tla, internal/agentcore/tools_worker_update.go, internal/agentcore/runtime.go, internal/computerevent/appender.go, internal/store/supervision_projection.go]
-  blocker_or_risk: "Exact deployed acceptance cannot start fan-out: supervised lifecycle calls are refused before the closed append, explicit Super targeting resolves to Texture, canonical message/result artifacts do not feed the actor wake/injection path or restart sweep, and a DeepSeek-resolved run terminates through the broken ChatGPT fallback without preserving the primary failure. No owner settlement, rollback rehearsal, registry closure, or H032 repair claim is admissible."
-  next_action: "Land this expanded problem-first checkpoint; connect canonical private artifacts to idempotent actor delivery and restart recovery without a second semantic tape; preserve explicit Super targeting; expose provider-attempt failure order; re-review the frozen repair; then repeat exact staging Texture/Super/fan-out/owner-settlement proof."
+    consequence: "The mission may execute schema/caller/migration work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
+  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "go test one-tape package set: pass", "go test -short ./...: 76 packages pass", "TLC safety: 104336 generated / 17627 distinct / depth 19 / no error", "TLC witness: 264 generated / 197 distinct / depth 197 / no error", "AJV draft-2020 schema compile: valid", "/tmp/texture-tape-final-delivery-review/omp-gemini36.out: ACCEPT", internal/agentcore/super_controller.go, internal/agentcore/supervision_execution.go, internal/computerevent/appender.go, internal/store/supervision_projection.go]
+  blocker_or_risk: "No local code blocker remains. Completion is still blocked on canonical landing and deployed evidence: CI, exact staging identity, the full Texture/Super three-way fan-out with retry/cancel/late/rebase/dissent, restart/reconstruction, compatibility-floor rollback rehearsal, and terminal registry closure. The non-short repository suite also observed exhausted live Serper, SerpAPI, and ZAI credits; mission packages and the offline repository suite pass."
+  next_action: "Commit the exact reviewed repair with this receipt, push origin/main, monitor CI and deployment, verify exact staging identity, then run the Definition's deployed acceptance and close H032/registries only if every required receipt is obtained."
 
 receipts:
   - id: texture-tape-definition-round-1
@@ -273,6 +272,22 @@ receipts:
       environment_identity: no_new_staging_observation
       deployed_acceptance: pending
     registry_conformance_ref: "terminal closure pending successful landing and deployed acceptance"
+  - id: texture-tape-repair-review-round-5
+    boundary: implement
+    commit_or_artifact: "accepted local repair implementation diff sha256:d00c069422e3cf214b421803ca49342de762a1e4cb170239f8dec8487d7f55e5 at base d163a4aaa732e54ad56cbb7fc8a08d3aa8722268; Definition receipt is a post-review status-only delta"
+    proof_refs: ["go test ./internal/computerevent ./internal/store ./internal/agentcore ./internal/apihandler ./internal/textureowner ./internal/actorruntime ./internal/toolregistry -count=1: pass", "go test -short ./... -count=1: 76 packages pass", "TLC safety: 104336 generated / 17627 distinct / depth 19 / no error", "TLC witness: 264 generated / 197 distinct / depth 197 / no error", "AJV draft-2020 schema compile: valid", "/tmp/texture-tape-final-delivery-review/omp-gemini36.out: ACCEPT"]
+    rollback_ref: "Before deployment, revert the repair commit. After deployment, disable supervision writes and deploy only the compatibility-floor release or a forward-compatible repair; preserve every canonical event and rebuild projections nondestructively."
+    disposition: "Accepted for landing after prior blocker-driven repair rounds and an exact-hash final full-candidate review. Final panel health: OMP Gemini 3.6 accepted with high confidence; Codex, OpenCode, and OMP GPT-5.6 Sol timed out while inspecting the large diff without returning verdicts; a focused retry produced no additional verdict. Effects remain OFF."
+    problem_ref: docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md
+    authorization_ref: owner_ratification_2026-08-03_take_draft_into_defined_mission
+    candidate_or_evidence_refs: ["sha256:d00c069422e3cf214b421803ca49342de762a1e4cb170239f8dec8487d7f55e5", "/tmp/texture-tape-final-delivery-review/manifest.tsv", "/tmp/texture-tape-final-delivery-review/omp-gemini36.out"]
+    landing:
+      source_commit: pending
+      ci_ref: pending
+      deploy_ref: pending
+      environment_identity: "last observed deployed checkpoint 248e4692595534df9843dff37a00a4146f3d570f; repair not yet deployed"
+      deployed_acceptance: pending
+    registry_conformance_ref: "terminal closure remains pending successful CI, exact staging identity, deployed acceptance, and compatibility-floor rehearsal"
 
 
 view:

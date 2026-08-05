@@ -693,15 +693,15 @@ func (s *Store) ListLifecycleEventPage(ctx context.Context, ownerID, computerID,
 	return page, nil
 }
 
-func (s *Store) ListLifecycleSubjects(ctx context.Context, computerID string) ([]types.AgentRecord, error) {
+func (s *Store) ListComputerAgents(ctx context.Context, computerID string) ([]types.AgentRecord, error) {
 	computerID = strings.TrimSpace(computerID)
 	if computerID == "" {
-		return nil, fmt.Errorf("list lifecycle subjects: computer_id is required")
+		return nil, fmt.Errorf("list computer agents: computer_id is required")
 	}
 	if s.ogStore == nil {
-		return nil, fmt.Errorf("list lifecycle subjects: object graph not initialized")
+		return nil, fmt.Errorf("list computer agents: object graph not initialized")
 	}
-	var objs []objectgraph.Object
+	var agents []types.AgentRecord
 	after := ""
 	for {
 		page, err := s.ogStore.ListObjectsPage(ctx, string(ogKindAgent), after, 1000)
@@ -709,8 +709,15 @@ func (s *Store) ListLifecycleSubjects(ctx context.Context, computerID string) ([
 			return nil, err
 		}
 		for _, obj := range page {
-			if obj.ComputerID == computerID {
-				objs = append(objs, obj)
+			if obj.ComputerID != computerID {
+				continue
+			}
+			agent, err := decodeLifecycleObject[types.AgentRecord](obj)
+			if err != nil {
+				return nil, err
+			}
+			if agent.OwnerID != "" && agent.ComputerID != "" {
+				agents = append(agents, agent)
 			}
 		}
 		if len(page) < 1000 {
@@ -718,25 +725,29 @@ func (s *Store) ListLifecycleSubjects(ctx context.Context, computerID string) ([
 		}
 		after = page[len(page)-1].CanonicalID
 	}
-	subjects := make([]types.AgentRecord, 0, len(objs))
-	for _, obj := range objs {
-		agent, decodeErr := decodeLifecycleObject[types.AgentRecord](obj)
-		if decodeErr != nil {
-			return nil, decodeErr
+	sort.Slice(agents, func(i, j int) bool {
+		if agents[i].OwnerID != agents[j].OwnerID {
+			return agents[i].OwnerID < agents[j].OwnerID
 		}
-		if agent.LifecycleVersion > 0 && agent.OwnerID != "" && agent.ComputerID != "" {
+		if agents[i].ComputerID != agents[j].ComputerID {
+			return agents[i].ComputerID < agents[j].ComputerID
+		}
+		return agents[i].AgentID < agents[j].AgentID
+	})
+	return agents, nil
+}
+
+func (s *Store) ListLifecycleSubjects(ctx context.Context, computerID string) ([]types.AgentRecord, error) {
+	agents, err := s.ListComputerAgents(ctx, computerID)
+	if err != nil {
+		return nil, err
+	}
+	subjects := agents[:0]
+	for _, agent := range agents {
+		if agent.LifecycleVersion > 0 {
 			subjects = append(subjects, agent)
 		}
 	}
-	sort.Slice(subjects, func(i, j int) bool {
-		if subjects[i].OwnerID != subjects[j].OwnerID {
-			return subjects[i].OwnerID < subjects[j].OwnerID
-		}
-		if subjects[i].ComputerID != subjects[j].ComputerID {
-			return subjects[i].ComputerID < subjects[j].ComputerID
-		}
-		return subjects[i].AgentID < subjects[j].AgentID
-	})
 	return subjects, nil
 }
 
@@ -744,6 +755,17 @@ func (s *Store) ListPendingLifecycleUpdates(ctx context.Context, ownerID, comput
 	if limit <= 0 {
 		limit = 100
 	}
+	return s.listPendingLifecycleUpdates(ctx, ownerID, computerID, targetAgentID, "", limit)
+}
+
+// ListPendingLifecycleUpdatesForTrajectory is the read-only compatibility
+// floor for records created before lifecycle supervision moved to the computer
+// tape. New supervised writers must not create records on this surface.
+func (s *Store) ListPendingLifecycleUpdatesForTrajectory(ctx context.Context, ownerID, computerID, targetAgentID, trajectoryID string, limit int) ([]types.CoagentSourcePacket, error) {
+	return s.listPendingLifecycleUpdates(ctx, ownerID, computerID, targetAgentID, strings.TrimSpace(trajectoryID), limit)
+}
+
+func (s *Store) listPendingLifecycleUpdates(ctx context.Context, ownerID, computerID, targetAgentID, trajectoryID string, limit int) ([]types.CoagentSourcePacket, error) {
 	graph := s.ogReadStore
 	if graph == nil {
 		graph = s.ogStore
@@ -764,9 +786,13 @@ func (s *Store) ListPendingLifecycleUpdates(ctx context.Context, ownerID, comput
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
-		if update.LifecycleVersion > 0 && update.TargetAgentID == targetAgentID && update.Disposition == types.UpdatePending {
-			updates = append(updates, update)
+		if update.LifecycleVersion <= 0 || update.TargetAgentID != targetAgentID || update.Disposition != types.UpdatePending {
+			continue
 		}
+		if trajectoryID != "" && strings.TrimSpace(update.TrajectoryID) != trajectoryID {
+			continue
+		}
+		updates = append(updates, update)
 	}
 	sort.Slice(updates, func(i, j int) bool {
 		if updates[i].ReducerSeq != updates[j].ReducerSeq {
@@ -774,7 +800,7 @@ func (s *Store) ListPendingLifecycleUpdates(ctx context.Context, ownerID, comput
 		}
 		return updates[i].UpdateID < updates[j].UpdateID
 	})
-	if len(updates) > limit {
+	if limit > 0 && len(updates) > limit {
 		updates = updates[:limit]
 	}
 	return updates, nil

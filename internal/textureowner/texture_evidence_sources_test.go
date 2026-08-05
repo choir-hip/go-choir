@@ -343,7 +343,7 @@ func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
 		t.Fatalf("DispatchWorkerUpdate: %v", err)
 	}
 
-	entities := handler.evidenceSourceEntitiesFromPendingUpdates(ctx, ownerID, targetAgentID, 10)
+	entities, _ := handler.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, []types.CoagentSourcePacket{update})
 	if !hasSourceEntity(entities, "source_service_item", "srcitem_market_rules", "") {
 		t.Fatalf("missing source_service_item entity: %#v", entities)
 	}
@@ -367,6 +367,39 @@ func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
 		if entity.Target.ItemID == "srcitem_ignored" {
 			t.Fatalf("free-form prose ref was scraped into source entity: %#v", entities)
 		}
+	}
+}
+
+func TestPendingSourceExtractionFailsClosedWithoutCanonicalAuthority(t *testing.T) {
+	t.Parallel()
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	ownerID := "user-source-authority-fail-closed"
+	targetAgentID := "texture:source-authority-fail-closed"
+	now := time.Now().UTC()
+	update := types.CoagentSourcePacket{
+		UpdateID: "legacy-source-authority-fail-closed", OwnerID: ownerID,
+		AgentID: "researcher:source-authority", TargetAgentID: targetAgentID,
+		ChannelID: "source-authority-fail-closed", Role: agentprofile.Researcher,
+		Packet: newCoagentPacket("evidence_update", "legacy source must not bypass authority", nil, []types.CoagentPacketSource{{
+			SourceID: "legacy-source", Kind: "url",
+			Target: types.CoagentPacketSourceTarget{URI: "https://example.test/private-source"},
+		}}, nil, nil, nil),
+		CreatedAt: now,
+	}
+	message := types.ChannelMessage{
+		ChannelID: update.ChannelID, FromAgentID: update.AgentID,
+		ToAgentID: update.TargetAgentID, Role: update.Role,
+		Content: update.Content, Timestamp: now,
+	}
+	if _, _, err := handler.Store.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+		t.Fatalf("seed legacy source update: %v", err)
+	}
+	withoutAuthority := *handler
+	withoutAuthority.Core = nil
+	entities, _, err := withoutAuthority.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, targetAgentID, "source-authority-fail-closed", 10)
+	if err == nil {
+		t.Fatalf("source extraction without canonical authority returned entities: %#v", entities)
 	}
 }
 

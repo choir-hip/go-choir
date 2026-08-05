@@ -52,7 +52,7 @@ func NewHandler(core *agentcore.Runtime) *Handler {
 	if core == nil {
 		return &Handler{}
 	}
-	return &Handler{
+	h := &Handler{
 		Core:        core,
 		Store:       core.Store(),
 		Bus:         core.EventBus(),
@@ -60,6 +60,8 @@ func NewHandler(core *agentcore.Runtime) *Handler {
 		ModelPolicy: core.TextureModelPolicy(),
 		Provider:    core.TextureProvider(),
 	}
+	core.SetCoagentUpdateEnvelopeBuilder(h.buildTextureCoagentUpdateMessages)
+	return h
 }
 
 // refuseLegacyTextureWriter is the closed-cutover boundary for paths that do

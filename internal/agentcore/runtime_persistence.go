@@ -92,6 +92,10 @@ func agentMutationForRun(rec *types.RunRecord) *store.AgentMutation {
 	if rec == nil || !runHasProfile(rec, agentprofile.Texture) {
 		return nil
 	}
+	if metadataStringValue(rec.Metadata, "supervision_delivery_authority") == "canonical" &&
+		len(metadataStringSlice(rec.Metadata["supervision_delivery_ids"])) > 0 {
+		return nil
+	}
 	docID := metadataStringValue(rec.Metadata, "doc_id")
 	if docID == "" {
 		return nil

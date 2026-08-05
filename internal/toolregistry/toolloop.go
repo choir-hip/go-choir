@@ -100,6 +100,7 @@ type toolLoopOptions struct {
 	completionGuard               ToolLoopCompletionGuardFunc
 	parkWaiter                    ToolLoopParkWaiterFunc
 	budget                        ToolLoopBudget
+	privateTraceTainted           bool
 }
 
 type pendingRequiredTool struct {
@@ -146,6 +147,15 @@ func WithToolLoopLLMConfig(config provideriface.LLMSelection) ToolLoopOption {
 func WithProviderPreconditionFallbacks(fallbacks ...provideriface.LLMSelection) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.providerPreconditionFallbacks = append([]provideriface.LLMSelection(nil), fallbacks...)
+	}
+}
+
+// WithPrivateTraceUserTurns marks the activation as derived from private user
+// turns. The durable caller may pass no raw messages when it restores a
+// previously persisted private-taint bit after compaction or rewarm.
+func WithPrivateTraceUserTurns(_ ...json.RawMessage) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.privateTraceTainted = true
 	}
 }
 
@@ -269,6 +279,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	initialToolChoiceAttempts := 0
 	activeLLMConfig := options.llmConfig
 	preconditionFallbackIndex := 0
+	var providerFallbackFailures []error
 	var requiredNextTool *pendingRequiredTool
 	var maxTokenContinuationAttempts int
 	var completionGuardAttempts int
@@ -286,6 +297,9 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		return nil
 	}
 	appendInjected := func(injected []json.RawMessage) error {
+		if len(injected) > 0 {
+			options.privateTraceTainted = true
+		}
 		for _, msg := range injected {
 			if err := appendMessage(runMemoryMessageRole(msg), msg); err != nil {
 				return err
@@ -404,6 +418,12 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 
 		if emit != nil {
 			lastUserText := extractLastUserMessage(messages)
+			lastUserSHA256 := toolOutputSHA256Hex(lastUserText)
+			lastUserPrivate := options.privateTraceTainted
+			lastUserPreview := truncatePromptSnippet(lastUserText, 4000)
+			if lastUserPrivate {
+				lastUserPreview = ""
+			}
 			preCallPayload, _ := json.Marshal(map[string]any{
 				"iteration":                            i + 1,
 				"phase":                                "provider_call_started",
@@ -414,8 +434,9 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				"system_sha256":                        toolOutputSHA256Hex(systemPrompt),
 				"system_preview":                       truncatePromptSnippet(systemPrompt, 2000),
 				"last_user_chars":                      len(lastUserText),
-				"last_user_sha256":                     toolOutputSHA256Hex(lastUserText),
-				"last_user_text":                       truncatePromptSnippet(lastUserText, 4000),
+				"last_user_sha256":                     lastUserSHA256,
+				"last_user_text":                       lastUserPreview,
+				"last_user_private":                    lastUserPrivate,
 				"message_roles":                        toolLoopMessageRoles(messages),
 				"max_tokens":                           req.MaxTokens,
 				"max_tokens_requested":                 req.MaxTokens > 0,
@@ -497,6 +518,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				next := options.providerPreconditionFallbacks[preconditionFallbackIndex]
 				preconditionFallbackIndex++
 				if !sameLLMSelection(activeLLMConfig, next) && strings.TrimSpace(next.Provider) != "" && strings.TrimSpace(next.Model) != "" {
+					providerFallbackFailures = append(providerFallbackFailures, fmt.Errorf("%s/%s: %w", req.Provider, req.Model, err))
 					activeLLMConfig = next
 					forceInitialToolChoiceRetry = strings.TrimSpace(req.ToolChoice) != ""
 					if emit != nil {
@@ -518,7 +540,11 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					continue
 				}
 			}
-			return "", totalUsage, fmt.Errorf("tool loop iteration %d: %w", i, err)
+			finalErr := fmt.Errorf("tool loop iteration %d (%s/%s): %w", i, req.Provider, req.Model, err)
+			if len(providerFallbackFailures) > 0 {
+				return "", totalUsage, errors.Join(append(providerFallbackFailures, finalErr)...)
+			}
+			return "", totalUsage, finalErr
 		}
 
 		// Accumulate token usage.
@@ -530,21 +556,27 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			return "", totalUsage, err
 		}
 
+		responsePreview := truncatePromptSnippet(resp.Text, 2000)
+		if options.privateTraceTainted {
+			responsePreview = ""
+		}
 		// Emit progress event for this iteration.
 		progressPayload, _ := json.Marshal(map[string]any{
-			"iteration":            i + 1,
-			"stop_reason":          resp.StopReason,
-			"tool_calls":           len(resp.ToolCalls),
-			"tool_call_names":      toolCallNames(resp.ToolCalls),
-			"response_text_chars":  len(resp.Text),
-			"response_text":        truncatePromptSnippet(resp.Text, 2000),
-			"model":                resp.Model,
-			"llm_provider":         activeLLMConfig.Provider,
-			"llm_model":            activeLLMConfig.Model,
-			"llm_reasoning_effort": activeLLMConfig.ReasoningEffort,
-			"model_policy":         "run_metadata",
-			"input_tokens":         resp.Usage.InputTokens,
-			"output_tokens":        resp.Usage.OutputTokens,
+			"iteration":             i + 1,
+			"stop_reason":           resp.StopReason,
+			"tool_calls":            len(resp.ToolCalls),
+			"tool_call_names":       toolCallNames(resp.ToolCalls),
+			"response_text_chars":   len(resp.Text),
+			"response_text":         responsePreview,
+			"response_text_sha256":  toolOutputSHA256Hex(resp.Text),
+			"response_text_private": options.privateTraceTainted,
+			"model":                 resp.Model,
+			"llm_provider":          activeLLMConfig.Provider,
+			"llm_model":             activeLLMConfig.Model,
+			"llm_reasoning_effort":  activeLLMConfig.ReasoningEffort,
+			"model_policy":          "run_metadata",
+			"input_tokens":          resp.Usage.InputTokens,
+			"output_tokens":         resp.Usage.OutputTokens,
 		})
 		emit(types.EventRunProgress, "tool_loop", progressPayload)
 
@@ -594,7 +626,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			requiredCalled := requiredToolCalled(activeRequired, resp.ToolCalls)
 
 			// Execute tools and collect results.
-			toolResults := ExecuteToolBatch(ctx, registry, resp.ToolCalls, emit)
+			toolResults := ExecuteToolBatch(ctx, registry, resp.ToolCalls, privateToolTraceEmitter(emit, options.privateTraceTainted))
 
 			// Append tool results as a user message (per Anthropic Messages API convention).
 			toolResultMsg, _ := json.Marshal(map[string]any{
@@ -604,11 +636,13 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			if err := appendMessage("user", toolResultMsg); err != nil {
 				return "", totalUsage, fmt.Errorf("tool loop persist tool result message: %w", err)
 			}
+			injectedAfterTools := false
 			if injectUserTurns != nil {
 				injected, err := injectUserTurns(false)
 				if err != nil {
 					return "", totalUsage, fmt.Errorf("tool loop inject turns after tools: %w", err)
 				}
+				injectedAfterTools = len(injected) > 0
 				if err := appendInjected(injected); err != nil {
 					return "", totalUsage, fmt.Errorf("tool loop persist injected turns after tools: %w", err)
 				}
@@ -682,7 +716,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 						})
 						emit(types.EventRunProgress, "required_next_tool_satisfied", payload)
 					}
-					if terminalTools := successfulTerminalToolNames(resp.ToolCalls, toolResults, options.terminalTools); len(terminalTools) > 0 {
+					if terminalTools := successfulTerminalToolNames(resp.ToolCalls, toolResults, options.terminalTools); !injectedAfterTools && len(terminalTools) > 0 {
 						if emit != nil {
 							payload, _ := json.Marshal(map[string]any{
 								"iteration": i + 1,
@@ -723,7 +757,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					})
 					emit(types.EventRunRetry, "required_next_tool", payload)
 				}
-			} else if terminalTools := successfulTerminalToolNames(resp.ToolCalls, toolResults, options.terminalTools); len(terminalTools) > 0 {
+			} else if terminalTools := successfulTerminalToolNames(resp.ToolCalls, toolResults, options.terminalTools); !injectedAfterTools && len(terminalTools) > 0 {
 				if emit != nil {
 					payload, _ := json.Marshal(map[string]any{
 						"iteration": i + 1,
@@ -1000,6 +1034,47 @@ func (budget ToolLoopBudget) active() bool {
 		budget.MaxOutputTokens > 0 ||
 		budget.MaxTotalTokens > 0 ||
 		budget.MaxElapsed > 0
+}
+
+func privateToolTraceEmitter(emit provideriface.EventEmitFunc, private bool) provideriface.EventEmitFunc {
+	if emit == nil || !private {
+		return emit
+	}
+	return func(kind types.EventKind, phase string, payload json.RawMessage) {
+		switch kind {
+		case types.EventToolInvoked:
+			var event struct {
+				Tool      string          `json:"tool"`
+				CallID    string          `json:"call_id"`
+				Arguments json.RawMessage `json:"arguments"`
+			}
+			_ = json.Unmarshal(payload, &event)
+			safe, _ := json.Marshal(map[string]any{
+				"tool": event.Tool, "call_id": event.CallID, "private": true,
+				"arguments_len": len(event.Arguments), "arguments_sha256": toolOutputSHA256Hex(string(event.Arguments)),
+			})
+			emit(kind, phase, safe)
+		case types.EventToolResult:
+			var event struct {
+				Tool             string `json:"tool"`
+				CallID           string `json:"call_id"`
+				IsError          bool   `json:"is_error"`
+				Output           string `json:"output"`
+				OutputLen        int    `json:"output_len"`
+				FullOutputLen    int    `json:"full_output_len"`
+				FullOutputSHA256 string `json:"full_output_sha256"`
+			}
+			_ = json.Unmarshal(payload, &event)
+			safe, _ := json.Marshal(map[string]any{
+				"tool": event.Tool, "call_id": event.CallID, "is_error": event.IsError, "private": true,
+				"output_len": event.OutputLen, "output_sha256": toolOutputSHA256Hex(event.Output),
+				"full_output_len": event.FullOutputLen, "full_output_sha256": event.FullOutputSHA256,
+			})
+			emit(kind, phase, safe)
+		default:
+			emit(kind, phase, payload)
+		}
+	}
 }
 
 func toolLoopBudgetLabel(budget ToolLoopBudget) string {

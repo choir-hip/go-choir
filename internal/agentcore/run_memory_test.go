@@ -100,6 +100,7 @@ func TestRunMemoryInitializeSeedsPriorActorSnapshot(t *testing.T) {
 		FirstKeptEntryID: priorMessage.EntryID,
 		TokensBefore:     42,
 		Reason:           "threshold",
+		Details:          map[string]any{runMetadataPrivateTraceTainted: true},
 	}); err != nil {
 		t.Fatalf("append prior memory compaction: %v", err)
 	}
@@ -203,6 +204,16 @@ func TestRunMemoryInitializeSeedsPriorActorSnapshot(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("initialize run memory: %v", err)
+	}
+	if !metadataBoolValue(current.Metadata, runMetadataPrivateTraceTainted) {
+		t.Fatal("rewarmed actor memory did not restore durable private Trace taint")
+	}
+	storedCurrent, err := s.GetRun(ctx, current.RunID)
+	if err != nil {
+		t.Fatalf("load tainted current run: %v", err)
+	}
+	if !metadataBoolValue(storedCurrent.Metadata, runMetadataPrivateTraceTainted) {
+		t.Fatal("private Trace taint was not persisted on the rewarmed run")
 	}
 	if len(messages) != 2 {
 		t.Fatalf("messages = %d, want actor snapshot + wake message: %+v", len(messages), messages)
@@ -465,5 +476,20 @@ func TestContextOverflowErrorDetection(t *testing.T) {
 	}
 	if isContextOverflowError(errors.New("network timeout")) {
 		t.Fatalf("unexpected context overflow detection")
+	}
+}
+
+func TestPrivateRunMemoryCompactionFailurePayloadRedactsProviderText(t *testing.T) {
+	const marker = "private-compaction-marker"
+	payload := runMemoryCompactionFailurePayload("threshold", 42, errors.New("unable to compact "+marker), true)
+	if strings.Contains(string(payload), marker) {
+		t.Fatalf("private compaction failure leaked provider text: %s", payload)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("decode private compaction failure: %v", err)
+	}
+	if decoded["provider_error_private"] != true || decoded["provider_error_sha256"] == "" {
+		t.Fatalf("private compaction failure metadata = %#v", decoded)
 	}
 }

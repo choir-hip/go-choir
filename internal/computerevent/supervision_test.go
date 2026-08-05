@@ -33,6 +33,33 @@ func testSupervisionTransaction(t *testing.T) SupervisionTransaction {
 	transaction.CommandDigest = digest
 	return transaction
 }
+
+func TestSupervisionCommandDigestBindsFinalMutationArtifactDigests(t *testing.T) {
+	transaction := testSupervisionTransaction(t)
+	var body map[string]any
+	if err := json.Unmarshal(transaction.Mutations[0].Body, &body); err != nil {
+		t.Fatal(err)
+	}
+	body["referenced_artifacts"] = []any{map[string]any{
+		"binding_id":       "binding-1",
+		"artifact_digest":  testDigestA,
+		"plaintext_digest": testDigestB,
+	}}
+	transaction.Mutations[0].Body, _ = json.Marshal(body)
+	first, err := transaction.ComputeCommandDigest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	body["referenced_artifacts"].([]any)[0].(map[string]any)["artifact_digest"] = testDigestC
+	transaction.Mutations[0].Body, _ = json.Marshal(body)
+	second, err := transaction.ComputeCommandDigest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatalf("command digest did not bind final ciphertext artifact digest: %s", first)
+	}
+}
 func testUnboundSupervisionEvent() Event {
 	return Event{
 		SchemaVersion: SchemaVersionV1, ComputerID: testComputerID,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -121,7 +122,91 @@ func supervisionAttemptShape(attempts []store.SupervisionAttemptLineage, attempt
 	return "retry", previous.Ordinal + 1, &prior
 }
 
+func (rt *Runtime) recoverSupervisedUpdate(ctx context.Context, rec *types.RunRecord, packet types.CoagentSourcePacketPayload, commandID, targetAgentID, channelID string) (types.CoagentSourcePacket, bool, error) {
+	if rt == nil || rt.eventAppender == nil || rt.store == nil || rec == nil {
+		return types.CoagentSourcePacket{}, false, nil
+	}
+	_, transaction, found, err := rt.eventAppender.RecoverFinalizedSupervisionTransaction(ctx, commandID)
+	if err != nil || !found {
+		return types.CoagentSourcePacket{}, found, err
+	}
+	profile := agentprofile.Canonical(agentProfileForRun(rec))
+	expectedActorRole := profile
+	if profile == agentprofile.CoSuper {
+		expectedActorRole = "cosuper"
+	}
+	if transaction.OwnerID != rec.OwnerID || transaction.ComputerID != rec.SandboxID ||
+		transaction.TrajectoryID != trajectoryIDForRun(rec) ||
+		transaction.Actor.ActorID != agentIDForRun(rec) ||
+		transaction.Actor.Role != expectedActorRole ||
+		transaction.Actor.AuthorityRef != "run:"+rec.RunID {
+		return types.CoagentSourcePacket{}, true, fmt.Errorf("%w: finalized supervised update scope mismatch", computerevent.ErrSupervisionIdempotencyConflict)
+	}
+	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.SandboxID, trajectoryIDForRun(rec))
+	if err != nil {
+		return types.CoagentSourcePacket{}, true, fmt.Errorf("recover supervised update trajectory: %w", err)
+	}
+	deliveries, err := rt.store.ListSupervisionDeliveryEvents(ctx, rec.OwnerID, rec.SandboxID, trajectory.TrajectoryID)
+	if err != nil {
+		return types.CoagentSourcePacket{}, true, fmt.Errorf("recover supervised update delivery: %w", err)
+	}
+	expectedPacket, err := computerevent.CanonicalJSON(normalizeCoagentSourcePacketPayload(packet))
+	if err != nil {
+		return types.CoagentSourcePacket{}, true, err
+	}
+	for _, delivery := range deliveries {
+		if delivery.CommandID != commandID {
+			continue
+		}
+		canonicalTarget := strings.TrimSpace(targetAgentID)
+		if canonicalTarget == "" {
+			switch delivery.Kind {
+			case "attempt_result":
+				canonicalTarget = persistentSuperAgentID(rec.OwnerID)
+			case "researcher_packet_recorded":
+				canonicalTarget = textureAgentIDForTrajectory(trajectory)
+			case "actor_message_recorded":
+				var body canonicalSupervisionDeliveryBody
+				if err := json.Unmarshal(delivery.Body, &body); err != nil || body.ToActorID == nil {
+					return types.CoagentSourcePacket{}, true, fmt.Errorf("%w: finalized supervised update recipient is not explicit", computerevent.ErrNeedsProjectionRepair)
+				}
+				canonicalTarget = strings.TrimSpace(*body.ToActorID)
+			}
+		}
+		update, addressed, err := rt.canonicalSupervisionDeliveryUpdate(ctx, trajectory, canonicalTarget, delivery)
+		if err != nil {
+			return types.CoagentSourcePacket{}, true, err
+		}
+		if !addressed || update.AgentID != agentIDForRun(rec) {
+			return types.CoagentSourcePacket{}, true, fmt.Errorf("%w: finalized supervised update recipient mismatch", computerevent.ErrSupervisionIdempotencyConflict)
+		}
+		if targetAgentID != "" && update.TargetAgentID != strings.TrimSpace(targetAgentID) {
+			return types.CoagentSourcePacket{}, true, fmt.Errorf("%w: finalized supervised update recipient mismatch", computerevent.ErrSupervisionIdempotencyConflict)
+		}
+		if transaction.TransactionClass == "record_message" && channelID != "" && update.ChannelID != strings.TrimSpace(channelID) {
+			return types.CoagentSourcePacket{}, true, fmt.Errorf("%w: finalized supervised update channel mismatch", computerevent.ErrSupervisionIdempotencyConflict)
+		}
+		acceptedPacket, err := computerevent.CanonicalJSON(normalizeCoagentSourcePacketPayload(update.Packet))
+		if err != nil {
+			return types.CoagentSourcePacket{}, true, err
+		}
+		if string(acceptedPacket) != string(expectedPacket) {
+			return types.CoagentSourcePacket{}, true, fmt.Errorf("%w: finalized supervised update payload mismatch", computerevent.ErrSupervisionIdempotencyConflict)
+		}
+		return update, true, nil
+	}
+	return types.CoagentSourcePacket{}, true, fmt.Errorf("%w: finalized supervised update has no delivery", computerevent.ErrNeedsProjectionRepair)
+}
+
 func (rt *Runtime) appendSupervisedUpdate(ctx context.Context, rec *types.RunRecord, packet types.CoagentSourcePacketPayload, commandID, targetAgentID, channelID string) (string, error) {
+	if recovered, found, err := rt.recoverSupervisedUpdate(ctx, rec, packet, commandID, targetAgentID, channelID); err != nil {
+		return "", err
+	} else if found {
+		if err := rt.dispatchSupervisionUpdate(ctx, rec, recovered.TargetAgentID, recovered.UpdateID); err != nil {
+			return "", err
+		}
+		return recovered.UpdateID, nil
+	}
 	snapshot, supervised, err := rt.supervisionSnapshotForRun(ctx, rec)
 	if err != nil || !supervised {
 		return "", err
@@ -135,12 +220,15 @@ func (rt *Runtime) appendSupervisedUpdate(ctx context.Context, rec *types.RunRec
 	if err != nil {
 		return "", err
 	}
-	bindingID := commandID + ":packet"
-	packetRef := computerevent.SupervisionArtifactPlaceholder(bindingID)
 	profile := agentprofile.Canonical(agentProfileForRun(rec))
 	transaction := computerevent.SupervisionTransaction{Schema: computerevent.SupervisionSchemaV1, Reducer: computerevent.SupervisionReducerV1, DigestRecipe: computerevent.SupervisionDigestRecipeV1, TransactionID: commandID, OwnerID: rec.OwnerID, ComputerID: rec.SandboxID, TrajectoryID: trajectoryIDForRun(rec), CommandID: commandID, Expected: supervisionExpected(snapshot), ObservedBase: &observedBase}
 	switch profile {
 	case agentprofile.CoSuper:
+		canonicalTargetAgentID := persistentSuperAgentID(rec.OwnerID)
+		if strings.TrimSpace(targetAgentID) != canonicalTargetAgentID {
+			return "", fmt.Errorf("supervised CoSuper result must target persistent Super %q", canonicalTargetAgentID)
+		}
+		targetAgentID = canonicalTargetAgentID
 		assignmentID, attemptID := strings.TrimSpace(metadataStringValue(rec.Metadata, runMetadataAssignmentID)), strings.TrimSpace(metadataStringValue(rec.Metadata, runMetadataAttemptID))
 		lineage, err := rt.store.GetSupervisionAssignmentLineage(ctx, rec.OwnerID, rec.SandboxID, trajectoryIDForRun(rec), assignmentID)
 		if err != nil {
@@ -160,6 +248,8 @@ func (rt *Runtime) appendSupervisedUpdate(ctx context.Context, rec *types.RunRec
 			return "", fmt.Errorf("supervision attempt %q is not canonical for assignment %q", attemptID, assignmentID)
 		}
 		resultID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("choir:supervision:result:"+commandID)).String()
+		bindingID := resultID + ":packet"
+		packetRef := computerevent.SupervisionArtifactPlaceholder(bindingID)
 		outcome := "succeeded"
 		if packet.Kind == "blocker" {
 			outcome = "blocked"
@@ -172,9 +262,26 @@ func (rt *Runtime) appendSupervisedUpdate(ctx context.Context, rec *types.RunRec
 		if _, _, _, err := rt.AppendSupervisionTransactionWithPrivateArtifacts(ctx, transaction, []computerevent.PrivateSupervisionArtifactPayload{{BindingID: bindingID, Plaintext: packetBytes, MediaType: computerevent.SupervisionEvidenceMediaTypeV1}}); err != nil {
 			return "", fmt.Errorf("append supervised attempt result: %w", err)
 		}
+		if err := rt.dispatchSupervisionUpdate(ctx, rec, targetAgentID, resultID); err != nil {
+			return "", err
+		}
 		return resultID, nil
 	case agentprofile.Researcher:
+		trajectory, err := rt.store.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.SandboxID, trajectoryIDForRun(rec))
+		if err != nil {
+			return "", fmt.Errorf("load supervised researcher trajectory: %w", err)
+		}
+		canonicalTargetAgentID := textureAgentIDForTrajectory(trajectory)
+		if canonicalTargetAgentID == "" {
+			return "", fmt.Errorf("supervised researcher trajectory has no Texture target")
+		}
+		if strings.TrimSpace(targetAgentID) != canonicalTargetAgentID {
+			return "", fmt.Errorf("supervised researcher packet must target trajectory Texture %q", canonicalTargetAgentID)
+		}
+		targetAgentID = canonicalTargetAgentID
 		packetID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("choir:supervision:research:"+commandID)).String()
+		bindingID := packetID + ":packet"
+		packetRef := computerevent.SupervisionArtifactPlaceholder(bindingID)
 		body, err := json.Marshal(map[string]any{"packet_id": packetID, "researcher_id": agentIDForRun(rec), "obligation_id": "run:" + rec.RunID, "packet_artifact_ref": packetRef, "source_artifact_refs": []string{}, "uncertainty_artifact_ref": packetRef, "conflict_refs": []string{}})
 		if err != nil {
 			return "", err
@@ -183,12 +290,26 @@ func (rt *Runtime) appendSupervisedUpdate(ctx context.Context, rec *types.RunRec
 		if _, _, _, err := rt.AppendSupervisionTransactionWithPrivateArtifacts(ctx, transaction, []computerevent.PrivateSupervisionArtifactPayload{{BindingID: bindingID, Plaintext: packetBytes, MediaType: computerevent.SupervisionEvidenceMediaTypeV1}}); err != nil {
 			return "", fmt.Errorf("append supervised researcher packet: %w", err)
 		}
+		if err := rt.dispatchSupervisionUpdate(ctx, rec, targetAgentID, packetID); err != nil {
+			return "", err
+		}
 		return packetID, nil
 	case agentprofile.Super, agentprofile.Texture:
 		messageID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("choir:supervision:message:"+commandID)).String()
-		toRole := "super"
-		if target, err := rt.store.GetAgentByScope(ctx, rec.OwnerID, rec.SandboxID, targetAgentID); err == nil {
-			toRole = agentprofile.Canonical(target.Profile)
+		bindingID := messageID + ":packet"
+		packetRef := computerevent.SupervisionArtifactPlaceholder(bindingID)
+		toRole := ""
+		if strings.TrimSpace(targetAgentID) == persistentSuperAgentID(rec.OwnerID) {
+			toRole = agentprofile.Super
+		} else {
+			target, err := rt.store.GetAgentByScope(ctx, rec.OwnerID, rec.SandboxID, targetAgentID)
+			if err != nil {
+				return "", fmt.Errorf("resolve supervised message target: %w", err)
+			}
+			toRole = agentprofile.Canonical(firstNonEmpty(target.Profile, target.Role))
+		}
+		if !canonicalSupervisionTargetProfileSupported(toRole) {
+			return "", fmt.Errorf("supervised message target profile %q cannot consume canonical packets", toRole)
 		}
 		var toActorID *string
 		if targetAgentID = strings.TrimSpace(targetAgentID); targetAgentID != "" {
@@ -202,8 +323,109 @@ func (rt *Runtime) appendSupervisedUpdate(ctx context.Context, rec *types.RunRec
 		if _, _, _, err := rt.AppendSupervisionTransactionWithPrivateArtifacts(ctx, transaction, []computerevent.PrivateSupervisionArtifactPayload{{BindingID: bindingID, Plaintext: packetBytes, MediaType: computerevent.SupervisionEvidenceMediaTypeV1}}); err != nil {
 			return "", fmt.Errorf("append supervised actor message: %w", err)
 		}
+		if err := rt.dispatchSupervisionUpdate(ctx, rec, targetAgentID, messageID); err != nil {
+			return "", err
+		}
 		return messageID, nil
 	default:
 		return "", fmt.Errorf("supervised update_coagent is not available to %s", profile)
 	}
+}
+
+func canonicalSupervisionTargetProfileSupported(profile string) bool {
+	switch agentprofile.Canonical(profile) {
+	case agentprofile.Super, agentprofile.Researcher, agentprofile.Texture:
+		return true
+	default:
+		return false
+	}
+}
+
+func (rt *Runtime) dispatchSupervisionUpdate(ctx context.Context, source *types.RunRecord, targetAgentID, recordID string) error {
+	if rt == nil || source == nil || rt.dispatchActor == nil {
+		return fmt.Errorf("dispatch canonical supervision update: actor runtime unavailable")
+	}
+	targetAgentID = strings.TrimSpace(targetAgentID)
+	recordID = strings.TrimSpace(recordID)
+	if targetAgentID == "" || recordID == "" {
+		return fmt.Errorf("dispatch canonical supervision update: target and record identity are required")
+	}
+	if err := rt.dispatchActor(ctx, source.OwnerID, source.SandboxID, targetAgentID, "coagent_result", recordID, trajectoryIDForRun(source), agentIDForRun(source)); err != nil {
+		rt.scheduleCanonicalSupervisionSweep(context.WithoutCancel(ctx))
+		return fmt.Errorf("dispatch canonical supervision update: %w", err)
+	}
+	return nil
+}
+
+func (rt *Runtime) acknowledgeCanonicalSupervisionDeliveries(ctx context.Context, rec *types.RunRecord) error {
+	if rt == nil || rec == nil || metadataStringValue(rec.Metadata, "supervision_delivery_authority") != "canonical" {
+		return nil
+	}
+	deliveryIDs := metadataStringSlice(rec.Metadata["supervision_delivery_ids"])
+	if len(deliveryIDs) == 0 {
+		return fmt.Errorf("canonical supervision completion has no delivery identities")
+	}
+	consumed, err := rt.consumedCanonicalSupervisionUpdateIDs(ctx, rec.OwnerID, rec.SandboxID, rec.AgentID)
+	if err != nil {
+		return err
+	}
+	pending, err := rt.canonicalSupervisionUpdatesForAgentWithConsumed(ctx, rec.OwnerID, rec.SandboxID, rec.AgentID, trajectoryIDForRun(rec), 0, consumed)
+	if err != nil {
+		return err
+	}
+	pendingIDs := make(map[string]bool, len(pending))
+	for _, update := range pending {
+		pendingIDs[strings.TrimSpace(update.UpdateID)] = true
+	}
+	unacknowledged := make([]string, 0, len(deliveryIDs))
+	for _, deliveryID := range deliveryIDs {
+		deliveryID = strings.TrimSpace(deliveryID)
+		if deliveryID == "" || consumed[deliveryID] {
+			continue
+		}
+		if !pendingIDs[deliveryID] {
+			return fmt.Errorf("canonical supervision delivery %q is not pending for run %s", deliveryID, rec.RunID)
+		}
+		unacknowledged = append(unacknowledged, deliveryID)
+	}
+	if len(unacknowledged) == 0 {
+		return nil
+	}
+	sort.Strings(unacknowledged)
+	snapshot, err := rt.store.GetSupervisionProjectionSnapshot(ctx, rec.OwnerID, rec.SandboxID, trajectoryIDForRun(rec))
+	if err != nil {
+		return err
+	}
+	observedBase, err := supervisionObservedBase(snapshot)
+	if err != nil {
+		return err
+	}
+	mutations := make([]computerevent.SupervisionMutation, 0, len(unacknowledged))
+	for _, deliveryID := range unacknowledged {
+		body, err := json.Marshal(map[string]any{
+			"message_id": deliveryID, "target_actor_id": rec.AgentID, "run_id": rec.RunID,
+		})
+		if err != nil {
+			return err
+		}
+		mutations = append(mutations, computerevent.SupervisionMutation{Kind: "actor_message_acknowledged", Body: body})
+	}
+	commandID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join(append([]string{"choir:supervision:ack", rec.RunID}, unacknowledged...), "\x00"))).String()
+	transaction := computerevent.SupervisionTransaction{
+		Schema: computerevent.SupervisionSchemaV1, Reducer: computerevent.SupervisionReducerV1,
+		DigestRecipe:  computerevent.SupervisionDigestRecipeV1,
+		TransactionID: commandID, OwnerID: rec.OwnerID, ComputerID: rec.SandboxID,
+		TrajectoryID: trajectoryIDForRun(rec), CommandID: commandID,
+		Expected: supervisionExpected(snapshot), ObservedBase: &observedBase,
+		TransactionClass: "acknowledge_message",
+		Actor: computerevent.SupervisionActor{
+			ActorID: rec.AgentID, Role: agentprofile.Canonical(agentProfileForRun(rec)),
+			AuthorityRef: "run:" + rec.RunID,
+		},
+		Mutations: mutations,
+	}
+	if _, _, err := rt.AppendSupervisionTransaction(ctx, transaction); err != nil {
+		return fmt.Errorf("acknowledge canonical supervision deliveries: %w", err)
+	}
+	return nil
 }

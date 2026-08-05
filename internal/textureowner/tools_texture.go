@@ -560,25 +560,35 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 
 	docID := strings.TrimSpace(in.DocID)
 	baseRevisionID := strings.TrimSpace(in.BaseRevisionID)
-
-	mutation, err := rt.Store.GetAgentMutationByRun(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-	if err != nil {
-		return types.Revision{}, fmt.Errorf("get texture mutation: %w", err)
-	}
-	if mutation == nil {
-		return types.Revision{}, fmt.Errorf("texture mutation not found for run %s", rec.RunID)
-	}
-	if mutation.State != "pending" {
-		return types.Revision{}, fmt.Errorf("texture mutation is %s, not pending: this Texture actor run is no longer writable", mutation.State)
-	}
+	canonicalDelivery := metadataStringValue(rec.Metadata, "supervision_delivery_authority") == "canonical" &&
+		len(metadataStringSlice(rec.Metadata["supervision_delivery_ids"])) > 0
 	if docID == "" {
 		docID = strings.TrimSpace(metadataStringValue(rec.Metadata, "doc_id"))
 	}
 	if docID == "" {
 		docID = strings.TrimSpace(rec.ChannelID)
 	}
-	if docID == "" {
-		docID = strings.TrimSpace(mutation.DocID)
+	var mutation *store.AgentMutation
+	var err error
+	if canonicalDelivery {
+		mutation = &store.AgentMutation{
+			DocID: docID, RunID: rec.RunID, OwnerID: rec.OwnerID,
+			ComputerID: agentMutationComputerID(rec), State: "pending",
+		}
+	} else {
+		mutation, err = rt.Store.GetAgentMutationByRun(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
+		if err != nil {
+			return types.Revision{}, fmt.Errorf("get texture mutation: %w", err)
+		}
+		if mutation == nil {
+			return types.Revision{}, fmt.Errorf("texture mutation not found for run %s", rec.RunID)
+		}
+		if mutation.State != "pending" {
+			return types.Revision{}, fmt.Errorf("texture mutation is %s, not pending: this Texture actor run is no longer writable", mutation.State)
+		}
+		if docID == "" {
+			docID = strings.TrimSpace(mutation.DocID)
+		}
 	}
 	if docID == "" {
 		return types.Revision{}, fmt.Errorf("doc_id must not be empty")
@@ -591,6 +601,11 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	}
 	if mutation.DocID != docID || mutation.OwnerID != rec.OwnerID {
 		return types.Revision{}, fmt.Errorf("texture mutation does not match edit target")
+	}
+	failLegacyMutation := func() {
+		if !canonicalDelivery {
+			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
+		}
 	}
 
 	computerID := strings.TrimSpace(rec.SandboxID)
@@ -609,13 +624,13 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		return types.Revision{}, fmt.Errorf("get texture document: %w", err)
 	}
 	if strings.TrimSpace(doc.TrajectoryID) == "" || strings.TrimSpace(doc.ComputerID) == "" {
-		_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
+		failLegacyMutation()
 		return types.Revision{}, fmt.Errorf("create Texture revision: %w", rt.refuseLegacyTextureWriter("unimported legacy Texture document"))
 	}
 	if doc.ComputerID != computerID || rec.TrajectoryID != doc.TrajectoryID ||
 		(metadataStringValue(rec.Metadata, "trajectory_id") != "" &&
 			metadataStringValue(rec.Metadata, "trajectory_id") != doc.TrajectoryID) {
-		_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
+		failLegacyMutation()
 		return types.Revision{}, fmt.Errorf("create Texture revision: run scope does not match supervised document")
 	}
 	if strings.TrimSpace(doc.CurrentRevisionID) == "" {
@@ -686,14 +701,17 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	}
 	var storedRev types.Revision
 	workItemID := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id"))
+	if workItemID == "" && canonicalDelivery {
+		workItemID = computerevent.DigestBytes([]byte(strings.Join(metadataStringSlice(rec.Metadata["supervision_delivery_ids"]), "\x00")))
+	}
 	if workItemID == "" {
-		_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
+		failLegacyMutation()
 		return types.Revision{}, fmt.Errorf("create Texture revision: supervision assignment identity missing")
 	}
 	agentID := strings.TrimSpace(rec.AgentID)
 	expectedAgentID := currentTextureAgentID(doc.DocID)
 	if agentID == "" || agentID != expectedAgentID {
-		_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
+		failLegacyMutation()
 		return types.Revision{}, fmt.Errorf("create Texture revision: run agent %q does not own supervised subject %q", agentID, expectedAgentID)
 	}
 	revisionMaterialDigest := objectgraph.SHA256([]byte(strings.Join([]string{
@@ -712,10 +730,18 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	if err != nil {
 		return types.Revision{}, fmt.Errorf("create canonical Texture revision: %w", err)
 	}
-	if err := rt.Store.RecordAgentMutationRevision(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, rev.RevisionID); err != nil {
-		if err != store.ErrMutationAlreadyCompleted {
-			return types.Revision{}, fmt.Errorf("record Texture mutation revision: %w", err)
+	if !canonicalDelivery {
+		if err := rt.Store.RecordAgentMutationRevision(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, rev.RevisionID); err != nil {
+			if err != store.ErrMutationAlreadyCompleted {
+				return types.Revision{}, fmt.Errorf("record Texture mutation revision: %w", err)
+			}
 		}
+	}
+	if canonicalDelivery {
+		if rec.Metadata == nil {
+			rec.Metadata = map[string]any{}
+		}
+		rec.Metadata["canonical_texture_revision_id"] = storedRev.RevisionID
 	}
 	if consumedThroughSeq > 0 {
 		if err := rt.Store.UpsertTextureControllerCheckpoint(ctx, store.TextureControllerCheckpoint{

@@ -9,8 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/actor"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -98,6 +100,20 @@ func TestInitialDispatchUpdateIdentityIsStableAndScoped(t *testing.T) {
 		if changed == first {
 			t.Fatalf("%s scope change reused initial dispatch ID %q", name, first)
 		}
+	}
+}
+
+func TestCoagentResultUpdateIdentityIsFreshForReplay(t *testing.T) {
+	first := actorDispatchUpdateID("owner-a", "computer-a", "agent-a", "coagent_result", "message-a")
+	replay := actorDispatchUpdateID("owner-a", "computer-a", "agent-a", "coagent_result", "message-a")
+	if first == replay {
+		t.Fatalf("coagent result replay reused processed actor update ID %q", first)
+	}
+	if _, err := uuid.Parse(first); err != nil {
+		t.Fatalf("first coagent result update ID = %q: %v", first, err)
+	}
+	if _, err := uuid.Parse(replay); err != nil {
+		t.Fatalf("replayed coagent result update ID = %q: %v", replay, err)
 	}
 }
 
@@ -319,11 +335,13 @@ func TestHandlerCoagentResultForCompletedRun(t *testing.T) {
 	// error means ReconcileCoagentWake succeeded.
 }
 
-// TestHandlerCoagentResultForBlockedRun tests the bug fix: a coagent_result
-// for a blocked run should reactivate it, NOT silently drop the message and
-// clear memory. Before the fix, this would orphan the blocked run.
-func TestHandlerCoagentResultForBlockedRun(t *testing.T) {
+// A blocked CoSuper may be reactivated by a wake, but private delivery must
+// fail closed when canonical tape authority is unavailable.
+func TestHandlerCoagentResultForBlockedRunFailsClosedWithoutCanonicalAuthority(t *testing.T) {
 	env := newAdapterTestEnv(t)
+	if err := env.adapter.Runtime.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatalf("install actor delivery tools: %v", err)
+	}
 
 	agentID := "agent-blocked-test"
 	ownerID := "user-blocked"
@@ -331,7 +349,7 @@ func TestHandlerCoagentResultForBlockedRun(t *testing.T) {
 		AgentID:   agentID,
 		OwnerID:   ownerID,
 		SandboxID: "sandbox-test",
-		Profile:   "test-profile",
+		Profile:   agentprofile.CoSuper,
 	})
 	if err != nil {
 		t.Fatalf("UpsertAgent: %v", err)
@@ -339,13 +357,19 @@ func TestHandlerCoagentResultForBlockedRun(t *testing.T) {
 
 	// Create a blocked run.
 	rec := types.RunRecord{
-		RunID:     "run-blocked-test",
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		AgentID:   agentID,
-		Prompt:    "test blocked",
-		State:     types.RunBlocked,
-		Error:     "provider rate limit",
+		RunID:        "run-blocked-test",
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-test",
+		AgentID:      agentID,
+		AgentProfile: agentprofile.CoSuper,
+		AgentRole:    agentprofile.CoSuper,
+		Metadata: map[string]any{
+			"agent_profile": agentprofile.CoSuper,
+			"agent_role":    agentprofile.CoSuper,
+		},
+		Prompt: "test blocked",
+		State:  types.RunBlocked,
+		Error:  "provider rate limit",
 	}
 	if err := env.store.CreateRun(env.ctx, rec); err != nil {
 		t.Fatalf("CreateRun: %v", err)
@@ -360,23 +384,10 @@ func TestHandlerCoagentResultForBlockedRun(t *testing.T) {
 		t.Fatalf("HandleUpdate coagent_result for blocked run: %v", err)
 	}
 
-	// The handler should have reactivated the run (set to RunPending,
-	// called ExecuteActivationSync). The stub provider should complete it.
-	// Memory should NOT be nil (the run was reactivated, not dropped).
-	_ = resultMem // memory may be nil if the run completed immediately
-
-	// Verify the run was reactivated (no longer RunBlocked).
-	updated, err := env.store.GetRun(env.ctx, rec.RunID)
-	if err != nil {
-		t.Fatalf("GetRun: %v", err)
-	}
-	if updated.State == types.RunBlocked {
-		t.Error("run is still RunBlocked — the bug: coagent_result was silently dropped instead of reactivating")
-	}
-	// The run should have been reactivated and completed (stub provider).
-	if updated.State != types.RunCompleted {
-		// Give it a moment to complete.
-		updated = waitForRunState(t, env.store, env.ctx, rec.RunID, types.RunCompleted, 3*time.Second)
+	_ = resultMem
+	updated := waitForRunState(t, env.store, env.ctx, rec.RunID, types.RunFailed, 3*time.Second)
+	if !strings.Contains(updated.Error, "canonical supervision delivery authority unavailable") {
+		t.Fatalf("blocked CoSuper authority failure = %q", updated.Error)
 	}
 }
 

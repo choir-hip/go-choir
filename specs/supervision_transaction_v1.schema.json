@@ -17,7 +17,7 @@
     "transaction_class": {
       "enum": [
         "projection_import", "open_trajectory", "revise_intent", "revise_artifact",
-        "record_message", "record_research", "open_assignment", "start_attempt",
+        "record_message", "acknowledge_message", "record_research", "open_assignment", "start_attempt",
         "return_result", "record_belief", "record_finding",
         "record_dissent", "record_reconciliation", "propose_decision",
         "record_owner_decision", "cancel_assignment", "record_disposition",
@@ -99,6 +99,15 @@
     {
       "if": {"properties": {"transaction_class": {"const": "record_message"}}},
       "then": {"$ref": "#/$defs/actor_message_transaction"}
+    },
+    {
+      "if": {"properties": {"transaction_class": {"const": "acknowledge_message"}}},
+      "then": {
+        "properties": {
+          "actor": {"properties": {"role": {"enum": ["texture", "super", "researcher"]}}},
+          "mutations": {"items": {"properties": {"kind": {"const": "actor_message_acknowledged"}}}}
+        }
+      }
     },
     {
       "if": {"properties": {"transaction_class": {"const": "record_research"}}},
@@ -422,6 +431,7 @@
         {"$ref": "#/$defs/intent_revised"},
         {"$ref": "#/$defs/texture_revision"},
         {"$ref": "#/$defs/actor_message_recorded"},
+        {"$ref": "#/$defs/actor_message_acknowledged"},
         {"$ref": "#/$defs/researcher_packet_recorded"},
         {"$ref": "#/$defs/assignment_opened"},
         {"$ref": "#/$defs/attempt_started"},
@@ -549,6 +559,22 @@
             "channel_id": {"$ref": "#/$defs/id"},
             "payload_artifact_ref": {"$ref": "#/$defs/artifact_ref"},
             "material": {"type": "boolean"}
+          }
+        }
+      }
+    },
+    "actor_message_acknowledged": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "body"],
+      "properties": {
+        "kind": {"const": "actor_message_acknowledged"},
+        "body": {
+          "type": "object", "additionalProperties": false,
+          "required": ["message_id", "target_actor_id", "run_id"],
+          "properties": {
+            "message_id": {"$ref": "#/$defs/id"},
+            "target_actor_id": {"$ref": "#/$defs/id"},
+            "run_id": {"$ref": "#/$defs/id"}
           }
         }
       }

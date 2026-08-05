@@ -88,7 +88,10 @@ type Runtime struct {
 	toolRegistry *toolregistry.ToolRegistry
 	toolProfiles map[string]*toolregistry.ToolRegistry
 
-	textureWakeAfter func(time.Duration, func()) textureWakeTimer
+	textureWakeAfter             func(time.Duration, func()) textureWakeTimer
+	coagentUpdateEnvelopeBuilder func(context.Context, *types.RunRecord, []types.CoagentSourcePacket, string) ([]json.RawMessage, error)
+	canonicalSweepMu             sync.Mutex
+	canonicalSweepTimer          textureWakeTimer
 
 	wirePublishDebounceMu sync.Mutex
 	wirePublishDebouncer  *wirePublishDebouncer
@@ -184,6 +187,14 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 // activate() panics — there is no fallback path.
 func (rt *Runtime) SetDispatchActor(fn func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error) {
 	rt.dispatchActor = fn
+}
+
+// SetCoagentUpdateEnvelopeBuilder binds the Texture-owned source materializer
+// used when canonical packets arrive after a Texture activation has started.
+func (rt *Runtime) SetCoagentUpdateEnvelopeBuilder(builder func(context.Context, *types.RunRecord, []types.CoagentSourcePacket, string) ([]json.RawMessage, error)) {
+	if rt != nil {
+		rt.coagentUpdateEnvelopeBuilder = builder
+	}
 }
 
 // DispatchActorActive reports whether the actor dispatch hook is set.
@@ -757,6 +768,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 	rt.passivateInterruptedActivations(ctx)
 	rt.rewarmInterruptedLifecycleActivations(ctx)
 	rt.recoverOpenWirePublicationClaims(ctx)
+	rt.reconcilePendingCanonicalSupervisionActors(ctx)
 	terminalOutcomeTargets := rt.reconcileTerminalRunOutcomes(ctx)
 	rt.sweepPassivatedSpawnedCoagentWork(ctx)
 	rt.sweepPendingUpdateActors(ctx, terminalOutcomeTargets)
@@ -888,7 +900,15 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 	rec.TrajectoryID = trajectoryIDForRun(rec)
 
 	existingAgent, existingAgentErr := rt.store.GetAgentByScope(ctx, ownerID, rt.cfg.SandboxID, rec.AgentID)
-	if existingAgentErr == nil && existingAgent.LifecycleVersion > 0 {
+	canonicalDeliveryAuthorized := false
+	if existingAgentErr == nil && metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {
+		updates, err := rt.canonicalSupervisionUpdatesForAgent(ctx, rec.OwnerID, rec.SandboxID, rec.AgentID, rec.TrajectoryID, 1)
+		if err != nil {
+			return nil, fmt.Errorf("%w: verify canonical actor delivery: %v", ErrSupervisionAuthorityRequired, err)
+		}
+		canonicalDeliveryAuthorized = len(updates) > 0
+	}
+	if existingAgentErr == nil && (existingAgent.LifecycleVersion > 0 || canonicalDeliveryAuthorized) {
 		if existingAgent.OwnerID != rec.OwnerID || existingAgent.ComputerID != rec.SandboxID {
 			return nil, fmt.Errorf("%w: projected activation scope mismatch", ErrSupervisionAuthorityRequired)
 		}
@@ -2580,6 +2600,11 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 	}
 
 	registry := rt.toolRegistryForRun(rec)
+	if (registry == nil || registry.Size() == 0) && runSupportsCoagentUpdateInjection(rec) &&
+		metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {
+		rt.handleExecutionError(ctx, rec, fmt.Errorf("private coagent delivery requires the tool-loop execution path"))
+		return
+	}
 
 	// Use the tool-calling loop if a tool registry is configured and the
 	// provider supports the provideriface.ToolLoopProvider interface. Otherwise, fall back
@@ -2589,6 +2614,22 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 	} else {
 		rt.executeWithProvider(ctx, rec, emit)
 	}
+}
+
+func (rt *Runtime) persistPrivateTraceTaint(ctx context.Context, rec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || rec == nil {
+		return fmt.Errorf("persist private Trace taint: runtime unavailable")
+	}
+	if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) {
+		return nil
+	}
+	rec.Metadata = cloneMetadata(rec.Metadata)
+	rec.Metadata[runMetadataPrivateTraceTainted] = true
+	rec.UpdatedAt = time.Now().UTC()
+	if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+		return fmt.Errorf("persist private Trace taint: %w", err)
+	}
+	return nil
 }
 
 // executeWithToolLoop runs the run through the real tool-calling loop.
@@ -2629,13 +2670,21 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			})
 		}
 	}
-	reactivateExistingMemory := metadataBoolValue(rec.Metadata, "actor_reactivate_existing_memory")
+	var privateTraceUserTurns []json.RawMessage
 	appendInitialMailboxTurns := shouldAppendInitialCoagentMailboxTurns(rec)
-	if !reactivateExistingMemory && !appendInitialMailboxTurns {
+	if !appendInitialMailboxTurns {
+		priorMessageCount := len(initialMessages)
 		initialMessages, err = rt.prependInitialCoagentUpdatePackets(ctx, rec, initialMessages)
 		if err != nil {
 			rt.handleExecutionError(ctx, rec, fmt.Errorf("prepend coagent update packets: %w", err))
 			return
+		}
+		if injectedCount := len(initialMessages) - priorMessageCount; injectedCount > 0 {
+			if err := rt.persistPrivateTraceTaint(ctx, rec); err != nil {
+				rt.handleExecutionError(ctx, rec, err)
+				return
+			}
+			privateTraceUserTurns = append(privateTraceUserTurns, initialMessages[:injectedCount]...)
 		}
 	}
 	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
@@ -2673,11 +2722,17 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		}
 		if len(injected) > 0 {
 			initialMessages = append(initialMessages, injected...)
+			privateTraceUserTurns = append(privateTraceUserTurns, injected...)
 			rec.UpdatedAt = time.Now().UTC()
 			if err := rt.store.UpdateRun(ctx, *rec); err != nil {
 				rt.handleExecutionError(ctx, rec, fmt.Errorf("persist actor initial mailbox metadata: %w", err))
 				return
 			}
+		}
+	}
+	for _, message := range initialMessages {
+		if isCoagentUpdateUserMessage(message) {
+			privateTraceUserTurns = append(privateTraceUserTurns, message)
 		}
 	}
 	maxOutputTokens := provideriface.MaxInteractiveOutputTokensForSelection(llmConfig, agentProfileForRun(rec))
@@ -2701,6 +2756,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		toolregistry.WithToolLoopLLMConfig(llmConfig),
 		toolregistry.WithProviderPreconditionFallbacks(preconditionFallbacks...),
 	}
+	if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) || len(privateTraceUserTurns) > 0 {
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithPrivateTraceUserTurns(privateTraceUserTurns...))
+	}
 	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
 	}
@@ -2714,17 +2772,25 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	text, usage, err := toolregistry.RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
 	if err != nil {
 		if errors.Is(err, toolregistry.ErrToolLoopPassivated) {
+			if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) {
+				text = ""
+			}
 			rt.passivateIdleToolLoopRun(context.Background(), rec, text, usage, err)
 			return
 		}
 		if ctx.Err() != nil {
 			rt.handleExecutionError(ctx, rec, ctx.Err())
+		} else if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) {
+			rt.handleExecutionError(ctx, rec, fmt.Errorf("private actor tool loop failed"))
 		} else {
 			rt.handleExecutionError(ctx, rec, err)
 		}
 		return
 	}
 	if err := rt.awaitRequiredChildRuns(ctx, rec, 5*time.Minute); err != nil {
+		if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) {
+			err = fmt.Errorf("private actor child run failed")
+		}
 		rt.handleExecutionError(ctx, rec, err)
 		return
 	}
@@ -2733,6 +2799,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	now := time.Now().UTC()
 	rec.State = types.RunCompleted
 	rec.Result = text
+	if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) {
+		rec.Result = ""
+	}
 	rec.UpdatedAt = now
 	rec.FinishedAt = &now
 
@@ -2749,10 +2818,19 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// texture completion event before the run is surfaced as completed. This keeps
 	// run completion aligned with document-version availability.
 	if err := rt.handleRunCompletion(ctx, rec); err != nil {
+		if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) {
+			err = fmt.Errorf("private actor completion failed")
+		}
 		rt.handleExecutionError(ctx, rec, err)
 		return
 	}
-
+	if err := rt.acknowledgeCanonicalSupervisionDeliveries(ctx, rec); err != nil {
+		if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) {
+			err = fmt.Errorf("private actor delivery acknowledgement failed")
+		}
+		rt.handleExecutionError(ctx, rec, err)
+		return
+	}
 	// Use a background context for post-provider persistence so that a fast
 	// shutdown or cancellation after the provider returns cannot drop the
 	// completed-run transition or parent notification.
@@ -2790,7 +2868,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		}
 		log.Printf("runtime: completed %s result=%q", wireLifecycleSummary(rec), strings.ReplaceAll(preview, "\n", " "))
 	}
-	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
+	rt.maybeContinueCoagentInbox(persistCtx, rec)
 }
 
 func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunRecord, text string, usage provideriface.TokenUsage, passivationErr error) {
@@ -2964,7 +3042,7 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	if _, continueErr := rt.continueOpenLifecycleWorkAfterTerminal(persistCtx, rec); continueErr != nil {
 		log.Printf("runtime: continue open lifecycle work after run %s: %v", rec.RunID, continueErr)
 	}
-	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
+	rt.maybeContinueCoagentInbox(persistCtx, rec)
 
 }
 
@@ -3604,6 +3682,12 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 	}
 
 	if !runHasProfile(rec, agentprofile.Texture) {
+		return nil
+	}
+	if metadataStringValue(rec.Metadata, "supervision_delivery_authority") == "canonical" {
+		if metadataStringValue(rec.Metadata, "canonical_texture_revision_id") == "" {
+			return fmt.Errorf("canonical Texture delivery completed without a Texture revision")
+		}
 		return nil
 	}
 
