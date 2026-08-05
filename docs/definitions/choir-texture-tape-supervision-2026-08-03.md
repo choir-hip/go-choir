@@ -175,15 +175,15 @@ measures:
     cannot_prove: "A bounded three-way trajectory does not prove throughput or optimal scheduling at arbitrary fan-out; it proves the causal and authority contract."
 
 now:
-  status: blocked_incomplete
-  slice: "Two independent reviews rejected fifth candidate sha256:dd38c85cfaff7bb218823884fa680ef9bbe64788216e540bf824de276b7d7362. Five incremental implementation iterations have not converged: stable/realization identity remains duplicated across canonical state, run authority, actor mailboxes, and wake/retry consumers; import still duplicates source-graph selection and conditional materialization."
-  question: "Owner decision required by the AGENTS.md non-convergence rule: remove mutable realization identity from the stable trajectory-start transaction and bind it only in runtime scheduling, or add a separate canonical activation-binding transition?"
+  status: superseded
+  slice: "Owner review rejected the mission's expanded architecture. The one-writer problem remains valid, but the mission overreached into a complete supervision ontology, migration/rebuild protocol, future promotion model, and CI-owned global write gate before proving one Texture append. The owner requested a complete report and deletion-first cleanup."
+  question: "What exact forward cutback returns staging to the last simple working product without losing user data, after verifying that no supervision transaction or import was accepted?"
   reconciliation:
-    observed_at: 2026-08-05T09:51:08Z
-    source_ref: b5bfe9073e4ef78c5a7517aa6c03f4690c99391f
-    deploy_identity: "No repaired runtime deployment exists. Last accepted source evidence remains b7445551 preserve-mode enabled guest with wrong_computer append refusal."
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@b5bfe907, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@b5bfe907]
-    worktree_inventory_ref: "Goal-owned rejected runtime candidate plus this fifth review problem/Definition checkpoint are dirty on main at b5bfe907; no untracked files; unrelated worktrees untouched."
+    observed_at: 2026-08-05T14:55:41Z
+    source_ref: c78da24c28bdb2749b07e1a1bc2c302eea9f0a7c
+    deploy_identity: "Public health reports b74455511d5fdb52a493c8bc6dcc73c4f65159d3. Mission evidence records an enabled guest whose first canonical append refused wrong_computer; no accepted supervision transaction is recorded."
+    authority_identities: [owner_correction_2026-08-05_remove_supervision_slop, docs/texture-tape-supervision-complexity-audit-2026-08-05.md, docs/choir-doctrine.md@c78da24c]
+    worktree_inventory_ref: "Main is five docs-only commits ahead of origin/main; a rejected uncommitted 38-file runtime/test/schema candidate remains preserved; the owner-requested complexity audit is untracked before this checkpoint commit."
     status: reconciled
   candidate:
     id: texture-tape-identity-boundary-repair
@@ -195,17 +195,18 @@ now:
     scope: "Rejected: source-ref occurrence merging drops versions; imported target source objects are unconditioned; stable Texture mutations retain realization-scoped consumers; old-realization active, passivated, and mailbox work can block or double-execute restart; realization-dependent trajectory-start payload breaks cross-realization retry."
     rollback: "No rejected candidate was deployed. Preserve the dirty source candidate until the owner selects the substrate direction; then replace it coherently rather than stacking a sixth caller-local patch. No canonical event rollback is allowed."
   decision:
-    selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
+    selected: "The prior H032-first mission expansion is superseded. Preserve only the one-canonical-tape and deterministic-projection invariants; remove CI authority over supervision, default write prohibition, and mechanisms not required to prove one ordinary Texture append and replay."
     kind: architecture
     status: settled
+    settled_by: owner
     source: owner
-    evidence_ref: docs/evidence/texture-tape-definition-consensus-2026-08-03.md
-    owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
-    recorded_at: 2026-08-04T03:03:00Z
-    consequence: "The mission may execute schema/caller/migration work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "candidate sha256:dd38c85cfaff7bb218823884fa680ef9bbe64788216e540bf824de276b7d7362: two independent REJECT reviews", "canonical review: mutation consumers, active/passivated restart, boot mailbox sweep, and cross-realization command retry", "import review: occurrence-key version loss and unconditioned target overwrite"]
-  blocker_or_risk: "The fifth candidate is rejected and must not be deployed. AGENTS.md requires a structural assessment and explicit human direction after 3+ iterations without convergence. The problem record now identifies a typed runtime scope boundary and shared conditional source-graph materializer; the remaining owner-sensitive choice is whether realization binding stays outside semantic tape state or becomes a separate canonical transition."
-  next_action: "Owner selects the realization-binding authority. Then replace the rejected caller-local changes with one substrate-level scope boundary and shared source-graph materializer, add the combined vm-a-to-vm-b and conflicting-target import proofs, freeze once, and run independent review."
+    evidence_ref: docs/texture-tape-supervision-complexity-audit-2026-08-05.md
+    owner_ratification_ref: "Owner correction on 2026-08-05: supervision should not be a CI concern; writes should not default prohibited; capsules and the audit log are the safety substrate; report and remove the accumulated slop."
+    recorded_at: 2026-08-05T14:55:41Z
+    consequence: "This Definition is no longer executable implementation authority. No sixth repair candidate or deployment may proceed from it. A deletion-first cleanup must verify staging data, unwind the unaccepted protocol coherently, restore the product path, and only then define the smallest one-tape successor."
+  evidence_refs: [docs/texture-tape-supervision-complexity-audit-2026-08-05.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "committed range 794b99c9..c78da24c: 143 files, +21719/-12192", "deployed b7445551: first canonical append refused wrong_computer", "rejected dirty candidate: 38 files, +1536/-228"]
+  blocker_or_risk: "Cleanup is not yet implemented. Deployed staging contains the unaccepted runtime protocol and CI write controller; the local worktree contains a rejected candidate. Before a forward revert, inspect canonical events/imports and prove no user data exists only in the new projection."
+  next_action: "Freeze a deletion-first cleanup candidate from the audit: preserve the rejected diff outside the worktree, inspect staging event/import state, remove CI/default write gating and the unaccepted protocol coherently, restore the prior product path, and prove it on staging."
 
 receipts:
   - id: texture-tape-definition-round-1

@@ -872,3 +872,57 @@ Heresy delta: `discovered` adds occurrence-key source loss, unconditioned
 target provenance overwrite, stable mutation/realization consumer divergence,
 old-realization active/passivated/mailbox execution, and realization-dependent
 semantic command idempotency; `introduced=[]`; `repaired=[]`.
+
+## Owner rejects the expanded architecture — 2026-08-05
+
+The owner reviewed the accumulated implementation and rejected the mission's
+expanded architecture. The original dual-tape diagnosis remains valid, but the
+attempt overreached into a complete supervision workflow ontology, live
+projection-import/rebuild protocol, raw protocol API/CLI, dashboard model,
+formal promotion suite, and CI/vmctl/guest write-mode controller before one
+ordinary canonical Texture write succeeded.
+
+A divergent agentic-consensus audit produced seven independent completed
+reviews. The high-confidence common findings are:
+
+- preserve `ComputerEventAppender`, stable `ComputerID`, private-payload
+  protection, deterministic replay, capsule isolation, and competing-writer
+  refusal;
+- discard the preserved 38-file rejected repair rather than attempt a sixth
+  caller-local identity/import patch;
+- remove the CI-controlled write mode and baked default prohibition only in
+  the same deployable candidate that installs a working runtime writer;
+- delete the speculative Super/CoSuper workflow, general live importer, raw
+  protocol surfaces, dashboard, and formal/release obligations;
+- do not deploy a raw revert to `794b99c9`, because it restores the original
+  3,684-line lifecycle transaction engine and independent `LifecycleEvent`
+  authority;
+- replace the broad protocol with the smallest canonical Texture
+  command/event and deterministic projection that passes a real product proof.
+
+No persisted state may be deleted or abandoned on receipt inference. Before a
+source cutover, inventory accepted, reserved, frozen, pinned, prepared,
+imported, and projection-only state across staging computers; prove legacy
+Texture/source data readable; and retain passive readers for every observed
+accepted event version.
+
+Mutation class remains `red`. Protected surfaces are canonical append/CAS and
+pin receipts, private plaintext, stable computer authority, legacy
+readability, deterministic replay/rebuild, direct-writer refusal, run
+acceptance, and deployment rollback readability. Admissible evidence is direct
+storage inventory plus focused local and exact-commit staging product proof:
+create/revise, identical retry, changed retry conflict, stale-head conflict,
+restart, isolated rebuild equality, and legacy writer refusal. Rollback is
+forward source rollback before a new event is accepted, then forward-only
+unless the prior reader is proved compatible; stored events and tables remain
+untouched.
+
+Conjecture delta: a narrow canonical Texture event/reducer can preserve the
+one-tape invariant and user data while deleting the unaccepted supervision
+operating system. Heresy delta: `discovered` adds CI-controlled product
+availability, host-persistent write mode, and unaccepted protocol promotion;
+`introduced=[]`; `repaired=[]`.
+
+The durable audit and rejected-candidate recovery patch are stored in iCloud
+Drive under `Choir Reports/choir-codebase-slop-and-complexity-audit-2026-08-05.md`
+and `Choir Reports/texture-tape-rejected-candidate-c78da24c-2026-08-05.patch`.
