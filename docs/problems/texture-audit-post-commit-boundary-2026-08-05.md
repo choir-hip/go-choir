@@ -1,7 +1,7 @@
 # Texture Audit Can Misreport Committed Mutations
 
 **Date:** 2026-08-05  
-**Status:** repaired in the deletion-first cleanup candidate; deployed proof pending
+**Status:** closed; repaired and deployed in `460c1423`
 **Classification:** canonical evidence boundary and ordinary Texture mutation behavior  
 **Mutation class of a repair:** red
 
@@ -82,3 +82,17 @@ route, or persisted Texture state migration is authorized.
   owner/computer/action/document/mutation scoped; title identity uses the
   committed update timestamp; merge and restore append the same audit; focused
   contract tests cover every reported failure.
+
+## Deployed Acceptance Receipt
+
+CI run
+[`31030833230`](https://github.com/choir-hip/go-choir/actions/runs/31030833230)
+passed and deployed
+`460c142394e12b6e307949d0180da08d1b058745`. The staging health endpoint
+reported that exact proxy and deployed commit. Through the authenticated
+`choir.news` product UI, Texture opened, created document
+`bb13d5b7-dcff-4834-8404-3d967bc19faf`, committed revision
+`3e1bc595-e025-4bc7-a751-63154bf6396b` with the expected content, and archived
+the proof document successfully. The private audit payload has no public reader;
+its append, idempotency, encryption, and non-gating failure contracts remain
+covered by the accepted local and CI tests rather than a second inspection API.

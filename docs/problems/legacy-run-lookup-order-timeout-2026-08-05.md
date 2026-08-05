@@ -1,7 +1,7 @@
 # Legacy Run Lookup Order Can Exhaust the Store Deadline
 
 **Date:** 2026-08-05  
-**Status:** repaired in the deletion-first cleanup candidate; deployed proof pending
+**Status:** closed; repaired and deployed in `460c1423`
 **Classification:** runtime lookup performance and operability  
 **Mutation class of a repair:** orange
 
@@ -48,5 +48,10 @@ first, preserves its computer-scope check, and falls back to the lifecycle
 identity only on `ErrNotFound`. The canonical-ID lookup uses the primary
 object-graph store, so a just-written run does not depend on a read-only Dolt
 connection refreshing a large recent write set. The 1,001-run cancellation
-regression passes three consecutive isolated executions. Staging proof remains
-required before closure.
+regression passes three consecutive isolated executions. CI run
+[`31030833230`](https://github.com/choir-hip/go-choir/actions/runs/31030833230)
+passed every runtime shard and deployed exact commit
+`460c142394e12b6e307949d0180da08d1b058745` to staging. The scale case was
+not recreated against durable staging data because doing so would create 1,001
+legacy run records; acceptance is the isolated regression, full CI, and exact
+deployed identity rather than a polluting production-data probe.
