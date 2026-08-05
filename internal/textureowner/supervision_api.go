@@ -294,15 +294,64 @@ func textureSupervisionImportCommandID(ownerID, trajectoryID string) string {
 func writeTextureSupervisionAPIError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "supervision trajectory not found"})
-	case errors.Is(err, computerevent.ErrSupervisionWritesDisabled), errors.Is(err, computerevent.ErrNeedsProjectionRepair):
-		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "supervision authority unavailable"})
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "supervision trajectory not found", Code: "trajectory_not_found"})
+	case errors.Is(err, computerevent.ErrSupervisionWritesDisabled):
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "supervision authority unavailable", Code: "writes_disabled"})
+	case errors.Is(err, computerevent.ErrNeedsProjectionRepair):
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "supervision authority unavailable", Code: "projection_repair_required"})
 	case errors.Is(err, computerevent.ErrSupervisionIdempotencyConflict), errors.Is(err, computerevent.ErrCASConflict), errors.Is(err, store.ErrLifecycleCommandConflict), errors.Is(err, store.ErrConcurrentStateChange),
 		textureSupervisionProjectionConflict(err):
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "supervision transition rejected"})
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "supervision transition rejected", Code: "state_conflict"})
 	default:
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid supervision request"})
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid supervision request", Code: textureSupervisionFailureCode(err)})
 	}
+}
+
+func writeTextureSupervisionCreateAppendAPIError(w http.ResponseWriter, err error) {
+	writeAPIJSON(w, http.StatusInternalServerError, apiError{
+		Error: "failed to create document",
+		Code:  textureSupervisionFailureCode(err),
+	})
+}
+
+func textureSupervisionFailureCode(err error) string {
+	switch {
+	case errors.Is(err, computerevent.ErrSupervisionWritesDisabled):
+		return "writes_disabled"
+	case errors.Is(err, computerevent.ErrNeedsProjectionRepair):
+		return "projection_repair_required"
+	case errors.Is(err, computerevent.ErrSupervisionIdempotencyConflict), errors.Is(err, computerevent.ErrCASConflict), errors.Is(err, store.ErrLifecycleCommandConflict), errors.Is(err, store.ErrConcurrentStateChange):
+		return "state_conflict"
+	}
+	message := ""
+	if err != nil {
+		message = err.Error()
+	}
+	for _, stage := range []struct {
+		marker string
+		code   string
+	}{
+		{"reserve supervision command", "command_reservation_failed"},
+		{"record supervision pin receipt", "frozen_plan_write_failed"},
+		{"load frozen supervision plan", "frozen_plan_load_failed"},
+		{"freeze supervision plan", "frozen_plan_write_failed"},
+		{"encrypt supervision transaction", "transaction_encryption_failed"},
+		{"pin private supervision transaction", "transaction_pin_failed"},
+		{"verify supervision pin receipt", "transaction_pin_verification_failed"},
+		{"verify frozen supervision pin receipt", "transaction_pin_verification_failed"},
+		{"resolve head for new event", "canonical_head_unavailable"},
+		{"resolve canonical head", "canonical_head_unavailable"},
+		{"resolve embedded head", "projection_head_unavailable"},
+		{"pin event", "event_pin_failed"},
+		{"prepare embedded projection", "projection_prepare_failed"},
+		{"head CAS", "event_append_failed"},
+		{"verify head receipt", "event_receipt_verification_failed"},
+	} {
+		if strings.Contains(message, stage.marker) {
+			return stage.code
+		}
+	}
+	return "authority_failed"
 }
 
 func textureSupervisionProjectionConflict(err error) bool {

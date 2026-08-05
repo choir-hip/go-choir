@@ -3,8 +3,10 @@ package textureowner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -188,5 +190,78 @@ func TestTextureColdWakeConsumesCanonicalSupervisionDelivery(t *testing.T) {
 	snapshot, err := handler.Store.GetSupervisionProjectionSnapshot(ctx, ownerID, core.TextureSandboxID(), trajectoryID)
 	if err != nil || snapshot.ArtifactHeadRevisionID != storedRevision.RevisionID {
 		t.Fatalf("canonical Texture projection head=%q want=%q err=%v", snapshot.ArtifactHeadRevisionID, storedRevision.RevisionID, err)
+	}
+}
+
+func TestTextureSupervisionFailureCodesExposeOnlyBoundedStages(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		code string
+	}{
+		{
+			name: "projection prepare",
+			err:  errors.New("computer event appender: prepare embedded projection: database detail"),
+			code: "projection_prepare_failed",
+		},
+		{
+			name: "platform append",
+			err:  errors.New("computer event appender: head CAS: remote detail"),
+			code: "event_append_failed",
+		},
+		{
+			name: "outer pin receipt stage wins",
+			err:  errors.New("record supervision pin receipt: computer event projection: load frozen supervision plan: database detail"),
+			code: "frozen_plan_write_failed",
+		},
+		{
+			name: "unknown authority",
+			err:  errors.New("unexpected internal detail"),
+			code: "authority_failed",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			writeTextureSupervisionAPIError(response, test.err)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d body=%s", response.Code, response.Body.String())
+			}
+			var result apiError
+			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.Error != "invalid supervision request" || result.Code != test.code {
+				t.Fatalf("response = %+v, want bounded code %q", result, test.code)
+			}
+			if strings.Contains(response.Body.String(), "detail") {
+				t.Fatalf("response leaked internal detail: %s", response.Body.String())
+			}
+		})
+	}
+}
+
+func TestTextureDocumentCreatePreservesInternalErrorStatusForAppendStage(t *testing.T) {
+	appendErr := errors.Join(
+		errTextureSupervisionAppend,
+		errors.New("computer event appender: prepare embedded projection: database detail"),
+	)
+	if !errors.Is(appendErr, errTextureSupervisionAppend) {
+		t.Fatal("append error lost its stage identity")
+	}
+	response := httptest.NewRecorder()
+	writeTextureSupervisionCreateAppendAPIError(response, appendErr)
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d body=%s", response.Code, response.Body.String())
+	}
+	var result apiError
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Error != "failed to create document" || result.Code != "projection_prepare_failed" {
+		t.Fatalf("response = %+v", result)
+	}
+	if strings.Contains(response.Body.String(), "detail") {
+		t.Fatalf("response leaked internal detail: %s", response.Body.String())
 	}
 }

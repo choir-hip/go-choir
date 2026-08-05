@@ -26,6 +26,8 @@ const (
 	HandoffKindCorpusWake HandoffKind = "corpus_wake"
 )
 
+var errTextureSupervisionAppend = fmt.Errorf("Texture supervision append failed")
+
 // HandoffRequest is the owner-local request for a Texture lifecycle handoff.
 type HandoffRequest struct {
 	Kind           HandoffKind
@@ -514,7 +516,7 @@ func (h *Handler) startSupervisionTrajectory(ctx context.Context, start types.St
 		Mutations: mutations,
 	}
 	if _, _, err := h.Core.AppendSupervisionTransaction(ctx, transaction); err != nil {
-		return types.LifecycleResult{}, err
+		return types.LifecycleResult{}, fmt.Errorf("%w: %w", errTextureSupervisionAppend, err)
 	}
 	snapshot, err := h.Store.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
 	if err != nil {

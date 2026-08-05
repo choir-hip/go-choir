@@ -440,6 +440,10 @@ func (h *Handler) HandleTextureCreateDocument(w http.ResponseWriter, r *http.Req
 	doc, err := h.startTextureOwnerDocument(r.Context(), ownerID, strings.TrimSpace(req.Title), time.Now().UTC())
 	if err != nil {
 		log.Printf("texture api: create document: %v", err)
+		if errors.Is(err, errTextureSupervisionAppend) {
+			writeTextureSupervisionCreateAppendAPIError(w, err)
+			return
+		}
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create document"})
 		return
 	}

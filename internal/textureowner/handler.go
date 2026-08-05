@@ -199,6 +199,7 @@ func (h *Handler) getTextureHistory(ctx context.Context, ownerID, docID string, 
 
 type apiError struct {
 	Error string `json:"error"`
+	Code  string `json:"code,omitempty"`
 }
 
 func authenticateUser(r *http.Request) (string, error) {

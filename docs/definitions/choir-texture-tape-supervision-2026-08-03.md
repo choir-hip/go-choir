@@ -176,23 +176,23 @@ measures:
 
 now:
   status: in_progress
-  slice: "The write-mode repair landed as d69e1a6f and preserve-mode deployment is exact and disabled. Forced enable then proved the gate fails closed: the public lifecycle API reported a legacy computer active and signed its stop/start epoch transition, but vmctl had no active mutable ownership. Run 30976735765 rejected enable before activation, forced disabled mode, and published an incomplete failure receipt. This contradictory lifecycle/vmctl authority is now the immediate substrate blocker; a constructed ComputerVersion cannot substitute for mutable compatibility proof."
-  question: "What existing no-SSH product/control path can create or reactivate one disposable mutable vmctl ownership whose exact d69e1a6f guest health can support enabled/disabled/enabled receipts?"
+  slice: "A disposable mutable computer now exists and same-release mode control works: disabled run 30977754149 refreshed vm-bbdbbd01c4390b7036067aaa12afeb68 with writes disabled and refused a prompt write without a run record; enabled run 30979037961 attempt 2 refreshed it with writes enabled. The enabled guest nevertheless rejects the first canonical Texture document/open_trajectory append. A stop/wake to epoch 8234 reproduced the failure, while the equivalent local appender fixture passes. Problem checkpoint 47496d62 records this enabled-but-unwritable authority before repair."
+  question: "Which bounded deployed appender stage fails after valid command-digest verification: local reservation/frozen-plan persistence, private pin, projection prepare, event pin/CAS, or receipt verification?"
   reconciliation:
-    observed_at: 2026-08-05T05:12:51Z
-    source_ref: d69e1a6f7e89e71bb7457f5a641e96c1e9c34e80
-    deploy_identity: "Accepted preserve-mode deployment from run 30975427662: exact host and sandbox d69e1a6f, writes disabled, guest proof false, mutable set empty. Rejected enable run 30976735765: no mutable active ownership; compensation succeeded and retained /var/lib/go-choir/deploy-failures/30976735765-1.json."
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@d69e1a6f, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@d69e1a6f]
-    worktree_inventory_ref: "Local main and origin/main at d69e1a6f before this problem-first checkpoint; only the goal-owned Definition and problem record are dirty. Unrelated worktrees remain untouched."
+    observed_at: 2026-08-05T06:17:28Z
+    source_ref: 47496d62
+    deploy_identity: "Exact f5500f2e same-release receipts: disabled run 30977754149 verified mutable guest vm-bbdbbd01c4390b7036067aaa12afeb68 with supervision_writes_disabled=true; enabled run 30979037961 attempt 2 verified the same guest with supervision_writes_disabled=false. Canonical document creation still returned HTTP 500, and exact-digest open_trajectory returned HTTP 400 before bounded diagnostic codes existed."
+    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@47496d62, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@f5500f2e]
+    worktree_inventory_ref: "Local main and origin/main at problem-first checkpoint 47496d62; only the goal-owned Definition plus bounded supervision API diagnostic source/tests are dirty. Unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: texture-tape-supervision-write-mode
-    state: landed_fail_closed
-    ref: d69e1a6f7e89e71bb7457f5a641e96c1e9c34e80
+    id: texture-tape-bounded-append-diagnostic
+    state: review_accepted
+    ref: worktree@47496d62
     owner: Main
-    base: 97f3561d521bb925a4a29a2bface73c1011dd35c
-    digest: "sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d over reviewed `.github`, `internal`, and `nix` implementation diff"
-    scope: "Immutable guest-manifest startup floor, tri-state vmctl boot override, exact guest health attestation, explicit-transition proof gate, and fail-closed deployment compensation. Canonical supervision events remain disabled."
+    base: 47496d62
+    digest: "sha256:6c74b7d35cea0d73f0537e618c1c796b5ffaaf9e2ed4873e2f7b1de97a541d56 over the repaired frozen bounded diagnostic source/test diff"
+    scope: "Return only bounded, non-secret supervision appender stage codes; preserve existing HTTP status semantics; and route only typed document-create append failures through the diagnostic mapper. No authority, event, projection, credential, or deployment semantics change."
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
     kind: architecture
@@ -202,9 +202,9 @@ now:
     owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may execute schema/caller/migration work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "implementation diff sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d", "go test -short ./... -count=1: 76 packages pass", "CI run 30975427662: success", "deploy job 92210016957: exact preserve-mode host receipt d69e1a6f, writes disabled, active_computers empty", "public lifecycle receipts 019fd049-e6fb-7c4e-9ef5-73885840d1b5, 019fd04a-0409-7783-a9a8-21430b2f3ebc, 019fd04a-6258-7bb6-85e6-8bcaa325d142", "enable run 30976735765 and deploy job 92214123396: rejected no mutable guest, compensation succeeded", "/var/lib/go-choir/deploy-failures/30976735765-1.json"]
-  blocker_or_risk: "No active mutable vmctl ownership exists. The public lifecycle state for a legacy computer can say active and advance an epoch without producing that ownership, so it is not admissible guest proof. Enabled/disabled/enabled receipts, canonical transaction acceptance, fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, rollback, and registry closure remain pending."
-  next_action: "Inventory the existing no-SSH provisioning/reactivation authority for a disposable mutable computer. Prefer wiring an existing path over adding one. Do not weaken the explicit transition gate or treat a constructed ComputerVersion/public lifecycle receipt as mutable guest proof."
+  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "CI run 30977754149 and deploy job 92217289839: exact f5500f2e disabled receipt, mutable guest proof true", "disabled prompt command texture-tape-disabled-floor-f550-1: HTTP 500 with subsequent run list empty", "CI run 30979037961 attempt 2 and deploy job 92221742922: exact f5500f2e enabled receipt, mutable guest proof true", "enabled POST /api/texture/documents: HTTP 500 failed to create document", "enabled exact-digest POST /api/texture/supervision/command: HTTP 400 invalid supervision request", "disposable guest stop/wake epoch 8233 to 8234: immediate create failure reproduced", "focused local startTextureOwnerDocument fixture: pass", "bounded diagnostic focused tests: pass"]
+  blocker_or_risk: "The deployed enabled guest is unwritable and therefore not accepted. The exact failing appender stage is not yet observable through the public product path. Canonical transaction acceptance, the remaining mode matrix, fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, rollback, and registry closure remain pending."
+  next_action: "Freeze and land the bounded stage-code candidate, deploy it to the same disposable mutable guest without weakening the gate, reproduce one canonical create, and use the returned non-secret stage code to repair the source failure. Then return to the full disabled/enabled/disabled/enabled acceptance matrix."
 
 receipts:
   - id: texture-tape-definition-round-1
