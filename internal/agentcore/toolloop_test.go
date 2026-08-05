@@ -195,7 +195,6 @@ func TestRuntimeWithToolRegistryUsesToolLoop(t *testing.T) {
 	)
 
 	rt, store := testRuntimeWithProviderAndRegistry(t, provider, registry)
-	installTestSupervisionAppender(t, rt, store)
 	defer rt.Stop()
 
 	rec, err := rt.StartRun(context.Background(), "test prompt", "user-alice")

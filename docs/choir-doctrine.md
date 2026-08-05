@@ -159,13 +159,9 @@ Each conjecture is tagged as one of:
 `C1 asserted` Choir's primary product object is a persistent computer composed
 of multiple ledgers, not a disposable sandbox and not a chat session.
 
-`C2 asserted` Canonical user-facing truth is versioned artifact state derived
-from the canonical per-computer event chain. Texture is an agentic, owner-facing
-appagent: it owns request-fulfilling document semantics, represents the owner's
-point of view, and messages Researcher or Super when grounded evidence or
-execution is needed. Its authored revisions and summaries are immutable events
-replayed by deterministic reducers; it does not own a second causal tape. Other
-appagents own their typed artifact semantics under the same rule.
+`C2 asserted` Canonical user-facing truth is versioned artifact state. Texture is
+the canonical document and artifact control-plane core; other appagents own
+their own typed artifact domains.
 
 `C3 asserted` A persistent computer is identified by stable `ComputerID` plus
 its canonical event chain. Risky or long-running mutation *effects* execute in
@@ -234,12 +230,8 @@ remains real even when protocol gates pass.
 
 These are hard consequences of the conjecture set.
 
-`I1` Texture owns the semantic authorization of canonical document versions;
-the per-computer event chain owns their durable causal order, and reducers
-materialize Texture as a deterministic projection. Findings, worker updates,
-search results, and verifier output are non-canonical until Texture incorporates
-them through a typed event. A direct Texture or lifecycle write outside that
-event authority is a competing tape, not an optimization.
+`I1` Texture owns canonical document versions. Findings, worker updates, search
+results, and verifier output are non-canonical until Texture incorporates them.
 
 `I2` Texture must not be forced into semantic delegation. Runtime may expose
 affordances and durable obligations; it must not convert role mentions or
@@ -249,11 +241,9 @@ metadata into a required semantic next step.
 state by default. Conductor may classify, open, or create the target
 Texture/context, but ordinary prompt-bar requests, sourcecycled/news ingestion,
 article creation, mission work, and most user prompts must not route directly to
-super. Texture agentically decides whether to write, message Researcher, message
-Super, ask both, ask neither, wait, or report a blocker. Super is the downstream
-operational supervisor invoked from Texture when the artifact needs coding,
-privileged execution, candidate work, generation, verification, or other
-coordinated work.
+super. Super is downstream execution authority invoked from Texture when the
+artifact needs coding, privileged execution, candidate work, generation,
+verification, or other supervision.
 
 `I2b` Texture must make owner-triggered work visible as artifact state. For
 prompt-bar input, `V0` is the owner prompt and `V1` is Texture's first response to
@@ -263,44 +253,11 @@ draft, acknowledgement, work-state note, blocker, or research/execution plan.
 What is forbidden is a mechanically forced trivial patch that hides ongoing
 delegation or background work from the owner-readable artifact.
 
-Texture state must also be operationally grounded: claims that work happened,
-evidence exists, a decision settled, or a request completed bind exact
-event-derived refs. Otherwise the state remains visibly pending, conjectural, or
-blocked.
-
 `I2c` Agent-to-agent update identity is runtime-owned. The runtime mints or
 deterministically derives `update_id` from the delivery envelope and normalized
 payload; an LLM must not have to invent it. Model-visible update payloads may
 describe kind, target, findings, evidence, refs, blockers, and questions; the
 durable `update_id` is not semantic content.
-
-`I2d` Owner intent is versioned artifact state, not appended chat. A material
-instruction change during live work creates a new intent revision and a durable
-reconciliation obligation over affected work, premises, and realized effects.
-Reducers enforce freshness and completeness; agents propose semantic
-dispositions, and settlement refuses while material rebase state is unresolved.
-
-`I2e` Super is the operational supervisor and CoSupers are scoped workers.
-Texture is the human-side supervisor without ceasing to be an agent: it
-represents the owner's point of view, fulfills the user's document request,
-messages Researcher/Super, integrates grounded results, and compresses dense
-technical state to human bandwidth. The full tape remains available for
-drill-down. Material blockers, commitments, dissent, changed beliefs,
-irreversible gates, and owner-only decisions cannot be silently omitted; honest
-overflow is preferable to a false clear state. No separate trajectory-supervisor
-role duplicates Super.
-
-`I2f` Fan-out is concurrent work under one serial authority. Super may open N
-scoped CoSuper assignments from one intent/base; each assignment and attempt
-binds exact scope, capability/policy, parent decision, working base, and
-idempotency identity. Results append in completion order, and retry,
-cancellation, late output, dissent, and rebase remain explicitly dispositioned
-before settlement. Fan-out branches are evidence producers, not independently
-promotable desired states. Effectful promotion requires one newly composed
-current-base bundle, independent composition verification, one owner-accepted
-desired-state event, then verified materialization/checkpoint/route receipts.
-No implicit branch merge, stale landing, or simultaneous pending desired-state
-transition is allowed.
 
 `I3` Parent/child is not a control ontology. Provenance-only spawned-by edges may
 remain temporarily, but control, liveness, settlement, cancellation, budgeting,
@@ -609,15 +566,6 @@ identity repaired** by the audited-construction Definition phases B/D/F. The
 detector remains active. The only self-development candidate is a frozen capsule
 effect bundle; no route resolves to a VM/desktop identity.
 
-`H032` **Dual semantic tape for Texture and lifecycle state** — the canonical
-`ComputerEventAppender` sequences self-development/effect events while embedded
-Texture/lifecycle reducers independently commit semantic state and their own
-`LifecycleEvent` stream. Successor: typed supervision transactions on the
-per-computer event chain, with Texture/lifecycle/CLI state reconstructed as
-deterministic projections and every alternate production writer deleted or
-made a derived compatibility view. A UI that merely displays event links does
-not repair this heresy.
-
 ## Banned Patterns
 
 Agents must not introduce:
@@ -650,10 +598,6 @@ Agents must not introduce:
     `ComputerVersion` route as self-development candidate authority. The only
     self-development candidate is a frozen capsule effect bundle; vmctl routes
     only accepted checkpoints after an authorizing event.
-17. new canonical Texture, intent, lifecycle, work, evidence, decision, or
-    settlement writes that bypass the per-computer event appender, or any
-    dual-write/reconciliation path that treats embedded `LifecycleEvent` state
-    as a second causal tape.
 
 ## Product Path
 
@@ -672,9 +616,7 @@ Product order follows the vision (choir-vision.md):
    credentials host-side) preserves dissent. Capsule effects are the typed
    transaction on the audit log; correction is an ordinary write. This is the
    supervised self-development center, and it is the binding constraint to
-   solve first. CoSupers do scoped work; Super supervises that work; Texture
-   remains the agentic, human-bandwidth projection through which the owner
-   understands, corrects, and ultimately governs it.
+   solve first.
 2. **The World Wire.** Downstream of the artifact-and-provenance substrate, the
    Wire indexes the world as reported — contested, plural, evidence-bounded.
    `universal-wire` identifiers remain transitional until a rename mission.

@@ -178,13 +178,11 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	for index, file := range bundle.RuntimeFiles {
 		manifestFiles[index] = updater.ManifestFile{Path: file.Path, SHA256: file.SHA256, Mode: file.Mode}
 	}
-	supervisionCompatibility := updater.CurrentSupervisionCompatibility()
 	manifest, err := updater.FinalizeManifest(updater.ReleaseManifest{
 		Version: updater.ManifestVersion, ComputerID: operation.ComputerID, AcceptedEventHead: operation.DecisionEvent,
 		CodeRef: string(version.CodeRef), ArtifactProgramRef: string(version.ArtifactProgramRef),
 		EventSchemaVersion: computerevent.SchemaVersionV1, ReducerVersion: computerevent.ReducerVersionV1,
-		Supervision: &supervisionCompatibility,
-		Marker:      "selfdev-" + operation.BundleDigest[:16], Files: manifestFiles,
+		Marker: "selfdev-" + operation.BundleDigest[:16], Files: manifestFiles,
 	})
 	if err != nil {
 		return err

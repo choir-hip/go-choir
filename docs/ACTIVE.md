@@ -5,16 +5,9 @@ corpus and does not make an unverified graph status into a live work claim.
 
 ## Active Definition
 
-[`definitions/choir-texture-tape-supervision-2026-08-03.md`](definitions/choir-texture-tape-supervision-2026-08-03.md)
-is the sole current product Definition and is presently
-`blocked_incomplete` on GitHub write authorization. Its independently accepted
-effects-OFF implementation candidate is committed locally as
-`f5c4c43e17e3e9b2e6de71170049695361c224bb`; HTTPS credentials are invalid and
-the available SSH identity lacks write permission to `choir-hip/go-choir`.
-H032 repair, CI, staging deployment, product-path acceptance, rollback, and
-terminal closure remain unclaimed. Staging remains on the previously observed
-pre-implementation identity `794b99c9bf1526ee74a72fec8ba31e0c21df6d16`.
-
+None. The durable-computer convergence mission completed on 2026-07-24. No
+successor is executable until the owner ratifies a Definition and all three
+registries promote it.
 
 ## Completed Definitions — Historical Evidence Authority
 
@@ -100,22 +93,15 @@ it active work or revising the product umbrella's semantics.
 
 ## Invocation
 
-After GitHub write authorization is restored, resume the sole product mission
-with:
-
-```text
-/goal docs/definitions/choir-texture-tape-supervision-2026-08-03.md
-```
-
-The performance and Choir-in-Choir drafts remain blocked and non-executable;
-promoting either requires separate owner ratification and three-registry
-reconciliation. They must not run concurrently with this protected product
-spine.
+Do not invoke a product `/goal` from this registry. No Definition is currently
+active. The performance and Choir-in-Choir drafts remain blocked and
+non-executable; promoting either requires separate owner ratification and
+three-registry reconciliation.
 
 This index owns no current slice, next action, execution order, resumption,
 completion, mutation, rollback sequencing, or escalation authority. The
-completed convergence Definition is evidence, not a competing executable
-entrypoint. Autopaper remains unauthorized.
+completed convergence Definition is evidence, not an executable entrypoint.
+Autopaper remains unauthorized.
 
 The OG/Dolt/heresy contract supplies the deployed D-ROUTE corpusd/vmctl CAS
 mechanics, receipt gates, H031 detection, and deletion bars. The completed
@@ -127,7 +113,7 @@ a third semantic store.
 ## Unowned External Work
 
 Runtime dissolution, actor/runtime extraction, broader source-system/Wire work,
-full external-agent capsule execution, and ComputerVersion performance optimization have no active executable Definition. Do not resume
+full external-agent capsule execution, and ComputerVersion performance optimization have no active Definition. Do not resume
 deleted plans; any new program must be grounded in current code and staging
 evidence, owner-ratified, and promoted through every registry.
 

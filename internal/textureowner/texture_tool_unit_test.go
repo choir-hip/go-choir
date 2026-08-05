@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -650,6 +652,160 @@ func TestPatchTextureSourceRefFailureDoesNotAdvanceDocumentHead(t *testing.T) {
 	}
 }
 
+func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing.T) {
+	s, h, registry := textureToolCommitRuntime(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	doc := types.Document{DocID: "doc-d4-tool", OwnerID: "user-1", Title: "D4 Tool", CreatedAt: now, UpdatedAt: now}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	base := structuredTextureToolRevision(t)
+	base.DocID = doc.DocID
+	base.OwnerID = doc.OwnerID
+	base.CreatedAt = now
+	if err := s.CreateRevision(ctx, base); err != nil {
+		t.Fatalf("CreateRevision base: %v", err)
+	}
+	runID := "run-d4-tool"
+	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID:     doc.DocID,
+		RunID:     runID,
+		OwnerID:   doc.OwnerID,
+		State:     "pending",
+		CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("CreateAgentMutation: %v", err)
+	}
+	run := &types.RunRecord{
+		RunID:        runID,
+		AgentID:      currentTextureAgentID(doc.DocID),
+		ChannelID:    doc.DocID,
+		OwnerID:      doc.OwnerID,
+		SandboxID:    "sandbox-texture-test",
+		State:        types.RunRunning,
+		Prompt:       "Patch structured Texture.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
+		Metadata: map[string]any{
+			"type":                     textureAgentRevisionTaskType,
+			"doc_id":                   doc.DocID,
+			"source_entities":          []textureSourceEntity{{EntityID: "legacy-sidecar", Kind: "content_item"}},
+			"source_ref_normalization": map[string]any{"legacy_count": 1},
+			runMetadataAgentID:         currentTextureAgentID(doc.DocID),
+			runMetadataAgentProfile:    agentprofile.Texture,
+			runMetadataAgentRole:       agentprofile.Texture,
+			runMetadataChannelID:       doc.DocID,
+		},
+	}
+	rawArgs, err := json.Marshal(editTextureArgs{
+		DocID:          doc.DocID,
+		BaseRevisionID: base.RevisionID,
+		StructuredEdits: []textureStructuredEdit{{
+			Op:      "update_block_text",
+			BlockID: "p-1",
+			Text:    "Committed structured claim",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal patch args: %v", err)
+	}
+	if _, err := registry.Execute(toolregistry.WithExecutionContext(ctx, textureToolExecutionContext(run)), "patch_texture", rawArgs); err != nil {
+		t.Fatalf("patch_texture: %v", err)
+	}
+	revs, err := s.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 10)
+	if err != nil {
+		t.Fatalf("ListRevisionsByDoc: %v", err)
+	}
+	if len(revs) != 2 {
+		t.Fatalf("revisions len = %d, want 2", len(revs))
+	}
+	appRev := revs[0]
+	if len(appRev.BodyDoc) == 0 || len(appRev.SourceEntities) == 0 {
+		t.Fatalf("app revision missing structured fields: body_doc=%s source_entities=%s", appRev.BodyDoc, appRev.SourceEntities)
+	}
+	var legacyEntities []texturedoc.SourceEntity
+	if err := json.Unmarshal(appRev.SourceEntities, &legacyEntities); err != nil {
+		t.Fatalf("unmarshal legacy source_entities: %v", err)
+	}
+	if len(legacyEntities) != 1 || legacyEntities[0].SourceEntityID != "src-web" {
+		t.Fatalf("legacy source_entities = %#v, want src-web preserved", legacyEntities)
+	}
+	graphEntities, err := s.ListTextureSourceEntities(ctx, doc.OwnerID)
+	if err != nil {
+		t.Fatalf("ListTextureSourceEntities: %v", err)
+	}
+	if len(graphEntities) != 1 {
+		t.Fatalf("graph source entities len = %d, want 1: %#v", len(graphEntities), graphEntities)
+	}
+	expectedCanonicalID, err := store.BuildTextureSourceEntityCanonicalID(doc.OwnerID, doc.OwnerID, "web_url", "https://example.com/story")
+	if err != nil {
+		t.Fatalf("BuildTextureSourceEntityCanonicalID: %v", err)
+	}
+	if graphEntities[0].CanonicalID != expectedCanonicalID || graphEntities[0].LegacySourceEntityID != "src-web" {
+		t.Fatalf("graph source entity = %#v, want target-derived canonical ID and legacy src-web", graphEntities[0])
+	}
+	graphRefs, err := s.ListTextureSourceRefsForRevision(ctx, doc.OwnerID, doc.DocID, appRev.RevisionID)
+	if err != nil {
+		t.Fatalf("ListTextureSourceRefsForRevision: %v", err)
+	}
+	if len(graphRefs) != 1 {
+		t.Fatalf("graph source refs len = %d, want 1: %#v", len(graphRefs), graphRefs)
+	}
+	if graphRefs[0].SourceEntityCanonicalID != graphEntities[0].CanonicalID || graphRefs[0].SourceEntityVersionID != graphEntities[0].VersionID {
+		t.Fatalf("graph source ref = %#v, want pin to graph entity %#v", graphRefs[0], graphEntities[0])
+	}
+	apiResp := h.revisionResponseFromRecord(ctx, appRev)
+	if string(apiResp.SourceEntities) != string(appRev.SourceEntities) {
+		t.Fatalf("legacy source_entities changed in API response: got %s want %s", apiResp.SourceEntities, appRev.SourceEntities)
+	}
+	if len(apiResp.SourceEntityObjects) != 1 {
+		t.Fatalf("source_entity_objects len = %d, want 1: %#v", len(apiResp.SourceEntityObjects), apiResp.SourceEntityObjects)
+	}
+	if apiResp.SourceEntityObjects[0].ObjectKind != string(store.TextureSourceEntityObjectKind) ||
+		apiResp.SourceEntityObjects[0].CanonicalID != graphEntities[0].CanonicalID ||
+		apiResp.SourceEntityObjects[0].LegacySourceEntityID != "src-web" {
+		t.Fatalf("source_entity_objects[0] = %#v, want graph entity wrapper", apiResp.SourceEntityObjects[0])
+	}
+	if len(apiResp.SourceRefs) != 1 {
+		t.Fatalf("source_refs len = %d, want 1: %#v", len(apiResp.SourceRefs), apiResp.SourceRefs)
+	}
+	if apiResp.SourceRefs[0].ObjectKind != string(store.TextureSourceRefObjectKind) ||
+		apiResp.SourceRefs[0].SourceEntityCanonicalID != graphEntities[0].CanonicalID ||
+		apiResp.SourceRefs[0].SourceEntityVersionID != graphEntities[0].VersionID ||
+		apiResp.SourceRefs[0].DisplayMode != store.TextureSourceRefDisplayNumbered {
+		t.Fatalf("source_refs[0] = %#v, want pinned source_ref wrapper", apiResp.SourceRefs[0])
+	}
+	listResp := h.revisionResponsesFromRecords(ctx, revs, doc.OwnerID, doc.DocID)
+	if len(listResp) != 2 {
+		t.Fatalf("revisionResponsesFromRecords len = %d, want 2", len(listResp))
+	}
+	if listResp[0].RevisionID != appRev.RevisionID || len(listResp[0].SourceEntityObjects) != 1 || len(listResp[0].SourceRefs) != 1 {
+		t.Fatalf("listed app revision response = %#v, want source wrappers", listResp[0])
+	}
+	if string(listResp[0].SourceEntities) != string(appRev.SourceEntities) {
+		t.Fatalf("listed response changed legacy source_entities: got %s want %s", listResp[0].SourceEntities, appRev.SourceEntities)
+	}
+	if listResp[1].RevisionID != base.RevisionID {
+		t.Fatalf("listed base revision id = %q, want %q", listResp[1].RevisionID, base.RevisionID)
+	}
+	if len(listResp[1].SourceEntityObjects) != 0 || len(listResp[1].SourceRefs) != 0 {
+		t.Fatalf("listed base revision response = %#v, want no graph wrappers", listResp[1])
+	}
+	meta := decodeRevisionMetadata(appRev.Metadata)
+	for _, key := range []string{"source_entities", "media_source_refs", "source_ref_normalization", "citations_json"} {
+		if _, ok := meta[key]; ok {
+			t.Fatalf("metadata retained legacy source key %q: %#v", key, meta)
+		}
+	}
+	if _, err := registry.Execute(toolregistry.WithExecutionContext(ctx, textureToolExecutionContext(run)), "patch_texture", rawArgs); err == nil ||
+		!strings.Contains(err.Error(), "stale") {
+		t.Fatalf("stale base err = %v, want stale rejection", err)
+	}
+}
+
 func TestTextureEditRevisionMetadataRecordsOperationEvidence(t *testing.T) {
 	now := time.Now().UTC()
 	raw := addTextureEditRevisionMetadata(json.RawMessage(`{"existing":"kept"}`), materializedTextureEdit{
@@ -907,6 +1063,252 @@ func structuredDocHasNode(node texturedoc.Node, nodeType, nodeID string) bool {
 	return false
 }
 
+func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing.T) {
+	s, _, registry := textureToolCommitRuntime(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	const (
+		ownerID      = "owner-explicit-work"
+		computerID   = "sandbox-texture-test"
+		docID        = "doc-explicit-work"
+		trajectoryID = "trajectory-explicit-work"
+		workItemID   = "work-explicit-work"
+	)
+	agentID := currentTextureAgentID(docID)
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "start-explicit-work", TrajectoryID: trajectoryID,
+		Kind:            types.TrajectoryKindDocument,
+		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		InitialWork:     types.WorkItemRecord{WorkItemID: workItemID, Objective: "Produce a grounded artifact", AssignedAgentID: agentID, AuthorityProfile: agentprofile.Texture},
+		InitialDocument: types.Document{DocID: docID, Title: "Explicit work disposition"},
+		InitialRevision: types.Revision{RevisionID: "revision-explicit-work-v0", AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "Produce a grounded artifact."},
+		Agent:           types.AgentRecord{AgentID: agentID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	packet := types.CoagentSourcePacketPayload{
+		SchemaVersion: types.CoagentSourcePacketSchemaV1,
+		Kind:          "evidence_update",
+		Summary:       "Interim evidence checkpoint; material work remains.",
+	}
+	payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, "Interim evidence checkpoint")
+	if err != nil {
+		t.Fatalf("digest interim update: %v", err)
+	}
+	queue := types.QueueLifecycleUpdateRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "queue-explicit-work-interim",
+		TrajectoryID: trajectoryID, TargetAgentID: agentID, ProducerAgentID: agentID,
+		ProducerUpdateID: "update-explicit-work-interim", UpdateID: "update-explicit-work-interim",
+		ChannelID: docID, Packet: packet, Content: "Interim evidence checkpoint", PayloadDigest: payloadDigest,
+		WorkDisposition: types.WorkItemOpen,
+	}
+	queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
+	if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
+		t.Fatalf("queue interim update: %v", err)
+	}
+	newRun := func(runID, baseRevisionID string) *types.RunRecord {
+		run := &types.RunRecord{
+			RunID: runID, AgentID: agentID, ChannelID: docID, OwnerID: ownerID, SandboxID: computerID, TrajectoryID: trajectoryID,
+			State: types.RunRunning, Prompt: "Revise the artifact.", CreatedAt: now, UpdatedAt: now,
+			AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
+			Metadata: map[string]any{
+				"type": textureAgentRevisionTaskType, "doc_id": docID, "current_revision_id": baseRevisionID,
+				"trajectory_id": trajectoryID, "lifecycle_work_item_id": workItemID,
+				runMetadataAgentID: agentID, runMetadataAgentProfile: agentprofile.Texture,
+				runMetadataAgentRole: agentprofile.Texture, runMetadataChannelID: docID,
+			},
+		}
+		activate := types.ReplaceLifecycleActivationRequest{
+			OwnerID: ownerID, ComputerID: computerID, CommandID: "activate-" + runID,
+			TrajectoryID: trajectoryID, AgentID: agentID, Run: *run,
+		}
+		activate.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(activate)
+		if _, err := s.ReplaceLifecycleActivation(ctx, activate); err != nil {
+			t.Fatalf("activate run %s: %v", runID, err)
+		}
+		if err := s.CreateAgentMutation(ctx, store.AgentMutation{DocID: docID, RunID: runID, OwnerID: ownerID, ComputerID: computerID, State: "pending", CreatedAt: now}); err != nil {
+			t.Fatalf("create mutation %s: %v", runID, err)
+		}
+		return run
+	}
+	finishRun := func(run *types.RunRecord) {
+		t.Helper()
+		stored, err := s.GetLifecycleRun(ctx, ownerID, computerID, run.RunID)
+		if err != nil {
+			t.Fatalf("load run %s for terminal projection: %v", run.RunID, err)
+		}
+		finishedAt := time.Now().UTC()
+		stored.State, stored.UpdatedAt, stored.FinishedAt = types.RunCompleted, finishedAt, &finishedAt
+		project := types.ReplaceLifecycleActivationRequest{
+			OwnerID: ownerID, ComputerID: computerID, CommandID: "finish-" + run.RunID,
+			TrajectoryID: trajectoryID, AgentID: agentID, Run: stored,
+		}
+		project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+		if _, err := s.ProjectTerminalLifecycleRun(ctx, project); err != nil {
+			t.Fatalf("finish run %s: %v", run.RunID, err)
+		}
+	}
+	omittedRun := newRun("run-explicit-work-omitted", start.InitialRevision.RevisionID)
+	omittedArgs, _ := json.Marshal(editTextureArgs{
+		DocID: docID, BaseRevisionID: start.InitialRevision.RevisionID,
+		Content: "# Ambiguous\n\nNo native work consequence was declared.", Rationale: "Exercise authority refusal.",
+	})
+	omittedRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, textureToolExecutionContext(omittedRun)), "rewrite_texture", omittedArgs)
+	if err != nil {
+		t.Fatalf("commit omitted disposition revision: %v", err)
+	}
+	var omittedResult map[string]any
+	if err := json.Unmarshal([]byte(omittedRaw), &omittedResult); err != nil || omittedResult["work_disposition"] != "open" {
+		t.Fatalf("omitted disposition result = %s, err=%v", omittedRaw, err)
+	}
+	finishRun(omittedRun)
+	omittedHead, _ := omittedResult["revision_id"].(string)
+	omittedSnapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil || len(omittedSnapshot.WorkItems) != 1 ||
+		omittedSnapshot.WorkItems[0].Status != types.WorkItemOpen || omittedSnapshot.HeadRevision.RevisionID != omittedHead {
+		t.Fatalf("omitted disposition did not preserve open work: %+v, %v", omittedSnapshot, err)
+	}
+	openRun := newRun("run-explicit-work-open", omittedHead)
+	openRun.Metadata["worker_update_ids"] = []string{queue.UpdateID}
+	openArgs, _ := json.Marshal(editTextureArgs{
+		DocID: docID, BaseRevisionID: omittedHead,
+		Content: "# Interim\n\nOfficial evidence is still required.", Rationale: "Preserve an honest interim artifact.",
+		WorkDisposition:    "open",
+		UpdateDispositions: []textureUpdateDisposition{{UpdateID: queue.UpdateID, Disposition: "incorporated"}},
+	})
+	openRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, textureToolExecutionContext(openRun)), "rewrite_texture", openArgs)
+	if err != nil {
+		t.Fatalf("commit open revision: %v", err)
+	}
+	var openResult map[string]any
+	if err := json.Unmarshal([]byte(openRaw), &openResult); err != nil || openResult["work_disposition"] != "open" {
+		t.Fatalf("open result = %s, err=%v", openRaw, err)
+	}
+	finishRun(openRun)
+	openSnapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		t.Fatalf("snapshot open revision: %v", err)
+	}
+	if len(openSnapshot.WorkItems) != 1 || openSnapshot.WorkItems[0].Status != types.WorkItemOpen ||
+		openSnapshot.HeadRevision.RevisionID == start.InitialRevision.RevisionID {
+		t.Fatalf("interim revision settled or failed to advance: %+v", openSnapshot)
+	}
+	if _, err := s.GetDocumentAliasSourcePath(ctx, ownerID, docID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("lifecycle revision created legacy projection alias: %v", err)
+	}
+	var incorporatedInterim, boundOpenRevision bool
+	for _, update := range openSnapshot.Updates {
+		if update.UpdateID == queue.UpdateID {
+			incorporatedInterim = update.Disposition == types.UpdateIncorporated
+		}
+		if update.Packet.Kind == "artifact_revision" {
+			boundOpenRevision = update.Disposition == types.UpdateIncorporated &&
+				update.WorkDisposition == types.WorkItemOpen && update.WorkItemID == start.InitialWork.WorkItemID
+		}
+	}
+	if !incorporatedInterim || !boundOpenRevision {
+		t.Fatalf("interim updates omitted incorporation or assigned open work binding: %+v", openSnapshot.Updates)
+	}
+	rejectedWork := types.OpenLifecycleWorkRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "command-open-rejected-evidence",
+		TrajectoryID: trajectoryID, WorkItem: types.WorkItemRecord{
+			WorkItemID: "work-rejected-evidence", Objective: "verify rejected evidence",
+			AssignedAgentID: start.Agent.AgentID, AuthorityProfile: agentprofile.Texture,
+		},
+	}
+	rejectedWork.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(rejectedWork)
+	if _, err := s.OpenLifecycleWork(ctx, rejectedWork); err != nil {
+		t.Fatalf("open rejected evidence work: %v", err)
+	}
+	rejectedUpdate := queue
+	rejectedUpdate.CommandID = "command-queue-rejected-evidence"
+	rejectedUpdate.ProducerUpdateID, rejectedUpdate.UpdateID = "producer-rejected-evidence", "update-rejected-evidence"
+	rejectedUpdate.Packet.Summary, rejectedUpdate.Content = "Evidence failed verification.", "Evidence failed verification."
+	rejectedUpdate.PayloadDigest, _ = store.ComputeLifecycleUpdatePayloadDigest(rejectedUpdate.Packet, rejectedUpdate.Content)
+	rejectedUpdate.WorkDisposition, rejectedUpdate.WorkItemID = types.WorkItemCompleted, rejectedWork.WorkItem.WorkItemID
+	rejectedUpdate.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(rejectedUpdate)
+	if _, err := s.QueueLifecycleUpdate(ctx, rejectedUpdate); err != nil {
+		t.Fatalf("queue rejected evidence: %v", err)
+	}
+	openRejectedWork := types.OpenLifecycleWorkRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "command-open-rejected-interim",
+		TrajectoryID: trajectoryID, WorkItem: types.WorkItemRecord{
+			WorkItemID: "work-rejected-interim", Objective: "continue after a rejected interim checkpoint",
+			AssignedAgentID: start.Agent.AgentID, AuthorityProfile: agentprofile.Texture,
+		},
+	}
+	openRejectedWork.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(openRejectedWork)
+	if _, err := s.OpenLifecycleWork(ctx, openRejectedWork); err != nil {
+		t.Fatalf("open rejected interim work: %v", err)
+	}
+	openRejectedUpdate := queue
+	openRejectedUpdate.CommandID = "command-queue-rejected-interim"
+	openRejectedUpdate.ProducerUpdateID, openRejectedUpdate.UpdateID = "producer-rejected-interim", "update-rejected-interim"
+	openRejectedUpdate.Packet.Summary, openRejectedUpdate.Content = "Interim evidence was unusable.", "Interim evidence was unusable."
+	openRejectedUpdate.PayloadDigest, _ = store.ComputeLifecycleUpdatePayloadDigest(openRejectedUpdate.Packet, openRejectedUpdate.Content)
+	openRejectedUpdate.WorkDisposition, openRejectedUpdate.WorkItemID = types.WorkItemOpen, openRejectedWork.WorkItem.WorkItemID
+	openRejectedUpdate.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(openRejectedUpdate)
+	if _, err := s.QueueLifecycleUpdate(ctx, openRejectedUpdate); err != nil {
+		t.Fatalf("queue rejected interim: %v", err)
+	}
+	ignoredUpdate := queue
+	ignoredUpdate.CommandID = "command-queue-ignored-evidence"
+	ignoredUpdate.ProducerUpdateID, ignoredUpdate.UpdateID = "producer-ignored-evidence", "update-ignored-evidence"
+	ignoredUpdate.Packet.Summary, ignoredUpdate.Content = "Evidence remains undecided.", "Evidence remains undecided."
+	ignoredUpdate.PayloadDigest, _ = store.ComputeLifecycleUpdatePayloadDigest(ignoredUpdate.Packet, ignoredUpdate.Content)
+	ignoredUpdate.WorkDisposition, ignoredUpdate.WorkItemID = types.WorkItemOpen, ""
+	ignoredUpdate.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(ignoredUpdate)
+	if _, err := s.QueueLifecycleUpdate(ctx, ignoredUpdate); err != nil {
+		t.Fatalf("queue ignored evidence: %v", err)
+	}
+	completedRun := newRun("run-explicit-work-completed", openSnapshot.HeadRevision.RevisionID)
+	completedArgs, _ := json.Marshal(editTextureArgs{
+		DocID: docID, BaseRevisionID: openSnapshot.HeadRevision.RevisionID,
+		Content: "# Grounded result\n\nThe required evidence is incorporated.", Rationale: "Complete the assigned artifact.",
+		WorkDisposition: "completed",
+		UpdateDispositions: []textureUpdateDisposition{
+			{UpdateID: rejectedUpdate.UpdateID, Disposition: "rejected", Reason: "evidence failed verification"},
+			{UpdateID: openRejectedUpdate.UpdateID, Disposition: "rejected", Reason: "interim evidence was unusable"},
+		},
+	})
+	completedRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, textureToolExecutionContext(completedRun)), "rewrite_texture", completedArgs)
+	if err != nil {
+		t.Fatalf("commit completed revision: %v", err)
+	}
+	var completedResult map[string]any
+	if err := json.Unmarshal([]byte(completedRaw), &completedResult); err != nil || completedResult["work_disposition"] != "completed" {
+		t.Fatalf("completed result = %s, err=%v", completedRaw, err)
+	}
+	completedSnapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		t.Fatalf("snapshot completed revision: %v", err)
+	}
+	if completedSnapshot.WorkItems[0].Status != types.WorkItemCompleted ||
+		completedSnapshot.WorkItems[0].ResultRef != completedSnapshot.HeadRevision.RevisionID {
+		t.Fatalf("explicit completion did not settle work: %+v", completedSnapshot)
+	}
+	var rejectedWorkState, openRejectedWorkState, ignoredUpdateState bool
+	for _, work := range completedSnapshot.WorkItems {
+		switch work.WorkItemID {
+		case rejectedWork.WorkItem.WorkItemID:
+			rejectedWorkState = work.Status == types.WorkItemRefused && work.ResultRef == completedSnapshot.HeadRevision.RevisionID
+		case openRejectedWork.WorkItem.WorkItemID:
+			openRejectedWorkState = work.Status == types.WorkItemOpen && work.ResultRef == ""
+		}
+	}
+	for _, update := range completedSnapshot.Updates {
+		if update.UpdateID == ignoredUpdate.UpdateID {
+			ignoredUpdateState = update.Disposition == types.UpdatePending
+		}
+	}
+	if !rejectedWorkState || !openRejectedWorkState || !ignoredUpdateState {
+		t.Fatalf("explicit rejection or omitted-pending consequence lost: works=%+v updates=%+v", completedSnapshot.WorkItems, completedSnapshot.Updates)
+	}
+}
+
 func TestTextureEditToolsRefusePresentInvalidWorkDisposition(t *testing.T) {
 	_, _, registry := textureToolCommitRuntime(t)
 	run := &types.RunRecord{
@@ -930,6 +1332,228 @@ func TestTextureEditToolsRefusePresentInvalidWorkDisposition(t *testing.T) {
 				t.Fatalf("rewrite_texture accepted invalid work disposition: %s", raw)
 			}
 		})
+	}
+}
+
+func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *testing.T) {
+	ctx := context.Background()
+	dir := filepath.Join(os.TempDir(), "go-choir-texture-computer-scope-test")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create temp dir: %v", err)
+	}
+	dbPath := filepath.Join(dir, t.Name()+".db")
+	promptRoot := filepath.Join(dir, t.Name()+"-prompts")
+	_ = os.Remove(dbPath)
+	_ = os.RemoveAll(promptRoot)
+	t.Cleanup(func() {
+		_ = os.Remove(dbPath)
+		_ = os.RemoveAll(promptRoot)
+	})
+	openRuntime := func() (*store.Store, *agentcore.Runtime, *Handler, *toolregistry.ToolRegistry) {
+		t.Helper()
+		s, err := store.Open(dbPath)
+		if err != nil {
+			t.Fatalf("open store: %v", err)
+		}
+		core := agentcore.New(provideriface.Config{
+			SandboxID: "computer-b", StorePath: dbPath, PromptRoot: promptRoot,
+			ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+		}, s, events.NewEventBus(), provider.NewStubProvider(0))
+		handler := NewHandler(core)
+		registry := toolregistry.NewToolRegistry()
+		if err := RegisterTools(registry, handler); err != nil {
+			t.Fatalf("register tools: %v", err)
+		}
+		return s, core, handler, registry
+	}
+	s, core, handler, registry := openRuntime()
+	const (
+		ownerID = "owner-computer-collision"
+		docID   = "doc-computer-collision"
+	)
+	agentID := currentTextureAgentID(docID)
+	starts := make(map[string]types.StartLifecycleRequest)
+	for _, computerID := range []string{"computer-a", "computer-b"} {
+		start := types.StartLifecycleRequest{
+			OwnerID: ownerID, ComputerID: computerID, CommandID: "start-" + computerID,
+			TrajectoryID: "trajectory-" + computerID, Kind: types.TrajectoryKindDocument,
+			SubjectRefs:    map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+			SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+			InitialWork: types.WorkItemRecord{
+				WorkItemID: "work-" + computerID, Objective: "revise scoped document",
+				AssignedAgentID: agentID, AuthorityProfile: agentprofile.Texture,
+			},
+			InitialDocument: types.Document{DocID: docID, Title: "Scoped " + computerID},
+			InitialRevision: types.Revision{
+				RevisionID: "revision-" + computerID + "-v0", AuthorKind: types.AuthorUser,
+				AuthorLabel: ownerID, Content: "Initial " + computerID,
+			},
+			Agent: types.AgentRecord{AgentID: agentID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID},
+		}
+		start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+		if _, err := s.StartLifecycle(ctx, start); err != nil {
+			t.Fatalf("start %s lifecycle: %v", computerID, err)
+		}
+		packet := types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update",
+			Summary: "pending " + computerID,
+		}
+		content := "pending " + computerID
+		payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+		queue := types.QueueLifecycleUpdateRequest{
+			OwnerID: ownerID, ComputerID: computerID, CommandID: "queue-" + computerID,
+			TrajectoryID: start.TrajectoryID, TargetAgentID: agentID, ProducerAgentID: agentID,
+			ProducerUpdateID: "producer-" + computerID, UpdateID: "update-" + computerID,
+			ChannelID: docID, Packet: packet, Content: content, PayloadDigest: payloadDigest,
+			WorkDisposition: types.WorkItemOpen, WorkItemID: start.InitialWork.WorkItemID,
+		}
+		queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
+		if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
+			t.Fatalf("queue %s update: %v", computerID, err)
+		}
+		starts[computerID] = start
+	}
+	if unscoped, err := s.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100); err != nil || len(unscoped) != 0 {
+		t.Fatalf("owner-only mailbox exposed lifecycle updates: %+v, %v", unscoped, err)
+	}
+	if docs, err := s.ListDocumentsByOwner(ctx, ownerID, 100); err != nil || len(docs) != 0 {
+		t.Fatalf("owner-only document list exposed lifecycle documents: %+v, %v", docs, err)
+	}
+	if revisions, err := s.ListRevisionsByDoc(ctx, docID, ownerID, 100); err != nil || len(revisions) != 0 {
+		t.Fatalf("owner-only revision list exposed lifecycle revisions: %+v, %v", revisions, err)
+	}
+	for _, computerID := range []string{"computer-a", "computer-b"} {
+		docs, err := s.ListDocumentsByScope(ctx, ownerID, computerID, 100)
+		if err != nil || len(docs) != 1 || docs[0].ComputerID != computerID || docs[0].Title != "Scoped "+computerID {
+			t.Fatalf("scoped documents on %s = %+v, %v", computerID, docs, err)
+		}
+		revisions, err := s.ListRevisionsByScope(ctx, docID, ownerID, computerID, 100)
+		if err != nil || len(revisions) != 1 || revisions[0].ComputerID != computerID || revisions[0].Content != "Initial "+computerID {
+			t.Fatalf("scoped revisions on %s = %+v, %v", computerID, revisions, err)
+		}
+	}
+	docs, err := handler.listTextureDocuments(ctx, ownerID, 100)
+	if err != nil || len(docs) != 1 || docs[0].ComputerID != "computer-b" {
+		t.Fatalf("computer-b product document list = %+v, %v", docs, err)
+	}
+	revisions, err := handler.listTextureRevisions(ctx, ownerID, docID, 100)
+	if err != nil || len(revisions) != 1 || revisions[0].ComputerID != "computer-b" {
+		t.Fatalf("computer-b product revision list = %+v, %v", revisions, err)
+	}
+	history, err := handler.getTextureHistory(ctx, ownerID, docID, 100)
+	if err != nil || len(history) != 1 || history[0].RevisionID != "revision-computer-b-v0" {
+		t.Fatalf("computer-b product history = %+v, %v", history, err)
+	}
+	blameRequest := httptest.NewRequest(http.MethodGet, "/api/texture/revisions/revision-computer-b-v0/blame", nil)
+	blameRequest.Header.Set("X-Authenticated-User", ownerID)
+	blameRecorder := httptest.NewRecorder()
+	handler.HandleTextureBlame(blameRecorder, blameRequest)
+	if blameRecorder.Code != http.StatusOK {
+		t.Fatalf("computer-b blame status = %d, body=%s", blameRecorder.Code, blameRecorder.Body.String())
+	}
+	var blame textureBlameResponse
+	if err := json.Unmarshal(blameRecorder.Body.Bytes(), &blame); err != nil ||
+		blame.RevisionID != "revision-computer-b-v0" || blame.DocID != docID {
+		t.Fatalf("computer-b blame = %+v, %v", blame, err)
+	}
+	newRun := func(runID, baseRevisionID string) *types.RunRecord {
+		return &types.RunRecord{
+			RunID: runID, AgentID: agentID, ChannelID: docID, OwnerID: ownerID, SandboxID: "computer-b",
+			State: types.RunRunning, Prompt: "Revise the scoped artifact.", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+			AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
+			Metadata: map[string]any{
+				"type": textureAgentRevisionTaskType, "doc_id": docID, "current_revision_id": baseRevisionID,
+				"trajectory_id":          starts["computer-b"].TrajectoryID,
+				"lifecycle_work_item_id": starts["computer-b"].InitialWork.WorkItemID,
+				runMetadataAgentID:       agentID, runMetadataAgentProfile: agentprofile.Texture,
+				runMetadataAgentRole: agentprofile.Texture, runMetadataChannelID: docID,
+			},
+		}
+	}
+	assertScopedInjection := func(h *Handler, rec *types.RunRecord) {
+		t.Helper()
+		inject := h.coagentUpdateTurnInjector(rec)
+		if inject == nil {
+			t.Fatal("scoped lifecycle injector is nil")
+		}
+		messages, err := inject(false)
+		if err != nil || len(messages) != 1 {
+			t.Fatalf("inject scoped updates: %d messages, %v", len(messages), err)
+		}
+		if !messageTextContains(t, messages[0], "update-computer-b") ||
+			messageTextContains(t, messages[0], "update-computer-a") {
+			t.Fatalf("cross-computer update injection: %s", string(messages[0]))
+		}
+	}
+	commitScopedEdit := func(s *store.Store, registry *toolregistry.ToolRegistry, runID, baseRevisionID, content string) string {
+		t.Helper()
+		run := newRun(runID, baseRevisionID)
+		if err := s.CreateRun(ctx, *run); err != nil {
+			t.Fatalf("create scoped edit run: %v", err)
+		}
+		if err := s.CreateAgentMutation(ctx, store.AgentMutation{DocID: docID, RunID: runID, OwnerID: ownerID, ComputerID: "computer-b", State: "pending", CreatedAt: time.Now().UTC()}); err != nil {
+			t.Fatalf("create scoped mutation: %v", err)
+		}
+		args, _ := json.Marshal(editTextureArgs{
+			DocID: docID, BaseRevisionID: baseRevisionID, Content: content,
+			Rationale: "Prove owner/computer scoped lifecycle edit.",
+		})
+		if _, err := registry.Execute(toolregistry.WithExecutionContext(ctx, textureToolExecutionContext(run)), "rewrite_texture", args); err != nil {
+			t.Fatalf("commit scoped edit: %v", err)
+		}
+		terminalRun, err := s.GetLifecycleRun(ctx, ownerID, "computer-b", runID)
+		if err != nil {
+			t.Fatalf("load scoped edit run for terminal projection: %v", err)
+		}
+		finishedAt := time.Now().UTC()
+		terminalRun.State, terminalRun.UpdatedAt, terminalRun.FinishedAt = types.RunCompleted, finishedAt, &finishedAt
+		projectTerminal := types.ReplaceLifecycleActivationRequest{
+			OwnerID: ownerID, ComputerID: "computer-b",
+			CommandID: "project-terminal-" + runID, TrajectoryID: starts["computer-b"].TrajectoryID,
+			AgentID: agentID, Run: terminalRun,
+		}
+		projectTerminal.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(projectTerminal)
+		if _, err := s.ProjectTerminalLifecycleRun(ctx, projectTerminal); err != nil {
+			t.Fatalf("project terminal scoped edit run: %v", err)
+		}
+		snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "computer-b", starts["computer-b"].TrajectoryID)
+		if err != nil {
+			t.Fatalf("load computer-b snapshot: %v", err)
+		}
+		if len(snapshot.WorkItems) != 1 || snapshot.WorkItems[0].Status != types.WorkItemOpen {
+			t.Fatalf("omitted work_disposition changed assigned work: %+v", snapshot.WorkItems)
+		}
+		foundOpenUpdate := false
+		for _, update := range snapshot.Updates {
+			if update.Disposition == types.UpdateIncorporated && update.WorkDisposition == types.WorkItemOpen {
+				foundOpenUpdate = true
+			}
+		}
+		if !foundOpenUpdate {
+			t.Fatalf("omitted work_disposition did not fail open: %+v", snapshot.Updates)
+		}
+		other, err := s.GetLifecycleSnapshot(ctx, ownerID, "computer-a", starts["computer-a"].TrajectoryID)
+		if err != nil || other.HeadRevision.RevisionID != starts["computer-a"].InitialRevision.RevisionID {
+			t.Fatalf("computer-a artifact changed: %+v, %v", other.HeadRevision, err)
+		}
+		return snapshot.HeadRevision.RevisionID
+	}
+
+	injectionRun := newRun("run-inject-before-restart", starts["computer-b"].InitialRevision.RevisionID)
+	assertScopedInjection(handler, injectionRun)
+	firstHead := commitScopedEdit(s, registry, "run-edit-before-restart", starts["computer-b"].InitialRevision.RevisionID, "# Computer B v1\n\nScoped before restart.")
+	core.Stop()
+	if err := s.Close(); err != nil {
+		t.Fatalf("close pre-restart store: %v", err)
+	}
+
+	s, core, handler, registry = openRuntime()
+	defer core.Stop()
+	defer s.Close()
+	assertScopedInjection(handler, newRun("run-inject-after-restart", firstHead))
+	secondHead := commitScopedEdit(s, registry, "run-edit-after-restart", firstHead, "# Computer B v2\n\nScoped after restart.")
+	if secondHead == firstHead {
+		t.Fatalf("computer-b head did not advance after restart: %s", secondHead)
 	}
 }
 

@@ -2,7 +2,6 @@ package sandbox
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -35,7 +34,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/zot"
 )
 
@@ -207,52 +205,8 @@ func Run() {
 			computerID, eventClient, db, eventClient,
 			computerevent.EventHeadReceiptVerifier{Keys: credentials.KeyResolver()},
 		)
-		supervisionWritesDisabledAfterReplay, restoreSupervisionWriteMode := holdSupervisionWritesDisabledForReplay()
-		var startupManifest updater.ReleaseManifest
-		var replayDigest string
-		if err == nil && !computerevent.SupervisionWritesDisabled() {
-			err = fmt.Errorf("sandbox: failed to hold supervision writes disabled for private tape replay")
-		}
 		if err == nil {
-			startupManifest, err = resolveStartupSupervisionRelease(
-				strings.TrimSpace(os.Getenv("CHOIR_UPDATER_ROOT")),
-				strings.TrimSpace(os.Getenv("CHOIR_GUEST_IMAGE_MANIFEST")),
-			)
-			if err == nil && startupManifest.Supervision == nil {
-				err = fmt.Errorf("sandbox: startup manifest lacks supervision compatibility floor")
-			}
-		}
-		if err == nil {
-			err = appender.RebuildPrivateProjectionFromPinnedSource(bootstrapCtx, privateCipher)
-		}
-		if err == nil {
-			replayDigest, err = db.SupervisionProjectionSemanticDigest(bootstrapCtx, computerID)
-		}
-		if err == nil && !computerevent.SupervisionWritesDisabled() {
-			err = fmt.Errorf("sandbox: supervision writes were enabled during private tape replay")
-		}
-		if err == nil {
-			err = appender.RebuildPrivateProjectionFromPinnedSource(bootstrapCtx, privateCipher)
-		}
-		if err == nil {
-			var replayRepeatDigest string
-			replayRepeatDigest, err = db.SupervisionProjectionSemanticDigest(bootstrapCtx, computerID)
-			if err == nil && replayRepeatDigest != replayDigest {
-				err = fmt.Errorf("sandbox: private tape replay semantic digest mismatch")
-			}
-		}
-		restoreSupervisionWriteMode()
-		if err == nil && computerevent.SupervisionWritesDisabled() != supervisionWritesDisabledAfterReplay {
-			err = fmt.Errorf("sandbox: failed to restore supervision write mode after private tape replay")
-		}
-		if err == nil {
-			compatibility := *startupManifest.Supervision
-			coreOpts = append(coreOpts, agentcore.WithStartupSupervisionReplayAttestation(agentcore.StartupSupervisionReplayAttestation{
-				Marker: startupManifest.Marker, EventSchemaVersion: startupManifest.EventSchemaVersion,
-				ReducerVersion: startupManifest.ReducerVersion, ReleaseDigest: startupManifest.ContentDigest,
-				Supervision: compatibility, SupervisionWritesDisabled: supervisionWritesDisabledAfterReplay,
-				PrivateTapeReplaySemanticDigest: replayDigest, ProjectionSemanticDigest: replayDigest,
-			}))
+			err = appender.Reconstruct(bootstrapCtx, eventClient)
 		}
 		if err == nil {
 			for _, lifecycleReceipt := range credentials.PendingLifecycleReceipts() {
@@ -304,7 +258,6 @@ func Run() {
 		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher))
 		log.Printf("sandbox: computer event authority reconstructed; self-development effects disabled")
 	}
-
 	var rtOpts []actorruntime.RuntimeOption
 
 	// Mount the Dolt-backed trace observability store when enabled. The store
@@ -425,45 +378,6 @@ func Run() {
 	}
 
 	s.Start()
-}
-func holdSupervisionWritesDisabledForReplay() (disabledAfterReplay bool, restore func()) {
-	const envName = "CHOIR_SUPERVISION_WRITES_DISABLED"
-	previous, wasSet := os.LookupEnv(envName)
-	disabledAfterReplay = strings.TrimSpace(previous) != ""
-	_ = os.Setenv(envName, "1")
-	return disabledAfterReplay, func() {
-		if wasSet {
-			_ = os.Setenv(envName, previous)
-			return
-		}
-		_ = os.Unsetenv(envName)
-	}
-}
-
-func resolveStartupSupervisionRelease(updaterRoot, guestImageManifestPath string) (updater.ReleaseManifest, error) {
-	currentPath := filepath.Join(filepath.Clean(updaterRoot), "current")
-	if _, err := os.Lstat(currentPath); err == nil {
-		return updater.ReadCurrentManifest(updaterRoot)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return updater.ReleaseManifest{}, err
-	}
-	if !filepath.IsAbs(guestImageManifestPath) {
-		return updater.ReleaseManifest{}, fmt.Errorf("sandbox: immutable guest image manifest path is unavailable")
-	}
-	raw, err := os.ReadFile(filepath.Clean(guestImageManifestPath))
-	if err != nil {
-		return updater.ReleaseManifest{}, fmt.Errorf("sandbox: read immutable guest image manifest: %w", err)
-	}
-	if !strings.HasPrefix(string(raw), "contract=choir-guest-image-v1\n") ||
-		!strings.Contains(string(raw), "\nsandbox=/nix/store/") {
-		return updater.ReleaseManifest{}, fmt.Errorf("sandbox: immutable guest image manifest is invalid")
-	}
-	compatibility := updater.CurrentSupervisionCompatibility()
-	return updater.ReleaseManifest{
-		Version: updater.ManifestVersion, EventSchemaVersion: computerevent.SchemaVersionV1,
-		ReducerVersion: computerevent.ReducerVersionV1, Supervision: &compatibility,
-		Marker: "immutable-guest-image", ContentDigest: computerevent.DigestBytes(raw),
-	}, nil
 }
 
 // storeDir extracts the directory portion of a file path.

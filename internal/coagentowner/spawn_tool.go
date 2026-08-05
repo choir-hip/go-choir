@@ -7,8 +7,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/google/uuid"
-
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
@@ -39,8 +37,6 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 		Title                string   `json:"title,omitempty"`
 		InitialContent       string   `json:"initial_content,omitempty"`
 		SourceItemIDs        []string `json:"source_item_ids,omitempty"`
-		AssignmentID         string   `json:"assignment_id,omitempty"`
-		AttemptID            string   `json:"attempt_id,omitempty"`
 	}
 	allowed := canonicalTargets(policy.AllowedDelegateTargets)
 	roleDescription := "Canonical role/profile name. Allowed target roles for this caller: " + strings.Join(allowed, ", ") + "."
@@ -56,14 +52,13 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 			"role":                    map[string]any{"type": "string", "enum": allowed, "description": roleDescription},
 			"profile":                 map[string]any{"type": "string", "enum": allowed, "description": "Optional canonical profile override. Usually omit; if set, it must be one of the allowed target roles for this caller."},
 			"channel_id":              map[string]any{"type": "string"},
-			"slot":                    map[string]any{"type": "string", "description": "Legacy non-supervised CoSuper scheduling slot. Supervised Super-to-CoSuper runs derive their slot from assignment_id."},
+			"slot":                    map[string]any{"type": "string", "enum": []string{"implementation", "verifier"}, "description": "For super spawning co-super children: use implementation for the capsule writer first; use verifier only after frozen-bundle or blocker evidence exists. Reusing a live slot returns the existing child instead of launching a duplicate."},
+			"capsule_handle":          map[string]any{"type": "string", "description": "Opaque handle returned by spawn_capsule; required for a co-super implementation slot and never used for a verifier slot."},
 			"model":                   map[string]any{"type": "string"},
 			"model_policy_overlay_id": map[string]any{"type": "string", "description": "Optional owner-visible model policy overlay id from System/model-policy-overlays/<id>.toml. Use this for eval/model arms instead of passing provider metadata directly."},
 			"title":                   map[string]any{"type": "string", "description": "For role=texture from processor or reconciler: optional Texture document title for a new article."},
 			"initial_content":         map[string]any{"type": "string", "description": "For role=texture from processor or reconciler: optional source/brief seed revision for the Texture before the Texture agent writes the article."},
 			"source_item_ids":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "For role=texture from processor: the exact source item ids this story handoff covers. Required when the processor request contains multiple source items."},
-			"assignment_id":           map[string]any{"type": "string", "format": "uuid", "description": "Required only for Super spawning a pre-authorized CoSuper; identifies the already-opened assignment."},
-			"attempt_id":              map[string]any{"type": "string", "format": "uuid", "description": "Required only for Super spawning a pre-authorized CoSuper; stable identity for this execution attempt."},
 		}, []string{"objective", "role"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			var in args
@@ -92,25 +87,18 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 				return "", fmt.Errorf("%s cannot delegate to %s", callerProfile, profile)
 			}
 			slot := normalizeSlot(in.Slot)
-			if strings.TrimSpace(in.Slot) != "" && slot == "" && !(callerProfile == agentprofile.Super && profile == agentprofile.CoSuper) {
+			if strings.TrimSpace(in.Slot) != "" && slot == "" {
 				return "", fmt.Errorf("spawn_agent slot must be implementation or verifier")
 			}
-			if callerProfile == agentprofile.Super && profile == agentprofile.CoSuper && strings.TrimSpace(in.CapsuleHandle) != "" {
-				return "", fmt.Errorf("supervised co-super execution does not accept capsule_handle")
-			}
-			hasSupervisionIDs := strings.TrimSpace(in.AssignmentID) != "" || strings.TrimSpace(in.AttemptID) != ""
-			if hasSupervisionIDs && !(callerProfile == agentprofile.Super && profile == agentprofile.CoSuper) {
-				return "", fmt.Errorf("assignment_id and attempt_id are accepted only for Super spawning CoSuper")
-			}
-			if callerProfile == agentprofile.Super && profile == agentprofile.CoSuper && (strings.TrimSpace(in.AssignmentID) == "" || strings.TrimSpace(in.AttemptID) == "") {
-				return "", fmt.Errorf("super spawning co-super requires assignment_id and attempt_id")
+			if callerProfile == agentprofile.Super && profile == agentprofile.CoSuper && slot == "" {
+				return "", fmt.Errorf("super spawn_agent role=co-super requires slot=\"implementation\" or slot=\"verifier\"")
 			}
 			if callerProfile == agentprofile.Super && profile == agentprofile.CoSuper {
-				if _, err := uuid.Parse(in.AssignmentID); err != nil {
-					return "", fmt.Errorf("assignment_id must be a UUID")
+				if slot == "implementation" && strings.TrimSpace(in.CapsuleHandle) == "" {
+					return "", fmt.Errorf("co-super implementation requires capsule_handle from spawn_capsule")
 				}
-				if _, err := uuid.Parse(in.AttemptID); err != nil {
-					return "", fmt.Errorf("attempt_id must be a UUID")
+				if slot == "verifier" && strings.TrimSpace(in.CapsuleHandle) != "" {
+					return "", fmt.Errorf("co-super verifier must inspect the frozen bundle, not a live capsule")
 				}
 			}
 			if profile == agentprofile.Texture {
@@ -163,12 +151,6 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 			}
 			if value := strings.TrimSpace(in.ModelPolicyOverlayID); value != "" {
 				constraints[modelpolicy.MetadataPolicyOverlayID] = value
-			}
-			if callerProfile == agentprofile.Super && profile == agentprofile.CoSuper {
-				constraints["supervision_assignment_id"] = strings.TrimSpace(in.AssignmentID)
-				constraints["supervision_attempt_id"] = strings.TrimSpace(in.AttemptID)
-				constraints["agent_id"] = "cosuper:assignment:" + strings.TrimSpace(in.AssignmentID)
-				constraints["co_super_slot"] = strings.TrimSpace(in.AssignmentID)
 			}
 			child, err := core.StartCoagentRun(ctx, exec.RunID, in.Objective, exec.OwnerID, constraints)
 			if err != nil {

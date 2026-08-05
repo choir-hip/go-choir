@@ -6,480 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"sort"
 	"strings"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 const runMetadataWorkerUpdatesInjected = "worker_updates_injected"
-
-type canonicalSupervisionDeliveryBody struct {
-	MessageID          string  `json:"message_id"`
-	FromActorID        string  `json:"from_actor_id"`
-	ToRole             string  `json:"to_role"`
-	ToActorID          *string `json:"to_actor_id"`
-	ChannelID          string  `json:"channel_id"`
-	PayloadArtifactRef string  `json:"payload_artifact_ref"`
-	PacketID           string  `json:"packet_id"`
-	ResearcherID       string  `json:"researcher_id"`
-	PacketArtifactRef  string  `json:"packet_artifact_ref"`
-	AssignmentID       string  `json:"assignment_id"`
-	ResultID           string  `json:"result_id"`
-	ResultArtifactRef  string  `json:"result_artifact_ref"`
-	Outcome            string  `json:"outcome"`
-}
-
-// ListPendingCanonicalSupervisionUpdates exposes the one-tape delivery
-// projection to the Texture lifecycle owner. It refuses when the canonical
-// private-artifact read authority is unavailable rather than making an empty
-// legacy mailbox look authoritative.
-func (rt *Runtime) ListPendingCanonicalSupervisionUpdates(ctx context.Context, ownerID, computerID, targetAgentID, trajectoryID string, limit int) ([]types.CoagentSourcePacket, error) {
-	if rt == nil || rt.store == nil || rt.eventAppender == nil || rt.privateArtifactCipher == nil {
-		return nil, fmt.Errorf("%w: canonical supervision delivery authority unavailable", ErrSupervisionAuthorityRequired)
-	}
-	return rt.canonicalSupervisionUpdatesForAgent(ctx, ownerID, computerID, targetAgentID, trajectoryID, limit)
-}
-
-// ListPendingSupervisionCompatibilityUpdates reads pre-cutover lifecycle
-// mailbox rows only after canonical private-artifact authority is available,
-// then projects completed-run consumption without mutating the legacy rows.
-func (rt *Runtime) ListPendingSupervisionCompatibilityUpdates(ctx context.Context, ownerID, computerID, targetAgentID, trajectoryID string, limit int) ([]types.CoagentSourcePacket, error) {
-	if rt == nil || rt.store == nil || rt.eventAppender == nil || rt.privateArtifactCipher == nil {
-		return nil, fmt.Errorf("%w: canonical supervision delivery authority unavailable", ErrSupervisionAuthorityRequired)
-	}
-	updates, err := rt.store.ListPendingLifecycleUpdatesForTrajectory(ctx, ownerID, computerID, targetAgentID, trajectoryID, 0)
-	if err != nil {
-		return nil, err
-	}
-	consumed, err := rt.consumedCanonicalSupervisionUpdateIDs(ctx, ownerID, computerID, targetAgentID)
-	if err != nil {
-		return nil, err
-	}
-	updates = filterConsumedCoagentUpdates(updates, consumed)
-	if limit > 0 && len(updates) > limit {
-		updates = updates[:limit]
-	}
-	return updates, nil
-}
-
-func (rt *Runtime) canonicalSupervisionUpdatesForAgent(ctx context.Context, ownerID, computerID, targetAgentID, trajectoryID string, limit int) ([]types.CoagentSourcePacket, error) {
-	if rt == nil || rt.store == nil {
-		return nil, fmt.Errorf("%w: canonical supervision delivery store unavailable", ErrSupervisionAuthorityRequired)
-	}
-	if rt.eventAppender == nil || rt.privateArtifactCipher == nil {
-		pending, err := rt.hasPendingCanonicalSupervisionDelivery(ctx, ownerID, computerID, targetAgentID, trajectoryID)
-		if err != nil {
-			return nil, err
-		}
-		if pending {
-			return nil, fmt.Errorf("%w: canonical supervision delivery artifact authority unavailable", ErrSupervisionAuthorityRequired)
-		}
-		return nil, nil
-	}
-	consumed, err := rt.consumedCanonicalSupervisionUpdateIDs(ctx, ownerID, computerID, targetAgentID)
-	if err != nil {
-		return nil, err
-	}
-	return rt.canonicalSupervisionUpdatesForAgentWithConsumed(ctx, ownerID, computerID, targetAgentID, trajectoryID, limit, consumed)
-}
-
-func (rt *Runtime) hasPendingCanonicalSupervisionDelivery(ctx context.Context, ownerID, computerID, targetAgentID, trajectoryID string) (bool, error) {
-	ownerID, computerID, targetAgentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(targetAgentID)
-	if ownerID == "" || computerID == "" || targetAgentID == "" {
-		return false, nil
-	}
-	consumed, err := rt.consumedCanonicalSupervisionUpdateIDs(ctx, ownerID, computerID, targetAgentID)
-	if err != nil {
-		return false, err
-	}
-	var trajectories []types.TrajectoryRecord
-	if trajectoryID = strings.TrimSpace(trajectoryID); trajectoryID != "" {
-		trajectory, err := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
-		if err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				return false, nil
-			}
-			return false, err
-		}
-		trajectories = []types.TrajectoryRecord{trajectory}
-	} else {
-		trajectories, err = rt.store.ListLifecycleTrajectoriesByOwner(ctx, ownerID, computerID, 0)
-		if err != nil {
-			return false, err
-		}
-	}
-	for _, trajectory := range trajectories {
-		deliveries, err := rt.store.ListSupervisionDeliveryEvents(ctx, ownerID, computerID, trajectory.TrajectoryID)
-		if err != nil {
-			return false, err
-		}
-		for _, delivery := range deliveries {
-			if consumed[delivery.ID] {
-				continue
-			}
-			addressed, err := rt.canonicalSupervisionDeliveryAddressed(ctx, trajectory, targetAgentID, delivery)
-			if err != nil {
-				return false, err
-			}
-			if addressed {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
-}
-
-func (rt *Runtime) canonicalSupervisionDeliveryAddressed(ctx context.Context, trajectory types.TrajectoryRecord, targetAgentID string, delivery store.SupervisionDeliveryEvent) (bool, error) {
-	var body canonicalSupervisionDeliveryBody
-	if err := json.Unmarshal(delivery.Body, &body); err != nil {
-		return false, fmt.Errorf("decode canonical supervision delivery %s: %w", delivery.ID, err)
-	}
-	return rt.canonicalSupervisionDeliveryBodyAddressed(ctx, trajectory, targetAgentID, delivery.Kind, body)
-}
-
-func (rt *Runtime) canonicalSupervisionDeliveryBodyAddressed(ctx context.Context, trajectory types.TrajectoryRecord, targetAgentID, deliveryKind string, body canonicalSupervisionDeliveryBody) (bool, error) {
-	switch deliveryKind {
-	case "actor_message_recorded":
-		if body.ToActorID != nil {
-			return strings.TrimSpace(*body.ToActorID) == targetAgentID, nil
-		}
-		targetProfile := canonicalProfileForAgentID(targetAgentID)
-		if targetProfile == "" {
-			target, err := rt.store.GetAgentByScope(ctx, trajectory.OwnerID, trajectory.ComputerID, targetAgentID)
-			if err != nil {
-				if errors.Is(err, store.ErrNotFound) {
-					return false, nil
-				}
-				return false, err
-			}
-			targetProfile = agentprofile.Canonical(firstNonEmpty(target.Profile, target.Role))
-		}
-		return agentprofile.Canonical(body.ToRole) == targetProfile, nil
-	case "attempt_result":
-		return targetAgentID == persistentSuperAgentID(trajectory.OwnerID), nil
-	case "researcher_packet_recorded":
-		return targetAgentID == textureAgentIDForTrajectory(trajectory), nil
-	default:
-		return false, nil
-	}
-}
-
-func (rt *Runtime) canonicalSupervisionUpdatesForAgentWithConsumed(ctx context.Context, ownerID, computerID, targetAgentID, trajectoryID string, limit int, consumed map[string]bool) ([]types.CoagentSourcePacket, error) {
-	if rt == nil || rt.store == nil || rt.eventAppender == nil || rt.privateArtifactCipher == nil {
-		return nil, fmt.Errorf("%w: canonical supervision delivery authority unavailable", ErrSupervisionAuthorityRequired)
-	}
-	ownerID, computerID, targetAgentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(targetAgentID)
-	if ownerID == "" || computerID == "" || targetAgentID == "" {
-		return nil, fmt.Errorf("canonical supervision delivery requires owner, computer, and target actor")
-	}
-	var trajectories []types.TrajectoryRecord
-	if trajectoryID = strings.TrimSpace(trajectoryID); trajectoryID != "" {
-		trajectory, err := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
-		if err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				return nil, nil
-			}
-			return nil, err
-		}
-		trajectories = []types.TrajectoryRecord{trajectory}
-	} else {
-		var err error
-		trajectories, err = rt.store.ListLifecycleTrajectoriesByOwner(ctx, ownerID, computerID, 0)
-		if err != nil {
-			return nil, err
-		}
-	}
-	updates := make([]types.CoagentSourcePacket, 0)
-	for _, trajectory := range trajectories {
-		deliveries, err := rt.store.ListSupervisionDeliveryEvents(ctx, ownerID, computerID, trajectory.TrajectoryID)
-		if err != nil {
-			return nil, err
-		}
-		for _, delivery := range deliveries {
-			if consumed[delivery.ID] {
-				continue
-			}
-			update, addressed, err := rt.canonicalSupervisionDeliveryUpdate(ctx, trajectory, targetAgentID, delivery)
-			if err != nil {
-				return nil, err
-			}
-			if addressed {
-				updates = append(updates, update)
-			}
-		}
-	}
-	sort.Slice(updates, func(i, j int) bool {
-		left := uint64(updates[i].ReducerSeq)
-		right := uint64(updates[j].ReducerSeq)
-		if left != right {
-			return left < right
-		}
-		return updates[i].UpdateID < updates[j].UpdateID
-	})
-	if limit > 0 && len(updates) > limit {
-		updates = updates[:limit]
-	}
-	return updates, nil
-}
-
-func (rt *Runtime) canonicalSupervisionDeliveryUpdate(ctx context.Context, trajectory types.TrajectoryRecord, targetAgentID string, delivery store.SupervisionDeliveryEvent) (types.CoagentSourcePacket, bool, error) {
-	var body canonicalSupervisionDeliveryBody
-	if err := json.Unmarshal(delivery.Body, &body); err != nil {
-		return types.CoagentSourcePacket{}, false, fmt.Errorf("decode canonical supervision delivery %s: %w", delivery.ID, err)
-	}
-	addressed, err := rt.canonicalSupervisionDeliveryBodyAddressed(ctx, trajectory, targetAgentID, delivery.Kind, body)
-	if err != nil || !addressed {
-		return types.CoagentSourcePacket{}, addressed, err
-	}
-	sourceAgentID, sourceRole, channelID, artifactRef := "", "", trajectory.TrajectoryID, ""
-	switch delivery.Kind {
-	case "actor_message_recorded":
-		sourceAgentID, channelID, artifactRef = strings.TrimSpace(body.FromActorID), strings.TrimSpace(body.ChannelID), strings.TrimSpace(body.PayloadArtifactRef)
-	case "attempt_result":
-		lineage, err := rt.store.GetSupervisionAssignmentLineage(ctx, trajectory.OwnerID, trajectory.ComputerID, trajectory.TrajectoryID, body.AssignmentID)
-		if err != nil {
-			return types.CoagentSourcePacket{}, false, err
-		}
-		sourceAgentID, sourceRole, artifactRef = lineage.AssignedActorID, agentprofile.CoSuper, strings.TrimSpace(body.ResultArtifactRef)
-	case "researcher_packet_recorded":
-		textureAgentID := textureAgentIDForTrajectory(trajectory)
-		docID := docIDFromTextureAgentID(textureAgentID)
-		sourceAgentID, sourceRole, channelID, artifactRef = strings.TrimSpace(body.ResearcherID), agentprofile.Researcher, docID, strings.TrimSpace(body.PacketArtifactRef)
-	default:
-		return types.CoagentSourcePacket{}, false, nil
-	}
-	if sourceRole == "" && sourceAgentID != "" {
-		if source, err := rt.store.GetAgentByScope(ctx, trajectory.OwnerID, trajectory.ComputerID, sourceAgentID); err == nil {
-			sourceRole = agentprofile.Canonical(source.Profile)
-		}
-	}
-	bindingIDs := []string{delivery.ID + ":packet"}
-	if legacy := strings.TrimSpace(delivery.CommandID); legacy != "" && legacy != delivery.ID {
-		bindingIDs = append(bindingIDs, legacy+":packet")
-	}
-	var plaintext []byte
-	var metadata computerevent.PrivateArtifactMetadata
-	var loadErrors []error
-	for _, bindingID := range bindingIDs {
-		plaintext, metadata, err = rt.eventAppender.LoadPrivateSupervisionArtifact(ctx, artifactRef, bindingID, rt.privateArtifactCipher)
-		if err == nil {
-			break
-		}
-		loadErrors = append(loadErrors, fmt.Errorf("%s: %w", bindingID, err))
-	}
-	if err != nil {
-		return types.CoagentSourcePacket{}, false, fmt.Errorf("load canonical supervision delivery %s: %w", delivery.ID, errors.Join(loadErrors...))
-	}
-	if metadata.MediaType != computerevent.SupervisionEvidenceMediaTypeV1 {
-		return types.CoagentSourcePacket{}, false, fmt.Errorf("canonical supervision delivery %s has media type %q", delivery.ID, metadata.MediaType)
-	}
-	var packet types.CoagentSourcePacketPayload
-	if err := json.Unmarshal(plaintext, &packet); err != nil {
-		return types.CoagentSourcePacket{}, false, fmt.Errorf("decode canonical supervision packet %s: %w", delivery.ID, err)
-	}
-	packet = normalizeCoagentSourcePacketPayload(packet)
-	if err := validateCoagentSourcePacketPayload(packet); err != nil {
-		return types.CoagentSourcePacket{}, false, fmt.Errorf("validate canonical supervision packet %s: %w", delivery.ID, err)
-	}
-	workDisposition := types.WorkItemOpen
-	if delivery.Kind == "attempt_result" {
-		workDisposition = types.WorkItemCompleted
-		if body.Outcome == "blocked" || body.Outcome == "failed" {
-			workDisposition = types.WorkItemOpen
-		}
-	}
-	update := types.CoagentSourcePacket{
-		UpdateID: delivery.ID, OwnerID: trajectory.OwnerID, ComputerID: trajectory.ComputerID,
-		AgentID: sourceAgentID, TargetAgentID: targetAgentID, ChannelID: channelID,
-		TrajectoryID: trajectory.TrajectoryID, Role: sourceRole, Packet: packet,
-		Content:   buildWorkerUpdateMessage(types.CoagentSourcePacket{Packet: packet}),
-		CreatedAt: delivery.CreatedAt, WorkDisposition: workDisposition,
-		LifecycleVersion: 1, ReducerSeq: int64(delivery.Sequence),
-	}
-	return update, true, nil
-}
-
-func canonicalProfileForAgentID(agentID string) string {
-	switch {
-	case strings.HasPrefix(strings.TrimSpace(agentID), agentprofile.Texture+":"):
-		return agentprofile.Texture
-	case strings.HasPrefix(strings.TrimSpace(agentID), agentprofile.Super+":") || strings.TrimSpace(agentID) == agentprofile.Super:
-		return agentprofile.Super
-	default:
-		return ""
-	}
-}
-
-func textureAgentIDForTrajectory(trajectory types.TrajectoryRecord) string {
-	docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
-	if docID == "" {
-		docID = strings.TrimPrefix(strings.TrimSpace(trajectory.SubjectRefs["artifact"]), "texture://documents/")
-	}
-	if docID == "" {
-		return ""
-	}
-	return currentTextureAgentID(docID)
-}
-
-func (rt *Runtime) consumedCanonicalSupervisionUpdateIDs(ctx context.Context, ownerID, computerID, targetAgentID string) (map[string]bool, error) {
-	trajectories, err := rt.store.ListLifecycleTrajectoriesByOwner(ctx, ownerID, computerID, 0)
-	if err != nil {
-		return nil, fmt.Errorf("list canonical supervision acknowledgement trajectories: %w", err)
-	}
-	consumed := make(map[string]bool)
-	for _, trajectory := range trajectories {
-		events, err := rt.store.ListSupervisionDeliveryEvents(ctx, ownerID, computerID, trajectory.TrajectoryID)
-		if err != nil {
-			return nil, fmt.Errorf("list canonical supervision acknowledgements: %w", err)
-		}
-		for _, event := range events {
-			if event.Kind != "actor_message_acknowledged" {
-				continue
-			}
-			var body struct {
-				MessageID     string `json:"message_id"`
-				TargetActorID string `json:"target_actor_id"`
-			}
-			if err := json.Unmarshal(event.Body, &body); err != nil {
-				return nil, fmt.Errorf("decode canonical supervision acknowledgement %s: %w", event.ID, err)
-			}
-			if strings.TrimSpace(body.TargetActorID) == strings.TrimSpace(targetAgentID) {
-				consumed[strings.TrimSpace(body.MessageID)] = true
-			}
-		}
-	}
-	return consumed, nil
-}
-
-func (rt *Runtime) reconcilePendingCanonicalSupervisionActors(ctx context.Context) {
-	if err := rt.sweepPendingCanonicalSupervisionActors(ctx); err != nil {
-		log.Printf("runtime: recover canonical supervision deliveries: %v", err)
-		rt.scheduleCanonicalSupervisionSweep(ctx)
-	}
-}
-
-func (rt *Runtime) scheduleCanonicalSupervisionSweep(ctx context.Context) {
-	if rt == nil || ctx == nil || ctx.Err() != nil || rt.textureWakeAfter == nil {
-		return
-	}
-	rt.canonicalSweepMu.Lock()
-	defer rt.canonicalSweepMu.Unlock()
-	if rt.canonicalSweepTimer != nil {
-		return
-	}
-	rt.canonicalSweepTimer = rt.textureWakeAfter(time.Second, func() {
-		rt.canonicalSweepMu.Lock()
-		rt.canonicalSweepTimer = nil
-		rt.canonicalSweepMu.Unlock()
-		if ctx.Err() == nil {
-			rt.reconcilePendingCanonicalSupervisionActors(ctx)
-		}
-	})
-}
-
-func (rt *Runtime) sweepPendingCanonicalSupervisionActors(ctx context.Context) error {
-	if rt == nil || rt.store == nil || rt.eventAppender == nil || rt.privateArtifactCipher == nil || rt.dispatchActor == nil {
-		return fmt.Errorf("%w: canonical supervision recovery authority unavailable", ErrSupervisionAuthorityRequired)
-	}
-	agents, err := rt.store.ListComputerAgents(ctx, rt.TextureSandboxID())
-	if err != nil {
-		return fmt.Errorf("list canonical supervision delivery agents: %w", err)
-	}
-	type actorTarget struct {
-		ownerID string
-		agentID string
-	}
-	targets := make(map[string]actorTarget)
-	owners := make(map[string]bool)
-	for _, agent := range agents {
-		ownerID, agentID := strings.TrimSpace(agent.OwnerID), strings.TrimSpace(agent.AgentID)
-		if ownerID == "" || agentID == "" {
-			continue
-		}
-		owners[ownerID] = true
-		targets[ownerID+"\x00"+agentID] = actorTarget{ownerID: ownerID, agentID: agentID}
-	}
-	var recoveryErrors []error
-	for ownerID := range owners {
-		trajectories, err := rt.store.ListLifecycleTrajectoriesByOwner(ctx, ownerID, rt.TextureSandboxID(), 0)
-		if err != nil {
-			recoveryErrors = append(recoveryErrors, fmt.Errorf("list canonical supervision target trajectories for %s: %w", ownerID, err))
-			continue
-		}
-		for _, trajectory := range trajectories {
-			deliveries, err := rt.store.ListSupervisionDeliveryEvents(ctx, ownerID, rt.TextureSandboxID(), trajectory.TrajectoryID)
-			if err != nil {
-				recoveryErrors = append(recoveryErrors, fmt.Errorf("list canonical supervision targets for %s: %w", trajectory.TrajectoryID, err))
-				continue
-			}
-			for _, delivery := range deliveries {
-				if delivery.Kind != "actor_message_recorded" {
-					continue
-				}
-				var body canonicalSupervisionDeliveryBody
-				if err := json.Unmarshal(delivery.Body, &body); err != nil {
-					recoveryErrors = append(recoveryErrors, fmt.Errorf("decode canonical supervision target %s: %w", delivery.ID, err))
-					continue
-				}
-				if body.ToActorID == nil {
-					continue
-				}
-				agentID := strings.TrimSpace(*body.ToActorID)
-				if agentID != "" {
-					targets[ownerID+"\x00"+agentID] = actorTarget{ownerID: ownerID, agentID: agentID}
-				}
-			}
-		}
-	}
-	for ownerID := range owners {
-		agentID := persistentSuperAgentID(ownerID)
-		targets[ownerID+"\x00"+agentID] = actorTarget{ownerID: ownerID, agentID: agentID}
-	}
-	for _, target := range targets {
-		updates, err := rt.canonicalSupervisionUpdatesForAgent(ctx, target.ownerID, rt.TextureSandboxID(), target.agentID, "", 0)
-		if err != nil {
-			recoveryErrors = append(recoveryErrors, fmt.Errorf("recover canonical supervision delivery for %s: %w", target.agentID, err))
-			continue
-		}
-		if len(updates) == 0 {
-			continue
-		}
-		if target.agentID == persistentSuperAgentID(target.ownerID) {
-			if _, err := rt.ensurePersistentSuperAgent(ctx, target.ownerID); err != nil {
-				recoveryErrors = append(recoveryErrors, fmt.Errorf("recover persistent Super identity for %s: %w", target.ownerID, err))
-				continue
-			}
-		}
-		dispatchedTrajectories := make(map[string]bool)
-		for _, update := range updates {
-			if dispatchedTrajectories[update.TrajectoryID] {
-				continue
-			}
-			dispatchedTrajectories[update.TrajectoryID] = true
-			if active, found, err := rt.activeRunByAgent(ctx, target.ownerID, target.agentID); err != nil {
-				recoveryErrors = append(recoveryErrors, fmt.Errorf("load active canonical supervision run for %s: %w", target.agentID, err))
-				continue
-			} else if found &&
-				metadataStringValue(active.Metadata, "request_source") == "update_coagent" &&
-				trajectoryIDForRun(&active) == update.TrajectoryID {
-				if err := rt.dispatchActor(ctx, active.OwnerID, active.SandboxID, active.AgentID, "initial_dispatch", active.RunID, update.TrajectoryID, ""); err != nil {
-					recoveryErrors = append(recoveryErrors, fmt.Errorf("redispatch canonical supervision activation %s: %w", active.RunID, err))
-				}
-				continue
-			}
-			if err := rt.dispatchActor(ctx, update.OwnerID, update.ComputerID, update.TargetAgentID, "coagent_result", update.UpdateID, update.TrajectoryID, update.AgentID); err != nil {
-				recoveryErrors = append(recoveryErrors, fmt.Errorf("dispatch recovered canonical supervision update %s: %w", update.UpdateID, err))
-			}
-		}
-	}
-	return errors.Join(recoveryErrors...)
-}
 
 // reconcilePersistentSuperActor is the durable controller boundary for the
 // user's privileged execution actor. update_coagent can append addressed work
@@ -512,17 +47,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	if err != nil {
 		return nil, err
 	}
-	updates = filterPersistentSuperRunnableUpdates(updates)
-	if len(updates) > 0 {
-		trajectoryID := updates[0].TrajectoryID
-		sameTrajectory := updates[:0]
-		for _, update := range updates {
-			if update.TrajectoryID == trajectoryID {
-				sameTrajectory = append(sameTrajectory, update)
-			}
-		}
-		updates = sameTrajectory
-	}
+	updates = filterPersistentSuperExecutionUpdates(updates)
 	if len(updates) == 0 {
 		if blockedActive != nil {
 			return blockedActive, nil
@@ -539,17 +64,6 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		"requested_by_agent_id": first.AgentID,
 		"requested_by_profile":  strings.TrimSpace(first.Role),
 	}
-	prompt := "Process pending coagent update packets for privileged execution."
-	if first.LifecycleVersion > 0 {
-		deliveryIDs := make([]string, 0, len(updates))
-		for _, update := range updates {
-			if id := strings.TrimSpace(update.UpdateID); id != "" {
-				deliveryIDs = append(deliveryIDs, id)
-			}
-		}
-		metadata["supervision_delivery_authority"] = "canonical"
-		metadata["supervision_delivery_ids"] = deliveryIDs
-	}
 	if first.ChannelID != "" {
 		metadata[runMetadataChannelID] = first.ChannelID
 	}
@@ -558,6 +72,15 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	}
 	if first.WorkItemID != "" {
 		metadata["lifecycle_work_item_id"] = first.WorkItemID
+	}
+	updateIDs := make([]string, 0, len(updates))
+	for _, update := range updates {
+		if id := strings.TrimSpace(update.UpdateID); id != "" {
+			updateIDs = append(updateIDs, id)
+		}
+	}
+	if len(updateIDs) > 0 {
+		metadata["worker_update_ids"] = updateIDs
 	}
 	if first.AgentID != "" {
 		if requester, err := rt.latestActiveRunByAgent(ctx, ownerID, first.AgentID); err == nil {
@@ -571,7 +94,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		}
 	}
 
-	rec, err := rt.createRunWithMetadata(ctx, prompt, ownerID, metadata)
+	rec, err := rt.createRunWithMetadata(ctx, "Process pending coagent update packets for privileged execution.", ownerID, metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -586,11 +109,6 @@ func (rt *Runtime) markPersistentSuperRunUpdatesDelivered(ctx context.Context, r
 	updateIDs := coagentUpdateIDsForRun(rec)
 	if len(updateIDs) == 0 {
 		return nil
-	}
-	if _, supervised, err := rt.supervisionSnapshotForRun(ctx, rec); err != nil {
-		return err
-	} else if supervised {
-		return rt.store.UpdateRun(ctx, *rec)
 	}
 	if err := rt.store.MarkWorkerUpdatesDelivered(ctx, rec.OwnerID, rec.AgentID, updateIDs, rec.RunID); err != nil {
 		return fmt.Errorf("mark persistent super updates delivered: %w", err)
@@ -645,15 +163,6 @@ func (rt *Runtime) updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx cont
 	if rec == nil {
 		return nil
 	}
-	if _, supervised, err := rt.supervisionSnapshotForRun(ctx, rec); err != nil {
-		return err
-	} else if supervised {
-		return rt.store.UpdateRun(ctx, *rec)
-	}
-
-	if err := rt.refuseLegacySupervisionWrite(ctx, rec.OwnerID, rec.SandboxID, trajectoryIDForRun(rec), "record run completion"); err != nil {
-		return err
-	}
 	updateIDs := coagentUpdateIDsForRun(rec)
 	if runHasProfile(rec, agentprofile.Texture) {
 		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
@@ -681,11 +190,12 @@ func (rt *Runtime) completeSuccessfulRunWorkItems(ctx context.Context, rec *type
 	if ownerID == "" {
 		return nil
 	}
-	if err := rt.refuseLegacySupervisionWrite(ctx, ownerID, rec.SandboxID, rec.TrajectoryID, "complete supervised work item"); err != nil {
-		if errors.Is(err, ErrSupervisionAuthorityRequired) {
+	if strings.TrimSpace(rec.SandboxID) != "" && strings.TrimSpace(rec.TrajectoryID) != "" {
+		if _, err := rt.store.GetLifecycleTrajectory(ctx, ownerID, rec.SandboxID, rec.TrajectoryID); err == nil {
 			return nil
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return err
 		}
-		return err
 	}
 	for _, workItemID := range metadataStringSlice(rec.Metadata["work_item_ids"]) {
 		workItemID = strings.TrimSpace(workItemID)
@@ -699,27 +209,19 @@ func (rt *Runtime) completeSuccessfulRunWorkItems(ctx context.Context, rec *type
 	return nil
 }
 
-func (rt *Runtime) maybeContinueCoagentInbox(ctx context.Context, rec *types.RunRecord) {
-	if rec == nil || rec.State != types.RunCompleted ||
-		metadataStringValue(rec.Metadata, "request_source") != "update_coagent" {
+func (rt *Runtime) maybeContinuePersistentSuperInbox(ctx context.Context, rec *types.RunRecord) {
+	if !isPersistentSuperInboxRun(rec) {
 		return
 	}
-	if isPersistentSuperInboxRun(rec) {
-		if err := rt.markPersistentSuperRunUpdatesDelivered(ctx, rec); err != nil {
-			log.Printf("runtime: mark persistent super updates delivered after %s: %v", rec.RunID, err)
-			return
-		}
-		if _, err := rt.reconcilePersistentSuperActor(ctx, rec.OwnerID, rec.AgentID); err != nil {
-			log.Printf("runtime: continue persistent super inbox after %s: %v", rec.RunID, err)
-		}
+	if rec.State != types.RunCompleted {
 		return
 	}
-	if _, supervised, err := rt.supervisionSnapshotForRun(ctx, rec); err != nil {
-		log.Printf("runtime: resolve supervised inbox after %s: %v", rec.RunID, err)
-	} else if supervised {
-		if _, err := rt.reconcileUpdatedCoagentActor(ctx, rec.OwnerID, rec.AgentID); err != nil {
-			log.Printf("runtime: continue supervised inbox after %s: %v", rec.RunID, err)
-		}
+	if err := rt.markPersistentSuperRunUpdatesDelivered(ctx, rec); err != nil {
+		log.Printf("runtime: mark persistent super updates delivered after %s: %v", rec.RunID, err)
+		return
+	}
+	if _, err := rt.reconcilePersistentSuperActor(ctx, rec.OwnerID, rec.AgentID); err != nil {
+		log.Printf("runtime: continue persistent super inbox after %s: %v", rec.RunID, err)
 	}
 }
 
@@ -749,13 +251,13 @@ func isPersistentSuperAgentRun(rec *types.RunRecord) bool {
 	return rec.AgentID == persistentSuperAgentID(rec.OwnerID)
 }
 
-func filterPersistentSuperRunnableUpdates(updates []types.CoagentSourcePacket) []types.CoagentSourcePacket {
+func filterPersistentSuperExecutionUpdates(updates []types.CoagentSourcePacket) []types.CoagentSourcePacket {
 	if len(updates) == 0 {
 		return nil
 	}
 	out := make([]types.CoagentSourcePacket, 0, len(updates))
 	for _, update := range updates {
-		if persistentSuperRunnableUpdate(update) {
+		if persistentSuperExecutableUpdate(update) {
 			out = append(out, update)
 		}
 	}
@@ -764,14 +266,6 @@ func filterPersistentSuperRunnableUpdates(updates []types.CoagentSourcePacket) [
 
 func (rt *Runtime) listAndSettlePersistentSuperBacklog(ctx context.Context, ownerID, agentID string) ([]types.CoagentSourcePacket, error) {
 	const limit = 100
-	canonical, err := rt.canonicalSupervisionUpdatesForAgent(ctx, ownerID, rt.TextureSandboxID(), agentID, "", 0)
-	if err != nil {
-		return nil, fmt.Errorf("list canonical super pending updates: %w", err)
-	}
-	canonical = filterPersistentSuperRunnableUpdates(canonical)
-	if len(canonical) > 0 {
-		return canonical, nil
-	}
 	for i := 0; i < 10; i++ {
 		updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
 		if err != nil {
@@ -794,7 +288,7 @@ func (rt *Runtime) settlePersistentSuperNonExecutionUpdates(ctx context.Context,
 		if u.DeliveredAt != nil || strings.TrimSpace(u.DeliveredToRunID) != "" {
 			continue
 		}
-		if !persistentSuperRunnableUpdate(u) {
+		if !persistentSuperExecutableUpdate(u) {
 			if id := strings.TrimSpace(u.UpdateID); id != "" {
 				nonExecIDs = append(nonExecIDs, id)
 			}
@@ -809,38 +303,28 @@ func (rt *Runtime) settlePersistentSuperNonExecutionUpdates(ctx context.Context,
 	return true, nil
 }
 
-func persistentSuperRunnableUpdate(update types.CoagentSourcePacket) bool {
+func persistentSuperExecutableUpdate(update types.CoagentSourcePacket) bool {
 	if update.DeliveredAt != nil || strings.TrimSpace(update.DeliveredToRunID) != "" {
 		return false
 	}
 	packet := normalizeCoagentSourcePacketPayload(update.Packet)
-	if validateCoagentSourcePacketPayload(packet) != nil {
+	if packet.Kind != "execution_request" {
 		return false
 	}
-	if packet.Kind == "execution_request" {
-		return len(packet.Actions) > 0
-	}
-	return update.LifecycleVersion > 0
+	return validateCoagentSourcePacketPayload(packet) == nil
 }
 
 func coagentUpdateDeliverableForRun(rec *types.RunRecord, update types.CoagentSourcePacket) bool {
-	if !isPersistentSuperAgentRun(rec) {
-		return true
+	if isPersistentSuperAgentRun(rec) {
+		return persistentSuperExecutableUpdate(update)
 	}
-	packet := normalizeCoagentSourcePacketPayload(update.Packet)
-	if validateCoagentSourcePacketPayload(packet) != nil {
-		return false
-	}
-	if packet.Kind == "execution_request" {
-		return len(packet.Actions) > 0
-	}
-	return update.LifecycleVersion > 0
+	return true
 }
 
 func buildPersistentSuperUpdatePrompt(updates []types.CoagentSourcePacket) string {
 	var b strings.Builder
-	b.WriteString("Process the pending canonical supervision records addressed to you as the user's persistent super actor.\n\n")
-	b.WriteString("Each delivered packet is validated and tape-derived. Execute only packet.kind=execution_request actions; reconcile results, evidence, questions, blockers, and other typed supervision updates without inventing effect authority. Report dispositions through the supervision tools and update_coagent.\n")
+	b.WriteString("Process the pending update_coagent records addressed to you as the user's persistent super actor.\n\n")
+	b.WriteString("Each delivered packet is a validated packet.kind=execution_request with executable actions. When you have command output, diffs, tests, artifacts, questions, or blockers, report them back with update_coagent as packet.sources, claims, actions, questions, and notes.\n")
 	for i, update := range updates {
 		b.WriteString("\nUpdate ")
 		b.WriteString(fmt.Sprintf("%d", i+1))
@@ -884,25 +368,9 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		}
 		return nil, fmt.Errorf("lookup coagent: %w", err)
 	}
-	canonical, err := rt.canonicalSupervisionUpdatesForAgent(ctx, ownerID, rt.TextureSandboxID(), agentID, "", 0)
+	updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
 	if err != nil {
-		return nil, fmt.Errorf("list canonical coagent updates: %w", err)
-	}
-	canonicalBacklog := len(canonical) > 0
-	updates := canonical
-	if canonicalBacklog {
-		trajectoryID := canonical[0].TrajectoryID
-		updates = updates[:0]
-		for _, update := range canonical {
-			if update.TrajectoryID == trajectoryID {
-				updates = append(updates, update)
-			}
-		}
-	} else {
-		updates, err = rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
-		if err != nil {
-			return nil, fmt.Errorf("list coagent pending updates: %w", err)
-		}
+		return nil, fmt.Errorf("list coagent pending updates: %w", err)
 	}
 	if len(updates) == 0 {
 		return nil, nil
@@ -912,17 +380,12 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	if profile == "" || profile == agentprofile.Email || profile == agentprofile.Conductor || profile == agentprofile.Super {
 		return nil, nil
 	}
-	if canonicalBacklog && profile == agentprofile.CoSuper {
-		return nil, fmt.Errorf("canonical CoSuper delivery requires a live supervised attempt; Super must open a retry attempt")
-	}
 	role := strings.TrimSpace(firstNonEmpty(agent.Role, profile))
 	channelID := strings.TrimSpace(firstNonEmpty(agent.ChannelID, first.ChannelID))
 	updateIDs := make([]string, 0, len(updates))
-	if canonicalBacklog {
-		for _, update := range updates {
-			if id := strings.TrimSpace(update.UpdateID); id != "" {
-				updateIDs = append(updateIDs, id)
-			}
+	for _, update := range updates {
+		if id := strings.TrimSpace(update.UpdateID); id != "" {
+			updateIDs = append(updateIDs, id)
 		}
 	}
 	metadata := map[string]any{
@@ -930,10 +393,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		runMetadataAgentRole:    role,
 		runMetadataAgentID:      agentID,
 		"request_source":        "update_coagent",
-	}
-	if canonicalBacklog {
-		metadata["supervision_delivery_authority"] = "canonical"
-		metadata["supervision_delivery_ids"] = updateIDs
+		"worker_update_ids":     updateIDs,
 	}
 	if channelID != "" {
 		metadata[runMetadataChannelID] = channelID
@@ -1057,102 +517,21 @@ func (rt *Runtime) coagentUpdateTurnInjector(rec *types.RunRecord) toolregistry.
 	return rt.coagentUpdateTurnInjectorWithInitialPhase(rec, "")
 }
 
-func filterConsumedCoagentUpdates(updates []types.CoagentSourcePacket, consumed map[string]bool) []types.CoagentSourcePacket {
-	if len(updates) == 0 || len(consumed) == 0 {
-		return updates
-	}
-	pending := updates[:0]
-	for _, update := range updates {
-		if !consumed[strings.TrimSpace(update.UpdateID)] {
-			pending = append(pending, update)
-		}
-	}
-	return pending
-}
-
-func mergePendingCoagentUpdates(groups [][]types.CoagentSourcePacket) []types.CoagentSourcePacket {
-	seen := make(map[string]bool)
-	var merged []types.CoagentSourcePacket
-	for _, group := range groups {
-		for _, update := range group {
-			id := strings.TrimSpace(update.UpdateID)
-			if id == "" || seen[id] {
-				continue
-			}
-			seen[id] = true
-			merged = append(merged, update)
-		}
-	}
-	sort.SliceStable(merged, func(i, j int) bool {
-		if !merged[i].CreatedAt.Equal(merged[j].CreatedAt) {
-			return merged[i].CreatedAt.Before(merged[j].CreatedAt)
-		}
-		return merged[i].UpdateID < merged[j].UpdateID
-	})
-	return merged
-}
-
 func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.RunRecord, ownerID, agentID string, limit int) ([]types.CoagentSourcePacket, error) {
-	if rec == nil {
-		return nil, nil
-	}
-	computerID := strings.TrimSpace(rec.SandboxID)
-	if computerID == "" {
-		return nil, fmt.Errorf("list pending coagent updates: computer_id is required")
-	}
-	if rt.eventAppender == nil || rt.privateArtifactCipher == nil {
-		return nil, fmt.Errorf("%w: canonical supervision delivery authority unavailable", ErrSupervisionAuthorityRequired)
-	}
 	lifecycleRun := false
-	if _, err := rt.store.GetLifecycleRun(ctx, rec.OwnerID, computerID, rec.RunID); err == nil {
-		lifecycleRun = true
-	} else if !errors.Is(err, store.ErrNotFound) {
-		return nil, fmt.Errorf("resolve lifecycle run authority: %w", err)
-	}
-	consumed, err := rt.consumedCanonicalSupervisionUpdateIDs(ctx, ownerID, computerID, agentID)
-	if err != nil {
-		return nil, err
-	}
-	canonicalTrajectoryID := ""
-	if lifecycleRun {
-		canonicalTrajectoryID = trajectoryIDForRun(rec)
-	}
-	canonical, err := rt.canonicalSupervisionUpdatesForAgentWithConsumed(ctx, ownerID, computerID, agentID, canonicalTrajectoryID, 0, consumed)
-	if err != nil {
-		return nil, err
-	}
-	if len(canonical) > 0 {
-		if limit > 0 && len(canonical) > limit {
-			canonical = canonical[:limit]
+	if rec != nil && strings.TrimSpace(rec.OwnerID) != "" && strings.TrimSpace(rec.SandboxID) != "" && strings.TrimSpace(rec.RunID) != "" {
+		if _, err := rt.store.GetLifecycleRun(ctx, rec.OwnerID, rec.SandboxID, rec.RunID); err == nil {
+			lifecycleRun = true
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return nil, fmt.Errorf("resolve lifecycle run authority: %w", err)
 		}
-		if rec.Metadata == nil {
-			rec.Metadata = map[string]any{}
-		}
-		rec.Metadata["supervision_delivery_authority"] = "canonical"
-		deliveryIDs := make([]string, 0, len(canonical))
-		for _, update := range canonical {
-			if id := strings.TrimSpace(update.UpdateID); id != "" {
-				deliveryIDs = append(deliveryIDs, id)
-			}
-		}
-		rec.Metadata["supervision_delivery_ids"] = deliveryIDs
-		return canonical, nil
 	}
 	if lifecycleRun {
-		lifecycle, err := rt.store.ListPendingLifecycleUpdatesForTrajectory(ctx, ownerID, computerID, agentID, trajectoryIDForRun(rec), 0)
-		if err != nil {
-			return nil, err
+		computerID := strings.TrimSpace(rec.SandboxID)
+		if computerID == "" {
+			return nil, fmt.Errorf("list pending lifecycle updates: computer_id is required")
 		}
-		mailbox, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 0)
-		if err != nil {
-			return nil, err
-		}
-		compatibility := mergePendingCoagentUpdates([][]types.CoagentSourcePacket{lifecycle, mailbox})
-		compatibility = filterConsumedCoagentUpdates(compatibility, consumed)
-		if limit > 0 && len(compatibility) > limit {
-			compatibility = compatibility[:limit]
-		}
-		return compatibility, nil
+		return rt.store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, agentID, limit)
 	}
 	return rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
 }
@@ -1193,20 +572,12 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 			if !coagentUpdateDeliverableForRun(rec, update) {
 				continue
 			}
+			seen[id] = true
 			fresh = append(fresh, update)
 			updateIDs = append(updateIDs, id)
-			if len(fresh) >= 100 {
-				break
-			}
 		}
 		if len(fresh) == 0 {
 			return nil, nil
-		}
-		if err := rt.persistPrivateTraceTaint(context.Background(), rec); err != nil {
-			return nil, err
-		}
-		for _, id := range updateIDs {
-			seen[id] = true
 		}
 		appendCoagentUpdateIDsForRun(rec, updateIDs)
 		phase := coagentPacketDeliveryMid
@@ -1219,9 +590,6 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 		projected, err := rt.projectTerminalOutcomeContent(context.Background(), fresh)
 		if err != nil {
 			return nil, err
-		}
-		if agentProfileForRun(rec) == agentprofile.Texture && rt.coagentUpdateEnvelopeBuilder != nil {
-			return rt.coagentUpdateEnvelopeBuilder(context.Background(), rec, projected, phase)
 		}
 		msgs, _, err := buildCoagentUpdateUserMessages(projected, phase, agentID, nil, nil)
 		if err != nil {
@@ -1340,9 +708,6 @@ func (rt *Runtime) prependInitialCoagentUpdatePackets(ctx context.Context, rec *
 		seen[id] = true
 		fresh = append(fresh, update)
 		updateIDs = append(updateIDs, id)
-		if len(fresh) >= 100 {
-			break
-		}
 	}
 	if len(fresh) == 0 {
 		return messages, nil

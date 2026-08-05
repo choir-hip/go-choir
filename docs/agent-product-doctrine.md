@@ -18,19 +18,10 @@ unless `AGENTS.md` is carrying a newer explicitly promoted operating update.
 ## Authority Boundaries
 
 - `conductor` routes exogenous user/app/connector input into Texture/artifact state. It has no self-development mutation authority.
-- Appagents own their artifact semantics. `texture` is the owner-facing appagent:
-  it fulfills document requests, authorizes canonical versions, messages
-  Researcher/Super as needed, and integrates their grounded outputs. The
-  per-computer event chain durably orders its authored state and reducers
-  materialize it as a projection.
+- Appagents own durable app artifacts. `texture` owns canonical document versions.
 - `researcher` reads/researches and may submit only the typed `update_coagent` source-packet mutation through the canonical event appender. It has no bash, raw Dolt, writable files, capsule commit, acceptance, route, or host authority.
-- `super` is the foreground operational supervisor. It decomposes granted
-  intent, scopes and reconciles CoSuper work, maintains operational beliefs and
-  obligations, preserves dissent, and proposes decisions/settlement; it has no
-  bash, writable/coding, shipper, worker-VM, route, or host tools.
-- `co-super` is a scoped worker agent. Every shell, filesystem, and build effect
-  is a capability-bound guest-local capsule broker verb; a CoSuper cannot
-  redefine owner intent, settle its own trajectory, or supervise a peer.
+- `super` is the foreground orchestration root. It may orchestrate capsules, delegation, inspection, verification requests, and decision proposals; it has no bash, writable/coding, shipper, worker-VM, route, or host tools.
+- `co-super` remains an agent loop, but every shell, filesystem, and build effect is a capability-bound guest-local capsule broker verb.
 - `vsuper`, candidate-super, and aliases are retired from production profiles for self-development and fail closed.
 - Verification is a read-only contract over evidence. It cannot append, accept, materialize, checkpoint, or route an event.
 
@@ -38,11 +29,6 @@ One stable `ComputerID` plus its canonical event chain is the evolving
 computer. A frozen capsule effect bundle is speculative and inert. Canonical
 desired state changes only by an authorized acceptance event; effective state
 changes only after verified guest materialization.
-
-Current caveat (H032): self-development/effect paths use the canonical appender,
-but Texture/lifecycle reducers still author a separate embedded event stream.
-Do not describe that split as the settled architecture or patch Texture around
-it; the owner-directed successor must cut it over before effects activate.
 
 ## Current Invariants (2026-07-08)
 
@@ -75,20 +61,10 @@ it; the owner-directed successor must cut it over before effects activate.
 
 Texture delegation is agentic. Texture may write, ask researcher, ask super, ask
 both, ask neither, wait for more evidence, or report a blocker within its
-authority envelope. `edit_texture` authorizes a typed transaction whose event-derived
-projection stores the canonical revision; it must not become
+authority envelope. `edit_texture` stores a canonical revision; it must not become
 a semantic workflow gate that requires a subsequent researcher/super/verifier
 tool call. Exact required-tool continuation is reserved for narrow mechanical
 tool protocols, not appagent policy.
-
-Texture represents the owner's point of view at human bandwidth. It is not a
-passive renderer: it is responsible for document state fulfilling the request
-and being operationally grounded. Claims about completed work, evidence,
-decisions, or settlement bind event-derived refs; otherwise Texture shows them
-as pending/conjectural/blocked. Dense Super/CoSuper/Researcher output remains
-drill-down evidence, not required owner reading. Mandatory current-intent,
-changed-belief, blocker, dissent, irreversible-gate, and owner-attention state
-cannot be hidden by narrative compression.
 
 Prompt bar, source ingestion, and article/news creation should show conductor
 entry followed by Texture artifact materialization. `super` before Texture is a
@@ -100,18 +76,9 @@ operations return handles and event-derived status. Worker-VM and candidate-VM
 delegation are obsolete and deleted, not classified for retention. Generic
 delegated agents use durable runs/trajectories and capsules.
 
-Fan-out is concurrent execution with serial canonical acknowledgement. Each
-assignment/attempt binds its parent Super decision, intent and working base,
-scope, capability/policy digest, obligations, and idempotency identity. Super
-must disposition retry, cancellation, late output, dissent, and rebase before
-settlement. Branch results are not promotion units. An effects-on path must
-integrate selected results into one new current-base `CapsuleEffectBundle`,
-independently verify the composition, obtain owner acceptance for that exact
-digest, and maintain at most one pending desired-state transition.
-
 Super addresses a CoSuper through the durable run/trajectory and its
 capsule-bound operation handle. No VSuper forwarding authority exists for
-self-development. Super owns operational reconciliation. A subordinate must not reconcile competing supervisors or
+self-development. A subordinate must not reconcile competing supervisors or
 receive a capability from model-visible text.
 
 Verifier agents are read-only with respect to canonical product state. They may

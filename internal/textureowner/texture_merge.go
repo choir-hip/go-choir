@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -349,7 +348,22 @@ func (h *Handler) HandleTextureSemanticCompare(w http.ResponseWriter, r *http.Re
 		Diff:             diff,
 		ModelEvidence:    modelEvidence,
 	}
-	log.Printf("texture api: persist compare evidence: %v", h.refuseLegacyTextureWriter("record merge comparison evidence"))
+	evidenceID := uuid.New().String()
+	if evidenceErr := h.Store.CreateEvidence(r.Context(), types.EvidenceRecord{
+		EvidenceID: evidenceID,
+		OwnerID:    ownerID,
+		AgentID:    "texture:compare",
+		Kind:       "texture.semantic_compare",
+		SourceURI:  "texture://" + docID,
+		Title:      "Semantic compare " + shortHash(sourceID) + " -> " + shortHash(targetID),
+		Content:    mustMarshalString(resp),
+		Metadata:   json.RawMessage(fmt.Sprintf(`{"doc_id":%q,"source_revision_id":%q,"target_revision_id":%q}`, docID, sourceID, targetID)),
+		CreatedAt:  time.Now().UTC(),
+	}); evidenceErr != nil {
+		log.Printf("texture api: persist compare evidence: %v", evidenceErr)
+	} else {
+		resp.EvidenceID = evidenceID
+	}
 	writeAPIJSON(w, http.StatusOK, resp)
 }
 
@@ -423,7 +437,23 @@ func (h *Handler) HandleTextureMergePreview(w http.ResponseWriter, r *http.Reque
 			"draft_line":         defaultDraftLine(),
 		},
 	}
-	log.Printf("texture api: persist merge preview evidence: %v", h.refuseLegacyTextureWriter("record merge preview evidence"))
+	evidenceID := uuid.New().String()
+	if evidenceErr := h.Store.CreateEvidence(r.Context(), types.EvidenceRecord{
+		EvidenceID: evidenceID,
+		OwnerID:    ownerID,
+		AgentID:    "texture:merge",
+		Kind:       "texture.merge_preview",
+		SourceURI:  "texture://" + docID,
+		Title:      "Merge preview " + shortHash(previewID),
+		Content:    mustMarshalString(resp),
+		Metadata:   json.RawMessage(fmt.Sprintf(`{"doc_id":%q,"preview_id":%q,"source_revision_id":%q,"target_revision_id":%q}`, docID, previewID, sourceRev.RevisionID, targetRev.RevisionID)),
+		CreatedAt:  time.Now().UTC(),
+	}); evidenceErr != nil {
+		log.Printf("texture api: persist merge preview evidence: %v", evidenceErr)
+	} else {
+		resp.EvidenceID = evidenceID
+		resp.Provenance["evidence_id"] = evidenceID
+	}
 	writeAPIJSON(w, http.StatusOK, resp)
 }
 
@@ -461,9 +491,13 @@ func (h *Handler) HandleTextureAcceptMerge(w http.ResponseWriter, r *http.Reques
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
-	if strings.TrimSpace(doc.ComputerID) == "" || strings.TrimSpace(doc.TrajectoryID) == "" {
-		err := h.refuseLegacyTextureWriter("accept merge for unimported Texture document")
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+	if strings.TrimSpace(doc.TrajectoryID) != "" {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle-authored documents cannot merge outside the durable lifecycle"})
+		return
+	}
+	if err := h.canonicalizeAliasedTextureDocumentTitle(r.Context(), ownerID, &doc, time.Now().UTC()); err != nil {
+		log.Printf("texture api: canonicalize merge document title: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to canonicalize document title"})
 		return
 	}
 	metadata := map[string]any{}
@@ -478,7 +512,7 @@ func (h *Handler) HandleTextureAcceptMerge(w http.ResponseWriter, r *http.Reques
 	metadata["draft_line"] = defaultDraftLine()
 	encoded, _ := json.Marshal(metadata)
 	rev := types.Revision{
-		RevisionID:       uuid.NewSHA1(uuid.NameSpaceOID, []byte("texture-merge:"+docID+"\x00"+strings.TrimSpace(req.PreviewID)+"\x00"+targetRev.RevisionID)).String(),
+		RevisionID:       uuid.New().String(),
 		DocID:            docID,
 		OwnerID:          ownerID,
 		AuthorKind:       types.AuthorUser,
@@ -489,14 +523,23 @@ func (h *Handler) HandleTextureAcceptMerge(w http.ResponseWriter, r *http.Reques
 		ParentRevisionID: targetRev.RevisionID,
 		CreatedAt:        time.Now().UTC(),
 	}
-	storedRev, err := h.appendTextureRevision(r.Context(), doc, rev, "texture-merge:"+rev.RevisionID, computerevent.SupervisionActor{
-		ActorID: ownerID, Role: "owner", AuthorityRef: "owner:" + ownerID,
-	})
-	if err != nil {
-		log.Printf("texture api: append accepted merge revision: %v", err)
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+	if err := h.Store.CreateRevision(r.Context(), rev); err != nil {
+		log.Printf("texture api: accept merge revision: %v", err)
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "failed to accept merge; document head may have changed"})
 		return
 	}
+	storedRev, err := h.getTextureRevision(r.Context(), ownerID, rev.RevisionID)
+	if err != nil {
+		log.Printf("texture api: load accepted merge revision: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load accepted merge revision"})
+		return
+	}
+	auditComputerID := strings.TrimSpace(doc.ComputerID)
+	if auditComputerID == "" && h.Core != nil {
+		auditComputerID = strings.TrimSpace(h.Core.TextureSandboxID())
+	}
+	auditDigest := textureAuditDigest("revision_committed", ownerID, auditComputerID, docID, storedRev.RevisionID, storedRev.RevisionHash)
+	h.recordTextureAudit(r.Context(), "revision_committed", ownerID, auditComputerID, storedRev.TrajectoryID, docID, storedRev.RevisionID, "texture-revision:"+docID+":"+storedRev.RevisionID, auditDigest, 0)
 	h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, storedRev)
 	writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), storedRev))
 }

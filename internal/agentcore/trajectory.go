@@ -51,11 +51,6 @@ func (rt *Runtime) stampAndMintTrajectory(ctx context.Context, rec *types.RunRec
 		return
 	}
 	rec.TrajectoryID = trajectoryID
-
-	if err := rt.refuseLegacySupervisionWrite(ctx, rec.OwnerID, rec.SandboxID, trajectoryID, "mint trajectory"); err != nil {
-		log.Printf("runtime: %v", err)
-		return
-	}
 	if rt.store == nil {
 		return
 	}

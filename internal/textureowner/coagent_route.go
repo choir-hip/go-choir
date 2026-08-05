@@ -224,10 +224,14 @@ func (h *Handler) coagentTextureTargetDocument(ctx context.Context, parentRec *t
 		},
 	}
 	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
-	started, err := h.startSupervisionTrajectory(ctx, start)
+	started, err := h.Store.StartLifecycle(ctx, start)
 	if err != nil {
 		return types.Document{}, false, "", fmt.Errorf("start Texture source lifecycle: %w", err)
 	}
+	if started.Document == nil || started.Revision == nil {
+		return types.Document{}, false, "", fmt.Errorf("start Texture source lifecycle: reducer returned no document or revision")
+	}
+	h.recordTextureAudit(ctx, "trajectory_started", ownerID, computerID, started.Trajectory.TrajectoryID, started.Document.DocID, started.Revision.RevisionID, start.CommandID, start.StartRequestDigest, started.Trajectory.LifecycleVersion)
 	h.emitTextureDocumentRevisionEventForRun(ctx, parentRec, *started.Revision)
 	return *started.Document, true, started.Revision.RevisionID, nil
 }

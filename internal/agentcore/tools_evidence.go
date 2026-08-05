@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // RegisterEvidenceTools installs the researcher-owned evidence-gathering tools.
@@ -115,7 +115,6 @@ func newSaveEvidenceTool(rt *Runtime) toolregistry.Tool {
 			if ownerID == "" || agentID == "" {
 				return "", fmt.Errorf("save_evidence missing owner or agent context")
 			}
-
 			kind := strings.TrimSpace(in.Kind)
 			if kind == "" {
 				return "", fmt.Errorf("kind must not be empty")
@@ -124,22 +123,28 @@ func newSaveEvidenceTool(rt *Runtime) toolregistry.Tool {
 			if content == "" {
 				return "", fmt.Errorf("content must not be empty")
 			}
-			payload, err := computerevent.CanonicalJSON(map[string]any{
-				"kind": kind, "source_uri": strings.TrimSpace(in.SourceURI),
-				"title": strings.TrimSpace(in.Title), "content": in.Content, "metadata": json.RawMessage(in.Metadata),
-				"owner_id": ownerID, "agent_id": agentID,
-			})
-			if err != nil {
+			rec := types.EvidenceRecord{
+				EvidenceID: uuid.NewString(),
+				OwnerID:    ownerID,
+				AgentID:    agentID,
+				Kind:       kind,
+				SourceURI:  strings.TrimSpace(in.SourceURI),
+				Title:      strings.TrimSpace(in.Title),
+				Content:    in.Content,
+				Metadata:   in.Metadata,
+				CreatedAt:  time.Now().UTC(),
+			}
+			if err := rt.store.CreateEvidence(ctx, rec); err != nil {
 				return "", err
 			}
-			pin, err := rt.PinPrivateEvidenceArtifact(ctx, "supervision:evidence:"+uuid.NewString(), payload, computerevent.SupervisionEvidenceMediaTypeV1)
-			if err != nil {
-				return "", fmt.Errorf("pin private evidence: %w", err)
-			}
 			return toolregistry.ResultJSON(map[string]any{
-				"artifact_ref": pin.Ref.String(), "plaintext_digest": pin.PlaintextDigest,
-				"media_type": pin.MediaType, "binding_id": pin.BindingID, "pin_receipt": pin.Receipt,
-				"status": "pinned",
+				"evidence_id": rec.EvidenceID,
+				"owner_id":    rec.OwnerID,
+				"agent_id":    rec.AgentID,
+				"kind":        rec.Kind,
+				"source_uri":  rec.SourceURI,
+				"title":       rec.Title,
+				"created_at":  rec.CreatedAt.Format(time.RFC3339Nano),
 			})
 		}}
 }

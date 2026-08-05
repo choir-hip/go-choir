@@ -1,12 +1,10 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-08-03. Every claim is marked **Live**, **Target**, or
+**Last updated:** 2026-07-24. Every claim is marked **Live**, **Target**, or
 **Retired**. The owner-ratified
 [durable-computer convergence Definition](definitions/choir-coherent-computer-convergence-2026-07-21.md)
-completed deployed acceptance and is historical evidence authority, no longer
-the active entrypoint. The owner-ratified
-[Texture/tape supervision Definition](definitions/choir-texture-tape-supervision-2026-08-03.md)
-is the sole executable product mission. The superseded
+completed deployed acceptance and is historical evidence authority. No
+top-level product Definition is currently executable. The superseded
 [self-development Definition](definitions/choir-cli-self-development-2026-07-16.md),
 completed audited-construction Definition, and OG/Dolt subordinate D-ROUTE,
 detector, and deletion contracts remain evidence.
@@ -71,14 +69,6 @@ explicit Web Lens inspection, Trace as evidence rather than a user app, and
 | `sourcecycled` | **Code-present, deployment-wired experimental adapter** | Poll cycles and queue state are in memory and lost on restart. It hands off/projects durable artifacts; it does not own canonical article meaning. |
 | Capsules | **Live accepted construction substrate; later self-development candidate rejected** | Audited ComputerVersion construction proved guest-local isolation and lifecycle. Additional namespaces/cgroup/seccomp/Landlock/capability/updater work on the rejected branch remains source evidence only; no self-development effect is authorized. |
 | Features/package adoption | **Forbidden as authority; exact residue remains historical** | AppChangePackage/AppAdoption cannot authorize self-development. Rejected-branch deletion is not silently claimed as canonical-main state and no successor may revive it as fallback authority. |
-
-**Known substrate split (H032, observed 2026-08-03):** the generic durable-work
-kernel writes Texture/lifecycle state and `LifecycleEvent` objects directly in
-embedded Dolt, while `ComputerEventAppender` sequences the separate canonical
-computer chain used mainly by self-development/effect paths. The target rows
-below describe the settled one-tape architecture, not the current caller graph.
-The active owner-ratified successor Definition is
-[`choir-texture-tape-supervision-2026-08-03.md`](definitions/choir-texture-tape-supervision-2026-08-03.md).
 
 `/goal <definition.md>` is an external compatible-harness invocation. Choir's
 CLI, prompt bar, and runtime do not implement an end-to-end Definition runner.
@@ -386,17 +376,11 @@ way that weakens the existing Texture/source/publication contract.
 
 ## Product Loop
 
-The representative long-horizon loop is:
+The current intended core loop is:
 
 ```text
-prompt -> conductor -> Texture
-Texture <-> Researcher (when sourced evidence is needed)
-Texture <-> Super <-> CoSupers (when supervised operational work is needed)
-Texture -> owner-facing versions
+prompt -> conductor -> texture -> researcher/persistent super -> cosuper -> texture versions
 ```
-
-This is an authority map, not required choreography. Texture may write, ask
-Researcher, ask Super, ask both, ask neither, wait, or report a blocker.
 
 Then:
 
@@ -593,28 +577,24 @@ view state must not live only in browser component variables. Per-app code can
 define the shape of its typed context, but persistence and reload semantics must
 use the universal shell/API path.
 
-`texture` is the single semantic authorizer for canonical document versions. It
-synthesizes user edits and coagent updates into typed supervision transactions;
-the computer event appender orders them and reducers materialize durable document
-state. Until H032 is repaired, current code does not fully conform to this
-target.
+`texture` is the single writer for canonical document versions. It synthesizes user
+edits and coagent updates into durable document state.
 
 `researcher` reads local files and the web, then submits findings/evidence only
 through the typed `update_coagent` source-packet mutation. It has no bash, raw
 Dolt, writable files, capsule commit, acceptance, route, or host authority.
 
-`super` is the per-user operational supervisor. It decomposes granted intent,
-scopes CoSuper work, maintains beliefs and obligations, reconciles evidence and
-dissent, and proposes decisions and settlement. It has no bash, direct
-writable/coding, shipper, worker-VM, route, or host tools.
+`super` is the per-user foreground orchestration root. It can orchestrate
+capsules and delegation, inspect evidence, request verification, and propose a
+decision. It has no bash, direct writable/coding, shipper, worker-VM, route, or
+host tools.
 
 `vsuper`, `candidate-super`, and aliases are retired from production
 self-development profiles and fail closed.
 
-`cosuper` is a durable scoped worker agent. Every shell, filesystem, and build
+`cosuper` is a durable execution co-agent. Every shell, filesystem, and build
 effect occurs through a capability-bound guest-local capsule broker. It never
-receives direct core-VM mutation or host authority, cannot redefine intent, and
-cannot settle or supervise its own trajectory.
+receives direct core-VM mutation or host authority.
 
 `worker VM`, `background computer`, and `candidate VM` are obsolete product
 concepts. Their product authority is retired, but canonical-main code residue
@@ -622,31 +602,20 @@ remains unclaimed pending inventory; rejected-branch deletion is not a landed
 claim. Generic delegated agents remain durable runs/trajectories and may perform
 effects only through a separately accepted capsule path.
 
-### Target: Layered Supervision Protocol
+### Target: Trajectory Supervision Protocol
 
 **Target (owner re-visioning 2026-07-31, design in
-[supervision-protocol.md](supervision-protocol.md)):** Super is the operational
-supervisor and CoSupers are scoped workers. Super
-observes the kernel's snapshot projections (artifact head, obligations, update
-dispositions, reducer sequence), assigns/reconciles work, and emits addressed
-findings and settlement proposals—never canonical Texture edits. Texture is the
-owner-facing appagent and human-side supervisor: it fulfills the user's document
-request, messages Researcher/Super, integrates their grounded outputs, and
-compresses dense state to a versioned, human-bandwidth view with exact
-drill-down refs and mandatory material blockers/dissent/attention gates. "All
-threads clear" is the kernel's deterministic settlement query, not an informal
-phrase or a narrative claim. The hierarchy is CoSuper → Super → Texture → owner;
-no separate trajectory-supervisor or unbounded observer tower is introduced.
-This layer is unbuilt; the archive design notes remain the pre-kernel source.
-
-Fan-out under this target is concurrent execution with serial acknowledgement:
-Super opens scoped assignments from one intent/base, CoSuper attempts finish in
-any order, and the tape retains retry, cancellation, late output, dissent, and
-reconciliation. Branch results do not become independent desired-state heads.
-The later effects-on path must integrate selected results into one newly
-composed current-base capsule bundle, verify the composition, and accept at most
-that exact digest as the single pending transition before materialization,
-checkpoint, and route projection.
+[supervision-protocol.md](supervision-protocol.md)):** a typed, durable
+protocol-health layer observes the kernel's snapshot projections (artifact
+head, obligations, update dispositions, reducer sequence) and emits addressed
+findings — never canonical edits. It enforces the single-writer invariant by
+construction: the supervisor's only outputs are supervision objects (findings,
+messages, work obligations, settlement records), and "all threads clear" is
+the kernel's deterministic settlement query, not an informal phrase. Observation is
+at the level of ideas (each semantic state update advances a texture to a new
+version), and the hierarchy terminates at the owner as root observer with an
+event-driven, sparse self-learning layer — no infinite observer tower. This
+layer is unbuilt; the archive design notes remain the pre-kernel source.
 
 ## Computer Model
 
@@ -786,14 +755,12 @@ Choir uses exactly two Dolt stores.
   head/promotion authority. Every capsule sees only its private overlay and
   broker-approved typed operations, not raw store access.
 
-The trusted guest `ComputerEventAppender` is the target sole causal sequencer for
-one ComputerID. Runtime EventRecord, Trace, trajectories, actor logs, run memory,
+The trusted guest `ComputerEventAppender` is the sole semantic writer for one
+ComputerID. Runtime EventRecord, Trace, trajectories, actor logs, run memory,
 reducers, status, checkpoints, routes, and vmctl are projections or actuators.
-Current self-development/effect paths use it; Texture/lifecycle paths still
-commit a competing embedded event stream (H032). The successor must make typed
-Researcher and Texture transactions fate-share their exact embedded reduction
-with canonical event CAS. Effectful accepted-state changes separately advance
-desired and effective heads through the declared updater state machine.
+Typed Researcher updates fate-share the exact embedded mutation with event CAS;
+other accepted state changes advance desired and effective heads through the
+declared updater state machine.
 
 The embedded store materializes desktop/app graph, appagent state, Texture
 versions, prompts/policies, typed findings, local trajectory indexes, and

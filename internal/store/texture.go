@@ -725,12 +725,9 @@ func (s *Store) UpdateTextureDocumentTitleAuthority(ctx context.Context, docID, 
 		return types.Document{}, ErrNotFound
 	}
 	if computerID != "" {
-		document, err := s.GetDocument(ctx, docID, ownerID)
-		if err == nil && strings.TrimSpace(document.TrajectoryID) != "" {
-			return types.Document{}, ErrLifecycleAuthorityRequired
-		}
-		if err != nil && !errors.Is(err, ErrNotFound) {
-			return types.Document{}, err
+		document, err := s.UpdateLifecycleDocumentTitleAuthority(ctx, ownerID, computerID, docID, title)
+		if err == nil || !errors.Is(err, ErrNotFound) {
+			return document, err
 		}
 	}
 
@@ -757,15 +754,49 @@ func (s *Store) ArchiveTextureDocumentAuthority(ctx context.Context, docID, owne
 	if docID == "" || ownerID == "" {
 		return types.Document{}, ErrNotFound
 	}
-	document, err := s.GetDocument(ctx, docID, ownerID)
+	var document types.Document
+	var err error
+	if computerID != "" {
+		document, err = s.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+	}
+	if computerID == "" || errors.Is(err, ErrNotFound) {
+		document, err = s.GetDocument(ctx, docID, ownerID)
+	}
 	if err != nil {
 		return types.Document{}, err
 	}
 	if document.ArchivedAt != nil {
 		return document, nil
 	}
-	if strings.TrimSpace(document.TrajectoryID) != "" {
-		return types.Document{}, ErrLifecycleAuthorityRequired
+	if trajectoryID := strings.TrimSpace(document.TrajectoryID); trajectoryID != "" {
+		trajectory, getErr := s.GetLifecycleTrajectory(ctx, ownerID, document.ComputerID, trajectoryID)
+		if getErr != nil {
+			return types.Document{}, getErr
+		}
+		if trajectory.Status == types.TrajectoryLive {
+			return types.Document{}, ErrLifecycleInvalidTransition
+		}
+		request := types.ArchiveLifecycleArtifactRequest{
+			OwnerID:                  ownerID,
+			ComputerID:               document.ComputerID,
+			CommandID:                "archive:" + docID + ":" + document.CurrentRevisionID,
+			TrajectoryID:             trajectoryID,
+			ExpectedLifecycleVersion: trajectory.LifecycleVersion,
+			ExpectedHeadRevisionID:   document.CurrentRevisionID,
+			Reason:                   "owner archived document",
+		}
+		request.CommandDigest, err = ComputeArchiveLifecycleArtifactDigest(request)
+		if err != nil {
+			return types.Document{}, err
+		}
+		result, archiveErr := s.ArchiveLifecycleArtifact(ctx, request)
+		if archiveErr != nil {
+			return types.Document{}, archiveErr
+		}
+		if result.Document == nil {
+			return types.Document{}, fmt.Errorf("archive texture document: reducer returned no document")
+		}
+		return *result.Document, nil
 	}
 
 	s.textureRevMu.Lock()

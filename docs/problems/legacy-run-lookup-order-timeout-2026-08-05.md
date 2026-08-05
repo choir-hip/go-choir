@@ -1,7 +1,7 @@
 # Legacy Run Lookup Order Can Exhaust the Store Deadline
 
 **Date:** 2026-08-05  
-**Status:** observed; repair not included in this checkpoint  
+**Status:** repaired in the deletion-first cleanup candidate; deployed proof pending
 **Classification:** runtime lookup performance and operability  
 **Mutation class of a repair:** orange
 
@@ -40,3 +40,13 @@ identity only when the legacy record is absent.
 
 Revert only the eventual lookup-order change. No schema, persisted data, event
 kind, route, or deployment control is part of the repair.
+
+## Repair Receipt
+
+`Runtime.getRunForComputer` now reads the exact owner-scoped legacy identity
+first, preserves its computer-scope check, and falls back to the lifecycle
+identity only on `ErrNotFound`. The canonical-ID lookup uses the primary
+object-graph store, so a just-written run does not depend on a read-only Dolt
+connection refreshing a large recent write set. The 1,001-run cancellation
+regression passes three consecutive isolated executions. Staging proof remains
+required before closure.

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
@@ -57,31 +56,6 @@ func (m *runMemoryManager) withLLMCompactor(provider provideriface.ToolLoopProvi
 	return m
 }
 
-func runMemoryPrivateTraceTainted(entries []types.RunMemoryEntry) bool {
-	for _, entry := range entries {
-		if metadataBoolValue(entry.Details, runMetadataPrivateTraceTainted) {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *runMemoryManager) persistPrivateTraceTaint(ctx context.Context) error {
-	if m == nil || m.store == nil || m.rec == nil {
-		return fmt.Errorf("persist run memory private Trace taint: runtime unavailable")
-	}
-	if metadataBoolValue(m.rec.Metadata, runMetadataPrivateTraceTainted) {
-		return nil
-	}
-	m.rec.Metadata = cloneMetadata(m.rec.Metadata)
-	m.rec.Metadata[runMetadataPrivateTraceTainted] = true
-	m.rec.UpdatedAt = time.Now().UTC()
-	if err := m.store.UpdateRun(ctx, *m.rec); err != nil {
-		return fmt.Errorf("persist run memory private Trace taint: %w", err)
-	}
-	return nil
-}
-
 func (m *runMemoryManager) initialize(ctx context.Context, initialMessages []json.RawMessage) ([]json.RawMessage, error) {
 	entries, err := m.store.ListRunMemoryEntries(ctx, m.rec.OwnerID, m.rec.RunID)
 	if err != nil {
@@ -120,11 +94,6 @@ func (m *runMemoryManager) seedActorMemorySnapshot(ctx context.Context) error {
 	}
 	if len(priorEntries) == 0 {
 		return nil
-	}
-	if runMemoryPrivateTraceTainted(priorEntries) {
-		if err := m.persistPrivateTraceTaint(ctx); err != nil {
-			return err
-		}
 	}
 	checkpoint, tail := latestRunMemoryCheckpointAndTail(priorEntries)
 	summary := summarizeRunMemoryMessages(checkpoint, tail, "actor_rewarm")
@@ -236,10 +205,6 @@ func (m *runMemoryManager) onProviderError(ctx context.Context, _ []json.RawMess
 }
 
 func (m *runMemoryManager) appendMessage(ctx context.Context, role string, msg json.RawMessage) error {
-	details := map[string]any(nil)
-	if metadataBoolValue(m.rec.Metadata, runMetadataPrivateTraceTainted) {
-		details = map[string]any{runMetadataPrivateTraceTainted: true}
-	}
 	_, err := m.store.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
 		RunID:   m.rec.RunID,
 		OwnerID: m.rec.OwnerID,
@@ -247,7 +212,6 @@ func (m *runMemoryManager) appendMessage(ctx context.Context, role string, msg j
 		Kind:    types.RunMemoryEntryMessage,
 		Role:    role,
 		Message: cloneRawMessage(msg),
-		Details: details,
 	})
 	return err
 }
@@ -316,9 +280,13 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 
 	compaction, err := m.generateLLMCompaction(ctx, plan)
 	if err != nil {
-		m.emit(types.EventRunProgress, "run_memory_compaction_failed",
-			runMemoryCompactionFailurePayload(reason, plan.TokensBefore, err,
-				metadataBoolValue(m.rec.Metadata, runMetadataPrivateTraceTainted)))
+		failedPayload, _ := json.Marshal(map[string]any{
+			"reason":         reason,
+			"tokens_before":  plan.TokensBefore,
+			"provider_error": err.Error(),
+			"fallback":       "deterministic_emergency",
+		})
+		m.emit(types.EventRunProgress, "run_memory_compaction_failed", failedPayload)
 		compaction = deterministicEmergencyRunMemoryCompaction(plan, err)
 	}
 
@@ -333,18 +301,17 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 		Reason:           reason,
 		Model:            strings.TrimSpace(m.llmConfig.Model),
 		Details: map[string]any{
-			"compacted_messages":           plan.CompactedMessages,
-			"kept_messages":                plan.KeptMessages,
-			"tokens_after":                 plan.TokensAfterEstimate,
-			"raw_entry_ids":                plan.RawEntryIDs,
-			"raw_tool_result_entry_ids":    plan.RawToolResultEntryIDs,
-			"checkpoint":                   compaction.Details,
-			"checkpoint_status":            compaction.Status,
-			"checkpoint_provider":          compaction.Provider,
-			"checkpoint_model":             compaction.Model,
-			"threshold_tokens":             m.effectiveContextThresholdTokens(),
-			"prompt_overhead_tokens":       m.promptOverheadTokens,
-			runMetadataPrivateTraceTainted: metadataBoolValue(m.rec.Metadata, runMetadataPrivateTraceTainted),
+			"compacted_messages":        plan.CompactedMessages,
+			"kept_messages":             plan.KeptMessages,
+			"tokens_after":              plan.TokensAfterEstimate,
+			"raw_entry_ids":             plan.RawEntryIDs,
+			"raw_tool_result_entry_ids": plan.RawToolResultEntryIDs,
+			"checkpoint":                compaction.Details,
+			"checkpoint_status":         compaction.Status,
+			"checkpoint_provider":       compaction.Provider,
+			"checkpoint_model":          compaction.Model,
+			"threshold_tokens":          m.effectiveContextThresholdTokens(),
+			"prompt_overhead_tokens":    m.promptOverheadTokens,
 		},
 	})
 	if err != nil {
@@ -362,29 +329,12 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 		"raw_entry_ids":             plan.RawEntryIDs,
 		"raw_tool_result_entry_ids": plan.RawToolResultEntryIDs,
 		"checkpoint_status":         compaction.Status,
-
-		"checkpoint_provider": compaction.Provider,
-		"checkpoint_model":    compaction.Model,
-		"threshold_tokens":    m.effectiveContextThresholdTokens(),
+		"checkpoint_provider":       compaction.Provider,
+		"checkpoint_model":          compaction.Model,
+		"threshold_tokens":          m.effectiveContextThresholdTokens(),
 	})
 	m.emit(types.EventRunCompactionCompleted, "run_memory", donePayload)
 	return true, nil
-}
-func runMemoryCompactionFailurePayload(reason string, tokensBefore int, providerErr error, private bool) json.RawMessage {
-	payload := map[string]any{
-		"reason":        reason,
-		"tokens_before": tokensBefore,
-		"fallback":      "deterministic_emergency",
-	}
-	if private {
-		payload["provider_error_private"] = true
-		payload["provider_error_len"] = len(providerErr.Error())
-		payload["provider_error_sha256"] = sha256Hex(providerErr.Error())
-	} else {
-		payload["provider_error"] = providerErr.Error()
-	}
-	encoded, _ := json.Marshal(payload)
-	return encoded
 }
 
 func (m *runMemoryManager) runCompactionLockKey() string {
@@ -431,16 +381,15 @@ func (m *runMemoryManager) compactRunEventLedger(ctx context.Context, entries []
 		TokensBefore: tokensBefore,
 		Reason:       reason,
 		Details: map[string]any{
-			"source":                       "run_event_ledger",
-			"source_state":                 string(m.rec.State),
-			"compacted_messages":           0,
-			"kept_messages":                0,
-			"tokens_after":                 tokensAfter,
-			"event_count":                  len(eventsForRun),
-			"summarized_events":            summarizedEvents,
-			"omitted_delta_events":         omittedDeltaEvents,
-			"prior_memory_entries":         len(entries),
-			runMetadataPrivateTraceTainted: metadataBoolValue(m.rec.Metadata, runMetadataPrivateTraceTainted),
+			"source":               "run_event_ledger",
+			"source_state":         string(m.rec.State),
+			"compacted_messages":   0,
+			"kept_messages":        0,
+			"tokens_after":         tokensAfter,
+			"event_count":          len(eventsForRun),
+			"summarized_events":    summarizedEvents,
+			"omitted_delta_events": omittedDeltaEvents,
+			"prior_memory_entries": len(entries),
 		},
 	})
 	if err != nil {

@@ -38,7 +38,6 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/api/trajectories", h.HandleTrajectoriesRoot)
 	s.HandleFunc("/api/trajectories/", h.HandleTrajectoryDetail)
 	s.HandleFunc("/api/acceptance/execution-identity", h.HandleExecutionIdentity)
-	s.HandleFunc("/api/acceptance/supervision-cleanup-inventory", h.HandleSupervisionCleanupInventory)
 	s.HandleFunc("/api/run-acceptances", h.HandleRunAcceptancesRoot)
 	s.HandleFunc("/api/run-acceptances/synthesize", h.HandleRunAcceptanceSynthesize)
 	s.HandleFunc("/api/run-acceptances/", h.HandleRunAcceptanceDetail)

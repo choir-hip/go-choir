@@ -223,7 +223,69 @@ func stableOwnerRevisionUpdateID(ownerID, docID, intent, prompt string) string {
 // long-running, mostly-parked Texture actor; without it a new /revise during a
 // pending actor would be silently dropped.
 func (rt *Handler) deliverOwnerRevisionToTextureActor(ctx context.Context, doc types.Document, ownerID string, req textureAgentRevisionRequest) error {
-	return rt.refuseLegacyTextureWriter("deliver owner Texture revision update")
+	if rt == nil || rt.Store == nil {
+		return fmt.Errorf("runtime store unavailable")
+	}
+	targetAgentID := currentTextureAgentID(doc.DocID)
+	if strings.TrimSpace(targetAgentID) == "" {
+		return fmt.Errorf("texture agent id unavailable for doc %s", doc.DocID)
+	}
+	intent := strings.TrimSpace(req.Intent)
+	prompt := strings.TrimSpace(req.Prompt)
+	summary := "Owner revision request"
+	if intent != "" {
+		summary = "Owner revision request: " + intent
+	}
+	var notes []string
+	if prompt != "" {
+		notes = append(notes, prompt)
+	}
+	update := types.CoagentSourcePacket{
+		// Deterministic update id keyed on the request content so a renewal/retry
+		// of the same owner request dedupes (DispatchWorkerUpdate is idempotent by
+		// owner_id+update_id, preserving VAL-CROSS-122) while a genuinely new
+		// owner instruction is delivered as a distinct packet.
+		UpdateID:      stableOwnerRevisionUpdateID(ownerID, doc.DocID, intent, prompt),
+		OwnerID:       ownerID,
+		AgentID:       targetAgentID,
+		TargetAgentID: targetAgentID,
+		ChannelID:     doc.DocID,
+		Role:          "owner",
+		Packet: types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "decision_request",
+			Summary:       summary,
+			Actions: []types.CoagentPacketAction{{
+				Type:      "revise_texture",
+				Objective: summary,
+				Inputs:    map[string]any{"intent": intent, "prompt": prompt},
+				Safety: types.CoagentPacketActionSafety{
+					MutationClass: "orange",
+					FileMutation:  "allowed",
+				},
+			}},
+			Notes: notes,
+		},
+		CreatedAt: time.Now().UTC(),
+	}
+	update.Content = buildTextureLifecycleUpdateMessage(update)
+	message := &types.ChannelMessage{
+		ChannelID: doc.DocID,
+		From:      "owner",
+		ToAgentID: targetAgentID,
+		Role:      update.Role,
+		Content:   update.Content,
+		Timestamp: update.CreatedAt,
+	}
+	stored, created, err := rt.Store.DispatchWorkerUpdate(ctx, update, message)
+	if err != nil {
+		return fmt.Errorf("dispatch owner revision update: %w", err)
+	}
+	if created {
+		rt.Core.EmitChannelMessageEvent(ctx, *message, ownerID)
+		rt.Core.WakeUpdatedCoagent(ctx, stored)
+	}
+	return nil
 }
 
 func textureRevisionMatchesDocument(revision types.Revision, doc types.Document, ownerID string) bool {
@@ -286,10 +348,7 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		return nil, err
 	}
 	sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceEntities)
-	evidenceEntities, sourceRejections, err := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), doc.TrajectoryID, 12)
-	if err != nil {
-		return nil, err
-	}
+	evidenceEntities, sourceRejections := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12)
 	if len(evidenceEntities) > 0 {
 		var changedEvidenceEntities bool
 		sourceEntities, changedEvidenceEntities = mergeTextureSourceEntities(sourceEntities, evidenceEntities)
@@ -1074,6 +1133,10 @@ func (rt *Handler) emitTextureAgentEvent(ctx context.Context, rec *types.RunReco
 		Kind:         kind,
 		Payload:      payload,
 	}
+	if err := rt.Store.AppendEvent(ctx, evRec); err != nil {
+		log.Printf("runtime: persist texture agent event: %v", err)
+		return
+	}
 	rt.Bus.Publish(events.RuntimeEvent{
 		Record: *evRec,
 		Actor:  events.ActorRuntime,
@@ -1097,6 +1160,10 @@ func (rt *Handler) emitTextureDocumentRevisionEvent(ctx context.Context, ownerID
 		Timestamp: time.Now().UTC(),
 		Kind:      types.EventTextureDocumentRevisionCreated,
 		Payload:   payload,
+	}
+	if err := rt.Store.AppendEvent(ctx, evRec); err != nil {
+		log.Printf("runtime: persist texture document revision event: %v", err)
+		return
 	}
 	rt.Bus.Publish(events.RuntimeEvent{
 		Record: *evRec,
@@ -1131,9 +1198,55 @@ func (rt *Handler) emitTextureDocumentRevisionEventForRun(ctx context.Context, r
 		Kind:         types.EventTextureDocumentRevisionCreated,
 		Payload:      payload,
 	}
+	if err := rt.Store.AppendEvent(ctx, evRec); err != nil {
+		log.Printf("runtime: persist texture document revision event: %v", err)
+		return
+	}
 	rt.Bus.Publish(events.RuntimeEvent{
 		Record: *evRec,
 		Actor:  events.ActorRuntime,
 		Cause:  events.CauseTaskLifecycle,
+	})
+}
+
+func (rt *Handler) emitTextureDecisionRecordedEvent(ctx context.Context, rec *types.RunRecord, decision types.TextureDecisionRecord) {
+	payload, err := json.Marshal(map[string]any{
+		"decision_id":   decision.DecisionID,
+		"doc_id":        decision.DocID,
+		"loop_id":       decision.RunID,
+		"trajectory_id": decision.TrajectoryID,
+		"actor_id":      decision.ActorID,
+		"decision_kind": decision.DecisionKind,
+		"reason":        decision.Reason,
+		"evidence_refs": decision.EvidenceRefs,
+		"next_action":   decision.NextAction,
+	})
+	if err != nil {
+		log.Printf("runtime: marshal Texture decision event: %v", err)
+		return
+	}
+	if rec != nil {
+		rt.emitTextureAgentEvent(ctx, rec, types.EventTextureDecisionRecorded, events.CauseToolExecution, payload)
+		return
+	}
+	evRec := &types.EventRecord{
+		EventID:      uuid.New().String(),
+		RunID:        decision.RunID,
+		AgentID:      decision.ActorID,
+		ChannelID:    decision.DocID,
+		OwnerID:      decision.OwnerID,
+		TrajectoryID: decision.TrajectoryID,
+		Timestamp:    decision.CreatedAt,
+		Kind:         types.EventTextureDecisionRecorded,
+		Payload:      payload,
+	}
+	if err := rt.Store.AppendEvent(ctx, evRec); err != nil {
+		log.Printf("runtime: persist Texture decision event: %v", err)
+		return
+	}
+	rt.Bus.Publish(events.RuntimeEvent{
+		Record: *evRec,
+		Actor:  events.ActorRuntime,
+		Cause:  events.CauseToolExecution,
 	})
 }

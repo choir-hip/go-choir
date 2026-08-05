@@ -3,7 +3,6 @@ package textureowner
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
@@ -807,35 +806,48 @@ func isHTTPURL(value string) bool {
 	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://")
 }
 
-// evidenceSourceEntitiesAndRejectionsFromPendingUpdates collates source entities
-// from canonical typed supervision deliveries addressed to Texture.
-func (rt *Handler) evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx context.Context, ownerID, textureAgentID, trajectoryID string, limit int) ([]textureSourceEntity, []coagentSourceRejection, error) {
-	if rt == nil || rt.Store == nil || rt.Core == nil {
-		return nil, nil, fmt.Errorf("canonical Texture source authority unavailable")
+// evidenceSourceEntitiesFromPendingUpdates collates source entities from the
+// typed evidence records attached to the pending update_coagent records addressed
+// to a Texture coagent. This is the typed replacement for the deleted regex
+// researcher-prose scraping: sources (and their text_quote excerpts) come from
+// structured researcher evidence, not from parsing message text.
+func (rt *Handler) evidenceSourceEntitiesFromPendingUpdates(ctx context.Context, ownerID, textureAgentID string, limit int) []textureSourceEntity {
+	entities, _ := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, textureAgentID, limit)
+	return entities
+}
+
+func (rt *Handler) evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx context.Context, ownerID, textureAgentID string, limit int) ([]textureSourceEntity, []coagentSourceRejection) {
+	if rt == nil || rt.Store == nil {
+		return nil, nil
 	}
 	textureAgentID = strings.TrimSpace(textureAgentID)
 	ownerID = strings.TrimSpace(ownerID)
-	trajectoryID = strings.TrimSpace(trajectoryID)
-	if textureAgentID == "" || ownerID == "" || trajectoryID == "" {
-		return nil, nil, fmt.Errorf("canonical Texture source scope is incomplete")
+	if textureAgentID == "" || ownerID == "" {
+		return nil, nil
 	}
-	computerID := strings.TrimSpace(rt.Core.TextureSandboxID())
-	updates, err := rt.Core.ListPendingCanonicalSupervisionUpdates(ctx, ownerID, computerID, textureAgentID, trajectoryID, 0)
-	if err != nil {
-		return nil, nil, fmt.Errorf("list canonical Texture source updates: %w", err)
+	computerID := ""
+	if rt.Core != nil {
+		computerID = strings.TrimSpace(rt.Core.TextureSandboxID())
 	}
-	if len(updates) == 0 {
-		updates, err = rt.Core.ListPendingSupervisionCompatibilityUpdates(ctx, ownerID, computerID, textureAgentID, trajectoryID, 0)
-		if err != nil {
-			return nil, nil, fmt.Errorf("list compatibility Texture source updates: %w", err)
+	subject, subjectErr := rt.Store.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
+	var updates []types.CoagentSourcePacket
+	var err error
+	if subjectErr == nil && subject.LifecycleVersion > 0 {
+		updates, err = rt.Store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, textureAgentID, limit)
+	} else {
+		updates, err = rt.Store.ListCoagentMailboxBacklog(ctx, ownerID, textureAgentID, limit)
+		if err == nil {
+			legacy := updates[:0]
+			for _, update := range updates {
+				if update.LifecycleVersion <= 0 {
+					legacy = append(legacy, update)
+				}
+			}
+			updates = legacy
 		}
 	}
-	if limit > 0 && len(updates) > limit {
-		updates = updates[:limit]
+	if err != nil || len(updates) == 0 {
+		return nil, nil
 	}
-	if len(updates) == 0 {
-		return nil, nil, nil
-	}
-	entities, rejections := rt.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, updates)
-	return entities, rejections, nil
+	return rt.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, updates)
 }

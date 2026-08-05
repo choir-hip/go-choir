@@ -23,23 +23,14 @@ that uses Texture as its owner-readable narrative.
 
 ## Core Invariant
 
-> Texture owns the semantic authorization of canonical document and artifact
-> state inside a multi-agent system. Its versions are deterministic projections
-> of the canonical per-computer event chain. It is not an independent causal
-> tape, a workflow engine, a route script, or a role-sequence executor.
+> Texture owns canonical document and artifact state inside a multi-agent system.
+> It is not a workflow engine, a route script, or a role-sequence executor.
 
 Texture may write, revise, wait, ask researcher, ask super, ask both, ask neither,
 request clarification, or report a blocker. The correct choice is part of the
 Texture agent's obligation and authority envelope. Runtime may expose tools,
 durable evidence, pending work, and policy constraints; runtime must not force a
 semantic delegation merely because text or metadata mentions another role.
-
-Texture represents the user's point of view. It is the human-side supervisor
-and remains an agent: responsible for document state fulfilling the user's
-request, messaging Researcher/Super when grounding or execution is needed,
-integrating their results, and translating dense technical state to human
-bandwidth. Super is the operational supervisor of CoSuper workers. Texture must
-not become either a passive renderer or a raw event dump.
 
 Conductor routes exogenous input into Texture-owned artifact state. Prompt-bar
 requests, sourcecycled/news ingestion, article creation, mission work, and most
@@ -54,8 +45,7 @@ ordinary ingress target for user or source prompts.
 1. **Canonical text is Texture-owned.** User revisions and Texture appagent
    revisions are canonical document versions. Researcher findings, super
    updates, trace moments, search results, and worker evidence are inputs to
-   Texture, not canonical text until Texture authorizes their incorporation
-   through a typed computer event and its reducer materializes the revision.
+   Texture, not canonical text until Texture incorporates them into a revision.
 
    Prompt-bar creation is not an exception. The owner's submitted prompt is the
    canonical `V0` Texture revision. It must not be moved into hidden metadata,
@@ -82,9 +72,8 @@ ordinary ingress target for user or source prompts.
    prompt saying "researcher" is evidence about owner intent; it is not a hard
    runtime command to spawn a researcher.
 
-4. **No semantic forced continuations from `edit_texture`.** `edit_texture`
-   authorizes a typed event whose projection stores a document revision. It must
-   not require a subsequent researcher, super,
+4. **No semantic forced continuations from `edit_texture`.** `edit_texture` stores a
+   document revision. It must not require a subsequent researcher, super,
    verifier, or other semantic appagent call. Deterministic app protocol
    handoffs, such as persisting an email draft for owner approval, must be
    explicit, narrow, and documented separately.
@@ -114,14 +103,6 @@ ordinary ingress target for user or source prompts.
    mechanically forced trivial patch that removes the owner's instruction or
    makes tiny prose edits while hiding the background work in Trace.
 
-   Owner-visible state must be operationally grounded. A claim that research,
-   execution, verification, settlement, or completion happened carries exact
-   event-derived refs. Without them, Texture must say pending, conjectural, or
-   blocked. Human-bandwidth compression may omit execution trivia, but never
-   silently omits material blockers, commitments, dissent, changed beliefs,
-   irreversible gates, or owner-only decisions; it shows honest overflow and
-   drill-down instead of a false clear state.
-
 6. **Required tool choice is not policy.** Exact next-tool enforcement is
    allowed only for mechanical tool protocols whose second call is part of the
    same protocol state, for example a worker allocation followed by a
@@ -141,11 +122,11 @@ ordinary ingress target for user or source prompts.
    prompts and revision builders may describe obligations and affordances, but
    must not mandate the retired "call spawn_agent now" or similar semantic role sequences.
 
-8. **Trace and Texture have different jobs.** The computer event chain is the
-   causal ledger. Trace projects detailed tool calls, model content, events, and
-   agent messages; Texture projects owner-readable semantic document state. Do
-   not turn Texture into a Trace-like topology/status dump, and do not use Trace
-   role sequences as a substitute for Texture semantics.
+8. **Trace and Texture have different jobs.** Trace is the causal ledger for tool
+   calls, LLM content, events, and agent messages. Texture is the owner-readable
+   narrative and canonical document surface. Do not turn Texture into a Trace-like
+   topology/status dump, and do not use Trace role sequences as a substitute for
+   Texture semantics.
 
 9. **Acceptance verifies outcomes, not role choreography.** A test may require
    researcher participation only when the product behavior under test is
@@ -445,9 +426,9 @@ Tests to invert or delete when M3.1 repairs H010/H024/H026:
 
 ## Protected Surface Rule
 
-Texture-authorized event writes, revision metadata, prompt routing, coagent wake
-behavior, Trace/Texture projection, and acceptance involving Texture are
-protected surfaces under Choir Doctrine. Before changing them, name the mutation class,
+Texture canonical writes, revision metadata, prompt routing, coagent wake
+behavior, Trace/Texture projection, and acceptance involving Texture are protected
+surfaces under Choir Doctrine. Before changing them, name the mutation class,
 conjecture delta, evidence class, rollback path, protected surface touched, and
 heresy delta (`discovered`, `introduced`, `repaired`).
 

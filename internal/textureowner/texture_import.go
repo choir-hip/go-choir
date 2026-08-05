@@ -619,11 +619,9 @@ func (h *Handler) ensureCanonicalTextureProjectionPath(ctx context.Context, owne
 func allocateTextureManifestPath(ctx context.Context, st *store.Store, ownerID string, doc types.Document) (string, error) {
 	stem := slugifyTextureManifestStem(doc.Title)
 	suffix := shortDocIDSuffix(doc.DocID)
-	identity := sha256.Sum256([]byte(strings.TrimSpace(ownerID) + "\x00" + strings.TrimSpace(doc.DocID)))
 	candidates := []string{
 		fmt.Sprintf("%s%s", stem, textureShortcutExt),
 		fmt.Sprintf("%s-%s%s", stem, suffix, textureShortcutExt),
-		fmt.Sprintf("%s-%s%s", stem, hex.EncodeToString(identity[:]), textureShortcutExt),
 	}
 	filesRoot := provideriface.ResolveFilesRoot("")
 	for _, candidate := range candidates {
@@ -645,5 +643,5 @@ func allocateTextureManifestPath(ctx context.Context, st *store.Store, ownerID s
 		}
 		return candidate, nil
 	}
-	return "", fmt.Errorf("no deterministic Texture shortcut path is available for document %s", doc.DocID)
+	return fmt.Sprintf("%s-%s%s", stem, uuid.New().String()[:8], textureShortcutExt), nil
 }

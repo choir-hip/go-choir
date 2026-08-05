@@ -1058,7 +1058,7 @@ func TestExecuteToolsError(t *testing.T) {
 	}
 }
 
-func TestExecuteToolsPreservesFullModelOutput(t *testing.T) {
+func TestExecuteToolsOutputTruncation(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 
 	bigTool := toolregistry.Tool{Name: "big_output",
@@ -1082,8 +1082,9 @@ func TestExecuteToolsPreservesFullModelOutput(t *testing.T) {
 
 	results := toolregistry.ExecuteToolBatch(context.Background(), registry, calls, emit)
 
-	if len(results[0].Output) != 150*1024 {
-		t.Errorf("model-visible output length = %d, want full tool output", len(results[0].Output))
+	// Output should be truncated to ~100KB + truncation notice.
+	if len(results[0].Output) > 110*1024 {
+		t.Errorf("output should be truncated, got %d bytes", len(results[0].Output))
 	}
 }
 

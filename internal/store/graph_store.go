@@ -15,32 +15,30 @@ import (
 
 // Object graph kind constants for VM store records.
 const (
-	ogKindAgent            = objectgraph.ObjectKind("choir.agent")
-	ogKindRun              = objectgraph.ObjectKind("choir.run")
-	ogKindEvent            = objectgraph.ObjectKind("choir.event")
-	ogKindTrajectory       = objectgraph.ObjectKind("choir.trajectory")
-	ogKindWorkItem         = objectgraph.ObjectKind("choir.work_item")
-	ogKindChannelMsg       = objectgraph.ObjectKind("choir.channel_message")
-	ogKindWorkerUpdate     = objectgraph.ObjectKind("choir.worker_update")
-	ogKindLifecycleEvent   = objectgraph.ObjectKind("choir.lifecycle_event")
-	ogKindLifecycleCmd     = objectgraph.ObjectKind("choir.lifecycle_command")
-	ogKindLifecycleSeq     = objectgraph.ObjectKind("choir.lifecycle_sequence")
-	ogKindSupervisionState = objectgraph.ObjectKind("choir.supervision_state")
-	ogKindSupervisionEvent = objectgraph.ObjectKind("choir.supervision_event")
-	ogKindInboxDeliv       = objectgraph.ObjectKind("choir.inbox_delivery")
-	ogKindRunMemory        = objectgraph.ObjectKind("choir.run_memory_entry")
-	ogKindRunAccept        = objectgraph.ObjectKind("choir.run_acceptance")
-	ogKindRunContin        = objectgraph.ObjectKind("choir.run_continuation")
-	ogKindTexDoc           = objectgraph.ObjectKind("choir.texture_document")
-	ogKindTexRev           = objectgraph.ObjectKind("choir.texture_revision")
-	ogKindTexDecision      = objectgraph.ObjectKind("choir.texture_decision")
-	ogKindEvidence         = objectgraph.ObjectKind("choir.agent_evidence")
-	ogKindContentItem      = objectgraph.ObjectKind("choir.content_item")
-	ogKindPodcastSub       = objectgraph.ObjectKind("choir.podcast_subscription")
-	ogKindBrowserSess      = objectgraph.ObjectKind("choir.browser_session")
-	ogKindCoagentMail      = objectgraph.ObjectKind("choir.coagent_mailbox")
-	ogKindDesktopSess      = objectgraph.ObjectKind("choir.desktop_session")
-	ogKindDesktopApp       = objectgraph.ObjectKind("choir.desktop_app_instance")
+	ogKindAgent          = objectgraph.ObjectKind("choir.agent")
+	ogKindRun            = objectgraph.ObjectKind("choir.run")
+	ogKindEvent          = objectgraph.ObjectKind("choir.event")
+	ogKindTrajectory     = objectgraph.ObjectKind("choir.trajectory")
+	ogKindWorkItem       = objectgraph.ObjectKind("choir.work_item")
+	ogKindChannelMsg     = objectgraph.ObjectKind("choir.channel_message")
+	ogKindWorkerUpdate   = objectgraph.ObjectKind("choir.worker_update")
+	ogKindLifecycleEvent = objectgraph.ObjectKind("choir.lifecycle_event")
+	ogKindLifecycleCmd   = objectgraph.ObjectKind("choir.lifecycle_command")
+	ogKindLifecycleSeq   = objectgraph.ObjectKind("choir.lifecycle_sequence")
+	ogKindInboxDeliv     = objectgraph.ObjectKind("choir.inbox_delivery")
+	ogKindRunMemory      = objectgraph.ObjectKind("choir.run_memory_entry")
+	ogKindRunAccept      = objectgraph.ObjectKind("choir.run_acceptance")
+	ogKindRunContin      = objectgraph.ObjectKind("choir.run_continuation")
+	ogKindTexDoc         = objectgraph.ObjectKind("choir.texture_document")
+	ogKindTexRev         = objectgraph.ObjectKind("choir.texture_revision")
+	ogKindTexDecision    = objectgraph.ObjectKind("choir.texture_decision")
+	ogKindEvidence       = objectgraph.ObjectKind("choir.agent_evidence")
+	ogKindContentItem    = objectgraph.ObjectKind("choir.content_item")
+	ogKindPodcastSub     = objectgraph.ObjectKind("choir.podcast_subscription")
+	ogKindBrowserSess    = objectgraph.ObjectKind("choir.browser_session")
+	ogKindCoagentMail    = objectgraph.ObjectKind("choir.coagent_mailbox")
+	ogKindDesktopSess    = objectgraph.ObjectKind("choir.desktop_session")
+	ogKindDesktopApp     = objectgraph.ObjectKind("choir.desktop_app_instance")
 )
 
 // Edge kind constants.
@@ -529,9 +527,9 @@ func (s *Store) getRunObjectByOwnerOG(ctx context.Context, ownerID, runID string
 	if err != nil {
 		return objectgraph.Object{}, err
 	}
-	graphStore := s.ogReadStore
+	graphStore := s.ogStore
 	if graphStore == nil {
-		graphStore = s.ogStore
+		graphStore = s.ogReadStore
 	}
 	if graphStore == nil {
 		return objectgraph.Object{}, fmt.Errorf("store: object graph not initialized")
@@ -657,34 +655,11 @@ func (s *Store) ListRunsByOwnerOG(ctx context.Context, ownerID string, limit int
 	if limit <= 0 {
 		limit = 100
 	}
-	runs, err := s.ListAllRunsByOwnerOG(ctx, ownerID)
-	if err != nil {
-		return nil, err
-	}
-	if len(runs) > limit {
-		runs = runs[:limit]
-	}
-	return runs, nil
-}
-
-// ListAllRunsByOwnerOG exhausts the legacy owner-scoped run projection.
-func (s *Store) ListAllRunsByOwnerOG(ctx context.Context, ownerID string) ([]types.RunRecord, error) {
-	return s.listEveryRunByOwnerOG(ctx, ownerID, false)
-}
-
-// ListEveryRunByOwnerOG exhausts both canonical computer-scoped and legacy
-// owner-scoped run projections. Delivery recovery uses it because a bounded
-// run window cannot prove that an immutable canonical event was never consumed.
-func (s *Store) ListEveryRunByOwnerOG(ctx context.Context, ownerID string) ([]types.RunRecord, error) {
-	return s.listEveryRunByOwnerOG(ctx, ownerID, true)
-}
-
-func (s *Store) listEveryRunByOwnerOG(ctx context.Context, ownerID string, includeLifecycle bool) ([]types.RunRecord, error) {
 	objs, err := s.ogListAllObjectsByKind(ctx, ogKindRun)
 	if err != nil {
 		return nil, err
 	}
-	runs := make([]types.RunRecord, 0, len(objs))
+	runs := make([]types.RunRecord, 0, min(limit, len(objs)))
 	for _, obj := range objs {
 		if obj.OwnerID != ownerID {
 			continue
@@ -693,7 +668,7 @@ func (s *Store) listEveryRunByOwnerOG(ctx context.Context, ownerID string, inclu
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
-		if !includeLifecycle && lifecycleRunProjection(obj, rec) {
+		if lifecycleRunProjection(obj, rec) {
 			continue
 		}
 		runs = append(runs, rec)
@@ -704,6 +679,9 @@ func (s *Store) listEveryRunByOwnerOG(ctx context.Context, ownerID string, inclu
 		}
 		return runs[i].RunID < runs[j].RunID
 	})
+	if len(runs) > limit {
+		runs = runs[:limit]
+	}
 	return runs, nil
 }
 

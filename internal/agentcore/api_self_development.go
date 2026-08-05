@@ -1178,6 +1178,26 @@ func writeKernelCapabilityUnavailable(w http.ResponseWriter, reason string) {
 	})
 }
 
+func (h *APIHandler) HandleSelfDevelopmentRestartHandoff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost || r.Header.Get("X-Internal-Updater") != "true" || !requestIsLoopback(r) {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "not found"})
+		return
+	}
+	if h.rt == nil || h.rt.selfdevControl == nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "restart credential authority unavailable"})
+		return
+	}
+	path := strings.TrimSpace(os.Getenv("CHOIR_RESTART_CREDENTIAL_HANDOFF"))
+	if path == "" {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "restart credential handoff path unavailable"})
+		return
+	}
+	if err := h.rt.selfdevControl.WriteRestartHandoff(r.Context(), path); err != nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "restart credential handoff failed"})
+		return
+	}
+	writeAPIJSON(w, http.StatusNoContent, nil)
+}
 func requestIsLoopback(request *http.Request) bool {
 	host, _, err := net.SplitHostPort(request.RemoteAddr)
 	if err != nil {

@@ -589,11 +589,6 @@ func TestLoadConfigFromEnv(t *testing.T) {
 	if cfg.BootReadyTimeout != 7*time.Second {
 		t.Fatalf("expected BootReadyTimeout=7s, got %s", cfg.BootReadyTimeout)
 	}
-	t.Setenv("VM_SUPERVISION_WRITES_DISABLED", "0")
-	cfg = LoadConfigFromEnv()
-	if cfg.SupervisionWritesDisabled != "0" {
-		t.Fatalf("expected explicit supervision write override 0, got %q", cfg.SupervisionWritesDisabled)
-	}
 }
 
 func TestConfigValidate(t *testing.T) {
@@ -617,13 +612,6 @@ func TestConfigValidate(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("Validate: %v", err)
 	}
-
-	cfg.SupervisionWritesDisabled = "invalid"
-	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "VM_SUPERVISION_WRITES_DISABLED") {
-		t.Fatalf("Validate error = %v, want invalid supervision write override", err)
-	}
-
-	cfg.SupervisionWritesDisabled = "1"
 
 	// Also valid with rootfs (legacy approach).
 	cfg.RootfsPath = "/path/to/rootfs"
@@ -1184,39 +1172,6 @@ func TestBuildFirecrackerConfig_GuestPortInBootArgs(t *testing.T) {
 		if containsStr(bootArgs, arg) {
 			t.Errorf("VAL-VM-011: boot args contain forbidden pattern: %s (full: %s)", arg, bootArgs)
 		}
-	}
-}
-
-func TestBuildFirecrackerConfig_SupervisionWriteOverride(t *testing.T) {
-	for _, mode := range []string{"", "0", "1"} {
-		t.Run("mode_"+mode, func(t *testing.T) {
-			cfg := DefaultManagerConfig()
-			cfg.StateDir = t.TempDir()
-			cfg.SupervisionWritesDisabled = mode
-			mgr := NewManager(cfg)
-			vmCfg := VMConfig{
-				VMID:              "vm-supervision-mode",
-				KernelImagePath:   "/opt/go-choir/guest/vmlinux",
-				RootfsPath:        "/opt/go-choir/guest/rootfs.ext4",
-				GuestPort:         8085,
-				MachineCPUCount:   2,
-				MachineMemSizeMib: 512,
-				Epoch:             1,
-			}
-
-			fcConfig := mgr.buildFirecrackerConfig(vmCfg, 9001)
-			bootArgs := fcConfig["boot-source"].(map[string]interface{})["boot_args"].(string)
-			param := "choir.supervision_writes_disabled="
-			if mode == "" {
-				if strings.Contains(bootArgs, param) {
-					t.Fatalf("default boot args unexpectedly override immutable floor: %q", bootArgs)
-				}
-				return
-			}
-			if !strings.Contains(bootArgs, param+mode) {
-				t.Fatalf("boot args missing supervision write override %s: %q", mode, bootArgs)
-			}
-		})
 	}
 }
 

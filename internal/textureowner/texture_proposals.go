@@ -3,10 +3,13 @@ package textureowner
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/yusefmosiah/go-choir/internal/types"
 	"log"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 type internalTextureProposalDeliveryRequest struct {
@@ -52,11 +55,81 @@ func (h *Handler) HandleInternalTextureProposalDelivery(w http.ResponseWriter, r
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "owner_id, proposal_id, and publication_id are required"})
 		return
 	}
-	if err := h.refuseLegacyTextureWriter("deliver publication proposal to Texture"); err != nil {
-		log.Printf("texture proposal delivery: %v", err)
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+	if req.DeliveryID == "" {
+		req.DeliveryID = uuid.NewString()
+	}
+
+	superAgent, err := h.Core.EnsurePersistentSuperAgent(r.Context(), req.OwnerID)
+	if err != nil {
+		log.Printf("texture proposal delivery: ensure super: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to prepare author inbox"})
 		return
 	}
+	now := time.Now().UTC()
+	content := fmt.Sprintf(
+		"Publication proposal received.\nproposal_id=%s\npublication_id=%s\npublication_version_id=%s\nsubmitter_id=%s\ndelivery_id=%s\n\nReview this proposal as an author-side event. Do not mutate canonical publication content without owner acceptance.",
+		req.ProposalID,
+		req.PublicationID,
+		req.PublicationVersionID,
+		req.SubmitterID,
+		req.DeliveryID,
+	)
+	message := types.ChannelMessage{
+		ChannelID:   superAgent.ChannelID,
+		From:        "platform",
+		FromAgentID: "platform:publication-proposals",
+		ToAgentID:   superAgent.AgentID,
+		Role:        "publication_proposal",
+		Content:     content,
+		Timestamp:   now,
+	}
+	update := types.CoagentSourcePacket{
+		UpdateID:      req.DeliveryID,
+		OwnerID:       req.OwnerID,
+		AgentID:       message.FromAgentID,
+		TargetAgentID: superAgent.AgentID,
+		ChannelID:     superAgent.ChannelID,
+		MessageSeq:    message.Seq,
+		Role:          message.Role,
+		Packet: types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "decision_request",
+			Summary:       "Publication proposal received.",
+			Notes:         []string{content},
+		},
+		CreatedAt: now,
+	}
+	update.Content = buildTextureLifecycleUpdateMessage(update)
+	message.Content = update.Content
+	if _, _, err := h.Store.DispatchWorkerUpdate(r.Context(), update, &message); err != nil {
+		log.Printf("texture proposal delivery: dispatch update: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to enqueue author update"})
+		return
+	}
+
+	run, err := h.Core.ReconcilePersistentSuperActor(r.Context(), req.OwnerID, superAgent.AgentID)
+	if err != nil {
+		log.Printf("texture proposal delivery: reconcile super: %v", err)
+		writeAPIJSON(w, http.StatusAccepted, internalTextureProposalDeliveryResponse{
+			DeliveryID:    req.DeliveryID,
+			OwnerID:       req.OwnerID,
+			TargetAgentID: superAgent.AgentID,
+			ChannelID:     superAgent.ChannelID,
+			State:         "queued",
+		})
+		return
+	}
+	resp := internalTextureProposalDeliveryResponse{
+		DeliveryID:    req.DeliveryID,
+		OwnerID:       req.OwnerID,
+		TargetAgentID: superAgent.AgentID,
+		ChannelID:     superAgent.ChannelID,
+		State:         "delivered",
+	}
+	if run != nil {
+		resp.RunID = run.RunID
+	}
+	writeAPIJSON(w, http.StatusCreated, resp)
 }
 
 func buildTextureLifecycleUpdateMessage(update types.CoagentSourcePacket) string {

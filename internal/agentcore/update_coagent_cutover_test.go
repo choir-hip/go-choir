@@ -39,7 +39,7 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 	ctx := context.Background()
 	ownerID := "user-alice"
 	trajectoryID := "traj-update-restart"
-	superAgent, err := rt.ensurePersistentSuperAgent(ctx, ownerID)
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("ensure super agent: %v", err)
 	}
@@ -95,8 +95,6 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 	rt.Stop()
 	rt2 := New(rt.cfg, s, events.NewEventBus(), provider.NewStubProvider(0))
 	setTestDispatch(rt2, s)
-	installTestSupervisionAppender(t, rt2, s)
-	d9InstallTools(t, rt2)
 	t.Cleanup(rt2.Stop)
 	run, err := rt2.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
 	if err != nil {
@@ -751,8 +749,6 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
 	}, s2, events.NewEventBus(), provider.NewStubProvider(2*time.Second))
-	installTestSupervisionAppender(t, rt, s2)
-	d9InstallTools(t, rt)
 	setTestDispatch(rt, s2)
 	t.Cleanup(func() {
 		rt.Stop()
@@ -785,11 +781,6 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 	if active.RunID == "" || active.RunID == interrupted.RunID {
 		t.Fatalf("replacement run = %+v, want new active run", active)
 	}
-	directPending, directErr := rt.pendingCoagentUpdatesForRun(ctx, &active, ownerID, agentID, 10)
-	if directErr != nil || len(directPending) != 2 {
-		t.Fatalf("replacement pending delivery selector: updates=%+v err=%v", directPending, directErr)
-	}
-	active = waitForRunUpdateIDs(t, rt, active.RunID, ownerID, []string{update.UpdateID, otherUpdate.UpdateID}, 3*time.Second)
 	if ids := metadataStringSlice(active.Metadata["worker_update_ids"]); !containsString(ids, update.UpdateID) {
 		t.Fatalf("worker_update_ids = %+v, want %s", ids, update.UpdateID)
 	} else if !containsString(ids, otherUpdate.UpdateID) {
@@ -1295,15 +1286,12 @@ func runM3RestartRecoverProcess(t *testing.T) {
 		ProviderTimeout:     5 * time.Minute,
 		SupervisionInterval: time.Hour,
 	}, s, events.NewEventBus(), provider.NewStubProvider(5*time.Minute))
-	installTestSupervisionAppender(t, rt, s)
-	d9InstallTools(t, rt)
 	setTestDispatch(rt, s)
 	defer rt.Stop()
 
 	rt.Start(ctx)
 	passivated := waitForStoredRunState(t, s, m3RestartInterruptID, types.RunPassivated, 10*time.Second)
 	replacement := waitForRunningReplacementRunByAgent(t, s, m3RestartInterruptID, 10*time.Second)
-	replacement = waitForRunUpdateIDs(t, rt, replacement.RunID, m3RestartOwnerID, []string{m3RestartUpdateID}, 10*time.Second)
 	obligations, err := rt.TrajectoryObligations(ctx, m3RestartOwnerID, m3RestartTrajectory)
 	if err != nil {
 		t.Fatalf("trajectory obligations after process restart: %v", err)
@@ -1564,8 +1552,6 @@ func TestCoagentRewarmUsesResidentActivationNotActiveRunProxy(t *testing.T) {
 
 func TestCoagentRewarmIgnoresBlockedHistoricalActivation(t *testing.T) {
 	rt, s := testRuntimeWithProviderAndRegistry(t, provider.NewStubProvider(2*time.Second), nil)
-	installTestSupervisionAppender(t, rt, s)
-	d9InstallTools(t, rt)
 	ctx := context.Background()
 	ownerID := "user-alice"
 	agentID := "coagent:blocked-history"
@@ -1646,34 +1632,9 @@ func TestCoagentRewarmIgnoresBlockedHistoricalActivation(t *testing.T) {
 	if got := metadataStringValue(rewarmed.Metadata, "request_source"); got != "update_coagent" {
 		t.Fatalf("request_source = %q, want update_coagent", got)
 	}
-	rewarmedValue := waitForRunUpdateIDs(t, rt, rewarmed.RunID, ownerID, []string{update.UpdateID}, 3*time.Second)
-	rewarmed = &rewarmedValue
 	if ids := metadataStringSlice(rewarmed.Metadata["worker_update_ids"]); !containsString(ids, update.UpdateID) {
 		t.Fatalf("worker_update_ids = %+v, want %s", ids, update.UpdateID)
 	}
-}
-
-func waitForRunUpdateIDs(t *testing.T, rt *Runtime, runID, ownerID string, want []string, timeout time.Duration) types.RunRecord {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	var last types.RunRecord
-	for time.Now().Before(deadline) {
-		rec, err := rt.GetRun(context.Background(), runID, ownerID)
-		if err == nil {
-			last = *rec
-			ids := metadataStringSlice(rec.Metadata["worker_update_ids"])
-			complete := true
-			for _, id := range want {
-				complete = complete && containsString(ids, id)
-			}
-			if complete {
-				return *rec
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("run %s state=%s error=%q update ids = %+v, want %+v", runID, last.State, last.Error, metadataStringSlice(last.Metadata["worker_update_ids"]), want)
-	return last
 }
 
 func waitForRuntimeRunTerminal(t *testing.T, rt *Runtime, runID, ownerID string, timeout time.Duration) types.RunRecord {
@@ -1699,7 +1660,7 @@ func TestTrajectoryObligationsReportPendingUpdateCoagent(t *testing.T) {
 	ctx := context.Background()
 	ownerID := "user-alice"
 	trajectoryID := "traj-update-stall"
-	superAgent, err := rt.ensurePersistentSuperAgent(ctx, ownerID)
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("ensure super agent: %v", err)
 	}
@@ -1976,7 +1937,6 @@ func TestUpdateCoagentWarmActivationInjectsPendingTurn(t *testing.T) {
 	provider := &warmUpdateInjectionProvider{StubProvider: provider.NewStubProvider(0)}
 	rt, s := testRuntimeWithProviderAndRegistry(t, provider, nil)
 	ctx := context.Background()
-	installTestSupervisionAppender(t, rt, s)
 	ownerID := "user-alice"
 	targetAgentID := "coagent:warm"
 	trajectoryID := "traj-warm-update"
@@ -2047,11 +2007,8 @@ func TestUpdateCoagentWarmActivationInjectsPendingTurn(t *testing.T) {
 	if storedRun.State != types.RunCompleted {
 		t.Fatalf("warm run state = %q error=%q", storedRun.State, storedRun.Error)
 	}
-	if storedRun.Result != "" {
-		t.Fatalf("private warm run result leaked: %q", storedRun.Result)
-	}
-	if !metadataBoolValue(storedRun.Metadata, runMetadataPrivateTraceTainted) {
-		t.Fatal("private warm update did not taint the run")
+	if storedRun.Result != "processed warm update" {
+		t.Fatalf("warm run result = %q", storedRun.Result)
 	}
 	if ids := metadataStringSlice(storedRun.Metadata["worker_update_ids"]); len(ids) != 1 || ids[0] != update.UpdateID {
 		t.Fatalf("worker_update_ids metadata = %+v, want %s", ids, update.UpdateID)

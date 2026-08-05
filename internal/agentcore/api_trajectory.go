@@ -19,14 +19,6 @@ type trajectoryListResponse struct {
 	Trajectories []types.TrajectoryRecord `json:"trajectories"`
 }
 
-// trajectoryEventPageResponse preserves the durable event-page contract while
-// attaching the same owner-facing supervision projection returned by detail.
-// The projection is omitted for unrelated legacy trajectories.
-type trajectoryEventPageResponse struct {
-	types.LifecycleEventPage
-	Supervision *types.SupervisionProjectionSnapshot `json:"supervision,omitempty"`
-}
-
 type trajectoryCancelRequest struct {
 	IdempotencyKey           string `json:"idempotency_key"`
 	ExpectedLifecycleVersion int64  `json:"expected_lifecycle_version"`
@@ -118,28 +110,13 @@ func (h *APIHandler) HandleTrajectoryDetail(w http.ResponseWriter, r *http.Reque
 			writeLifecycleAPIError(w, pageErr)
 			return
 		}
-		response := trajectoryEventPageResponse{LifecycleEventPage: page}
-		if supervision, supervisionErr := h.rt.Store().GetSupervisionProjectionSnapshot(r.Context(), ownerID, h.rt.TextureSandboxID(), trajectoryID); supervisionErr == nil {
-			supervisionCopy := supervision
-			response.Supervision = &supervisionCopy
-		} else if !errors.Is(supervisionErr, store.ErrNotFound) {
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load supervision projection"})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, response)
+		writeAPIJSON(w, http.StatusOK, page)
 		return
 	}
 	const prefix = "/api/trajectories/"
 	trajectoryID := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
 	if trajectoryID == "" {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "trajectory not found"})
-		return
-	}
-	if supervision, supervisionErr := h.rt.Store().GetSupervisionProjectionSnapshot(r.Context(), ownerID, h.rt.TextureSandboxID(), trajectoryID); supervisionErr == nil {
-		writeAPIJSON(w, http.StatusOK, supervision)
-		return
-	} else if !errors.Is(supervisionErr, store.ErrNotFound) {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load supervision projection"})
 		return
 	}
 	if snapshot, snapshotErr := h.rt.Store().GetLifecycleSnapshot(r.Context(), ownerID, h.rt.TextureSandboxID(), trajectoryID); snapshotErr == nil {
@@ -168,11 +145,6 @@ func (h *APIHandler) streamLifecycleEvents(w http.ResponseWriter, r *http.Reques
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle stream cursor"})
 		return
 	}
-	supervision, supervisionErr := h.rt.Store().GetSupervisionProjectionSnapshot(r.Context(), ownerID, h.rt.TextureSandboxID(), trajectoryID)
-	if supervisionErr != nil && !errors.Is(supervisionErr, store.ErrNotFound) {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load supervision projection"})
-		return
-	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "lifecycle streaming unavailable"})
@@ -181,11 +153,6 @@ func (h *APIHandler) streamLifecycleEvents(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
-	if supervisionErr == nil {
-		payload, _ := json.Marshal(supervision)
-		fmt.Fprintf(w, "id: %d\nevent: supervision_snapshot\ndata: %s\n\n", supervision.SnapshotCursor, payload)
-		flusher.Flush()
-	}
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	heartbeat := time.NewTicker(15 * time.Second)
@@ -255,15 +222,6 @@ func (h *APIHandler) HandleTrajectoryCancel(w http.ResponseWriter, r *http.Reque
 	}
 	if len(request.IdempotencyKey) > 256 {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "idempotency_key is too long"})
-		return
-	}
-	if _, supervisionErr := h.rt.Store().GetSupervisionProjectionSnapshot(r.Context(), ownerID, h.rt.TextureSandboxID(), trajectoryID); supervisionErr == nil {
-		// The owner API has no trusted Super run authority. It must never fall
-		// through to the legacy lifecycle canceller for canonical work.
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "supervised trajectory cancellation requires a Super assignment_cancelled transaction"})
-		return
-	} else if !errors.Is(supervisionErr, store.ErrNotFound) {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to resolve supervision cancellation authority"})
 		return
 	}
 	result, cancelledRunIDs, err := h.rt.CancelTrajectoryCommand(

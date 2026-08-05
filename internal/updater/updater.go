@@ -31,48 +31,17 @@ type ManifestFile struct {
 	Mode   uint32 `json:"mode"`
 }
 
-// SupervisionCompatibility declares the immutable payload and reducer floor
-// required to replay the canonical supervision tape across a release change.
-type SupervisionCompatibility struct {
-	TransactionSchema      string   `json:"transaction_schema"`
-	Reducer                string   `json:"reducer"`
-	DigestRecipe           string   `json:"digest_recipe"`
-	PrivatePayloadMedia    []string `json:"private_payload_media"`
-	ProjectionImportSchema string   `json:"projection_import_schema"`
-}
-
-func CurrentSupervisionCompatibility() SupervisionCompatibility {
-	return SupervisionCompatibility{
-		TransactionSchema: computerevent.SupervisionSchemaV1,
-		Reducer:           computerevent.SupervisionReducerV1,
-		DigestRecipe:      computerevent.SupervisionDigestRecipeV1,
-		PrivatePayloadMedia: []string{
-			computerevent.SupervisionTransactionMediaTypeV1,
-			computerevent.SupervisionEvidenceMediaTypeV1,
-			computerevent.ProjectionImportMediaTypeV1,
-			computerevent.ProjectionImportEvidenceMediaTypeV1,
-		},
-		ProjectionImportSchema: "choir.supervision_projection_import.v1",
-	}
-}
-
-func currentSupervisionCompatibilityPtr() *SupervisionCompatibility {
-	value := CurrentSupervisionCompatibility()
-	return &value
-}
-
 type ReleaseManifest struct {
-	Version            int                       `json:"version"`
-	ComputerID         string                    `json:"computer_id"`
-	AcceptedEventHead  string                    `json:"accepted_event_head"`
-	CodeRef            string                    `json:"code_ref"`
-	ArtifactProgramRef string                    `json:"artifact_program_ref"`
-	EventSchemaVersion uint64                    `json:"event_schema_version"`
-	ReducerVersion     uint64                    `json:"reducer_version"`
-	Supervision        *SupervisionCompatibility `json:"supervision_compatibility,omitempty"`
-	Marker             string                    `json:"marker"`
-	Files              []ManifestFile            `json:"files"`
-	ContentDigest      string                    `json:"content_digest"`
+	Version            int            `json:"version"`
+	ComputerID         string         `json:"computer_id"`
+	AcceptedEventHead  string         `json:"accepted_event_head"`
+	CodeRef            string         `json:"code_ref"`
+	ArtifactProgramRef string         `json:"artifact_program_ref"`
+	EventSchemaVersion uint64         `json:"event_schema_version"`
+	ReducerVersion     uint64         `json:"reducer_version"`
+	Marker             string         `json:"marker"`
+	Files              []ManifestFile `json:"files"`
+	ContentDigest      string         `json:"content_digest"`
 }
 
 type ApplyRequest struct {
@@ -110,18 +79,8 @@ type ServiceManager interface {
 	CleanupRecoveryCredential(context.Context) error
 }
 
-// HealthAttestation is boot-grounded proof that the running release can
-// forward-read the supervision tape while its semantic writers are disabled.
-type HealthAttestation struct {
-	ObservationArtifactDigests      []string                 `json:"observation_artifact_digests"`
-	Supervision                     SupervisionCompatibility `json:"supervision_compatibility"`
-	SupervisionWritesDisabled       bool                     `json:"supervision_writes_disabled"`
-	PrivateTapeReplaySemanticDigest string                   `json:"private_tape_replay_semantic_digest"`
-	ProjectionSemanticDigest        string                   `json:"projection_semantic_digest"`
-}
-
 type HealthProber interface {
-	Probe(context.Context, string, ReleaseManifest) (HealthAttestation, error)
+	Probe(context.Context, string, ReleaseManifest) ([]string, error)
 }
 
 type ReceiptSigner interface {
@@ -162,9 +121,6 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	}
 	if commitment != request.RequestCommitment {
 		return ApplyResult{}, fmt.Errorf("updater: request commitment mismatch")
-	}
-	if err := verifyForwardReadableFloor(request.Manifest); err != nil {
-		return ApplyResult{}, err
 	}
 	journalPath := filepath.Join(u.root, "operations", safeName(request.IdempotencyKey)+".json")
 	journal, found, err := readJournal(journalPath)
@@ -229,15 +185,12 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	}
 	completedAt := u.now().UTC().Truncate(time.Microsecond)
 	if journal.Phase == "restart_requested" {
-		attestation, probeErr := u.health.Probe(ctx, releaseDigest, request.Manifest)
-		if probeErr == nil {
-			probeErr = verifyHealthAttestation(attestation, request.Manifest)
-		}
+		observations, probeErr := u.health.Probe(ctx, releaseDigest, request.Manifest)
 		if probeErr == nil {
 			if cleanupErr := u.service.CleanupRecoveryCredential(ctx); cleanupErr != nil {
 				return ApplyResult{}, fmt.Errorf("updater: cleanup recovery credential: %w", cleanupErr)
 			}
-			healthReceipt, receiptErr := u.signHealthReceipt(ctx, request, releaseDigest, journal.StartedAt, completedAt, attestation.ObservationArtifactDigests, "healthy")
+			healthReceipt, receiptErr := u.signHealthReceipt(ctx, request, releaseDigest, journal.StartedAt, completedAt, observations, "healthy")
 			if receiptErr != nil {
 				return ApplyResult{}, receiptErr
 			}
@@ -317,17 +270,7 @@ func (u *Updater) trustedSourceDir(source, releaseDigest string) (string, error)
 	return resolved, nil
 }
 
-func verifyForwardReadableFloor(manifest ReleaseManifest) error {
-	if manifest.Supervision == nil {
-		return fmt.Errorf("updater: supervision compatibility floor is required")
-	}
-	return verifySupervisionCompatibility(*manifest.Supervision)
-}
-
 func (u *Updater) stageRelease(sourceDir, releaseDir string, manifest ReleaseManifest) error {
-	if err := verifyForwardReadableFloor(manifest); err != nil {
-		return err
-	}
 	if err := verifyManifest(sourceDir, manifest); err != nil {
 		return err
 	}
@@ -374,11 +317,6 @@ func verifyManifest(root string, manifest ReleaseManifest) error {
 	if manifest.Version != ManifestVersion || !computerevent.IsSHA256(manifest.AcceptedEventHead) || !computerevent.IsSHA256(manifest.ContentDigest) || manifest.ComputerID == "" || manifest.CodeRef == "" || manifest.ArtifactProgramRef == "" || manifest.EventSchemaVersion == 0 || manifest.ReducerVersion == 0 || manifest.Marker == "" || len(manifest.Files) == 0 {
 		return fmt.Errorf("updater: invalid release manifest")
 	}
-	if manifest.Supervision != nil {
-		if err := verifySupervisionCompatibility(*manifest.Supervision); err != nil {
-			return err
-		}
-	}
 	files := append([]ManifestFile(nil), manifest.Files...)
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 
@@ -404,47 +342,6 @@ func verifyManifest(root string, manifest ReleaseManifest) error {
 	canonical, err := computerevent.CanonicalJSON(unsigned)
 	if err != nil || computerevent.DigestBytes(canonical) != manifest.ContentDigest {
 		return fmt.Errorf("updater: manifest content digest mismatch")
-	}
-	return nil
-}
-
-func verifySupervisionCompatibility(got SupervisionCompatibility) error {
-	want := CurrentSupervisionCompatibility()
-	if got.TransactionSchema != want.TransactionSchema ||
-		got.Reducer != want.Reducer ||
-		got.DigestRecipe != want.DigestRecipe ||
-		got.ProjectionImportSchema != want.ProjectionImportSchema ||
-		len(got.PrivatePayloadMedia) != len(want.PrivatePayloadMedia) {
-		return fmt.Errorf("updater: unsupported supervision compatibility floor")
-	}
-	for index := range want.PrivatePayloadMedia {
-		if got.PrivatePayloadMedia[index] != want.PrivatePayloadMedia[index] {
-			return fmt.Errorf("updater: unsupported supervision compatibility floor")
-		}
-	}
-	return nil
-}
-
-func verifyHealthAttestation(attestation HealthAttestation, manifest ReleaseManifest) error {
-	if err := verifyForwardReadableFloor(manifest); err != nil {
-		return err
-	}
-	if err := verifySupervisionCompatibility(attestation.Supervision); err != nil {
-		return fmt.Errorf("updater: health supervision compatibility: %w", err)
-	}
-	if len(attestation.ObservationArtifactDigests) == 0 {
-		return fmt.Errorf("updater: health observation artifacts are required")
-	}
-	for _, digest := range attestation.ObservationArtifactDigests {
-		if !computerevent.IsSHA256(digest) {
-			return fmt.Errorf("updater: health observation artifact digest is invalid")
-		}
-	}
-	if !attestation.SupervisionWritesDisabled ||
-		!computerevent.IsSHA256(attestation.PrivateTapeReplaySemanticDigest) ||
-		!computerevent.IsSHA256(attestation.ProjectionSemanticDigest) ||
-		attestation.PrivateTapeReplaySemanticDigest != attestation.ProjectionSemanticDigest {
-		return fmt.Errorf("updater: health private supervision replay attestation is invalid")
 	}
 	return nil
 }
@@ -514,8 +411,7 @@ func BuildBaselineManifest(sourceDir, computerID, codeRef, artifactProgramRef st
 		Version: ManifestVersion, ComputerID: strings.TrimSpace(computerID), AcceptedEventHead: computerevent.ZeroHead,
 		CodeRef: strings.TrimSpace(codeRef), ArtifactProgramRef: strings.TrimSpace(artifactProgramRef),
 		EventSchemaVersion: computerevent.SchemaVersionV1, ReducerVersion: computerevent.ReducerVersionV1,
-		Supervision: currentSupervisionCompatibilityPtr(),
-		Marker:      "genesis-baseline", Files: files,
+		Marker: "genesis-baseline", Files: files,
 	})
 }
 func (u *Updater) ImportBaseline(request BaselineImportRequest) (ReleaseManifest, error) {
@@ -659,26 +555,17 @@ func (u *Updater) restorePrior(ctx context.Context, request ApplyRequest, priorT
 	if priorTarget == "" {
 		return nil, fmt.Errorf("updater: initial release failed and no prior release exists: %w", cause)
 	}
-	priorManifest, err := readReleaseManifest(priorTarget)
-	if err != nil {
-		return nil, fmt.Errorf("updater: read rollback candidate manifest: %w", err)
-	}
-	if priorManifest.ContentDigest != priorDigest {
-		return nil, fmt.Errorf("updater: rollback candidate digest does not match prior release")
-	}
-	if err := verifyForwardReadableFloor(priorManifest); err != nil {
-		return nil, fmt.Errorf("updater: rollback candidate is below supervision compatibility floor: %w", err)
-	}
 	if err := u.swapCurrent(priorTarget); err != nil {
 		return nil, fmt.Errorf("updater: restore prior pointer: %w", err)
 	}
 	if err := u.service.RecoveryRestart(ctx); err != nil {
 		return nil, fmt.Errorf("updater: restart restored release: %w", err)
 	}
-	attestation, err := u.health.Probe(ctx, priorDigest, priorManifest)
-	if err == nil {
-		err = verifyHealthAttestation(attestation, priorManifest)
+	priorManifest, err := readReleaseManifest(priorTarget)
+	if err != nil {
+		return nil, fmt.Errorf("updater: read restored release manifest: %w", err)
 	}
+	observations, err := u.health.Probe(ctx, priorDigest, priorManifest)
 	if err != nil {
 		return nil, fmt.Errorf("updater: restored release unhealthy: %w", err)
 	}
@@ -690,7 +577,7 @@ func (u *Updater) restorePrior(ctx context.Context, request ApplyRequest, priorT
 		"operation_id": request.OperationID, "failed_release_digest": failedDigest,
 		"restored_release_digest": priorDigest, "accepted_event_head": request.AcceptedEventHead,
 		"request_commitment": request.RequestCommitment, "failure": cause.Error(),
-		"observation_artifact_digests": attestation.ObservationArtifactDigests,
+		"observation_artifact_digests": observations,
 	}, completedAt)
 	if err != nil {
 		return nil, err

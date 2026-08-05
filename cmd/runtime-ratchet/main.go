@@ -21,17 +21,6 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	files, err := repositoryFiles(repo)
-	if err != nil {
-		fatal(err)
-	}
-	callers, err := scanSupervisionMutationCallers(repo, files)
-	if err != nil {
-		fatal(err)
-	}
-	if err := validateSupervisionMutationCallers(callers); err != nil {
-		fatal(err)
-	}
 	inventory, err := scanRepository(repo)
 	if err != nil {
 		fatal(err)

@@ -1,7 +1,7 @@
 # Texture Audit Can Misreport Committed Mutations
 
 **Date:** 2026-08-05  
-**Status:** observed; repair not included in this checkpoint  
+**Status:** repaired in the deletion-first cleanup candidate; deployed proof pending
 **Classification:** canonical evidence boundary and ordinary Texture mutation behavior  
 **Mutation class of a repair:** red
 
@@ -77,5 +77,8 @@ route, or persisted Texture state migration is authorized.
 - `discovered`: post-commit evidence failure acting as product-write failure;
   computer-scoped idempotency collisions; target-value identity suppressing a
   later mutation; missing significant mutation coverage.
-- `introduced`: none by this evidence checkpoint.
-- `repaired`: none; documentation precedes repair.
+- `introduced`: none by the repair.
+- `repaired`: audit failure is non-gating; event identity is
+  owner/computer/action/document/mutation scoped; title identity uses the
+  committed update timestamp; merge and restore append the same audit; focused
+  contract tests cover every reported failure.

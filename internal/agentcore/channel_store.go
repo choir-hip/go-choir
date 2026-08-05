@@ -26,19 +26,16 @@ func (rt *Runtime) ChannelPost(ctx context.Context, channelID, from, role, conte
 // the corresponding event. Addressed wake/delivery is owned by update_coagent
 // (actor messages); channel messages remain the audit/replay surface.
 func (rt *Runtime) ChannelCast(ctx context.Context, channelID, toAgentID, toRunID, from, role, content string) (uint64, error) {
-	execution := toolregistry.ExecutionContextFrom(ctx)
-	trajectoryID, computerID := "", ""
-	if runRec := execution.RunRecord; runRec != nil {
-		trajectoryID = trajectoryIDForRun(runRec)
-		computerID = runRec.SandboxID
-	}
-	if err := rt.refuseLegacySupervisionWrite(ctx, execution.OwnerID, computerID, trajectoryID, "channel message"); err != nil {
-		return 0, err
+	trajectoryID := ""
+	if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil && runRec.Metadata != nil {
+		if id, _ := runRec.Metadata[runMetadataTrajectoryID].(string); strings.TrimSpace(id) != "" {
+			trajectoryID = strings.TrimSpace(id)
+		}
 	}
 	message := ChannelMessage{
 		ChannelID:    channelID,
-		FromAgentID:  execution.AgentID,
-		FromRunID:    execution.RunID,
+		FromAgentID:  toolregistry.ExecutionContextFrom(ctx).AgentID,
+		FromRunID:    toolregistry.ExecutionContextFrom(ctx).RunID,
 		ToAgentID:    strings.TrimSpace(toAgentID),
 		ToRunID:      strings.TrimSpace(toRunID),
 		TrajectoryID: trajectoryID,
@@ -47,7 +44,7 @@ func (rt *Runtime) ChannelCast(ctx context.Context, channelID, toAgentID, toRunI
 		Content:      content,
 		Timestamp:    time.Now().UTC(),
 	}
-	ownerID := execution.OwnerID
+	ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 	if ownerID == "" && message.FromRunID != "" {
 		if rec, err := rt.store.GetRun(context.Background(), message.FromRunID); err == nil {
 			ownerID = rec.OwnerID

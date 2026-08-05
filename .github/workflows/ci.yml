@@ -8,15 +8,6 @@ on:
         type: boolean
         required: false
         default: true
-      supervision_writes_mode:
-        description: Preserve, disable, or enable canonical supervision writes for the exact deployed release
-        type: choice
-        required: false
-        default: preserve
-        options:
-          - preserve
-          - disabled
-          - enabled
   push:
     branches: [main]
   pull_request:
@@ -562,7 +553,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && ( "${{ inputs.force_staging_deploy }}" == "true" || "${{ inputs.supervision_writes_mode }}" != "preserve" ) ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.force_staging_deploy }}" == "true" ]]; then
             {
               echo "deploy_needed=true"
               echo "deploy_host=true"
@@ -572,7 +563,7 @@ jobs:
               echo "deploy_vmctl_restart=true"
               echo "deploy_active_vm_refresh=true"
               echo "host_services=sandbox"
-              echo "class_explanation=manual workflow_dispatch forced host/frontend staging deploy with same-commit sandbox package, supervision write mode ${{ inputs.supervision_writes_mode }}, and active VM refresh"
+              echo "class_explanation=manual workflow_dispatch forced host/frontend staging deploy with same-commit sandbox package and active VM refresh"
             } >> "$GITHUB_OUTPUT"
             echo "Staging deploy forced by manual workflow_dispatch."
             exit 0
@@ -659,7 +650,6 @@ jobs:
           DEPLOY_ACTIVE_VM_REFRESH: ${{ needs.deploy-impact.outputs.deploy_active_vm_refresh }}
           DEPLOY_HOST_OS: ${{ needs.deploy-impact.outputs.deploy_host_os }}
           HOST_SERVICES: ${{ needs.deploy-impact.outputs.host_services }}
-          SUPERVISION_WRITES_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.supervision_writes_mode || 'preserve' }}
         run: |
           remote_env=(
             "DEPLOY_COMMIT=$DEPLOY_COMMIT"
@@ -671,7 +661,6 @@ jobs:
             "DEPLOY_ACTIVE_VM_REFRESH=$DEPLOY_ACTIVE_VM_REFRESH"
             "DEPLOY_HOST_OS=$DEPLOY_HOST_OS"
             "HOST_SERVICES=$HOST_SERVICES"
-            "SUPERVISION_WRITES_MODE=$SUPERVISION_WRITES_MODE"
           )
           printf -v remote_env_q '%q ' "${remote_env[@]}"
           ssh go-choir-node-b \
@@ -684,95 +673,6 @@ jobs:
             deploy_shell_pid=$BASHPID
             deploy_completed=false
             receipt_artifacts='{}'
-            supervision_runtime_file=/var/lib/go-choir/vmctl-runtime.env
-            supervision_mode_mutated=false
-            supervision_compensation_status=not_required
-            force_supervision_writes_disabled() {
-              [ "$supervision_mode_mutated" = "true" ] || return 0
-              supervision_compensation_status=failed
-              echo "==> Failed deployment: forcing supervision writes disabled" >&2
-              local runtime_tmp="${supervision_runtime_file}.rollback-tmp"
-              printf 'VM_SUPERVISION_WRITES_DISABLED=1\n' > "$runtime_tmp" || return 1
-              chmod 0644 "$runtime_tmp" || return 1
-              mv "$runtime_tmp" "$supervision_runtime_file" || return 1
-              systemctl restart go-choir-vmctl || return 1
-              local vmctl_ready=false
-              local attempt
-              for attempt in $(seq 1 30); do
-                if curl -fsS --max-time 2 http://127.0.0.1:8083/health >/dev/null 2>&1; then
-                  vmctl_ready=true
-                  break
-                fi
-                sleep 1
-              done
-              [ "$vmctl_ready" = "true" ] || return 1
-
-              local ownerships_json
-              ownerships_json=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors \
-                -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list) || return 1
-              if ! printf '%s' "$ownerships_json" | jq -e '.ownerships | type == "array"' >/dev/null; then
-                echo "    Invalid vmctl ownership inventory during supervision rollback" >&2
-                return 1
-              fi
-              local active_mutable_tsv
-              if ! active_mutable_tsv=$(printf '%s' "$ownerships_json" | jq -r '
-                .ownerships[]
-                | select(.state == "active")
-                | select((.kind == null) or (.kind == "") or (.kind == "interactive"))
-                | select((.snapshot_kind // "") != "constructed-computer-version")
-                | [.user_id, (.desktop_id // "primary"), .vm_id, .sandbox_url]
-                | @tsv
-              '); then
-                echo "    Could not select mutable computers during supervision rollback" >&2
-                return 1
-              fi
-              local active_mutable=()
-              if [ -n "$active_mutable_tsv" ]; then
-                mapfile -t active_mutable <<< "$active_mutable_tsv"
-              fi
-              local record
-              for record in "${active_mutable[@]}"; do
-                local user_id desktop_id vm_id sandbox_url
-                IFS=$'\t' read -r user_id desktop_id vm_id sandbox_url <<< "$record"
-                if [ -z "$user_id" ] || [ -z "$desktop_id" ] || [ -z "$vm_id" ] || [ -z "$sandbox_url" ]; then
-                  echo "    Incomplete mutable computer identity during supervision rollback" >&2
-                  return 1
-                fi
-                local payload refresh_body refresh_status refreshed_url rollback_verified
-                payload=$(jq -nc --arg user_id "$user_id" --arg desktop_id "$desktop_id" \
-                  '{user_id:$user_id, desktop_id:$desktop_id}')
-                refresh_body="/tmp/go-choir-supervision-rollback-${vm_id}.json"
-                refresh_status=$(timeout 300 curl -sS -o "$refresh_body" -w '%{http_code}' \
-                  --retry 2 --retry-delay 2 --retry-all-errors \
-                  -H "X-Internal-Caller: true" -H "Content-Type: application/json" \
-                  -d "$payload" http://127.0.0.1:8083/internal/vmctl/refresh || printf 'curl_error_%s' "$?")
-                rollback_verified=false
-                if [[ "$refresh_status" =~ ^2[0-9][0-9]$ ]]; then
-                  refreshed_url=$(jq -r '.sandbox_url // empty' "$refresh_body" 2>/dev/null || true)
-                  [ -z "$refreshed_url" ] || sandbox_url="$refreshed_url"
-                  for attempt in $(seq 1 120); do
-                    if [ "$(curl -fsS --max-time 5 "${sandbox_url}/health" 2>/dev/null | jq -r '.supervision_writes_disabled | tostring' 2>/dev/null || true)" = "true" ]; then
-                      rollback_verified=true
-                      break
-                    fi
-                    sleep 1
-                  done
-                fi
-                if [ "$rollback_verified" != "true" ]; then
-                  echo "    Could not verify disabled mode for ${vm_id}; stopping it fail-closed" >&2
-                  local stop_status
-                  stop_status=$(timeout 60 curl -sS -o /dev/null -w '%{http_code}' \
-                    -H "X-Internal-Caller: true" -H "Content-Type: application/json" \
-                    -d "$payload" http://127.0.0.1:8083/internal/vmctl/stop || printf 'curl_error_%s' "$?")
-                  if [[ ! "$stop_status" =~ ^2[0-9][0-9]$ ]]; then
-                    echo "    Failed to stop ${vm_id} after supervision rollback failure: ${stop_status}" >&2
-                    return 1
-                  fi
-                fi
-              done
-              supervision_compensation_status=succeeded
-              echo "==> Supervision write rollback verified for every mutable active computer" >&2
-            }
             record_incomplete_deploy() {
               local status="$1"
               [ "$BASHPID" = "$deploy_shell_pid" ] || return 0
@@ -792,10 +692,8 @@ jobs:
                 --arg run_id "$DEPLOY_RUN_ID" \
                 --arg run_attempt "$DEPLOY_RUN_ATTEMPT" \
                 --arg exit_status "$status" \
-                --arg supervision_writes_mode "$SUPERVISION_WRITES_MODE" \
-                --arg supervision_compensation "$supervision_compensation_status" \
                 --argjson artifacts "$artifacts_json" \
-                '{schema_version: 1, status: "incomplete", target_commit: $target_commit, failed_at: $failed_at, github: {run_id: $run_id, run_attempt: $run_attempt}, exit_status: $exit_status, runtime_configuration: {supervision_writes_mode: $supervision_writes_mode, compensation: $supervision_compensation}, observed_artifacts: $artifacts, rollback: {previous_receipt: "/var/lib/go-choir/deploy-receipt-previous.json", frontend: "/var/www/go-choir/frontend-previous", service_pattern: "/var/lib/go-choir/services/<service>-previous", nixos_profile: "/nix/var/nix/profiles/system"}}' \
+                '{schema_version: 1, status: "incomplete", target_commit: $target_commit, failed_at: $failed_at, github: {run_id: $run_id, run_attempt: $run_attempt}, exit_status: $exit_status, observed_artifacts: $artifacts, rollback: {previous_receipt: "/var/lib/go-choir/deploy-receipt-previous.json", frontend: "/var/www/go-choir/frontend-previous", service_pattern: "/var/lib/go-choir/services/<service>-previous", nixos_profile: "/nix/var/nix/profiles/system"}}' \
                 > "$failure_tmp" 2>/dev/null || return 0
               mv "$failure_tmp" "$failure_path" || return 0
               chmod 0644 "$failure_path" || true
@@ -804,9 +702,6 @@ jobs:
             on_deploy_exit() {
               local status=$?
               trap - EXIT
-              if [ "$deploy_completed" != "true" ] && ! force_supervision_writes_disabled; then
-                echo "Supervision write rollback could not be fully verified" >&2
-              fi
               record_incomplete_deploy "$status"
               exit "$status"
             }
@@ -820,50 +715,6 @@ jobs:
             echo "    host_services=${HOST_SERVICES}"
             echo "    workflow_commit=${DEPLOY_COMMIT}"
             echo "    workflow_run=${DEPLOY_RUN_ID} attempt=${DEPLOY_RUN_ATTEMPT}"
-            echo "    supervision_writes_mode=${SUPERVISION_WRITES_MODE}"
-            case "$SUPERVISION_WRITES_MODE" in
-              preserve|"")
-                SUPERVISION_WRITES_MODE=preserve
-                ;;
-              disabled)
-                supervision_writes_value=1
-                ;;
-              enabled)
-                supervision_writes_value=0
-                ;;
-              *)
-                echo "Invalid supervision write mode: ${SUPERVISION_WRITES_MODE}" >&2
-                exit 1
-                ;;
-            esac
-            if [ "$SUPERVISION_WRITES_MODE" != "preserve" ] &&
-              { [ "$DEPLOY_VMCTL_RESTART" != "true" ] || [ "$DEPLOY_ACTIVE_VM_REFRESH" != "true" ]; }; then
-              echo "Explicit supervision write mode requires vmctl restart and canonical active-computer refresh" >&2
-              exit 1
-            fi
-            if [ "$SUPERVISION_WRITES_MODE" != "preserve" ]; then
-              supervision_runtime_tmp="${supervision_runtime_file}.tmp"
-              printf 'VM_SUPERVISION_WRITES_DISABLED=%s\n' "$supervision_writes_value" > "$supervision_runtime_tmp"
-              chmod 0644 "$supervision_runtime_tmp"
-              mv "$supervision_runtime_tmp" "$supervision_runtime_file"
-              supervision_mode_mutated=true
-            fi
-            if [ -f "$supervision_runtime_file" ]; then
-              supervision_writes_value=$(sed -n 's/^VM_SUPERVISION_WRITES_DISABLED=//p' "$supervision_runtime_file" | tail -n 1)
-            else
-              # The immutable compatibility-floor guest defaults disabled.
-              supervision_writes_value=1
-            fi
-            case "$supervision_writes_value" in
-              1) supervision_writes_expected=true ;;
-              0) supervision_writes_expected=false ;;
-              *)
-                echo "Invalid VM_SUPERVISION_WRITES_DISABLED in ${supervision_runtime_file}: ${supervision_writes_value}" >&2
-                exit 1
-                ;;
-            esac
-            supervision_guest_proof=false
-            echo "    expected_supervision_writes_disabled=${supervision_writes_expected}"
             service_pointer_deploy=false
             if [ "${DEPLOY_HOST_OS}" != "true" ] && [ -n "${HOST_SERVICES}" ]; then
               service_pointer_deploy=true
@@ -926,27 +777,22 @@ jobs:
               local sandbox_url="$1"
               local vm_id="$2"
               local expected_commit="$3"
-              local expected_writes_disabled="$4"
               local commit=""
-              local writes_disabled=""
-              local health=""
               # The persistent public-platform guest can spend more than one minute
-              # reopening its store after a refresh. Keep identity and the global
-              # supervision-write mode fail-closed.
+              # reopening its store after a refresh. Keep the identity check fail-closed,
+              # but allow the measured startup path to finish before declaring failure.
               for _ in $(seq 1 120); do
                 # A bounded migration step can hold the embedded store for roughly
                 # three seconds. Give one health probe enough time to cross that
                 # contention window while keeping exact identity fail-closed.
-                health=$(curl -fsS --max-time 5 "${sandbox_url}/health" 2>/dev/null || true)
-                commit=$(printf '%s' "$health" | jq -r '.build.commit // empty' 2>/dev/null || true)
-                writes_disabled=$(printf '%s' "$health" | jq -r '.supervision_writes_disabled | tostring' 2>/dev/null || true)
-                if [ "$commit" = "$expected_commit" ] && [ "$writes_disabled" = "$expected_writes_disabled" ]; then
-                  echo "    Verified ${vm_id} serves sandbox commit ${commit} with supervision_writes_disabled=${writes_disabled}"
+                commit=$(curl -fsS --max-time 5 "${sandbox_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
+                if [ "$commit" = "$expected_commit" ]; then
+                  echo "    Verified ${vm_id} serves sandbox commit ${commit}"
                   return 0
                 fi
                 sleep 1
               done
-              echo "Timed out waiting for ${vm_id} to serve sandbox runtime ${expected_commit} with supervision_writes_disabled=${expected_writes_disabled}; observed commit=${commit:-missing} mode=${writes_disabled:-missing}" >&2
+              echo "Timed out waiting for ${vm_id} to serve sandbox runtime ${expected_commit}; observed ${commit:-missing}" >&2
               return 1
             }
             dump_deploy_service_diagnostics() {
@@ -1352,7 +1198,7 @@ jobs:
                       refresh_sandbox_url="$refreshed_sandbox_url"
                     fi
                     echo "    Refreshed ${refresh_vm_id}"
-                    wait_for_sandbox_commit "$refresh_sandbox_url" "$refresh_vm_id" "$sandbox_runtime_commit" "$supervision_writes_expected"
+                    wait_for_sandbox_commit "$refresh_sandbox_url" "$refresh_vm_id" "$sandbox_runtime_commit"
                   ) &
                   refresh_pids+=("$!")
                   if [ "${#refresh_pids[@]}" -ge "$max_parallel_refresh" ]; then
@@ -1373,17 +1219,12 @@ jobs:
               if [ "${#active_interactive[@]}" -gt 0 ]; then
                 record_receipt_artifact sandbox "$DEPLOY_COMMIT" active
                 record_receipt_artifact active_computers "$DEPLOY_COMMIT" active
-                supervision_guest_proof=true
               else
                 echo "    No mutable active interactive computers were refreshed; immutable realizations remain untouched"
                 record_receipt_artifact active_computers "$DEPLOY_COMMIT" empty
               fi
             else
               echo "==> Skipping active computer refresh; ordinary guest image and sandbox runtime package unchanged"
-            fi
-            if [ "$SUPERVISION_WRITES_MODE" != "preserve" ] && [ "$supervision_guest_proof" != "true" ]; then
-              echo "Explicit supervision write mode lacks a refreshed mutable guest health proof" >&2
-              exit 1
             fi
             note_phase "active computer refresh"
 
@@ -1599,12 +1440,9 @@ jobs:
               --arg activated_at "$activated_at" \
               --arg run_id "$DEPLOY_RUN_ID" \
               --arg run_attempt "$DEPLOY_RUN_ATTEMPT" \
-              --arg supervision_writes_mode "$SUPERVISION_WRITES_MODE" \
-              --argjson supervision_writes_disabled "$supervision_writes_expected" \
-              --argjson supervision_guest_health_verified "$supervision_guest_proof" \
               --argjson artifacts "$receipt_artifacts" \
               --argjson host_identity "$host_identity" \
-              '{schema_version: 1, target_commit: $target_commit, activated_at: $activated_at, github: {run_id: $run_id, run_attempt: $run_attempt}, runtime_configuration: {supervision_writes_mode: $supervision_writes_mode, supervision_writes_disabled: $supervision_writes_disabled, guest_health_verified: $supervision_guest_health_verified}, artifacts: $artifacts, host_identity: $host_identity}' \
+              '{schema_version: 1, target_commit: $target_commit, activated_at: $activated_at, github: {run_id: $run_id, run_attempt: $run_attempt}, artifacts: $artifacts, host_identity: $host_identity}' \
               > "$receipt_tmp"
             if [ -f /var/lib/go-choir/deploy-receipt.json ]; then
               cp /var/lib/go-choir/deploy-receipt.json /var/lib/go-choir/deploy-receipt-previous.json

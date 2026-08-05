@@ -577,7 +577,6 @@ func TestAPIKeyEnvironmentSecretNeverAppearsInHelp(t *testing.T) {
 	var flagHelp bytes.Buffer
 	fs.SetOutput(&flagHelp)
 	if _, err := newClient(fs, []string{"--help"}, io.Discard, io.Discard); !errors.Is(err, flag.ErrHelp) {
-
 		t.Fatalf("newClient help error = %v, want flag.ErrHelp", err)
 	}
 	if strings.Contains(flagHelp.String(), secret) {
@@ -601,46 +600,6 @@ func TestAPIKeyEnvironmentSecretNeverAppearsInHelp(t *testing.T) {
 		if strings.Contains(stdout.String(), secret) || strings.Contains(stderr.String(), secret) {
 			t.Fatalf("%v help leaked environment secret: stdout=%q stderr=%q", args, stdout.String(), stderr.String())
 		}
-	}
-}
-func TestSupervisionCommandPostsExactFileRequest(t *testing.T) {
-	request := []byte("{\n  \"trajectory_id\": \"trajectory-1\",\n  \"transaction_id\": \"command-1\",\n  \"transaction_class\": \"record_owner_decision\",\n  \"command_id\": \"command-1\",\n  \"command_digest\": \"digest\",\n  \"expected\": {},\n  \"mutations\": [{\"kind\":\"owner_decision_recorded\",\"body\":{\"decision_artifact_ref\":\"choir:supervision-artifact:placeholder\"}}],\n  \"private_artifacts\": [{\"binding_id\":\"decision-1\",\"plaintext\":\"decision\",\"media_type\":\"text/plain\"}]\n}\n")
-	commandFile := filepath.Join(t.TempDir(), "command.json")
-	if err := os.WriteFile(commandFile, request, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/api/texture/supervision/command" {
-			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
-		}
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(body, request) {
-			t.Fatalf("request body = %q, want exact file %q", body, request)
-		}
-		_, _ = io.WriteString(w, `{"receipt":{},"artifact_digest":"artifact-digest"}`)
-	}))
-	defer stub.Close()
-
-	var stdout, stderr bytes.Buffer
-	code := run([]string{"supervision", "command", "--file=" + commandFile, "--host=" + stub.URL}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("code = %d, stderr=%s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "artifact-digest") {
-		t.Fatalf("response missing artifact digest: %s", stdout.String())
-	}
-}
-
-func TestSupervisionCommandHelp(t *testing.T) {
-	var stdout bytes.Buffer
-	if code := run([]string{"help"}, &stdout, io.Discard); code != 0 {
-		t.Fatalf("help code = %d", code)
-	}
-	if !strings.Contains(stdout.String(), "supervision command --file <json>") {
-		t.Fatalf("help omitted supervision command: %s", stdout.String())
 	}
 }
 

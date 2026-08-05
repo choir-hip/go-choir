@@ -42,9 +42,6 @@ func LoadConfigFromEnv() ManagerConfig {
 	if v := os.Getenv("VM_KERNEL_PARAMS"); v != "" {
 		cfg.KernelParams = strings.TrimSpace(v)
 	}
-	if v := strings.TrimSpace(os.Getenv("VM_SUPERVISION_WRITES_DISABLED")); v != "" {
-		cfg.SupervisionWritesDisabled = v
-	}
 	if v := os.Getenv("VM_KERNEL_PARAMS_FILE"); v != "" {
 		if data, err := os.ReadFile(v); err == nil {
 			cfg.KernelParams = strings.TrimSpace(string(data))
@@ -109,11 +106,6 @@ func (c ManagerConfig) Validate() error {
 	if c.StateDir == "" {
 		return fmt.Errorf("VM_STATE_DIR is required for Firecracker VM management")
 	}
-	switch c.SupervisionWritesDisabled {
-	case "", "0", "1":
-	default:
-		return fmt.Errorf("VM_SUPERVISION_WRITES_DISABLED must be 0 or 1")
-	}
 	return nil
 }
 
@@ -137,6 +129,7 @@ func IsFirecrackerAvailable() bool {
 	}
 	return true
 }
+
 
 func findInPath(name string) (string, error) {
 	path := os.Getenv("PATH")

@@ -83,10 +83,6 @@ type Store struct {
 	og               *objectgraph.Service
 	ogStore          *objectgraph.DoltStore
 	ogReadStore      *objectgraph.DoltStore
-	// rebuildComputerEventProjectionBeforeCommit is intentionally package-private:
-	// focused transaction tests use it to prove a replacement cannot partially
-	// escape when a failure occurs after replay.
-	rebuildComputerEventProjectionBeforeCommit func() error
 }
 
 // DB returns the primary embedded Dolt *sql.DB connection used by this store.
@@ -546,7 +542,6 @@ CREATE TABLE IF NOT EXISTS computer_event_index (
 	event_artifact_digest          CHAR(64) NOT NULL,
 	event_pin_receipt_digest       CHAR(64) NOT NULL,
 	payload_pin_receipt_digests_json LONGTEXT NOT NULL,
-	supervision_transaction_json LONGTEXT NOT NULL,
 	request_commitment             CHAR(64) NOT NULL,
 	idempotency_key                VARCHAR(255) NOT NULL,
 	status                         VARCHAR(32) NOT NULL,
@@ -565,19 +560,6 @@ CREATE TABLE IF NOT EXISTS computer_event_index (
 	finalized_at                   DATETIME(6) NULL,
 	UNIQUE(computer_id, sequence),
 	UNIQUE(computer_id, idempotency_key)
-);
-
-CREATE TABLE IF NOT EXISTS computer_supervision_commands (
-	computer_id                    VARCHAR(128) NOT NULL,
-	command_id                     VARCHAR(255) NOT NULL,
-	command_digest                 CHAR(64) NOT NULL,
-	status                         VARCHAR(32) NOT NULL,
-	event_digest                   CHAR(64) NULL,
-	artifact_digest                CHAR(64) NULL,
-	event_head_receipt_json        LONGTEXT NULL,
-	created_at                     DATETIME(6) NOT NULL,
-	updated_at                     DATETIME(6) NOT NULL,
-	PRIMARY KEY(computer_id, command_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_computer_event_index_status ON computer_event_index(computer_id, status, sequence);
@@ -773,7 +755,6 @@ func (s *Store) bootstrap() error {
 		{"self_development_operations", "code_ref", "VARCHAR(96) NOT NULL DEFAULT ''"},
 		{"self_development_operations", "artifact_program_ref", "VARCHAR(128) NOT NULL DEFAULT ''"},
 		{"self_development_operations", "decision_receipt", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"computer_event_index", "supervision_transaction_json", "LONGTEXT NOT NULL DEFAULT ''"},
 	} {
 		if err := s.ensureColumn(migration.table, migration.name, migration.ddl); err != nil {
 			return err
@@ -983,9 +964,48 @@ func lifecycleTerminalSettlementRequested(rec types.RunRecord) bool {
 // reducer for a durable active-to-terminal trigger. The trigger is evidence
 // that a product caller should try; it is not settlement authority.
 func (s *Store) ReconcileLifecycleSettlementForTerminalRun(ctx context.Context, rec types.RunRecord) error {
-	// Settlement is semantic authority and is no longer available through the
-	// legacy lifecycle reconciliation surface.
-	return ErrLifecycleAuthorityRequired
+	rec.TrajectoryID = runTrajectoryID(rec)
+	stored, err := s.GetLifecycleRun(ctx, rec.OwnerID, rec.SandboxID, rec.RunID)
+	if err != nil {
+		return err
+	}
+	if !stored.State.Terminal() || !lifecycleTerminalSettlementRequested(stored) {
+		return nil
+	}
+	for attempt := 0; attempt < lifecycleTerminalSettlementAttempts; attempt++ {
+		snapshot, snapshotErr := s.GetLifecycleSnapshot(ctx, stored.OwnerID, stored.SandboxID, stored.TrajectoryID)
+		if snapshotErr != nil {
+			return snapshotErr
+		}
+		if snapshot.Trajectory.Status != types.TrajectoryLive {
+			return nil
+		}
+		prospective := snapshot.Trajectory
+		prospective.TerminalArtifactHeadRef = snapshot.Document.CurrentRevisionID
+		ready, readyErr := s.lifecycleSettlementReady(ctx, prospective, nil, nil)
+		if readyErr != nil {
+			return readyErr
+		}
+		if !ready {
+			return nil
+		}
+		req := types.SettleLifecycleTrajectoryRequest{
+			OwnerID:                  stored.OwnerID,
+			ComputerID:               stored.SandboxID,
+			CommandID:                lifecycleTerminalSettlementCommandID(stored.RunID),
+			TrajectoryID:             stored.TrajectoryID,
+			ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+			ExpectedHeadRevisionID:   snapshot.Document.CurrentRevisionID,
+		}
+		req.CommandDigest, _ = ComputeSettleLifecycleTrajectoryDigest(req)
+		if _, err = s.SettleLifecycleTrajectory(ctx, req); err == nil {
+			return nil
+		}
+		if !errors.Is(err, ErrConcurrentStateChange) {
+			return err
+		}
+	}
+	return ErrConcurrentStateChange
 }
 
 func (s *Store) persistLifecycleRun(ctx context.Context, rec types.RunRecord) (bool, error) {
@@ -993,19 +1013,38 @@ func (s *Store) persistLifecycleRun(ctx context.Context, rec types.RunRecord) (b
 	if strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.SandboxID) == "" || strings.TrimSpace(rec.TrajectoryID) == "" {
 		return false, nil
 	}
-	if _, err := s.GetSupervisionProjectionSnapshot(ctx, rec.OwnerID, rec.SandboxID, rec.TrajectoryID); err == nil {
-		// Canonical supervision mutations own semantics. Runtime rows are only
-		// scheduling projections after attempt authority has been recorded.
-		return false, nil
-	} else if !errors.Is(err, ErrNotFound) {
+	trajectory, err := s.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.SandboxID, rec.TrajectoryID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return false, nil
+		}
 		return true, err
 	}
-	if _, err := s.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.SandboxID, rec.TrajectoryID); err == nil {
-		return true, ErrLifecycleAuthorityRequired
-	} else if !errors.Is(err, ErrNotFound) {
+
+	body, err := json.Marshal(rec)
+	if err != nil {
 		return true, err
 	}
-	return false, nil
+	req := types.ReplaceLifecycleActivationRequest{
+		OwnerID: rec.OwnerID, ComputerID: rec.SandboxID,
+		CommandID:    "lifecycle-activation:" + strings.TrimPrefix(objectgraph.SHA256(body), "sha256:"),
+		TrajectoryID: rec.TrajectoryID, AgentID: rec.AgentID, Run: rec,
+	}
+	req.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(req)
+	if trajectory.Status == types.TrajectoryLive {
+		_, err = s.ReplaceLifecycleActivation(ctx, req)
+	} else {
+		_, err = s.ProjectTerminalLifecycleRun(ctx, req)
+	}
+	if err != nil {
+		return true, err
+	}
+	if rec.State.Terminal() {
+		if reconcileErr := s.ReconcileLifecycleSettlementForTerminalRun(ctx, rec); reconcileErr != nil {
+			log.Printf("store: reconcile terminal lifecycle settlement run=%s: %v", rec.RunID, reconcileErr)
+		}
+	}
+	return true, nil
 }
 
 // CreateRun inserts a new run record.

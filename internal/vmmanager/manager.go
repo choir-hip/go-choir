@@ -212,11 +212,6 @@ type ManagerConfig struct {
 	// vmmanager appends its per-VM runtime parameters to this base cmdline.
 	KernelParams string
 
-	// SupervisionWritesDisabled is an optional platform override propagated to
-	// every guest at boot. Empty preserves the immutable guest release default;
-	// "1" disables writes and "0" explicitly enables them.
-	SupervisionWritesDisabled string
-
 	// GuestPort is the port the guest sandbox listens on.
 	GuestPort int
 
@@ -1392,9 +1387,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("choir.source_service_runtime_owner_id=%s", kernelParamValue(sourceServiceRuntimeOwnerID(cfg))),
 			fmt.Sprintf("ip=%s::%s:255.255.255.252::eth0:off", guestIP, hostIP),
 		}
-		if mode := strings.TrimSpace(m.cfg.SupervisionWritesDisabled); mode != "" {
-			runtimeArgs = append(runtimeArgs, "choir.supervision_writes_disabled="+mode)
-		}
 		runtimeArgs = append(runtimeArgs, guestIdentityKernelParams(cfg)...)
 		if cfg.GatewayToken != "" {
 			runtimeArgs = append(runtimeArgs, fmt.Sprintf("choir.gateway_token=%s", kernelParamValue(cfg.GatewayToken)))
@@ -1422,9 +1414,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("choir.source_service_url=http://%s:8787", hostIP),
 			fmt.Sprintf("choir.source_service_runtime_url=http://127.0.0.1:%d", cfg.GuestPort),
 			fmt.Sprintf("choir.source_service_runtime_owner_id=%s", kernelParamValue(sourceServiceRuntimeOwnerID(cfg))),
-		}
-		if mode := strings.TrimSpace(m.cfg.SupervisionWritesDisabled); mode != "" {
-			legacyRuntimeArgs = append(legacyRuntimeArgs, "choir.supervision_writes_disabled="+mode)
 		}
 		for _, arg := range append(legacyRuntimeArgs, guestIdentityKernelParams(cfg)...) {
 			bootArgs += " " + arg

@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"strings"
 )
 
 type textureCoagentUpdatePacket struct {
@@ -59,39 +62,30 @@ func (h *Handler) coagentUpdateTurnInjector(rec *types.RunRecord) toolregistry.I
 		if err != nil || len(updates) == 0 {
 			return nil, err
 		}
+		entities, rejections := h.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(context.Background(), ownerID, updates)
+		mergeTextureSourceEntitiesIntoRunMetadata(rec, entities)
+		mergeCoagentSourceRejectionsIntoRunMetadata(rec, rejections)
 		phase := "mid_activation"
 		if finalCheckpoint {
 			phase = "final_checkpoint"
 		}
-		return h.buildTextureCoagentUpdateMessages(context.Background(), rec, updates, phase)
+		packet := textureCoagentUpdatePacket{
+			PacketType: "coagent_update", DeliveryPhase: phase, TargetAgentID: targetAgentID,
+			Updates: updates, SourceEntities: entities, SourceRejections: rejections,
+		}
+		if len(entities) > 0 {
+			packet.SourceInstruction = "When writing Texture content from these updates, preserve sources as Texture source entities/transclusion refs using the listed source_entities entity_id values. Do not write ordinary URL links, markdown web links, source inventories, or Source: lines as substitutes for a listed source entity."
+		}
+		payload, err := json.Marshal(packet)
+		if err != nil {
+			return nil, fmt.Errorf("marshal Texture coagent update packet: %w", err)
+		}
+		message, err := json.Marshal(map[string]any{"role": "user", "content": []map[string]string{{"type": "text", "text": "Choir coagent update packet.\n\n" + string(payload)}}})
+		if err != nil {
+			return nil, err
+		}
+		return []json.RawMessage{message}, nil
 	}
-}
-
-func (h *Handler) buildTextureCoagentUpdateMessages(ctx context.Context, rec *types.RunRecord, updates []types.CoagentSourcePacket, phase string) ([]json.RawMessage, error) {
-	if h == nil || rec == nil || len(updates) == 0 {
-		return nil, nil
-	}
-	ownerID := strings.TrimSpace(rec.OwnerID)
-	targetAgentID := strings.TrimSpace(rec.AgentID)
-	entities, rejections := h.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, updates)
-	mergeTextureSourceEntitiesIntoRunMetadata(rec, entities)
-	mergeCoagentSourceRejectionsIntoRunMetadata(rec, rejections)
-	packet := textureCoagentUpdatePacket{
-		PacketType: "coagent_update", DeliveryPhase: phase, TargetAgentID: targetAgentID,
-		Updates: updates, SourceEntities: entities, SourceRejections: rejections,
-	}
-	if len(entities) > 0 {
-		packet.SourceInstruction = "When writing Texture content from these updates, preserve sources as Texture source entities/transclusion refs using the listed source_entities entity_id values. Do not write ordinary URL links, markdown web links, source inventories, or Source: lines as substitutes for a listed source entity."
-	}
-	payload, err := json.Marshal(packet)
-	if err != nil {
-		return nil, fmt.Errorf("marshal Texture coagent update packet: %w", err)
-	}
-	message, err := json.Marshal(map[string]any{"role": "user", "content": []map[string]string{{"type": "text", "text": "Choir coagent update packet.\n\n" + string(payload)}}})
-	if err != nil {
-		return nil, err
-	}
-	return []json.RawMessage{message}, nil
 }
 
 func agentMutationComputerID(rec *types.RunRecord) string {
@@ -101,9 +95,16 @@ func agentMutationComputerID(rec *types.RunRecord) string {
 	return strings.TrimSpace(rec.SandboxID)
 }
 
-func (h *Handler) createAgentMutationForRun(ctx context.Context, rec *types.RunRecord) error {
-	if h == nil || rec == nil {
-		return nil
+func (h *Handler) createAgentMutationForRun(ctx context.Context, rec *types.RunRecord) {
+	if h == nil || h.Store == nil || rec == nil {
+		return
 	}
-	return h.refuseLegacyTextureWriter("create Texture agent mutation")
+	docID := firstNonEmpty(metadataStringValue(rec.Metadata, "doc_id"), rec.ChannelID)
+	if docID == "" {
+		return
+	}
+	_ = h.Store.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID: docID, RunID: rec.RunID, OwnerID: rec.OwnerID, ComputerID: agentMutationComputerID(rec), State: "pending",
+		ScheduledMessageSeq: int64(metadataIntValue(rec.Metadata, "scheduled_message_seq")), CreatedAt: time.Now().UTC(),
+	})
 }

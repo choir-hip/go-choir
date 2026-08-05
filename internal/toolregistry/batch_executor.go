@@ -85,21 +85,15 @@ func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.Tool
 			visibleOutput = projection.ModelOutput
 		}
 	}
-	fullObservedOutput := output
-	if projection != nil {
-		fullObservedOutput = projection.DurableOutput
-	}
-	eventOutput := capToolOutput(visibleOutput)
+	visibleOutput = capToolOutput(visibleOutput)
+
 	resultPayloadData := map[string]any{
-		"tool":                  call.Name,
-		"call_id":               call.ID,
-		"is_error":              isError,
-		"output_len":            len(visibleOutput),
-		"output":                eventOutput,
-		"full_output_truncated": len(eventOutput) != len(fullObservedOutput),
+		"tool":       call.Name,
+		"call_id":    call.ID,
+		"is_error":   isError,
+		"output_len": len(visibleOutput),
+		"output":     visibleOutput,
 	}
-	resultPayloadData["full_output_len"] = len(fullObservedOutput)
-	resultPayloadData["full_output_sha256"] = toolOutputSHA256Hex(fullObservedOutput)
 	if projection != nil {
 		resultPayloadData["output_projection"] = projection.Metadata
 		resultPayloadData["full_output_len"] = len(projection.DurableOutput)

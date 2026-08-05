@@ -14,7 +14,7 @@ func TestSelfDevelopmentRolesExposeOnlyCapsuleEffects(t *testing.T) {
 	}
 
 	super := rt.ToolRegistryForProfile(agentprofile.Super)
-	for _, required := range []string{"read_file", "update_coagent", "open_supervision_assignments", "record_supervision_transition", "spawn_capsule", "destroy_capsule", "inspect_capsule"} {
+	for _, required := range []string{"read_file", "update_coagent", "spawn_capsule", "destroy_capsule", "inspect_capsule"} {
 		if _, ok := super.Lookup(required); !ok {
 			t.Errorf("super missing %q", required)
 		}

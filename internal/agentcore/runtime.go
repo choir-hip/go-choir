@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -42,14 +43,9 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
 
-var (
-	// ErrPromptCommandConflict marks reuse of a public command identity with a
-	// different request. Public handlers map it to a durable 409 refusal.
-	ErrPromptCommandConflict = errors.New("prompt command conflict")
-	// ErrSupervisionAuthorityRequired refuses a legacy writer before it can
-	// create meaning for a trajectory owned by the canonical supervision tape.
-	ErrSupervisionAuthorityRequired = errors.New("supervision transaction authority required")
-)
+// ErrPromptCommandConflict marks reuse of a public command identity with a
+// different request. Public handlers map it to a durable 409 refusal.
+var ErrPromptCommandConflict = errors.New("prompt command conflict")
 
 // Runtime is the core runtime engine that manages run lifecycle, event
 // emission, and health state. It persists all state through
@@ -88,10 +84,7 @@ type Runtime struct {
 	toolRegistry *toolregistry.ToolRegistry
 	toolProfiles map[string]*toolregistry.ToolRegistry
 
-	textureWakeAfter             func(time.Duration, func()) textureWakeTimer
-	coagentUpdateEnvelopeBuilder func(context.Context, *types.RunRecord, []types.CoagentSourcePacket, string) ([]json.RawMessage, error)
-	canonicalSweepMu             sync.Mutex
-	canonicalSweepTimer          textureWakeTimer
+	textureWakeAfter func(time.Duration, func()) textureWakeTimer
 
 	wirePublishDebounceMu sync.Mutex
 	wirePublishDebouncer  *wirePublishDebouncer
@@ -129,22 +122,8 @@ type Runtime struct {
 	selfdevStartupReleaseDigest string
 	selfdevStartupEventSchema   uint64
 	selfdevStartupReducer       uint64
-	startupSupervisionReplay    *StartupSupervisionReplayAttestation
 	selfdevStartMu              sync.Mutex
 	selfdevMaterializeMu        sync.Mutex
-}
-
-// StartupSupervisionReplayAttestation is produced during sandbox boot after
-// two write-disabled private-tape rebuilds converge on one semantic digest.
-type StartupSupervisionReplayAttestation struct {
-	Marker                          string
-	EventSchemaVersion              uint64
-	ReducerVersion                  uint64
-	ReleaseDigest                   string
-	Supervision                     updater.SupervisionCompatibility
-	SupervisionWritesDisabled       bool
-	PrivateTapeReplaySemanticDigest string
-	ProjectionSemanticDigest        string
 }
 
 type textureWakeTimer interface {
@@ -187,14 +166,6 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 // activate() panics — there is no fallback path.
 func (rt *Runtime) SetDispatchActor(fn func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error) {
 	rt.dispatchActor = fn
-}
-
-// SetCoagentUpdateEnvelopeBuilder binds the Texture-owned source materializer
-// used when canonical packets arrive after a Texture activation has started.
-func (rt *Runtime) SetCoagentUpdateEnvelopeBuilder(builder func(context.Context, *types.RunRecord, []types.CoagentSourcePacket, string) ([]json.RawMessage, error)) {
-	if rt != nil {
-		rt.coagentUpdateEnvelopeBuilder = builder
-	}
 }
 
 // DispatchActorActive reports whether the actor dispatch hook is set.
@@ -377,7 +348,7 @@ func defaultChannelID(profile string, metadata map[string]any, parent *types.Run
 	return ""
 }
 
-func (rt *Runtime) ensurePersistentSuperAgent(ctx context.Context, ownerID string) (types.AgentRecord, error) {
+func (rt *Runtime) EnsurePersistentSuperAgent(ctx context.Context, ownerID string) (types.AgentRecord, error) {
 	if rt == nil || rt.store == nil {
 		return types.AgentRecord{}, fmt.Errorf("runtime store unavailable")
 	}
@@ -498,6 +469,17 @@ func WithContentService(service *contentowner.Service) RuntimeOption {
 	}
 }
 
+// WithCapsuleExecutor binds the guest-local capsule authority. It is omitted
+// outside the Linux guest; capsule tools then remain uninstalled.
+func WithCapsuleExecutor(executor *capsule.Executor) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.capsuleExecutor = executor
+		if executor != nil {
+			rt.capsuleBuilder = transaction.NewTransactionBuilder(transaction.NewClassifier())
+		}
+	}
+}
+
 // WithPrivateArtifactCipher binds the guest-root private artifact authority.
 func WithPrivateArtifactCipher(cipher *computerevent.PrivateArtifactCipher) RuntimeOption {
 	return func(rt *Runtime) {
@@ -505,13 +487,38 @@ func WithPrivateArtifactCipher(cipher *computerevent.PrivateArtifactCipher) Runt
 	}
 }
 
-// WithStartupSupervisionReplayAttestation supplies immutable proof produced
-// before Runtime construction; /health only serves this boot result.
-func WithStartupSupervisionReplayAttestation(attestation StartupSupervisionReplayAttestation) RuntimeOption {
-	attestation.Supervision.PrivatePayloadMedia = append([]string(nil), attestation.Supervision.PrivatePayloadMedia...)
+func WithSelfDevelopmentUpdater(client *updater.Client, root, computerID, realizationID string) RuntimeOption {
 	return func(rt *Runtime) {
-		copied := attestation
-		rt.startupSupervisionReplay = &copied
+		rt.selfdevUpdater = client
+		rt.selfdevUpdaterRoot = filepath.Clean(strings.TrimSpace(root))
+		rt.selfdevComputerID = strings.TrimSpace(computerID)
+		rt.selfdevRealizationID = strings.TrimSpace(realizationID)
+		if manifest, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot); err == nil {
+			rt.selfdevStartupMarker = manifest.Marker
+			rt.selfdevStartupReleaseDigest = manifest.ContentDigest
+			rt.selfdevStartupEventSchema = manifest.EventSchemaVersion
+			rt.selfdevStartupReducer = manifest.ReducerVersion
+		}
+	}
+}
+
+func WithSelfDevelopmentVerifier(client *receiptsigner.Client) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.selfdevVerifier = client
+	}
+}
+
+func WithSelfDevelopmentControl(credentials *selfdev.GuestCredentials) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.selfdevControl = credentials
+	}
+}
+
+func WithSelfDevelopmentRoute(client *vmctl.Client, ownerID, desktopID string) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.selfdevRoute = client
+		rt.selfdevRouteOwnerID = strings.TrimSpace(ownerID)
+		rt.selfdevRouteDesktopID = strings.TrimSpace(desktopID)
 	}
 }
 
@@ -519,237 +526,6 @@ func WithComputerEventAppender(appender *computerevent.ComputerEventAppender) Ru
 	return func(rt *Runtime) {
 		rt.eventAppender = appender
 	}
-}
-
-// AppendSupervisionTransaction is the guest-core authority seam for one closed
-// Texture/Super command. Callers choose semantic mutations; the runtime binds
-// and serializes them through the sole per-computer event appender.
-func (rt *Runtime) AppendSupervisionTransaction(ctx context.Context, transaction computerevent.SupervisionTransaction) (computerevent.Receipt, string, error) {
-	if rt == nil || rt.eventAppender == nil {
-		return computerevent.Receipt{}, "", fmt.Errorf("supervision transaction authority unavailable")
-	}
-	event := computerevent.Event{
-		SchemaVersion:  computerevent.SchemaVersionV1,
-		ComputerID:     transaction.ComputerID,
-		EventKind:      computerevent.EventSupervisionTransaction,
-		IdempotencyKey: transaction.CommandID, TrajectoryID: transaction.TrajectoryID,
-		ActorProfile: transaction.Actor.Role, AuthorityRef: transaction.Actor.AuthorityRef,
-		PrivacyClass: "owner", ReducerVersion: computerevent.ReducerVersionV1,
-	}
-	return rt.eventAppender.AppendNewSupervisionTransaction(ctx, event, computerevent.TransitionInput{}, transaction, rt.privateArtifactCipher)
-}
-
-// AppendSupervisionTransactionWithPrivateArtifacts reserves one complete
-// logical command before the appender encrypts or pins any command-owned input.
-func (rt *Runtime) AppendSupervisionTransactionWithPrivateArtifacts(ctx context.Context, transaction computerevent.SupervisionTransaction, payloads []computerevent.PrivateSupervisionArtifactPayload) (computerevent.Receipt, string, []computerevent.PrivateSupervisionArtifact, error) {
-	if rt == nil || rt.eventAppender == nil || rt.privateArtifactCipher == nil {
-		return computerevent.Receipt{}, "", nil, fmt.Errorf("supervision private artifact authority unavailable")
-	}
-	event := computerevent.Event{
-		SchemaVersion: computerevent.SchemaVersionV1, ComputerID: transaction.ComputerID,
-		EventKind: computerevent.EventSupervisionTransaction, IdempotencyKey: transaction.CommandID,
-		TrajectoryID: transaction.TrajectoryID, ActorProfile: transaction.Actor.Role,
-		AuthorityRef: transaction.Actor.AuthorityRef, PrivacyClass: "owner",
-		ReducerVersion: computerevent.ReducerVersionV1,
-	}
-	return rt.eventAppender.AppendNewSupervisionTransactionWithPrivateArtifacts(
-		ctx, event, computerevent.TransitionInput{}, transaction, payloads, rt.privateArtifactCipher,
-	)
-}
-
-// PinPrivateEvidenceArtifact pins a standalone evidence object. Command-owned
-// payloads must use AppendSupervisionTransactionWithPrivateArtifacts.
-func (rt *Runtime) PinPrivateEvidenceArtifact(ctx context.Context, bindingID string, plaintext []byte, mediaType string) (computerevent.PrivateSupervisionArtifact, error) {
-	if rt == nil || rt.eventAppender == nil || rt.privateArtifactCipher == nil {
-		return computerevent.PrivateSupervisionArtifact{}, fmt.Errorf("supervision private artifact authority unavailable")
-	}
-	return rt.eventAppender.PinPrivateEvidenceArtifact(ctx, bindingID, plaintext, mediaType, rt.privateArtifactCipher)
-}
-
-type LegacyProjectionImportResult struct {
-	ManifestDigest string                `json:"manifest_digest"`
-	ManifestRef    string                `json:"manifest_ref"`
-	EventReceipt   computerevent.Receipt `json:"event_receipt"`
-}
-
-// ImportLegacySupervisionProjection is the one-time cutover path from the
-// quiescent legacy lifecycle projection into one canonical transaction.
-func (rt *Runtime) ImportLegacySupervisionProjection(ctx context.Context, ownerID, trajectoryID, commandID string) (LegacyProjectionImportResult, error) {
-	if rt == nil || rt.store == nil || rt.eventAppender == nil || rt.privateArtifactCipher == nil {
-		return LegacyProjectionImportResult{}, fmt.Errorf("projection import authority unavailable")
-	}
-	ownerID = strings.TrimSpace(ownerID)
-	trajectoryID = strings.TrimSpace(trajectoryID)
-	commandID = strings.TrimSpace(commandID)
-	computerID := strings.TrimSpace(rt.cfg.SandboxID)
-	if ownerID == "" || trajectoryID == "" || commandID == "" || computerID == "" {
-		return LegacyProjectionImportResult{}, fmt.Errorf("projection import scope is incomplete")
-	}
-	if receipt, accepted, found, recoverErr := rt.eventAppender.RecoverFinalizedSupervisionTransaction(ctx, commandID); recoverErr != nil {
-		return LegacyProjectionImportResult{}, fmt.Errorf("projection import: recover finalized command: %w", recoverErr)
-	} else if found {
-		return legacyProjectionImportResultFromTransaction(ownerID, computerID, trajectoryID, commandID, accepted, receipt)
-	}
-	if frozen, found, recoverErr := rt.eventAppender.RecoverFrozenSupervisionTransaction(ctx, commandID); recoverErr != nil {
-		return LegacyProjectionImportResult{}, fmt.Errorf("projection import: recover reserved command: %w", recoverErr)
-	} else if found {
-		receipt, resumeErr := rt.eventAppender.ResumeFrozenSupervisionTransaction(ctx, frozen, rt.privateArtifactCipher)
-		if resumeErr != nil {
-			return LegacyProjectionImportResult{}, fmt.Errorf("projection import: resume reserved command: %w", resumeErr)
-		}
-		return legacyProjectionImportResultFromTransaction(ownerID, computerID, trajectoryID, commandID, frozen, receipt)
-	}
-	if pending, recoverErr := rt.eventAppender.HasPendingSupervisionReservation(ctx, commandID); recoverErr != nil {
-		return LegacyProjectionImportResult{}, fmt.Errorf("projection import: inspect reserved command: %w", recoverErr)
-	} else if pending {
-		return LegacyProjectionImportResult{}, fmt.Errorf("projection import: reserved command has no recoverable frozen inputs: %w", computerevent.ErrNeedsProjectionRepair)
-	}
-
-	barrier, err := rt.store.AcquireLegacyProjectionImportBarrier(ctx, ownerID, computerID, trajectoryID)
-	if err != nil {
-		return LegacyProjectionImportResult{}, err
-	}
-	defer barrier.Release()
-
-	gatedState, err := barrier.State(ctx)
-	if err != nil {
-		return LegacyProjectionImportResult{}, err
-	}
-	evidenceBase := map[string]any{
-		"schema":              "choir.supervision_projection_import_evidence.v1",
-		"owner_id":            gatedState.OwnerID,
-		"computer_id":         gatedState.ComputerID,
-		"trajectory_id":       gatedState.TrajectoryID,
-		"writes_disabled_at":  gatedState.WritesDisabledAt.Format(time.RFC3339Nano),
-		"admission_watermark": gatedState.AdmissionWatermark,
-	}
-	quiescence := make(map[string]any, len(evidenceBase)+1)
-	for key, value := range evidenceBase {
-		quiescence[key] = value
-	}
-	quiescence["kind"] = "quiescence"
-	quiescenceBytes, err := computerevent.CanonicalJSON(quiescence)
-	if err != nil {
-		return LegacyProjectionImportResult{}, err
-	}
-	quiescenceBindingID := commandID + ":quiescence"
-	quiescenceRef := computerevent.SupervisionArtifactPlaceholder(quiescenceBindingID)
-
-	drainState, err := barrier.State(ctx)
-	if err != nil {
-		return LegacyProjectionImportResult{}, err
-	}
-	drain := make(map[string]any, len(evidenceBase)+2)
-	for key, value := range evidenceBase {
-		drain[key] = value
-	}
-	drain["kind"] = "drain"
-	drain["admission_watermark"] = drainState.AdmissionWatermark
-	drainBytes, err := computerevent.CanonicalJSON(drain)
-	if err != nil {
-		return LegacyProjectionImportResult{}, err
-	}
-	drainBindingID := commandID + ":drain"
-	drainRef := computerevent.SupervisionArtifactPlaceholder(drainBindingID)
-
-	manifest, err := rt.store.BuildProjectionImportV1(ctx, ownerID, computerID, trajectoryID, store.ProjectionImportBuildOptions{
-		QuiescenceReceiptRef: quiescenceRef,
-		DrainReceiptRefs:     []string{drainRef},
-		WritesDisabledAt:     gatedState.WritesDisabledAt,
-	})
-	if err != nil {
-		return LegacyProjectionImportResult{}, err
-	}
-	if manifest.LegacyLifecycleWatermark != gatedState.AdmissionWatermark {
-		return LegacyProjectionImportResult{}, fmt.Errorf("projection import: lifecycle watermark changed during snapshot construction: %w", store.ErrConcurrentStateChange)
-	}
-	manifestBytes, err := computerevent.CanonicalJSON(manifest)
-	if err != nil {
-		return LegacyProjectionImportResult{}, err
-	}
-	manifestBindingID := commandID + ":manifest"
-	manifestRef := computerevent.SupervisionArtifactPlaceholder(manifestBindingID)
-
-	preAppendState, err := barrier.State(ctx)
-	if err != nil {
-		return LegacyProjectionImportResult{}, err
-	}
-	if preAppendState.AdmissionWatermark != manifest.LegacyLifecycleWatermark {
-		return LegacyProjectionImportResult{}, fmt.Errorf("projection import: lifecycle watermark changed before append: %w", store.ErrConcurrentStateChange)
-	}
-	transaction, err := store.NewProjectionImportTransaction(manifest, manifestRef, commandID)
-	if err != nil {
-		return LegacyProjectionImportResult{}, err
-	}
-	receipt, _, pinned, err := rt.AppendSupervisionTransactionWithPrivateArtifacts(ctx, transaction, []computerevent.PrivateSupervisionArtifactPayload{
-		{BindingID: quiescenceBindingID, Plaintext: quiescenceBytes, MediaType: computerevent.ProjectionImportEvidenceMediaTypeV1},
-		{BindingID: drainBindingID, Plaintext: drainBytes, MediaType: computerevent.ProjectionImportEvidenceMediaTypeV1},
-		{
-			BindingID: manifestBindingID, Plaintext: manifestBytes, MediaType: computerevent.ProjectionImportMediaTypeV1,
-			Finalize: func(replacements map[string]string) ([]byte, map[string]string, error) {
-				bound, additional, bindErr := store.BindProjectionImportManifest(manifest, replacements)
-				if bindErr != nil {
-					return nil, nil, bindErr
-				}
-				raw, marshalErr := computerevent.CanonicalJSON(bound)
-				return raw, additional, marshalErr
-			},
-		},
-	})
-	if err != nil {
-		return LegacyProjectionImportResult{}, err
-	}
-	bindings := make(map[string]string, len(pinned))
-	actualManifestRef := ""
-	for _, artifact := range pinned {
-		bindings[computerevent.SupervisionArtifactPlaceholder(artifact.BindingID)] = artifact.Ref.String()
-		if artifact.BindingID == manifestBindingID {
-			actualManifestRef = artifact.Ref.String()
-		}
-	}
-	boundManifest, _, err := store.BindProjectionImportManifest(manifest, bindings)
-	if err != nil || actualManifestRef == "" {
-		return LegacyProjectionImportResult{}, fmt.Errorf("projection import: recover accepted manifest binding: %w", err)
-	}
-	return LegacyProjectionImportResult{ManifestDigest: boundManifest.ProjectionDigest, ManifestRef: actualManifestRef, EventReceipt: receipt}, nil
-}
-
-func legacyProjectionImportResultFromTransaction(ownerID, computerID, trajectoryID, commandID string, transaction computerevent.SupervisionTransaction, receipt computerevent.Receipt) (LegacyProjectionImportResult, error) {
-	if transaction.TransactionClass != "projection_import" || transaction.CommandID != commandID || transaction.OwnerID != ownerID || transaction.ComputerID != computerID || transaction.TrajectoryID != trajectoryID || len(transaction.Mutations) != 1 || transaction.Mutations[0].Kind != "projection_imported" {
-		return LegacyProjectionImportResult{}, fmt.Errorf("projection import: recovered command scope mismatch")
-	}
-	body, err := json.Marshal(transaction.Mutations[0].Body)
-	if err != nil {
-		return LegacyProjectionImportResult{}, fmt.Errorf("projection import: encode recovered command: %w", err)
-	}
-	var payload struct {
-		Manifest store.ProjectionImportV1 `json:"manifest"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return LegacyProjectionImportResult{}, fmt.Errorf("projection import: decode recovered manifest: %w", err)
-	}
-	if payload.Manifest.OwnerID != ownerID || payload.Manifest.ComputerID != computerID || payload.Manifest.Snapshot.Trajectory.TrajectoryID != trajectoryID || payload.Manifest.ProjectionDigest == "" {
-		return LegacyProjectionImportResult{}, fmt.Errorf("projection import: recovered manifest scope mismatch")
-	}
-	manifestBindingID := commandID + ":manifest"
-	for _, artifact := range transaction.ReferencedArtifacts {
-		if artifact.BindingID == manifestBindingID {
-			if _, err := computerevent.ParseArtifactRef(artifact.Ref); err != nil {
-				return LegacyProjectionImportResult{}, fmt.Errorf("projection import: recovered manifest ref: %w", err)
-			}
-			return LegacyProjectionImportResult{ManifestDigest: payload.Manifest.ProjectionDigest, ManifestRef: artifact.Ref, EventReceipt: receipt}, nil
-		}
-	}
-	return LegacyProjectionImportResult{}, fmt.Errorf("projection import: recovered manifest artifact is missing")
-}
-
-// RebuildSupervisionProjection reconstructs replay-owned state from corpusd's
-// signed private tape and commits only after full semantic equivalence checks.
-func (rt *Runtime) RebuildSupervisionProjection(ctx context.Context) error {
-	if rt == nil || rt.eventAppender == nil || rt.privateArtifactCipher == nil {
-		return fmt.Errorf("projection rebuild authority unavailable")
-	}
-	return rt.eventAppender.RebuildPrivateProjectionFromPinnedSource(ctx, rt.privateArtifactCipher)
 }
 
 func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWakeTimer) RuntimeOption {
@@ -768,7 +544,6 @@ func (rt *Runtime) Start(ctx context.Context) {
 	rt.passivateInterruptedActivations(ctx)
 	rt.rewarmInterruptedLifecycleActivations(ctx)
 	rt.recoverOpenWirePublicationClaims(ctx)
-	rt.reconcilePendingCanonicalSupervisionActors(ctx)
 	terminalOutcomeTargets := rt.reconcileTerminalRunOutcomes(ctx)
 	rt.sweepPassivatedSpawnedCoagentWork(ctx)
 	rt.sweepPendingUpdateActors(ctx, terminalOutcomeTargets)
@@ -898,41 +673,23 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 		Metadata:         metadata,
 	}
 	rec.TrajectoryID = trajectoryIDForRun(rec)
-
 	existingAgent, existingAgentErr := rt.store.GetAgentByScope(ctx, ownerID, rt.cfg.SandboxID, rec.AgentID)
-	canonicalDeliveryAuthorized := false
-	if existingAgentErr == nil && metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {
-		updates, err := rt.canonicalSupervisionUpdatesForAgent(ctx, rec.OwnerID, rec.SandboxID, rec.AgentID, rec.TrajectoryID, 1)
-		if err != nil {
-			return nil, fmt.Errorf("%w: verify canonical actor delivery: %v", ErrSupervisionAuthorityRequired, err)
+	if existingAgentErr == nil && existingAgent.LifecycleVersion > 0 {
+		if rec.TrajectoryID == "" || existingAgent.ChannelID != rec.ChannelID ||
+			existingAgent.Profile != rec.AgentProfile || existingAgent.Role != rec.AgentRole {
+			return nil, fmt.Errorf("durable activation binding mismatch")
 		}
-		canonicalDeliveryAuthorized = len(updates) > 0
-	}
-	if existingAgentErr == nil && (existingAgent.LifecycleVersion > 0 || canonicalDeliveryAuthorized) {
-		if existingAgent.OwnerID != rec.OwnerID || existingAgent.ComputerID != rec.SandboxID {
-			return nil, fmt.Errorf("%w: projected activation scope mismatch", ErrSupervisionAuthorityRequired)
-		}
-		if _, err := rt.store.GetSupervisionProjectionSnapshot(ctx, rec.OwnerID, rec.SandboxID, rec.TrajectoryID); err != nil {
-			return nil, fmt.Errorf("%w: projected activation trajectory unavailable: %v", ErrSupervisionAuthorityRequired, err)
-		}
-		if err := rt.store.CreateRun(ctx, *rec); err != nil {
-			return nil, fmt.Errorf("persist projected activation: %w", err)
-		}
-		if err := persistSubmittedRunEvent(ctx, rt.store, rt.bus, rec, len(prompt), rt.traceStore); err != nil {
+		if err := persistLifecycleSubmittedRun(ctx, rt.store, rt.bus, rec, len(prompt), rt.traceStore); err != nil {
 			return nil, err
 		}
-		return rec, nil
-	}
-	if existingAgentErr != nil && !errors.Is(existingAgentErr, store.ErrNotFound) {
-		return nil, fmt.Errorf("resolve run subject: %w", existingAgentErr)
-	}
-
-	if err := rt.refuseLegacySupervisionWrite(ctx, rec.OwnerID, rec.SandboxID, rec.TrajectoryID, "mint trajectory"); err != nil {
-		return nil, err
-	}
-	rt.stampAndMintTrajectory(ctx, rec)
-	if err := persistSubmittedRun(ctx, rt.store, rt.bus, agentRec, rec, len(prompt), rt.traceStore); err != nil {
-		return nil, err
+	} else {
+		if existingAgentErr != nil && !errors.Is(existingAgentErr, store.ErrNotFound) {
+			return nil, fmt.Errorf("resolve run subject: %w", existingAgentErr)
+		}
+		rt.stampAndMintTrajectory(ctx, rec)
+		if err := persistSubmittedRun(ctx, rt.store, rt.bus, agentRec, rec, len(prompt), rt.traceStore); err != nil {
+			return nil, err
+		}
 	}
 	if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Processor {
 		if _, err := rt.beginWireProcessorDecisionWorkItem(ctx, rec); err != nil {
@@ -970,10 +727,6 @@ func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, own
 	}
 	metadata = ensureDesktopID(metadata, nil, metadataStringValue(metadata, runMetadataDesktopID))
 	metadata = ensureTrajectoryID(metadata, nil, runID)
-
-	if err := rt.refuseLegacySupervisionWrite(ctx, ownerID, rt.cfg.SandboxID, metadataStringValue(metadata, runMetadataTrajectoryID), "complete prompt-bar decision"); err != nil {
-		return nil, err
-	}
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, nil)
 	if agentprofile.Canonical(agentRec.Profile) == agentprofile.Conductor && metadataStringValue(metadata, "lifecycle_command_id") == "" {
 		metadata["lifecycle_command_id"] = uuid.NewString()
@@ -1023,23 +776,22 @@ func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, own
 
 func (rt *Runtime) getRunForComputer(ctx context.Context, ownerID, runID string) (types.RunRecord, error) {
 	computerID := strings.TrimSpace(rt.cfg.SandboxID)
-	if computerID != "" {
-		if rec, err := rt.store.GetLifecycleRun(ctx, ownerID, computerID, runID); err == nil {
-			return rec, nil
-		} else if !errors.Is(err, store.ErrNotFound) {
-			return types.RunRecord{}, err
-		}
-	}
 	rec, err := rt.store.GetRunByOwner(ctx, ownerID, runID)
-	if err != nil {
+	if err == nil {
+		if strings.TrimSpace(rec.SandboxID) != "" &&
+			(strings.TrimSpace(rec.TrajectoryID) != "" || metadataStringValue(rec.Metadata, runMetadataTrajectoryID) != "") &&
+			strings.TrimSpace(rec.SandboxID) != computerID {
+			return types.RunRecord{}, store.ErrNotFound
+		}
+		return rec, nil
+	}
+	if !errors.Is(err, store.ErrNotFound) {
 		return types.RunRecord{}, err
 	}
-	if strings.TrimSpace(rec.SandboxID) != "" &&
-		(strings.TrimSpace(rec.TrajectoryID) != "" || metadataStringValue(rec.Metadata, runMetadataTrajectoryID) != "") &&
-		strings.TrimSpace(rec.SandboxID) != computerID {
+	if computerID == "" {
 		return types.RunRecord{}, store.ErrNotFound
 	}
-	return rec, nil
+	return rt.store.GetLifecycleRun(ctx, ownerID, computerID, runID)
 }
 
 // GetRun returns a run by ID, scoped to the given owner. If the run does
@@ -1051,29 +803,6 @@ func (rt *Runtime) GetRun(ctx context.Context, runID, ownerID string) (*types.Ru
 		return nil, err
 	}
 	return &rec, nil
-}
-
-// refuseLegacySupervisionWrite makes the legacy lifecycle boundary explicit:
-// a supervised trajectory can acquire state only through
-// AppendSupervisionTransaction and its projection reducer.
-func (rt *Runtime) refuseLegacySupervisionWrite(ctx context.Context, ownerID, computerID, trajectoryID, operation string) error {
-	if computerevent.SupervisionWritesDisabled() {
-		return fmt.Errorf("%w: %w: %s", ErrSupervisionAuthorityRequired, computerevent.ErrSupervisionWritesDisabled, operation)
-	}
-	if rt == nil || rt.store == nil || strings.TrimSpace(computerID) == "" || strings.TrimSpace(trajectoryID) == "" {
-		return nil
-	}
-	if _, err := rt.store.GetSupervisionProjectionSnapshot(ctx, ownerID, computerID, trajectoryID); err == nil {
-		return fmt.Errorf("%w: %s for trajectory %s", ErrSupervisionAuthorityRequired, operation, trajectoryID)
-	} else if !errors.Is(err, store.ErrNotFound) {
-		return fmt.Errorf("resolve supervision authority for %s: %w", operation, err)
-	}
-	if _, err := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID); err == nil {
-		return fmt.Errorf("%w: %s for trajectory %s", ErrSupervisionAuthorityRequired, operation, trajectoryID)
-	} else if !errors.Is(err, store.ErrNotFound) {
-		return fmt.Errorf("resolve lifecycle authority for %s: %w", operation, err)
-	}
-	return nil
 }
 
 // StartCoagentRun creates a coagent run and records the requesting run as
@@ -1096,16 +825,6 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		return nil, fmt.Errorf("lookup requester run: %w", err)
 	}
 
-	supervisionSnapshot, supervisedTrajectory, err := rt.supervisionSnapshotForRun(ctx, &requesterRec)
-	if err != nil {
-		return nil, err
-	}
-	if !supervisedTrajectory {
-		if err := rt.refuseLegacySupervisionWrite(ctx, ownerID, requesterRec.SandboxID, trajectoryIDForRun(&requesterRec), "spawn coagent run"); err != nil {
-			return nil, err
-		}
-	}
-
 	runID := uuid.New().String()
 
 	// Build metadata from constraints and requester provenance.
@@ -1117,7 +836,6 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		metadata[k] = v
 	}
 	// A pinned model-policy overlay (e.g. an eval arm) covers the whole
-
 	// trajectory: a child coagent inherits the requester's overlay when it does
 	// not specify its own, so a Texture arm also pins the researchers it spawns.
 	if strings.TrimSpace(metadataStringValue(metadata, modelpolicy.MetadataPolicyOverlayID)) == "" {
@@ -1129,26 +847,8 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		metadata[runMetadataCoSuperSlot] = slot
 	}
 	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
-	if supervisedTrajectory {
-		// A model cannot redirect a supervised child to another trajectory.
-		metadata[runMetadataTrajectoryID] = trajectoryIDForRun(&requesterRec)
-	}
-	if !supervisedTrajectory {
-		if err := rt.refuseLegacySupervisionWrite(ctx, ownerID, rt.cfg.SandboxID, metadataStringValue(metadata, runMetadataTrajectoryID), "spawn coagent run"); err != nil {
-			return nil, err
-		}
-	}
 
-	if supervisedTrajectory {
-		coagentProfile := agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile))
-		slot := strings.TrimSpace(metadataStringValue(metadata, runMetadataCoSuperSlot))
-		if agentprofile.Canonical(agentProfileForRun(&requesterRec)) != agentprofile.Super || coagentProfile != agentprofile.CoSuper || slot == "" {
-			return nil, fmt.Errorf("supervised execution only permits Super to start a slotted CoSuper")
-		}
-		if strings.TrimSpace(metadataStringValue(metadata, runMetadataAssignmentID)) == "" || strings.TrimSpace(metadataStringValue(metadata, runMetadataAttemptID)) == "" {
-			return nil, fmt.Errorf("supervised co-super spawn requires assignment_id and attempt_id")
-		}
-	} else if rt.coagentSpawnBudgetApplies(&requesterRec) {
+	if rt.coagentSpawnBudgetApplies(&requesterRec) {
 		coagentProfile := agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile))
 		if coagentProfile == "" {
 			coagentProfile = agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentRole))
@@ -1186,7 +886,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	metadata = inheritTextureRequesterMetadata(metadata, &requesterRec)
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, &requesterRec)
 	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
-	if requesterAgent, lookupErr := rt.store.GetAgentByScope(ctx, ownerID, rt.cfg.SandboxID, requesterRec.AgentID); !supervisedTrajectory && lookupErr == nil && requesterAgent.LifecycleVersion > 0 {
+	if requesterAgent, lookupErr := rt.store.GetAgentByScope(ctx, ownerID, rt.cfg.SandboxID, requesterRec.AgentID); lookupErr == nil && requesterAgent.LifecycleVersion > 0 {
 		switch agentprofile.Canonical(agentRec.Profile) {
 		case agentprofile.Super, agentprofile.CoSuper:
 			return nil, fmt.Errorf("durable-work lifecycle refuses effects-capable %s activation", agentRec.Profile)
@@ -1195,27 +895,12 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	if strings.TrimSpace(agentRec.ChannelID) == "" {
 		agentRec.ChannelID = runID
 	}
-	if supervisedTrajectory {
-		candidate := &types.RunRecord{
-			RunID: runID, AgentID: agentRec.AgentID, OwnerID: ownerID, SandboxID: rt.cfg.SandboxID,
-			Metadata: metadata,
-		}
-		observedBase, err := rt.appendSupervisionAttemptStart(ctx, &requesterRec, candidate, supervisionSnapshot)
-		if err != nil {
-			return nil, err
-		}
-		metadata[runMetadataObservedBase] = map[string]string{
-			"canonical_event_head": observedBase.CanonicalEventHead, "intent_revision_id": observedBase.IntentRevisionID,
-			"artifact_head_revision_id": observedBase.ArtifactHeadRevisionID,
-		}
-	}
 	claimedCoSuperSlot := false
 	claimedCoSuperTrajectoryID := ""
 	claimedCoSuperSlotName := ""
-	if rawSlot := strings.TrimSpace(metadataStringValue(metadata, runMetadataCoSuperSlot)); rawSlot != "" &&
+	if slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" &&
 		agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile)) == agentprofile.CoSuper &&
-		(supervisedTrajectory || rt.coagentSpawnBudgetApplies(&requesterRec)) {
-		slot := rawSlot
+		rt.coagentSpawnBudgetApplies(&requesterRec) {
 		trajectoryID := metadataStringValue(metadata, runMetadataTrajectoryID)
 		existing, claimed, err := rt.store.ClaimCoSuperSlot(ctx, ownerID, trajectoryID, slot, runID, agentRec.AgentID, requesterRunID)
 		if err != nil {
@@ -1245,11 +930,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		}
 		return cause
 	}
-	if supervisedTrajectory {
-		// A canonical assignment is capability authority; scheduling a run must
-		// not promote a capsule or enable effects.
-		delete(metadata, "capsule_control_handle")
-	} else if agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile)) == agentprofile.CoSuper &&
+	if agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile)) == agentprofile.CoSuper &&
 		normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)) == "implementation" {
 		controlHandle := strings.TrimSpace(metadataStringValue(metadata, "capsule_control_handle"))
 		if rt.capsuleExecutor == nil || controlHandle == "" {
@@ -1290,25 +971,29 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		Metadata:         metadata,
 	}
 	rt.stampAndMintTrajectory(ctx, rec)
-	if !supervisedTrajectory {
-		spawnedWork, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, &requesterRec, "spawned_work_item_id")
-		if err != nil {
-			return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist spawned coagent work item: %w", err))
-		}
-		if spawnedWork.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
-			log.Printf("runtime: spawned coagent work item not created for run=%s profile=%s trajectory=%s agent=%s requested_by=%s",
-				rec.RunID, agentprofile.Canonical(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
-		}
-		if spawnedWork.LifecycleVersion > 0 {
-			return nil, releaseCoSuperSlotClaim(fmt.Errorf("%w: project spawned lifecycle run", ErrSupervisionAuthorityRequired))
-		}
+	spawnedWork, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, &requesterRec, "spawned_work_item_id")
+	if err != nil {
+		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist spawned coagent work item: %w", err))
 	}
-	if err := rt.store.CreateRun(ctx, *rec); err != nil {
+	if spawnedWork.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
+		log.Printf("runtime: spawned coagent work item not created for run=%s profile=%s trajectory=%s agent=%s requested_by=%s",
+			rec.RunID, agentprofile.Canonical(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
+	}
+	if spawnedWork.LifecycleVersion > 0 {
+		rec.TrajectoryID = spawnedWork.TrajectoryID
+		project := types.ReplaceLifecycleActivationRequest{
+			OwnerID: ownerID, ComputerID: rec.SandboxID,
+			CommandID:    "lifecycle-project-spawned-run:" + rec.RunID,
+			TrajectoryID: rec.TrajectoryID, AgentID: rec.AgentID, Run: *rec,
+		}
+		project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+		if _, err := rt.store.ReplaceLifecycleActivation(ctx, project); err != nil {
+			return nil, releaseCoSuperSlotClaim(fmt.Errorf("project spawned lifecycle run: %w", err))
+		}
+	} else if err := rt.store.CreateRun(ctx, *rec); err != nil {
 		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist coagent run: %w", err))
 	}
-	if !supervisedTrajectory {
-		rt.createAgentMutationForRun(ctx, rec)
-	}
+	rt.createAgentMutationForRun(ctx, rec)
 
 	// Emit submitted event.
 	objectiveLenPayload, _ := json.Marshal(map[string]any{
@@ -1390,8 +1075,25 @@ func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 		ObjectiveFingerprint: "spawned_coagent:" + workitem.ObjectiveFingerprint(ownerID, trajectoryID, rec.RunID, objective),
 		Details:              details,
 	}
-	if err := rt.refuseLegacySupervisionWrite(ctx, ownerID, work.ComputerID, trajectoryID, "open spawned work"); err != nil {
-		return types.WorkItemRecord{}, err
+	if work.ComputerID != "" {
+		if _, lifecycleErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, work.ComputerID, trajectoryID); lifecycleErr == nil {
+			work.WorkItemID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("choir:lifecycle:spawned-work:"+ownerID+":"+trajectoryID+":"+rec.RunID)).String()
+			open := types.OpenLifecycleWorkRequest{
+				OwnerID: ownerID, ComputerID: work.ComputerID,
+				CommandID: "lifecycle-open-spawned-work:" + rec.RunID, TrajectoryID: trajectoryID, WorkItem: work,
+			}
+			open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
+			opened, openErr := rt.store.OpenLifecycleWork(ctx, open)
+			if openErr != nil {
+				return types.WorkItemRecord{}, openErr
+			}
+			if opened.WorkItem == nil {
+				return types.WorkItemRecord{}, fmt.Errorf("open spawned lifecycle work returned no work item")
+			}
+			return *opened.WorkItem, nil
+		} else if !errors.Is(lifecycleErr, store.ErrNotFound) {
+			return types.WorkItemRecord{}, lifecycleErr
+		}
 	}
 	return rt.store.CreateWorkItem(ctx, work)
 }
@@ -1589,11 +1291,6 @@ func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason st
 		}
 		return fmt.Errorf("lookup run: %w", err)
 	}
-
-	if err := rt.refuseLegacySupervisionWrite(ctx, ownerID, rec.SandboxID, trajectoryIDForRun(&rec), "terminalize run"); err != nil {
-		rt.runningMu.Unlock()
-		return err
-	}
 	if rec.State.Terminal() {
 		trajectoryID := strings.TrimSpace(trajectoryIDForRun(&rec))
 		trajectory, trajectoryErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, rec.SandboxID, trajectoryID)
@@ -1641,22 +1338,27 @@ func (rt *Runtime) persistActivationState(ctx context.Context, rec *types.RunRec
 		*rec = stored
 		return false, nil
 	}
-
-	if _, projectionErr := rt.store.GetSupervisionProjectionSnapshot(ctx, stored.OwnerID, stored.SandboxID, trajectoryIDForRun(&stored)); projectionErr == nil {
-		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
-			return false, fmt.Errorf("persist projected activation state: %w", err)
-		}
-		return true, nil
-	} else if !errors.Is(projectionErr, store.ErrNotFound) {
-		return false, fmt.Errorf("resolve projected activation state: %w", projectionErr)
-	}
-	if err := rt.refuseLegacySupervisionWrite(ctx, stored.OwnerID, stored.SandboxID, trajectoryIDForRun(&stored), "persist activation state"); err != nil {
-		return false, err
-	}
 	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx, rec); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+// CancelAgent cancels the most recent non-terminal run owned by the given agent.
+func (rt *Runtime) CancelAgent(ctx context.Context, agentID, ownerID string) error {
+	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
+		return fmt.Errorf("lookup resident agent run: %w", err)
+	} else if found {
+		return rt.CancelRun(ctx, resident.RunID, ownerID)
+	}
+	rec, err := rt.latestActiveRunByAgent(ctx, ownerID, agentID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return fmt.Errorf("agent not found: %s", agentID)
+		}
+		return fmt.Errorf("lookup active agent run: %w", err)
+	}
+	return rt.CancelRun(ctx, rec.RunID, ownerID)
 }
 
 const trajectoryActivationDrainTimeout = 30 * time.Second
@@ -1673,8 +1375,36 @@ func (rt *Runtime) cancelTrajectoryAuthorityCommand(ctx context.Context, ownerID
 	if ownerID == "" || trajectoryID == "" {
 		return types.LifecycleResult{}, fmt.Errorf("cancel trajectory: owner_id and trajectory_id are required")
 	}
+	computerID := strings.TrimSpace(rt.TextureSandboxID())
+	if computerID != "" {
+		if trajectory, lifecycleErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID); lifecycleErr == nil {
+			if expectedVersion <= 0 || strings.TrimSpace(expectedHead) == "" {
+				snapshot, snapshotErr := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+				if snapshotErr != nil {
+					return types.LifecycleResult{}, snapshotErr
+				}
+				expectedVersion = snapshot.Trajectory.LifecycleVersion
+				expectedHead = snapshot.HeadRevision.RevisionID
+			}
+			if strings.TrimSpace(commandID) == "" {
+				commandID = "lifecycle-cancel:" + trajectoryID
+			}
+			if strings.TrimSpace(reason) == "" {
+				reason = "owner cancellation"
+			}
+			cancel := types.CancelLifecycleRequest{
+				OwnerID: ownerID, ComputerID: computerID, CommandID: strings.TrimSpace(commandID),
+				TrajectoryID: trajectory.TrajectoryID, Reason: strings.TrimSpace(reason),
+				ExpectedLifecycleVersion: expectedVersion, ExpectedHeadRevisionID: strings.TrimSpace(expectedHead),
+			}
+			cancel.CommandDigest, _ = store.ComputeCancelLifecycleDigest(cancel)
+			return rt.store.CancelLifecycleTrajectory(ctx, cancel)
+		} else if !errors.Is(lifecycleErr, store.ErrNotFound) {
+			return types.LifecycleResult{}, lifecycleErr
+		}
+	}
 	if expectedVersion > 0 || strings.TrimSpace(expectedHead) != "" {
-		return types.LifecycleResult{}, store.ErrLifecycleAuthorityRequired
+		return types.LifecycleResult{}, store.ErrNotFound
 	}
 	trajectory, err := rt.store.CancelTrajectoryAuthority(ctx, ownerID, trajectoryID)
 	return types.LifecycleResult{Trajectory: trajectory}, err
@@ -1788,7 +1518,7 @@ func (rt *Runtime) drainCancelledTrajectoryActivations(ctx context.Context, owne
 
 // CancelRunTrajectory derives the trajectory that contains runID, persists
 // metadata-only identity, and delegates to CancelTrajectory.
-func (rt *Runtime) cancelRunTrajectory(ctx context.Context, runID, ownerID string) ([]string, error) {
+func (rt *Runtime) CancelRunTrajectory(ctx context.Context, runID, ownerID string) ([]string, error) {
 	if rt == nil || rt.store == nil {
 		return nil, fmt.Errorf("cancel trajectory: runtime store is unavailable")
 	}
@@ -1804,10 +1534,6 @@ func (rt *Runtime) cancelRunTrajectory(ctx context.Context, runID, ownerID strin
 	trajectoryID := trajectoryIDForRun(&rec)
 	if trajectoryID == "" {
 		trajectoryID = rec.RunID
-	}
-
-	if err := rt.refuseLegacySupervisionWrite(ctx, ownerID, rec.SandboxID, trajectoryID, "cancel trajectory"); err != nil {
-		return nil, err
 	}
 	rec.Metadata = ensureTrajectoryID(rec.Metadata, nil, trajectoryID)
 	rec.TrajectoryID = trajectoryID
@@ -2056,11 +1782,6 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 			progressed := false
 			for i := range runs {
 				rec := &runs[i]
-
-				if err := rt.refuseLegacySupervisionWrite(ctx, rec.OwnerID, rec.SandboxID, trajectoryIDForRun(rec), "passivate interrupted activation"); err != nil {
-					log.Printf("runtime: boot passivation for run %s refused: %v", rec.RunID, err)
-					continue
-				}
 				now := time.Now().UTC()
 				rec.State = types.RunPassivated
 				rec.Error = ""
@@ -2159,10 +1880,26 @@ func (rt *Runtime) lifecycleActivationBindingsEligible(ctx context.Context, rec 
 }
 
 func (rt *Runtime) passivateInterruptedLifecycleActivation(ctx context.Context, rec *types.RunRecord) error {
-	if rec == nil {
-		return nil
+	passivated := *rec
+	passivated.State = types.RunPassivated
+	passivated.UpdatedAt = time.Now().UTC()
+	passivated.FinishedAt = nil
+	req := types.ReplaceLifecycleActivationRequest{
+		OwnerID: passivated.OwnerID, ComputerID: passivated.SandboxID,
+		CommandID:    "lifecycle-passivate-interrupted:" + passivated.RunID,
+		TrajectoryID: passivated.TrajectoryID, AgentID: passivated.AgentID, Run: passivated,
 	}
-	return fmt.Errorf("%w: passivate interrupted lifecycle activation for trajectory %s", ErrSupervisionAuthorityRequired, rec.TrajectoryID)
+	req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
+	if _, err := rt.store.ReplaceLifecycleActivation(ctx, req); err != nil {
+		return err
+	}
+	if runHasProfile(&passivated, agentprofile.Texture) {
+		if err := rt.store.MarkAgentMutationStale(context.WithoutCancel(ctx), passivated.OwnerID, agentMutationComputerID(&passivated), passivated.RunID); err != nil {
+			return fmt.Errorf("passivate interrupted Texture mutation: %w", err)
+		}
+	}
+	*rec = passivated
+	return nil
 }
 
 // rewarmInterruptedLifecycleActivations closes the projection-before-dispatch
@@ -2190,13 +1927,15 @@ func (rt *Runtime) rewarmInterruptedLifecycleActivations(ctx context.Context) {
 				continue
 			}
 			if !eligible {
-				log.Printf("runtime: stale lifecycle rewarm for run %s refused: %v", rec.RunID, ErrSupervisionAuthorityRequired)
+				if passivateErr := rt.passivateInterruptedLifecycleActivation(ctx, rec); passivateErr != nil {
+					log.Printf("runtime: boot lifecycle rewarm: passivate stale run %s: %v", rec.RunID, passivateErr)
+					continue
+				}
+				log.Printf("runtime: passivated stale lifecycle run %s before restart dispatch", rec.RunID)
 				continue
 			}
-			// A resumed supervised execution needs an already-projected,
-			// canonical attempt authority. The legacy activation table cannot
-			// supply that proof or create it.
-			log.Printf("runtime: lifecycle rewarm for run %s refused: %v", rec.RunID, ErrSupervisionAuthorityRequired)
+			rt.activate(rec)
+			log.Printf("runtime: re-dispatched lifecycle run %s (state=%s) after restart", rec.RunID, state)
 		}
 	}
 }
@@ -2216,7 +1955,9 @@ func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) map[string]
 			log.Printf("runtime: boot lifecycle settlement reconciliation: query %s runs: %v", state, lifecycleErr)
 		} else {
 			for i := range lifecycleRuns {
-				log.Printf("runtime: boot lifecycle settlement reconciliation for run %s refused: %v", lifecycleRuns[i].RunID, ErrSupervisionAuthorityRequired)
+				if err := rt.store.ReconcileLifecycleSettlementForTerminalRun(ctx, lifecycleRuns[i]); err != nil {
+					log.Printf("runtime: boot lifecycle settlement reconciliation for run %s: %v", lifecycleRuns[i].RunID, err)
+				}
 			}
 		}
 		runs, err := rt.store.ListAllRunsByState(ctx, state)
@@ -2600,11 +2341,6 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 	}
 
 	registry := rt.toolRegistryForRun(rec)
-	if (registry == nil || registry.Size() == 0) && runSupportsCoagentUpdateInjection(rec) &&
-		metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {
-		rt.handleExecutionError(ctx, rec, fmt.Errorf("private coagent delivery requires the tool-loop execution path"))
-		return
-	}
 
 	// Use the tool-calling loop if a tool registry is configured and the
 	// provider supports the provideriface.ToolLoopProvider interface. Otherwise, fall back
@@ -2614,22 +2350,6 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 	} else {
 		rt.executeWithProvider(ctx, rec, emit)
 	}
-}
-
-func (rt *Runtime) persistPrivateTraceTaint(ctx context.Context, rec *types.RunRecord) error {
-	if rt == nil || rt.store == nil || rec == nil {
-		return fmt.Errorf("persist private Trace taint: runtime unavailable")
-	}
-	if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) {
-		return nil
-	}
-	rec.Metadata = cloneMetadata(rec.Metadata)
-	rec.Metadata[runMetadataPrivateTraceTainted] = true
-	rec.UpdatedAt = time.Now().UTC()
-	if err := rt.store.UpdateRun(ctx, *rec); err != nil {
-		return fmt.Errorf("persist private Trace taint: %w", err)
-	}
-	return nil
 }
 
 // executeWithToolLoop runs the run through the real tool-calling loop.
@@ -2670,21 +2390,13 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			})
 		}
 	}
-	var privateTraceUserTurns []json.RawMessage
+	reactivateExistingMemory := metadataBoolValue(rec.Metadata, "actor_reactivate_existing_memory")
 	appendInitialMailboxTurns := shouldAppendInitialCoagentMailboxTurns(rec)
-	if !appendInitialMailboxTurns {
-		priorMessageCount := len(initialMessages)
+	if !reactivateExistingMemory && !appendInitialMailboxTurns {
 		initialMessages, err = rt.prependInitialCoagentUpdatePackets(ctx, rec, initialMessages)
 		if err != nil {
 			rt.handleExecutionError(ctx, rec, fmt.Errorf("prepend coagent update packets: %w", err))
 			return
-		}
-		if injectedCount := len(initialMessages) - priorMessageCount; injectedCount > 0 {
-			if err := rt.persistPrivateTraceTaint(ctx, rec); err != nil {
-				rt.handleExecutionError(ctx, rec, err)
-				return
-			}
-			privateTraceUserTurns = append(privateTraceUserTurns, initialMessages[:injectedCount]...)
 		}
 	}
 	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
@@ -2722,17 +2434,11 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		}
 		if len(injected) > 0 {
 			initialMessages = append(initialMessages, injected...)
-			privateTraceUserTurns = append(privateTraceUserTurns, injected...)
 			rec.UpdatedAt = time.Now().UTC()
 			if err := rt.store.UpdateRun(ctx, *rec); err != nil {
 				rt.handleExecutionError(ctx, rec, fmt.Errorf("persist actor initial mailbox metadata: %w", err))
 				return
 			}
-		}
-	}
-	for _, message := range initialMessages {
-		if isCoagentUpdateUserMessage(message) {
-			privateTraceUserTurns = append(privateTraceUserTurns, message)
 		}
 	}
 	maxOutputTokens := provideriface.MaxInteractiveOutputTokensForSelection(llmConfig, agentProfileForRun(rec))
@@ -2756,9 +2462,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		toolregistry.WithToolLoopLLMConfig(llmConfig),
 		toolregistry.WithProviderPreconditionFallbacks(preconditionFallbacks...),
 	}
-	if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) || len(privateTraceUserTurns) > 0 {
-		toolLoopOptions = append(toolLoopOptions, toolregistry.WithPrivateTraceUserTurns(privateTraceUserTurns...))
-	}
 	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
 	}
@@ -2772,25 +2475,17 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	text, usage, err := toolregistry.RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
 	if err != nil {
 		if errors.Is(err, toolregistry.ErrToolLoopPassivated) {
-			if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) {
-				text = ""
-			}
 			rt.passivateIdleToolLoopRun(context.Background(), rec, text, usage, err)
 			return
 		}
 		if ctx.Err() != nil {
 			rt.handleExecutionError(ctx, rec, ctx.Err())
-		} else if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) {
-			rt.handleExecutionError(ctx, rec, fmt.Errorf("private actor tool loop failed"))
 		} else {
 			rt.handleExecutionError(ctx, rec, err)
 		}
 		return
 	}
 	if err := rt.awaitRequiredChildRuns(ctx, rec, 5*time.Minute); err != nil {
-		if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) {
-			err = fmt.Errorf("private actor child run failed")
-		}
 		rt.handleExecutionError(ctx, rec, err)
 		return
 	}
@@ -2799,9 +2494,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	now := time.Now().UTC()
 	rec.State = types.RunCompleted
 	rec.Result = text
-	if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) {
-		rec.Result = ""
-	}
 	rec.UpdatedAt = now
 	rec.FinishedAt = &now
 
@@ -2818,19 +2510,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// texture completion event before the run is surfaced as completed. This keeps
 	// run completion aligned with document-version availability.
 	if err := rt.handleRunCompletion(ctx, rec); err != nil {
-		if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) {
-			err = fmt.Errorf("private actor completion failed")
-		}
 		rt.handleExecutionError(ctx, rec, err)
 		return
 	}
-	if err := rt.acknowledgeCanonicalSupervisionDeliveries(ctx, rec); err != nil {
-		if metadataBoolValue(rec.Metadata, runMetadataPrivateTraceTainted) {
-			err = fmt.Errorf("private actor delivery acknowledgement failed")
-		}
-		rt.handleExecutionError(ctx, rec, err)
-		return
-	}
+
 	// Use a background context for post-provider persistence so that a fast
 	// shutdown or cancellation after the provider returns cannot drop the
 	// completed-run transition or parent notification.
@@ -2868,7 +2551,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		}
 		log.Printf("runtime: completed %s result=%q", wireLifecycleSummary(rec), strings.ReplaceAll(preview, "\n", " "))
 	}
-	rt.maybeContinueCoagentInbox(persistCtx, rec)
+	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
 }
 
 func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunRecord, text string, usage provideriface.TokenUsage, passivationErr error) {
@@ -3042,7 +2725,7 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	if _, continueErr := rt.continueOpenLifecycleWorkAfterTerminal(persistCtx, rec); continueErr != nil {
 		log.Printf("runtime: continue open lifecycle work after run %s: %v", rec.RunID, continueErr)
 	}
-	rt.maybeContinueCoagentInbox(persistCtx, rec)
+	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
 
 }
 
@@ -3419,8 +3102,7 @@ func (rt *Runtime) recordExplicitInitialTextureDecisionIfNeeded(ctx context.Cont
 		return nil
 	}
 	if !runHasProfile(rec, agentprofile.Texture) ||
-		!metadataBoolValue(rec.Metadata, "texture_initial_decision_required") ||
-		metadataBoolValue(rec.Metadata, "texture_initial_decision_recorded") {
+		!metadataBoolValue(rec.Metadata, "texture_initial_decision_required") {
 		return nil
 	}
 	docID := metadataStringValue(rec.Metadata, "doc_id")
@@ -3428,22 +3110,6 @@ func (rt *Runtime) recordExplicitInitialTextureDecisionIfNeeded(ctx context.Cont
 	kind := metadataStringValue(rec.Metadata, "texture_initial_decision_kind")
 	if docID == "" || reason == "" || kind != "no_worker_needed" {
 		return nil
-	}
-
-	if _, projectionErr := rt.store.GetSupervisionProjectionSnapshot(ctx, rec.OwnerID, rec.SandboxID, trajectoryIDForRun(rec)); projectionErr == nil {
-		if err := rt.recordCanonicalInitialTextureDecision(ctx, rec, docID, kind, reason); err != nil {
-			return err
-		}
-		rec.Metadata["texture_initial_decision_recorded"] = true
-		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
-			return fmt.Errorf("persist canonical initial Texture decision marker: %w", err)
-		}
-		return nil
-	} else if !errors.Is(projectionErr, store.ErrNotFound) {
-		return fmt.Errorf("resolve initial Texture decision projection: %w", projectionErr)
-	}
-	if err := rt.refuseLegacySupervisionWrite(ctx, rec.OwnerID, rec.SandboxID, trajectoryIDForRun(rec), "record initial Texture decision"); err != nil {
-		return err
 	}
 	existing, err := rt.store.ListTextureDecisionsByDocument(ctx, rec.OwnerID, docID, 100)
 	if err != nil {
@@ -3475,67 +3141,6 @@ func (rt *Runtime) recordExplicitInitialTextureDecisionIfNeeded(ctx context.Cont
 		return fmt.Errorf("record initial Texture decision: %w", err)
 	}
 	rec.Metadata["texture_initial_decision_recorded"] = true
-	return nil
-}
-
-func (rt *Runtime) recordCanonicalInitialTextureDecision(ctx context.Context, rec *types.RunRecord, docID, kind, reason string) error {
-	projection, err := rt.store.GetSupervisionProjectionSnapshot(ctx, rec.OwnerID, rec.SandboxID, trajectoryIDForRun(rec))
-	if err != nil {
-		return err
-	}
-	commandID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("choir:texture:initial-decision:"+rec.RunID)).String()
-	decisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(commandID+":decision")).String()
-	proposalID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(commandID+":owner-prompt")).String()
-	evidence := map[string]any{
-		"schema":      "choir.supervision_owner_decision_evidence.v1",
-		"decision_id": decisionID, "decision_kind": kind, "reason": reason,
-		"evidence_refs": metadataStringSliceValue(rec.Metadata, "texture_initial_decision_evidence_refs"),
-		"next_action":   metadataStringValue(rec.Metadata, "texture_initial_decision_next_action"),
-		"owner_id":      rec.OwnerID, "computer_id": rec.SandboxID,
-		"trajectory_id": trajectoryIDForRun(rec), "artifact_id": docID,
-	}
-	evidenceBytes, err := computerevent.CanonicalJSON(evidence)
-	if err != nil {
-		return err
-	}
-	bindingID := commandID + ":decision"
-	decisionArtifactRef := computerevent.SupervisionArtifactPlaceholder(bindingID)
-	scopeBytes, err := computerevent.CanonicalJSON(map[string]string{
-		"owner_id": rec.OwnerID, "computer_id": rec.SandboxID,
-		"trajectory_id": trajectoryIDForRun(rec), "artifact_id": docID,
-	})
-	if err != nil {
-		return err
-	}
-	body, err := json.Marshal(map[string]any{
-		"decision_id": decisionID, "proposal_id": proposalID,
-		"owner_actor_id": rec.OwnerID, "decision_artifact_ref": decisionArtifactRef,
-		"scope_digest": computerevent.DigestBytes(scopeBytes),
-	})
-	if err != nil {
-		return err
-	}
-	expectedHead := projection.CanonicalEventHead
-	expectedLifecycle := uint64(projection.LifecycleVersion)
-	expectedIntent := projection.IntentRevisionID
-	expectedArtifactHead := projection.ArtifactHeadRevisionID
-	transaction := computerevent.SupervisionTransaction{
-		Schema: computerevent.SupervisionSchemaV1, Reducer: computerevent.SupervisionReducerV1,
-		DigestRecipe: computerevent.SupervisionDigestRecipeV1, TransactionID: commandID,
-		TransactionClass: "record_owner_decision", OwnerID: rec.OwnerID, ComputerID: rec.SandboxID,
-		TrajectoryID: trajectoryIDForRun(rec), CommandID: commandID,
-		Actor: computerevent.SupervisionActor{ActorID: rec.OwnerID, Role: "owner", AuthorityRef: "owner:" + rec.OwnerID},
-		Expected: computerevent.SupervisionExpected{
-			CanonicalEventHead: &expectedHead, LifecycleVersion: &expectedLifecycle,
-			IntentRevisionID: &expectedIntent, ArtifactHeadRevisionID: &expectedArtifactHead,
-		},
-		Mutations: []computerevent.SupervisionMutation{{Kind: "owner_decision_recorded", Body: body}},
-	}
-	if _, _, _, err := rt.AppendSupervisionTransactionWithPrivateArtifacts(ctx, transaction, []computerevent.PrivateSupervisionArtifactPayload{{
-		BindingID: bindingID, Plaintext: evidenceBytes, MediaType: computerevent.SupervisionEvidenceMediaTypeV1,
-	}}); err != nil {
-		return fmt.Errorf("record canonical initial Texture decision: %w", err)
-	}
 	return nil
 }
 
@@ -3682,12 +3287,6 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 	}
 
 	if !runHasProfile(rec, agentprofile.Texture) {
-		return nil
-	}
-	if metadataStringValue(rec.Metadata, "supervision_delivery_authority") == "canonical" {
-		if metadataStringValue(rec.Metadata, "canonical_texture_revision_id") == "" {
-			return fmt.Errorf("canonical Texture delivery completed without a Texture revision")
-		}
 		return nil
 	}
 

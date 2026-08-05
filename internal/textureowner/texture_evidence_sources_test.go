@@ -9,6 +9,8 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -343,7 +345,7 @@ func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
 		t.Fatalf("DispatchWorkerUpdate: %v", err)
 	}
 
-	entities, _ := handler.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, []types.CoagentSourcePacket{update})
+	entities := handler.evidenceSourceEntitiesFromPendingUpdates(ctx, ownerID, targetAgentID, 10)
 	if !hasSourceEntity(entities, "source_service_item", "srcitem_market_rules", "") {
 		t.Fatalf("missing source_service_item entity: %#v", entities)
 	}
@@ -367,38 +369,6 @@ func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
 		if entity.Target.ItemID == "srcitem_ignored" {
 			t.Fatalf("free-form prose ref was scraped into source entity: %#v", entities)
 		}
-	}
-}
-
-func TestPendingSourceExtractionFailsClosedWithoutCanonicalAuthority(t *testing.T) {
-	t.Parallel()
-	_, handler := testAPISetup(t)
-	ctx := context.Background()
-	ownerID := "user-source-authority-fail-closed"
-	targetAgentID := "texture:source-authority-fail-closed"
-	now := time.Now().UTC()
-	update := types.CoagentSourcePacket{
-		UpdateID: "legacy-source-authority-fail-closed", OwnerID: ownerID,
-		AgentID: "researcher:source-authority", TargetAgentID: targetAgentID,
-		ChannelID: "source-authority-fail-closed", Role: agentprofile.Researcher,
-		Packet: newCoagentPacket("evidence_update", "legacy source must not bypass authority", nil, []types.CoagentPacketSource{{
-			SourceID: "legacy-source", Kind: "url",
-			Target: types.CoagentPacketSourceTarget{URI: "https://example.test/private-source"},
-		}}, nil, nil, nil),
-		CreatedAt: now,
-	}
-	message := types.ChannelMessage{
-		ChannelID: update.ChannelID, FromAgentID: update.AgentID,
-		ToAgentID: update.TargetAgentID, Role: update.Role,
-		Content: update.Content, Timestamp: now,
-	}
-	if _, _, err := handler.Store.DispatchWorkerUpdate(ctx, update, &message); err != nil {
-		t.Fatalf("seed legacy source update: %v", err)
-	}
-	withoutAuthority := &Handler{Store: handler.Store}
-	entities, _, err := withoutAuthority.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, targetAgentID, "source-authority-fail-closed", 10)
-	if err == nil {
-		t.Fatalf("source extraction without canonical authority returned entities: %#v", entities)
 	}
 }
 
@@ -574,6 +544,187 @@ func TestTextureCoagentSourceRefsSurviveInjectionAndDelivery(t *testing.T) {
 	}
 	if _, ok := meta[textureAvailableSourceEntitiesKey]; ok {
 		t.Fatalf("revision metadata retained run source context: %#v", meta[textureAvailableSourceEntitiesKey])
+	}
+}
+
+func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testing.T) {
+	t.Parallel()
+	core, handler := testAPISetup(t)
+	if err := core.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatalf("InstallDefaultAgentTools: %v", err)
+	}
+	if err := RegisterTools(core.ToolRegistryForProfile(agentprofile.Texture), handler); err != nil {
+		t.Fatalf("RegisterTextureTools: %v", err)
+	}
+	s := handler.Store
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := "user-summary-source"
+	docID := "doc-summary-source"
+	targetAgentID := currentTextureAgentID(docID)
+	contentID := "content-openai-docs"
+	evidenceID := "ev-openai-summary"
+
+	if err := s.CreateContentItem(ctx, types.ContentItem{
+		ContentID:    contentID,
+		OwnerID:      ownerID,
+		SourceType:   "source_search",
+		MediaType:    "text/html",
+		Title:        "OpenAI GPT-5.5 docs",
+		SourceURL:    "https://developers.openai.com/api/docs/models/gpt-5.5",
+		CanonicalURL: "https://developers.openai.com/api/docs/models/gpt-5.5",
+		TextContent:  "Model aliases include gpt-5.5 and gpt-5.5-2026-04-23.",
+		ContentHash:  "hash-openai-docs",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}); err != nil {
+		t.Fatalf("CreateContentItem: %v", err)
+	}
+	if err := s.CreateEvidence(ctx, types.EvidenceRecord{
+		EvidenceID: evidenceID,
+		OwnerID:    ownerID,
+		AgentID:    "researcher:summary-source",
+		Kind:       "source_excerpt",
+		Title:      "OpenAI GPT-5.5 docs evidence",
+		SourceURI:  "https://developers.openai.com/api/docs/models/gpt-5.5",
+		Content:    "Researcher synthesis: OpenAI's API docs identify GPT-5.5 as the current public frontier model.",
+		Metadata:   json.RawMessage(`{"content_id":"content-openai-docs"}`),
+		CreatedAt:  now,
+	}); err != nil {
+		t.Fatalf("CreateEvidence: %v", err)
+	}
+
+	doc := types.Document{
+		DocID:   docID,
+		OwnerID: ownerID,
+		Title:   "Summary source",
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	parent := types.Revision{
+		RevisionID: "rev-summary-source-v0",
+		DocID:      docID,
+		OwnerID:    ownerID,
+		AuthorKind: types.AuthorUser,
+		Content:    "Write the sourced update.",
+		Citations:  json.RawMessage("[]"),
+		Metadata:   json.RawMessage("{}"),
+		CreatedAt:  now,
+	}
+	if err := s.CreateRevision(ctx, parent); err != nil {
+		t.Fatalf("CreateRevision: %v", err)
+	}
+	doc.CurrentRevisionID = parent.RevisionID
+
+	sources := coagentSourcesFromTypedEvidenceRefs([]string{"evidence_id:" + evidenceID})
+	update := types.CoagentSourcePacket{
+		UpdateID:      "update-summary-source",
+		OwnerID:       ownerID,
+		AgentID:       "researcher:summary-source",
+		TargetAgentID: targetAgentID,
+		ChannelID:     docID,
+		Role:          agentprofile.Researcher,
+		Packet:        newCoagentPacket("evidence_update", "source evidence ready", coagentClaimsFromTexts([]string{"OpenAI GPT-5.5 public release evidence is ready."}, sources), sources, nil, nil, nil),
+		Content:       "Use the OpenAI docs source evidence.",
+		CreatedAt:     now,
+	}
+	message := types.ChannelMessage{
+		ChannelID:   update.ChannelID,
+		FromAgentID: update.AgentID,
+		ToAgentID:   update.TargetAgentID,
+		Role:        update.Role,
+		Content:     update.Content,
+		Timestamp:   now,
+	}
+	if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+		t.Fatalf("DispatchWorkerUpdate: %v", err)
+	}
+
+	rec := &types.RunRecord{
+		RunID:        "run-summary-source",
+		OwnerID:      ownerID,
+		AgentID:      targetAgentID,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
+		ChannelID:    docID,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			"type":                textureAgentRevisionTaskType,
+			"request_source":      "update_coagent",
+			"doc_id":              docID,
+			"current_revision_id": parent.RevisionID,
+			runMetadataAgentID:    targetAgentID,
+			runMetadataChannelID:  docID,
+		},
+	}
+	inject := handler.coagentUpdateTurnInjector(rec)
+	if inject == nil {
+		t.Fatal("Texture coagent update injector is nil")
+	}
+	if _, err := inject(false); err != nil {
+		t.Fatalf("inject coagent update: %v", err)
+	}
+	handler.createAgentMutationForRun(ctx, rec)
+	sourceEntities := decodeAvailableTextureSourceEntities(rec.Metadata)
+	entityID := stableSourceEntityID("content_item", contentID)
+	if !hasSourceEntity(sourceEntities, "content_item", "", contentID) {
+		t.Fatalf("run metadata missing evidence-derived content source: %#v", sourceEntities)
+	}
+	for _, entity := range sourceEntities {
+		if entity.EntityID != entityID {
+			continue
+		}
+		if len(entity.Selectors) != 1 || entity.Selectors[0].SelectorKind != "whole_resource" {
+			t.Fatalf("summary evidence source should use whole_resource selector: %#v", entity)
+		}
+	}
+
+	editArgs, err := json.Marshal(map[string]any{
+		"doc_id":           docID,
+		"base_revision_id": parent.RevisionID,
+		"edits": []map[string]any{
+			{
+				"op":       "update_block_text",
+				"block_id": "p-" + docID + "-" + parent.RevisionID + "-0",
+				"text":     "OpenAI documentation supports the GPT-5.5 release.",
+			},
+			{
+				"op":               "insert_source_ref",
+				"block_id":         "p-" + docID + "-" + parent.RevisionID + "-0",
+				"source_entity_id": entityID,
+			},
+		},
+		"rationale": "Incorporate researcher source evidence with a native source citation.",
+	})
+	if err != nil {
+		t.Fatalf("marshal texture edit args: %v", err)
+	}
+	if _, err := core.ToolRegistryForProfile(agentprofile.Texture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec)), "patch_texture", editArgs); err != nil {
+		t.Fatalf("patch_texture should accept whole_resource source citation: %v", err)
+	}
+	updated, err := s.GetDocument(ctx, docID, ownerID)
+	if err != nil {
+		t.Fatalf("GetDocument: %v", err)
+	}
+	rev, err := s.GetRevision(ctx, updated.CurrentRevisionID, ownerID)
+	if err != nil {
+		t.Fatalf("GetRevision: %v", err)
+	}
+	if !strings.Contains(rev.Content, "[1]") || strings.Contains(rev.Content, "](source:") {
+		t.Fatalf("revision missing native source citation: %q", rev.Content)
+	}
+	meta := decodeRevisionMetadata(rev.Metadata)
+	if _, ok := meta["source_entities"]; ok {
+		t.Fatalf("revision metadata retained legacy source_entities: %#v", meta["source_entities"])
+	}
+	var structuredEntities []texturedoc.SourceEntity
+	if err := json.Unmarshal(rev.SourceEntities, &structuredEntities); err != nil {
+		t.Fatalf("unmarshal revision source_entities: %v", err)
+	}
+	if len(structuredEntities) != 1 || structuredEntities[0].SourceEntityID != entityID {
+		t.Fatalf("revision source_entities = %#v, want %q", structuredEntities, entityID)
 	}
 }
 

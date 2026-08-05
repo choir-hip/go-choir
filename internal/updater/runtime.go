@@ -118,9 +118,9 @@ type HTTPHealthProber struct {
 	Interval time.Duration
 }
 
-func (p HTTPHealthProber) Probe(ctx context.Context, releaseDigest string, manifest ReleaseManifest) (HealthAttestation, error) {
+func (p HTTPHealthProber) Probe(ctx context.Context, releaseDigest string, manifest ReleaseManifest) ([]string, error) {
 	if !computerevent.IsSHA256(releaseDigest) || strings.TrimSpace(p.URL) == "" {
-		return HealthAttestation{}, fmt.Errorf("updater: invalid health probe contract")
+		return nil, fmt.Errorf("updater: invalid health probe contract")
 	}
 	client := p.Client
 	if client == nil {
@@ -135,17 +135,17 @@ func (p HTTPHealthProber) Probe(ctx context.Context, releaseDigest string, manif
 		interval = time.Second
 	}
 	var lastErr error
-	for attempt := range attempts {
+	for attempt := 0; attempt < attempts; attempt++ {
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():
-				return HealthAttestation{}, ctx.Err()
+				return nil, ctx.Err()
 			case <-time.After(interval):
 			}
 		}
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, p.URL, nil)
 		if err != nil {
-			return HealthAttestation{}, err
+			return nil, err
 		}
 		response, err := client.Do(request)
 		if err != nil {
@@ -153,15 +153,11 @@ func (p HTTPHealthProber) Probe(ctx context.Context, releaseDigest string, manif
 			continue
 		}
 		var health struct {
-			Status                          string                   `json:"status"`
-			SelfDevelopmentMarker           string                   `json:"self_development_marker"`
-			EventSchemaVersion              uint64                   `json:"event_schema_version"`
-			ReducerVersion                  uint64                   `json:"reducer_version"`
-			ReleaseDigest                   string                   `json:"release_digest"`
-			Supervision                     SupervisionCompatibility `json:"supervision_compatibility"`
-			SupervisionWritesDisabled       bool                     `json:"supervision_writes_disabled"`
-			PrivateTapeReplaySemanticDigest string                   `json:"private_tape_replay_semantic_digest"`
-			ProjectionSemanticDigest        string                   `json:"projection_semantic_digest"`
+			Status                string `json:"status"`
+			SelfDevelopmentMarker string `json:"self_development_marker"`
+			EventSchemaVersion    uint64 `json:"event_schema_version"`
+			ReducerVersion        uint64 `json:"reducer_version"`
+			ReleaseDigest         string `json:"release_digest"`
 		}
 		decodeErr := json.NewDecoder(response.Body).Decode(&health)
 		_ = response.Body.Close()
@@ -175,15 +171,9 @@ func (p HTTPHealthProber) Probe(ctx context.Context, releaseDigest string, manif
 		}
 		canonical, err := computerevent.CanonicalJSON(health)
 		if err != nil {
-			return HealthAttestation{}, err
+			return nil, err
 		}
-		return HealthAttestation{
-			ObservationArtifactDigests:      []string{computerevent.DigestBytes(canonical)},
-			Supervision:                     health.Supervision,
-			SupervisionWritesDisabled:       health.SupervisionWritesDisabled,
-			PrivateTapeReplaySemanticDigest: health.PrivateTapeReplaySemanticDigest,
-			ProjectionSemanticDigest:        health.ProjectionSemanticDigest,
-		}, nil
+		return []string{computerevent.DigestBytes(canonical)}, nil
 	}
-	return HealthAttestation{}, fmt.Errorf("updater: health probe failed: %w", lastErr)
+	return nil, fmt.Errorf("updater: health probe failed: %w", lastErr)
 }

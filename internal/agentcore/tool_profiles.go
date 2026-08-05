@@ -17,20 +17,19 @@ import (
 )
 
 const (
-	runMetadataAgentProfile        = "agent_profile"
-	runMetadataChannelID           = "channel_id"
-	runMetadataAgentRole           = "agent_role"
-	runMetadataAgentID             = "agent_id"
-	runMetadataModel               = "model"
-	runMetadataDesktopID           = "desktop_id"
-	runMetadataToolCWD             = "tool_cwd"
-	runMetadataOwnerEmail          = "owner_email"
-	runMetadataCoSuperSlot         = "co_super_slot"
-	runMetadataSpawnReused         = "spawn_reused_existing_child"
-	runMetadataProcessorKey        = "processor_key"
-	runMetadataReconcilerScope     = "reconciler_scope"
-	runMetadataExplicitResearcher  = "explicit_researcher_request"
-	runMetadataPrivateTraceTainted = "private_trace_tainted"
+	runMetadataAgentProfile       = "agent_profile"
+	runMetadataChannelID          = "channel_id"
+	runMetadataAgentRole          = "agent_role"
+	runMetadataAgentID            = "agent_id"
+	runMetadataModel              = "model"
+	runMetadataDesktopID          = "desktop_id"
+	runMetadataToolCWD            = "tool_cwd"
+	runMetadataOwnerEmail         = "owner_email"
+	runMetadataCoSuperSlot        = "co_super_slot"
+	runMetadataSpawnReused        = "spawn_reused_existing_child"
+	runMetadataProcessorKey       = "processor_key"
+	runMetadataReconcilerScope    = "reconciler_scope"
+	runMetadataExplicitResearcher = "explicit_researcher_request"
 )
 
 func toolExecutionContextForRun(rec *types.RunRecord) toolregistry.ExecutionContext {
@@ -342,12 +341,6 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterCoagentUpdateTools(superRegistry, rt); err != nil {
 		return err
 	}
-	if err := superRegistry.Register(newOpenSupervisionAssignmentsTool(rt)); err != nil {
-		return err
-	}
-	if err := superRegistry.Register(newRecordSupervisionTransitionTool(rt)); err != nil {
-		return err
-	}
 	if rt.capsuleExecutor != nil {
 		if err := RegisterCapsuleTools(superRegistry); err != nil {
 			return err
@@ -395,9 +388,6 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	}
 	textureRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Texture), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
-		return err
-	}
-	if err := RegisterCoagentUpdateTools(textureRegistry, rt); err != nil {
 		return err
 	}
 	emailRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Email), cwd, searchClient, sourceClient, httpClient)

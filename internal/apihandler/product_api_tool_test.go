@@ -179,61 +179,6 @@ func TestProductAPIRequestToolRejectsUnauthorizedAndDisallowedRequests(t *testin
 	}
 }
 
-func TestProductAPIRequestToolRefusesSupervisionAuthorityRoutesBeforeOwnerInjection(t *testing.T) {
-	canonical := server.NewServer("product-api-supervision-deny-test", "0")
-	protectedCalls := 0
-	canonical.HandleFunc("/api/texture/supervision/", func(w http.ResponseWriter, r *http.Request) {
-		protectedCalls++
-		if got := r.Header.Get("X-Authenticated-User"); got != "" {
-			t.Errorf("protected route received synthesized owner %q", got)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-	allowedCalls := 0
-	canonical.HandleFunc("/api/texture/documents", func(w http.ResponseWriter, r *http.Request) {
-		allowedCalls++
-		if got := r.Header.Get("X-Authenticated-User"); got != "user-product-api" {
-			t.Errorf("permitted Texture route owner = %q", got)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-	registry := toolregistry.NewToolRegistry()
-	if err := RegisterProductAPIRequestTool(canonical, registry); err != nil {
-		t.Fatalf("register product_api_request: %v", err)
-	}
-	superCtx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
-		OwnerID: "user-product-api", Profile: agentprofile.Super,
-	})
-	for _, route := range []string{"command", "import", "rebuild"} {
-		for _, path := range []string{
-			"/api/texture/supervision/" + route,
-			"/api/texture/supervision/" + route + "/?source=tool",
-			"/api/texture/supervision//" + route,
-			"/api/texture/supervision/ignored/../" + route,
-			"https://ignored.example/api/texture/supervision/%" + map[string]string{"command": "63", "import": "69", "rebuild": "72"}[route] + route[1:],
-		} {
-			raw, err := json.Marshal(map[string]string{"method": http.MethodPost, "path": path})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := registry.Execute(superCtx, productAPIToolName, raw); err == nil || !strings.Contains(err.Error(), "refuses supervision authority route") {
-				t.Fatalf("protected path %q error = %v", path, err)
-			}
-		}
-	}
-	if protectedCalls != 0 {
-		t.Fatalf("protected supervision route was invoked %d times", protectedCalls)
-	}
-
-	raw, err := registry.Execute(superCtx, productAPIToolName, json.RawMessage(`{"method":"GET","path":"/api/texture/documents"}`))
-	if err != nil {
-		t.Fatalf("permitted Texture request: %v", err)
-	}
-	if allowedCalls != 1 || !strings.Contains(raw, `"status_code":204`) {
-		t.Fatalf("permitted Texture result = %q calls=%d", raw, allowedCalls)
-	}
-}
-
 func TestProductAPIRequestToolCapsResponseAndReportsHTTPError(t *testing.T) {
 	t.Parallel()
 
