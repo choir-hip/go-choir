@@ -176,23 +176,23 @@ measures:
 
 now:
   status: in_progress
-  slice: "A disposable mutable computer now exists and same-release mode control works: disabled run 30977754149 refreshed vm-bbdbbd01c4390b7036067aaa12afeb68 with writes disabled and refused a prompt write without a run record; enabled run 30979037961 attempt 2 refreshed it with writes enabled. The enabled guest nevertheless rejects the first canonical Texture document/open_trajectory append. A stop/wake to epoch 8234 reproduced the failure, while the equivalent local appender fixture passes. Problem checkpoint 47496d62 records this enabled-but-unwritable authority before repair."
-  question: "Which bounded deployed appender stage fails after valid command-digest verification: local reservation/frozen-plan persistence, private pin, projection prepare, event pin/CAS, or receipt verification?"
+  slice: "Bounded diagnostic commit bcd2900e passed CI run 30981838658 and preserve-mode deploy job 92229738069 refreshed mutable guest vm-bbdbbd01c4390b7036067aaa12afeb68 at the exact commit with writes enabled. The first canonical document append still failed, now as bounded code authority_failed; the exact-digest command endpoint returned the same code. This excludes the already classified reservation, frozen-plan, private-pin, projection, event-pin/CAS, and receipt-verification stages but leaves precondition/authority branches indistinguishable."
+  question: "Which bounded precondition branch is failing: missing runtime event appender, missing reservation/frozen-plan/private-payload authority, wrong computer binding, or transaction encoding/validation?"
   reconciliation:
-    observed_at: 2026-08-05T06:17:28Z
-    source_ref: 47496d62
-    deploy_identity: "Exact f5500f2e same-release receipts: disabled run 30977754149 verified mutable guest vm-bbdbbd01c4390b7036067aaa12afeb68 with supervision_writes_disabled=true; enabled run 30979037961 attempt 2 verified the same guest with supervision_writes_disabled=false. Canonical document creation still returned HTTP 500, and exact-digest open_trajectory returned HTTP 400 before bounded diagnostic codes existed."
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@47496d62, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@f5500f2e]
-    worktree_inventory_ref: "Local main and origin/main at problem-first checkpoint 47496d62; only the goal-owned Definition plus bounded supervision API diagnostic source/tests are dirty. Unrelated worktrees remain untouched."
+    observed_at: 2026-08-05T06:57:05Z
+    source_ref: bcd2900eb9e5311f6c1e91bae500760de15419d9
+    deploy_identity: "CI run 30981838658 succeeded. Deploy job 92229738069 published exact host/sandbox activation bcd2900e in preserve mode, verified the mutable guest with supervision_writes_disabled=false, guest_health_verified=true, and current public /health bcd2900e."
+    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@bcd2900e, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@bcd2900e]
+    worktree_inventory_ref: "Local main and origin/main at bcd2900e; only the goal-owned Definition plus expanded bounded precondition code/test mapping are dirty. Unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: texture-tape-bounded-append-diagnostic
+    id: texture-tape-bounded-precondition-diagnostic
     state: review_accepted
-    ref: worktree@47496d62
+    ref: worktree@bcd2900e
     owner: Main
-    base: 47496d62
-    digest: "sha256:6c74b7d35cea0d73f0537e618c1c796b5ffaaf9e2ed4873e2f7b1de97a541d56 over the repaired frozen bounded diagnostic source/test diff"
-    scope: "Return only bounded, non-secret supervision appender stage codes; preserve existing HTTP status semantics; and route only typed document-create append failures through the diagnostic mapper. No authority, event, projection, credential, or deployment semantics change."
+    base: bcd2900e
+    digest: "sha256:b8af1023f3df98c32abeef6dcddb7200ae30a62292d1f7371b82e87f4cb042f0 over the expanded bounded diagnostic source/test diff"
+    scope: "Split known runtime-appender, storage, private-payload, verifier, computer-binding, identity, encoding, digest, and commitment preconditions into bounded non-secret codes. HTTP status, authority, event, projection, credential, and deployment semantics remain unchanged."
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
     kind: architecture
@@ -202,9 +202,9 @@ now:
     owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may execute schema/caller/migration work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "CI run 30977754149 and deploy job 92217289839: exact f5500f2e disabled receipt, mutable guest proof true", "disabled prompt command texture-tape-disabled-floor-f550-1: HTTP 500 with subsequent run list empty", "CI run 30979037961 attempt 2 and deploy job 92221742922: exact f5500f2e enabled receipt, mutable guest proof true", "enabled POST /api/texture/documents: HTTP 500 failed to create document", "enabled exact-digest POST /api/texture/supervision/command: HTTP 400 invalid supervision request", "disposable guest stop/wake epoch 8233 to 8234: immediate create failure reproduced", "focused local startTextureOwnerDocument fixture: pass", "bounded diagnostic focused tests: pass"]
-  blocker_or_risk: "The deployed enabled guest is unwritable and therefore not accepted. The exact failing appender stage is not yet observable through the public product path. Canonical transaction acceptance, the remaining mode matrix, fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, rollback, and registry closure remain pending."
-  next_action: "Freeze and land the bounded stage-code candidate, deploy it to the same disposable mutable guest without weakening the gate, reproduce one canonical create, and use the returned non-secret stage code to repair the source failure. Then return to the full disabled/enabled/disabled/enabled acceptance matrix."
+  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "CI run 30981838658: success", "deploy job 92229738069: exact bcd2900e host/sandbox, preserve mode, writes enabled, mutable guest proof true", "POST /api/texture/documents: HTTP 500 code authority_failed", "exact-digest POST /api/texture/supervision/command: HTTP 400 code authority_failed", "bounded diagnostic review: accepted after preserving existing HTTP statuses and typed append-only document mapping", "go test ./internal/textureowner ./internal/computerevent -count=1: pass", "expanded bounded stage focused tests: pass"]
+  blocker_or_risk: "The deployed enabled guest is unwritable and therefore not accepted. The broad authority_failed result must be split once more before the source repair is identifiable. Canonical transaction acceptance, the remaining mode matrix, fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, rollback, and registry closure remain pending."
+  next_action: "Independently review and land the expanded bounded precondition codes, deploy to the same enabled disposable guest, and reproduce one canonical create. Repair the returned source branch, then resume the full disabled/enabled/disabled/enabled acceptance matrix."
 
 receipts:
   - id: texture-tape-definition-round-1

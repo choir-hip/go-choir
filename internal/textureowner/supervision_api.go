@@ -331,6 +331,24 @@ func textureSupervisionFailureCode(err error) string {
 		marker string
 		code   string
 	}{
+		{"supervision transaction authority unavailable", "event_appender_unavailable"},
+		{"supervision reservation unavailable", "reservation_store_unavailable"},
+		{"frozen supervision plan storage unavailable", "frozen_plan_store_unavailable"},
+		{"private supervision payload authority unavailable", "private_payload_authority_unavailable"},
+		{"artifact pin receipt verifier unavailable", "pin_receipt_verifier_unavailable"},
+		{"supervision command lookup unavailable", "command_store_unavailable"},
+		{"supervision transaction targets wrong computer", "wrong_computer"},
+		{"computer event appender: wrong computer", "wrong_computer"},
+		{"pre-reservation transaction_id", "transaction_identity_invalid"},
+		{"supervision event entropy", "event_identity_invalid"},
+		{"compute supervision command digest", "command_digest_failed"},
+		{"create reserved supervision event identity", "event_identity_failed"},
+		{"canonical supervision transaction", "transaction_encoding_failed"},
+		{"create supervision artifact ref", "artifact_ref_failed"},
+		{"compute supervision pin intent", "pin_intent_failed"},
+		{"pinned supervision artifact digest mismatch", "pin_digest_mismatch"},
+		{"canonical supervision payload receipt", "pin_receipt_encoding_failed"},
+		{"compute supervision request commitment", "request_commitment_failed"},
 		{"reserve supervision command", "command_reservation_failed"},
 		{"record supervision pin receipt", "frozen_plan_write_failed"},
 		{"load frozen supervision plan", "frozen_plan_load_failed"},
@@ -346,6 +364,7 @@ func textureSupervisionFailureCode(err error) string {
 		{"prepare embedded projection", "projection_prepare_failed"},
 		{"head CAS", "event_append_failed"},
 		{"verify head receipt", "event_receipt_verification_failed"},
+		{"supervision transaction:", "transaction_invalid"},
 	} {
 		if strings.Contains(message, stage.marker) {
 			return stage.code

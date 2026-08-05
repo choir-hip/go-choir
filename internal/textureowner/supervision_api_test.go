@@ -200,6 +200,11 @@ func TestTextureSupervisionFailureCodesExposeOnlyBoundedStages(t *testing.T) {
 		code string
 	}{
 		{
+			name: "runtime appender unavailable",
+			err:  errors.New("Texture supervision append failed: supervision transaction authority unavailable"),
+			code: "event_appender_unavailable",
+		},
+		{
 			name: "projection prepare",
 			err:  errors.New("computer event appender: prepare embedded projection: database detail"),
 			code: "projection_prepare_failed",
