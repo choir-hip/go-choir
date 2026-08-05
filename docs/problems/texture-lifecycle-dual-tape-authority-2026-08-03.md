@@ -669,3 +669,46 @@ delta: `discovered` adds stable scope used as realization mailbox authority,
 source-scoped graph omission, ambiguous source-version import, unsound graph
 relabeling, pre-validation frozen-command resume, and an open snapshot schema;
 `introduced=[]`; `repaired=[]`.
+
+## Repaired candidate still collapses mailbox consumers and import identity — 2026-08-05
+
+Two independent read-only reviews rejected repaired frozen candidate
+`sha256:7981d06439d75820bc762fe0bbd393cb27c9bb3e9de4230149b6370d94540ee1`
+at base `a0a259d5b6cf1fd37474113c79c00bdcc4950f18`. This checkpoint records
+the newly exposed boundary failures before another repair-code commit.
+
+Actor dispatch producers now correctly address the mutable realization
+mailbox, but two consumers reuse that mailbox identity as canonical authority.
+Texture initial dispatch and cold wake pass the actor-runtime `computerID` into
+stable document/activation validation, so a valid Texture activation fails
+when stable and realization IDs differ. Generic cold-wake reconciliation uses
+the same realization ID for `GetAgentByScope`; stable persistent Super and
+projected agents are therefore absent after restart and their accepted
+canonical deliveries remain undrained. The actor boundary must carry mailbox
+scope for dispatch compatibility and derive stable canonical scope from the
+runtime for all state and authority lookups.
+
+Projection-import frozen recovery now validates target owner/computer,
+trajectory, class, mutation, and manifest fields before resume, but it does not
+compare the frozen manifest's `source_computer_id` with the current mutable
+source. A command ID reused after realization replacement can therefore resume
+and materialize a snapshot frozen from another source computer. Separately, the
+import validator and canonical object builder still key source entities by
+canonical ID alone. The source graph legitimately stores identity by
+`(canonical_id, version_id)` and one revision may pin two exact historical
+versions of the same entity; the current import rejects that losslessly
+representable graph as a duplicate.
+
+Mutation class remains `red`. Protected surfaces are actor activation
+authority, cold restart delivery, persistent Super identity, frozen import
+recovery, source-computer binding, and lossless source graph materialization.
+Admissible evidence adds a real divergent-identity actor-handler test, a
+different-source frozen-command refusal before resume, and a two-version
+same-entity import round trip. Rollback remains disabled activation run
+`30977754149`; neither rejected candidate may be deployed. Conjecture delta:
+producer-side identity separation is insufficient unless every consumer
+receives or derives both scopes, and source graph identity is a canonical and
+version pair rather than a canonical ID. Heresy delta: `discovered` adds
+mailbox identity reused as canonical consumer authority, source-computer-free
+frozen recovery, and canonical-only source-entity import identity;
+`introduced=[]`; `repaired=[]`.
