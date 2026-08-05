@@ -789,3 +789,86 @@ from realization-scoped scheduling rows. Heresy delta: `discovered` adds
 unscoped imported evidence invisibility, realization-scoped canonical mutation
 authority, and cross-realization active-run reuse; `introduced=[]`;
 `repaired=[]`.
+
+## Fifth candidate confirms identity-boundary non-convergence — 2026-08-05
+
+Two independent read-only reviews rejected frozen candidate
+`sha256:dd38c85cfaff7bb218823884fa680ef9bbe64788216e540bf824de276b7d7362`
+at base `b5bfe9073e4ef78c5a7517aa6c03f4690c99391f`. This is the fifth
+rejected implementation iteration in one substrate. Per `AGENTS.md` root-cause
+clustering and dead-end rules, incremental patching stops here pending explicit
+owner direction.
+
+The reviews found seven remaining failures. Source selection merges refs by
+document/revision/occurrence and can silently discard distinct canonical/version
+records before the source digest is frozen. Imported source object writes carry
+no absent-or-content-equality conditions, so target provenance can be
+overwritten. Stable-scoped Texture mutations still have realization-scoped
+edit/completion/failure/passivation consumers. Active and passivated Texture
+runs from an old realization are selected before replacement logic, while the
+boot actor sweep can execute old-realization mailboxes on the new realization.
+Finally, putting mutable realization identity inside the idempotent
+`trajectory_started` command makes a lost-response retry conflict after
+realization replacement.
+
+### Root-cause clustering assessment
+
+The failures form two dependency graphs:
+
+```text
+stable ComputerID canonical subject/projection
+  -> backend-stamped run authority
+  -> mutable realization scheduling row
+  -> realization-scoped mailbox
+  -> active/passivated/restart consumers
+
+legacy scoped + generic source graph
+  -> lossless canonical/version selection
+  -> explicit source-scope provenance
+  -> reversible target re-key
+  -> conditioned target materialization
+  -> reader-visible projection
+  -> reconstruction ownership
+```
+
+The implementation passes bare strings through both graphs and duplicates
+scope decisions at each caller. `Runtime.ComputerID()` is an existing partial
+replacement, but there is no shared typed scope boundary and it is therefore
+not sufficient. The actor runtime already has a realization-scoped mailbox
+identity, and canonical projection already has stable scope; the missing
+connection is one runtime-owned scope value whose stable and realization
+components cannot be substituted accidentally. Active/passivated selection,
+boot sweeping, mutation lookup, dispatch, and cold recovery must consume that
+one boundary rather than independently choosing `ComputerID` or `SandboxID`.
+
+For import, `lifecycleSourceGraphBatch` is the existing source-graph identity,
+metadata, and conditional-write implementation. The import path manually
+reimplements it. The substrate repair should share a source-graph
+materialization/condition builder, preserve every canonical/version pair, and
+refuse ambiguous source or pre-existing target collisions before append.
+
+One architecture decision remains owner-sensitive. Mutable realization
+identity inside `trajectory_started` preserves the initial scheduling receipt
+but contaminates stable command idempotency and reconstructs stale scheduling
+state after replacement. The safer substrate direction is to keep realization
+out of the stable semantic start transaction, materialize a stable canonical
+agent, and bind that subject to the current realization through the existing
+runtime/actor scheduling authority. If realization changes must instead be on
+the canonical tape, the schema needs a separate idempotent activation-binding
+transition rather than changing the original start command. This authority
+choice must be settled before another implementation candidate.
+
+Mutation class remains `red`. Protected surfaces are canonical command
+idempotency, actor mailbox execution, restart recovery, Texture mutation
+authority, migration source digests, private evidence provenance, and
+object-graph conditional writes. Admissible evidence for any successor
+candidate must include a single vm-a-to-vm-b scenario covering initial,
+active, passivated, boot-sweep, and retry paths, plus mixed scoped/generic
+multi-version import with a conflicting pre-existing target object. Rollback
+remains disabled activation run `30977754149`; no rejected candidate may be
+deployed. Conjecture delta: identity correctness requires one typed boundary
+and one shared source-graph materializer, not more caller-local substitutions.
+Heresy delta: `discovered` adds occurrence-key source loss, unconditioned
+target provenance overwrite, stable mutation/realization consumer divergence,
+old-realization active/passivated/mailbox execution, and realization-dependent
+semantic command idempotency; `introduced=[]`; `repaired=[]`.

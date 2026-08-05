@@ -175,25 +175,25 @@ measures:
     cannot_prove: "A bounded three-way trajectory does not prove throughput or optimal scheduling at arbitrary fan-out; it proves the causal and authority contract."
 
 now:
-  status: in_progress
-  slice: "Two independent reviews rejected fourth candidate sha256:14ca0e8fadca1d6976420c0381829e347f63ed53e0201e54f7ccc76a2d8fc682. Versioned import materialization and trajectory realization preservation are repaired, but unscoped legacy source records remain invisible after target import, initial Texture AgentMutation authority still uses realization scope, and persistent Super recovery can reuse an active run from a prior realization."
-  question: "Can the next repair carry reversible unscoped-source provenance, stamp canonical mutation authority from stable run metadata, and refuse old-realization active runs without weakening historical compatibility?"
+  status: blocked_incomplete
+  slice: "Two independent reviews rejected fifth candidate sha256:dd38c85cfaff7bb218823884fa680ef9bbe64788216e540bf824de276b7d7362. Five incremental implementation iterations have not converged: stable/realization identity remains duplicated across canonical state, run authority, actor mailboxes, and wake/retry consumers; import still duplicates source-graph selection and conditional materialization."
+  question: "Owner decision required by the AGENTS.md non-convergence rule: remove mutable realization identity from the stable trajectory-start transaction and bind it only in runtime scheduling, or add a separate canonical activation-binding transition?"
   reconciliation:
-    observed_at: 2026-08-05T09:25:20Z
-    source_ref: ff9dd3d9b133b25bda09cb7210b009ef1144939d
+    observed_at: 2026-08-05T09:51:08Z
+    source_ref: b5bfe9073e4ef78c5a7517aa6c03f4690c99391f
     deploy_identity: "No repaired runtime deployment exists. Last accepted source evidence remains b7445551 preserve-mode enabled guest with wrong_computer append refusal."
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@ff9dd3d9, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@ff9dd3d9]
-    worktree_inventory_ref: "Goal-owned rejected runtime candidate plus this fourth review problem/Definition checkpoint are dirty on main at ff9dd3d9; no untracked files; unrelated worktrees untouched."
+    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@b5bfe907, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@b5bfe907]
+    worktree_inventory_ref: "Goal-owned rejected runtime candidate plus this fifth review problem/Definition checkpoint are dirty on main at b5bfe907; no untracked files; unrelated worktrees untouched."
     status: reconciled
   candidate:
-    id: texture-tape-computer-identity-repair
+    id: texture-tape-identity-boundary-repair
     state: rejected
-    ref: "worktree diff sha256:14ca0e8fadca1d6976420c0381829e347f63ed53e0201e54f7ccc76a2d8fc682 excluding Definition receipt"
+    ref: "worktree diff sha256:dd38c85cfaff7bb218823884fa680ef9bbe64788216e540bf824de276b7d7362 excluding Definition receipt"
     owner: Main
-    base: ff9dd3d9b133b25bda09cb7210b009ef1144939d
-    digest: "sha256:14ca0e8fadca1d6976420c0381829e347f63ed53e0201e54f7ccc76a2d8fc682"
-    scope: "Rejected: generic legacy source records remain unscoped after target import; initial mutation authority uses realization scope; persistent Super recovery can reuse a prior-realization active run."
-    rollback: "Before deployment, discard or revert the exact source diff. After deployment, disable supervision writes and deploy the accepted compatibility floor or a forward-compatible repair; preserve canonical events and rebuild projections. No canonical event rollback is allowed."
+    base: b5bfe9073e4ef78c5a7517aa6c03f4690c99391f
+    digest: "sha256:dd38c85cfaff7bb218823884fa680ef9bbe64788216e540bf824de276b7d7362"
+    scope: "Rejected: source-ref occurrence merging drops versions; imported target source objects are unconditioned; stable Texture mutations retain realization-scoped consumers; old-realization active, passivated, and mailbox work can block or double-execute restart; realization-dependent trajectory-start payload breaks cross-realization retry."
+    rollback: "No rejected candidate was deployed. Preserve the dirty source candidate until the owner selects the substrate direction; then replace it coherently rather than stacking a sixth caller-local patch. No canonical event rollback is allowed."
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
     kind: architecture
@@ -203,9 +203,9 @@ now:
     owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may execute schema/caller/migration work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "candidate sha256:14ca0e8fadca1d6976420c0381829e347f63ed53e0201e54f7ccc76a2d8fc682: two independent REJECT reviews", "canonical review: initial mutation scope and cross-realization persistent Super reuse", "import review: unscoped legacy source graph remains invisible after target materialization"]
-  blocker_or_risk: "The fourth candidate is rejected and must not be deployed. A fifth problem-first repair and exact independent review are required. The enabled guest and all remaining mission acceptance axes remain pending."
-  next_action: "Checkpoint the fourth review, repair reversible unscoped-source import, stable mutation authority, and realization-matched recovery with exact regressions, then freeze and independently review a fifth candidate."
+  evidence_refs: [docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "candidate sha256:dd38c85cfaff7bb218823884fa680ef9bbe64788216e540bf824de276b7d7362: two independent REJECT reviews", "canonical review: mutation consumers, active/passivated restart, boot mailbox sweep, and cross-realization command retry", "import review: occurrence-key version loss and unconditioned target overwrite"]
+  blocker_or_risk: "The fifth candidate is rejected and must not be deployed. AGENTS.md requires a structural assessment and explicit human direction after 3+ iterations without convergence. The problem record now identifies a typed runtime scope boundary and shared conditional source-graph materializer; the remaining owner-sensitive choice is whether realization binding stays outside semantic tape state or becomes a separate canonical transition."
+  next_action: "Owner selects the realization-binding authority. Then replace the rejected caller-local changes with one substrate-level scope boundary and shared source-graph materializer, add the combined vm-a-to-vm-b and conflicting-target import proofs, freeze once, and run independent review."
 
 receipts:
   - id: texture-tape-definition-round-1
