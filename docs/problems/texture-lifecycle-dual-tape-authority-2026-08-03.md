@@ -401,3 +401,47 @@ source revert and restoration of the disposable staging model-policy backup.
 Heresy delta: `discovered` adds the explicit-target rewrite and missing
 canonical delivery consumer; `introduced` remains none by observation;
 `repaired` remains none.
+
+## Fourth frozen implementation review blockers — 2026-08-04
+
+The delivery/privacy repair candidate was frozen against
+`215775d467d5ae876ab54e38f9bea790ad347a89` with tracked binary-diff digest
+`sha256:17a35ec073e22df58f8f9b1b5ea8ab5c635d554fee481ce2d9b4101909b4fc77`.
+Four independent read-only reviewers rejected it before landing. Their observed
+failures precede any further repair:
+
+1. Generic cold and warm compatibility paths can use legacy mailbox rows when
+   canonical appender/private-artifact authority is unavailable, rather than
+   proving the canonical delivery set is empty.
+2. Super and generic cold compatibility wakes persist packet plaintext in the
+   run prompt and mark it pre-injected, bypassing private-envelope taint and
+   exposing literals to provider-call Trace and terminal run surfaces.
+3. Canonical-first selection still reads compatibility storage eagerly, so an
+   irrelevant legacy read/decode failure can block an available canonical
+   Texture or generic delivery.
+4. A post-commit actor dispatch failure has no live-process retry, and restart
+   recovery can strand a persisted initial activation by redispatching only a
+   coagent wake rather than the stable initial activation.
+5. Role-addressed CoSuper cold recovery creates a run without assignment and
+   attempt authority, so its supervised result cannot be returned.
+6. Completed derived runs treat every injected delivery ID as consumed without
+   a canonical acknowledgement/disposition mutation, allowing one undisposed
+   result to disappear from delivery while still blocking settlement.
+7. Canonical Texture wakes mark every legacy mutation stale but the edit path
+   still requires that legacy mutation, so the owner-visible revision cannot be
+   committed.
+8. Texture source extraction is not scoped to the activated trajectory and can
+   cite a pending delivery from another trajectory for the same actor.
+9. Private tool-result Trace records only the provider-visible capped output
+   digest/length for ordinary tools, not the full redacted output digest/length.
+
+This is one remaining authority-and-privacy cutover cluster. The next candidate
+must make canonical emptiness a prerequisite for every compatibility read;
+route all packets through one private-tainted injection path; bind dispatch,
+activation, acknowledgement, Texture edits, source projection, and CoSuper
+assignment authority to the same canonical delivery; and make every
+post-commit failure restart- and live-recoverable. Mutation class remains
+`red`. Protected surfaces remain canonical supervision append/reduction,
+private artifacts and Trace, actor delivery/restart, Texture revision authority,
+and settlement. Rollback is source revert before deployment. H032 remains
+`discovered`; `introduced=[]`, `repaired=[]`.
