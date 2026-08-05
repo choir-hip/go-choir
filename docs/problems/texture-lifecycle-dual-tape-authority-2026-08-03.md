@@ -712,3 +712,39 @@ version pair rather than a canonical ID. Heresy delta: `discovered` adds
 mailbox identity reused as canonical consumer authority, source-computer-free
 frozen recovery, and canonical-only source-entity import identity;
 `introduced=[]`; `repaired=[]`.
+
+## Third candidate preserves manifest identity but collapses materialization — 2026-08-05
+
+Two independent read-only reviews rejected frozen candidate
+`sha256:93be8d3bb6049ac70730979e27960c758099302cf9045f08966bc576e87b0935`
+at base `cb8abc5388c6800d18b2ff341dfd5d41d814e1f1`. The repaired manifest,
+validator, rebind, schema, and frozen-command recovery preserve source graph
+versions and both computer scopes, but two downstream consumers still erase
+that information.
+
+`supervisionImportedDerivedObjects` materializes imported source entities and
+refs through generic lifecycle-object identities keyed only by canonical ID.
+Two exact versions therefore resolve to the same object-graph row, and the
+later write replaces the earlier one. Those rows also omit the
+`entity_version_key`, `ref_version_key`, and revision metadata used by the
+source-graph readers, while reconstruction cleanup now expects version-scoped
+IDs. The import must use the same canonical/version identity and metadata
+recipe as the live lifecycle source-graph batch.
+
+Separately, Texture start requests carry stable `ComputerID` and realization
+`SandboxID`, but `startSupervisionTrajectory` serializes only the Texture actor
+ID. The canonical reducer reconstructs the agent with
+`SandboxID=ComputerID`, silently replacing the mutable realization mailbox
+with stable canonical scope. The transaction must carry the realization
+identity explicitly and the reducer must preserve it.
+
+Mutation class remains `red`. Protected surfaces are imported private evidence,
+reconstruction ownership, canonical Texture actor identity, and restart
+delivery. Admissible evidence adds a materialized two-version graph readback
+and an exact divergent-identity trajectory-start assertion before a fourth
+frozen review. Rollback remains disabled activation run `30977754149`; no
+rejected candidate may be deployed. Conjecture delta: typed identity must
+survive every reducer consumer, not only the wire manifest and producer.
+Heresy delta: `discovered` adds canonical/version collapse during import
+materialization and realization identity loss during trajectory reduction;
+`introduced=[]`; `repaired=[]`.

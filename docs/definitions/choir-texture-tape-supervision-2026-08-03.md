@@ -176,23 +176,23 @@ measures:
 
 now:
   status: in_progress
-  slice: "Independent reviews rejected repaired candidate sha256:7981d06439d75820bc762fe0bbd393cb27c9bb3e9de4230149b6370d94540ee1. Dispatch producers separated stable canonical scope from realization mailboxes, but Texture initial/cold handlers and generic cold-wake agent lookup still consumed mailbox scope as canonical authority. Frozen import recovery omitted expected source_computer_id, and import object identity still rejected two exact versions of one canonical source entity."
-  question: "Can the next repair carry both scopes through actor consumers, bind frozen recovery to source and target computers, and materialize source entities by canonical/version pair without weakening uniqueness elsewhere?"
+  slice: "Two independent reviews rejected third candidate sha256:93be8d3bb6049ac70730979e27960c758099302cf9045f08966bc576e87b0935. Manifest, validation, rebind, reconstruction ownership, schema closure, frozen recovery, and actor consumers now preserve their intended scopes, but import materialization still writes source records under canonical-only generic object identities and trajectory start reduction still replaces the realization SandboxID with stable ComputerID."
+  question: "Can the next repair reuse the live source-graph version identity/metadata recipe for imported objects and carry realization identity explicitly through trajectory start without weakening stable canonical scope?"
   reconciliation:
-    observed_at: 2026-08-05T08:14:34Z
-    source_ref: a0a259d5b6cf1fd37474113c79c00bdcc4950f18
+    observed_at: 2026-08-05T09:03:39Z
+    source_ref: cb8abc5388c6800d18b2ff341dfd5d41d814e1f1
     deploy_identity: "No repaired runtime deployment exists. Last accepted source evidence remains b7445551 preserve-mode enabled guest with wrong_computer append refusal."
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@a0a259d5, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@a0a259d5]
-    worktree_inventory_ref: "Goal-owned rejected runtime candidate plus this second review problem/Definition checkpoint are dirty on main at a0a259d5; no untracked files; unrelated worktrees untouched."
+    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@cb8abc53, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@cb8abc53]
+    worktree_inventory_ref: "Goal-owned rejected runtime candidate plus this third review problem/Definition checkpoint are dirty on main at cb8abc53; no untracked files; unrelated worktrees untouched."
     status: reconciled
   candidate:
     id: texture-tape-computer-identity-repair
     state: rejected
-    ref: "worktree diff sha256:7981d06439d75820bc762fe0bbd393cb27c9bb3e9de4230149b6370d94540ee1 excluding Definition receipt"
+    ref: "worktree diff sha256:93be8d3bb6049ac70730979e27960c758099302cf9045f08966bc576e87b0935 excluding Definition receipt"
     owner: Main
-    base: a0a259d5b6cf1fd37474113c79c00bdcc4950f18
-    digest: "sha256:7981d06439d75820bc762fe0bbd393cb27c9bb3e9de4230149b6370d94540ee1"
-    scope: "Rejected: actor consumers still collapsed mailbox and canonical scope; frozen recovery omitted source identity; source-entity import identity remained canonical-only instead of canonical/version."
+    base: cb8abc5388c6800d18b2ff341dfd5d41d814e1f1
+    digest: "sha256:93be8d3bb6049ac70730979e27960c758099302cf9045f08966bc576e87b0935"
+    scope: "Rejected: imported source graph rows still collapse canonical/version identity and omit source-reader metadata; trajectory start reduction still relabels realization SandboxID as stable ComputerID."
     rollback: "Before deployment, discard or revert the exact source diff. After deployment, disable supervision writes and deploy the accepted compatibility floor or a forward-compatible repair; preserve canonical events and rebuild projections. No canonical event rollback is allowed."
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
@@ -203,9 +203,9 @@ now:
     owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may execute schema/caller/migration work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "candidate sha256:7981d06439d75820bc762fe0bbd393cb27c9bb3e9de4230149b6370d94540ee1: two independent REJECT reviews", "canonical review: Texture handler and generic cold-wake consumer scope failures", "import review: source_computer_id recovery omission and multi-version entity rejection"]
-  blocker_or_risk: "The second candidate is rejected and must not be deployed. Another problem-first repair and exact independent review are required. The enabled guest and all remaining mission acceptance axes remain pending."
-  next_action: "Checkpoint the second review, repair the four concrete findings with divergent actor-handler, source-bound recovery, and two-version graph regressions, then freeze and independently review a third candidate."
+  evidence_refs: [docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "candidate sha256:93be8d3bb6049ac70730979e27960c758099302cf9045f08966bc576e87b0935: two independent REJECT reviews", "canonical review: trajectory reducer drops realization identity and confirms imported source materialization collapse", "import review: manifest identity is repaired but object-graph materialization remains canonical-only"]
+  blocker_or_risk: "The third candidate is rejected and must not be deployed. A fourth problem-first repair and exact independent review are required. The enabled guest and all remaining mission acceptance axes remain pending."
+  next_action: "Checkpoint the third review, repair imported source materialization and trajectory realization preservation with exact readback regressions, then freeze and independently review a fourth candidate."
 
 receipts:
   - id: texture-tape-definition-round-1
