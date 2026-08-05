@@ -395,8 +395,7 @@ func TestPendingSourceExtractionFailsClosedWithoutCanonicalAuthority(t *testing.
 	if _, _, err := handler.Store.DispatchWorkerUpdate(ctx, update, &message); err != nil {
 		t.Fatalf("seed legacy source update: %v", err)
 	}
-	withoutAuthority := *handler
-	withoutAuthority.Core = nil
+	withoutAuthority := &Handler{Store: handler.Store}
 	entities, _, err := withoutAuthority.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, targetAgentID, "source-authority-fail-closed", 10)
 	if err == nil {
 		t.Fatalf("source extraction without canonical authority returned entities: %#v", entities)
