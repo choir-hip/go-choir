@@ -528,3 +528,50 @@ Mutation class remains `red`; protected surfaces are lifecycle authority,
 vmctl ownership, deployment mode, and guest boot identity. Rollback succeeded
 to disabled mode. Heresy delta: `discovered` adds contradictory public
 lifecycle versus vmctl-active authority; `introduced=[]`; `repaired=[]`.
+
+## Enabled guest rejects the first canonical supervision append — 2026-08-05
+
+Forced same-release disabled run `30977754149` deployed source
+`f5500f2e913201fcc3ebb55e33eb914d91a6573c`, refreshed disposable mutable guest
+`vm-bbdbbd01c4390b7036067aaa12afeb68`, and published an activation receipt with
+`supervision_writes_mode=disabled`, `supervision_writes_disabled=true`, and
+`guest_health_verified=true`. A prompt-bar write returned HTTP 500 and the
+owner's run list remained empty, proving the disabled floor refused the write
+without a partial run record.
+
+Forced same-release enabled run `30979037961` attempt 2 then refreshed the same
+guest and published `supervision_writes_mode=enabled`,
+`supervision_writes_disabled=false`, and `guest_health_verified=true`. The first
+canonical Texture document creation nevertheless returned HTTP 500
+`failed to create document`. A separately generated, schema-valid
+`open_trajectory` request with an exact locally computed command digest reached
+`/api/texture/supervision/command` but returned HTTP 400
+`invalid supervision request`; the more specific command-digest rejection no
+longer applied. Stopping and waking the disposable computer advanced its epoch
+from 8233 to 8234 and reproduced the same document-creation failure immediately
+after boot, excluding short-lived capability expiry as the sufficient cause.
+A focused local `startTextureOwnerDocument` fixture passed, so the remaining
+error is specific to the deployed appender, persistent projection, credential,
+or platform-CAS path.
+
+Prompt-bar submissions made while enabled did create completed conductor run
+compatibility records whose decisions set `create_initial_version=false`; they
+did not create a Texture document or a canonical supervision trajectory and are
+not append acceptance evidence. No accepted trajectory, event receipt, or
+canonical document resulted from the failed probes.
+
+This blocks the enabled leg of the required same-release transition matrix.
+Before repair, capture a bounded deployed error-stage diagnostic without
+treating SSH or a host-side database mutation as product proof. Then repair the
+source failure, return to disabled, and rerun disabled/enabled/disabled/enabled
+with a canonical transaction receipt on each enabled leg and refusal plus
+non-append evidence on each disabled leg.
+
+Mutation class remains `red`; protected surfaces are the canonical supervision
+appender, private projection, guest credential path, platform event pin/CAS,
+deployment mode, and run acceptance. Rollback is the successful disabled
+activation receipt from run `30977754149`; the current enabled guest must not be
+treated as accepted while canonical writes fail. Conjecture delta: write-mode
+health proves boot configuration and replay only, not append reachability.
+Heresy delta: `discovered` adds enabled-but-unwritable supervision authority;
+`introduced=[]`; `repaired=[]`.
