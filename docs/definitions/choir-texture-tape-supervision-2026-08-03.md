@@ -176,23 +176,24 @@ measures:
 
 now:
   status: in_progress
-  slice: "Expanded diagnostic b7445551 passed CI run 30983410517 and exact preserve-mode deploy job 92235033317 refreshed the mutable enabled guest. The first canonical document append returned bounded code wrong_computer. Source convergence shows the appender is bound to stable CHOIR_COMPUTER_ID while Texture transaction builders use realization-scoped Runtime.TextureSandboxID from SANDBOX_ID; the local fixture assigned one value to both and hid the mismatch. The problem record now checkpoints this dual identity before repair."
-  question: "Which complete canonical caller set must move to a stable runtime ComputerID accessor while realization-scoped compatibility state remains on SandboxID, and what replay/migration boundary prevents existing state from being orphaned?"
+  slice: "Independent reviews rejected stable-computer candidate sha256:09a8bd9999f5af58a420e259fea274628e2254861029b82f6a551ecbaa3845b6. Canonical actor resolution, evidence scope, persistent Super identity, and realization-mailbox dispatch were incomplete; projection import omitted scoped graph records, ignored pinned entity versions, failed to re-key computer-derived graph identities, resumed frozen commands before scope validation, and published an open snapshot schema. The problem checkpoint is recorded before repair-code commit."
+  question: "Can a repaired candidate keep canonical supervision on stable ComputerID, actor mailboxes on mutable SandboxID, and projection import as a reversible source-to-target identity transform while rejecting wrong frozen scope before mutation?"
   reconciliation:
-    observed_at: 2026-08-05T07:24:26Z
+    observed_at: 2026-08-05T08:14:34Z
     source_ref: b74455511d5fdb52a493c8bc6dcc73c4f65159d3
-    deploy_identity: "CI run 30983410517 succeeded. Deploy job 92235033317 published exact host/sandbox b7445551 in preserve mode and verified mutable guest vm-bbdbbd01c4390b7036067aaa12afeb68 with writes enabled. Public /health reports b7445551; authenticated bootstrap reports the VM-scoped sandbox identity."
+    deploy_identity: "Unchanged rejected-source evidence: CI run 30983410517 succeeded; deploy job 92235033317 published exact b7445551 in preserve mode; enabled canonical document append failed wrong_computer."
     authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@b7445551, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@b7445551]
-    worktree_inventory_ref: "Local main and origin/main at b7445551; only the goal-owned Definition and problem-first dual-identity checkpoint are dirty. Unrelated worktrees remain untouched."
+    worktree_inventory_ref: "Goal-owned rejected candidate and problem/Definition checkpoint are dirty on main at b7445551; unrelated worktrees remain untouched."
     status: reconciled
   candidate:
     id: texture-tape-computer-identity-repair
-    state: problem_checkpoint
-    ref: docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md
+    state: rejected
+    ref: "worktree diff sha256:09a8bd9999f5af58a420e259fea274628e2254861029b82f6a551ecbaa3845b6"
     owner: Main
-    base: b7445551
-    digest: "not frozen; caller and migration inventory required before repair"
-    scope: "Provide stable ComputerID to canonical supervision callers without relabeling mutable VM realizations or orphaning legacy realization-scoped state."
+    base: b74455511d5fdb52a493c8bc6dcc73c4f65159d3
+    digest: "sha256:09a8bd9999f5af58a420e259fea274628e2254861029b82f6a551ecbaa3845b6"
+    scope: "Rejected: stable canonical scope was incomplete at projected actor lookup, evidence binding, persistent Super recovery, realization-mailbox dispatch, source graph selection/re-keying, frozen-command validation order, and snapshot wire closure."
+    rollback: "Before deployment, discard or revert the exact source diff. After deployment, disable supervision writes and deploy the accepted compatibility floor or a forward-compatible repair; preserve canonical events and rebuild projections. No canonical event rollback is allowed."
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
     kind: architecture
@@ -202,9 +203,9 @@ now:
     owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may execute schema/caller/migration work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "CI run 30983410517: success", "deploy job 92235033317: exact b7445551 host/sandbox, preserve mode, writes enabled, mutable guest proof true", "POST /api/texture/documents: HTTP 500 code wrong_computer", "authenticated /api/shell/bootstrap: sandbox_id vm-bbdbbd01c4390b7036067aaa12afeb68", "source chain: vmctl stable ComputerID -> vmmanager choir.computer_id -> guest CHOIR_COMPUTER_ID appender; VMID -> SANDBOX_ID -> Runtime.TextureSandboxID transaction"]
-  blocker_or_risk: "Canonical Texture callers target the mutable VM realization rather than the stable appender ComputerID. A blind global identity replacement could orphan existing realization-scoped compatibility records, so the canonical caller and replay/migration boundary must be frozen first. The enabled guest is not accepted. Canonical transaction acceptance, the remaining mode matrix, fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, rollback, and registry closure remain pending."
-  next_action: "Inventory every canonical supervision transaction/projection caller and the runtime configuration seam. Select the smallest clean stable-ComputerID cutover with explicit legacy-state treatment, then freeze and independently review the repair candidate before code mutation."
+  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "candidate sha256:09a8bd9999f5af58a420e259fea274628e2254861029b82f6a551ecbaa3845b6: two independent REJECT reviews", "canonical-scope review: projected lookup/evidence/Super identity/mailbox findings", "projection-import review: scoped graph/version/re-key/frozen-order/schema findings", "go test focused stable-identity contracts before review: pass but insufficient"]
+  blocker_or_risk: "The first candidate is rejected and must not be deployed. A repaired exact candidate needs focused proof and independent review. The enabled guest is not accepted; CI, deployment, the full mode matrix, canonical transaction acceptance, fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, rollback, and registry closure remain pending."
+  next_action: "Repair every review finding, add divergent-identity and import-boundary regressions, freeze a new exact digest, and obtain independent acceptance before any source commit."
 
 receipts:
   - id: texture-tape-definition-round-1

@@ -618,3 +618,54 @@ ComputerID from runtime SandboxID at the caller boundary repairs the mismatch
 without relabeling mutable realizations. Heresy delta: `discovered` adds
 realization identity used as canonical computer authority; `introduced=[]`;
 `repaired=[]`.
+
+## First stable-computer candidate is incomplete at actor and import boundaries — 2026-08-05
+
+Two independent read-only reviews rejected frozen worktree candidate
+`sha256:09a8bd9999f5af58a420e259fea274628e2254861029b82f6a551ecbaa3845b6`
+at base `b74455511d5fdb52a493c8bc6dcc73c4f65159d3`. This checkpoint records
+the findings before any repair-code commit.
+
+The canonical-scope review found that projected run creation still resolved
+agents and delivery backlogs under `SandboxID`; initial owner-decision evidence
+serialized the mutable realization as `computer_id`; persistent Super recovery
+created its agent under the realization scope; and Texture, Super, and cold
+reconciliation wakes dispatched canonical records through a stable-computer
+mailbox even though actor mailboxes remain realization-scoped. These paths can
+refuse a valid projected activation, bind private evidence to the wrong
+computer, create two durable identities for persistent Super, or leave accepted
+canonical deliveries unwoken after restart.
+
+The projection-import review found four independent cutover failures.
+The builder queried only legacy unscoped source graph records and therefore
+omitted normal source-computer entities and refs. Entity selection ignored the
+pinned version ID and could import every historical version of one canonical
+entity. Rebinding changed source graph `ComputerID` without recomputing the
+computer-derived entity/ref canonical IDs and dependent ref version linkage.
+Frozen-command recovery resumed a command before verifying its complete import
+scope, so command-ID reuse could finalize an unrelated transaction before
+returning a mismatch. The published JSON schema also left `snapshot` open and
+untyped, accepting members the Go reducer drops before recomputing the digest.
+
+This is still one substrate defect: the first candidate treated stable computer
+scope as a mechanical replacement, but the boundary carries three distinct
+identities. Canonical supervision state uses the stable computer; actor
+activation uses the mutable realization mailbox; projection import preserves a
+frozen source-computer graph while deterministically constructing and
+validating the target-computer graph. The repair must encode each transition
+explicitly rather than globally relabeling `SandboxID`.
+
+Mutation class remains `red`. Protected surfaces are canonical supervision
+scope, private evidence bindings, actor delivery/restart recovery, persistent
+Super identity, projection-import source and target digests, frozen-command
+recovery, and the published wire schema. Admissible evidence is a second exact
+candidate review plus focused divergent-identity, pinned-source-version,
+reversible-rebind, and wrong-frozen-scope tests before CI and deployed
+acceptance. Rollback remains the successful disabled activation from run
+`30977754149`; no rejected candidate may be deployed. Conjecture delta: a
+stable `Runtime.ComputerID` accessor is necessary but not sufficient unless
+mailbox and source-import boundaries retain their distinct identities. Heresy
+delta: `discovered` adds stable scope used as realization mailbox authority,
+source-scoped graph omission, ambiguous source-version import, unsound graph
+relabeling, pre-validation frozen-command resume, and an open snapshot schema;
+`introduced=[]`; `repaired=[]`.
