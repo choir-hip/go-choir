@@ -445,3 +445,42 @@ post-commit failure restart- and live-recoverable. Mutation class remains
 private artifacts and Trace, actor delivery/restart, Texture revision authority,
 and settlement. Rollback is source revert before deployment. H032 remains
 `discovered`; `introduced=[]`, `repaired=[]`.
+
+
+## Compatibility-floor deployment and control gap — 2026-08-05
+
+Forced staging run `30971525939` built source
+`8cab71b2c4ee3fc0484675830a3a46767a678039` after every selected CI gate
+passed. The deploy reached the host: public proxy `/health` reported that exact
+`build.commit`. It did not reach one accepted host/guest/computer identity.
+Refresh of active mutable computer
+`vm-58e28a39cda64651f8bca7e9ac2efc52` timed out after 300 seconds. The
+workflow projected that ownership `failed`, observed the acceptance computer
+still serving sandbox commit `794b99c9bf1526ee74a72fec8ba31e0c21df6d16`,
+refused the activation receipt, and retained
+`/var/lib/go-choir/deploy-failures/30971525939-1.json`.
+
+The failed ownership is no longer in the active-only refresh set. A retry is
+therefore the smallest safe probe; mixed host/guest commits remain rejected
+until the workflow publishes one exact activation receipt.
+
+The attempt also exposed a separate cutover-control gap. The compatibility
+floor hard-sets `CHOIR_SUPERVISION_WRITES_DISABLED=1` in the immutable guest
+systemd service. The required global switch exists and fails closed, but the
+same exact release has no tracked platform configuration path that can boot
+guests disabled for the floor, enabled for cutover, disabled for rollback
+rehearsal, and enabled again while binding each state to deployment and guest
+health receipts. Removing the hard-set environment line would enable writes but
+would not supply the required exact-release rollback control.
+
+Mutation class remains `red`. Protected surfaces are deployment routing, active
+VM refresh, guest boot configuration, and the canonical supervision write
+gate. Admissible repair evidence is a successful exact-identity floor retry,
+then same-release disabled/enabled/disabled/enabled deploy receipts whose
+refreshed guest health reports the expected switch state. Rollback is the
+fail-closed default plus the prior activation receipt; no canonical event may be
+deleted or rewritten. Conjecture delta: a platform-owned tri-state deployment
+input (`preserve`, `disabled`, `enabled`) can control a boot-time guest override
+without changing the release artifact. Heresy delta: `discovered` adds the
+mixed-identity refresh failure and absent tracked same-release switch control;
+`introduced=[]`; `repaired=[]`.

@@ -176,23 +176,23 @@ measures:
 
 now:
   status: in_progress
-  slice: "Canonical source commit 0cf889b12944bf22394d5b0cd2a8eeeafac8dfda is on origin/main. Replacement CI run 30970387427 cleared vet but reproduced the same actorruntime race-shard SQLITE_BUSY while the boot sweep handled the migrated mailbox; the repair now stops the actor scheduler before the migration-only fixture inspects SQLite."
-  question: "Will the deterministic migration-fixture repair pass CI, deploy as the exact staging identity, and preserve the accepted one-tape authority, recovery, privacy, and owner-legibility properties on the disposable acceptance computer?"
+  slice: "Canonical source commit 8cab71b2c4ee3fc0484675830a3a46767a678039 reached staging host services in forced CI run 30971525939, but activation failed closed before its receipt: refresh of active mutable computer vm-58e28a39cda64651f8bca7e9ac2efc52 timed out after 300 seconds and projected that ownership failed. The deploy left proxy commit 8cab71b2 live while the acceptance computer still served sandbox commit 794b99c9; this is not an accepted deployment identity."
+  question: "Will a documented retry complete the fail-closed active-computer refresh and publish one exact compatibility-floor identity before any supervision event is emitted, and how will that exact release expose a tracked global disable/enable control for the later rollback rehearsal?"
   reconciliation:
-    observed_at: 2026-08-05T02:57:51Z
-    source_ref: 0cf889b12944bf22394d5b0cd2a8eeeafac8dfda
-    deploy_identity: "Last observed staging identity remains the failed-acceptance checkpoint 248e4692595534df9843dff37a00a4146f3d570f; source 0cf889b1 is not yet deployed."
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@0cf889b1, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@0cf889b1]
-    worktree_inventory_ref: "Local main and origin/main at 0cf889b1 plus one goal-owned migration-fixture repair and this receipt; unrelated worktrees remain untouched."
+    observed_at: 2026-08-05T03:45:26Z
+    source_ref: 8cab71b2c4ee3fc0484675830a3a46767a678039
+    deploy_identity: "Incomplete mixed deployment from run 30971525939: public proxy build.commit=8cab71b2c4ee3fc0484675830a3a46767a678039; active acceptance sandbox build.commit=794b99c9bf1526ee74a72fec8ba31e0c21df6d16; no activation receipt for 8cab71b2."
+    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@8cab71b2, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@8cab71b2]
+    worktree_inventory_ref: "Local main and origin/main at 8cab71b2; only this problem-first receipt is goal-owned. Unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: texture-tape-supervision-ci-repair-v7
-    state: locally_verified
-    ref: "uncommitted test-only repair at base 0cf889b12944bf22394d5b0cd2a8eeeafac8dfda"
+    id: texture-tape-supervision-compatibility-floor
+    state: deploy_failed_closed
+    ref: 8cab71b2c4ee3fc0484675830a3a46767a678039
     owner: Main
-    base: 0cf889b12944bf22394d5b0cd2a8eeeafac8dfda
-    digest: "test repair excluding this Definition receipt: sha256:da4a59c0ac6160fe4ded33bb9380a2749ba4366e5a90f1d34c63390b3cbeddd5"
-    scope: "Quiesce the actor scheduler before the boot-migration fixture inspects its SQLite log; no production behavior change."
+    base: 8cab71b2c4ee3fc0484675830a3a46767a678039
+    digest: "source commit 8cab71b2c4ee3fc0484675830a3a46767a678039; deployment receipt absent"
+    scope: "Compatibility-floor runtime with CHOIR_SUPERVISION_WRITES_DISABLED hard-set in the guest service. No canonical supervision event was authorized."
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
     kind: architecture
@@ -202,9 +202,9 @@ now:
     owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may execute schema/caller/migration work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "source commit 0cf889b12944bf22394d5b0cd2a8eeeafac8dfda on origin/main", "CI run 30969279117: vet failure repaired", "CI run 30970387427 job 92193249199: repeated adapter_test.go:516 SQLITE_BUSY during concurrent boot-sweep handler transaction", "go test -race ./internal/actorruntime -run TestAdapterStartMigratesUniqueLegacyUnscopedMailbox -count=20: pass after scheduler quiescence", internal/agentcore/super_controller.go, internal/agentcore/supervision_execution.go, internal/computerevent/appender.go, internal/store/supervision_projection.go]
-  blocker_or_risk: "A second CI retry and deployment remain pending. The race-shard failure is now source-demonstrably confined to a migration-only fixture inspecting SQLite while Start's actor sweep runs; the fixture repair waits for the scheduler without changing production code. No production-code blocker is known. Deployed fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, compatibility-floor rollback, and terminal registry closure remain unproved."
-  next_action: "Commit and push the test-only race-fixture repair with this receipt, monitor replacement CI and deployment, verify exact staging identity, then run deployed acceptance and close H032/registries only if every required receipt is obtained."
+  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "source commit 8cab71b2c4ee3fc0484675830a3a46767a678039 on origin/main", "CI run 30971525939: all selected vet, test, TLA+, doccheck, frontend, and aggregate gates passed", "CI run 30971525939 job 92198556648: vm-58e28a39cda64651f8bca7e9ac2efc52 refresh timed out after 300 seconds; incomplete receipt /var/lib/go-choir/deploy-failures/30971525939-1.json", "2026-08-05 public /health: proxy build.commit 8cab71b2 while active acceptance sandbox diagnostics remained 794b99c9", internal/agentcore/super_controller.go, internal/agentcore/supervision_execution.go, internal/computerevent/appender.go, internal/store/supervision_projection.go]
+  blocker_or_risk: "Staging is a mixed, unaccepted deployment: host services reached 8cab71b2 but active-computer refresh failed and no activation receipt was published. The failed ownership is excluded from a subsequent active-only refresh, so one documented retry is the next safe probe. Separately, the compatibility floor currently hard-sets the write-disable switch in the immutable guest service and has no tracked same-release platform control for disabled/enabled rollback rehearsal; cutover cannot proceed until that control is implemented and proved. Deployed fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, compatibility-floor rollback, and terminal registry closure remain unproved."
+  next_action: "Commit and push this problem-first receipt without a code fix, then retry the forced compatibility-floor deployment. Accept no staging identity until the workflow publishes its exact activation receipt. After a successful floor, add and prove the tracked same-release global write-mode control before enabling supervision writes."
 
 receipts:
   - id: texture-tape-definition-round-1
@@ -288,6 +288,22 @@ receipts:
       environment_identity: "last observed deployed checkpoint 248e4692595534df9843dff37a00a4146f3d570f; 0cf889b1 not yet deployed"
       deployed_acceptance: pending
     registry_conformance_ref: "terminal closure remains pending successful CI, exact staging identity, deployed acceptance, and compatibility-floor rehearsal"
+  - id: texture-tape-compatibility-floor-deploy-attempt-1
+    boundary: deploy
+    commit_or_artifact: "source 8cab71b2c4ee3fc0484675830a3a46767a678039; GitHub Actions run 30971525939; incomplete deploy receipt /var/lib/go-choir/deploy-failures/30971525939-1.json"
+    proof_refs: ["CI run 30971525939: selected gates passed", "deploy job 92198556648: active refresh vm-58e28a39cda64651f8bca7e9ac2efc52 timed out after 300 seconds", "public /health at 2026-08-05T03:45Z: proxy build.commit=8cab71b2c4ee3fc0484675830a3a46767a678039", "deploy diagnostics: acceptance sandbox build.commit=794b99c9bf1526ee74a72fec8ba31e0c21df6d16"]
+    rollback_ref: "The deploy failed before publishing a new activation receipt. Keep CHOIR_SUPERVISION_WRITES_DISABLED set, preserve the prior receipt and every computer disk, and retry only the active refresh/identity path; do not emit supervision events."
+    disposition: "Rejected as a deployed identity. The workflow correctly failed closed after one mutable active computer refresh timed out; mixed host/guest commits are evidence of incompleteness, not acceptance."
+    problem_ref: docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md
+    authorization_ref: owner_ratification_2026-08-03_take_draft_into_defined_mission
+    candidate_or_evidence_refs: ["GitHub Actions run 30971525939", "job 92198556648", "/var/lib/go-choir/deploy-failures/30971525939-1.json"]
+    landing:
+      source_commit: 8cab71b2c4ee3fc0484675830a3a46767a678039
+      ci_ref: "all selected CI gates passed before deploy"
+      deploy_ref: "failed: no activation receipt"
+      environment_identity: "mixed proxy 8cab71b2 / acceptance sandbox 794b99c9"
+      deployed_acceptance: rejected
+    registry_conformance_ref: "terminal closure remains pending"
 
 
 view:
