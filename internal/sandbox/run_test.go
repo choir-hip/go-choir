@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
 
@@ -44,6 +45,103 @@ func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
 	}
 	if got.TextureActorParkIdle != loaded.TextureActorParkIdle {
 		t.Fatalf("TextureActorParkIdle = %s, want %s", got.TextureActorParkIdle, loaded.TextureActorParkIdle)
+	}
+}
+func TestHoldSupervisionWritesDisabledForReplayRestoresRequestedMode(t *testing.T) {
+	const envName = "CHOIR_SUPERVISION_WRITES_DISABLED"
+	tests := []struct {
+		name         string
+		before       string
+		beforeSet    bool
+		wantDisabled bool
+	}{
+		{name: "enabled unset", wantDisabled: false},
+		{name: "enabled empty", beforeSet: true, wantDisabled: false},
+		{name: "disabled", before: "1", beforeSet: true, wantDisabled: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.beforeSet {
+				t.Setenv(envName, test.before)
+			} else {
+				_ = os.Unsetenv(envName)
+				t.Cleanup(func() { _ = os.Unsetenv(envName) })
+			}
+
+			disabledAfterReplay, restore := holdSupervisionWritesDisabledForReplay()
+			if disabledAfterReplay != test.wantDisabled {
+				t.Fatalf("disabledAfterReplay = %t, want %t", disabledAfterReplay, test.wantDisabled)
+			}
+			if got := os.Getenv(envName); got != "1" {
+				t.Fatalf("replay mode = %q, want disabled", got)
+			}
+
+			restore()
+			got, gotSet := os.LookupEnv(envName)
+			if gotSet != test.beforeSet || got != test.before {
+				t.Fatalf("restored mode = (%q, %t), want (%q, %t)", got, gotSet, test.before, test.beforeSet)
+			}
+		})
+	}
+}
+func TestResolveStartupSupervisionReleaseUsesImmutableGuestFloorBeforeBaselineImport(t *testing.T) {
+	raw := []byte("contract=choir-guest-image-v1\nbuild_commit=test\nsandbox=/nix/store/sandbox-test\n")
+	guestManifestPath := filepath.Join(t.TempDir(), "guest-image-manifest")
+	if err := os.WriteFile(guestManifestPath, raw, 0o444); err != nil {
+		t.Fatal(err)
+	}
+
+	manifest, err := resolveStartupSupervisionRelease(t.TempDir(), guestManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Marker != "immutable-guest-image" ||
+		manifest.ContentDigest != computerevent.DigestBytes(raw) ||
+		manifest.Supervision == nil {
+		t.Fatalf("startup supervision release = %+v", manifest)
+	}
+}
+func TestResolveStartupSupervisionReleaseRefusesMalformedExistingCurrent(t *testing.T) {
+	guestManifestPath := filepath.Join(t.TempDir(), "guest-image-manifest")
+	if err := os.WriteFile(guestManifestPath, []byte("contract=choir-guest-image-v1\nsandbox=/nix/store/sandbox-test\n"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name         string
+		createTarget bool
+	}{
+		{name: "release missing manifest", createTarget: true},
+		{name: "dangling current"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			target := filepath.Join(root, "releases", "candidate")
+			if test.createTarget {
+				if err := os.MkdirAll(filepath.Join(target, "bin"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(target, "bin", "sandbox"), []byte("candidate"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.Symlink(target, filepath.Join(root, "current")); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := resolveStartupSupervisionRelease(root, guestManifestPath); err == nil {
+				t.Fatal("malformed existing current used immutable fallback")
+			}
+		})
+	}
+}
+
+func TestResolveStartupSupervisionReleaseRejectsUnboundGuestManifest(t *testing.T) {
+	guestManifestPath := filepath.Join(t.TempDir(), "guest-image-manifest")
+	if err := os.WriteFile(guestManifestPath, []byte("contract=wrong\nsandbox=/tmp/sandbox\n"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolveStartupSupervisionRelease(t.TempDir(), guestManifestPath); err == nil {
+		t.Fatal("unbound guest image manifest was accepted")
 	}
 }
 

@@ -176,23 +176,23 @@ measures:
 
 now:
   status: in_progress
-  slice: "Canonical source commit 8cab71b2c4ee3fc0484675830a3a46767a678039 reached staging host services in forced CI run 30971525939, but activation failed closed before its receipt: refresh of active mutable computer vm-58e28a39cda64651f8bca7e9ac2efc52 timed out after 300 seconds and projected that ownership failed. The deploy left proxy commit 8cab71b2 live while the acceptance computer still served sandbox commit 794b99c9; this is not an accepted deployment identity."
-  question: "Will a documented retry complete the fail-closed active-computer refresh and publish one exact compatibility-floor identity before any supervision event is emitted, and how will that exact release expose a tracked global disable/enable control for the later rollback rehearsal?"
+  slice: "Canonical source 97f3561d now has an accepted exact host deployment receipt from CI run 30973228388, but `active_computers.status=empty`: two constructed computers were correctly preserved and no mutable guest proved the compatibility floor. A red repair candidate binds first startup replay to the immutable guest-image manifest, adds tri-state write-mode control, and compensates every failed explicit transition back to disabled. Two final reviewers found that the first fallback could misattest malformed existing updater state; the refrozen implementation now distinguishes an absent `current` path from every existing/dangling/malformed path and captures compensation inventory selection errors. Candidate sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d."
+  question: "Will the repaired exact release boot one mutable acceptance computer write-disabled, then survive the required enabled/disabled/enabled transition sequence with guest health and failure compensation proving each state?"
   reconciliation:
-    observed_at: 2026-08-05T03:45:26Z
-    source_ref: 8cab71b2c4ee3fc0484675830a3a46767a678039
-    deploy_identity: "Incomplete mixed deployment from run 30971525939: public proxy build.commit=8cab71b2c4ee3fc0484675830a3a46767a678039; active acceptance sandbox build.commit=794b99c9bf1526ee74a72fec8ba31e0c21df6d16; no activation receipt for 8cab71b2."
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@8cab71b2, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@8cab71b2]
-    worktree_inventory_ref: "Local main and origin/main at 8cab71b2; only this problem-first receipt is goal-owned. Unrelated worktrees remain untouched."
+    observed_at: 2026-08-05T04:20:43Z
+    source_ref: 97f3561d521bb925a4a29a2bface73c1011dd35c
+    deploy_identity: "Accepted host deployment receipt from run 30973228388 at 2026-08-05T04:09:18Z: target/check-out/host services 97f3561d; sandbox package installed 97f3561d; active_computers empty, so no mutable guest compatibility proof."
+    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@97f3561d, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@97f3561d]
+    worktree_inventory_ref: "Local main and origin/main at 97f3561d; the write-mode/startup repair candidate plus this problem/Definition update are goal-owned. Unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: texture-tape-supervision-compatibility-floor
-    state: deploy_failed_closed
-    ref: 8cab71b2c4ee3fc0484675830a3a46767a678039
+    id: texture-tape-supervision-write-mode
+    state: accepted_for_landing
+    ref: "uncommitted implementation candidate sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d"
     owner: Main
-    base: 8cab71b2c4ee3fc0484675830a3a46767a678039
-    digest: "source commit 8cab71b2c4ee3fc0484675830a3a46767a678039; deployment receipt absent"
-    scope: "Compatibility-floor runtime with CHOIR_SUPERVISION_WRITES_DISABLED hard-set in the guest service. No canonical supervision event was authorized."
+    base: 97f3561d521bb925a4a29a2bface73c1011dd35c
+    digest: "sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d over `.github`, `internal`, and `nix` implementation diff"
+    scope: "Immutable guest-manifest startup floor, tri-state vmctl boot override, exact guest health attestation, explicit-transition proof gate, and fail-closed deployment compensation. Canonical supervision events remain disabled."
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
     kind: architecture
@@ -202,9 +202,9 @@ now:
     owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may execute schema/caller/migration work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "source commit 8cab71b2c4ee3fc0484675830a3a46767a678039 on origin/main", "CI run 30971525939: all selected vet, test, TLA+, doccheck, frontend, and aggregate gates passed", "CI run 30971525939 job 92198556648: vm-58e28a39cda64651f8bca7e9ac2efc52 refresh timed out after 300 seconds; incomplete receipt /var/lib/go-choir/deploy-failures/30971525939-1.json", "2026-08-05 public /health: proxy build.commit 8cab71b2 while active acceptance sandbox diagnostics remained 794b99c9", internal/agentcore/super_controller.go, internal/agentcore/supervision_execution.go, internal/computerevent/appender.go, internal/store/supervision_projection.go]
-  blocker_or_risk: "Staging is a mixed, unaccepted deployment: host services reached 8cab71b2 but active-computer refresh failed and no activation receipt was published. The failed ownership is excluded from a subsequent active-only refresh, so one documented retry is the next safe probe. Separately, the compatibility floor currently hard-sets the write-disable switch in the immutable guest service and has no tracked same-release platform control for disabled/enabled rollback rehearsal; cutover cannot proceed until that control is implemented and proved. Deployed fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, compatibility-floor rollback, and terminal registry closure remain unproved."
-  next_action: "Commit and push this problem-first receipt without a code fix, then retry the forced compatibility-floor deployment. Accept no staging identity until the workflow publishes its exact activation receipt. After a successful floor, add and prove the tracked same-release global write-mode control before enabling supervision writes."
+  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "implementation diff sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d", "go test -short ./... -count=1: 76 packages pass", "focused sandbox/vmmanager/vmctl tests and vet: pass", "deploy/CI/node-b pointer contract scripts and extracted Bash syntax: pass", "CI run 30973228388 and deploy job 92203495640: exact host receipt 97f3561d, active_computers empty", "/tmp/texture-write-mode-final-review/{codex,omp-gpt56-sol}.out: rejected malformed-existing-current fallback; repaired with Lstat distinction and regression tests", "/tmp/texture-write-mode-blocker-recheck/{codex,omp-gpt56-sol}.out: ACCEPT exact sha256:1d577002 with high confidence", internal/sandbox/run.go, internal/vmmanager/manager.go, nix/node-b.nix, nix/sandbox-vm.nix, .github/workflows/ci.yml]
+  blocker_or_risk: "Staging host identity is accepted at 97f3561d, but no mutable guest has proved compatibility replay or write mode. The exact implementation candidate is independently accepted for landing; push, green CI, mutable guest floor, and same-release disabled/enabled/disabled/enabled receipts remain required. Canonical transaction acceptance, fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, rollback, and terminal registry closure remain pending."
+  next_action: "Commit and push sha256:1d577002, require green CI, deploy in preserve mode, boot one mutable acceptance computer, and execute enabled/disabled/enabled transitions. Any failed explicit transition must leave a compensation receipt and no live unverified writer."
 
 receipts:
   - id: texture-tape-definition-round-1
@@ -304,6 +304,39 @@ receipts:
       environment_identity: "mixed proxy 8cab71b2 / acceptance sandbox 794b99c9"
       deployed_acceptance: rejected
     registry_conformance_ref: "terminal closure remains pending"
+  - id: texture-tape-compatibility-floor-host-deploy
+    boundary: deploy
+    commit_or_artifact: "source 97f3561d521bb925a4a29a2bface73c1011dd35c; GitHub Actions run 30973228388; activation receipt at 2026-08-05T04:09:18Z"
+    proof_refs: ["CI run 30973228388: success", "deploy job 92203495640: target/check-out/host service identities 97f3561d", "receipt artifacts sandbox installed 97f3561d and active_computers empty", "public /health build.commit and deployed_commit 97f3561d"]
+    rollback_ref: "Prior activation receipt and NixOS/service/frontend rollback refs. Supervision writes remain disabled; no canonical event rollback is needed."
+    disposition: "Accepted as exact host/package deployment identity, not as mutable-computer compatibility proof. Two constructed computers were preserved and no mutable active computer was refreshed."
+    problem_ref: docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md
+    authorization_ref: owner_ratification_2026-08-03_take_draft_into_defined_mission
+    candidate_or_evidence_refs: ["GitHub Actions run 30973228388", "job 92203495640", "public choir.news /health at 2026-08-05T04:12Z"]
+    landing:
+      source_commit: 97f3561d521bb925a4a29a2bface73c1011dd35c
+      ci_ref: "30973228388 success"
+      deploy_ref: "activation receipt published"
+      environment_identity: "host services and installed sandbox package 97f3561d; mutable active computer set empty"
+      deployed_acceptance: partial_host_only
+    registry_conformance_ref: "terminal closure remains pending mutable-computer proof and mission acceptance"
+  - id: texture-tape-write-mode-review-round-6
+    boundary: implement
+    commit_or_artifact: "rejected candidate implementation sha256:58772709393a4d765ee4d2526eb47f17faca1bfd5a4688b28c9d7ef09e44c0d4; repaired candidate sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d"
+    proof_refs: ["/tmp/texture-write-mode-final-review/codex.out: REJECT", "/tmp/texture-write-mode-final-review/omp-gpt56-sol.out: REJECT", "/tmp/texture-write-mode-final-review/omp-gemini36.out: ACCEPT", "TestResolveStartupSupervisionReleaseRefusesMalformedExistingCurrent: pass", "/tmp/texture-write-mode-blocker-recheck/codex.out: ACCEPT", "/tmp/texture-write-mode-blocker-recheck/omp-gpt56-sol.out: ACCEPT", "focused sandbox/vmmanager/vmctl tests and vet: pass"]
+    rollback_ref: "Before deployment, revert the write-mode commit. After deployment, dispatch disabled mode; the failure trap forces disabled and stops any guest it cannot verify."
+    disposition: "Codex and OMP GPT-5.6 found that nested os.ErrNotExist from malformed existing updater state could misbind immutable identity; repaired by checking current-path existence before manifest resolution. Codex also identified masked jq selection failure; repaired by status-captured selection. Both rejecting reviewers independently rechecked exact sha256:1d577002 and accepted with high confidence."
+    problem_ref: docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md
+    authorization_ref: owner_ratification_2026-08-03_take_draft_into_defined_mission
+    candidate_or_evidence_refs: ["sha256:1d5770024ac2648749909343ae9efe17163db03a1ce5780e50e81c665d11bf3d", "/tmp/texture-write-mode-final-review/manifest.tsv"]
+    landing:
+      source_commit: pending
+      ci_ref: pending
+      deploy_ref: pending
+      environment_identity: "accepted write-disabled host release 97f3561d; no mutable proof"
+      deployed_acceptance: pending
+    registry_conformance_ref: "terminal closure remains pending"
+
 
 
 view:

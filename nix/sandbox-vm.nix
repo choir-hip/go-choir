@@ -345,6 +345,21 @@ EOF
           choir.gateway_token=*)
             echo "RUNTIME_GATEWAY_TOKEN=''${param#choir.gateway_token=}" >> "$ENV_FILE"
             ;;
+          choir.supervision_writes_disabled=*)
+            supervision_writes_disabled="''${param#choir.supervision_writes_disabled=}"
+            case "$supervision_writes_disabled" in
+              1)
+                echo "CHOIR_SUPERVISION_WRITES_DISABLED=1" >> "$ENV_FILE"
+                ;;
+              0)
+                echo "CHOIR_SUPERVISION_WRITES_DISABLED=" >> "$ENV_FILE"
+                ;;
+              *)
+                echo "invalid choir.supervision_writes_disabled kernel parameter" >&2
+                exit 1
+                ;;
+            esac
+            ;;
         esac
       done
 

@@ -463,6 +463,16 @@ refused the activation receipt, and retained
 The failed ownership is no longer in the active-only refresh set. A retry is
 therefore the smallest safe probe; mixed host/guest commits remain rejected
 until the workflow publishes one exact activation receipt.
+Deployment diagnostics made the immediate boot refusal explicit: the refreshed
+guest repeatedly opened its persistent store and then exited because
+`/mnt/persistent/choir-updater/current` did not exist. Existing ordinary
+computers predate self-development baseline import, so requiring that mutable
+updater pointer before the sandbox can boot creates a circular prerequisite.
+The compatibility-floor repair must prefer an authenticated current updater
+release when present, but otherwise bind startup replay to the immutable guest
+image manifest already in the booted Nix closure. It must not fabricate or
+import a mutable baseline merely to make startup succeed.
+
 
 The attempt also exposed a separate cutover-control gap. The compatibility
 floor hard-sets `CHOIR_SUPERVISION_WRITES_DISABLED=1` in the immutable guest

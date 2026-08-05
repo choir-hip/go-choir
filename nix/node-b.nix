@@ -54,10 +54,28 @@ let
     exec "${package}/bin/${name}" "$@"
   '';
   # vmctl-priority.env is mutable by design, but may only tune priority IDs.
-  # Reassert credential authority after EnvironmentFile expansion.
+  # Ignore any supervision override injected there. The tracked deploy path owns
+  # the exact-content runtime file and absence preserves the guest release default.
   vmctlExec = pkgs.writeShellScript "go-choir-vmctl-exec" ''
     set -euo pipefail
     export VMCTL_CORPUSD_URL="http://127.0.0.1:8086"
+    unset VM_SUPERVISION_WRITES_DISABLED
+    supervision_runtime_file="/var/lib/go-choir/vmctl-runtime.env"
+    if [ -f "$supervision_runtime_file" ]; then
+      supervision_runtime_config="$(${pkgs.coreutils}/bin/cat "$supervision_runtime_file")"
+      case "$supervision_runtime_config" in
+        VM_SUPERVISION_WRITES_DISABLED=0)
+          export VM_SUPERVISION_WRITES_DISABLED=0
+          ;;
+        VM_SUPERVISION_WRITES_DISABLED=1)
+          export VM_SUPERVISION_WRITES_DISABLED=1
+          ;;
+        *)
+          echo "invalid vmctl supervision runtime configuration" >&2
+          exit 1
+          ;;
+      esac
+    fi
     exec ${serviceExec "vmctl" goChoirPackages.vmctl} "$@"
   '';
   diskRetentionSweep = pkgs.writeShellScript "go-choir-disk-retention-sweep" ''
@@ -498,11 +516,10 @@ in
       StateDirectory = "go-choir/vm-state";
       ReadWritePaths = [ "/var/lib/go-choir" "/var/lib/go-choir/vm-state" "/var/lib/go-choir/guest" ];
       ReadOnlyPaths = [ "/var/lib/go-choir/auth" ];
-      # Optional runtime priority overrides. This is intentionally outside the
-      # repo-tracked Nix closure so operators can add paid/real-user always-on
-      # IDs without a platform rebuild:
-      #   VMCTL_ALWAYS_ON_USER_IDS=<auth user UUID>,<auth user UUID>
-      EnvironmentFile = "-/var/lib/go-choir/vmctl-priority.env";
+      # Optional operator-owned priority input keeps paid/real-user computers
+      # warm. vmctlExec excludes supervision mode from this file and reads the
+      # deploy-owned runtime file directly.
+      EnvironmentFile = [ "-/var/lib/go-choir/vmctl-priority.env" ];
       Environment = [
         "VMCTL_PORT=8083"
         # D-ROUTE and immutable ComputerVersion inputs are tables on the same
