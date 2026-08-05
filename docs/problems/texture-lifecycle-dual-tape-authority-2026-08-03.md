@@ -575,3 +575,46 @@ treated as accepted while canonical writes fail. Conjecture delta: write-mode
 health proves boot configuration and replay only, not append reachability.
 Heresy delta: `discovered` adds enabled-but-unwritable supervision authority;
 `introduced=[]`; `repaired=[]`.
+
+## VM-scoped Texture identity is rejected by the stable computer appender — 2026-08-05
+
+Expanded bounded diagnostic commit
+`b74455511d5fdb52a493c8bc6dcc73c4f65159d3` passed CI run `30983410517`.
+Preserve-mode deploy job `92235033317` refreshed disposable mutable guest
+`vm-bbdbbd01c4390b7036067aaa12afeb68` at the exact commit, retained
+`supervision_writes_disabled=false`, and published `guest_health_verified=true`.
+The first canonical document append then returned HTTP 500 with bounded code
+`wrong_computer`. The authenticated guest bootstrap independently reported
+`sandbox_id=vm-bbdbbd01c4390b7036067aaa12afeb68`.
+
+Source convergence identifies the dual identity. `vmctl` stores and boots a
+stable `VMOwnership.ComputerID` through `VMManagerConfig.ComputerID`; vmmanager
+places that value in the `choir.computer_id` kernel parameter and the guest
+loads it as `CHOIR_COMPUTER_ID` when constructing the sole
+`ComputerEventAppender`. Separately, vmmanager places the mutable realization
+ID in `vm_id`; the guest loads it as `SANDBOX_ID`, and `agentcore.Runtime`
+currently exposes only that realization-scoped value through
+`TextureSandboxID`. Texture's canonical transaction builders use
+`TextureSandboxID`, so they target the VM realization while the appender
+correctly enforces the stable computer identity. The local fixture hid the
+defect by assigning one value to both identities.
+
+This is a substrate identity-authority defect, not an appender/CAS failure and
+not a reason to weaken the appender's wrong-computer check. The repair must give
+canonical supervision callers the stable `CHOIR_COMPUTER_ID` while preserving
+the realization ID for sandbox routing and compatibility records. It must
+inventory all canonical callers before selecting a cutover; changing every
+legacy runtime scope to the stable identity without migration could orphan
+existing realization-scoped state.
+
+Mutation class remains `red`. Protected surfaces are stable ComputerID
+authority, guest boot identity, canonical supervision event construction,
+embedded projection scope, and restart reconstruction. Admissible repair
+evidence is an exact deployed canonical append receipt bound to the stable
+computer, followed by restart reconstruction and the same-release write-mode
+matrix. Rollback is the successful disabled activation from run `30977754149`;
+the enabled guest remains unaccepted. Conjecture delta: separating canonical
+ComputerID from runtime SandboxID at the caller boundary repairs the mismatch
+without relabeling mutable realizations. Heresy delta: `discovered` adds
+realization identity used as canonical computer authority; `introduced=[]`;
+`repaired=[]`.

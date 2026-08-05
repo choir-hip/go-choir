@@ -176,23 +176,23 @@ measures:
 
 now:
   status: in_progress
-  slice: "Bounded diagnostic commit bcd2900e passed CI run 30981838658 and preserve-mode deploy job 92229738069 refreshed mutable guest vm-bbdbbd01c4390b7036067aaa12afeb68 at the exact commit with writes enabled. The first canonical document append still failed, now as bounded code authority_failed; the exact-digest command endpoint returned the same code. This excludes the already classified reservation, frozen-plan, private-pin, projection, event-pin/CAS, and receipt-verification stages but leaves precondition/authority branches indistinguishable."
-  question: "Which bounded precondition branch is failing: missing runtime event appender, missing reservation/frozen-plan/private-payload authority, wrong computer binding, or transaction encoding/validation?"
+  slice: "Expanded diagnostic b7445551 passed CI run 30983410517 and exact preserve-mode deploy job 92235033317 refreshed the mutable enabled guest. The first canonical document append returned bounded code wrong_computer. Source convergence shows the appender is bound to stable CHOIR_COMPUTER_ID while Texture transaction builders use realization-scoped Runtime.TextureSandboxID from SANDBOX_ID; the local fixture assigned one value to both and hid the mismatch. The problem record now checkpoints this dual identity before repair."
+  question: "Which complete canonical caller set must move to a stable runtime ComputerID accessor while realization-scoped compatibility state remains on SandboxID, and what replay/migration boundary prevents existing state from being orphaned?"
   reconciliation:
-    observed_at: 2026-08-05T06:57:05Z
-    source_ref: bcd2900eb9e5311f6c1e91bae500760de15419d9
-    deploy_identity: "CI run 30981838658 succeeded. Deploy job 92229738069 published exact host/sandbox activation bcd2900e in preserve mode, verified the mutable guest with supervision_writes_disabled=false, guest_health_verified=true, and current public /health bcd2900e."
-    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@bcd2900e, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@bcd2900e]
-    worktree_inventory_ref: "Local main and origin/main at bcd2900e; only the goal-owned Definition plus expanded bounded precondition code/test mapping are dirty. Unrelated worktrees remain untouched."
+    observed_at: 2026-08-05T07:24:26Z
+    source_ref: b74455511d5fdb52a493c8bc6dcc73c4f65159d3
+    deploy_identity: "CI run 30983410517 succeeded. Deploy job 92235033317 published exact host/sandbox b7445551 in preserve mode and verified mutable guest vm-bbdbbd01c4390b7036067aaa12afeb68 with writes enabled. Public /health reports b7445551; authenticated bootstrap reports the VM-scoped sandbox identity."
+    authority_identities: [owner_direction_2026-08-03_texture_is_audit_projection, owner_ratification_2026-08-03_take_draft_into_defined_mission, docs/choir-doctrine.md@b7445551, docs/definitions/choir-texture-tape-supervision-2026-08-03.md@b7445551]
+    worktree_inventory_ref: "Local main and origin/main at b7445551; only the goal-owned Definition and problem-first dual-identity checkpoint are dirty. Unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: texture-tape-bounded-precondition-diagnostic
-    state: review_accepted
-    ref: worktree@bcd2900e
+    id: texture-tape-computer-identity-repair
+    state: problem_checkpoint
+    ref: docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md
     owner: Main
-    base: bcd2900e
-    digest: "sha256:b8af1023f3df98c32abeef6dcddb7200ae30a62292d1f7371b82e87f4cb042f0 over the expanded bounded diagnostic source/test diff"
-    scope: "Split known runtime-appender, storage, private-payload, verifier, computer-binding, identity, encoding, digest, and commitment preconditions into bounded non-secret codes. HTTP status, authority, event, projection, credential, and deployment semantics remain unchanged."
+    base: b7445551
+    digest: "not frozen; caller and migration inventory required before repair"
+    scope: "Provide stable ComputerID to canonical supervision callers without relabeling mutable VM realizations or orphaning legacy realization-scoped state."
   decision:
     selected: "Execute the H032-first one-tape supervision mission with non-effect N-way CoSuper fan-out; model the complete capsule promotion join but keep capsule freeze, effects, materialization, checkpoint, and route activation for the successor."
     kind: architecture
@@ -202,9 +202,9 @@ now:
     owner_ratification_ref: "Owner instruction in the 2026-08-03 design dialogue: use agentic consensus and iterate the draft into a defined mission, with special attention to capsule fan-out and promotion."
     recorded_at: 2026-08-04T03:03:00Z
     consequence: "The mission may execute schema/caller/migration work and the H032 repair within its red ceremony. It must prove concurrent non-effect fan-out and semantic rebase, must not add a duplicate supervisor or activate effects, and must preserve the single-composed-candidate promotion seam for the successor."
-  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "CI run 30981838658: success", "deploy job 92229738069: exact bcd2900e host/sandbox, preserve mode, writes enabled, mutable guest proof true", "POST /api/texture/documents: HTTP 500 code authority_failed", "exact-digest POST /api/texture/supervision/command: HTTP 400 code authority_failed", "bounded diagnostic review: accepted after preserving existing HTTP statuses and typed append-only document mapping", "go test ./internal/textureowner ./internal/computerevent -count=1: pass", "expanded bounded stage focused tests: pass"]
-  blocker_or_risk: "The deployed enabled guest is unwritable and therefore not accepted. The broad authority_failed result must be split once more before the source repair is identifiable. Canonical transaction acceptance, the remaining mode matrix, fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, rollback, and registry closure remain pending."
-  next_action: "Independently review and land the expanded bounded precondition codes, deploy to the same enabled disposable guest, and reproduce one canonical create. Repair the returned source branch, then resume the full disabled/enabled/disabled/enabled acceptance matrix."
+  evidence_refs: [docs/evidence/texture-tape-supervision-candidate-2026-08-04.md, docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md, "CI run 30983410517: success", "deploy job 92235033317: exact b7445551 host/sandbox, preserve mode, writes enabled, mutable guest proof true", "POST /api/texture/documents: HTTP 500 code wrong_computer", "authenticated /api/shell/bootstrap: sandbox_id vm-bbdbbd01c4390b7036067aaa12afeb68", "source chain: vmctl stable ComputerID -> vmmanager choir.computer_id -> guest CHOIR_COMPUTER_ID appender; VMID -> SANDBOX_ID -> Runtime.TextureSandboxID transaction"]
+  blocker_or_risk: "Canonical Texture callers target the mutable VM realization rather than the stable appender ComputerID. A blind global identity replacement could orphan existing realization-scoped compatibility records, so the canonical caller and replay/migration boundary must be frozen first. The enabled guest is not accepted. Canonical transaction acceptance, the remaining mode matrix, fan-out/retry/cancel/late/rebase/dissent, restart/reconstruction, rollback, and registry closure remain pending."
+  next_action: "Inventory every canonical supervision transaction/projection caller and the runtime configuration seam. Select the smallest clean stable-ComputerID cutover with explicit legacy-state treatment, then freeze and independently review the repair candidate before code mutation."
 
 receipts:
   - id: texture-tape-definition-round-1
