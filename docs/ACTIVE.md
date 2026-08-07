@@ -48,6 +48,18 @@ settled historical authority, not a competing `/goal`.
 
 ## Draft Successor Definitions — Not Executable
 
+[`definitions/choir-continuous-texture-supervision-draft-2026-08-07.md`](definitions/choir-continuous-texture-supervision-draft-2026-08-07.md)
+is an owner-requested, consensus-repaired **non-executable draft** for connecting
+Texture's existing durable inbound update/revision path to target-bound
+Researcher control, the one persistent Super, and networkless evidence-only
+CoSuper work. Its
+[`consensus receipt`](evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md)
+records six `REPAIR`, two `ACCEPT`, and one failed-before-review route. It remains
+blocked pending owner ratification and three-registry promotion and authorizes no
+runtime mutation, generic supervision subsystem, direct Texture-to-CoSuper path,
+host write, computer-event append, self-development finalization/acceptance,
+materialization, checkpoint, or route effect.
+
 [`definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md`](definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md)
 is an owner-authorized **draft** successor for empirically optimizing
 ComputerVersion realization performance after audited construction completes.

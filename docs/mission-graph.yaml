@@ -219,7 +219,7 @@ nodes:
     depends_on:
       - choir-audited-autoputer-construction-2026-07-15
       - choir-cli-self-development-2026-07-16
-    enables: [choir-in-choir-computer-control-draft-2026-07-18]
+    enables: [choir-continuous-texture-supervision-draft-2026-08-07, choir-in-choir-computer-control-draft-2026-07-18]
     note: >-
       Completed and accepted on staging on 2026-07-24. Retained as historical
       evidence for the generic durable-work kernel, restart reconstruction,
@@ -233,6 +233,36 @@ nodes:
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
       - docs/standing-questions.md
+      - docs/ACTIVE.md
+      - AGENTS.md
+  - id: choir-continuous-texture-supervision-draft-2026-08-07
+    title: DRAFT — Continuous Texture Supervision
+    path: docs/definitions/choir-continuous-texture-supervision-draft-2026-08-07.md
+    ledger: ''
+    status: blocked
+    kind: product_completion
+    entrypoint: false
+    execution_mode: draft_non_executable
+    depends_on:
+      - choir-coherent-computer-convergence-2026-07-21
+    enables: []
+    note: >-
+      Owner-requested, consensus-repaired non-executable draft for a
+      direction-specific lifecycle control path from Texture to bound Researcher
+      work and the one persistent Super, plus networkless evidence-only CoSuper
+      proof. It grants no runtime mutation, /goal execution, generic mailbox,
+      direct Texture-to-CoSuper path, host/computer-event effect,
+      self-development finalization/acceptance, materialization, checkpoint, or
+      route authority until owner ratification and three-registry promotion.
+    sources:
+      - docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
+      - docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
+      - docs/standing-questions.md
+      - docs/computer-ontology.md
+      - docs/agent-product-doctrine.md
+      - docs/choir-doctrine.md
+      - docs/supervision-protocol.md
+      - docs/texture-agentic-invariants-2026-06-13.md
       - docs/ACTIVE.md
       - AGENTS.md
   - id: choir-in-choir-computer-control-draft-2026-07-18
