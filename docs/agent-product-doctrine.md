@@ -59,22 +59,25 @@ changes only after verified guest materialization.
   the induced resolve-failure path returns a bounded 504; re-prove after a
   routing or timeout change rather than reopening the old 180-second diagnosis.
 
-Texture delegation is agentic. Texture may write, ask researcher, ask super, ask
-both, ask neither, wait for more evidence, or report a blocker within its
-authority envelope. `edit_texture` stores a canonical revision; it must not become
-a semantic workflow gate that requires a subsequent researcher/super/verifier
-tool call. Exact required-tool continuation is reserved for narrow mechanical
-tool protocols, not appagent policy.
+Texture delegation is agentic. Texture may revise, ask Researcher, ask Super,
+ask both, ask neither, wait for more evidence, or report a blocker within its
+authority envelope. `patch_texture` and `rewrite_texture` store canonical
+revisions; neither may become a semantic workflow gate that requires a
+subsequent researcher/super/verifier tool call. Exact required-tool
+continuation is reserved for narrow mechanical protocols, not appagent policy.
 
-Prompt bar, source ingestion, and article/news creation should show conductor
+Prompt bar, source ingestion, and article/news creation should show Conductor
 entry followed by Texture artifact materialization. `super` before Texture is a
-route invariant failure. `super` after Texture is valid only when Texture requested
-execution through an explicit affordance such as `request_super_execution`.
+route invariant failure. `super` after Texture is valid only when Texture sends
+an explicit typed execution request through a capability the runtime grants.
 
-Prefer asynchronous supervision. Capsule work, verification, and durable
-operations return handles and event-derived status. Worker-VM and candidate-VM
-delegation are obsolete and deleted, not classified for retention. Generic
-delegated agents use durable runs/trajectories and capsules.
+Supervision is asynchronous and continuous. Texture may write many semantic
+versions between owner reads while it receives intermediate updates and sends
+revised direction to Researcher or Super. Capsule work, verification, and
+durable operations return typed updates and evidence handles as they progress,
+not only a terminal report. Worker-VM and candidate-VM delegation are obsolete
+and deleted. Generic delegated agents use durable runs/trajectories and
+capsules.
 
 Super addresses a CoSuper through the durable run/trajectory and its
 capsule-bound operation handle. No VSuper forwarding authority exists for
@@ -125,15 +128,18 @@ marked-unused (`mark_source_unused` with a rationale). The former
 
 ## Texture as Artifact Control Plane
 
-Texture is also Choir's artifact control plane. Conductor routes exogenous
-user/app/source input into Texture-owned artifact state: prompt-bar requests,
-sourcecycled/news ingestion, article creation, mission work, and most user
-prompts should open or create Texture/context first. Super is not the direct
-ingress target for ordinary user or source prompts. Texture may later call
-`request_super_execution` when the Texture-controlled artifact needs execution,
-coding-agent trees, generated artifacts, verification, candidate work, or other
-privileged action, and downstream researcher/super evidence must attach back to
-the Texture/artifact context.
+Texture is also Choir's artifact control plane and the delegated controller for
+long-running artifact trajectories. Conductor routes exogenous user/app/source
+input into Texture-owned artifact state: prompt-bar requests, sourcecycled/news
+ingestion, article creation, mission work, and most user prompts should open or
+create Texture/context first. Super is not the direct ingress target for
+ordinary user or source prompts. Texture may later send the persistent Super a
+typed execution request when the artifact needs execution, coding-agent trees,
+generated artifacts, verification, candidate work, or another privileged
+action. Researcher and Super return material updates as the work advances;
+Texture incorporates what they teach into idea-level versions and redirects the
+trajectory. The owner samples and corrects the current head asynchronously
+rather than approving each version.
 
 Read `texture-agentic-invariants-2026-06-13.md` before changing Texture tools,
 prompts, routing, revision creation, coagent wake behavior, Trace/Texture

@@ -456,9 +456,10 @@ revision and stops; Texture decides its own semantic delegation.
 
 `H011` **Super as direct ingress for Texture-centered work** — conductor routes
 ordinary user/source/article/mission work to super by prompt heuristics,
-bypassing Texture-owned artifact state. Successor: conductor creates/resolves the
-Texture artifact; Texture owns the artifact and then decides whether to write,
-transclude, research, call `request_super_execution`, or wait.
+bypassing Texture-owned artifact state. Successor: conductor creates or
+resolves the Texture artifact; Texture owns the artifact and then decides
+whether to revise, transclude, research, send a typed execution request to the
+persistent Super, or wait.
 
 `H012` **Researcher intent by substring oracle** — narrative text containing
 "researcher" acts as control-plane signal. Successor: structured intent metadata

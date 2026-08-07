@@ -23,10 +23,12 @@ that uses Texture as its owner-readable narrative.
 
 ## Core Invariant
 
-> Texture owns canonical document and artifact state inside a multi-agent system.
-> It is not a workflow engine, a route script, or a role-sequence executor.
+> Texture owns canonical document and artifact state inside a multi-agent system
+> and is the delegated controller that keeps its trajectory aligned with the
+> owner's intent. It is not a workflow engine, route script, or role-sequence
+> executor.
 
-Texture may write, revise, wait, ask researcher, ask super, ask both, ask neither,
+Texture may revise, wait, ask Researcher, ask Super, ask both, ask neither,
 request clarification, or report a blocker. The correct choice is part of the
 Texture agent's obligation and authority envelope. Runtime may expose tools,
 durable evidence, pending work, and policy constraints; runtime must not force a
@@ -40,12 +42,24 @@ super execution, coordinate coding-agent trees through super, wait, or record an
 off-document decision/blocker. Super is downstream execution authority, not the
 ordinary ingress target for user or source prompts.
 
+The owner is not the clock of this loop. One Texture actor may write many
+versions and redirect downstream agents many times between owner reads. The
+owner samples and corrects the current head asynchronously; Texture carries the
+delegated responsibility for keeping the trajectory on track between those
+interventions.
+
 ## Non-Negotiable Rules
 
 1. **Canonical text is Texture-owned.** User revisions and Texture appagent
    revisions are canonical document versions. Researcher findings, super
    updates, trace moments, search results, and worker evidence are inputs to
    Texture, not canonical text until Texture incorporates them into a revision.
+
+   Canonical text carries semantic control state: current understanding,
+   changed beliefs, evidence, uncertainty, intent, and idea-level futures.
+   Commands, worker choreography, retries, and action checklists remain in
+   addressed messages, work items, artifacts, and Trace. A new revision records
+   a semantic state change; it is not an owner notification or approval gate.
 
    Prompt-bar creation is not an exception. The owner's submitted prompt is the
    canonical `V0` Texture revision. It must not be moved into hidden metadata,
@@ -67,16 +81,16 @@ ordinary ingress target for user or source prompts.
    `super` before Texture is a route invariant failure; `super` after Texture is
    valid only when Texture requested it.
 
-3. **Delegation is agentic.** Texture decides whether to call `spawn_agent`,
-   `request_super_execution`, both, neither, or a future coordination tool. A
-   prompt saying "researcher" is evidence about owner intent; it is not a hard
-   runtime command to spawn a researcher.
+3. **Delegation is agentic.** Texture decides whether to revise, spawn or
+   address Researcher, send a typed execution request to the persistent Super,
+   do several of those, or do none. A prompt saying "researcher" or "execute" is
+   evidence about owner intent; it is not a hard runtime command.
 
-4. **No semantic forced continuations from `edit_texture`.** `edit_texture` stores a
-   document revision. It must not require a subsequent researcher, super,
-   verifier, or other semantic appagent call. Deterministic app protocol
-   handoffs, such as persisting an email draft for owner approval, must be
-   explicit, narrow, and documented separately.
+4. **No semantic forced continuations from Texture writes.** `patch_texture` or
+   `rewrite_texture` stores a document revision. It must not require a
+   subsequent researcher, super, verifier, or other semantic appagent call.
+   Deterministic app protocol handoffs, such as persisting an email draft for
+   owner approval, must be explicit, narrow, and documented separately.
 
    Texture write tools must also not become premature run terminators. A
    successful Texture write stores a canonical revision; the same logical
@@ -95,13 +109,13 @@ ordinary ingress target for user or source prompts.
    park/passivation path so later addressed `update_coagent` packets enter the
    same document thread.
 
-5. **Owner-visible work state is canonical.** Texture should not wait silently
-   when an owner-triggered request requires research, execution, verification,
-   long reasoning, or delegation. A quick Texture-authored revision may honestly
-   acknowledge the request, preserve the obligation, and name the active work
-   underway. That revision is useful artifact state. What is forbidden is a
-   mechanically forced trivial patch that removes the owner's instruction or
-   makes tiny prose edits while hiding the background work in Trace.
+5. **Current work state is canonical without becoming a status dashboard.**
+   Texture should not wait silently when an owner-triggered request requires
+   research, execution, verification, long reasoning, or delegation. A prompt
+   semantic revision may preserve the live objective, uncertainty, and ideas
+   being explored. It should not transcribe assignments or tool actions merely
+   to show activity. What is forbidden is hiding material background learning
+   only in Trace or replacing the owner's intent with a trivial patch.
 
 6. **Required tool choice is not policy.** Exact next-tool enforcement is
    allowed only for mechanical tool protocols whose second call is part of the
@@ -154,8 +168,8 @@ ordinary ingress target for user or source prompts.
 
 Runtime may:
 
-- expose `spawn_agent`, `request_super_execution`, source tools, edit tools, and
-  other affordances to Texture;
+- expose canonical Texture writes, Researcher delegation, a typed persistent-Super
+  request, source tools, and other capability-bounded affordances to Texture;
 - preserve owner intent, source refs, revision metadata, and trajectory/work
   evidence durably;
 - wake Texture from pending coagent updates or assigned work items;
@@ -313,8 +327,8 @@ doc is re-woken rather than silently dropping the findings.
   the model's context on its **first** inference turn (cold prepend), matching
   the warm-injection contract.
 - A grounded integrate turn must take a **durable action**: write
-  (`patch_texture`/`rewrite_texture`), delegate (`spawn_agent`/
-  `request_super_execution`), or record an explicit Texture decision
+  (`patch_texture`/`rewrite_texture`), send a capability-bounded delegation or
+  follow-up, or record an explicit Texture decision
   (`record_texture_decision`). It must not silently end with prose. This keeps
   Texture agentic (it chooses which durable action) while banning the silent
   no-op that presents as "Revision failed".

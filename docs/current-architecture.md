@@ -577,24 +577,30 @@ view state must not live only in browser component variables. Per-app code can
 define the shape of its typed context, but persistence and reload semantics must
 use the universal shell/API path.
 
-`texture` is the single writer for canonical document versions. It synthesizes user
-edits and coagent updates into durable document state.
+`texture` is the single writer for canonical document versions and the delegated
+controller for the trajectory. It synthesizes owner edits and material coagent
+updates into durable, idea-level state; judges that state against the objective;
+and sends revised direction to Researcher or Super. One Texture actor may write
+many versions between owner reads.
 
 `researcher` reads local files and the web, then submits findings/evidence only
-through the typed `update_coagent` source-packet mutation. It has no bash, raw
-Dolt, writable files, capsule commit, acceptance, route, or host authority.
+through the typed `update_coagent` source-packet mutation. Its production
+registry excludes bash, raw Dolt, writable files, capsule commit, acceptance,
+route, and host authority.
 
-`super` is the per-user foreground orchestration root. It can orchestrate
-capsules and delegation, inspect evidence, request verification, and propose a
-decision. It has no bash, direct writable/coding, shipper, worker-VM, route, or
-host tools.
+`super` is the per-user foreground execution controller. It can orchestrate
+capsules and delegation, inspect evidence, request verification, and return
+intermediate or terminal operational synthesis to Texture. Its production
+registry excludes bash, capsule command execution, direct writable/coding,
+shipper, worker-VM, route, and host tools.
 
 `vsuper`, `candidate-super`, and aliases are retired from production
 self-development profiles and fail closed.
 
-`cosuper` is a durable execution co-agent. Every shell, filesystem, and build
-effect occurs through a capability-bound guest-local capsule broker. It never
-receives direct core-VM mutation or host authority.
+`cosuper` is a durable execution co-agent. Implementation-slot shell,
+filesystem, and build effects occur only through a capability-bound guest-local
+capsule broker; verifier slots cannot execute or write. Neither slot receives
+direct core-VM mutation or host authority.
 
 `worker VM`, `background computer`, and `candidate VM` are obsolete product
 concepts. Their product authority is retired, but canonical-main code residue
@@ -604,21 +610,26 @@ effects only through a separately accepted capsule path.
 
 ### Supervision Boundary And Current Gap
 
-Supervision is not a separate protocol-health layer or actor hierarchy. It is
-the work performed by the existing authority chain: the owner supervises
-through owner-readable Texture state; Texture supervises semantic state and
-decides when execution is needed; Super supervises execution and verification;
-and scoped CoSupers return capability-bounded work and evidence. The
-durable-work kernel, typed updates, trajectories, work items, Trace, settlement
-queries, and canonical events are their substrate, not another supervisor.
+Supervision is not a separate protocol-health layer or actor hierarchy. Texture
+is the delegated supervisory control loop: it maintains the current semantic
+state, receives material updates as the trajectory advances, writes a new
+immutable version when that state changes, and sends revised direction back to
+Researcher or Super. Super supervises execution and verification; scoped
+CoSupers return capability-bounded work and evidence. The owner may read only
+occasionally and can correct the current head without approving every
+intermediate version. The durable-work kernel, typed updates, trajectories,
+work items, Trace, settlement queries, and canonical events are substrate, not
+another supervisor.
 
-The role topology exists in source, but the complete product loop is not
-currently accepted live behavior. Effects remain OFF, Texture does not receive
-the `request_super_execution` affordance in that mode, and no current Definition
-authorizes capsule/self-development effects. The next product mission must
-prove one explicit Texture → Super → scoped CoSuper → Super → Texture loop over
-the existing substrate rather than invent a generic supervision service,
-findings reducer, observer hierarchy, or second causal tape. See
+The complete bidirectional product loop is not currently accepted live
+behavior. Texture's production registry can spawn Researcher but lacks the
+`update_coagent` tool its prompt names for follow-up, and its delegate policy
+does not currently connect it to the persistent Super. Effects also remain OFF,
+and no current Definition authorizes capsule/self-development effects. The next
+product mission must prove multiple Texture revision-and-redirection cycles over
+one live trajectory, including the Texture → Super → scoped CoSuper → Super →
+Texture path, rather than invent a generic supervision service, findings
+reducer, observer hierarchy, or second causal tape. See
 [supervision-protocol.md](supervision-protocol.md) for the bounded contract.
 
 ## Computer Model
