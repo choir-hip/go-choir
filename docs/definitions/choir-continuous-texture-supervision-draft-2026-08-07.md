@@ -202,12 +202,15 @@ now:
     worktree_inventory_ref: 2026-08-07 reviewed candidate receipt; primary worktree dirty only in five goal-owned docs
     status: reconciled
   candidate:
-    id: continuous-texture-supervision-definition-v2
+    id: continuous-texture-supervision-definition-v3
     state: frozen
-    ref: main working tree; SHA-256 over concatenated scoped files with this digest value normalized to SELF
+    ref: >-
+      SHA-256 in scope-list order: for each path, hash its UTF-8 path bytes, one
+      NUL byte, its file bytes, and one NUL byte; before hashing this Definition,
+      replace only the digest field value after sha256-self-normalized: with SELF.
     owner: current orchestrator
     base: f64784e88b42abbf7d87fee058c989537b686d58
-    digest: sha256-self-normalized:885cf4acb7f236b496df6adc41bd4a403266b08487488c9be261472d22188653
+    digest: sha256-self-normalized:ff116061fb7e69c430d34d0fba345ee705581b19016becc056535ded2d3a14b3
     scope: [docs/definitions/choir-continuous-texture-supervision-draft-2026-08-07.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
   decision:
     selected: Preserve producer-report QueueLifecycleUpdate; add direction-specific lifecycle controls with target work, an exact persistent-Super opener, and one atomic Texture apply transition; keep Super non-lifecycle and CoSuper networkless/evidence-only.
@@ -217,10 +220,10 @@ now:
     evidence_ref: docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
     owner_ratification_ref: none
     recorded_at: 2026-08-07T20:34:47Z
-    consequence: The six-to-two REPAIR verdict is adjudicated in this draft; no runtime implementation, lifecycle-profile refusal change, registry promotion to active, or /goal execution is authorized.
-  evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, frozen candidate digest 880c00cb8f7a6c546825689a7ba37c02a551f897a93080f5e1e2dbbda2cb89ed]
+    consequence: All eight completed repaired-candidate reviewers accepted the substantive architecture; five required only the candidate-identity wording repair now applied. No runtime implementation, lifecycle-profile refusal change, registry promotion to active, or /goal execution is authorized.
+  evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, reviewed source commit 6681606d4e0f14e83dab89bb808862db82cdd21b]
   blocker_or_risk: Owner ratification is absent. Implementation must discard and re-authorize the capsule slice if evidence-only networkless isolation cannot be separated from self-development finalization.
-  next_action: Owner ratifies or rejects candidate v2 against its self-normalized digest; only ratification may promote it to an executable /goal.
+  next_action: Owner ratifies or rejects candidate v3 against its exactly specified self-normalized digest; only ratification may promote it to an executable /goal.
 
 receipts:
   - id: continuous-supervision-definition-review-v1
@@ -237,6 +240,22 @@ receipts:
       ci_ref: not_applicable
       deploy_ref: not_applicable
       environment_identity: 460c142394e12b6e307949d0180da08d1b058745 observation only
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries
+  - id: continuous-supervision-definition-review-v2
+    boundary: challenge
+    commit_or_artifact: git:6681606d4e0f14e83dab89bb808862db82cdd21b
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md]
+    rollback_ref: main@f64784e88b42abbf7d87fee058c989537b686d58
+    disposition: Eight completed reviewers accepted the substantive repair; five REPAIR verdicts isolated an underspecified digest construction, three returned ACCEPT, and one route failed before review. Candidate v3 applies the exact byte-level identity repair.
+    problem_ref: this Definition observed_artifact
+    authorization_ref: owner request to draft and review only
+    candidate_or_evidence_refs: [reviewed source commit 6681606d4e0f14e83dab89bb808862db82cdd21b, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md]
+    landing:
+      source_commit: 6681606d4e0f14e83dab89bb808862db82cdd21b
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/31216848206 success
+      deploy_ref: skipped_docs_only
+      environment_identity: not_applicable
       deployed_acceptance: not_applicable
     registry_conformance_ref: draft blocked/non-executable in all three registries
 

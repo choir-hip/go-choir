@@ -185,3 +185,38 @@ remains non-executable pending owner ratification against that repaired digest.
 - failed OMP Cursor Grok route: `a56654b11f965aecaa3719dea6effed37ae9a8ea2fe2627224a4e582993af39d`
 - runner manifest: `72a27f306590daee7b507afb95a8906e5be2def3b85a71b300424ce29ddc3633`
 - frozen prompt: `ce14a12959640222378d47598881fac5b8802a62df77480bca5419a9a269e9ab`
+
+## Repaired-candidate acceptance review
+
+- **Reviewed at:** 2026-08-07T20:49:40Z
+- **Reviewed source commit:** `6681606d4e0f14e83dab89bb808862db82cdd21b`
+- **Reviewed self-normalized digest:** `885cf4acb7f236b496df6adc41bd4a403266b08487488c9be261472d22188653`
+- **Panel:** the same nine routes and lenses, including Claude
+- **Result:** five `REPAIR`, three `ACCEPT`, one route failed before review
+
+All eight completed reviewers found the six substantive architecture, authority,
+atomicity, capsule, and deployed-proof blockers materially repaired. Claude,
+Codex, Cursor, and OMP GPT-5.6 Sol independently reproduced one remaining
+identity defect: the digest prose did not specify the path bytes and NUL
+separators used by the recorded digest. Devin also returned `REPAIR`, but its
+claim that the evidence file was absent from candidate scope is contradicted by
+the reviewed Definition's explicit scope list and is dismissed.
+
+**Adjudication:** accept the reviewed architecture and apply the minority
+identity blocker. Candidate v3 specifies the exact byte-level self-normalized
+algorithm and is re-frozen without changing runtime design or authority. This
+receipt remains evidence, not owner ratification or execution authority.
+
+### Repaired-candidate output identities
+
+- Claude: `74a8ba8eb1987ea45548be170e162edbeddcc50152c14abb8264db73a62d1044`
+- Codex: `a54ed67e414fca714bd8e58c6716cb74339809a604e4b6e2efb3eaa7cacc6d68`
+- Cursor: `869cef99a3606c9a82e8f54e1e426aa44fcd68da34a03a618c30390b3bd46dde`
+- Devin: `a5c9560da638660fc4a8817678e975cfcb91e489789a614f772bb2d047c83528`
+- OpenCode: `440aa7e8eadedac22a123bb1a756db2a0decbf1a8ca39d543337bd13556f48a1`
+- OMP Gemini 3.6 Flash: `43ddd0010aade48e42a77619c6dd9c523f3ff9804ecfc5bff76c327b3ab6a57a`
+- OMP GPT-5.6 Sol: `3813f19c0d63811d85d63d219bc8c86671542a524df2904f3e0b20187ad96d04`
+- OMP DeepSeek v4 Flash: `0a4070e9bc4c30994de21e906a2551f36407d5c4d78ef1a129c7063e48a3182c`
+- failed OMP Cursor Grok route: `a56654b11f965aecaa3719dea6effed37ae9a8ea2fe2627224a4e582993af39d`
+- runner manifest: `be448da9a2be8a8a26eba5415d0842d078c492011b2d6f57205a8e8ee472e3e8`
+- frozen prompt: `c425e096dd59bf6b25a413a48c5ad226bbd7fe92c0ff6e75be2d9648cd25bb2f`

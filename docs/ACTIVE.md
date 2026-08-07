@@ -54,8 +54,10 @@ Texture's existing durable inbound update/revision path to target-bound
 Researcher control, the one persistent Super, and networkless evidence-only
 CoSuper work. Its
 [`consensus receipt`](evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md)
-records six `REPAIR`, two `ACCEPT`, and one failed-before-review route. It remains
-blocked pending owner ratification and three-registry promotion and authorizes no
+records a first panel of six `REPAIR`, two `ACCEPT`, and one failed route, then a
+repaired-candidate panel of five identity-only `REPAIR`, three `ACCEPT`, and one
+failed route. It remains blocked pending owner ratification and three-registry
+promotion and authorizes no
 runtime mutation, generic supervision subsystem, direct Texture-to-CoSuper path,
 host write, computer-event append, self-development finalization/acceptance,
 materialization, checkpoint, or route effect.
