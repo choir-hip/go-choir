@@ -602,20 +602,24 @@ remains unclaimed pending inventory; rejected-branch deletion is not a landed
 claim. Generic delegated agents remain durable runs/trajectories and may perform
 effects only through a separately accepted capsule path.
 
-### Target: Trajectory Supervision Protocol
+### Supervision Boundary And Current Gap
 
-**Target (owner re-visioning 2026-07-31, design in
-[supervision-protocol.md](supervision-protocol.md)):** a typed, durable
-protocol-health layer observes the kernel's snapshot projections (artifact
-head, obligations, update dispositions, reducer sequence) and emits addressed
-findings — never canonical edits. It enforces the single-writer invariant by
-construction: the supervisor's only outputs are supervision objects (findings,
-messages, work obligations, settlement records), and "all threads clear" is
-the kernel's deterministic settlement query, not an informal phrase. Observation is
-at the level of ideas (each semantic state update advances a texture to a new
-version), and the hierarchy terminates at the owner as root observer with an
-event-driven, sparse self-learning layer — no infinite observer tower. This
-layer is unbuilt; the archive design notes remain the pre-kernel source.
+Supervision is not a separate protocol-health layer or actor hierarchy. It is
+the work performed by the existing authority chain: the owner supervises
+through owner-readable Texture state; Texture supervises semantic state and
+decides when execution is needed; Super supervises execution and verification;
+and scoped CoSupers return capability-bounded work and evidence. The
+durable-work kernel, typed updates, trajectories, work items, Trace, settlement
+queries, and canonical events are their substrate, not another supervisor.
+
+The role topology exists in source, but the complete product loop is not
+currently accepted live behavior. Effects remain OFF, Texture does not receive
+the `request_super_execution` affordance in that mode, and no current Definition
+authorizes capsule/self-development effects. The next product mission must
+prove one explicit Texture → Super → scoped CoSuper → Super → Texture loop over
+the existing substrate rather than invent a generic supervision service,
+findings reducer, observer hierarchy, or second causal tape. See
+[supervision-protocol.md](supervision-protocol.md) for the bounded contract.
 
 ## Computer Model
 

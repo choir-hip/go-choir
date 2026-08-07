@@ -1,166 +1,123 @@
-# Trajectory Supervision Protocol (Target)
+# Supervision Is Agent Work
 
-**Last updated:** 2026-08-01. **Scope:** Target — decided direction, not yet
-fully implemented. The durable-work kernel this protocol builds on is **Live**
-(see [current-architecture.md](current-architecture.md) and the
-[convergence Definition](definitions/choir-coherent-computer-convergence-2026-07-21.md)),
-but the supervision layer itself is unbuilt.
+**Last updated:** 2026-08-05. **Scope:** current design boundary, corrected by
+the owner after the Texture tape cleanup.
 
-This document is the current home for Choir's supervision design intent. The
-archived
-[conductor-supervision-protocol](archive/design-conductor-supervision-protocol-2026-06-23.md)
-and
-[observer-hierarchy](archive/design-observer-hierarchy-2026-06-23.md) notes
-remain in Git history as the pre-kernel source of this design.
+Supervision is not a separate Choir subsystem, service, actor class, causal log,
+or workflow engine. It is what the existing agents do across authority
+boundaries:
 
-## Why a supervision protocol
+- the owner supervises the computer through owner-readable Texture state;
+- Texture supervises meaning, intent, evidence incorporation, and the standing
+  artifact;
+- Super supervises execution, decomposition, verification, and return of
+  results;
+- CoSuper performs a capability-bounded execution or verification assignment;
+- Researcher returns sourced evidence for Texture or Super to judge.
 
-Choir has multiple actors operating on a shared durable computer — Texture,
-researchers, super, CoSuper executors, and the owner. The durable-work kernel
-(single-writer reducers, trajectories, typed updates, settlement) removes the
-"who owns what" ambiguity. What it does not yet provide is a *protocol-health
-immune system*: a typed, durable observer that watches the object graph
-without owning canonical artifacts, and turns stalled or contract-violating
-state into addressed findings instead of user-noticed failures.
+The durable-work kernel, typed updates, trajectories, Trace, work items,
+settlement queries, and canonical computer events support that work. They are
+substrate and evidence, not another supervisor.
 
-The symptoms this targets are the pre-kernel liveness failures recorded in the
-archived design: texture revisions stalling without explanation, researchers
-emitting prose without source packets, and "all threads clear" being an
-informal phrase rather than a durable settlement record.
+## Current Code State
 
-## 1. Authority boundary (Target)
+The role topology exists in current source:
 
-The supervision layer never writes canonical artifacts. Its only outputs are
-supervision objects: findings, addressed messages, work obligations, and
-settlement records. This matches the kernel's single-writer invariant — the
-trajectory/update/work reducers and `CommitTextureHeadAuthority` are the only
-canonical writers.
+- `texture` owns canonical document versions and may write, wait, ask
+  Researcher, or record a blocker.
+- `super` is a persistent per-owner orchestration actor. It consumes addressed
+  `execution_request` packets and may delegate to Researcher or CoSuper.
+- `co-super` is a durable child role. Implementation and verifier slots are
+  separately bounded; effects use guest-local capsule broker tools rather than
+  direct host mutation.
+- typed `update_coagent` packets return evidence, actions, questions, and
+  results through durable mailboxes.
+- significant Texture mutations append compact private audit evidence through
+  the canonical `ComputerEventAppender`. That audit is evidence, not a second
+  semantic state authority.
 
-| Actor | Owns | Can mutate | Cannot do |
+The complete product loop is **not currently accepted live behavior**.
+Self-development effects remain OFF, Texture's effects-OFF tool registry does
+not expose `request_super_execution`, and no current executable Definition
+authorizes capsule, updater, checkpoint, or route effects. Super and CoSuper
+code, policies, tests, and durable controllers therefore exist ahead of a
+deployed end-to-end Texture-to-Super acceptance proof.
+
+## Authority Boundary
+
+| Actor | Supervises | Owns | Must not do |
 |---|---|---|---|
-| Owner | everything | anything (via UI/commands) | n/a |
-| Texture | canonical document state | revisions, source refs, publish | invent source packets; execute external actions |
-| Appagents | their own artifacts | their own output objects | mutate canonical Texture state directly |
-| Super | execution plans | executes tools, returns results | decide what should be done |
-| Trajectory supervisor | health state, findings, addressed messages | supervision objects, messages | edit artifacts |
-| Meta-conductor (Target) | portfolio attention | priority work items, owner-attention requests | edit artifacts |
+| Owner | intention and acceptance | final authority | be bypassed by hidden promotion |
+| Texture | semantic state and owner-readable context | canonical document versions | execute privileged effects or treat delegation as mandatory |
+| Super | execution and verification work | execution plan and addressed obligations | directly mutate canonical Texture or host state |
+| CoSuper | one scoped implementation or verification assignment | returned bundle/evidence for that assignment | acquire authority from prompt text or mutate the host directly |
+| Researcher | evidence gathering within a request | sourced evidence packet | write canonical Texture state |
 
-The invariant is single-writer per object type. The supervisor may write
-messages, but the actor that receives a message owns the response.
+Single-writer ownership is per semantic object. Supervision does not require a
+generic `supervision_object`, findings database, observer hierarchy, or second
+settlement authority.
 
-## 2. Observation (Target)
-
-Supervision observes **semantic state updates**, never action streams or
-prose. Each meaningful change to standing state advances the supervised
-trajectory's texture to a new version; the reducers maintain snapshot
-projections (artifact head, obligations, update dispositions, reducer
-sequence). A sensor reads those projections and emits a typed, append-only
-observation:
+## The Intended Loop
 
 ```text
-observation_id
-observed_at
-trajectory_id
-sensor_kind: one of
-  trace_event | appagent_event | source_packet | tool_result
-  | mailbox_state | work_item | artifact_validator | actor_liveness
-subject_id
-subject_kind
-payload: typed JSON
-schema_version
+owner input
+  -> Conductor opens or routes to Texture
+  -> Texture writes the standing understanding
+  -> Texture decides whether execution is needed
+  -> explicit Texture request wakes persistent Super
+  -> Super decomposes and, when needed, assigns scoped CoSuper work
+  -> CoSuper returns bundle/evidence; independent verification remains separate
+  -> Super returns the grounded result and unresolved decisions to Texture
+  -> Texture incorporates what matters into a new owner-readable revision
+  -> owner accepts, redirects, or stops
 ```
 
-Observation rows are projections and never acknowledge semantic state; the
-reducer-owned graph remains the only truth. Because every layer observes the
-same projections, adding a layer costs a query, not a copy of the world — this
-is what keeps a supervision hierarchy from turning into an unbounded tower.
+Every arrow should reuse the existing durable-run, typed-update, artifact,
+capsule, and canonical-event substrates. A missing arrow is a product-path gap,
+not justification for a new supervision platform.
 
-## 3. Findings and verdicts (Target)
+## Current Gaps
 
-A finding is a durable record of a protocol-health verdict, fingerprinted to
-prevent spam. Its resolution is the kernel's update-disposition vocabulary
-(`pending → incorporated | rejected | cancelled | late`).
+1. Effects-OFF deliberately breaks the explicit Texture-to-Super execution
+   arrow in the deployed product.
+2. Existing Super/CoSuper and capsule contracts have strong local coverage but
+   no current owner-ratified, deployed end-to-end product acceptance.
+3. Documentation previously described a separate trajectory-supervisor and
+   meta-supervision layer. That was an ontology error and is superseded here.
+4. The product still needs a concise owner-visible representation of pending
+   execution, returned evidence, unresolved decisions, and settlement inside
+   ordinary Texture state.
 
-```text
-finding_id
-finding_fingerprint = trajectory_id + invariant + actor + subject + evidence_hash
-observed_at
-state: one of open | resolved | escalated
-severity: watch | nudge_required | blocked | violation
-trajectory_id
-invariant: string, e.g. "researcher_packet_has_sources"
-actor: the actor responsible for responding
-subject_id: the object that violates the invariant
-evidence_hash: hash of the evidence payload
-expected_response_shape
-resolution_at
-resolved_by
-```
+## Path Forward
 
-"All threads clear" is a settlement query over no open findings, no pending
-mailbox obligations, and no non-terminal updates — already defined
-deterministically by the kernel's settlement rule, not by a supervisor claim.
+The next executable Definition should prove one narrow, real supervised task,
+not build a generic supervision protocol:
 
-## 4. Actions (Target)
+1. Start from a canonical Texture revision containing the owner's intent.
+2. Expose one explicit, authenticated Texture-to-Super request in the
+   authorized effects mode.
+3. Reuse the persistent Super inbox and durable run.
+4. If the task needs effects, use one implementation CoSuper and one independent
+   verifier CoSuper in disposable guest-local capsules.
+5. Return typed evidence and result handles to Super, then to Texture.
+6. Make Texture revise the owner-readable artifact with result, evidence,
+   blocker, or decision.
+7. Prove restart durability, cancellation, idempotency, no direct host mutation,
+   exact staging identity, and owner acceptance.
 
-Actions are the supervisor's only output: addressed, auditable, idempotent.
+Only after that path works should obsolete branches or redundant state be
+deleted. Do not add a generic observation schema, findings reducer, supervision
+API/CLI, deployment write-mode controller, or parallel causal tape.
 
-| Action | Target | Effect |
-|---|---|---|
-| `send_actor_message` | actor mailbox | structured message with invariant, evidence, expected response shape |
-| `open_work_item` | work queue | durable obligation to resolve a finding |
-| `ask_user` | owner notification | clarification request when the supervisor cannot decide |
-| `record_protocol_violation` | trajectory log | non-blocking audit of a broken contract |
-| `record_clear` | trajectory log | settlement record that all invariants pass |
+## Success Criterion
 
-Not allowed: `patch_texture`, `edit_artifact`, `invent_source_packet`,
-`rewrite_findings`, `execute_super_work`.
+Supervision works when the owner can inspect Texture and understand:
 
-## 5. State machine (Target)
+- what the computer believes it is doing;
+- what Super delegated and why;
+- what evidence or artifact came back;
+- what remains blocked or undecided;
+- what changed after the owner's correction.
 
-```text
-observing
-  -> healthy        (work progressing, no findings)
-  -> watch          (possible issue, too early to act)
-  -> nudge_required (actor has obligation but has not acted)
-  -> blocked        (actor lacks required input/capability)
-  -> violation      (protocol contract broken)
-  -> settled        (settlement query passes)
-```
-
-Transitions are triggered by observation processing, not model confidence. A
-`nudge_required` finding produces exactly one `send_actor_message` per
-fingerprint; repeated violation reopens the finding or emits
-`record_protocol_violation`.
-
-## 6. Hierarchy termination (Target)
-
-The hierarchy terminates at the **owner as root observer** — the owner of the
-computer and the source of intention. Within the system, the self-learning
-layer is a periodic, event-driven reflection mode (schedule, failure trigger,
-or owner request), never a continuous meta-meta-supervision tower. It proposes
-policy changes as mutation transactions subject to the same verification and
-promotion protocol as any other change; the owner decides.
-
-## 7. First validators (Target)
-
-- **`researcher_packet_has_sources`**: a researcher update lacks
-  `packet.sources` → finding `malformed_researcher_packet` (violation) →
-  one addressed message with the expected response shape.
-- **`texture_source_coverage`**: a Texture revision contains factual claims
-  without native `source_ref` nodes while available source entities are
-  non-empty → finding `unsupported_factual_claims` (nudge) → one message to
-  Texture.
-
-## 8. Build order (Target)
-
-Phase 1: read-only observation and verdicts, no actions. Phase 2: one safe
-action — `send_actor_message` for `researcher_packet_has_sources`. Phase 3:
-Texture validators. Phase 4: durable `record_clear` settlement object. Phase 5:
-meta-conductor / portfolio attention.
-
-The first proof is Phase 2: exactly one idempotent message when a researcher
-forgets sources. The deletion targets are bespoke control paths — ad hoc retry
-loops, "wait for the user to notice" stalls, and informal settlement
-language —
-the goal is to delete bespoke control, not add another layer.
+That is an agent-product outcome. More supervisory infrastructure is not proof
+of more supervision.
