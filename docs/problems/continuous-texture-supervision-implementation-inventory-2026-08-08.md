@@ -437,3 +437,36 @@ authority, and emit no packet/wake/projection/reopen. Per-tool capsule
 revalidation must also reject further read/write/exec effects once the intent is
 durable, while the report tool remains available solely to record delayed
 evidence. A deterministic report-versus-intent race test is required.
+
+
+## Joined capsule restart and drain blockers — 2026-08-08
+
+Fresh capsule/security review of the joined cancellation candidate found three
+additional protected-surface gaps:
+
+1. A restarted Linux capsule executor reconstructs empty in-memory maps.
+   `HasCapsule` and the structured revocation receipt can consequently declare
+   `CapsuleAbsent` without inspecting or cleaning a surviving state directory,
+   overlay mount, or `/sys/fs/cgroup/capsule/<id>` membership. `Pdeathsig` is not
+   proof of host resource cleanup. Restart reconciliation must kill/delete the
+   exact orphan cgroup, detach the exact overlay, remove the private capsule
+   state tree, verify all three are absent, and only then sign the acknowledgement.
+   Receipt creation itself must independently refuse visible residue.
+2. Compatibility permits an old assignment binding with an empty
+   `ExecutionHandleDigest`. That may permit closure/replay, but a delayed report
+   containing command receipts has no exact handle identity against which to
+   authenticate raw executor receipts. Receipt-bearing late evidence must refuse
+   without the stored domain-separated execution-handle digest; command-free
+   narration may remain evidence.
+3. The lifecycle reducer terminalizes run records before runtime drain queries.
+   The drain currently queries active records only and excludes a cancelled
+   snapshot activation, so an actually resident provider context can remain in
+   `Runtime.running` without receiving actor cancellation. Draining must join
+   all exact lifecycle trajectory run records with the process-local resident
+   activation set, signal only that intersection (never start a historical
+   terminal actor), and remove/cancel each resident context after durable
+   cancellation.
+
+These are implementation blockers. Real Linux restart cleanup and a real
+resident-provider cancellation/late-return sequence remain required acceptance
+evidence; source or Darwin simulation cannot promote effects.
