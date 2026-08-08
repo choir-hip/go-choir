@@ -22,6 +22,7 @@ const (
 	LifecycleSettleTrajectory   LifecycleCommandKind = "settle_trajectory"
 	LifecycleCancelTrajectory   LifecycleCommandKind = "cancel_trajectory"
 	LifecycleArchiveArtifact    LifecycleCommandKind = "archive_artifact"
+	LifecycleApplyTextureTurn   LifecycleCommandKind = "apply_texture_turn"
 )
 
 const (
@@ -50,6 +51,8 @@ const (
 	LifecycleTrajectorySettled    LifecycleEventKind = "trajectory_settled"
 	LifecycleTrajectoryCancelled  LifecycleEventKind = "trajectory_cancelled"
 	LifecycleArtifactArchived     LifecycleEventKind = "artifact_archived"
+	LifecycleTextureTurnCommitted LifecycleEventKind = "texture_turn_committed"
+	LifecycleControlQueued        LifecycleEventKind = "control_queued"
 )
 
 const (
@@ -118,6 +121,79 @@ type ApplyLifecycleUpdateRequest struct {
 }
 
 type QueueLifecycleUpdateRequest ApplyLifecycleUpdateRequest
+
+// TextureTurnOutcome is the single durable semantic result of one Texture
+// controller turn. Only TextureTurnRevision advances the canonical document
+// head; the other outcomes remain durable without manufacturing a revision.
+type TextureTurnOutcome string
+
+const (
+	TextureTurnRevision         TextureTurnOutcome = "revision"
+	TextureTurnNoSemanticChange TextureTurnOutcome = "no_semantic_change"
+	TextureTurnWait             TextureTurnOutcome = "wait"
+	TextureTurnBlock            TextureTurnOutcome = "block"
+)
+
+// TextureTurnInboundDisposition explicitly resolves one ordered producer
+// report and, when requested, its producer-owned work obligation.
+type TextureTurnInboundDisposition struct {
+	TargetAgentID      string            `json:"target_agent_id"`
+	ProducerAgentID    string            `json:"producer_agent_id"`
+	ProducerUpdateID   string            `json:"producer_update_id"`
+	UpdateID           string            `json:"update_id"`
+	Disposition        UpdateDisposition `json:"disposition"`
+	ProducerWorkItemID string            `json:"producer_work_item_id"`
+	WorkDisposition    WorkItemStatus    `json:"work_disposition"`
+	WorkResultRef      string            `json:"work_result_ref,omitempty"`
+	Reason             string            `json:"reason,omitempty"`
+}
+
+// TextureTurnControl is one ordered, downward target-control packet. OpenWork
+// is populated only for the exact persistent-Super opener. The work and first
+// execution_request are committed by the same conditional turn batch.
+type TextureTurnControl struct {
+	ControlID        string                     `json:"control_id"`
+	TargetAgentID    string                     `json:"target_agent_id"`
+	TargetWorkItemID string                     `json:"target_work_item_id"`
+	OpenWork         *WorkItemRecord            `json:"open_work,omitempty"`
+	Packet           CoagentSourcePacketPayload `json:"packet"`
+	Content          string                     `json:"content"`
+	PayloadDigest    string                     `json:"payload_digest"`
+}
+
+// ApplyTextureTurnRequest is the sole store mutation for a progressive Texture
+// turn. Runtime derives all scope and actor identities before this command.
+type ApplyTextureTurnRequest struct {
+	OwnerID                        string                          `json:"owner_id"`
+	ComputerID                     string                          `json:"computer_id"`
+	CommandID                      string                          `json:"command_id"`
+	CommandDigest                  string                          `json:"command_digest"`
+	DocumentID                     string                          `json:"document_id"`
+	TrajectoryID                   string                          `json:"trajectory_id"`
+	CallerAgentID                  string                          `json:"caller_agent_id"`
+	CallerRunID                    string                          `json:"caller_run_id"`
+	ExpectedLifecycleVersion       int64                           `json:"expected_lifecycle_version"`
+	ExpectedCallerLifecycleVersion int64                           `json:"expected_caller_lifecycle_version"`
+	ExpectedHeadRevisionID         string                          `json:"expected_head_revision_id"`
+	Outcome                        TextureTurnOutcome              `json:"outcome"`
+	Revision                       Revision                        `json:"revision,omitempty"`
+	Reason                         string                          `json:"reason,omitempty"`
+	SubjectRefs                    map[string]string               `json:"subject_refs,omitempty"`
+	Inbound                        []TextureTurnInboundDisposition `json:"inbound"`
+	Controls                       []TextureTurnControl            `json:"controls,omitempty"`
+}
+
+// TextureTurnRecord is stored in the lifecycle command receipt. It is the
+// durable outcome authority for revision and non-revision turns alike.
+type TextureTurnRecord struct {
+	Outcome             TextureTurnOutcome `json:"outcome"`
+	PriorHeadRevisionID string             `json:"prior_head_revision_id"`
+	HeadRevisionID      string             `json:"head_revision_id"`
+	InboundUpdateIDs    []string           `json:"inbound_update_ids,omitempty"`
+	ControlUpdateIDs    []string           `json:"control_update_ids,omitempty"`
+	TargetWorkItemIDs   []string           `json:"target_work_item_ids,omitempty"`
+	Reason              string             `json:"reason,omitempty"`
+}
 
 type OpenLifecycleWorkRequest struct {
 	OwnerID       string         `json:"owner_id"`
@@ -230,14 +306,17 @@ type ArchiveLifecycleArtifactRequest struct {
 }
 
 type LifecycleStoredResult struct {
-	Trajectory TrajectoryRecord     `json:"trajectory"`
-	Schema     string               `json:"schema,omitempty"`
-	WorkItem   *WorkItemRecord      `json:"work_item,omitempty"`
-	Agent      *AgentRecord         `json:"agent,omitempty"`
-	Update     *CoagentSourcePacket `json:"update,omitempty"`
-	Events     []LifecycleEvent     `json:"events"`
-	Document   *Document            `json:"document,omitempty"`
-	Revision   *Revision            `json:"revision,omitempty"`
+	Trajectory      TrajectoryRecord      `json:"trajectory"`
+	Schema          string                `json:"schema,omitempty"`
+	WorkItem        *WorkItemRecord       `json:"work_item,omitempty"`
+	Agent           *AgentRecord          `json:"agent,omitempty"`
+	Update          *CoagentSourcePacket  `json:"update,omitempty"`
+	Events          []LifecycleEvent      `json:"events"`
+	Document        *Document             `json:"document,omitempty"`
+	Revision        *Revision             `json:"revision,omitempty"`
+	TextureTurn     *TextureTurnRecord    `json:"texture_turn,omitempty"`
+	Controls        []CoagentSourcePacket `json:"controls,omitempty"`
+	TargetWorkItems []WorkItemRecord      `json:"target_work_items,omitempty"`
 }
 
 type LifecycleCommandReceipt struct {
@@ -274,16 +353,19 @@ type LifecycleEvent struct {
 }
 
 type LifecycleResult struct {
-	Receipt    LifecycleCommandReceipt `json:"receipt"`
-	Trajectory TrajectoryRecord        `json:"trajectory"`
-	Schema     string                  `json:"schema,omitempty"`
-	WorkItem   *WorkItemRecord         `json:"work_item,omitempty"`
-	Agent      *AgentRecord            `json:"agent,omitempty"`
-	Update     *CoagentSourcePacket    `json:"update,omitempty"`
-	Events     []LifecycleEvent        `json:"events"`
-	Replay     bool                    `json:"replay"`
-	Document   *Document               `json:"document,omitempty"`
-	Revision   *Revision               `json:"revision,omitempty"`
+	Receipt         LifecycleCommandReceipt `json:"receipt"`
+	Trajectory      TrajectoryRecord        `json:"trajectory"`
+	Schema          string                  `json:"schema,omitempty"`
+	WorkItem        *WorkItemRecord         `json:"work_item,omitempty"`
+	Agent           *AgentRecord            `json:"agent,omitempty"`
+	Update          *CoagentSourcePacket    `json:"update,omitempty"`
+	Events          []LifecycleEvent        `json:"events"`
+	Replay          bool                    `json:"replay"`
+	Document        *Document               `json:"document,omitempty"`
+	Revision        *Revision               `json:"revision,omitempty"`
+	TextureTurn     *TextureTurnRecord      `json:"texture_turn,omitempty"`
+	Controls        []CoagentSourcePacket   `json:"controls,omitempty"`
+	TargetWorkItems []WorkItemRecord        `json:"target_work_items,omitempty"`
 }
 
 type LifecycleActivationProjection struct {

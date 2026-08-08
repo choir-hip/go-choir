@@ -377,6 +377,7 @@ func (s *Store) replayLifecycleCommand(ctx context.Context, ownerID, computerID,
 			Receipt: receipt, Trajectory: stored.Trajectory, Schema: stored.Schema,
 			WorkItem: stored.WorkItem, Agent: stored.Agent, Update: stored.Update,
 			Events: stored.Events, Replay: true, Document: stored.Document, Revision: stored.Revision,
+			TextureTurn: stored.TextureTurn, Controls: stored.Controls, TargetWorkItems: stored.TargetWorkItems,
 		}, true, nil
 	}
 	result := types.LifecycleResult{Receipt: receipt, Replay: true}
@@ -1370,7 +1371,8 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 	storedReceipt.StoredResult = &types.LifecycleStoredResult{
 		Trajectory: result.Trajectory, Schema: result.Schema, WorkItem: result.WorkItem,
 		Agent: result.Agent, Update: result.Update, Events: result.Events,
-		Document: result.Document, Revision: result.Revision,
+		Document: result.Document, Revision: result.Revision, TextureTurn: result.TextureTurn,
+		Controls: result.Controls, TargetWorkItems: result.TargetWorkItems,
 	}
 	receiptObj, err := lifecycleObject(ogKindLifecycleCmd, ownerID, computerID, commandID, storedReceipt,
 		lifecycleMetadata("command_id", commandID, computerID, result.Receipt.TrajectoryID, result.Receipt.ReducerSeq),

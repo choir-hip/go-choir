@@ -944,10 +944,8 @@ func TestLifecycleSnapshotReconstructsAfterRestart(t *testing.T) {
 	replacementRetry.UpdateID = "update-after-replacement"
 	replacementRetry.SourceRunID = "run-after-replacement"
 	replacementRetry.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(replacementRetry)
-	replacementReplay, err := reopened.QueueLifecycleUpdate(ctx, replacementRetry)
-	if err != nil || !replacementReplay.Replay || replacementReplay.Update == nil ||
-		replacementReplay.Update.UpdateID != queue.UpdateID {
-		t.Fatalf("replacement activation replay after restart = %+v, %v", replacementReplay, err)
+	if _, err := reopened.QueueLifecycleUpdate(ctx, replacementRetry); !errors.Is(err, ErrLifecycleCommandConflict) {
+		t.Fatalf("changed runtime identity replay after restart error = %v, want command conflict", err)
 	}
 	conflicting := queue
 	conflicting.PayloadDigest = "sha256:changed-after-restart"
