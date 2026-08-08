@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -352,6 +353,68 @@ func TestLifecycleTextureInitialWorkWakeRecoversCommittedStartExactlyOnce(t *tes
 	}
 	if len(dispatches) != 1 {
 		t.Fatalf("committed-start replay redispatched: %v", dispatches)
+	}
+}
+
+func TestLifecycleTextureConcurrentInitialWorkWakeKeepsSoleWinnerAuthoritative(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	var dispatchMu sync.Mutex
+	var dispatches []string
+	core.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, _, _ string) error {
+		dispatchMu.Lock()
+		dispatches = append(dispatches, kind+":"+content)
+		dispatchMu.Unlock()
+		return nil
+	})
+
+	const callers = 40
+	startGate := make(chan struct{})
+	errs := make(chan error, callers)
+	var wg sync.WaitGroup
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-startGate
+			_, err := handler.ReconcileAgentWake(t.Context(), start.OwnerID, start.InitialDocument.DocID)
+			errs <- err
+		}()
+	}
+	close(startGate)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent initial wake: %v", err)
+		}
+	}
+
+	dispatchMu.Lock()
+	gotDispatches := append([]string(nil), dispatches...)
+	dispatchMu.Unlock()
+	if len(gotDispatches) != 1 || !strings.HasPrefix(gotDispatches[0], "initial_dispatch:") {
+		t.Fatalf("concurrent initial dispatches=%v", gotDispatches)
+	}
+	agent, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	if err != nil || agent.ActiveRunID == "" {
+		t.Fatalf("concurrent winner agent=%+v err=%v", agent, err)
+	}
+	if err := handler.ValidateActivationAuthority(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID, agent.ActiveRunID); err != nil {
+		t.Fatalf("concurrent winner lost activation authority: %v", err)
+	}
+	runs, err := core.Store().ListLifecycleRunsByChannel(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var textureRuns int
+	for i := range runs {
+		if runs[i].AgentID == start.Agent.AgentID && isTextureAgentRevisionTaskType(metadataStringValue(runs[i].Metadata, "type")) {
+			textureRuns++
+		}
+	}
+	if textureRuns != 1 {
+		t.Fatalf("concurrent initial Texture runs=%d all=%+v", textureRuns, runs)
 	}
 }
 

@@ -46,6 +46,7 @@ type Handler struct {
 	wakeTextureControl   func(context.Context, types.CoagentSourcePacket)
 	wakeOwnerInstruction func(context.Context, string, string, string) error
 	textureEditMu        sync.Mutex
+	textureWakeMu        sync.Mutex
 }
 
 // NewHandler composes Texture ownership over the concrete agent lifecycle.

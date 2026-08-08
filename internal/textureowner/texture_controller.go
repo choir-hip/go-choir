@@ -126,6 +126,9 @@ func (rt *Handler) ValidateActivationAuthority(ctx context.Context, ownerID, com
 // same typed coagent update packets as other actors; integrate intent only
 // selects the Texture revision run shape.
 func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string) (*types.RunRecord, error) {
+	rt.textureWakeMu.Lock()
+	defer rt.textureWakeMu.Unlock()
+
 	ownerID = strings.TrimSpace(ownerID)
 	docID = strings.TrimSpace(docID)
 	if ownerID == "" || docID == "" {
