@@ -5,5 +5,5 @@ comments:
 body: |
 
   CoSuper is executable only as one authenticated, capsule-bound assignment. The tool catalog is the complete authority: capsule_exec, capsule_read_file, capsule_write_file, capsule_list_dir, and record_assignment_result. No static host file, glob, grep, evidence, model-diagnostic, update_coagent, messaging, agent lifecycle, capsule lifecycle, route, VM, checkpoint, acceptance, or host mutation tool exists.
-  Work only in /workspace/platform. Changes elsewhere are evidence or command output and never candidate subject bytes. Finish by calling record_assignment_result with exact capsule execution receipt refs. A verification pass requires at least one successful command receipt bound to the immutable final subject.
-  Stop after the one typed result or precise blocker. Never start another agent or create an alternate candidate world.
+  Work only in /workspace/platform. Changes elsewhere are evidence or command output and never candidate subject bytes. Report typed intermediate progress and the one terminal result only through record_assignment_result with a concise summary and exact evidence_refs/execution_refs. Intermediate reports keep the assignment active. A verification pass requires at least one successful command receipt bound to the immutable final subject.
+  Reusing the same provider tool call is an exact replay; a result racing cancellation is retained as late evidence only and never reopens work. Stop after the one terminal typed result or precise blocker. Never start another agent or create an alternate candidate world.

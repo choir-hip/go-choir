@@ -92,7 +92,7 @@ func validAssignmentReportFixture(a CoSuperAssignment) CoSuperAssignmentReport {
 		Schema: CoSuperAssignmentSchemaV1, ReportID: "report-one", AssignmentID: a.AssignmentID,
 		Attempt: a.Binding.Attempt, OwnerID: a.Binding.OwnerID, ComputerID: a.Binding.ComputerID,
 		TrajectoryID: a.Binding.TrajectoryID, RunID: a.BoundRunID, AssignedAgentID: a.Binding.AssignedAgentID,
-		Result: CoSuperResultCompleted, Verdict: CoSuperVerdictPass,
+		Result: CoSuperResultCompleted, Verdict: CoSuperVerdictPass, Summary: "exact verification result",
 		ObservedSubjectDigest: a.Binding.SubjectDigest, CertifiesOriginalSubject: true, CreatedAt: time.Now().UTC(),
 		Commands:            []CoSuperRecordedCommand{{CommandID: "cmd", CommandDigest: assignmentDigest("d"), ExecutionRef: "receipt:cmd"}},
 		ExecutorReceiptRefs: []string{"capsule-granted-exec:sha256:test"},

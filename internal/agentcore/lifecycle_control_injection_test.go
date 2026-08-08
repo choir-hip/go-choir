@@ -259,3 +259,77 @@ func TestLifecycleInjectionRestartDerivesSeenFromDurableMemoryAndRejectsSpoof(t 
 		t.Fatalf("untrusted user packet marked occurrence seen: updates=%v owners=%v", updates, owners)
 	}
 }
+
+func TestPersistentSuperReportToTextureCanonicalReplayWakeAndInjection(t *testing.T) {
+	rt, s := testRuntime(t)
+	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	var dispatches []string
+	rt.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, trajectory, _ string) error {
+		dispatches = append(dispatches, kind+":"+content+":"+trajectory)
+		return nil
+	})
+	ownerID := "owner-super-report-texture"
+	superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-report", superAgent.AgentID, agentprofile.Super)
+	parent, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+	if err != nil || parent == nil {
+		t.Fatalf("reconcile persistent Super = %+v err=%v", parent, err)
+	}
+	dispatches = nil
+	raw := json.RawMessage(`{"kind":"execution_result","summary":"inspected assignment progress","claims":[],"sources":[],"actions":[],"questions":[],"notes":["evidence:progress"],"work_disposition":"open"}`)
+	ctx := toolContextForTestCall(parent, "provider-call-report-texture")
+	first, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(ctx, "report_to_texture", raw)
+	if err != nil || !strings.Contains(first, `"replay":false`) {
+		t.Fatalf("first report = %s err=%v", first, err)
+	}
+	if len(dispatches) != 1 || !strings.HasPrefix(dispatches[0], "coagent_result:result:") {
+		t.Fatalf("post-commit wakes = %+v", dispatches)
+	}
+	second, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(ctx, "report_to_texture", raw)
+	if err != nil || !strings.Contains(second, `"replay":true`) || len(dispatches) != 1 {
+		t.Fatalf("report replay = %s err=%v wakes=%+v", second, err, dispatches)
+	}
+	unknown := json.RawMessage(`{"kind":"execution_result","summary":"bad","claims":[],"sources":[],"actions":[],"questions":[],"notes":["x"],"work_disposition":"open","target_agent_id":"texture:forged"}`)
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(toolContextForTestCall(parent, "provider-call-report-unknown"), "report_to_texture", unknown); err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("unknown authority field = %v", err)
+	}
+	forged := json.RawMessage(`{"kind":"proposal","summary":"bad authority","claims":[],"sources":[],"actions":[{"type":"inspect_file","objective":"inspect","inputs":{"nested":{"workItemID":"forged"}}}],"questions":[],"notes":[],"work_disposition":"open"}`)
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(toolContextForTestCall(parent, "provider-call-report-forged"), "report_to_texture", forged); err == nil || !strings.Contains(err.Error(), "cannot author lifecycle authority") {
+		t.Fatalf("nested authority input = %v", err)
+	}
+	updates, err := s.ListPendingLifecycleUpdates(context.Background(), ownerID, "sandbox-test", fixture.control.AgentID, 10)
+	if err != nil || len(updates) != 1 || updates[0].Direction != types.LifecyclePacketDirectionProducerReport ||
+		updates[0].ControlBindingID != fixture.control.UpdateID || updates[0].ProducerWorkItemID != fixture.workID || updates[0].TargetWorkItemID == "" {
+		t.Fatalf("Texture pending report = %+v err=%v", updates, err)
+	}
+	textureRun, err := s.GetLifecycleRun(context.Background(), ownerID, "sandbox-test", fixture.control.SourceRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	injected := rt.coagentUpdateTurnInjector(&textureRun)
+	messages, err := injected(false)
+	if err != nil || len(messages) != 1 || !strings.Contains(string(messages[0]), "inspected assignment progress") || !strings.Contains(string(messages[0]), fixture.trajectoryID) {
+		t.Fatalf("Texture report injection = %s err=%v", messages, err)
+	}
+	if legacy, err := s.ListCoagentMailboxBacklog(context.Background(), ownerID, fixture.control.AgentID, 10); err != nil || len(legacy) != 0 {
+		t.Fatalf("legacy rows = %+v err=%v", legacy, err)
+	}
+}
+
+func TestSelectLifecycleControlActivationRejectsProducerReports(t *testing.T) {
+	control := types.CoagentSourcePacket{UpdateID: "control", TrajectoryID: "trajectory", TargetWorkItemID: "work", Direction: types.LifecyclePacketDirectionControl}
+	report := control
+	report.UpdateID, report.Direction = "producer-report", types.LifecyclePacketDirectionProducerReport
+	selected := selectLifecycleControlActivation([]types.CoagentSourcePacket{report, control}, "trajectory", map[string]bool{"work": true})
+	if len(selected) != 1 || selected[0].UpdateID != control.UpdateID {
+		t.Fatalf("new-run control selection admitted report: %+v", selected)
+	}
+	if selected = selectLifecycleControlActivation([]types.CoagentSourcePacket{report}, "trajectory", nil); len(selected) != 0 {
+		t.Fatalf("report-only activation = %+v", selected)
+	}
+}

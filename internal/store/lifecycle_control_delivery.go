@@ -218,8 +218,9 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, result)
 }
 
-// ListLifecycleControlsDeliveredToRun returns the full typed control envelopes
-// bound by BindLifecycleControlDelivery to one exact durable run. New-run
+// ListLifecycleControlsDeliveredToRun returns the full typed envelopes bound
+// to one exact durable run: downward controls plus authenticated CoSuper return
+// reports already delivered to their owning persistent-Super run. New-run
 // selection intentionally uses ListPendingLifecycleUpdates instead; this reader
 // is only for warm/cold injection after the delivery cursor has advanced. It
 // never consults the legacy coagent mailbox.
@@ -291,20 +292,49 @@ func (s *Store) ListLifecycleControlsDeliveredToRun(ctx context.Context, ownerID
 			continue
 		}
 		if update.OwnerID != ownerID || update.ComputerID != computerID || update.TrajectoryID != trajectoryID || update.TargetAgentID != targetAgentID ||
-			update.Direction != types.LifecyclePacketDirectionControl || update.Disposition != types.UpdatePending || update.DeliveredAt == nil ||
-			strings.TrimSpace(update.TargetWorkItemID) == "" || !lifecycleRunBindsWork(run, update.TargetWorkItemID) ||
-			update.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 || strings.TrimSpace(update.Packet.Kind) == "" || strings.TrimSpace(update.Content) == "" {
+			update.Disposition != types.UpdatePending || update.DeliveredAt == nil || update.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 ||
+			strings.TrimSpace(update.Packet.Kind) == "" || strings.TrimSpace(update.Content) == "" {
 			return nil, ErrLifecycleInvalidTransition
 		}
 		payloadDigest, digestErr := ComputeLifecycleUpdatePayloadDigest(update.Packet, update.Content)
 		if digestErr != nil || payloadDigest != update.PayloadDigest {
 			return nil, ErrLifecycleInvalidTransition
 		}
-		work, workErr := s.GetLifecycleWorkItem(ctx, ownerID, computerID, update.TargetWorkItemID)
-		if workErr != nil {
-			return nil, workErr
+		producerWorkID, targetWorkID, bindingErr := ResolveLifecyclePacketWorkBindings(update)
+		if bindingErr != nil {
+			return nil, bindingErr
 		}
-		if work.OwnerID != ownerID || work.ComputerID != computerID || work.TrajectoryID != trajectoryID || work.AssignedAgentID != targetAgentID || work.Status != types.WorkItemOpen {
+		switch update.Direction {
+		case types.LifecyclePacketDirectionControl:
+			if targetWorkID == "" || !lifecycleRunBindsWork(run, targetWorkID) {
+				return nil, ErrLifecycleInvalidTransition
+			}
+			work, workErr := s.GetLifecycleWorkItem(ctx, ownerID, computerID, targetWorkID)
+			if workErr != nil {
+				return nil, workErr
+			}
+			if work.OwnerID != ownerID || work.ComputerID != computerID || work.TrajectoryID != trajectoryID || work.AssignedAgentID != targetAgentID || work.Status != types.WorkItemOpen {
+				return nil, ErrLifecycleInvalidTransition
+			}
+		case types.LifecyclePacketDirectionProducerReport:
+			if profile != agentprofile.Super || producerWorkID == "" || targetWorkID == "" || strings.TrimSpace(update.ControlBindingID) == "" ||
+				!lifecycleRunBindsWork(run, targetWorkID) || !persistentSuperControlBinding(run.Metadata, trajectoryID, targetWorkID, update.ControlBindingID) {
+				return nil, ErrLifecycleInvalidTransition
+			}
+			producerRun, runErr := s.GetLifecycleRun(ctx, ownerID, computerID, update.SourceRunID)
+			if runErr != nil {
+				return nil, runErr
+			}
+			producerWork, workErr := s.GetLifecycleWorkItem(ctx, ownerID, computerID, producerWorkID)
+			if workErr != nil {
+				return nil, workErr
+			}
+			if producerRun.RunID != update.SourceRunID || producerRun.AgentID != update.AgentID || producerRun.TrajectoryID != trajectoryID ||
+				producerRun.AgentProfile != agentprofile.CoSuper || !producerRun.State.Valid() || !lifecycleRunBindsWork(producerRun, producerWorkID) ||
+				producerWork.TrajectoryID != trajectoryID || producerWork.AssignedAgentID != update.AgentID || producerWork.AuthorityProfile != agentprofile.CoSuper {
+				return nil, ErrLifecycleInvalidTransition
+			}
+		default:
 			return nil, ErrLifecycleInvalidTransition
 		}
 		updates = append(updates, update)

@@ -60,23 +60,14 @@ func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.C
 	return acked.Assignment, nil
 }
 
-func (rt *Runtime) cancelAssignedCoSuper(ctx context.Context, parent types.RunRecord, assignmentID string, attempt uint64, reason string) (types.CoSuperAssignment, error) {
+func (rt *Runtime) cancelAssignedCoSuper(ctx context.Context, parent types.RunRecord, assignmentID string, attempt uint64, reason string) (types.CoSuperAssignmentCommandResult, error) {
 	assignment, err := rt.store.GetCoSuperAssignment(ctx, parent.OwnerID, parent.SandboxID, strings.TrimSpace(assignmentID), attempt)
 	if err != nil {
-		return types.CoSuperAssignment{}, err
+		return types.CoSuperAssignmentCommandResult{}, err
 	}
 	if assignment.Binding.ParentRunID != parent.RunID || assignment.Binding.ParentAgentID != parent.AgentID ||
 		parent.AgentID != persistentSuperAgentID(parent.OwnerID) {
-		return types.CoSuperAssignment{}, fmt.Errorf("assignment cancellation requires exact persistent Super parent")
-	}
-	if assignment.Disposition.Terminal() {
-		return assignment, nil
-	}
-	if assignment.BoundRunID != "" {
-		assignment, err = rt.revokeAssignedCapsule(ctx, assignment, reason)
-		if err != nil {
-			return assignment, err
-		}
+		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("assignment cancellation requires exact persistent Super parent")
 	}
 	cancel := types.CancelCoSuperAssignmentRequest{
 		CommandID: fmt.Sprintf("co-super-cancel:%s:%d", assignment.AssignmentID, assignment.Binding.Attempt),
@@ -88,14 +79,28 @@ func (rt *Runtime) cancelAssignedCoSuper(ctx context.Context, parent types.RunRe
 		cancel.Reason = "persistent Super cancelled assignment"
 	}
 	cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
-	cancelled, err := rt.store.CancelCoSuperAssignment(ctx, cancel)
-	if err != nil {
-		return assignment, err
+	if assignment.Disposition.Terminal() {
+		// Exact cancellation replay/conflict is receipt-authoritative even after
+		// terminal projection; never bypass it with an in-memory early return.
+		replayed, replayErr := rt.store.CancelCoSuperAssignment(ctx, cancel)
+		if replayErr != nil {
+			return types.CoSuperAssignmentCommandResult{}, replayErr
+		}
+		return replayed, nil
 	}
 	if assignment.BoundRunID != "" {
-		_ = rt.terminalizeRun(context.Background(), assignment.BoundRunID, assignment.Binding.OwnerID, cancel.Reason)
+		assignment, err = rt.revokeAssignedCapsule(ctx, assignment, reason)
+		if err != nil {
+			return types.CoSuperAssignmentCommandResult{}, err
+		}
 	}
-	return cancelled.Assignment, nil
+	cancel.ExpectedLifecycleVersion = assignment.LifecycleVersion
+	cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
+	cancelled, err := rt.store.CancelCoSuperAssignment(ctx, cancel)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	return cancelled, nil
 }
 
 // ReconcileCoSuperAssignmentsForTrajectory closes restart gaps without a
@@ -152,8 +157,12 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 				ExpectedLifecycleVersion: assignment.LifecycleVersion, Reason: "restart acknowledged absent pre-bind assignment capsule",
 			}
 			cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
-			if _, err := rt.store.CancelCoSuperAssignment(ctx, cancel); err != nil {
-				return err
+			cancelled, cancelErr := rt.store.CancelCoSuperAssignment(ctx, cancel)
+			if cancelErr != nil {
+				return cancelErr
+			}
+			if !cancelled.Replay && cancelled.Update != nil {
+				rt.wakeUpdatedCoagent(ctx, *cancelled.Update)
 			}
 			continue
 		}
@@ -174,8 +183,12 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 			ExpectedLifecycleVersion: assignment.LifecycleVersion, Reason: "restart revoked absent assignment capsule",
 		}
 		cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
-		if _, err := rt.store.CancelCoSuperAssignment(ctx, cancel); err != nil {
-			return err
+		cancelled, cancelErr := rt.store.CancelCoSuperAssignment(ctx, cancel)
+		if cancelErr != nil {
+			return cancelErr
+		}
+		if !cancelled.Replay && cancelled.Update != nil {
+			rt.wakeUpdatedCoagent(ctx, *cancelled.Update)
 		}
 	}
 	return nil
@@ -201,33 +214,12 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 	report.Mutations = nil
 	report.ObservedSubjectDigest = assignment.Binding.SubjectDigest
 	report.CertifiesOriginalSubject = false
-	fingerprintParts := []string{string(report.Result), string(report.Verdict), report.ReportID}
+	fingerprintParts := []string{string(report.Result), string(report.Verdict), report.ReportID, strings.TrimSpace(report.Summary)}
+	fingerprintParts = append(fingerprintParts, report.EvidenceRefs...)
 	for _, command := range report.Commands {
 		fingerprintParts = append(fingerprintParts, command.ExecutionRef, command.CommandDigest)
 	}
 	terminalFingerprint := objectgraph.SHA256([]byte(strings.Join(fingerprintParts, "\x00")))
-
-	if !terminal {
-		if stored, storedErr := rt.store.GetCoSuperAssignmentReport(ctx, rec.OwnerID, rec.SandboxID, report.ReportID); storedErr == nil {
-			storedParts := []string{string(stored.Result), string(stored.Verdict), stored.ReportID}
-			for _, command := range stored.Commands {
-				storedParts = append(storedParts, command.ExecutionRef, command.CommandDigest)
-			}
-			if objectgraph.SHA256([]byte(strings.Join(storedParts, "\x00"))) != terminalFingerprint {
-				return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
-			}
-			commandID := "co-super-report:" + assignment.AssignmentID + ":" + report.ReportID
-			return rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, commandID)
-		} else if !errors.Is(storedErr, store.ErrNotFound) {
-			return types.CoSuperAssignmentCommandResult{}, storedErr
-		}
-		active := assignment.CapsuleDisposition == types.CoSuperCapsuleActive && !assignment.Disposition.Terminal()
-		late := assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked
-		if !active && !late {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("partial report conflicts with capsule terminalization in progress")
-		}
-		return rt.commitAssignedCoSuperReport(ctx, assignment, report)
-	}
 
 	storedReport, reportErr := rt.store.GetCoSuperAssignmentReport(ctx, rec.OwnerID, rec.SandboxID, report.ReportID)
 	reportExists := reportErr == nil
@@ -236,8 +228,9 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 	}
 	if reportExists {
 		// The stored runtime-derived report is the only replay authority. A
-		// changed terminal result/verdict/evidence conflicts before effects.
-		storedParts := []string{string(storedReport.Result), string(storedReport.Verdict), storedReport.ReportID}
+		// changed result/verdict/evidence conflicts before any fate effect.
+		storedParts := []string{string(storedReport.Result), string(storedReport.Verdict), storedReport.ReportID, strings.TrimSpace(storedReport.Summary)}
+		storedParts = append(storedParts, storedReport.EvidenceRefs...)
 		for _, command := range storedReport.Commands {
 			storedParts = append(storedParts, command.ExecutionRef, command.CommandDigest)
 		}
@@ -245,6 +238,28 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 			return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
 		}
 		report = storedReport
+	}
+	if !terminal && reportExists {
+		return rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
+			assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, "co-super-report:"+assignment.AssignmentID+":"+report.ReportID)
+	}
+
+	// Cancellation/revocation wins the lifecycle race. A provider tool call
+	// already in flight may still commit its authenticated report identity, but
+	// Store derives it as late evidence only: no packet, wake, projection, or
+	// capsule effect can reopen/revise the cancelled assignment.
+	if assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked {
+		if reportExists {
+			return rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
+				assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, "co-super-report:"+assignment.AssignmentID+":"+report.ReportID)
+		}
+		return rt.commitAssignedCoSuperReport(ctx, assignment, report)
+	}
+	if !terminal {
+		if assignment.CapsuleDisposition != types.CoSuperCapsuleActive || assignment.Disposition.Terminal() {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("partial report requires active nonterminal assignment")
+		}
+		return rt.commitAssignedCoSuperReport(ctx, assignment, report)
 	}
 
 	intent := "capsule-freeze-intent:" + terminalFingerprint

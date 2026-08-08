@@ -375,6 +375,9 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterCoagentUpdateTools(superRegistry, rt); err != nil {
 		return err
 	}
+	if err := RegisterPersistentSuperReportTools(superRegistry, rt); err != nil {
+		return err
+	}
 	if rt.capsuleExecutor != nil {
 		if err := RegisterAssignedCoSuperTools(superRegistry, rt); err != nil {
 			return err

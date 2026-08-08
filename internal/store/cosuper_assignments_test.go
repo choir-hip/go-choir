@@ -845,3 +845,149 @@ func TestPartialAssignmentReportPreservesActiveCapsuleThenTerminalFreezes(t *tes
 		t.Fatalf("new late partial changed terminal fate: %+v err=%v", lateResult, err)
 	}
 }
+
+func TestCoSuperReturnLoopCommitsExactPacketsAndTerminalProjection(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-upward-loop", 1, types.CoSuperAssignmentImplementation, true, "cap-upward-loop", "capsule-upward-loop")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-upward-loop")); err != nil {
+		t.Fatal(err)
+	}
+
+	var firstPartial types.RecordCoSuperAssignmentReportRequest
+	for index := 0; index < 2; index++ {
+		req := assignmentReportRequest(open, int64(2+index), fmt.Sprintf("report-progress-%d", index), open.Binding.SubjectDigest, types.CoSuperResultPartial, types.CoSuperVerdictNone)
+		req.Report.Summary = fmt.Sprintf("progress %d", index)
+		req.CommandDigest, _ = ComputeRecordCoSuperAssignmentReportDigest(req)
+		if index == 0 {
+			firstPartial = req
+		}
+		result, err := s.RecordCoSuperAssignmentReport(ctx, req)
+		if err != nil || result.Update == nil || result.Replay || result.Update.Direction != types.LifecyclePacketDirectionProducerReport ||
+			result.Update.ControlBindingID != f.parentControlID || result.Update.ProducerWorkItemID != open.Binding.AssignedWorkItemID ||
+			result.Update.TargetWorkItemID != f.parentWorkID || result.Update.DeliveredToRunID != f.parentRunID || result.Update.DeliveredAt == nil {
+			t.Fatalf("partial return %d = %+v err=%v", index, result, err)
+		}
+		replay, err := s.RecordCoSuperAssignmentReport(ctx, req)
+		if err != nil || !replay.Replay || replay.Update == nil || replay.Update.UpdateID != result.Update.UpdateID {
+			t.Fatalf("partial replay %d = %+v err=%v", index, replay, err)
+		}
+	}
+	terminal := assignmentReportRequest(open, 4, "report-terminal", open.Binding.SubjectDigest, types.CoSuperResultCompleted, types.CoSuperVerdictNone)
+	terminal.Report.Summary = "implementation complete"
+	terminal.CommandDigest, _ = ComputeRecordCoSuperAssignmentReportDigest(terminal)
+	result, err := s.RecordCoSuperAssignmentReport(ctx, terminal)
+	if err != nil || result.Update == nil || result.Assignment.Disposition != types.CoSuperAssignmentCompleted {
+		t.Fatalf("terminal = %+v err=%v", result, err)
+	}
+	priorReplay, err := s.RecordCoSuperAssignmentReport(ctx, firstPartial)
+	if err != nil || !priorReplay.Replay || priorReplay.Update == nil || priorReplay.Update.ProducerUpdateID != firstPartial.Report.ReportID {
+		t.Fatalf("prior partial replay after terminal = %+v err=%v", priorReplay, err)
+	}
+	work, err := s.GetLifecycleWorkItem(ctx, f.ownerID, f.computerID, open.Binding.AssignedWorkItemID)
+	if err != nil || work.Status != types.WorkItemCompleted || work.ResultRef != terminal.Report.ReportID {
+		t.Fatalf("terminal work = %+v err=%v", work, err)
+	}
+	run, err := s.GetLifecycleRun(ctx, f.ownerID, f.computerID, f.assignedRunIDs[0])
+	if err != nil || run.State != types.RunCompleted || run.FinishedAt == nil {
+		t.Fatalf("terminal run = %+v err=%v", run, err)
+	}
+	agent, err := s.GetAgentByScope(ctx, f.ownerID, f.computerID, open.Binding.AssignedAgentID)
+	if err != nil || agent.ActiveRunID != "" {
+		t.Fatalf("terminal agent = %+v err=%v", agent, err)
+	}
+	packets, err := s.ListLifecycleControlsDeliveredToRun(ctx, f.ownerID, f.computerID, f.trajectoryID, f.parentAgentID, f.parentRunID, 10)
+	if err != nil || len(packets) != 3 {
+		t.Fatalf("parent delivered reports = %+v err=%v", packets, err)
+	}
+	if legacy, err := s.ListCoagentMailboxBacklog(ctx, f.ownerID, f.parentAgentID, 10); err != nil || len(legacy) != 0 {
+		t.Fatalf("legacy mailbox rows = %+v err=%v", legacy, err)
+	}
+}
+
+func TestCoSuperCancellationQueuesOneFailureAndLateResultIsEvidenceOnly(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-cancel-return", 1, types.CoSuperAssignmentImplementation, true, "cap-cancel-return", "capsule-cancel-return")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-cancel-return")); err != nil {
+		t.Fatal(err)
+	}
+	cancel := types.CancelCoSuperAssignmentRequest{CommandID: "cancel-return", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 2, Reason: "capsule authority missing"}
+	cancel.CommandDigest, _ = ComputeCancelCoSuperAssignmentDigest(cancel)
+	cancelled, err := s.CancelCoSuperAssignment(ctx, cancel)
+	if err != nil || cancelled.Update == nil || cancelled.Report == nil || !cancelled.Report.Late {
+		t.Fatalf("cancel = %+v err=%v", cancelled, err)
+	}
+	retry := cancel
+	retry.ExpectedLifecycleVersion = cancelled.Assignment.LifecycleVersion
+	retry.CommandDigest, _ = ComputeCancelCoSuperAssignmentDigest(retry)
+	replayed, err := s.CancelCoSuperAssignment(ctx, retry)
+	if err != nil || !replayed.Replay || replayed.Update == nil {
+		t.Fatalf("cancel replay = %+v err=%v", replayed, err)
+	}
+	conflict := retry
+	conflict.Reason = "different cancellation"
+	conflict.CommandDigest, _ = ComputeCancelCoSuperAssignmentDigest(conflict)
+	if _, err := s.CancelCoSuperAssignment(ctx, conflict); !errors.Is(err, ErrCoSuperAssignmentCommandConflict) {
+		t.Fatalf("cancel conflict = %v", err)
+	}
+	packets, err := s.ListLifecycleControlsDeliveredToRun(ctx, f.ownerID, f.computerID, f.trajectoryID, f.parentAgentID, f.parentRunID, 10)
+	if err != nil || len(packets) != 1 {
+		t.Fatalf("cancel obligations before parent terminal = %+v err=%v", packets, err)
+	}
+	settleParent := types.SettleLifecycleWorkRequest{OwnerID: f.ownerID, ComputerID: f.computerID, CommandID: "settle-parent-before-late", TrajectoryID: f.trajectoryID,
+		WorkItemID: f.parentWorkID, ActingAgentID: f.parentAgentID, ResultRef: "parent-result:cancelled-child"}
+	settleParent.CommandDigest, _ = ComputeSettleLifecycleWorkDigest(settleParent)
+	if _, err := s.SettleLifecycleWork(ctx, settleParent); err != nil {
+		t.Fatalf("settle parent before late evidence: %v", err)
+	}
+	parentRun, err := s.GetRunByOwner(ctx, f.ownerID, f.parentRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished := time.Now().UTC()
+	parentRun.State, parentRun.UpdatedAt, parentRun.FinishedAt = types.RunCompleted, finished, &finished
+	if err := s.UpdateRun(ctx, parentRun); err != nil {
+		t.Fatalf("terminalize historical parent run: %v", err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, f.ownerID, f.computerID, f.trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelTrajectory := types.CancelLifecycleRequest{OwnerID: f.ownerID, ComputerID: f.computerID, CommandID: "terminal-trajectory-before-late", TrajectoryID: f.trajectoryID,
+		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, Reason: "parent lifecycle closed before delayed evidence"}
+	cancelTrajectory.CommandDigest, _ = ComputeCancelLifecycleDigest(cancelTrajectory)
+	if _, err := s.CancelLifecycleTrajectory(ctx, cancelTrajectory); err != nil {
+		t.Fatalf("terminalize trajectory before late evidence: %v", err)
+	}
+	snapshot, err = s.GetLifecycleSnapshot(ctx, f.ownerID, f.computerID, f.trajectoryID)
+	if err != nil || snapshot.Trajectory.Status != types.TrajectoryCancelled {
+		t.Fatalf("historical parent trajectory = %+v err=%v", snapshot, err)
+	}
+	late := assignmentReportRequest(open, cancelled.Assignment.LifecycleVersion, "late-real-result", open.Binding.SubjectDigest, types.CoSuperResultCompleted, types.CoSuperVerdictNone)
+	late.Report.Summary = "real result arrived after revoke"
+	late.Report.ObservedSubjectDigest = objectgraph.SHA256([]byte("late changed subject evidence"))
+	late.Report.CandidateSubjectDigest, late.Report.CandidateID = late.Report.ObservedSubjectDigest, "late-authored-candidate"
+	late.Report.Mutations = []types.CoSuperRecordedMutation{{MutationID: "late-mutation", Kind: "assignment_overlay", BeforeDigest: open.Binding.SubjectDigest,
+		AfterDigest: late.Report.ObservedSubjectDigest, EvidenceRef: "late-capsule-diff", SubjectBytesChanged: true}}
+	late.CommandDigest, _ = ComputeRecordCoSuperAssignmentReportDigest(late)
+	lateResult, err := s.RecordCoSuperAssignmentReport(ctx, late)
+	if err != nil || lateResult.Report == nil || !lateResult.Report.Late || lateResult.Update != nil || lateResult.Candidate != nil || lateResult.Report.CandidateID != "" || lateResult.Assignment.Disposition != types.CoSuperAssignmentCancelled {
+		t.Fatalf("late = %+v err=%v", lateResult, err)
+	}
+	latePartial := assignmentReportRequest(open, lateResult.Assignment.LifecycleVersion, "late-partial-result", open.Binding.SubjectDigest, types.CoSuperResultPartial, types.CoSuperVerdictNone)
+	latePartial.Report.Summary = "in-flight partial result arrived after revoke"
+	latePartial.CommandDigest, _ = ComputeRecordCoSuperAssignmentReportDigest(latePartial)
+	partialResult, err := s.RecordCoSuperAssignmentReport(ctx, latePartial)
+	if err != nil || partialResult.Report == nil || !partialResult.Report.Late || partialResult.Update != nil || partialResult.Assignment.Disposition != types.CoSuperAssignmentCancelled {
+		t.Fatalf("late partial = %+v err=%v", partialResult, err)
+	}
+}

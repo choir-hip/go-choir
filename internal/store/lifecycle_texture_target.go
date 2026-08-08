@@ -214,10 +214,13 @@ func ResolveLifecyclePacketWorkBindings(packet types.CoagentSourcePacket) (produ
 		}
 		return producer, "", nil
 	case types.LifecyclePacketDirectionProducerReport:
-		if target != "" {
-			return "", "", fmt.Errorf("producer report cannot carry target work: %w", ErrLifecycleInvalidTransition)
+		// A report may name its exact target work only when it also carries
+		// the runtime-derived downward control occurrence that authorized the
+		// return edge. Unbound producer reports retain the legacy one-work shape.
+		if target != "" && strings.TrimSpace(packet.ControlBindingID) == "" {
+			return "", "", fmt.Errorf("producer report target work requires authenticated control binding: %w", ErrLifecycleInvalidTransition)
 		}
-		return producer, "", nil
+		return producer, target, nil
 	case types.LifecyclePacketDirectionControl:
 		if producer != "" || target == "" || packet.WorkDisposition != "" {
 			return "", "", fmt.Errorf("lifecycle control requires only target work: %w", ErrLifecycleInvalidTransition)
