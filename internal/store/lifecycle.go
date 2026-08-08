@@ -1240,6 +1240,14 @@ func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, t
 			if update.TrajectoryID == trajectoryID && update.LifecycleVersion > 0 {
 				snapshot.Updates = append(snapshot.Updates, update)
 			}
+		case ogKindCoSuperAssignment:
+			assignment, decodeErr := decodeLifecycleObject[types.CoSuperAssignment](obj)
+			if decodeErr != nil {
+				return types.LifecycleSnapshot{}, decodeErr
+			}
+			if assignment.Binding.TrajectoryID == trajectoryID {
+				snapshot.CoSuperAssignments = append(snapshot.CoSuperAssignments, assignment)
+			}
 		case ogKindLifecycleEvent:
 			event, decodeErr := decodeLifecycleObject[types.LifecycleEvent](obj)
 			if decodeErr != nil {
@@ -1276,6 +1284,12 @@ func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, t
 	}
 	sort.Slice(snapshot.WorkItems, func(i, j int) bool { return snapshot.WorkItems[i].WorkItemID < snapshot.WorkItems[j].WorkItemID })
 	sort.Slice(snapshot.Agents, func(i, j int) bool { return snapshot.Agents[i].AgentID < snapshot.Agents[j].AgentID })
+	sort.Slice(snapshot.CoSuperAssignments, func(i, j int) bool {
+		if snapshot.CoSuperAssignments[i].AssignmentID != snapshot.CoSuperAssignments[j].AssignmentID {
+			return snapshot.CoSuperAssignments[i].AssignmentID < snapshot.CoSuperAssignments[j].AssignmentID
+		}
+		return snapshot.CoSuperAssignments[i].Binding.Attempt < snapshot.CoSuperAssignments[j].Binding.Attempt
+	})
 	sort.Slice(snapshot.Updates, func(i, j int) bool {
 		if snapshot.Updates[i].ReducerSeq == snapshot.Updates[j].ReducerSeq {
 			return snapshot.Updates[i].UpdateID < snapshot.Updates[j].UpdateID

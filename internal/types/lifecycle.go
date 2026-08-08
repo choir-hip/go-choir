@@ -24,6 +24,14 @@ const (
 	LifecycleArchiveArtifact    LifecycleCommandKind = "archive_artifact"
 )
 
+const (
+	LifecycleOpenCoSuperAssignment        LifecycleCommandKind = "open_co_super_assignment"
+	LifecycleBindCoSuperAssignment        LifecycleCommandKind = "bind_co_super_assignment"
+	LifecycleRecordCoSuperAssignment      LifecycleCommandKind = "record_co_super_assignment"
+	LifecycleCancelCoSuperAssignment      LifecycleCommandKind = "cancel_co_super_assignment"
+	LifecycleSetCoSuperCapsuleDisposition LifecycleCommandKind = "set_co_super_capsule_disposition"
+)
+
 type LifecycleEventKind string
 
 const (
@@ -42,6 +50,14 @@ const (
 	LifecycleTrajectorySettled    LifecycleEventKind = "trajectory_settled"
 	LifecycleTrajectoryCancelled  LifecycleEventKind = "trajectory_cancelled"
 	LifecycleArtifactArchived     LifecycleEventKind = "artifact_archived"
+)
+
+const (
+	LifecycleCoSuperAssignmentOpened      LifecycleEventKind = "co_super_assignment_opened"
+	LifecycleCoSuperAssignmentBound       LifecycleEventKind = "co_super_assignment_bound"
+	LifecycleCoSuperAssignmentReported    LifecycleEventKind = "co_super_assignment_reported"
+	LifecycleCoSuperAssignmentCancelled   LifecycleEventKind = "co_super_assignment_cancelled"
+	LifecycleCoSuperCapsuleDispositionSet LifecycleEventKind = "co_super_capsule_disposition_set"
 )
 
 type StartLifecycleRequest struct {
@@ -280,6 +296,7 @@ type LifecycleSnapshot struct {
 	Trajectory          TrajectoryRecord              `json:"trajectory"`
 	WorkItems           []WorkItemRecord              `json:"work_items"`
 	Agents              []AgentRecord                 `json:"agents"`
+	CoSuperAssignments  []CoSuperAssignment           `json:"co_super_assignments,omitempty"`
 	Activation          LifecycleActivationProjection `json:"activation"`
 	Schema              string                        `json:"schema"`
 	CurrentDocumentHead *Revision                     `json:"current_document_head,omitempty"`
