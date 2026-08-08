@@ -374,3 +374,25 @@ non-granting evidence without pretending they certify a frozen final subject.
 No late result may wake, reopen, create a candidate, or gain a verification Pass.
 Real Linux namespace/seccomp/Landlock behavior remains an acceptance evidence
 gap rather than a waiver for these source defects.
+
+
+## Persistent-Super delivery settlement gap — 2026-08-08
+
+Follow-up source inspection of the rejected candidate found one additional
+single-authority defect. `BindLifecycleControlDelivery` replaces the persistent
+run's `lifecycle_control_bindings` metadata with only the current bind batch,
+which invalidates older exact assignment/control joins when the same resident
+Super receives a later continuation. More fundamentally, delivered controls and
+CoSuper return packets remain `UpdatePending`: `report_to_texture` queues the
+Super's upward report but atomically dispositions none of the exact packets that
+the Super actually consumed. Those target-Super packets can therefore block
+trajectory settlement forever even though durable run memory proves they entered
+the actor context.
+
+The repair must append/deduplicate immutable run control bindings rather than
+replace them, and the canonical Super-to-Texture report command must atomically
+disposition the complete exact-run packet occurrence set proven present in
+authenticated durable run memory. It may not trust model-authored IDs, dispose a
+packet absent from memory, or create another cursor/tape. Replay, continuation,
+partial progress, cancellation, and more than 100 packets must retain exact
+control/work authority.
