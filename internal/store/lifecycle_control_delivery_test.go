@@ -99,4 +99,8 @@ func TestBindLifecycleControlDeliveryExactPersistentSuperRemainsNonLifecycle(t *
 	if !ok || len(bindings) != 1 { // JSON decode from OG uses []any.
 		t.Fatalf("persistent Super lacks ordered control bindings: %#v", stored.Metadata["lifecycle_control_bindings"])
 	}
+	binding, ok := bindings[0].(map[string]any)
+	if !ok || binding["trajectory_id"] != start.TrajectoryID || binding["update_id"] != turn.Controls[0].UpdateID || binding["target_work_item_id"] != workID {
+		t.Fatalf("persistent Super decoded binding mismatch: %#v", bindings[0])
+	}
 }

@@ -186,7 +186,7 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 		objects = append(objects, eventObj)
 		eventObjs = append(eventObjs, eventObj)
 		controls = append(controls, update)
-		controlBindings = append(controlBindings, map[string]string{"update_id": update.UpdateID, "target_work_item_id": update.TargetWorkItemID, "producer_agent_id": update.AgentID})
+		controlBindings = append(controlBindings, map[string]string{"trajectory_id": req.TrajectoryID, "update_id": update.UpdateID, "target_work_item_id": update.TargetWorkItemID, "producer_agent_id": update.AgentID})
 	}
 	if run.Metadata == nil {
 		run.Metadata = map[string]any{}
