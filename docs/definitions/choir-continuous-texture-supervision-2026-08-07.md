@@ -228,25 +228,25 @@ measures:
     cannot_prove: Human comprehension without owner inspection.
 
 now:
-  status: working
-  slice: "Exact unpublished runtime candidate 363bf393 joins the complete continuous Texture loop, lossless exact-run control delivery, authenticated-memory settlement, same-run restart recovery, atomic owner rebase, one-version observation, assignment-only capsule execution, intent-first cancellation, Linux orphan cleanup, resident activation drain, and bounded delayed terminal-report evidence closure. Independent lifecycle and capsule/security red teams returned ACCEPT with no remaining critical/high source finding. All effects remain OFF."
-  question: none
+  status: blocked
+  slice: "Final reviewed runtime candidate 99fc3e6b passed the complete race-selected CI and was deployed to Node B with exact host/sandbox activation receipts. Independent follow-up review accepted the protected CI-repair delta. Authenticated product acceptance is blocked because the owner-scoped stable computer remains an immutable constructed version at 7122f279; the new lifecycle route returns 404 there. Effects remain OFF and all registries remain open."
+  question: "Which already-authorized staging computer/version transition may expose exact candidate 99fc3e6b to the authenticated stable-computer product path without mutating the unrelated constructed computer, creating a candidate/worker computer, using SSH, or promoting effects before acceptance?"
   reconciliation:
-    observed_at: 2026-08-08T12:22:00Z
-    source_ref: 363bf39398128fa0e1a85a19ae9a7762f92ba3dc
-    deploy_identity: 6965f7f71f764f91737b21804bc376281cbdbe8f
-    authority_identities: [docs/choir-doctrine.md, docs/agent-product-doctrine.md, docs/supervision-protocol.md, docs/texture-agentic-invariants-2026-06-13.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, "owner directive in this run: proceed without asking", "owner directive in this run: use the Definition dashboard to supervise /goal until Texture works correctly"]
+    observed_at: 2026-08-08T13:20:00Z
+    source_ref: 99fc3e6b7bf151ddad1f0927ca18a24ba5275d10
+    deploy_identity: "Node B activation receipt 99fc3e6b7bf151ddad1f0927ca18a24ba5275d10; owner computer computer-03335285269bdba4f94377e56879f9e6 still joins immutable code 7122f2799be4458f4b925be11990321c7e70ffc4"
+    authority_identities: [docs/choir-doctrine.md, docs/agent-product-doctrine.md, docs/computer-ontology.md, docs/supervision-protocol.md, docs/texture-agentic-invariants-2026-06-13.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, "owner directive in this run: proceed without asking", "owner directive in this run: use the Definition dashboard to supervise /goal until Texture works correctly"]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "2026-08-08 reviewed-candidate inventory: primary owns exact unpublished runtime candidate 363bf393 plus this goal-owned documentation update; origin/main remains cdaa787b; unrelated .context-only and objectgraph/store WIP worktrees remain forbidden and untouched. Completed repair worktrees are retained read-only until landing."
+    worktree_inventory_ref: "2026-08-08 landing inventory: origin/main contains runtime 99fc3e6b and documentation blocker receipt 63441293; current edits are goal-owned evidence/Definition only. The unrelated .context and terminal-outcome-closure objectgraph/store WIP remain forbidden and untouched."
     status: reconciled
   candidate:
     id: continuous-texture-supervision-runtime-v1
-    state: reviewed
-    ref: git:363bf39398128fa0e1a85a19ae9a7762f92ba3dc
+    state: ci_and_host_deployed_product_blocked
+    ref: git:99fc3e6b7bf151ddad1f0927ca18a24ba5275d10
     owner: current goal session
     base: cdaa787bf2d006a1d4e59c1650a232f2083d8f9d
-    digest: pending final documentation and registry-closure commit
-    scope: [internal/agentprofile, internal/agentcore, internal/capsule, internal/store, internal/textureowner, internal/toolregistry, internal/types, cmd/choir, docs/supervision-protocol.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, this Definition and adjacent focused tests]
+    digest: 99fc3e6b7bf151ddad1f0927ca18a24ba5275d10
+    scope: [internal/agentprofile, internal/agentcore, internal/actorruntime, internal/capsule, internal/store, internal/textureowner, internal/toolregistry, internal/types, cmd/choir, scripts/go-test-non-runtime-shards, docs/supervision-protocol.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, this Definition and adjacent focused tests]
   decision:
     selected: "Use one lifecycle object-graph reducer/event/receipt authority for bidirectional controls and one atomic Texture turn; keep persistent Super exact and non-lifecycle; make authenticated durable run memory the sole delivery-consumption proof; derive assignment/candidate/verification/cancellation fate in trusted runtime and Store; give assigned CoSupers only an empty-set capsule-local registry plus reporting; retain delayed authenticated results as evidence only; project one public version per semantic revision."
     kind: architecture
@@ -255,12 +255,28 @@ now:
     evidence_ref: docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
     owner_ratification_ref: "Owner directives in this run: proceed without asking; promote the repaired Definition; verifier may write and run tests/scripts only inside its capsule; supervise through the Definition dashboard until Texture works correctly."
     recorded_at: 2026-08-08T03:33:22Z
-    consequence: "The source candidate may proceed to the landing loop but effects cannot turn on or registries close until exact pushed CI, Linux staging identity, authenticated deployed acceptance, real capsule cleanup/no-effect evidence, and artifact fetch succeed."
-  evidence_refs: [git:363bf39398128fa0e1a85a19ae9a7762f92ba3dc, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, "independent lifecycle red-team ACCEPT at 3ac0935b", "independent capsule/security red-team ACCEPT at 363bf393", /tmp/choir-capsule-final-linux.test]
-  blocker_or_risk: "Source review is accepted. Publication remains blocked on the exact documentation-bearing candidate commit, CI, Linux staging deployment/build identity, authenticated repeated-cycle API/CLI proof, no-SSH same-build restart, real namespace/cgroup/overlay cancellation cleanup, actual delayed-result retention, protected-state no-effect comparison, and final registry/requirement audit. Darwin evidence cannot close those Linux or product-path obligations."
-  next_action: Commit the reviewed candidate receipt and protocol update, push one immutable SHA, monitor CI/deploy, verify exact staging identity, then run the full authenticated acceptance and close registries only if every artifact-backed gate passes.
+    consequence: "Source, independent review, CI, and host deployment gates passed. Effects cannot turn on or registries close until the exact candidate is joined to an authorized staging computer, authenticated acceptance passes, real capsule cleanup/no-effect evidence is recorded, and the final audit closes."
+  evidence_refs: [git:99fc3e6b7bf151ddad1f0927ca18a24ba5275d10, "CI 31257971088 success", "Node B activation receipt at 99fc3e6b", docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, "independent lifecycle red-team ACCEPT at 3ac0935b", "independent capsule/security red-team ACCEPT at 363bf393 and protected follow-up ACCEPT at 99fc3e6b", /tmp/choir-capsule-final-linux.test]
+  blocker_or_risk: "The exact source passed review/CI and the host deploy is healthy, but authenticated current-computer status proves the serving product computer is the preserved constructed version at 7122f279. POST /api/texture/lifecycle-documents consequently returns 404. No SSH, new candidate/worker computer, unrelated route mutation, or premature effect promotion is authorized. Real Linux capsule behavior and the complete product trajectory remain unproved."
+  next_action: "Obtain or identify an already-authorized stable staging computer whose immutable route is exact candidate 99fc3e6b, then run the full authenticated acceptance. If no such authority exists, escalate this documented platform-update/acceptance deadlock to the owner rather than mutating the preserved constructed computer."
 
 receipts:
+  - id: continuous-supervision-runtime-landing-v1
+    boundary: implement
+    commit_or_artifact: git:99fc3e6b7bf151ddad1f0927ca18a24ba5275d10
+    proof_refs: [docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, "GitHub Actions run 31257971088", "Node B activation receipt 2026-08-08T13:12:35Z"]
+    rollback_ref: git:cdaa787bf2d006a1d4e59c1650a232f2083d8f9d
+    disposition: "Independent protected-delta review ACCEPT; full selected CI and host deployment succeeded. Deployed product acceptance is blocked because the authenticated stable computer serves immutable code 7122f279 and returns 404 for the new lifecycle route. Effects OFF; registries open."
+    problem_ref: docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md#staging-immutable-route-acceptance-blocker--2026-08-08
+    authorization_ref: owner-ratified active Definition landing loop
+    candidate_or_evidence_refs: [git:99fc3e6b7bf151ddad1f0927ca18a24ba5275d10, "independent capsule/security follow-up ACCEPT at exact 99fc3e6b", "authenticated computer computer-03335285269bdba4f94377e56879f9e6 epoch 130"]
+    landing:
+      source_commit: 99fc3e6b7bf151ddad1f0927ca18a24ba5275d10
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/31257971088
+      deploy_ref: https://github.com/choir-hip/go-choir/actions/runs/31257971088/job/93105759406
+      environment_identity: "host/sandbox activation 99fc3e6b; owner computer immutable code 7122f279 (mismatch, not accepted)"
+      deployed_acceptance: blocked_http_404_on_authenticated_product_computer
+    registry_conformance_ref: "all three continuous-supervision entries remain promoted but open; effects remain OFF pending deployed acceptance"
   - id: continuous-supervision-definition-review-v1
     boundary: define
     commit_or_artifact: sha256:880c00cb8f7a6c546825689a7ba37c02a551f897a93080f5e1e2dbbda2cb89ed

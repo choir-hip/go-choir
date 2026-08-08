@@ -2,6 +2,7 @@
 
 **Date:** 2026-08-08  
 **Reviewed runtime candidate:** `363bf39398128fa0e1a85a19ae9a7762f92ba3dc`  
+**Final protected-delta candidate:** `99fc3e6b7bf151ddad1f0927ca18a24ba5275d10`
 **Base deployed source:** `cdaa787bf2d006a1d4e59c1650a232f2083d8f9d`  
 **Mutation class:** red  
 **Effects:** OFF pending exact Linux staging acceptance and registry promotion
@@ -78,9 +79,38 @@ added. The Definition dashboard remained live at `http://127.0.0.1:8787/`.
   gaps documented before their repairs. `introduced` — none known after review.
   `repaired` — source-level instances above; no global or deployed claim yet.
 
-## Outstanding acceptance
+## Protected CI-repair follow-up and landing result
 
-Publication remains blocked on one immutable pushed SHA, CI, Linux staging build
-identity, authenticated repeated-cycle product proof, same-build no-SSH restart,
-real capsule/cgroup/overlay cleanup, in-flight cancellation plus actual delayed
-result, no-effect comparison, artifact/identity fetch, and registry closure.
+The first pushed documentation-bearing candidate failed CI as recorded in the
+problem inventory. Candidate `99fc3e6b7bf151ddad1f0927ca18a24ba5275d10`
+then repaired only the observed landing failures: mechanically scoped detached
+closure cancellation, mountinfo-aware exact-root cleanup, exact Texture
+activation fixture selection, and a bounded 25-minute timeout for the unchanged
+isolated Store Race suite.
+
+Independent capsule/security follow-up review returned **ACCEPT** on the exact
+`363bf393..99fc3e6b` protected delta with no critical/high finding. Local vet,
+focused Race, and linux/amd64 capsule cross-compilation passed. Full selected CI
+run [`31257971088`](https://github.com/choir-hip/go-choir/actions/runs/31257971088)
+completed successfully. Node B's activation receipt at
+`2026-08-08T13:12:35Z` names exact commit `99fc3e6b` for sandbox, active
+computers, host services, and the canonical checkout.
+
+Authenticated product acceptance did **not** pass. The current owner-scoped
+computer `computer-03335285269bdba4f94377e56879f9e6`, epoch 130, remains joined
+to an immutable constructed ComputerVersion whose code commit is
+`7122f2799be4458f4b925be11990321c7e70ffc4`. The deploy log explicitly preserved
+that `candidate-fleet` realization while refreshing a different user's active
+computer. On the preserved computer,
+`POST /api/texture/lifecycle-documents` returns HTTP 404
+`texture endpoint not found`; it therefore cannot produce any of this
+Definition's required actor, lifecycle, Texture, source, capsule, cancellation,
+or restart artifacts.
+
+The mismatch is now documented before mitigation. The current Definition does
+not authorize SSH, a new candidate/worker computer, deletion of the unclaimed
+constructed-computer residue, a user-computer route mutation, or effects/promotion
+before acceptance. CI and host-deployment gates are green, but product-path and
+real-Linux gates remain open. All three registries remain open and effects stay
+OFF until an authorized staging computer is immutably joined to exact candidate
+`99fc3e6b` and the complete acceptance succeeds.
