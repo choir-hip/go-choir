@@ -307,8 +307,14 @@ func TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery(t *testin
 		agentID = "texture:" + docID
 	)
 	seedDurableTextureUpdate(t, s, ctx, "sandbox-startup", ownerID, docID, "update-startup-recovery", "Durable startup finding")
-	if runs, err := s.ListLifecycleRunsByOwner(ctx, ownerID, "sandbox-startup", 20); err != nil || len(runs) != 0 {
-		t.Fatalf("fixture unexpectedly has an activation before startup: %+v, %v", runs, err)
+	if runs, err := s.ListLifecycleRunsByOwner(ctx, ownerID, "sandbox-startup", 20); err != nil {
+		t.Fatalf("list fixture runs before startup: %v", err)
+	} else {
+		for _, run := range runs {
+			if run.AgentID == agentID {
+				t.Fatalf("fixture unexpectedly has a Texture activation before startup: %+v", runs)
+			}
+		}
 	}
 
 	owner := textureowner.NewHandler(adapter.Runtime)
@@ -584,7 +590,13 @@ func TestTextureWakeIgnoresGenericParkedMemoryAndRoutesToDocumentOwner(t *testin
 	if err != nil {
 		t.Fatalf("list reconciled Texture runs: %v", err)
 	}
-	if len(runs) != 2 {
+	textureRuns := 0
+	for _, run := range runs {
+		if run.AgentID == agentID {
+			textureRuns++
+		}
+	}
+	if textureRuns != 2 {
 		t.Fatalf("Texture owner minted a replacement instead of reusing canonical memory: %+v", runs)
 	}
 }

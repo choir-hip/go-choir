@@ -1251,6 +1251,25 @@ func validCapsuleResidueIdentity(capsuleID string) bool {
 		!strings.ContainsAny(capsuleID, `/\`) && filepath.Base(capsuleID) == capsuleID
 }
 
+func mountedAtPath(path string) (bool, error) {
+	data, err := os.ReadFile("/proc/self/mountinfo")
+	if err != nil {
+		return false, fmt.Errorf("read mountinfo: %w", err)
+	}
+	want := filepath.Clean(path)
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+		mountPoint := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`).Replace(fields[4])
+		if filepath.Clean(mountPoint) == want {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (e *Executor) capsuleResidueExists(capsuleID string) (bool, error) {
 	if !validCapsuleResidueIdentity(capsuleID) {
 		return false, fmt.Errorf("capsule residue identity is invalid")
@@ -1281,8 +1300,15 @@ func (e *Executor) CleanupOrphanedCapsule(_ context.Context, capsuleID string) e
 	}
 	base := filepath.Join(e.stateDir, capsuleID)
 	if _, err := os.Lstat(base); err == nil {
-		if err := unmountCapsuleRoot(filepath.Join(base, "root")); err != nil {
-			return err
+		root := filepath.Join(base, "root")
+		mounted, mountErr := mountedAtPath(root)
+		if mountErr != nil {
+			return mountErr
+		}
+		if mounted {
+			if err := unmountCapsuleRoot(root); err != nil {
+				return err
+			}
 		}
 		if err := removePrivateTree(base); err != nil {
 			return fmt.Errorf("remove orphan capsule state: %w", err)

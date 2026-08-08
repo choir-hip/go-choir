@@ -620,46 +620,43 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			}
 
 			terminalClosure := len(resp.ToolCalls) == 1 && options.detachedTerminalTool != nil && options.detachedTerminalTool(resp.ToolCalls[0])
-			toolCtx := ctx
-			cancelToolClosure := func() {}
-			if terminalClosure {
-				toolCtx, cancelToolClosure = context.WithTimeout(context.WithoutCancel(ctx), options.detachedTerminalToolTimeout)
+			runToolTurn := func() ([]types.ToolResult, error) {
+				toolCtx := ctx
+				if terminalClosure {
+					detached, cancel := context.WithTimeout(context.WithoutCancel(ctx), options.detachedTerminalToolTimeout)
+					defer cancel()
+					toolCtx = detached
+				}
+				// Append the assistant's response (with tool calls) to conversation.
+				assistantPayload := map[string]any{
+					"role":    "assistant",
+					"content": buildAssistantContent(resp.Text, resp.ToolCalls),
+				}
+				if strings.TrimSpace(resp.ReasoningContent) != "" {
+					assistantPayload["reasoning_content"] = resp.ReasoningContent
+				}
+				assistantMsg, _ := json.Marshal(assistantPayload)
+				if err := appendMessageWithContext(toolCtx, "assistant", assistantMsg); err != nil {
+					return nil, fmt.Errorf("tool loop persist assistant message: %w", err)
+				}
+				toolResults := ExecuteToolBatch(toolCtx, registry, resp.ToolCalls, emit)
+				toolResultMsg, _ := json.Marshal(map[string]any{
+					"role":    "user",
+					"content": buildToolResultContent(toolResults),
+				})
+				if err := appendMessageWithContext(toolCtx, "user", toolResultMsg); err != nil {
+					return nil, fmt.Errorf("tool loop persist tool result message: %w", err)
+				}
+				return toolResults, nil
 			}
-
-			// Append the assistant's response (with tool calls) to conversation.
-			assistantPayload := map[string]any{
-				"role":    "assistant",
-				"content": buildAssistantContent(resp.Text, resp.ToolCalls),
+			toolResults, toolTurnErr := runToolTurn()
+			if toolTurnErr != nil {
+				return "", totalUsage, toolTurnErr
 			}
-			if strings.TrimSpace(resp.ReasoningContent) != "" {
-				assistantPayload["reasoning_content"] = resp.ReasoningContent
-			}
-			assistantMsg, _ := json.Marshal(assistantPayload)
-			if err := appendMessageWithContext(toolCtx, "assistant", assistantMsg); err != nil {
-				cancelToolClosure()
-				return "", totalUsage, fmt.Errorf("tool loop persist assistant message: %w", err)
-			}
-
 			activeRequired := requiredNextTool
 			requiredCalled := requiredToolCalled(activeRequired, resp.ToolCalls)
-
-			// Execute tools and collect results.
-			toolResults := ExecuteToolBatch(toolCtx, registry, resp.ToolCalls, emit)
-
-			// Append tool results as a user message (per Anthropic Messages API convention).
-			toolResultMsg, _ := json.Marshal(map[string]any{
-				"role":    "user",
-				"content": buildToolResultContent(toolResults),
-			})
-			if err := appendMessageWithContext(toolCtx, "user", toolResultMsg); err != nil {
-				cancelToolClosure()
-				return "", totalUsage, fmt.Errorf("tool loop persist tool result message: %w", err)
-			}
-			if terminalClosure {
-				cancelToolClosure()
-				if len(toolResults) == 1 && !toolResults[0].IsError {
-					return "", totalUsage, ErrDetachedTerminalToolCommitted
-				}
+			if terminalClosure && len(toolResults) == 1 && !toolResults[0].IsError {
+				return "", totalUsage, ErrDetachedTerminalToolCommitted
 			}
 			if injectUserTurns != nil {
 				injected, err := injectUserTurns(false)
