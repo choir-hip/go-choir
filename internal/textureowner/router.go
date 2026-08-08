@@ -42,6 +42,10 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 			h.HandleTextureEnsureManifest(w, r)
 		case strings.HasSuffix(rest, "/stream"):
 			h.HandleTextureDocumentStream(w, r)
+		case strings.HasSuffix(rest, "/events"):
+			h.HandleTextureDocumentEvents(w, r)
+		case strings.HasSuffix(rest, "/source-open"):
+			h.HandleTextureSourceOpen(w, r)
 		case strings.HasSuffix(rest, "/revise"):
 			h.HandleTextureAgentRevision(w, r)
 		case strings.HasSuffix(rest, "/compare"):
