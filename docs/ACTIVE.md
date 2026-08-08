@@ -20,9 +20,11 @@ blocked by protected gateway provider availability: ChatGPT auth is stale, and
 Z.AI remained unavailable with an open unhealthy-provider circuit after a
 cooldown-aware retry; sanitized local diagnostics then found DeepSeek/Xiaomi
 balance failures, Fireworks precondition failure, and Z.AI balance/rate failure.
-No Researcher/Super/capsule turn was produced. Effects remain OFF; provider
-restoration, real Linux product proof, no-effect/source-rollback evidence, and
-registry closure remain mandatory.
+No Researcher/Super/capsule turn was produced. Public CLI read/show and durable
+disconnect/resume observation through cancelled cursor 9 nevertheless passed;
+positive correction, historical v1+, and source-open remain blocked. Effects
+remain OFF; provider restoration, real Linux product proof,
+no-effect/source-rollback evidence, and registry closure remain mandatory.
 
 ## Completed Definitions — Historical Evidence Authority
 

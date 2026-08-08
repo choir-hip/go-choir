@@ -260,10 +260,13 @@ nodes:
       create, tell, policy rollback, and public cancellation executed. Repeated
       supervision is blocked by protected gateway provider availability:
       ChatGPT auth is stale, Z.AI remained unavailable with an open circuit
-      after a cooldown-aware retry, and sanitized local diagnostics found every configured provider/model route
-      failed before tool semantics. No alternate completed a Texture turn. Effects remain OFF; provider restoration,
-      real Linux product proof, no-effect/source-rollback receipts, and terminal
-      registry closure remain mandatory.
+      after a cooldown-aware retry, and sanitized local diagnostics found every
+      configured provider/model route failed before tool semantics. No alternate
+      completed a Texture turn. Public CLI read/show and durable disconnected
+      watch resume through cancelled cursor 9 passed; positive correction,
+      historical v1+, and source-open remain blocked. Effects remain OFF;
+      provider restoration, real Linux product proof, no-effect/source-rollback
+      receipts, and terminal registry closure remain mandatory.
     sources:
       - docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
       - docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md

@@ -213,3 +213,25 @@ renewal. The existing credential deployment and recovery workflows are
 SSH-shaped break-glass paths forbidden by this acceptance. No credential or
 authority was changed. The remaining transition is provider account restoration
 or a separately ratified scoped no-SSH host renewal authority.
+
+
+### Deployed public CLI partial acceptance
+
+A fresh scoped key exercised the checked-in `choir` CLI against retained
+cancelled document `11902866-d32e-55c4-9483-d9bd47c91a6c` on exact deployed
+`ac6dd16b`. `texture read`, `history`, `revisions`, and exact `show --revision
+d1a831ba-6af5-5206-aa03-49caf4b047dc` returned the same document, trajectory,
+and current v0 identity. Separate `watch --once --limit 2` processes proved
+durable disconnect/resume across cursor pages `0→2→4→6→8→9`; resuming after
+terminal cursor 9 returned an empty successful page. The sequence contained the
+start, six owner-instruction events, cancellation request, and cancellation.
+
+Authority negatives also used the public CLI: `tell` and `correct` against the
+cancelled exact head both returned HTTP 409; a follow-up product snapshot remained cancelled at
+watermark/lifecycle version 9 with the exact v0 head unchanged. Asking the
+original document to show a revision belonging to another retained document was
+rejected as not an exact version. The temporary key was revoked and then
+returned HTTP 401. This is positive product proof for read/history/revisions,
+exact current show, and resumable durable observation plus negative authority.
+It is not positive correction, a generated historical v1+, or source-open proof;
+those remain provider-blocked.

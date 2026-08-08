@@ -34,7 +34,7 @@ unexecuted Researcher/Super/capsule behavior.
 | 1 | Focused registry, authorization, reducer, atomic turn, projection, transclusion, replay, cancellation, capsule, API/CLI tests | **PASS.** Joined full/focused/Race validation and selected CI passed; independent reviews found no remaining critical/high source defect. | Local/CI is the admissible class for this action. |
 | 2 | Reconstruct pending controls; replay identities and pre-cutover fixtures | **PASS locally.** Exact-run Super reconstruction, same-run Researcher append recovery, authenticated-memory replay, restarted observation, create/instruction replay, CLI cursor replay, and historical show/source contracts passed. | **PARTIAL PASS.** The deployment restart recovered the exact initial work into run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf`; restart with pending Researcher/Super controls remains unexecuted because no provider completed the first Texture turn. |
 | 3 | Real Texture→Researcher/Super→Texture repeated loop with parallel isolated CoSupers | Runtime path exists and is source-reviewed. | **BLOCKED.** Texture reached its real provider boundary, but no provider completed iteration zero/its fallback chain; no downstream actors, assignments, or capsules exist. |
-| 4 | Public API/CLI create, tell/correct, watch/resume, show, open-source | Local API/CLI contracts passed. | **PARTIAL PASS.** Public create, multiple durable tells, trajectory show, model-policy update/resolve/rollback, and lifecycle cancel executed. Correct, watch/disconnect/resume, historical version, CLI parity, and source-open await a produced revision/source. |
+| 4 | Public API/CLI create, tell/correct, watch/resume, show, open-source | Local API/CLI contracts passed. | **PARTIAL PASS.** Public create, durable tells, trajectory show, model-policy rollback, and lifecycle cancel executed. Deployed CLI `read`, `history`, `revisions`, and exact `show` returned the retained document/v0; separate `watch --once --limit 2` processes resumed cursors `0→2→4→6→8→9`, then returned empty after 9. Cancelled `tell`/`correct` failed HTTP 409 and cross-document revision `show` was rejected. Positive correction against a live Texture-authored head, historical v1+, and positive source-open remain blocked on provider output. |
 | 5 | Continuous-prose and differently styled report cases | Generic schema/prompt source contract exists. | **BLOCKED.** The continuous-prose case was durably created, but provider failure prevented its first generated revision; the second style case was not started. |
 | 6 | Pending controls, passivation, approved no-SSH same-build restart, same identities | Deterministic local recovery contracts passed. | **PARTIAL PASS.** Ordinary deployment restart recovered initial owner work on exact identities. Pending Researcher/Super controls and same-run append recovery remain unproved on staging. |
 | 7 | Direct owner revision plus natural-language correction | Atomic owner-head rebase and lifecycle instruction source tests passed. | **PARTIAL PASS.** Natural-language owner instructions queued durably and woke exact Texture runs. No Texture-authored revision existed to correct or rebase. |
@@ -52,7 +52,7 @@ unexecuted Researcher/Super/capsule behavior.
 | `owner_read_amplification` | Telemetry only; no generated owner-visible version exists. |
 | `progressive_owner_visibility` | **BLOCKED deployed.** No informative revision while work remained open. |
 | `generic_grounded_writing` | Schema/source contract passes locally; exact deployed research/execution transclusions in two writing forms are blocked. |
-| `automatable_texture_surface` | **PARTIAL PASS deployed.** Create, tell, show, policy resolution, and cancel returned stable authenticated JSON; watch/resume, historical show, and source-open could not be exercised without a revision/source. |
+| `automatable_texture_surface` | **PARTIAL PASS deployed.** API create/tell/show/cancel and CLI read/history/revisions/exact-show plus disconnected durable watch resume through terminal cursor 9 passed; caught-up resume returned empty and cancelled/mismatched authority failed closed. Positive live correction, generated historical v1+, and source-open remain unproved. |
 
 ## `not_done_when` audit
 
@@ -77,7 +77,7 @@ triggered or cannot yet be excluded by the required evidence class.
 | 14 | **UNPROVED on staging Linux:** cross-compile and source review cannot prove namespace, cgroup, seccomp, Landlock, overlay, network, and cleanup behavior. |
 | 15 | **TRIGGERED:** no deployed informative revision while work remained open. |
 | 16 | **TRIGGERED:** no deployed openable research/execution transclusions exist. |
-| 17 | **TRIGGERED/UNPROVED:** create/tell/show/cancel are deployed and automatable, but the required resumable observation, historical version, and source-open acceptance is absent. |
+| 17 | **TRIGGERED/PARTIAL:** the exact API/CLI read/show/watch-resume surface is deployed and automatable through terminal cursor 9, including fail-closed negatives, but positive correction, generated historical version, and source-open acceptance are absent. |
 | 18 | **UNPROVED deployed:** neither requested generated writing form completed a first revision. |
 | 19 | Multiple isolated assignment support exists in source, but parallel writable-capsule product behavior is **unproved**. |
 
@@ -98,6 +98,11 @@ triggered or cannot yet be excluded by the required evidence class.
 - cooldown-aware Z.AI trajectory
   `aca3504c-2ae0-5a4e-bab5-b22541e90585` / run
   `f0d0e6ea-f98b-484c-9630-b6c849279118`, cancelled at lifecycle version 3.
+- deployed CLI partial acceptance on retained document
+  `11902866-d32e-55c4-9483-d9bd47c91a6c`: exact v0
+  `d1a831ba-6af5-5206-aa03-49caf4b047dc`; watch resume cursors
+  `0→2→4→6→8→9`, empty after 9; cancelled tell/correct HTTP 409; cross-document
+  revision show rejected.
 
 These are failure/partial-path evidence. They do not count as an accepted
 Researcher, Super, CoSuper, capsule, transclusion, or run-acceptance graph.
