@@ -16,13 +16,17 @@ func validCoSuperAssignmentFixture(kind CoSuperAssignmentKind, writable bool) Co
 		OwnerID: "owner", ComputerID: "computer", TrajectoryID: "trajectory",
 		ParentAgentID: "super:owner", ParentRunID: "run-super", ParentDecisionID: "decision:" + assignmentDigest("d"), ParentControlID: "control-1",
 		ParentWorkItemID: "work-super", AssignedWorkItemID: "work-cosuper", AssignedAgentID: "co-super:one",
-		Kind: kind, Attempt: 1, ScopeDigest: assignmentDigest("a"), CapabilityDigest: assignmentDigest("b"),
-		SubjectDigest: assignmentDigest("c"), Writable: writable,
+		Kind: kind, Attempt: 1, ScopeDigest: assignmentDigest("a"), RequestDigest: assignmentDigest("e"), CapabilityDigest: assignmentDigest("b"),
+		SubjectDigest: assignmentDigest("c"), SourceArtifactRef: "capsule-source-git:commit:" + assignmentDigest("c"), Writable: writable,
 		NetworkMode:    CoSuperCapsuleNetworkForbidden,
 		FilesystemMode: CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
 	}
 	if writable {
 		binding.CapsuleID = "capsule-one"
+	}
+	if kind == CoSuperAssignmentVerification {
+		binding.SourceCandidateID = "candidate-one"
+		binding.SourceArtifactRef = "capsule-subject:" + binding.SubjectDigest
 	}
 	return CoSuperAssignment{
 		Schema: CoSuperAssignmentSchemaV1, AssignmentID: "assignment-one", Binding: binding,
@@ -50,6 +54,8 @@ func TestCoSuperAssignmentBindingValidationExhaustive(t *testing.T) {
 		"kind":                          func(a *CoSuperAssignment) { a.Binding.Kind = "review" },
 		"attempt":                       func(a *CoSuperAssignment) { a.Binding.Attempt = 0 },
 		"scope digest":                  func(a *CoSuperAssignment) { a.Binding.ScopeDigest = "sha256:no" },
+		"request digest":                func(a *CoSuperAssignment) { a.Binding.RequestDigest = "" },
+		"source artifact":               func(a *CoSuperAssignment) { a.Binding.SourceArtifactRef = "" },
 		"capability digest":             func(a *CoSuperAssignment) { a.Binding.CapabilityDigest = "" },
 		"subject digest":                func(a *CoSuperAssignment) { a.Binding.SubjectDigest = "" },
 		"writable capsule":              func(a *CoSuperAssignment) { a.Binding.CapsuleID = "" },
@@ -88,8 +94,9 @@ func validAssignmentReportFixture(a CoSuperAssignment) CoSuperAssignmentReport {
 		TrajectoryID: a.Binding.TrajectoryID, RunID: a.BoundRunID, AssignedAgentID: a.Binding.AssignedAgentID,
 		Result: CoSuperResultCompleted, Verdict: CoSuperVerdictPass,
 		ObservedSubjectDigest: a.Binding.SubjectDigest, CertifiesOriginalSubject: true, CreatedAt: time.Now().UTC(),
-		Commands: []CoSuperRecordedCommand{{CommandID: "cmd", CommandDigest: assignmentDigest("d"), ExecutionRef: "receipt:cmd"}},
-		Outputs:  []CoSuperRecordedOutput{{OutputID: "out", Kind: "evidence", Digest: assignmentDigest("e"), Ref: "artifact:out"}},
+		Commands:            []CoSuperRecordedCommand{{CommandID: "cmd", CommandDigest: assignmentDigest("d"), ExecutionRef: "receipt:cmd"}},
+		ExecutorReceiptRefs: []string{"capsule-granted-exec:sha256:test"},
+		Outputs:             []CoSuperRecordedOutput{{OutputID: "out", Kind: "evidence", Digest: assignmentDigest("e"), Ref: "artifact:out"}},
 	}
 }
 
@@ -107,6 +114,7 @@ func TestVerificationReportSubjectIdentityContract(t *testing.T) {
 	changed.CertifiesOriginalSubject = false
 	changed.CandidateSubjectDigest = changed.ObservedSubjectDigest
 	changed.CandidateID = "obj:choir.co_super_subject_candidate:b3duZXI:candidate"
+	changed.CandidateArtifactRef = "capsule-subject:" + changed.CandidateSubjectDigest
 	changed.Mutations = []CoSuperRecordedMutation{{
 		MutationID: "mutation", Kind: "subject_bytes", BeforeDigest: a.Binding.SubjectDigest,
 		AfterDigest: changed.ObservedSubjectDigest, EvidenceRef: "receipt:mutation", SubjectBytesChanged: true,
@@ -142,7 +150,7 @@ func TestVerificationPassRequiresCapsuleCommandEvidence(t *testing.T) {
 	a.CapsuleDisposition = CoSuperCapsuleFrozen
 	report := validAssignmentReportFixture(a)
 	report.Commands = nil
-	if err := report.ValidateAgainst(a); err == nil || !strings.Contains(err.Error(), "command evidence") {
+	if err := report.ValidateAgainst(a); err == nil || !strings.Contains(err.Error(), "executor receipt evidence") {
 		t.Fatalf("empty verification pass error = %v", err)
 	}
 }

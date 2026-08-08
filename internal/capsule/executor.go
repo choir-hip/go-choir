@@ -4,11 +4,13 @@ package capsule
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -39,6 +41,7 @@ type Executor struct {
 	controlHandles    map[capKey]string
 	revokedCaps       map[string]bool
 	executionReceipts map[string]ExecutionReceipt
+	grantedReceipts   map[string]GrantedExecutionReceipt
 	stateDir          string
 	lowerDir          string
 	sourceDir         string
@@ -65,6 +68,7 @@ func NewExecutorWithSource(stateDir, lowerDir, sourceDir, brokerPath string, vmM
 		controlHandles:    make(map[capKey]string),
 		revokedCaps:       make(map[string]bool),
 		executionReceipts: make(map[string]ExecutionReceipt),
+		grantedReceipts:   make(map[string]GrantedExecutionReceipt),
 		stateDir:          filepath.Clean(stateDir),
 		lowerDir:          filepath.Clean(lowerDir),
 		sourceDir:         filepath.Clean(sourceDir),
@@ -87,6 +91,49 @@ func (e *Executor) InitializationError() error {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.initErr
+}
+
+const subjectArtifactPrefix = "capsule-subject:sha256:"
+
+func (e *Executor) subjectArtifactPath(ref string) (string, string, error) {
+	if !strings.HasPrefix(ref, subjectArtifactPrefix) {
+		return "", "", fmt.Errorf("capsule subject artifact ref is invalid")
+	}
+	digest := strings.TrimPrefix(ref, subjectArtifactPrefix)
+	if len(digest) != sha256.Size*2 {
+		return "", "", fmt.Errorf("capsule subject artifact digest is invalid")
+	}
+	if _, err := hex.DecodeString(digest); err != nil || strings.ToLower(digest) != digest {
+		return "", "", fmt.Errorf("capsule subject artifact digest is invalid")
+	}
+	root := filepath.Join(e.stateDir, "subjects", digest, "workspace", "platform")
+	return root, digest, nil
+}
+
+// PreflightSourceSnapshot persists an immutable content-addressed complete-tree
+// source before assignment Open. A candidate ref selects that exact prior
+// artifact; empty selects the current clean committed source tree.
+func (e *Executor) PreflightSourceSnapshot(ctx context.Context, candidateRef string) (SourcePreflight, error) {
+	if strings.TrimSpace(candidateRef) != "" {
+		root, digest, err := e.subjectArtifactPath(strings.TrimSpace(candidateRef))
+		if err != nil {
+			return SourcePreflight{}, err
+		}
+		actual, err := digestCanonicalSubjectTree(ctx, root)
+		if err != nil || actual != digest {
+			return SourcePreflight{}, fmt.Errorf("capsule candidate artifact is unavailable or corrupt")
+		}
+		return SourcePreflight{SubjectDigest: digest, ArtifactRef: strings.TrimSpace(candidateRef)}, nil
+	}
+	commit, err := immutableGitCommitIdentity(ctx, e.sourceDir)
+	if err != nil {
+		return SourcePreflight{}, err
+	}
+	digest, err := canonicalImmutableCommitDigest(ctx, e.sourceDir, commit)
+	if err != nil {
+		return SourcePreflight{}, err
+	}
+	return SourcePreflight{SubjectDigest: digest, ArtifactRef: "capsule-source-git:" + commit + ":sha256:" + digest}, nil
 }
 
 // Spawn creates an isolated capsule with a private user/PID/mount/network/UTS/
@@ -167,17 +214,51 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 			cleanupErr = errors.Join(cleanupErr, unmountCapsuleRoot(caps.MergedDir))
 		}
 		if cleanupErr == nil {
-			cleanupErr = os.RemoveAll(base)
+			cleanupErr = removePrivateTree(base)
 		}
 		if cleanupErr != nil {
 			retErr = errors.Join(retErr, fmt.Errorf("capsule admission cleanup failed: %w", cleanupErr))
 		}
 	}()
 
+	source := SourcePreflight{SubjectDigest: strings.TrimSpace(spec.ExpectedSubjectDigest), ArtifactRef: strings.TrimSpace(spec.SourceArtifactRef)}
+	if source.SubjectDigest == "" && source.ArtifactRef == "" {
+		source, err = e.PreflightSourceSnapshot(ctx, "")
+		if err != nil {
+			return nil, fmt.Errorf("capsule preflight source: %w", err)
+		}
+	}
 	sourceLower := filepath.Join(base, "source-lower")
-	sourceDigest, err := copyImmutableSourceTree(ctx, e.sourceDir, filepath.Join(sourceLower, "workspace", "platform"))
-	if err != nil {
-		return nil, fmt.Errorf("capsule pin source: %w", err)
+	sourceTarget := filepath.Join(sourceLower, "workspace", "platform")
+	var sourceDigest string
+	if strings.HasPrefix(source.ArtifactRef, subjectArtifactPrefix) {
+		artifactRoot, artifactDigest, resolveErr := e.subjectArtifactPath(source.ArtifactRef)
+		if resolveErr != nil || source.SubjectDigest == "" || artifactDigest != source.SubjectDigest {
+			return nil, fmt.Errorf("capsule spawn requires exact candidate source artifact and subject digest")
+		}
+		if err := copyCanonicalSubjectTree(ctx, artifactRoot, sourceTarget); err != nil {
+			return nil, fmt.Errorf("capsule pin candidate source: %w", err)
+		}
+		sourceDigest, err = digestCanonicalSubjectTree(ctx, sourceTarget)
+	} else {
+		const prefix = "capsule-source-git:"
+		raw := strings.TrimPrefix(source.ArtifactRef, prefix)
+		separator := strings.Index(raw, ":sha256:")
+		if !strings.HasPrefix(source.ArtifactRef, prefix) || separator <= 0 || raw[separator+len(":sha256:"):] != source.SubjectDigest {
+			return nil, fmt.Errorf("capsule spawn requires exact preflight git source and subject digest")
+		}
+		commit := raw[:separator]
+		decodedCommit, decodeErr := hex.DecodeString(commit)
+		if decodeErr != nil || (len(decodedCommit) != 20 && len(decodedCommit) != 32) {
+			return nil, fmt.Errorf("capsule spawn preflight git commit is invalid")
+		}
+		sourceDigest, err = copyImmutableCommitTree(ctx, e.sourceDir, commit, sourceTarget)
+	}
+	if err != nil || sourceDigest != source.SubjectDigest {
+		return nil, fmt.Errorf("capsule source changed after durable preflight")
+	}
+	if err := makeSubjectTreeReadOnly(filepath.Join(sourceLower, "workspace", "platform")); err != nil {
+		return nil, err
 	}
 	caps.SourceSnapshotDigest = sourceDigest
 	lowerLayers := sourceLower + ":" + e.lowerDir
@@ -340,7 +421,7 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 		}
 	}
 	if cleanupErr == nil {
-		if err := os.RemoveAll(filepath.Join(e.stateDir, id)); err != nil {
+		if err := removePrivateTree(filepath.Join(e.stateDir, id)); err != nil {
 			cleanupErr = err
 		}
 	}
@@ -502,6 +583,7 @@ func (e *Executor) Exec(ctx context.Context, agentRunID, handle string, request 
 		return ExecResult{}, err
 	}
 	receipt := ExecutionReceipt{
+		AgentRunID: agentRunID, CapabilityHandleDigest: computerevent.DigestBytes([]byte(handle)),
 		CapsuleID: caps.ID, Command: request.Command, Cwd: request.Cwd, ExitCode: result.ExitCode,
 		StdoutDigest: computerevent.DigestBytes([]byte(result.Stdout)), StderrDigest: computerevent.DigestBytes([]byte(result.Stderr)),
 		WorktreeDigest: worktreeDigest, SourceTreeDigest: caps.SourceSnapshotDigest, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
@@ -511,6 +593,13 @@ func (e *Executor) Exec(ctx context.Context, agentRunID, handle string, request 
 		return ExecResult{}, err
 	}
 	receipt.ReceiptRef = "capsule-exec:sha256:" + computerevent.DigestBytes(canonical)
+	storedCanonical, err := computerevent.CanonicalJSON(receipt)
+	if err != nil {
+		return ExecResult{}, err
+	}
+	if err := e.persistReceiptArtifact("execution", receipt.ReceiptRef, storedCanonical); err != nil {
+		return ExecResult{}, err
+	}
 	e.mu.Lock()
 	e.executionReceipts[receipt.ReceiptRef] = receipt
 	e.mu.Unlock()
@@ -519,57 +608,124 @@ func (e *Executor) Exec(ctx context.Context, agentRunID, handle string, request 
 }
 
 func digestCapsuleWorktree(ctx context.Context, caps *Capsule) (string, error) {
-	changes, err := caps.Diff(ctx)
-	if err != nil {
-		return "", err
+	return digestCanonicalSubjectTree(ctx, filepath.Join(caps.MergedDir, "workspace", "platform"))
+}
+
+func receiptArtifactName(ref string) string {
+	digest := sha256.Sum256([]byte(ref))
+	return hex.EncodeToString(digest[:]) + ".json"
+}
+
+func (e *Executor) persistReceiptArtifact(kind, ref string, canonical []byte) error {
+	root := filepath.Join(e.stateDir, "receipts", kind)
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return err
 	}
-	sort.Slice(changes, func(i, j int) bool { return changes[i].Path < changes[j].Path })
-	type entry struct {
-		Path          string `json:"path"`
-		Kind          string `json:"kind"`
-		Mode          uint32 `json:"mode"`
-		ContentDigest string `json:"content_digest,omitempty"`
-	}
-	entries := make([]entry, 0, len(changes))
-	for _, change := range changes {
-		if err := ctx.Err(); err != nil {
-			return "", err
+	path := filepath.Join(root, receiptArtifactName(ref))
+	if err := os.WriteFile(path, canonical, 0o400); err != nil {
+		if existing, readErr := os.ReadFile(path); readErr != nil || !bytes.Equal(existing, canonical) {
+			return fmt.Errorf("persist executor receipt artifact: %w", err)
 		}
-		item := entry{Path: change.Path, Kind: change.Kind.String(), Mode: uint32(change.Mode.Perm())}
-		if change.Kind != ChangeDeleted {
-			path := filepath.Join(caps.MergedDir, filepath.FromSlash(strings.TrimPrefix(change.Path, "/")))
-			info, statErr := os.Lstat(path)
-			if statErr != nil {
-				return "", statErr
-			}
-			switch {
-			case info.Mode().IsRegular():
-				input, openErr := os.Open(path)
-				if openErr != nil {
-					return "", openErr
-				}
-				hash := sha256.New()
-				_, copyErr := io.Copy(hash, &contextReader{ctx: ctx, reader: input})
-				closeErr := input.Close()
-				if copyErr != nil || closeErr != nil {
-					return "", errors.Join(copyErr, closeErr)
-				}
-				item.ContentDigest = hex.EncodeToString(hash.Sum(nil))
-			case info.Mode()&os.ModeSymlink != 0:
-				target, linkErr := os.Readlink(path)
-				if linkErr != nil {
-					return "", linkErr
-				}
-				item.ContentDigest = computerevent.DigestBytes([]byte(target))
-			}
-		}
-		entries = append(entries, item)
 	}
-	canonical, err := computerevent.CanonicalJSON(entries)
+	return nil
+}
+
+func (e *Executor) PersistGrantedFreezeReceipt(ctx context.Context, agentRunID, handle string) (CapsuleFateReceipt, error) {
+	capability, caps, err := e.resolveOne(agentRunID, handle, "exec")
+	if err != nil || capability.AgentRole != RoleCoSuper {
+		return CapsuleFateReceipt{}, fmt.Errorf("capsule freeze receipt authority unavailable")
+	}
+	caps.mu.RLock()
+	state := caps.State
+	caps.mu.RUnlock()
+	if state != StateFrozen {
+		return CapsuleFateReceipt{}, fmt.Errorf("capsule freeze receipt requires frozen capsule")
+	}
+	finalDigest, err := digestCapsuleWorktree(ctx, caps)
 	if err != nil {
-		return "", err
+		return CapsuleFateReceipt{}, err
 	}
-	return computerevent.DigestBytes(canonical), nil
+	receipt := CapsuleFateReceipt{AgentRunID: agentRunID, CapabilityHandleDigest: computerevent.DigestBytes([]byte(handle)), CapsuleID: caps.ID,
+		Disposition: "frozen", SourceSubjectDigest: caps.SourceSnapshotDigest, FinalSubjectDigest: finalDigest, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	unsigned, err := json.Marshal(receipt)
+	if err != nil {
+		return CapsuleFateReceipt{}, err
+	}
+	receipt.ReceiptRef = "capsule-fate:sha256:" + computerevent.DigestBytes(unsigned)
+	canonical, err := json.Marshal(receipt)
+	if err != nil {
+		return CapsuleFateReceipt{}, err
+	}
+	if err := e.persistReceiptArtifact("fate", receipt.ReceiptRef, canonical); err != nil {
+		return CapsuleFateReceipt{}, err
+	}
+	return receipt, nil
+}
+
+func (e *Executor) OpenCapsuleFateReceipt(ref string) (CapsuleFateReceipt, error) {
+	raw, err := os.ReadFile(filepath.Join(e.stateDir, "receipts", "fate", receiptArtifactName(ref)))
+	if err != nil {
+		return CapsuleFateReceipt{}, fmt.Errorf("capsule fate receipt unavailable")
+	}
+	var receipt CapsuleFateReceipt
+	if err := json.Unmarshal(raw, &receipt); err != nil || receipt.ReceiptRef != ref {
+		return CapsuleFateReceipt{}, fmt.Errorf("capsule fate receipt is invalid")
+	}
+	unsigned := receipt
+	unsigned.ReceiptRef = ""
+	canonical, err := json.Marshal(unsigned)
+	if err != nil || "capsule-fate:sha256:"+computerevent.DigestBytes(canonical) != ref {
+		return CapsuleFateReceipt{}, fmt.Errorf("capsule fate receipt digest mismatch")
+	}
+	return receipt, nil
+}
+
+func (e *Executor) OpenExecutionReceipt(ref string) (ExecutionReceipt, error) {
+	e.mu.RLock()
+	stored, ok := e.executionReceipts[ref]
+	e.mu.RUnlock()
+	if ok {
+		return stored, nil
+	}
+	raw, err := os.ReadFile(filepath.Join(e.stateDir, "receipts", "execution", receiptArtifactName(ref)))
+	if err != nil {
+		return ExecutionReceipt{}, fmt.Errorf("executor receipt unavailable")
+	}
+	var receipt ExecutionReceipt
+	if err := json.Unmarshal(raw, &receipt); err != nil || receipt.ReceiptRef != ref {
+		return ExecutionReceipt{}, fmt.Errorf("executor receipt is invalid")
+	}
+	unsigned := receipt
+	unsigned.ReceiptRef = ""
+	canonical, err := computerevent.CanonicalJSON(unsigned)
+	if err != nil || "capsule-exec:sha256:"+computerevent.DigestBytes(canonical) != ref {
+		return ExecutionReceipt{}, fmt.Errorf("executor receipt digest mismatch")
+	}
+	return receipt, nil
+}
+
+func (e *Executor) OpenGrantedExecutionReceipt(ref string) (GrantedExecutionReceipt, error) {
+	e.mu.RLock()
+	stored, ok := e.grantedReceipts[ref]
+	e.mu.RUnlock()
+	if ok {
+		return stored, nil
+	}
+	raw, err := os.ReadFile(filepath.Join(e.stateDir, "receipts", "granted", receiptArtifactName(ref)))
+	if err != nil {
+		return GrantedExecutionReceipt{}, fmt.Errorf("granted executor receipt unavailable")
+	}
+	var receipt GrantedExecutionReceipt
+	if err := json.Unmarshal(raw, &receipt); err != nil || receipt.ReceiptRef != ref {
+		return GrantedExecutionReceipt{}, fmt.Errorf("granted executor receipt is invalid")
+	}
+	unsigned := receipt
+	unsigned.ReceiptRef = ""
+	canonical, err := json.Marshal(unsigned)
+	if err != nil || "capsule-granted-exec:sha256:"+computerevent.DigestBytes(canonical) != ref {
+		return GrantedExecutionReceipt{}, fmt.Errorf("granted executor receipt digest mismatch")
+	}
+	return receipt, nil
 }
 
 func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRunID, handle string, refs []string) ([]ExecutionReceipt, error) {
@@ -587,8 +743,8 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 	if err != nil {
 		return nil, err
 	}
-	e.mu.RLock()
-	defer e.mu.RUnlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	receipts := make([]ExecutionReceipt, 0, len(refs))
 	seen := make(map[string]struct{}, len(refs))
 	for _, ref := range refs {
@@ -596,10 +752,28 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 			continue
 		}
 		receipt, found := e.executionReceipts[ref]
-		if !found || receipt.CapsuleID != caps.ID || receipt.ExitCode != 0 || receipt.WorktreeDigest != worktreeDigest ||
+		handleDigest := computerevent.DigestBytes([]byte(handle))
+		if !found || receipt.AgentRunID != agentRunID || receipt.CapabilityHandleDigest != handleDigest ||
+			receipt.CapsuleID != caps.ID || receipt.ExitCode != 0 || receipt.WorktreeDigest != worktreeDigest ||
 			receipt.SourceTreeDigest != caps.SourceSnapshotDigest {
-			return nil, fmt.Errorf("capsule execution evidence does not bind the final successful worktree")
+			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, frozen source, and final successful subject")
 		}
+		granted := GrantedExecutionReceipt{Execution: receipt, AgentRunID: agentRunID, CapabilityHandleDigest: handleDigest,
+			CapsuleID: caps.ID, Frozen: true, SourceSubjectDigest: caps.SourceSnapshotDigest, FinalSubjectDigest: worktreeDigest}
+		canonicalWithoutRef, canonicalErr := json.Marshal(granted)
+		if canonicalErr != nil {
+			return nil, canonicalErr
+		}
+		granted.ReceiptRef = "capsule-granted-exec:sha256:" + computerevent.DigestBytes(canonicalWithoutRef)
+		canonical, canonicalErr := json.Marshal(granted)
+		if canonicalErr != nil {
+			return nil, canonicalErr
+		}
+		if persistErr := e.persistReceiptArtifact("granted", granted.ReceiptRef, canonical); persistErr != nil {
+			return nil, persistErr
+		}
+		e.grantedReceipts[granted.ReceiptRef] = granted
+		receipt.GrantedReceiptRef = granted.ReceiptRef
 		seen[ref] = struct{}{}
 		receipts = append(receipts, receipt)
 	}
@@ -610,13 +784,11 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 }
 
 func (e *Executor) ResolveExecutionReceipts(refs []string) ([]ExecutionReceipt, error) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
 	receipts := make([]ExecutionReceipt, 0, len(refs))
 	for _, ref := range refs {
-		receipt, found := e.executionReceipts[ref]
-		if !found {
-			return nil, fmt.Errorf("capsule execution receipt unavailable")
+		receipt, err := e.OpenExecutionReceipt(ref)
+		if err != nil {
+			return nil, err
 		}
 		receipts = append(receipts, receipt)
 	}
@@ -787,6 +959,61 @@ func (e *Executor) ResolveGrantedWorktreeDigest(ctx context.Context, agentRunID,
 		return "", err
 	}
 	return "sha256:" + strings.TrimPrefix(digest, "sha256:"), nil
+}
+
+// PersistGrantedCandidate exports the frozen complete subject tree into the
+// executor's content-addressed subject store. The opaque artifact ref is
+// durable and can later be supplied to PreflightSourceSnapshot for exact
+// verification; it never exposes a host path.
+func (e *Executor) PersistGrantedCandidate(ctx context.Context, agentRunID, handle string) (SourcePreflight, error) {
+	capability, err := e.ResolveCapability(agentRunID, handle)
+	if err != nil || capability.AgentRole != RoleCoSuper {
+		return SourcePreflight{}, fmt.Errorf("capsule candidate authority unavailable")
+	}
+	e.mu.RLock()
+	caps := e.capsules[capability.TargetCapsule]
+	e.mu.RUnlock()
+	if caps == nil {
+		return SourcePreflight{}, fmt.Errorf("capsule candidate authority unavailable")
+	}
+	caps.mu.RLock()
+	state := caps.State
+	caps.mu.RUnlock()
+	if state != StateFrozen {
+		return SourcePreflight{}, fmt.Errorf("capsule candidate requires frozen capsule")
+	}
+	subjectRoot := filepath.Join(caps.MergedDir, "workspace", "platform")
+	digest, err := digestCanonicalSubjectTree(ctx, subjectRoot)
+	if err != nil {
+		return SourcePreflight{}, err
+	}
+	if err := os.MkdirAll(filepath.Join(e.stateDir, "subjects"), 0o700); err != nil {
+		return SourcePreflight{}, err
+	}
+	temporary, err := os.MkdirTemp(e.stateDir, ".candidate-")
+	if err != nil {
+		return SourcePreflight{}, err
+	}
+	defer removePrivateTree(temporary)
+	target := filepath.Join(temporary, "workspace", "platform")
+	if err := copyCanonicalSubjectTree(ctx, subjectRoot, target); err != nil {
+		return SourcePreflight{}, err
+	}
+	copied, err := digestCanonicalSubjectTree(ctx, target)
+	if err != nil || copied != digest {
+		return SourcePreflight{}, fmt.Errorf("capsule candidate reconstruction digest mismatch")
+	}
+	if err := makeSubjectTreeReadOnly(target); err != nil {
+		return SourcePreflight{}, err
+	}
+	final := filepath.Join(e.stateDir, "subjects", digest)
+	if err := os.Rename(temporary, final); err != nil {
+		existing, verifyErr := digestCanonicalSubjectTree(ctx, filepath.Join(final, "workspace", "platform"))
+		if verifyErr != nil || existing != digest {
+			return SourcePreflight{}, fmt.Errorf("persist content-addressed capsule candidate: %w", err)
+		}
+	}
+	return SourcePreflight{SubjectDigest: digest, ArtifactRef: subjectArtifactPrefix + digest}, nil
 }
 
 func (e *Executor) ResolveGrantedSourceSnapshotDigest(agentRunID, handle string) (string, error) {
@@ -1155,6 +1382,21 @@ func digestRegularFile(path string) ([sha256.Size]byte, error) {
 		return zero, err
 	}
 	return sha256.Sum256(data), nil
+}
+
+func removePrivateTree(root string) error {
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			_ = os.Chmod(path, 0o700)
+		} else if info.Mode().IsRegular() {
+			_ = os.Chmod(path, 0o600)
+		}
+		return nil
+	})
+	return os.RemoveAll(root)
 }
 
 func randomOpaque(prefix string) (string, error) {

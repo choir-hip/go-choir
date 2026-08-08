@@ -60,8 +60,11 @@ type CoSuperAssignmentBinding struct {
 	Kind                       CoSuperAssignmentKind `json:"assignment_kind"`
 	Attempt                    uint64                `json:"attempt"`
 	ScopeDigest                string                `json:"scope_digest"`
+	RequestDigest              string                `json:"request_digest"`
 	CapabilityDigest           string                `json:"capability_digest"`
 	SubjectDigest              string                `json:"subject_digest"`
+	SourceArtifactRef          string                `json:"source_artifact_ref"`
+	SourceCandidateID          string                `json:"source_candidate_id,omitempty"`
 	Writable                   bool                  `json:"writable"`
 	CapsuleID                  string                `json:"capsule_id,omitempty"`
 	NetworkMode                string                `json:"network_mode"`
@@ -98,11 +101,24 @@ func (b CoSuperAssignmentBinding) Validate() error {
 		return fmt.Errorf("co-super assignment: attempt must be positive")
 	}
 	for name, digest := range map[string]string{
-		"scope_digest": b.ScopeDigest, "capability_digest": b.CapabilityDigest, "subject_digest": b.SubjectDigest,
+		"scope_digest": b.ScopeDigest, "request_digest": b.RequestDigest, "capability_digest": b.CapabilityDigest, "subject_digest": b.SubjectDigest,
 	} {
 		if !ValidSHA256Digest(digest) {
 			return fmt.Errorf("co-super assignment: %s must be an exact sha256 digest", name)
 		}
+	}
+	if strings.TrimSpace(b.SourceArtifactRef) == "" || b.SourceArtifactRef != strings.TrimSpace(b.SourceArtifactRef) {
+		return fmt.Errorf("co-super assignment: exact runtime source artifact ref is required")
+	}
+	if (b.Kind == CoSuperAssignmentVerification) != (strings.TrimSpace(b.SourceCandidateID) != "") || b.SourceCandidateID != strings.TrimSpace(b.SourceCandidateID) {
+		return fmt.Errorf("co-super assignment: verification requires exact runtime-selected source candidate")
+	}
+	if b.SourceCandidateID != "" {
+		if b.SourceArtifactRef != "capsule-subject:"+b.SubjectDigest {
+			return fmt.Errorf("co-super assignment: candidate source artifact must bind subject digest")
+		}
+	} else if !strings.HasPrefix(b.SourceArtifactRef, "capsule-source-git:") || !strings.HasSuffix(b.SourceArtifactRef, ":"+b.SubjectDigest) {
+		return fmt.Errorf("co-super assignment: implementation source must bind exact git provenance and subject digest")
 	}
 	if !b.Writable || strings.TrimSpace(b.CapsuleID) == "" {
 		return fmt.Errorf("co-super assignment: implementation and verification require a writable isolated capsule_id")
@@ -257,6 +273,8 @@ type CoSuperAssignmentReport struct {
 	CertifiesOriginalSubject bool                        `json:"certifies_original_subject"`
 	CandidateSubjectDigest   string                      `json:"candidate_subject_digest,omitempty"`
 	CandidateID              string                      `json:"candidate_id,omitempty"`
+	CandidateArtifactRef     string                      `json:"candidate_artifact_ref,omitempty"`
+	ExecutorReceiptRefs      []string                    `json:"executor_receipt_refs,omitempty"`
 	CreatedAt                time.Time                   `json:"created_at"`
 }
 
@@ -289,8 +307,8 @@ func (r CoSuperAssignmentReport) ValidateAgainst(a CoSuperAssignment) error {
 			return fmt.Errorf("co-super assignment report: pass requires completed result")
 		}
 	}
-	if a.Binding.Kind == CoSuperAssignmentVerification && r.Result == CoSuperResultCompleted && r.Verdict == CoSuperVerdictPass && len(r.Commands) == 0 {
-		return fmt.Errorf("co-super assignment report: verification pass requires exact capsule command evidence")
+	if a.Binding.Kind == CoSuperAssignmentVerification && r.Result == CoSuperResultCompleted && r.Verdict == CoSuperVerdictPass && (len(r.Commands) == 0 || len(r.ExecutorReceiptRefs) == 0) {
+		return fmt.Errorf("co-super assignment report: verification pass requires exact successful frozen-subject executor receipt evidence")
 	}
 	if a.Binding.Kind == CoSuperAssignmentImplementation && r.Result == CoSuperResultCompleted && len(r.Commands) == 0 && len(r.Mutations) == 0 {
 		return fmt.Errorf("co-super assignment report: implementation completion requires command or runtime-derived mutation evidence")
@@ -314,6 +332,15 @@ func (r CoSuperAssignmentReport) ValidateAgainst(a CoSuperAssignment) error {
 		}
 		seen["output:"+output.OutputID] = struct{}{}
 	}
+	for _, ref := range r.ExecutorReceiptRefs {
+		if strings.TrimSpace(ref) == "" || ref != strings.TrimSpace(ref) {
+			return fmt.Errorf("co-super assignment report: executor receipt refs must be canonical")
+		}
+		if _, duplicate := seen["executor:"+ref]; duplicate {
+			return fmt.Errorf("co-super assignment report: duplicate executor receipt ref")
+		}
+		seen["executor:"+ref] = struct{}{}
+	}
 	changed := r.ObservedSubjectDigest != a.Binding.SubjectDigest
 	for _, mutation := range r.Mutations {
 		if strings.TrimSpace(mutation.MutationID) == "" || strings.TrimSpace(mutation.Kind) == "" ||
@@ -332,10 +359,10 @@ func (r CoSuperAssignmentReport) ValidateAgainst(a CoSuperAssignment) error {
 		}
 	}
 	if changed {
-		if r.CandidateSubjectDigest != r.ObservedSubjectDigest || strings.TrimSpace(r.CandidateID) == "" || r.CertifiesOriginalSubject {
+		if r.CandidateSubjectDigest != r.ObservedSubjectDigest || strings.TrimSpace(r.CandidateID) == "" || r.CandidateArtifactRef != "capsule-subject:"+r.CandidateSubjectDigest || r.CertifiesOriginalSubject {
 			return fmt.Errorf("co-super assignment report: changed subject requires a distinct non-certifying candidate identity")
 		}
-	} else if r.CandidateSubjectDigest != "" || r.CandidateID != "" {
+	} else if r.CandidateSubjectDigest != "" || r.CandidateID != "" || r.CandidateArtifactRef != "" {
 		return fmt.Errorf("co-super assignment report: unchanged subject cannot create candidate identity")
 	}
 	if r.CertifiesOriginalSubject && (a.Binding.Kind != CoSuperAssignmentVerification || r.Verdict != CoSuperVerdictPass || r.Late || changed) {
@@ -355,6 +382,7 @@ type CoSuperSubjectCandidate struct {
 	OriginalSubjectDigest string    `json:"original_subject_digest"`
 	SubjectDigest         string    `json:"subject_digest"`
 	SourceReportID        string    `json:"source_report_id"`
+	ArtifactRef           string    `json:"artifact_ref"`
 	CreatedAt             time.Time `json:"created_at"`
 }
 

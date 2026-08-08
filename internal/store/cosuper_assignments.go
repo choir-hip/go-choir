@@ -676,8 +676,11 @@ func validateCoSuperAssignmentRun(assignment types.CoSuperAssignment, assignedAg
 		metadataExactString(run.Metadata, "parent_control_id") != assignment.Binding.ParentControlID ||
 		metadataExactString(run.Metadata, "capsule_id") != assignment.Binding.CapsuleID ||
 		metadataExactString(run.Metadata, "scope_digest") != assignment.Binding.ScopeDigest ||
+		metadataExactString(run.Metadata, "request_digest") != assignment.Binding.RequestDigest ||
 		metadataExactString(run.Metadata, "capability_digest") != assignment.Binding.CapabilityDigest ||
 		metadataExactString(run.Metadata, "subject_digest") != assignment.Binding.SubjectDigest ||
+		metadataExactString(run.Metadata, "source_artifact_ref") != assignment.Binding.SourceArtifactRef ||
+		metadataExactString(run.Metadata, "source_candidate_id") != assignment.Binding.SourceCandidateID ||
 		coordinationID != assignment.Binding.CoordinationContractID || coordinationDigest != assignment.Binding.CoordinationContractDigest {
 		return fmt.Errorf("co-super assignment: exact run/work/parent binding mismatch: %w", ErrCoSuperAssignmentInvalid)
 	}
@@ -877,11 +880,11 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 			OwnerID: req.OwnerID, ComputerID: req.ComputerID, TrajectoryID: assignment.Binding.TrajectoryID,
 			AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
 			OriginalSubjectDigest: assignment.Binding.SubjectDigest, SubjectDigest: report.CandidateSubjectDigest,
-			SourceReportID: report.ReportID, CreatedAt: now}
+			SourceReportID: report.ReportID, ArtifactRef: report.CandidateArtifactRef, CreatedAt: now}
 		existing, getErr := s.lifecycleGraph().GetObject(ctx, candidateID)
 		if getErr == nil {
 			decoded, decodeErr := decodeLifecycleObject[types.CoSuperSubjectCandidate](existing)
-			if decodeErr != nil || decoded.OwnerID != req.OwnerID || decoded.ComputerID != req.ComputerID || decoded.SubjectDigest != report.CandidateSubjectDigest {
+			if decodeErr != nil || decoded.OwnerID != req.OwnerID || decoded.ComputerID != req.ComputerID || decoded.SubjectDigest != report.CandidateSubjectDigest || decoded.ArtifactRef != report.CandidateArtifactRef {
 				return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
 			}
 			candidate, candidateObj, candidateExists = &decoded, existing, true
@@ -1088,4 +1091,22 @@ func (s *Store) GetCoSuperAssignmentReport(ctx context.Context, ownerID, compute
 		return types.CoSuperAssignmentReport{}, ErrNotFound
 	}
 	return report, nil
+}
+
+func (s *Store) GetCoSuperSubjectCandidate(ctx context.Context, ownerID, computerID, candidateID string) (types.CoSuperSubjectCandidate, error) {
+	obj, err := s.lifecycleGraph().GetObject(ctx, strings.TrimSpace(candidateID))
+	if err != nil {
+		if errors.Is(err, objectgraph.ErrNotFound) {
+			return types.CoSuperSubjectCandidate{}, ErrNotFound
+		}
+		return types.CoSuperSubjectCandidate{}, err
+	}
+	candidate, err := decodeLifecycleObject[types.CoSuperSubjectCandidate](obj)
+	if err != nil {
+		return types.CoSuperSubjectCandidate{}, err
+	}
+	if candidate.CandidateID != strings.TrimSpace(candidateID) || candidate.OwnerID != strings.TrimSpace(ownerID) || candidate.ComputerID != strings.TrimSpace(computerID) {
+		return types.CoSuperSubjectCandidate{}, ErrNotFound
+	}
+	return candidate, nil
 }

@@ -208,8 +208,23 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 	terminalFingerprint := objectgraph.SHA256([]byte(strings.Join(fingerprintParts, "\x00")))
 
 	if !terminal {
-		if assignment.CapsuleDisposition != types.CoSuperCapsuleActive || assignment.Disposition.Terminal() {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("partial report requires active nonterminal assignment")
+		if stored, storedErr := rt.store.GetCoSuperAssignmentReport(ctx, rec.OwnerID, rec.SandboxID, report.ReportID); storedErr == nil {
+			storedParts := []string{string(stored.Result), string(stored.Verdict), stored.ReportID}
+			for _, command := range stored.Commands {
+				storedParts = append(storedParts, command.ExecutionRef, command.CommandDigest)
+			}
+			if objectgraph.SHA256([]byte(strings.Join(storedParts, "\x00"))) != terminalFingerprint {
+				return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
+			}
+			commandID := "co-super-report:" + assignment.AssignmentID + ":" + report.ReportID
+			return rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, commandID)
+		} else if !errors.Is(storedErr, store.ErrNotFound) {
+			return types.CoSuperAssignmentCommandResult{}, storedErr
+		}
+		active := assignment.CapsuleDisposition == types.CoSuperCapsuleActive && !assignment.Disposition.Terminal()
+		late := assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked
+		if !active && !late {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("partial report conflicts with capsule terminalization in progress")
 		}
 		return rt.commitAssignedCoSuperReport(ctx, assignment, report)
 	}
@@ -255,13 +270,12 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("terminal report cannot resume capsule disposition %s", assignment.CapsuleDisposition)
 	}
 
-	var changes []capsule.FileChange
 	if assignment.CapsuleDisposition == types.CoSuperCapsuleFreezeRequested {
 		handle, err := rt.capsuleExecutor.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
 		if err != nil {
 			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("resolve exact assignment capability after freeze intent: %w", err)
 		}
-		changes, err = rt.capsuleExecutor.ExtractGranted(ctx, rec.RunID, handle)
+		_, err = rt.capsuleExecutor.ExtractGranted(ctx, rec.RunID, handle)
 		if err != nil {
 			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("freeze assignment after durable intent: %w", err)
 		}
@@ -273,13 +287,17 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 		if err != nil || !types.ValidSHA256Digest(frozenDigest) {
 			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("frozen assignment digest unavailable: %w", err)
 		}
-		ack := "capsule-freeze-ack:" + objectgraph.SHA256([]byte(strings.Join([]string{intent, assignment.Binding.CapsuleID, frozenDigest, fmt.Sprint(len(changes))}, "\x00")))
+		freezeReceipt, receiptErr := rt.capsuleExecutor.PersistGrantedFreezeReceipt(ctx, rec.RunID, handle)
+		if receiptErr != nil || freezeReceipt.CapsuleID != assignment.Binding.CapsuleID || "sha256:"+strings.TrimPrefix(freezeReceipt.FinalSubjectDigest, "sha256:") != frozenDigest || "sha256:"+strings.TrimPrefix(freezeReceipt.SourceSubjectDigest, "sha256:") != assignment.Binding.SubjectDigest {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("durable typed executor freeze receipt unavailable: %w", receiptErr)
+		}
+		ack := freezeReceipt.ReceiptRef
 		frozen, err := rt.store.SetCoSuperCapsuleDisposition(ctx, coSuperFateRequest(assignment, types.CoSuperCapsuleFrozen, intent, ack))
 		if err != nil {
 			return types.CoSuperAssignmentCommandResult{}, err
 		}
 		assignment = frozen.Assignment
-		if len(changes) > 0 {
+		if frozenDigest != assignment.Binding.SubjectDigest {
 			report.ObservedSubjectDigest = frozenDigest
 			report.Mutations = []types.CoSuperRecordedMutation{{
 				MutationID: "assignment-overlay:" + objectgraph.SHA256([]byte(ack)), Kind: "assignment_overlay",
@@ -289,24 +307,32 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 		}
 	}
 
-	if assignment.CapsuleDisposition == types.CoSuperCapsuleFrozen && !reportExists && len(changes) == 0 {
+	if assignment.CapsuleDisposition == types.CoSuperCapsuleFrozen && !reportExists {
 		handle, resolveErr := rt.capsuleExecutor.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
 		if resolveErr != nil {
 			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("resolve frozen assignment capability: %w", resolveErr)
 		}
-		changes, resolveErr = rt.capsuleExecutor.ExtractGranted(ctx, rec.RunID, handle)
-		if resolveErr != nil {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("inspect already-frozen assignment: %w", resolveErr)
+		frozenDigest, digestErr := rt.capsuleExecutor.ResolveGrantedWorktreeDigest(ctx, rec.RunID, handle)
+		if digestErr != nil || !types.ValidSHA256Digest(frozenDigest) {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("already-frozen assignment digest unavailable: %w", digestErr)
 		}
-		if len(changes) > 0 && len(report.Mutations) == 0 {
-			frozenDigest, digestErr := rt.capsuleExecutor.ResolveGrantedWorktreeDigest(ctx, rec.RunID, handle)
-			if digestErr != nil || !types.ValidSHA256Digest(frozenDigest) {
-				return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("already-frozen assignment digest unavailable: %w", digestErr)
-			}
+		report, resolveErr = rt.bindFrozenAssignmentExecutionReceipts(ctx, assignment, handle, report)
+		if resolveErr != nil {
+			return types.CoSuperAssignmentCommandResult{}, resolveErr
+		}
+		if frozenDigest != assignment.Binding.SubjectDigest && len(report.Mutations) == 0 {
 			report.ObservedSubjectDigest = frozenDigest
-			report.Mutations = []types.CoSuperRecordedMutation{{MutationID: "assignment-overlay:" + objectgraph.SHA256([]byte(assignment.CapsuleAckRef)), Kind: "assignment_overlay", BeforeDigest: assignment.Binding.SubjectDigest, AfterDigest: frozenDigest, EvidenceRef: "capsule-diff:" + objectgraph.SHA256([]byte(assignment.CapsuleAckRef)), SubjectBytesChanged: true}}
+			report.Mutations = []types.CoSuperRecordedMutation{{MutationID: "assignment-subject:" + objectgraph.SHA256([]byte(assignment.CapsuleAckRef)), Kind: "workspace_platform_complete_tree", BeforeDigest: assignment.Binding.SubjectDigest, AfterDigest: frozenDigest, EvidenceRef: "capsule-diff:" + objectgraph.SHA256([]byte(assignment.CapsuleAckRef)), SubjectBytesChanged: true}}
+		}
+		if frozenDigest != assignment.Binding.SubjectDigest {
+			candidate, candidateErr := rt.capsuleExecutor.PersistGrantedCandidate(ctx, rec.RunID, handle)
+			if candidateErr != nil || "sha256:"+strings.TrimPrefix(candidate.SubjectDigest, "sha256:") != frozenDigest {
+				return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("persist reconstructable content-addressed candidate: %w", candidateErr)
+			}
+			report.CandidateArtifactRef = candidate.ArtifactRef
 		}
 	}
+
 	var result types.CoSuperAssignmentCommandResult
 	if reportExists {
 		commandID := "co-super-report:" + assignment.AssignmentID + ":" + report.ReportID
@@ -331,21 +357,48 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 	return result, nil
 }
 
-func (rt *Runtime) commitAssignedCoSuperReport(ctx context.Context, assignment types.CoSuperAssignment, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentCommandResult, error) {
+func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, assignment types.CoSuperAssignment, handle string, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentReport, error) {
 	refs := make([]string, 0, len(report.Commands))
 	for _, command := range report.Commands {
 		refs = append(refs, command.ExecutionRef)
 	}
-	if len(refs) > 0 {
-		receipts, err := rt.capsuleExecutor.ResolveExecutionReceipts(refs)
-		if err != nil || len(receipts) != len(refs) {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("assignment command evidence unavailable: %w", err)
+	if len(refs) == 0 {
+		return report, nil
+	}
+	receipts, err := rt.capsuleExecutor.ResolveGrantedExecutionReceipts(ctx, assignment.BoundRunID, handle, refs)
+	if err != nil || len(receipts) != len(refs) {
+		return report, fmt.Errorf("assignment command evidence unavailable after durable freeze: %w", err)
+	}
+	seen := map[string]bool{}
+	for i, receipt := range receipts {
+		if receipt.CapsuleID != assignment.Binding.CapsuleID || objectgraph.SHA256([]byte(receipt.Command)) != report.Commands[i].CommandDigest || strings.TrimSpace(receipt.GrantedReceiptRef) == "" || seen[receipt.GrantedReceiptRef] {
+			return report, fmt.Errorf("assignment command evidence does not bind unique exact final subject")
 		}
-		for i, receipt := range receipts {
-			if receipt.CapsuleID != assignment.Binding.CapsuleID || objectgraph.SHA256([]byte(receipt.Command)) != report.Commands[i].CommandDigest {
-				return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("assignment command evidence binding mismatch")
+		seen[receipt.GrantedReceiptRef] = true
+		report.ExecutorReceiptRefs = append(report.ExecutorReceiptRefs, receipt.GrantedReceiptRef)
+	}
+	return report, nil
+}
+
+func (rt *Runtime) commitAssignedCoSuperReport(ctx context.Context, assignment types.CoSuperAssignment, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentCommandResult, error) {
+	if report.Result == types.CoSuperResultPartial {
+		refs := make([]string, 0, len(report.Commands))
+		for _, command := range report.Commands {
+			refs = append(refs, command.ExecutionRef)
+		}
+		if len(refs) > 0 {
+			receipts, err := rt.capsuleExecutor.ResolveExecutionReceipts(refs)
+			if err != nil || len(receipts) != len(refs) {
+				return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("partial assignment command evidence unavailable: %w", err)
+			}
+			for i, receipt := range receipts {
+				if receipt.CapsuleID != assignment.Binding.CapsuleID || objectgraph.SHA256([]byte(receipt.Command)) != report.Commands[i].CommandDigest {
+					return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("partial assignment command evidence binding mismatch")
+				}
 			}
 		}
+	} else if len(report.Commands) != len(report.ExecutorReceiptRefs) {
+		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("terminal assignment requires one durable granted executor receipt per command")
 	}
 	req := types.RecordCoSuperAssignmentReportRequest{
 		CommandID: "co-super-report:" + assignment.AssignmentID + ":" + report.ReportID,

@@ -36,7 +36,10 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 		metadataStringValue(rec.Metadata, "capsule_id") != assignment.Binding.CapsuleID ||
 		metadataStringValue(rec.Metadata, "capability_digest") != assignment.Binding.CapabilityDigest ||
 		metadataStringValue(rec.Metadata, "assigned_work_item_id") != assignment.Binding.AssignedWorkItemID ||
-		metadataStringValue(rec.Metadata, "assignment_kind") != string(assignment.Binding.Kind) {
+		metadataStringValue(rec.Metadata, "assignment_kind") != string(assignment.Binding.Kind) ||
+		metadataStringValue(rec.Metadata, "request_digest") != assignment.Binding.RequestDigest ||
+		metadataStringValue(rec.Metadata, "source_artifact_ref") != assignment.Binding.SourceArtifactRef ||
+		metadataStringValue(rec.Metadata, "source_candidate_id") != assignment.Binding.SourceCandidateID {
 		return nil, "", fmt.Errorf("assigned CoSuper durable run binding mismatch")
 	}
 	resolver := rt.assignmentHandleResolver

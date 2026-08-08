@@ -247,6 +247,22 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	}
 	if profile == agentprofile.CoSuper {
 		b.WriteString(runtimeprompts.CoSuperRuntimeOverlay())
+		kind := metadataStringValue(rec.Metadata, "assignment_kind")
+		if assignmentID := metadataStringValue(rec.Metadata, "assignment_id"); assignmentID != "" {
+			b.WriteString("\n\nExact authenticated assignment: assignment_id=")
+			b.WriteString(assignmentID)
+			b.WriteString(" kind=")
+			b.WriteString(kind)
+			b.WriteString(" subject_digest=")
+			b.WriteString(metadataStringValue(rec.Metadata, "subject_digest"))
+			if kind == string(types.CoSuperAssignmentVerification) {
+				b.WriteString(" candidate_id=")
+				b.WriteString(metadataStringValue(rec.Metadata, "source_candidate_id"))
+				b.WriteString(". This verification capsule contains that exact immutable candidate subject.")
+			} else {
+				b.WriteString(". Implement only the bounded objective in /workspace/platform and return a typed result.")
+			}
+		}
 	}
 	if profile == agentprofile.Researcher {
 		b.WriteString(runtimeprompts.ResearcherRuntimeOverlay())

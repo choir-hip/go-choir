@@ -3,13 +3,17 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
@@ -138,4 +142,91 @@ func registryToolNames(registry *toolregistry.ToolRegistry) []string {
 		names[index] = tool.Name
 	}
 	return names
+}
+
+func TestAssignCoSuperSchemaHasNoModelAuthoredRuntimeBindings(t *testing.T) {
+	registry := toolregistry.MustNewToolRegistry()
+	if err := RegisterAssignedCoSuperTools(registry, &Runtime{}); err != nil {
+		t.Fatal(err)
+	}
+	tool, ok := registry.Lookup("assign_co_super")
+	if !ok {
+		t.Fatal("assign_co_super missing")
+	}
+	properties, _ := tool.Parameters["properties"].(map[string]any)
+	for _, forbidden := range []string{"attempt", "scope_digest", "subject_digest", "assignment_id", "capsule_id"} {
+		if _, present := properties[forbidden]; present {
+			t.Fatalf("model-authored runtime binding %q remains in schema", forbidden)
+		}
+	}
+	for _, required := range []string{"objective", "kind", "parent_work_item_id", "candidate_id"} {
+		if _, present := properties[required]; !present {
+			t.Fatalf("assignment semantic field %q missing", required)
+		}
+	}
+	cancel, ok := registry.Lookup("cancel_co_super_assignment")
+	if !ok {
+		t.Fatal("cancel assignment missing")
+	}
+	cancelProperties, _ := cancel.Parameters["properties"].(map[string]any)
+	if _, present := cancelProperties["attempt"]; present {
+		t.Fatal("cancel schema retains model-authored attempt")
+	}
+}
+
+func TestAssignmentIdentityUsesOnlyAuthenticatedParentRunAndToolCall(t *testing.T) {
+	parent := types.RunRecord{RunID: "parent-run", OwnerID: "owner", SandboxID: "computer"}
+	left := StartAssignedCoSuperRequest{Objective: "one", Kind: types.CoSuperAssignmentImplementation, ParentWorkItemID: "work", ToolCallID: "call"}
+	right := StartAssignedCoSuperRequest{Objective: "changed", Kind: types.CoSuperAssignmentVerification, CandidateID: "candidate", ParentWorkItemID: "other", ToolCallID: "call"}
+	if deterministicAssignmentIdentity(parent, left) != deterministicAssignmentIdentity(parent, right) {
+		t.Fatal("semantic arguments changed authenticated assignment identity")
+	}
+	other := parent
+	other.RunID = "other-parent"
+	if deterministicAssignmentIdentity(parent, left) == deterministicAssignmentIdentity(other, left) {
+		t.Fatal("parent run absent from assignment identity")
+	}
+	right.ToolCallID = "other-call"
+	if deterministicAssignmentIdentity(parent, left) == deterministicAssignmentIdentity(parent, right) {
+		t.Fatal("tool call absent from assignment identity")
+	}
+}
+
+func TestStartCoagentRunHardRefusesCoSuperForEveryCaller(t *testing.T) {
+	s, err := openTestStore(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	now := time.Now().UTC()
+	parent := types.RunRecord{RunID: "parent", AgentID: "super:owner", AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, OwnerID: "owner", SandboxID: "computer", State: types.RunRunning, CreatedAt: now, UpdatedAt: now}
+	if err := s.CreateRun(context.Background(), parent); err != nil {
+		t.Fatal(err)
+	}
+	rt := &Runtime{store: s, cfg: provideriface.Config{SandboxID: "computer"}}
+	for _, constraints := range []map[string]any{
+		{runMetadataAgentProfile: agentprofile.CoSuper, runMetadataAgentRole: agentprofile.CoSuper},
+		{runMetadataAgentRole: "coagent"},
+	} {
+		if _, err := rt.StartCoagentRun(context.Background(), parent.RunID, "forbidden", parent.OwnerID, constraints); err == nil || !strings.Contains(err.Error(), "refuses all CoSuper") {
+			t.Fatalf("generic CoSuper activation error=%v", err)
+		}
+	}
+}
+
+func TestAssignedCoSuperPromptNamesExactKindWithoutFutureToolLie(t *testing.T) {
+	rt := &Runtime{}
+	for _, kind := range []types.CoSuperAssignmentKind{types.CoSuperAssignmentImplementation, types.CoSuperAssignmentVerification} {
+		rec := &types.RunRecord{RunID: "assigned", AgentID: "co-super:assigned", AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, Metadata: map[string]any{"assignment_id": "assignment", "assignment_kind": string(kind), "subject_digest": "sha256:subject", "source_candidate_id": "candidate"}}
+		prompt, err := rt.systemPromptForRun(rec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(prompt, "kind="+string(kind)) {
+			t.Fatalf("prompt does not name exact %s assignment: %s", kind, prompt)
+		}
+		if strings.Contains(prompt, "may be added later") || strings.Contains(prompt, "report one precise result through update_coagent") {
+			t.Fatalf("prompt retains future/static tool lie: %s", prompt)
+		}
+	}
 }
