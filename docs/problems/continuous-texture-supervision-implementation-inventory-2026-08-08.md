@@ -281,3 +281,36 @@ source/deploy/worktree identity, rerun live doccheck, then build and test one
 frozen A–C candidate. Do not register the Texture affordance until store-side
 validation, atomic turn, readers, replay, and the negative matrix are all present
 in that same candidate.
+
+
+## Joined repair integration findings — 2026-08-08
+
+The first joined capsule-security, upward-report, and Texture-durability candidate
+exposed three integration defects before publication:
+
+1. a late CoSuper report on a still-live trajectory added the same trajectory
+   object condition through both the live reducer transition and the historical
+   authority join, so Dolt rejected the conditional batch as a duplicate rather
+   than persisting evidence;
+2. historical late-evidence authority still required the persistent Super's
+   mutable `ActiveRunID` to name the original parent run, which would reject an
+   authenticated delayed result after the persistent Super had legitimately
+   activated a later control; and
+3. four broad agentcore fixtures still exercised the superseded generic,
+   unassigned CoSuper `update_coagent`/rewarm path. The exact closed registry now
+   refuses that path, as required; those fixtures must either seed legacy rows
+   directly when testing compatibility or use an ordinary Researcher for generic
+   restart coverage.
+
+Evidence was the joined focused Store failure
+`TestPartialAssignmentReportPreservesActiveCapsuleThenTerminalFreezes`
+(`objectgraph dolt: duplicate condition ... choir.trajectory`) and runtime-shard
+failures naming `tool "update_coagent" not found` or `unassigned CoSuper cannot
+execute`. These are not reasons to restore generic CoSuper authority.
+
+The repair direction is substrate-level: CAS a live trajectory exactly once;
+for post-terminal evidence condition the immutable historical trajectory while
+allowing the static persistent-Super agent to point at a newer active run; keep
+the original parent run/control/work identity as the authentication join; and
+remove stale generic-CoSuper test setup. Late reports remain report/evidence
+only—no candidate, packet, wake, projection, reopen, or semantic revision.
