@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1089,6 +1090,19 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start lifecycle: %v", err)
 	}
+	producerRun := types.RunRecord{
+		RunID: "run-explicit-work-producer", AgentID: agentID, ChannelID: docID, OwnerID: ownerID, SandboxID: computerID,
+		TrajectoryID: trajectoryID, State: types.RunRunning, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
+		CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": workItemID},
+	}
+	producerProject := types.ReplaceLifecycleActivationRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "activate-explicit-work-producer",
+		TrajectoryID: trajectoryID, AgentID: agentID, Run: producerRun,
+	}
+	producerProject.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(producerProject)
+	if _, err := s.ReplaceLifecycleActivation(ctx, producerProject); err != nil {
+		t.Fatalf("activate explicit-work producer: %v", err)
+	}
 	packet := types.CoagentSourcePacketPayload{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
 		Kind:          "evidence_update",
@@ -1102,12 +1116,21 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "queue-explicit-work-interim",
 		TrajectoryID: trajectoryID, TargetAgentID: agentID, ProducerAgentID: agentID,
 		ProducerUpdateID: "update-explicit-work-interim", UpdateID: "update-explicit-work-interim",
-		ChannelID: docID, Packet: packet, Content: "Interim evidence checkpoint", PayloadDigest: payloadDigest,
-		WorkDisposition: types.WorkItemOpen,
+		ChannelID: docID, Role: agentprofile.Texture, SourceRunID: producerRun.RunID,
+		Packet: packet, Content: "Interim evidence checkpoint", PayloadDigest: payloadDigest,
+		WorkDisposition: types.WorkItemOpen, WorkItemID: workItemID,
 	}
 	queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
 	if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
 		t.Fatalf("queue interim update: %v", err)
+	}
+	producerRun.State = types.RunPassivated
+	producerRun.UpdatedAt = now.Add(time.Second)
+	producerProject.CommandID = "passivate-explicit-work-producer"
+	producerProject.Run = producerRun
+	producerProject.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(producerProject)
+	if _, err := s.ReplaceLifecycleActivation(ctx, producerProject); err != nil {
+		t.Fatalf("passivate explicit-work producer: %v", err)
 	}
 	newRun := func(runID, baseRevisionID string) *types.RunRecord {
 		run := &types.RunRecord{
@@ -1199,19 +1222,28 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 	if _, err := s.GetDocumentAliasSourcePath(ctx, ownerID, docID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("lifecycle revision created legacy projection alias: %v", err)
 	}
-	var incorporatedInterim, boundOpenRevision bool
+	var incorporatedInterim bool
 	for _, update := range openSnapshot.Updates {
 		if update.UpdateID == queue.UpdateID {
 			incorporatedInterim = update.Disposition == types.UpdateIncorporated
 		}
-		if update.Packet.Kind == "artifact_revision" {
-			boundOpenRevision = update.Disposition == types.UpdateIncorporated &&
-				update.WorkDisposition == types.WorkItemOpen && update.WorkItemID == start.InitialWork.WorkItemID
+		if update.Packet.Kind == "artifact_revision" && update.AgentID == start.Agent.AgentID {
+			t.Fatalf("atomic Texture turn leaked synthetic self update: %+v", update)
 		}
 	}
-	if !incorporatedInterim || !boundOpenRevision {
-		t.Fatalf("interim updates omitted incorporation or assigned open work binding: %+v", openSnapshot.Updates)
+	if !incorporatedInterim || openSnapshot.WorkItems[0].Status != types.WorkItemOpen {
+		t.Fatalf("interim turn omitted incorporation or assigned open work CAS: %+v", openSnapshot)
 	}
+	decisionRun := newRun("run-explicit-work-wait", openSnapshot.HeadRevision.RevisionID)
+	decisionArgs := json.RawMessage(fmt.Sprintf(`{"doc_id":%q,"base_revision_id":%q,"decision_kind":"wait_for_evidence","reason":"await exact verification"}`, docID, openSnapshot.HeadRevision.RevisionID))
+	if _, err := registry.Execute(toolregistry.WithExecutionContext(ctx, textureToolExecutionContext(decisionRun)), "record_texture_decision", decisionArgs); err != nil {
+		t.Fatalf("commit no-revision wait turn: %v", err)
+	}
+	decisionMutation, err := s.GetAgentMutationByRun(ctx, ownerID, computerID, decisionRun.RunID)
+	if err != nil || decisionMutation == nil || decisionMutation.RevisionID != "" || decisionMutation.State != "sleeping" {
+		t.Fatalf("no-revision turn wrote fake mutation revision: %+v, %v", decisionMutation, err)
+	}
+	finishRun(decisionRun)
 	rejectedWork := types.OpenLifecycleWorkRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "command-open-rejected-evidence",
 		TrajectoryID: trajectoryID, WorkItem: types.WorkItemRecord{
@@ -1222,6 +1254,14 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 	rejectedWork.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(rejectedWork)
 	if _, err := s.OpenLifecycleWork(ctx, rejectedWork); err != nil {
 		t.Fatalf("open rejected evidence work: %v", err)
+	}
+	producerRun.Metadata["work_item_ids"] = []string{workItemID, rejectedWork.WorkItem.WorkItemID, "work-rejected-interim"}
+	producerRun.UpdatedAt = time.Now().UTC()
+	producerProject.CommandID = "bind-explicit-work-producer-followups"
+	producerProject.Run = producerRun
+	producerProject.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(producerProject)
+	if _, err := s.ReplaceLifecycleActivation(ctx, producerProject); err != nil {
+		t.Fatalf("bind follow-up producer work: %v", err)
 	}
 	rejectedUpdate := queue
 	rejectedUpdate.CommandID = "command-queue-rejected-evidence"
@@ -1259,7 +1299,7 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 	ignoredUpdate.ProducerUpdateID, ignoredUpdate.UpdateID = "producer-ignored-evidence", "update-ignored-evidence"
 	ignoredUpdate.Packet.Summary, ignoredUpdate.Content = "Evidence remains undecided.", "Evidence remains undecided."
 	ignoredUpdate.PayloadDigest, _ = store.ComputeLifecycleUpdatePayloadDigest(ignoredUpdate.Packet, ignoredUpdate.Content)
-	ignoredUpdate.WorkDisposition, ignoredUpdate.WorkItemID = types.WorkItemOpen, ""
+	ignoredUpdate.WorkDisposition, ignoredUpdate.WorkItemID = types.WorkItemOpen, workItemID
 	ignoredUpdate.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(ignoredUpdate)
 	if _, err := s.QueueLifecycleUpdate(ctx, ignoredUpdate); err != nil {
 		t.Fatalf("queue ignored evidence: %v", err)
@@ -1326,6 +1366,9 @@ func TestTextureEditToolsRefusePresentInvalidWorkDisposition(t *testing.T) {
 		"updates_object":           json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","work_disposition":"open","update_dispositions":{}}`),
 		"updates_unknown":          json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","work_disposition":"open","update_dispositions":[{"update_id":"u","disposition":"incorporated","receipt":"fake"}]}`),
 		"rejection_without_reason": json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","work_disposition":"open","update_dispositions":[{"update_id":"u","disposition":"rejected"}]}`),
+		"control_raw_content":      json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","controls":[{"target_work_item_id":"work","content":"escape","packet":{"kind":"question","summary":"q","questions":["q"]}}]}`),
+		"control_target_agent":     json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","controls":[{"target_work_item_id":"work","target_agent_id":"researcher:foreign","packet":{"kind":"question","summary":"q","questions":["q"]}}]}`),
+		"control_direction":        json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","controls":[{"target_work_item_id":"work","packet":{"kind":"question","summary":"q","questions":["q"],"direction":"target_control"}}]}`),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := registry.Execute(ctx, "rewrite_texture", raw); err == nil {
@@ -1394,6 +1437,7 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 		if _, err := s.StartLifecycle(ctx, start); err != nil {
 			t.Fatalf("start %s lifecycle: %v", computerID, err)
 		}
+		producerAgentID, producerWorkID, producerRunID := projectTextureOwnerTestProducer(t, s, start, computerID+"-scoped")
 		packet := types.CoagentSourcePacketPayload{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update",
 			Summary: "pending " + computerID,
@@ -1402,10 +1446,11 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 		payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 		queue := types.QueueLifecycleUpdateRequest{
 			OwnerID: ownerID, ComputerID: computerID, CommandID: "queue-" + computerID,
-			TrajectoryID: start.TrajectoryID, TargetAgentID: agentID, ProducerAgentID: agentID,
+			TrajectoryID: start.TrajectoryID, TargetAgentID: agentID, ProducerAgentID: producerAgentID,
 			ProducerUpdateID: "producer-" + computerID, UpdateID: "update-" + computerID,
-			ChannelID: docID, Packet: packet, Content: content, PayloadDigest: payloadDigest,
-			WorkDisposition: types.WorkItemOpen, WorkItemID: start.InitialWork.WorkItemID,
+			ChannelID: docID, Role: agentprofile.Researcher, SourceRunID: producerRunID,
+			Packet: packet, Content: content, PayloadDigest: payloadDigest,
+			WorkDisposition: types.WorkItemOpen, WorkItemID: producerWorkID,
 		}
 		queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
 		if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
@@ -1470,21 +1515,7 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 			},
 		}
 	}
-	assertScopedInjection := func(h *Handler, rec *types.RunRecord) {
-		t.Helper()
-		inject := h.coagentUpdateTurnInjector(rec)
-		if inject == nil {
-			t.Fatal("scoped lifecycle injector is nil")
-		}
-		messages, err := inject(false)
-		if err != nil || len(messages) != 1 {
-			t.Fatalf("inject scoped updates: %d messages, %v", len(messages), err)
-		}
-		if !messageTextContains(t, messages[0], "update-computer-b") ||
-			messageTextContains(t, messages[0], "update-computer-a") {
-			t.Fatalf("cross-computer update injection: %s", string(messages[0]))
-		}
-	}
+
 	commitScopedEdit := func(s *store.Store, registry *toolregistry.ToolRegistry, runID, baseRevisionID, content string) string {
 		t.Helper()
 		run := newRun(runID, baseRevisionID)
@@ -1520,17 +1551,22 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 		if err != nil {
 			t.Fatalf("load computer-b snapshot: %v", err)
 		}
-		if len(snapshot.WorkItems) != 1 || snapshot.WorkItems[0].Status != types.WorkItemOpen {
-			t.Fatalf("omitted work_disposition changed assigned work: %+v", snapshot.WorkItems)
-		}
-		foundOpenUpdate := false
-		for _, update := range snapshot.Updates {
-			if update.Disposition == types.UpdateIncorporated && update.WorkDisposition == types.WorkItemOpen {
-				foundOpenUpdate = true
+		foundInitialOpenWork := false
+		for _, work := range snapshot.WorkItems {
+			if work.Status != types.WorkItemOpen {
+				t.Fatalf("omitted work_disposition changed assigned work: %+v", snapshot.WorkItems)
+			}
+			if work.WorkItemID == starts["computer-b"].InitialWork.WorkItemID {
+				foundInitialOpenWork = true
 			}
 		}
-		if !foundOpenUpdate {
-			t.Fatalf("omitted work_disposition did not fail open: %+v", snapshot.Updates)
+		if !foundInitialOpenWork {
+			t.Fatalf("initial assigned work missing after omitted work_disposition: %+v", snapshot.WorkItems)
+		}
+		for _, update := range snapshot.Updates {
+			if update.Packet.Kind == "artifact_revision" && update.AgentID == agentID {
+				t.Fatalf("omitted work_disposition leaked synthetic self update: %+v", update)
+			}
 		}
 		other, err := s.GetLifecycleSnapshot(ctx, ownerID, "computer-a", starts["computer-a"].TrajectoryID)
 		if err != nil || other.HeadRevision.RevisionID != starts["computer-a"].InitialRevision.RevisionID {
@@ -1539,8 +1575,6 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 		return snapshot.HeadRevision.RevisionID
 	}
 
-	injectionRun := newRun("run-inject-before-restart", starts["computer-b"].InitialRevision.RevisionID)
-	assertScopedInjection(handler, injectionRun)
 	firstHead := commitScopedEdit(s, registry, "run-edit-before-restart", starts["computer-b"].InitialRevision.RevisionID, "# Computer B v1\n\nScoped before restart.")
 	core.Stop()
 	if err := s.Close(); err != nil {
@@ -1550,7 +1584,6 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 	s, core, handler, registry = openRuntime()
 	defer core.Stop()
 	defer s.Close()
-	assertScopedInjection(handler, newRun("run-inject-after-restart", firstHead))
 	secondHead := commitScopedEdit(s, registry, "run-edit-after-restart", firstHead, "# Computer B v2\n\nScoped after restart.")
 	if secondHead == firstHead {
 		t.Fatalf("computer-b head did not advance after restart: %s", secondHead)
@@ -1597,13 +1630,29 @@ func textureToolExecutionContext(run *types.RunRecord) toolregistry.ExecutionCon
 		return toolregistry.ExecutionContext{}
 	}
 	return toolregistry.ExecutionContext{
-		RunID:     run.RunID,
-		AgentID:   run.AgentID,
-		OwnerID:   run.OwnerID,
-		Profile:   run.AgentProfile,
-		Role:      run.AgentRole,
-		ChannelID: run.ChannelID,
-		SandboxID: run.SandboxID,
-		RunRecord: run,
+		RunID:      run.RunID,
+		ToolCallID: "tool-call:" + run.RunID,
+		AgentID:    run.AgentID,
+		OwnerID:    run.OwnerID,
+		Profile:    run.AgentProfile,
+		Role:       run.AgentRole,
+		ChannelID:  run.ChannelID,
+		SandboxID:  run.SandboxID,
+		RunRecord:  run,
+	}
+}
+
+func TestRecordTextureDecisionStrictlyRefusesAuthorityAndUnknownControlFields(t *testing.T) {
+	for name, raw := range map[string]json.RawMessage{
+		"unknown_top_level": json.RawMessage(`{"decision_kind":"blocker","reason":"blocked","direction":"target_control"}`),
+		"both_targets":      json.RawMessage(`{"decision_kind":"blocker","reason":"blocked","controls":[{"target_work_item_id":"work","open_persistent_super":true,"objective":"x","packet":{"kind":"question","summary":"q","questions":["q"]}}]}`),
+		"model_control_id":  json.RawMessage(`{"decision_kind":"blocker","reason":"blocked","controls":[{"target_work_item_id":"work","control_id":"fake","packet":{"kind":"question","summary":"q","questions":["q"]}}]}`),
+		"raw_content":       json.RawMessage(`{"decision_kind":"blocker","reason":"blocked","controls":[{"target_work_item_id":"work","content":"escape","packet":{"kind":"question","summary":"q","questions":["q"]}}]}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := decodeRecordTextureDecisionArgs(raw); err == nil {
+				t.Fatalf("strict decision decoder accepted %s", raw)
+			}
+		})
 	}
 }

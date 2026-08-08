@@ -17,6 +17,17 @@ type SpawnSpec struct {
 	WorkingDir string       // initial working directory
 	OwnerRunID string       // agent run that owns this capsule
 	Tier       ResourceTier // resource tier preset
+
+	// SourceArtifactRef and ExpectedSubjectDigest are trusted-runtime inputs.
+	// Spawn materializes exactly this preflighted content-addressed subject and
+	// refuses any digest mismatch, closing the durable-open/spawn race.
+	SourceArtifactRef     string
+	ExpectedSubjectDigest string
+}
+
+type SourcePreflight struct {
+	SubjectDigest string `json:"subject_digest"`
+	ArtifactRef   string `json:"artifact_ref"`
 }
 
 // ResourceTier is a preset for resource limits.
@@ -81,19 +92,58 @@ type ExecResult struct {
 }
 
 type ExecutionReceipt struct {
-	ReceiptRef       string `json:"receipt_ref"`
-	CapsuleID        string `json:"capsule_id"`
-	Command          string `json:"command"`
-	Cwd              string `json:"cwd"`
-	ExitCode         int    `json:"exit_code"`
-	StdoutDigest     string `json:"stdout_digest"`
-	StderrDigest     string `json:"stderr_digest"`
-	WorktreeDigest   string `json:"worktree_digest"`
-	SourceTreeDigest string `json:"source_tree_digest"`
-	OccurredAt       string `json:"occurred_at"`
+	ReceiptRef             string `json:"receipt_ref"`
+	GrantedReceiptRef      string `json:"granted_receipt_ref,omitempty"`
+	AgentRunID             string `json:"agent_run_id"`
+	CapabilityHandleDigest string `json:"capability_handle_digest"`
+	CapsuleID              string `json:"capsule_id"`
+	Command                string `json:"command"`
+	Cwd                    string `json:"cwd"`
+	ExitCode               int    `json:"exit_code"`
+	StdoutDigest           string `json:"stdout_digest"`
+	StderrDigest           string `json:"stderr_digest"`
+	WorktreeDigest         string `json:"worktree_digest"`
+	SourceTreeDigest       string `json:"source_tree_digest"`
+	OccurredAt             string `json:"occurred_at"`
 }
 
 // ChangeKind describes the type of filesystem change.
+type CapsuleFateReceipt struct {
+	ReceiptRef             string `json:"receipt_ref"`
+	AgentRunID             string `json:"agent_run_id"`
+	CapabilityHandleDigest string `json:"capability_handle_digest"`
+	CapsuleID              string `json:"capsule_id"`
+	Disposition            string `json:"disposition"`
+	SourceSubjectDigest    string `json:"source_subject_digest"`
+	FinalSubjectDigest     string `json:"final_subject_digest"`
+	OccurredAt             string `json:"occurred_at"`
+}
+
+// CapsuleRevocationReceipt is the executor's durable structured
+// acknowledgement that the exact run/capability/capsule authority is absent
+// after a previously durable revoke intent.
+type CapsuleRevocationReceipt struct {
+	ReceiptRef                 string `json:"receipt_ref"`
+	AgentRunID                 string `json:"agent_run_id"`
+	AssignmentCapabilityDigest string `json:"assignment_capability_digest"`
+	CapsuleID                  string `json:"capsule_id"`
+	IntentRef                  string `json:"intent_ref"`
+	Disposition                string `json:"disposition"`
+	CapsuleAbsent              bool   `json:"capsule_absent"`
+	OccurredAt                 string `json:"occurred_at"`
+}
+
+type GrantedExecutionReceipt struct {
+	ReceiptRef             string           `json:"receipt_ref"`
+	Execution              ExecutionReceipt `json:"execution"`
+	AgentRunID             string           `json:"agent_run_id"`
+	CapabilityHandleDigest string           `json:"capability_handle_digest"`
+	CapsuleID              string           `json:"capsule_id"`
+	Frozen                 bool             `json:"frozen"`
+	SourceSubjectDigest    string           `json:"source_subject_digest"`
+	FinalSubjectDigest     string           `json:"final_subject_digest"`
+}
+
 type ChangeKind int
 
 const (

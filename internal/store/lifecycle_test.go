@@ -12,6 +12,14 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+func lifecycleStructuredBodyDoc(docID, revisionID, content string) json.RawMessage {
+	bodyDoc, err := json.Marshal(userAuthoredTextStructuredTextureDoc(docID, revisionID, content))
+	if err != nil {
+		panic(err)
+	}
+	return bodyDoc
+}
+
 func lifecycleStartFixture() types.StartLifecycleRequest {
 	req := types.StartLifecycleRequest{
 		OwnerID: "owner-lifecycle", ComputerID: "computer-lifecycle",
@@ -21,8 +29,11 @@ func lifecycleStartFixture() types.StartLifecycleRequest {
 		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		InitialWork:     types.WorkItemRecord{WorkItemID: "work-lifecycle-1", Objective: "produce artifact"},
 		InitialDocument: types.Document{DocID: "document-lifecycle-1", Title: "Lifecycle artifact"},
-		InitialRevision: types.Revision{RevisionID: "revision-lifecycle-v0", AuthorKind: types.AuthorAppAgent, AuthorLabel: "Choir", Content: "Initial artifact"},
-		Agent:           types.AgentRecord{AgentID: "texture:document-lifecycle-1", Profile: "texture", Role: "texture", ChannelID: "document-lifecycle-1"},
+		InitialRevision: types.Revision{
+			RevisionID: "revision-lifecycle-v0", AuthorKind: types.AuthorAppAgent, AuthorLabel: "Choir", Content: "Initial artifact",
+			BodyDoc: lifecycleStructuredBodyDoc("document-lifecycle-1", "revision-lifecycle-v0", "Initial artifact"),
+		},
+		Agent: types.AgentRecord{AgentID: "texture:document-lifecycle-1", Profile: "texture", Role: "texture", ChannelID: "document-lifecycle-1"},
 	}
 	digest, err := ComputeStartLifecycleRequestDigest(req)
 	if err != nil {
@@ -134,6 +145,60 @@ func TestStartLifecycleAtomicReplayAndScope(t *testing.T) {
 	if _, err := s.StartLifecycle(ctx, conflict); !errors.Is(err, ErrLifecycleCommandConflict) {
 		t.Fatalf("conflicting replay error = %v, want ErrLifecycleCommandConflict", err)
 	}
+}
+
+func TestStartLifecyclePreparesStructuredRevision(t *testing.T) {
+	t.Run("derives readable content and preserves replay hash", func(t *testing.T) {
+		s := openTestStore(t)
+		ctx := context.Background()
+		req := lifecycleStartFixture()
+		req.InitialRevision.Content = ""
+		req.InitialRevision.BodyDoc = lifecycleStructuredBodyDoc(req.InitialDocument.DocID, req.InitialRevision.RevisionID, "Canonical initial projection")
+		req.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(req)
+
+		result, err := s.StartLifecycle(ctx, req)
+		if err != nil {
+			t.Fatalf("start lifecycle: %v", err)
+		}
+		if result.Revision == nil || result.Revision.Content != "Canonical initial projection" {
+			t.Fatalf("prepared initial revision = %+v", result.Revision)
+		}
+		expectedHash := types.ComputeStructuredRevisionHash("", result.Revision.Content, result.Revision.BodyDoc, result.Revision.SourceEntities, result.Revision.Provenance)
+		if result.Revision.RevisionHash != expectedHash {
+			t.Fatalf("initial revision hash = %q, want %q", result.Revision.RevisionHash, expectedHash)
+		}
+		snapshot, err := s.GetLifecycleSnapshot(ctx, req.OwnerID, req.ComputerID, req.TrajectoryID)
+		if err != nil || snapshot.HeadRevision.Content != "Canonical initial projection" || snapshot.HeadRevision.RevisionHash != expectedHash {
+			t.Fatalf("prepared snapshot head = %+v, %v", snapshot.HeadRevision, err)
+		}
+		replayed, err := s.StartLifecycle(ctx, req)
+		if err != nil || !replayed.Replay || replayed.Revision == nil ||
+			replayed.Revision.Content != result.Revision.Content || replayed.Revision.RevisionHash != result.Revision.RevisionHash {
+			t.Fatalf("prepared start replay = %+v, %v", replayed, err)
+		}
+	})
+
+	t.Run("rejects disagreeing projection without durable mutation", func(t *testing.T) {
+		s := openTestStore(t)
+		ctx := context.Background()
+		req := lifecycleStartFixture()
+		req.InitialRevision.Content = "caller projection disagrees"
+		req.InitialRevision.BodyDoc = lifecycleStructuredBodyDoc(req.InitialDocument.DocID, req.InitialRevision.RevisionID, "Canonical initial projection")
+		req.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(req)
+
+		if _, err := s.StartLifecycle(ctx, req); !errors.Is(err, ErrInvalidTextureRevision) {
+			t.Fatalf("start mismatch error = %v, want ErrInvalidTextureRevision", err)
+		}
+		if _, err := s.GetLifecycleTrajectory(ctx, req.OwnerID, req.ComputerID, req.TrajectoryID); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("rejected start persisted trajectory: %v", err)
+		}
+		if _, err := s.GetLifecycleDocument(ctx, req.OwnerID, req.ComputerID, req.InitialDocument.DocID); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("rejected start persisted document: %v", err)
+		}
+		if _, err := s.GetLifecycleRevision(ctx, req.OwnerID, req.ComputerID, req.InitialRevision.RevisionID); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("rejected start persisted revision: %v", err)
+		}
+	})
 }
 
 func TestCommitLifecycleArtifactHeadAtomicReplayAndCAS(t *testing.T) {
@@ -248,8 +313,30 @@ func TestStartLifecycleDigestIgnoresRetryEphemeraButBindsContent(t *testing.T) {
 	}
 }
 
-func queueLifecycleUpdateFixture(t *testing.T, req types.StartLifecycleRequest, commandID string) types.QueueLifecycleUpdateRequest {
+func queueLifecycleUpdateFixture(t *testing.T, s *Store, req types.StartLifecycleRequest, commandID string) types.QueueLifecycleUpdateRequest {
 	t.Helper()
+	ctx := context.Background()
+	sourceRunID := "run-queue-producer:" + req.TrajectoryID
+	if _, err := s.GetLifecycleRun(ctx, req.OwnerID, req.ComputerID, sourceRunID); errors.Is(err, ErrNotFound) {
+		now := time.Unix(1, 0).UTC()
+		run := types.RunRecord{
+			RunID: sourceRunID, AgentID: req.Agent.AgentID, ChannelID: req.InitialDocument.DocID,
+			TrajectoryID: req.TrajectoryID, AgentProfile: req.Agent.Profile, AgentRole: req.Agent.Role,
+			OwnerID: req.OwnerID, SandboxID: req.ComputerID, State: types.RunPending,
+			Prompt: "produce lifecycle update", CreatedAt: now, UpdatedAt: now,
+			Metadata: map[string]any{"lifecycle_work_item_id": req.InitialWork.WorkItemID},
+		}
+		project := types.ReplaceLifecycleActivationRequest{
+			OwnerID: req.OwnerID, ComputerID: req.ComputerID, CommandID: "project-queue-producer:" + req.TrajectoryID,
+			TrajectoryID: req.TrajectoryID, AgentID: req.Agent.AgentID, Run: run,
+		}
+		project.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(project)
+		if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+			t.Fatalf("project queue producer: %v", err)
+		}
+	} else if err != nil {
+		t.Fatalf("lookup queue producer: %v", err)
+	}
 	packet := testStoreCoagentPacket("result", "durable update")
 	payloadDigest, err := ComputeLifecycleUpdatePayloadDigest(packet, "update content")
 	if err != nil {
@@ -258,9 +345,10 @@ func queueLifecycleUpdateFixture(t *testing.T, req types.StartLifecycleRequest, 
 	update := types.QueueLifecycleUpdateRequest{
 		OwnerID: req.OwnerID, ComputerID: req.ComputerID, CommandID: commandID,
 		TrajectoryID: req.TrajectoryID, TargetAgentID: req.Agent.AgentID,
-		ProducerAgentID: "producer-agent", ProducerUpdateID: "producer-update-1",
+		ProducerAgentID: req.Agent.AgentID, ProducerUpdateID: "producer-update-1",
 		UpdateID: "update-lifecycle-1", Packet: packet, Content: "update content",
-		PayloadDigest: payloadDigest,
+		PayloadDigest: payloadDigest, ChannelID: req.InitialDocument.DocID, Role: req.Agent.Role,
+		SourceRunID: sourceRunID, WorkItemID: req.InitialWork.WorkItemID, WorkDisposition: types.WorkItemOpen,
 	}
 	digest, err := ComputeQueueLifecycleUpdateDigest(update)
 	if err != nil {
@@ -268,6 +356,33 @@ func queueLifecycleUpdateFixture(t *testing.T, req types.StartLifecycleRequest, 
 	}
 	update.CommandDigest = digest
 	return update
+}
+
+func bindLifecycleQueueSourceWork(t *testing.T, s *Store, queue types.QueueLifecycleUpdateRequest, workItemID string) {
+	t.Helper()
+	ctx := context.Background()
+	run, err := s.GetLifecycleRun(ctx, queue.OwnerID, queue.ComputerID, queue.SourceRunID)
+	if err != nil {
+		t.Fatalf("get queue source run: %v", err)
+	}
+	bound, err := lifecycleActivationWorkItemIDs(run.Metadata)
+	if err != nil {
+		t.Fatalf("decode queue source bindings: %v", err)
+	}
+	if !containsLifecycleIdentity(bound, workItemID) {
+		bound = append(bound, workItemID)
+	}
+	run.Metadata["work_item_ids"] = bound
+	run.UpdatedAt = run.UpdatedAt.Add(time.Second)
+	project := types.ReplaceLifecycleActivationRequest{
+		OwnerID: queue.OwnerID, ComputerID: queue.ComputerID,
+		CommandID:    "bind-queue-source-work:" + queue.SourceRunID + ":" + workItemID,
+		TrajectoryID: queue.TrajectoryID, AgentID: run.AgentID, Run: run,
+	}
+	project.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatalf("bind queue source work: %v", err)
+	}
 }
 
 func TestQueueLifecycleUpdateValidatesProducerWorkBinding(t *testing.T) {
@@ -296,7 +411,7 @@ func TestQueueLifecycleUpdateValidatesProducerWorkBinding(t *testing.T) {
 	if _, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, open.WorkItem.AssignedAgentID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("open work created a durable subject: %v", err)
 	}
-	base := queueLifecycleUpdateFixture(t, start, "command-queue-work-binding")
+	base := queueLifecycleUpdateFixture(t, s, start, "command-queue-work-binding")
 	base.WorkItemID, base.WorkDisposition = open.WorkItem.WorkItemID, types.WorkItemOpen
 
 	assertRefused := func(name string, candidate types.QueueLifecycleUpdateRequest) {
@@ -358,7 +473,7 @@ func TestLifecycleSettlementWaitsForUpdateDisposition(t *testing.T) {
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start lifecycle: %v", err)
 	}
-	queue := queueLifecycleUpdateFixture(t, start, "command-queue-1")
+	queue := queueLifecycleUpdateFixture(t, s, start, "command-queue-1")
 	queued, err := s.QueueLifecycleUpdate(ctx, queue)
 	if err != nil {
 		t.Fatalf("queue update: %v", err)
@@ -375,9 +490,12 @@ func TestLifecycleSettlementWaitsForUpdateDisposition(t *testing.T) {
 			candidate.PayloadDigest = "sha256:changed-payload"
 		},
 		"work consequence": func(candidate *types.QueueLifecycleUpdateRequest) {
-			candidate.WorkDisposition = types.WorkItemOpen
-			candidate.WorkItemID = start.InitialWork.WorkItemID
+			candidate.WorkDisposition = types.WorkItemCompleted
 		},
+		"source run": func(candidate *types.QueueLifecycleUpdateRequest) { candidate.SourceRunID = "changed-run" },
+		"channel":    func(candidate *types.QueueLifecycleUpdateRequest) { candidate.ChannelID = "changed-channel" },
+		"role":       func(candidate *types.QueueLifecycleUpdateRequest) { candidate.Role = "changed-role" },
+		"update id":  func(candidate *types.QueueLifecycleUpdateRequest) { candidate.UpdateID = "changed-update-id" },
 	} {
 		t.Run("same key rejects changed "+name, func(t *testing.T) {
 			candidate := queue
@@ -388,22 +506,20 @@ func TestLifecycleSettlementWaitsForUpdateDisposition(t *testing.T) {
 			}
 		})
 	}
-	activationRetry := queue
-	activationRetry.UpdateID = "different-activation-update-id"
-	activationRetry.SourceRunID = "replacement-activation"
-	activationRetry.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(activationRetry)
-	activationReplay, err := s.QueueLifecycleUpdate(ctx, activationRetry)
-	if err != nil || !activationReplay.Replay || activationReplay.Update == nil ||
-		activationReplay.Update.UpdateID != queue.UpdateID {
-		t.Fatalf("activation-independent queue replay = %+v, %v", activationReplay, err)
+	changedUpdateID := queue
+	changedUpdateID.CommandID = "command-queue-changed-update-id"
+	changedUpdateID.UpdateID = "different-activation-update-id"
+	changedUpdateID.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(changedUpdateID)
+	if _, err := s.QueueLifecycleUpdate(ctx, changedUpdateID); !errors.Is(err, ErrLifecycleCommandConflict) {
+		t.Fatalf("changed update id error = %v, want command conflict", err)
 	}
-	updateKeyRetry := activationRetry
-	updateKeyRetry.CommandID = "command-queue-replacement-activation"
+	updateKeyRetry := queue
+	updateKeyRetry.CommandID = "command-queue-update-key-retry"
 	updateKeyRetry.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(updateKeyRetry)
 	updateKeyReplay, err := s.QueueLifecycleUpdate(ctx, updateKeyRetry)
 	if err != nil || !updateKeyReplay.Replay || updateKeyReplay.Update == nil ||
 		updateKeyReplay.Update.UpdateID != queue.UpdateID {
-		t.Fatalf("update-key replay = %+v, %v", updateKeyReplay, err)
+		t.Fatalf("exact update-key replay = %+v, %v", updateKeyReplay, err)
 	}
 
 	settle := types.SettleLifecycleWorkRequest{
@@ -426,6 +542,7 @@ func TestLifecycleSettlementWaitsForUpdateDisposition(t *testing.T) {
 	apply.Disposition = types.UpdateIncorporated
 	apply.Revision = types.Revision{
 		RevisionID: "revision-lifecycle-v1", AuthorKind: types.AuthorAppAgent, AuthorLabel: "researcher", Content: "Incorporated update",
+		BodyDoc:    lifecycleStructuredBodyDoc(start.InitialDocument.DocID, "revision-lifecycle-v1", "Incorporated update"),
 		CreatedAt:  time.Unix(100, 0).UTC(),
 		Provenance: json.RawMessage(`{"schema_version":1,"authored_at":"1970-01-01T00:01:40Z","authoring_model":{"provider":"test","model":"stable"}}`),
 	}
@@ -470,7 +587,7 @@ func TestLifecycleSettlementWaitsForUpdateDisposition(t *testing.T) {
 	if settledTrajectory.Trajectory.Status != types.TrajectorySettled || len(settledTrajectory.Events) != 1 {
 		t.Fatalf("unexpected explicit settlement: %+v", settledTrajectory)
 	}
-	lateQueue := queueLifecycleUpdateFixture(t, start, "command-queue-late")
+	lateQueue := queueLifecycleUpdateFixture(t, s, start, "command-queue-late")
 	lateQueue.UpdateID, lateQueue.ProducerUpdateID = "update-lifecycle-late", "producer-update-late"
 	lateQueue.CommandDigest = ""
 	lateQueue.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(lateQueue)
@@ -506,16 +623,18 @@ func TestLifecycleUpdateWorkConsequenceRequiresExplicitDispositionAndAssignedPro
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start lifecycle: %v", err)
 	}
-	ambiguous := queueLifecycleUpdateFixture(t, start, "command-queue-ambiguous-work")
+	ambiguous := queueLifecycleUpdateFixture(t, s, start, "command-queue-ambiguous-work")
+	ambiguous.WorkDisposition = ""
 	ambiguous.WorkItemID = start.InitialWork.WorkItemID
 	ambiguous.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(ambiguous)
 	if _, err := s.QueueLifecycleUpdate(ctx, ambiguous); err == nil {
 		t.Fatal("queue accepted work_item_id without explicit terminal work disposition")
 	}
 
-	queue := queueLifecycleUpdateFixture(t, start, "command-queue-explicit-work")
+	queue := queueLifecycleUpdateFixture(t, s, start, "command-queue-explicit-work")
 	queue.WorkDisposition = types.WorkItemCompleted
 	queue.WorkItemID = start.InitialWork.WorkItemID
+	queue.ProducerAgentID = "producer-not-assigned"
 	queue.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(queue)
 	if _, err := s.QueueLifecycleUpdate(ctx, queue); err == nil {
 		t.Fatal("queue accepted work consequence from producer not assigned to work")
@@ -537,7 +656,7 @@ func TestCancelLifecycleTrajectoryCancelsWorkAndPendingUpdates(t *testing.T) {
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start lifecycle: %v", err)
 	}
-	queue := queueLifecycleUpdateFixture(t, start, "command-queue-cancel")
+	queue := queueLifecycleUpdateFixture(t, s, start, "command-queue-cancel")
 	if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
 		t.Fatalf("queue update: %v", err)
 	}
@@ -633,7 +752,7 @@ func TestLifecycleApplyAndCancellationRaceIsLinearizable(t *testing.T) {
 		if _, err := s.StartLifecycle(ctx, start); err != nil {
 			t.Fatalf("start lifecycle %s: %v", suffix, err)
 		}
-		queue := queueLifecycleUpdateFixture(t, start, "command-race-queue-"+suffix)
+		queue := queueLifecycleUpdateFixture(t, s, start, "command-race-queue-"+suffix)
 		queue.UpdateID, queue.ProducerUpdateID = "update-race-"+suffix, "producer-update-race-"+suffix
 		queue.ProducerAgentID = start.Agent.AgentID
 		queue.WorkDisposition, queue.WorkItemID = types.WorkItemCompleted, start.InitialWork.WorkItemID
@@ -652,6 +771,7 @@ func TestLifecycleApplyAndCancellationRaceIsLinearizable(t *testing.T) {
 		apply.Revision = types.Revision{
 			RevisionID: apply.DispositionRef, AuthorKind: types.AuthorAppAgent,
 			AuthorLabel: "Choir", Content: "linearizable artifact " + suffix,
+			BodyDoc: lifecycleStructuredBodyDoc(start.InitialDocument.DocID, apply.DispositionRef, "linearizable artifact "+suffix),
 		}
 		apply.CommandDigest, _ = ComputeApplyLifecycleUpdateDigest(apply)
 		cancel := types.CancelLifecycleRequest{
@@ -804,7 +924,7 @@ func TestLifecycleSnapshotReconstructsAfterRestart(t *testing.T) {
 	if _, err := first.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start lifecycle: %v", err)
 	}
-	queue := queueLifecycleUpdateFixture(t, start, "command-queue-restart")
+	queue := queueLifecycleUpdateFixture(t, first, start, "command-queue-restart")
 	if _, err := first.QueueLifecycleUpdate(ctx, queue); err != nil {
 		t.Fatalf("queue update: %v", err)
 	}
@@ -824,10 +944,8 @@ func TestLifecycleSnapshotReconstructsAfterRestart(t *testing.T) {
 	replacementRetry.UpdateID = "update-after-replacement"
 	replacementRetry.SourceRunID = "run-after-replacement"
 	replacementRetry.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(replacementRetry)
-	replacementReplay, err := reopened.QueueLifecycleUpdate(ctx, replacementRetry)
-	if err != nil || !replacementReplay.Replay || replacementReplay.Update == nil ||
-		replacementReplay.Update.UpdateID != queue.UpdateID {
-		t.Fatalf("replacement activation replay after restart = %+v, %v", replacementReplay, err)
+	if _, err := reopened.QueueLifecycleUpdate(ctx, replacementRetry); !errors.Is(err, ErrLifecycleCommandConflict) {
+		t.Fatalf("changed runtime identity replay after restart error = %v, want command conflict", err)
 	}
 	conflicting := queue
 	conflicting.PayloadDigest = "sha256:changed-after-restart"
@@ -876,7 +994,7 @@ func TestLifecycleRelatedUpdatesCommitWithArtifactAndWorkAtomically(t *testing.T
 		t.Fatalf("open producer work: %v", err)
 	}
 
-	primary := queueLifecycleUpdateFixture(t, start, "command-queue-related-primary")
+	primary := queueLifecycleUpdateFixture(t, s, start, "command-queue-related-primary")
 	primary.UpdateID, primary.ProducerUpdateID = "update-related-primary", "producer-update-related-primary"
 	primary.ProducerAgentID = start.Agent.AgentID
 	primary.WorkDisposition, primary.WorkItemID = types.WorkItemCompleted, start.InitialWork.WorkItemID
@@ -884,7 +1002,8 @@ func TestLifecycleRelatedUpdatesCommitWithArtifactAndWorkAtomically(t *testing.T
 	if _, err := s.QueueLifecycleUpdate(ctx, primary); err != nil {
 		t.Fatalf("queue primary update: %v", err)
 	}
-	related := queueLifecycleUpdateFixture(t, start, "command-queue-related-evidence")
+	bindLifecycleQueueSourceWork(t, s, primary, open.WorkItem.WorkItemID)
+	related := queueLifecycleUpdateFixture(t, s, start, "command-queue-related-evidence")
 	related.UpdateID, related.ProducerUpdateID = "update-related-evidence", "producer-update-related-evidence"
 	related.ProducerAgentID = open.WorkItem.AssignedAgentID
 	related.WorkDisposition, related.WorkItemID = types.WorkItemCompleted, open.WorkItem.WorkItemID
@@ -892,7 +1011,7 @@ func TestLifecycleRelatedUpdatesCommitWithArtifactAndWorkAtomically(t *testing.T
 	if _, err := s.QueueLifecycleUpdate(ctx, related); err != nil {
 		t.Fatalf("queue related update: %v", err)
 	}
-	relatedSecond := queueLifecycleUpdateFixture(t, start, "command-queue-related-second")
+	relatedSecond := queueLifecycleUpdateFixture(t, s, start, "command-queue-related-second")
 	relatedSecond.UpdateID, relatedSecond.ProducerUpdateID = "update-related-second", "producer-update-a"
 	relatedSecond.ProducerAgentID = start.Agent.AgentID
 	relatedSecond.WorkDisposition, relatedSecond.WorkItemID = types.WorkItemOpen, start.InitialWork.WorkItemID
@@ -908,6 +1027,7 @@ func TestLifecycleRelatedUpdatesCommitWithArtifactAndWorkAtomically(t *testing.T
 	apply.Revision = types.Revision{
 		RevisionID: apply.DispositionRef, AuthorKind: types.AuthorAppAgent,
 		AuthorLabel: "Choir", Content: "Evidence incorporated atomically",
+		BodyDoc: lifecycleStructuredBodyDoc(start.InitialDocument.DocID, apply.DispositionRef, "Evidence incorporated atomically"),
 	}
 	apply.RelatedUpdates = []types.ApplyLifecycleRelatedUpdate{{
 		TargetAgentID: related.TargetAgentID, ProducerAgentID: related.ProducerAgentID,
@@ -1034,7 +1154,7 @@ func TestDurableWorkLifecycleSmokeTrace(t *testing.T) {
 		t.Fatalf("unexpected start state: %+v", started)
 	}
 
-	queue := queueLifecycleUpdateFixture(t, start, "command-smoke-queue")
+	queue := queueLifecycleUpdateFixture(t, first, start, "command-smoke-queue")
 	queue.UpdateID = "update-smoke"
 	queue.WorkDisposition = types.WorkItemCompleted
 	queue.WorkItemID = start.InitialWork.WorkItemID
@@ -1076,6 +1196,7 @@ func TestDurableWorkLifecycleSmokeTrace(t *testing.T) {
 	apply.Revision = types.Revision{
 		RevisionID: apply.DispositionRef, AuthorKind: types.AuthorAppAgent,
 		AuthorLabel: "Choir", Content: "Durable update incorporated",
+		BodyDoc: lifecycleStructuredBodyDoc(start.InitialDocument.DocID, apply.DispositionRef, "Durable update incorporated"),
 	}
 	apply.CommandDigest, _ = ComputeApplyLifecycleUpdateDigest(apply)
 	applied, err := second.ApplyLifecycleUpdate(ctx, apply)
@@ -1142,7 +1263,7 @@ func TestLifecycleRejectedUpdateRefusesProducerWork(t *testing.T) {
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start lifecycle: %v", err)
 	}
-	queue := queueLifecycleUpdateFixture(t, start, "command-queue-rejection")
+	queue := queueLifecycleUpdateFixture(t, s, start, "command-queue-rejection")
 	queue.UpdateID = "update-rejection"
 	queue.ProducerUpdateID = "producer-update-rejection"
 	queue.ProducerAgentID = start.Agent.AgentID
@@ -1200,7 +1321,7 @@ func TestLifecycleRejectedOpenUpdateKeepsProducerWorkOpen(t *testing.T) {
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start lifecycle: %v", err)
 	}
-	queue := queueLifecycleUpdateFixture(t, start, "command-queue-open-rejection")
+	queue := queueLifecycleUpdateFixture(t, s, start, "command-queue-open-rejection")
 	queue.UpdateID, queue.ProducerUpdateID = "update-open-rejection", "producer-update-open-rejection"
 	queue.ProducerAgentID = start.Agent.AgentID
 	queue.WorkDisposition, queue.WorkItemID = types.WorkItemOpen, start.InitialWork.WorkItemID
@@ -1258,13 +1379,13 @@ func TestLifecycleRevisionHeadCASRejectsStaleParent(t *testing.T) {
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start lifecycle: %v", err)
 	}
-	queueA := queueLifecycleUpdateFixture(t, start, "command-queue-head-a")
+	queueA := queueLifecycleUpdateFixture(t, s, start, "command-queue-head-a")
 	queueA.UpdateID, queueA.ProducerUpdateID = "update-head-a", "producer-head-a"
 	queueA.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(queueA)
 	if _, err := s.QueueLifecycleUpdate(ctx, queueA); err != nil {
 		t.Fatalf("queue A: %v", err)
 	}
-	queueB := queueLifecycleUpdateFixture(t, start, "command-queue-head-b")
+	queueB := queueLifecycleUpdateFixture(t, s, start, "command-queue-head-b")
 	queueB.UpdateID, queueB.ProducerUpdateID = "update-head-b", "producer-head-b"
 	queueB.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(queueB)
 	if _, err := s.QueueLifecycleUpdate(ctx, queueB); err != nil {
@@ -1273,7 +1394,11 @@ func TestLifecycleRevisionHeadCASRejectsStaleParent(t *testing.T) {
 	applyA := types.ApplyLifecycleUpdateRequest(queueA)
 	applyA.CommandID, applyA.CommandDigest = "command-apply-head-a", ""
 	applyA.Disposition = types.UpdateIncorporated
-	applyA.Revision = types.Revision{RevisionID: "revision-head-cas-v1", ParentRevisionID: start.InitialRevision.RevisionID, AuthorKind: types.AuthorAppAgent, Content: "first"}
+	applyA.Revision = types.Revision{
+		RevisionID: "revision-head-cas-v1", ParentRevisionID: start.InitialRevision.RevisionID,
+		AuthorKind: types.AuthorAppAgent, Content: "first",
+		BodyDoc: lifecycleStructuredBodyDoc(start.InitialDocument.DocID, "revision-head-cas-v1", "first"),
+	}
 	applyA.DispositionRef = applyA.Revision.RevisionID
 	applyA.CommandDigest, _ = ComputeApplyLifecycleUpdateDigest(applyA)
 	if _, err := s.ApplyLifecycleUpdate(ctx, applyA); err != nil {
@@ -1282,7 +1407,11 @@ func TestLifecycleRevisionHeadCASRejectsStaleParent(t *testing.T) {
 	applyB := types.ApplyLifecycleUpdateRequest(queueB)
 	applyB.CommandID, applyB.CommandDigest = "command-apply-head-b", ""
 	applyB.Disposition = types.UpdateIncorporated
-	applyB.Revision = types.Revision{RevisionID: "revision-head-cas-v2", ParentRevisionID: start.InitialRevision.RevisionID, AuthorKind: types.AuthorAppAgent, Content: "stale"}
+	applyB.Revision = types.Revision{
+		RevisionID: "revision-head-cas-v2", ParentRevisionID: start.InitialRevision.RevisionID,
+		AuthorKind: types.AuthorAppAgent, Content: "stale",
+		BodyDoc: lifecycleStructuredBodyDoc(start.InitialDocument.DocID, "revision-head-cas-v2", "stale"),
+	}
 	applyB.DispositionRef = applyB.Revision.RevisionID
 	applyB.CommandDigest, _ = ComputeApplyLifecycleUpdateDigest(applyB)
 	if _, err := s.ApplyLifecycleUpdate(ctx, applyB); !errors.Is(err, ErrConcurrentStateChange) {
@@ -2019,7 +2148,7 @@ func TestBlockedLifecycleProjectionAfterSettlementReleasesCanonicalAdmission(t *
 }
 
 func TestLifecycleActiveRunIDIsReducerOwnedAcrossOtherAgentWriters(t *testing.T) {
-	t.Run("generic upsert preserves canonical activation", func(t *testing.T) {
+	t.Run("lifecycle activation cuts over generic researcher authority", func(t *testing.T) {
 		s := openTestStore(t)
 		ctx := context.Background()
 		start := lifecycleStartFixture()
@@ -2080,12 +2209,12 @@ func TestLifecycleActiveRunIDIsReducerOwnedAcrossOtherAgentWriters(t *testing.T)
 			})
 		}
 		agent.UpdatedAt = now.Add(time.Second)
-		if err := s.UpsertAgent(ctx, agent); err != nil {
-			t.Fatalf("generic upsert while active: %v", err)
+		if err := s.UpsertAgent(ctx, agent); !errors.Is(err, ErrLifecycleAuthorityRequired) {
+			t.Fatalf("generic upsert after lifecycle cutover error = %v, want ErrLifecycleAuthorityRequired", err)
 		}
 		stored, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, agentID)
-		if err != nil || stored.ActiveRunID != run.RunID {
-			t.Fatalf("generic upsert active_run_id = %q, %v; want %q", stored.ActiveRunID, err, run.RunID)
+		if err != nil || stored.ActiveRunID != run.RunID || stored.LifecycleVersion <= 0 {
+			t.Fatalf("lifecycle Researcher projection = %+v, %v; want active run %q and positive version", stored, err, run.RunID)
 		}
 		terminal := activate
 		terminal.CommandID = "command-active-run-authority-terminal"
@@ -2107,10 +2236,19 @@ func TestLifecycleActiveRunIDIsReducerOwnedAcrossOtherAgentWriters(t *testing.T)
 			results <- peer.UpsertAgent(ctx, agent)
 		}()
 		close(startRace)
+		var authorityRefusals int
 		for range 2 {
-			if err := <-results; err != nil {
+			err := <-results
+			if errors.Is(err, ErrLifecycleAuthorityRequired) {
+				authorityRefusals++
+				continue
+			}
+			if err != nil {
 				t.Fatalf("terminal/upsert race: %v", err)
 			}
+		}
+		if authorityRefusals != 1 {
+			t.Fatalf("terminal/upsert race authority refusals = %d, want 1", authorityRefusals)
 		}
 		stored, err = s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, agentID)
 		if err != nil || stored.ActiveRunID != "" {
@@ -2194,10 +2332,11 @@ func TestLifecycleActivationAdmissionRequiresCurrentOpenWork(t *testing.T) {
 		{
 			name: "terminal_pending",
 			prepare: func(t *testing.T, s *Store, start types.StartLifecycleRequest, started types.LifecycleResult, workItemID string) {
-				queue := queueLifecycleUpdateFixture(t, start, "command-queue-activation-terminal-pending")
+				queue := queueLifecycleUpdateFixture(t, s, start, "command-queue-activation-terminal-pending")
 				queue.ProducerAgentID = started.Agent.AgentID
 				queue.ProducerUpdateID = "producer-update-activation-terminal-pending"
 				queue.UpdateID = "update-activation-terminal-pending"
+				bindLifecycleQueueSourceWork(t, s, queue, workItemID)
 				queue.WorkItemID, queue.WorkDisposition = workItemID, types.WorkItemCompleted
 				queue.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(queue)
 				if _, err := s.QueueLifecycleUpdate(context.Background(), queue); err != nil {
@@ -2544,6 +2683,10 @@ func TestLifecycleLateUpdatesUseCASLinearizedSequenceAcrossStores(t *testing.T) 
 	if err != nil {
 		t.Fatalf("start lifecycle: %v", err)
 	}
+	requests := []types.QueueLifecycleUpdateRequest{
+		queueLifecycleUpdateFixture(t, first, start, "command-late-race-a"),
+		queueLifecycleUpdateFixture(t, first, start, "command-late-race-b"),
+	}
 	cancel := types.CancelLifecycleRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "command-cancel-late-race",
 		TrajectoryID: start.TrajectoryID, ExpectedLifecycleVersion: started.Trajectory.LifecycleVersion,
@@ -2556,10 +2699,6 @@ func TestLifecycleLateUpdatesUseCASLinearizedSequenceAcrossStores(t *testing.T) 
 	}
 	second := &Store{ogStore: first.ogStore, ogReadStore: first.ogReadStore}
 
-	requests := []types.QueueLifecycleUpdateRequest{
-		queueLifecycleUpdateFixture(t, start, "command-late-race-a"),
-		queueLifecycleUpdateFixture(t, start, "command-late-race-b"),
-	}
 	for i := 0; i < len(requests); i++ {
 		requests[i].UpdateID = "update-late-race-" + string(rune('a'+i))
 		requests[i].ProducerUpdateID = "producer-late-race-" + string(rune('a'+i))
@@ -2631,7 +2770,7 @@ func TestLifecycleTerminalUpdateRefsReconstructAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start lifecycle: %v", err)
 	}
-	pending := queueLifecycleUpdateFixture(t, start, "command-queue-before-terminal-ref-restart")
+	pending := queueLifecycleUpdateFixture(t, first, start, "command-queue-before-terminal-ref-restart")
 	pending.UpdateID = "update-cancelled-terminal-ref-restart"
 	pending.ProducerUpdateID = "producer-cancelled-terminal-ref-restart"
 	pending.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(pending)
@@ -2659,7 +2798,7 @@ func TestLifecycleTerminalUpdateRefsReconstructAfterRestart(t *testing.T) {
 		cancelled.DispositionRef != lifecycleTerminalTrajectoryRef(start.TrajectoryID) {
 		t.Fatalf("cancelled terminal ref after restart = %+v, %v", cancelled, err)
 	}
-	late := queueLifecycleUpdateFixture(t, start, "command-late-terminal-ref-restart")
+	late := queueLifecycleUpdateFixture(t, second, start, "command-late-terminal-ref-restart")
 	late.UpdateID = "update-late-terminal-ref-restart"
 	late.ProducerUpdateID = "producer-late-terminal-ref-restart"
 	late.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(late)
@@ -2683,6 +2822,170 @@ func TestLifecycleTerminalUpdateRefsReconstructAfterRestart(t *testing.T) {
 		reconstructed.CreatedAt.IsZero() {
 		t.Fatalf("late payload after restart = %+v, %v", reconstructed, err)
 	}
+}
+
+func TestApplyLifecycleUpdatePreparesStructuredRevision(t *testing.T) {
+	setup := func(t *testing.T) (*Store, types.StartLifecycleRequest, types.QueueLifecycleUpdateRequest) {
+		t.Helper()
+		s := openTestStore(t)
+		start := lifecycleStartFixture()
+		start.CommandID = "command-start-plain-structured-apply"
+		start.TrajectoryID = "trajectory-plain-structured-apply"
+		start.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(start)
+		if _, err := s.StartLifecycle(context.Background(), start); err != nil {
+			t.Fatalf("start lifecycle: %v", err)
+		}
+		queue := queueLifecycleUpdateFixture(t, s, start, "command-queue-plain-structured-apply")
+		if _, err := s.QueueLifecycleUpdate(context.Background(), queue); err != nil {
+			t.Fatalf("queue lifecycle update: %v", err)
+		}
+		return s, start, queue
+	}
+
+	t.Run("derives readable content", func(t *testing.T) {
+		s, start, queue := setup(t)
+		apply := types.ApplyLifecycleUpdateRequest(queue)
+		apply.CommandID = "command-apply-plain-structured-derived"
+		apply.Disposition, apply.DispositionRef = types.UpdateIncorporated, "revision-plain-structured-derived"
+		apply.Revision = types.Revision{
+			RevisionID: apply.DispositionRef, AuthorKind: types.AuthorAppAgent, AuthorLabel: "Texture",
+			BodyDoc: lifecycleStructuredBodyDoc(start.InitialDocument.DocID, apply.DispositionRef, "Canonical plain applied projection"),
+		}
+		apply.CommandDigest, _ = ComputeApplyLifecycleUpdateDigest(apply)
+
+		result, err := s.ApplyLifecycleUpdate(context.Background(), apply)
+		if err != nil {
+			t.Fatalf("apply lifecycle update: %v", err)
+		}
+		if result.Revision == nil || result.Revision.Content != "Canonical plain applied projection" {
+			t.Fatalf("prepared plain applied revision = %+v", result.Revision)
+		}
+	})
+
+	t.Run("rejects disagreeing projection without durable mutation", func(t *testing.T) {
+		s, start, queue := setup(t)
+		ctx := context.Background()
+		before, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+		if err != nil {
+			t.Fatalf("snapshot before rejected apply: %v", err)
+		}
+		apply := types.ApplyLifecycleUpdateRequest(queue)
+		apply.CommandID = "command-apply-plain-structured-mismatch"
+		apply.Disposition, apply.DispositionRef = types.UpdateIncorporated, "revision-plain-structured-mismatch"
+		apply.Revision = types.Revision{
+			RevisionID: apply.DispositionRef, AuthorKind: types.AuthorAppAgent, AuthorLabel: "Texture",
+			Content: "caller projection disagrees",
+			BodyDoc: lifecycleStructuredBodyDoc(start.InitialDocument.DocID, apply.DispositionRef, "Canonical plain applied projection"),
+		}
+		apply.CommandDigest, _ = ComputeApplyLifecycleUpdateDigest(apply)
+
+		if _, err := s.ApplyLifecycleUpdate(ctx, apply); !errors.Is(err, ErrInvalidTextureRevision) {
+			t.Fatalf("plain apply mismatch error = %v, want ErrInvalidTextureRevision", err)
+		}
+		after, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+		if err != nil {
+			t.Fatalf("snapshot after rejected apply: %v", err)
+		}
+		if after.Trajectory.LifecycleVersion != before.Trajectory.LifecycleVersion ||
+			after.Trajectory.ReducerSeq != before.Trajectory.ReducerSeq ||
+			after.HeadRevision.RevisionID != before.HeadRevision.RevisionID ||
+			len(after.Updates) != 1 || after.Updates[0].Disposition != types.UpdatePending {
+			t.Fatalf("rejected plain apply mutated lifecycle: before=%+v after=%+v", before, after)
+		}
+		if _, err := s.GetLifecycleRevision(ctx, start.OwnerID, start.ComputerID, apply.Revision.RevisionID); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("rejected plain apply persisted revision: %v", err)
+		}
+	})
+}
+
+func TestApplyLifecycleUpdateWithSourceGraphPreparesStructuredRevision(t *testing.T) {
+	setup := func(t *testing.T) (*Store, types.StartLifecycleRequest, types.QueueLifecycleUpdateRequest) {
+		t.Helper()
+		s := openTestStore(t)
+		start := lifecycleStartFixture()
+		start.CommandID = "command-start-structured-apply"
+		start.TrajectoryID = "trajectory-structured-apply"
+		start.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(start)
+		if _, err := s.StartLifecycle(context.Background(), start); err != nil {
+			t.Fatalf("start lifecycle: %v", err)
+		}
+		queue := queueLifecycleUpdateFixture(t, s, start, "command-queue-structured-apply")
+		if _, err := s.QueueLifecycleUpdate(context.Background(), queue); err != nil {
+			t.Fatalf("queue lifecycle update: %v", err)
+		}
+		return s, start, queue
+	}
+
+	t.Run("derives readable content and preserves source-aware replay hash", func(t *testing.T) {
+		s, start, queue := setup(t)
+		ctx := context.Background()
+		before, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+		if err != nil {
+			t.Fatalf("snapshot before apply: %v", err)
+		}
+		apply := types.ApplyLifecycleUpdateRequest(queue)
+		apply.CommandID = "command-apply-structured-derived"
+		apply.Disposition, apply.DispositionRef = types.UpdateIncorporated, "revision-structured-derived"
+		apply.Revision = types.Revision{
+			RevisionID: apply.DispositionRef, AuthorKind: types.AuthorAppAgent, AuthorLabel: "Texture",
+			BodyDoc: lifecycleStructuredBodyDoc(start.InitialDocument.DocID, apply.DispositionRef, "Canonical applied projection"),
+		}
+		graph := TextureSourceGraphWriteSet{}
+		apply.CommandDigest, _ = ComputeApplyLifecycleUpdateWithSourceGraphDigest(apply, graph)
+
+		result, err := s.ApplyLifecycleUpdateWithSourceGraph(ctx, apply, graph)
+		if err != nil {
+			t.Fatalf("apply lifecycle update with source graph: %v", err)
+		}
+		if result.Revision == nil || result.Revision.Content != "Canonical applied projection" {
+			t.Fatalf("prepared applied revision = %+v", result.Revision)
+		}
+		expectedHash := types.ComputeStructuredRevisionHash(before.HeadRevision.RevisionHash, result.Revision.Content, result.Revision.BodyDoc, result.Revision.SourceEntities, result.Revision.Provenance)
+		if result.Revision.RevisionHash != expectedHash {
+			t.Fatalf("applied revision hash = %q, want %q", result.Revision.RevisionHash, expectedHash)
+		}
+		replayed, err := s.ApplyLifecycleUpdateWithSourceGraph(ctx, apply, graph)
+		if err != nil || !replayed.Replay || replayed.Revision == nil ||
+			replayed.Revision.Content != result.Revision.Content || replayed.Revision.RevisionHash != result.Revision.RevisionHash {
+			t.Fatalf("prepared apply replay = %+v, %v", replayed, err)
+		}
+	})
+
+	t.Run("rejects disagreeing projection without durable mutation", func(t *testing.T) {
+		s, start, queue := setup(t)
+		ctx := context.Background()
+		before, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+		if err != nil {
+			t.Fatalf("snapshot before rejected apply: %v", err)
+		}
+		apply := types.ApplyLifecycleUpdateRequest(queue)
+		apply.CommandID = "command-apply-structured-mismatch"
+		apply.Disposition, apply.DispositionRef = types.UpdateIncorporated, "revision-structured-mismatch"
+		apply.Revision = types.Revision{
+			RevisionID: apply.DispositionRef, AuthorKind: types.AuthorAppAgent, AuthorLabel: "Texture",
+			Content: "caller projection disagrees",
+			BodyDoc: lifecycleStructuredBodyDoc(start.InitialDocument.DocID, apply.DispositionRef, "Canonical applied projection"),
+		}
+		graph := TextureSourceGraphWriteSet{}
+		apply.CommandDigest, _ = ComputeApplyLifecycleUpdateWithSourceGraphDigest(apply, graph)
+
+		if _, err := s.ApplyLifecycleUpdateWithSourceGraph(ctx, apply, graph); !errors.Is(err, ErrInvalidTextureRevision) {
+			t.Fatalf("apply mismatch error = %v, want ErrInvalidTextureRevision", err)
+		}
+		after, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+		if err != nil {
+			t.Fatalf("snapshot after rejected apply: %v", err)
+		}
+		if after.Trajectory.LifecycleVersion != before.Trajectory.LifecycleVersion ||
+			after.Trajectory.ReducerSeq != before.Trajectory.ReducerSeq ||
+			after.HeadRevision.RevisionID != before.HeadRevision.RevisionID ||
+			len(after.Updates) != 1 || after.Updates[0].Disposition != types.UpdatePending {
+			t.Fatalf("rejected apply mutated lifecycle: before=%+v after=%+v", before, after)
+		}
+		if _, err := s.GetLifecycleRevision(ctx, start.OwnerID, start.ComputerID, apply.Revision.RevisionID); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("rejected apply persisted revision: %v", err)
+		}
+	})
 }
 
 func TestApplyLifecycleDigestIgnoresReducerGeneratedTimestamps(t *testing.T) {
@@ -2734,7 +3037,7 @@ func TestLegacyPendingWorkerListsExcludeLifecycleUpdates(t *testing.T) {
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start lifecycle: %v", err)
 	}
-	queue := queueLifecycleUpdateFixture(t, start, "command-queue-legacy-list-guard")
+	queue := queueLifecycleUpdateFixture(t, s, start, "command-queue-legacy-list-guard")
 	if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
 		t.Fatalf("queue lifecycle update: %v", err)
 	}
@@ -2795,7 +3098,7 @@ func TestLegacyListLimitsApplyAfterLifecycleExclusion(t *testing.T) {
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start scoped lifecycle: %v", err)
 	}
-	queue := queueLifecycleUpdateFixture(t, start, "command-queue-shared-lifecycle-exclusion")
+	queue := queueLifecycleUpdateFixture(t, s, start, "command-queue-shared-lifecycle-exclusion")
 	queue.UpdateID = legacyUpdate.UpdateID
 	queue.CommandDigest, _ = ComputeQueueLifecycleUpdateDigest(queue)
 	if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
@@ -3086,6 +3389,7 @@ func TestLifecycleWorkAndUpdatesDoNotCrossComputerScope(t *testing.T) {
 		start.InitialDocument.DocID = "document-shared-lifecycle-scope"
 		start.InitialRevision.RevisionID = "revision-shared-lifecycle-scope"
 		start.InitialRevision.Content = "artifact on " + computerID
+		start.InitialRevision.BodyDoc = lifecycleStructuredBodyDoc(start.InitialDocument.DocID, start.InitialRevision.RevisionID, start.InitialRevision.Content)
 		start.Agent.AgentID = "texture:document-shared-lifecycle-scope"
 		start.Agent.ChannelID = start.InitialDocument.DocID
 		start.SubjectRefs["artifact"] = "texture://" + start.InitialDocument.DocID
@@ -3094,7 +3398,7 @@ func TestLifecycleWorkAndUpdatesDoNotCrossComputerScope(t *testing.T) {
 		if _, err := s.StartLifecycle(ctx, start); err != nil {
 			t.Fatalf("start lifecycle on %s: %v", computerID, err)
 		}
-		queue := queueLifecycleUpdateFixture(t, start, "command-queue-"+computerID)
+		queue := queueLifecycleUpdateFixture(t, s, start, "command-queue-"+computerID)
 		queue.UpdateID = "update-shared-lifecycle-scope"
 		queue.ProducerUpdateID = "producer-update-shared-lifecycle-scope"
 		queue.Content = "update on " + computerID

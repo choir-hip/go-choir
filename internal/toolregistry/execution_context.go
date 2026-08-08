@@ -11,6 +11,7 @@ import (
 // available to tools during one execution loop.
 type ExecutionContext struct {
 	RunID      string
+	ToolCallID string
 	AgentID    string
 	OwnerID    string
 	Profile    string
@@ -28,6 +29,7 @@ type executionContextKey struct{}
 // WithExecutionContext installs one authoritative tool execution context.
 func WithExecutionContext(ctx context.Context, execution ExecutionContext) context.Context {
 	execution.RunID = strings.TrimSpace(execution.RunID)
+	execution.ToolCallID = strings.TrimSpace(execution.ToolCallID)
 	execution.AgentID = strings.TrimSpace(execution.AgentID)
 	execution.OwnerID = strings.TrimSpace(execution.OwnerID)
 	execution.Profile = strings.TrimSpace(execution.Profile)

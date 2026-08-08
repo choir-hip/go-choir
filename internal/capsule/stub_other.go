@@ -22,6 +22,10 @@ func NewExecutor(stateDir, lowerDir, brokerPath string, vmMemoryTotal int64) *Ex
 func NewExecutorWithSource(stateDir, lowerDir, sourceDir, brokerPath string, vmMemoryTotal int64) *Executor {
 	return &Executor{}
 }
+func (e *Executor) InitializationError() error { return stubErr("initialize") }
+func (e *Executor) PreflightSourceSnapshot(context.Context, string) (SourcePreflight, error) {
+	return SourcePreflight{}, stubErr("preflight source")
+}
 func (e *Executor) Spawn(context.Context, SpawnSpec) (*Capsule, error) { return nil, stubErr("spawn") }
 func (e *Executor) Destroy(context.Context, string) error              { return stubErr("destroy") }
 func (e *Executor) ForceDestroy(context.Context, string) error         { return stubErr("destroy") }
@@ -45,6 +49,12 @@ func (e *Executor) ExtractGranted(context.Context, string, string) ([]FileChange
 func (e *Executor) ResolveGrantedCapsuleID(string, string) (string, error) {
 	return "", stubErr("resolve")
 }
+func (e *Executor) ResolveGrantedWorktreeDigest(context.Context, string, string) (string, error) {
+	return "", stubErr("resolve")
+}
+func (e *Executor) PersistGrantedCandidate(context.Context, string, string) (SourcePreflight, error) {
+	return SourcePreflight{}, stubErr("persist candidate")
+}
 func (e *Executor) ResolveGrantedSourceSnapshotDigest(string, string) (string, error) {
 	return "", stubErr("resolve")
 }
@@ -58,6 +68,12 @@ func (e *Executor) ListOwned(string) []CapsuleControlSummary { return nil }
 func (e *Executor) MintCapability(string, AgentRole, string, time.Duration) (*Capability, error) {
 	return nil, stubErr("mint")
 }
+func (e *Executor) MintCapabilityHandle(string, AgentRole, string, string, time.Duration) (*Capability, error) {
+	return nil, stubErr("mint")
+}
+func (e *Executor) AssignmentHandle(string, string) (string, error) {
+	return "", stubErr("resolve")
+}
 func (e *Executor) ResolveCapability(string, string) (*Capability, error) {
 	return nil, stubErr("resolve")
 }
@@ -65,6 +81,18 @@ func (e *Executor) RevokeCapability(string, string) error       { return stubErr
 func (e *Executor) ResolveTarget(*Capability) ([]string, error) { return nil, stubErr("resolve") }
 func (e *Executor) Exec(context.Context, string, string, ExecRequest) (ExecResult, error) {
 	return ExecResult{}, stubErr("exec")
+}
+func (e *Executor) PersistGrantedFreezeReceipt(context.Context, string, string) (CapsuleFateReceipt, error) {
+	return CapsuleFateReceipt{}, stubErr("freeze receipt")
+}
+func (e *Executor) OpenCapsuleFateReceipt(string) (CapsuleFateReceipt, error) {
+	return CapsuleFateReceipt{}, stubErr("freeze receipt")
+}
+func (e *Executor) OpenExecutionReceipt(string) (ExecutionReceipt, error) {
+	return ExecutionReceipt{}, stubErr("execution receipt")
+}
+func (e *Executor) OpenGrantedExecutionReceipt(string) (GrantedExecutionReceipt, error) {
+	return GrantedExecutionReceipt{}, stubErr("execution receipt")
 }
 func (e *Executor) ResolveGrantedExecutionReceipts(context.Context, string, string, []string) ([]ExecutionReceipt, error) {
 	return nil, stubErr("execution receipts")
@@ -81,6 +109,14 @@ func (e *Executor) WriteFile(context.Context, string, string, string, []byte, ui
 func (e *Executor) ListDir(context.Context, string, string, string) ([]string, error) {
 	return nil, stubErr("list")
 }
+func (e *Executor) CleanupOrphanedCapsule(context.Context, string) error {
+	return stubErr("cleanup orphaned capsule")
+}
+func (e *Executor) PersistRevocationReceipt(string, string, string, string) (CapsuleRevocationReceipt, error) {
+	return CapsuleRevocationReceipt{}, stubErr("persist revocation receipt")
+}
+
+func (e *Executor) HasCapsule(string) bool { return false }
 func (e *Executor) InspectCapsuleRaw(string) (*CapsuleDiagnostics, error) {
 	return nil, stubErr("inspect")
 }

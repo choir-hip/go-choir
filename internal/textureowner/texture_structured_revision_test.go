@@ -1,7 +1,9 @@
 package textureowner
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -123,8 +125,95 @@ func runtimeStructuredRevisionFixture(t *testing.T) (json.RawMessage, json.RawMe
 	return bodyDocJSON, sourceEntitiesJSON
 }
 
+func TestDirectOwnerEditAtomicallyRebases101OldHeadOccurrencesAndWakesOnce(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	var wakes []string
+	handler.wakeOwnerInstruction = func(_ context.Context, ownerID, docID, instructionID string) error {
+		if ownerID != start.OwnerID || docID != start.InitialDocument.DocID || instructionID == "" {
+			t.Fatalf("bad wake scope owner=%q doc=%q instruction=%q", ownerID, docID, instructionID)
+		}
+		wakes = append(wakes, instructionID)
+		return nil
+	}
+	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
+	for i := 0; i < 101; i++ {
+		response := postOwnerInstruction(t, handler, path, start.OwnerID, fmt.Sprintf("old-head-%03d", i), fmt.Sprintf("preserve owner intent %03d", i), start.InitialRevision.RevisionID)
+		if response.Code != http.StatusAccepted {
+			t.Fatalf("tell %d status=%d body=%s", i, response.Code, response.Body.String())
+		}
+	}
+	if len(wakes) != 101 {
+		t.Fatalf("tell wakes=%d", len(wakes))
+	}
+	before, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestBody := textureCreateRevisionRequest{
+		Content: "direct owner correction after queued intent", ParentRevisionID: start.InitialRevision.RevisionID,
+		IdempotencyKey: "direct-owner-rebase-101", ExpectedLifecycleVersion: before.Trajectory.LifecycleVersion,
+	}
+	request := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", requestBody)
+	response := httptest.NewRecorder()
+	handler.HandleTextureRevisions(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("direct edit status=%d body=%s", response.Code, response.Body.String())
+	}
+	var revision textureRevisionResponse
+	if err := json.NewDecoder(response.Body).Decode(&revision); err != nil {
+		t.Fatal(err)
+	}
+	if len(wakes) != 102 {
+		t.Fatalf("direct edit must wake exactly once: wakes=%d", len(wakes))
+	}
+	oldHead, err := core.Store().ListPendingLifecycleOwnerInstructionsForHead(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID, start.Agent.AgentID, start.InitialRevision.RevisionID)
+	if err != nil || len(oldHead) != 0 {
+		t.Fatalf("stranded old-head occurrences=%d err=%v", len(oldHead), err)
+	}
+	pending, err := core.Store().ListPendingLifecycleOwnerInstructionsForHead(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID, start.Agent.AgentID, revision.RevisionID)
+	if err != nil || len(pending) != 102 {
+		t.Fatalf("rebased occurrence set=%d err=%v", len(pending), err)
+	}
+	for i := 0; i < 101; i++ {
+		if pending[i].Content != fmt.Sprintf("preserve owner intent %03d", i) || pending[i].HeadRevisionID != revision.RevisionID ||
+			pending[i].TargetWorkItemID != start.InitialWork.WorkItemID {
+			t.Fatalf("owner intent/order changed at %d: %+v", i, pending[i])
+		}
+	}
+	if pending[101].Kind != types.LifecycleOwnerCorrect || pending[101].HeadRevisionID != revision.RevisionID {
+		t.Fatalf("new correction not ordered after rebased intent: %+v", pending[101])
+	}
+	after, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Trajectory.LifecycleVersion != before.Trajectory.LifecycleVersion+1 || after.Trajectory.ReducerSeq != before.Trajectory.ReducerSeq+2 {
+		t.Fatalf("direct edit was not one lifecycle transition: before=%+v after=%+v", before.Trajectory, after.Trajectory)
+	}
+	replayRequest := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", requestBody)
+	replayResponse := httptest.NewRecorder()
+	handler.HandleTextureRevisions(replayResponse, replayRequest)
+	if replayResponse.Code != http.StatusCreated || len(wakes) != 102 {
+		t.Fatalf("direct edit replay status=%d wakes=%d body=%s", replayResponse.Code, len(wakes), replayResponse.Body.String())
+	}
+	conflictBody := requestBody
+	conflictBody.Content = "conflicting direct owner correction"
+	conflictRequest := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", conflictBody)
+	conflictResponse := httptest.NewRecorder()
+	handler.HandleTextureRevisions(conflictResponse, conflictRequest)
+	if conflictResponse.Code != http.StatusConflict || len(wakes) != 102 {
+		t.Fatalf("direct edit conflict status=%d wakes=%d body=%s", conflictResponse.Code, len(wakes), conflictResponse.Body.String())
+	}
+}
+
 func TestTextureRevisionAPICommitsLifecycleBoundHeadThroughReducer(t *testing.T) {
 	rt, handler := testAPISetup(t)
+	var wakes []string
+	handler.wakeOwnerInstruction = func(_ context.Context, _, _, instructionID string) error {
+		wakes = append(wakes, instructionID)
+		return nil
+	}
 	start := types.StartLifecycleRequest{
 		OwnerID: "user-1", ComputerID: rt.TextureSandboxID(), CommandID: "start-public-revision",
 		TrajectoryID: "trajectory-public-revision", Kind: types.TrajectoryKindDocument,
@@ -132,7 +221,7 @@ func TestTextureRevisionAPICommitsLifecycleBoundHeadThroughReducer(t *testing.T)
 		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		InitialWork:     types.WorkItemRecord{WorkItemID: "work-public-revision", Objective: "revise artifact"},
 		InitialDocument: types.Document{DocID: "document-public-revision", Title: "Public lifecycle revision"},
-		InitialRevision: types.Revision{RevisionID: "revision-public-v0", AuthorKind: types.AuthorAppAgent, AuthorLabel: "Choir", Content: "Initial"},
+		InitialRevision: types.Revision{RevisionID: "revision-public-v0", AuthorKind: types.AuthorAppAgent, AuthorLabel: "Choir", BodyDoc: observationBodyDoc("Initial")},
 		Agent:           types.AgentRecord{AgentID: "texture:document-public-revision", Profile: "texture", Role: "texture", ChannelID: "document-public-revision"},
 	}
 	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
@@ -172,8 +261,9 @@ func TestTextureRevisionAPICommitsLifecycleBoundHeadThroughReducer(t *testing.T)
 		renamedSnapshot.Trajectory.LifecycleVersion != 1 {
 		t.Fatalf("title projection mutated lifecycle authority: %+v", renamedSnapshot)
 	}
+	bodyDoc, sourceEntities := runtimeStructuredRevisionFixture(t)
 	request := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", textureCreateRevisionRequest{
-		Content: "Owner-authored", ParentRevisionID: start.InitialRevision.RevisionID,
+		BodyDoc: bodyDoc, SourceEntities: sourceEntities, ParentRevisionID: start.InitialRevision.RevisionID,
 		IdempotencyKey: "public-revision-command", ExpectedLifecycleVersion: 1,
 	})
 	response := httptest.NewRecorder()
@@ -189,12 +279,21 @@ func TestTextureRevisionAPICommitsLifecycleBoundHeadThroughReducer(t *testing.T)
 	if err != nil {
 		t.Fatalf("get lifecycle snapshot: %v", err)
 	}
-	if snapshot.HeadRevision.RevisionID != revision.RevisionID || snapshot.HeadRevision.Content != "Owner-authored" ||
-		snapshot.Trajectory.ReducerSeq != 2 || snapshot.Trajectory.LifecycleVersion != 2 {
+	if snapshot.HeadRevision.RevisionID != revision.RevisionID || snapshot.HeadRevision.Content == "" ||
+		snapshot.Trajectory.ReducerSeq != 3 || snapshot.Trajectory.LifecycleVersion != 2 {
 		t.Fatalf("unexpected lifecycle revision snapshot: %+v", snapshot)
 	}
+	pendingCorrections, err := rt.Store().ListPendingLifecycleOwnerInstructionsForHead(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID, start.Agent.AgentID, revision.RevisionID)
+	if err != nil || len(pendingCorrections) != 1 || pendingCorrections[0].Kind != types.LifecycleOwnerCorrect || pendingCorrections[0].TargetWorkItemID != start.InitialWork.WorkItemID {
+		t.Fatalf("joined owner correction obligation = %+v, %v", pendingCorrections, err)
+	}
+	refs, refsErr := rt.Store().ListTextureSourceRefsForRevisionByScope(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID, revision.RevisionID)
+	entities, entitiesErr := rt.Store().ListTextureSourceEntitiesForRevisionByScope(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID, revision.RevisionID)
+	if refsErr != nil || entitiesErr != nil || len(refs) != 1 || len(entities) != 1 || len(wakes) != 1 {
+		t.Fatalf("joined source graph/wake refs=%+v entities=%+v wakes=%v errors=%v/%v", refs, entities, wakes, refsErr, entitiesErr)
+	}
 	replay := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", textureCreateRevisionRequest{
-		Content: "Owner-authored", ParentRevisionID: start.InitialRevision.RevisionID,
+		BodyDoc: bodyDoc, SourceEntities: sourceEntities, ParentRevisionID: start.InitialRevision.RevisionID,
 		IdempotencyKey: "public-revision-command", ExpectedLifecycleVersion: 1,
 	})
 	replayResponse := httptest.NewRecorder()
@@ -205,6 +304,18 @@ func TestTextureRevisionAPICommitsLifecycleBoundHeadThroughReducer(t *testing.T)
 	var replayed textureRevisionResponse
 	if err := json.NewDecoder(replayResponse.Body).Decode(&replayed); err != nil || replayed.RevisionID != revision.RevisionID {
 		t.Fatalf("unexpected lifecycle revision replay: %+v, %v", replayed, err)
+	}
+	if len(wakes) != 1 {
+		t.Fatalf("replay emitted Texture wake: %v", wakes)
+	}
+	conflictRequest := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", textureCreateRevisionRequest{
+		Content: "conflicting reuse", ParentRevisionID: start.InitialRevision.RevisionID,
+		IdempotencyKey: "public-revision-command", ExpectedLifecycleVersion: 1,
+	})
+	conflictResponse := httptest.NewRecorder()
+	handler.HandleTextureRevisions(conflictResponse, conflictRequest)
+	if conflictResponse.Code != http.StatusConflict || len(wakes) != 1 {
+		t.Fatalf("conflicting occurrence status=%d wakes=%v body=%s", conflictResponse.Code, wakes, conflictResponse.Body.String())
 	}
 	cancel := types.CancelLifecycleRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "cancel-public-revision",

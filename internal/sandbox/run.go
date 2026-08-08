@@ -135,6 +135,14 @@ func Run() {
 		agentcore.WithDesktopStateOwner(desktopHandler),
 		agentcore.WithContentService(contentService),
 	}
+	capsuleExecutor, capsuleConfigured, err := configuredCapsuleExecutor()
+	if err != nil {
+		log.Fatalf("sandbox: configure production capsule executor: %v", err)
+	}
+	if capsuleConfigured {
+		coreOpts = append(coreOpts, agentcore.WithCapsuleExecutor(capsuleExecutor))
+		log.Printf("sandbox: production networkless assignment capsule executor enabled")
+	}
 	if credentialPath := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_CREDENTIAL_FILE")); credentialPath != "" {
 		computerID := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))
 		realizationID := strings.TrimSpace(os.Getenv("CHOIR_REALIZATION_ID"))

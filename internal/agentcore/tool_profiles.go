@@ -232,6 +232,9 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	}
 	if profile == agentprofile.Texture {
 		b.WriteString(textureprompts.RunOverlay())
+		if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) != "" {
+			b.WriteString("\n\nLifecycle Texture control authority:\nDo not call spawn_agent. Open each new Researcher atomically inside the successful patch_texture, rewrite_texture, or record_texture_decision transition: add one controls item with open_researcher=true, an objective, and the first typed downward packet. Continue an existing bound Researcher only by target_work_item_id. Agent/work/control/update/target identities and direction are runtime-derived; never author them in packet fields.")
+		}
 	}
 	if profile == agentprofile.Processor {
 		b.WriteString(runtimeprompts.ProcessorRuntimeOverlay())
@@ -244,6 +247,22 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	}
 	if profile == agentprofile.CoSuper {
 		b.WriteString(runtimeprompts.CoSuperRuntimeOverlay())
+		kind := metadataStringValue(rec.Metadata, "assignment_kind")
+		if assignmentID := metadataStringValue(rec.Metadata, "assignment_id"); assignmentID != "" {
+			b.WriteString("\n\nExact authenticated assignment: assignment_id=")
+			b.WriteString(assignmentID)
+			b.WriteString(" kind=")
+			b.WriteString(kind)
+			b.WriteString(" subject_digest=")
+			b.WriteString(metadataStringValue(rec.Metadata, "subject_digest"))
+			if kind == string(types.CoSuperAssignmentVerification) {
+				b.WriteString(" candidate_id=")
+				b.WriteString(metadataStringValue(rec.Metadata, "source_candidate_id"))
+				b.WriteString(". This verification capsule contains that exact immutable candidate subject.")
+			} else {
+				b.WriteString(". Implement only the bounded objective in /workspace/platform and return a typed result.")
+			}
+		}
 	}
 	if profile == agentprofile.Researcher {
 		b.WriteString(runtimeprompts.ResearcherRuntimeOverlay())
@@ -278,6 +297,21 @@ func (rt *Runtime) providerPromptForRun(rec *types.RunRecord) (string, error) {
 	b.WriteString("\n\nUser request:\n")
 	b.WriteString(rec.Prompt)
 	return b.String(), nil
+}
+
+type registryToolInstaller func(*toolregistry.ToolRegistry) error
+
+// delegatedCoSuperRegistryInputs is deliberately a closed set of assignment
+// capabilities. Host self-development, event, updater, materialization,
+// acceptance, route, VM, path-mutation, and owner-decision installers do not
+// belong in this input type, so the delegated registry cannot receive their
+// backing callbacks by configuration accident.
+func buildAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, error) {
+	registry := toolregistry.MustNewToolRegistry()
+	if err := RegisterCapsuleLocalTools(registry, rt); err != nil {
+		return nil, fmt.Errorf("build assigned co-super registry: %w", err)
+	}
+	return registry, nil
 }
 
 func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, searchClient search.Client, sourceClient researchtools.SourceSearchClient, httpClient *http.Client) (*toolregistry.ToolRegistry, error) {
@@ -317,10 +351,10 @@ func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, se
 	return registry, nil
 }
 
-// InstallDefaultAgentTools installs role-bound registries. Super receives
-// read/orchestration and capsule lifecycle tools; CoSuper receives only typed
-// update plus broker-backed capsule effects. Neither role receives direct host
-// mutation, shipper, route, or VM tools.
+// InstallDefaultAgentTools installs role-bound registries. Super receives only
+// the persistent assignment/cancel authority; capsule effects are runtime-owned.
+// CoSuper has an empty static registry. An exact assigned run receives a fresh
+// closed capsule-local registry after its durable binding is authenticated.
 func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if strings.TrimSpace(cwd) == "" {
 		wd, err := os.Getwd()
@@ -341,23 +375,15 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterCoagentUpdateTools(superRegistry, rt); err != nil {
 		return err
 	}
-	if rt.capsuleExecutor != nil {
-		if err := RegisterCapsuleTools(superRegistry); err != nil {
-			return err
-		}
-	}
-	coSuperRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.CoSuper), cwd, searchClient, sourceClient, httpClient)
-	if err != nil {
-		return err
-	}
-	if err := RegisterCoagentUpdateTools(coSuperRegistry, rt); err != nil {
+	if err := RegisterPersistentSuperReportTools(superRegistry, rt); err != nil {
 		return err
 	}
 	if rt.capsuleExecutor != nil {
-		if err := RegisterCapsuleExecTools(coSuperRegistry); err != nil {
+		if err := RegisterAssignedCoSuperTools(superRegistry, rt); err != nil {
 			return err
 		}
 	}
+	coSuperRegistry := toolregistry.MustNewToolRegistry()
 	researcherRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Researcher), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err

@@ -17,8 +17,14 @@ const (
 	coagentPacketDeliveryThread = "activation_mailbox_turn"
 )
 
+const lifecycleInjectionEnvelopeSchemaV1 = "choir.lifecycle_injection.v1"
+
 type coagentUpdatePacket struct {
+	Schema            string                    `json:"schema"`
 	PacketType        string                    `json:"packet_type"`
+	OwnerID           string                    `json:"owner_id,omitempty"`
+	ComputerID        string                    `json:"computer_id,omitempty"`
+	TargetRunID       string                    `json:"target_run_id,omitempty"`
 	DeliveryPhase     string                    `json:"delivery_phase"`
 	TargetAgentID     string                    `json:"target_agent_id,omitempty"`
 	ChannelID         string                    `json:"channel_id,omitempty"`
@@ -93,6 +99,7 @@ func buildCoagentUpdateUserMessages(updates []types.CoagentSourcePacket, deliver
 		return nil, nil, nil
 	}
 	packet := coagentUpdatePacket{
+		Schema:            lifecycleInjectionEnvelopeSchemaV1,
 		PacketType:        coagentPacketTypeUpdate,
 		DeliveryPhase:     deliveryPhase,
 		TargetAgentID:     strings.TrimSpace(targetAgentID),
@@ -107,6 +114,11 @@ func buildCoagentUpdateUserMessages(updates []types.CoagentSourcePacket, deliver
 		id := strings.TrimSpace(update.UpdateID)
 		if id != "" {
 			updateIDs = append(updateIDs, id)
+		}
+		if packet.OwnerID == "" {
+			packet.OwnerID = strings.TrimSpace(update.OwnerID)
+			packet.ComputerID = strings.TrimSpace(update.ComputerID)
+			packet.TargetRunID = strings.TrimSpace(update.DeliveredToRunID)
 		}
 		if packet.ChannelID == "" {
 			packet.ChannelID = strings.TrimSpace(update.ChannelID)

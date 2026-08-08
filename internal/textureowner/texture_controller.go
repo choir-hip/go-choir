@@ -17,18 +17,15 @@ import (
 // the given doc. The actor mailbox replaces the old debounce timer system —
 // the handler processes the message when the actor activates, and the tool
 // loop's park-resume handles coalescing naturally.
-func (rt *Handler) scheduleTextureWorkerWake(ownerID, docID, _ string) {
+func (rt *Handler) scheduleTextureWorkerWake(ownerID, docID, instructionID string) {
 	ownerID = strings.TrimSpace(ownerID)
 	docID = strings.TrimSpace(docID)
-	if ownerID == "" || docID == "" {
+	instructionID = strings.TrimSpace(instructionID)
+	if ownerID == "" || docID == "" || instructionID == "" || rt == nil || rt.wakeOwnerInstruction == nil {
 		return
 	}
-	textureAgentID := currentTextureAgentID(docID)
-	if rt.Core == nil || !rt.Core.DispatchActorActive() {
-		return
-	}
-	if err := rt.Core.DispatchActor(context.Background(), ownerID, rt.Core.TextureSandboxID(), textureAgentID, "coagent_result", "", "", ""); err != nil {
-		log.Printf("runtime: schedule texture wake for doc %s: %v", docID, err)
+	if err := rt.wakeOwnerInstruction(context.Background(), ownerID, docID, instructionID); err != nil {
+		log.Printf("runtime: schedule texture owner-instruction wake for doc %s: %v", docID, err)
 	}
 }
 
@@ -145,6 +142,19 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 	if strings.TrimSpace(doc.ComputerID) == "" || strings.TrimSpace(doc.TrajectoryID) == "" {
 		return nil, fmt.Errorf("texture wake requires durable lifecycle document binding")
 	}
+	wakeComputerID, wakeTrajectoryID := strings.TrimSpace(doc.ComputerID), strings.TrimSpace(doc.TrajectoryID)
+	unlockWake := rt.lockTextureWakeScope(ownerID, wakeComputerID, docID)
+	defer unlockWake()
+	// The document may have advanced while this caller waited for its exact
+	// owner/computer/document wake scope. Re-read before deriving activation
+	// authority or current-head inputs.
+	doc, err = rt.getTextureDocument(ctx, ownerID, docID)
+	if err != nil {
+		return nil, fmt.Errorf("reload doc for texture wake: %w", err)
+	}
+	if strings.TrimSpace(doc.ComputerID) != wakeComputerID || strings.TrimSpace(doc.TrajectoryID) != wakeTrajectoryID {
+		return nil, fmt.Errorf("texture wake durable lifecycle document binding changed")
+	}
 	if _, err := rt.Store.GetAgentByScope(ctx, ownerID, doc.ComputerID, textureAgentID); err != nil {
 		return nil, fmt.Errorf("load durable Texture subject: %w", err)
 	}
@@ -187,10 +197,45 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 	if err != nil {
 		return nil, fmt.Errorf("list pending lifecycle Texture updates: %w", err)
 	}
+	instructions, err := rt.Store.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, doc.ComputerID, doc.TrajectoryID, textureAgentID, "")
+	if err != nil {
+		return nil, fmt.Errorf("list pending lifecycle owner instructions: %w", err)
+	}
+	initialWorkWake := false
+	if len(updates) == 0 && len(instructions) == 0 {
+		snapshot, snapshotErr := rt.Store.GetLifecycleSnapshot(ctx, ownerID, doc.ComputerID, doc.TrajectoryID)
+		if snapshotErr != nil {
+			return nil, fmt.Errorf("load initial lifecycle Texture work: %w", snapshotErr)
+		}
+		for _, work := range snapshot.WorkItems {
+			if work.Status == types.WorkItemOpen && work.AssignedAgentID == textureAgentID {
+				initialWorkWake = true
+				break
+			}
+		}
+		if initialWorkWake {
+			runs, runsErr := rt.Store.ListLifecycleRunsByChannel(ctx, ownerID, doc.ComputerID, docID, 0)
+			if runsErr != nil {
+				return nil, fmt.Errorf("list initial lifecycle Texture runs: %w", runsErr)
+			}
+			for i := range runs {
+				if strings.TrimSpace(runs[i].AgentID) == textureAgentID &&
+					isTextureAgentRevisionTaskType(metadataStringValue(runs[i].Metadata, "type")) {
+					initialWorkWake = false
+					break
+				}
+			}
+		}
+	}
 	var scheduledSeq int64
 	for _, update := range updates {
 		if update.MessageSeq > scheduledSeq {
 			scheduledSeq = update.MessageSeq
+		}
+	}
+	for _, instruction := range instructions {
+		if instruction.ReducerSeq > scheduledSeq {
+			scheduledSeq = instruction.ReducerSeq
 		}
 	}
 	if rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq); err != nil {
@@ -198,7 +243,7 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 	} else if reactivated {
 		return rec, nil
 	}
-	if len(updates) == 0 {
+	if len(updates) == 0 && len(instructions) == 0 && !initialWorkWake {
 		return nil, nil
 	}
 	pendingCleanupCtx := context.WithoutCancel(ctx)
@@ -214,8 +259,17 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 			return nil, fmt.Errorf("stale unbound pending Texture mutation: %w", staleErr)
 		}
 	}
+	intent := firstNonEmpty(func() string {
+		if initialWorkWake {
+			return "initial_owner_work"
+		}
+		if len(instructions) > 0 {
+			return "apply_owner_instruction"
+		}
+		return ""
+	}(), "integrate_execution_findings")
 	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
-		Intent: "integrate_execution_findings",
+		Intent: intent,
 	}, scheduledSeq)
 	if err != nil {
 		return nil, fmt.Errorf("start reconciled Texture revision: %w", err)

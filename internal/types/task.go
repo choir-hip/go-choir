@@ -383,6 +383,9 @@ type EventRecord struct {
 type RunMemoryEntryKind string
 
 const (
+	// RunMemoryRoleRuntimeInjection authenticates a provider-facing message as appended by the runtime injector.
+	RunMemoryRoleRuntimeInjection = "runtime_injection"
+
 	// RunMemoryEntryMessage stores a provider-facing conversation message.
 	RunMemoryEntryMessage RunMemoryEntryKind = "message"
 

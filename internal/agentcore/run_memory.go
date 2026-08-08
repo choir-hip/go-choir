@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -24,6 +25,12 @@ var (
 	// ErrRunMemoryCompactionFailed marks a failure in durable memory compaction
 	// before a provider call.
 	ErrRunMemoryCompactionFailed = errors.New("run memory compaction failed")
+
+	// ErrRuntimeInjectionAppendFailed distinguishes a failed durable append of a
+	// runtime-authenticated control occurrence from ordinary conversation-memory
+	// failures. The exact delivered lifecycle run must remain retryable because
+	// the occurrence has not yet become model-visible durable memory.
+	ErrRuntimeInjectionAppendFailed = errors.New("runtime injection memory append failed")
 
 	runMemoryCompactionLocks sync.Map
 )
@@ -172,7 +179,27 @@ func (m *runMemoryManager) afterAppendMessage(ctx context.Context, role string, 
 	if strings.TrimSpace(role) == "" {
 		role = runMemoryMessageRole(msg)
 	}
-	return m.appendMessage(ctx, role, msg)
+	if err := m.appendMessage(ctx, role, msg); err != nil {
+		if role == types.RunMemoryRoleRuntimeInjection {
+			return fmt.Errorf("%w: %v", ErrRuntimeInjectionAppendFailed, err)
+		}
+		return err
+	}
+	if role == types.RunMemoryRoleRuntimeInjection && m.rec != nil {
+		// Preserve the legacy observational metadata only after the durable
+		// append succeeds. Injection dedupe and report authority never trust it.
+		seen, _ := lifecycleInjectionIDsFromRunMemory(m.rec, []types.RunMemoryEntry{{
+			RunID: m.rec.RunID, OwnerID: m.rec.OwnerID, AgentID: m.rec.AgentID,
+			Kind: types.RunMemoryEntryMessage, Role: role, Message: msg,
+		}})
+		ids := make([]string, 0, len(seen))
+		for id := range seen {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		appendCoagentUpdateIDsForRun(m.rec, ids)
+	}
+	return nil
 }
 
 func (m *runMemoryManager) onProviderError(ctx context.Context, _ []json.RawMessage, providerErr error) ([]json.RawMessage, bool, error) {

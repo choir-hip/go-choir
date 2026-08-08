@@ -25,12 +25,12 @@ func TestAuthorKindValid(t *testing.T) {
 func TestDocumentJSONRoundTrip(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	doc := Document{
-		DocID:              "doc-1",
-		OwnerID:            "user-1",
-		Title:              "Test Document",
-		CurrentRevisionID:  "rev-5",
-		CreatedAt:          now,
-		UpdatedAt:          now.Add(time.Minute),
+		DocID:             "doc-1",
+		OwnerID:           "user-1",
+		Title:             "Test Document",
+		CurrentRevisionID: "rev-5",
+		CreatedAt:         now,
+		UpdatedAt:         now.Add(time.Minute),
 	}
 
 	data, err := json.Marshal(doc)
@@ -175,11 +175,11 @@ func TestDiffResultJSONRoundTrip(t *testing.T) {
 				ToContent:   "same line",
 			},
 			{
-				Type:       "removed",
-				FromLine:   1,
-				ToLine:     1,
-				ToLineNum:  -1,
-				ToEndLine:  -1,
+				Type:        "removed",
+				FromLine:    1,
+				ToLine:      1,
+				ToLineNum:   -1,
+				ToEndLine:   -1,
 				FromContent: "old line",
 			},
 			{
@@ -223,8 +223,8 @@ func TestBlameResultJSONRoundTrip(t *testing.T) {
 		DocID:      "doc-1",
 		Sections: []BlameSection{
 			{
-				RevisionID: "rev-1",
-				AuthorKind: AuthorUser,
+				RevisionID:  "rev-1",
+				AuthorKind:  AuthorUser,
 				AuthorLabel: "alice",
 				StartLine:   0,
 				EndLine:     0,
@@ -232,8 +232,8 @@ func TestBlameResultJSONRoundTrip(t *testing.T) {
 				Timestamp:   now,
 			},
 			{
-				RevisionID: "rev-2",
-				AuthorKind: AuthorAppAgent,
+				RevisionID:  "rev-2",
+				AuthorKind:  AuthorAppAgent,
 				AuthorLabel: "appagent",
 				StartLine:   1,
 				EndLine:     1,

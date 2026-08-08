@@ -113,7 +113,7 @@ func TestSpawnAgentRejectsInvalidExplicitProfile(t *testing.T) {
 		if err == nil {
 			t.Fatalf("spawn_agent accepted explicit profile %q outside the caller's allowed targets", profile)
 		}
-		if got := err.Error(); got != "profile must be one of researcher, co-super" {
+		if got := err.Error(); got != "profile must be one of researcher" {
 			t.Fatalf("spawn_agent profile %q error = %q", profile, got)
 		}
 	}

@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,8 +19,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // CapsuleToolCtx is injected by guest core. Opaque handles are bound to the
@@ -39,6 +42,9 @@ type CapsuleToolCtx struct {
 		Head(context.Context, string) (*computerevent.Head, error)
 		EventByIdempotency(context.Context, string, string) (computerevent.Event, bool, error)
 	}
+	// ValidateCurrentObligation rejoins durable run/work/trajectory/assignment
+	// fate immediately before every readable or writable capsule execution.
+	ValidateCurrentObligation func(context.Context) error
 }
 
 type capsuleCtxKey struct{}
@@ -66,9 +72,26 @@ func RegisterCapsuleTools(registry *toolregistry.ToolRegistry) error {
 	return nil
 }
 
-func RegisterCapsuleExecTools(registry *toolregistry.ToolRegistry) error {
+// RegisterCapsuleLocalTools installs only effects scoped to an already-bound
+// capsule. It deliberately excludes host self-development proposal,
+// verification, event, updater-root, and finalization authority. No host profile
+// registry wires this future surface today.
+func RegisterCapsuleLocalTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
 	for _, tool := range []toolregistry.Tool{
-		newCapsuleExecTool(), newCapsuleReadFileTool(), newCapsuleWriteFileTool(), newCapsuleListDirTool(),
+		newCapsuleExecTool(), newCapsuleReadFileTool(), newCapsuleWriteFileTool(), newCapsuleListDirTool(), newRecordAssignedCoSuperReportTool(rt),
+	} {
+		if err := registry.Register(tool); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// registerHostSelfDevelopmentTools groups the legacy host-backed effect tools
+// separately from capsule-local execution. These tools are intentionally not
+// an input to the delegated CoSuper registry builder.
+func registerHostSelfDevelopmentTools(registry *toolregistry.ToolRegistry) error {
+	for _, tool := range []toolregistry.Tool{
 		newCommitTransactionTool(), newInspectSelfDevelopmentBundleTool(), newRecordSelfDevelopmentVerificationTool(),
 	} {
 		if err := registry.Register(tool); err != nil {
@@ -88,14 +111,34 @@ func requireCapsuleRole(ctx context.Context, role capsule.AgentRole) (*CapsuleTo
 	}
 	return value, nil
 }
+
+func requireCurrentAssignedCapsule(ctx context.Context) (*CapsuleToolCtx, error) {
+	value, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+	if err != nil {
+		return nil, err
+	}
+	if value.ValidateCurrentObligation == nil {
+		return nil, fmt.Errorf("assigned capsule obligation validator unavailable")
+	}
+	if err := value.ValidateCurrentObligation(ctx); err != nil {
+		return nil, fmt.Errorf("assigned capsule obligation is no longer executable: %w", err)
+	}
+	return value, nil
+}
 func requireCapsuleMutationRole(ctx context.Context) (*CapsuleToolCtx, error) {
-	toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+	toolCtx, err := requireCurrentAssignedCapsule(ctx)
 	if err != nil {
 		return nil, err
 	}
 	execution := toolregistry.ExecutionContextFrom(ctx)
-	if execution.RunRecord == nil || normalizeCoSuperSlot(metadataStringValue(execution.RunRecord.Metadata, runMetadataCoSuperSlot)) != "implementation" {
-		return nil, fmt.Errorf("capsule mutation is restricted to the co-super implementation slot")
+	kind := ""
+	if execution.RunRecord != nil {
+		kind = metadataStringValue(execution.RunRecord.Metadata, "assignment_kind")
+	}
+	if execution.RunRecord == nil || metadataStringValue(execution.RunRecord.Metadata, "assignment_id") == "" ||
+		metadataIntValue(execution.RunRecord.Metadata, "assignment_attempt") <= 0 || toolCtx.CapsuleHandle == "" ||
+		(kind != string(types.CoSuperAssignmentImplementation) && kind != string(types.CoSuperAssignmentVerification)) {
+		return nil, fmt.Errorf("capsule mutation requires an exact bound writable CoSuper assignment")
 	}
 	return toolCtx, nil
 }
@@ -696,7 +739,7 @@ func newCapsuleReadFileTool() toolregistry.Tool {
 	return toolregistry.Tool{Name: "capsule_read_file", Description: "Read a file inside the assigned capsule.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{"path": map[string]any{"type": "string"}}, []string{"path"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+			toolCtx, err := requireCurrentAssignedCapsule(ctx)
 			if err != nil {
 				return "", err
 			}
@@ -747,7 +790,7 @@ func newCapsuleListDirTool() toolregistry.Tool {
 	return toolregistry.Tool{Name: "capsule_list_dir", Description: "List a directory inside the assigned capsule.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{"path": map[string]any{"type": "string"}}, []string{"path"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+			toolCtx, err := requireCurrentAssignedCapsule(ctx)
 			if err != nil {
 				return "", err
 			}
@@ -764,12 +807,91 @@ func newCapsuleListDirTool() toolregistry.Tool {
 	}
 }
 
+func newRecordAssignedCoSuperReportTool(rt *Runtime) toolregistry.Tool {
+	type args struct {
+		Result        types.CoSuperAssignmentResultKind `json:"result"`
+		Verdict       types.CoSuperAssignmentVerdict    `json:"verdict"`
+		Summary       string                            `json:"summary"`
+		EvidenceRefs  []string                          `json:"evidence_refs"`
+		ExecutionRefs []string                          `json:"execution_refs"`
+	}
+	return toolregistry.Tool{
+		Name: "record_assignment_result", Description: "Record a typed partial or terminal result for this exact capsule assignment, with bound command/output/mutation evidence.",
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
+			"result":         map[string]any{"type": "string", "enum": []string{"completed", "failed", "blocked", "partial"}},
+			"verdict":        map[string]any{"type": "string", "enum": []string{"none", "pass", "fail", "abstain"}},
+			"summary":        map[string]any{"type": "string"},
+			"evidence_refs":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"execution_refs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		}, []string{"result", "verdict", "summary", "evidence_refs", "execution_refs"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+			if err != nil {
+				return "", err
+			}
+			var input args
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return "", err
+			}
+			input.Summary = strings.TrimSpace(input.Summary)
+			if input.Summary == "" {
+				return "", fmt.Errorf("record_assignment_result summary is required")
+			}
+			input.EvidenceRefs = sortedUniqueStrings(input.EvidenceRefs)
+			input.ExecutionRefs = trimNonEmptyStrings(input.ExecutionRefs)
+			receipts, err := toolCtx.Executor.ResolveExecutionReceipts(input.ExecutionRefs)
+			if err != nil && len(input.ExecutionRefs) > 0 {
+				return "", err
+			}
+			commands := make([]types.CoSuperRecordedCommand, 0, len(receipts))
+			outputs := make([]types.CoSuperRecordedOutput, 0, len(receipts)*2)
+			for _, receipt := range receipts {
+				commandDigest := objectgraph.SHA256([]byte(receipt.Command))
+				commandID := "capsule-command:" + objectgraph.SHA256([]byte(receipt.ReceiptRef))
+				commands = append(commands, types.CoSuperRecordedCommand{CommandID: commandID, CommandDigest: commandDigest, ExecutionRef: receipt.ReceiptRef, ExitCode: receipt.ExitCode})
+				outputs = append(outputs,
+					types.CoSuperRecordedOutput{OutputID: commandID + ":stdout", Kind: "stdout", Digest: "sha256:" + strings.TrimPrefix(receipt.StdoutDigest, "sha256:"), Ref: receipt.ReceiptRef + "#stdout"},
+					types.CoSuperRecordedOutput{OutputID: commandID + ":stderr", Kind: "stderr", Digest: "sha256:" + strings.TrimPrefix(receipt.StderrDigest, "sha256:"), Ref: receipt.ReceiptRef + "#stderr"})
+			}
+			execution := toolregistry.ExecutionContextFrom(ctx)
+			report := types.CoSuperAssignmentReport{Result: input.Result, Verdict: input.Verdict, Summary: input.Summary,
+				EvidenceRefs: input.EvidenceRefs, Commands: commands, Outputs: outputs}
+			result, err := rt.recordAssignedCoSuperReport(ctx, execution.RunRecord, execution.ToolCallID, report)
+			if err != nil {
+				return "", err
+			}
+			// Store committed the exact parent obligation before this wake. Replays
+			// and late evidence-only reports never send a second actor signal.
+			if !result.Replay && result.Update != nil {
+				rt.wakeUpdatedCoagent(ctx, *result.Update)
+			}
+			return toolregistry.ResultJSON(map[string]any{"receipt": result.Receipt, "assignment_id": result.Assignment.AssignmentID,
+				"attempt": result.Assignment.Binding.Attempt, "disposition": result.Assignment.Disposition, "report": result.Report, "candidate": result.Candidate})
+		},
+	}
+}
+
 func randomCapsuleID() (string, error) {
 	var value [16]byte
 	if _, err := rand.Read(value[:]); err != nil {
 		return "", fmt.Errorf("capsule identity: %w", err)
 	}
 	return "capsule-" + hex.EncodeToString(value[:]), nil
+}
+
+func sortedUniqueStrings(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func trimNonEmptyStrings(values []string) []string {

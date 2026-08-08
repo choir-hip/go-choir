@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -196,6 +197,38 @@ func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.
 	}
 	if !terminalProgress {
 		t.Fatal("missing terminal_tool_success progress event")
+	}
+}
+
+func TestRunToolLoopDurableTransitionPassivatesAndDecisionSatisfiesRequiredActivation(t *testing.T) {
+	for _, toolName := range []string{"patch_texture", "rewrite_texture", "record_texture_decision"} {
+		t.Run(toolName, func(t *testing.T) {
+			registry := NewToolRegistry()
+			if err := registry.Register(Tool{Name: toolName, Func: func(context.Context, json.RawMessage) (string, error) {
+				return `{"status":"stored"}`, nil
+			}}); err != nil {
+				t.Fatal(err)
+			}
+			provider := newMockToolLoopProvider(&provideriface.ToolLoopResponse{
+				StopReason: "tool_use", ToolCalls: []types.ToolCall{{ID: "call-transition", Name: toolName, Arguments: json.RawMessage(`{}`)}},
+				Usage: provideriface.TokenUsage{InputTokens: 3, OutputTokens: 2}, Model: "test-model",
+			})
+			var passivatingProgress bool
+			_, _, err := RunToolLoop(context.Background(), provider, registry,
+				[]json.RawMessage{json.RawMessage(`{"role":"user","content":"transition"}`)}, "Texture", 0,
+				func(kind types.EventKind, phase string, _ json.RawMessage) {
+					passivatingProgress = passivatingProgress || (kind == types.EventRunProgress && phase == "passivating_tool_success")
+				}, nil,
+				WithInitialToolChoice("required"),
+				WithRequiredWriteTools("patch_texture", "rewrite_texture", "record_texture_decision"),
+				WithPassivatingToolSuccesses("patch_texture", "rewrite_texture", "record_texture_decision"))
+			if !errors.Is(err, ErrToolLoopPassivated) {
+				t.Fatalf("transition error = %v, want passivation", err)
+			}
+			if provider.CallCount() != 1 || !passivatingProgress {
+				t.Fatalf("provider calls=%d progress=%v", provider.CallCount(), passivatingProgress)
+			}
+		})
 	}
 }
 
@@ -2415,5 +2448,62 @@ func TestExecuteToolBatchPreservesExecutionContext(t *testing.T) {
 	)
 	if len(results) != 1 || results[0].IsError || results[0].Output != "preserved" {
 		t.Fatalf("results = %+v, want preserved caller context", results)
+	}
+}
+
+type delayedTerminalToolProvider struct {
+	provideriface.Provider
+	ready chan struct{}
+}
+
+func (p *delayedTerminalToolProvider) CallWithTools(ctx context.Context, _ provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
+	close(p.ready)
+	<-ctx.Done()
+	return &provideriface.ToolLoopResponse{StopReason: "tool_use", ToolCalls: []types.ToolCall{{
+		ID: "late-terminal-call", Name: "terminal_evidence", Arguments: json.RawMessage(`{"result":"completed"}`),
+	}}}, nil
+}
+
+func TestRunToolLoopDetachesOnlySoleSelectedTerminalEvidenceAfterProviderCancellation(t *testing.T) {
+	registry := NewToolRegistry()
+	executed := false
+	if err := registry.Register(Tool{Name: "terminal_evidence", Func: func(ctx context.Context, _ json.RawMessage) (string, error) {
+		if ctx.Err() != nil {
+			t.Fatalf("terminal evidence tool received cancelled context: %v", ctx.Err())
+		}
+		execution := ExecutionContextFrom(ctx)
+		if execution.RunRecord == nil || execution.RunRecord.RunID != "run-late" || execution.ToolCallID != "late-terminal-call" {
+			t.Fatalf("detached execution identity = %+v", execution)
+		}
+		executed = true
+		return ResultJSON(map[string]any{"late": true})
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	var persisted atomic.Int32
+	hooks := ToolLoopMemoryHooks{AfterAppendMessage: func(ctx context.Context, _ string, _ json.RawMessage) error {
+		if ctx.Err() != nil {
+			t.Fatalf("late evidence memory received cancelled context: %v", ctx.Err())
+		}
+		persisted.Add(1)
+		return nil
+	}}
+	provider := &delayedTerminalToolProvider{ready: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = WithExecutionContext(ctx, ExecutionContext{RunRecord: &types.RunRecord{RunID: "run-late"}})
+	go func() {
+		<-provider.ready
+		cancel()
+	}()
+	_, _, err := RunToolLoop(ctx, provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"report"}`)}, "system", 512, func(types.EventKind, string, json.RawMessage) {}, nil,
+		WithToolLoopMemoryHooks(hooks),
+		WithDetachedTerminalToolClosure(time.Second, func(call types.ToolCall) bool {
+			return call.Name == "terminal_evidence" && strings.Contains(string(call.Arguments), "completed")
+		}))
+	if !errors.Is(err, ErrDetachedTerminalToolCommitted) {
+		t.Fatalf("tool loop error = %v", err)
+	}
+	if !executed || persisted.Load() != 2 {
+		t.Fatalf("terminal closure executed=%t persisted=%d", executed, persisted.Load())
 	}
 }

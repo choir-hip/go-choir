@@ -71,7 +71,14 @@ run_shard() {
     echo "Using duration-aware non-runtime split: ${store_package} isolated in shard 0"
   fi
   echo "Running ${#selected[@]} of ${#all_packages[@]} non-runtime packages in shard ${shard_index}/${total_shards}"
-  "$(dirname "$0")/go-test-with-timing" -count=1 "${selected[@]}" "$@"
+  local -a timeout_args=()
+  if (( ${#selected[@]} == 1 )) && [[ "${selected[0]}" == "$store_package" ]]; then
+    # Store is intentionally isolated but its full Race suite exceeds Go's
+    # default 10m package timeout. Keep it bounded below the 30m CI job rather
+    # than skipping Race or weakening the package selection.
+    timeout_args=(-timeout=25m)
+  fi
+  "$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "${selected[@]}" "$@"
 }
 
 if [[ -n "${SHARD_INDEX:-}" ]]; then
