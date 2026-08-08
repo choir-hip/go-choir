@@ -1089,6 +1089,19 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start lifecycle: %v", err)
 	}
+	producerRun := types.RunRecord{
+		RunID: "run-explicit-work-producer", AgentID: agentID, ChannelID: docID, OwnerID: ownerID, SandboxID: computerID,
+		TrajectoryID: trajectoryID, State: types.RunRunning, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
+		CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": workItemID},
+	}
+	producerProject := types.ReplaceLifecycleActivationRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "activate-explicit-work-producer",
+		TrajectoryID: trajectoryID, AgentID: agentID, Run: producerRun,
+	}
+	producerProject.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(producerProject)
+	if _, err := s.ReplaceLifecycleActivation(ctx, producerProject); err != nil {
+		t.Fatalf("activate explicit-work producer: %v", err)
+	}
 	packet := types.CoagentSourcePacketPayload{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
 		Kind:          "evidence_update",
@@ -1102,12 +1115,21 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "queue-explicit-work-interim",
 		TrajectoryID: trajectoryID, TargetAgentID: agentID, ProducerAgentID: agentID,
 		ProducerUpdateID: "update-explicit-work-interim", UpdateID: "update-explicit-work-interim",
-		ChannelID: docID, Packet: packet, Content: "Interim evidence checkpoint", PayloadDigest: payloadDigest,
-		WorkDisposition: types.WorkItemOpen,
+		ChannelID: docID, Role: agentprofile.Texture, SourceRunID: producerRun.RunID,
+		Packet: packet, Content: "Interim evidence checkpoint", PayloadDigest: payloadDigest,
+		WorkDisposition: types.WorkItemOpen, WorkItemID: workItemID,
 	}
 	queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
 	if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
 		t.Fatalf("queue interim update: %v", err)
+	}
+	producerRun.State = types.RunPassivated
+	producerRun.UpdatedAt = now.Add(time.Second)
+	producerProject.CommandID = "passivate-explicit-work-producer"
+	producerProject.Run = producerRun
+	producerProject.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(producerProject)
+	if _, err := s.ReplaceLifecycleActivation(ctx, producerProject); err != nil {
+		t.Fatalf("passivate explicit-work producer: %v", err)
 	}
 	newRun := func(runID, baseRevisionID string) *types.RunRecord {
 		run := &types.RunRecord{
@@ -1223,6 +1245,14 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 	if _, err := s.OpenLifecycleWork(ctx, rejectedWork); err != nil {
 		t.Fatalf("open rejected evidence work: %v", err)
 	}
+	producerRun.Metadata["work_item_ids"] = []string{workItemID, rejectedWork.WorkItem.WorkItemID, "work-rejected-interim"}
+	producerRun.UpdatedAt = time.Now().UTC()
+	producerProject.CommandID = "bind-explicit-work-producer-followups"
+	producerProject.Run = producerRun
+	producerProject.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(producerProject)
+	if _, err := s.ReplaceLifecycleActivation(ctx, producerProject); err != nil {
+		t.Fatalf("bind follow-up producer work: %v", err)
+	}
 	rejectedUpdate := queue
 	rejectedUpdate.CommandID = "command-queue-rejected-evidence"
 	rejectedUpdate.ProducerUpdateID, rejectedUpdate.UpdateID = "producer-rejected-evidence", "update-rejected-evidence"
@@ -1259,7 +1289,7 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 	ignoredUpdate.ProducerUpdateID, ignoredUpdate.UpdateID = "producer-ignored-evidence", "update-ignored-evidence"
 	ignoredUpdate.Packet.Summary, ignoredUpdate.Content = "Evidence remains undecided.", "Evidence remains undecided."
 	ignoredUpdate.PayloadDigest, _ = store.ComputeLifecycleUpdatePayloadDigest(ignoredUpdate.Packet, ignoredUpdate.Content)
-	ignoredUpdate.WorkDisposition, ignoredUpdate.WorkItemID = types.WorkItemOpen, ""
+	ignoredUpdate.WorkDisposition, ignoredUpdate.WorkItemID = types.WorkItemOpen, workItemID
 	ignoredUpdate.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(ignoredUpdate)
 	if _, err := s.QueueLifecycleUpdate(ctx, ignoredUpdate); err != nil {
 		t.Fatalf("queue ignored evidence: %v", err)
@@ -1394,6 +1424,7 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 		if _, err := s.StartLifecycle(ctx, start); err != nil {
 			t.Fatalf("start %s lifecycle: %v", computerID, err)
 		}
+		producerAgentID, producerWorkID, producerRunID := projectTextureOwnerTestProducer(t, s, start, computerID+"-scoped")
 		packet := types.CoagentSourcePacketPayload{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update",
 			Summary: "pending " + computerID,
@@ -1402,10 +1433,11 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 		payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 		queue := types.QueueLifecycleUpdateRequest{
 			OwnerID: ownerID, ComputerID: computerID, CommandID: "queue-" + computerID,
-			TrajectoryID: start.TrajectoryID, TargetAgentID: agentID, ProducerAgentID: agentID,
+			TrajectoryID: start.TrajectoryID, TargetAgentID: agentID, ProducerAgentID: producerAgentID,
 			ProducerUpdateID: "producer-" + computerID, UpdateID: "update-" + computerID,
-			ChannelID: docID, Packet: packet, Content: content, PayloadDigest: payloadDigest,
-			WorkDisposition: types.WorkItemOpen, WorkItemID: start.InitialWork.WorkItemID,
+			ChannelID: docID, Role: agentprofile.Researcher, SourceRunID: producerRunID,
+			Packet: packet, Content: content, PayloadDigest: payloadDigest,
+			WorkDisposition: types.WorkItemOpen, WorkItemID: producerWorkID,
 		}
 		queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
 		if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
@@ -1520,8 +1552,17 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 		if err != nil {
 			t.Fatalf("load computer-b snapshot: %v", err)
 		}
-		if len(snapshot.WorkItems) != 1 || snapshot.WorkItems[0].Status != types.WorkItemOpen {
-			t.Fatalf("omitted work_disposition changed assigned work: %+v", snapshot.WorkItems)
+		foundInitialOpenWork := false
+		for _, work := range snapshot.WorkItems {
+			if work.Status != types.WorkItemOpen {
+				t.Fatalf("omitted work_disposition changed assigned work: %+v", snapshot.WorkItems)
+			}
+			if work.WorkItemID == starts["computer-b"].InitialWork.WorkItemID {
+				foundInitialOpenWork = true
+			}
+		}
+		if !foundInitialOpenWork {
+			t.Fatalf("initial assigned work missing after omitted work_disposition: %+v", snapshot.WorkItems)
 		}
 		foundOpenUpdate := false
 		for _, update := range snapshot.Updates {

@@ -217,13 +217,13 @@ func ComputeQueueLifecycleUpdateDigest(req types.QueueLifecycleUpdateRequest) (s
 	}
 	return lifecycleDigest(struct {
 		CommandID, TrajectoryID, TargetAgentID, ProducerAgentID string
-		ProducerUpdateID, PayloadDigest, WorkItemID             string
+		UpdateID, ProducerUpdateID, PayloadDigest, WorkItemID   string
 		SourceRunID, ChannelID, Role                            string
 		WorkDisposition                                         types.WorkItemStatus
 	}{
 		CommandID: strings.TrimSpace(req.CommandID), TrajectoryID: strings.TrimSpace(req.TrajectoryID),
 		TargetAgentID: strings.TrimSpace(req.TargetAgentID), ProducerAgentID: strings.TrimSpace(req.ProducerAgentID),
-		ProducerUpdateID: strings.TrimSpace(req.ProducerUpdateID), PayloadDigest: strings.TrimSpace(req.PayloadDigest),
+		UpdateID: strings.TrimSpace(req.UpdateID), ProducerUpdateID: strings.TrimSpace(req.ProducerUpdateID), PayloadDigest: strings.TrimSpace(req.PayloadDigest),
 		SourceRunID: strings.TrimSpace(req.SourceRunID), ChannelID: strings.TrimSpace(req.ChannelID), Role: strings.TrimSpace(req.Role),
 		WorkItemID: strings.TrimSpace(req.WorkItemID), WorkDisposition: workDisposition,
 	})

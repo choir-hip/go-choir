@@ -904,6 +904,7 @@ func TestLifecycleRunInjectorReadsComputerScopedPendingUpdates(t *testing.T) {
 	)
 	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
 	targetAgentID := currentTextureAgentID(docID)
+	producerAgentID, producerWorkID, producerRunID := projectTestLifecycleProducer(t, s, ownerID, "sandbox-test", trajectoryID, docID, "lifecycle-injector")
 	packet := types.CoagentSourcePacketPayload{
 		SchemaVersion: "coagent_source_packet.v1",
 		Kind:          "evidence_update",
@@ -911,8 +912,10 @@ func TestLifecycleRunInjectorReadsComputerScopedPendingUpdates(t *testing.T) {
 	}
 	req := types.QueueLifecycleUpdateRequest{
 		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "queue-lifecycle-injector",
-		TrajectoryID: trajectoryID, TargetAgentID: targetAgentID, ProducerAgentID: "researcher:lifecycle-injector",
+		TrajectoryID: trajectoryID, TargetAgentID: targetAgentID, ProducerAgentID: producerAgentID,
 		ProducerUpdateID: "producer-lifecycle-injector", UpdateID: "update-lifecycle-injector",
+		ChannelID: docID, Role: agentprofile.Researcher, SourceRunID: producerRunID,
+		WorkItemID: producerWorkID, WorkDisposition: types.WorkItemOpen,
 		Packet: packet, Content: "scoped lifecycle content", Disposition: types.UpdatePending,
 	}
 	req.PayloadDigest, _ = store.ComputeLifecycleUpdatePayloadDigest(req.Packet, req.Content)
@@ -1211,9 +1214,10 @@ func TestGenericRestartRewarmDefersTexturePendingLifecycleBindingsToDocumentOwne
 				ChannelID:        docID, Role: agentprofile.Texture, SourceRunID: run.RunID,
 				Packet: packet, Content: content, PayloadDigest: payloadDigest,
 			}
+			queue.WorkDisposition = types.WorkItemOpen
+			queue.WorkItemID = firstWorkItemID
 			if tc.terminal {
 				queue.WorkDisposition = types.WorkItemCompleted
-				queue.WorkItemID = firstWorkItemID
 			}
 			queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
 			if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {

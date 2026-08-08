@@ -495,6 +495,7 @@ func TestLifecycleSettlementWaitsForUpdateDisposition(t *testing.T) {
 		"source run": func(candidate *types.QueueLifecycleUpdateRequest) { candidate.SourceRunID = "changed-run" },
 		"channel":    func(candidate *types.QueueLifecycleUpdateRequest) { candidate.ChannelID = "changed-channel" },
 		"role":       func(candidate *types.QueueLifecycleUpdateRequest) { candidate.Role = "changed-role" },
+		"update id":  func(candidate *types.QueueLifecycleUpdateRequest) { candidate.UpdateID = "changed-update-id" },
 	} {
 		t.Run("same key rejects changed "+name, func(t *testing.T) {
 			candidate := queue
