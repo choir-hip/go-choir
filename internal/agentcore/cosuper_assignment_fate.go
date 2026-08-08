@@ -347,6 +347,39 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 }
 
 func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.RunRecord, toolCallID string, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentCommandResult, error) {
+	var lastErr error
+	for attempt := 0; attempt < 4; attempt++ {
+		result, err := rt.recordAssignedCoSuperReportOnce(ctx, rec, toolCallID, report)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+		if !errors.Is(err, store.ErrCoSuperAssignmentInvalid) && !errors.Is(err, store.ErrConcurrentStateChange) {
+			return types.CoSuperAssignmentCommandResult{}, err
+		}
+		// A cancellation/report race may invalidate the live freeze CAS or
+		// advance assignment fate after late authority was read. Reload the
+		// exact immutable binding and retry only after cancellation/revocation
+		// has won. The next attempt is forced through the evidence-only path.
+		assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
+		assignmentAttempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
+		current, loadErr := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.SandboxID, assignmentID, assignmentAttempt)
+		if loadErr != nil {
+			return types.CoSuperAssignmentCommandResult{}, loadErr
+		}
+		_, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, rec.OwnerID, rec.SandboxID, current.Binding.TrajectoryID)
+		cancellationWon := intentErr == nil
+		if intentErr != nil && !errors.Is(intentErr, store.ErrNotFound) {
+			return types.CoSuperAssignmentCommandResult{}, intentErr
+		}
+		if !cancellationWon && !current.Disposition.Terminal() && current.CapsuleDisposition != types.CoSuperCapsuleRevokeRequested && current.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+			return types.CoSuperAssignmentCommandResult{}, err
+		}
+	}
+	return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("retain assignment report after cancellation race: %w", lastErr)
+}
+
+func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *types.RunRecord, toolCallID string, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentCommandResult, error) {
 	if rec == nil || rt.capsuleExecutor == nil || strings.TrimSpace(toolCallID) == "" {
 		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("assigned CoSuper report authority unavailable")
 	}
