@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -187,6 +188,15 @@ func ComputeCommitLifecycleArtifactHeadDigest(req types.CommitLifecycleArtifactH
 	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
 	req.Revision.OwnerID, req.Revision.ComputerID, req.Revision.CreatedAt = "", "", time.Time{}
 	return lifecycleDigest(req)
+}
+
+func ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(req types.CommitLifecycleArtifactHeadRequest, graph TextureSourceGraphWriteSet) (string, error) {
+	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
+	req.Revision.OwnerID, req.Revision.ComputerID, req.Revision.CreatedAt = "", "", time.Time{}
+	return lifecycleDigest(struct {
+		Request types.CommitLifecycleArtifactHeadRequest `json:"request"`
+		Graph   TextureSourceGraphWriteSet               `json:"source_graph"`
+	}{Request: req, Graph: normalizeApplyLifecycleSourceGraphDigest(graph)})
 }
 
 func ComputeOpenLifecycleWorkDigest(req types.OpenLifecycleWorkRequest) (string, error) {
@@ -2524,6 +2534,13 @@ func (s *Store) lifecycleSourceGraphBatch(ctx context.Context, rev types.Revisio
 // CommitLifecycleArtifactHead advances a live lifecycle artifact head under
 // trajectory/document/head CAS and emits the durable reducer event atomically.
 func (s *Store) CommitLifecycleArtifactHead(ctx context.Context, req types.CommitLifecycleArtifactHeadRequest) (types.LifecycleResult, error) {
+	return s.CommitLifecycleArtifactHeadWithSourceGraph(ctx, req, TextureSourceGraphWriteSet{})
+}
+
+// CommitLifecycleArtifactHeadWithSourceGraph is the canonical object-graph
+// command for an owner editor revision: revision/source graph, head CAS,
+// correction obligation, events, and receipt fate-share one conditional batch.
+func (s *Store) CommitLifecycleArtifactHeadWithSourceGraph(ctx context.Context, req types.CommitLifecycleArtifactHeadRequest, sourceGraph TextureSourceGraphWriteSet) (types.LifecycleResult, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
 	if err != nil {
 		return types.LifecycleResult{}, err
@@ -2531,13 +2548,34 @@ func (s *Store) CommitLifecycleArtifactHead(ctx context.Context, req types.Commi
 	req.OwnerID, req.ComputerID = ownerID, computerID
 	req.CommandID, req.CommandDigest = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest)
 	req.TrajectoryID, req.ExpectedHeadRevisionID = strings.TrimSpace(req.TrajectoryID), strings.TrimSpace(req.ExpectedHeadRevisionID)
+	if req.OwnerCorrection != nil {
+		correction := *req.OwnerCorrection
+		correction.RequestID, correction.InstructionID = strings.TrimSpace(correction.RequestID), strings.TrimSpace(correction.InstructionID)
+		correction.TargetAgentID, correction.TargetWorkItemID = strings.TrimSpace(correction.TargetAgentID), strings.TrimSpace(correction.TargetWorkItemID)
+		correction.Content = strings.TrimSpace(correction.Content)
+		req.OwnerCorrection = &correction
+	}
 	if err := validateLifecycleCommand(req.CommandID, req.CommandDigest, req.TrajectoryID); err != nil {
 		return types.LifecycleResult{}, err
 	}
 	if req.ExpectedLifecycleVersion <= 0 || req.ExpectedHeadRevisionID == "" {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle commit head: expected lifecycle version and head are required")
 	}
-	computedDigest, digestErr := ComputeCommitLifecycleArtifactHeadDigest(req)
+	if req.OwnerCorrection != nil && (req.Unbound || req.OwnerCorrection.RequestID == "" || req.OwnerCorrection.InstructionID == "" || req.OwnerCorrection.TargetAgentID == "" || req.OwnerCorrection.TargetWorkItemID == "" || req.OwnerCorrection.Content == "") {
+		return types.LifecycleResult{}, fmt.Errorf("lifecycle commit head: live owner correction requires complete occurrence and Texture work binding")
+	}
+	var computedDigest string
+	var digestErr error
+	if req.OwnerCorrection == nil && len(sourceGraph.SourceEntities) == 0 && len(sourceGraph.SourceRefs) == 0 {
+		computedDigest, digestErr = ComputeCommitLifecycleArtifactHeadDigest(req)
+		if digestErr == nil && strings.TrimSpace(req.CommandDigest) != computedDigest {
+			// The explicit WithSourceGraph entry point has its own joined digest
+			// domain, while the legacy wrapper must replay historical receipts.
+			computedDigest, digestErr = ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(req, sourceGraph)
+		}
+	} else {
+		computedDigest, digestErr = ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(req, sourceGraph)
+	}
 	if err := requireLifecycleDigest(req.CommandDigest, computedDigest, digestErr); err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -2601,41 +2639,113 @@ func (s *Store) CommitLifecycleArtifactHead(ctx context.Context, req types.Commi
 		return types.LifecycleResult{}, err
 	}
 	if req.Unbound {
-		return s.commitUnboundTextureArtifactHead(ctx, req, trajectoryObj, trajectory, documentObj, document, headObj, revision, now)
+		return s.commitUnboundTextureArtifactHead(ctx, req, trajectoryObj, trajectory, documentObj, document, headObj, revision, sourceGraph, now)
 	}
-	nextSeq := trajectory.ReducerSeq + 1
-	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = nextSeq, trajectory.LifecycleVersion+1, now
-	revisionMeta := lifecycleMetadata("revision_id", revision.RevisionID, computerID, req.TrajectoryID, nextSeq)
+	seq := trajectory.ReducerSeq + 1
+	revisionSeq := seq
+	revisionMeta := lifecycleMetadata("revision_id", revision.RevisionID, computerID, req.TrajectoryID, revisionSeq)
 	revisionMeta["doc_id"], revisionMeta["revision_hash"] = docID, revision.RevisionHash
 	revisionObj, err := lifecycleObject(ogKindTexRev, ownerID, computerID, revision.RevisionID, revision, revisionMeta, now, now)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	documentMeta := lifecycleMetadata("doc_id", docID, computerID, req.TrajectoryID, nextSeq)
+	documentMeta := lifecycleMetadata("doc_id", docID, computerID, req.TrajectoryID, revisionSeq)
 	documentMeta["current_revision_id"] = revision.RevisionID
 	documentUpdated, err := lifecycleObject(ogKindTexDoc, ownerID, computerID, docID, document, documentMeta, documentObj.CreatedAt, now)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	trajectoryUpdated, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, req.TrajectoryID, trajectory, lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, nextSeq), trajectoryObj.CreatedAt, now)
-	if err != nil {
-		return types.LifecycleResult{}, err
+	objects := []objectgraph.Object{documentUpdated, revisionObj}
+	conditions := []objectgraph.ObjectCondition{
+		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
+		{CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash},
+		{CanonicalID: headObj.CanonicalID, Exists: true, ExpectedContentHash: headObj.ContentHash},
+		{CanonicalID: revisionObj.CanonicalID},
 	}
-	event := types.LifecycleEvent{
-		EventID: req.CommandID + ":" + fmt.Sprintf("%d", nextSeq), OwnerID: ownerID, ComputerID: computerID,
+	sourceObjects, sourceConditions, sourceErr := s.lifecycleSourceGraphBatch(ctx, revision, sourceGraph, now)
+	if sourceErr != nil {
+		return types.LifecycleResult{}, fmt.Errorf("lifecycle commit head source graph: %w", sourceErr)
+	}
+	objects, conditions = append(objects, sourceObjects...), append(conditions, sourceConditions...)
+	events := []types.LifecycleEvent{{
+		EventID: req.CommandID + ":1", OwnerID: ownerID, ComputerID: computerID,
 		TrajectoryID: req.TrajectoryID, Kind: types.LifecycleArtifactHeadAdvanced,
-		ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: nextSeq,
+		ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: revisionSeq,
 		CommandID: req.CommandID, CommandDigest: req.CommandDigest,
 		ArtifactRefs: []string{docID, revision.RevisionID}, CreatedAt: now,
+	}}
+	var ownerInstruction *types.LifecycleOwnerInstruction
+	if req.OwnerCorrection != nil {
+		if revision.AuthorKind != types.AuthorUser {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		correction := req.OwnerCorrection
+		if correction.TargetAgentID != "texture:"+docID {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		agentObj, agent, agentErr := s.textureTurnAgentObject(ctx, ownerID, computerID, correction.TargetAgentID)
+		if agentErr != nil {
+			return types.LifecycleResult{}, agentErr
+		}
+		workObj, work, workErr := s.lifecycleWorkObject(ctx, ownerID, computerID, correction.TargetWorkItemID)
+		if workErr != nil {
+			return types.LifecycleResult{}, workErr
+		}
+		if agent.Profile != agentprofile.Texture || agent.Role != agentprofile.Texture || agent.ChannelID != docID ||
+			work.Status != types.WorkItemOpen || work.TrajectoryID != req.TrajectoryID || work.AssignedAgentID != correction.TargetAgentID || work.AuthorityProfile != agentprofile.Texture {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		seq++
+		instruction := types.LifecycleOwnerInstruction{
+			Schema: types.LifecycleOwnerInstructionSchemaV1, InstructionID: correction.InstructionID, RequestID: correction.RequestID,
+			OwnerID: ownerID, ComputerID: computerID, DocumentID: docID, TrajectoryID: req.TrajectoryID,
+			TargetAgentID: correction.TargetAgentID, TargetWorkItemID: correction.TargetWorkItemID, HeadRevisionID: revision.RevisionID,
+			Kind: types.LifecycleOwnerCorrect, Content: correction.Content, Status: types.LifecycleOwnerInstructionPending,
+			LifecycleVersion: 1, ReducerSeq: seq, CreatedAt: now,
+		}
+		instructionKey := req.TrajectoryID + "\x00" + instruction.InstructionID
+		instructionObj, buildErr := lifecycleObject(ogKindOwnerInstruction, ownerID, computerID, instructionKey, instruction,
+			lifecycleMetadata("instruction_id", instruction.InstructionID, computerID, req.TrajectoryID, seq), now, now)
+		if buildErr != nil {
+			return types.LifecycleResult{}, buildErr
+		}
+		conditions = append(conditions,
+			objectgraph.ObjectCondition{CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash},
+			objectgraph.ObjectCondition{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash},
+			objectgraph.ObjectCondition{CanonicalID: instructionObj.CanonicalID},
+		)
+		objects = append(objects, instructionObj)
+		events = append(events, types.LifecycleEvent{
+			EventID: req.CommandID + ":2", OwnerID: ownerID, ComputerID: computerID, TrajectoryID: req.TrajectoryID,
+			WorkItemID: correction.TargetWorkItemID, Kind: types.LifecycleOwnerInstructionQueued,
+			ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: seq, CommandID: req.CommandID,
+			CommandDigest: req.CommandDigest, RequestID: correction.RequestID, ArtifactRefs: []string{instructionObj.CanonicalID}, CreatedAt: now,
+		})
+		ownerInstruction = &instruction
 	}
-	eventObj, err := lifecycleObject(ogKindLifecycleEvent, ownerID, computerID, event.EventID, event, lifecycleMetadata("event_id", event.EventID, computerID, req.TrajectoryID, nextSeq), now, now)
+	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = seq, trajectory.LifecycleVersion+1, now
+	trajectoryUpdated, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, req.TrajectoryID, trajectory,
+		lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, seq), trajectoryObj.CreatedAt, now)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID, req.CommandID, req.CommandDigest, types.LifecycleCommitArtifactHead, nextSeq, []objectgraph.Object{eventObj})
+	objects = append(objects, trajectoryUpdated)
+	eventObjs := make([]objectgraph.Object, 0, len(events))
+	for _, event := range events {
+		eventObj, buildErr := lifecycleObject(ogKindLifecycleEvent, ownerID, computerID, event.EventID, event,
+			lifecycleMetadata("event_id", event.EventID, computerID, req.TrajectoryID, event.ReducerSeq), now, now)
+		if buildErr != nil {
+			return types.LifecycleResult{}, buildErr
+		}
+		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: eventObj.CanonicalID})
+		objects, eventObjs = append(objects, eventObj), append(eventObjs, eventObj)
+	}
+	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID, req.CommandID, req.CommandDigest, types.LifecycleCommitArtifactHead, seq, eventObjs)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
+	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: receiptObj.CanonicalID})
+	objects = append(objects, receiptObj)
 	edgeMetadata := json.RawMessage(`{}`)
 	documentEdgeID, err := objectgraph.BuildEdgeID(revisionObj.CanonicalID, documentUpdated.CanonicalID, ogEdgeDocRevision, edgeMetadata)
 	if err != nil {
@@ -2645,18 +2755,12 @@ func (s *Store) CommitLifecycleArtifactHead(ctx context.Context, req types.Commi
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	conditions := []objectgraph.ObjectCondition{
-		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
-		{CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash},
-		{CanonicalID: headObj.CanonicalID, Exists: true, ExpectedContentHash: headObj.ContentHash},
-		{CanonicalID: revisionObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
-	}
-	result := types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Document: &document, Revision: &revision, Events: []types.LifecycleEvent{event}}
-	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions,
-		[]objectgraph.Object{trajectoryUpdated, documentUpdated, revisionObj, eventObj, receiptObj}, result,
+	result := types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Document: &document, Revision: &revision, OwnerInstruction: ownerInstruction, Events: events}
+	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, result,
 		objectgraph.Edge{EdgeID: documentEdgeID, FromID: revisionObj.CanonicalID, ToID: documentUpdated.CanonicalID, Kind: ogEdgeDocRevision, Metadata: edgeMetadata, CreatedAt: now},
 		objectgraph.Edge{EdgeID: parentEdgeID, FromID: revisionObj.CanonicalID, ToID: headObj.CanonicalID, Kind: ogEdgeRevParent, Metadata: edgeMetadata, CreatedAt: now},
 	)
+
 }
 
 func (s *Store) commitUnboundTextureArtifactHead(
@@ -2668,6 +2772,7 @@ func (s *Store) commitUnboundTextureArtifactHead(
 	document types.Document,
 	headObj objectgraph.Object,
 	revision types.Revision,
+	sourceGraph TextureSourceGraphWriteSet,
 	now time.Time,
 ) (types.LifecycleResult, error) {
 	ownerID, computerID := req.OwnerID, req.ComputerID
@@ -2714,6 +2819,10 @@ func (s *Store) commitUnboundTextureArtifactHead(
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
+	sourceObjects, sourceConditions, sourceErr := s.lifecycleSourceGraphBatch(ctx, revision, sourceGraph, now)
+	if sourceErr != nil {
+		return types.LifecycleResult{}, fmt.Errorf("unbound lifecycle commit head source graph: %w", sourceErr)
+	}
 	conditions := []objectgraph.ObjectCondition{
 		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
 		{CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash},
@@ -2723,13 +2832,14 @@ func (s *Store) commitUnboundTextureArtifactHead(
 		{CanonicalID: receiptObj.CanonicalID},
 		sequenceCondition,
 	}
+	conditions = append(conditions, sourceConditions...)
 	result := types.LifecycleResult{
 		Receipt: receipt, Trajectory: trajectory, Document: &document, Revision: &revision,
 		Events: []types.LifecycleEvent{event},
 	}
 	return s.commitLifecycleTransition(
 		ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions,
-		[]objectgraph.Object{documentUpdated, revisionObj, eventObj, receiptObj, sequenceUpdated}, result,
+		append([]objectgraph.Object{documentUpdated, revisionObj, eventObj, receiptObj, sequenceUpdated}, sourceObjects...), result,
 		objectgraph.Edge{EdgeID: documentEdgeID, FromID: revisionObj.CanonicalID, ToID: documentUpdated.CanonicalID, Kind: ogEdgeDocRevision, Metadata: edgeMetadata, CreatedAt: now},
 		objectgraph.Edge{EdgeID: parentEdgeID, FromID: revisionObj.CanonicalID, ToID: headObj.CanonicalID, Kind: ogEdgeRevParent, Metadata: edgeMetadata, CreatedAt: now},
 	)

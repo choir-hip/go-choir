@@ -358,3 +358,28 @@ func TestTextureLifecycleObservationRejectsWrongComputerScope(t *testing.T) {
 		t.Fatalf("wrong computer page err=%v, want scope refusal", err)
 	}
 }
+
+func TestTextureObservationNoChangeTransitionsNeverReprojectOldVersion(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	doc, err := core.Store().GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []types.LifecycleEventKind{types.LifecycleTextureTurnCommitted, types.LifecycleControlDelivered, types.LifecycleOwnerInstructionQueued} {
+		event, err := handler.projectTextureLifecycleEvent(t.Context(), doc, types.LifecycleEvent{
+			EventID: "transition-" + string(kind), Kind: kind, ReducerSeq: 50, CommandID: "no-change",
+			CommandDigest: "sha256:no-change", TrajectoryID: start.TrajectoryID,
+			ArtifactRefs: []string{start.InitialDocument.DocID, start.InitialRevision.RevisionID}, CreatedAt: time.Now().UTC(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if event.EventType == "version" || event.RevisionID != "" || event.VersionNumber != nil {
+			t.Fatalf("%s duplicated old version: %+v", kind, event)
+		}
+		if event.Cursor != 50 || event.EventType == "" {
+			t.Fatalf("%s lost typed cursor transition: %+v", kind, event)
+		}
+	}
+}

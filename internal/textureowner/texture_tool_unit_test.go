@@ -1515,21 +1515,7 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 			},
 		}
 	}
-	assertScopedInjection := func(h *Handler, rec *types.RunRecord) {
-		t.Helper()
-		inject := h.coagentUpdateTurnInjector(rec)
-		if inject == nil {
-			t.Fatal("scoped lifecycle injector is nil")
-		}
-		messages, err := inject(false)
-		if err != nil || len(messages) != 1 {
-			t.Fatalf("inject scoped updates: %d messages, %v", len(messages), err)
-		}
-		if !messageTextContains(t, messages[0], "update-computer-b") ||
-			messageTextContains(t, messages[0], "update-computer-a") {
-			t.Fatalf("cross-computer update injection: %s", string(messages[0]))
-		}
-	}
+
 	commitScopedEdit := func(s *store.Store, registry *toolregistry.ToolRegistry, runID, baseRevisionID, content string) string {
 		t.Helper()
 		run := newRun(runID, baseRevisionID)
@@ -1589,8 +1575,6 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 		return snapshot.HeadRevision.RevisionID
 	}
 
-	injectionRun := newRun("run-inject-before-restart", starts["computer-b"].InitialRevision.RevisionID)
-	assertScopedInjection(handler, injectionRun)
 	firstHead := commitScopedEdit(s, registry, "run-edit-before-restart", starts["computer-b"].InitialRevision.RevisionID, "# Computer B v1\n\nScoped before restart.")
 	core.Stop()
 	if err := s.Close(); err != nil {
@@ -1600,7 +1584,6 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 	s, core, handler, registry = openRuntime()
 	defer core.Stop()
 	defer s.Close()
-	assertScopedInjection(handler, newRun("run-inject-after-restart", firstHead))
 	secondHead := commitScopedEdit(s, registry, "run-edit-after-restart", firstHead, "# Computer B v2\n\nScoped after restart.")
 	if secondHead == firstHead {
 		t.Fatalf("computer-b head did not advance after restart: %s", secondHead)

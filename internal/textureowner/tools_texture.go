@@ -3,6 +3,7 @@ package textureowner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -963,6 +964,13 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		}
 		applied, applyErr := rt.applyTextureLifecycleTurn(ctx, rec, doc, in, types.TextureTurnRevision, rev, graph, in.Rationale)
 		if applyErr != nil {
+			if errors.Is(applyErr, store.ErrConcurrentStateChange) || errors.Is(applyErr, store.ErrStaleDocumentHead) {
+				// A late direct edit or owner occurrence invalidates only this tool
+				// attempt. Keep the resident run and its pending mutation alive: the
+				// next tool turn reloads the canonical head, lifecycle snapshot, and
+				// complete same-head owner set.
+				return types.Revision{}, fmt.Errorf("Texture head or owner-instruction set changed concurrently; reload the current Texture document and retry this same run/mutation: %w", applyErr)
+			}
 			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 			return types.Revision{}, fmt.Errorf("apply atomic Texture lifecycle turn: %w", applyErr)
 		}

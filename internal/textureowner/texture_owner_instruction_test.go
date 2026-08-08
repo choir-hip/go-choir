@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -427,5 +428,89 @@ func TestOwnerInstructionWakeSurvivesPassivationRaceAndBootReconcile(t *testing.
 	}
 	if len(wakes) != 1 {
 		t.Fatalf("reconcile emitted extra owner occurrence wake: %v", wakes)
+	}
+}
+
+func TestResidentTextureInjectsAndConsumes101SameHeadOwnerOccurrences(t *testing.T) {
+	core, handler := testAPISetup(t)
+	installSynchronousTextureOwnerWake(t, core, handler)
+	start := startObservationLifecycle(t, core.Store())
+	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
+	for i := 0; i < 101; i++ {
+		response := postOwnerInstruction(t, handler, path, start.OwnerID, fmt.Sprintf("bulk-runtime-%03d", i), fmt.Sprintf("owner occurrence %03d", i), start.InitialRevision.RevisionID)
+		if response.Code != http.StatusAccepted {
+			t.Fatalf("tell %d status=%d body=%s", i, response.Code, response.Body.String())
+		}
+	}
+	agent, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	if err != nil || agent.ActiveRunID == "" {
+		t.Fatalf("resident agent=%+v err=%v", agent, err)
+	}
+	run, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, agent.ActiveRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inject := handler.coagentUpdateTurnInjector(&run)
+	messages, err := inject(false)
+	if err != nil || len(messages) != 1 || strings.Count(string(messages[0]), `\"instruction_id\"`) != 101 || len(metadataStringSlice(run.Metadata[textureOwnerInstructionIDsMetadata])) != 101 {
+		t.Fatalf("complete runtime injection count=%d metadata=%d err=%v", strings.Count(string(messages[0]), `\"instruction_id\"`), len(metadataStringSlice(run.Metadata[textureOwnerInstructionIDsMetadata])), err)
+	}
+	doc, err := core.Store().GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handler.applyTextureLifecycleTurn(t.Context(), &run, doc, editTextureArgs{ToolCallID: "owner-101-turn", WorkDisposition: string(types.WorkItemOpen)}, types.TextureTurnWait, types.Revision{}, store.TextureSourceGraphWriteSet{}, "consume complete owner set"); err != nil {
+		t.Fatalf("consume complete owner set: %v", err)
+	}
+	remaining, err := core.Store().ListPendingLifecycleOwnerInstructionsForHead(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID, start.Agent.AgentID, start.InitialRevision.RevisionID)
+	if err != nil || len(remaining) != 0 {
+		t.Fatalf("remaining owner set=%d err=%v", len(remaining), err)
+	}
+}
+
+func TestLateOwnerInstructionConcurrencyKeepsResidentMutationRetryable(t *testing.T) {
+	core, handler := testAPISetup(t)
+	installSynchronousTextureOwnerWake(t, core, handler)
+	start := startObservationLifecycle(t, core.Store())
+	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
+	if response := postOwnerInstruction(t, handler, path, start.OwnerID, "retry-first", "first instruction", start.InitialRevision.RevisionID); response.Code != http.StatusAccepted {
+		t.Fatalf("first status=%d", response.Code)
+	}
+	agent, _ := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	run, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, agent.ActiveRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inject := handler.coagentUpdateTurnInjector(&run)
+	initialMessages, err := inject(false)
+	if err != nil || len(initialMessages) != 1 {
+		t.Fatalf("initial injection=%s err=%v", initialMessages, err)
+	}
+	if _, err := core.Store().AppendRunMemoryEntry(t.Context(), types.RunMemoryEntry{RunID: run.RunID, OwnerID: run.OwnerID, AgentID: run.AgentID, Kind: types.RunMemoryEntryMessage, Role: "user", Message: initialMessages[0], CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	delete(run.Metadata, textureOwnerInstructionIDsMetadata)
+	delete(run.Metadata, textureOwnerRequestIDsMetadata)
+	inject = handler.coagentUpdateTurnInjector(&run)
+	if duplicate, err := inject(false); err != nil || len(duplicate) != 0 {
+		t.Fatalf("owner memory/metadata crash gap duplicated=%s err=%v", duplicate, err)
+	}
+	if response := postOwnerInstruction(t, handler, path, start.OwnerID, "retry-late", "late instruction", start.InitialRevision.RevisionID); response.Code != http.StatusAccepted {
+		t.Fatalf("late status=%d", response.Code)
+	}
+	_, err = handler.commitTextureToolEdit(t.Context(), &run, editTextureArgs{
+		DocID: start.InitialDocument.DocID, BaseRevisionID: start.InitialRevision.RevisionID,
+		Content: "retryable revised content", Rationale: "exercise deterministic late instruction race", ToolCallID: "late-race-tool", WorkDisposition: string(types.WorkItemOpen),
+	})
+	if err == nil || !strings.Contains(err.Error(), "retry this same run/mutation") {
+		t.Fatalf("late race error=%v", err)
+	}
+	mutation, mutationErr := core.Store().GetAgentMutationByRun(t.Context(), start.OwnerID, start.ComputerID, run.RunID)
+	resident, residentErr := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	if mutationErr != nil || mutation == nil || mutation.State != "pending" || residentErr != nil || resident.ActiveRunID != run.RunID {
+		t.Fatalf("retry authority mutation=%+v resident=%+v errors=%v/%v", mutation, resident, mutationErr, residentErr)
+	}
+	if messages, err := inject(false); err != nil || len(messages) != 1 || !strings.Contains(string(messages[0]), "late instruction") || strings.Contains(string(messages[0]), "first instruction") {
+		t.Fatalf("retry injection duplicated/lost occurrence=%s err=%v", messages, err)
 	}
 }

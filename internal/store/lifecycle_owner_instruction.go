@@ -155,19 +155,34 @@ func (s *Store) GetLifecycleOwnerInstruction(ctx context.Context, ownerID, compu
 }
 
 func (s *Store) ListPendingLifecycleOwnerInstructions(ctx context.Context, ownerID, computerID, trajectoryID, targetAgentID string, limit int) ([]types.LifecycleOwnerInstruction, error) {
-	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	out, err := s.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, computerID, trajectoryID, targetAgentID, "")
 	if err != nil {
 		return nil, err
-	}
-	trajectoryID, targetAgentID = strings.TrimSpace(trajectoryID), strings.TrimSpace(targetAgentID)
-	if trajectoryID == "" || targetAgentID == "" {
-		return nil, fmt.Errorf("owner instructions: trajectory_id and target_agent_id are required")
 	}
 	if limit <= 0 {
 		limit = 100
 	}
 	if limit > 1000 {
 		limit = 1000
+	}
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// ListPendingLifecycleOwnerInstructionsForHead returns the complete ordered
+// occurrence set. An empty head selects every pending occurrence. Runtime turn
+// construction and reducer completeness CAS deliberately share this one
+// unbounded reader so pagination cannot strand the 101st instruction.
+func (s *Store) ListPendingLifecycleOwnerInstructionsForHead(ctx context.Context, ownerID, computerID, trajectoryID, targetAgentID, headRevisionID string) ([]types.LifecycleOwnerInstruction, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	trajectoryID, targetAgentID, headRevisionID = strings.TrimSpace(trajectoryID), strings.TrimSpace(targetAgentID), strings.TrimSpace(headRevisionID)
+	if trajectoryID == "" || targetAgentID == "" {
+		return nil, fmt.Errorf("owner instructions: trajectory_id and target_agent_id are required")
 	}
 	objs, err := s.lifecycleTransitionObjects(ctx, ogKindOwnerInstruction, trajectoryID, ownerID, computerID)
 	if err != nil {
@@ -179,7 +194,8 @@ func (s *Store) ListPendingLifecycleOwnerInstructions(ctx context.Context, owner
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
-		if instruction.TargetAgentID == targetAgentID && instruction.Status == types.LifecycleOwnerInstructionPending {
+		if instruction.TargetAgentID == targetAgentID && instruction.Status == types.LifecycleOwnerInstructionPending &&
+			(headRevisionID == "" || instruction.HeadRevisionID == headRevisionID) {
 			out = append(out, instruction)
 		}
 	}
@@ -189,9 +205,6 @@ func (s *Store) ListPendingLifecycleOwnerInstructions(ctx context.Context, owner
 		}
 		return out[i].ReducerSeq < out[j].ReducerSeq
 	})
-	if len(out) > limit {
-		out = out[:limit]
-	}
 	return out, nil
 }
 

@@ -307,16 +307,25 @@ type SettleLifecycleTrajectoryRequest struct {
 	ExpectedHeadRevisionID   string `json:"expected_head_revision_id"`
 }
 
+type CommitLifecycleOwnerCorrection struct {
+	RequestID        string `json:"request_id"`
+	InstructionID    string `json:"instruction_id"`
+	TargetAgentID    string `json:"target_agent_id"`
+	TargetWorkItemID string `json:"target_work_item_id"`
+	Content          string `json:"content"`
+}
+
 type CommitLifecycleArtifactHeadRequest struct {
-	OwnerID                  string   `json:"owner_id"`
-	ComputerID               string   `json:"computer_id"`
-	CommandID                string   `json:"command_id"`
-	CommandDigest            string   `json:"command_digest"`
-	TrajectoryID             string   `json:"trajectory_id"`
-	ExpectedLifecycleVersion int64    `json:"expected_lifecycle_version"`
-	ExpectedHeadRevisionID   string   `json:"expected_head_revision_id"`
-	Unbound                  bool     `json:"unbound,omitempty"`
-	Revision                 Revision `json:"revision"`
+	OwnerID                  string                          `json:"owner_id"`
+	ComputerID               string                          `json:"computer_id"`
+	CommandID                string                          `json:"command_id"`
+	CommandDigest            string                          `json:"command_digest"`
+	TrajectoryID             string                          `json:"trajectory_id"`
+	ExpectedLifecycleVersion int64                           `json:"expected_lifecycle_version"`
+	ExpectedHeadRevisionID   string                          `json:"expected_head_revision_id"`
+	Unbound                  bool                            `json:"unbound,omitempty"`
+	Revision                 Revision                        `json:"revision"`
+	OwnerCorrection          *CommitLifecycleOwnerCorrection `json:"owner_correction,omitempty"`
 }
 
 type ArchiveLifecycleArtifactRequest struct {
