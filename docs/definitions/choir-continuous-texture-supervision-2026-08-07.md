@@ -229,24 +229,24 @@ measures:
 
 now:
   status: working
-  slice: "Define boundary closed; executable authority is promoted. At /goal startup, launch and keep the skill-owned local Definition dashboard live, then begin Implement A with a complete exported-caller and target-address inventory before runtime mutation."
+  slice: "The read-only implementation inventory and problem-first boundary are landed. Repair the active-mission registry root and deleted problem citer, then build one frozen Implement A–C candidate joining fail-closed addressing, direction-specific lifecycle control, structured normalization, and the atomic Texture turn before any Texture affordance is registered."
   question: none
   reconciliation:
-    observed_at: 2026-08-08T03:33:22Z
-    source_ref: 6965f7f71f764f91737b21804bc376281cbdbe8f
+    observed_at: 2026-08-08T03:57:58Z
+    source_ref: 7467b678cfb2a92906434158fb2a18124f3ee0c3
     deploy_identity: 6965f7f71f764f91737b21804bc376281cbdbe8f
-    authority_identities: [docs/choir-doctrine.md@f64784e8, docs/agent-product-doctrine.md@f64784e8, docs/supervision-protocol.md@f64784e8, docs/texture-agentic-invariants-2026-06-13.md@f64784e8, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, "owner directive in this run: proceed without asking", "owner directive in this run: use the Definition dashboard to supervise /goal until Texture works correctly"]
+    authority_identities: [docs/choir-doctrine.md@f64784e8, docs/agent-product-doctrine.md@f64784e8, docs/supervision-protocol.md@f64784e8, docs/texture-agentic-invariants-2026-06-13.md@f64784e8, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md@7467b678, "owner directive in this run: proceed without asking", "owner directive in this run: use the Definition dashboard to supervise /goal until Texture works correctly"]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "2026-08-08 dashboard-amendment inventory: primary worktree clean at main@6965f7f7 before this goal-owned Definition edit; all other worktrees and WIP remain forbidden."
+    worktree_inventory_ref: "2026-08-08 post-inventory inventory: primary worktree clean at main@7467b678 before this goal-owned Definition/manifest repair; one .context-only and one objectgraph/store WIP worktree remain forbidden; all other registered worktrees are clean or prunable and untouched."
     status: reconciled
   candidate:
-    id: continuous-texture-supervision-definition-v6
-    state: ready
-    ref: main working tree executable Definition
-    owner: owner
-    base: 6965f7f71f764f91737b21804bc376281cbdbe8f
-    digest: sha256-self-normalized:b8abca13a95d48ea10e0389ab266d17a1128066631cfef8b890c830e913cbf80
-    scope: [docs/definitions/choir-continuous-texture-supervision-2026-08-07.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, scripts/lint/cts-receipt-lint.py]
+    id: continuous-texture-supervision-implement-a-c-v1
+    state: preparing
+    ref: main working tree
+    owner: current goal session
+    base: 7467b678cfb2a92906434158fb2a18124f3ee0c3
+    digest: pending until scoped runtime bytes and tests are frozen
+    scope: [docs/definitions/choir-continuous-texture-supervision-2026-08-07.md, docs/doc-authority-manifest.yaml, internal/agentprofile/, internal/agentcore/tools_researcher.go, internal/agentcore/tools_worker_update.go, internal/agentcore/super_controller.go, internal/types/lifecycle.go, internal/types/evidence.go, internal/store/lifecycle.go, internal/textureowner/tools_texture.go, internal/textureowner/texture_controller.go, focused tests adjacent to those files]
   decision:
     selected: "Preserve producer-report QueueLifecycleUpdate; add direction-specific lifecycle controls with target work, an exact persistent-Super opener, and one atomic progressive Texture-turn transition. Keep Super non-lifecycle; let it coordinate many capability-bound CoSupers, normally one writable assignment per isolated capsule. Verifier is an independently assigned writable-capsule capability rather than a singleton role: it may edit files and run tests/scripts inside its capsule, but verifies an immutable subject identity and has no host or self-development effect authority. At least one verification result is required before completion. Keep Texture prose-first and domain-generic while exact research, code, command, test, and later multimedia evidence uses one canonical source_ref transclusion contract exposed through the existing Texture API and CLI."
     kind: architecture
@@ -255,10 +255,10 @@ now:
     evidence_ref: docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
     owner_ratification_ref: "Owner directives in this run: proceed without asking; promote the repaired Definition; verifier should not be read-only and may write and run tests or other scripts; use the Definition dashboard to supervise the /goal run until Texture works correctly."
     recorded_at: 2026-08-08T03:33:22Z
-    consequence: "The Definition is executable through /goal after three-registry promotion. The /goal executor must launch view.generator as a supervised long-running local process at startup and keep it live through terminal closure because Texture is the artifact being repaired, not yet a reliable supervision surface. The dashboard remains a read-only, non-authoritative projection. Runtime work must follow the red-mutation ceremony: one writable assignment per isolated capsule by default, including verification assignments; a verifier may edit and execute tests/scripts inside its own networkless capsule; at least one independently identified verification result is required before completion; changed subject bytes become a new candidate; one canonical source_ref projection remains authoritative; no generic mailbox, direct Texture-to-CoSuper path, host mutation, or self-development finalization/materialization/checkpoint/route/owner-decision effect is authorized."
-  evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, .agentic-consensus/cts-v4.7-panel/, .agentic-consensus/cts-v4.7-2-panel/, .agentic-consensus/cts-v4.7-3-panel/, scripts/lint/cts-receipt-lint.py, "owner directive in this run: proceed without asking", "owner directive in this run: use the Definition dashboard to supervise /goal until Texture works correctly"]
-  blocker_or_risk: "No Define blocker remains. Implementation is red: protected runtime surfaces remain unchanged until each closed typed schema and atomic transition is implemented and proved. Effects remain OFF."
-  next_action: Launch `view.generator` as a supervised long-running local process and confirm its health endpoint is current; keep it live while inventorying every exported target-address, lifecycle enqueue/reducer, Texture write, persistent-Super opener, CoSuper capability, and public Texture API/CLI caller, then freeze the exact Implement A schema and negative matrix before code mutation.
+    consequence: "The Definition is executable through /goal after three-registry promotion. The /goal executor must keep view.generator live through terminal closure because Texture is the artifact being repaired, not yet a reliable supervision surface. Runtime work follows the red-mutation ceremony and the frozen A–C schema in the implementation inventory: no temporary generic Texture update tool, no separately committing control call, no legacy mailbox write, and no target wake before one validated conditional turn commit. Later capsule work preserves one writable assignment per isolated capsule by default, including verification; a verifier may edit and execute tests/scripts inside its own networkless capsule but has no host or self-development effect authority."
+  evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, .agentic-consensus/cts-v4.7-panel/, .agentic-consensus/cts-v4.7-2-panel/, .agentic-consensus/cts-v4.7-3-panel/, scripts/lint/cts-receipt-lint.py, "owner directive in this run: proceed without asking", "owner directive in this run: use the Definition dashboard to supervise /goal until Texture works correctly"]
+  blocker_or_risk: "The live doccheck found a three-registry root mismatch and the owner-ratification receipt cites a deleted problem path. This goal-owned docs candidate repairs both before runtime mutation. Implementation remains red; effects stay OFF. Production capsules are currently unwired, and existing CoSuper verifier tools carry forbidden self-development effects, so Implement D cannot be reached by merely enabling the executor."
+  next_action: Validate the manifest root and deleted-citer repairs with live doccheck, Definition parsing/dashboard generation, and the receipt linter; then implement and test the frozen A–C schema as one candidate before registering or waking any Texture-originated control.
 
 receipts:
   - id: continuous-supervision-definition-review-v1
@@ -524,7 +524,7 @@ receipts:
     proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, scripts/lint/cts-receipt-lint.py, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
     rollback_ref: main@b20bece30b408373d2844f5621fb9f91fc624d99
     disposition: "Owner ratified the direction-specific lifecycle control, atomic progressive Texture turn, many capability-bound CoSupers, mandatory independently identified verification result from a writable isolated capsule, single canonical source_ref transclusion projection, and automatable Texture API/CLI contract; corrected the verifier model so it may edit and run tests/scripts inside its capsule; accepted the mechanically repaired ledger; and directed promotion without another panel. The Definition is executable, not complete: runtime behavior remains to be implemented and accepted on staging."
-    problem_ref: docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md
+    problem_ref: docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md
     authorization_ref: "Owner directive in this run: proceed without asking and promote the repaired Definition as executable."
     candidate_or_evidence_refs: [this Definition@continuous-texture-supervision-definition-v5, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md]
     landing:
@@ -534,6 +534,23 @@ receipts:
       environment_identity: not_applicable; staging identity remains observational baseline only
       deployed_acceptance: not_applicable until the red implementation boundary lands
     registry_conformance_ref: "docs/ACTIVE.md Active Definition; docs/mission-graph.yaml active mission_orchestrator entrypoint; docs/doc-authority-manifest.yaml active executable definition authority"
+
+  - id: continuous-supervision-implementation-inventory
+    boundary: define
+    commit_or_artifact: git:7467b678cfb2a92906434158fb2a18124f3ee0c3
+    proof_refs: [docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md]
+    rollback_ref: main@d40a711f67144b4e1c41e3155e4d79975682dec1
+    disposition: "Read-only production-caller inventory found the exact A–C substrate boundary plus new structured-normalization, owner-correction, durable-stream, production-capsule-wiring, verifier-effect, and registry-root problems. Commits a5308e87 and 7467b678 landed the problem-first receipts without runtime repair; the current docs candidate repairs the deleted citer and registry root before red mutation."
+    problem_ref: docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md
+    authorization_ref: this active owner-ratified Definition and AGENTS.md problem-documentation-first invariant
+    candidate_or_evidence_refs: [docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, main@7467b678cfb2a92906434158fb2a18124f3ee0c3]
+    landing:
+      source_commit: 7467b678cfb2a92906434158fb2a18124f3ee0c3
+      ci_ref: docs truth pending; live pre-flight failure is recorded in the problem receipt
+      deploy_ref: skipped_docs_only
+      environment_identity: 6965f7f71f764f91737b21804bc376281cbdbe8f observation only
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "live doccheck failure recorded before repair: one product mission-graph entrypoint versus zero authority-root product Definitions"
 
 view:
   path: http://127.0.0.1:8787/
