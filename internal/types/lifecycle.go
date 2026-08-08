@@ -23,6 +23,7 @@ const (
 	LifecycleCancelTrajectory      LifecycleCommandKind = "cancel_trajectory"
 	LifecycleArchiveArtifact       LifecycleCommandKind = "archive_artifact"
 	LifecycleApplyTextureTurn      LifecycleCommandKind = "apply_texture_turn"
+	LifecycleBindControlDelivery   LifecycleCommandKind = "bind_control_delivery"
 	LifecycleQueueOwnerInstruction LifecycleCommandKind = "queue_owner_instruction"
 )
 
@@ -46,6 +47,7 @@ const (
 	LifecycleArtifactArchived       LifecycleEventKind = "artifact_archived"
 	LifecycleTextureTurnCommitted   LifecycleEventKind = "texture_turn_committed"
 	LifecycleControlQueued          LifecycleEventKind = "control_queued"
+	LifecycleControlDelivered       LifecycleEventKind = "control_delivered"
 	LifecycleOwnerInstructionQueued LifecycleEventKind = "owner_instruction_queued"
 )
 
@@ -186,6 +188,25 @@ type TextureTurnRecord struct {
 	OwnerInstructionIDs   []string           `json:"owner_instruction_ids,omitempty"`
 	CausalRequestIDs      []string           `json:"causal_request_ids,omitempty"`
 	Reason                string             `json:"reason,omitempty"`
+}
+
+type BindLifecycleControlDeliveryItem struct {
+	UpdateID         string `json:"update_id"`
+	ProducerAgentID  string `json:"producer_agent_id"`
+	ProducerUpdateID string `json:"producer_update_id"`
+	TargetWorkItemID string `json:"target_work_item_id"`
+}
+
+type BindLifecycleControlDeliveryRequest struct {
+	OwnerID                  string                             `json:"owner_id"`
+	ComputerID               string                             `json:"computer_id"`
+	CommandID                string                             `json:"command_id"`
+	CommandDigest            string                             `json:"command_digest"`
+	TrajectoryID             string                             `json:"trajectory_id"`
+	TargetAgentID            string                             `json:"target_agent_id"`
+	TargetRunID              string                             `json:"target_run_id"`
+	ExpectedLifecycleVersion int64                              `json:"expected_lifecycle_version"`
+	Controls                 []BindLifecycleControlDeliveryItem `json:"controls"`
 }
 
 type OpenLifecycleWorkRequest struct {

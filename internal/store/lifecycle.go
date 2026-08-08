@@ -1135,7 +1135,7 @@ func (s *Store) ListPendingLifecycleUpdates(ctx context.Context, ownerID, comput
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
-		if update.LifecycleVersion > 0 && update.TargetAgentID == targetAgentID && update.Disposition == types.UpdatePending {
+		if update.LifecycleVersion > 0 && update.TargetAgentID == targetAgentID && update.Disposition == types.UpdatePending && update.DeliveredAt == nil && strings.TrimSpace(update.DeliveredToRunID) == "" {
 			updates = append(updates, update)
 		}
 	}
