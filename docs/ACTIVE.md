@@ -12,9 +12,12 @@ Super, many capability-bound capsule-only CoSupers, progressive prose-first
 versions with canonical source transclusions, and an automatable Texture API/CLI
 surface. The final owner settlement accepts the repaired Definition after the
 v4.7-3 panel's remaining ledger-only dissent was mechanically closed. Runtime
-behavior is not yet implemented; effects remain OFF, and the Definition's red
-mutation, staging identity, authenticated product-path, no-effect, rollback, and
-registry-closure evidence floor remains mandatory.
+candidate `99fc3e6b` has passed independent source review, selected CI, and exact
+Node B host deployment, but authenticated product acceptance is blocked: the
+owner's preserved constructed computer still serves immutable `7122f279` and
+returns 404 for the lifecycle create route. Effects remain OFF; real Linux
+product proof, no-effect/rollback evidence, and registry closure remain
+mandatory.
 
 ## Completed Definitions — Historical Evidence Authority
 

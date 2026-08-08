@@ -307,7 +307,7 @@ documents:
     is_root: [authority, entry]
     is_evidence: false
     annotations: {doc_role: definition, authority: active_product_mission, lifecycle: active, entrypoint: true}
-    witnesses: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, docs/supervision-protocol.md, docs/texture-agentic-invariants-2026-06-13.md]
+    witnesses: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, docs/supervision-protocol.md, docs/texture-agentic-invariants-2026-06-13.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, durable_actor_delivery_change, trajectory_work_update_change, Texture_tool_authority_change, persistent_Super_inbox_change, capsule_effect_boundary_change, deployed_acceptance, registry_closure]
 
   - path: docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md
@@ -391,3 +391,19 @@ documents:
     annotations: {doc_role: consensus_evidence, authority: adjudicated_external_review, lifecycle: append_only}
     witnesses: [docs/definitions/choir-continuous-texture-supervision-2026-08-07.md, docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [definition_candidate_change, owner_ratification, registry_promotion]
+
+  - path: docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md
+    claim_scope: current
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: implementation_evidence, authority: reviewed_runtime_and_landing_receipt, lifecycle: append_only}
+    witnesses: [docs/definitions/choir-continuous-texture-supervision-2026-08-07.md, docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md]
+    refresh_triggers: [runtime_candidate_change, independent_review, ci, deployment_identity_change, deployed_acceptance]
+
+  - path: docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md
+    claim_scope: current
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: requirement_audit, authority: definition_conformance_evidence, lifecycle: append_only}
+    witnesses: [docs/definitions/choir-continuous-texture-supervision-2026-08-07.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [product_computer_identity_change, deployed_acceptance, registry_closure, goal_completion_audit]

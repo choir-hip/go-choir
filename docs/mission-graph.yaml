@@ -252,19 +252,19 @@ nodes:
       Super; many capability-bound CoSupers with writable isolated capsules,
       including verification CoSupers that may edit and run tests/scripts;
       mandatory independently identified verification before completion;
-      progressive owner-visible prose versions;
-      one canonical source_ref transclusion projection; and an automatable
-      Texture API/CLI surface. The v4.7-3 panel's remaining dissent concerned
-      stale current-state wording, missing evidence-ledger entries, and linter
-      inventory; the final Define candidate repairs those defects under the
-      owner's instruction to proceed without another panel. Runtime mutation is
-      now authorized only within this Definition's red-mutation boundaries.
-      Effects remain OFF, and implementation is incomplete until exact staging
-      identity, authenticated product-path, no-effect, rollback, and terminal
-      registry receipts close it.
+      progressive owner-visible prose versions; one canonical source_ref
+      transclusion projection; and an automatable Texture API/CLI surface.
+      Runtime candidate 99fc3e6b passed independent source review, selected CI,
+      and exact Node B host deployment. Authenticated product acceptance remains
+      blocked because the owner's preserved constructed computer serves
+      immutable 7122f279 and returns 404 for the lifecycle create route. Effects
+      remain OFF; real Linux product proof, no-effect/rollback receipts, and
+      terminal registry closure remain mandatory.
     sources:
       - docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
       - docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
+      - docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md
+      - docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md
       - docs/standing-questions.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
