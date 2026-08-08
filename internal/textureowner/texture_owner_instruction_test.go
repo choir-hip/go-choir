@@ -10,9 +10,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+func installSynchronousTextureOwnerWake(t *testing.T, core *agentcore.Runtime, handler *Handler) {
+	t.Helper()
+	core.SetDispatchActor(func(ctx context.Context, ownerID, _ string, toAgentID, kind, _ string, _ string, _ string) error {
+		if kind != "coagent_result" {
+			return nil
+		}
+		if !strings.HasPrefix(toAgentID, "texture:") {
+			return nil
+		}
+		_, err := handler.ReconcileAgentWake(ctx, ownerID, strings.TrimPrefix(toAgentID, "texture:"))
+		return err
+	})
+}
 
 func postOwnerInstruction(t *testing.T, handler *Handler, path, owner, requestID, content, head string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -82,6 +97,7 @@ func TestTextureOwnerInstructionAPIAuthOccurrenceReplayConflictAndPrivateProject
 
 func TestLifecycleReviseRoutesToOwnerInstructionNotProducerMailbox(t *testing.T) {
 	core, handler := testAPISetup(t)
+	installSynchronousTextureOwnerWake(t, core, handler)
 	start := startObservationLifecycle(t, core.Store())
 	body, _ := json.Marshal(map[string]string{
 		"prompt": "revise privately", "client_request_id": "revise-occurrence", "expected_head_revision_id": start.InitialRevision.RevisionID,
@@ -135,7 +151,7 @@ func TestLifecycleTextureWaitBlockNoChangeThenTellResumesSameResidentRun(t *test
 	for _, outcome := range []types.TextureTurnOutcome{types.TextureTurnWait, types.TextureTurnBlock, types.TextureTurnNoSemanticChange} {
 		t.Run(string(outcome), func(t *testing.T) {
 			core, handler := testAPISetup(t)
-			core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+			installSynchronousTextureOwnerWake(t, core, handler)
 			start := startObservationLifecycle(t, core.Store())
 			path := "/api/texture/documents/" + start.InitialDocument.DocID
 			first := postOwnerInstruction(t, handler, path+"/tell", start.OwnerID, "first-"+string(outcome), "first instruction", start.InitialRevision.RevisionID)
@@ -199,7 +215,7 @@ func TestLifecycleTextureWaitBlockNoChangeThenTellResumesSameResidentRun(t *test
 
 func TestLifecycleTextureResearcherOpenerDerivesIdentitiesAndCommitsBeforeWake(t *testing.T) {
 	core, handler := testAPISetup(t)
-	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	installSynchronousTextureOwnerWake(t, core, handler)
 	start := startObservationLifecycle(t, core.Store())
 	first := postOwnerInstruction(t, handler, "/api/texture/documents/"+start.InitialDocument.DocID+"/tell", start.OwnerID, "researcher-opener", "research exact gap", start.InitialRevision.RevisionID)
 	if first.Code != http.StatusAccepted {
