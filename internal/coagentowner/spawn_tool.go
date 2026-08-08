@@ -18,7 +18,7 @@ import (
 // RegisterSpawnTool composes generic coagent lifecycle with the concrete owner
 // selected by the requested profile. No app owner is imported by agentcore.
 func RegisterSpawnTool(registry *toolregistry.ToolRegistry, core *agentcore.Runtime, texture *textureowner.Handler, policy agentprofile.Policy) error {
-	if registry == nil || len(policy.AllowedDelegateTargets) == 0 {
+	if registry == nil || len(policy.AllowedSpawnTargets) == 0 {
 		return nil
 	}
 	return registry.Register(newSpawnAgentTool(core, texture, policy))
@@ -38,7 +38,7 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 		InitialContent       string   `json:"initial_content,omitempty"`
 		SourceItemIDs        []string `json:"source_item_ids,omitempty"`
 	}
-	allowed := canonicalTargets(policy.AllowedDelegateTargets)
+	allowed := canonicalTargets(policy.AllowedSpawnTargets)
 	roleDescription := "Canonical role/profile name. Allowed target roles for this caller: " + strings.Join(allowed, ", ") + "."
 	description := "Spawn an allowed child agent run for the current " + policy.Profile + " profile."
 	if policy.Profile == agentprofile.Conductor {
@@ -83,8 +83,8 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 				profile = role
 			}
 			callerProfile := agentprofile.Canonical(exec.Profile)
-			if !agentprofile.CanDelegate(callerProfile, profile) {
-				return "", fmt.Errorf("%s cannot delegate to %s", callerProfile, profile)
+			if !agentprofile.CanSpawn(callerProfile, profile) {
+				return "", fmt.Errorf("%s cannot spawn %s", callerProfile, profile)
 			}
 			slot := normalizeSlot(in.Slot)
 			if strings.TrimSpace(in.Slot) != "" && slot == "" {
