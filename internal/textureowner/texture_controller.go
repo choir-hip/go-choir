@@ -126,9 +126,6 @@ func (rt *Handler) ValidateActivationAuthority(ctx context.Context, ownerID, com
 // same typed coagent update packets as other actors; integrate intent only
 // selects the Texture revision run shape.
 func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string) (*types.RunRecord, error) {
-	rt.textureWakeMu.Lock()
-	defer rt.textureWakeMu.Unlock()
-
 	ownerID = strings.TrimSpace(ownerID)
 	docID = strings.TrimSpace(docID)
 	if ownerID == "" || docID == "" {
@@ -144,6 +141,19 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 	}
 	if strings.TrimSpace(doc.ComputerID) == "" || strings.TrimSpace(doc.TrajectoryID) == "" {
 		return nil, fmt.Errorf("texture wake requires durable lifecycle document binding")
+	}
+	wakeComputerID, wakeTrajectoryID := strings.TrimSpace(doc.ComputerID), strings.TrimSpace(doc.TrajectoryID)
+	unlockWake := rt.lockTextureWakeScope(ownerID, wakeComputerID, docID)
+	defer unlockWake()
+	// The document may have advanced while this caller waited for its exact
+	// owner/computer/document wake scope. Re-read before deriving activation
+	// authority or current-head inputs.
+	doc, err = rt.getTextureDocument(ctx, ownerID, docID)
+	if err != nil {
+		return nil, fmt.Errorf("reload doc for texture wake: %w", err)
+	}
+	if strings.TrimSpace(doc.ComputerID) != wakeComputerID || strings.TrimSpace(doc.TrajectoryID) != wakeTrajectoryID {
+		return nil, fmt.Errorf("texture wake durable lifecycle document binding changed")
 	}
 	if _, err := rt.Store.GetAgentByScope(ctx, ownerID, doc.ComputerID, textureAgentID); err != nil {
 		return nil, fmt.Errorf("load durable Texture subject: %w", err)

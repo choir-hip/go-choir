@@ -33,6 +33,11 @@ const (
 	runMetadataOwnerEmail   = "owner_email"
 )
 
+type textureWakeLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
 // Handler owns Texture's HTTP and lifecycle behavior while using agentcore as
 // the concrete execution substrate.
 type Handler struct {
@@ -46,7 +51,34 @@ type Handler struct {
 	wakeTextureControl   func(context.Context, types.CoagentSourcePacket)
 	wakeOwnerInstruction func(context.Context, string, string, string) error
 	textureEditMu        sync.Mutex
-	textureWakeMu        sync.Mutex
+	textureWakeLocksMu   sync.Mutex
+	textureWakeLocks     map[string]*textureWakeLock
+}
+
+func (h *Handler) lockTextureWakeScope(ownerID, computerID, docID string) func() {
+	key := strings.Join([]string{strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(docID)}, "\x00")
+	h.textureWakeLocksMu.Lock()
+	if h.textureWakeLocks == nil {
+		h.textureWakeLocks = make(map[string]*textureWakeLock)
+	}
+	lock := h.textureWakeLocks[key]
+	if lock == nil {
+		lock = &textureWakeLock{}
+		h.textureWakeLocks[key] = lock
+	}
+	lock.refs++
+	h.textureWakeLocksMu.Unlock()
+
+	lock.mu.Lock()
+	return func() {
+		lock.mu.Unlock()
+		h.textureWakeLocksMu.Lock()
+		lock.refs--
+		if lock.refs == 0 && h.textureWakeLocks[key] == lock {
+			delete(h.textureWakeLocks, key)
+		}
+		h.textureWakeLocksMu.Unlock()
+	}
 }
 
 // NewHandler composes Texture ownership over the concrete agent lifecycle.

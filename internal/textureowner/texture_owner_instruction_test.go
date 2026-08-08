@@ -418,6 +418,75 @@ func TestLifecycleTextureConcurrentInitialWorkWakeKeepsSoleWinnerAuthoritative(t
 	}
 }
 
+func TestLifecycleTextureSlowDocumentWakeDoesNotBlockUnrelatedDocument(t *testing.T) {
+	core, handler := testAPISetup(t)
+	first := startObservationLifecycle(t, core.Store())
+	second := first
+	second.CommandID = "start-observation-other"
+	second.TrajectoryID = "trajectory-observation-other"
+	second.SubjectRefs = map[string]string{"artifact": "texture://document/doc-observation-other", "doc_id": "doc-observation-other"}
+	second.InitialWork.WorkItemID = "work-observation-other"
+	second.InitialWork.AssignedAgentID = "texture:doc-observation-other"
+	second.InitialDocument.DocID = "doc-observation-other"
+	second.InitialRevision.RevisionID = "revision-observation-other-0"
+	second.Agent.AgentID = "texture:doc-observation-other"
+	second.Agent.ChannelID = "doc-observation-other"
+	second.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(second)
+	if _, err := core.Store().StartLifecycle(t.Context(), second); err != nil {
+		t.Fatal(err)
+	}
+
+	var dispatchMu sync.Mutex
+	var dispatches []string
+	core.SetDispatchActor(func(_ context.Context, _, _, toAgentID, kind, content, _, _ string) error {
+		dispatchMu.Lock()
+		dispatches = append(dispatches, toAgentID+":"+kind+":"+content)
+		dispatchMu.Unlock()
+		return nil
+	})
+
+	unlockFirst := handler.lockTextureWakeScope(first.OwnerID, first.ComputerID, first.InitialDocument.DocID)
+	firstStarted := make(chan struct{})
+	firstDone := make(chan error, 1)
+	go func() {
+		close(firstStarted)
+		_, err := handler.ReconcileAgentWake(t.Context(), first.OwnerID, first.InitialDocument.DocID)
+		firstDone <- err
+	}()
+	<-firstStarted
+
+	secondRun, err := handler.ReconcileAgentWake(t.Context(), second.OwnerID, second.InitialDocument.DocID)
+	if err != nil || secondRun == nil || secondRun.AgentID != second.Agent.AgentID {
+		t.Fatalf("unrelated document wake blocked/failed: run=%+v err=%v", secondRun, err)
+	}
+	if err := handler.ValidateActivationAuthority(t.Context(), second.OwnerID, second.ComputerID, second.Agent.AgentID, secondRun.RunID); err != nil {
+		t.Fatalf("unrelated document winner authority: %v", err)
+	}
+	dispatchMu.Lock()
+	beforeRelease := append([]string(nil), dispatches...)
+	dispatchMu.Unlock()
+	if len(beforeRelease) != 1 || !strings.HasPrefix(beforeRelease[0], second.Agent.AgentID+":initial_dispatch:") {
+		t.Fatalf("dispatches before releasing slow document=%v", beforeRelease)
+	}
+
+	unlockFirst()
+	if err := <-firstDone; err != nil {
+		t.Fatalf("slow document wake after release: %v", err)
+	}
+	dispatchMu.Lock()
+	finalDispatches := append([]string(nil), dispatches...)
+	dispatchMu.Unlock()
+	if len(finalDispatches) != 2 {
+		t.Fatalf("final independent dispatches=%v", finalDispatches)
+	}
+	handler.textureWakeLocksMu.Lock()
+	remainingLocks := len(handler.textureWakeLocks)
+	handler.textureWakeLocksMu.Unlock()
+	if remainingLocks != 0 {
+		t.Fatalf("wake lock registry leaked %d entries", remainingLocks)
+	}
+}
+
 func TestResidentTextureInjectsAndAtomicallyConsumesOrderedOwnerOccurrences(t *testing.T) {
 	core, handler := testAPISetup(t)
 	start := startObservationLifecycle(t, core.Store())
