@@ -229,23 +229,23 @@ measures:
 
 now:
   status: working
-  slice: "Define boundary closed; executable authority is promoted. Begin Implement A with a complete exported-caller and target-address inventory before runtime mutation."
+  slice: "Define boundary closed; executable authority is promoted. At /goal startup, launch and keep the skill-owned local Definition dashboard live, then begin Implement A with a complete exported-caller and target-address inventory before runtime mutation."
   question: none
   reconciliation:
-    observed_at: 2026-08-08T02:37:12Z
-    source_ref: b20bece30b408373d2844f5621fb9f91fc624d99
-    deploy_identity: 460c142394e12b6e307949d0180da08d1b058745
-    authority_identities: [docs/choir-doctrine.md@f64784e8, docs/agent-product-doctrine.md@f64784e8, docs/supervision-protocol.md@f64784e8, docs/texture-agentic-invariants-2026-06-13.md@f64784e8, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, "owner directive in this run: proceed without asking"]
+    observed_at: 2026-08-08T03:33:22Z
+    source_ref: 6965f7f71f764f91737b21804bc376281cbdbe8f
+    deploy_identity: 6965f7f71f764f91737b21804bc376281cbdbe8f
+    authority_identities: [docs/choir-doctrine.md@f64784e8, docs/agent-product-doctrine.md@f64784e8, docs/supervision-protocol.md@f64784e8, docs/texture-agentic-invariants-2026-06-13.md@f64784e8, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, "owner directive in this run: proceed without asking", "owner directive in this run: use the Definition dashboard to supervise /goal until Texture works correctly"]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "2026-08-08 promotion inventory: goal-owned Definition rename, consensus evidence, ACTIVE.md, mission-graph.yaml, doc-authority-manifest.yaml, and scripts/lint/cts-receipt-lint.py; all other worktrees and WIP remain forbidden."
+    worktree_inventory_ref: "2026-08-08 dashboard-amendment inventory: primary worktree clean at main@6965f7f7 before this goal-owned Definition edit; all other worktrees and WIP remain forbidden."
     status: reconciled
   candidate:
-    id: continuous-texture-supervision-definition-v5
+    id: continuous-texture-supervision-definition-v6
     state: ready
     ref: main working tree executable Definition
     owner: owner
-    base: b20bece30b408373d2844f5621fb9f91fc624d99
-    digest: sha256-self-normalized:a98c9cfbc34e5bd924c78e42f59f434dbd3844b1be27ab4c4088ceebcc2ac4d0
+    base: 6965f7f71f764f91737b21804bc376281cbdbe8f
+    digest: sha256-self-normalized:b8abca13a95d48ea10e0389ab266d17a1128066631cfef8b890c830e913cbf80
     scope: [docs/definitions/choir-continuous-texture-supervision-2026-08-07.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, scripts/lint/cts-receipt-lint.py]
   decision:
     selected: "Preserve producer-report QueueLifecycleUpdate; add direction-specific lifecycle controls with target work, an exact persistent-Super opener, and one atomic progressive Texture-turn transition. Keep Super non-lifecycle; let it coordinate many capability-bound CoSupers, normally one writable assignment per isolated capsule. Verifier is an independently assigned writable-capsule capability rather than a singleton role: it may edit files and run tests/scripts inside its capsule, but verifies an immutable subject identity and has no host or self-development effect authority. At least one verification result is required before completion. Keep Texture prose-first and domain-generic while exact research, code, command, test, and later multimedia evidence uses one canonical source_ref transclusion contract exposed through the existing Texture API and CLI."
@@ -253,12 +253,12 @@ now:
     status: settled
     source: owner
     evidence_ref: docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
-    owner_ratification_ref: "Owner directives in this run: proceed without asking; promote the repaired Definition; verifier should not be read-only and may write and run tests or other scripts."
-    recorded_at: 2026-08-08T02:45:35Z
-    consequence: "The Definition is executable through /goal after three-registry promotion. Runtime work must follow its red-mutation ceremony: one writable assignment per isolated capsule by default, including verification assignments; a verifier may edit and execute tests/scripts inside its own networkless capsule; at least one independently identified verification result is required before completion; changed subject bytes become a new candidate; one canonical source_ref projection remains authoritative; no generic mailbox, direct Texture-to-CoSuper path, host mutation, or self-development finalization/materialization/checkpoint/route/owner-decision effect is authorized."
-  evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, .agentic-consensus/cts-v4.7-panel/, .agentic-consensus/cts-v4.7-2-panel/, .agentic-consensus/cts-v4.7-3-panel/, scripts/lint/cts-receipt-lint.py, "owner directive in this run: proceed without asking"]
+    owner_ratification_ref: "Owner directives in this run: proceed without asking; promote the repaired Definition; verifier should not be read-only and may write and run tests or other scripts; use the Definition dashboard to supervise the /goal run until Texture works correctly."
+    recorded_at: 2026-08-08T03:33:22Z
+    consequence: "The Definition is executable through /goal after three-registry promotion. The /goal executor must launch view.generator as a supervised long-running local process at startup and keep it live through terminal closure because Texture is the artifact being repaired, not yet a reliable supervision surface. The dashboard remains a read-only, non-authoritative projection. Runtime work must follow the red-mutation ceremony: one writable assignment per isolated capsule by default, including verification assignments; a verifier may edit and execute tests/scripts inside its own networkless capsule; at least one independently identified verification result is required before completion; changed subject bytes become a new candidate; one canonical source_ref projection remains authoritative; no generic mailbox, direct Texture-to-CoSuper path, host mutation, or self-development finalization/materialization/checkpoint/route/owner-decision effect is authorized."
+  evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, .agentic-consensus/cts-v4.7-panel/, .agentic-consensus/cts-v4.7-2-panel/, .agentic-consensus/cts-v4.7-3-panel/, scripts/lint/cts-receipt-lint.py, "owner directive in this run: proceed without asking", "owner directive in this run: use the Definition dashboard to supervise /goal until Texture works correctly"]
   blocker_or_risk: "No Define blocker remains. Implementation is red: protected runtime surfaces remain unchanged until each closed typed schema and atomic transition is implemented and proved. Effects remain OFF."
-  next_action: Inventory every exported target-address, lifecycle enqueue/reducer, Texture write, persistent-Super opener, CoSuper capability, and public Texture API/CLI caller; freeze the exact Implement A schema and negative matrix before code mutation.
+  next_action: Launch `view.generator` as a supervised long-running local process and confirm its health endpoint is current; keep it live while inventorying every exported target-address, lifecycle enqueue/reducer, Texture write, persistent-Super opener, CoSuper capability, and public Texture API/CLI caller, then freeze the exact Implement A schema and negative matrix before code mutation.
 
 receipts:
   - id: continuous-supervision-definition-review-v1
@@ -536,8 +536,11 @@ receipts:
     registry_conformance_ref: "docs/ACTIVE.md Active Definition; docs/mission-graph.yaml active mission_orchestrator entrypoint; docs/doc-authority-manifest.yaml active executable definition authority"
 
 view:
-  path: none
-  generator: none
+  path: http://127.0.0.1:8787/
+  generator: "node skills/definition/scripts/dashboard.mjs docs/definitions/choir-continuous-texture-supervision-2026-08-07.md --serve 127.0.0.1:8787 --watch"
+  generator_version: definition-dashboard-js/v1
+  authority: "This local dashboard is a non-editable, non-authoritative projection for owner supervision while Texture itself is being repaired. The Markdown/YAML Definition remains the sole mission authority; dashboard health is not acceptance or completion evidence."
+  lifecycle: "The /goal executor must launch this generator as a supervised long-running process at startup, keep it live through terminal closure, and stop it on completion, blocked_incomplete, or supersession. It is session-local and must not become a service, repository artifact, second mission state, or product supervision API."
 ---
 
 # Continuous Texture Supervision
@@ -664,6 +667,18 @@ preserving stale-base safety without fake revisions or escaped directives.
 4. If the direction-specific lifecycle command or writable verification-capsule effect boundary
    is infeasible, stop and revise this Definition; do not improvise a dual-write,
    generic lifecycle actor migration, broad refusal deletion, or smaller artifact.
+
+### Observe — keep the local Definition dashboard live
+
+1. At `/goal` startup, launch `view.generator` as a supervised long-running
+   process and confirm `view.path` reports a current projection before Implement
+   A begins.
+2. Keep it live and watching this Definition through terminal closure so the
+   owner can supervise revisions, current action, evidence, dirty paths, and
+   blockers while Texture itself remains the artifact under repair.
+3. The dashboard is read-only and non-authoritative. Never infer acceptance,
+   completion, product health, or mutation authority from dashboard health, and
+   never copy its ephemeral session log into mission state.
 
 ### Implement A — make addressing mechanically safe
 
