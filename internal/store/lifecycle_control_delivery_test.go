@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -116,16 +117,37 @@ func TestBindLifecycleControlDeliveryExactPersistentSuperRemainsNonLifecycle(t *
 	if err != nil || len(delivered) != 1 || delivered[0].Content != "control persistent-super" || delivered[0].Packet.Kind != "execution_request" {
 		t.Fatalf("persistent Super exact delivered payload=%+v err=%v", delivered, err)
 	}
+	injectionEnvelope, _ := json.Marshal(map[string]any{
+		"schema": "choir.lifecycle_injection.v1", "packet_type": "coagent_update",
+		"owner_id": start.OwnerID, "computer_id": start.ComputerID, "trajectory_id": start.TrajectoryID,
+		"target_agent_id": superID, "target_run_id": run.RunID,
+		"updates": []map[string]any{{"update_id": turn.Controls[0].UpdateID}},
+	})
+	injectionMessage, _ := json.Marshal(map[string]any{"role": "user", "content": "Choir authenticated coagent update packet.\n\n" + string(injectionEnvelope)})
 	reportPacket := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_result", Summary: "super progress", Notes: []string{"evidence:progress"}}
 	reportPayloadDigest, _ := ComputeLifecycleUpdatePayloadDigest(reportPacket, "super progress")
 	report := types.QueueLifecycleUpdateRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "queue-super-progress", TrajectoryID: start.TrajectoryID,
 		TargetAgentID: caller.AgentID, ProducerAgentID: superID, ControlBindingID: turn.Controls[0].UpdateID, TargetWorkItemID: start.InitialWork.WorkItemID,
-		ProducerUpdateID: "super-progress-occurrence", UpdateID: "super-progress-result", ChannelID: start.InitialDocument.DocID, Role: "super", SourceRunID: run.RunID,
+		ConsumedDeliveryUpdateIDs: []string{turn.Controls[0].UpdateID},
+		ProducerUpdateID:          "super-progress-occurrence", UpdateID: "super-progress-result", ChannelID: start.InitialDocument.DocID, Role: "super", SourceRunID: run.RunID,
 		Packet: reportPacket, Content: "super progress", WorkDisposition: types.WorkItemCompleted, WorkItemID: workID, PayloadDigest: reportPayloadDigest}
 	report.CommandDigest, _ = ComputeQueuePersistentSuperReportDigest(report)
+	if _, err := s.QueueLifecycleUpdate(context.Background(), report); !errors.Is(err, ErrLifecycleInvalidTransition) {
+		t.Fatalf("persistent Super report accepted caller IDs without durable runtime injection: %v", err)
+	}
+	if _, err := s.AppendRunMemoryEntry(context.Background(), types.RunMemoryEntry{
+		RunID: run.RunID, OwnerID: start.OwnerID, AgentID: superID, Kind: types.RunMemoryEntryMessage,
+		Role: types.RunMemoryRoleRuntimeInjection, Message: injectionMessage, CreatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	queued, err := s.QueueLifecycleUpdate(context.Background(), report)
 	if err != nil || queued.Update == nil || queued.Update.Direction != types.LifecyclePacketDirectionProducerReport || queued.Update.TargetWorkItemID != start.InitialWork.WorkItemID || queued.Update.ControlBindingID != turn.Controls[0].UpdateID {
 		t.Fatalf("persistent Super report = %+v err=%v", queued, err)
+	}
+	history, historyErr := s.ListLifecycleControlsDeliveredToRun(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID, superID, run.RunID, 10)
+	if historyErr != nil || len(history) != 1 || history[0].Disposition != types.UpdateIncorporated {
+		t.Fatalf("incorporated exact-run delivery history = %+v err=%v", history, historyErr)
 	}
 	replayed, err := s.QueueLifecycleUpdate(context.Background(), report)
 	if err != nil || !replayed.Replay || replayed.Update == nil || replayed.Update.UpdateID != queued.Update.UpdateID {

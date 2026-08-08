@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,16 @@ type lifecycleControlFixture struct {
 	workID       string
 	control      types.CoagentSourcePacket
 	run          types.RunRecord
+}
+
+func appendAuthenticatedInjectionForTest(t *testing.T, s *store.Store, run types.RunRecord, message json.RawMessage) {
+	t.Helper()
+	if _, err := s.AppendRunMemoryEntry(context.Background(), types.RunMemoryEntry{
+		RunID: run.RunID, OwnerID: run.OwnerID, AgentID: run.AgentID,
+		Kind: types.RunMemoryEntryMessage, Role: types.RunMemoryRoleRuntimeInjection, Message: message, CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func seedTextureLifecycleControl(t *testing.T, s *store.Store, ownerID, suffix, targetAgentID, targetProfile string) lifecycleControlFixture {
@@ -114,6 +125,7 @@ func TestBoundLifecycleControlWarmAndColdInjectionExactlyOnce(t *testing.T) {
 	if err != nil || len(first) != 1 || !strings.Contains(string(first[0]), fixture.control.Content) || !strings.Contains(string(first[0]), "evidence_update") {
 		t.Fatalf("warm exact injection=%s err=%v", first, err)
 	}
+	appendAuthenticatedInjectionForTest(t, s, fixture.run, first[0])
 	second, err := inject(false)
 	if err != nil || len(second) != 0 {
 		t.Fatalf("warm duplicate injection=%s err=%v", second, err)
@@ -124,9 +136,90 @@ func TestBoundLifecycleControlWarmAndColdInjectionExactlyOnce(t *testing.T) {
 	if err != nil || len(messages) != 2 || !strings.Contains(string(messages[0]), cold.control.Content) {
 		t.Fatalf("cold exact injection=%s err=%v", messages, err)
 	}
-	messages, err = rt.prependInitialCoagentUpdatePackets(context.Background(), &cold.run, messages)
-	if err != nil || len(messages) != 2 {
+	appendAuthenticatedInjectionForTest(t, s, cold.run, messages[0])
+	messages, err = rt.prependInitialCoagentUpdatePackets(context.Background(), &cold.run, []json.RawMessage{json.RawMessage(`{"role":"user","content":"base"}`)})
+	if err != nil || len(messages) != 1 {
 		t.Fatalf("cold duplicate injection=%s err=%v", messages, err)
+	}
+}
+
+func TestExactRunLifecycleInjectionIncludesOccurrence101AndPreservesPriorBindings(t *testing.T) {
+	rt, s := testRuntime(t)
+	fixture := bindResearcherControlFixture(t, rt, s, "owner-101", "occurrence-101")
+	snapshot, err := s.GetLifecycleSnapshot(context.Background(), fixture.run.OwnerID, fixture.run.SandboxID, fixture.trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	textureAgentID := "texture:" + snapshot.Document.DocID
+	textureAgent, err := s.GetAgentByScope(context.Background(), fixture.run.OwnerID, fixture.run.SandboxID, textureAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controls := make([]types.TextureTurnControl, 0, 100)
+	for i := 2; i <= 101; i++ {
+		packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: fmt.Sprintf("direction %03d", i)}
+		content := fmt.Sprintf("durable direction occurrence %03d", i)
+		digest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+		if err != nil {
+			t.Fatal(err)
+		}
+		controls = append(controls, types.TextureTurnControl{ControlID: fmt.Sprintf("bulk-control-occurrence-%03d", i), TargetAgentID: fixture.run.AgentID, TargetWorkItemID: fixture.workID, Packet: packet, Content: content, PayloadDigest: digest})
+	}
+	callerWorkID := ""
+	for _, work := range snapshot.WorkItems {
+		if work.AssignedAgentID == textureAgentID && work.Status == types.WorkItemOpen {
+			callerWorkID = work.WorkItemID
+			break
+		}
+	}
+	if callerWorkID == "" {
+		t.Fatal("missing Texture caller work")
+	}
+	req := types.ApplyTextureTurnRequest{
+		OwnerID: fixture.run.OwnerID, ComputerID: fixture.run.SandboxID, CommandID: "turn-control-occurrences-2-101",
+		DocumentID: snapshot.Document.DocID, TrajectoryID: fixture.trajectoryID, CallerAgentID: textureAgentID,
+		CallerRunID: textureAgent.ActiveRunID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+		ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion, ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID,
+		CallerWorkItemID: callerWorkID, CallerWorkDisposition: types.WorkItemOpen,
+		Outcome: types.TextureTurnWait, Reason: "queue complete occurrence set", Controls: controls,
+	}
+	req.CommandDigest, err = store.ComputeApplyTextureTurnDigest(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, err := s.ApplyTextureTurn(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(turn.Controls) != 100 {
+		t.Fatalf("new controls=%d", len(turn.Controls))
+	}
+	if _, err := rt.bindLifecycleControlsToRun(context.Background(), &fixture.run, turn.Controls); err != nil {
+		t.Fatal(err)
+	}
+	firstPage, err := s.ListLifecycleControlsDeliveredToRunPage(context.Background(), fixture.run.OwnerID, fixture.run.SandboxID, fixture.trajectoryID, fixture.run.AgentID, fixture.run.RunID, 0, 100)
+	if err != nil || len(firstPage.Packets) != 100 || !firstPage.HasMore {
+		t.Fatalf("first exact-run page=%+v err=%v", firstPage, err)
+	}
+	secondPage, err := s.ListLifecycleControlsDeliveredToRunPage(context.Background(), fixture.run.OwnerID, fixture.run.SandboxID, fixture.trajectoryID, fixture.run.AgentID, fixture.run.RunID, firstPage.NextCursor, 100)
+	if err != nil || len(secondPage.Packets) != 1 || secondPage.HasMore || secondPage.Packets[0].UpdateID != "bulk-control-occurrence-101" {
+		t.Fatalf("second exact-run page=%+v err=%v", secondPage, err)
+	}
+	injected, err := rt.coagentUpdateTurnInjector(&fixture.run)(false)
+	if err != nil || len(injected) != 1 || !strings.Contains(string(injected[0]), "bulk-control-occurrence-101") {
+		t.Fatalf("101 injection=%s err=%v", injected, err)
+	}
+	appendAuthenticatedInjectionForTest(t, s, fixture.run, injected[0])
+	if duplicate, err := rt.coagentUpdateTurnInjector(&fixture.run)(false); err != nil || len(duplicate) != 0 {
+		t.Fatalf("101 durable duplicate=%s err=%v", duplicate, err)
+	}
+	stored, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.SandboxID, fixture.run.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindings, _ := stored.Metadata["lifecycle_control_bindings"].([]any)
+	if len(bindings) != 101 {
+		t.Fatalf("appended control bindings=%d want 101: %#v", len(bindings), stored.Metadata["lifecycle_control_bindings"])
 	}
 }
 
@@ -173,6 +266,7 @@ func TestPersistentSuperLifecycleControlsStayTrajectoryIsolatedThenReconcile(t *
 	if err != nil || len(firstBootPayload) != 1 || !strings.Contains(string(firstBootPayload[0]), "durable typed control content") {
 		t.Fatalf("boot payload injection=%s err=%v", firstBootPayload, err)
 	}
+	appendAuthenticatedInjectionForTest(t, s, bootRun, firstBootPayload[0])
 	duplicateBootPayload, err := bootInject(false)
 	if err != nil || len(duplicateBootPayload) != 0 {
 		t.Fatalf("boot duplicate payload=%s err=%v", duplicateBootPayload, err)
@@ -240,7 +334,7 @@ func TestLifecycleInjectionRestartDerivesSeenFromDurableMemoryAndRejectsSpoof(t 
 	}
 	if _, err := s.AppendRunMemoryEntry(context.Background(), types.RunMemoryEntry{
 		RunID: fixture.run.RunID, OwnerID: fixture.run.OwnerID, AgentID: fixture.run.AgentID,
-		Kind: types.RunMemoryEntryMessage, Role: "user", Message: messages[0], CreatedAt: time.Now().UTC(),
+		Kind: types.RunMemoryEntryMessage, Role: types.RunMemoryRoleRuntimeInjection, Message: messages[0], CreatedAt: time.Now().UTC(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -260,6 +354,126 @@ func TestLifecycleInjectionRestartDerivesSeenFromDurableMemoryAndRejectsSpoof(t 
 	}
 }
 
+func TestRuntimeInjectionAppendFailurePassivatesAndRestartReactivatesExactResearcherRun(t *testing.T) {
+	rt, s := testRuntime(t)
+	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	fixture := bindResearcherControlFixture(t, rt, s, "owner-append-failure", "append-failure")
+	fixture.run.Metadata = cloneMetadata(fixture.run.Metadata)
+	fixture.run.Metadata["request_source"] = "lifecycle_texture_control"
+	if err := s.UpdateRun(context.Background(), fixture.run); err != nil {
+		t.Fatal(err)
+	}
+	bindingsBefore, err := json.Marshal(fixture.run.Metadata["lifecycle_control_bindings"])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Fail only the actual runtime-authenticated injection append. Initial actor
+	// memory and every lifecycle/object-graph transition remain available, so
+	// this exercises executeWithToolLoop rather than calling the injector alone.
+	if _, err := s.DB().ExecContext(context.Background(), `
+		CREATE TRIGGER fail_runtime_injection_append
+		BEFORE INSERT ON run_memory_entries FOR EACH ROW
+		BEGIN
+			IF NEW.role = 'runtime_injection' THEN
+				SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'injected runtime-memory append failure';
+			END IF;
+		END`); err != nil {
+		t.Fatal(err)
+	}
+	rt.ExecuteActivationSync(context.Background(), &fixture.run)
+	failed, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.SandboxID, fixture.run.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed.State != types.RunPassivated || failed.State.Terminal() || failed.FinishedAt != nil || failed.Error != "" ||
+		metadataStringValue(failed.Metadata, "passivated_reason") != runtimeInjectionAppendFailurePassivationReason {
+		t.Fatalf("runtime append failure state=%+v", failed)
+	}
+	entries, err := s.ListRunMemoryEntries(context.Background(), failed.OwnerID, failed.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.Role == types.RunMemoryRoleRuntimeInjection {
+			t.Fatalf("failed append became durable/model-visible: %+v", entry)
+		}
+	}
+	pending, err := rt.listPendingLifecyclePacketsDeliveredToRun(context.Background(), &failed)
+	if err != nil || len(pending) != 1 || pending[0].UpdateID != fixture.control.UpdateID || pending[0].DeliveredToRunID != failed.RunID {
+		t.Fatalf("exact pending delivery after runtime failure=%+v err=%v", pending, err)
+	}
+	work, err := s.GetLifecycleWorkItem(context.Background(), failed.OwnerID, failed.SandboxID, fixture.workID)
+	if err != nil || work.Status != types.WorkItemOpen || work.AssignedAgentID != failed.AgentID || work.TrajectoryID != failed.TrajectoryID {
+		t.Fatalf("open work after runtime failure=%+v err=%v", work, err)
+	}
+	trajectory, err := s.GetLifecycleTrajectory(context.Background(), failed.OwnerID, failed.SandboxID, failed.TrajectoryID)
+	if err != nil || trajectory.Status != types.TrajectoryLive {
+		t.Fatalf("live trajectory after runtime failure=%+v err=%v", trajectory, err)
+	}
+
+	if _, err := s.DB().ExecContext(context.Background(), `DROP TRIGGER fail_runtime_injection_append`); err != nil {
+		t.Fatal(err)
+	}
+	restarted := testPeerRuntime(t, rt, s)
+	var dispatches []string
+	restarted.SetDispatchActor(func(_ context.Context, _, _, agentID, kind, runID, trajectoryID, _ string) error {
+		dispatches = append(dispatches, agentID+"|"+kind+"|"+runID+"|"+trajectoryID)
+		return nil
+	})
+	restarted.Start(context.Background())
+
+	recovered, err := s.GetLifecycleRun(context.Background(), failed.OwnerID, failed.SandboxID, failed.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered.RunID != failed.RunID || recovered.AgentID != failed.AgentID || recovered.AgentProfile != agentprofile.Researcher ||
+		recovered.AgentRole != agentprofile.Researcher || recovered.TrajectoryID != failed.TrajectoryID || recovered.State != types.RunPending ||
+		!metadataBoolValue(recovered.Metadata, "actor_reactivate_existing_memory") {
+		t.Fatalf("restart did not reactivate exact Researcher run: %+v", recovered)
+	}
+	bindingsAfter, err := json.Marshal(recovered.Metadata["lifecycle_control_bindings"])
+	if err != nil || string(bindingsAfter) != string(bindingsBefore) {
+		t.Fatalf("restart changed exact delivery bindings: before=%s after=%s err=%v", bindingsBefore, bindingsAfter, err)
+	}
+	pendingAfterRestart, err := restarted.listPendingLifecyclePacketsDeliveredToRun(context.Background(), &recovered)
+	if err != nil || len(pendingAfterRestart) != 1 || pendingAfterRestart[0].UpdateID != fixture.control.UpdateID || pendingAfterRestart[0].DeliveredToRunID != recovered.RunID {
+		t.Fatalf("restart changed exact pending delivery=%+v err=%v", pendingAfterRestart, err)
+	}
+	workAfterRestart, err := s.GetLifecycleWorkItem(context.Background(), recovered.OwnerID, recovered.SandboxID, fixture.workID)
+	if err != nil || workAfterRestart.Status != types.WorkItemOpen || workAfterRestart.AssignedAgentID != recovered.AgentID || workAfterRestart.TrajectoryID != recovered.TrajectoryID {
+		t.Fatalf("restart changed open work=%+v err=%v", workAfterRestart, err)
+	}
+	trajectoryAfterRestart, err := s.GetLifecycleTrajectory(context.Background(), recovered.OwnerID, recovered.SandboxID, recovered.TrajectoryID)
+	if err != nil || trajectoryAfterRestart.Status != types.TrajectoryLive {
+		t.Fatalf("restart changed live trajectory=%+v err=%v", trajectoryAfterRestart, err)
+	}
+	if len(dispatches) != 1 || !strings.Contains(dispatches[0], failed.AgentID+"|initial_dispatch|"+failed.RunID+"|") {
+		t.Fatalf("restart dispatches=%v, want only exact Researcher run", dispatches)
+	}
+
+	var targetRuns []types.RunRecord
+	for _, state := range []types.RunState{types.RunPending, types.RunRunning, types.RunBlocked, types.RunPassivated, types.RunCompleted, types.RunFailed, types.RunCancelled} {
+		runs, listErr := s.ListLifecycleRunsByState(context.Background(), failed.OwnerID, failed.SandboxID, state)
+		if listErr != nil {
+			t.Fatal(listErr)
+		}
+		for _, run := range runs {
+			if run.AgentID == failed.AgentID {
+				targetRuns = append(targetRuns, run)
+			}
+		}
+	}
+	if len(targetRuns) != 1 || targetRuns[0].RunID != failed.RunID {
+		t.Fatalf("restart created or rebound another Researcher run: %+v", targetRuns)
+	}
+	retried, err := restarted.coagentUpdateTurnInjectorWithInitialPhase(&recovered, coagentPacketDeliveryCold)(false)
+	if err != nil || len(retried) != 1 || !strings.Contains(string(retried[0]), fixture.control.UpdateID) {
+		t.Fatalf("same-run retry payload=%s err=%v", retried, err)
+	}
+}
 func TestPersistentSuperReportToTextureCanonicalReplayWakeAndInjection(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
@@ -280,6 +494,12 @@ func TestPersistentSuperReportToTextureCanonicalReplayWakeAndInjection(t *testin
 	if err != nil || parent == nil {
 		t.Fatalf("reconcile persistent Super = %+v err=%v", parent, err)
 	}
+	inject := rt.coagentUpdateTurnInjectorWithInitialPhase(parent, coagentPacketDeliveryCold)
+	authorityMessages, err := inject(false)
+	if err != nil || len(authorityMessages) != 1 {
+		t.Fatalf("inject report authority = %s err=%v", authorityMessages, err)
+	}
+	appendAuthenticatedInjectionForTest(t, s, *parent, authorityMessages[0])
 	dispatches = nil
 	raw := json.RawMessage(`{"kind":"execution_result","summary":"inspected assignment progress","claims":[],"sources":[],"actions":[],"questions":[],"notes":["evidence:progress"],"work_disposition":"open"}`)
 	ctx := toolContextForTestCall(parent, "provider-call-report-texture")
@@ -318,6 +538,112 @@ func TestPersistentSuperReportToTextureCanonicalReplayWakeAndInjection(t *testin
 	}
 	if legacy, err := s.ListCoagentMailboxBacklog(context.Background(), ownerID, fixture.control.AgentID, 10); err != nil || len(legacy) != 0 {
 		t.Fatalf("legacy rows = %+v err=%v", legacy, err)
+	}
+}
+
+func TestPersistentSuperReportRequiresCompleteAuthenticated101DeliveryAndDispositionsAtomically(t *testing.T) {
+	rt, s := testRuntime(t)
+	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	ownerID := "owner-super-report-101"
+	superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-report-101", superAgent.AgentID, agentprofile.Super)
+	snapshot, err := s.GetLifecycleSnapshot(context.Background(), ownerID, "sandbox-test", fixture.trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	textureAgentID := "texture:" + snapshot.Document.DocID
+	textureAgent, err := s.GetAgentByScope(context.Background(), ownerID, "sandbox-test", textureAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	callerWorkID := ""
+	for _, work := range snapshot.WorkItems {
+		if work.AssignedAgentID == textureAgentID && work.Status == types.WorkItemOpen {
+			callerWorkID = work.WorkItemID
+			break
+		}
+	}
+	controls := make([]types.TextureTurnControl, 0, 100)
+	for i := 2; i <= 101; i++ {
+		packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: fmt.Sprintf("execute direction %03d", i), Actions: []types.CoagentPacketAction{{Type: "run_command", Objective: fmt.Sprintf("inspect %03d", i), Safety: types.CoagentPacketActionSafety{MutationClass: "green", Network: "forbidden", FileMutation: "forbidden"}}}}
+		content := fmt.Sprintf("super direction occurrence %03d", i)
+		digest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+		if err != nil {
+			t.Fatal(err)
+		}
+		controls = append(controls, types.TextureTurnControl{ControlID: fmt.Sprintf("super-bulk-control-%03d", i), TargetAgentID: superAgent.AgentID, TargetWorkItemID: fixture.workID, Packet: packet, Content: content, PayloadDigest: digest})
+	}
+	turnReq := types.ApplyTextureTurnRequest{OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "turn-super-controls-2-101", DocumentID: snapshot.Document.DocID, TrajectoryID: fixture.trajectoryID, CallerAgentID: textureAgentID, CallerRunID: textureAgent.ActiveRunID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion, ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, CallerWorkItemID: callerWorkID, CallerWorkDisposition: types.WorkItemOpen, Outcome: types.TextureTurnWait, Reason: "queue all super directions", Controls: controls}
+	turnReq.CommandDigest, err = store.ComputeApplyTextureTurnDigest(turnReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ApplyTextureTurn(context.Background(), turnReq); err != nil {
+		t.Fatal(err)
+	}
+	parent, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+	if err != nil || parent == nil {
+		t.Fatalf("reconcile 101 control run=%+v err=%v", parent, err)
+	}
+	firstPage, err := s.ListLifecycleControlsDeliveredToRunPage(context.Background(), ownerID, "sandbox-test", fixture.trajectoryID, parent.AgentID, parent.RunID, 0, 100)
+	if err != nil || len(firstPage.Packets) != 100 || !firstPage.HasMore {
+		t.Fatalf("first delivered page=%+v err=%v", firstPage, err)
+	}
+	partialMessages, _, err := buildCoagentUpdateUserMessages(firstPage.Packets, coagentPacketDeliveryCold, parent.AgentID, nil, nil)
+	if err != nil || len(partialMessages) != 1 {
+		t.Fatalf("partial message=%s err=%v", partialMessages, err)
+	}
+	appendAuthenticatedInjectionForTest(t, s, *parent, partialMessages[0])
+	raw := json.RawMessage(`{"kind":"execution_result","summary":"complete 101 directions","claims":[],"sources":[],"actions":[],"questions":[],"notes":["complete"],"work_disposition":"open"}`)
+	partialResult, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(toolContextForTestCall(parent, "report-partial-101"), "report_to_texture", raw)
+	if err != nil {
+		t.Fatalf("partial durable delivery report: %v", err)
+	}
+	if !strings.Contains(partialResult, `"control_binding_id":"super-bulk-control-100"`) {
+		t.Fatalf("partial report did not select latest authenticated control: %s", partialResult)
+	}
+	afterPartial, err := rt.listAllLifecyclePacketsDeliveredToRun(context.Background(), parent)
+	if err != nil || len(afterPartial) != 101 {
+		t.Fatalf("partial delivered set=%d err=%v", len(afterPartial), err)
+	}
+	for i, packet := range afterPartial {
+		want := types.UpdateIncorporated
+		if i == 100 {
+			want = types.UpdatePending
+		}
+		if packet.Disposition != want {
+			t.Fatalf("partial delivery %d %s disposition=%s want=%s", i, packet.UpdateID, packet.Disposition, want)
+		}
+	}
+	remaining, err := rt.coagentUpdateTurnInjector(parent)(false)
+	if err != nil || len(remaining) != 1 || !strings.Contains(string(remaining[0]), "super-bulk-control-101") {
+		t.Fatalf("remaining occurrence 101=%s err=%v", remaining, err)
+	}
+	appendAuthenticatedInjectionForTest(t, s, *parent, remaining[0])
+	completeResult, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(toolContextForTestCall(parent, "report-complete-101"), "report_to_texture", raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(completeResult, `"control_binding_id":"super-bulk-control-101"`) {
+		t.Fatalf("complete report did not select occurrence 101 after prior dispositions: %s", completeResult)
+	}
+	all, err := rt.listAllLifecyclePacketsDeliveredToRun(context.Background(), parent)
+	if err != nil || len(all) != 101 {
+		t.Fatalf("complete delivered set=%d err=%v", len(all), err)
+	}
+	for _, packet := range all {
+		if packet.Disposition != types.UpdateIncorporated {
+			t.Fatalf("delivery %s disposition=%s", packet.UpdateID, packet.Disposition)
+		}
+	}
+	if pending, err := s.ListAllPendingLifecycleUpdates(context.Background(), ownerID, "sandbox-test", parent.AgentID); err != nil || len(pending) != 0 {
+		t.Fatalf("pending Super delivery after report=%d err=%v", len(pending), err)
 	}
 }
 

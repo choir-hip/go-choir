@@ -1947,6 +1947,74 @@ func (rt *Runtime) rewarmInterruptedLifecycleActivations(ctx context.Context) {
 			log.Printf("runtime: re-dispatched lifecycle run %s (state=%s) after restart", rec.RunID, state)
 		}
 	}
+	rt.reactivateRetryableLifecycleInjectionRuns(ctx, computerID)
+}
+
+// reactivateRetryableLifecycleInjectionRuns resumes the same passivated
+// lifecycle Researcher activation whose authenticated control append failed.
+// Texture is reconstructed by its owner and persistent Super by its controller. It does not
+// select backlog, create a run, bind controls, or reconstruct another role.
+func (rt *Runtime) reactivateRetryableLifecycleInjectionRuns(ctx context.Context, computerID string) {
+	runs, err := rt.store.ListLifecycleRunsByState(ctx, "", computerID, types.RunPassivated)
+	if err != nil {
+		log.Printf("runtime: boot lifecycle injection recovery: query passivated runs: %v", err)
+		return
+	}
+	for i := range runs {
+		rec := &runs[i]
+		if agentprofile.Canonical(rec.AgentProfile) != agentprofile.Researcher ||
+			agentprofile.Canonical(rec.AgentRole) != agentprofile.Researcher ||
+			metadataStringValue(rec.Metadata, "request_source") != "lifecycle_texture_control" ||
+			metadataStringValue(rec.Metadata, "passivated_reason") != runtimeInjectionAppendFailurePassivationReason {
+			continue
+		}
+		trajectory, trajectoryErr := rt.store.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.SandboxID, rec.TrajectoryID)
+		if trajectoryErr != nil || trajectory.Status != types.TrajectoryLive {
+			if trajectoryErr != nil {
+				log.Printf("runtime: boot lifecycle injection recovery: read trajectory for run %s: %v", rec.RunID, trajectoryErr)
+			}
+			continue
+		}
+		eligible, eligibilityErr := rt.lifecycleActivationBindingsEligible(ctx, rec)
+		if eligibilityErr != nil {
+			log.Printf("runtime: boot lifecycle injection recovery: validate work for run %s: %v", rec.RunID, eligibilityErr)
+			continue
+		}
+		if !eligible {
+			continue
+		}
+		controls, controlsErr := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, rec)
+		if controlsErr != nil {
+			log.Printf("runtime: boot lifecycle injection recovery: validate exact deliveries for run %s: %v", rec.RunID, controlsErr)
+			continue
+		}
+		if len(controls) == 0 {
+			continue
+		}
+		agent, agentErr := rt.store.GetAgentByScope(ctx, rec.OwnerID, rec.SandboxID, rec.AgentID)
+		if agentErr != nil || agentprofile.Canonical(agent.Profile) != agentprofile.Researcher ||
+			agentprofile.Canonical(agent.Role) != agentprofile.Researcher ||
+			(strings.TrimSpace(agent.ActiveRunID) != "" && strings.TrimSpace(agent.ActiveRunID) != rec.RunID) {
+			if agentErr != nil {
+				log.Printf("runtime: boot lifecycle injection recovery: validate actor for run %s: %v", rec.RunID, agentErr)
+			}
+			continue
+		}
+		rec.Metadata = cloneMetadata(rec.Metadata)
+		rec.Metadata["actor_reactivate_existing_memory"] = true
+		rec.Metadata["actor_reactivated_from_passivated"] = true
+		rec.Metadata["passivated_reason"] = ""
+		rec.State = types.RunPending
+		rec.Error = ""
+		rec.FinishedAt = nil
+		rec.UpdatedAt = time.Now().UTC()
+		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+			log.Printf("runtime: boot lifecycle injection recovery: reactivate exact run %s: %v", rec.RunID, err)
+			continue
+		}
+		rt.activate(rec)
+		log.Printf("runtime: reactivated exact lifecycle Researcher run %s after injection append failure", rec.RunID)
+	}
 }
 
 // reconcileTerminalRunOutcomes exhausts terminal runs, repairs their outcome
@@ -2212,7 +2280,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 		return nil, err
 	}
 	if profile == agentprofile.Researcher {
-		updates, listErr := rt.store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, agentID, 100)
+		updates, listErr := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
 		if listErr != nil {
 			return nil, listErr
 		}
@@ -2479,7 +2547,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			return
 		}
 		for _, msg := range injected {
-			if err := memory.afterAppendMessage(ctx, "user", msg); err != nil {
+			if err := memory.afterAppendMessage(ctx, types.RunMemoryRoleRuntimeInjection, msg); err != nil {
 				rt.handleExecutionError(ctx, rec, fmt.Errorf("persist initial mailbox turn: %w", err))
 				return
 			}
@@ -2614,6 +2682,62 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		log.Printf("runtime: completed %s result=%q", wireLifecycleSummary(rec), strings.ReplaceAll(preview, "\n", " "))
 	}
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
+}
+
+const runtimeInjectionAppendFailurePassivationReason = "runtime_injection_append_failed"
+
+func retryableLifecycleRuntimeInjectionFailure(rec *types.RunRecord, err error) bool {
+	if rec == nil || !errors.Is(err, ErrRuntimeInjectionAppendFailed) {
+		return false
+	}
+	profile := agentprofile.Canonical(rec.AgentProfile)
+	role := agentprofile.Canonical(rec.AgentRole)
+	if profile != role || (profile != agentprofile.Researcher && profile != agentprofile.Texture && profile != agentprofile.Super) {
+		return false
+	}
+	if profile == agentprofile.Super && rec.AgentID != persistentSuperAgentID(rec.OwnerID) {
+		return false
+	}
+	return metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" &&
+		strings.TrimSpace(rec.OwnerID) != "" && strings.TrimSpace(rec.SandboxID) != "" &&
+		lifecycleControlTrajectoryForRun(rec) != "" && strings.TrimSpace(rec.AgentID) != "" &&
+		strings.TrimSpace(rec.RunID) != ""
+}
+
+// passivateRuntimeInjectionAppendFailure preserves the exact lifecycle run and
+// its delivery bindings when authenticated memory append fails. The control is
+// still pending and was never durably model-visible, so terminalizing this run
+// would strand already-delivered authority and invite a replacement run.
+func (rt *Runtime) passivateRuntimeInjectionAppendFailure(rec *types.RunRecord, appendErr error) {
+	if rt == nil || rt.store == nil || rec == nil {
+		return
+	}
+	now := time.Now().UTC()
+	rec.State = types.RunPassivated
+	rec.Error = ""
+	rec.FinishedAt = nil
+	rec.UpdatedAt = now
+	rec.Metadata = cloneMetadata(rec.Metadata)
+	rec.Metadata["passivated_reason"] = runtimeInjectionAppendFailurePassivationReason
+	rec.Metadata["actor_sleep_state"] = "retryable_runtime_failure"
+	rec.Metadata["runtime_injection_append_error"] = appendErr.Error()
+	persisted, err := rt.persistActivationState(context.Background(), rec)
+	if err != nil {
+		// Never fall through to terminal failure. If durable passivation itself is
+		// unavailable, boot recovery still sees the stored pending/running exact
+		// lifecycle run and re-dispatches it without changing its identity.
+		log.Printf("runtime: preserve retryable lifecycle injection failure for run %s: %v", rec.RunID, err)
+		return
+	}
+	if !persisted {
+		return
+	}
+	payload, _ := json.Marshal(map[string]string{
+		"reason": runtimeInjectionAppendFailurePassivationReason,
+		"error":  appendErr.Error(),
+	})
+	rt.emitEvent(context.Background(), rec, types.EventRunPassivated, events.CauseSupervisorRecovery, payload)
+	log.Printf("runtime: passivated exact lifecycle run %s after runtime injection append failure", rec.RunID)
 }
 
 func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunRecord, text string, usage provideriface.TokenUsage, passivationErr error) {
@@ -3536,6 +3660,10 @@ var durableMetadataKeys = []string{
 // critical store updates so that the run state is properly persisted even
 // during shutdown (VAL-CHOIR-009, VAL-CHOIR-010).
 func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecord, err error) {
+	if retryableLifecycleRuntimeInjectionFailure(rec, err) {
+		rt.passivateRuntimeInjectionAppendFailure(rec, err)
+		return
+	}
 	now := time.Now().UTC()
 
 	// Determine if the failure is recoverable (blocked) or permanent (failed).

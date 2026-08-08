@@ -215,29 +215,60 @@ func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
 			if trajectoryID == "" {
 				return "", fmt.Errorf("report_to_texture requires one exact delivered lifecycle control trajectory")
 			}
-			delivered, err := rt.store.ListLifecycleControlsDeliveredToRun(ctx, parent.OwnerID, parent.SandboxID, trajectoryID, parent.AgentID, parent.RunID, 100)
+			delivered, err := rt.listAllLifecyclePacketsDeliveredToRun(ctx, parent)
 			if err != nil {
 				return "", err
 			}
-			controls := make([]types.CoagentSourcePacket, 0, len(delivered))
-			for _, packet := range delivered {
-				if packet.Direction == types.LifecyclePacketDirectionControl {
-					controls = append(controls, packet)
+			memoryEntries, err := rt.store.ListRunMemoryEntries(ctx, parent.OwnerID, parent.RunID)
+			if err != nil {
+				return "", fmt.Errorf("report_to_texture load durable run memory: %w", err)
+			}
+			memorySeen, _ := lifecycleInjectionIDsFromRunMemory(parent, memoryEntries)
+			authenticatedDelivered := make([]types.CoagentSourcePacket, 0, len(delivered))
+			consumedDeliveryIDs := make([]string, 0, len(delivered))
+			allControls := make([]types.CoagentSourcePacket, 0, len(delivered))
+			for _, deliveredPacket := range delivered {
+				if deliveredPacket.Direction == types.LifecyclePacketDirectionControl {
+					allControls = append(allControls, deliveredPacket)
+				}
+				if !memorySeen[strings.TrimSpace(deliveredPacket.UpdateID)] {
+					// Delivery can commit while a provider call is already in flight.
+					// It remains pending until the next authenticated runtime append.
+					continue
+				}
+				authenticatedDelivered = append(authenticatedDelivered, deliveredPacket)
+				consumedDeliveryIDs = append(consumedDeliveryIDs, deliveredPacket.UpdateID)
+			}
+			if len(allControls) == 0 {
+				return "", fmt.Errorf("report_to_texture requires an exact delivered control binding")
+			}
+			scope := allControls[0]
+			if scope.TargetWorkItemID == "" || scope.AgentID == "" || scope.SourceRunID == "" {
+				return "", fmt.Errorf("report_to_texture control binding is incomplete")
+			}
+			// Validate every downward control across every page before selecting
+			// report authority; an unauthenticated later arrival cannot conceal a
+			// cross-trajectory/work/Texture-source corruption.
+			for _, candidate := range allControls[1:] {
+				if candidate.TrajectoryID != scope.TrajectoryID || candidate.TargetWorkItemID != scope.TargetWorkItemID ||
+					candidate.AgentID != scope.AgentID || candidate.SourceRunID != scope.SourceRunID || candidate.ChannelID != scope.ChannelID {
+					return "", fmt.Errorf("report_to_texture delivered controls span more than one trajectory/work/Texture scope")
+				}
+			}
+			controls := make([]types.CoagentSourcePacket, 0, len(authenticatedDelivered))
+			for _, deliveredPacket := range authenticatedDelivered {
+				if deliveredPacket.Direction == types.LifecyclePacketDirectionControl {
+					controls = append(controls, deliveredPacket)
 				}
 			}
 			if len(controls) == 0 {
-				return "", fmt.Errorf("report_to_texture requires an exact delivered control binding")
+				return "", fmt.Errorf("report_to_texture requires an authenticated delivered control binding")
 			}
 			control := controls[0]
-			if control.TargetWorkItemID == "" || control.AgentID == "" || control.SourceRunID == "" {
-				return "", fmt.Errorf("report_to_texture control binding is incomplete")
-			}
 			for _, candidate := range controls[1:] {
-				if candidate.TrajectoryID != control.TrajectoryID || candidate.TargetWorkItemID != control.TargetWorkItemID ||
-					candidate.AgentID != control.AgentID || candidate.SourceRunID != control.SourceRunID || candidate.ChannelID != control.ChannelID {
-					return "", fmt.Errorf("report_to_texture delivered controls span more than one trajectory/work/Texture scope")
-				}
-				if candidate.ReducerSeq > control.ReducerSeq {
+				// MessageSeq is the immutable occurrence order. ReducerSeq advances
+				// again when a partial report incorporates an older delivery.
+				if candidate.MessageSeq > control.MessageSeq || (candidate.MessageSeq == control.MessageSeq && candidate.UpdateID > control.UpdateID) {
 					control = candidate
 				}
 			}
@@ -268,7 +299,8 @@ func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
 				OwnerID: parent.OwnerID, ComputerID: parent.SandboxID, CommandID: "queue-" + producerUpdateID,
 				TrajectoryID: trajectoryID, TargetAgentID: control.AgentID, ProducerAgentID: parent.AgentID,
 				ControlBindingID: control.UpdateID, TargetWorkItemID: targetWorkID,
-				ProducerUpdateID: producerUpdateID, UpdateID: "result:" + occurrence,
+				ConsumedDeliveryUpdateIDs: consumedDeliveryIDs,
+				ProducerUpdateID:          producerUpdateID, UpdateID: "result:" + occurrence,
 				ChannelID: control.ChannelID, Role: "super", SourceRunID: parent.RunID,
 				Packet: packet, Content: content, WorkDisposition: input.WorkDisposition,
 				WorkItemID: control.TargetWorkItemID, PayloadDigest: payloadDigest,

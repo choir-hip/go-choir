@@ -99,6 +99,7 @@ type ApplyLifecycleUpdateRequest struct {
 	ProducerAgentID           string                        `json:"producer_agent_id"`
 	ControlBindingID          string                        `json:"control_binding_id,omitempty"`
 	TargetWorkItemID          string                        `json:"target_work_item_id,omitempty"`
+	ConsumedDeliveryUpdateIDs []string                      `json:"consumed_delivery_update_ids,omitempty"`
 	ProducerUpdateID          string                        `json:"producer_update_id"`
 	UpdateID                  string                        `json:"update_id"`
 	MessageSeq                int64                         `json:"message_seq,omitempty"`

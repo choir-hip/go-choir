@@ -246,6 +246,31 @@ func ComputeQueuePersistentSuperReportDigest(req types.QueueLifecycleUpdateReque
 	if err != nil {
 		return "", err
 	}
+	consumed := make([]string, 0, len(req.ConsumedDeliveryUpdateIDs))
+	for _, id := range req.ConsumedDeliveryUpdateIDs {
+		if id = strings.TrimSpace(id); id != "" {
+			consumed = append(consumed, id)
+		}
+	}
+	if len(consumed) > 0 {
+		return lifecycleDigest(struct {
+			Domain                                                  string
+			CommandID, TrajectoryID, TargetAgentID, ProducerAgentID string
+			UpdateID, ProducerUpdateID, PayloadDigest, WorkItemID   string
+			SourceRunID, ChannelID, Role                            string
+			ControlBindingID, TargetWorkItemID                      string
+			ConsumedDeliveryUpdateIDs                               []string
+			WorkDisposition                                         types.WorkItemStatus
+		}{
+			Domain: "choir.lifecycle.persistent-super-report/v2", CommandID: strings.TrimSpace(req.CommandID), TrajectoryID: strings.TrimSpace(req.TrajectoryID),
+			TargetAgentID: strings.TrimSpace(req.TargetAgentID), ProducerAgentID: strings.TrimSpace(req.ProducerAgentID),
+			UpdateID: strings.TrimSpace(req.UpdateID), ProducerUpdateID: strings.TrimSpace(req.ProducerUpdateID), PayloadDigest: strings.TrimSpace(req.PayloadDigest),
+			SourceRunID: strings.TrimSpace(req.SourceRunID), ChannelID: strings.TrimSpace(req.ChannelID), Role: strings.TrimSpace(req.Role),
+			ControlBindingID: strings.TrimSpace(req.ControlBindingID), TargetWorkItemID: strings.TrimSpace(req.TargetWorkItemID), ConsumedDeliveryUpdateIDs: consumed,
+			WorkItemID: strings.TrimSpace(req.WorkItemID), WorkDisposition: workDisposition,
+		})
+	}
+	// Empty consumption sets retain the historical v1 shape for old receipts.
 	return lifecycleDigest(struct {
 		Domain                                                  string
 		CommandID, TrajectoryID, TargetAgentID, ProducerAgentID string
@@ -1184,6 +1209,13 @@ func (s *Store) ListPendingLifecycleUpdates(ctx context.Context, ownerID, comput
 		updates = updates[:limit]
 	}
 	return updates, nil
+}
+
+// ListAllPendingLifecycleUpdates is the activation-selection view. It avoids a
+// fixed prefix cap so one exact trajectory/work occurrence set is never split
+// merely because it contains occurrence 101.
+func (s *Store) ListAllPendingLifecycleUpdates(ctx context.Context, ownerID, computerID, targetAgentID string) ([]types.CoagentSourcePacket, error) {
+	return s.ListPendingLifecycleUpdates(ctx, ownerID, computerID, targetAgentID, int(^uint(0)>>1))
 }
 
 func (s *Store) GetLifecycleUpdate(ctx context.Context, ownerID, computerID, trajectoryID, targetAgentID, producerAgentID, producerUpdateID string) (types.CoagentSourcePacket, error) {
@@ -2172,6 +2204,78 @@ func validateUpdateWorkConsequence(disposition types.WorkItemStatus, workItemID,
 	return nil
 }
 
+func runMemoryMessageTexts(raw json.RawMessage) []string {
+	var message struct {
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
+	}
+	if json.Unmarshal(raw, &message) != nil || strings.TrimSpace(message.Role) != "user" {
+		return nil
+	}
+	var scalar string
+	if json.Unmarshal(message.Content, &scalar) == nil {
+		return []string{scalar}
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(message.Content, &blocks) != nil {
+		return nil
+	}
+	out := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Type == "text" && strings.TrimSpace(block.Text) != "" {
+			out = append(out, block.Text)
+		}
+	}
+	return out
+}
+
+// lifecycleUpdateIDsInAuthenticatedRunMemory derives occurrence authority only
+// from durable messages bearing the runtime-owned injection role and an exact
+// lifecycle envelope for this run. Run metadata and caller-supplied IDs are not
+// evidence that a packet entered provider context.
+func lifecycleUpdateIDsInAuthenticatedRunMemory(entries []types.RunMemoryEntry, run types.RunRecord, trajectoryID string) map[string]bool {
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		if entry.Kind != types.RunMemoryEntryMessage || entry.Role != types.RunMemoryRoleRuntimeInjection ||
+			entry.OwnerID != run.OwnerID || entry.RunID != run.RunID || entry.AgentID != run.AgentID || len(entry.Message) == 0 {
+			continue
+		}
+		for _, text := range runMemoryMessageTexts(entry.Message) {
+			start := strings.Index(text, "{")
+			if start < 0 {
+				continue
+			}
+			var envelope struct {
+				Schema        string `json:"schema"`
+				PacketType    string `json:"packet_type"`
+				OwnerID       string `json:"owner_id"`
+				ComputerID    string `json:"computer_id"`
+				TrajectoryID  string `json:"trajectory_id"`
+				TargetAgentID string `json:"target_agent_id"`
+				TargetRunID   string `json:"target_run_id"`
+				Updates       []struct {
+					UpdateID string `json:"update_id"`
+				} `json:"updates"`
+			}
+			if json.Unmarshal([]byte(text[start:]), &envelope) != nil || envelope.Schema != "choir.lifecycle_injection.v1" ||
+				envelope.PacketType != "coagent_update" || strings.TrimSpace(envelope.OwnerID) != run.OwnerID ||
+				strings.TrimSpace(envelope.ComputerID) != run.SandboxID || strings.TrimSpace(envelope.TrajectoryID) != trajectoryID ||
+				strings.TrimSpace(envelope.TargetAgentID) != run.AgentID || strings.TrimSpace(envelope.TargetRunID) != run.RunID {
+				continue
+			}
+			for _, update := range envelope.Updates {
+				if id := strings.TrimSpace(update.UpdateID); id != "" {
+					seen[id] = true
+				}
+			}
+		}
+	}
+	return seen
+}
+
 func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecycleUpdateRequest) (types.LifecycleResult, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
 	if err != nil {
@@ -2184,6 +2288,9 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	req.ProducerUpdateID, req.PayloadDigest = strings.TrimSpace(req.ProducerUpdateID), strings.TrimSpace(req.PayloadDigest)
 	req.SourceRunID, req.ChannelID, req.Role = strings.TrimSpace(req.SourceRunID), strings.TrimSpace(req.ChannelID), strings.TrimSpace(req.Role)
 	req.ControlBindingID, req.TargetWorkItemID = strings.TrimSpace(req.ControlBindingID), strings.TrimSpace(req.TargetWorkItemID)
+	for i := range req.ConsumedDeliveryUpdateIDs {
+		req.ConsumedDeliveryUpdateIDs[i] = strings.TrimSpace(req.ConsumedDeliveryUpdateIDs[i])
+	}
 	req.WorkItemID = strings.TrimSpace(req.WorkItemID)
 	req.WorkDisposition, err = normalizeUpdateWorkDisposition(req.WorkDisposition)
 	if err != nil {
@@ -2252,6 +2359,12 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	var producerRunObj objectgraph.Object
 	var producerRun types.RunRecord
 	var producerAuthorityConditions []objectgraph.ObjectCondition
+	type deliveredPacketConsumption struct {
+		object objectgraph.Object
+		update types.CoagentSourcePacket
+		key    string
+	}
+	var deliveredPacketConsumptions []deliveredPacketConsumption
 	persistentSuperProducer := req.ProducerAgentID == "super:"+ownerID
 	if persistentSuperProducer {
 		if req.ControlBindingID == "" || req.TargetWorkItemID == "" || req.Role != "super" {
@@ -2298,6 +2411,71 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		}
 		producerAuthorityConditions = append(producerAuthorityConditions,
 			coSuperObjectCondition(controlObj), coSuperObjectCondition(targetRunObj), coSuperObjectCondition(targetWorkObj))
+
+		// The complete consumable set is the canonical exact-run delivery order
+		// intersected with authenticated durable runtime-injection memory. A packet
+		// bound while the provider is in flight is deliberately left pending until
+		// a later turn appends it; a caller cannot omit an already appended packet.
+		var delivered []types.CoagentSourcePacket
+		var after int64
+		for {
+			page, pageErr := s.ListLifecycleControlsDeliveredToRunPage(ctx, ownerID, computerID, req.TrajectoryID, req.ProducerAgentID, req.SourceRunID, after, 100)
+			if pageErr != nil {
+				return types.LifecycleResult{}, pageErr
+			}
+			delivered = append(delivered, page.Packets...)
+			if !page.HasMore {
+				break
+			}
+			if page.NextCursor <= after {
+				return types.LifecycleResult{}, ErrConcurrentStateChange
+			}
+			after = page.NextCursor
+		}
+		memoryEntries, memoryErr := s.ListRunMemoryEntries(ctx, ownerID, req.SourceRunID)
+		if memoryErr != nil {
+			return types.LifecycleResult{}, memoryErr
+		}
+		memorySeen := lifecycleUpdateIDsInAuthenticatedRunMemory(memoryEntries, producerRun, req.TrajectoryID)
+		expectedConsumed := make([]types.CoagentSourcePacket, 0, len(delivered))
+		unseenPending := false
+		for _, packet := range delivered {
+			if memorySeen[strings.TrimSpace(packet.UpdateID)] {
+				expectedConsumed = append(expectedConsumed, packet)
+			} else if packet.Disposition == types.UpdatePending {
+				unseenPending = true
+			}
+		}
+		// The selected direction itself must have entered this exact run's
+		// durable provider context. This closes the empty-proof/direct-Store path.
+		if !memorySeen[req.ControlBindingID] || len(expectedConsumed) == 0 {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		// Do not terminalize a Super obligation while an arrival-during-provider
+		// packet remains unseen: it must stay executable by a later same-run turn.
+		if unseenPending && req.WorkDisposition != types.WorkItemOpen {
+			return types.LifecycleResult{}, ErrConcurrentStateChange
+		}
+		if len(expectedConsumed) != len(req.ConsumedDeliveryUpdateIDs) {
+			return types.LifecycleResult{}, ErrConcurrentStateChange
+		}
+		for i, packet := range expectedConsumed {
+			if req.ConsumedDeliveryUpdateIDs[i] == "" || req.ConsumedDeliveryUpdateIDs[i] != packet.UpdateID {
+				return types.LifecycleResult{}, ErrConcurrentStateChange
+			}
+			if packet.Disposition != types.UpdatePending {
+				continue
+			}
+			key := packet.TrajectoryID + "\x00" + packet.TargetAgentID + "\x00" + packet.AgentID + "\x00" + packet.ProducerUpdateID
+			packetObj, storedPacket, packetErr := s.textureTurnUpdateObject(ctx, ownerID, computerID, key)
+			if packetErr != nil {
+				return types.LifecycleResult{}, packetErr
+			}
+			if storedPacket.UpdateID != packet.UpdateID || storedPacket.DeliveredToRunID != req.SourceRunID || storedPacket.Disposition != types.UpdatePending {
+				return types.LifecycleResult{}, ErrConcurrentStateChange
+			}
+			deliveredPacketConsumptions = append(deliveredPacketConsumptions, deliveredPacketConsumption{object: packetObj, update: storedPacket, key: key})
+		}
 	} else {
 		if req.ControlBindingID != "" || req.TargetWorkItemID != "" {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
@@ -2409,7 +2587,40 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	if work.Status != types.WorkItemOpen {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
-	nextSeq := trajectory.ReducerSeq + 1
+	nextSeq := trajectory.ReducerSeq
+	events := make([]types.LifecycleEvent, 0, len(deliveredPacketConsumptions)+1)
+	eventObjs := make([]objectgraph.Object, 0, len(deliveredPacketConsumptions)+1)
+	consumedObjects := make([]objectgraph.Object, 0, len(deliveredPacketConsumptions))
+	consumedConditions := make([]objectgraph.ObjectCondition, 0, len(deliveredPacketConsumptions))
+	for i := range deliveredPacketConsumptions {
+		consumed := &deliveredPacketConsumptions[i]
+		nextSeq++
+		consumed.update.Disposition = types.UpdateIncorporated
+		consumed.update.DispositionRef = req.UpdateID
+		consumed.update.DispositionReason = "authenticated durable run-memory delivery incorporated by Super report"
+		consumed.update.LifecycleVersion++
+		consumed.update.ReducerSeq = nextSeq
+		updatedMeta := lifecycleMetadata("update_id", consumed.update.UpdateID, computerID, req.TrajectoryID, nextSeq)
+		updatedMeta["producer_update_id"], updatedMeta["target_agent_id"] = consumed.update.ProducerUpdateID, consumed.update.TargetAgentID
+		updatedObj, buildErr := lifecycleObject(ogKindWorkerUpdate, ownerID, computerID, consumed.key, consumed.update, updatedMeta, consumed.object.CreatedAt, now)
+		if buildErr != nil {
+			return types.LifecycleResult{}, buildErr
+		}
+		consumedConditions = append(consumedConditions, coSuperObjectCondition(consumed.object))
+		consumedObjects = append(consumedObjects, updatedObj)
+		event := types.LifecycleEvent{
+			EventID: req.CommandID + ":" + fmt.Sprintf("%d", len(events)+1), OwnerID: ownerID, ComputerID: computerID,
+			TrajectoryID: req.TrajectoryID, WorkItemID: consumed.update.TargetWorkItemID, UpdateID: consumed.update.UpdateID,
+			Kind: types.LifecycleUpdateApplied, ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: nextSeq,
+			CommandID: req.CommandID, CommandDigest: req.CommandDigest, Reason: consumed.update.DispositionReason, CreatedAt: now,
+		}
+		eventObj, buildErr := lifecycleObject(ogKindLifecycleEvent, ownerID, computerID, event.EventID, event, lifecycleMetadata("event_id", event.EventID, computerID, req.TrajectoryID, nextSeq), now, now)
+		if buildErr != nil {
+			return types.LifecycleResult{}, buildErr
+		}
+		events, eventObjs = append(events, event), append(eventObjs, eventObj)
+	}
+	nextSeq++
 	update := types.CoagentSourcePacket{
 		UpdateID: req.UpdateID, ProducerUpdateID: req.ProducerUpdateID,
 		OwnerID: ownerID, ComputerID: computerID, AgentID: req.ProducerAgentID,
@@ -2428,7 +2639,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = nextSeq, trajectory.LifecycleVersion+1, now
 	agent.LastReducerSeq, agent.LifecycleVersion, agent.UpdatedAt = nextSeq, agent.LifecycleVersion+1, now
 	event := types.LifecycleEvent{
-		EventID: req.CommandID + ":1", OwnerID: ownerID, ComputerID: computerID,
+		EventID: req.CommandID + ":" + fmt.Sprintf("%d", len(events)+1), OwnerID: ownerID, ComputerID: computerID,
 		TrajectoryID: req.TrajectoryID, UpdateID: req.UpdateID, Kind: types.LifecycleUpdateQueued,
 		ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: nextSeq,
 		CommandID: req.CommandID, CommandDigest: req.CommandDigest, CreatedAt: now,
@@ -2452,7 +2663,8 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID, req.CommandID, req.CommandDigest, types.LifecycleQueueUpdate, nextSeq, []objectgraph.Object{eventObj})
+	events, eventObjs = append(events, event), append(eventObjs, eventObj)
+	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID, req.CommandID, req.CommandDigest, types.LifecycleQueueUpdate, nextSeq, eventObjs)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -2462,10 +2674,33 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		{CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash},
 		{CanonicalID: producerRunObj.CanonicalID, Exists: true, ExpectedContentHash: producerRunObj.ContentHash},
 		{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash},
-		{CanonicalID: updateObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
+		{CanonicalID: updateObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
 	}
-	conditions = append(conditions, producerAuthorityConditions...)
-	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, []objectgraph.Object{trajectoryUpdated, agentUpdated, updateObj, eventObj, receiptObj}, types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &agent, Update: &update, Events: []types.LifecycleEvent{event}})
+	seenConditions := make(map[string]bool, len(conditions)+len(producerAuthorityConditions)+len(consumedConditions)+len(eventObjs))
+	for _, condition := range conditions {
+		seenConditions[condition.CanonicalID] = true
+	}
+	appendCondition := func(condition objectgraph.ObjectCondition) {
+		if !seenConditions[condition.CanonicalID] {
+			conditions = append(conditions, condition)
+			seenConditions[condition.CanonicalID] = true
+		}
+	}
+	for _, condition := range producerAuthorityConditions {
+		appendCondition(condition)
+	}
+	for _, condition := range consumedConditions {
+		appendCondition(condition)
+	}
+	for _, eventObject := range eventObjs {
+		appendCondition(objectgraph.ObjectCondition{CanonicalID: eventObject.CanonicalID})
+	}
+	objects := []objectgraph.Object{trajectoryUpdated, agentUpdated, updateObj}
+	objects = append(objects, consumedObjects...)
+	objects = append(objects, eventObjs...)
+	objects = append(objects, receiptObj)
+	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &agent, Update: &update, Events: events})
+
 }
 
 func unscopedGraphObject(kind objectgraph.ObjectKind, ownerID, identityKey string, body any, metadata map[string]any, now time.Time) (objectgraph.Object, error) {

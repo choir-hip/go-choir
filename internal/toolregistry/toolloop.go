@@ -308,7 +308,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	}
 	appendInjected := func(injected []json.RawMessage) error {
 		for _, msg := range injected {
-			if err := appendMessage(runMemoryMessageRole(msg), msg); err != nil {
+			if err := appendMessage(types.RunMemoryRoleRuntimeInjection, msg); err != nil {
 				return err
 			}
 		}

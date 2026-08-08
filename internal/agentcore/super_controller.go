@@ -154,12 +154,13 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 	var candidate *types.RunRecord
 	for i := range runs {
 		run := &runs[i]
+		passivatedReason := metadataStringValue(run.Metadata, "passivated_reason")
 		if run.OwnerID != ownerID || run.AgentID != agentID || !isPersistentSuperAgentRun(run) ||
 			metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" ||
-			metadataStringValue(run.Metadata, "passivated_reason") != "runtime_restarted" {
+			(passivatedReason != "runtime_restarted" && passivatedReason != runtimeInjectionAppendFailurePassivationReason) {
 			continue
 		}
-		controls, readErr := rt.store.ListLifecycleControlsDeliveredToRun(ctx, ownerID, run.SandboxID, lifecycleControlTrajectoryForRun(run), agentID, run.RunID, 100)
+		controls, readErr := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, run)
 		if readErr != nil {
 			return nil, false, fmt.Errorf("validate restarted persistent-Super control run %s: %w", run.RunID, readErr)
 		}
@@ -403,6 +404,43 @@ func lifecycleControlTrajectoryForRun(rec *types.RunRecord) string {
 	return strings.TrimSpace(firstNonEmpty(rec.TrajectoryID, metadataStringValue(rec.Metadata, "assignment_trajectory_id"), metadataStringValue(rec.Metadata, runMetadataTrajectoryID)))
 }
 
+func (rt *Runtime) listAllLifecyclePacketsDeliveredToRun(ctx context.Context, rec *types.RunRecord) ([]types.CoagentSourcePacket, error) {
+	if rt == nil || rt.store == nil || rec == nil {
+		return nil, nil
+	}
+	const pageSize = 100
+	var out []types.CoagentSourcePacket
+	var after int64
+	for {
+		page, err := rt.store.ListLifecycleControlsDeliveredToRunPage(ctx, rec.OwnerID, rec.SandboxID, lifecycleControlTrajectoryForRun(rec), rec.AgentID, rec.RunID, after, pageSize)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, page.Packets...)
+		if !page.HasMore {
+			return out, nil
+		}
+		if page.NextCursor <= after {
+			return nil, fmt.Errorf("exact-run lifecycle delivery cursor did not advance")
+		}
+		after = page.NextCursor
+	}
+}
+
+func (rt *Runtime) listPendingLifecyclePacketsDeliveredToRun(ctx context.Context, rec *types.RunRecord) ([]types.CoagentSourcePacket, error) {
+	all, err := rt.listAllLifecyclePacketsDeliveredToRun(ctx, rec)
+	if err != nil {
+		return nil, err
+	}
+	pending := make([]types.CoagentSourcePacket, 0, len(all))
+	for _, packet := range all {
+		if packet.Disposition == types.UpdatePending {
+			pending = append(pending, packet)
+		}
+	}
+	return pending, nil
+}
+
 func lifecycleControlWorkIDsForRun(rec *types.RunRecord) map[string]bool {
 	out := map[string]bool{}
 	if rec == nil {
@@ -521,7 +559,7 @@ func (rt *Runtime) listPendingPersistentSuperLifecycleControls(ctx context.Conte
 	if agentprofile.Canonical(agent.Profile) != agentprofile.Super || agentprofile.Canonical(agent.Role) != agentprofile.Super || agent.LifecycleVersion != 0 || agent.OwnerID != ownerID || agent.ComputerID != computerID {
 		return nil, fmt.Errorf("persistent Super lifecycle control target has invalid authority")
 	}
-	updates, err := rt.store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, agentID, limit)
+	updates, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
 	if err != nil {
 		return nil, fmt.Errorf("list persistent-Super lifecycle controls: %w", err)
 	}
@@ -642,7 +680,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	lifecycleControls := false
 	var updates []types.CoagentSourcePacket
 	if profile == agentprofile.Researcher && agent.LifecycleVersion > 0 {
-		updates, err = rt.store.ListPendingLifecycleUpdates(ctx, ownerID, rt.TextureSandboxID(), agentID, 100)
+		updates, err = rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, rt.TextureSandboxID(), agentID)
 		if err == nil {
 			updates, err = rt.validateTargetBoundLifecycleControls(ctx, ownerID, rt.TextureSandboxID(), agentID, updates, false)
 		}
@@ -832,7 +870,7 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 	computerID := strings.TrimSpace(rec.SandboxID)
 	if isPersistentSuperAgentRun(rec) {
 		if metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
-			return rt.store.ListLifecycleControlsDeliveredToRun(ctx, ownerID, computerID, lifecycleControlTrajectoryForRun(rec), agentID, rec.RunID, limit)
+			return rt.listPendingLifecyclePacketsDeliveredToRun(ctx, rec)
 		}
 		return rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
 	}
@@ -841,9 +879,9 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 			return nil, fmt.Errorf("list pending lifecycle updates: computer_id is required")
 		}
 		if agentProfileForRun(rec) == agentprofile.Researcher {
-			return rt.store.ListLifecycleControlsDeliveredToRun(ctx, ownerID, computerID, lifecycleControlTrajectoryForRun(rec), agentID, rec.RunID, limit)
+			return rt.listPendingLifecyclePacketsDeliveredToRun(ctx, rec)
 		}
-		return rt.store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, agentID, limit)
+		return rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
 	}
 	return rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
 }
@@ -920,7 +958,7 @@ func lifecycleInjectionIDsFromRunMemory(rec *types.RunRecord, entries []types.Ru
 		return updates, owners
 	}
 	for _, entry := range entries {
-		if entry.Kind != types.RunMemoryEntryMessage || len(entry.Message) == 0 {
+		if entry.Kind != types.RunMemoryEntryMessage || entry.Role != types.RunMemoryRoleRuntimeInjection || len(entry.Message) == 0 {
 			continue
 		}
 		for _, text := range runMemoryUserMessageTexts(entry.Message) {
@@ -955,12 +993,20 @@ func lifecycleInjectionIDsFromRunMemory(rec *types.RunRecord, entries []types.Ru
 					InstructionID string `json:"instruction_id"`
 				} `json:"instructions"`
 			}
-			if json.Unmarshal([]byte(text[start:]), &envelope) != nil || envelope.Schema != lifecycleInjectionEnvelopeSchemaV1 ||
-				envelope.PacketType != packetType || strings.TrimSpace(envelope.OwnerID) != strings.TrimSpace(rec.OwnerID) ||
-				strings.TrimSpace(envelope.ComputerID) != strings.TrimSpace(rec.SandboxID) ||
-				strings.TrimSpace(envelope.TrajectoryID) != strings.TrimSpace(rec.TrajectoryID) ||
+			expectedTrajectory := lifecycleControlTrajectoryForRun(rec)
+			if json.Unmarshal([]byte(text[start:]), &envelope) != nil {
+				continue
+			}
+			targetRunID, expectedRunID := strings.TrimSpace(envelope.TargetRunID), strings.TrimSpace(rec.RunID)
+			exactLifecycleDelivery := metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control"
+			ownerID, computerID := strings.TrimSpace(envelope.OwnerID), strings.TrimSpace(envelope.ComputerID)
+			if envelope.Schema != lifecycleInjectionEnvelopeSchemaV1 || envelope.PacketType != packetType ||
+				(ownerID != "" && ownerID != strings.TrimSpace(rec.OwnerID)) ||
+				(computerID != "" && computerID != strings.TrimSpace(rec.SandboxID)) ||
+				strings.TrimSpace(envelope.TrajectoryID) != expectedTrajectory ||
 				strings.TrimSpace(envelope.TargetAgentID) != strings.TrimSpace(rec.AgentID) ||
-				(envelope.TargetRunID != "" && strings.TrimSpace(envelope.TargetRunID) != strings.TrimSpace(rec.RunID)) {
+				(targetRunID != "" && targetRunID != expectedRunID) ||
+				(exactLifecycleDelivery && (ownerID != strings.TrimSpace(rec.OwnerID) || computerID != strings.TrimSpace(rec.SandboxID) || targetRunID != expectedRunID)) {
 				continue
 			}
 			switch envelope.PacketType {
@@ -1014,71 +1060,49 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 	if rt == nil || rt.store == nil || rec == nil || !runSupportsCoagentUpdateInjection(rec) {
 		return nil
 	}
-	// Texture participates in the same warm-injection path as the other durable
-	// actors. A Texture activation may now incorporate an addressed packet, write
-	// a canonical revision, then receive later packets and write deeper revisions
-	// in the same logical actor run.
 	ownerID := strings.TrimSpace(rec.OwnerID)
 	agentID := strings.TrimSpace(rec.AgentID)
 	if ownerID == "" || agentID == "" {
 		return nil
 	}
 	initialPhase = strings.TrimSpace(initialPhase)
-	seen := map[string]bool{}
-	for _, id := range coagentUpdateIDsForRun(rec) {
-		id = strings.TrimSpace(id)
-		if id != "" {
-			seen[id] = true
-		}
-	}
-	seenOwnerInstructions := map[string]bool{}
-	memorySeenLoaded := false
 	return func(finalCheckpoint bool) ([]json.RawMessage, error) {
-		if !memorySeenLoaded {
-			entries, err := rt.store.ListRunMemoryEntries(context.Background(), rec.OwnerID, rec.RunID)
-			if err != nil {
-				return nil, fmt.Errorf("derive delivered lifecycle occurrences from run memory: %w", err)
-			}
-			memoryUpdates, memoryOwners := lifecycleInjectionIDsFromRunMemory(rec, entries)
-			for id := range memoryUpdates {
-				seen[id] = true
-			}
-			for id := range memoryOwners {
-				seenOwnerInstructions[id] = true
-			}
-			memorySeenLoaded = true
+		// Durable runtime-authenticated memory is the sole seen-occurrence
+		// authority. Do not mutate a process-local seen map or trust RunRecord
+		// metadata before the returned message has actually appended.
+		entries, err := rt.store.ListRunMemoryEntries(context.Background(), rec.OwnerID, rec.RunID)
+		if err != nil {
+			return nil, fmt.Errorf("derive delivered lifecycle occurrences from run memory: %w", err)
 		}
+		seenUpdates, seenOwnerInstructions := lifecycleInjectionIDsFromRunMemory(rec, entries)
 		phase := coagentPacketDeliveryMid
 		if finalCheckpoint {
 			phase = coagentPacketDeliveryFinal
-		} else if initialPhase != "" {
-			phase, initialPhase = initialPhase, ""
+		} else if initialPhase != "" && len(seenUpdates) == 0 && len(seenOwnerInstructions) == 0 {
+			// The first phase is durable-memory-derived rather than process-local:
+			// an append failure retries the identical cold/thread projection, while
+			// later arrivals after a successful append are mid-activation turns.
+			phase = initialPhase
 		}
-		ownerMessages, freshOwnerIDs, err := rt.lifecycleOwnerInstructionTurnsForRun(context.Background(), rec, phase, seenOwnerInstructions)
+		ownerMessages, _, err := rt.lifecycleOwnerInstructionTurnsForRun(context.Background(), rec, phase, seenOwnerInstructions)
 		if err != nil {
 			return nil, fmt.Errorf("list pending owner instruction turns: %w", err)
-		}
-		for _, id := range freshOwnerIDs {
-			seenOwnerInstructions[id] = true
 		}
 		updates, err := rt.pendingCoagentUpdatesForRun(context.Background(), rec, ownerID, agentID, 100)
 		if err != nil {
 			return nil, fmt.Errorf("list pending update_coagent turns: %w", err)
 		}
 		fresh := make([]types.CoagentSourcePacket, 0, len(updates))
-		updateIDs := make([]string, 0, len(updates))
 		for _, update := range updates {
 			id := strings.TrimSpace(update.UpdateID)
-			if id == "" || seen[id] || !coagentUpdateDeliverableForRun(rec, update) {
+			if id == "" || seenUpdates[id] || !coagentUpdateDeliverableForRun(rec, update) {
 				continue
 			}
-			seen[id] = true
-			fresh, updateIDs = append(fresh, update), append(updateIDs, id)
+			fresh = append(fresh, update)
 		}
 		if len(fresh) == 0 {
 			return ownerMessages, nil
 		}
-		appendCoagentUpdateIDsForRun(rec, updateIDs)
 		projected, err := rt.projectTerminalOutcomeContent(context.Background(), fresh)
 		if err != nil {
 			return nil, err
@@ -1092,14 +1116,22 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 }
 
 func shouldAppendInitialCoagentMailboxTurns(rec *types.RunRecord) bool {
-	if rec == nil || agentProfileForRun(rec) != agentprofile.Texture {
+	if rec == nil {
+		return false
+	}
+	requestSource := metadataStringValue(rec.Metadata, "request_source")
+	// Exact lifecycle packets must pass through the authenticated runtime
+	// injection append, including Researcher and persistent Super cold starts.
+	if requestSource == "lifecycle_texture_control" {
+		return true
+	}
+	if agentProfileForRun(rec) != agentprofile.Texture {
 		return false
 	}
 	if metadataStringValue(rec.Metadata, "request_intent") == "apply_owner_instruction" {
 		return true
 	}
-	requestSource := metadataStringValue(rec.Metadata, "request_source")
-	if requestSource == "update_coagent" || requestSource == "lifecycle_texture_control" {
+	if requestSource == "update_coagent" {
 		return true
 	}
 	return len(coagentUpdateIDsForRun(rec)) > 0
@@ -1123,13 +1155,11 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) toolregistry.ToolLoop
 			if err != nil {
 				return false, fmt.Errorf("list pending update_coagent records for park wait: %w", err)
 			}
-			seen := map[string]bool{}
-			for _, id := range coagentUpdateIDsForRun(rec) {
-				id = strings.TrimSpace(id)
-				if id != "" {
-					seen[id] = true
-				}
+			entries, err := rt.store.ListRunMemoryEntries(ctx, rec.OwnerID, rec.RunID)
+			if err != nil {
+				return false, fmt.Errorf("derive parked delivery occurrences from run memory: %w", err)
 			}
+			seen, _ := lifecycleInjectionIDsFromRunMemory(rec, entries)
 			for _, update := range updates {
 				id := strings.TrimSpace(update.UpdateID)
 				if id != "" && !seen[id] {
@@ -1180,19 +1210,16 @@ func (rt *Runtime) prependInitialCoagentUpdatePackets(ctx context.Context, rec *
 	if ownerID == "" || agentID == "" {
 		return messages, nil
 	}
-	seen := map[string]bool{}
-	for _, id := range coagentUpdateIDsForRun(rec) {
-		id = strings.TrimSpace(id)
-		if id != "" {
-			seen[id] = true
-		}
+	entries, err := rt.store.ListRunMemoryEntries(ctx, rec.OwnerID, rec.RunID)
+	if err != nil {
+		return messages, fmt.Errorf("derive cold delivery occurrences from run memory: %w", err)
 	}
+	seen, _ := lifecycleInjectionIDsFromRunMemory(rec, entries)
 	updates, err := rt.pendingCoagentUpdatesForRun(ctx, rec, ownerID, agentID, 100)
 	if err != nil {
 		return messages, fmt.Errorf("list pending coagent updates for cold delivery: %w", err)
 	}
 	fresh := make([]types.CoagentSourcePacket, 0, len(updates))
-	updateIDs := make([]string, 0, len(updates))
 	for _, update := range updates {
 		id := strings.TrimSpace(update.UpdateID)
 		if id == "" || seen[id] {
@@ -1203,12 +1230,10 @@ func (rt *Runtime) prependInitialCoagentUpdatePackets(ctx context.Context, rec *
 		}
 		seen[id] = true
 		fresh = append(fresh, update)
-		updateIDs = append(updateIDs, id)
 	}
 	if len(fresh) == 0 {
 		return messages, nil
 	}
-	appendCoagentUpdateIDsForRun(rec, updateIDs)
 	projected, err := rt.projectTerminalOutcomeContent(ctx, fresh)
 	if err != nil {
 		return messages, err
@@ -1268,7 +1293,7 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 			log.Printf("runtime: resolve resident lifecycle control target %s: %v", target, err)
 			return
 		} else if found {
-			updates, listErr := rt.store.ListPendingLifecycleUpdates(ctx, update.OwnerID, update.ComputerID, target, 100)
+			updates, listErr := rt.store.ListAllPendingLifecycleUpdates(ctx, update.OwnerID, update.ComputerID, target)
 			if listErr == nil {
 				updates, listErr = rt.validateTargetBoundLifecycleControls(ctx, update.OwnerID, update.ComputerID, target, updates, agentProfileForRun(&resident) == agentprofile.Super)
 			}

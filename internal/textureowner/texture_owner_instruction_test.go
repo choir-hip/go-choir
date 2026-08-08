@@ -486,7 +486,7 @@ func TestLateOwnerInstructionConcurrencyKeepsResidentMutationRetryable(t *testin
 	if err != nil || len(initialMessages) != 1 {
 		t.Fatalf("initial injection=%s err=%v", initialMessages, err)
 	}
-	if _, err := core.Store().AppendRunMemoryEntry(t.Context(), types.RunMemoryEntry{RunID: run.RunID, OwnerID: run.OwnerID, AgentID: run.AgentID, Kind: types.RunMemoryEntryMessage, Role: "user", Message: initialMessages[0], CreatedAt: time.Now().UTC()}); err != nil {
+	if _, err := core.Store().AppendRunMemoryEntry(t.Context(), types.RunMemoryEntry{RunID: run.RunID, OwnerID: run.OwnerID, AgentID: run.AgentID, Kind: types.RunMemoryEntryMessage, Role: types.RunMemoryRoleRuntimeInjection, Message: initialMessages[0], CreatedAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
 	delete(run.Metadata, textureOwnerInstructionIDsMetadata)

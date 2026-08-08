@@ -141,6 +141,16 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	now := time.Now().UTC()
 	seq := trajectory.ReducerSeq
 	conditions := []objectgraph.ObjectCondition{{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash}, {CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash}, {CanonicalID: runObj.CanonicalID, Exists: true, ExpectedContentHash: runObj.ContentHash}}
+	seenConditions := make(map[string]bool, len(req.Controls)*3+len(conditions))
+	for _, condition := range conditions {
+		seenConditions[condition.CanonicalID] = true
+	}
+	appendCondition := func(condition objectgraph.ObjectCondition) {
+		if !seenConditions[condition.CanonicalID] {
+			conditions = append(conditions, condition)
+			seenConditions[condition.CanonicalID] = true
+		}
+	}
 	objects := make([]objectgraph.Object, 0, len(req.Controls)*2+2)
 	events := make([]types.LifecycleEvent, 0, len(req.Controls))
 	eventObjs := make([]objectgraph.Object, 0, len(req.Controls))
@@ -167,7 +177,8 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 		if work.Status != types.WorkItemOpen || work.TrajectoryID != req.TrajectoryID || work.AssignedAgentID != req.TargetAgentID || work.OwnerID != ownerID || work.ComputerID != computerID {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
-		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: updateObj.CanonicalID, Exists: true, ExpectedContentHash: updateObj.ContentHash}, objectgraph.ObjectCondition{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash})
+		appendCondition(objectgraph.ObjectCondition{CanonicalID: updateObj.CanonicalID, Exists: true, ExpectedContentHash: updateObj.ContentHash})
+		appendCondition(objectgraph.ObjectCondition{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash})
 		seq++
 		update.DeliveredToRunID, update.DeliveredAt = req.TargetRunID, &now
 		update.LifecycleVersion++
@@ -183,7 +194,7 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 		if err != nil {
 			return types.LifecycleResult{}, err
 		}
-		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: eventObj.CanonicalID})
+		appendCondition(objectgraph.ObjectCondition{CanonicalID: eventObj.CanonicalID})
 		objects = append(objects, eventObj)
 		eventObjs = append(eventObjs, eventObj)
 		controls = append(controls, update)
@@ -193,7 +204,51 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 		run.Metadata = map[string]any{}
 	}
 	run.Metadata["assignment_trajectory_id"] = req.TrajectoryID
-	run.Metadata["lifecycle_control_bindings"] = controlBindings
+	// A resident exact run can receive more controls after its first bind. Keep
+	// every historical control join in order; replacing this slice would make
+	// older CoSuper assignment/report authority disappear.
+	mergedBindings := make([]map[string]string, 0, len(controlBindings))
+	seenBindings := map[string]bool{}
+	appendBinding := func(binding map[string]string) {
+		key := strings.TrimSpace(binding["trajectory_id"]) + "\x00" + strings.TrimSpace(binding["update_id"])
+		if key == "\x00" || seenBindings[key] {
+			return
+		}
+		seenBindings[key] = true
+		mergedBindings = append(mergedBindings, binding)
+	}
+	switch existing := run.Metadata["lifecycle_control_bindings"].(type) {
+	case []any:
+		for _, raw := range existing {
+			entry, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			appendBinding(map[string]string{
+				"trajectory_id":       strings.TrimSpace(fmt.Sprint(entry["trajectory_id"])),
+				"update_id":           strings.TrimSpace(fmt.Sprint(entry["update_id"])),
+				"target_work_item_id": strings.TrimSpace(fmt.Sprint(entry["target_work_item_id"])),
+				"producer_agent_id":   strings.TrimSpace(fmt.Sprint(entry["producer_agent_id"])),
+			})
+		}
+	case []map[string]string:
+		for _, entry := range existing {
+			appendBinding(entry)
+		}
+	case []map[string]any:
+		for _, entry := range existing {
+			appendBinding(map[string]string{
+				"trajectory_id":       strings.TrimSpace(fmt.Sprint(entry["trajectory_id"])),
+				"update_id":           strings.TrimSpace(fmt.Sprint(entry["update_id"])),
+				"target_work_item_id": strings.TrimSpace(fmt.Sprint(entry["target_work_item_id"])),
+				"producer_agent_id":   strings.TrimSpace(fmt.Sprint(entry["producer_agent_id"])),
+			})
+		}
+	}
+	for _, binding := range controlBindings {
+		appendBinding(binding)
+	}
+	run.Metadata["lifecycle_control_bindings"] = mergedBindings
 	run.UpdatedAt = now
 	runBody, err := json.Marshal(run)
 	if err != nil {
@@ -212,28 +267,44 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: receiptObj.CanonicalID})
+	appendCondition(objectgraph.ObjectCondition{CanonicalID: receiptObj.CanonicalID})
 	objects = append(objects, receiptObj)
 	result := types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &agent, Events: events, Controls: controls}
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, result)
 }
 
-// ListLifecycleControlsDeliveredToRun returns the full typed envelopes bound
-// to one exact durable run: downward controls plus authenticated CoSuper return
-// reports already delivered to their owning persistent-Super run. New-run
-// selection intentionally uses ListPendingLifecycleUpdates instead; this reader
-// is only for warm/cold injection after the delivery cursor has advanced. It
-// never consults the legacy coagent mailbox.
+// LifecycleDeliveredPacketPage is one exact-run delivery page. NextCursor is
+// the immutable packet MessageSeq. ReducerSeq is not a valid delivery cursor:
+// it advances again when the packet is incorporated.
+type LifecycleDeliveredPacketPage struct {
+	Packets    []types.CoagentSourcePacket
+	NextCursor int64
+	HasMore    bool
+}
+
+// ListLifecycleControlsDeliveredToRun returns one compatibility page of the
+// typed envelopes bound to one exact durable run. Callers that must observe the
+// complete run use ListLifecycleControlsDeliveredToRunPage until HasMore is
+// false; they must never assume the first 100 occurrences are the whole run.
 func (s *Store) ListLifecycleControlsDeliveredToRun(ctx context.Context, ownerID, computerID, trajectoryID, targetAgentID, targetRunID string, limit int) ([]types.CoagentSourcePacket, error) {
+	page, err := s.ListLifecycleControlsDeliveredToRunPage(ctx, ownerID, computerID, trajectoryID, targetAgentID, targetRunID, 0, limit)
+	return page.Packets, err
+}
+
+// ListLifecycleControlsDeliveredToRunPage returns downward controls plus
+// authenticated CoSuper reports already delivered to one exact run. It
+// validates the complete exact-run set before returning a page, never consults
+// the legacy mailbox, and resumes strictly after an immutable occurrence cursor.
+func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, ownerID, computerID, trajectoryID, targetAgentID, targetRunID string, after int64, limit int) (LifecycleDeliveredPacketPage, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
 	if err != nil {
-		return nil, err
+		return LifecycleDeliveredPacketPage{}, err
 	}
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	targetAgentID = strings.TrimSpace(targetAgentID)
 	targetRunID = strings.TrimSpace(targetRunID)
 	if trajectoryID == "" || targetAgentID == "" || targetRunID == "" {
-		return nil, ErrLifecycleInvalidTransition
+		return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 	}
 	if limit <= 0 {
 		limit = 100
@@ -241,12 +312,12 @@ func (s *Store) ListLifecycleControlsDeliveredToRun(ctx context.Context, ownerID
 
 	agent, err := s.GetAgentByScope(ctx, ownerID, computerID, targetAgentID)
 	if err != nil {
-		return nil, err
+		return LifecycleDeliveredPacketPage{}, err
 	}
 	profile := agentprofile.Canonical(agent.Profile)
 	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agentprofile.Canonical(agent.Role) != profile ||
 		(profile != agentprofile.Researcher && !(profile == agentprofile.Super && targetAgentID == agentprofile.Super+":"+ownerID && agent.LifecycleVersion == 0)) {
-		return nil, ErrLifecycleInvalidTransition
+		return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 	}
 	var run types.RunRecord
 	if profile == agentprofile.Super {
@@ -255,17 +326,17 @@ func (s *Store) ListLifecycleControlsDeliveredToRun(ctx context.Context, ownerID
 		run, err = s.GetLifecycleRun(ctx, ownerID, computerID, targetRunID)
 	}
 	if err != nil {
-		return nil, err
+		return LifecycleDeliveredPacketPage{}, err
 	}
 	if run.RunID != targetRunID || run.OwnerID != ownerID || run.SandboxID != computerID || run.AgentID != targetAgentID || agentprofile.Canonical(run.AgentProfile) != profile {
-		return nil, ErrLifecycleInvalidTransition
+		return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 	}
 	if profile == agentprofile.Super {
 		if strings.TrimSpace(run.TrajectoryID) != "" || metadataStringValueStore(run.Metadata, "assignment_trajectory_id") != trajectoryID {
-			return nil, ErrLifecycleInvalidTransition
+			return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 		}
 	} else if strings.TrimSpace(run.TrajectoryID) != trajectoryID {
-		return nil, ErrLifecycleInvalidTransition
+		return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 	}
 
 	graph := s.ogReadStore
@@ -273,11 +344,11 @@ func (s *Store) ListLifecycleControlsDeliveredToRun(ctx context.Context, ownerID
 		graph = s.ogStore
 	}
 	if graph == nil {
-		return nil, fmt.Errorf("lifecycle delivered controls: object graph not initialized")
+		return LifecycleDeliveredPacketPage{}, fmt.Errorf("lifecycle delivered controls: object graph not initialized")
 	}
 	objects, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
 	if err != nil {
-		return nil, err
+		return LifecycleDeliveredPacketPage{}, err
 	}
 	updates := make([]types.CoagentSourcePacket, 0)
 	for _, obj := range objects {
@@ -286,67 +357,80 @@ func (s *Store) ListLifecycleControlsDeliveredToRun(ctx context.Context, ownerID
 		}
 		update, decodeErr := decodeLifecycleObject[types.CoagentSourcePacket](obj)
 		if decodeErr != nil {
-			return nil, decodeErr
+			return LifecycleDeliveredPacketPage{}, decodeErr
 		}
 		if update.DeliveredToRunID != targetRunID {
 			continue
 		}
 		if update.OwnerID != ownerID || update.ComputerID != computerID || update.TrajectoryID != trajectoryID || update.TargetAgentID != targetAgentID ||
-			update.Disposition != types.UpdatePending || update.DeliveredAt == nil || update.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 ||
+			(update.Disposition != types.UpdatePending && update.Disposition != types.UpdateIncorporated) || update.DeliveredAt == nil || update.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 ||
 			strings.TrimSpace(update.Packet.Kind) == "" || strings.TrimSpace(update.Content) == "" {
-			return nil, ErrLifecycleInvalidTransition
+			return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 		}
 		payloadDigest, digestErr := ComputeLifecycleUpdatePayloadDigest(update.Packet, update.Content)
 		if digestErr != nil || payloadDigest != update.PayloadDigest {
-			return nil, ErrLifecycleInvalidTransition
+			return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 		}
 		producerWorkID, targetWorkID, bindingErr := ResolveLifecyclePacketWorkBindings(update)
 		if bindingErr != nil {
-			return nil, bindingErr
+			return LifecycleDeliveredPacketPage{}, bindingErr
 		}
 		switch update.Direction {
 		case types.LifecyclePacketDirectionControl:
 			if targetWorkID == "" || !lifecycleRunBindsWork(run, targetWorkID) {
-				return nil, ErrLifecycleInvalidTransition
+				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 			}
 			work, workErr := s.GetLifecycleWorkItem(ctx, ownerID, computerID, targetWorkID)
 			if workErr != nil {
-				return nil, workErr
+				return LifecycleDeliveredPacketPage{}, workErr
 			}
-			if work.OwnerID != ownerID || work.ComputerID != computerID || work.TrajectoryID != trajectoryID || work.AssignedAgentID != targetAgentID || work.Status != types.WorkItemOpen {
-				return nil, ErrLifecycleInvalidTransition
+			if work.OwnerID != ownerID || work.ComputerID != computerID || work.TrajectoryID != trajectoryID || work.AssignedAgentID != targetAgentID ||
+				(update.Disposition == types.UpdatePending && work.Status != types.WorkItemOpen) ||
+				(update.Disposition == types.UpdateIncorporated && work.Status != types.WorkItemOpen && !workItemTerminal(work.Status)) {
+				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 			}
 		case types.LifecyclePacketDirectionProducerReport:
 			if profile != agentprofile.Super || producerWorkID == "" || targetWorkID == "" || strings.TrimSpace(update.ControlBindingID) == "" ||
 				!lifecycleRunBindsWork(run, targetWorkID) || !persistentSuperControlBinding(run.Metadata, trajectoryID, targetWorkID, update.ControlBindingID) {
-				return nil, ErrLifecycleInvalidTransition
+				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 			}
 			producerRun, runErr := s.GetLifecycleRun(ctx, ownerID, computerID, update.SourceRunID)
 			if runErr != nil {
-				return nil, runErr
+				return LifecycleDeliveredPacketPage{}, runErr
 			}
 			producerWork, workErr := s.GetLifecycleWorkItem(ctx, ownerID, computerID, producerWorkID)
 			if workErr != nil {
-				return nil, workErr
+				return LifecycleDeliveredPacketPage{}, workErr
 			}
 			if producerRun.RunID != update.SourceRunID || producerRun.AgentID != update.AgentID || producerRun.TrajectoryID != trajectoryID ||
 				producerRun.AgentProfile != agentprofile.CoSuper || !producerRun.State.Valid() || !lifecycleRunBindsWork(producerRun, producerWorkID) ||
 				producerWork.TrajectoryID != trajectoryID || producerWork.AssignedAgentID != update.AgentID || producerWork.AuthorityProfile != agentprofile.CoSuper {
-				return nil, ErrLifecycleInvalidTransition
+				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 			}
 		default:
-			return nil, ErrLifecycleInvalidTransition
+			return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 		}
 		updates = append(updates, update)
 	}
 	sort.Slice(updates, func(i, j int) bool {
-		if updates[i].ReducerSeq != updates[j].ReducerSeq {
-			return updates[i].ReducerSeq < updates[j].ReducerSeq
+		if updates[i].MessageSeq != updates[j].MessageSeq {
+			return updates[i].MessageSeq < updates[j].MessageSeq
 		}
 		return updates[i].UpdateID < updates[j].UpdateID
 	})
-	if len(updates) > limit {
-		updates = updates[:limit]
+	if after < 0 {
+		return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 	}
-	return updates, nil
+	first := sort.Search(len(updates), func(i int) bool { return updates[i].MessageSeq > after })
+	remaining := updates[first:]
+	page := LifecycleDeliveredPacketPage{Packets: make([]types.CoagentSourcePacket, 0, min(limit, len(remaining))), NextCursor: after}
+	if len(remaining) > limit {
+		page.HasMore = true
+		remaining = remaining[:limit]
+	}
+	page.Packets = append(page.Packets, remaining...)
+	if len(page.Packets) > 0 {
+		page.NextCursor = page.Packets[len(page.Packets)-1].MessageSeq
+	}
+	return page, nil
 }
