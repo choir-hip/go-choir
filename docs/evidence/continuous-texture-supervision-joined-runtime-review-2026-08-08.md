@@ -250,6 +250,27 @@ is retained and is not acceptance or a platform defect. The recurrence proves th
 F/restart did not itself restore host ChatGPT auth; it does not justify policy permutation or credential bypass.
 
 
+### Operator-ratified ChatGPT restoration
+
+After docs-first ceremony `77be0419`/CI `31284157112`, a first auth-only install
+was rolled back exactly because its bounded probe used a different owner's
+legacy guest before provider. Receipt `8f55bb96`/CI `31284504546` landed that
+failure before retry. The second attempt minted and nonce-verified the correct
+acceptance-owner key to stable VM `vm-bbdbbd01c4390b7036067aaa12afeb68`, guest
+`computer-42850e9734d9442386c5dd8bf3afbf19`, route `648d6071…`, epoch 8249,
+and exact F.
+
+The accepted root-only atomic transaction changed only Node B Codex auth
+`eb1b7317…→cc744524…`, kept gateway env `7c5cc6e…`, and restarted only the
+gateway `3806702→3807256`. Exact-F product probe document `c0956f24…`,
+trajectory `2cbf6c95…`, work `f2e18cb7…`, and run `cb19cfff…` used real
+`chatgpt/gpt-5.5` to create exact marker v1 `3de79895…` with completed work and
+no error. The retained probe was publicly cancelled at lifecycle 4/reducer 5.
+Final readback was 14 terminal/0 active runs, self-development OFF generation 0,
+exact policy, exact env, and exact-F health. This repairs provider availability,
+not the still-required full supervision acceptance. Root-only rollback remains
+retained and the temporary key remains live only through that acceptance.
+
 ### Deployed public CLI partial acceptance
 
 A fresh scoped key exercised the checked-in `choir` CLI against retained

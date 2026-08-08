@@ -273,11 +273,13 @@ nodes:
       Sanitized preflight selected only an atomic ChatGPT auth-file replacement
       plus gateway restart because the full helper would also change Bedrock; a
       root-only rollback copy and unchanged gateway env are mandatory. The
-      first install preserved those gates but its probe used a different
-      owner's legacy guest and failed before provider, so exact rollback
-      restored auth/env/health and revoked the key. Correct acceptance-owner
-      browser auth is available for a second bounded attempt after this receipt
-      lands. Effects remain OFF; provider-dependent repeated progression, real capsule/late-result,
+      first install was rolled back after a wrong-owner pre-provider probe. The
+      second attempt nonce-verified the exact acceptance owner/computer/F
+      identity, installed only auth cc744524, preserved env/policy/health, and
+      real chatgpt/gpt-5.5 created the exact requested marker v1 with completed
+      work and no error. Provider availability is repaired; the key and
+      root-only rollback are retained through immediate full acceptance.
+      Effects remain OFF; provider-dependent repeated progression, real capsule/late-result,
       positive correction/source-open, checkpoint/no-effect and run acceptance,
       and terminal registry closure remain mandatory.
     sources:

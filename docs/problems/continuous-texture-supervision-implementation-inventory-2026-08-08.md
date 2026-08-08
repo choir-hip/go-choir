@@ -1075,3 +1075,49 @@ mutation may occur until this problem receipt lands.
 Heresy delta: discovered an operator probe-owner mismatch and a sanitized digest
 method error; introduced none durably; repaired none yet. The provisional auth
 replacement was fully rolled back. Effects remain OFF.
+
+### Second scoped restoration proved usable ChatGPT on exact F
+
+Rollback receipt `8f55bb964652f7263a575a9a05ac655202f39efe` and docs CI
+`31284504546` passed before the second mutation. The correct acceptance-owner
+browser session minted key `ak_45ce1796-7044-4086-ad48-5f7789f6b4ba`, and a
+fresh nonce-bound identity joined owner/computer scope
+`vm-bbdbbd01c4390b7036067aaa12afeb68`, guest
+`computer-42850e9734d9442386c5dd8bf3afbf19`, route digest
+`sha256:648d6071215206b190376ff6c24f3c93c08483b09bfb2ffc4790c00f3dd66489`,
+epoch 8249, and host/guest/platform to exact F `67a61358` before host mutation.
+
+The same accepted transaction replaced old auth `eb1b7317…` with local
+`cc744524…`, kept root:root mode 0600, left gateway env byte-exact at
+`7c5cc6e…`, restarted only `go-choir-gateway` PID `3806702→3807256`, and kept
+public health exact F. Rollback ref
+`/var/lib/go-choir/provider-auth-backups/codex-auth.cts-chatgpt-second-20260808T234218Z-c7b9f88760.rollback.json`
+is root-owned mode 0600 and retained through acceptance.
+
+The bounded canonical product probe succeeded through real
+`chatgpt/gpt-5.5` with no auth/refresh error: document
+`c0956f24-a1ec-5280-aa53-5776dca6f4b2`, v0
+`c1b47b8e-8f7c-57ea-ba73-563d0230ae67`, trajectory
+`2cbf6c95-2344-5064-bf24-919bfb9f8cf0`, work
+`f2e18cb7-007b-54c2-a26b-e1ea783831fe`, run
+`cb19cfff-acb5-4fe4-966c-cd84b29a7630`, and appagent v1
+`3de79895-9e1d-5e0d-b357-5eb6a40096e7`. The exact v1 content was the requested
+single marker `CTS_CHATGPT_AUTH_RESTORED_85d09891afd34046`; work completed, the
+persistent run passivated without error, and the trajectory was then retained
+and publicly cancelled at lifecycle 4/reducer/watermark 5 with exact v1 terminal
+head.
+
+Final probe readback was fourteen terminal and zero active runs (six cancelled,
+five failed, three completed), self-development OFF generation 0, policy
+SHA-256 `7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`,
+unchanged gateway env, active PID 3807256, and exact-F health. This proves the
+protected ChatGPT availability blocker repaired. It is not the full supervision
+acceptance: no Researcher, persistent Super, parallel CoSuper capsule,
+source-open/correction, delayed result, restart, checkpoint comparison, or run
+acceptance was exercised by the bounded marker probe. Effects remain OFF.
+
+Problem delta: stale ChatGPT credential availability repaired. Heresy delta:
+discovered none, introduced none, repaired none; credential restoration is a
+protected operator repair, not an architecture heresy repair. The scoped key and
+rollback backup remain live only for the immediate full acceptance and must be
+revoked/deleted under terminal disposition.
