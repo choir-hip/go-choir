@@ -551,6 +551,10 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 	if revision.AuthorKind == "" {
 		revision.AuthorKind = types.AuthorAppAgent
 	}
+	revision, _, _, err = prepareTextureRevisionV2(revision)
+	if err != nil {
+		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: prepare initial revision: %w", err)
+	}
 	expectedRevisionHash := types.ComputeStructuredRevisionHash("", revision.Content, revision.BodyDoc, revision.SourceEntities, revision.Provenance)
 	if revision.RevisionHash != "" && revision.RevisionHash != expectedRevisionHash {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: initial revision hash mismatch: %w", ErrLifecycleInvalidTransition)
@@ -2898,6 +2902,10 @@ func (s *Store) applyLifecycleUpdate(ctx context.Context, req types.ApplyLifecyc
 		revision.OwnerID, revision.ComputerID, revision.TrajectoryID = ownerID, computerID, req.TrajectoryID
 		if revision.ParentRevisionID == "" {
 			revision.ParentRevisionID = document.CurrentRevisionID
+		}
+		revision, _, _, err = prepareTextureRevisionV2(revision)
+		if err != nil {
+			return types.LifecycleResult{}, fmt.Errorf("lifecycle incorporate update: prepare revision: %w", err)
 		}
 		document, revision, buildErr := commitTextureHeadAuthority(document, &head, revision, now)
 		if errors.Is(buildErr, ErrStaleDocumentHead) {
