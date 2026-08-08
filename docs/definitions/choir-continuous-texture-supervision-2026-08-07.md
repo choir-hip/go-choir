@@ -1,0 +1,832 @@
+---
+definition_version: 2
+definition_id: choir-continuous-texture-supervision-2026-08-07
+execution_mode: mission_orchestrator
+
+start:
+  captured_at: 2026-08-07T20:10:30Z
+  source:
+    canonical_ref: main@f64784e88b42abbf7d87fee058c989537b686d58
+    deploy_identity: 460c142394e12b6e307949d0180da08d1b058745 observed at https://choir.news/health
+  worktree_inventory:
+    status: reconciled
+    evidence_ref: 2026-08-07 read-only git status and git worktree inventory
+    preservation_rule: Preserve every non-primary worktree and all unrelated WIP; this draft owns only its Definition, review evidence, and three registry entries.
+  worktrees:
+    - path: /Users/wiz/go-choir
+      status: clean
+      class: goal_candidate
+      owner: owner-and-current-session
+      touch: goal_owned
+      paths_or_digest: [docs/definitions/choir-continuous-texture-supervision-draft-2026-08-07.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
+      recovery: revert the docs-only draft commit
+    - path: /Users/wiz/.codex/worktrees/eb3c6a2a-cb9f-4067-8cd8-e8ec6224cb6f/go-choir
+      status: dirty
+      class: other_agent_wip
+      owner: unknown
+      touch: forbidden
+      paths_or_digest: [.context/]
+      recovery: leave in place
+    - path: /Users/wiz/go-choir-terminal-outcome-closure
+      status: dirty
+      class: user_wip
+      owner: unknown
+      touch: forbidden
+      paths_or_digest: [internal/objectgraph/dolt_store.go, internal/objectgraph/registry.go, internal/objectgraph/store.go, internal/store/graph_store.go, internal/store/store.go]
+      recovery: leave branch autoputer-terminal-outcome-closure and worktree in place
+    - path: clean secondary worktrees listed by the 2026-08-07 inventory
+      status: clean
+      class: other_agent_wip
+      owner: unknown
+      touch: forbidden
+      paths_or_digest: [/private/tmp/choir-head-review, /Users/wiz/.codex/worktrees/5fbb817f-e1ac-4f37-8976-9ec4e94afb99/go-choir, /Users/wiz/go-choir-autoputer-v2, /Users/wiz/go-choir-s0-ratchet, /Users/wiz/go-choir-s3i17, /Users/wiz/go-choir-worktrees/chatgpt-search-provider]
+      recovery: leave in place
+    - path: prunable worktree registrations listed by the 2026-08-07 inventory
+      status: unknown
+      class: generated_temp
+      owner: unknown
+      touch: forbidden
+      paths_or_digest: [choir-g1-judge, choir-g1-review, choir-g1-review-22a2, go-choir-architecture-recovery, go-choir-ci-doccheck-pr1, go-choir-ci-goal, go-choir-ci-integration-owner, choir-g1-review-yheq91cz]
+      recovery: leave registration metadata untouched
+  candidates:
+    - id: continuous-texture-supervision-definition-v1
+      ref: main working tree
+      base: f64784e88b42abbf7d87fee058c989537b686d58
+      scope: [docs/definitions/choir-continuous-texture-supervision-draft-2026-08-07.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
+      disposition: active
+      evidence_ref: frozen review digest 880c00cb8f7a6c546825689a7ba37c02a551f897a93080f5e1e2dbbda2cb89ed
+  observed_artifact:
+    - claim: Texture's production registry omits update_coagent although its profile allows coagent tools and its prompt describes Researcher follow-up.
+      evidence_ref: internal/agentcore/tool_profiles.go InstallDefaultAgentTools; internal/agentprofile/agentprofile.go PolicyFor
+    - claim: Texture may spawn only Researcher; adding Super to AllowedDelegateTargets would wrongly allow arbitrary Super creation rather than address the one persistent Super.
+      evidence_ref: internal/coagentowner/spawn_tool.go RegisterSpawnTool; internal/agentcore/runtime.go persistentSuperAgentID
+    - claim: The typed coagent_source_packet.v1 path carries producer UUID, trajectory, work-item, payload-digest, disposition, and wake identity, but target authorization is not Texture-safe.
+      evidence_ref: internal/agentcore/tools_worker_update.go; internal/agentcore/tools_researcher.go; internal/types/evidence.go
+    - claim: Target lookup can fail open when AgentRecord lookup errors, and the generic resolver self-targets a Texture channel before honoring explicit agent_id.
+      evidence_ref: internal/agentcore/tools_worker_update.go target lookup; internal/agentcore/tools_researcher.go resolveCoagentFindingsTarget
+    - claim: Researcher target resolution accepts an arbitrary owner-scoped texture:<doc_id> shape without proving requester, document, or trajectory binding.
+      evidence_ref: internal/agentcore/tools_researcher.go resolveResearcherFindingsTarget
+    - claim: Lifecycle QueueLifecycleUpdate accepts only Texture targets, while persistent Super drains the pre-cutover worker inbox; a lifecycle Texture can therefore reach neither a bound Researcher nor persistent Super through one accepted durable path.
+      evidence_ref: internal/store/lifecycle.go QueueLifecycleUpdate; internal/store/store.go DispatchWorkerUpdate; internal/agentcore/super_controller.go reconcilePersistentSuperActor
+    - claim: Researcher, Super, and CoSuper updates can already wake Texture and be incorporated into immutable canonical revisions.
+      evidence_ref: internal/textureowner/texture_controller.go; internal/textureowner/tools_texture.go; internal/agentcore/coagent_update_packet.go
+    - claim: A successful Texture patch or rewrite terminates the activation, and inbound update activations mechanically require a canonical write; this prevents post-revision redirection and can create bogus no-op revisions for redundant evidence.
+      evidence_ref: internal/agentcore/runtime.go executeWithToolLoop; internal/toolregistry/toolloop.go; internal/textureowner/tool_loop_policy.go; internal/textureowner/tools_texture.go
+    - claim: 'Owner correction is split: /revise dispatches a pre-cutover worker-update packet, while a direct canonical revision changes the head without reliably waking the lifecycle Texture actor.'
+      evidence_ref: internal/textureowner/texture_agent_revision.go deliverOwnerRevisionToTextureActor; internal/textureowner/texture.go handleTextureCreateRevision
+    - claim: Persistent Super and capsule-scoped implementation/verifier CoSuper authority already exist, but lifecycle-requested effects-capable activation is refused while effects are OFF.
+      evidence_ref: internal/agentcore/super_controller.go; internal/agentcore/runtime.go StartCoagentRun; internal/agentcore/tools_capsule.go; internal/capsule/roles.go
+    - claim: The deleted request_super_execution was a same-channel ChannelCast with no durable trajectory accounting; restoring that implementation would restore the defect.
+      evidence_ref: git commit 7b7bba73 historical Texture tool source; removal 0df1412312de; docs/archive/choir-architecture-review-next-moves-2026-06-11.md
+  unknowns: []
+
+start_corrections:
+  - corrected_at: 2026-08-07T20:34:47Z
+    evidence_ref: docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
+    correction: The primary worktree was clean at start capture and became dirty-but-goal-owned when the four-file candidate was frozen. Review reproduced digest 880c00cb8f7a6c546825689a7ba37c02a551f897a93080f5e1e2dbbda2cb89ed; the repaired candidate adds this evidence file and awaits a new self-normalized digest.
+    consequence: Start remains immutable; current candidate and reconciliation below, not the start inventory, carry the reviewed dirty state.
+  - corrected_at: 2026-08-08T02:37:12Z
+    evidence_ref: docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
+    correction: The owner ratified the repaired architecture and directed promotion. The executable Definition is renamed without the draft suffix; its final candidate adds the consensus evidence, all three registry entries, and scripts/lint/cts-receipt-lint.py to the identity-bound scope.
+    consequence: The immutable start paths remain historical. The now card and promoted registries name the executable path and complete current worktree inventory.
+
+
+finish:
+  deliver: Texture continuously supervises one durable trajectory by revising a canonical, prose-first document and issuing mechanically authorized controls to its own Researchers and its owner's one persistent Super. Texture publishes grounded intermediate versions while work remains open; Super may coordinate many assigned capsule-only CoSupers and returns intermediate evidence until Texture settles or redirects the work. Research, code excerpts, diffs, terminal commands and output, tests, and later multimedia all use one generic transcluded-source contract rather than workflow-specific document syntax.
+  artifact: An authenticated staging trajectory with at least three causally distinct Texture revisions and two downward control cycles. At least one informative appagent revision is owner-visible while assigned work remains open, a later revision incorporates an owner correction or new result, and the versions include exact openable research and execution-source transclusions. The trajectory includes a Texture-originated Researcher follow-up, a Texture-originated persistent-Super execution request, parallel isolated CoSuper work, a verification CoSuper result from its own writable isolated capsule incorporated by Texture, durable work/update/request identities, and an owner-inspectable latest Texture version. The same facts are observable through the Texture API and the `choir texture` CLI without browser prose scraping or internal database access.
+  acceptance:
+    - action: Run focused role-registry, fail-closed target authorization, direction-specific lifecycle reducer, atomic Texture transition, structured-document projection, generic source-transclusion, race, replay, owner-correction, cancellation, capsule capability, and Texture API/CLI contract tests.
+      proves: Allowed calls work; prose and structured evidence remain one revision; lookup errors and cross-owner, cross-computer, cross-document, cross-trajectory, arbitrary-Super, direct-CoSuper, non-lifecycle Texture, verifier host/effect mutation, duplicate, stale-head, and late-result calls fail without weakening existing authority. Verification CoSupers may write and run tests or scripts only inside their assigned capsules.
+      evidence_class: focused local contract and race tests
+    - action: Reconstruct pending Researcher and Super controls and resumable Texture version observation after process restart; replay equal and conflicting command, packet, request, and cursor identities; replay pre-cutover fixtures.
+      proves: One lifecycle reducer/projection is authoritative, ordered outbound digests are stable, equal retry is idempotent, conflicting retry fails, old revisions and their exact transcluded sources remain readable, and no new Texture traffic enters the pre-cutover worker inbox.
+      evidence_class: local restart, reducer, API/CLI, and compatibility proof
+    - action: Drive prompt bar -> Texture v1 -> Researcher partial result -> owner-visible Texture v2 while work remains open -> focused Researcher redirect -> persistent Super intermediate result -> Texture v3 and changed Super direction -> at least two parallel networkless writable CoSuper assignments in separate capsules -> at least one verification CoSuper that writes test support and runs tests/scripts in its own isolated capsule -> later Texture version incorporating its typed result on staging through authenticated product APIs.
+      proves: Repeated bidirectional supervision produces progressive prose revisions with grounded evidence and uses real actors, lifecycle work/control, and isolated capsules rather than manually started workers, a fixed one-implementer/one-verifier topology, an immediate generic update tool, or one terminal round trip.
+      evidence_class: deployed authenticated product-path proof
+    - action: Through public APIs and the `choir texture` CLI, create a Texture, tell it what to do, watch successive versions, show an exact current or historical version, and open the exact source behind a research quotation and an execution transclusion. Disconnect and resume watching from the last durable cursor.
+      proves: Automation can observe the same progressive document the owner sees; human prose is not the test protocol; version lineage, ongoing-work state, request/update causality, and source identity/content are machine-readable and survive reconnect.
+      evidence_class: local contract plus deployed CLI/API acceptance
+    - action: Run an owner-directed continuous-prose case with no requested headings or lists and a differently styled report case through the same document and transclusion APIs.
+      proves: The schema supports generic writing and does not force a supervision dashboard or coding template; document form follows owner intent while source grounding remains mechanically inspectable.
+      evidence_class: deployed product behavior and structured-document inspection
+    - action: "Leave Researcher and Super controls pending, passivate both actors, perform an approved no-SSH same-build staging process restart by re-running the existing workflow_dispatch force_staging_deploy deploy with the identical SHA and confirming the same container identity through /health; continue the same owner/computer/document/trajectory/work/actor/update identities."
+      proves: Pending state, cold reconstruction, and exact causality survive process and residency boundaries.
+      evidence_class: deployed no-SSH restart and durability proof
+    - action: Commit a direct owner revision through the deployed editor while Texture is parked; separately submit a natural-language revise request; then inspect the next revision and downstream controls.
+      proves: Canonical owner edits remain immediate, both correction semantics wake through lifecycle authority, and subsequent supervision binds the corrected head.
+      evidence_class: deployed owner-control proof
+    - action: Cancel in-flight Super/CoSuper work, deliver a real delayed result and exact retry after cancellation, and fetch trajectory/update/run evidence.
+      proves: The result is late and evidence-only; no obligation reopens and no actor wake, semantic revision, or accepted state follows.
+      evidence_class: deployed failure-semantics proof
+    - action: Compare canonical computer event heads, self-development operation state, materialization, checkpoint, route generation, and relevant host projections before and after capsule work; inspect each accepted Texture version against its typed packets, source objects, and Trace.
+      proves: The owner sees evolving semantic state with exact embedded evidence rather than command-log or status-template leakage, while verifier and capsule work cause no computer-event, finalization, host, or promotion effect.
+      evidence_class: deployed human inspection and no-effect proof
+  rollback: Keep all schemas additive and replay-compatible; leave self-development materialization, acceptance, checkpoint, and route effects OFF; revert the behavior commit through origin/main and CI to the last accepted runtime, retaining new packets as pending/late rather than falsely delivered. If lifecycle-native addressing cannot be made single-authority, discard the candidate and revise this Definition instead of adding a bridge or second queue.
+  landing:
+    required: true
+    environment: staging
+    required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_acceptance]
+  not_done_when:
+    - Owner ratification or executable authority in any of the three registries is absent.
+    - Only prompt text, registry presence, mocks, local tests, or model narration says the loop works.
+    - Acceptance manually starts Researcher, Super, or CoSuper instead of Texture addressing them through product behavior.
+    - Only one worker round trip or one post-worker Texture revision exists.
+    - New Texture controls write the pre-cutover worker inbox, create a second causal log, or permit two stores to disagree about pending/delivered state.
+    - Texture can address CoSuper, a foreign Researcher, or an arbitrary Super; Super or verifier CoSuper gains host mutation.
+    - A redundant or unusable packet forces a duplicate semantic revision or disappears without a durable disposition.
+    - Effects-capable work can materialize, accept, checkpoint, route, or mutate the host while those effects remain OFF.
+    - Target lookup errors, a non-lifecycle Texture, or a direct generic update call can enqueue privileged work.
+    - One field or reducer rule ambiguously treats producer-owned report work as target-owned control work.
+    - A Texture control can commit or wake independently of its revision/no-change/wait/block transition.
+    - Direct owner revisions wait for a provider, or owner head commit and actor wake are separate failure domains.
+    - Verifier CoSuper can call record_self_development_verification, append a computer event, mutate updater state, or propose an effect.
+    - The disposable capsule has host networking or any capability not bound to the exact run/capsule/slot.
+    - Texture exposes only a final report after assigned work settles, or the proof cannot identify an informative revision committed while work was still open.
+    - A displayed quotation, code excerpt, diff, command, test result, or media item is copied prose rather than a transclusion bound to an exact openable source version and content hash.
+    - Automated acceptance must scrape generated prose, poll with sleeps, or inspect an internal database because version, request/update causality, ongoing-work state, source identity, or resumable observation is absent from the public Texture API and CLI.
+    - The document schema or default prompt forces headings, lists, status fields, work-item inventories, or a coding-specific report shape when the owner requested continuous prose.
+    - Super is limited to one implementation and one verifier CoSuper, or two writable CoSupers can race inside the same capsule without an explicit exceptional coordination contract.
+
+boundaries:
+  mutation_class: red
+  authority_sources: [AGENTS.md, docs/choir-doctrine.md, docs/agent-product-doctrine.md, docs/computer-ontology.md, docs/standing-questions.md, docs/supervision-protocol.md, docs/texture-agentic-invariants-2026-06-13.md, "owner directive in this run: proceed without asking; promote the repaired Definition as executable"]
+  must_preserve:
+    - Texture is the sole canonical document writer among agents and the delegated semantic controller; direct owner revisions remain canonical, while operational directives remain typed packets, work items, and Trace.
+    - The lifecycle trajectory, work-item, worker-update object, event sequence, and snapshot reducers are the single authority for new supervision state; no new event log, service, workflow engine, or dual mailbox write.
+    - "Producer reports and downward controls are distinct reducer commands; producer_work_item_id belongs to the reporting caller; target_work_item_id belongs to the addressed actor; no sender settles target work."
+    - Texture may spawn Researcher only, address only its bound Researchers and exact super:<owner> on the current computer, and never address CoSuper directly.
+    - Target lookup is fail-closed; channel shape, prompt text, caller-supplied role, and model-authored direction are never authority. Non-lifecycle Texture cannot send this control.
+    - The Super identity is one persistent non-lifecycle actor per owner/computer; Super may be an exact lifecycle control target/assignee without becoming a generic lifecycle actor class.
+    - A Texture revision/no-change/wait/block outcome, inbound dispositions, target-work changes, and ordered outbound controls commit in one conditional object-graph batch; target wake happens only afterward.
+    - Direct owner revisions remain immediately canonical and atomically record a lifecycle correction cursor/obligation; natural-language revise requests remain Texture-authored decisions.
+    - Every implementation or verification CoSuper is run-bound, assigned-capsule-only, writable within that capsule, and networkless. A verification assignment may edit files and run tests/scripts in its own capsule, but it verifies an immutable subject identity; changing subject bytes produces a new candidate identity rather than a verdict on the original. Neither role receives self-development finalization or host-effect authority.
+    - Producer and control identity is runtime-derived; owner, computer, document, trajectory, producer work, target work, target, action class, ordered payload digest, and idempotency are validated before durable enqueue.
+    - Canonical event/private payload, encryption, Trace/evidence, cancellation, late-result, restart replay, run acceptance, and exact staging identity contracts do not weaken.
+    - Semantic delegation remains agentic; no keyword oracle, forced first tool, required role choreography, polling loop, or trivial revision hides background work.
+    - Texture's visible artifact is generic writing, normally coherent prose. Structured document nodes carry editing and evidence semantics but never mandate a supervision dashboard, workflow inventory, coding report, heading sequence, or list-heavy style.
+    - One generic source-reference/transclusion model covers research quotations, files and code excerpts, diffs, patches, commands and terminal output, test runs, images, and later multimedia. Domain-specific renderers do not create domain-specific supervision authority.
+    - Every expanded transclusion binds its body placement to an immutable source identity, version, selector, and content hash. The structured document is canonical; rendered prose and the machine-readable transclusion manifest are deterministic projections, never independently writable truths.
+    - Public Texture API and CLI surfaces expose create, tell/correct, watch, show exact version, and open-source behavior with stable machine-readable output and resumable durable observation; they do not expose raw actor chatter as document state.
+  excluded:
+    - Restoring the historical same-channel request_super_execution implementation, its required-first-tool behavior, or the current immediate generic update_coagent implementation for Texture.
+    - Adding a generic supervision subsystem, separate public supervision API/CLI, generic actor-mailbox migration, second tape, new TLA control plane, VM/route controller, or broad write-mode flag. Extending the existing Texture API and `choir texture` CLI to expose the accepted document/version/source contract is required, not excluded.
+    - Promoting persistent Super to a generic lifecycle actor class; new Texture traffic through DispatchWorkerUpdate; dual delivery cursors.
+    - External coding-agent integration, fleet promotion, ComputerVersion materialization, checkpoint publication, route CAS, self-development verification/finalization/acceptance, or canonical event append from capsule proof.
+    - UI redesign, publication/Wire work, and unrelated runtime cleanup.
+  protected_surfaces: [Texture canonical writes and source graph, lifecycle trajectory/work/update reducers and conditional object-graph batch, actor mailbox/passivation/restart, private payload encryption and audit, role tool registries and fail-closed target authorization, persistent Super identity and inbox, capsule capability/slot/network namespace enforcement, canonical computer event chain, self-development operation and updater root, cancellation and late results, run acceptance, provider/model calls, deployment routing]
+  completion_evidence_floor: [problem-documenting docs-only commit before repair code, frozen implementation candidate, independent security and architecture review, focused race and replay tests, deterministic Texture document/projection/transclusion and API/CLI contract tests, full applicable CI, exact staging commit identity, authenticated repeated-cycle and same-build restart proof, owner-correction proof, progressive revision while work remains open, exact research and execution transclusion proof, resumable CLI/API observation, independent writable-capsule verification result with test/script evidence, actual late-result proof, before/after no-effect receipts, owner-visible Texture inspection, rollback receipt]
+
+measures:
+  - name: target_authority
+    kind: gate
+    baseline: Texture has no registered update_coagent; generic resolver is unsafe if merely enabled.
+    desired: Every accepted outbound packet proves exact caller and target owner/computer/document/trajectory/work binding; all skip-level and foreign targets fail.
+    decision_use: Blocks implementation or landing on any authority bypass.
+    cannot_prove: Semantic usefulness or deployed continuity.
+  - name: single_delivery_authority
+    kind: gate
+    baseline: Lifecycle updates target Texture while persistent Super consumes pre-cutover worker-inbox rows.
+    desired: New Texture-originated control uses one lifecycle-authoritative enqueue/replay/disposition path and no pre-cutover dual-write.
+    decision_use: Rejects compatibility bridges that create two pending/delivered truths.
+    cannot_prove: Human comprehension of Texture.
+  - name: revision_control_causality
+    kind: gate
+    baseline: Upward packet-to-revision exists; downward post-revision control does not.
+    desired: At least two distinct downward controls and at least two later revisions each cite consumed packet/update cursors on one trajectory.
+    decision_use: Distinguishes a loop from one-shot generation.
+    cannot_prove: Long-horizon quality beyond the accepted trajectory.
+  - name: authority_negative_matrix
+    kind: gate
+    baseline: Registry tests cover Super/CoSuper names but not Texture addressing or slot-complete invocation behavior.
+    desired: Role and slot matrix proves forbidden host, spawn, target, capsule, and verifier operations fail at call time.
+    decision_use: Blocks removal of effects-capable guard until equivalent narrower enforcement exists.
+    cannot_prove: Provider quality.
+  - name: owner_read_amplification
+    kind: telemetry
+    baseline: unknown
+    desired: Multiple grounded revisions and control turns may occur between owner reads while the latest Texture remains sufficient to resume supervision.
+    decision_use: Guides later cadence and compaction tuning only.
+    cannot_prove: Mission completion or correctness.
+  - name: progressive_owner_visibility
+    kind: gate
+    baseline: Upward evidence can eventually produce a revision, but the accepted contract does not require an informative version before work settles.
+    desired: At least one grounded appagent revision becomes owner-visible while assigned work remains open, and a causally later revision incorporates new evidence or an owner correction on the same trajectory.
+    decision_use: Rejects final-report-only behavior and fake progress events that do not change the owner-readable artifact.
+    cannot_prove: Long-horizon editorial quality.
+  - name: generic_grounded_writing
+    kind: gate
+    baseline: Texture supports structured source references and execution source kinds, but expanded in-document transclusion and prose-first genericity are not accepted end to end.
+    desired: Continuous prose and differently structured writing both use the same canonical document schema; exact research and execution sources are visibly transcluded and openable by immutable identity/version/hash.
+    decision_use: Rejects workflow-template writing, copied evidence without provenance, and domain-specific document schemas.
+    cannot_prove: That every generated style choice is tasteful.
+  - name: automatable_texture_surface
+    kind: gate
+    baseline: Public Texture APIs expose documents, revisions, and a non-resumable stream; the CLI exposes only read, history, and revisions.
+    desired: Public API and CLI can create, tell/correct, durably watch and resume, show an exact version, and open a transcluded source with stable JSON or JSONL identities.
+    decision_use: Makes progressive supervision verifiable without browser text scraping, internal storage access, or timing sleeps.
+    cannot_prove: Human comprehension without owner inspection.
+
+now:
+  status: working
+  slice: "Define boundary closed; executable authority is promoted. Begin Implement A with a complete exported-caller and target-address inventory before runtime mutation."
+  question: none
+  reconciliation:
+    observed_at: 2026-08-08T02:37:12Z
+    source_ref: b20bece30b408373d2844f5621fb9f91fc624d99
+    deploy_identity: 460c142394e12b6e307949d0180da08d1b058745
+    authority_identities: [docs/choir-doctrine.md@f64784e8, docs/agent-product-doctrine.md@f64784e8, docs/supervision-protocol.md@f64784e8, docs/texture-agentic-invariants-2026-06-13.md@f64784e8, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, "owner directive in this run: proceed without asking"]
+    policy_resolution_ref: not_applicable
+    worktree_inventory_ref: "2026-08-08 promotion inventory: goal-owned Definition rename, consensus evidence, ACTIVE.md, mission-graph.yaml, doc-authority-manifest.yaml, and scripts/lint/cts-receipt-lint.py; all other worktrees and WIP remain forbidden."
+    status: reconciled
+  candidate:
+    id: continuous-texture-supervision-definition-v5
+    state: ready
+    ref: main working tree executable Definition
+    owner: owner
+    base: b20bece30b408373d2844f5621fb9f91fc624d99
+    digest: sha256-self-normalized:a98c9cfbc34e5bd924c78e42f59f434dbd3844b1be27ab4c4088ceebcc2ac4d0
+    scope: [docs/definitions/choir-continuous-texture-supervision-2026-08-07.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, scripts/lint/cts-receipt-lint.py]
+  decision:
+    selected: "Preserve producer-report QueueLifecycleUpdate; add direction-specific lifecycle controls with target work, an exact persistent-Super opener, and one atomic progressive Texture-turn transition. Keep Super non-lifecycle; let it coordinate many capability-bound CoSupers, normally one writable assignment per isolated capsule. Verifier is an independently assigned writable-capsule capability rather than a singleton role: it may edit files and run tests/scripts inside its capsule, but verifies an immutable subject identity and has no host or self-development effect authority. At least one verification result is required before completion. Keep Texture prose-first and domain-generic while exact research, code, command, test, and later multimedia evidence uses one canonical source_ref transclusion contract exposed through the existing Texture API and CLI."
+    kind: architecture
+    status: settled
+    source: owner
+    evidence_ref: docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
+    owner_ratification_ref: "Owner directives in this run: proceed without asking; promote the repaired Definition; verifier should not be read-only and may write and run tests or other scripts."
+    recorded_at: 2026-08-08T02:45:35Z
+    consequence: "The Definition is executable through /goal after three-registry promotion. Runtime work must follow its red-mutation ceremony: one writable assignment per isolated capsule by default, including verification assignments; a verifier may edit and execute tests/scripts inside its own networkless capsule; at least one independently identified verification result is required before completion; changed subject bytes become a new candidate; one canonical source_ref projection remains authoritative; no generic mailbox, direct Texture-to-CoSuper path, host mutation, or self-development finalization/materialization/checkpoint/route/owner-decision effect is authorized."
+  evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, .agentic-consensus/cts-v4.7-panel/, .agentic-consensus/cts-v4.7-2-panel/, .agentic-consensus/cts-v4.7-3-panel/, scripts/lint/cts-receipt-lint.py, "owner directive in this run: proceed without asking"]
+  blocker_or_risk: "No Define blocker remains. Implementation is red: protected runtime surfaces remain unchanged until each closed typed schema and atomic transition is implemented and proved. Effects remain OFF."
+  next_action: Inventory every exported target-address, lifecycle enqueue/reducer, Texture write, persistent-Super opener, CoSuper capability, and public Texture API/CLI caller; freeze the exact Implement A schema and negative matrix before code mutation.
+
+receipts:
+  - id: continuous-supervision-definition-review-v1
+    boundary: define
+    commit_or_artifact: sha256:880c00cb8f7a6c546825689a7ba37c02a551f897a93080f5e1e2dbbda2cb89ed
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md]
+    rollback_ref: main@f64784e88b42abbf7d87fee058c989537b686d58
+    disposition: Six REPAIR, two ACCEPT, one route failed before review; blockers adjudicated into candidate v2.
+    problem_ref: this Definition observed_artifact
+    authorization_ref: owner request to draft and review only
+    candidate_or_evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: 460c142394e12b6e307949d0180da08d1b058745 observation only
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries
+
+  - id: continuous-supervision-definition-review-v2
+    boundary: define
+    commit_or_artifact: git:6681606d4e0f14e83dab89bb808862db82cdd21b
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md]
+    rollback_ref: main@f64784e88b42abbf7d87fee058c989537b686d58
+    disposition: Eight completed reviewers accepted the substantive repair; five REPAIR verdicts isolated an underspecified digest construction, three returned ACCEPT, and one route failed before review. Candidate v3 applies the exact byte-level identity repair.
+    problem_ref: this Definition observed_artifact
+    authorization_ref: owner request to draft and review only
+    candidate_or_evidence_refs: [reviewed source commit 6681606d4e0f14e83dab89bb808862db82cdd21b, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md]
+    landing:
+      source_commit: 6681606d4e0f14e83dab89bb808862db82cdd21b
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/31216848206 success
+      deploy_ref: skipped_docs_only
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries
+
+
+  - id: continuous-supervision-definition-review-v4
+    boundary: define
+    commit_or_artifact: not_applicable working-tree candidate v4 (self-normalized digest 9db1c4397646142c28d1f85580ec91099a22c6340e20dd3740c36d4419373018) -> adjudicated into v4.1
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md]
+    rollback_ref: main@f64784e88b42abbf7d87fee058c989537b686d58
+    disposition: Six completed reviewers REPAIR, one ACCEPT, one route returned no verdict, one route failed before review on a missing API key; blockers (read-only verification required vs optional, in-scope superseded one-slot capsule freeze, single source_ref guarantee, deletion-citer disposition, unnamed restart operation, stale reconciliation) adjudicated into candidate v4.1.
+    problem_ref: this Definition observed_artifact-2 (the v4 delta had never been panel-reviewed by definition gate)
+    authorization_ref: owner request to run consensus and promote on green
+    candidate_or_evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, this Definition@v4.1]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: b20bece30b408373d2844f5621fb9f91fc624d99
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries until green panel and owner ratification
+
+  - id: continuous-supervision-definition-review-v4.1
+    boundary: define
+    commit_or_artifact: not_applicable working-tree candidate v4.1 (self-normalized digest 4a88d3637c657279370713308db7b7636835da05cb55d68ee1806cf0ef5c9727 verified by panel)
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, .agentic-consensus/cts-v4.1-panel/]
+    rollback_ref: main@f64784e88b42abbf7d87fee058c989537b686d58
+    disposition: v4.1 re-panel (nine routes, Claude included) returned six REPAIR, one ACCEPT (OpenCode), Devin no verdict, Grok-45 failed on missing API key; blocking findings were Definition front-matter YAML parse failures, B3 still unresolved in Implement C.4, duplicated/mislabeled identity records in the evidence receipt, stale next_action candidate identity, and reconciliation inventory wording; all adjudicated and fixed into candidate v4.2 below.
+    problem_ref: v4.1 candidate did not clear the green gate; repairs were applied under the parse/test-independence regime
+    authorization_ref: definition review protocol; owner request to run consensus including Claude and promote on green
+    candidate_or_evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, this Definition@v4.2]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable; no runtime deploy occurred during this define-gate review
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries until green panel and owner ratification
+
+  - id: continuous-supervision-definition-review-v4.2
+    boundary: define
+    commit_or_artifact: not_applicable working-tree candidate v4.2 (self-normalized digest 9e6cd9222c7585cd1f64e44fd6ff2842413e4849b3446a95a3799b350c5c16a2)
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, .agentic-consensus/cts-v4.2-panel/]
+    rollback_ref: main@f64784e88b42abbf7d87fee058c989537b686d58
+    disposition: "v4.2 identity re-panel (nine routes, Claude included) returned REPAIR on receipt integrity: six recorded v4.1 block hashes computed over ANSI-stripped text did not match raw bytes, and the v4 gate output identity block was absent. All deliberative architecture, parser, and registry checks passed."
+    problem_ref: v4.2 gate identity receipt integrity (raw-bytes requirement)
+    authorization_ref: v4.2 re-panel authorization; definition review protocol
+    candidate_or_evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, this Definition@v4.3]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries
+
+  - id: continuous-supervision-definition-review-v4.3
+    boundary: define
+    commit_or_artifact: not_applicable working-tree candidate v4.3 (self-normalized digest 58db42d21ae631557e4f55797c2f3646f5560dc34cf6b1c21aa650c0d3204344)
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, .agentic-consensus/cts-v4.3-panel/]
+    rollback_ref: main@f64784e88b42abbf7d87fee058c989537b686d58
+    disposition: "v4.3 identity re-re-panel (nine routes, Claude included) confirmed all 22 identity hashes and the digest fixed point, and flagged four repair items detailed in the evidence."
+    problem_ref: v4.3 gate receipt-integrity chain (orphaned digest restatement in evidence, missing v4.2/v4.3 receipts, non-chronological ordering, stale now.slice)
+    authorization_ref: v4.3 re-review authorization; definition review protocol
+    candidate_or_evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, this Definition@v4.4]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries until green panel and owner ratification
+
+  - id: continuous-supervision-definition-review-v4.4-1
+    boundary: define
+    commit_or_artifact: not_applicable working-tree candidate v4.4 (first re-freeze; raw .out bytes of this gate were overwritten in place by the v4.4-2 run, so no identity block can be built retroactively — recorded as a receipt-integrity data loss)
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md]
+    rollback_ref: main@b20bece30b408373d2844f5621fb9f91fc624d99
+    disposition: "v4.4-1 gate (nine routes, Claude included) returned REPAIR: 65-hex v4.3 receipt digest, wrong-case docs/Evidence path in the v4.3 receipt, corrupted-word typo in ACTIVE.md, missing registry_conformance_ref on the v4.1 receipt; all four were adjudicated and repaired (the ACTIVE.md edit was itself defect-ridden and had truncated the file, which the v4.4-2 gate caught)."
+    problem_ref: v4.4 first re-freeze receipt integrity
+    authorization_ref: v4.4 re-freeze authorization; definition review protocol
+    candidate_or_evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, this Definition@v4.5]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries until green panel and owner ratification
+
+  - id: continuous-supervision-definition-review-v4.4-2
+    boundary: define
+    commit_or_artifact: not_applicable working-tree candidate v4.4 fixed (digest e89b73d007b4245b48a071eb227d4ac0cf063be0f602c475e260236523a66e16; see evidence identity block)
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, .agentic-consensus/cts-v4.4-panel/]
+    rollback_ref: main@b20bece30b408373d2844f5621fb9f91fc624d99
+    disposition: "v4.4-2 re-check gate (nine routes, Claude included) returned REPAIR (Claude, Cursor, GPT-5.6-Sol, Codex) against ACCEPT (Gemini, DeepSeek, OpenCode): observed_at not current, v4.3 panel tally misstated (five REPAIR/one ACCEPT not six), and the v4.4-1 gate had no receipt; all adjudicated into candidate v4.5 (this Definition)."
+    problem_ref: v4.4-2 gate receipt integrity (observed_at currency, v4.3 tally, unreceipted v4.4-1)
+    authorization_ref: v4.4-2 re-check authorization; definition review protocol
+    candidate_or_evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, this Definition@v4.5]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries until green panel and owner ratification
+
+  - id: continuous-supervision-definition-review-v4.5-1
+    boundary: define
+    commit_or_artifact: not_applicable working-tree candidate v4.5 (self-normalized digest 76aa485a596399e9dd509a686d49669c67b6d4b097780cc778928994b6b69df1)
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, .agentic-consensus/cts-v4.5-panel/previous-round]
+    rollback_ref: main@b20bece30b408373d2844f5621fb9f91fc624d99
+    disposition: "v4.5-1 gate (nine routes, Claude included) reviewed a stale snapshot (the prompt text then pointed at the prior v4.4 snapshot in error); its four REPAIR findings were all satisfied by the live v4.5 bytes: observed_at, v4.3 tally, v4.4-2 tally, comma fix. The run is preserved in 'cts-v4.5-panel/previous-round' for identity review; its outputs were regenerated by the v4.5-2 gate."
+    problem_ref: stale-snapshot pointer in the v4.5-1 prompt
+    authorization_ref: v4.5 re-freeze authorization; definition review protocol
+    candidate_or_evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, this Definition@v4.6]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries until green panel and owner ratification
+
+  - id: continuous-supervision-definition-review-v4.5-2
+    boundary: define
+    commit_or_artifact: not_applicable working-tree candidate v4.5 (self-normalized digest 76aa485a596399e9dd509a686d49669c67b6d4b097780cc778928994b6b69df1)
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, .agentic-consensus/cts-v4.5-panel/]
+    rollback_ref: main@b20bece30b408373d2844f5621fb9f91fc624d99
+    disposition: "v4.5-2 gate (eight ok including Devin, one failed: Claude, Codex, Cursor, GPT-5.6-Sol, DeepSeek REPAIR; Gemini, OpenCode ACCEPT; Devin no verdict; Grok-45 failed) returned four hygiene findings (trailing-space scalars in the Definition, v4.3 'seven completed verdicts' noun error, v4.4-2 'seven ok' undercount vs its manifest with eight ok rows, and a reviewer-list comma corruption) plus one non-blocking ACTIVE adjudication label still naming v4.4; adjudicated into candidate v4.6 (see evidence identities)."
+    problem_ref: "v4.5 gate hygiene: trailing-space, tally nouns, list comma, ACTIVE label"
+    authorization_ref: v4.5 re-review authorization; definition review protocol
+    candidate_or_evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, this Definition@v4.6]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries until green panel and owner ratification
+
+  - id: continuous-supervision-definition-review-v4.6-1
+    boundary: define
+    commit_or_artifact: not_applicable working-tree candidate v4.6 (self-normalized digest 38fcbb5654c71f857db658220e92e8ab8284cd58c9be30a78bb9b42d9f6326de)
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md]
+    rollback_ref: main@b20bece30b408373d2844f5621fb9f91fc624d99
+    disposition: "v4.6-1 gate (nine routes, Claude included) reviewed the v4.6 candidate; three REPAIR blockers (next_action hex literal contradicting candidate.digest, 37-hex rollback on v4.5-2 receipt, 'green snapshot' typo). All three fixed immediately; the run's raw outputs were overwritten in place by the same-directory v4.6-2 run, so the identity block cannot be built (recorded process defect, same class as v4.4-1)."
+    problem_ref: "v4.6-1 output overwrite: no identity block recordable"
+    authorization_ref: v4.6 re-check authorization; definition review protocol
+    candidate_or_evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, this Definition@v4.7]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries until green panel and owner ratification
+
+  - id: continuous-supervision-definition-review-v4.6-2
+    boundary: define
+    commit_or_artifact: not_applicable working-tree candidate v4.6 (self-normalized digest 66392a6d827fde7754f4ba1a8f8e431f7cc8bb69bbd5367fce5c58d0ac4d3bea)
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, .agentic-consensus/cts-v4.6-panel/]
+    rollback_ref: main@b20bece30b408373d2844f5621fb9f91fc624d99
+    disposition: "v4.6-2 gate (nine routes, Claude included) returned REPAIR (Claude, Codex, Cursor, GPT-5.6-Sol) / ACCEPT (DeepSeek, Gemini) with Devin and OpenCode delivering no verdict, Grok-45 failed on missing API key: confirmed the v4.5-2 gate Codex verdict REPAIR not ACCEPT, corrected the OpenCode misreport (no verdict), and left no byte/identity defects beyond the receipt prose. Adjudicated into candidate v4.7."
+    problem_ref: "v4.5-2 gate miscount (Codex) + v4.6-2 OpenCode misreport"
+    authorization_ref: v4.6-2 re-review authorization; definition review protocol
+    candidate_or_evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, this Definition@v4.7]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries until green panel and owner ratification
+
+
+  - id: continuous-supervision-definition-review-v4.7-1
+    boundary: define
+    commit_or_artifact: not_applicable working-tree candidate v4.7 (self-normalized digest 2f6de3e16fe02e46962278aaf6c36251605f0db3fca153d3773ea8f41231333f)
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, .agentic-consensus/cts-v4.7-panel/]
+    rollback_ref: main@b20bece30b408373d2844f5621fb9f91fc624d99
+    disposition: "v4.7-1 gate (nine routes, Claude included; Claude spent monthly limit so delivered no verdict, Devin ok no verdict, DeepSeek/OpenCode timed out, Grok-45 failed; REPAIR from Codex, Cursor, Gemini, GPT-5.6-Sol) found receipt-integrity defects: v4.6-2 receipt corrupt digest + 41-hex rollback, missing reviewer commas, evidence corruption and stale 66/66 identity count, OpenCode miscoded ACCEPT (no verdict in raw output). All adjudicated into the v4.7 final bytes; re-panel scheduled as v4.7-2."
+    problem_ref: "v4.6-2 receipt corruption + evidence stale count + OpenCode miscode"
+    authorization_ref: v4.7 re-review authorization; definition review protocol
+    candidate_or_evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, this Definition@v4.7]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries during the v4.7-1 gate; no promotion occurred
+
+  - id: continuous-supervision-definition-review-v4.7-2
+    boundary: define
+    commit_or_artifact: not_applicable working-tree candidate v4.7 (self-normalized digest b189b070caaa25bfbd9b0aa12eb7c79a0f47508ec0d95616da36296408cdf94c)
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, .agentic-consensus/cts-v4.7-2-panel/]
+    rollback_ref: main@b20bece30b408373d2844f5621fb9f91fc624d99
+    disposition: "v4.7-2 gate returned four REPAIR (Codex, Cursor, GPT-5.6-Sol, DeepSeek) and one ACCEPT (Gemini); Devin returned no verdict, OpenCode timed out, Grok-45 failed, and Claude was excluded. It found missing receipt fields, boundary/prose corruption, the regressed v4.4-2 composition count, a missing v4.7-1 evidence section, and an unreceipted current freeze. All mechanical findings are adjudicated in the final Define boundary."
+    problem_ref: "v4.7-2 receipt integrity, evidence-ledger gap, and composition-count regression"
+    authorization_ref: "definition review protocol; owner directive to clean ledger gaps and proceed"
+    candidate_or_evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, this Definition@continuous-texture-supervision-definition-v5]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries during the v4.7-2 gate; no promotion occurred
+
+  - id: continuous-supervision-definition-review-v4.7-3
+    boundary: define
+    commit_or_artifact: not_applicable working-tree candidate v4.7 (self-normalized digest 5aeaa97c3d72bd20067ffc7ce6eb7b95df2c5f637adf48c8c2ee460d819b4d40)
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, .agentic-consensus/cts-v4.7-3-panel/, scripts/lint/cts-receipt-lint.py]
+    rollback_ref: main@b20bece30b408373d2844f5621fb9f91fc624d99
+    disposition: "v4.7-3 gate returned four REPAIR (Codex, Cursor, GPT-5.6-Sol, DeepSeek) and one ACCEPT (Gemini); Devin and OpenCode returned no verdict, Grok-45 failed, and Claude was excluded. All enumerated parser, digest, identity, receipt-schema, hygiene, registry, and composition checks passed. REPAIR findings were stale green-silence wording, missing v4.7-1/v4.7-2 ledger entries, and omitted inventory/disposition of the new receipt linter; the final Define boundary repairs them without changing the ratified architecture."
+    problem_ref: "v4.7-3 stale current-state claim, evidence-ledger gap, and untracked linter inventory"
+    authorization_ref: "definition review protocol; owner directive to clean ledger gaps and proceed"
+    candidate_or_evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, this Definition@continuous-texture-supervision-definition-v5, scripts/lint/cts-receipt-lint.py]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: draft blocked/non-executable in all three registries during the v4.7-3 gate; no promotion occurred
+
+  - id: continuous-supervision-owner-ratification-and-promotion
+    boundary: define
+    commit_or_artifact: this executable Definition at candidate.digest
+    proof_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, scripts/lint/cts-receipt-lint.py, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
+    rollback_ref: main@b20bece30b408373d2844f5621fb9f91fc624d99
+    disposition: "Owner ratified the direction-specific lifecycle control, atomic progressive Texture turn, many capability-bound CoSupers, mandatory independently identified verification result from a writable isolated capsule, single canonical source_ref transclusion projection, and automatable Texture API/CLI contract; corrected the verifier model so it may edit and run tests/scripts inside its capsule; accepted the mechanically repaired ledger; and directed promotion without another panel. The Definition is executable, not complete: runtime behavior remains to be implemented and accepted on staging."
+    problem_ref: docs/problems/texture-lifecycle-dual-tape-authority-2026-08-03.md
+    authorization_ref: "Owner directive in this run: proceed without asking and promote the repaired Definition as executable."
+    candidate_or_evidence_refs: [this Definition@continuous-texture-supervision-definition-v5, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md]
+    landing:
+      source_commit: docs-only/yellow promotion commit containing candidate.digest
+      ci_ref: docs truth and repository contract checks required
+      deploy_ref: not_applicable; no runtime behavior changed
+      environment_identity: not_applicable; staging identity remains observational baseline only
+      deployed_acceptance: not_applicable until the red implementation boundary lands
+    registry_conformance_ref: "docs/ACTIVE.md Active Definition; docs/mission-graph.yaml active mission_orchestrator entrypoint; docs/doc-authority-manifest.yaml active executable definition authority"
+
+view:
+  path: none
+  generator: none
+---
+
+# Continuous Texture Supervision
+
+## Problem and cause
+
+The durable loop is only half connected. Researcher, Super, and CoSuper packets
+can reach Texture and cause immutable semantic revisions. Texture cannot use the
+same accepted lifecycle authority to redirect a bound Researcher or assign work
+to the one persistent Super. Merely registering `update_coagent` would expose an
+unsafe generic resolver, not repair the loop.
+
+The missing edge came from a correct deletion with an incomplete replacement.
+The old Super request was a same-channel cast that bypassed trajectories and was
+removed during the durable-lifecycle cutover. The typed packet, work-item,
+actor-wake, persistent-Super, and capsule pieces now exist, but their authority
+boundaries do not join. This mission connects those pieces; it does not restore
+the deleted channel cast or build another supervision platform.
+
+## Target capability contract
+
+| Caller | May create | May address | Must never do |
+|---|---|---|---|
+| Texture | Researcher work; one persistent-Super work obligation through a typed opener | Researchers already bound to its document/trajectory; exact `super:<owner>` | Spawn Super/CoSuper, address CoSuper, mutate host/capsule, or smuggle commands into canonical prose |
+| Researcher | Nothing | Requesting `texture:<doc_id>` | Execute, write, spawn, or address arbitrary Texture/Super identities |
+| Super | Researcher and assigned implementation/verifier CoSuper work | Requesting Texture and its own children through bound work | Shell/write host state, execute capsule commands, accept/materialize/route |
+| Implementation CoSuper | Nothing | Owning Super/Texture result path through bound work | Host execution, another capsule, acceptance/route, verifier verdict |
+| Verification CoSuper | Nothing | Owning Super/Texture result path through bound work | Mutate host or another capsule, alter the frozen subject under the same verification identity, self-development effect, acceptance/route |
+
+Spawn authority and message-address authority remain separate. Texture gaining a
+persistent-Super address must not add Super to `AllowedDelegateTargets`.
+
+## Owner-facing document and automation contract
+
+Texture's visible artifact is ordinary writing, normally coherent prose. The
+document may be a research report, essay, investigation, proposal,
+correspondence, publication draft, or technical explanation. Its storage schema
+must not force headings, lists, status blocks, work-item inventories, or a
+coding-specific report shape. Structure serves editing and evidence placement;
+it does not dictate rhetoric.
+
+Texture publishes new immutable versions when owner-relevant understanding
+changes, including while delegated work remains open. A long trajectory may
+produce many useful versions before its final version. Texture may coalesce a
+burst of redundant inputs, but it may not hide substantive interim learning
+until settlement.
+
+One generic source reference/transclusion binds exact research quotations, file
+or code excerpts, diffs, patches, commands and terminal output, test runs,
+images, and later multimedia into the prose. Source kind selects presentation;
+it does not select a different workflow or authority path. An expanded item is
+not copied model prose: its body placement resolves to an immutable source
+identity, version, selector, and content hash, and the full permitted source can
+be opened through the product.
+
+The existing Texture API and `choir texture` CLI must let an authenticated owner
+or automated verifier perform the same five product actions: create a Texture;
+tell or correct it; watch successive versions; show an exact current or
+historical version; and open the exact source behind a transclusion. Machine
+mode returns stable JSON or JSONL identities and watch resumes from a durable
+cursor. Human prose remains the artifact, never the test protocol.
+
+## Proposed substrate cutover
+
+The new path remains in the existing lifecycle worker-update object, event, and
+snapshot authority, but it does not overload one work relationship. Existing
+`QueueLifecycleUpdate` retains upward producer-report semantics:
+`producer_work_item_id` is open and assigned to the authenticated caller, and
+only that producer may report its disposition. A direction-specific lifecycle
+control command carries a runtime-derived `target_work_item_id`; the exact target
+owns that open obligation, and the sender cannot settle it. Direction is derived
+from caller, target, packet kind, and work bindings, never model-authored.
+
+The persistent Super remains the existing non-lifecycle `super:<owner>` actor,
+scoped by owner and computer. It may be admitted only as that exact lifecycle
+control target/assignee; it is not promoted into a generic lifecycle actor
+class. Its reconciler reads pending lifecycle controls by target identity.
+Pre-cutover worker-inbox rows remain compatibility input for old non-lifecycle work, but
+new Texture traffic never writes or marks delivery there.
+
+A Texture-only typed Super-work opener creates or reuses target work for the
+exact persistent Super and queues `kind=execution_request` with validated
+actions. A continuation can address only existing target work for a bound
+Researcher or that Super. These are operation variants over the atomic Texture
+transition below, not independently committing calls and not additions to
+`AllowedDelegateTargets`. The current immediate generic `update_coagent` is not
+exposed to Texture.
+
+One Texture-specific conditional lifecycle apply commits expected lifecycle
+version and document head plus exactly one semantic outcome:
+
+1. a semantic revision;
+2. an explicit no-semantic-change disposition;
+3. a deliberate wait; or
+4. a durable block.
+
+A semantic revision contains one canonical structured document. Its readable
+prose and machine-readable transclusion manifest are deterministic projections,
+not independently writable copies. Generic source references and expanded
+transclusions resolve and pin before the revision becomes canonical.
+
+The same object-graph batch commits inbound dispositions, target-work open/reuse,
+zero or more validated ordered outbound controls, source objects and references,
+events, and command receipt. The ordered outbound set and target-work bindings
+participate in its replay digest. `patch_texture`, `rewrite_texture`, the Texture
+form of `update_coagent`, the typed Super opener, and public owner correction are
+affordance/validation views over this apply; none queues, wakes, or reports
+durable success independently. Remove the synthetic self-queue-before-apply
+convention. Wake targets only after commit; restart sweep recovers committed
+packets if wake delivery fails. The activation may remain terminal afterward,
+preserving stale-base safety without fake revisions or escaped directives.
+
+## Execution sequence
+
+### Define — freeze authority before code
+
+1. Preserve the frozen v1 digest and durable panel receipt; adjudicate every
+   blocking finding into this repaired candidate.
+2. Freeze the repaired self-normalized digest and obtain owner ratification for
+   its direction-specific work semantics, atomic apply, and exact capsule-local
+   evidence boundary.
+3. Only then promote the Definition through all three registries. The docs-only
+   Define commit is the required problem-documentation-first checkpoint.
+4. If the direction-specific lifecycle command or writable verification-capsule effect boundary
+   is infeasible, stop and revise this Definition; do not improvise a dual-write,
+   generic lifecycle actor migration, broad refusal deletion, or smaller artifact.
+
+### Implement A — make addressing mechanically safe
+
+1. Separate spawn policy from message-address policy in `internal/agentprofile`;
+   Texture remains spawn-Researcher-only.
+2. Make every target lookup error a hard refusal. Delete channel/self inference
+   from Texture authority; reject non-lifecycle Texture, cross-document/
+   trajectory/owner/computer targets, arbitrary Super, and every CoSuper target.
+3. Freeze the role/slot/target negative matrix and direction-specific packet
+   identities before registering any Texture affordance.
+4. Land target validation, atomic lifecycle control, and readers in the same
+   candidate. Texture must not temporarily receive the immediate generic tool or
+   a pre-cutover persistent-Super fallback.
+
+### Implement B — join the lifecycle inboxes
+
+1. Preserve producer-report `QueueLifecycleUpdate`; add a distinct control
+   command in the same reducer/object/event/snapshot authority with exact target
+   work and no sender-owned target disposition.
+2. Admit bound Researcher and exact owner/computer persistent Super as control
+   targets/assignees without making Super a generic lifecycle actor.
+3. Make Researcher, Texture, and persistent Super warm/cold reconciliation read
+   pending lifecycle state and reconstruct it after restart.
+4. The Texture Super opener atomically opens/reuses target work and queues one
+   execution request. Equal retry produces one packet/work/activation; conflicting
+   payload or ordered-control digest fails.
+5. Retain pre-cutover-inbox readers only for identified pre-cutover rows; add replay fixtures
+   and a detector proving new lifecycle traffic cannot enter them.
+
+### Implement C — close the semantic control transaction
+
+1. Extend the existing source-aware canonical Texture write with one narrow
+   Texture-turn transition; the current helper name is not architecture, and
+   atomicity must not be simulated with independently acknowledged tool batches.
+2. Commit revision/no-change/wait/block, inbound dispositions, target-work
+   changes, ordered controls, source objects/references, events, and receipt
+   under one expected-head CAS.
+3. Make the structured document canonical. Derive readable content and the
+   normalized transclusion manifest from it; reject any supplied projection that
+   disagrees rather than retaining two document truths.
+4. Expanded transclusion reuses the one `source_ref` node; `display_mode:
+   expanded_ref` selects quotation, code, diff, terminal, test, image, or later
+   multimedia rendering on the same node. Preserve the exact source version,
+   selector, hash, and open path; no second node type or independently writable
+   source-embed truth exists.
+5. Replace required-write behavior with required durable transition. Silent
+   no-op remains forbidden; redundant evidence receives a disposition without a
+   fake version. Substantive interim learning may publish before work settles.
+6. Preserve owner semantics: direct revisions commit canonical `AuthorUser` head
+   and correction cursor/obligation atomically; `/revise` queues a lifecycle
+   decision request for a Texture-authored revision. Coalesce wakes, not edits.
+7. Update prompts only after the capability exists. Prefer coherent prose and
+   follow owner-requested form without role choreography, forced headings,
+   first-tool forcing, or unavailable-effects claims.
+
+### Implement D — connect Super and capsule-only CoSuper work
+
+1. Make persistent Super consume target-bound lifecycle execution requests,
+   emit intermediate typed updates, and preserve one owner/computer identity.
+2. Do not broadly remove the lifecycle-profile refusal. Add only the exact
+   persistent-Super -> assigned CoSuper path after the authority matrix passes.
+3. Permit many concurrent CoSuper assignments subject to computer resource and
+   capability policy. The safe default is one writable assignment per isolated,
+   run-bound disposable capsule; two writable CoSupers share a capsule only
+   under an explicit coordination contract that owns file-race behavior.
+4. Bind every assignment and retry to exact owner, computer, trajectory, parent
+   Super decision, work item, attempt, scope digest, capability digest, and
+   capsule when writable. Cancellation and late-result dispositions remain
+   assignment-specific.
+5. Every implementation or verification CoSuper receives only its assigned
+   capsule mutation capability. A verification assignment may edit files,
+   generate test fixtures or harnesses, and run builds, tests, and scripts inside
+   its own writable networkless capsule. It is not a read-only role.
+6. Bind a verification assignment to the immutable subject digest it evaluates.
+   Its typed result records commands, outputs, relevant capsule mutations, and
+   verdict. If it changes subject bytes, that output is a newly identified
+   candidate requiring its own verification; it cannot certify the original.
+7. No CoSuper may call `record_self_development_verification` or gain a
+   ComputerEventAppender/updater-root/effect-proposal/finalization, acceptance,
+   materialization, checkpoint, route, VM, host-path, or owner-decision effect.
+   If writable capsule isolation from those effects is impossible, stop and move
+   that slice to a separately ratified successor without weakening the artifact.
+8. Dispose the historical same-channel request citers in the same landing
+   boundary: repair the conjecture/assertion-ledger entry (A1 no longer routes
+   through `request_super_execution`), disposition the dead `super_requested`
+   checkpoint in `internal/agentcore/run_acceptance.go` to the new direction
+   opener, and re-point fixtures at the typed lifecycle receipt. This satisfies
+   the deletion-citer standing question without restoring the removed tool.
+
+### Implement E — expose the progressive Texture through API and CLI
+
+1. Extend the existing public Texture API rather than creating a supervision
+   service. Give each owner instruction/correction a durable identity even when
+   one resident Texture actor handles many requests.
+2. Make document observation durable and resumable. Version events expose cursor,
+   revision, parent, version, working/terminal state, causal request/update
+   identities, and transclusion identities without exposing raw actor chatter.
+3. Extend `choir texture` with create, tell/correct, watch, show exact version,
+   and open-source behavior. Default automation output is stable JSON; watch uses
+   JSONL and resumes after its last durable cursor.
+4. Keep deterministic verification on the real product contract: direct
+   owner-authored fixture revisions may supply a canonical structured document
+   and source objects, while agentic acceptance uses the real Texture actor. Add
+   no test-only route and require no browser prose scraping or fixed sleeps.
+
+### Land — prove the product loop
+
+1. Freeze and independently review the complete runtime candidate, including
+   fail-closed authority, conditional batch, generic prose/transclusion
+   projection, resumable API/CLI observation, replay, private payload, owner
+   correction, many-CoSuper capsule isolation, cancellation, and no-effect
+   checks.
+2. Run focused/race tests and the applicable full CI shards once.
+3. Commit, push `origin/main`, monitor CI and staging deployment, and verify the
+   exact deployed commit through `/health`.
+4. Run the full authenticated repeated-cycle acceptance. Prove an informative
+   transclusion-grounded Texture version while work remains open; a later
+   correction and changed direction; at least two parallel writable CoSuper
+   capsules; at least one independently identified verification CoSuper result from a writable networkless capsule, including test/script evidence; pending packets across passivation and
+   no-SSH same-build process restart; in-flight cancellation plus actual late
+   result/retry; and before/after protected-state comparison.
+5. Run the public API/CLI acceptance: create, tell, watch, disconnect/resume,
+   show current and historical versions, and open exact research and execution
+   transclusions. Run continuous-prose and differently structured writing cases
+   through the same schema.
+6. Fetch exact document/revision/source, owner/computer/trajectory,
+   producer/target work, actor, request/command/update/digest, run, capsule,
+   cancellation/late, and acceptance identities; inspect every acceptance
+   Texture version against its machine-readable receipts.
+7. Close the Definition and registries only after the artifact is fetched,
+   effects remain unchanged, and rollback is rehearsed.
+
+## Red-mutation ceremony
+
+**Conjecture delta:** C6/C7 gain a deployed test of durable actors supervising
+through trajectory/work authority; they remain active conjectures rather than
+being promoted by one success. The proposal removes one H011/H015/H018 instance
+without claiming those heresy classes globally repaired.
+
+**Protected surfaces:** canonical Texture writes and owner heads; lifecycle
+reducers, conditional object-graph batch, replay, and pre-cutover compatibility;
+actor delivery/restart; encrypted private payload and audit; fail-closed
+role/target/work authority; persistent Super identity; capsule slot, handle, and
+network namespace; canonical computer events, updater state, cancellation/late
+results, run acceptance, provider calls, and deployment routing.
+
+**Admissible evidence:** deterministic direction/authority negatives,
+conditional batch/race/replay and same-build restart proofs, deterministic
+document projection and generic transclusion contracts, frozen-candidate
+independent review, exact CI/deploy identity, authenticated staging trajectory
+with an informative owner-visible revision while work remains open, later owner
+correction, parallel isolated CoSuper work, exact research and execution source
+opening, resumable API/CLI observation, actual late result, protected-state
+before/after receipts, fetched artifacts/IDs, owner-visible Texture inspection,
+and rollback receipt.
+
+**Rollback:** additive compatibility plus source revert. New packets remain
+pending/late and inspectable; they are never marked delivered merely because an
+older runtime cannot execute them. No speculative capsule effect can cross into
+materialization, checkpoint, route, or host state.
+
+**Heresy delta:** discovered — lifecycle-addressable versus pre-cutover worker-inbox split, absent Texture tool,
+fail-open/self-target/cross-document resolution, producer/target work ambiguity,
+two-commit Texture mutation, terminal redirection gap, forced no-op revisions,
+split owner correction, and verifier self-development effects. Introduced — none
+by this Definition. Repaired — none until deployed acceptance proves the cutover.

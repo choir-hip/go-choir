@@ -302,13 +302,13 @@ documents:
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/definitions/choir-cli-self-development-2026-07-16.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md]
     refresh_triggers: [successor_promotion, deployment_identity_change, durable_actor_delivery_change, artifact_lifecycle_change, trajectory_settlement_change, Texture_public_protocol_change]
 
-  - path: docs/definitions/choir-continuous-texture-supervision-draft-2026-08-07.md
+  - path: docs/definitions/choir-continuous-texture-supervision-2026-08-07.md
     claim_scope: current
     is_root: []
     is_evidence: false
-    annotations: {doc_role: definition_draft, authority: non_executable_successor_draft, lifecycle: blocked, entrypoint: false}
+    annotations: {doc_role: definition, authority: active_product_mission, lifecycle: active, entrypoint: true}
     witnesses: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, docs/supervision-protocol.md, docs/texture-agentic-invariants-2026-06-13.md]
-    refresh_triggers: [owner_ratification, registry_promotion, durable_actor_delivery_change, trajectory_work_update_change, Texture_tool_authority_change, persistent_Super_inbox_change, capsule_effect_boundary_change, deployed_acceptance]
+    refresh_triggers: [mission_state_change, deployment_identity_change, durable_actor_delivery_change, trajectory_work_update_change, Texture_tool_authority_change, persistent_Super_inbox_change, capsule_effect_boundary_change, deployed_acceptance, registry_closure]
 
   - path: docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md
     claim_scope: current
@@ -389,5 +389,5 @@ documents:
     is_root: []
     is_evidence: true
     annotations: {doc_role: consensus_evidence, authority: adjudicated_external_review, lifecycle: append_only}
-    witnesses: [docs/definitions/choir-continuous-texture-supervision-draft-2026-08-07.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    witnesses: [docs/definitions/choir-continuous-texture-supervision-2026-08-07.md, docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [definition_candidate_change, owner_ratification, registry_promotion]
