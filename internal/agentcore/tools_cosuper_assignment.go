@@ -215,7 +215,17 @@ func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
 			if trajectoryID == "" {
 				return "", fmt.Errorf("report_to_texture requires one exact delivered lifecycle control trajectory")
 			}
-			delivered, err := rt.listAllLifecyclePacketsDeliveredToRun(ctx, parent)
+			trajectory, err := rt.store.GetLifecycleTrajectory(ctx, parent.OwnerID, parent.SandboxID, trajectoryID)
+			if err != nil {
+				return "", err
+			}
+			var delivered []types.CoagentSourcePacket
+			if trajectory.Status == types.TrajectoryLive {
+				delivered, err = rt.listAllLifecyclePacketsDeliveredToRun(ctx, parent)
+			} else {
+				delivered, err = rt.store.ListHistoricalLifecycleControlsDeliveredToRun(ctx, parent.OwnerID, parent.SandboxID, trajectoryID, parent.AgentID, parent.RunID)
+			}
+
 			if err != nil {
 				return "", err
 			}
@@ -295,11 +305,15 @@ func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
 			if err != nil {
 				return "", err
 			}
+			var consumedForReport []string
+			if trajectory.Status == types.TrajectoryLive {
+				consumedForReport = consumedDeliveryIDs
+			}
 			req := types.QueueLifecycleUpdateRequest{
 				OwnerID: parent.OwnerID, ComputerID: parent.SandboxID, CommandID: "queue-" + producerUpdateID,
 				TrajectoryID: trajectoryID, TargetAgentID: control.AgentID, ProducerAgentID: parent.AgentID,
 				ControlBindingID: control.UpdateID, TargetWorkItemID: targetWorkID,
-				ConsumedDeliveryUpdateIDs: consumedDeliveryIDs,
+				ConsumedDeliveryUpdateIDs: consumedForReport,
 				ProducerUpdateID:          producerUpdateID, UpdateID: "result:" + occurrence,
 				ChannelID: control.ChannelID, Role: "super", SourceRunID: parent.RunID,
 				Packet: packet, Content: content, WorkDisposition: input.WorkDisposition,

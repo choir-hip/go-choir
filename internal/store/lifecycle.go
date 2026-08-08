@@ -2329,6 +2329,10 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
+	// Terminal trajectories accept only authenticated historical evidence. The
+	// late branch below writes an update/event/receipt without mutating the
+	// trajectory, actor, run, or work projections.
+	lateEvidenceOnly := trajectory.Status != types.TrajectoryLive
 	documentID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
 	if documentID == "" || req.TargetAgentID != "texture:"+documentID || strings.TrimSpace(req.ChannelID) != documentID {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
@@ -2377,9 +2381,13 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		if err != nil {
 			return types.LifecycleResult{}, err
 		}
+		producerRunStateAllowed := persistentSuperRunStateAllowed(producerRun.State)
+		if lateEvidenceOnly {
+			producerRunStateAllowed = persistentSuperHistoricalReportRunStateAllowed(producerRun.State)
+		}
 		if producerRunObj.ComputerID != "" || producerRun.RunID != req.SourceRunID || producerRun.OwnerID != ownerID ||
 			producerRun.SandboxID != computerID || producerRun.TrajectoryID != "" || producerRun.AgentID != req.ProducerAgentID ||
-			producerRun.AgentProfile != "super" || producerRun.AgentRole != "super" || !persistentSuperRunStateAllowed(producerRun.State) ||
+			producerRun.AgentProfile != "super" || producerRun.AgentRole != "super" || !producerRunStateAllowed ||
 			producerRun.ChannelID != req.ChannelID || metadataExactString(producerRun.Metadata, "assignment_trajectory_id") != req.TrajectoryID ||
 			!persistentSuperControlBinding(producerRun.Metadata, req.TrajectoryID, req.WorkItemID, req.ControlBindingID) {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
@@ -2392,7 +2400,8 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		if control.UpdateID != req.ControlBindingID || control.ProducerUpdateID != req.ControlBindingID ||
 			control.Direction != types.LifecyclePacketDirectionControl || control.AgentID != req.TargetAgentID ||
 			control.TargetAgentID != req.ProducerAgentID || control.TargetWorkItemID != req.WorkItemID ||
-			control.TrajectoryID != req.TrajectoryID || control.DeliveredToRunID != req.SourceRunID || control.DeliveredAt == nil {
+			control.TrajectoryID != req.TrajectoryID || control.DeliveredToRunID != req.SourceRunID || control.DeliveredAt == nil ||
+			(!lateEvidenceOnly && control.Disposition != types.UpdatePending) {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
 		targetRunObj, targetRun, targetErr := s.textureTurnRunObject(ctx, ownerID, computerID, control.SourceRunID)
@@ -2403,79 +2412,87 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		if targetErr != nil {
 			return types.LifecycleResult{}, targetErr
 		}
+		targetAuthorityStateAllowed := targetWork.Status == types.WorkItemOpen && targetRun.State.Valid()
+		if lateEvidenceOnly {
+			targetAuthorityStateAllowed = workItemTerminal(targetWork.Status) &&
+				(targetRun.State.Terminal() || targetRun.State == types.RunPassivated)
+		}
 		if targetRun.RunID != control.SourceRunID || targetRun.AgentID != req.TargetAgentID || targetRun.TrajectoryID != req.TrajectoryID ||
-			targetRun.AgentProfile != "texture" || targetRun.AgentRole != "texture" || !targetRun.State.Valid() ||
-			!lifecycleRunBindsWork(targetRun, req.TargetWorkItemID) || targetWork.Status != types.WorkItemOpen ||
+			targetRun.AgentProfile != "texture" || targetRun.AgentRole != "texture" || !targetAuthorityStateAllowed ||
+			!lifecycleRunBindsWork(targetRun, req.TargetWorkItemID) ||
 			targetWork.TrajectoryID != req.TrajectoryID || targetWork.AssignedAgentID != req.TargetAgentID || targetWork.AuthorityProfile != "texture" {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
 		producerAuthorityConditions = append(producerAuthorityConditions,
 			coSuperObjectCondition(controlObj), coSuperObjectCondition(targetRunObj), coSuperObjectCondition(targetWorkObj))
 
-		// The complete consumable set is the canonical exact-run delivery order
-		// intersected with authenticated durable runtime-injection memory. A packet
-		// bound while the provider is in flight is deliberately left pending until
-		// a later turn appends it; a caller cannot omit an already appended packet.
-		var delivered []types.CoagentSourcePacket
-		var after int64
-		for {
-			page, pageErr := s.ListLifecycleControlsDeliveredToRunPage(ctx, ownerID, computerID, req.TrajectoryID, req.ProducerAgentID, req.SourceRunID, after, 100)
-			if pageErr != nil {
-				return types.LifecycleResult{}, pageErr
+		if !lateEvidenceOnly {
+			// The complete consumable set is the canonical exact-run delivery order
+			// intersected with authenticated durable runtime-injection memory. A packet
+			// bound while the provider is in flight is deliberately left pending until
+			// a later turn appends it; a caller cannot omit an already appended packet.
+			var delivered []types.CoagentSourcePacket
+			var after int64
+			for {
+				page, pageErr := s.ListLifecycleControlsDeliveredToRunPage(ctx, ownerID, computerID, req.TrajectoryID, req.ProducerAgentID, req.SourceRunID, after, 100)
+				if pageErr != nil {
+					return types.LifecycleResult{}, pageErr
+				}
+				delivered = append(delivered, page.Packets...)
+				if !page.HasMore {
+					break
+				}
+				if page.NextCursor <= after {
+					return types.LifecycleResult{}, ErrConcurrentStateChange
+				}
+				after = page.NextCursor
 			}
-			delivered = append(delivered, page.Packets...)
-			if !page.HasMore {
-				break
+			memoryEntries, memoryErr := s.ListRunMemoryEntries(ctx, ownerID, req.SourceRunID)
+			if memoryErr != nil {
+				return types.LifecycleResult{}, memoryErr
 			}
-			if page.NextCursor <= after {
+			memorySeen := lifecycleUpdateIDsInAuthenticatedRunMemory(memoryEntries, producerRun, req.TrajectoryID)
+			expectedConsumed := make([]types.CoagentSourcePacket, 0, len(delivered))
+			unseenPending := false
+			for _, packet := range delivered {
+				if memorySeen[strings.TrimSpace(packet.UpdateID)] {
+					expectedConsumed = append(expectedConsumed, packet)
+				} else if packet.Disposition == types.UpdatePending {
+					unseenPending = true
+				}
+			}
+			// The selected direction itself must have entered this exact run's
+			// durable provider context. This closes the empty-proof/direct-Store path.
+			if !memorySeen[req.ControlBindingID] || len(expectedConsumed) == 0 {
+				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+			}
+			// Do not terminalize a Super obligation while an arrival-during-provider
+			// packet remains unseen: it must stay executable by a later same-run turn.
+			if unseenPending && req.WorkDisposition != types.WorkItemOpen {
 				return types.LifecycleResult{}, ErrConcurrentStateChange
 			}
-			after = page.NextCursor
-		}
-		memoryEntries, memoryErr := s.ListRunMemoryEntries(ctx, ownerID, req.SourceRunID)
-		if memoryErr != nil {
-			return types.LifecycleResult{}, memoryErr
-		}
-		memorySeen := lifecycleUpdateIDsInAuthenticatedRunMemory(memoryEntries, producerRun, req.TrajectoryID)
-		expectedConsumed := make([]types.CoagentSourcePacket, 0, len(delivered))
-		unseenPending := false
-		for _, packet := range delivered {
-			if memorySeen[strings.TrimSpace(packet.UpdateID)] {
-				expectedConsumed = append(expectedConsumed, packet)
-			} else if packet.Disposition == types.UpdatePending {
-				unseenPending = true
-			}
-		}
-		// The selected direction itself must have entered this exact run's
-		// durable provider context. This closes the empty-proof/direct-Store path.
-		if !memorySeen[req.ControlBindingID] || len(expectedConsumed) == 0 {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-		// Do not terminalize a Super obligation while an arrival-during-provider
-		// packet remains unseen: it must stay executable by a later same-run turn.
-		if unseenPending && req.WorkDisposition != types.WorkItemOpen {
-			return types.LifecycleResult{}, ErrConcurrentStateChange
-		}
-		if len(expectedConsumed) != len(req.ConsumedDeliveryUpdateIDs) {
-			return types.LifecycleResult{}, ErrConcurrentStateChange
-		}
-		for i, packet := range expectedConsumed {
-			if req.ConsumedDeliveryUpdateIDs[i] == "" || req.ConsumedDeliveryUpdateIDs[i] != packet.UpdateID {
+			if len(expectedConsumed) != len(req.ConsumedDeliveryUpdateIDs) {
 				return types.LifecycleResult{}, ErrConcurrentStateChange
 			}
-			if packet.Disposition != types.UpdatePending {
-				continue
+			for i, packet := range expectedConsumed {
+				if req.ConsumedDeliveryUpdateIDs[i] == "" || req.ConsumedDeliveryUpdateIDs[i] != packet.UpdateID {
+					return types.LifecycleResult{}, ErrConcurrentStateChange
+				}
+				if packet.Disposition != types.UpdatePending {
+					continue
+				}
+				key := packet.TrajectoryID + "\x00" + packet.TargetAgentID + "\x00" + packet.AgentID + "\x00" + packet.ProducerUpdateID
+				packetObj, storedPacket, packetErr := s.textureTurnUpdateObject(ctx, ownerID, computerID, key)
+				if packetErr != nil {
+					return types.LifecycleResult{}, packetErr
+				}
+				if storedPacket.UpdateID != packet.UpdateID || storedPacket.DeliveredToRunID != req.SourceRunID || storedPacket.Disposition != types.UpdatePending {
+					return types.LifecycleResult{}, ErrConcurrentStateChange
+				}
+				deliveredPacketConsumptions = append(deliveredPacketConsumptions, deliveredPacketConsumption{object: packetObj, update: storedPacket, key: key})
 			}
-			key := packet.TrajectoryID + "\x00" + packet.TargetAgentID + "\x00" + packet.AgentID + "\x00" + packet.ProducerUpdateID
-			packetObj, storedPacket, packetErr := s.textureTurnUpdateObject(ctx, ownerID, computerID, key)
-			if packetErr != nil {
-				return types.LifecycleResult{}, packetErr
-			}
-			if storedPacket.UpdateID != packet.UpdateID || storedPacket.DeliveredToRunID != req.SourceRunID || storedPacket.Disposition != types.UpdatePending {
-				return types.LifecycleResult{}, ErrConcurrentStateChange
-			}
-			deliveredPacketConsumptions = append(deliveredPacketConsumptions, deliveredPacketConsumption{object: packetObj, update: storedPacket, key: key})
 		}
+
 	} else {
 		if req.ControlBindingID != "" || req.TargetWorkItemID != "" {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
@@ -2502,7 +2519,8 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		return types.LifecycleResult{}, err
 	}
 	if work.TrajectoryID != req.TrajectoryID || strings.TrimSpace(work.AssignedAgentID) != req.ProducerAgentID ||
-		strings.TrimSpace(work.AuthorityProfile) != strings.TrimSpace(producerRun.AgentProfile) {
+		strings.TrimSpace(work.AuthorityProfile) != strings.TrimSpace(producerRun.AgentProfile) ||
+		(lateEvidenceOnly && persistentSuperProducer && !workItemTerminal(work.Status)) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	updateKey := req.TrajectoryID + "\x00" + req.TargetAgentID + "\x00" + req.ProducerAgentID + "\x00" + req.ProducerUpdateID
@@ -2529,7 +2547,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		return types.LifecycleResult{}, getErr
 	}
 	now := time.Now().UTC()
-	if trajectory.Status != types.TrajectoryLive {
+	if lateEvidenceOnly {
 		nextSeq, sequenceUpdated, sequenceCondition, sequenceErr := s.nextPostTerminalSequence(ctx, ownerID, computerID, trajectory, now)
 		if sequenceErr != nil {
 			return types.LifecycleResult{}, sequenceErr
@@ -3018,6 +3036,43 @@ func (s *Store) CommitLifecycleArtifactHeadWithSourceGraph(ctx context.Context, 
 			work.Status != types.WorkItemOpen || work.TrajectoryID != req.TrajectoryID || work.AssignedAgentID != correction.TargetAgentID || work.AuthorityProfile != agentprofile.Texture {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
+
+		// A direct canonical edit supersedes the old head, not the owner's
+		// already-queued intent. Rebase the complete ordered old-head occurrence
+		// set to the new head in this same CAS batch, then append the edit's own
+		// correction occurrence. ReducerSeq is intentionally preserved so every
+		// pre-edit tell keeps its original order ahead of the new correction.
+		pendingOldHead, pendingErr := s.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, computerID, req.TrajectoryID, correction.TargetAgentID, req.ExpectedHeadRevisionID)
+		if pendingErr != nil {
+			return types.LifecycleResult{}, pendingErr
+		}
+		for _, oldInstruction := range pendingOldHead {
+			if oldInstruction.InstructionID == correction.InstructionID {
+				return types.LifecycleResult{}, ErrLifecycleCommandConflict
+			}
+			oldObj, storedInstruction, loadErr := s.lifecycleOwnerInstructionObject(ctx, ownerID, computerID, req.TrajectoryID, oldInstruction.InstructionID)
+			if loadErr != nil {
+				return types.LifecycleResult{}, loadErr
+			}
+			if storedInstruction.Status != types.LifecycleOwnerInstructionPending ||
+				storedInstruction.HeadRevisionID != req.ExpectedHeadRevisionID ||
+				storedInstruction.TargetAgentID != correction.TargetAgentID ||
+				storedInstruction.DocumentID != docID || storedInstruction.TrajectoryID != req.TrajectoryID {
+				return types.LifecycleResult{}, ErrConcurrentStateChange
+			}
+			storedInstruction.HeadRevisionID = revision.RevisionID
+			storedInstruction.TargetWorkItemID = correction.TargetWorkItemID
+			storedInstruction.LifecycleVersion++
+			updatedOld, buildErr := lifecycleObject(ogKindOwnerInstruction, ownerID, computerID,
+				req.TrajectoryID+"\x00"+storedInstruction.InstructionID, storedInstruction,
+				lifecycleMetadata("instruction_id", storedInstruction.InstructionID, computerID, req.TrajectoryID, storedInstruction.ReducerSeq), oldObj.CreatedAt, now)
+			if buildErr != nil {
+				return types.LifecycleResult{}, buildErr
+			}
+			conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: oldObj.CanonicalID, Exists: true, ExpectedContentHash: oldObj.ContentHash})
+			objects = append(objects, updatedOld)
+		}
+
 		seq++
 		instruction := types.LifecycleOwnerInstruction{
 			Schema: types.LifecycleOwnerInstructionSchemaV1, InstructionID: correction.InstructionID, RequestID: correction.RequestID,

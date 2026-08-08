@@ -233,6 +233,13 @@ func persistentSuperRunStateAllowed(state types.RunState) bool {
 	return state == types.RunPending || state == types.RunRunning || state == types.RunPassivated
 }
 
+// A late persistent-Super report may authenticate only the exact historical
+// run that received its control. Terminal and passivated runs retain evidence
+// authority, but never regain live execution authority.
+func persistentSuperHistoricalReportRunStateAllowed(state types.RunState) bool {
+	return state.Terminal() || state == types.RunPassivated
+}
+
 // requireCoSuperAssignmentAuthority proves the join between the lifecycle work
 // graph and the exact non-lifecycle persistent Super control run. It never
 // promotes that Super run or agent into lifecycle state.

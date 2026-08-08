@@ -3,6 +3,7 @@ package textureowner
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -122,6 +123,88 @@ func runtimeStructuredRevisionFixture(t *testing.T) (json.RawMessage, json.RawMe
 		t.Fatalf("marshal source entities: %v", err)
 	}
 	return bodyDocJSON, sourceEntitiesJSON
+}
+
+func TestDirectOwnerEditAtomicallyRebases101OldHeadOccurrencesAndWakesOnce(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	var wakes []string
+	handler.wakeOwnerInstruction = func(_ context.Context, ownerID, docID, instructionID string) error {
+		if ownerID != start.OwnerID || docID != start.InitialDocument.DocID || instructionID == "" {
+			t.Fatalf("bad wake scope owner=%q doc=%q instruction=%q", ownerID, docID, instructionID)
+		}
+		wakes = append(wakes, instructionID)
+		return nil
+	}
+	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
+	for i := 0; i < 101; i++ {
+		response := postOwnerInstruction(t, handler, path, start.OwnerID, fmt.Sprintf("old-head-%03d", i), fmt.Sprintf("preserve owner intent %03d", i), start.InitialRevision.RevisionID)
+		if response.Code != http.StatusAccepted {
+			t.Fatalf("tell %d status=%d body=%s", i, response.Code, response.Body.String())
+		}
+	}
+	if len(wakes) != 101 {
+		t.Fatalf("tell wakes=%d", len(wakes))
+	}
+	before, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestBody := textureCreateRevisionRequest{
+		Content: "direct owner correction after queued intent", ParentRevisionID: start.InitialRevision.RevisionID,
+		IdempotencyKey: "direct-owner-rebase-101", ExpectedLifecycleVersion: before.Trajectory.LifecycleVersion,
+	}
+	request := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", requestBody)
+	response := httptest.NewRecorder()
+	handler.HandleTextureRevisions(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("direct edit status=%d body=%s", response.Code, response.Body.String())
+	}
+	var revision textureRevisionResponse
+	if err := json.NewDecoder(response.Body).Decode(&revision); err != nil {
+		t.Fatal(err)
+	}
+	if len(wakes) != 102 {
+		t.Fatalf("direct edit must wake exactly once: wakes=%d", len(wakes))
+	}
+	oldHead, err := core.Store().ListPendingLifecycleOwnerInstructionsForHead(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID, start.Agent.AgentID, start.InitialRevision.RevisionID)
+	if err != nil || len(oldHead) != 0 {
+		t.Fatalf("stranded old-head occurrences=%d err=%v", len(oldHead), err)
+	}
+	pending, err := core.Store().ListPendingLifecycleOwnerInstructionsForHead(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID, start.Agent.AgentID, revision.RevisionID)
+	if err != nil || len(pending) != 102 {
+		t.Fatalf("rebased occurrence set=%d err=%v", len(pending), err)
+	}
+	for i := 0; i < 101; i++ {
+		if pending[i].Content != fmt.Sprintf("preserve owner intent %03d", i) || pending[i].HeadRevisionID != revision.RevisionID ||
+			pending[i].TargetWorkItemID != start.InitialWork.WorkItemID {
+			t.Fatalf("owner intent/order changed at %d: %+v", i, pending[i])
+		}
+	}
+	if pending[101].Kind != types.LifecycleOwnerCorrect || pending[101].HeadRevisionID != revision.RevisionID {
+		t.Fatalf("new correction not ordered after rebased intent: %+v", pending[101])
+	}
+	after, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Trajectory.LifecycleVersion != before.Trajectory.LifecycleVersion+1 || after.Trajectory.ReducerSeq != before.Trajectory.ReducerSeq+2 {
+		t.Fatalf("direct edit was not one lifecycle transition: before=%+v after=%+v", before.Trajectory, after.Trajectory)
+	}
+	replayRequest := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", requestBody)
+	replayResponse := httptest.NewRecorder()
+	handler.HandleTextureRevisions(replayResponse, replayRequest)
+	if replayResponse.Code != http.StatusCreated || len(wakes) != 102 {
+		t.Fatalf("direct edit replay status=%d wakes=%d body=%s", replayResponse.Code, len(wakes), replayResponse.Body.String())
+	}
+	conflictBody := requestBody
+	conflictBody.Content = "conflicting direct owner correction"
+	conflictRequest := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", conflictBody)
+	conflictResponse := httptest.NewRecorder()
+	handler.HandleTextureRevisions(conflictResponse, conflictRequest)
+	if conflictResponse.Code != http.StatusConflict || len(wakes) != 102 {
+		t.Fatalf("direct edit conflict status=%d wakes=%d body=%s", conflictResponse.Code, len(wakes), conflictResponse.Body.String())
+	}
 }
 
 func TestTextureRevisionAPICommitsLifecycleBoundHeadThroughReducer(t *testing.T) {

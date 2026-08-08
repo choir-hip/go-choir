@@ -434,3 +434,98 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 	}
 	return page, nil
 }
+
+// ListHistoricalLifecycleControlsDeliveredToRun returns every downward control
+// durably delivered to one exact old persistent-Super run after its trajectory
+// became terminal. It is evidence authentication only: terminal/passivated run
+// and terminal work identities are required, and no delivery or lifecycle state
+// is changed.
+func (s *Store) ListHistoricalLifecycleControlsDeliveredToRun(ctx context.Context, ownerID, computerID, trajectoryID, targetAgentID, targetRunID string) ([]types.CoagentSourcePacket, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	trajectoryID, targetAgentID, targetRunID = strings.TrimSpace(trajectoryID), strings.TrimSpace(targetAgentID), strings.TrimSpace(targetRunID)
+	if trajectoryID == "" || targetAgentID != agentprofile.Super+":"+ownerID || targetRunID == "" {
+		return nil, ErrLifecycleInvalidTransition
+	}
+	trajectory, err := s.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return nil, err
+	}
+	if trajectory.Status == types.TrajectoryLive {
+		return nil, ErrLifecycleInvalidTransition
+	}
+	agent, err := s.GetAgentByScope(ctx, ownerID, computerID, targetAgentID)
+	if err != nil {
+		return nil, err
+	}
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.Profile != agentprofile.Super ||
+		agent.Role != agentprofile.Super || agent.LifecycleVersion != 0 {
+		return nil, ErrLifecycleInvalidTransition
+	}
+	run, err := s.GetRunByOwner(ctx, ownerID, targetRunID)
+	if err != nil {
+		return nil, err
+	}
+	if run.RunID != targetRunID || run.OwnerID != ownerID || run.SandboxID != computerID || run.AgentID != targetAgentID ||
+		run.AgentProfile != agentprofile.Super || run.AgentRole != agentprofile.Super || run.TrajectoryID != "" ||
+		metadataStringValueStore(run.Metadata, "assignment_trajectory_id") != trajectoryID ||
+		!persistentSuperHistoricalReportRunStateAllowed(run.State) {
+		return nil, ErrLifecycleInvalidTransition
+	}
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("historical lifecycle controls: object graph not initialized")
+	}
+	objects, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	controls := make([]types.CoagentSourcePacket, 0)
+	for _, obj := range objects {
+		if obj.ObjectKind != ogKindWorkerUpdate {
+			continue
+		}
+		control, decodeErr := decodeLifecycleObject[types.CoagentSourcePacket](obj)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if control.Direction != types.LifecyclePacketDirectionControl || control.DeliveredToRunID != targetRunID {
+			continue
+		}
+		if control.OwnerID != ownerID || control.ComputerID != computerID || control.TrajectoryID != trajectoryID ||
+			control.TargetAgentID != targetAgentID || control.DeliveredAt == nil || control.TargetWorkItemID == "" ||
+			control.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 || strings.TrimSpace(control.Packet.Kind) == "" ||
+			strings.TrimSpace(control.Content) == "" || !lifecycleRunBindsWork(run, control.TargetWorkItemID) ||
+			!persistentSuperControlBinding(run.Metadata, trajectoryID, control.TargetWorkItemID, control.UpdateID) {
+			return nil, ErrLifecycleInvalidTransition
+		}
+		payloadDigest, digestErr := ComputeLifecycleUpdatePayloadDigest(control.Packet, control.Content)
+		if digestErr != nil || payloadDigest != control.PayloadDigest {
+			return nil, ErrLifecycleInvalidTransition
+		}
+		work, workErr := s.GetLifecycleWorkItem(ctx, ownerID, computerID, control.TargetWorkItemID)
+		if workErr != nil {
+			return nil, workErr
+		}
+		if work.OwnerID != ownerID || work.ComputerID != computerID || work.TrajectoryID != trajectoryID ||
+			work.AssignedAgentID != targetAgentID || work.AuthorityProfile != agentprofile.Super || !workItemTerminal(work.Status) {
+			return nil, ErrLifecycleInvalidTransition
+		}
+		controls = append(controls, control)
+	}
+	sort.Slice(controls, func(i, j int) bool {
+		if controls[i].ReducerSeq != controls[j].ReducerSeq {
+			return controls[i].ReducerSeq < controls[j].ReducerSeq
+		}
+		return controls[i].UpdateID < controls[j].UpdateID
+	})
+	if len(controls) == 0 {
+		return nil, ErrNotFound
+	}
+	return controls, nil
+}

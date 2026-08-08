@@ -647,6 +647,107 @@ func TestPersistentSuperReportRequiresCompleteAuthenticated101DeliveryAndDisposi
 	}
 }
 
+func TestPersistentSuperReportAfterCancellationIsHistoricalLateEvidenceOnly(t *testing.T) {
+	for _, oldRunState := range []types.RunState{types.RunCancelled, types.RunPassivated} {
+		t.Run(string(oldRunState), func(t *testing.T) {
+			rt, s := testRuntime(t)
+			if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+				t.Fatal(err)
+			}
+			var dispatches []string
+			rt.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, trajectory, _ string) error {
+				dispatches = append(dispatches, kind+":"+content+":"+trajectory)
+				return nil
+			})
+			ownerID := "owner-super-late-" + string(oldRunState)
+			superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fixture := seedTextureLifecycleControl(t, s, ownerID, "late-"+string(oldRunState), superAgent.AgentID, agentprofile.Super)
+			parent, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+			if err != nil || parent == nil {
+				t.Fatalf("reconcile persistent Super = %+v err=%v", parent, err)
+			}
+			inject := rt.coagentUpdateTurnInjectorWithInitialPhase(parent, coagentPacketDeliveryCold)
+			authorityMessages, injectErr := inject(false)
+			if injectErr != nil || len(authorityMessages) != 1 {
+				t.Fatalf("inject late-report authority=%s err=%v", authorityMessages, injectErr)
+			}
+			appendAuthenticatedInjectionForTest(t, s, *parent, authorityMessages[0])
+			before, err := s.GetLifecycleSnapshot(context.Background(), ownerID, "sandbox-test", fixture.trajectoryID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cancelled, _, err := rt.CancelTrajectoryCommand(context.Background(), fixture.trajectoryID, ownerID,
+				"cancel-super-late-"+string(oldRunState), "owner cancelled controlled work",
+				before.Trajectory.LifecycleVersion, before.HeadRevision.RevisionID)
+			if err != nil || cancelled.Trajectory.Status != types.TrajectoryCancelled {
+				t.Fatalf("cancelled trajectory=%+v err=%v", cancelled.Trajectory, err)
+			}
+			now := time.Now().UTC()
+			parent.State, parent.UpdatedAt = oldRunState, now
+			if oldRunState.Terminal() {
+				parent.FinishedAt = &now
+			} else {
+				parent.FinishedAt = nil
+			}
+			if err := s.UpdateRun(context.Background(), *parent); err != nil {
+				t.Fatal(err)
+			}
+			reloaded, err := s.GetRunByOwner(context.Background(), ownerID, parent.RunID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parent = &reloaded
+			dispatches = nil
+			raw := json.RawMessage(`{"kind":"execution_result","summary":"real delayed result after cancellation","claims":[],"sources":[],"actions":[],"questions":[],"notes":["historical evidence only"],"work_disposition":"completed"}`)
+			ctx := toolContextForTestCall(parent, "provider-call-late-"+string(oldRunState))
+			first, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(ctx, "report_to_texture", raw)
+			if err != nil {
+				t.Fatalf("late report = %s err=%v", first, err)
+			}
+			var response struct {
+				Replay bool                       `json:"replay"`
+				Update *types.CoagentSourcePacket `json:"update"`
+			}
+			if err := json.Unmarshal([]byte(first), &response); err != nil || response.Replay || response.Update == nil || response.Update.Disposition != types.UpdateLate {
+				t.Fatalf("late response=%s decoded=%+v err=%v", first, response, err)
+			}
+			if len(dispatches) != 0 {
+				t.Fatalf("late evidence woke an actor: %v", dispatches)
+			}
+			after, err := s.GetLifecycleSnapshot(context.Background(), ownerID, "sandbox-test", fixture.trajectoryID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if after.Trajectory.Status != types.TrajectoryCancelled || after.Trajectory.LifecycleVersion != cancelled.Trajectory.LifecycleVersion ||
+				after.Trajectory.ReducerSeq != cancelled.Trajectory.ReducerSeq {
+				t.Fatalf("late evidence changed terminal trajectory: before=%+v after=%+v", cancelled.Trajectory, after.Trajectory)
+			}
+			for _, work := range after.WorkItems {
+				if work.Status != types.WorkItemCancelled {
+					t.Fatalf("late evidence reopened or settled work: %+v", work)
+				}
+			}
+			stored, err := s.GetLifecycleUpdate(context.Background(), ownerID, "sandbox-test", fixture.trajectoryID,
+				fixture.control.AgentID, parent.AgentID, response.Update.ProducerUpdateID)
+			if err != nil || stored.Disposition != types.UpdateLate || stored.DeliveredAt != nil || stored.DeliveredToRunID != "" {
+				t.Fatalf("stored late evidence=%+v err=%v", stored, err)
+			}
+			replay, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(ctx, "report_to_texture", raw)
+			if err != nil || !strings.Contains(replay, `"replay":true`) || len(dispatches) != 0 {
+				t.Fatalf("late replay=%s err=%v wakes=%v", replay, err, dispatches)
+			}
+			conflict := json.RawMessage(`{"kind":"execution_result","summary":"changed delayed result","claims":[],"sources":[],"actions":[],"questions":[],"notes":["historical evidence only"],"work_disposition":"completed"}`)
+			if _, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(ctx, "report_to_texture", conflict); err == nil || !strings.Contains(err.Error(), "conflict") {
+				t.Fatalf("changed late replay did not conflict: %v", err)
+			}
+		})
+
+	}
+}
+
 func TestSelectLifecycleControlActivationRejectsProducerReports(t *testing.T) {
 	control := types.CoagentSourcePacket{UpdateID: "control", TrajectoryID: "trajectory", TargetWorkItemID: "work", Direction: types.LifecyclePacketDirectionControl}
 	report := control

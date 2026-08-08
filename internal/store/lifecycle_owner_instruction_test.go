@@ -90,6 +90,120 @@ func TestQueueLifecycleOwnerInstructionReplayConflictOccurrenceAndAtomicTurnCons
 	}
 }
 
+func TestDirectOwnerHeadAndConcurrentTellCASPreserveEveryLinearizedOccurrence(t *testing.T) {
+	s, start, _, _ := setupLifecycleTextureTargetFixture(t)
+	ctx := context.Background()
+	seeded := ownerInstructionRequest(t, s, start, "race-seeded", "intent pending before direct edit")
+	if _, err := s.QueueLifecycleOwnerInstruction(ctx, seeded); err != nil {
+		t.Fatal(err)
+	}
+	before, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	racing := types.QueueLifecycleOwnerInstructionRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "owner-command-racing",
+		RequestID: "owner-request-racing", InstructionID: "owner-instruction-racing",
+		DocumentID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID,
+		TargetAgentID: start.Agent.AgentID, TargetWorkItemID: start.InitialWork.WorkItemID,
+		ExpectedLifecycleVersion: before.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: before.Document.CurrentRevisionID,
+		Kind: types.LifecycleOwnerTell, Content: "intent racing direct edit",
+	}
+	racing.CommandDigest, _ = ComputeQueueLifecycleOwnerInstructionDigest(racing)
+	edit := types.CommitLifecycleArtifactHeadRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "direct-owner-race",
+		TrajectoryID: start.TrajectoryID, ExpectedLifecycleVersion: before.Trajectory.LifecycleVersion,
+		ExpectedHeadRevisionID: before.Document.CurrentRevisionID,
+		Revision:               types.Revision{RevisionID: "direct-owner-race-v1", AuthorKind: types.AuthorUser, AuthorLabel: start.OwnerID, Content: "direct owner edit"},
+		OwnerCorrection: &types.CommitLifecycleOwnerCorrection{
+			RequestID: "direct-owner-race-request", InstructionID: "direct-owner-race-instruction",
+			TargetAgentID: start.Agent.AgentID, TargetWorkItemID: start.InitialWork.WorkItemID,
+			Content: "reconcile the exact direct owner edit",
+		},
+	}
+	edit.CommandDigest, _ = ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(edit, TextureSourceGraphWriteSet{})
+	type editResult struct {
+		result types.LifecycleResult
+		err    error
+	}
+	startRace := make(chan struct{})
+	tellDone := make(chan error, 1)
+	editDone := make(chan editResult, 1)
+	go func() {
+		<-startRace
+		_, queueErr := s.QueueLifecycleOwnerInstruction(ctx, racing)
+		tellDone <- queueErr
+	}()
+	go func() {
+		<-startRace
+		result, commitErr := s.CommitLifecycleArtifactHeadWithSourceGraph(ctx, edit, TextureSourceGraphWriteSet{})
+		editDone <- editResult{result: result, err: commitErr}
+	}()
+	close(startRace)
+	tellErr := <-tellDone
+	committed := <-editDone
+	if tellErr != nil && committed.err != nil {
+		t.Fatalf("both racing commands failed: tell=%v edit=%v", tellErr, committed.err)
+	}
+	if tellErr == nil && committed.err == nil {
+		t.Fatal("both stale-version racing commands committed")
+	}
+	if committed.err != nil {
+		if !errors.Is(committed.err, ErrConcurrentStateChange) {
+			t.Fatalf("unexpected edit race error: %v", committed.err)
+		}
+		latest, _ := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+		edit.ExpectedLifecycleVersion = latest.Trajectory.LifecycleVersion
+		edit.CommandDigest, _ = ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(edit, TextureSourceGraphWriteSet{})
+		committed.result, committed.err = s.CommitLifecycleArtifactHeadWithSourceGraph(ctx, edit, TextureSourceGraphWriteSet{})
+		if committed.err != nil {
+			t.Fatalf("retry direct edit after linearized tell: %v", committed.err)
+		}
+	} else {
+		if !errors.Is(tellErr, ErrConcurrentStateChange) {
+			t.Fatalf("unexpected tell race error: %v", tellErr)
+		}
+		latest, _ := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+		racing.ExpectedLifecycleVersion = latest.Trajectory.LifecycleVersion
+		racing.ExpectedHeadRevisionID = latest.Document.CurrentRevisionID
+		racing.CommandDigest, _ = ComputeQueueLifecycleOwnerInstructionDigest(racing)
+		if _, err := s.QueueLifecycleOwnerInstruction(ctx, racing); err != nil {
+			t.Fatalf("retry tell against linearized direct head: %v", err)
+		}
+	}
+	if committed.result.Revision == nil {
+		t.Fatal("direct edit revision missing")
+	}
+	newHead := committed.result.Revision.RevisionID
+	oldPending, err := s.ListPendingLifecycleOwnerInstructionsForHead(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID, start.Agent.AgentID, before.Document.CurrentRevisionID)
+	if err != nil || len(oldPending) != 0 {
+		t.Fatalf("race stranded old-head occurrences=%+v err=%v", oldPending, err)
+	}
+	pending, err := s.ListPendingLifecycleOwnerInstructionsForHead(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID, start.Agent.AgentID, newHead)
+	if err != nil || len(pending) != 3 {
+		t.Fatalf("race lost occurrence: %+v err=%v", pending, err)
+	}
+	seen := map[string]bool{}
+	for _, occurrence := range pending {
+		seen[occurrence.InstructionID] = true
+	}
+	for _, id := range []string{seeded.InstructionID, racing.InstructionID, edit.OwnerCorrection.InstructionID} {
+		if !seen[id] {
+			t.Fatalf("race lost owner occurrence %q: %+v", id, pending)
+		}
+	}
+	replay, err := s.CommitLifecycleArtifactHeadWithSourceGraph(ctx, edit, TextureSourceGraphWriteSet{})
+	if err != nil || !replay.Replay || replay.Revision == nil || replay.Revision.RevisionID != newHead {
+		t.Fatalf("direct race replay=%+v err=%v", replay, err)
+	}
+	conflict := edit
+	conflict.Revision.Content = "changed direct edit"
+	conflict.CommandDigest, _ = ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(conflict, TextureSourceGraphWriteSet{})
+	if _, err := s.CommitLifecycleArtifactHeadWithSourceGraph(ctx, conflict, TextureSourceGraphWriteSet{}); !errors.Is(err, ErrLifecycleCommandConflict) {
+		t.Fatalf("changed direct race replay err=%v", err)
+	}
+}
+
 func TestLifecycleOwnerInstructionScopeHeadTargetAndRestartDurability(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "owner-instruction.db")
 	first, err := Open(path)
