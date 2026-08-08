@@ -634,3 +634,31 @@ narrow lock followed by exact authority revalidation). Lock lifecycle must not
 race waiters or leak unboundedly. Regression proof must retain the 40-way
 same-document winner-authority assertion and additionally prove a blocked wake
 for one document does not delay an unrelated document's reconcile/dispatch.
+
+
+## Exact-candidate provider credential failure — 2026-08-08
+
+Candidate `ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee` passed selected CI run
+[`31261269488`](https://github.com/choir-hip/go-choir/actions/runs/31261269488)
+and deployed successfully. A fresh nonce-bound execution identity joined the
+same stable acceptance computer, VM epoch 8247, guest sandbox, host build, and
+deployment receipt to exact `ac6dd16b`. Boot recovery then correctly created
+Texture run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf` for the previously stranded
+initial work, proving the repaired committed-start projection executed after a
+no-SSH deployment restart.
+
+The provider call failed before iteration zero with ChatGPT HTTP 401
+`refresh_token_reused` ("Your refresh token has already been used to generate a
+new access token. Please try signing in again."). The run became failed, the
+initial work remained open, and no revision or downward control was produced.
+The acceptance computer's durable model policy pins Texture and Super to
+ChatGPT `gpt-5.5` and Researcher to ChatGPT `gpt-5.4-mini`; CoSuper is pinned to
+DeepSeek. This is real gateway-credential/product evidence, not a local failure
+or permission to forge auth.
+
+Provider routing and credentials are protected. Any remediation must use an
+owner-visible product configuration or the canonical gateway credential-renewal
+authority, record before/after policy and key identity without exposing secrets,
+and preserve rollback. It must not edit Node B through SSH, inject a token into
+the guest, weaken auth, silently fall back across policy, or claim the failed
+run as supervision evidence. Effects remain OFF.
