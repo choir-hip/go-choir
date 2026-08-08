@@ -615,3 +615,22 @@ proven unbound after re-reading the agent/run authority, or the reconciler must
 reuse the concurrently installed valid activation. A concurrent regression must
 prove one authoritative winner, no winner-staling, no duplicate dispatch, and
 safe loser/replay behavior.
+
+
+## Global Texture wake serialization blocks unrelated documents — 2026-08-08
+
+Independent review rejected repair `015a11048d0ed01ff2376177a1dcc865328e961f`
+with a second high liveness finding. Its single Handler-wide wake mutex is held
+through the entire reconcile and run-construction path. Run construction imports
+media sources sequentially and may wait up to thirty seconds per URL, without a
+bounded URL count. One slow document can therefore block committed initial work,
+owner instructions, coagent updates, and boot reconciliation for every other
+owner and document on the computer.
+
+Same-document initial-wake serialization is required, but cross-document
+serialization is not. The lock must be keyed by the canonical
+`{owner_id, computer_id, doc_id}` scope (or expensive work must occur outside a
+narrow lock followed by exact authority revalidation). Lock lifecycle must not
+race waiters or leak unboundedly. Regression proof must retain the 40-way
+same-document winner-authority assertion and additionally prove a blocked wake
+for one document does not delay an unrelated document's reconcile/dispatch.
