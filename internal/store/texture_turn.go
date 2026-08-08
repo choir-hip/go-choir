@@ -362,6 +362,26 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		ownerInstructionIDs = append(ownerInstructionIDs, instruction.InstructionID)
 		causalRequestIDs = append(causalRequestIDs, instruction.RequestID)
 	}
+	if req.Outcome == types.TextureTurnRevision {
+		pendingInstructions, pendingErr := s.ListPendingLifecycleOwnerInstructions(ctx, ownerID, computerID, req.TrajectoryID, req.CallerAgentID, 1000)
+		if pendingErr != nil {
+			return types.LifecycleResult{}, pendingErr
+		}
+		expected := make([]types.LifecycleOwnerInstruction, 0, len(pendingInstructions))
+		for _, instruction := range pendingInstructions {
+			if instruction.HeadRevisionID == req.ExpectedHeadRevisionID {
+				expected = append(expected, instruction)
+			}
+		}
+		if len(expected) != len(req.OwnerInstructions) {
+			return types.LifecycleResult{}, ErrConcurrentStateChange
+		}
+		for i := range expected {
+			if expected[i].InstructionID != req.OwnerInstructions[i].InstructionID || expected[i].RequestID != req.OwnerInstructions[i].RequestID {
+				return types.LifecycleResult{}, ErrConcurrentStateChange
+			}
+		}
+	}
 	now := time.Now().UTC()
 	conditions := []objectgraph.ObjectCondition{
 		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
@@ -845,4 +865,26 @@ func textureTurnWorkEquivalent(existing, requested types.WorkItemRecord) bool {
 	left, _ := json.Marshal(existing)
 	right, _ := json.Marshal(requested)
 	return string(left) == string(right)
+}
+
+// GetAppliedTextureTurnByCallerRun returns the durable Texture-turn receipt
+// whose stored result names the exact caller activation. It is the recovery
+// authority for legacy mutation projections after process-local failures.
+func (s *Store) GetAppliedTextureTurnByCallerRun(ctx context.Context, ownerID, computerID, trajectoryID, runID string) (types.LifecycleResult, error) {
+	objects, err := s.lifecycleTransitionObjects(ctx, ogKindLifecycleCmd, strings.TrimSpace(trajectoryID), strings.TrimSpace(ownerID), strings.TrimSpace(computerID))
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	for i := len(objects) - 1; i >= 0; i-- {
+		receipt, decodeErr := decodeLifecycleObject[types.LifecycleCommandReceipt](objects[i])
+		if decodeErr != nil {
+			return types.LifecycleResult{}, decodeErr
+		}
+		stored := receipt.StoredResult
+		if receipt.Kind != types.LifecycleApplyTextureTurn || stored == nil || stored.TextureTurn == nil || stored.Agent == nil || strings.TrimSpace(stored.Agent.ActiveRunID) != strings.TrimSpace(runID) {
+			continue
+		}
+		return types.LifecycleResult{Receipt: receipt, Trajectory: stored.Trajectory, Schema: stored.Schema, WorkItem: stored.WorkItem, Agent: stored.Agent, Update: stored.Update, Events: stored.Events, Document: stored.Document, Revision: stored.Revision, TextureTurn: stored.TextureTurn, Controls: stored.Controls, TargetWorkItems: stored.TargetWorkItems}, nil
+	}
+	return types.LifecycleResult{}, ErrNotFound
 }

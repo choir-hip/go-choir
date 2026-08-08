@@ -1240,7 +1240,7 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 		t.Fatalf("commit no-revision wait turn: %v", err)
 	}
 	decisionMutation, err := s.GetAgentMutationByRun(ctx, ownerID, computerID, decisionRun.RunID)
-	if err != nil || decisionMutation == nil || decisionMutation.RevisionID != "" || decisionMutation.State != "deferred" {
+	if err != nil || decisionMutation == nil || decisionMutation.RevisionID != "" || decisionMutation.State != "sleeping" {
 		t.Fatalf("no-revision turn wrote fake mutation revision: %+v, %v", decisionMutation, err)
 	}
 	finishRun(decisionRun)

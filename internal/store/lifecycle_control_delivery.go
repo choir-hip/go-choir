@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -96,7 +97,15 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	if trajectory.Status != types.TrajectoryLive || trajectory.LifecycleVersion != req.ExpectedLifecycleVersion {
 		return types.LifecycleResult{}, ErrConcurrentStateChange
 	}
-	agentObj, agent, err := s.textureTurnAgentObject(ctx, ownerID, computerID, req.TargetAgentID)
+	agentCanonicalID, err := scopedAgentCanonicalID(ownerID, computerID, req.TargetAgentID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	agentObj, err := s.lifecycleGraph().GetObject(ctx, agentCanonicalID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	agent, err := decodeLifecycleObject[types.AgentRecord](agentObj)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -104,11 +113,27 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agentprofile.Canonical(agent.Role) != profile || (profile != agentprofile.Researcher && !(profile == agentprofile.Super && agent.AgentID == agentprofile.Super+":"+ownerID && agent.LifecycleVersion == 0)) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
-	runObj, run, err := s.textureTurnRunObject(ctx, ownerID, computerID, req.TargetRunID)
+	var runObj objectgraph.Object
+	var run types.RunRecord
+	if profile == agentprofile.Super {
+		runObj, err = s.getRunObjectByOwnerOG(ctx, ownerID, req.TargetRunID)
+		if err == nil {
+			err = ogDecode(runObj, &run)
+		}
+	} else {
+		runObj, run, err = s.textureTurnRunObject(ctx, ownerID, computerID, req.TargetRunID)
+	}
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if run.RunID != req.TargetRunID || run.OwnerID != ownerID || run.SandboxID != computerID || run.AgentID != req.TargetAgentID || run.TrajectoryID != req.TrajectoryID || agentprofile.Canonical(run.AgentProfile) != profile || !run.State.Active() {
+	if run.RunID != req.TargetRunID || run.OwnerID != ownerID || run.SandboxID != computerID || run.AgentID != req.TargetAgentID || agentprofile.Canonical(run.AgentProfile) != profile || !run.State.Active() {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	if profile == agentprofile.Super {
+		if strings.TrimSpace(run.TrajectoryID) != "" || metadataStringValueStore(run.Metadata, "assignment_trajectory_id") != req.TrajectoryID {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+	} else if run.TrajectoryID != req.TrajectoryID {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 
@@ -119,6 +144,7 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	events := make([]types.LifecycleEvent, 0, len(req.Controls))
 	eventObjs := make([]objectgraph.Object, 0, len(req.Controls))
 	controls := make([]types.CoagentSourcePacket, 0, len(req.Controls))
+	controlBindings := make([]map[string]string, 0, len(req.Controls))
 	seen := map[string]bool{}
 	for _, item := range req.Controls {
 		if seen[item.UpdateID] || !lifecycleRunBindsWork(run, item.TargetWorkItemID) {
@@ -160,7 +186,21 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 		objects = append(objects, eventObj)
 		eventObjs = append(eventObjs, eventObj)
 		controls = append(controls, update)
+		controlBindings = append(controlBindings, map[string]string{"update_id": update.UpdateID, "target_work_item_id": update.TargetWorkItemID, "producer_agent_id": update.AgentID})
 	}
+	if run.Metadata == nil {
+		run.Metadata = map[string]any{}
+	}
+	run.Metadata["assignment_trajectory_id"] = req.TrajectoryID
+	run.Metadata["lifecycle_control_bindings"] = controlBindings
+	run.UpdatedAt = now
+	runBody, err := json.Marshal(run)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	runUpdated := runObj
+	runUpdated.Body, runUpdated.ContentHash, runUpdated.UpdatedAt = runBody, objectgraph.SHA256(runBody), now
+	objects = append(objects, runUpdated)
 	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = seq, trajectory.LifecycleVersion+1, now
 	trajectoryUpdated, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, req.TrajectoryID, trajectory, lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, seq), trajectoryObj.CreatedAt, now)
 	if err != nil {

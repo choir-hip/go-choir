@@ -3336,6 +3336,18 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 		return nil
 	}
 
+	if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(rec.SandboxID) != "" {
+		if turn, turnErr := rt.store.GetAppliedTextureTurnByCallerRun(persistCtx, rec.OwnerID, rec.SandboxID, rec.TrajectoryID, rec.RunID); turnErr == nil && turn.TextureTurn != nil {
+			if turn.TextureTurn.Outcome == types.TextureTurnRevision && turn.Revision != nil {
+				_ = rt.store.CompleteAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, turn.Revision.RevisionID)
+			} else {
+				_ = rt.store.SleepAgentMutationAfterTextureTurn(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.TrajectoryID, rec.RunID)
+			}
+			return nil
+		} else if turnErr != nil && !errors.Is(turnErr, store.ErrNotFound) {
+			log.Printf("runtime: recover committed Texture turn for run %s: %v", rec.RunID, turnErr)
+		}
+	}
 	if strings.TrimSpace(mutation.RevisionID) != "" {
 		if err := rt.store.CompleteAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, mutation.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
 			log.Printf("runtime: texture agent revision run %s: complete written mutation: %v", rec.RunID, err)
