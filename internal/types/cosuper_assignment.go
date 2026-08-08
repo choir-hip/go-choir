@@ -257,6 +257,8 @@ type CoSuperAssignmentReport struct {
 	CertifiesOriginalSubject bool                        `json:"certifies_original_subject"`
 	CandidateSubjectDigest   string                      `json:"candidate_subject_digest,omitempty"`
 	CandidateID              string                      `json:"candidate_id,omitempty"`
+	Summary                  string                      `json:"summary,omitempty"`
+	EvidenceRefs             []string                    `json:"evidence_refs,omitempty"`
 	CreatedAt                time.Time                   `json:"created_at"`
 }
 
@@ -276,6 +278,19 @@ func (r CoSuperAssignmentReport) ValidateAgainst(a CoSuperAssignment) error {
 	}
 	if !ValidSHA256Digest(r.ObservedSubjectDigest) {
 		return fmt.Errorf("co-super assignment report: observed_subject_digest is required")
+	}
+	if strings.TrimSpace(r.Summary) == "" || r.Summary != strings.TrimSpace(r.Summary) {
+		return fmt.Errorf("co-super assignment report: canonical summary is required")
+	}
+	seenEvidence := map[string]struct{}{}
+	for _, ref := range r.EvidenceRefs {
+		if strings.TrimSpace(ref) == "" || ref != strings.TrimSpace(ref) {
+			return fmt.Errorf("co-super assignment report: evidence refs must be canonical")
+		}
+		if _, duplicate := seenEvidence[ref]; duplicate {
+			return fmt.Errorf("co-super assignment report: duplicate evidence ref")
+		}
+		seenEvidence[ref] = struct{}{}
 	}
 	if a.Binding.Kind == CoSuperAssignmentImplementation {
 		if r.Verdict != CoSuperVerdictNone {
@@ -331,7 +346,7 @@ func (r CoSuperAssignmentReport) ValidateAgainst(a CoSuperAssignment) error {
 			changed = true
 		}
 	}
-	if changed {
+	if changed && !r.Late {
 		if r.CandidateSubjectDigest != r.ObservedSubjectDigest || strings.TrimSpace(r.CandidateID) == "" || r.CertifiesOriginalSubject {
 			return fmt.Errorf("co-super assignment report: changed subject requires a distinct non-certifying candidate identity")
 		}
@@ -363,6 +378,7 @@ type CoSuperAssignmentCommandResult struct {
 	Assignment CoSuperAssignment        `json:"assignment"`
 	Report     *CoSuperAssignmentReport `json:"report,omitempty"`
 	Candidate  *CoSuperSubjectCandidate `json:"candidate,omitempty"`
+	Update     *CoagentSourcePacket     `json:"update,omitempty"`
 	Replay     bool                     `json:"replay"`
 }
 

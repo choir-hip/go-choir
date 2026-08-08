@@ -29,7 +29,7 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 		agentprofile.Conductor: {"cancel_agent"},
 		agentprofile.Super: append(append(slices.Clone(ordinary),
 			"update_coagent"),
-			"assign_co_super", "cancel_co_super_assignment", "destroy_capsule", "inspect_capsule", "list_capsules", "spawn_capsule"),
+			"assign_co_super", "cancel_co_super_assignment", "report_to_texture", "destroy_capsule", "inspect_capsule", "list_capsules", "spawn_capsule"),
 		agentprofile.CoSuper: {
 			"glob", "grep", "list_evidence", "read_evidence", "read_file", "save_evidence",
 			"update_coagent", "verify_model_capability",
@@ -167,4 +167,20 @@ func registryToolNames(registry *toolregistry.ToolRegistry) []string {
 		names[index] = tool.Name
 	}
 	return names
+}
+
+func TestPersistentSuperReportToolDoesNotDependOnCapsuleExecutor(t *testing.T) {
+	rt := &Runtime{}
+	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	registry := rt.ToolRegistryForProfile(agentprofile.Super)
+	if _, ok := registry.Lookup("report_to_texture"); !ok {
+		t.Fatal("persistent Super lacks capsule-independent report_to_texture")
+	}
+	for _, name := range []string{"assign_co_super", "cancel_co_super_assignment", "spawn_capsule"} {
+		if _, ok := registry.Lookup(name); ok {
+			t.Fatalf("capsule-unavailable Super exposes %s", name)
+		}
+	}
 }

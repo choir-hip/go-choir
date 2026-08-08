@@ -215,6 +215,8 @@ func ComputeQueueLifecycleUpdateDigest(req types.QueueLifecycleUpdateRequest) (s
 	if err != nil {
 		return "", err
 	}
+	// Historical producer reports must retain their byte-identical digest
+	// shape so receipts written before target-work correlation replay forever.
 	return lifecycleDigest(struct {
 		CommandID, TrajectoryID, TargetAgentID, ProducerAgentID string
 		UpdateID, ProducerUpdateID, PayloadDigest, WorkItemID   string
@@ -225,6 +227,29 @@ func ComputeQueueLifecycleUpdateDigest(req types.QueueLifecycleUpdateRequest) (s
 		TargetAgentID: strings.TrimSpace(req.TargetAgentID), ProducerAgentID: strings.TrimSpace(req.ProducerAgentID),
 		UpdateID: strings.TrimSpace(req.UpdateID), ProducerUpdateID: strings.TrimSpace(req.ProducerUpdateID), PayloadDigest: strings.TrimSpace(req.PayloadDigest),
 		SourceRunID: strings.TrimSpace(req.SourceRunID), ChannelID: strings.TrimSpace(req.ChannelID), Role: strings.TrimSpace(req.Role),
+		WorkItemID: strings.TrimSpace(req.WorkItemID), WorkDisposition: workDisposition,
+	})
+}
+
+func ComputeQueuePersistentSuperReportDigest(req types.QueueLifecycleUpdateRequest) (string, error) {
+	workDisposition, err := normalizeUpdateWorkDisposition(req.WorkDisposition)
+	if err != nil {
+		return "", err
+	}
+	return lifecycleDigest(struct {
+		Domain                                                  string
+		CommandID, TrajectoryID, TargetAgentID, ProducerAgentID string
+		UpdateID, ProducerUpdateID, PayloadDigest, WorkItemID   string
+		SourceRunID, ChannelID, Role                            string
+		ControlBindingID, TargetWorkItemID                      string
+		WorkDisposition                                         types.WorkItemStatus
+	}{
+		Domain:    "choir.lifecycle.persistent-super-report/v1",
+		CommandID: strings.TrimSpace(req.CommandID), TrajectoryID: strings.TrimSpace(req.TrajectoryID),
+		TargetAgentID: strings.TrimSpace(req.TargetAgentID), ProducerAgentID: strings.TrimSpace(req.ProducerAgentID),
+		UpdateID: strings.TrimSpace(req.UpdateID), ProducerUpdateID: strings.TrimSpace(req.ProducerUpdateID), PayloadDigest: strings.TrimSpace(req.PayloadDigest),
+		SourceRunID: strings.TrimSpace(req.SourceRunID), ChannelID: strings.TrimSpace(req.ChannelID), Role: strings.TrimSpace(req.Role),
+		ControlBindingID: strings.TrimSpace(req.ControlBindingID), TargetWorkItemID: strings.TrimSpace(req.TargetWorkItemID),
 		WorkItemID: strings.TrimSpace(req.WorkItemID), WorkDisposition: workDisposition,
 	})
 }
@@ -2148,6 +2173,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	req.TargetAgentID, req.ProducerAgentID = strings.TrimSpace(req.TargetAgentID), strings.TrimSpace(req.ProducerAgentID)
 	req.ProducerUpdateID, req.PayloadDigest = strings.TrimSpace(req.ProducerUpdateID), strings.TrimSpace(req.PayloadDigest)
 	req.SourceRunID, req.ChannelID, req.Role = strings.TrimSpace(req.SourceRunID), strings.TrimSpace(req.ChannelID), strings.TrimSpace(req.Role)
+	req.ControlBindingID, req.TargetWorkItemID = strings.TrimSpace(req.ControlBindingID), strings.TrimSpace(req.TargetWorkItemID)
 	req.WorkItemID = strings.TrimSpace(req.WorkItemID)
 	req.WorkDisposition, err = normalizeUpdateWorkDisposition(req.WorkDisposition)
 	if err != nil {
@@ -2170,6 +2196,9 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle queue update: payload digest mismatch: %w", ErrLifecycleCommandConflict)
 	}
 	computedCommandDigest, commandDigestErr := ComputeQueueLifecycleUpdateDigest(req)
+	if req.ControlBindingID != "" || req.TargetWorkItemID != "" {
+		computedCommandDigest, commandDigestErr = ComputeQueuePersistentSuperReportDigest(req)
+	}
 	if err := requireLifecycleDigest(req.CommandDigest, computedCommandDigest, commandDigestErr); err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -2210,22 +2239,75 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		agent.LifecycleVersion <= 0 || agent.Profile != "texture" || agent.Role != "texture" || strings.TrimSpace(agent.ChannelID) != documentID {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
-	producerRunObj, err := s.lifecycleGetObject(ctx, ogKindRun, ownerID, computerID, strings.TrimSpace(req.SourceRunID))
-	if err != nil {
-		return types.LifecycleResult{}, err
-	}
-	producerRun, err := decodeLifecycleObject[types.RunRecord](producerRunObj)
-	if err != nil {
-		return types.LifecycleResult{}, err
-	}
-	boundWorkItemIDs, err := lifecycleActivationWorkItemIDs(producerRun.Metadata)
-	if err != nil || producerRun.RunID != strings.TrimSpace(req.SourceRunID) || producerRun.OwnerID != ownerID ||
-		producerRun.SandboxID != computerID || producerRun.TrajectoryID != req.TrajectoryID || producerRun.AgentID != req.ProducerAgentID ||
-		strings.TrimSpace(producerRun.AgentProfile) == "" || strings.TrimSpace(producerRun.AgentRole) == "" || !producerRun.State.Valid() ||
-		strings.TrimSpace(producerRun.AgentProfile) != strings.TrimSpace(producerRun.AgentRole) ||
-		strings.TrimSpace(producerRun.AgentRole) != req.Role || strings.TrimSpace(producerRun.ChannelID) != req.ChannelID ||
-		!containsLifecycleIdentity(boundWorkItemIDs, req.WorkItemID) {
-		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	var producerRunObj objectgraph.Object
+	var producerRun types.RunRecord
+	var producerAuthorityConditions []objectgraph.ObjectCondition
+	persistentSuperProducer := req.ProducerAgentID == "super:"+ownerID
+	if persistentSuperProducer {
+		if req.ControlBindingID == "" || req.TargetWorkItemID == "" || req.Role != "super" {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		producerRunObj, err = s.getRunObjectByOwnerOG(ctx, ownerID, req.SourceRunID)
+		if err == nil {
+			producerRun, err = decodeLifecycleObject[types.RunRecord](producerRunObj)
+		}
+		if err != nil {
+			return types.LifecycleResult{}, err
+		}
+		if producerRunObj.ComputerID != "" || producerRun.RunID != req.SourceRunID || producerRun.OwnerID != ownerID ||
+			producerRun.SandboxID != computerID || producerRun.TrajectoryID != "" || producerRun.AgentID != req.ProducerAgentID ||
+			producerRun.AgentProfile != "super" || producerRun.AgentRole != "super" || !persistentSuperRunStateAllowed(producerRun.State) ||
+			producerRun.ChannelID != req.ChannelID || metadataExactString(producerRun.Metadata, "assignment_trajectory_id") != req.TrajectoryID ||
+			!persistentSuperControlBinding(producerRun.Metadata, req.TrajectoryID, req.WorkItemID, req.ControlBindingID) {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		controlKey := req.TrajectoryID + "\x00" + req.ProducerAgentID + "\x00" + req.TargetAgentID + "\x00" + req.ControlBindingID
+		controlObj, control, controlErr := s.textureTurnUpdateObject(ctx, ownerID, computerID, controlKey)
+		if controlErr != nil {
+			return types.LifecycleResult{}, controlErr
+		}
+		if control.UpdateID != req.ControlBindingID || control.ProducerUpdateID != req.ControlBindingID ||
+			control.Direction != types.LifecyclePacketDirectionControl || control.AgentID != req.TargetAgentID ||
+			control.TargetAgentID != req.ProducerAgentID || control.TargetWorkItemID != req.WorkItemID ||
+			control.TrajectoryID != req.TrajectoryID || control.DeliveredToRunID != req.SourceRunID || control.DeliveredAt == nil {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		targetRunObj, targetRun, targetErr := s.textureTurnRunObject(ctx, ownerID, computerID, control.SourceRunID)
+		if targetErr != nil {
+			return types.LifecycleResult{}, targetErr
+		}
+		targetWorkObj, targetWork, targetErr := s.lifecycleWorkObject(ctx, ownerID, computerID, req.TargetWorkItemID)
+		if targetErr != nil {
+			return types.LifecycleResult{}, targetErr
+		}
+		if targetRun.RunID != control.SourceRunID || targetRun.AgentID != req.TargetAgentID || targetRun.TrajectoryID != req.TrajectoryID ||
+			targetRun.AgentProfile != "texture" || targetRun.AgentRole != "texture" || !targetRun.State.Valid() ||
+			!lifecycleRunBindsWork(targetRun, req.TargetWorkItemID) || targetWork.Status != types.WorkItemOpen ||
+			targetWork.TrajectoryID != req.TrajectoryID || targetWork.AssignedAgentID != req.TargetAgentID || targetWork.AuthorityProfile != "texture" {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		producerAuthorityConditions = append(producerAuthorityConditions,
+			coSuperObjectCondition(controlObj), coSuperObjectCondition(targetRunObj), coSuperObjectCondition(targetWorkObj))
+	} else {
+		if req.ControlBindingID != "" || req.TargetWorkItemID != "" {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		producerRunObj, err = s.lifecycleGetObject(ctx, ogKindRun, ownerID, computerID, req.SourceRunID)
+		if err == nil {
+			producerRun, err = decodeLifecycleObject[types.RunRecord](producerRunObj)
+		}
+		if err != nil {
+			return types.LifecycleResult{}, err
+		}
+		boundWorkItemIDs, bindingErr := lifecycleActivationWorkItemIDs(producerRun.Metadata)
+		if bindingErr != nil || producerRun.RunID != req.SourceRunID || producerRun.OwnerID != ownerID ||
+			producerRun.SandboxID != computerID || producerRun.TrajectoryID != req.TrajectoryID || producerRun.AgentID != req.ProducerAgentID ||
+			strings.TrimSpace(producerRun.AgentProfile) == "" || strings.TrimSpace(producerRun.AgentRole) == "" || !producerRun.State.Valid() ||
+			strings.TrimSpace(producerRun.AgentProfile) != strings.TrimSpace(producerRun.AgentRole) ||
+			strings.TrimSpace(producerRun.AgentRole) != req.Role || strings.TrimSpace(producerRun.ChannelID) != req.ChannelID ||
+			!containsLifecycleIdentity(boundWorkItemIDs, req.WorkItemID) {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
 	}
 	workObj, work, err := s.lifecycleWorkObject(ctx, ownerID, computerID, req.WorkItemID)
 	if err != nil {
@@ -2250,8 +2332,8 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 			stored.TargetAgentID != req.TargetAgentID || stored.AgentID != req.ProducerAgentID || stored.ProducerUpdateID != req.ProducerUpdateID ||
 			strings.TrimSpace(stored.SourceRunID) != req.SourceRunID || strings.TrimSpace(stored.ChannelID) != req.ChannelID || strings.TrimSpace(stored.Role) != req.Role ||
 			stored.PayloadDigest != req.PayloadDigest || strings.TrimSpace(stored.ProducerWorkItemID) != req.WorkItemID ||
-			strings.TrimSpace(stored.WorkItemID) != req.WorkItemID || strings.TrimSpace(stored.TargetWorkItemID) != "" ||
-			stored.WorkDisposition != req.WorkDisposition {
+			strings.TrimSpace(stored.WorkItemID) != req.WorkItemID || strings.TrimSpace(stored.ControlBindingID) != req.ControlBindingID ||
+			strings.TrimSpace(stored.TargetWorkItemID) != req.TargetWorkItemID || stored.WorkDisposition != req.WorkDisposition {
 			return types.LifecycleResult{}, ErrLifecycleCommandConflict
 		}
 		return types.LifecycleResult{Trajectory: trajectory, Agent: &agent, Update: &stored, Replay: true}, nil
@@ -2270,7 +2352,9 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 			TargetAgentID: req.TargetAgentID, TrajectoryID: req.TrajectoryID,
 			ChannelID: req.ChannelID, Role: req.Role, SourceRunID: req.SourceRunID,
 			Direction:          types.LifecyclePacketDirectionProducerReport,
+			ControlBindingID:   req.ControlBindingID,
 			ProducerWorkItemID: req.WorkItemID,
+			TargetWorkItemID:   req.TargetWorkItemID,
 			WorkItemID:         req.WorkItemID, WorkDisposition: req.WorkDisposition,
 			MessageSeq: nextSeq, PayloadDigest: req.PayloadDigest,
 			Disposition: types.UpdateLate, DispositionRef: lifecycleTerminalTrajectoryRef(req.TrajectoryID),
@@ -2307,6 +2391,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 			{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash},
 			{CanonicalID: updateObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
 		}
+		conditions = append(conditions, producerAuthorityConditions...)
 		return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, []objectgraph.Object{sequenceUpdated, updateObj, eventObj, receiptObj}, types.LifecycleResult{
 			Receipt: receipt, Trajectory: trajectory, Agent: &agent, Update: &update, Events: []types.LifecycleEvent{event},
 		})
@@ -2321,7 +2406,9 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		TargetAgentID: req.TargetAgentID, TrajectoryID: req.TrajectoryID,
 		ChannelID: req.ChannelID, Role: req.Role, SourceRunID: req.SourceRunID,
 		Direction:          types.LifecyclePacketDirectionProducerReport,
+		ControlBindingID:   req.ControlBindingID,
 		ProducerWorkItemID: req.WorkItemID,
+		TargetWorkItemID:   req.TargetWorkItemID,
 		WorkItemID:         req.WorkItemID, WorkDisposition: req.WorkDisposition,
 		PayloadDigest: req.PayloadDigest, Disposition: types.UpdatePending,
 		MessageSeq:       nextSeq,
@@ -2367,6 +2454,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash},
 		{CanonicalID: updateObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
 	}
+	conditions = append(conditions, producerAuthorityConditions...)
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, []objectgraph.Object{trajectoryUpdated, agentUpdated, updateObj, eventObj, receiptObj}, types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &agent, Update: &update, Events: []types.LifecycleEvent{event}})
 }
 

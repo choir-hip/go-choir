@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -793,6 +794,8 @@ func newRecordAssignedCoSuperReportTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		Result        types.CoSuperAssignmentResultKind `json:"result"`
 		Verdict       types.CoSuperAssignmentVerdict    `json:"verdict"`
+		Summary       string                            `json:"summary"`
+		EvidenceRefs  []string                          `json:"evidence_refs"`
 		ExecutionRefs []string                          `json:"execution_refs"`
 	}
 	return toolregistry.Tool{
@@ -800,8 +803,10 @@ func newRecordAssignedCoSuperReportTool(rt *Runtime) toolregistry.Tool {
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"result":         map[string]any{"type": "string", "enum": []string{"completed", "failed", "blocked", "partial"}},
 			"verdict":        map[string]any{"type": "string", "enum": []string{"none", "pass", "fail", "abstain"}},
+			"summary":        map[string]any{"type": "string"},
+			"evidence_refs":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 			"execution_refs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-		}, []string{"result", "verdict", "execution_refs"}, false),
+		}, []string{"result", "verdict", "summary", "evidence_refs", "execution_refs"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			toolCtx, err := requireCapsuleMutationRole(ctx)
 			if err != nil {
@@ -811,6 +816,11 @@ func newRecordAssignedCoSuperReportTool(rt *Runtime) toolregistry.Tool {
 			if err := json.Unmarshal(raw, &input); err != nil {
 				return "", err
 			}
+			input.Summary = strings.TrimSpace(input.Summary)
+			if input.Summary == "" {
+				return "", fmt.Errorf("record_assignment_result summary is required")
+			}
+			input.EvidenceRefs = sortedUniqueStrings(input.EvidenceRefs)
 			input.ExecutionRefs = trimNonEmptyStrings(input.ExecutionRefs)
 			receipts, err := toolCtx.Executor.ResolveExecutionReceipts(input.ExecutionRefs)
 			if err != nil && len(input.ExecutionRefs) > 0 {
@@ -827,10 +837,16 @@ func newRecordAssignedCoSuperReportTool(rt *Runtime) toolregistry.Tool {
 					types.CoSuperRecordedOutput{OutputID: commandID + ":stderr", Kind: "stderr", Digest: "sha256:" + strings.TrimPrefix(receipt.StderrDigest, "sha256:"), Ref: receipt.ReceiptRef + "#stderr"})
 			}
 			execution := toolregistry.ExecutionContextFrom(ctx)
-			report := types.CoSuperAssignmentReport{Result: input.Result, Verdict: input.Verdict, Commands: commands, Outputs: outputs}
+			report := types.CoSuperAssignmentReport{Result: input.Result, Verdict: input.Verdict, Summary: input.Summary,
+				EvidenceRefs: input.EvidenceRefs, Commands: commands, Outputs: outputs}
 			result, err := rt.recordAssignedCoSuperReport(ctx, execution.RunRecord, execution.ToolCallID, report)
 			if err != nil {
 				return "", err
+			}
+			// Store committed the exact parent obligation before this wake. Replays
+			// and late evidence-only reports never send a second actor signal.
+			if !result.Replay && result.Update != nil {
+				rt.wakeUpdatedCoagent(ctx, *result.Update)
 			}
 			return toolregistry.ResultJSON(map[string]any{"receipt": result.Receipt, "assignment_id": result.Assignment.AssignmentID,
 				"attempt": result.Assignment.Binding.Attempt, "disposition": result.Assignment.Disposition, "report": result.Report, "candidate": result.Candidate})
@@ -844,6 +860,21 @@ func randomCapsuleID() (string, error) {
 		return "", fmt.Errorf("capsule identity: %w", err)
 	}
 	return "capsule-" + hex.EncodeToString(value[:]), nil
+}
+
+func sortedUniqueStrings(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func trimNonEmptyStrings(values []string) []string {

@@ -588,7 +588,8 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 			return types.LifecycleResult{}, getErr
 		}
 		producerWorkID, targetWorkID, bindingErr := ResolveLifecyclePacketWorkBindings(update)
-		if bindingErr != nil || update.Direction != types.LifecyclePacketDirectionProducerReport || targetWorkID != "" ||
+		if bindingErr != nil || update.Direction != types.LifecyclePacketDirectionProducerReport ||
+			(targetWorkID != "" && targetWorkID != req.CallerWorkItemID) ||
 			producerWorkID != disposition.ProducerWorkItemID || update.UpdateID != disposition.UpdateID ||
 			update.ProducerUpdateID != disposition.ProducerUpdateID || update.AgentID != disposition.ProducerAgentID ||
 			update.TargetAgentID != req.CallerAgentID || update.TrajectoryID != req.TrajectoryID || update.Disposition != types.UpdatePending {

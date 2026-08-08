@@ -425,10 +425,21 @@ func selectLifecycleControlActivation(updates []types.CoagentSourcePacket, traje
 	}
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	if trajectoryID == "" {
-		trajectoryID = strings.TrimSpace(updates[0].TrajectoryID)
+		for _, update := range updates {
+			if update.Direction == types.LifecyclePacketDirectionControl {
+				trajectoryID = strings.TrimSpace(update.TrajectoryID)
+				break
+			}
+		}
+	}
+	if trajectoryID == "" {
+		return nil
 	}
 	out := make([]types.CoagentSourcePacket, 0, len(updates))
 	for _, update := range updates {
+		if update.Direction != types.LifecyclePacketDirectionControl {
+			continue
+		}
 		if strings.TrimSpace(update.TrajectoryID) != trajectoryID {
 			continue
 		}
@@ -570,6 +581,11 @@ func coagentUpdateDeliverableForRun(rec *types.RunRecord, update types.CoagentSo
 		}
 	}
 	if isPersistentSuperAgentRun(rec) {
+		if update.Direction == types.LifecyclePacketDirectionProducerReport {
+			packet := normalizeCoagentSourcePacketPayload(update.Packet)
+			return update.DeliveredAt != nil && strings.TrimSpace(update.DeliveredToRunID) == strings.TrimSpace(rec.RunID) &&
+				(packet.Kind == "execution_result" || packet.Kind == "blocker" || packet.Kind == "evidence_update") && validateCoagentSourcePacketPayload(packet) == nil
+		}
 		return persistentSuperExecutablePacket(update)
 	}
 	return true

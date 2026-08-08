@@ -83,7 +83,13 @@ func (rt *Runtime) startAssignedCoSuper(ctx context.Context, parentRunID, ownerI
 
 func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent types.RunRecord, req StartAssignedCoSuperRequest) (AssignedCoSuperStart, error) {
 	req.Objective = strings.TrimSpace(req.Objective)
-	if req.Objective == "" || req.Attempt == 0 || strings.TrimSpace(req.ParentWorkItemID) == "" || strings.TrimSpace(req.ToolCallID) == "" ||
+	// Provider arguments never own lifecycle attempt. The runtime currently
+	// derives the first occurrence; the internal field remains for a future
+	// sibling-owned retry selector without changing this tool contract.
+	if req.Attempt == 0 {
+		req.Attempt = 1
+	}
+	if req.Objective == "" || strings.TrimSpace(req.ParentWorkItemID) == "" || strings.TrimSpace(req.ToolCallID) == "" ||
 		(req.Kind != types.CoSuperAssignmentImplementation && req.Kind != types.CoSuperAssignmentVerification) ||
 		!types.ValidSHA256Digest(req.ScopeDigest) || !types.ValidSHA256Digest(req.SubjectDigest) {
 		return AssignedCoSuperStart{}, fmt.Errorf("assigned CoSuper requires objective, kind, attempt, scope digest, and immutable subject digest")
