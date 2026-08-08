@@ -1759,6 +1759,10 @@ func (h *Handler) HandleTextureDocumentStream(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
+	if strings.TrimSpace(doc.TrajectoryID) != "" {
+		h.handleLifecycleTextureDocumentStream(w, r, doc)
+		return
+	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")

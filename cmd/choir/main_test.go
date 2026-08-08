@@ -384,6 +384,137 @@ func TestExecutionIdentityCLICommonCommitAllowsBoundMixedGeneration(t *testing.T
 	}
 }
 
+func TestTextureShowCurrentAndExactHistoricalVersion(t *testing.T) {
+	var revisionPath string
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/texture/documents/doc-one":
+			_, _ = io.WriteString(w, `{"doc_id":"doc-one","current_revision_id":"rev-current"}`)
+		case "/api/texture/revisions/rev-current", "/api/texture/revisions/rev-history", "/api/texture/revisions/rev-foreign":
+			revisionPath = r.URL.Path
+			revisionDocID := "doc-one"
+			if strings.HasSuffix(r.URL.Path, "rev-foreign") {
+				revisionDocID = "doc-other"
+			}
+			_, _ = io.WriteString(w, `{"revision_id":"`+strings.TrimPrefix(r.URL.Path, "/api/texture/revisions/")+`","doc_id":"`+revisionDocID+`","content":"body"}`)
+		default:
+			t.Errorf("unexpected request %s", r.URL.String())
+			http.NotFound(w, r)
+		}
+	}))
+	defer stub.Close()
+
+	for name, args := range map[string][]string{
+		"current":    {"texture", "show", "--host=" + stub.URL, "doc-one"},
+		"historical": {"texture", "show", "--host=" + stub.URL, "--revision=rev-history", "doc-one"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			if code := run(args, &out, &errOut); code != 0 {
+				t.Fatalf("code=%d stderr=%s", code, errOut.String())
+			}
+			var response textureShowCLIResponse
+			if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Schema != "choir.texture_show.v1" || len(response.Document) == 0 || len(response.Revision) == 0 {
+				t.Fatalf("show response=%s", out.String())
+			}
+			if name == "current" && (!response.Current || revisionPath != "/api/texture/revisions/rev-current") {
+				t.Fatalf("current response=%s path=%q", out.String(), revisionPath)
+			}
+			if name == "historical" && (response.Current || revisionPath != "/api/texture/revisions/rev-history") {
+				t.Fatalf("historical response=%s path=%q", out.String(), revisionPath)
+			}
+		})
+	}
+	var out, errOut bytes.Buffer
+	if code := run([]string{"texture", "show", "--host=" + stub.URL, "--revision=rev-foreign", "doc-one"}, &out, &errOut); code != 1 || !strings.Contains(errOut.String(), "not an exact version of this document") {
+		t.Fatalf("cross-document show code=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+}
+
+func TestTextureWatchJSONLResumeCursorAndDeterministicPage(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/texture/documents/doc-watch/events" || r.URL.Query().Get("after") != "7" || r.URL.Query().Get("limit") != "2" {
+			t.Errorf("watch request=%s", r.URL.String())
+		}
+		_, _ = io.WriteString(w, `{"schema":"choir.texture_observation.v1","events":[{"schema":"choir.texture_observation.v1","cursor":8,"kind":"update_applied","work_state":"working"},{"schema":"choir.texture_observation.v1","cursor":9,"kind":"trajectory_settled","work_state":"terminal"}],"next_cursor":9,"watermark":9}`)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"texture", "watch", "--host=" + stub.URL, "--after=7", "--limit=2", "--once", "doc-watch"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, errOut.String())
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 2 || !strings.Contains(lines[0], `"cursor":8`) || !strings.Contains(lines[1], `"cursor":9`) {
+		t.Fatalf("watch JSONL=%q", out.String())
+	}
+}
+
+func TestTextureWatchReconnectsFromLastDurableCursorWithoutSleep(t *testing.T) {
+	requests := 0
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		switch requests {
+		case 1:
+			if r.URL.Query().Get("after") != "11" {
+				t.Errorf("initial cursor=%q, want 11", r.URL.Query().Get("after"))
+			}
+			_, _ = io.WriteString(w, `{"schema":"choir.texture_observation.v1","events":[{"cursor":12,"work_state":"working"}],"next_cursor":12,"watermark":12}`)
+		case 2:
+			if r.URL.Query().Get("after") != "12" {
+				t.Errorf("cursor after delivered event=%q, want 12", r.URL.Query().Get("after"))
+			}
+			http.Error(w, "temporary", http.StatusServiceUnavailable)
+		case 3:
+			if r.URL.Query().Get("after") != "12" {
+				t.Errorf("reconnect cursor=%q, want acknowledged 12", r.URL.Query().Get("after"))
+			}
+			_, _ = io.WriteString(w, `{"schema":"choir.texture_observation.v1","events":[{"cursor":13,"work_state":"terminal"}],"next_cursor":13,"watermark":13}`)
+		default:
+			t.Errorf("unexpected extra request %d", requests)
+		}
+	}))
+	defer stub.Close()
+	var out, errOut bytes.Buffer
+	code := run([]string{"texture", "watch", "--host=" + stub.URL, "--after=11", "--poll-interval=0", "--reconnect-attempts=1", "doc-watch"}, &out, &errOut)
+	if code != 0 || requests != 3 || strings.Count(out.String(), `"cursor":12`) != 1 || strings.Count(out.String(), `"cursor":13`) != 1 {
+		t.Fatalf("code=%d requests=%d stdout=%s stderr=%s", code, requests, out.String(), errOut.String())
+	}
+}
+
+func TestTextureWatchReportsCursorExpiry(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"schema":"choir.texture_observation.v1","cursor_expired":true,"replay_required":true,"next_cursor":999,"watermark":12}`)
+	}))
+	defer stub.Close()
+	var out, errOut bytes.Buffer
+	code := run([]string{"texture", "watch", "--host=" + stub.URL, "--after=999", "--once", "--reconnect-attempts=0", "doc-watch"}, &out, &errOut)
+	if code != 1 || !strings.Contains(errOut.String(), "cursor 999 expired; replay required at watermark 12") || out.Len() != 0 {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+}
+
+func TestTextureOpenSourceUsesExactPinnedIdentity(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/texture/documents/doc-source/source-open" || r.URL.Query().Get("revision_id") != "rev-2" ||
+			r.URL.Query().Get("source_ref_id") != "obj:choir.source_ref:one" || r.URL.Query().Get("source_ref_version_id") != "ver-ref-2" {
+			t.Errorf("source open request=%s", r.URL.String())
+		}
+		_, _ = io.WriteString(w, `{"schema":"choir.texture_source_open.v1","revision_id":"rev-2","source_identity":{"source_entity_hash":"sha256:source","selectors":[{"kind":"text_quote"}],"open_path":"/exact"}}`)
+	}))
+	defer stub.Close()
+	var out, errOut bytes.Buffer
+	code := run([]string{"texture", "open-source", "--host=" + stub.URL, "--revision=rev-2", "--source-ref=obj:choir.source_ref:one", "--source-ref-version=ver-ref-2", "doc-source"}, &out, &errOut)
+	if code != 0 || !strings.Contains(out.String(), `"source_entity_hash": "sha256:source"`) {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+	}
+}
+
 func TestLifecycleEventsUsesDurableCursor(t *testing.T) {
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/api/trajectories/trajectory-one/events" {
