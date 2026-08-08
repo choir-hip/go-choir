@@ -184,7 +184,7 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 	if err != nil {
 		return nil, fmt.Errorf("list pending lifecycle Texture updates: %w", err)
 	}
-	instructions, err := rt.Store.ListPendingLifecycleOwnerInstructions(ctx, ownerID, doc.ComputerID, doc.TrajectoryID, textureAgentID, 100)
+	instructions, err := rt.Store.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, doc.ComputerID, doc.TrajectoryID, textureAgentID, "")
 	if err != nil {
 		return nil, fmt.Errorf("list pending lifecycle owner instructions: %w", err)
 	}

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"sort"
 	"strings"
 	"time"
 
@@ -392,32 +391,13 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		causalRequestIDs = append(causalRequestIDs, instruction.RequestID)
 	}
 	// Every outcome consumes one exact ordered same-head owner occurrence set.
-	// Checking only revision outcomes lets a late tell race a wait/block/no-change
-	// turn and strand that occurrence behind an already committed activation.
-	// Read the complete object set while trajectoryMu is held rather than using
-	// the externally bounded list API: completeness is an atomic precondition.
-	pendingInstructionObjects, pendingErr := s.lifecycleTransitionObjects(ctx, ogKindOwnerInstruction, req.TrajectoryID, ownerID, computerID)
+	// Runtime construction and reducer completeness share the same unbounded
+	// reader; the store lock makes this list plus the subsequent object CAS one
+	// atomic precondition even when more than one API page of tells is pending.
+	expected, pendingErr := s.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, computerID, req.TrajectoryID, req.CallerAgentID, req.ExpectedHeadRevisionID)
 	if pendingErr != nil {
 		return types.LifecycleResult{}, pendingErr
 	}
-	expected := make([]types.LifecycleOwnerInstruction, 0, len(pendingInstructionObjects))
-	for _, obj := range pendingInstructionObjects {
-		instruction, decodeErr := decodeLifecycleObject[types.LifecycleOwnerInstruction](obj)
-		if decodeErr != nil {
-			return types.LifecycleResult{}, decodeErr
-		}
-		if instruction.Status == types.LifecycleOwnerInstructionPending &&
-			instruction.TargetAgentID == req.CallerAgentID &&
-			instruction.HeadRevisionID == req.ExpectedHeadRevisionID {
-			expected = append(expected, instruction)
-		}
-	}
-	sort.Slice(expected, func(i, j int) bool {
-		if expected[i].ReducerSeq == expected[j].ReducerSeq {
-			return expected[i].InstructionID < expected[j].InstructionID
-		}
-		return expected[i].ReducerSeq < expected[j].ReducerSeq
-	})
 	if len(expected) != len(req.OwnerInstructions) {
 		return types.LifecycleResult{}, ErrConcurrentStateChange
 	}
@@ -708,6 +688,12 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 				return types.LifecycleResult{}, ErrConcurrentStateChange
 			}
 			addCondition(objectgraph.ObjectCondition{CanonicalID: targetAgentObj.CanonicalID, Exists: true, ExpectedContentHash: targetAgentObj.ContentHash})
+		}
+		// Persistent Super has execution authority, so every continuation (not
+		// only its opener) must remain a typed executable request. Validate at
+		// the reducer boundary before constructing any backlog object.
+		if binding.TargetProfile == agentprofile.Super && (control.Packet.Kind != "execution_request" || len(control.Packet.Actions) == 0) {
+			return types.LifecycleResult{}, fmt.Errorf("apply Texture turn: persistent-Super control requires execution_request actions")
 		}
 		if binding.TargetRun != nil {
 			targetRunObj, targetRun, runErr := s.textureTurnRunObject(ctx, ownerID, computerID, binding.TargetRun.RunID)

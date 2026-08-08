@@ -140,6 +140,9 @@ func (h *Handler) projectTextureLifecycleEvent(ctx context.Context, doc types.Do
 		out.EventType = "control"
 		out.ControlID = event.UpdateID
 	}
+	if !textureLifecycleEventCanAdvanceVersion(event.Kind) {
+		return out, nil
+	}
 	for i := len(event.ArtifactRefs) - 1; i >= 0; i-- {
 		revision, err := h.Store.GetLifecycleRevision(ctx, doc.OwnerID, doc.ComputerID, event.ArtifactRefs[i])
 		if errors.Is(err, store.ErrNotFound) {
@@ -148,7 +151,7 @@ func (h *Handler) projectTextureLifecycleEvent(ctx context.Context, doc types.Do
 		if err != nil {
 			return textureDurableEvent{}, err
 		}
-		if revision.DocID != doc.DocID || revision.TrajectoryID != doc.TrajectoryID {
+		if revision.DocID != doc.DocID || revision.TrajectoryID != doc.TrajectoryID || !revision.CreatedAt.Equal(event.CreatedAt) {
 			continue
 		}
 		out.EventType = "version"
@@ -163,6 +166,15 @@ func (h *Handler) projectTextureLifecycleEvent(ctx context.Context, doc types.Do
 		break
 	}
 	return out, nil
+}
+
+func textureLifecycleEventCanAdvanceVersion(kind types.LifecycleEventKind) bool {
+	switch kind {
+	case types.LifecycleTrajectoryStarted, types.LifecycleUpdateApplied, types.LifecycleArtifactHeadAdvanced, types.LifecycleTextureTurnCommitted:
+		return true
+	default:
+		return false
+	}
 }
 
 func textureStatusAtEvent(kind types.LifecycleEventKind) (types.TrajectoryStatus, string) {

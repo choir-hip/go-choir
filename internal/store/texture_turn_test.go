@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -309,6 +311,20 @@ func TestApplyTextureTurnPersistentSuperOpenerIsAtomic(t *testing.T) {
 	pending, err = s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, superID, 10)
 	if err != nil || len(pending) != 2 {
 		t.Fatalf("conflicting Super reuse queued control: %+v, %v", pending, err)
+	}
+	malformed := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
+	malformed.CommandID, malformed.Reason = "texture-turn-super-malformed-continuation", "must refuse malformed continuation"
+	bad := textureTurnControl(t, "control-super-malformed", superID, work.WorkItemID)
+	bad.Packet.Kind, bad.Packet.Actions = "evidence_update", nil
+	bad.PayloadDigest, _ = ComputeLifecycleUpdatePayloadDigest(bad.Packet, bad.Content)
+	malformed.Controls = []types.TextureTurnControl{bad}
+	setTextureTurnDigest(t, &malformed, TextureSourceGraphWriteSet{})
+	if _, err := s.ApplyTextureTurn(ctx, malformed); err == nil || !strings.Contains(err.Error(), "persistent-Super control requires execution_request actions") {
+		t.Fatalf("malformed Super continuation error = %v", err)
+	}
+	afterMalformed, err := s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, superID, 10)
+	if err != nil || len(afterMalformed) != 2 {
+		t.Fatalf("malformed continuation poisoned backlog: %+v, %v", afterMalformed, err)
 	}
 }
 
@@ -636,4 +652,31 @@ func TestApplyTextureTurnCallerWorkConsequenceAtomicReplayAndRefusal(t *testing.
 			t.Fatalf("wrong caller-work refusal mutated lifecycle")
 		}
 	})
+}
+
+func TestApplyTextureTurnConsumesComplete101OwnerOccurrenceSet(t *testing.T) {
+	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
+	ctx := context.Background()
+	bindings := make([]types.TextureTurnOwnerInstruction, 0, 101)
+	for i := 0; i < 101; i++ {
+		queued := ownerInstructionRequest(t, s, start, fmt.Sprintf("bulk-%03d", i), fmt.Sprintf("owner tell %03d", i))
+		if _, err := s.QueueLifecycleOwnerInstruction(ctx, queued); err != nil {
+			t.Fatal(err)
+		}
+		bindings = append(bindings, types.TextureTurnOwnerInstruction{InstructionID: queued.InstructionID, RequestID: queued.RequestID})
+	}
+	complete, err := s.ListPendingLifecycleOwnerInstructionsForHead(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID, caller.AgentID, start.InitialRevision.RevisionID)
+	if err != nil || len(complete) != 101 {
+		t.Fatalf("complete owner set=%d err=%v", len(complete), err)
+	}
+	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
+	req.CommandID, req.Reason, req.OwnerInstructions = "texture-turn-owner-101", "consume full unbounded occurrence set", bindings
+	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
+	if _, err := s.ApplyTextureTurn(ctx, req); err != nil {
+		t.Fatalf("apply 101 owner tells: %v", err)
+	}
+	remaining, err := s.ListPendingLifecycleOwnerInstructionsForHead(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID, caller.AgentID, start.InitialRevision.RevisionID)
+	if err != nil || len(remaining) != 0 {
+		t.Fatalf("remaining owner occurrences=%d err=%v", len(remaining), err)
+	}
 }
