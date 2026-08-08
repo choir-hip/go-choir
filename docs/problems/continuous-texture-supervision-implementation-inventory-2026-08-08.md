@@ -262,10 +262,22 @@ attempted narrow filter, so this is a broad local baseline signal, not product
 acceptance. No code, runtime configuration, external effect, or staging state
 was changed by this inventory.
 
+## Registry pre-flight failure discovered after the inventory
+
+The first live `scripts/doccheck` probe after writing this receipt failed before
+considering the new file: `docs/mission-graph.yaml` has one working product
+entrypoint, while the authority manifest reports zero current product Definition
+roots. The active Definition's manifest entry has `is_root: []` even though it is
+the one owner-ratified executable product mission. The three navigation surfaces
+therefore disagree about executable topology. This is a registry-hygiene defect,
+not an implementation blocker to guess around. This dated problem update lands
+before the manifest repair.
+
 ## Next safe action
 
 Update the active Definition's sole `now` card to reference this landed receipt,
-repair its deleted problem citer, reconcile exact source/deploy/worktree
-identity, then build and test one frozen A–C candidate. Do not register the
-Texture affordance until store-side validation, atomic turn, readers, replay,
-and the negative matrix are all present in that same candidate.
+repair its deleted problem citer and the manifest root mismatch, reconcile exact
+source/deploy/worktree identity, rerun live doccheck, then build and test one
+frozen A–C candidate. Do not register the Texture affordance until store-side
+validation, atomic turn, readers, replay, and the negative matrix are all present
+in that same candidate.
