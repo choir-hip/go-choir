@@ -6,6 +6,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func postOwnerInstruction(t *testing.T, handler *Handler, path, owner, requestID, content, head string) *httptest.ResponseRecorder {
@@ -128,5 +131,49 @@ func TestTextureLifecycleCreateExactReplayAndChangedPayloadConflict(t *testing.T
 	snapshot, err := core.Store().GetLifecycleSnapshot(t.Context(), "user-1", "sandbox-test", created.TrajectoryID)
 	if err != nil || snapshot.Document.DocID != created.DocID || snapshot.HeadRevision.RevisionID != created.RevisionID || snapshot.HeadRevision.Content != "private initial" || len(snapshot.WorkItems) != 1 || snapshot.WorkItems[0].AssignedAgentID != created.TargetAgentID {
 		t.Fatalf("created lifecycle snapshot=%+v err=%v", snapshot, err)
+	}
+}
+
+func TestResidentTextureInjectsAndAtomicallyConsumesOrderedOwnerOccurrences(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
+	first := postOwnerInstruction(t, handler, path, start.OwnerID, "resident-one", "first private owner instruction", start.InitialRevision.RevisionID)
+	second := postOwnerInstruction(t, handler, path, start.OwnerID, "resident-two", "second private owner instruction", start.InitialRevision.RevisionID)
+	if first.Code != http.StatusAccepted || second.Code != http.StatusAccepted {
+		t.Fatalf("queue statuses=%d/%d", first.Code, second.Code)
+	}
+	agent, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	if err != nil || agent.ActiveRunID == "" {
+		t.Fatalf("resident agent=%+v err=%v", agent, err)
+	}
+	run, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, agent.ActiveRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inject := handler.coagentUpdateTurnInjector(&run)
+	if inject == nil {
+		t.Fatal("owner instruction injector unavailable")
+	}
+	messages, err := inject(false)
+	if err != nil || len(messages) != 1 || !strings.Contains(string(messages[0]), "first private owner instruction") || !strings.Contains(string(messages[0]), "second private owner instruction") {
+		t.Fatalf("injected messages=%s err=%v", messages, err)
+	}
+	instructionIDs := metadataStringSlice(run.Metadata[textureOwnerInstructionIDsMetadata])
+	requestIDs := metadataStringSlice(run.Metadata[textureOwnerRequestIDsMetadata])
+	if len(instructionIDs) != 2 || len(requestIDs) != 2 {
+		t.Fatalf("authenticated metadata ids=%v requests=%v", instructionIDs, requestIDs)
+	}
+	doc, err := core.Store().GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := handler.applyTextureLifecycleTurn(t.Context(), &run, doc, editTextureArgs{ToolCallID: "owner-turn-tool", WorkDisposition: string(types.WorkItemOpen)}, types.TextureTurnWait, types.Revision{}, store.TextureSourceGraphWriteSet{}, "owner-directed wait")
+	if err != nil || result.TextureTurn == nil || len(result.TextureTurn.OwnerInstructionIDs) != 2 || len(result.TextureTurn.CausalRequestIDs) != 2 || len(result.Events) == 0 || len(result.Events[0].RequestIDs) != 2 {
+		t.Fatalf("owner turn result=%+v err=%v", result, err)
+	}
+	pending, err := core.Store().ListPendingLifecycleOwnerInstructions(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID, start.Agent.AgentID, 10)
+	if err != nil || len(pending) != 0 {
+		t.Fatalf("pending after owner turn=%+v err=%v", pending, err)
 	}
 }

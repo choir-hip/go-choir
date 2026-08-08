@@ -173,10 +173,22 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 	if callerWorkDisposition == "" {
 		callerWorkDisposition = types.WorkItemOpen
 	}
+	instructionIDs := metadataStringSlice(rec.Metadata[textureOwnerInstructionIDsMetadata])
+	requestIDs := metadataStringSlice(rec.Metadata[textureOwnerRequestIDsMetadata])
+	if len(instructionIDs) != len(requestIDs) {
+		return types.LifecycleResult{}, fmt.Errorf("authenticated owner instruction metadata is incomplete")
+	}
+	ownerInstructions := make([]types.TextureTurnOwnerInstruction, 0, len(instructionIDs))
+	for i := range instructionIDs {
+		if strings.TrimSpace(instructionIDs[i]) == "" || strings.TrimSpace(requestIDs[i]) == "" {
+			return types.LifecycleResult{}, fmt.Errorf("authenticated owner instruction metadata is empty")
+		}
+		ownerInstructions = append(ownerInstructions, types.TextureTurnOwnerInstruction{InstructionID: instructionIDs[i], RequestID: requestIDs[i]})
+	}
 	req := types.ApplyTextureTurnRequest{
 		OwnerID: rec.OwnerID, ComputerID: doc.ComputerID,
 		CommandID: "texture-turn:" + commandUUID, DocumentID: doc.DocID, TrajectoryID: doc.TrajectoryID,
-		CallerAgentID: rec.AgentID, CallerRunID: rec.RunID,
+		CallerAgentID: rec.AgentID, CallerRunID: rec.RunID, OwnerInstructions: ownerInstructions,
 		ExpectedLifecycleVersion:       snapshot.Trajectory.LifecycleVersion,
 		ExpectedCallerLifecycleVersion: caller.LifecycleVersion,
 		ExpectedHeadRevisionID:         doc.CurrentRevisionID,
