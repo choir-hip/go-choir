@@ -2,10 +2,10 @@
 
 **Date:** 2026-08-08  
 **Reviewed runtime candidate:** `363bf39398128fa0e1a85a19ae9a7762f92ba3dc`  
-**Final protected-delta candidate:** `99fc3e6b7bf151ddad1f0927ca18a24ba5275d10`
+**Final deployed source candidate:** `ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee`
 **Base deployed source:** `cdaa787bf2d006a1d4e59c1650a232f2083d8f9d`  
 **Mutation class:** red  
-**Effects:** OFF pending exact Linux staging acceptance and registry promotion
+**Effects:** OFF pending exact Linux staging acceptance and terminal registry closure
 
 ## Joined result
 
@@ -96,7 +96,7 @@ completed successfully. Node B's activation receipt at
 `2026-08-08T13:12:35Z` names exact commit `99fc3e6b` for sandbox, active
 computers, host services, and the canonical checkout.
 
-Authenticated product acceptance did **not** pass. The current owner-scoped
+Authenticated product acceptance did **not** pass at this intermediate landing point. The then-current owner-scoped
 computer `computer-03335285269bdba4f94377e56879f9e6`, epoch 130, remains joined
 to an immutable constructed ComputerVersion whose code commit is
 `7122f2799be4458f4b925be11990321c7e70ffc4`. The deploy log explicitly preserved
@@ -107,10 +107,67 @@ computer. On the preserved computer,
 Definition's required actor, lifecycle, Texture, source, capsule, cancellation,
 or restart artifacts.
 
-The mismatch is now documented before mitigation. The current Definition does
-not authorize SSH, a new candidate/worker computer, deletion of the unclaimed
+The mismatch was documented before mitigation. The Definition did not authorize
+SSH, a new candidate/worker computer, deletion of the unclaimed
 constructed-computer residue, a user-computer route mutation, or effects/promotion
-before acceptance. CI and host-deployment gates are green, but product-path and
-real-Linux gates remain open. All three registries remain open and effects stay
-OFF until an authorized staging computer is immutably joined to exact candidate
-`99fc3e6b` and the complete acceptance succeeds.
+before acceptance. At that intermediate gate, CI and host deployment were green
+while product-path and real-Linux gates remained open. The authorized environment
+recovery and later exact-candidate product probe below supersede this route
+blocker as current mission state; this section remains historical failure
+evidence.
+
+
+## Exact lifecycle-wake repair, deployment, and product probe
+
+The authorized exact-candidate environment was recovered without changing the
+preserved constructed computer or creating a candidate/worker computer. The
+first authenticated create at deployed `99fc3e6b` exposed the initial-work wake
+defect documented in the problem inventory. After two independent high findings
+were documented and repaired, the final source
+`ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee` serialized reconciliation only for
+the canonical `{owner_id, computer_id, doc_id}` scope, revalidated durable
+document binding after waiting, and retained one authoritative winner without
+blocking unrelated documents. The final lifecycle red-team returned **ACCEPT**.
+Focused repeated Race, full `internal/textureowner`, vet, and joined validation
+passed.
+
+GitHub Actions run
+[`31261269488`](https://github.com/choir-hip/go-choir/actions/runs/31261269488)
+passed, including build, vet, Race, SBOM, and staging deployment jobs. A fresh
+nonce-bound execution-identity request joined the authorized computer scope
+`vm-bbdbbd01c4390b7036067aaa12afeb68`, guest identity
+`computer-42850e9734d9442386c5dd8bf3afbf19`, VM epoch 8247, sandbox and host
+builds, route digest, deployment receipt, executable/image/kernel digests, and
+platform attestation to exact `ac6dd16b`. Boot recovery then created Texture run
+`5ee276b3-d25c-41ac-afaa-5879a6ea5ecf` for the previously stranded initial
+work. This is deployed proof that the committed-start projection repair ran
+after the ordinary no-SSH deployment restart.
+
+The provider-dependent acceptance did not pass. That recovered run failed before
+iteration zero on server-owned ChatGPT authentication with HTTP 401
+`refresh_token_reused`. Authenticated owner-visible model-policy probes then
+exercised configured DeepSeek, Fireworks, Z.AI, and Bedrock selections without
+exposing or injecting credentials. DeepSeek and Fireworks paths exhausted their
+provider-precondition fallback chains into the same terminal ChatGPT failure;
+Z.AI returned HTTP 429; Bedrock was unsupported in the deployed gateway. No
+probe produced a Researcher, update, revision, source, Super control, capsule,
+or effect. The exact original model-policy bytes were restored at SHA-256
+`7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`.
+
+The retained failed trajectory
+`8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d` was cancelled through the public
+conditional lifecycle endpoint using expected version 7 and exact head
+`d1a831ba-6af5-5206-aa03-49caf4b047dc`. The returned snapshot has trajectory and
+initial work cancelled, terminal head unchanged, lifecycle version/reducer
+sequence 9, and resident activation cancelled. The temporary acceptance API key
+was revoked and a subsequent use returned HTTP 401. These are admissible product
+receipts for exact identity, initial wake, owner instruction, byte-exact policy
+rollback, and lifecycle cancellation—not for the required repeated supervision
+or Linux capsule loop.
+
+The remaining blocker belongs to protected canonical gateway credential/provider
+availability. This mission does not authorize SSH, guest token injection, auth
+weakening, route changes, or a silent model fallback. Effects remain OFF; real
+Researcher/Super/CoSuper progression, capsule isolation/cleanup, restart with
+pending controls, late evidence, no-effect comparison, rollback rehearsal, run
+acceptance, and registry closure remain open.

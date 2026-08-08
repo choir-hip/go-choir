@@ -11,13 +11,16 @@ inbound revision path to target-bound Researcher control, the one persistent
 Super, many capability-bound capsule-only CoSupers, progressive prose-first
 versions with canonical source transclusions, and an automatable Texture API/CLI
 surface. The final owner settlement accepts the repaired Definition after the
-v4.7-3 panel's remaining ledger-only dissent was mechanically closed. Runtime
-candidate `99fc3e6b` has passed independent source review, selected CI, and exact
-Node B host deployment, but authenticated product acceptance is blocked: the
-owner's preserved constructed computer still serves immutable `7122f279` and
-returns 404 for the lifecycle create route. Effects remain OFF; real Linux
-product proof, no-effect/rollback evidence, and registry closure remain
-mandatory.
+v4.7-3 panel's remaining ledger-only dissent was mechanically closed. Runtime candidate
+`ac6dd16b` has passed final independent source review, selected CI, exact Node B
+deployment, and nonce-bound host/guest/platform identity. The repaired initial
+work projected after restart, and authenticated create, tell, model-policy
+rollback, and public lifecycle cancellation executed. Repeated supervision is
+blocked by protected gateway provider availability: ChatGPT auth is stale, Z.AI
+returned 429, configured alternate fallback chains did not complete, and no
+Researcher/Super/capsule turn was produced. Effects remain OFF; provider
+restoration, real Linux product proof, no-effect/source-rollback evidence, and
+registry closure remain mandatory.
 
 ## Completed Definitions — Historical Evidence Authority
 
@@ -104,15 +107,18 @@ it active work or revising the product umbrella's semantics.
 
 ## Invocation
 
-Do not invoke a product `/goal` from this registry. No Definition is currently
-active. The performance and Choir-in-Choir drafts remain blocked and
+Invoke only the active Continuous Texture Supervision Definition above through
+`/goal docs/definitions/choir-continuous-texture-supervision-2026-08-07.md`.
+Its provider-availability blocker does not make it non-executable or authorize a
+successor. The performance and Choir-in-Choir drafts remain blocked and
 non-executable; promoting either requires separate owner ratification and
 three-registry reconciliation.
 
-This index owns no current slice, next action, execution order, resumption,
-completion, mutation, rollback sequencing, or escalation authority. The
-completed convergence Definition is evidence, not an executable entrypoint.
-Autopaper remains unauthorized.
+This index delegates the current slice, next action, execution order, resumption,
+completion, mutation, rollback sequencing, and escalation authority to that
+active Definition; it owns no second mission state. The completed convergence
+Definition is evidence, not an executable entrypoint. Autopaper remains
+unauthorized.
 
 The OG/Dolt/heresy contract supplies the deployed D-ROUTE corpusd/vmctl CAS
 mechanics, receipt gates, H031 detection, and deletion bars. The completed

@@ -1,111 +1,132 @@
 # Continuous Texture Supervision — Requirement Audit
 
-**Date:** 2026-08-08  
-**Definition:** `choir-continuous-texture-supervision-2026-08-07`  
-**Runtime candidate:** `99fc3e6b7bf151ddad1f0927ca18a24ba5275d10`  
-**Audit verdict:** **NOT COMPLETE — authenticated product path blocked**  
+**Date:** 2026-08-08
+**Definition:** `choir-continuous-texture-supervision-2026-08-07`
+**Runtime candidate:** `ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee`
+**Audit verdict:** **NOT COMPLETE — exact product path reached; protected provider availability blocked the supervision loop**
 **Effects:** OFF
 
 This is a requirement-by-requirement audit, not a completion receipt. It
-separates source/CI proof from the deployed product evidence required by the
-Definition. A source contract marked PASS below does not promote the
-corresponding deployed behavior.
+separates source/CI proof, deployed product-path proof actually reached, and the
+remaining evidence floor. A partial product receipt does not promote the
+unexecuted Researcher/Super/capsule behavior.
 
 ## Identity and landing gates
 
 | Gate | State | Evidence |
 | --- | --- | --- |
-| Frozen implementation candidate | PASS | `99fc3e6b7bf151ddad1f0927ca18a24ba5275d10` |
-| Independent lifecycle review | PASS | ACCEPT at `3ac0935b3008374e134c1a9c56cfa2cc4707adb1` |
-| Independent capsule/security review | PASS | ACCEPT at `363bf39398128fa0e1a85a19ae9a7762f92ba3dc`; protected-delta ACCEPT at `99fc3e6b` |
-| Applicable CI | PASS | GitHub Actions run `31257971088`, including selected Race lanes, vet/build, heresy detector, docs truth, and differential SBOM |
-| Host deploy identity | PASS | Node B activation receipt at `2026-08-08T13:12:35Z` names exact `99fc3e6b` for sandbox/host artifacts |
-| Product computer identity | **FAIL/BLOCKED** | Authenticated `computer-03335285269bdba4f94377e56879f9e6`, epoch 130, joins immutable code `7122f2799be4458f4b925be11990321c7e70ffc4`, not `99fc3e6b` |
-| Product route availability | **FAIL/BLOCKED** | Authenticated `POST /api/texture/lifecycle-documents` returns HTTP 404 `texture endpoint not found` |
-| Deployed acceptance | NOT RUNNABLE | The serving computer lacks the candidate runtime; no downstream artifact would be candidate evidence |
-| Rollback | REF IDENTIFIED / RECEIPT NOT RUN | Source rollback target is `cdaa787bf2d006a1d4e59c1650a232f2083d8f9d`; no rollback rehearsal or terminal rollback receipt exists, and no computer route was changed by this mission |
+| Frozen implementation candidate | PASS | `ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee` |
+| Independent lifecycle review | PASS | Earlier exact-control ACCEPT at `3ac0935b`; final document-scoped wake-serialization review ACCEPT at `ac6dd16b` |
+| Independent capsule/security review | PASS at source | ACCEPT at `363bf393`; protected-delta ACCEPT through `99fc3e6b` |
+| Applicable CI | PASS | GitHub Actions run `31261269488`, including build, vet, selected Race, SBOM, docs truth, and staging deployment |
+| Host and product identity | PASS | Nonce-bound identity joined host, sandbox, route, deployment receipt, platform attestation, computer scope `vm-bbdbbd01c4390b7036067aaa12afeb68`, guest `computer-42850e9734d9442386c5dd8bf3afbf19`, and VM epoch 8247 to exact `ac6dd16b` |
+| Product lifecycle route | PASS | Authenticated create, tell, model-policy file/resolve, trajectory inspection, and conditional public cancel all executed on the exact candidate |
+| Initial committed-work projection | PASS deployed | No-SSH deployment restart created run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf` for the previously stranded initial work |
+| Provider-dependent acceptance | **BLOCKED** | ChatGPT returned HTTP 401 `refresh_token_reused`; Z.AI returned HTTP 429; configured DeepSeek/Fireworks fallback chains terminated on the same ChatGPT failure; Bedrock was unsupported. No Researcher/update/revision/Super/capsule was produced |
+| Acceptance-artifact cleanup | PASS | Failed trajectory `8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d` was publicly cancelled at lifecycle version 9; original model-policy bytes were restored at SHA-256 `7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`; temporary API key was revoked and then returned HTTP 401 |
+| Source rollback | REF IDENTIFIED / REHEARSAL OPEN | Rollback target remains `cdaa787bf2d006a1d4e59c1650a232f2083d8f9d`; the owner-policy probe rollback was exercised, but a source/deployment rollback receipt is not yet admissible |
 | Registry terminal closure | OPEN | ACTIVE, mission graph, and authority manifest remain active/working; effects remain OFF |
 
 ## Finish acceptance actions
 
-| # | Required action | Source/contract state | Required deployed state |
+| # | Required action | Source/contract state | Deployed state |
 | --- | --- | --- | --- |
-| 1 | Focused registry, authorization, reducer, atomic turn, projection, transclusion, replay, cancellation, capsule, API/CLI tests | **PASS.** Joined full/focused/Race validation and selected CI passed; independent reviews found no remaining critical/high source defect. | Local/CI is the admissible class for this action; no further product claim inferred. |
-| 2 | Reconstruct pending controls; replay identities and pre-cutover fixtures | **PASS locally.** `TestPersistentSuperLifecycleControlsStayTrajectoryIsolatedThenReconcile` proves boot-time exact-run Super reconstruction; `TestRuntimeInjectionAppendFailurePassivatesAndRestartReactivatesExactResearcherRun` and `TestLifecycleInjectionRestartDerivesSeenFromDurableMemoryAndRejectsSpoof` cover Researcher/durable-memory recovery; `TestTextureLifecycleObservationSurvivesStoreRestart` and `TestTextureLifecycleObservationProjectsOneVersionForMultiInboundTurnAcrossResumeAndReplay` cover restarted/resumed observation; lifecycle-create and owner-instruction replay-conflict tests cover equal/conflicting requests; CLI watch cursor/reconnect/expiry tests cover cursor replay; exact historical show and source-open tests cover old revision/source readability; pre-cutover compatibility suites passed CI. | Same-build deployed restart remains required by action 6. |
-| 3 | Real Texture→Researcher/Super→Texture repeated loop with parallel isolated CoSupers | Runtime path exists and is source-reviewed. | **BLOCKED.** No trajectory, revision, run, work-item, assignment, capsule, or acceptance IDs exist on exact candidate staging. |
-| 4 | Public API/CLI create, tell/correct, watch/resume, show, open-source | Local API/CLI contracts passed and the CLI targets the new lifecycle create route. | **BLOCKED.** The exact authenticated create request returns 404 on the serving computer. |
-| 5 | Continuous-prose and differently styled report cases | Generic schema/prompt source contract exists. | **BLOCKED.** Neither deployed style case can be created. |
-| 6 | Pending controls, passivation, approved no-SSH same-build restart, same identities | Deterministic local recovery contracts passed. | **BLOCKED.** Restarting immutable `7122f279` cannot prove recovery of `99fc3e6b`; no candidate trajectory can first be established. |
-| 7 | Direct owner revision plus natural-language correction | Atomic owner-head rebase and lifecycle instruction source tests passed. | **BLOCKED.** No candidate Texture/document/trajectory exists. |
-| 8 | In-flight cancellation, delayed authenticated result, exact retry | Deterministic resident-provider cancellation and bounded evidence-only terminal closure passed source review and Race tests. | **BLOCKED.** Actual Linux/provider/capsule delayed-result evidence is absent. |
-| 9 | Compare event heads, self-development state, checkpoint, route, host projections before/after | Source gates refuse assignment effects outside the capsule and late evidence cannot promote state. | **BLOCKED.** No real candidate capsule work exists, so before/after no-effect receipts and Trace joins are absent. |
+| 1 | Focused registry, authorization, reducer, atomic turn, projection, transclusion, replay, cancellation, capsule, API/CLI tests | **PASS.** Joined full/focused/Race validation and selected CI passed; independent reviews found no remaining critical/high source defect. | Local/CI is the admissible class for this action. |
+| 2 | Reconstruct pending controls; replay identities and pre-cutover fixtures | **PASS locally.** Exact-run Super reconstruction, same-run Researcher append recovery, authenticated-memory replay, restarted observation, create/instruction replay, CLI cursor replay, and historical show/source contracts passed. | **PARTIAL PASS.** The deployment restart recovered the exact initial work into run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf`; restart with pending Researcher/Super controls remains unexecuted because no provider completed the first Texture turn. |
+| 3 | Real Texture→Researcher/Super→Texture repeated loop with parallel isolated CoSupers | Runtime path exists and is source-reviewed. | **BLOCKED.** Texture reached its real provider boundary, but no provider completed iteration zero/its fallback chain; no downstream actors, assignments, or capsules exist. |
+| 4 | Public API/CLI create, tell/correct, watch/resume, show, open-source | Local API/CLI contracts passed. | **PARTIAL PASS.** Public create, multiple durable tells, trajectory show, model-policy update/resolve/rollback, and lifecycle cancel executed. Correct, watch/disconnect/resume, historical version, CLI parity, and source-open await a produced revision/source. |
+| 5 | Continuous-prose and differently styled report cases | Generic schema/prompt source contract exists. | **BLOCKED.** The continuous-prose case was durably created, but provider failure prevented its first generated revision; the second style case was not started. |
+| 6 | Pending controls, passivation, approved no-SSH same-build restart, same identities | Deterministic local recovery contracts passed. | **PARTIAL PASS.** Ordinary deployment restart recovered initial owner work on exact identities. Pending Researcher/Super controls and same-run append recovery remain unproved on staging. |
+| 7 | Direct owner revision plus natural-language correction | Atomic owner-head rebase and lifecycle instruction source tests passed. | **PARTIAL PASS.** Natural-language owner instructions queued durably and woke exact Texture runs. No Texture-authored revision existed to correct or rebase. |
+| 8 | In-flight cancellation, delayed authenticated result, exact retry | Deterministic cancellation and bounded evidence-only closure passed source review and Race tests. | **PARTIAL PASS.** Public conditional cancellation cancelled the failed trajectory and resident activation. No in-flight capsule effect or delayed authenticated result existed, so late-evidence semantics remain unproved. |
+| 9 | Compare event heads, self-development state, checkpoint, route, host projections before/after | Source gates refuse out-of-capsule and late promotion effects. | **PARTIAL PASS.** Self-development was observed OFF before the run; policy bytes were restored exactly; cancellation had no semantic revision. No real capsule effect occurred, so the required complete protected-state before/after comparison is absent. |
 
 ## Measures
 
 | Measure | Audit state |
 | --- | --- |
-| `target_authority` | **PASS at source/CI.** Trusted target validation binds exact owner/computer/document/trajectory/work/role and fails closed. |
-| `single_delivery_authority` | **PASS at source/CI.** New traffic uses lifecycle controls/bindings/receipts; no legacy mailbox write was added. |
+| `target_authority` | **PASS at source/CI; partial deployed.** Exact document/work/head-bound initial wake and owner instruction ran; downstream actor target bindings were not exercised. |
+| `single_delivery_authority` | **PASS at source/CI.** New traffic uses lifecycle controls/bindings/receipts and did not enter the legacy mailbox. No deployed downward packet was produced. |
 | `revision_control_causality` | **BLOCKED deployed.** No accepted trajectory with two downward cycles and later revisions. |
-| `authority_negative_matrix` | **PASS at source/CI; Linux residual open.** Registries and runtime refuse generic spawn/host/effect tools; real kernel isolation awaits staging. |
-| `owner_read_amplification` | Telemetry only; no deployed sample exists. |
-| `progressive_owner_visibility` | **BLOCKED deployed.** No informative revision while work remains open. |
-| `generic_grounded_writing` | Schema/source contract passes locally; exact research/execution transclusions in two deployed writing forms are **blocked**. |
-| `automatable_texture_surface` | API/CLI contracts pass locally; exact deployed surface is **absent on the serving computer**. |
+| `authority_negative_matrix` | **PASS at source/CI; Linux residual open.** Registries/runtime refuse generic host/effect tools; real capsule kernel isolation awaits a provider-completed Super assignment. |
+| `owner_read_amplification` | Telemetry only; no generated owner-visible version exists. |
+| `progressive_owner_visibility` | **BLOCKED deployed.** No informative revision while work remained open. |
+| `generic_grounded_writing` | Schema/source contract passes locally; exact deployed research/execution transclusions in two writing forms are blocked. |
+| `automatable_texture_surface` | **PARTIAL PASS deployed.** Create, tell, show, policy resolution, and cancel returned stable authenticated JSON; watch/resume, historical show, and source-open could not be exercised without a revision/source. |
 
 ## `not_done_when` audit
 
-The Definition is not complete because multiple stopping prohibitions are
-currently triggered or cannot yet be excluded by the required evidence class.
+The Definition is not complete because multiple stopping prohibitions remain
+triggered or cannot yet be excluded by the required evidence class.
 
 | # | Current disposition |
 | --- | --- |
-| 1 | **EXCLUDED:** owner ratification and executable authority are present in ACTIVE, mission graph, and authority manifest. Terminal registry closure is a separate remaining landing step. |
-| 2 | **TRIGGERED:** source, review, CI, and host deployment exist, but no authenticated exact-candidate product loop exists. |
-| 3 | **UNPROVED:** no deployed actor-start topology exists to show Texture, rather than the acceptance driver, addresses every actor. |
-| 4 | **TRIGGERED:** no deployed worker round trip or progressive revision exists. |
+| 1 | **EXCLUDED:** owner ratification and executable authority remain present in all registries; terminal registry closure is separate and still open. |
+| 2 | **TRIGGERED:** source, review, CI, exact deployment, and partial product receipts exist, but the repeated authenticated supervision loop does not. |
+| 3 | **UNPROVED:** Texture was product-started and attempted the provider call, but no successful run addressed Researcher, Super, or CoSuper. |
+| 4 | **TRIGGERED:** no worker round trip or progressive revision exists. |
 | 5 | Excluded by source tests/review: lifecycle authority is single-tape and new traffic does not enter the legacy worker inbox. |
 | 6 | Excluded by source tests/review; real Linux capsule isolation remains required. |
-| 7 | Excluded by atomic-turn/durable-disposition source tests; deployed behavior remains unobserved. |
-| 8 | **UNPROVED deployed:** source gates and effects-OFF mode refuse promotion, but no before/after real-capsule receipt exists. |
+| 7 | Excluded by atomic-turn/durable-disposition source tests; deployed turn behavior remains unobserved. |
+| 8 | **UNPROVED deployed:** effects were OFF and no revision/effect escaped, but no real capsule before/after receipt exists. |
 | 9 | Excluded by fail-closed source tests. |
 | 10 | Excluded by direction-specific producer/target work identities and reducer validation. |
 | 11 | Excluded by atomic Texture-turn conditional commit tests. |
-| 12 | Excluded by direct owner atomic head/rebase/wake source tests. |
-| 13 | Excluded by assigned-CoSuper empty-set registry and Store/runtime authority checks. |
-| 14 | **UNPROVED on staging Linux:** cross-compile and source review cannot prove namespace, cgroup, seccomp, Landlock, overlay, or network behavior. |
-| 15 | **TRIGGERED:** no deployed informative revision while work remains open. |
+| 12 | Excluded by direct owner atomic head/rebase/wake source tests; no deployed Texture-authored head existed to rebase. |
+| 13 | Excluded by assigned-CoSuper empty-set registry and Store/runtime authority checks; no deployed assignment ran. |
+| 14 | **UNPROVED on staging Linux:** cross-compile and source review cannot prove namespace, cgroup, seccomp, Landlock, overlay, network, and cleanup behavior. |
+| 15 | **TRIGGERED:** no deployed informative revision while work remained open. |
 | 16 | **TRIGGERED:** no deployed openable research/execution transclusions exist. |
-| 17 | **TRIGGERED on the serving computer:** the candidate public create surface is 404, so automation cannot observe the required trajectory. |
-| 18 | **UNPROVED deployed:** neither requested writing form ran. |
+| 17 | **TRIGGERED/UNPROVED:** create/tell/show/cancel are deployed and automatable, but the required resumable observation, historical version, and source-open acceptance is absent. |
+| 18 | **UNPROVED deployed:** neither requested generated writing form completed a first revision. |
 | 19 | Multiple isolated assignment support exists in source, but parallel writable-capsule product behavior is **unproved**. |
+
+## Product receipts retained
+
+- document `11902866-d32e-55c4-9483-d9bd47c91a6c`;
+- initial revision/head `d1a831ba-6af5-5206-aa03-49caf4b047dc`;
+- cancelled trajectory `8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d`;
+- cancelled initial work `74fa5e0f-92ee-5e3a-ac8f-0c4b8f044e4c`;
+- recovered exact initial-wake run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf`;
+- later provider-probe runs recorded in the problem inventory;
+- public cancellation command
+  `public-cancel:cts-failed-acceptance-cancel-ac6dd16b-v7`, terminal lifecycle
+  version/reducer sequence 9.
+
+These are failure/partial-path evidence. They do not count as an accepted
+Researcher, Super, CoSuper, capsule, transclusion, or run-acceptance graph.
 
 ## Remaining evidence floor
 
-Still missing: exact product-computer build identity, authenticated repeated-cycle
-trajectory, three progressive revisions, two downward control cycles, owner
-correction, openable research and execution sources, resumable observation,
-independent writable verification capsule, real Linux isolation and cleanup,
-no-SSH same-build restart, actual delayed-result/replay evidence, protected-state
-before/after comparison, owner-visible inspection, rollback rehearsal/receipt, terminal registry
-closure, and the full accepted identity graph: owner and computer; document and
-revision; immutable source and source version/hash; trajectory and run;
-producer/target work; actor; request, command, update, occurrence and digest;
-assignment, capsule and execution handle; cancellation and late evidence; and
-run-acceptance identifiers.
+Still missing: a canonical audited gateway credential/provider restoration;
+authenticated repeated-cycle trajectory; three progressive revisions; two
+downward control cycles; owner correction against a Texture-authored head;
+openable research and execution sources; watch disconnect/resume and CLI parity;
+parallel implementation and independent writable verification capsules; real
+Linux isolation and cleanup; restart with pending controls; actual delayed
+receipt/replay evidence; complete protected-state before/after comparison;
+owner-visible inspection; source/deployment rollback rehearsal; run acceptance;
+terminal registry closure; and the full accepted identity graph: owner/computer,
+document/revision, immutable source/version/hash, trajectory/run,
+producer/target work, actor, request/command/update/occurrence/digest,
+assignment/capsule/execution handle, cancellation/late evidence, and acceptance
+identifiers.
 
-## Independent audit check
+## Independent audit status
 
-An independent lifecycle reviewer checked all nine acceptance actions, eight
-measures, nineteen `not_done_when` clauses, landing gates, and evidence-floor
-claims against exact docs candidate `c6af39f3`. Its four corrections are applied
-here: rollback is only an identified ref without a receipt; action 2 names the
-complete Super/Researcher/observation/replay/history contracts; the missing
-identity graph is explicit; and prohibitions 1 and 8 are classified separately
-from terminal registry closure. The reviewer found no deployed-status overclaim
-and retained the **NOT COMPLETE** verdict.
+The earlier independent audit correction at exact docs candidate `c6af39f3`
+remains incorporated: rollback is not overstated, action 2 names the complete
+local recovery contracts, the missing identity graph is explicit, and owner
+ratification is distinguished from terminal registry closure. New deployed
+receipts narrow the blocker from route identity to protected provider
+availability but do not change the **NOT COMPLETE** verdict. A final independent
+doc-truth review returned **ACCEPT** after repairing the stale ACTIVE invocation,
+terminal-registry wording, and prohibition 17 classification; it confirmed the
+9/8/19 coverage and three-registry consistency.
 
-The only safe next transition is an owner-authorized acceptance environment
-already serving exact `99fc3e6b`, or a separately ratified computer-version/
-materialization/route mission with rollback. This Definition does not authorize
-mutating the preserved constructed computer to manufacture its own acceptance.
+The only safe next transition is an audited renewal of server-owned ChatGPT auth
+or restoration of one configured tool-capable provider through the canonical
+gateway operator authority. After that transition, exact `ac6dd16b` identity
+must be reverified and a fresh trajectory must run the complete acceptance. This
+Definition does not authorize SSH, guest credential injection, auth weakening,
+route mutation, or an unreviewed silent fallback.

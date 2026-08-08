@@ -662,3 +662,57 @@ authority, record before/after policy and key identity without exposing secrets,
 and preserve rollback. It must not edit Node B through SSH, inject a token into
 the guest, weaken auth, silently fall back across policy, or claim the failed
 run as supervision evidence. Effects remain OFF.
+
+
+### Authorized alternate-route probes and public cancellation
+
+The owner-visible product configuration path was then exercised without changing
+source, route, computer realization, or gateway credentials. Before mutation,
+`System/model-policy.toml` had SHA-256
+`7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`.
+Temporary exact-role selections were written through authenticated
+`PUT /api/files/System/model-policy.toml`, checked through
+`GET /api/model-policy/resolve`, and rolled back through that same public file
+surface. The exact original bytes and SHA-256 were restored after the probes.
+No secret entered the guest policy file.
+
+The available alternate routes did not provide an accepting multi-turn tool
+loop:
+
+- DeepSeek-selected Texture run `1666bedd-bbab-435b-be56-e6abe761f6a1`
+  retained DeepSeek metadata but exhausted its configured provider-precondition
+  fallbacks and terminated at iteration 2 on the same ChatGPT 401.
+- Fireworks legacy-model run `0ef1b196-87b3-43b0-89dd-3d35f230e094`
+  terminated at iteration 3 on the same terminal ChatGPT fallback; the deployed
+  Kimi selection was separately tried with and without explicit reasoning as
+  runs `d6df68a5-c72c-4901-ad83-af5624844459` and
+  `58e9c17d-cdf9-42c3-bb4d-738186ec1bef`, each terminating at iteration 1 on
+  the same ChatGPT credential failure.
+- Z.AI-selected run `db8164af-2709-44a3-b5a9-7a37ad6df9ea` was durably blocked
+  by an upstream HTTP 429 before iteration zero.
+- Bedrock-selected run `0e2b8082-fc68-49dd-abc5-64dc6628db08` failed closed as
+  an unsupported deployed provider.
+
+None of these runs created a Researcher, lifecycle update, Texture revision,
+source, Super direction, capsule, or effect. They are availability evidence,
+not successful supervision evidence. Silent policy fallback is therefore not a
+valid closure, and further owner-policy permutations cannot repair a stale
+server-owned ChatGPT refresh token or exhausted/unavailable provider capacity.
+The remaining remediation authority is the canonical host-side gateway
+credential/provider operator path; this Definition still forbids SSH, guest
+credential injection, auth weakening, or an unreviewed source fallback.
+
+The retained failed trajectory was then closed through the authenticated public
+lifecycle command, not deleted. Command
+`public-cancel:cts-failed-acceptance-cancel-ac6dd16b-v7` conditionally matched
+lifecycle version 7 and head
+`d1a831ba-6af5-5206-aa03-49caf4b047dc`; the returned snapshot records trajectory
+`8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d` and its initial work as `cancelled`,
+terminal head unchanged, lifecycle version/reducer sequence 9, and activation
+`58e9c17d-cdf9-42c3-bb4d-738186ec1bef` cancelled. The temporary acceptance API
+key was revoked through `DELETE /auth/api-keys/{id}` (HTTP 204), and a subsequent
+authenticated probe returned HTTP 401. Effects remain OFF. Exact-candidate
+identity, create-route availability, initial-work restart projection, public
+owner instructions, model-policy rollback, and public cancellation are now
+proved; the repeated supervision/capsule/no-effect acceptance remains blocked
+on protected server-side provider availability.

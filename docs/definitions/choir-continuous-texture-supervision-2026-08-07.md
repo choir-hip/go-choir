@@ -229,23 +229,23 @@ measures:
 
 now:
   status: blocked
-  slice: "Final reviewed runtime candidate 99fc3e6b passed the complete race-selected CI and was deployed to Node B with exact host/sandbox activation receipts. Independent follow-up review accepted the protected CI-repair delta. Authenticated product acceptance is blocked because the owner-scoped stable computer remains an immutable constructed version at 7122f279; the new lifecycle route returns 404 there. Effects remain OFF and all registries remain open."
-  question: "Which already-authorized staging computer/version transition may expose exact candidate 99fc3e6b to the authenticated stable-computer product path without mutating the unrelated constructed computer, creating a candidate/worker computer, using SSH, or promoting effects before acceptance?"
+  slice: "Exact candidate ac6dd16b passed final independent lifecycle review, selected CI, and exact Node B deployment. Nonce-bound product identity joined the authorized stable acceptance computer, VM epoch 8247, guest, host, route, and platform attestation to ac6dd16b. Restart recovery executed the repaired committed-start projection, the public lifecycle create/tell/cancel and owner model-policy surfaces worked, and the failed trajectory was cancelled durably. Repeated supervision acceptance is now blocked by protected server-side provider availability: ChatGPT auth returns refresh_token_reused, Z.AI returns 429, configured alternate tool-loop routes exhaust to that terminal ChatGPT failure, and Bedrock is unavailable. Effects remain OFF and registries remain open."
+  question: "Which canonical host-side gateway credential/provider operator authority can renew ChatGPT or restore one configured tool-capable provider without SSH, guest credential injection, auth weakening, route mutation, or silent policy fallback?"
   reconciliation:
-    observed_at: 2026-08-08T13:20:00Z
-    source_ref: 99fc3e6b7bf151ddad1f0927ca18a24ba5275d10
-    deploy_identity: "Node B activation receipt 99fc3e6b7bf151ddad1f0927ca18a24ba5275d10; owner computer computer-03335285269bdba4f94377e56879f9e6 still joins immutable code 7122f2799be4458f4b925be11990321c7e70ffc4"
+    observed_at: 2026-08-08T15:05:00Z
+    source_ref: ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee
+    deploy_identity: "Nonce-bound execution identity joined API-key computer scope vm-bbdbbd01c4390b7036067aaa12afeb68, guest computer-42850e9734d9442386c5dd8bf3afbf19, VM epoch 8247, host, route, deployment receipt, and platform attestation to exact ac6dd16b"
     authority_identities: [docs/choir-doctrine.md, docs/agent-product-doctrine.md, docs/computer-ontology.md, docs/supervision-protocol.md, docs/texture-agentic-invariants-2026-06-13.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, "owner directive in this run: proceed without asking", "owner directive in this run: use the Definition dashboard to supervise /goal until Texture works correctly"]
-    policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "2026-08-08 audit inventory: origin/main contains runtime 99fc3e6b and blocker/evidence receipts through 1dc2642b; current edits are goal-owned Definition audit and active-registry truth updates. The unrelated .context and terminal-outcome-closure objectgraph/store WIP remain forbidden and untouched."
+    policy_resolution_ref: "Authenticated model-policy file and resolve APIs; original SHA-256 7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a restored exactly after alternate-route probes"
+    worktree_inventory_ref: "2026-08-08 audit inventory: origin/main contains exact runtime ac6dd16b and provider-blocker receipt 4db19fbe; current edits are goal-owned Definition/evidence/registry truth updates. Unrelated worktrees remain forbidden and untouched."
     status: reconciled
   candidate:
     id: continuous-texture-supervision-runtime-v1
-    state: ci_and_host_deployed_product_blocked
-    ref: git:99fc3e6b7bf151ddad1f0927ca18a24ba5275d10
+    state: ci_deployed_exact_product_provider_blocked
+    ref: git:ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee
     owner: current goal session
-    base: cdaa787bf2d006a1d4e59c1650a232f2083d8f9d
-    digest: 99fc3e6b7bf151ddad1f0927ca18a24ba5275d10
+    base: 99fc3e6b7bf151ddad1f0927ca18a24ba5275d10
+    digest: ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee
     scope: [internal/agentprofile, internal/agentcore, internal/actorruntime, internal/capsule, internal/store, internal/textureowner, internal/toolregistry, internal/types, cmd/choir, scripts/go-test-non-runtime-shards, docs/supervision-protocol.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, this Definition and adjacent focused tests]
   decision:
     selected: "Use one lifecycle object-graph reducer/event/receipt authority for bidirectional controls and one atomic Texture turn; keep persistent Super exact and non-lifecycle; make authenticated durable run memory the sole delivery-consumption proof; derive assignment/candidate/verification/cancellation fate in trusted runtime and Store; give assigned CoSupers only an empty-set capsule-local registry plus reporting; retain delayed authenticated results as evidence only; project one public version per semantic revision."
@@ -255,28 +255,28 @@ now:
     evidence_ref: docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
     owner_ratification_ref: "Owner directives in this run: proceed without asking; promote the repaired Definition; verifier may write and run tests/scripts only inside its capsule; supervise through the Definition dashboard until Texture works correctly."
     recorded_at: 2026-08-08T03:33:22Z
-    consequence: "Source, independent review, CI, and host deployment gates passed. Effects cannot turn on or registries close until the exact candidate is joined to an authorized staging computer, authenticated acceptance passes, real capsule cleanup/no-effect evidence is recorded, and the final audit closes."
-  evidence_refs: [git:99fc3e6b7bf151ddad1f0927ca18a24ba5275d10, "CI 31257971088 success", "Node B activation receipt at 99fc3e6b", docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, "independent lifecycle red-team ACCEPT at 3ac0935b", "independent capsule/security red-team ACCEPT at 363bf393 and protected follow-up ACCEPT at 99fc3e6b", /tmp/choir-capsule-final-linux.test]
-  blocker_or_risk: "The exact source passed review/CI and the host deploy is healthy, but authenticated current-computer status proves the serving product computer is the preserved constructed version at 7122f279. POST /api/texture/lifecycle-documents consequently returns 404. No SSH, new candidate/worker computer, unrelated route mutation, or premature effect promotion is authorized. Real Linux capsule behavior and the complete product trajectory remain unproved."
-  next_action: "Obtain or identify an already-authorized stable staging computer whose immutable route is exact candidate 99fc3e6b, then run the full authenticated acceptance. If no such authority exists, escalate this documented platform-update/acceptance deadlock to the owner rather than mutating the preserved constructed computer."
+    consequence: "Source, independent review, CI, exact deployment/product identity, initial wake recovery, and public cancellation gates passed. Effects cannot turn on or registries close until protected provider availability is restored, the repeated authenticated acceptance passes, real capsule cleanup/no-effect evidence is recorded, and the final audit closes."
+  evidence_refs: [git:ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee, "CI 31261269488 success", "Node B exact deployment ac6dd16b", "nonce-bound execution identity at VM epoch 8247", "Texture restart run 5ee276b3-d25c-41ac-afaa-5879a6ea5ecf", "public lifecycle cancellation command public-cancel:cts-failed-acceptance-cancel-ac6dd16b-v7", docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, "independent wake-scope red-team ACCEPT at ac6dd16b", /tmp/choir-capsule-final-linux.test]
+  blocker_or_risk: "Exact product identity and the repaired initial wake are proven, but no deployed provider completed the tool loop: ChatGPT is blocked by refresh_token_reused; Z.AI returned 429; DeepSeek, Xiaomi, and Fireworks precondition fallback chains terminate at the same ChatGPT credential failure; Bedrock is unsupported. Owner-visible policy probes were rolled back byte-for-byte, the failed trajectory was cancelled publicly, and the temporary key was revoked. Real Researcher/Super/capsule/Linux/no-effect behavior remains unproved."
+  next_action: "Escalate the documented protected gateway credential/provider-availability blocker to the canonical operator authority. After an audited renewal or capacity restoration, verify exact ac6dd16b identity again, create a fresh trajectory, and run the full acceptance. Do not use SSH, inject guest secrets, weaken auth, or add an unreviewed fallback."
 
 receipts:
   - id: continuous-supervision-runtime-landing-v1
     boundary: implement
-    commit_or_artifact: git:99fc3e6b7bf151ddad1f0927ca18a24ba5275d10
-    proof_refs: [docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, "GitHub Actions run 31257971088", "Node B activation receipt 2026-08-08T13:12:35Z"]
+    commit_or_artifact: git:ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee
+    proof_refs: [docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, "GitHub Actions run 31261269488", "nonce-bound execution identity at VM epoch 8247", "public cancellation snapshot at lifecycle version 9"]
     rollback_ref: git:cdaa787bf2d006a1d4e59c1650a232f2083d8f9d
-    disposition: "Independent protected-delta review ACCEPT; full selected CI and host deployment succeeded. Deployed product acceptance is blocked because the authenticated stable computer serves immutable code 7122f279 and returns 404 for the new lifecycle route. Effects OFF; registries open."
-    problem_ref: docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md#staging-immutable-route-acceptance-blocker--2026-08-08
+    disposition: "Independent exact wake-scope review ACCEPT; full selected CI and exact host/guest deployment succeeded. Boot recovery projected the stranded initial work, and public create/tell/cancel/model-policy surfaces executed. Deployed repeated supervision is blocked by protected provider credential/quota availability. The failed trajectory is durably cancelled, owner policy restored exactly, temporary key revoked, effects OFF, registries open."
+    problem_ref: docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md#exact-candidate-provider-credential-failure--2026-08-08
     authorization_ref: owner-ratified active Definition landing loop
-    candidate_or_evidence_refs: [git:99fc3e6b7bf151ddad1f0927ca18a24ba5275d10, "independent capsule/security follow-up ACCEPT at exact 99fc3e6b", "authenticated computer computer-03335285269bdba4f94377e56879f9e6 epoch 130"]
+    candidate_or_evidence_refs: [git:ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee, "independent lifecycle wake-scope ACCEPT at exact ac6dd16b", "execution identity guest computer-42850e9734d9442386c5dd8bf3afbf19 epoch 8247", "cancelled trajectory 8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d"]
     landing:
-      source_commit: 99fc3e6b7bf151ddad1f0927ca18a24ba5275d10
-      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/31257971088
-      deploy_ref: https://github.com/choir-hip/go-choir/actions/runs/31257971088/job/93105759406
-      environment_identity: "host/sandbox activation 99fc3e6b; owner computer immutable code 7122f279 (mismatch, not accepted)"
-      deployed_acceptance: blocked_http_404_on_authenticated_product_computer
-    registry_conformance_ref: "all three continuous-supervision entries remain promoted but open; effects remain OFF pending deployed acceptance"
+      source_commit: ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/31261269488
+      deploy_ref: https://github.com/choir-hip/go-choir/actions/runs/31261269488
+      environment_identity: "nonce-bound joined host/guest/platform identity exact ac6dd16b at VM epoch 8247"
+      deployed_acceptance: "partial: create/initial-wake/owner-instruction/policy-rollback/public-cancellation passed; provider-dependent supervision blocked"
+    registry_conformance_ref: "all three continuous-supervision entries remain active/open; effects remain OFF pending provider restoration and full deployed acceptance"
   - id: continuous-supervision-definition-review-v1
     boundary: define
     commit_or_artifact: sha256:880c00cb8f7a6c546825689a7ba37c02a551f897a93080f5e1e2dbbda2cb89ed
