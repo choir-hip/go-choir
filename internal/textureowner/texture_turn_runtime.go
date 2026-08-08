@@ -195,7 +195,13 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 	// A successful replay is durable success but not a new commit. Only packets
 	// first created by this commit are eligible for actor wake.
 	if !result.Replay && h.wakeTextureControl != nil {
+		seenTargets := map[string]bool{}
 		for _, control := range result.Controls {
+			key := control.TrajectoryID + "\x00" + control.TargetAgentID
+			if seenTargets[key] {
+				continue
+			}
+			seenTargets[key] = true
 			h.wakeTextureControl(context.WithoutCancel(ctx), control)
 		}
 	}

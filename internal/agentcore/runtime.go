@@ -2199,6 +2199,22 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	if profile == agentprofile.Researcher {
+		updates, listErr := rt.store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, agentID, 100)
+		if listErr != nil {
+			return nil, listErr
+		}
+		updates, listErr = rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, updates, false)
+		if listErr != nil {
+			return nil, listErr
+		}
+		updates = selectLifecycleControlActivation(updates, trajectoryID, lifecycleControlWorkIDsForRun(rec))
+		if len(updates) > 0 {
+			if _, bindErr := rt.bindLifecycleControlsToRun(ctx, rec, updates); bindErr != nil {
+				return nil, bindErr
+			}
+		}
+	}
 	rt.lifecycleWorkReconcileMu.Unlock()
 	reconcileLocked = false
 	rt.activate(rec)
