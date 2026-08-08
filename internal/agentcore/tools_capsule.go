@@ -18,8 +18,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // CapsuleToolCtx is injected by guest core. Opaque handles are bound to the
@@ -70,9 +72,9 @@ func RegisterCapsuleTools(registry *toolregistry.ToolRegistry) error {
 // capsule. It deliberately excludes host self-development proposal,
 // verification, event, updater-root, and finalization authority. No host profile
 // registry wires this future surface today.
-func RegisterCapsuleLocalTools(registry *toolregistry.ToolRegistry) error {
+func RegisterCapsuleLocalTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
 	for _, tool := range []toolregistry.Tool{
-		newCapsuleExecTool(), newCapsuleReadFileTool(), newCapsuleWriteFileTool(), newCapsuleListDirTool(),
+		newCapsuleExecTool(), newCapsuleReadFileTool(), newCapsuleWriteFileTool(), newCapsuleListDirTool(), newRecordAssignedCoSuperReportTool(rt),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
@@ -111,8 +113,14 @@ func requireCapsuleMutationRole(ctx context.Context) (*CapsuleToolCtx, error) {
 		return nil, err
 	}
 	execution := toolregistry.ExecutionContextFrom(ctx)
-	if execution.RunRecord == nil || normalizeCoSuperSlot(metadataStringValue(execution.RunRecord.Metadata, runMetadataCoSuperSlot)) != "implementation" {
-		return nil, fmt.Errorf("capsule mutation is restricted to the co-super implementation slot")
+	kind := ""
+	if execution.RunRecord != nil {
+		kind = metadataStringValue(execution.RunRecord.Metadata, "assignment_kind")
+	}
+	if execution.RunRecord == nil || metadataStringValue(execution.RunRecord.Metadata, "assignment_id") == "" ||
+		metadataIntValue(execution.RunRecord.Metadata, "assignment_attempt") <= 0 || toolCtx.CapsuleHandle == "" ||
+		(kind != string(types.CoSuperAssignmentImplementation) && kind != string(types.CoSuperAssignmentVerification)) {
+		return nil, fmt.Errorf("capsule mutation requires an exact bound writable CoSuper assignment")
 	}
 	return toolCtx, nil
 }
@@ -777,6 +785,55 @@ func newCapsuleListDirTool() toolregistry.Tool {
 				return "", err
 			}
 			return toolregistry.ResultJSON(map[string]any{"path": input.Path, "entries": entries})
+		},
+	}
+}
+
+func newRecordAssignedCoSuperReportTool(rt *Runtime) toolregistry.Tool {
+	type args struct {
+		Result        types.CoSuperAssignmentResultKind `json:"result"`
+		Verdict       types.CoSuperAssignmentVerdict    `json:"verdict"`
+		ExecutionRefs []string                          `json:"execution_refs"`
+	}
+	return toolregistry.Tool{
+		Name: "record_assignment_result", Description: "Record a typed partial or terminal result for this exact capsule assignment, with bound command/output/mutation evidence.",
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
+			"result":         map[string]any{"type": "string", "enum": []string{"completed", "failed", "blocked", "partial"}},
+			"verdict":        map[string]any{"type": "string", "enum": []string{"none", "pass", "fail", "abstain"}},
+			"execution_refs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		}, []string{"result", "verdict", "execution_refs"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			toolCtx, err := requireCapsuleMutationRole(ctx)
+			if err != nil {
+				return "", err
+			}
+			var input args
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return "", err
+			}
+			input.ExecutionRefs = trimNonEmptyStrings(input.ExecutionRefs)
+			receipts, err := toolCtx.Executor.ResolveExecutionReceipts(input.ExecutionRefs)
+			if err != nil && len(input.ExecutionRefs) > 0 {
+				return "", err
+			}
+			commands := make([]types.CoSuperRecordedCommand, 0, len(receipts))
+			outputs := make([]types.CoSuperRecordedOutput, 0, len(receipts)*2)
+			for _, receipt := range receipts {
+				commandDigest := objectgraph.SHA256([]byte(receipt.Command))
+				commandID := "capsule-command:" + objectgraph.SHA256([]byte(receipt.ReceiptRef))
+				commands = append(commands, types.CoSuperRecordedCommand{CommandID: commandID, CommandDigest: commandDigest, ExecutionRef: receipt.ReceiptRef, ExitCode: receipt.ExitCode})
+				outputs = append(outputs,
+					types.CoSuperRecordedOutput{OutputID: commandID + ":stdout", Kind: "stdout", Digest: "sha256:" + strings.TrimPrefix(receipt.StdoutDigest, "sha256:"), Ref: receipt.ReceiptRef + "#stdout"},
+					types.CoSuperRecordedOutput{OutputID: commandID + ":stderr", Kind: "stderr", Digest: "sha256:" + strings.TrimPrefix(receipt.StderrDigest, "sha256:"), Ref: receipt.ReceiptRef + "#stderr"})
+			}
+			execution := toolregistry.ExecutionContextFrom(ctx)
+			report := types.CoSuperAssignmentReport{Result: input.Result, Verdict: input.Verdict, Commands: commands, Outputs: outputs}
+			result, err := rt.recordAssignedCoSuperReport(ctx, execution.RunRecord, execution.ToolCallID, report)
+			if err != nil {
+				return "", err
+			}
+			return toolregistry.ResultJSON(map[string]any{"receipt": result.Receipt, "assignment_id": result.Assignment.AssignmentID,
+				"attempt": result.Assignment.Binding.Attempt, "disposition": result.Assignment.Disposition, "report": result.Report, "candidate": result.Candidate})
 		},
 	}
 }

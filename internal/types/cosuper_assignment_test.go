@@ -14,7 +14,7 @@ func validCoSuperAssignmentFixture(kind CoSuperAssignmentKind, writable bool) Co
 	now := time.Now().UTC()
 	binding := CoSuperAssignmentBinding{
 		OwnerID: "owner", ComputerID: "computer", TrajectoryID: "trajectory",
-		ParentAgentID: "super:owner", ParentRunID: "run-super", ParentDecisionID: "decision-1", ParentControlID: "control-1",
+		ParentAgentID: "super:owner", ParentRunID: "run-super", ParentDecisionID: "decision:" + assignmentDigest("d"), ParentControlID: "control-1",
 		ParentWorkItemID: "work-super", AssignedWorkItemID: "work-cosuper", AssignedAgentID: "co-super:one",
 		Kind: kind, Attempt: 1, ScopeDigest: assignmentDigest("a"), CapabilityDigest: assignmentDigest("b"),
 		SubjectDigest: assignmentDigest("c"), Writable: writable,
@@ -133,5 +133,16 @@ func TestVerificationReportSubjectIdentityContract(t *testing.T) {
 	missing.ObservedSubjectDigest = ""
 	if err := missing.ValidateAgainst(a); err == nil {
 		t.Fatal("verification without immutable subject digest accepted")
+	}
+}
+
+func TestVerificationPassRequiresCapsuleCommandEvidence(t *testing.T) {
+	a := validCoSuperAssignmentFixture(CoSuperAssignmentVerification, true)
+	a.Disposition, a.BoundRunID, a.LifecycleVersion = CoSuperAssignmentBound, "run-cosuper", 2
+	a.CapsuleDisposition = CoSuperCapsuleFrozen
+	report := validAssignmentReportFixture(a)
+	report.Commands = nil
+	if err := report.ValidateAgainst(a); err == nil || !strings.Contains(err.Error(), "command evidence") {
+		t.Fatalf("empty verification pass error = %v", err)
 	}
 }

@@ -126,6 +126,7 @@ func normalizeCoSuperReportForDigest(report types.CoSuperAssignmentReport) types
 
 func ComputeRecordCoSuperAssignmentReportDigest(req types.RecordCoSuperAssignmentReportRequest) (string, error) {
 	req.CommandDigest = ""
+	req.ExpectedLifecycleVersion = 0
 	req.Report = normalizeCoSuperReportForDigest(req.Report)
 	return computeCoSuperCommandDigest(req)
 }
@@ -196,6 +197,35 @@ func metadataExactString(metadata map[string]any, key string) string {
 	return strings.TrimSpace(value)
 }
 
+func persistentSuperControlBinding(metadata map[string]any, trajectoryID, workItemID, updateID string) bool {
+	raw := metadata["lifecycle_control_bindings"]
+	var entries []any
+	switch value := raw.(type) {
+	case []any:
+		entries = value
+	case []map[string]any:
+		entries = make([]any, len(value))
+		for i := range value {
+			entries[i] = value[i]
+		}
+	default:
+		return false
+	}
+	for _, rawEntry := range entries {
+		entry, ok := rawEntry.(map[string]any)
+		if !ok {
+			continue
+		}
+		entryTrajectory, _ := entry["trajectory_id"].(string)
+		entryWork, _ := entry["target_work_item_id"].(string)
+		entryUpdate, _ := entry["update_id"].(string)
+		if strings.TrimSpace(entryTrajectory) == trajectoryID && strings.TrimSpace(entryWork) == workItemID && strings.TrimSpace(entryUpdate) == updateID {
+			return true
+		}
+	}
+	return false
+}
+
 func persistentSuperRunStateAllowed(state types.RunState) bool {
 	return state == types.RunPending || state == types.RunRunning || state == types.RunPassivated
 }
@@ -203,7 +233,7 @@ func persistentSuperRunStateAllowed(state types.RunState) bool {
 // requireCoSuperAssignmentAuthority proves the join between the lifecycle work
 // graph and the exact non-lifecycle persistent Super control run. It never
 // promotes that Super run or agent into lifecycle state.
-func (s *Store) requireCoSuperAssignmentAuthority(ctx context.Context, binding types.CoSuperAssignmentBinding) (coSuperAuthorityObjects, error) {
+func (s *Store) requireCoSuperParentAuthority(ctx context.Context, binding types.CoSuperAssignmentBinding) (coSuperAuthorityObjects, error) {
 	if err := binding.Validate(); err != nil {
 		return coSuperAuthorityObjects{}, fmt.Errorf("%w: %v", ErrCoSuperAssignmentInvalid, err)
 	}
@@ -241,9 +271,7 @@ func (s *Store) requireCoSuperAssignmentAuthority(ctx context.Context, binding t
 		parentRun.RunID != binding.ParentRunID || parentRun.AgentID != binding.ParentAgentID || parentRun.TrajectoryID != "" ||
 		parentRun.AgentProfile != "super" || parentRun.AgentRole != "super" || !persistentSuperRunStateAllowed(parentRun.State) ||
 		metadataExactString(parentRun.Metadata, "assignment_trajectory_id") != binding.TrajectoryID ||
-		metadataExactString(parentRun.Metadata, "parent_work_item_id") != binding.ParentWorkItemID ||
-		metadataExactString(parentRun.Metadata, "parent_decision_id") != binding.ParentDecisionID ||
-		metadataExactString(parentRun.Metadata, "parent_control_id") != binding.ParentControlID {
+		!persistentSuperControlBinding(parentRun.Metadata, binding.TrajectoryID, binding.ParentWorkItemID, binding.ParentControlID) {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: parent decision/control run binding mismatch: %w", ErrCoSuperAssignmentInvalid)
 	}
 	parentWorkObj, parentWork, err := s.lifecycleWorkObject(ctx, binding.OwnerID, binding.ComputerID, binding.ParentWorkItemID)
@@ -254,6 +282,15 @@ func (s *Store) requireCoSuperAssignmentAuthority(ctx context.Context, binding t
 		parentWork.TrajectoryID != binding.TrajectoryID || parentWork.AssignedAgentID != binding.ParentAgentID ||
 		parentWork.AuthorityProfile != "super" || parentWork.Status != types.WorkItemOpen {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: parent Super target work mismatch: %w", ErrCoSuperAssignmentInvalid)
+	}
+	return coSuperAuthorityObjects{trajectory: trajectoryObj, trajectoryRec: trajectory, parentAgent: parentAgentObj,
+		parentRun: parentRunObj, parentWork: parentWorkObj}, nil
+}
+
+func (s *Store) requireCoSuperAssignmentAuthority(ctx context.Context, binding types.CoSuperAssignmentBinding) (coSuperAuthorityObjects, error) {
+	authority, err := s.requireCoSuperParentAuthority(ctx, binding)
+	if err != nil {
+		return coSuperAuthorityObjects{}, err
 	}
 	assignedAgentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, binding.OwnerID, binding.ComputerID, binding.AssignedAgentID)
 	if err != nil {
@@ -280,18 +317,20 @@ func (s *Store) requireCoSuperAssignmentAuthority(ctx context.Context, binding t
 		metadataExactString(assignedWork.Details, "parent_work_item_id") != binding.ParentWorkItemID {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: assigned CoSuper work mismatch: %w", ErrCoSuperAssignmentInvalid)
 	}
-	return coSuperAuthorityObjects{
-		trajectory: trajectoryObj, trajectoryRec: trajectory, parentAgent: parentAgentObj, parentRun: parentRunObj,
-		parentWork: parentWorkObj, assignedAgent: assignedAgentObj, assignedWork: assignedWorkObj,
-	}, nil
+	authority.assignedAgent, authority.assignedWork = assignedAgentObj, assignedWorkObj
+	return authority, nil
+}
+
+func coSuperParentAuthorityConditions(authority coSuperAuthorityObjects) []objectgraph.ObjectCondition {
+	return []objectgraph.ObjectCondition{
+		coSuperObjectCondition(authority.parentAgent), coSuperObjectCondition(authority.parentRun),
+		coSuperObjectCondition(authority.parentWork),
+	}
 }
 
 func coSuperAuthorityConditions(authority coSuperAuthorityObjects) []objectgraph.ObjectCondition {
-	return []objectgraph.ObjectCondition{
-		coSuperObjectCondition(authority.parentAgent), coSuperObjectCondition(authority.parentRun),
-		coSuperObjectCondition(authority.parentWork), coSuperObjectCondition(authority.assignedAgent),
-		coSuperObjectCondition(authority.assignedWork),
-	}
+	conditions := coSuperParentAuthorityConditions(authority)
+	return append(conditions, coSuperObjectCondition(authority.assignedAgent), coSuperObjectCondition(authority.assignedWork))
 }
 
 func (s *Store) prepareCoSuperLifecycleTransition(ctx context.Context, trajectoryObj objectgraph.Object, trajectory types.TrajectoryRecord, now time.Time) (coSuperLifecycleTransition, error) {
@@ -366,6 +405,48 @@ func (s *Store) replayCoSuperAssignmentCommand(ctx context.Context, ownerID, com
 	return result, true, nil
 }
 
+// ReplayRecordedCoSuperAssignmentReport returns the original authenticated
+// lifecycle receipt and current assignment projection without synthesizing a
+// new report command after fate transitions.
+func (s *Store) ReplayRecordedCoSuperAssignmentReport(ctx context.Context, ownerID, computerID, assignmentID string, attempt uint64, reportID, commandID string) (types.CoSuperAssignmentCommandResult, error) {
+	assignment, err := s.GetCoSuperAssignment(ctx, ownerID, computerID, assignmentID, attempt)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	report, err := s.GetCoSuperAssignmentReport(ctx, ownerID, computerID, reportID)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	if report.AssignmentID != assignmentID || report.Attempt != attempt {
+		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
+	}
+	commandCanonicalID, err := lifecycleCanonicalID(ogKindLifecycleCmd, ownerID, computerID, commandID)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	obj, err := s.lifecycleGraph().GetObject(ctx, commandCanonicalID)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	receipt, err := decodeLifecycleObject[types.LifecycleCommandReceipt](obj)
+	if err != nil || receipt.CommandID != commandID || receipt.Kind != types.LifecycleRecordCoSuperAssignment {
+		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
+	}
+	result := types.CoSuperAssignmentCommandResult{Receipt: receipt, Assignment: assignment, Report: &report, Replay: true}
+	if report.CandidateID != "" {
+		candidateObj, getErr := s.lifecycleGraph().GetObject(ctx, report.CandidateID)
+		if getErr != nil {
+			return types.CoSuperAssignmentCommandResult{}, getErr
+		}
+		candidate, decodeErr := decodeLifecycleObject[types.CoSuperSubjectCandidate](candidateObj)
+		if decodeErr != nil {
+			return types.CoSuperAssignmentCommandResult{}, decodeErr
+		}
+		result.Candidate = &candidate
+	}
+	return result, nil
+}
+
 func (s *Store) commitCoSuperLifecycleCommand(ctx context.Context, transition coSuperLifecycleTransition, commandKind types.LifecycleCommandKind, eventKind types.LifecycleEventKind, commandID, digest string, assignment types.CoSuperAssignment, report *types.CoSuperAssignmentReport, candidate *types.CoSuperSubjectCandidate, reportID, reason string, artifactObjects []objectgraph.Object, conditions []objectgraph.ObjectCondition, edges []objectgraph.Edge, evidenceRefs []string) (types.CoSuperAssignmentCommandResult, error) {
 	now := assignment.UpdatedAt
 	artifactRefs := make([]string, 0, len(artifactObjects))
@@ -406,6 +487,12 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 	if err := req.Binding.Validate(); err != nil {
 		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("%w: %v", ErrCoSuperAssignmentInvalid, err)
 	}
+	if strings.TrimSpace(req.AssignedAgent.AgentID) != req.Binding.AssignedAgentID ||
+		strings.TrimSpace(req.AssignedWork.WorkItemID) != req.Binding.AssignedWorkItemID ||
+		strings.TrimSpace(req.AssignedWork.AssignedAgentID) != req.Binding.AssignedAgentID ||
+		strings.TrimSpace(req.AssignedWork.Objective) == "" {
+		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
+	}
 	computedDigest, digestErr := ComputeOpenCoSuperAssignmentDigest(req)
 	if err := requireCoSuperCommandDigest(req.CommandDigest, computedDigest, digestErr); err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
@@ -415,7 +502,7 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 	if replay, found, err := s.replayCoSuperAssignmentCommand(ctx, req.Binding.OwnerID, req.Binding.ComputerID, req.CommandID, req.CommandDigest, req.AssignmentID, req.Binding.Attempt, ""); found || err != nil {
 		return replay, err
 	}
-	authority, err := s.requireCoSuperAssignmentAuthority(ctx, req.Binding)
+	authority, err := s.requireCoSuperParentAuthority(ctx, req.Binding)
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
@@ -424,6 +511,29 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
+
+	assignedAgent := req.AssignedAgent
+	assignedAgent.AgentID, assignedAgent.OwnerID, assignedAgent.ComputerID = req.Binding.AssignedAgentID, req.Binding.OwnerID, req.Binding.ComputerID
+	assignedAgent.SandboxID, assignedAgent.Profile, assignedAgent.Role = req.Binding.ComputerID, "co-super", "co-super"
+	assignedAgent.ChannelID, assignedAgent.ActiveRunID = req.Binding.AssignedAgentID, ""
+	assignedAgent.LifecycleVersion, assignedAgent.LastReducerSeq = 1, transition.seq
+	assignedAgent.CreatedAt, assignedAgent.UpdatedAt = now, now
+	assignedWork := req.AssignedWork
+	assignedWork.WorkItemID, assignedWork.OwnerID, assignedWork.ComputerID = req.Binding.AssignedWorkItemID, req.Binding.OwnerID, req.Binding.ComputerID
+	assignedWork.TrajectoryID, assignedWork.AssignedAgentID = req.Binding.TrajectoryID, req.Binding.AssignedAgentID
+	assignedWork.Objective = strings.TrimSpace(assignedWork.Objective)
+	assignedWork.AuthorityProfile, assignedWork.Status, assignedWork.ResultRef = "co-super", types.WorkItemOpen, ""
+	assignedWork.ObjectiveFingerprint = objectgraph.SHA256([]byte(assignedWork.Objective))
+	assignedWork.CreatedByRunID = req.Binding.ParentRunID
+	assignedWork.Details = map[string]any{
+		"assignment_id": req.AssignmentID, "attempt": req.Binding.Attempt, "assignment_kind": string(req.Binding.Kind),
+		"parent_loop_id": req.Binding.ParentRunID, "parent_decision_id": req.Binding.ParentDecisionID,
+		"parent_control_id": req.Binding.ParentControlID, "parent_work_item_id": req.Binding.ParentWorkItemID,
+		"scope_digest": req.Binding.ScopeDigest, "subject_digest": req.Binding.SubjectDigest,
+	}
+	assignedWork.LifecycleVersion, assignedWork.LastReducerSeq = 1, transition.seq
+	assignedWork.CreatedAt, assignedWork.UpdatedAt = now, now
+
 	assignment := types.CoSuperAssignment{
 		Schema: types.CoSuperAssignmentSchemaV1, AssignmentID: req.AssignmentID, Binding: req.Binding,
 		Disposition: types.CoSuperAssignmentOpen, CapsuleDisposition: types.CoSuperCapsuleUnbound,
@@ -437,13 +547,23 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
+	agentObj, err := lifecycleObject(ogKindAgent, req.Binding.OwnerID, req.Binding.ComputerID, assignedAgent.AgentID, assignedAgent,
+		lifecycleMetadata("agent_id", assignedAgent.AgentID, req.Binding.ComputerID, req.Binding.TrajectoryID, transition.seq), now, now)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	workObj, err := lifecycleObject(ogKindWorkItem, req.Binding.OwnerID, req.Binding.ComputerID, assignedWork.WorkItemID, assignedWork,
+		lifecycleMetadata("work_item_id", assignedWork.WorkItemID, req.Binding.ComputerID, req.Binding.TrajectoryID, transition.seq), now, now)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
 	targets := []struct {
 		obj  objectgraph.Object
 		kind objectgraph.EdgeKind
 	}{
 		{authority.trajectory, ogEdgeAssignmentTrajectory}, {authority.parentAgent, ogEdgeAssignmentParent},
 		{authority.parentRun, ogEdgeAssignmentParentRun}, {authority.parentWork, ogEdgeAssignmentParentWork},
-		{authority.assignedAgent, ogEdgeAssignmentAgent}, {authority.assignedWork, ogEdgeAssignmentWork},
+		{agentObj, ogEdgeAssignmentAgent}, {workObj, ogEdgeAssignmentWork},
 	}
 	edges := make([]objectgraph.Edge, 0, len(targets))
 	for _, target := range targets {
@@ -453,10 +573,11 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 		}
 		edges = append(edges, edge)
 	}
-	conditions := coSuperAuthorityConditions(authority)
-	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: assignmentObj.CanonicalID})
+	conditions := coSuperParentAuthorityConditions(authority)
+	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: assignmentObj.CanonicalID},
+		objectgraph.ObjectCondition{CanonicalID: agentObj.CanonicalID}, objectgraph.ObjectCondition{CanonicalID: workObj.CanonicalID})
 	return s.commitCoSuperLifecycleCommand(ctx, transition, types.LifecycleOpenCoSuperAssignment, types.LifecycleCoSuperAssignmentOpened,
-		req.CommandID, req.CommandDigest, assignment, nil, nil, "", "", []objectgraph.Object{assignmentObj}, conditions, edges, nil)
+		req.CommandID, req.CommandDigest, assignment, nil, nil, "", "", []objectgraph.Object{assignmentObj, agentObj, workObj}, conditions, edges, nil)
 }
 
 func (s *Store) getCoSuperAssignmentObject(ctx context.Context, ownerID, computerID, assignmentID string, attempt uint64) (objectgraph.Object, types.CoSuperAssignment, error) {
@@ -507,36 +628,73 @@ func (s *Store) ListCoSuperAssignments(ctx context.Context, ownerID, computerID,
 	return out, nil
 }
 
-func (s *Store) requireCoSuperBoundRun(ctx context.Context, assignment types.CoSuperAssignment, runID string) (objectgraph.Object, error) {
-	runObj, err := s.lifecycleGetObject(ctx, ogKindRun, assignment.Binding.OwnerID, assignment.Binding.ComputerID, strings.TrimSpace(runID))
-	if err != nil {
-		return objectgraph.Object{}, err
+func metadataExactUint64(metadata map[string]any, key string) uint64 {
+	if metadata == nil {
+		return 0
 	}
-	run, err := decodeLifecycleObject[types.RunRecord](runObj)
-	if err != nil {
-		return objectgraph.Object{}, err
+	switch value := metadata[key].(type) {
+	case uint64:
+		return value
+	case int:
+		if value > 0 {
+			return uint64(value)
+		}
+	case int64:
+		if value > 0 {
+			return uint64(value)
+		}
+	case float64:
+		if value > 0 && value == float64(uint64(value)) {
+			return uint64(value)
+		}
+	case json.Number:
+		parsed, _ := strconv.ParseUint(string(value), 10, 64)
+		return parsed
 	}
+	return 0
+}
+
+func validateCoSuperAssignmentRun(assignment types.CoSuperAssignment, assignedAgent types.AgentRecord, run types.RunRecord) error {
 	workIDs, bindingErr := lifecycleActivationWorkItemIDs(run.Metadata)
-	if bindingErr != nil || !slices.Contains(workIDs, assignment.Binding.AssignedWorkItemID) ||
-		run.OwnerID != assignment.Binding.OwnerID || run.SandboxID != assignment.Binding.ComputerID ||
+	coordinationID := metadataExactString(run.Metadata, "coordination_contract_id")
+	coordinationDigest := metadataExactString(run.Metadata, "coordination_contract_digest")
+	if bindingErr != nil || len(workIDs) != 1 || workIDs[0] != assignment.Binding.AssignedWorkItemID ||
+		metadataExactString(run.Metadata, "lifecycle_work_item_id") != assignment.Binding.AssignedWorkItemID ||
+		strings.TrimSpace(run.RunID) == "" || run.OwnerID != assignment.Binding.OwnerID || run.SandboxID != assignment.Binding.ComputerID ||
 		run.TrajectoryID != assignment.Binding.TrajectoryID || run.AgentID != assignment.Binding.AssignedAgentID ||
-		run.AgentProfile != "co-super" || run.AgentRole != "co-super" || !run.State.Active() ||
-		run.RequestedByRunID != assignment.Binding.ParentRunID ||
+		run.ChannelID != assignedAgent.ChannelID || run.AgentProfile != "co-super" || run.AgentRole != "co-super" || run.State != types.RunPending ||
+		run.RequestedByRunID != assignment.Binding.ParentRunID || !run.CreatedAt.IsZero() || !run.UpdatedAt.IsZero() ||
+		run.FinishedAt != nil || run.Result != "" || run.Error != "" ||
+		metadataExactString(run.Metadata, "requested_by_agent_id") != assignment.Binding.ParentAgentID ||
+		metadataExactString(run.Metadata, "requested_by_profile") != "super" ||
+		metadataExactString(run.Metadata, "assignment_id") != assignment.AssignmentID ||
+		metadataExactUint64(run.Metadata, "assignment_attempt") != assignment.Binding.Attempt ||
+		metadataExactString(run.Metadata, "assignment_kind") != string(assignment.Binding.Kind) ||
+		metadataExactString(run.Metadata, "assigned_work_item_id") != assignment.Binding.AssignedWorkItemID ||
+		metadataExactString(run.Metadata, "parent_work_item_id") != assignment.Binding.ParentWorkItemID ||
 		metadataExactString(run.Metadata, "parent_decision_id") != assignment.Binding.ParentDecisionID ||
-		metadataExactString(run.Metadata, "parent_control_id") != assignment.Binding.ParentControlID {
-		return objectgraph.Object{}, fmt.Errorf("co-super assignment: exact run/work/parent binding mismatch: %w", ErrCoSuperAssignmentInvalid)
+		metadataExactString(run.Metadata, "parent_control_id") != assignment.Binding.ParentControlID ||
+		metadataExactString(run.Metadata, "capsule_id") != assignment.Binding.CapsuleID ||
+		metadataExactString(run.Metadata, "scope_digest") != assignment.Binding.ScopeDigest ||
+		metadataExactString(run.Metadata, "capability_digest") != assignment.Binding.CapabilityDigest ||
+		metadataExactString(run.Metadata, "subject_digest") != assignment.Binding.SubjectDigest ||
+		coordinationID != assignment.Binding.CoordinationContractID || coordinationDigest != assignment.Binding.CoordinationContractDigest {
+		return fmt.Errorf("co-super assignment: exact run/work/parent binding mismatch: %w", ErrCoSuperAssignmentInvalid)
 	}
-	return runObj, nil
+	return nil
 }
 
 func (s *Store) BindCoSuperAssignment(ctx context.Context, req types.BindCoSuperAssignmentRequest) (types.CoSuperAssignmentCommandResult, error) {
 	req.CommandID, req.CommandDigest = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest)
 	req.OwnerID, req.ComputerID, req.AssignmentID = strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID), strings.TrimSpace(req.AssignmentID)
 	req.RunID, req.CapsuleID = strings.TrimSpace(req.RunID), strings.TrimSpace(req.CapsuleID)
+	if req.RunID == "" {
+		req.RunID = strings.TrimSpace(req.Run.RunID)
+	}
 	if err := validateCoSuperCommand(req.CommandID, req.CommandDigest, req.AssignmentID, req.Attempt); err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
-	if strings.TrimSpace(req.OpaqueCapability) == "" || req.RunID == "" || req.ExpectedLifecycleVersion <= 0 {
+	if strings.TrimSpace(req.OpaqueCapability) == "" || req.RunID == "" || req.RunID != strings.TrimSpace(req.Run.RunID) || req.ExpectedLifecycleVersion <= 0 {
 		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
 	}
 	computedDigest, digestErr := ComputeBindCoSuperAssignmentDigest(req)
@@ -560,12 +718,31 @@ func (s *Store) BindCoSuperAssignment(ctx context.Context, req types.BindCoSuper
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
-	runObj, err := s.requireCoSuperBoundRun(ctx, assignment, req.RunID)
-	if err != nil {
+	assignedAgent, err := decodeLifecycleObject[types.AgentRecord](authority.assignedAgent)
+	if err != nil || assignedAgent.ActiveRunID != "" {
+		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
+	}
+	if err := validateCoSuperAssignmentRun(assignment, assignedAgent, req.Run); err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
 	now := time.Now().UTC()
 	transition, err := s.prepareCoSuperLifecycleTransition(ctx, authority.trajectory, authority.trajectoryRec, now)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	run := req.Run
+	run.RunID, run.CreatedAt, run.UpdatedAt, run.FinishedAt = req.RunID, now, now, nil
+	run.Result, run.Error = "", ""
+	runObj, err := lifecycleObject(ogKindRun, req.OwnerID, req.ComputerID, run.RunID, run,
+		lifecycleMetadata("run_id", run.RunID, req.ComputerID, assignment.Binding.TrajectoryID, transition.seq), now, now)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	assignedAgent.ActiveRunID = run.RunID
+	assignedAgent.LifecycleVersion++
+	assignedAgent.LastReducerSeq, assignedAgent.UpdatedAt = transition.seq, now
+	assignedAgentObj, err := lifecycleObject(ogKindAgent, req.OwnerID, req.ComputerID, assignedAgent.AgentID, assignedAgent,
+		lifecycleMetadata("agent_id", assignedAgent.AgentID, req.ComputerID, assignment.Binding.TrajectoryID, transition.seq), authority.assignedAgent.CreatedAt, now)
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
@@ -600,7 +777,7 @@ func (s *Store) BindCoSuperAssignment(ctx context.Context, req types.BindCoSuper
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
 	conditions := coSuperAuthorityConditions(authority)
-	conditions = append(conditions, coSuperObjectCondition(assignmentObj), coSuperObjectCondition(runObj),
+	conditions = append(conditions, coSuperObjectCondition(assignmentObj), objectgraph.ObjectCondition{CanonicalID: runObj.CanonicalID},
 		objectgraph.ObjectCondition{CanonicalID: runClaimObj.CanonicalID}, objectgraph.ObjectCondition{CanonicalID: capabilityObj.CanonicalID},
 		objectgraph.ObjectCondition{CanonicalID: capsuleObj.CanonicalID})
 	runEdge, err := coSuperEdge(updatedObj.CanonicalID, runObj.CanonicalID, ogEdgeAssignmentRun, now)
@@ -609,7 +786,7 @@ func (s *Store) BindCoSuperAssignment(ctx context.Context, req types.BindCoSuper
 	}
 	return s.commitCoSuperLifecycleCommand(ctx, transition, types.LifecycleBindCoSuperAssignment, types.LifecycleCoSuperAssignmentBound,
 		req.CommandID, req.CommandDigest, assignment, nil, nil, "", "",
-		[]objectgraph.Object{updatedObj, runClaimObj, capabilityObj, capsuleObj}, conditions, []objectgraph.Edge{runEdge}, nil)
+		[]objectgraph.Object{updatedObj, assignedAgentObj, runObj, runClaimObj, capabilityObj, capsuleObj}, conditions, []objectgraph.Edge{runEdge}, nil)
 }
 
 func coSuperReportChangedSubject(report types.CoSuperAssignmentReport, originalDigest string) bool {
@@ -679,7 +856,7 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 	report.Schema, report.AssignmentID, report.Attempt = types.CoSuperAssignmentSchemaV1, assignment.AssignmentID, assignment.Binding.Attempt
 	report.OwnerID, report.ComputerID, report.TrajectoryID = assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID
 	report.RunID, report.AssignedAgentID = assignment.BoundRunID, assignment.Binding.AssignedAgentID
-	report.Late = assignment.Disposition.Terminal() || assignment.CapsuleDisposition != types.CoSuperCapsuleActive
+	report.Late = assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked
 	report.CreatedAt = now
 	changed := coSuperReportChangedSubject(report, assignment.Binding.SubjectDigest)
 	var candidate *types.CoSuperSubjectCandidate
@@ -830,7 +1007,7 @@ func validCoSuperCapsuleTransition(current, next types.CoSuperCapsuleDisposition
 	case types.CoSuperCapsuleFrozen:
 		return current == types.CoSuperCapsuleFreezeRequested && intentRef != "" && ackRef != ""
 	case types.CoSuperCapsuleRevokeRequested:
-		return (current == types.CoSuperCapsuleActive || current == types.CoSuperCapsuleFreezeRequested || current == types.CoSuperCapsuleFrozen) && intentRef != "" && ackRef == ""
+		return (current == types.CoSuperCapsuleUnbound || current == types.CoSuperCapsuleActive || current == types.CoSuperCapsuleFreezeRequested || current == types.CoSuperCapsuleFrozen) && intentRef != "" && ackRef == ""
 	case types.CoSuperCapsuleRevoked:
 		return current == types.CoSuperCapsuleRevokeRequested && intentRef != "" && ackRef != ""
 	default:
@@ -861,7 +1038,8 @@ func (s *Store) SetCoSuperCapsuleDisposition(ctx context.Context, req types.SetC
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
-	if assignment.LifecycleVersion != req.ExpectedLifecycleVersion || assignment.BoundRunID == "" ||
+	if assignment.LifecycleVersion != req.ExpectedLifecycleVersion ||
+		(assignment.BoundRunID == "" && assignment.Disposition != types.CoSuperAssignmentOpen) ||
 		!validCoSuperCapsuleTransition(assignment.CapsuleDisposition, req.Disposition, req.IntentRef, req.AckRef) {
 		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
 	}

@@ -82,6 +82,9 @@ func (b CoSuperAssignmentBinding) Validate() error {
 			return fmt.Errorf("co-super assignment: %s is required and must be canonical", name)
 		}
 	}
+	if !strings.HasPrefix(b.ParentDecisionID, "decision:sha256:") || !ValidSHA256Digest(strings.TrimPrefix(b.ParentDecisionID, "decision:")) {
+		return fmt.Errorf("co-super assignment: parent_decision_id must be runtime-derived")
+	}
 	if b.ParentAgentID != "super:"+b.OwnerID {
 		return fmt.Errorf("co-super assignment: parent_agent_id must be exact persistent super:<owner>")
 	}
@@ -159,7 +162,8 @@ func (a CoSuperAssignment) Validate() error {
 	}
 	switch a.Disposition {
 	case CoSuperAssignmentOpen:
-		if a.BoundRunID != "" || a.TerminalAt != nil || a.CapsuleDisposition != CoSuperCapsuleUnbound {
+		if a.BoundRunID != "" || a.TerminalAt != nil ||
+			(a.CapsuleDisposition != CoSuperCapsuleUnbound && a.CapsuleDisposition != CoSuperCapsuleRevokeRequested && a.CapsuleDisposition != CoSuperCapsuleRevoked) {
 			return fmt.Errorf("co-super assignment: open assignment cannot be bound, terminal, or capsule-active")
 		}
 	case CoSuperAssignmentBound:
@@ -285,6 +289,12 @@ func (r CoSuperAssignmentReport) ValidateAgainst(a CoSuperAssignment) error {
 			return fmt.Errorf("co-super assignment report: pass requires completed result")
 		}
 	}
+	if a.Binding.Kind == CoSuperAssignmentVerification && r.Result == CoSuperResultCompleted && r.Verdict == CoSuperVerdictPass && len(r.Commands) == 0 {
+		return fmt.Errorf("co-super assignment report: verification pass requires exact capsule command evidence")
+	}
+	if a.Binding.Kind == CoSuperAssignmentImplementation && r.Result == CoSuperResultCompleted && len(r.Commands) == 0 && len(r.Mutations) == 0 {
+		return fmt.Errorf("co-super assignment report: implementation completion requires command or runtime-derived mutation evidence")
+	}
 	seen := map[string]struct{}{}
 	for _, command := range r.Commands {
 		if strings.TrimSpace(command.CommandID) == "" || !ValidSHA256Digest(command.CommandDigest) || strings.TrimSpace(command.ExecutionRef) == "" {
@@ -361,19 +371,22 @@ type OpenCoSuperAssignmentRequest struct {
 	CommandDigest string                   `json:"command_digest"`
 	AssignmentID  string                   `json:"assignment_id"`
 	Binding       CoSuperAssignmentBinding `json:"binding"`
+	AssignedAgent AgentRecord              `json:"assigned_agent"`
+	AssignedWork  WorkItemRecord           `json:"assigned_work"`
 }
 
 type BindCoSuperAssignmentRequest struct {
-	CommandID                string `json:"command_id"`
-	CommandDigest            string `json:"command_digest"`
-	OwnerID                  string `json:"owner_id"`
-	ComputerID               string `json:"computer_id"`
-	AssignmentID             string `json:"assignment_id"`
-	Attempt                  uint64 `json:"attempt"`
-	ExpectedLifecycleVersion int64  `json:"expected_lifecycle_version"`
-	RunID                    string `json:"loop_id"`
-	OpaqueCapability         string `json:"-"`
-	CapsuleID                string `json:"capsule_id,omitempty"`
+	CommandID                string    `json:"command_id"`
+	CommandDigest            string    `json:"command_digest"`
+	OwnerID                  string    `json:"owner_id"`
+	ComputerID               string    `json:"computer_id"`
+	AssignmentID             string    `json:"assignment_id"`
+	Attempt                  uint64    `json:"attempt"`
+	ExpectedLifecycleVersion int64     `json:"expected_lifecycle_version"`
+	RunID                    string    `json:"loop_id"`
+	Run                      RunRecord `json:"run"`
+	OpaqueCapability         string    `json:"-"`
+	CapsuleID                string    `json:"capsule_id,omitempty"`
 }
 
 type RecordCoSuperAssignmentReportRequest struct {

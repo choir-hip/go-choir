@@ -27,7 +27,7 @@ func installCoSuperAssignmentAuthority(t *testing.T, s *Store, count int) coSupe
 	f := coSuperAssignmentStoreFixture{
 		ownerID: "owner-assignment", computerID: "computer-assignment", trajectoryID: "trajectory-assignment",
 		parentAgentID: "super:owner-assignment", parentRunID: "run-super-assignment", parentWorkID: "work-super-assignment",
-		parentDecisionID: "decision-assignment", parentControlID: "control-assignment",
+		parentDecisionID: "decision:" + objectgraph.SHA256([]byte("decision-assignment")), parentControlID: "control-assignment",
 	}
 	trajectory := types.TrajectoryRecord{
 		TrajectoryID: f.trajectoryID, OwnerID: f.ownerID, ComputerID: f.computerID,
@@ -52,8 +52,9 @@ func installCoSuperAssignmentAuthority(t *testing.T, s *Store, count int) coSupe
 		AgentProfile: "super", AgentRole: "super", OwnerID: f.ownerID, SandboxID: f.computerID,
 		State: types.RunRunning, Prompt: "coordinate", CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{
-			"assignment_trajectory_id": f.trajectoryID, "parent_work_item_id": f.parentWorkID,
-			"parent_decision_id": f.parentDecisionID, "parent_control_id": f.parentControlID,
+			"assignment_trajectory_id": f.trajectoryID, "work_item_ids": []string{f.parentWorkID},
+			"lifecycle_control_bindings": []any{map[string]any{"trajectory_id": f.trajectoryID,
+				"target_work_item_id": f.parentWorkID, "update_id": f.parentControlID, "producer_agent_id": "texture:document-assignment"}},
 		},
 	}
 	mustLifecycleObject := func(kind objectgraph.ObjectKind, key string, body any, metadata map[string]any) objectgraph.Object {
@@ -78,33 +79,8 @@ func installCoSuperAssignmentAuthority(t *testing.T, s *Store, count int) coSupe
 		f.assignedAgentIDs = append(f.assignedAgentIDs, agentID)
 		f.assignedWorkIDs = append(f.assignedWorkIDs, workID)
 		f.assignedRunIDs = append(f.assignedRunIDs, runID)
-		agent := types.AgentRecord{
-			AgentID: agentID, OwnerID: f.ownerID, ComputerID: f.computerID, SandboxID: f.computerID,
-			Profile: "co-super", Role: "co-super", ChannelID: agentID, ActiveRunID: runID,
-			LifecycleVersion: 1, CreatedAt: now, UpdatedAt: now,
-		}
-		work := types.WorkItemRecord{
-			WorkItemID: workID, TrajectoryID: f.trajectoryID, OwnerID: f.ownerID, ComputerID: f.computerID,
-			Objective: "bounded delegated assignment", AuthorityProfile: "co-super", Status: types.WorkItemOpen,
-			AssignedAgentID: agentID, CreatedByRunID: f.parentRunID,
-			Details: map[string]any{"parent_loop_id": f.parentRunID, "parent_decision_id": f.parentDecisionID,
-				"parent_control_id": f.parentControlID, "parent_work_item_id": f.parentWorkID},
-			LifecycleVersion: 1, CreatedAt: now, UpdatedAt: now,
-		}
-		run := types.RunRecord{
-			RunID: runID, AgentID: agentID, ChannelID: agentID, RequestedByRunID: f.parentRunID, TrajectoryID: f.trajectoryID,
-			AgentProfile: "co-super", AgentRole: "co-super", OwnerID: f.ownerID, SandboxID: f.computerID,
-			State: types.RunRunning, Prompt: "perform bounded assignment", CreatedAt: now, UpdatedAt: now,
-			Metadata: map[string]any{
-				"work_item_ids": []string{workID}, "lifecycle_work_item_id": workID,
-				"parent_decision_id": f.parentDecisionID, "parent_control_id": f.parentControlID,
-			},
-		}
-		objects = append(objects,
-			mustLifecycleObject(ogKindAgent, agentID, agent, map[string]any{"agent_id": agentID, "computer_id": f.computerID}),
-			mustLifecycleObject(ogKindWorkItem, workID, work, lifecycleMetadata("work_item_id", workID, f.computerID, f.trajectoryID, 1)),
-			mustLifecycleObject(ogKindRun, runID, run, map[string]any{"run_id": runID, "computer_id": f.computerID, "trajectory_id": f.trajectoryID}),
-		)
+		// The standard assignment opener creates the lifecycle CoSuper subject
+		// and its work atomically. Fixtures reserve only their deterministic IDs.
 	}
 	if err := s.ogStore.PutBatch(ctx, objectgraph.Batch{Objects: objects}); err != nil {
 		t.Fatalf("install assignment authority: %v", err)
@@ -129,16 +105,36 @@ func coSuperOpenRequest(f coSuperAssignmentStoreFixture, index int, assignmentID
 	}
 	req := types.OpenCoSuperAssignmentRequest{
 		CommandID: "command-open-" + assignmentID + fmt.Sprintf("-%d", attempt), AssignmentID: assignmentID, Binding: binding,
+		AssignedAgent: types.AgentRecord{AgentID: binding.AssignedAgentID},
+		AssignedWork: types.WorkItemRecord{WorkItemID: binding.AssignedWorkItemID, AssignedAgentID: binding.AssignedAgentID,
+			Objective: "bounded delegated assignment"},
 	}
 	req.CommandDigest, _ = ComputeOpenCoSuperAssignmentDigest(req)
 	return req
 }
 
 func bindCoSuperRequest(open types.OpenCoSuperAssignmentRequest, runID, capability string) types.BindCoSuperAssignmentRequest {
+	run := types.RunRecord{
+		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
+		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
+		AgentProfile: "co-super", AgentRole: "co-super", OwnerID: open.Binding.OwnerID, SandboxID: open.Binding.ComputerID,
+		State: types.RunPending, Prompt: open.AssignedWork.Objective,
+		Metadata: map[string]any{
+			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
+			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "super",
+			"assignment_id": open.AssignmentID, "assignment_attempt": open.Binding.Attempt, "assignment_kind": string(open.Binding.Kind),
+			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
+			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
+			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest,
+			"capability_digest": open.Binding.CapabilityDigest, "subject_digest": open.Binding.SubjectDigest,
+			"coordination_contract_id":     open.Binding.CoordinationContractID,
+			"coordination_contract_digest": open.Binding.CoordinationContractDigest,
+		},
+	}
 	req := types.BindCoSuperAssignmentRequest{
 		CommandID: "command-bind-" + open.AssignmentID + fmt.Sprintf("-%d", open.Binding.Attempt),
 		OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: open.AssignmentID,
-		Attempt: open.Binding.Attempt, ExpectedLifecycleVersion: 1, RunID: runID,
+		Attempt: open.Binding.Attempt, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
 		OpaqueCapability: capability, CapsuleID: open.Binding.CapsuleID,
 	}
 	req.CommandDigest, _ = ComputeBindCoSuperAssignmentDigest(req)
@@ -399,14 +395,14 @@ func TestCoSuperAssignmentRejectsGenericLifecycleSuperSubstitute(t *testing.T) {
 func TestCoSuperAssignmentBindClaimsCapabilityAndCapsuleUniquely(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
-	f := installCoSuperAssignmentAuthority(t, s, 5)
+	f := installCoSuperAssignmentAuthority(t, s, 6)
 	opens := []types.OpenCoSuperAssignmentRequest{
 		coSuperOpenRequest(f, 0, "assignment-bind-0", 1, types.CoSuperAssignmentImplementation, true, "shared-capability", "shared-capsule"),
 		coSuperOpenRequest(f, 1, "assignment-bind-1", 1, types.CoSuperAssignmentImplementation, true, "shared-capability", "capsule-one"),
 		coSuperOpenRequest(f, 2, "assignment-bind-2", 1, types.CoSuperAssignmentImplementation, true, "capability-two", "shared-capsule"),
 		coSuperOpenRequest(f, 3, "assignment-bind-3", 1, types.CoSuperAssignmentImplementation, true, "capability-three", "capsule-three"),
 		coSuperOpenRequest(f, 4, "assignment-bind-4", 1, types.CoSuperAssignmentImplementation, true, "capability-four", "capsule-four"),
-		coSuperOpenRequest(f, 3, "assignment-bind-5", 1, types.CoSuperAssignmentImplementation, true, "capability-five", "capsule-five"),
+		coSuperOpenRequest(f, 5, "assignment-bind-5", 1, types.CoSuperAssignmentImplementation, true, "capability-five", "capsule-five"),
 	}
 	opens[2].Binding.CoordinationContractID = "coordination-future-only"
 	opens[2].Binding.CoordinationContractDigest = objectgraph.SHA256([]byte("coordination-future-only"))
@@ -434,7 +430,9 @@ func TestCoSuperAssignmentBindClaimsCapabilityAndCapsuleUniquely(t *testing.T) {
 	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(opens[3], f.assignedRunIDs[3], "capability-three")); err != nil {
 		t.Fatalf("independent bind: %v", err)
 	}
-	wrongRun := bindCoSuperRequest(opens[4], f.assignedRunIDs[3], "capability-four")
+	wrongRun := bindCoSuperRequest(opens[4], f.assignedRunIDs[4], "capability-four")
+	wrongRun.Run.AgentID = opens[3].Binding.AssignedAgentID
+	wrongRun.CommandDigest, _ = ComputeBindCoSuperAssignmentDigest(wrongRun)
 	if _, err := s.BindCoSuperAssignment(ctx, wrongRun); !errors.Is(err, ErrCoSuperAssignmentInvalid) {
 		t.Fatalf("cross-assignment run error = %v", err)
 	}
@@ -552,7 +550,7 @@ func TestCancelledAssignmentAcceptsLateResultWithoutReopeningOrCertifying(t *tes
 	}
 }
 
-func TestCapsuleFreezeDoesNotCompleteAssignment(t *testing.T) {
+func TestCapsuleFreezeAcknowledgementPermitsBoundTerminalReport(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installCoSuperAssignmentAuthority(t, s, 1)
@@ -582,9 +580,9 @@ func TestCapsuleFreezeDoesNotCompleteAssignment(t *testing.T) {
 	}
 	delayed := assignmentReportRequest(open, 4, "report-after-freeze", open.Binding.SubjectDigest, types.CoSuperResultCompleted, types.CoSuperVerdictPass)
 	reported, err := s.RecordCoSuperAssignmentReport(ctx, delayed)
-	if err != nil || reported.Report == nil || !reported.Report.Late || reported.Report.CertifiesOriginalSubject ||
-		reported.Assignment.Disposition != types.CoSuperAssignmentBound || reported.Assignment.CapsuleDisposition != types.CoSuperCapsuleFrozen {
-		t.Fatalf("delayed report after freeze changed outcome/certification: %+v, %v", reported, err)
+	if err != nil || reported.Report == nil || reported.Report.Late || !reported.Report.CertifiesOriginalSubject ||
+		reported.Assignment.Disposition != types.CoSuperAssignmentCompleted || reported.Assignment.CapsuleDisposition != types.CoSuperCapsuleFrozen {
+		t.Fatalf("frozen terminal report did not preserve exact certification: %+v, %v", reported, err)
 	}
 }
 
@@ -709,5 +707,80 @@ func TestAssignmentOutcomeAndCapsuleFateRemainSeparateAcrossRestart(t *testing.T
 	page, err := s.ListLifecycleEventPage(ctx, f.ownerID, f.computerID, f.trajectoryID, 1, 100)
 	if err != nil || len(page.Events) != len(snapshot.Events) {
 		t.Fatalf("assignment events absent from lifecycle paging: %d/%d, %v", len(page.Events), len(snapshot.Events), err)
+	}
+}
+
+func TestOpenedAssignmentCapsuleCleanupIntentAckBeforeCancel(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-prebind-cleanup", 1, types.CoSuperAssignmentImplementation, true, "cap", "capsule-prebind")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	intent := types.SetCoSuperCapsuleDispositionRequest{CommandID: "prebind-revoke-intent", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 1, Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: "intent:prebind"}
+	intent.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(intent)
+	requested, err := s.SetCoSuperCapsuleDisposition(ctx, intent)
+	if err != nil || requested.Assignment.Disposition != types.CoSuperAssignmentOpen {
+		t.Fatalf("intent: %+v %v", requested, err)
+	}
+	ack := intent
+	ack.CommandID = "prebind-revoke-ack"
+	ack.ExpectedLifecycleVersion = 2
+	ack.Disposition = types.CoSuperCapsuleRevoked
+	ack.AckRef = "ack:absent"
+	ack.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(ack)
+	revoked, err := s.SetCoSuperCapsuleDisposition(ctx, ack)
+	if err != nil || revoked.Assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+		t.Fatalf("ack: %+v %v", revoked, err)
+	}
+	cancel := types.CancelCoSuperAssignmentRequest{CommandID: "cancel-prebind", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 3, Reason: "mint failed"}
+	cancel.CommandDigest, _ = ComputeCancelCoSuperAssignmentDigest(cancel)
+	cancelled, err := s.CancelCoSuperAssignment(ctx, cancel)
+	if err != nil || cancelled.Assignment.Disposition != types.CoSuperAssignmentCancelled || cancelled.Assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+		t.Fatalf("cancel: %+v %v", cancelled, err)
+	}
+}
+
+func TestReplayRecordedReportAfterRevokeReturnsOriginalReceipt(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-report-replay", 1, types.CoSuperAssignmentVerification, true, "cap", "capsule")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(open, f.assignedRunIDs[0], "cap")); err != nil {
+		t.Fatal(err)
+	}
+	req := assignmentReportRequest(open, 2, "report-replay", open.Binding.SubjectDigest, types.CoSuperResultCompleted, types.CoSuperVerdictPass)
+	changedCAS := req
+	changedCAS.ExpectedLifecycleVersion = 99
+	changedDigest, _ := ComputeRecordCoSuperAssignmentReportDigest(changedCAS)
+	if changedDigest != req.CommandDigest {
+		t.Fatal("CAS precondition changed semantic report occurrence digest")
+	}
+	reported, err := s.RecordCoSuperAssignmentReport(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent := types.SetCoSuperCapsuleDispositionRequest{CommandID: "replay-revoke-intent", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 3, Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: "intent:replay"}
+	intent.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(intent)
+	x, err := s.SetCoSuperCapsuleDisposition(ctx, intent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ack := intent
+	ack.CommandID = "replay-revoke-ack"
+	ack.ExpectedLifecycleVersion = x.Assignment.LifecycleVersion
+	ack.Disposition = types.CoSuperCapsuleRevoked
+	ack.AckRef = "ack:replay"
+	ack.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(ack)
+	if _, err := s.SetCoSuperCapsuleDisposition(ctx, ack); err != nil {
+		t.Fatal(err)
+	}
+	replay, err := s.ReplayRecordedCoSuperAssignmentReport(ctx, f.ownerID, f.computerID, open.AssignmentID, 1, req.Report.ReportID, req.CommandID)
+	if err != nil || !replay.Replay || replay.Report == nil || replay.Receipt.CommandDigest != reported.Receipt.CommandDigest || replay.Assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+		t.Fatalf("replay: %+v %v", replay, err)
 	}
 }

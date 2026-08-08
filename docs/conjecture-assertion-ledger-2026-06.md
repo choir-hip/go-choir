@@ -16,13 +16,16 @@ artifacts. The superseded theory source remains available in Git history.
 ### A1 — Texture delegation tool-scope is enforced in code
 
 - **Claim:** Texture agents cannot spawn co-super or vsuper; spawn targets are
-  exactly `[researcher]`, enforced at call time; super is reachable only via
-  `request_super_execution` (routes to the persistent super, never spawns).
-- **Receipts:** `internal/coagentowner/spawn_tool.go` (spawn_agent tool gated
-  by `AllowedDelegateTargets`; `canonicalTargets` restricts roles),
-  `internal/agentprofile/agentprofile.go` (`AllowedDelegateTargets` per
-  profile), `internal/agentcore/tool_profiles.go:313` (registry assembly),
-  `internal/agentcore/runtime.go:3365` (`request_super_execution` routing).
+  exactly `[researcher]`, enforced at call time. Texture reaches only the exact
+  non-lifecycle persistent `super:<owner>` through a target-bound lifecycle
+  direction opener committed with its Texture turn; that Super may open exact
+  lifecycle CoSuper assignments, never a generic lifecycle Super activation.
+- **Receipts:** `internal/coagentowner/spawn_tool.go` (`spawn_agent` gated by
+  `AllowedSpawnTargets`), `internal/agentprofile/agentprofile.go` (separate
+  spawn/message policy), `internal/store/texture_turn.go` (exact persistent-Super
+  target-control opener), `internal/store/cosuper_assignments.go` (atomic
+  assignment Open/Bind receipts), and `internal/agentcore/tools_cosuper_assignment.go`
+  (exact persistent-Super runtime gate).
   *(Historical receipts `internal/runtime/tool_profiles.go:223-229`,
   `tool_profiles.go:314`, `tools_texture.go:194-237` moved/dissolved in commit
   `c791a0ae`.)*

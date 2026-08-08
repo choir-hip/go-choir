@@ -81,6 +81,14 @@ func NewExecutorWithSource(stateDir, lowerDir, sourceDir, brokerPath string, vmM
 	return e
 }
 
+// InitializationError reports fail-closed construction validation before the
+// executor is wired into a production role registry.
+func (e *Executor) InitializationError() error {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.initErr
+}
+
 // Spawn creates an isolated capsule with a private user/PID/mount/network/UTS/
 // IPC/cgroup namespace, overlay root, cgroup-v2 budget, and broker process.
 func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retErr error) {
@@ -362,8 +370,19 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 // signed capability material remains inside guest core and is never returned by
 // the agent tool surface.
 func (e *Executor) MintCapability(agentRunID string, role AgentRole, capsuleID string, ttl time.Duration) (*Capability, error) {
-	if strings.TrimSpace(agentRunID) == "" || ttl <= 0 || ttl > 24*time.Hour {
-		return nil, fmt.Errorf("capsule capability requires run identity and ttl in (0,24h]")
+	handle, err := randomOpaque("h-")
+	if err != nil {
+		return nil, err
+	}
+	return e.MintCapabilityHandle(agentRunID, role, capsuleID, handle, ttl)
+}
+
+// MintCapabilityHandle installs a runtime-precommitted opaque handle after the
+// assignment opener has durably bound its digest. The handle remains usable
+// only by the exact run/capsule pair and is never returned to the parent Super.
+func (e *Executor) MintCapabilityHandle(agentRunID string, role AgentRole, capsuleID, handle string, ttl time.Duration) (*Capability, error) {
+	if strings.TrimSpace(agentRunID) == "" || strings.TrimSpace(handle) == "" || handle != strings.TrimSpace(handle) || ttl <= 0 || ttl > 24*time.Hour {
+		return nil, fmt.Errorf("capsule capability requires run identity, canonical opaque handle, and ttl in (0,24h]")
 	}
 	if role != RoleCoSuper && role != RoleResearcher {
 		return nil, fmt.Errorf("capsule capability role %q is not grantable", role)
@@ -377,30 +396,47 @@ func (e *Executor) MintCapability(agentRunID string, role AgentRole, capsuleID s
 	} else if capsuleID != "*" {
 		return nil, fmt.Errorf("researcher capability must target wildcard")
 	}
+	key := capKey{AgentRunID: agentRunID, Handle: handle}
+	if _, exists := e.capabilities[key]; exists {
+		return nil, fmt.Errorf("capsule capability handle already exists")
+	}
 	capabilityID, err := randomOpaque("cap-")
 	if err != nil {
 		return nil, err
 	}
-	handle, err := randomOpaque("h-")
-	if err != nil {
-		return nil, err
-	}
 	capability := &Capability{
-		CapabilityID:  capabilityID,
-		Handle:        handle,
-		CapsuleID:     capsuleID,
-		AgentRunID:    agentRunID,
-		AgentRole:     role,
-		TargetCapsule: capsuleID,
-		Verbs:         cloneVerbSet(RoleVerbSets[role]),
-		ExpiresAt:     time.Now().UTC().Add(ttl),
+		CapabilityID: capabilityID, Handle: handle, CapsuleID: capsuleID, AgentRunID: agentRunID,
+		AgentRole: role, TargetCapsule: capsuleID, Verbs: cloneVerbSet(RoleVerbSets[role]),
+		ExpiresAt: time.Now().UTC().Add(ttl),
 	}
 	if err := SignCapability(capability, e.privateKey, "guest-ephemeral"); err != nil {
 		return nil, err
 	}
-	e.capabilities[capKey{AgentRunID: agentRunID, Handle: handle}] = capability
+	e.capabilities[key] = capability
 	copy := *capability
 	return &copy, nil
+}
+
+// AssignmentHandle resolves the only active opaque handle for an exact
+// assignment run/capsule pair. It is a trusted runtime bridge, never a model
+// result or durable field.
+func (e *Executor) AssignmentHandle(agentRunID, capsuleID string) (string, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	var handle string
+	for key, capability := range e.capabilities {
+		if key.AgentRunID != agentRunID || capability.TargetCapsule != capsuleID || e.revokedCaps[capability.CapabilityID] {
+			continue
+		}
+		if handle != "" {
+			return "", fmt.Errorf("capsule assignment capability is ambiguous")
+		}
+		handle = key.Handle
+	}
+	if handle == "" {
+		return "", fmt.Errorf("capsule assignment capability unavailable")
+	}
+	return handle, nil
 }
 
 func (e *Executor) ResolveCapability(agentRunID, handle string) (*Capability, error) {
@@ -729,6 +765,30 @@ func (e *Executor) ResolveGrantedCapsuleID(agentRunID, handle string) (string, e
 	}
 	return capability.TargetCapsule, nil
 }
+func (e *Executor) ResolveGrantedWorktreeDigest(ctx context.Context, agentRunID, handle string) (string, error) {
+	capability, err := e.ResolveCapability(agentRunID, handle)
+	if err != nil || capability.AgentRole != RoleCoSuper {
+		return "", fmt.Errorf("capsule granted worktree unavailable")
+	}
+	e.mu.RLock()
+	capsule := e.capsules[capability.TargetCapsule]
+	e.mu.RUnlock()
+	if capsule == nil {
+		return "", fmt.Errorf("capsule granted worktree unavailable")
+	}
+	capsule.mu.RLock()
+	state := capsule.State
+	capsule.mu.RUnlock()
+	if state != StateFrozen {
+		return "", fmt.Errorf("capsule granted worktree requires frozen capsule")
+	}
+	digest, err := digestCapsuleWorktree(ctx, capsule)
+	if err != nil {
+		return "", err
+	}
+	return "sha256:" + strings.TrimPrefix(digest, "sha256:"), nil
+}
+
 func (e *Executor) ResolveGrantedSourceSnapshotDigest(agentRunID, handle string) (string, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
 	if err != nil || capability.AgentRole != RoleCoSuper {
@@ -957,6 +1017,16 @@ func (e *Executor) resolveControl(agentRunID, handle string) (string, error) {
 		return "", fmt.Errorf("capsule control handle unavailable")
 	}
 	return capsuleID, nil
+}
+
+// HasCapsule is the trusted executor acknowledgement used by durable fate
+// reconciliation. False means this executor owns no live or quarantined
+// process/cgroup/overlay for the identity.
+func (e *Executor) HasCapsule(id string) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	_, ok := e.capsules[id]
+	return ok
 }
 
 func (e *Executor) InspectCapsuleRaw(id string) (*CapsuleDiagnostics, error) {
