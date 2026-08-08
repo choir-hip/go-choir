@@ -499,3 +499,33 @@ batches, injected turns, and further provider calls must remain cancelled. A
 successful closure stops the tool loop without completing or reopening the
 cancelled run. Deterministic proof must block a provider, cancel it, return the
 terminal tool call, and retain evidence while ordinary mutation remains denied.
+
+
+## First pushed candidate CI failures — 2026-08-08
+
+Pushed candidate `76e9cd7716aa069b303b4a524784261bb7cabd86`
+entered race-selected CI run
+[`31257297770`](https://github.com/choir-hip/go-choir/actions/runs/31257297770)
+and failed before deploy. This is a new landing blocker and is recorded before
+repair:
+
+- `go vet` found a possible detached terminal-closure context leak in
+  `internal/toolregistry/toolloop.go`; the cancel function is not mechanically
+  discharged on every path.
+- The real Linux capsule revocation test failed. Its exact assertion/log must be
+  inspected and the source or test repaired from Linux evidence, not Darwin
+  assumptions.
+- Two `internal/actorruntime` race fixtures now observe lifecycle producer runs
+  and canonical Texture reactivation in their active-run queries, contradicting
+  their older fixture expectations. The tests must distinguish the intended
+  exact activation rather than treating every trajectory run as the Texture
+  activation; any underlying product misprojection must be repaired instead.
+- The isolated Store race package hit Go's default ten-minute package timeout at
+  `TestApplyTextureTurnConsumesComplete101OwnerOccurrenceSet`. Full Store already
+  takes roughly 6.5 minutes without Race on this candidate. The CI shard gives
+  the Store its own job but does not raise the default package timeout, making
+  the selected red-candidate race lane structurally incapable of completing.
+  Preserve Store isolation and set a bounded timeout below the 30-minute job,
+  rather than skipping Race or deleting coverage.
+
+Deploy and acceptance remain blocked; effects remain OFF.
