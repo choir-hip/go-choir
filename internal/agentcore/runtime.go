@@ -2211,6 +2211,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 		updates = selectLifecycleControlActivation(updates, trajectoryID, lifecycleControlWorkIDsForRun(rec))
 		if len(updates) > 0 {
 			if _, bindErr := rt.bindLifecycleControlsToRun(ctx, rec, updates); bindErr != nil {
+				rt.failUnactivatedLifecycleControlRun(ctx, rec, bindErr)
 				return nil, bindErr
 			}
 		}

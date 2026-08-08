@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -122,6 +123,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	}
 	if lifecycleControls {
 		if _, err := rt.bindLifecycleControlsToRun(ctx, rec, updates); err != nil {
+			rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
 			return nil, err
 		}
 	}
@@ -419,6 +421,22 @@ func (rt *Runtime) bindLifecycleControlsToRun(ctx context.Context, rec *types.Ru
 	return result, nil
 }
 
+func (rt *Runtime) failUnactivatedLifecycleControlRun(ctx context.Context, rec *types.RunRecord, bindErr error) {
+	if rt == nil || rt.store == nil || rec == nil {
+		return
+	}
+	now := time.Now().UTC()
+	rec.State, rec.UpdatedAt, rec.FinishedAt = types.RunFailed, now, &now
+	if rec.Metadata == nil {
+		rec.Metadata = map[string]any{}
+	}
+	rec.Metadata["lifecycle_control_bind_failed"] = true
+	rec.Metadata["lifecycle_control_bind_failure"] = strings.TrimSpace(bindErr.Error())
+	if err := rt.store.UpdateRun(context.WithoutCancel(ctx), *rec); err != nil {
+		log.Printf("runtime: terminalize unactivated lifecycle control run %s: %v", rec.RunID, err)
+	}
+}
+
 func (rt *Runtime) listPendingPersistentSuperLifecycleControls(ctx context.Context, ownerID, computerID, agentID string, limit int) ([]types.CoagentSourcePacket, error) {
 	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
 	if ownerID == "" || computerID == "" || agentID != persistentSuperAgentID(ownerID) {
@@ -602,6 +620,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	}
 	if lifecycleControls {
 		if _, err := rt.bindLifecycleControlsToRun(ctx, rec, updates); err != nil {
+			rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
 			return nil, err
 		}
 	}
