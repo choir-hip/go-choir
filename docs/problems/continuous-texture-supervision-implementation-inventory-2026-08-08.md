@@ -556,3 +556,40 @@ computer's authority and either perform the standard reviewed route/promotion
 transition with rollback and exact identity receipts, or obtain a separately
 authorized product acceptance environment whose immutable computer identity is
 joined to `99fc3e6b`. Effects remain OFF and the registries remain open.
+
+
+## Lifecycle Texture create does not activate initial work — 2026-08-08
+
+An already-authorized staging acceptance account was recovered through its
+existing authenticated browser session. A nonce-bound execution-identity join
+proved host, guest sandbox, deployment receipt, VM epoch 8245, and platform
+attestation all bind exact candidate
+`99fc3e6b7bf151ddad1f0927ca18a24ba5275d10`. This resolves the earlier lack of
+an exact-candidate product environment without mutating the preserved
+constructed computer.
+
+The first authenticated product request exposed a new source defect before any
+repair. `POST /api/texture/lifecycle-documents` returned HTTP 201 and durably
+created document `11902866-d32e-55c4-9483-d9bd47c91a6c`, revision
+`d1a831ba-6af5-5206-aa03-49caf4b047dc`, trajectory
+`8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d`, and initial Texture-assigned work
+`74fa5e0f-92ee-5e3a-ac8f-0c4b8f044e4c`. For more than sixty seconds the
+snapshot remained reducer sequence 1 with exactly the start event, the work
+open, no updates, no later revision, and the Texture activation passivated. No
+provider/run/actor activity followed.
+
+The create handler calls `ReconcileAgentWake`, but that reconciler starts a new
+Texture run only when a pending lifecycle update or owner-instruction occurrence
+exists. `StartLifecycle` durably creates the initial assigned work and v0
+revision without either occurrence, so the successful new start commit has no
+executable projection. This violates the Definition's prompt-bar/create entry
+point and wake-after-commit contract. The repair must treat exact open initial
+work assigned to the lifecycle Texture as a durable wake reason, preserve
+concurrent replay/idempotency, bind the new run to that exact work and current
+head, and recover it after a crash between start commit and dispatch. It must not
+invent a second queue, enqueue a synthetic legacy packet, dispatch before the
+start commit, or wake an unrelated/terminal/non-lifecycle document.
+
+Effects remain OFF. The created trajectory is retained as failure evidence and
+must be cancelled through the public lifecycle authority after repair or final
+acceptance; it must not be silently deleted.
