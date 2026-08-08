@@ -110,12 +110,14 @@ Commands:
   lifecycle events <id>  Read reducer events after a durable cursor
   lifecycle <snapshot|events>  Observe the narrow durable-work protocol
   identity            Verify a nonce-bound signed execution identity
+  texture create --request-id id --title title --content text  Create a Texture document
   texture read <doc>  Read a Texture document's metadata (title, current revision id)
   texture history <doc>  List revision history for a document (metadata only)
   texture revisions <doc>  List revisions with full content bodies
   texture show [--revision id] <doc>  Show the current or exact historical version as JSON
   texture watch [--after cursor] <doc>  Watch durable version/control events as JSONL
   texture open-source --revision id --source-ref id --source-ref-version id <doc>
+  texture tell|correct --request-id id <doc> <instruction>
   search <query>      Search the corpus
   run start <text>    Submit a prompt to the conductor (starts a run)
   run status <id>     Get the status of a prompt-bar submission
@@ -818,18 +820,23 @@ func textureWatchEventTerminal(raw json.RawMessage) bool {
 
 func runTexture(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir texture: subcommand required (read|history|revisions|show|watch|open-source)")
+		fmt.Fprintln(stderr, "choir texture: subcommand required (create|read|history|revisions|show|watch|open-source|tell|correct)")
 		return 2
 	}
 	sub := args[0]
 	fs := flag.NewFlagSet("choir texture "+sub, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var revisionID, sourceRefID, sourceRefVersionID string
+	var title, initialContent, clientRequestID, expectedHeadRevisionID string
 	var after int64
 	var limit, reconnectAttempts int
 	var once bool
 	var pollInterval time.Duration
 	switch sub {
+	case "create":
+		fs.StringVar(&title, "title", "", "Texture document title")
+		fs.StringVar(&initialContent, "content", "", "initial owner-authored v0 content and objective")
+		fs.StringVar(&clientRequestID, "request-id", "", "stable client occurrence id for exact retries")
 	case "show":
 		fs.StringVar(&revisionID, "revision", "", "exact historical revision id; defaults to current head")
 	case "watch":
@@ -838,6 +845,9 @@ func runTexture(args []string, stdout, stderr io.Writer) int {
 		fs.BoolVar(&once, "once", false, "fetch one durable page and exit")
 		fs.DurationVar(&pollInterval, "poll-interval", time.Second, "delay between caught-up durable pages")
 		fs.IntVar(&reconnectAttempts, "reconnect-attempts", 3, "consecutive request failures tolerated before exit")
+	case "tell", "correct":
+		fs.StringVar(&clientRequestID, "request-id", "", "stable client occurrence id for exact retries")
+		fs.StringVar(&expectedHeadRevisionID, "expected-head", "", "expected current revision; defaults to a fresh document read")
 	case "open-source":
 		fs.StringVar(&revisionID, "revision", "", "exact Texture revision id")
 		fs.StringVar(&sourceRefID, "source-ref", "", "canonical source_ref id")
@@ -849,6 +859,26 @@ func runTexture(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	rest := fs.Args()
+	if sub == "create" {
+		if strings.TrimSpace(title) == "" || strings.TrimSpace(initialContent) == "" || strings.TrimSpace(clientRequestID) == "" {
+			fmt.Fprintln(stderr, "choir texture create: --title, --content, and --request-id are required")
+			return 2
+		}
+		var created json.RawMessage
+		body := map[string]string{"title": strings.TrimSpace(title), "initial_content": strings.TrimSpace(initialContent), "client_request_id": strings.TrimSpace(clientRequestID)}
+		if err := c.do(http.MethodPost, "/api/texture/lifecycle-documents", body, &created); err != nil {
+			fmt.Fprintf(stderr, "choir texture create: %v\n", err)
+			return 1
+		}
+		var envelope struct {
+			Schema string `json:"schema"`
+		}
+		if json.Unmarshal(created, &envelope) != nil || envelope.Schema != "choir.texture_create.v1" {
+			fmt.Fprintf(stderr, "choir texture create: unsupported create schema %q\n", envelope.Schema)
+			return 1
+		}
+		return writeJSON(stdout, created)
+	}
 	if len(rest) == 0 || strings.TrimSpace(rest[0]) == "" {
 		fmt.Fprintf(stderr, "choir texture %s: document id required\n", sub)
 		return 2
@@ -973,6 +1003,36 @@ func runTexture(args []string, stdout, stderr io.Writer) int {
 				time.Sleep(pollInterval)
 			}
 		}
+	case "tell", "correct":
+		if strings.TrimSpace(clientRequestID) == "" || len(rest) < 2 || strings.TrimSpace(strings.Join(rest[1:], " ")) == "" {
+			fmt.Fprintf(stderr, "choir texture %s: --request-id and instruction text are required\n", sub)
+			return 2
+		}
+		headID := strings.TrimSpace(expectedHeadRevisionID)
+		if headID == "" {
+			var document struct {
+				CurrentRevisionID string `json:"current_revision_id"`
+			}
+			if err := c.do(http.MethodGet, "/api/texture/documents/"+escapedDocID, nil, &document); err != nil {
+				fmt.Fprintf(stderr, "choir texture %s %s: %v\n", sub, docID, err)
+				return 1
+			}
+			headID = strings.TrimSpace(document.CurrentRevisionID)
+		}
+		body := map[string]string{"client_request_id": strings.TrimSpace(clientRequestID), "content": strings.TrimSpace(strings.Join(rest[1:], " ")), "expected_head_revision_id": headID}
+		var response json.RawMessage
+		if err := c.do(http.MethodPost, "/api/texture/documents/"+escapedDocID+"/"+sub, body, &response); err != nil {
+			fmt.Fprintf(stderr, "choir texture %s %s: %v\n", sub, docID, err)
+			return 1
+		}
+		var envelope struct {
+			Schema string `json:"schema"`
+		}
+		if json.Unmarshal(response, &envelope) != nil || envelope.Schema != "choir.texture_owner_instruction.v1" {
+			fmt.Fprintf(stderr, "choir texture %s %s: unsupported owner-instruction schema %q\n", sub, docID, envelope.Schema)
+			return 1
+		}
+		return writeJSON(stdout, response)
 	case "open-source":
 		if strings.TrimSpace(revisionID) == "" || strings.TrimSpace(sourceRefID) == "" || strings.TrimSpace(sourceRefVersionID) == "" {
 			fmt.Fprintln(stderr, "choir texture open-source: --revision, --source-ref, and --source-ref-version are required")

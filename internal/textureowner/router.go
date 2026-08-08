@@ -24,6 +24,9 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 	case "/api/texture/markdown-lineage/import":
 		h.HandleTextureImportMarkdownLineage(w, r)
 		return
+	case "/api/texture/lifecycle-documents":
+		h.HandleTextureLifecycleCreate(w, r)
+		return
 	}
 	if strings.HasPrefix(path, textureRevisionsPathPrefix) {
 		if strings.HasSuffix(path, "/blame") {
@@ -46,6 +49,8 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 			h.HandleTextureDocumentEvents(w, r)
 		case strings.HasSuffix(rest, "/source-open"):
 			h.HandleTextureSourceOpen(w, r)
+		case strings.HasSuffix(rest, "/tell"), strings.HasSuffix(rest, "/correct"):
+			h.HandleTextureOwnerInstruction(w, r)
 		case strings.HasSuffix(rest, "/revise"):
 			h.HandleTextureAgentRevision(w, r)
 		case strings.HasSuffix(rest, "/compare"):
