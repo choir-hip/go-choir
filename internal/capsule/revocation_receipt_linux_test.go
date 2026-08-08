@@ -9,6 +9,23 @@ import (
 	"testing"
 )
 
+func TestOrphanCleanupRejectsPathShapedCapsuleIdentityBeforeMutation(t *testing.T) {
+	state := t.TempDir()
+	marker := filepath.Join(state, "keep")
+	if err := os.WriteFile(marker, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e := NewExecutor(state, t.TempDir(), filepath.Join(t.TempDir(), "missing-broker"), 1<<20)
+	for _, capsuleID := range []string{"", ".", "..", "/", "child/name", `child\name`, " spaced "} {
+		if err := e.CleanupOrphanedCapsule(context.Background(), capsuleID); err == nil {
+			t.Fatalf("path-shaped capsule identity %q accepted", capsuleID)
+		}
+	}
+	if data, err := os.ReadFile(marker); err != nil || string(data) != "keep" {
+		t.Fatalf("cleanup identity refusal mutated executor state: %q %v", data, err)
+	}
+}
+
 func TestPersistRevocationReceiptIsStructuredDurableAndRequiresAbsentCapsule(t *testing.T) {
 	state := t.TempDir()
 	e := NewExecutor(state, t.TempDir(), filepath.Join(t.TempDir(), "missing-broker"), 1<<20)

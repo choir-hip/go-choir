@@ -128,8 +128,8 @@ func (b CoSuperAssignmentBinding) Validate() error {
 	if !b.Writable || strings.TrimSpace(b.CapsuleID) == "" {
 		return fmt.Errorf("co-super assignment: implementation and verification require a writable isolated capsule_id")
 	}
-	if b.CapsuleID != strings.TrimSpace(b.CapsuleID) {
-		return fmt.Errorf("co-super assignment: capsule_id must be canonical")
+	if b.CapsuleID != strings.TrimSpace(b.CapsuleID) || b.CapsuleID == "." || b.CapsuleID == ".." || strings.ContainsAny(b.CapsuleID, `/\`) {
+		return fmt.Errorf("co-super assignment: capsule_id must be a canonical single path component")
 	}
 	if b.NetworkMode != CoSuperCapsuleNetworkForbidden && b.NetworkMode != CoSuperCapsuleNetworkNone {
 		return fmt.Errorf("co-super assignment: capsule network_mode must be forbidden or none")

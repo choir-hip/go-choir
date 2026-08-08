@@ -1247,7 +1247,8 @@ func (e *Executor) resolveControl(agentRunID, handle string) (string, error) {
 }
 
 func validCapsuleResidueIdentity(capsuleID string) bool {
-	return capsuleID != "" && strings.TrimSpace(capsuleID) == capsuleID && filepath.Base(capsuleID) == capsuleID
+	return capsuleID != "" && strings.TrimSpace(capsuleID) == capsuleID && capsuleID != "." && capsuleID != ".." &&
+		!strings.ContainsAny(capsuleID, `/\`) && filepath.Base(capsuleID) == capsuleID
 }
 
 func (e *Executor) capsuleResidueExists(capsuleID string) (bool, error) {
@@ -1267,7 +1268,6 @@ func (e *Executor) capsuleResidueExists(capsuleID string) (bool, error) {
 // killed/deleted, the exact overlay is detached, and the private state tree is
 // removed before absence can be receipted.
 func (e *Executor) CleanupOrphanedCapsule(_ context.Context, capsuleID string) error {
-	capsuleID = strings.TrimSpace(capsuleID)
 	if !validCapsuleResidueIdentity(capsuleID) {
 		return fmt.Errorf("orphan capsule cleanup identity is invalid")
 	}
@@ -1306,9 +1306,9 @@ func (e *Executor) CleanupOrphanedCapsule(_ context.Context, capsuleID string) e
 // handle is neither required after revocation nor reintroduced.
 func (e *Executor) PersistRevocationReceipt(agentRunID, capabilityDigest, capsuleID, intentRef string) (CapsuleRevocationReceipt, error) {
 	agentRunID, capabilityDigest = strings.TrimSpace(agentRunID), strings.TrimSpace(capabilityDigest)
-	capsuleID, intentRef = strings.TrimSpace(capsuleID), strings.TrimSpace(intentRef)
+	intentRef = strings.TrimSpace(intentRef)
 	encodedCapability := strings.TrimPrefix(capabilityDigest, "sha256:")
-	if agentRunID == "" || capsuleID == "" || intentRef == "" || !strings.HasPrefix(capabilityDigest, "sha256:") || len(encodedCapability) != sha256.Size*2 {
+	if agentRunID == "" || !validCapsuleResidueIdentity(capsuleID) || intentRef == "" || !strings.HasPrefix(capabilityDigest, "sha256:") || len(encodedCapability) != sha256.Size*2 {
 		return CapsuleRevocationReceipt{}, fmt.Errorf("capsule revocation receipt binding is invalid")
 	}
 	if _, err := hex.DecodeString(encodedCapability); err != nil {
@@ -1386,7 +1386,7 @@ func (e *Executor) ListCapsules() []CapsuleSummary {
 }
 
 func validateSpawnSpec(spec SpawnSpec) error {
-	if strings.TrimSpace(spec.CapsuleID) == "" || filepath.Base(spec.CapsuleID) != spec.CapsuleID || spec.OwnerRunID == "" {
+	if !validCapsuleResidueIdentity(spec.CapsuleID) || spec.OwnerRunID == "" {
 		return fmt.Errorf("capsule spawn requires safe capsule and owner-run identities")
 	}
 	if spec.MemoryMax <= 0 || spec.CpuQuota <= 0 || spec.CpuPeriod <= 0 || spec.PidsMax <= 0 {

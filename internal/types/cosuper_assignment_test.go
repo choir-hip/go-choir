@@ -59,6 +59,7 @@ func TestCoSuperAssignmentBindingValidationExhaustive(t *testing.T) {
 		"capability digest":             func(a *CoSuperAssignment) { a.Binding.CapabilityDigest = "" },
 		"subject digest":                func(a *CoSuperAssignment) { a.Binding.SubjectDigest = "" },
 		"writable capsule":              func(a *CoSuperAssignment) { a.Binding.CapsuleID = "" },
+		"path-shaped capsule":           func(a *CoSuperAssignment) { a.Binding.CapsuleID = ".." },
 		"network mode":                  func(a *CoSuperAssignment) { a.Binding.NetworkMode = "allowed" },
 		"filesystem mode":               func(a *CoSuperAssignment) { a.Binding.FilesystemMode = "host" },
 		"partial coordination contract": func(a *CoSuperAssignment) { a.Binding.CoordinationContractID = "contract" },
