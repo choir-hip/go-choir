@@ -74,8 +74,11 @@ func TestPolicyFor(t *testing.T) {
 			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
 			AllowedSpawnTargets: []string{Texture}, AllowedMessageTargets: []string{Texture},
 		},
-		Email:   {Profile: Email},
-		CoSuper: {Profile: CoSuper, AllowedMessageTargets: []string{Super, Texture}},
+		Email: {Profile: Email},
+		CoSuper: {
+			Profile: CoSuper, AllowReadOnlyFiles: true, AllowEvidenceTools: true,
+			AllowModelDiagnosticTools: true, AllowedMessageTargets: []string{Super, Texture},
+		},
 		Super: {
 			Profile: Super, AllowReadOnlyFiles: true, AllowResearchTools: true,
 			AllowEvidenceTools: true, AllowMemoryTools: true,

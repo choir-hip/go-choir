@@ -66,9 +66,26 @@ func RegisterCapsuleTools(registry *toolregistry.ToolRegistry) error {
 	return nil
 }
 
-func RegisterCapsuleExecTools(registry *toolregistry.ToolRegistry) error {
+// RegisterCapsuleLocalTools installs only effects scoped to an already-bound
+// capsule. It deliberately excludes host self-development proposal,
+// verification, event, updater-root, and finalization authority. No host profile
+// registry wires this future surface today.
+func RegisterCapsuleLocalTools(registry *toolregistry.ToolRegistry) error {
 	for _, tool := range []toolregistry.Tool{
 		newCapsuleExecTool(), newCapsuleReadFileTool(), newCapsuleWriteFileTool(), newCapsuleListDirTool(),
+	} {
+		if err := registry.Register(tool); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// registerHostSelfDevelopmentTools groups the legacy host-backed effect tools
+// separately from capsule-local execution. These tools are intentionally not
+// an input to the delegated CoSuper registry builder.
+func registerHostSelfDevelopmentTools(registry *toolregistry.ToolRegistry) error {
+	for _, tool := range []toolregistry.Tool{
 		newCommitTransactionTool(), newInspectSelfDevelopmentBundleTool(), newRecordSelfDevelopmentVerificationTool(),
 	} {
 		if err := registry.Register(tool); err != nil {

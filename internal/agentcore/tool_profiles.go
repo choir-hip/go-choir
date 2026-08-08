@@ -280,6 +280,51 @@ func (rt *Runtime) providerPromptForRun(rec *types.RunRecord) (string, error) {
 	return b.String(), nil
 }
 
+type registryToolInstaller func(*toolregistry.ToolRegistry) error
+
+// delegatedCoSuperRegistryInputs is deliberately a closed set of assignment
+// capabilities. Host self-development, event, updater, materialization,
+// acceptance, route, VM, path-mutation, and owner-decision installers do not
+// belong in this input type, so the delegated registry cannot receive their
+// backing callbacks by configuration accident.
+type delegatedCoSuperRegistryInputs struct {
+	ReadOnlyFiles   registryToolInstaller
+	Evidence        registryToolInstaller
+	ModelDiagnostic registryToolInstaller
+	CoagentResult   registryToolInstaller
+
+	// CapsuleLocal is reserved for a future capability-bound capsule registry.
+	// It is intentionally nil in the host profile registry today.
+	CapsuleLocal registryToolInstaller
+}
+
+func buildDelegatedCoSuperRegistry(inputs delegatedCoSuperRegistryInputs) (*toolregistry.ToolRegistry, error) {
+	registry := toolregistry.MustNewToolRegistry()
+	required := []struct {
+		name      string
+		installer registryToolInstaller
+	}{
+		{name: "read-only files", installer: inputs.ReadOnlyFiles},
+		{name: "evidence", installer: inputs.Evidence},
+		{name: "model diagnostic", installer: inputs.ModelDiagnostic},
+		{name: "coagent result", installer: inputs.CoagentResult},
+	}
+	for _, item := range required {
+		if item.installer == nil {
+			return nil, fmt.Errorf("build delegated co-super registry: %s installer is required", item.name)
+		}
+		if err := item.installer(registry); err != nil {
+			return nil, fmt.Errorf("build delegated co-super registry: install %s tools: %w", item.name, err)
+		}
+	}
+	if inputs.CapsuleLocal != nil {
+		if err := inputs.CapsuleLocal(registry); err != nil {
+			return nil, fmt.Errorf("build delegated co-super registry: install capsule-local tools: %w", err)
+		}
+	}
+	return registry, nil
+}
+
 func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, searchClient search.Client, sourceClient researchtools.SourceSearchClient, httpClient *http.Client) (*toolregistry.ToolRegistry, error) {
 	registry := toolregistry.MustNewToolRegistry()
 	if spec.AllowReadOnlyFiles {
@@ -317,10 +362,11 @@ func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, se
 	return registry, nil
 }
 
-// InstallDefaultAgentTools installs role-bound registries. Super receives
-// read/orchestration and capsule lifecycle tools; CoSuper receives only typed
-// update plus broker-backed capsule effects. Neither role receives direct host
-// mutation, shipper, route, or VM tools.
+// InstallDefaultAgentTools installs role-bound registries. Super keeps its
+// existing read/orchestration and capsule lifecycle surface. CoSuper receives a
+// separately built delegated-assignment registry; no host self-development or
+// effect installer is an input to that builder. Capsule-local tools remain a
+// future capability-bound surface and are not wired here.
 func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if strings.TrimSpace(cwd) == "" {
 		wd, err := os.Getwd()
@@ -346,17 +392,23 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 			return err
 		}
 	}
-	coSuperRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.CoSuper), cwd, searchClient, sourceClient, httpClient)
+	coSuperRegistry, err := buildDelegatedCoSuperRegistry(delegatedCoSuperRegistryInputs{
+		ReadOnlyFiles: func(registry *toolregistry.ToolRegistry) error {
+			return RegisterReadOnlyFileTools(registry, cwd)
+		},
+		Evidence: func(registry *toolregistry.ToolRegistry) error {
+			return RegisterEvidenceTools(registry, rt)
+		},
+		ModelDiagnostic: func(registry *toolregistry.ToolRegistry) error {
+			return RegisterModelDiagnosticTools(registry, rt)
+		},
+		CoagentResult: func(registry *toolregistry.ToolRegistry) error {
+			return RegisterCoagentUpdateTools(registry, rt)
+		},
+		CapsuleLocal: nil,
+	})
 	if err != nil {
 		return err
-	}
-	if err := RegisterCoagentUpdateTools(coSuperRegistry, rt); err != nil {
-		return err
-	}
-	if rt.capsuleExecutor != nil {
-		if err := RegisterCapsuleExecTools(coSuperRegistry); err != nil {
-			return err
-		}
 	}
 	researcherRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Researcher), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
