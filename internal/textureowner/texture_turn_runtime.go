@@ -283,6 +283,6 @@ func (h *Handler) commitTextureNonRevisionTurn(ctx context.Context, rec *types.R
 	// The lifecycle turn is the authority. Best-effort deferral prevents the
 	// legacy revision-required finalizer from misclassifying this committed
 	// no-revision outcome; it never writes the existing head as a fake revision.
-	_ = h.Store.DeferAgentMutation(context.WithoutCancel(ctx), rec.OwnerID, computerID, rec.RunID)
+	_ = h.Store.SleepAgentMutationAfterTextureTurn(context.WithoutCancel(ctx), rec.OwnerID, computerID, doc.TrajectoryID, rec.RunID)
 	return result, nil
 }
