@@ -162,7 +162,8 @@ func (a CoSuperAssignment) Validate() error {
 	}
 	switch a.Disposition {
 	case CoSuperAssignmentOpen:
-		if a.BoundRunID != "" || a.TerminalAt != nil || a.CapsuleDisposition != CoSuperCapsuleUnbound {
+		if a.BoundRunID != "" || a.TerminalAt != nil ||
+			(a.CapsuleDisposition != CoSuperCapsuleUnbound && a.CapsuleDisposition != CoSuperCapsuleRevokeRequested && a.CapsuleDisposition != CoSuperCapsuleRevoked) {
 			return fmt.Errorf("co-super assignment: open assignment cannot be bound, terminal, or capsule-active")
 		}
 	case CoSuperAssignmentBound:

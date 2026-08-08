@@ -150,8 +150,8 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 	return nil
 }
 
-func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.RunRecord, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentCommandResult, error) {
-	if rec == nil || rt.capsuleExecutor == nil {
+func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.RunRecord, toolCallID string, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentCommandResult, error) {
+	if rec == nil || rt.capsuleExecutor == nil || strings.TrimSpace(toolCallID) == "" {
 		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("assigned CoSuper report authority unavailable")
 	}
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
@@ -160,28 +160,77 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
-	if assignment.BoundRunID != rec.RunID || assignment.Binding.AssignedAgentID != rec.AgentID || assignment.CapsuleDisposition != types.CoSuperCapsuleActive {
-		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("report run is not the exact active bound assignment")
+	if assignment.BoundRunID != rec.RunID || assignment.Binding.AssignedAgentID != rec.AgentID {
+		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("report run is not the exact bound assignment")
 	}
+	report.ReportID = "report:" + objectgraph.SHA256([]byte(strings.Join([]string{
+		"choir:co-super-report:v1", rec.OwnerID, rec.SandboxID, rec.RunID, assignmentID, fmt.Sprint(attempt), strings.TrimSpace(toolCallID),
+	}, "\x00")))
 	terminal := report.Result != types.CoSuperResultPartial
-	report.Mutations = nil // never accept model-authored filesystem evidence
+	report.Mutations = nil
 	report.ObservedSubjectDigest = assignment.Binding.SubjectDigest
+	report.CertifiesOriginalSubject = false
+	fingerprintParts := []string{string(report.Result), string(report.Verdict), report.ReportID}
+	for _, command := range report.Commands {
+		fingerprintParts = append(fingerprintParts, command.ExecutionRef, command.CommandDigest)
+	}
+	terminalFingerprint := objectgraph.SHA256([]byte(strings.Join(fingerprintParts, "\x00")))
+
 	if !terminal {
-		// A partial report is typed intermediate evidence only. It cannot freeze,
-		// certify, mint a candidate, or narrate unobserved mutations.
-		report.CertifiesOriginalSubject = false
-	} else {
-		intent := "capsule-freeze-intent:" + objectgraph.SHA256([]byte(assignment.AssignmentID+"\x00"+report.ReportID))
+		if assignment.CapsuleDisposition != types.CoSuperCapsuleActive || assignment.Disposition.Terminal() {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("partial report requires active nonterminal assignment")
+		}
+		return rt.commitAssignedCoSuperReport(ctx, assignment, report)
+	}
+
+	storedReport, reportErr := rt.store.GetCoSuperAssignmentReport(ctx, rec.OwnerID, rec.SandboxID, report.ReportID)
+	reportExists := reportErr == nil
+	if reportErr != nil && !errors.Is(reportErr, store.ErrNotFound) {
+		return types.CoSuperAssignmentCommandResult{}, reportErr
+	}
+	if reportExists {
+		// The stored runtime-derived report is the only replay authority. A
+		// changed terminal result/verdict/evidence conflicts before effects.
+		storedParts := []string{string(storedReport.Result), string(storedReport.Verdict), storedReport.ReportID}
+		for _, command := range storedReport.Commands {
+			storedParts = append(storedParts, command.ExecutionRef, command.CommandDigest)
+		}
+		if objectgraph.SHA256([]byte(strings.Join(storedParts, "\x00"))) != terminalFingerprint {
+			return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
+		}
+		report = storedReport
+	}
+
+	intent := "capsule-freeze-intent:" + terminalFingerprint
+	switch assignment.CapsuleDisposition {
+	case types.CoSuperCapsuleActive:
+		if reportExists {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("stored terminal report cannot precede freeze intent")
+		}
 		requested, err := rt.store.SetCoSuperCapsuleDisposition(ctx, coSuperFateRequest(assignment, types.CoSuperCapsuleFreezeRequested, intent, ""))
 		if err != nil {
 			return types.CoSuperAssignmentCommandResult{}, err
 		}
 		assignment = requested.Assignment
+	case types.CoSuperCapsuleFreezeRequested:
+		if assignment.CapsuleIntentRef != intent {
+			return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
+		}
+	case types.CoSuperCapsuleFrozen, types.CoSuperCapsuleRevokeRequested, types.CoSuperCapsuleRevoked:
+		if assignment.CapsuleIntentRef != intent && !reportExists {
+			return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
+		}
+	default:
+		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("terminal report cannot resume capsule disposition %s", assignment.CapsuleDisposition)
+	}
+
+	var changes []capsule.FileChange
+	if assignment.CapsuleDisposition == types.CoSuperCapsuleFreezeRequested {
 		handle, err := rt.capsuleExecutor.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
 		if err != nil {
 			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("resolve exact assignment capability after freeze intent: %w", err)
 		}
-		changes, err := rt.capsuleExecutor.ExtractGranted(ctx, rec.RunID, handle)
+		changes, err = rt.capsuleExecutor.ExtractGranted(ctx, rec.RunID, handle)
 		if err != nil {
 			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("freeze assignment after durable intent: %w", err)
 		}
@@ -208,6 +257,31 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 			}}
 		}
 	}
+
+	var result types.CoSuperAssignmentCommandResult
+	if reportExists {
+		result, err = rt.commitAssignedCoSuperReport(ctx, assignment, report)
+	} else {
+		if assignment.CapsuleDisposition != types.CoSuperCapsuleFrozen {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("terminal report requires frozen executor acknowledgement")
+		}
+		result, err = rt.commitAssignedCoSuperReport(ctx, assignment, report)
+	}
+	if err != nil {
+		return result, err
+	}
+	current := result.Assignment
+	if current.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+		current, err = rt.revokeAssignedCapsule(ctx, current, "terminal assignment report recorded")
+		if err != nil {
+			return result, err
+		}
+	}
+	result.Assignment = current
+	return result, nil
+}
+
+func (rt *Runtime) commitAssignedCoSuperReport(ctx context.Context, assignment types.CoSuperAssignment, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentCommandResult, error) {
 	refs := make([]string, 0, len(report.Commands))
 	for _, command := range report.Commands {
 		refs = append(refs, command.ExecutionRef)
@@ -224,19 +298,11 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 		}
 	}
 	req := types.RecordCoSuperAssignmentReportRequest{
-		CommandID: "co-super-report:" + assignmentID + ":" + strings.TrimSpace(report.ReportID),
-		OwnerID:   rec.OwnerID, ComputerID: rec.SandboxID, AssignmentID: assignmentID, Attempt: attempt,
+		CommandID: "co-super-report:" + assignment.AssignmentID + ":" + report.ReportID,
+		OwnerID:   assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
+		AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
 		ExpectedLifecycleVersion: assignment.LifecycleVersion, Report: report,
 	}
 	req.CommandDigest, _ = store.ComputeRecordCoSuperAssignmentReportDigest(req)
-	result, err := rt.store.RecordCoSuperAssignmentReport(ctx, req)
-	if err != nil {
-		return result, err
-	}
-	if terminal {
-		if _, err := rt.revokeAssignedCapsule(ctx, result.Assignment, "terminal assignment report recorded"); err != nil {
-			return result, err
-		}
-	}
-	return result, nil
+	return rt.store.RecordCoSuperAssignmentReport(ctx, req)
 }

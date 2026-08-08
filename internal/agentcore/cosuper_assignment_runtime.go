@@ -164,9 +164,36 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("spawn assigned capsule after durable open: %w", err))
 	}
 	cleanupCapsule := func(cause error) error {
+		current, loadErr := rt.store.GetCoSuperAssignment(context.Background(), ownerID, computerID, assignmentID, req.Attempt)
+		if loadErr != nil {
+			return fmt.Errorf("%w (load opened assignment for capsule cleanup: %v)", cause, loadErr)
+		}
+		intent := "capsule-revoke-intent:" + objectgraph.SHA256([]byte(current.AssignmentID+"\x00pre-bind\x00"+cause.Error()))
+		requested, fateErr := rt.store.SetCoSuperCapsuleDisposition(context.Background(), coSuperFateRequest(current, types.CoSuperCapsuleRevokeRequested, intent, ""))
+		if fateErr != nil {
+			return fmt.Errorf("%w (persist pre-bind capsule revoke intent: %v)", cause, fateErr)
+		}
 		_ = rt.capsuleExecutor.RevokeCapability(runID, opaque)
-		_ = rt.capsuleExecutor.ForceDestroy(context.Background(), capsuleID)
-		return cancelOpen(cause)
+		if rt.capsuleExecutor.HasCapsule(capsuleID) {
+			if destroyErr := rt.capsuleExecutor.ForceDestroy(context.Background(), capsuleID); destroyErr != nil {
+				return fmt.Errorf("%w (destroy after pre-bind revoke intent: %v)", cause, destroyErr)
+			}
+		}
+		if rt.capsuleExecutor.HasCapsule(capsuleID) {
+			return fmt.Errorf("%w (pre-bind capsule continued after executor acknowledgement)", cause)
+		}
+		ack := "capsule-revoke-ack:" + objectgraph.SHA256([]byte(intent+"\x00absent"))
+		acked, fateErr := rt.store.SetCoSuperCapsuleDisposition(context.Background(), coSuperFateRequest(requested.Assignment, types.CoSuperCapsuleRevoked, intent, ack))
+		if fateErr != nil {
+			return fmt.Errorf("%w (persist pre-bind capsule revoke acknowledgement: %v)", cause, fateErr)
+		}
+		cancel := types.CancelCoSuperAssignmentRequest{CommandID: "co-super-open-failed:" + assignmentID, OwnerID: ownerID, ComputerID: computerID,
+			AssignmentID: assignmentID, Attempt: req.Attempt, ExpectedLifecycleVersion: acked.Assignment.LifecycleVersion, Reason: cause.Error()}
+		cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
+		if _, cancelErr := rt.store.CancelCoSuperAssignment(context.Background(), cancel); cancelErr != nil {
+			return fmt.Errorf("%w (cancel pre-bind assignment after revoke ack: %v)", cause, cancelErr)
+		}
+		return cause
 	}
 	if created.ID != capsuleID || created.State != capsule.StateActive {
 		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("assigned capsule acknowledgement mismatch"))

@@ -126,6 +126,7 @@ func normalizeCoSuperReportForDigest(report types.CoSuperAssignmentReport) types
 
 func ComputeRecordCoSuperAssignmentReportDigest(req types.RecordCoSuperAssignmentReportRequest) (string, error) {
 	req.CommandDigest = ""
+	req.ExpectedLifecycleVersion = 0
 	req.Report = normalizeCoSuperReportForDigest(req.Report)
 	return computeCoSuperCommandDigest(req)
 }
@@ -964,7 +965,7 @@ func validCoSuperCapsuleTransition(current, next types.CoSuperCapsuleDisposition
 	case types.CoSuperCapsuleFrozen:
 		return current == types.CoSuperCapsuleFreezeRequested && intentRef != "" && ackRef != ""
 	case types.CoSuperCapsuleRevokeRequested:
-		return (current == types.CoSuperCapsuleActive || current == types.CoSuperCapsuleFreezeRequested || current == types.CoSuperCapsuleFrozen) && intentRef != "" && ackRef == ""
+		return (current == types.CoSuperCapsuleUnbound || current == types.CoSuperCapsuleActive || current == types.CoSuperCapsuleFreezeRequested || current == types.CoSuperCapsuleFrozen) && intentRef != "" && ackRef == ""
 	case types.CoSuperCapsuleRevoked:
 		return current == types.CoSuperCapsuleRevokeRequested && intentRef != "" && ackRef != ""
 	default:
@@ -995,7 +996,8 @@ func (s *Store) SetCoSuperCapsuleDisposition(ctx context.Context, req types.SetC
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
-	if assignment.LifecycleVersion != req.ExpectedLifecycleVersion || assignment.BoundRunID == "" ||
+	if assignment.LifecycleVersion != req.ExpectedLifecycleVersion ||
+		(assignment.BoundRunID == "" && assignment.Disposition != types.CoSuperAssignmentOpen) ||
 		!validCoSuperCapsuleTransition(assignment.CapsuleDisposition, req.Disposition, req.IntentRef, req.AckRef) {
 		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
 	}

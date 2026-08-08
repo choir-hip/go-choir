@@ -791,7 +791,6 @@ func newCapsuleListDirTool() toolregistry.Tool {
 
 func newRecordAssignedCoSuperReportTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
-		ReportID      string                            `json:"report_id"`
 		Result        types.CoSuperAssignmentResultKind `json:"result"`
 		Verdict       types.CoSuperAssignmentVerdict    `json:"verdict"`
 		ExecutionRefs []string                          `json:"execution_refs"`
@@ -799,11 +798,10 @@ func newRecordAssignedCoSuperReportTool(rt *Runtime) toolregistry.Tool {
 	return toolregistry.Tool{
 		Name: "record_assignment_result", Description: "Record a typed partial or terminal result for this exact capsule assignment, with bound command/output/mutation evidence.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"report_id":      map[string]any{"type": "string"},
 			"result":         map[string]any{"type": "string", "enum": []string{"completed", "failed", "blocked", "partial"}},
 			"verdict":        map[string]any{"type": "string", "enum": []string{"none", "pass", "fail", "abstain"}},
 			"execution_refs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-		}, []string{"report_id", "result", "verdict", "execution_refs"}, false),
+		}, []string{"result", "verdict", "execution_refs"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			toolCtx, err := requireCapsuleMutationRole(ctx)
 			if err != nil {
@@ -813,11 +811,7 @@ func newRecordAssignedCoSuperReportTool(rt *Runtime) toolregistry.Tool {
 			if err := json.Unmarshal(raw, &input); err != nil {
 				return "", err
 			}
-			input.ReportID = strings.TrimSpace(input.ReportID)
 			input.ExecutionRefs = trimNonEmptyStrings(input.ExecutionRefs)
-			if input.ReportID == "" {
-				return "", fmt.Errorf("exact report identity is required")
-			}
 			receipts, err := toolCtx.Executor.ResolveExecutionReceipts(input.ExecutionRefs)
 			if err != nil && len(input.ExecutionRefs) > 0 {
 				return "", err
@@ -833,9 +827,8 @@ func newRecordAssignedCoSuperReportTool(rt *Runtime) toolregistry.Tool {
 					types.CoSuperRecordedOutput{OutputID: commandID + ":stderr", Kind: "stderr", Digest: "sha256:" + strings.TrimPrefix(receipt.StderrDigest, "sha256:"), Ref: receipt.ReceiptRef + "#stderr"})
 			}
 			execution := toolregistry.ExecutionContextFrom(ctx)
-			report := types.CoSuperAssignmentReport{ReportID: input.ReportID, Result: input.Result, Verdict: input.Verdict,
-				Commands: commands, Outputs: outputs}
-			result, err := rt.recordAssignedCoSuperReport(ctx, execution.RunRecord, report)
+			report := types.CoSuperAssignmentReport{Result: input.Result, Verdict: input.Verdict, Commands: commands, Outputs: outputs}
+			result, err := rt.recordAssignedCoSuperReport(ctx, execution.RunRecord, execution.ToolCallID, report)
 			if err != nil {
 				return "", err
 			}
