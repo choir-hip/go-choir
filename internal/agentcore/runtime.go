@@ -2047,8 +2047,14 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 		grouped[key] = append(grouped[key], item)
 	}
 	for _, workItems := range grouped {
-		if _, err := rt.reconcileAssignedWorkItemActor(ctx, workItems); err != nil {
-			first := workItems[0]
+		first := workItems[0]
+		var err error
+		if strings.TrimSpace(first.AssignedAgentID) == persistentSuperAgentID(strings.TrimSpace(first.OwnerID)) {
+			_, err = rt.reconcilePersistentSuperActor(ctx, first.OwnerID, first.AssignedAgentID)
+		} else {
+			_, err = rt.reconcileAssignedWorkItemActor(ctx, workItems)
+		}
+		if err != nil {
 			log.Printf("runtime: boot work-item sweep owner=%s agent=%s trajectory=%s: %v",
 				first.OwnerID, first.AssignedAgentID, first.TrajectoryID, err)
 		}
