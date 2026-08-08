@@ -24,7 +24,7 @@ unexecuted Researcher/Super/capsule behavior.
 | Initial committed-work projection | PASS deployed | No-SSH deployment restart created run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf` for the previously stranded initial work |
 | Provider-dependent acceptance | **BLOCKED** | Host ChatGPT returned HTTP 401 `refresh_token_reused` on both original and fresh trajectories; Z.AI returned HTTP 429 and later an open unhealthy-provider circuit; configured fallback chains ended at stale ChatGPT. Sanitized local reproduction after staging found DeepSeek/Xiaomi HTTP 402 balance failures, Fireworks HTTP 412 `PRECONDITION_FAILED`, and Z.AI HTTP 429 code `1113`; these local calls diagnose route failures but are not acceptance evidence. No Researcher/update/revision/Super/capsule was produced |
 | Acceptance-artifact cleanup | PASS | Original failed trajectory `8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d` was publicly cancelled at lifecycle version 9; fresh recurrence trajectories `41cec88f-510f-53cc-a5e7-84c372b5421b` and `aca3504c-2ae0-5a4e-bab5-b22541e90585` were publicly cancelled at lifecycle version 3; original model-policy bytes were restored at SHA-256 `7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`; all temporary API keys were revoked and rejected on subsequent use |
-| Source rollback | REF IDENTIFIED / REHEARSAL OPEN | Rollback target remains `cdaa787bf2d006a1d4e59c1650a232f2083d8f9d`; the owner-policy probe rollback was exercised, but a source/deployment rollback receipt is not yet admissible |
+| Source rollback | **LOCAL SOURCE REHEARSAL PASS / DEPLOYED OPEN** | Disposable exact-`ac6dd16b` worktree reversed all 99 changed non-document paths to `cdaa787b`; zero scoped paths differed afterward. Path-list SHA-256 `0b7eb424…`, reverse-patch SHA-256 `64a61e5…`. Focused packages, sequential runtime shards, standalone retry of one parallel resource-timeout test, vet, and diff checks passed. Mission docs were intentionally retained. No staging/deployment/route rollback was executed or claimed. |
 | Registry terminal closure | OPEN | ACTIVE, mission graph, and authority manifest remain active/working; effects remain OFF |
 
 ## Finish acceptance actions
@@ -116,7 +116,7 @@ openable research and execution sources; watch disconnect/resume and CLI parity;
 parallel implementation and independent writable verification capsules; real
 Linux isolation and cleanup; restart with pending controls; actual delayed
 receipt/replay evidence; complete protected-state before/after comparison;
-owner-visible inspection; source/deployment rollback rehearsal; run acceptance;
+owner-visible inspection; deployed source/route rollback rehearsal; run acceptance;
 terminal registry closure; and the full accepted identity graph: owner/computer,
 document/revision, immutable source/version/hash, trajectory/run,
 producer/target work, actor, request/command/update/occurrence/digest,

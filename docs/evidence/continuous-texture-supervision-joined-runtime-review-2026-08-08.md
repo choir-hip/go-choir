@@ -235,3 +235,31 @@ returned HTTP 401. This is positive product proof for read/history/revisions,
 exact current show, and resumable durable observation plus negative authority.
 It is not positive correction, a generated historical v1+, or source-open proof;
 those remain provider-blocked.
+
+
+### Local source-only rollback rehearsal
+
+A disposable detached worktree at exact runtime candidate `ac6dd16b` generated
+and reverse-applied the binary diff for every non-document path changed since
+`cdaa787b`. Mission documentation was intentionally retained. The scope
+contained 99 source/test/script paths with ordered path-list SHA-256
+`0b7eb4241e3dc5a70705ce596f436a372b5213593457c0c9b831c8c9296b22f3`; the
+1,289,831-byte reverse patch has SHA-256
+`64a61e5db159cf7d839532bad9a2a9d320e11a430e100a0ad6de2998b77530a8`.
+After application, `git diff --name-only cdaa787b -- <scope>` returned zero
+paths.
+
+Focused `textureowner`, `toolregistry`, `types`, CLI, and capsule packages
+passed, as did affected-package vet and `git diff --check`. A first parallel
+runtime-shard run exposed one `context deadline exceeded` in
+`TestCancelRunTrajectoryDrainsMoreThanOneActivePage`; the exact test passed
+standalone, and the complete four runtime shards then passed sequentially. The
+parallel failure is retained as resource-contention diagnostic evidence and is
+not hidden as a pass.
+
+This proves that the documented source rollback can be reconstructed cleanly and
+returns the complete non-document candidate scope to the previously CI-passed
+`cdaa787b` source while retaining evidence. It is local source-only rehearsal,
+not a staging deployment, route rollback, or product rollback receipt. The
+disposable worktree was removed; the patch and structured manifest remain under
+`/tmp` for this session only and are reproducible from the two commit identities.
