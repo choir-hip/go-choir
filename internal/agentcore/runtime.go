@@ -851,6 +851,10 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	if slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" {
 		metadata[runMetadataCoSuperSlot] = slot
 	}
+	targetProfile := agentprofile.Canonical(firstNonEmptyString(metadataStringValue(metadata, runMetadataAgentProfile), metadataStringValue(metadata, runMetadataAgentRole)))
+	if targetProfile == agentprofile.CoSuper {
+		return nil, fmt.Errorf("generic StartCoagentRun refuses all CoSuper activation; use the authenticated persistent-Super assignment runtime")
+	}
 	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
 
 	if rt.coagentSpawnBudgetApplies(&requesterRec) {
@@ -2372,6 +2376,14 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 	}
 
 	registry := rt.toolRegistryForRun(rec)
+	if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.CoSuper {
+		var bindErr error
+		registry, _, bindErr = rt.assignedCoSuperToolOverlay(ctx, rec, registry)
+		if bindErr != nil {
+			rt.handleExecutionError(ctx, rec, fmt.Errorf("bind assigned CoSuper registry: %w", bindErr))
+			return
+		}
+	}
 
 	// Use the tool-calling loop if a tool registry is configured and the
 	// provider supports the provideriface.ToolLoopProvider interface. Otherwise, fall back

@@ -28,12 +28,8 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 	expected := map[string][]string{
 		agentprofile.Conductor: {"cancel_agent"},
 		agentprofile.Super: append(append(slices.Clone(ordinary),
-			"update_coagent"),
-			"assign_co_super", "cancel_co_super_assignment", "destroy_capsule", "inspect_capsule", "list_capsules", "spawn_capsule"),
-		agentprofile.CoSuper: {
-			"glob", "grep", "list_evidence", "read_evidence", "read_file", "save_evidence",
-			"update_coagent", "verify_model_capability",
-		},
+			"update_coagent"), "assign_co_super", "cancel_co_super_assignment"),
+		agentprofile.CoSuper:    {},
 		agentprofile.Researcher: append(slices.Clone(ordinary), "update_coagent"),
 		agentprofile.Texture:    {"cancel_agent", "get_run_memory_entry"},
 		agentprofile.Processor: append(append(slices.Clone(ordinary), "update_coagent"),
@@ -94,43 +90,18 @@ func TestDelegatedCoSuperCannotReachHostEffectToolsOrCallbacks(t *testing.T) {
 	}
 }
 
-func TestDelegatedCoSuperBuilderAcceptsOnlyAssignmentInstallers(t *testing.T) {
-	calls := map[string]int{}
-	installer := func(name string) registryToolInstaller {
-		return func(registry *toolregistry.ToolRegistry) error {
-			calls[name]++
-			return registry.Register(toolregistry.Tool{
-				Name: name,
-				Func: func(context.Context, json.RawMessage) (string, error) {
-					calls[name+" callback"]++
-					return name, nil
-				},
-			})
-		}
-	}
-	registry, err := buildDelegatedCoSuperRegistry(delegatedCoSuperRegistryInputs{
-		ReadOnlyFiles:   installer("read"),
-		Evidence:        installer("evidence"),
-		ModelDiagnostic: installer("model-diagnostic"),
-		CoagentResult:   installer("coagent-result"),
-		CapsuleLocal:    installer("capsule-local"),
-	})
+func TestAssignedCoSuperBuilderIsExactClosedSet(t *testing.T) {
+	registry, err := buildAssignedCoSuperRegistry(nil)
 	if err != nil {
-		t.Fatalf("build delegated registry: %v", err)
+		t.Fatalf("build assigned registry: %v", err)
 	}
-	want := []string{"capsule-local", "coagent-result", "evidence", "model-diagnostic", "read"}
+	want := []string{"capsule_exec", "capsule_list_dir", "capsule_read_file", "capsule_write_file", "record_assignment_result"}
 	if got := registryToolNames(registry); !slices.Equal(got, want) {
-		t.Fatalf("delegated builder tools = %v, want %v", got, want)
+		t.Fatalf("assigned registry tools = %v, want exact %v", got, want)
 	}
-	for _, name := range want {
-		if calls[name] != 1 {
-			t.Errorf("%s installer calls = %d, want 1", name, calls[name])
-		}
-		if _, err := registry.Execute(context.Background(), name, json.RawMessage(`{}`)); err != nil {
-			t.Errorf("execute %s: %v", name, err)
-		}
-		if calls[name+" callback"] != 1 {
-			t.Errorf("%s backing callback calls = %d, want 1", name, calls[name+" callback"])
+	for _, absent := range []string{"read_file", "glob", "grep", "save_evidence", "verify_model_capability", "update_coagent", "spawn_agent", "spawn_capsule", "destroy_capsule"} {
+		if _, ok := registry.Lookup(absent); ok {
+			t.Fatalf("assigned registry inherited forbidden callback %q", absent)
 		}
 	}
 }

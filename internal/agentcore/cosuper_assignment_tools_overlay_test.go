@@ -38,13 +38,8 @@ func TestAssignedCoSuperToolOverlayIsExactRunOnly(t *testing.T) {
 	base := rt.ToolRegistryForProfile(agentprofile.CoSuper)
 	legacy := &types.RunRecord{RunID: "legacy", AgentID: "co-super:legacy", AgentProfile: "co-super", AgentRole: "co-super"}
 	got, h, err := rt.assignedCoSuperToolOverlay(ctx, legacy, base)
-	if err != nil || h != "" || got != base {
-		t.Fatalf("unassigned overlay=(%p,%q,%v)", got, h, err)
-	}
-	for _, n := range []string{"capsule_exec", "capsule_read_file", "record_assignment_result"} {
-		if _, ok := got.Lookup(n); ok {
-			t.Fatalf("unassigned sees %s", n)
-		}
+	if err == nil || h != "" || got != nil {
+		t.Fatalf("unassigned overlay=(%p,%q,%v), want hard refusal", got, h, err)
 	}
 	o, c, tr, r, cap, id, opaque := "owner", "computer", "trajectory", "run", "capsule", "assignment", "opaque"
 	b := types.CoSuperAssignmentBinding{OwnerID: o, ComputerID: c, TrajectoryID: tr, ParentAgentID: "super:owner", ParentRunID: "parent", ParentDecisionID: "decision:" + objectgraph.SHA256([]byte("decision")), ParentControlID: "control", ParentWorkItemID: "parent-work", AssignedWorkItemID: "assigned-work", AssignedAgentID: "co-super:assigned", Kind: types.CoSuperAssignmentImplementation, Attempt: 1, ScopeDigest: objectgraph.SHA256([]byte("scope")), CapabilityDigest: objectgraph.SHA256([]byte("capability")), SubjectDigest: objectgraph.SHA256([]byte("subject")), Writable: true, CapsuleID: cap, NetworkMode: types.CoSuperCapsuleNetworkForbidden, FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay}
@@ -64,7 +59,7 @@ func TestAssignedCoSuperToolOverlayIsExactRunOnly(t *testing.T) {
 			t.Errorf("missing %s", n)
 		}
 	}
-	for _, n := range []string{"commit_transaction", "append_computer_event", "materialize_self_development", "create_checkpoint"} {
+	for _, n := range []string{"read_file", "glob", "grep", "save_evidence", "verify_model_capability", "update_coagent", "commit_transaction", "append_computer_event", "materialize_self_development", "create_checkpoint"} {
 		if _, ok := overlay.Lookup(n); ok {
 			t.Errorf("host tool %s", n)
 		}
