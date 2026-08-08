@@ -117,8 +117,23 @@ func (h *Handler) textureLifecycleEventPage(ctx context.Context, doc types.Docum
 	if err != nil {
 		return out, err
 	}
+	// ApplyTextureTurn emits one turn-commit transition plus one typed
+	// disposition transition per inbound packet. The immutable revision belongs
+	// to the turn commit, never to each incorporated packet. Build this command
+	// classification from the complete durable event set so a resumed page that
+	// starts after the turn commit projects exactly like an initial page.
+	allEvents, err := h.Store.ListLifecycleEvents(ctx, doc.OwnerID, doc.ComputerID, doc.TrajectoryID)
+	if err != nil {
+		return textureDurableEventPage{}, err
+	}
+	textureTurnCommands := make(map[string]bool)
+	for _, event := range allEvents {
+		if event.Kind == types.LifecycleTextureTurnCommitted {
+			textureTurnCommands[event.CommandID] = true
+		}
+	}
 	for _, event := range page.Events {
-		projected, projectErr := h.projectTextureLifecycleEvent(ctx, doc, event)
+		projected, projectErr := h.projectTextureLifecycleEventForCommand(ctx, doc, event, textureTurnCommands[event.CommandID])
 		if projectErr != nil {
 			return textureDurableEventPage{}, projectErr
 		}
@@ -128,6 +143,10 @@ func (h *Handler) textureLifecycleEventPage(ctx context.Context, doc types.Docum
 }
 
 func (h *Handler) projectTextureLifecycleEvent(ctx context.Context, doc types.Document, event types.LifecycleEvent) (textureDurableEvent, error) {
+	return h.projectTextureLifecycleEventForCommand(ctx, doc, event, false)
+}
+
+func (h *Handler) projectTextureLifecycleEventForCommand(ctx context.Context, doc types.Document, event types.LifecycleEvent, textureTurnCommand bool) (textureDurableEvent, error) {
 	status, workState := textureStatusAtEvent(event.Kind)
 	out := textureDurableEvent{
 		Schema: textureObservationSchemaV1, Cursor: event.ReducerSeq, EventID: event.EventID,
@@ -140,7 +159,8 @@ func (h *Handler) projectTextureLifecycleEvent(ctx context.Context, doc types.Do
 		out.EventType = "control"
 		out.ControlID = event.UpdateID
 	}
-	if !textureLifecycleEventCanAdvanceVersion(event.Kind) {
+	if !textureLifecycleEventCanAdvanceVersion(event.Kind) ||
+		(textureTurnCommand && event.Kind == types.LifecycleUpdateApplied) {
 		return out, nil
 	}
 	for i := len(event.ArtifactRefs) - 1; i >= 0; i-- {

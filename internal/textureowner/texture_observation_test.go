@@ -130,6 +130,122 @@ func applyObservationSourceVersion(t *testing.T, s *store.Store, start types.Sta
 	return *result.Revision, graph
 }
 
+func applyObservationTextureTurnWithInbound(t *testing.T, s *store.Store, start types.StartLifecycleRequest, inboundCount int) (types.LifecycleResult, types.ApplyTextureTurnRequest, int64) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	caller := types.RunRecord{
+		RunID: "run-observation-texture", AgentID: start.Agent.AgentID, AgentProfile: "texture", AgentRole: "texture",
+		ChannelID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID, OwnerID: start.OwnerID, SandboxID: start.ComputerID,
+		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID},
+	}
+	projectCaller := types.ReplaceLifecycleActivationRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "project-observation-texture",
+		TrajectoryID: start.TrajectoryID, AgentID: caller.AgentID, Run: caller,
+	}
+	projectCaller.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(projectCaller)
+	if _, err := s.ReplaceLifecycleActivation(ctx, projectCaller); err != nil {
+		t.Fatalf("project Texture caller: %v", err)
+	}
+
+	producer := types.AgentRecord{
+		AgentID: "researcher:observation-turn", OwnerID: start.OwnerID, ComputerID: start.ComputerID, SandboxID: start.ComputerID,
+		Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := s.UpsertAgent(ctx, producer); err != nil {
+		t.Fatalf("upsert turn producer: %v", err)
+	}
+	open := types.OpenLifecycleWorkRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "open-observation-turn-producer", TrajectoryID: start.TrajectoryID,
+		WorkItem: types.WorkItemRecord{
+			WorkItemID: "work-observation-turn-producer", Objective: "produce multiple reports", AuthorityProfile: "researcher",
+			AssignedAgentID: producer.AgentID, CreatedByRunID: caller.RunID,
+			Details: map[string]any{"requested_by_profile": "texture", "requested_by_agent_id": caller.AgentID, "requested_by_run_id": caller.RunID},
+		},
+	}
+	open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
+	opened, err := s.OpenLifecycleWork(ctx, open)
+	if err != nil || opened.WorkItem == nil {
+		t.Fatalf("open turn producer work: %+v, %v", opened.WorkItem, err)
+	}
+	producerRun := types.RunRecord{
+		RunID: "run-observation-turn-producer", AgentID: producer.AgentID, AgentProfile: "researcher", AgentRole: "researcher",
+		ChannelID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID, OwnerID: start.OwnerID, SandboxID: start.ComputerID,
+		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, RequestedByRunID: caller.RunID,
+		Metadata: map[string]any{"lifecycle_work_item_id": opened.WorkItem.WorkItemID},
+	}
+	projectProducer := types.ReplaceLifecycleActivationRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "project-observation-turn-producer",
+		TrajectoryID: start.TrajectoryID, AgentID: producer.AgentID, Run: producerRun,
+	}
+	projectProducer.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(projectProducer)
+	if _, err := s.ReplaceLifecycleActivation(ctx, projectProducer); err != nil {
+		t.Fatalf("project turn producer: %v", err)
+	}
+
+	inbound := make([]types.TextureTurnInboundDisposition, 0, inboundCount)
+	for i := 1; i <= inboundCount; i++ {
+		id := strconv.Itoa(i)
+		packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "turn report " + id}
+		content := "private turn report " + id
+		payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+		if err != nil {
+			t.Fatal(err)
+		}
+		queue := types.QueueLifecycleUpdateRequest{
+			OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "queue-observation-turn-" + id,
+			TrajectoryID: start.TrajectoryID, TargetAgentID: caller.AgentID, ProducerAgentID: producer.AgentID,
+			ProducerUpdateID: "producer-observation-turn-" + id, UpdateID: "update-observation-turn-" + id,
+			ChannelID: start.InitialDocument.DocID, Role: "researcher", SourceRunID: producerRun.RunID,
+			Packet: packet, Content: content, PayloadDigest: payloadDigest, WorkItemID: opened.WorkItem.WorkItemID,
+			WorkDisposition: types.WorkItemOpen,
+		}
+		queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
+		if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
+			t.Fatalf("queue turn report %d: %v", i, err)
+		}
+		inbound = append(inbound, types.TextureTurnInboundDisposition{
+			TargetAgentID: caller.AgentID, ProducerAgentID: producer.AgentID, ProducerUpdateID: queue.ProducerUpdateID,
+			UpdateID: queue.UpdateID, Disposition: types.UpdateIncorporated, ProducerWorkItemID: opened.WorkItem.WorkItemID,
+			WorkDisposition: types.WorkItemOpen,
+		})
+	}
+	trajectory, err := s.GetLifecycleTrajectory(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, caller.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := s.GetLifecycleDocument(ctx, start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeTurnCursor := trajectory.ReducerSeq
+	turn := types.ApplyTextureTurnRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "apply-observation-texture-turn",
+		DocumentID: doc.DocID, TrajectoryID: start.TrajectoryID, CallerAgentID: caller.AgentID, CallerRunID: caller.RunID,
+		ExpectedLifecycleVersion: trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: agent.LifecycleVersion,
+		ExpectedHeadRevisionID: doc.CurrentRevisionID, CallerWorkItemID: start.InitialWork.WorkItemID,
+		CallerWorkDisposition: types.WorkItemOpen, Outcome: types.TextureTurnRevision,
+		Revision: types.Revision{RevisionID: "revision-observation-turn", AuthorKind: types.AuthorAppAgent, AuthorLabel: "Texture", BodyDoc: observationBodyDoc("one revision from multiple reports")},
+		Reason:   "one semantic revision", Inbound: inbound,
+	}
+	turn.CommandDigest, err = store.ComputeApplyTextureTurnDigest(turn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.ApplyTextureTurn(ctx, turn)
+	if err != nil {
+		t.Fatalf("apply multi-inbound Texture turn: %v", err)
+	}
+	if result.Revision == nil {
+		t.Fatal("multi-inbound Texture turn returned no revision")
+	}
+	return result, turn, beforeTurnCursor
+}
+
 func observationRequest(handler *Handler, path, user string) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(http.MethodGet, path, nil)
 	if user != "" {
@@ -230,6 +346,92 @@ func TestTextureLifecycleObservationDurablePageResumeAndExactScope(t *testing.T)
 	}
 	if strings.Count(sse.Body.String(), "id: "+strconv.FormatInt(firstPage.NextCursor, 10)+"\n") != 0 {
 		t.Fatalf("Last-Event-ID replayed acknowledged cursor: %s", sse.Body.String())
+	}
+}
+
+func TestTextureLifecycleObservationProjectsOneVersionForMultiInboundTurnAcrossResumeAndReplay(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	turn, turnRequest, beforeTurnCursor := applyObservationTextureTurnWithInbound(t, core.Store(), start, 2)
+	replay, err := core.Store().ApplyTextureTurn(context.Background(), turnRequest)
+	if err != nil || !replay.Replay || replay.Revision == nil || replay.Revision.RevisionID != turn.Revision.RevisionID || len(replay.Events) != len(turn.Events) {
+		t.Fatalf("multi-inbound turn replay = %+v, %v", replay, err)
+	}
+	for i := range turn.Events {
+		if replay.Events[i].EventID != turn.Events[i].EventID || replay.Events[i].ReducerSeq != turn.Events[i].ReducerSeq || replay.Events[i].Kind != turn.Events[i].Kind {
+			t.Fatalf("turn replay event %d changed: first=%+v replay=%+v", i, turn.Events[i], replay.Events[i])
+		}
+	}
+
+	firstPath := "/api/texture/documents/doc-observation/events?after=" + strconv.FormatInt(beforeTurnCursor, 10) + "&limit=1"
+	first := observationRequest(handler, firstPath, start.OwnerID)
+	if first.Code != http.StatusOK {
+		t.Fatalf("first turn page status=%d body=%s", first.Code, first.Body.String())
+	}
+	var firstPage textureDurableEventPage
+	if err := json.Unmarshal(first.Body.Bytes(), &firstPage); err != nil {
+		t.Fatal(err)
+	}
+	if len(firstPage.Events) != 1 || firstPage.Events[0].Kind != string(types.LifecycleTextureTurnCommitted) ||
+		firstPage.Events[0].EventType != "version" || firstPage.Events[0].RevisionID != turn.Revision.RevisionID ||
+		firstPage.Events[0].CommandID != "apply-observation-texture-turn" || firstPage.Events[0].CommandDigest == "" ||
+		firstPage.Events[0].Cursor != beforeTurnCursor+1 || firstPage.NextCursor != firstPage.Events[0].Cursor {
+		t.Fatalf("canonical turn version page = %+v", firstPage)
+	}
+
+	resumePath := "/api/texture/documents/doc-observation/events?after=" + strconv.FormatInt(firstPage.NextCursor, 10) + "&limit=100"
+	resumed := observationRequest(handler, resumePath, start.OwnerID)
+	replayed := observationRequest(handler, resumePath, start.OwnerID)
+	if resumed.Code != http.StatusOK || replayed.Code != http.StatusOK || resumed.Body.String() != replayed.Body.String() {
+		t.Fatalf("resumed API replay is unstable: first status=%d body=%s replay status=%d body=%s", resumed.Code, resumed.Body.String(), replayed.Code, replayed.Body.String())
+	}
+	var resumedPage textureDurableEventPage
+	if err := json.Unmarshal(resumed.Body.Bytes(), &resumedPage); err != nil {
+		t.Fatal(err)
+	}
+	if len(resumedPage.Events) != 2 || resumedPage.NextCursor != resumedPage.Watermark {
+		t.Fatalf("resumed per-inbound transitions = %+v", resumedPage)
+	}
+	for i, event := range resumedPage.Events {
+		if event.Kind != string(types.LifecycleUpdateApplied) || event.EventType != "lifecycle" || event.RevisionID != "" || event.VersionNumber != nil ||
+			event.UpdateID != "update-observation-turn-"+strconv.Itoa(i+1) || event.CommandID != firstPage.Events[0].CommandID || event.CommandDigest != firstPage.Events[0].CommandDigest ||
+			event.Cursor != firstPage.NextCursor+int64(i+1) {
+			t.Fatalf("resumed inbound transition %d = %+v", i, event)
+		}
+	}
+
+	full := observationRequest(handler, "/api/texture/documents/doc-observation/events?after="+strconv.FormatInt(beforeTurnCursor, 10)+"&limit=100", start.OwnerID)
+	if full.Code != http.StatusOK {
+		t.Fatalf("full turn page status=%d body=%s", full.Code, full.Body.String())
+	}
+	var fullPage textureDurableEventPage
+	if err := json.Unmarshal(full.Body.Bytes(), &fullPage); err != nil {
+		t.Fatal(err)
+	}
+	versions := 0
+	for _, event := range fullPage.Events {
+		if event.EventType == "version" {
+			versions++
+			if event.RevisionID != turn.Revision.RevisionID || event.Cursor != firstPage.Events[0].Cursor {
+				t.Fatalf("unstable full-page version = %+v", event)
+			}
+		}
+	}
+	if versions != 1 {
+		t.Fatalf("multi-inbound turn projected %d versions, want exactly one: %+v", versions, fullPage.Events)
+	}
+	if strings.Contains(full.Body.String(), "private turn report") {
+		t.Fatalf("public API leaked inbound content: %s", full.Body.String())
+	}
+
+	sseRequest := httptest.NewRequest(http.MethodGet, "/api/texture/documents/doc-observation/stream?limit=100&once=1", nil)
+	sseRequest.Header.Set("X-Authenticated-User", start.OwnerID)
+	sseRequest.Header.Set("Last-Event-ID", strconv.FormatInt(firstPage.NextCursor, 10))
+	sse := httptest.NewRecorder()
+	handler.HandleTextureRouter(sse, sseRequest)
+	if sse.Code != http.StatusOK || strings.Count(sse.Body.String(), "event: texture") != 2 || strings.Contains(sse.Body.String(), `"event_type":"version"`) ||
+		!strings.Contains(sse.Body.String(), `"update_id":"update-observation-turn-1"`) || !strings.Contains(sse.Body.String(), `"update_id":"update-observation-turn-2"`) {
+		t.Fatalf("resumed SSE replayed version or lost typed inbound causality: status=%d body=%s", sse.Code, sse.Body.String())
 	}
 }
 
