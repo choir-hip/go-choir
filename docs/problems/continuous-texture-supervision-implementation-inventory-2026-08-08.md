@@ -481,3 +481,21 @@ binding, spawn, cleanup, and receipt authorities must require the same canonical
 single path component: nonempty, trimmed, not `.`/`..`, and containing no slash
 or backslash. Negative tests must prove refusal before filesystem or cgroup
 mutation.
+
+
+## Cancelled provider late-tool closure — 2026-08-08
+
+The repaired resident drain now correctly cancels the provider context, but a
+provider that returns an already in-flight terminal `record_assignment_result`
+after observing cancellation still passes through tool-loop message persistence
+and execution using that cancelled context. It can therefore fail before the
+late-evidence reducer despite durable raw executor receipts.
+
+Only the runtime-authenticated, sole terminal assignment-report call may receive
+a bounded `context.WithoutCancel` closure after the provider response has fixed
+the run and tool-call identity. Assistant/tool-result memory and the exact report
+commit may use that closure; capsule read/write/exec, partial reports, mixed
+batches, injected turns, and further provider calls must remain cancelled. A
+successful closure stops the tool loop without completing or reopening the
+cancelled run. Deterministic proof must block a provider, cancel it, return the
+terminal tool call, and retain evidence while ordinary mutation remains denied.
