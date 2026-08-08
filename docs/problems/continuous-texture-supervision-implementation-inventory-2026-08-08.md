@@ -314,3 +314,63 @@ allowing the static persistent-Super agent to point at a newer active run; keep
 the original parent run/control/work identity as the authentication join; and
 remove stale generic-CoSuper test setup. Late reports remain report/evidence
 only—no candidate, packet, wake, projection, reopen, or semantic revision.
+
+
+## Independent joined lifecycle review blockers — 2026-08-08
+
+A fresh read-only review of joined candidate `59d4fc6e6eb6a1404aa232dbf3ea75defc1f3bf7`
+returned **REPAIR** despite the green joined suites. It found:
+
+- persistent-Super reports are authenticated against an open Texture target work
+  and a nonterminal Super run before `QueueLifecycleUpdate` reaches its
+  terminal-trajectory late branch; after trajectory cancellation cancels those
+  works, a real delayed Super result is refused instead of durably recorded as
+  evidence-only;
+- a direct owner edit advances the head and queues its new-head correction but
+  neither consumes nor explicitly disposes already-pending owner occurrences on
+  the old head, while runtime injection and the reducer read only current-head
+  occurrences; the old instruction can remain pending forever;
+- delivered persistent-Super controls/reports are read oldest-first with
+  `limit=100` and no cursor, so occurrence 101 can remain permanently invisible,
+  and `report_to_texture` can select a stale control; and
+- runtime injection marks occurrence IDs in mutable run state before the
+  returned packet is durably appended to run memory. An append failure after
+  delivery binding can lose the only executable projection of that control.
+
+The review also found that one revision incorporating multiple inbound packets
+can project several public `version` events for the same immutable revision,
+because both per-update apply events and the turn-commit event carry the new
+revision refs and timestamp. One canonical revision must have one version
+projection; the other events remain typed cursor transitions.
+
+These are protected lifecycle/delivery/observation defects, not test gaps to
+waive. The candidate remains unpublished and effects remain OFF. Repairs must
+preserve exact historical authority for late evidence, atomically disposition
+old-head owner occurrences during direct edit, page or unboundedly read the
+complete exact-run delivery set, derive injection dedupe only from durable run
+memory, and designate exactly one event kind as the version projection.
+
+
+The parallel capsule-security review also returned **REPAIR** with two high
+source defects:
+
+- generic run or trajectory cancellation terminalizes lifecycle run/work truth
+  but does not durably transition the bound CoSuper assignment through revoke
+  intent, executor destruction/inspection, acknowledgement, and assignment
+  cancellation. An active capsule/handle is then treated as healthy by restart
+  reconciliation, and the overlay does not rejoin live run/work/trajectory
+  state; writable authority can outlive the cancelled product obligation; and
+- a real terminal assignment result racing cancellation and citing actual prior
+  execution receipts reaches the evidence-only branch, but terminal command
+  validation still requires granted receipts minted from a frozen live capsule.
+  Because cancellation has revoked/destroyed it, the late result is rejected;
+  only a command-free narration can currently persist.
+
+Generic cancellation must delegate exact assignment fate before terminal
+projection (or atomically record the assignment revoke intent that reconciliation
+must finish), and overlay execution must revalidate live obligation state. Late
+reports must authenticate persisted raw executor receipts and retain them as
+non-granting evidence without pretending they certify a frozen final subject.
+No late result may wake, reopen, create a candidate, or gain a verification Pass.
+Real Linux namespace/seccomp/Landlock behavior remains an acceptance evidence
+gap rather than a waiver for these source defects.
