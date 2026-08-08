@@ -22,7 +22,7 @@ unexecuted Researcher/Super/capsule behavior.
 | Host and product identity | PASS | Nonce-bound identity joined host, sandbox, route, deployment receipt, platform attestation, computer scope `vm-bbdbbd01c4390b7036067aaa12afeb68`, guest `computer-42850e9734d9442386c5dd8bf3afbf19`, and VM epoch 8247 to exact `ac6dd16b` |
 | Product lifecycle route | PASS | Authenticated create, tell, model-policy file/resolve, trajectory inspection, and conditional public cancel all executed on the exact candidate |
 | Initial committed-work projection | PASS deployed | No-SSH deployment restart created run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf` for the previously stranded initial work |
-| Provider-dependent acceptance | **BLOCKED** | ChatGPT returned HTTP 401 `refresh_token_reused` on both the original and a fresh post-escalation trajectory; Z.AI returned HTTP 429 and later an open unhealthy-provider circuit after a cooldown-aware retry; configured DeepSeek/Fireworks fallback chains terminated on the same ChatGPT failure; Bedrock was unsupported. No Researcher/update/revision/Super/capsule was produced |
+| Provider-dependent acceptance | **BLOCKED** | Host ChatGPT returned HTTP 401 `refresh_token_reused` on both original and fresh trajectories; Z.AI returned HTTP 429 and later an open unhealthy-provider circuit; configured fallback chains ended at stale ChatGPT. Sanitized local reproduction after staging found DeepSeek/Xiaomi HTTP 402 balance failures, Fireworks HTTP 412 `PRECONDITION_FAILED`, and Z.AI HTTP 429 code `1113`; these local calls diagnose route failures but are not acceptance evidence. No Researcher/update/revision/Super/capsule was produced |
 | Acceptance-artifact cleanup | PASS | Original failed trajectory `8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d` was publicly cancelled at lifecycle version 9; fresh recurrence trajectories `41cec88f-510f-53cc-a5e7-84c372b5421b` and `aca3504c-2ae0-5a4e-bab5-b22541e90585` were publicly cancelled at lifecycle version 3; original model-policy bytes were restored at SHA-256 `7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`; all temporary API keys were revoked and rejected on subsequent use |
 | Source rollback | REF IDENTIFIED / REHEARSAL OPEN | Rollback target remains `cdaa787bf2d006a1d4e59c1650a232f2083d8f9d`; the owner-policy probe rollback was exercised, but a source/deployment rollback receipt is not yet admissible |
 | Registry terminal closure | OPEN | ACTIVE, mission graph, and authority manifest remain active/working; effects remain OFF |
@@ -104,7 +104,7 @@ Researcher, Super, CoSuper, capsule, transclusion, or run-acceptance graph.
 
 ## Remaining evidence floor
 
-Still missing: a canonical audited gateway credential/provider restoration;
+Still missing: a canonical audited gateway credential/provider restoration or funding/configuration of one unavailable provider account;
 authenticated repeated-cycle trajectory; three progressive revisions; two
 downward control cycles; owner correction against a Texture-authored head;
 openable research and execution sources; watch disconnect/resume and CLI parity;
@@ -132,9 +132,15 @@ terminal-registry wording, and prohibition 17 classification; it confirmed the
 
 The only safe next transition is an audited renewal of server-owned ChatGPT auth
 or restoration of one configured tool-capable provider through the canonical
-gateway operator authority. Repository inspection found no scoped product API
-or `choir` CLI renewal path; the tracked credential and recovery paths are
-SSH-shaped break-glass operations outside this acceptance authority. After that transition, exact `ac6dd16b` identity
+gateway operator authority. Repository and GitHub authority inspection found no scoped product API or
+`choir` CLI renewal path, no provider Actions secret, and no repository
+environment authority; only the Node B SSH host/key secrets exist. The tracked
+credential and recovery paths are SSH-shaped break-glass operations outside
+this acceptance authority. Sanitized local diagnostics show every configured provider/model route failed
+before tool semantics; balance attribution applies only to DeepSeek/Xiaomi and
+the qualified Z.AI classification, not Fireworks. Local ChatGPT token metadata
+reports an unexpired expiry, which does not prove usable auth; none of these
+facts supplies a proven or admissible host transfer/renewal path. After that transition, exact `ac6dd16b` identity
 must be reverified and a fresh trajectory must run the complete acceptance. This
 Definition does not authorize SSH, guest credential injection, auth weakening,
 route mutation, or an unreviewed silent fallback.

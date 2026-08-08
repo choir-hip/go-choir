@@ -763,3 +763,40 @@ credential or provider account capacity, or a separately ratified red mission
 to create an auditable scoped no-SSH renewal authority. This active Definition
 cannot silently expand into auth/gateway administration. Effects remain OFF;
 all fresh failure artifacts are retained cancelled rather than deleted.
+
+
+### Sanitized provider-account diagnostics
+
+After staging had already identified the failed gateway boundary, a local
+operator-side reproduction used the repository's gitignored provider credentials
+to distinguish routing defects from provider-account availability. No credential,
+response body, account identity, or token was printed or committed, and these
+local calls are diagnostic only—not staging acceptance evidence. Minimal
+no-tool requests to the same configured provider/model selections returned:
+
+- DeepSeek `deepseek-v4-flash`: HTTP 402 with an error message classified by the
+  adapter probe as balance-related;
+- Xiaomi `mimo-v2.5`: HTTP 402, type `insufficient_balance`, code `402`;
+- Fireworks `accounts/fireworks/models/kimi-k2p6`: HTTP 412, code
+  `PRECONDITION_FAILED`;
+- Z.AI `glm-5.2`: HTTP 429, type `rate_limit_error`, code `1113`, with a
+  balance-related message classification.
+
+This independently reproduces why model-policy permutation cannot restore the
+acceptance loop: every configured provider/model route failed before tool
+semantics. Account/balance attribution applies to DeepSeek/Xiaomi and the
+qualified Z.AI classification; Fireworks proves only a precondition failure.
+Local Codex token metadata reports an unexpired expiry and `codex login status`
+reports a ChatGPT login, but neither proves usable auth or supplies a proven or
+admissible transfer/renewal authority. Provider-account restoration and safe,
+auditable host credential renewal remain equal possible remedies; neither is a
+lifecycle patch.
+
+The operator-authority inventory also converged. Repository Actions secrets name
+only the Node B SSH host/key; there are no repository environment secrets or
+variables and no provider credential secret consumed by deployment. The only
+tracked provider credential deployment script copies credentials over SSH, and
+the one-time recovery workflow is likewise SSH-based. No credential value was
+uploaded or changed during this inspection. A separately ratified authority
+must either create a scoped no-SSH renewal path or perform external provider
+account restoration before this Definition can resume. Effects remain OFF.

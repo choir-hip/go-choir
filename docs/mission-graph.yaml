@@ -260,8 +260,8 @@ nodes:
       create, tell, policy rollback, and public cancellation executed. Repeated
       supervision is blocked by protected gateway provider availability:
       ChatGPT auth is stale, Z.AI remained unavailable with an open circuit
-      after a cooldown-aware retry, and configured alternate routes did not
-      complete a Texture turn. Effects remain OFF; provider restoration,
+      after a cooldown-aware retry, and sanitized local diagnostics found every configured provider/model route
+      failed before tool semantics. No alternate completed a Texture turn. Effects remain OFF; provider restoration,
       real Linux product proof, no-effect/source-rollback receipts, and terminal
       registry closure remain mandatory.
     sources:

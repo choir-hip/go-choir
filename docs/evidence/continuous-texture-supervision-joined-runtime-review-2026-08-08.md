@@ -191,3 +191,25 @@ one-time recovery paths are SSH-shaped break-glass operations, not admissible
 product acceptance. This confirms the remaining dependency is external
 protected gateway auth/provider health rather than lifecycle wake, route
 identity, or another model-policy permutation.
+
+
+### Sanitized account and operator-authority diagnosis
+
+Local reproduction was performed only after exact staging provider failures and
+is not counted as product acceptance. Using gitignored operator credentials
+without printing secrets or response bodies, minimal requests returned DeepSeek
+HTTP 402 with a balance-related error classification, Xiaomi HTTP 402
+`insufficient_balance`, Fireworks HTTP 412 `PRECONDITION_FAILED`, and Z.AI HTTP
+429 code `1113` with a balance/rate classification. This shows every configured provider/model route failed before tool semantics;
+account/balance attribution applies to DeepSeek/Xiaomi and the qualified Z.AI
+classification, not the Fireworks precondition failure. Local Codex token
+metadata reports an unexpired expiry, which does not prove usable auth, while
+the host gateway retains stale auth.
+
+GitHub authority inspection found only the Node B SSH host/key Actions secrets,
+no provider secret, no repository environment, and no repository variable.
+Repository inspection found no scoped product API or `choir` CLI provider-auth
+renewal. The existing credential deployment and recovery workflows are
+SSH-shaped break-glass paths forbidden by this acceptance. No credential or
+authority was changed. The remaining transition is provider account restoration
+or a separately ratified scoped no-SSH host renewal authority.

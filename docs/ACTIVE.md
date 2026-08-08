@@ -18,8 +18,9 @@ work projected after restart, and authenticated create, tell, model-policy
 rollback, and public lifecycle cancellation executed. Repeated supervision is
 blocked by protected gateway provider availability: ChatGPT auth is stale, and
 Z.AI remained unavailable with an open unhealthy-provider circuit after a
-cooldown-aware retry; configured alternate fallback chains did not complete, and
-no Researcher/Super/capsule turn was produced. Effects remain OFF; provider
+cooldown-aware retry; sanitized local diagnostics then found DeepSeek/Xiaomi
+balance failures, Fireworks precondition failure, and Z.AI balance/rate failure.
+No Researcher/Super/capsule turn was produced. Effects remain OFF; provider
 restoration, real Linux product proof, no-effect/source-rollback evidence, and
 registry closure remain mandatory.
 
