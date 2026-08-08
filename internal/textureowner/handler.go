@@ -43,8 +43,9 @@ type Handler struct {
 	ModelPolicy *modelpolicy.Manager
 	Provider    provideriface.Provider
 
-	wakeTextureControl func(context.Context, types.CoagentSourcePacket)
-	textureEditMu      sync.Mutex
+	wakeTextureControl   func(context.Context, types.CoagentSourcePacket)
+	wakeOwnerInstruction func(context.Context, string, string, string) error
+	textureEditMu        sync.Mutex
 }
 
 // NewHandler composes Texture ownership over the concrete agent lifecycle.
@@ -60,6 +61,9 @@ func NewHandler(core *agentcore.Runtime) *Handler {
 		ModelPolicy:        core.TextureModelPolicy(),
 		Provider:           core.TextureProvider(),
 		wakeTextureControl: core.WakeUpdatedCoagent,
+		wakeOwnerInstruction: func(ctx context.Context, ownerID, docID, instructionID string) error {
+			return core.DispatchActor(ctx, ownerID, core.TextureSandboxID(), currentTextureAgentID(docID), "coagent_result", instructionID, "", "")
+		},
 	}
 }
 

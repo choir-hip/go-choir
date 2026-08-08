@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -53,6 +54,13 @@ func TestBindLifecycleControlDeliveryResearcherAtomicReplayAndPendingExclusion(t
 	if err != nil || len(pending) != 0 {
 		t.Fatalf("delivered control remains pending: %+v %v", pending, err)
 	}
+	delivered, err := s.ListLifecycleControlsDeliveredToRun(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID, run.AgentID, run.RunID, 100)
+	if err != nil || len(delivered) != 1 || delivered[0].UpdateID != turn.Controls[0].UpdateID || delivered[0].Content != turn.Controls[0].Content || delivered[0].Packet.Kind != turn.Controls[0].Packet.Kind {
+		t.Fatalf("exact delivered control payload = %+v, %v", delivered, err)
+	}
+	if _, err := s.ListLifecycleControlsDeliveredToRun(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID, run.AgentID, "other-run", 100); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("other run read exact control: %v", err)
+	}
 	replay, err := s.BindLifecycleControlDelivery(context.Background(), bind)
 	if err != nil || !replay.Replay {
 		t.Fatalf("equal delivery replay = %+v %v", replay, err)
@@ -102,5 +110,49 @@ func TestBindLifecycleControlDeliveryExactPersistentSuperRemainsNonLifecycle(t *
 	binding, ok := bindings[0].(map[string]any)
 	if !ok || binding["trajectory_id"] != start.TrajectoryID || binding["update_id"] != turn.Controls[0].UpdateID || binding["target_work_item_id"] != workID {
 		t.Fatalf("persistent Super decoded binding mismatch: %#v", bindings[0])
+	}
+	delivered, err := s.ListLifecycleControlsDeliveredToRun(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID, superID, run.RunID, 10)
+	if err != nil || len(delivered) != 1 || delivered[0].Content != "control persistent-super" || delivered[0].Packet.Kind != "execution_request" {
+		t.Fatalf("persistent Super exact delivered payload=%+v err=%v", delivered, err)
+	}
+}
+
+func TestDeliveredLifecycleControlReaderSurvivesStoreRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "delivered-control-restart.db")
+	first, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, start, caller, researcherWork := setupLifecycleTextureTargetFixtureWithStore(t, first)
+	request := textureTurnBaseRequest(t, first, start, caller, types.TextureTurnWait)
+	request.CommandID = "turn-delivery-restart"
+	request.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-delivery-restart", researcherWork.AssignedAgentID, researcherWork.WorkItemID)}
+	setTextureTurnDigest(t, &request, TextureSourceGraphWriteSet{})
+	turn, err := first.ApplyTextureTurn(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := first.GetLifecycleRun(context.Background(), start.OwnerID, start.ComputerID, "run-researcher-target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.BindLifecycleControlDelivery(context.Background(), bindControlRequestForTest(t, first, start, run, turn.Controls)); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	pending, err := second.ListPendingLifecycleUpdates(context.Background(), start.OwnerID, start.ComputerID, run.AgentID, 10)
+	if err != nil || len(pending) != 0 {
+		t.Fatalf("restart new-run selection=%+v err=%v", pending, err)
+	}
+	delivered, err := second.ListLifecycleControlsDeliveredToRun(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID, run.AgentID, run.RunID, 10)
+	if err != nil || len(delivered) != 1 || delivered[0].UpdateID != turn.Controls[0].UpdateID || delivered[0].Content != turn.Controls[0].Content || delivered[0].Packet.Kind != turn.Controls[0].Packet.Kind {
+		t.Fatalf("restart exact delivered payload=%+v err=%v", delivered, err)
 	}
 }

@@ -13,8 +13,12 @@ import (
 
 func setupLifecycleTextureTargetFixture(t *testing.T) (*Store, types.StartLifecycleRequest, types.RunRecord, types.WorkItemRecord) {
 	t.Helper()
+	return setupLifecycleTextureTargetFixtureWithStore(t, openTestStore(t))
+}
+
+func setupLifecycleTextureTargetFixtureWithStore(t *testing.T, s *Store) (*Store, types.StartLifecycleRequest, types.RunRecord, types.WorkItemRecord) {
+	t.Helper()
 	ctx := context.Background()
-	s := openTestStore(t)
 	start := lifecycleStartFixture()
 	start.CommandID = "command-start-texture-target"
 	start.TrajectoryID = "trajectory-texture-target"

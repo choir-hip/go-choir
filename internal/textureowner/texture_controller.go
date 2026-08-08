@@ -17,18 +17,15 @@ import (
 // the given doc. The actor mailbox replaces the old debounce timer system —
 // the handler processes the message when the actor activates, and the tool
 // loop's park-resume handles coalescing naturally.
-func (rt *Handler) scheduleTextureWorkerWake(ownerID, docID, _ string) {
+func (rt *Handler) scheduleTextureWorkerWake(ownerID, docID, instructionID string) {
 	ownerID = strings.TrimSpace(ownerID)
 	docID = strings.TrimSpace(docID)
-	if ownerID == "" || docID == "" {
+	instructionID = strings.TrimSpace(instructionID)
+	if ownerID == "" || docID == "" || instructionID == "" || rt == nil || rt.wakeOwnerInstruction == nil {
 		return
 	}
-	textureAgentID := currentTextureAgentID(docID)
-	if rt.Core == nil || !rt.Core.DispatchActorActive() {
-		return
-	}
-	if err := rt.Core.DispatchActor(context.Background(), ownerID, rt.Core.TextureSandboxID(), textureAgentID, "coagent_result", "", "", ""); err != nil {
-		log.Printf("runtime: schedule texture wake for doc %s: %v", docID, err)
+	if err := rt.wakeOwnerInstruction(context.Background(), ownerID, docID, instructionID); err != nil {
+		log.Printf("runtime: schedule texture owner-instruction wake for doc %s: %v", docID, err)
 	}
 }
 
