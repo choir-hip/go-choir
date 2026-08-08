@@ -22,7 +22,7 @@ unexecuted Researcher/Super/capsule behavior.
 | Host and product identity | PASS | Nonce-bound identity joined host, sandbox, route, deployment receipt, platform attestation, computer scope `vm-bbdbbd01c4390b7036067aaa12afeb68`, guest `computer-42850e9734d9442386c5dd8bf3afbf19`, and VM epoch 8247 to exact `ac6dd16b` |
 | Product lifecycle route | PASS | Authenticated create, tell, model-policy file/resolve, trajectory inspection, and conditional public cancel all executed on the exact candidate |
 | Initial committed-work projection | PASS deployed | No-SSH deployment restart created run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf` for the previously stranded initial work |
-| Provider-dependent acceptance | **BLOCKED** | Host ChatGPT returned HTTP 401 `refresh_token_reused` on both original and fresh trajectories; Z.AI returned HTTP 429 and later an open unhealthy-provider circuit; configured fallback chains ended at stale ChatGPT. Sanitized local reproduction after staging found DeepSeek/Xiaomi HTTP 402 balance failures, Fireworks HTTP 412 `PRECONDITION_FAILED`, Z.AI HTTP 429 code `1113`, and direct AWS Bedrock bearer invokes in `us-east-1` returned HTTP 403 for both gateway seed `us.anthropic.claude-haiku-4-5-20251001-v1:0` and exact owner-policy-selected `us.anthropic.claude-sonnet-4-6`; these local calls diagnose availability only and are not acceptance evidence or host-credential proof. No Researcher/update/revision/Super/capsule was produced. Exact-F recurrence trajectory `e5f85464-560b-5383-b199-cf4c62c12145` / run `74a5a20f-24a3-4b25-b11c-1072f881f8a9` again failed iteration zero on ChatGPT 401 and was publicly cancelled at version 3. |
+| Provider-dependent acceptance | **BLOCKED — RESTORATION AUTHORIZED/PENDING** | Host ChatGPT returned HTTP 401 `refresh_token_reused` on both original and fresh trajectories; Z.AI returned HTTP 429 and later an open unhealthy-provider circuit; configured fallback chains ended at stale ChatGPT. Sanitized local reproduction after staging found DeepSeek/Xiaomi HTTP 402 balance failures, Fireworks HTTP 412 `PRECONDITION_FAILED`, Z.AI HTTP 429 code `1113`, and direct AWS Bedrock bearer invokes in `us-east-1` returned HTTP 403 for both gateway seed `us.anthropic.claude-haiku-4-5-20251001-v1:0` and exact owner-policy-selected `us.anthropic.claude-sonnet-4-6`; these local calls diagnose availability only and are not acceptance evidence or host-credential proof. No Researcher/update/revision/Super/capsule was produced. Exact-F recurrence trajectory `e5f85464-560b-5383-b199-cf4c62c12145` / run `74a5a20f-24a3-4b25-b11c-1072f881f8a9` again failed iteration zero on ChatGPT 401 and was publicly cancelled at version 3. At `2026-08-08T23:24Z` the operator explicitly authorized the local-token/SSH Node B restoration; sanitized preflight selected a ChatGPT-only atomic auth-file replacement because full helper execution would also change Bedrock. |
 | Acceptance-artifact cleanup | PASS | Original failed trajectory `8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d` was publicly cancelled at lifecycle version 9; fresh recurrence trajectories `41cec88f-510f-53cc-a5e7-84c372b5421b` and `aca3504c-2ae0-5a4e-bab5-b22541e90585` were publicly cancelled at lifecycle version 3; original model-policy bytes were restored at SHA-256 `7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`; all temporary API keys were revoked and rejected on subsequent use. Exact-F recurrence was likewise retained/cancelled at version 3; the first setup key lacked `write:texture`, was refused HTTP 403 with no mutation, and both new setup keys were revoked/post-401. Empty generic document `457320df-e047-405c-b2a1-a0263b4cb5dc` from an operator route mistake is retained with current_version_number/revision_count 0 and no trajectory/run and is not acceptance. |
 | Source rollback | **DEPLOYED BOUNDED REHEARSAL + RECOVERY PASS / STRICT MIDPOINT OBSERVABILITY FAIL** | Canonical R `10d48659` made the exact 99 non-document paths cdaa-equivalent; CI/rolling/deploy `31267448310` passed and exact R ran at epoch 8248. R preserved run/lifecycle/selfdev/policy/inventory summaries, but its legacy response omitted six stored owner-instruction `request_id` fields, so the full v9 response digest differed and the identity-ambiguity gate fired. Canonical F `67a61358` immediately restored the exact pre-R whole tree; CI/rolling/deploy `31268477380` passed, exact F ran at epoch 8249, and all captured frozen comparator response/state digests equalled baseline. Exposure was 1,909 seconds; key revoked/post-401. Canonical deployed rollback/recovery is rehearsed; strict old-runtime forward-observability and complete checkpoint/capsule acceptance remain open. |
 | Registry terminal closure | OPEN | ACTIVE, mission graph, and authority manifest remain active/working; effects remain OFF |
@@ -137,7 +137,7 @@ Researcher, Super, CoSuper, capsule, transclusion, or run-acceptance graph.
 
 ## Remaining evidence floor
 
-Still missing: a canonical audited gateway credential/provider restoration or funding/configuration of one unavailable provider account;
+Still missing: successful usability proof for the operator-ratified scoped ChatGPT restoration;
 authenticated repeated-cycle trajectory; three progressive revisions; two
 downward control cycles; owner correction against a Texture-authored head;
 openable research and execution sources plus positive correction/CLI parity;
@@ -163,25 +163,31 @@ doc-truth review returned **ACCEPT** after repairing the stale ACTIVE invocation
 terminal-registry wording, and prohibition 17 classification; it confirmed the
 9/8/19 coverage and three-registry consistency.
 
-The only safe next transition is an audited renewal of server-owned ChatGPT auth
-or restoration of one configured tool-capable provider through the canonical
-gateway operator authority. Repository and GitHub authority inspection found no scoped product API or
-`choir` CLI renewal path, no provider Actions secret, and no repository
-environment authority; only the Node B SSH host/key secrets exist. The tracked
-credential and recovery paths are SSH-shaped break-glass operations outside
-this acceptance authority. Sanitized local diagnostics show every configured provider/model route failed
-before tool semantics; balance attribution applies only to DeepSeek/Xiaomi and
-the qualified Z.AI classification, not Fireworks. Local ChatGPT token metadata
-reports an unexpired expiry, which does not prove usable auth; none of these
-facts supplies a proven or admissible host transfer/renewal path.
+The operator explicitly ratified the previously missing transition at
+`2026-08-08T23:24Z`: use the existing local ChatGPT token and SSH Node B for a
+scoped gateway-auth restoration. Sanitized preflight selected only the tracked
+helper's atomic ChatGPT auth-file copy/restart subset because full helper
+execution would also change the unequal local Bedrock credential and exceed the
+ratified scope. Before the explicit ratification, repository and GitHub authority inspection
+found no scoped product API or `choir` CLI renewal path, no provider Actions
+secret, and no repository environment authority; only the Node B SSH host/key
+secrets existed, so the tracked SSH-shaped break-glass path was then outside
+acceptance authority. The `2026-08-08T23:24Z` exception now authorizes only the
+exact Node B ChatGPT auth-file transfer and gateway restart described above; it
+does not authorize general SSH mutation, guest injection, gateway env/Bedrock,
+policy, route, or auth weakening. Sanitized local diagnostics show every
+configured provider/model route failed before tool semantics; balance attribution applies only to DeepSeek/Xiaomi and
+the qualified Z.AI classification, not Fireworks. Local ChatGPT token metadata reports an unexpired expiry, which does not prove
+usable auth by itself; the ratified scoped transfer plus a successful sanitized
+canonical product ChatGPT probe is now the admissible proof path.
 
 A post-recurrence independent blocked-slice audit returned **NONE**: every
 remaining acceptance gap is downstream of the first successful real Texture
 provider turn; further local/source proof would duplicate already-passing
 contracts, manually created actors/evidence would be synthetic acceptance, and
-retained failures or active registries must not be deleted. After an authorized
-restoration transition, exact deployed F
+retained failures or active registries must not be deleted. After the ratified restoration transition proves usable auth, exact deployed F
 `67a61358ceda55c30e9853907f85648bb8531bb8` identity must be reverified and a
-fresh trajectory must run the complete acceptance. This
-Definition does not authorize SSH, guest credential injection, auth weakening,
-route mutation, or an unreviewed silent fallback.
+fresh trajectory must run the complete acceptance. This Definition authorizes only the exact scoped Node B ChatGPT transfer/restart
+exception. It still forbids general SSH, guest credential injection, gateway
+env/Bedrock mutation, auth weakening, route mutation, or an unreviewed silent
+fallback.

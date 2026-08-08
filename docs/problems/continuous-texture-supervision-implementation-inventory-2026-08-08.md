@@ -988,3 +988,54 @@ This exact-F recurrence rules out deployment restart alone as credential
 restoration and reconfirms that the current blocker is protected host ChatGPT
 credential authority. It does not authorize another model-policy permutation,
 credential transfer, SSH recovery, or auth weakening. Effects remain OFF.
+
+### Operator-ratified scoped ChatGPT restoration preflight
+
+At `2026-08-08T23:24Z` the operator explicitly authorized using the existing
+local ChatGPT token and SSH access to Node B. This is the previously missing
+protected authority; it is scoped to restoring Node B ChatGPT authentication,
+not to changing model policy, other provider credentials, route state, guest
+credentials, or self-development effects.
+
+The tracked operator helper is `nix/deploy-provider-creds.sh` at SHA-256
+`bf2eadd1f446c93e405125612b05757fee51f5d35b90b341f06b301e417e4560`.
+Sanitized preflight found local `~/.codex/auth.json` SHA-256
+`cc74452413e4622d253524960d160c059860e26d6dcc8310a17b08a5abee7de6`,
+mode 0600, with access, refresh, and ID tokens present and access expiry
+`2026-08-13T00:05:24Z`. Node B's current
+`/var/lib/go-choir/codex-auth.json` is SHA-256
+`eb1b7317613de015a3f29948cb738e74e84f60f0d073186760808afadba7aeb5`,
+mode 0600, last refreshed `2026-07-24T00:10:18.068693Z`. Account-identity
+digests differ; the operator explicitly selected the local credential as the
+replacement.
+
+The full helper would also regenerate `gateway-provider.env`. Per-key digest
+comparison proved every planned value already equals Node B except
+`AWS_BEARER_TOKEN_BEDROCK`; invoking the whole helper would therefore exceed the
+ChatGPT-only authority by changing Bedrock. The restoration will instead use the helper's exact ChatGPT subset under an
+exclusive Node B `flock`: upload only into a root-only directory, verify the
+expected SHA-256, root ownership, mode 0600, JSON validity, and required token
+shape without printing values, then `install` an already-0600 same-filesystem
+canonical temp and atomically `mv -T` it over
+`/var/lib/go-choir/codex-auth.json`. Traps remove both temps and restore the
+backup on install/service failure, preventing any readable-mode window. Only
+`go-choir-gateway` restarts. The existing env file remains byte-identical at
+SHA-256
+`7c5cc6e848471bc0e7afccbcfd3704c61dc185dffce0c535379f7c817bd5b8ef`.
+
+**Red mutation ceremony.** Conjecture delta: replacing only the stale Node B
+Codex auth file with the operator-selected local record will restore the exact-F
+ChatGPT tool boundary without source, policy, route, computer, or other-provider
+change. Protected surfaces: the token in SSH transit, the root-owned auth file,
+and the gateway restart. Admissible evidence: sanitized pre/post file digests,
+mode/owner, unchanged env digest, active gateway with a new PID, exact staging
+build identity, and one bounded sanitized canonical product ChatGPT probe that
+proves usability rather than file deployment alone, followed by the fresh
+accepted trajectory and before/after self-development/policy/run/lifecycle
+receipts. Rollback: first create and hash a root-only mode-0600 timestamped copy
+of the old auth file; on any copy, service, health, auth/refresh, or product-probe
+failure, atomically reinstall the already-0600 backup, restart, and verify the
+old SHA/account digest plus fresh PID and exact-F health. Retain the backup only
+through acceptance, then delete it under recorded disposition. Heresy delta at
+preflight: discovered none, introduced none, repaired none. Effects remain OFF;
+credential restoration alone is not acceptance.

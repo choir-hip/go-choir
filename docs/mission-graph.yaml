@@ -268,9 +268,12 @@ nodes:
       restored the exact pre-R tree/ac6-equivalent runtime, passed
       CI/rolling/deploy 31268477380, and joined exact product identity at epoch
       8249. All captured frozen comparator response/state digests matched baseline; exposure was 1,909 seconds
-      and the key was revoked/post401. The current slice is authorized provider
-      restoration or separately ratified scoped no-SSH renewal. Effects remain
-      OFF; provider-dependent repeated progression, real capsule/late-result,
+      and the key was revoked/post401. At 2026-08-08T23:24Z the operator
+      explicitly authorized the existing local ChatGPT token and SSH Node B.
+      Sanitized preflight selected only an atomic ChatGPT auth-file replacement
+      plus gateway restart because the full helper would also change Bedrock; a
+      root-only rollback copy and unchanged gateway env are mandatory. Effects
+      remain OFF; provider-dependent repeated progression, real capsule/late-result,
       positive correction/source-open, checkpoint/no-effect and run acceptance,
       and terminal registry closure remain mandatory.
     sources:

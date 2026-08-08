@@ -35,8 +35,11 @@ the epoch-8247 baseline; exposure was 1,909 seconds and the key was
 revoked/post-401. Canonical deployed rollback/recovery is therefore rehearsed,
 while the legacy projection is not forward-lossless.
 
-The current slice has returned to authorized provider restoration or separately
-ratified scoped no-SSH renewal. Effects remain OFF. Provider-dependent repeated
+At `2026-08-08T23:24Z` the operator explicitly authorized the existing local
+ChatGPT token and SSH Node B. Sanitized preflight selected a ChatGPT-only atomic
+auth-file replacement and gateway restart because the full tracked provider
+helper would also change Bedrock. A root-only rollback copy and unchanged gateway
+env are mandatory. Effects remain OFF. Provider-dependent repeated
 Researcher/Super/CoSuper progression, real capsule/late-result behavior, positive
 correction/source opening, complete checkpoint/no-effect and run acceptance,
 and terminal registry closure remain mandatory.
