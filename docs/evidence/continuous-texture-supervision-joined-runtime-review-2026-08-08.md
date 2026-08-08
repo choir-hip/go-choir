@@ -284,3 +284,31 @@ computer policy bytes, route/build identity, and the retained lifecycle head. It
 is not a complete protected-state comparison: no real capsule effect occurred,
 and no canonical product readback for checkpoint state or the complete protected
 event-head set was obtained. Those gates remain open.
+
+
+### Deployed rollback preflight and refusal
+
+A red-class preflight considered re-running historical successful deployment
+run `31030833230` at `460c1423`, whose deployed runtime tree underlies
+`cdaa787b`; exact-ac6 run `31261269488` was the proposed recovery. Authenticated
+inventory found only one mutable active interactive computer (`primary`, epoch
+8247), all twelve durable runs terminal, self-development OFF generation 0,
+exact policy bytes, and the retained lifecycle snapshot unchanged at cancelled
+watermark 9/v0. The preflight key was revoked and returned HTTP 401.
+
+Independent deployment red-team nevertheless returned **DO NOT PROCEED**. A
+rerun-all preserves the historical push event and exact checkout but also invokes
+the sibling rolling-Flake publisher, produces a historical `main@460c` event-ref
+receipt while current main is newer, rebuilds/restarts all Node B host services,
+and refreshes every mutable active interactive computer. Exact-ac6 recovery has
+normal CI/build latency. A job-scoped deploy rerun avoids the independent Flake
+publisher but GitHub reruns the job with its dependencies, so it does not provide
+a bounded deploy-only recovery window. Most importantly, the older runtime has
+no restart/read receipt against the current persisted object graph.
+
+No workflow was rerun and no deployment, route, checkpoint, computer, or product
+state changed. Deployed rollback remains open. A safe rehearsal requires either
+a canonical current-main revert followed by a newly reviewed forward candidate,
+or purpose-built bounded deploy-only authority with an exclusive change freeze,
+complete affected-computer/protected-state inventory, and old-code proof against
+a reconstructable current graph snapshot.

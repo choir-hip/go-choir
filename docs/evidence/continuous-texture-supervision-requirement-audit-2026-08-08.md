@@ -24,7 +24,7 @@ unexecuted Researcher/Super/capsule behavior.
 | Initial committed-work projection | PASS deployed | No-SSH deployment restart created run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf` for the previously stranded initial work |
 | Provider-dependent acceptance | **BLOCKED** | Host ChatGPT returned HTTP 401 `refresh_token_reused` on both original and fresh trajectories; Z.AI returned HTTP 429 and later an open unhealthy-provider circuit; configured fallback chains ended at stale ChatGPT. Sanitized local reproduction after staging found DeepSeek/Xiaomi HTTP 402 balance failures, Fireworks HTTP 412 `PRECONDITION_FAILED`, and Z.AI HTTP 429 code `1113`; these local calls diagnose route failures but are not acceptance evidence. No Researcher/update/revision/Super/capsule was produced |
 | Acceptance-artifact cleanup | PASS | Original failed trajectory `8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d` was publicly cancelled at lifecycle version 9; fresh recurrence trajectories `41cec88f-510f-53cc-a5e7-84c372b5421b` and `aca3504c-2ae0-5a4e-bab5-b22541e90585` were publicly cancelled at lifecycle version 3; original model-policy bytes were restored at SHA-256 `7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`; all temporary API keys were revoked and rejected on subsequent use |
-| Source rollback | **LOCAL SOURCE REHEARSAL PASS / DEPLOYED OPEN** | Disposable exact-`ac6dd16b` worktree reversed all 99 changed non-document paths to `cdaa787b`; zero scoped paths differed afterward. Path-list SHA-256 `0b7eb424…`, reverse-patch SHA-256 `64a61e5…`. Focused packages, sequential runtime shards, standalone retry of one parallel resource-timeout test, vet, and diff checks passed. Mission docs were intentionally retained. No staging/deployment/route rollback was executed or claimed. |
+| Source rollback | **LOCAL PASS / UNSAFE DEPLOY PATH REJECTED** | The 99-path `cdaa787b` source reconstruction and tests passed. Independent red-team rejected rerun-all of historical deploy `31030833230`: it would also publish the rolling Flake, claim a stale current-main event ref, restart all Node B services/refresh every mutable active computer, and open the newer persisted graph with older code without bounded recovery. Job-scoped rerun still includes dependencies and normal recovery latency. Preflight found one active interactive computer and 12 terminal/0 active runs; no deploy occurred and the key was revoked. A canonical current-main revert plus reviewed forward candidate, or purpose-built bounded deploy-only authority with backward-graph proof, remains required. |
 | Registry terminal closure | OPEN | ACTIVE, mission graph, and authority manifest remain active/working; effects remain OFF |
 
 ## Finish acceptance actions
@@ -108,6 +108,10 @@ triggered or cannot yet be excluded by the required evidence class.
   `7192b8b1…`; identical route digest, epoch 8247, and host/guest `ac6dd16b`
   identities across post-deploy probes; cancelled head/watermark stable; readback
   key revoked/post-401.
+- deployment-rollback preflight/refusal: historical run `31030833230` and
+  exact-ac6 recovery run `31261269488` inspected; one active interactive
+  computer, 12 terminal/0 active runs, self-development OFF generation 0,
+  policy/head stable; rerun-all rejected before effect; key revoked/post-401.
 
 These are failure/partial-path evidence. They do not count as an accepted
 Researcher, Super, CoSuper, capsule, transclusion, or run-acceptance graph.

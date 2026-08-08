@@ -25,9 +25,13 @@ disconnect/resume observation through cancelled cursor 9 nevertheless passed;
 positive correction, historical v1+, and source-open remain blocked. A local
 source-only rollback rehearsal exactly restored all 99 non-document candidate
 paths to `cdaa787b` and passed sequential runtime shards/focused/vet checks;
-deployed rollback remains open. Authenticated readback kept self-development OFF
-generation 0, policy bytes exact, and route digest/epoch/build identity unchanged;
-real capsule/checkpoint/event-head comparison remains open. Effects remain OFF;
+deployed rollback remains open: independent red-team rejected a historical
+workflow rerun because it would publish a rolling route, misstate current-main
+provenance, refresh every mutable computer, and open newer persisted state with
+older code without bounded recovery; no deployment was triggered. Authenticated
+readback kept self-development OFF generation 0, policy bytes exact, and route
+digest/epoch/build identity unchanged; real capsule/checkpoint/event-head
+comparison remains open. Effects remain OFF;
 provider restoration, real Linux product proof, complete no-effect/deployed-
 rollback evidence, and registry closure remain mandatory.
 
