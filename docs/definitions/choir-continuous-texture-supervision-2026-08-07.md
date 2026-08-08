@@ -229,22 +229,22 @@ measures:
 
 now:
   status: working
-  slice: "The read-only implementation inventory and problem-first boundary are landed. Repair the active-mission registry root and deleted problem citer, then build one frozen Implement A–C candidate joining fail-closed addressing, direction-specific lifecycle control, structured normalization, and the atomic Texture turn before any Texture affordance is registered."
+  slice: "The unpublished local red candidate now joins strict packet/address authority, canonical structured revisions, atomic Texture-turn and many-CoSuper assignment substrates, strict fixture migration, and durable public Texture observation/CLI. Runtime tool/readers, occurrence-bound owner correction, and real capsule activation are active; effects remain OFF."
   question: none
   reconciliation:
-    observed_at: 2026-08-08T03:57:58Z
-    source_ref: 7467b678cfb2a92906434158fb2a18124f3ee0c3
+    observed_at: 2026-08-08T05:29:10Z
+    source_ref: cdaa787bf2d006a1d4e59c1650a232f2083d8f9d
     deploy_identity: 6965f7f71f764f91737b21804bc376281cbdbe8f
     authority_identities: [docs/choir-doctrine.md@f64784e8, docs/agent-product-doctrine.md@f64784e8, docs/supervision-protocol.md@f64784e8, docs/texture-agentic-invariants-2026-06-13.md@f64784e8, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md@7467b678, "owner directive in this run: proceed without asking", "owner directive in this run: use the Definition dashboard to supervise /goal until Texture works correctly"]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "2026-08-08 post-inventory inventory: primary worktree clean at main@7467b678 before this goal-owned Definition/manifest repair; one .context-only and one objectgraph/store WIP worktree remain forbidden; all other registered worktrees are clean or prunable and untouched."
+    worktree_inventory_ref: "2026-08-08 candidate inventory: origin/main=cdaa787b; primary owns unpublished local candidate a1490f02 and this Definition update; goal-owned runtime, observation, resolver-fixture, and capsule worktrees are active. The unrelated .context-only and objectgraph/store WIP worktrees remain forbidden and untouched."
     status: reconciled
   candidate:
     id: continuous-texture-supervision-implement-a-c-v1
-    state: preparing
-    ref: main working tree
+    state: building
+    ref: main@ca56f9d3 plus current Definition update; atomic/store/address/assignment/observation and strict fixture slices are joined locally; production runtime, owner correction, and capsule execution remain unjoined/unpublished
     owner: current goal session
-    base: 7467b678cfb2a92906434158fb2a18124f3ee0c3
+    base: cdaa787bf2d006a1d4e59c1650a232f2083d8f9d
     digest: pending until scoped runtime bytes and tests are frozen
     scope: [docs/definitions/choir-continuous-texture-supervision-2026-08-07.md, docs/doc-authority-manifest.yaml, internal/agentprofile/, internal/agentcore/tools_researcher.go, internal/agentcore/tools_worker_update.go, internal/agentcore/super_controller.go, internal/types/lifecycle.go, internal/types/evidence.go, internal/store/lifecycle.go, internal/textureowner/tools_texture.go, internal/textureowner/texture_controller.go, focused tests adjacent to those files]
   decision:
@@ -257,8 +257,8 @@ now:
     recorded_at: 2026-08-08T03:33:22Z
     consequence: "The Definition is executable through /goal after three-registry promotion. The /goal executor must keep view.generator live through terminal closure because Texture is the artifact being repaired, not yet a reliable supervision surface. Runtime work follows the red-mutation ceremony and the frozen A–C schema in the implementation inventory: no temporary generic Texture update tool, no separately committing control call, no legacy mailbox write, and no target wake before one validated conditional turn commit. Later capsule work preserves one writable assignment per isolated capsule by default, including verification; a verifier may edit and execute tests/scripts inside its own networkless capsule but has no host or self-development effect authority."
   evidence_refs: [docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, .agentic-consensus/cts-v4.7-panel/, .agentic-consensus/cts-v4.7-2-panel/, .agentic-consensus/cts-v4.7-3-panel/, scripts/lint/cts-receipt-lint.py, "owner directive in this run: proceed without asking", "owner directive in this run: use the Definition dashboard to supervise /goal until Texture works correctly"]
-  blocker_or_risk: "The live doccheck found a three-registry root mismatch and the owner-ratification receipt cites a deleted problem path. This goal-owned docs candidate repairs both before runtime mutation. Implementation remains red; effects stay OFF. Production capsules are currently unwired, and existing CoSuper verifier tools carry forbidden self-development effects, so Implement D cannot be reached by merely enabling the executor."
-  next_action: Validate the manifest root and deleted-citer repairs with live doccheck, Definition parsing/dashboard generation, and the receipt linter; then implement and test the frozen A–C schema as one candidate before registering or waking any Texture-originated control.
+  blocker_or_risk: "No registry blocker remains and effects stay OFF. Implementation review discovered three substrate gaps before activation: the first atomic-turn core omitted the caller Texture work consequence; owner correction remained a legacy mailbox path with content-hash/singular causality; and the first CoSuper assignment API required prewritten assigned agent/work/run objects, making its production opener circular. Active slices must repair these atomically before any product affordance or capsule activation is accepted. Real executor freeze/revoke acknowledgement and deployed proof remain absent."
+  next_action: Join the production Texture turn/controller and durable readers with caller-work fate-sharing; join observation, add occurrence-bound owner create/tell/correct CLI/API causality, finish strict fixture migration, and connect real many-CoSuper capsule activation/cancellation before candidate freeze.
 
 receipts:
   - id: continuous-supervision-definition-review-v1
@@ -551,6 +551,23 @@ receipts:
       environment_identity: 6965f7f71f764f91737b21804bc376281cbdbe8f observation only
       deployed_acceptance: not_applicable
     registry_conformance_ref: "live doccheck failure recorded before repair: one product mission-graph entrypoint versus zero authority-root product Definitions"
+
+  - id: continuous-supervision-preparatory-substrate
+    boundary: implement
+    commit_or_artifact: "local unpublished commits 7ce06244, e3342476, 020ff64d"
+    proof_refs: [internal/agentprofile/agentprofile_test.go, internal/agentcore/prompts_policy_test.go, internal/agentcore/tool_profiles_authority_test.go, internal/store/lifecycle_test.go, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md]
+    rollback_ref: main@cdaa787bf2d006a1d4e59c1650a232f2083d8f9d
+    disposition: "Separated spawn from message policy without widening Texture spawning; made delegated CoSuper host-effect installers unreachable while leaving capsule-local mutation unwired; and connected Start/apply lifecycle revisions to the canonical structured normalization authority with derived readable content and mismatch refusal. Focused, full-store, and race evidence passed. These are necessary substrate repairs, not an A–E or product-loop completion claim; the commits remain local until the joined red candidate is ready."
+    problem_ref: docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md
+    authorization_ref: "owner-ratified active Definition; frozen Implement A-C/D safety boundaries"
+    candidate_or_evidence_refs: [git:7ce06244c5c05ba20ac189a71489103aba22d78b, git:e33424764e8785445a8558aa73cf8909eba0e083, git:020ff64dfcb9212ebd2c894cd5ba317909d2ef7d, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md]
+    landing:
+      source_commit: pending joined runtime candidate
+      ci_ref: pending
+      deploy_ref: pending
+      environment_identity: staging baseline 6965f7f71f764f91737b21804bc376281cbdbe8f only
+      deployed_acceptance: pending
+    registry_conformance_ref: "not a Definition status transition; active registries remain current and live doccheck passed at cdaa787b"
 
 view:
   path: http://127.0.0.1:8787/
