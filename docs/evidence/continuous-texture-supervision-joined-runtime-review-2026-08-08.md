@@ -263,3 +263,24 @@ returns the complete non-document candidate scope to the previously CI-passed
 not a staging deployment, route rollback, or product rollback receipt. The
 disposable worktree was removed; the patch and structured manifest remain under
 `/tmp` for this session only and are reproducible from the two commit identities.
+
+
+### Authenticated partial no-effect readback
+
+The exact acceptance computer's self-development mode was `off`, generation 0,
+before the first trajectory and remained `off`, generation 0, after provider,
+policy, CLI, cancellation, and local rollback-rehearsal work. The computer-owned
+model-policy bytes remained exactly SHA-256
+`7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`.
+Nonce-bound identities captured before and after the later probes retained the
+same route digest, VM epoch 8247, and exact host/guest build
+`ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee`. The original cancelled trajectory
+also remained at lifecycle version/watermark 9 with exact v0 head after the CLI
+authority negatives. The scoped readback key was revoked and subsequently
+returned HTTP 401.
+
+This is admissible partial no-effect evidence for self-development mode,
+computer policy bytes, route/build identity, and the retained lifecycle head. It
+is not a complete protected-state comparison: no real capsule effect occurred,
+and no canonical product readback for checkpoint state or the complete protected
+event-head set was obtained. Those gates remain open.

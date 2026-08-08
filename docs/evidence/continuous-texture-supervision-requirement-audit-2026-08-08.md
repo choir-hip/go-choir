@@ -39,7 +39,7 @@ unexecuted Researcher/Super/capsule behavior.
 | 6 | Pending controls, passivation, approved no-SSH same-build restart, same identities | Deterministic local recovery contracts passed. | **PARTIAL PASS.** Ordinary deployment restart recovered initial owner work on exact identities. Pending Researcher/Super controls and same-run append recovery remain unproved on staging. |
 | 7 | Direct owner revision plus natural-language correction | Atomic owner-head rebase and lifecycle instruction source tests passed. | **PARTIAL PASS.** Natural-language owner instructions queued durably and woke exact Texture runs. No Texture-authored revision existed to correct or rebase. |
 | 8 | In-flight cancellation, delayed authenticated result, exact retry | Deterministic cancellation and bounded evidence-only closure passed source review and Race tests. | **PARTIAL PASS.** Public conditional cancellation cancelled the failed trajectory and resident activation. No in-flight capsule effect or delayed authenticated result existed, so late-evidence semantics remain unproved. |
-| 9 | Compare event heads, self-development state, checkpoint, route, host projections before/after | Source gates refuse out-of-capsule and late promotion effects. | **PARTIAL PASS.** Self-development was observed OFF before the run; policy bytes were restored exactly; cancellation had no semantic revision. No real capsule effect occurred, so the required complete protected-state before/after comparison is absent. |
+| 9 | Compare event heads, self-development state, checkpoint, route, host projections before/after | Source gates refuse out-of-capsule and late promotion effects. | **PARTIAL PASS.** Exact acceptance computer self-development remained `off`, generation 0, before and after. Model policy bytes remained SHA-256 `7192b8b1…`; nonce-bound post-deploy identities before/after later probes retained the same route digest, VM epoch 8247, and host/guest `ac6dd16b` builds. The retained cancelled trajectory stayed at watermark/lifecycle version 9 and exact v0 after CLI negatives. The readback key was revoked/post-401. No real capsule effect, canonical checkpoint readback, or complete protected event-head comparison exists, so full no-effect acceptance remains open. |
 
 ## Measures
 
@@ -68,7 +68,7 @@ triggered or cannot yet be excluded by the required evidence class.
 | 5 | Excluded by source tests/review: lifecycle authority is single-tape and new traffic does not enter the legacy worker inbox. |
 | 6 | Excluded by source tests/review; real Linux capsule isolation remains required. |
 | 7 | Excluded by atomic-turn/durable-disposition source tests; deployed turn behavior remains unobserved. |
-| 8 | **UNPROVED deployed:** effects were OFF and no revision/effect escaped, but no real capsule before/after receipt exists. |
+| 8 | **PARTIALLY EXCLUDED:** authenticated readback kept self-development OFF generation 0, policy bytes exact, route digest/epoch/build identity unchanged, and cancelled lifecycle head stable; no real capsule/checkpoint/event-head comparison exists, so full no-effect proof remains open. |
 | 9 | Excluded by fail-closed source tests. |
 | 10 | Excluded by direction-specific producer/target work identities and reducer validation. |
 | 11 | Excluded by atomic Texture-turn conditional commit tests. |
@@ -103,6 +103,11 @@ triggered or cannot yet be excluded by the required evidence class.
   `d1a831ba-6af5-5206-aa03-49caf4b047dc`; watch resume cursors
   `0→2→4→6→8→9`, empty after 9; cancelled tell/correct HTTP 409; cross-document
   revision show rejected.
+- authenticated partial no-effect readback: exact acceptance computer
+  self-development `off`, generation 0 before/after; model-policy SHA-256
+  `7192b8b1…`; identical route digest, epoch 8247, and host/guest `ac6dd16b`
+  identities across post-deploy probes; cancelled head/watermark stable; readback
+  key revoked/post-401.
 
 These are failure/partial-path evidence. They do not count as an accepted
 Researcher, Super, CoSuper, capsule, transclusion, or run-acceptance graph.
