@@ -1032,7 +1032,7 @@ func TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill(t *testing.T) {
 
 const (
 	m3RestartOwnerID     = "user-alice"
-	m3RestartAgentID     = "cosuper:process-restart"
+	m3RestartAgentID     = "researcher:process-restart"
 	m3RestartTrajectory  = "traj-process-restart"
 	m3RestartChannelID   = "channel-process-restart"
 	m3RestartUpdateID    = "update-process-restart"
@@ -1096,8 +1096,8 @@ func runM3RestartStartProcess(t *testing.T) {
 		AgentID:      m3RestartAgentID,
 		ChannelID:    m3RestartChannelID,
 		TrajectoryID: m3RestartTrajectory,
-		AgentProfile: agentprofile.CoSuper,
-		AgentRole:    agentprofile.CoSuper,
+		AgentProfile: agentprofile.Researcher,
+		AgentRole:    agentprofile.Researcher,
 		OwnerID:      m3RestartOwnerID,
 		SandboxID:    "sandbox-test",
 		State:        types.RunPending,
@@ -1105,8 +1105,8 @@ func runM3RestartStartProcess(t *testing.T) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper,
-			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataAgentProfile: agentprofile.Researcher,
+			runMetadataAgentRole:    agentprofile.Researcher,
 			runMetadataAgentID:      m3RestartAgentID,
 			runMetadataChannelID:    m3RestartChannelID,
 			runMetadataTrajectoryID: m3RestartTrajectory,
@@ -1319,8 +1319,8 @@ func seedM3RestartBacklog(t *testing.T, ctx context.Context, s storeWriter) {
 		AgentID:   m3RestartAgentID,
 		OwnerID:   m3RestartOwnerID,
 		SandboxID: "sandbox-test",
-		Profile:   agentprofile.CoSuper,
-		Role:      agentprofile.CoSuper,
+		Profile:   agentprofile.Researcher,
+		Role:      agentprofile.Researcher,
 		ChannelID: m3RestartChannelID,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -1339,11 +1339,11 @@ func seedM3RestartBacklog(t *testing.T, ctx context.Context, s storeWriter) {
 	update := types.CoagentSourcePacket{
 		UpdateID:      m3RestartUpdateID,
 		OwnerID:       m3RestartOwnerID,
-		AgentID:       "co-super:process-verifier",
+		AgentID:       "researcher:process-producer",
 		TargetAgentID: m3RestartAgentID,
 		ChannelID:     m3RestartChannelID,
 		TrajectoryID:  m3RestartTrajectory,
-		Role:          agentprofile.CoSuper,
+		Role:          agentprofile.Researcher,
 		Packet:        testCoagentUpdatePacket("execution_result", "process restart update"),
 		Content:       "pending update content from the killed process proof",
 		CreatedAt:     now.Add(time.Millisecond),
@@ -1366,7 +1366,7 @@ func seedM3RestartBacklog(t *testing.T, ctx context.Context, s storeWriter) {
 		TrajectoryID:     m3RestartTrajectory,
 		Objective:        "finish process restart assigned obligation",
 		Reason:           "process restart proof should rewarm this durable work",
-		AuthorityProfile: agentprofile.CoSuper,
+		AuthorityProfile: agentprofile.Researcher,
 		AssignedAgentID:  m3RestartAgentID,
 		CreatedByRunID:   m3RestartInterruptID,
 	})

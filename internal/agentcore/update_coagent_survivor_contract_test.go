@@ -190,65 +190,11 @@ func TestSurvivorContract_TextureCollatesOnlyPacketSources(t *testing.T) {
 // TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets by also
 // asserting the deliverable-for-run filter from the run side, so a later
 // change cannot weaken one path while leaving the other intact.
-func TestSurvivorContract_SuperExecutesOnlyExecutionRequestPackets(t *testing.T) {
-	rt, s := testRuntime(t)
+func TestSurvivorContract_GenericCoSuperCannotAuthorPersistentSuperPackets(t *testing.T) {
+	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
-	ctx := context.Background()
-	ownerID := "user-survivor-super-gate"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
-	if err != nil {
-		t.Fatalf("ensure persistent super: %v", err)
-	}
-	// evidence_update addressed to persistent Super: must NOT be executable.
-	coSuperRun := startBoundLegacyCoSuperResultRun(t, s, superAgent, "survivor-super-gate")
-	raw, err := rt.ToolRegistryForProfile(agentprofile.CoSuper).Execute(toolContextForTestCall(coSuperRun, "call-survivor-super-gate"), "update_coagent", json.RawMessage(`{
-		"schema_version":"coagent_source_packet.v1",
-		"kind":"evidence_update",
-		"summary":"non-execution packet for Super",
-		"agent_id":"`+superAgent.AgentID+`",
-		"channel_id":"`+superAgent.ChannelID+`",
-		"claims":[{"text":"This packet must not start privileged execution."}]
-	}`))
-	if err != nil {
-		t.Fatalf("update_coagent evidence_update to super: %v", err)
-	}
-	// The privilege filter must reject this packet.
-	backlog, err := s.ListCoagentMailboxBacklog(ctx, ownerID, superAgent.AgentID, 10)
-	if err != nil {
-		t.Fatalf("list super backlog: %v", err)
-	}
-	for _, pkt := range backlog {
-		if persistentSuperExecutableUpdate(pkt) {
-			t.Fatalf("persistentSuperExecutableUpdate admitted non-execution packet %#v", pkt)
-		}
-	}
-	// Construct a persistent-Super-shaped RunRecord the same way the runtime
-	// would so isPersistentSuperAgentRun recognizes it; then prove the
-	// deliverable filter rejects the non-execution packet from the run side.
-	persistentSuperRun := &types.RunRecord{
-		RunID:        "run-survivor-super-gate-persistent",
-		OwnerID:      ownerID,
-		AgentID:      superAgent.AgentID,
-		AgentProfile: agentprofile.Super,
-		AgentRole:    agentprofile.Super,
-		ChannelID:    superAgent.ChannelID,
-		SandboxID:    "sandbox-test",
-	}
-	if !isPersistentSuperAgentRun(persistentSuperRun) {
-		t.Fatalf("test fixture: persistentSuperRun was not recognized as a persistent super run; agentID=%q ownerID=%q", superAgent.AgentID, ownerID)
-	}
-	// E3.2 obligation: the non-execution packet must not linger as live
-	// pending backlog forever. The current behavior leaves it pending (pinned
-	// by TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets). This
-	// assertion records the survivor contract that E3.2 must make true:
-	// after settlement, no backlog row for a non-execution packet addressed
-	// to persistent Super remains deliverable for a persistent-Super run.
-	if updateID := d9UpdateID(t, raw); updateID != "" {
-		for _, pkt := range backlog {
-			if pkt.UpdateID == updateID && coagentUpdateDeliverableForRun(persistentSuperRun, pkt) {
-				t.Fatalf("non-execution Super packet %s is still deliverable for a persistent-Super run; E3.2 settlement not yet landed", updateID)
-			}
-		}
+	if _, ok := rt.ToolRegistryForProfile(agentprofile.CoSuper).Lookup("update_coagent"); ok {
+		t.Fatal("static CoSuper registry retained legacy update_coagent return authority")
 	}
 }
 
@@ -305,57 +251,6 @@ func mustNow(t *testing.T) time.Time {
 // obligation: non-execution packets addressed to persistent Super are
 // automatically settled (marked delivered/settled) during reconciliation
 // so they do not linger in the mailbox backlog forever.
-func TestSurvivorContract_SuperSettlesNonExecutionRequestPackets(t *testing.T) {
-	rt, s := testRuntime(t)
-	d9InstallTools(t, rt)
-	ctx := context.Background()
-	ownerID := "user-survivor-settle"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
-	if err != nil {
-		t.Fatalf("ensure persistent super: %v", err)
-	}
-
-	coSuperRun := startBoundLegacyCoSuperResultRun(t, s, superAgent, "survivor-settle")
-	raw, err := rt.ToolRegistryForProfile(agentprofile.CoSuper).Execute(toolContextForTestCall(coSuperRun, "call-survivor-settle"), "update_coagent", json.RawMessage(`{
-		"schema_version":"coagent_source_packet.v1",
-		"kind":"evidence_update",
-		"summary":"non-execution packet to be settled",
-		"agent_id":"`+superAgent.AgentID+`",
-		"channel_id":"`+superAgent.ChannelID+`",
-		"claims":[{"text":"This packet is non-executable and must be settled."}]
-	}`))
-	if err != nil {
-		t.Fatalf("update_coagent: %v", err)
-	}
-	updateID := d9UpdateID(t, raw)
-
-	run, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
-	if err != nil {
-		t.Fatalf("reconcile persistent super: %v", err)
-	}
-	if run != nil {
-		t.Fatalf("expected no run to start, got %+v", run)
-	}
-
-	backlog, err := s.ListCoagentMailboxBacklog(ctx, ownerID, superAgent.AgentID, 10)
-	if err != nil {
-		t.Fatalf("list backlog after: %v", err)
-	}
-	if len(backlog) != 0 {
-		t.Fatalf("backlog = %+v, want 0 (settled)", backlog)
-	}
-
-	stored, err := s.GetWorkerUpdate(ctx, ownerID, updateID)
-	if err != nil {
-		t.Fatalf("get worker update: %v", err)
-	}
-	if stored.DeliveredToRunID != "settled_non_executable" {
-		t.Fatalf("delivered_to_loop_id = %q, want settled_non_executable", stored.DeliveredToRunID)
-	}
-	if stored.DeliveredAt == nil {
-		t.Fatal("expected delivered_at to be non-nil")
-	}
-}
 
 func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *testing.T) {
 	rt, s := testRuntime(t)
