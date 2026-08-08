@@ -153,6 +153,73 @@ func TestApplyTextureTurnOrderedControlsAtomicReplayAndLegacyIsolation(t *testin
 	}
 }
 
+func TestApplyTextureTurnResearcherOpenerAgentWorkAndFirstControlAreAtomic(t *testing.T) {
+	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
+	ctx := context.Background()
+	targetAgentID, targetWorkID := "researcher:atomic-open", "work-researcher-atomic-open"
+	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
+	req.CommandID = "texture-turn-researcher-opener"
+	control := textureTurnControl(t, "control-researcher-first", targetAgentID, targetWorkID)
+	control.Packet = types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What exact evidence resolves the gap?"}}
+	control.Content = "research exact gap"
+	control.PayloadDigest, _ = ComputeLifecycleUpdatePayloadDigest(control.Packet, control.Content)
+	control.OpenAgent = &types.AgentRecord{AgentID: targetAgentID, Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID}
+	control.OpenWork = &types.WorkItemRecord{WorkItemID: targetWorkID, Objective: "research exact gap", AuthorityProfile: "researcher", AssignedAgentID: targetAgentID}
+	req.Controls = []types.TextureTurnControl{control}
+	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
+
+	result, err := s.ApplyTextureTurn(ctx, req)
+	if err != nil || len(result.Controls) != 1 || len(result.TargetWorkItems) != 1 {
+		t.Fatalf("atomic Researcher opener = %+v, %v", result, err)
+	}
+	agent, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, targetAgentID)
+	if err != nil || agent.Profile != "researcher" || agent.Role != "researcher" || agent.ChannelID != start.InitialDocument.DocID || agent.LifecycleVersion != 1 {
+		t.Fatalf("atomic Researcher agent = %+v, %v", agent, err)
+	}
+	work, err := s.GetLifecycleWorkItem(ctx, start.OwnerID, start.ComputerID, targetWorkID)
+	if err != nil || work.Status != types.WorkItemOpen || work.AssignedAgentID != targetAgentID || work.CreatedByRunID != caller.RunID {
+		t.Fatalf("atomic Researcher work = %+v, %v", work, err)
+	}
+	pending, err := s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, targetAgentID, 10)
+	if err != nil || len(pending) != 1 || pending[0].UpdateID != control.ControlID || pending[0].TargetWorkItemID != targetWorkID || pending[0].Direction != types.LifecyclePacketDirectionControl {
+		t.Fatalf("atomic Researcher first control = %+v, %v", pending, err)
+	}
+	legacy, err := s.ListPendingWorkerUpdates(ctx, start.OwnerID, targetAgentID, 10)
+	if err != nil || len(legacy) != 0 {
+		t.Fatalf("Researcher opener leaked to legacy mailbox: %+v, %v", legacy, err)
+	}
+	replay, err := s.ApplyTextureTurn(ctx, req)
+	if err != nil || !replay.Replay || len(replay.Controls) != 1 {
+		t.Fatalf("Researcher opener replay = %+v, %v", replay, err)
+	}
+}
+
+func TestApplyTextureTurnResearcherOpenerRefusesMismatchedAgentWithoutPartialMutation(t *testing.T) {
+	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
+	ctx := context.Background()
+	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
+	req.CommandID = "texture-turn-researcher-opener-refusal"
+	control := textureTurnControl(t, "control-researcher-refused", "researcher:expected", "work-researcher-refused")
+	control.OpenAgent = &types.AgentRecord{AgentID: "researcher:forged", Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID}
+	control.OpenWork = &types.WorkItemRecord{WorkItemID: control.TargetWorkItemID, Objective: "must refuse", AuthorityProfile: "researcher", AssignedAgentID: control.TargetAgentID}
+	req.Controls = []types.TextureTurnControl{control}
+	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
+	before, _ := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if _, err := s.ApplyTextureTurn(ctx, req); err == nil {
+		t.Fatal("mismatched Researcher opener accepted")
+	}
+	after, _ := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if after.SnapshotCursor != before.SnapshotCursor {
+		t.Fatalf("refused Researcher opener partially mutated trajectory: %d -> %d", before.SnapshotCursor, after.SnapshotCursor)
+	}
+	if _, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, "researcher:forged"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("refused opener created agent: %v", err)
+	}
+	if _, err := s.GetLifecycleWorkItem(ctx, start.OwnerID, start.ComputerID, control.TargetWorkItemID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("refused opener created work: %v", err)
+	}
+}
+
 func TestApplyTextureTurnPersistentSuperOpenerIsAtomic(t *testing.T) {
 	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
 	ctx := context.Background()
@@ -242,6 +309,50 @@ func TestApplyTextureTurnPersistentSuperOpenerIsAtomic(t *testing.T) {
 	pending, err = s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, superID, 10)
 	if err != nil || len(pending) != 2 {
 		t.Fatalf("conflicting Super reuse queued control: %+v, %v", pending, err)
+	}
+}
+
+func TestApplyTextureTurnEveryOutcomeRequiresCompleteOrderedSameHeadOwnerInstructions(t *testing.T) {
+	for _, outcome := range []types.TextureTurnOutcome{types.TextureTurnRevision, types.TextureTurnNoSemanticChange, types.TextureTurnWait, types.TextureTurnBlock} {
+		t.Run(string(outcome), func(t *testing.T) {
+			s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
+			ctx := context.Background()
+			req := textureTurnBaseRequest(t, s, start, caller, outcome)
+			req.CommandID = "texture-turn-owner-completeness-" + string(outcome)
+			if outcome == types.TextureTurnRevision {
+				req.Revision = types.Revision{RevisionID: "revision-owner-completeness", AuthorKind: types.AuthorAppAgent, AuthorLabel: "Texture"}
+			}
+
+			// The turn was shaped before a same-head owner occurrence arrived. Refresh
+			// only the ordinary lifecycle CAS version to prove the independent exact-set
+			// precondition refuses the late occurrence for every semantic outcome.
+			queued := ownerInstructionRequest(t, s, start, "late-"+string(outcome), "late same-head owner instruction")
+			if _, err := s.QueueLifecycleOwnerInstruction(ctx, queued); err != nil {
+				t.Fatal(err)
+			}
+			trajectory, err := s.GetLifecycleTrajectory(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.ExpectedLifecycleVersion = trajectory.LifecycleVersion
+			setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
+			before, _ := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+			if _, err := s.ApplyTextureTurn(ctx, req); !errors.Is(err, ErrConcurrentStateChange) {
+				t.Fatalf("incomplete %s owner set error = %v, want concurrent-state refusal", outcome, err)
+			}
+			after, _ := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+			if after.SnapshotCursor != before.SnapshotCursor || after.HeadRevision.RevisionID != before.HeadRevision.RevisionID {
+				t.Fatalf("incomplete %s owner set mutated atomically guarded state: before=%+v after=%+v", outcome, before, after)
+			}
+
+			if outcome != types.TextureTurnRevision {
+				req.OwnerInstructions = []types.TextureTurnOwnerInstruction{{InstructionID: queued.InstructionID, RequestID: queued.RequestID}}
+				setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
+				if _, err := s.ApplyTextureTurn(ctx, req); err != nil {
+					t.Fatalf("complete %s owner set: %v", outcome, err)
+				}
+			}
+		})
 	}
 }
 

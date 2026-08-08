@@ -62,6 +62,7 @@ type textureUpdateDisposition struct {
 type textureControlArgs struct {
 	TargetWorkItemID    string                           `json:"target_work_item_id,omitempty"`
 	OpenPersistentSuper bool                             `json:"open_persistent_super,omitempty"`
+	OpenResearcher      bool                             `json:"open_researcher,omitempty"`
 	Objective           string                           `json:"objective,omitempty"`
 	Packet              types.CoagentSourcePacketPayload `json:"packet"`
 }
@@ -167,11 +168,21 @@ func validateTextureControls(toolName string, controls []textureControlArgs) err
 		control := &controls[i]
 		control.TargetWorkItemID = strings.TrimSpace(control.TargetWorkItemID)
 		control.Objective = strings.TrimSpace(control.Objective)
-		if control.OpenPersistentSuper == (control.TargetWorkItemID != "") {
-			return fmt.Errorf("%s controls[%d] must name exactly one of target_work_item_id or open_persistent_super", toolName, i)
+		modes := 0
+		if control.TargetWorkItemID != "" {
+			modes++
 		}
-		if control.OpenPersistentSuper && control.Objective == "" {
-			return fmt.Errorf("%s controls[%d] persistent-Super opener requires objective", toolName, i)
+		if control.OpenPersistentSuper {
+			modes++
+		}
+		if control.OpenResearcher {
+			modes++
+		}
+		if modes != 1 {
+			return fmt.Errorf("%s controls[%d] must name exactly one of target_work_item_id, open_persistent_super, or open_researcher", toolName, i)
+		}
+		if (control.OpenPersistentSuper || control.OpenResearcher) && control.Objective == "" {
+			return fmt.Errorf("%s controls[%d] opener requires objective", toolName, i)
 		}
 	}
 	return nil
@@ -182,8 +193,7 @@ func validateRawTextureControls(toolName string, raw json.RawMessage) error {
 	if err := json.Unmarshal(raw, &controls); err != nil {
 		return fmt.Errorf("decode %s controls: %w", toolName, err)
 	}
-	allowedControl := map[string]bool{"target_work_item_id": true, "open_persistent_super": true, "objective": true, "packet": true}
-	allowedPacket := map[string]bool{"schema_version": true, "kind": true, "summary": true, "claims": true, "sources": true, "actions": true, "questions": true, "notes": true}
+	allowedControl := map[string]bool{"target_work_item_id": true, "open_persistent_super": true, "open_researcher": true, "objective": true, "packet": true}
 	for i, control := range controls {
 		for key := range control {
 			if !allowedControl[key] {
@@ -194,28 +204,114 @@ func validateRawTextureControls(toolName string, raw json.RawMessage) error {
 		if !ok {
 			return fmt.Errorf("%s controls[%d] packet is required", toolName, i)
 		}
-		var packet map[string]json.RawMessage
-		if err := json.Unmarshal(rawPacket, &packet); err != nil {
-			return fmt.Errorf("decode %s controls[%d] packet: %w", toolName, i, err)
+		// DisallowUnknownFields is recursive for every typed packet object,
+		// including claims, sources/targets/selectors/evidence/snapshots, actions,
+		// expected_sources, and safety. Plain json.Unmarshal would silently drop
+		// model-authored fields at any of those authority boundaries.
+		if err := rejectNullTextureControlPacketNodes(rawPacket, fmt.Sprintf("%s controls[%d].packet", toolName, i)); err != nil {
+			return err
 		}
-		for key := range packet {
-			if !allowedPacket[key] {
-				return fmt.Errorf("%s controls[%d].packet unknown or authority-owned field %q", toolName, i, key)
+		var packet types.CoagentSourcePacketPayload
+		decoder := json.NewDecoder(strings.NewReader(string(rawPacket)))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&packet); err != nil {
+			return fmt.Errorf("decode %s controls[%d] packet strictly: %w", toolName, i, err)
+		}
+		for actionIndex, action := range packet.Actions {
+			if err := rejectTextureControlAuthorityFields(action.Inputs, fmt.Sprintf("%s controls[%d].packet.actions[%d].inputs", toolName, i, actionIndex)); err != nil {
+				return err
 			}
 		}
 	}
 	return nil
 }
 
+var textureControlAuthorityFields = map[string]bool{
+	"owner_id": true, "computer_id": true, "trajectory_id": true,
+	"agent_id": true, "target_agent_id": true, "channel_id": true,
+	"command_id": true, "command_digest": true, "control_id": true,
+	"update_id": true, "producer_update_id": true, "request_id": true, "instruction_id": true,
+	"run_id": true, "source_run_id": true, "target_work_item_id": true, "producer_work_item_id": true, "work_item_id": true,
+	"direction": true, "message_seq": true, "payload_digest": true, "lifecycle_version": true, "reducer_seq": true,
+	"disposition": true, "disposition_ref": true, "delivered_to_loop_id": true, "delivered_to_run_id": true, "delivered_at": true,
+}
+
+// action.inputs is intentionally an open data bag, so it cannot reject unknown
+// domain keys. It must still recursively refuse envelope/control authority that
+// the runtime derives from the authenticated run and exact work binding.
+func rejectTextureControlAuthorityFields(value any, path string) error {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, nested := range typed {
+			canonicalKey := textureControlFieldKey(key)
+			for authorityKey := range textureControlAuthorityFields {
+				canonicalAuthority := textureControlFieldKey(authorityKey)
+				if canonicalKey == canonicalAuthority || strings.HasSuffix(canonicalKey, canonicalAuthority) {
+					return fmt.Errorf("%s contains authority-owned field %q", path, key)
+				}
+			}
+			if err := rejectTextureControlAuthorityFields(nested, path+"."+key); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for i, nested := range typed {
+			if err := rejectTextureControlAuthorityFields(nested, fmt.Sprintf("%s[%d]", path, i)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func textureControlFieldKey(key string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return unicode.ToLower(r)
+		}
+		return -1
+	}, strings.TrimSpace(key))
+}
+
+func rejectNullTextureControlPacketNodes(raw json.RawMessage, path string) error {
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return fmt.Errorf("decode %s: %w", path, err)
+	}
+	var walk func(any, string) error
+	walk = func(node any, nodePath string) error {
+		if node == nil {
+			return fmt.Errorf("%s must not be null", nodePath)
+		}
+		switch typed := node.(type) {
+		case map[string]any:
+			for key, nested := range typed {
+				if err := walk(nested, nodePath+"."+key); err != nil {
+					return err
+				}
+			}
+		case []any:
+			for i, nested := range typed {
+				if err := walk(nested, fmt.Sprintf("%s[%d]", nodePath, i)); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	return walk(value, path)
+}
+
 func textureControlsSchema() map[string]any {
 	return map[string]any{
 		"type":        "array",
-		"description": "Ordered controls. Continue an exact bound work item by target_work_item_id, or atomically open the owner's one persistent Super with open_persistent_super and objective. Target actor, direction, command/control/update identities, and opener work identity are runtime-derived.",
+		"description": "Ordered controls. Continue an exact bound work item by target_work_item_id, atomically open a runtime-derived Researcher with open_researcher and objective, or atomically open the owner's one persistent Super with open_persistent_super and objective. Target actor, direction, command/control/update identities, and opener agent/work identities are runtime-derived.",
 		"items": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"target_work_item_id":   map[string]any{"type": "string"},
 				"open_persistent_super": map[string]any{"type": "boolean"},
+				"open_researcher":       map[string]any{"type": "boolean"},
 				"objective":             map[string]any{"type": "string"},
 				"packet":                map[string]any{"type": "object", "description": "Typed coagent_source_packet.v1 payload. Persistent-Super openers require kind=execution_request with at least one action."},
 			},
