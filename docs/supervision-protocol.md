@@ -1,7 +1,8 @@
 # Texture Is the Supervisory Control Loop
 
-**Last updated:** 2026-08-05. **Scope:** current design boundary and current
-implementation gap, corrected by the owner after the Texture tape cleanup.
+**Last updated:** 2026-08-08. **Scope:** supervisory design boundary and the
+joined continuous-supervision candidate. Effects remain OFF until the exact
+candidate passes deployed Linux acceptance and registry promotion.
 
 Supervision is not a separate Choir subsystem, protocol-health layer, actor
 class, causal log, or workflow engine. It is the continuous control work
@@ -94,16 +95,23 @@ runtime capability checks prevent the crossing.
 |---|---|---|
 | Texture | Canonical semantic state; trajectory direction; owner-readable current head | Host bash, writable filesystem, capsule execution, route or VM mutation |
 | Researcher | Sourced evidence and questions | Bash, writable filesystem, canonical Texture writes, privileged effects |
-| Super | Execution decomposition, capsule lifecycle, verification, operational synthesis | Bash, capsule command execution, direct host writes, canonical Texture writes |
-| CoSuper implementation slot | One assigned implementation inside one capsule | Host bash/filesystem, unassigned capsules, route or VM authority |
-| CoSuper verifier slot | Independent capsule inspection and verification | Capsule execution or writes, host bash/filesystem, implementation authority |
+| Super | Persistent execution decomposition, assignment direction, verification synthesis, and upward reporting | Bash, generic capsule lifecycle, capsule execution, direct host writes, canonical Texture writes |
+| Assigned implementation CoSuper | One implementation assignment inside its exact capsule | Host bash/filesystem, unassigned capsules, route or VM authority, generic coagent/provider tools |
+| Assigned verifier CoSuper | Independent inspection and verification inside its own exact capsule | Host bash/filesystem, unassigned capsules, implementation-candidate authority, generic coagent/provider tools |
+| Unassigned or legacy CoSuper | None | Every capsule and reporting effect |
 
-The current CoSuper execution boundary is layered: only the CoSuper registry
-contains `capsule_exec`; mutation tools require the CoSuper role and
-`implementation` slot; the executor resolves an opaque capability by agent run
-and handle; and the command runs through the assigned capsule broker rather than
-on the host. Super may create, inspect, and destroy capsules but cannot execute
-inside them.
+The joined CoSuper boundary is assignment-owned rather than a static role
+registry. Generic Super-to-CoSuper spawn and model-callable capsule lifecycle
+are absent. Trusted assignment runtime snapshots one complete canonical source
+tree, durably opens and binds the assignment, creates the isolated capsule, and
+installs an exact registry from an empty closed set: capsule-local
+read/list/write/exec plus authenticated assignment reporting. Both
+implementation and verification slots may execute tests and write local support
+inside their own capsule; only the reducer can derive candidate or verification
+authority. Every tool call revalidates the live trajectory, open work, exact
+run, assignment, capability, and capsule. Terminal reports and cancellation
+follow durable intent, executor effect/inspection, and structured durable
+acknowledgement; delayed authenticated receipts are evidence only.
 
 Prompt text explains these boundaries. It does not create them.
 
@@ -120,53 +128,49 @@ Prompt text explains these boundaries. It does not create them.
   not necessarily run completion.
 - Owner revisions delivered while the actor is resident enter the same durable
   mailbox rather than replacing or bypassing the loop.
-- The persistent Super consumes typed `execution_request` packets and can
-  supervise Researcher and capability-scoped CoSuper work.
-- Researcher, Super, and CoSuper can return typed packets upward.
+- The exact persistent Super consumes durable ordered `execution_request`
+  controls without becoming lifecycle-scoped itself. Researcher and Super
+  delivery is bound to the exact run and consumed only from authenticated
+  durable runtime memory.
+- Texture can send target-constrained lifecycle direction to its Researchers
+  and the persistent Super. Both return typed canonical packets upward; reporting
+  settles only the authenticated consumed delivery intersection.
+- One atomic Texture turn can incorporate several inbound packets while
+  projecting exactly one public version. Direct owner edits rebase the complete
+  pending old-head occurrence set in one CAS transition.
+- Lifecycle cancellation is intent-first and fate-shared with assignment
+  capsules; actual delayed reports remain authenticated evidence without
+  candidate, Pass, packet, wake, projection, or reopen authority.
 
-## What Is Not Yet Connected
+## Acceptance State
 
-The full bidirectional control loop is not currently accepted live behavior.
-The missing path is more specific than “Super is disabled”:
+The smallest capability-safe loop is connected in the joined source candidate,
+but it is not yet accepted live behavior. Effects remain OFF. Promotion still
+requires the exact immutable SHA to pass CI, deploy to Linux staging, and produce
+product-path evidence for repeated bidirectional cycles, passivation/restart,
+owner correction, cancellation while provider work is in flight, late evidence
+retention, and real namespace/cgroup/overlay cleanup. The canonical receipt
+registry must then promote exactly one candidate.
 
-1. Texture's current production registry does not contain `update_coagent`,
-   although its prompt tells it to send follow-up messages to active
-   researchers. Texture can spawn a Researcher but cannot currently steer that
-   Researcher through the promised typed follow-up path.
-2. Texture's current delegate policy names only Researcher. The former
-   `request_super_execution` tool is absent, and Texture has no current
-   capability to send a typed execution request to the persistent Super.
-3. Self-development effects remain OFF. No current executable Definition
-   authorizes a deployed Super-to-CoSuper capsule task, checkpoint, updater, or
-   route effect.
-4. Consequently, source contains strong pieces of the upward observation path,
-   resident Texture loop, Super controller, and capsule boundary, but no
-   deployed proof that Texture repeatedly observes, revises, and redirects a
-   live execution trajectory.
+This is an evidence and promotion gap, not permission to add a supervision
+transaction grammar, findings database, observer hierarchy, parallel causal
+tape, public raw supervision API, callback authority, mailbox poller, or generic
+capsule route.
 
-This is a control-loop connectivity gap. It is not justification for a generic
-supervision transaction grammar, findings database, observer hierarchy,
-parallel causal tape, or public raw supervision API.
+## Path To Promotion
 
-## Path Forward
-
-The successor mission should connect the smallest capability-safe loop over the
-existing substrate:
-
-1. Give Texture a typed, target-constrained messaging capability for its
-   Researcher coagents and the one persistent Super. Do not restore a host tool
-   or a prompt-only permission.
-2. Carry Texture-to-Super work as an idempotent, durable
-   `execution_request` bound to the Texture trajectory and its open obligation.
-3. Require Super and Researcher to return useful intermediate updates, not only
-   terminal results.
-4. Let each material update produce a new canonical semantic revision while the
-   trajectory remains live, then let Texture send revised direction back down.
-5. Preserve the current split: Super owns capsule lifecycle but cannot execute;
-   implementation CoSuper executes only inside its assigned capsule; verifier
-   CoSuper remains read-and-verify only.
-6. Settle only through the existing trajectory/work-item reducer after
-   obligations and pending updates are resolved.
+1. Freeze one immutable candidate and pass joined Store/runtime/race suites and
+   independent lifecycle and capsule/security review.
+2. Push that SHA, require CI, and verify Linux staging reports the exact build.
+3. Exercise several Texture→Researcher/Super→Texture cycles, an owner correction,
+   passivation/restart with the same exact Researcher run, and lossless 101+
+   ordered delivery.
+4. Exercise an assigned implementation and independent verification capsule
+   through the product route, including durable intent/effect/ack receipts,
+   in-flight cancellation, restart orphan cleanup, and delayed evidence-only
+   reporting.
+5. Confirm one semantic revision projects one public version, close every open
+   registry entry, and only then promote effects for the reviewed route.
 
 The acceptance proof must exercise multiple feedback cycles, not merely one
 round trip:
