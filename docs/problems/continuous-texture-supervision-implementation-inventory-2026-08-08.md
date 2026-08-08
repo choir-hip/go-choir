@@ -470,3 +470,14 @@ additional protected-surface gaps:
 These are implementation blockers. Real Linux restart cleanup and a real
 resident-provider cancellation/late-return sequence remain required acceptance
 evidence; source or Darwin simulation cannot promote effects.
+
+
+## Capsule identity path safety — 2026-08-08
+
+Review of restart cleanup found that the existing basename-only capsule identity
+check admits `.` and `/`-shaped identities. A cleanup API must never permit an
+identity to collapse to the executor state root or cgroup parent. Assignment
+binding, spawn, cleanup, and receipt authorities must require the same canonical
+single path component: nonempty, trimmed, not `.`/`..`, and containing no slash
+or backslash. Negative tests must prove refusal before filesystem or cgroup
+mutation.
