@@ -3,6 +3,7 @@ package textureowner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -96,9 +97,151 @@ func TestLifecycleReviseRoutesToOwnerInstructionNotProducerMailbox(t *testing.T)
 	if err != nil || len(pendingOwner) != 1 || pendingOwner[0].Content != "revise privately" {
 		t.Fatalf("owner instruction pending=%+v err=%v", pendingOwner, err)
 	}
+	agent, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	if err != nil || strings.TrimSpace(agent.ActiveRunID) == "" {
+		t.Fatalf("lifecycle revise did not create/reuse resident activation: agent=%+v err=%v", agent, err)
+	}
+
+	// Replay while that lifecycle actor is resident. The old branch used
+	// deliverOwnerRevisionToTextureActor -> DispatchWorkerUpdate here; replay must
+	// remain an owner-instruction receipt and create no producer/legacy mailbox row.
+	replayReq := httptest.NewRequest(http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revise", strings.NewReader(string(body)))
+	replayReq.Header.Set("X-Authenticated-User", start.OwnerID)
+	replayResponse := httptest.NewRecorder()
+	handler.HandleTextureRouter(replayResponse, replayReq)
+	var replay textureOwnerInstructionResponse
+	if err := json.Unmarshal(replayResponse.Body.Bytes(), &replay); err != nil || replayResponse.Code != http.StatusAccepted || !replay.Replay {
+		t.Fatalf("resident lifecycle revise replay status=%d response=%+v err=%v body=%s", replayResponse.Code, replay, err, replayResponse.Body.String())
+	}
+	pendingOwner, err = core.Store().ListPendingLifecycleOwnerInstructions(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID, start.Agent.AgentID, 10)
+	if err != nil || len(pendingOwner) != 1 {
+		t.Fatalf("resident replay duplicated owner instruction: %+v err=%v", pendingOwner, err)
+	}
 	producerReports, err := core.Store().ListPendingLifecycleUpdates(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID, 10)
 	if err != nil || len(producerReports) != 0 {
 		t.Fatalf("lifecycle revise entered producer mailbox: %+v err=%v", producerReports, err)
+	}
+	legacy, err := core.Store().ListCoagentMailboxBacklog(t.Context(), start.OwnerID, start.Agent.AgentID, 10)
+	if err != nil || len(legacy) != 0 {
+		t.Fatalf("lifecycle revise entered legacy DispatchWorkerUpdate mailbox: %+v err=%v", legacy, err)
+	}
+	messages, err := core.Store().ListChannelMessages(t.Context(), start.OwnerID, start.InitialDocument.DocID, 0, 10)
+	if err != nil || len(messages) != 0 {
+		t.Fatalf("lifecycle revise emitted legacy mailbox message: %+v err=%v", messages, err)
+	}
+}
+
+func TestLifecycleTextureWaitBlockNoChangeThenTellResumesSameResidentRun(t *testing.T) {
+	for _, outcome := range []types.TextureTurnOutcome{types.TextureTurnWait, types.TextureTurnBlock, types.TextureTurnNoSemanticChange} {
+		t.Run(string(outcome), func(t *testing.T) {
+			core, handler := testAPISetup(t)
+			core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+			start := startObservationLifecycle(t, core.Store())
+			path := "/api/texture/documents/" + start.InitialDocument.DocID
+			first := postOwnerInstruction(t, handler, path+"/tell", start.OwnerID, "first-"+string(outcome), "first instruction", start.InitialRevision.RevisionID)
+			if first.Code != http.StatusAccepted {
+				t.Fatalf("first tell status=%d body=%s", first.Code, first.Body.String())
+			}
+			agent, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+			if err != nil || agent.ActiveRunID == "" {
+				t.Fatalf("resident agent=%+v err=%v", agent, err)
+			}
+			runID := agent.ActiveRunID
+			run, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, runID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			inject := handler.coagentUpdateTurnInjector(&run)
+			if messages, err := inject(false); err != nil || len(messages) != 1 || !strings.Contains(string(messages[0]), "first instruction") {
+				t.Fatalf("first injection=%s err=%v", messages, err)
+			}
+			doc, _ := core.Store().GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
+			if _, err := handler.applyTextureLifecycleTurn(t.Context(), &run, doc, editTextureArgs{ToolCallID: "first-transition-" + string(outcome), WorkDisposition: string(types.WorkItemOpen)}, outcome, types.Revision{}, store.TextureSourceGraphWriteSet{}, "durable first outcome"); err != nil {
+				t.Fatalf("first %s transition: %v", outcome, err)
+			}
+			if err := core.Store().SleepAgentMutationAfterTextureTurn(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID, runID); err != nil {
+				t.Fatalf("sleep first %s transition: %v", outcome, err)
+			}
+			stored, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, runID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stored.State, stored.UpdatedAt, stored.FinishedAt = types.RunPassivated, time.Now().UTC(), nil
+			passivate := types.ReplaceLifecycleActivationRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "passivate-" + runID, TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: stored}
+			passivate.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(passivate)
+			if _, err := core.Store().ReplaceLifecycleActivation(t.Context(), passivate); err != nil {
+				t.Fatalf("passivate resident run: %v", err)
+			}
+
+			second := postOwnerInstruction(t, handler, path+"/tell", start.OwnerID, "resume-"+string(outcome), "resume same run", start.InitialRevision.RevisionID)
+			if second.Code != http.StatusAccepted {
+				t.Fatalf("resume tell status=%d body=%s", second.Code, second.Body.String())
+			}
+			resumed, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, runID)
+			if err != nil || resumed.RunID != runID || resumed.State != types.RunPending {
+				t.Fatalf("same-run resume=%+v err=%v", resumed, err)
+			}
+			mutation, err := core.Store().GetAgentMutationByRun(t.Context(), start.OwnerID, start.ComputerID, runID)
+			if err != nil || mutation == nil || mutation.State != "pending" {
+				t.Fatalf("same-run mutation authority=%+v err=%v", mutation, err)
+			}
+			inject = handler.coagentUpdateTurnInjector(&resumed)
+			if messages, err := inject(false); err != nil || len(messages) != 1 || !strings.Contains(string(messages[0]), "resume same run") {
+				t.Fatalf("resumed injection=%s err=%v", messages, err)
+			}
+			doc, _ = core.Store().GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
+			if _, err := handler.applyTextureLifecycleTurn(t.Context(), &resumed, doc, editTextureArgs{ToolCallID: "resumed-transition-" + string(outcome), WorkDisposition: string(types.WorkItemOpen)}, types.TextureTurnWait, types.Revision{}, store.TextureSourceGraphWriteSet{}, "same resident run resumed"); err != nil {
+				t.Fatalf("same-run resumed transition: %v", err)
+			}
+		})
+	}
+}
+
+func TestLifecycleTextureResearcherOpenerDerivesIdentitiesAndCommitsBeforeWake(t *testing.T) {
+	core, handler := testAPISetup(t)
+	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	start := startObservationLifecycle(t, core.Store())
+	first := postOwnerInstruction(t, handler, "/api/texture/documents/"+start.InitialDocument.DocID+"/tell", start.OwnerID, "researcher-opener", "research exact gap", start.InitialRevision.RevisionID)
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("tell status=%d body=%s", first.Code, first.Body.String())
+	}
+	agent, _ := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	run, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, agent.ActiveRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inject := handler.coagentUpdateTurnInjector(&run)
+	if _, err := inject(false); err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := core.Store().GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
+	args := editTextureArgs{ToolCallID: "open-researcher-tool", WorkDisposition: string(types.WorkItemOpen), Controls: []textureControlArgs{{
+		OpenResearcher: true, Objective: "research exact gap",
+		Packet: types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What evidence resolves it?"}},
+	}}}
+	snapshot, _ := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	controls, err := handler.textureTurnControls(t.Context(), &run, doc, snapshot, args)
+	if err != nil || len(controls) != 1 || controls[0].OpenAgent == nil || controls[0].OpenWork == nil || !strings.HasPrefix(controls[0].TargetAgentID, "researcher:") || controls[0].OpenAgent.AgentID != controls[0].TargetAgentID || controls[0].OpenWork.WorkItemID != controls[0].TargetWorkItemID {
+		t.Fatalf("runtime-derived Researcher opener=%+v err=%v", controls, err)
+	}
+	if _, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, controls[0].TargetAgentID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("Researcher agent existed before atomic turn: %v", err)
+	}
+	result, err := handler.applyTextureLifecycleTurn(t.Context(), &run, doc, args, types.TextureTurnWait, types.Revision{}, store.TextureSourceGraphWriteSet{}, "research requested")
+	if err != nil || result.TextureTurn == nil || len(result.Controls) != 1 {
+		t.Fatalf("atomic Researcher runtime turn=%+v err=%v", result, err)
+	}
+	createdAgent, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, controls[0].TargetAgentID)
+	if err != nil || createdAgent.Profile != "researcher" || createdAgent.LifecycleVersion != 1 {
+		t.Fatalf("created Researcher=%+v err=%v", createdAgent, err)
+	}
+	legacy, err := core.Store().ListPendingWorkerUpdates(t.Context(), start.OwnerID, controls[0].TargetAgentID, 10)
+	if err != nil || len(legacy) != 0 {
+		t.Fatalf("Researcher first control leaked to legacy mailbox: %+v err=%v", legacy, err)
+	}
+	replay, err := handler.applyTextureLifecycleTurn(t.Context(), &run, doc, args, types.TextureTurnWait, types.Revision{}, store.TextureSourceGraphWriteSet{}, "research requested")
+	if err != nil || !replay.Replay || len(replay.Controls) != 1 || replay.Controls[0].TargetAgentID != controls[0].TargetAgentID {
+		t.Fatalf("Researcher runtime opener replay=%+v err=%v", replay, err)
 	}
 }
 

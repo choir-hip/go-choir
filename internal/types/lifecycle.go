@@ -153,6 +153,7 @@ type TextureTurnControl struct {
 	ControlID        string                     `json:"control_id"`
 	TargetAgentID    string                     `json:"target_agent_id"`
 	TargetWorkItemID string                     `json:"target_work_item_id"`
+	OpenAgent        *AgentRecord               `json:"open_agent,omitempty"`
 	OpenWork         *WorkItemRecord            `json:"open_work,omitempty"`
 	Packet           CoagentSourcePacketPayload `json:"packet"`
 	Content          string                     `json:"content"`

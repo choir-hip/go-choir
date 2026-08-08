@@ -232,6 +232,9 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	}
 	if profile == agentprofile.Texture {
 		b.WriteString(textureprompts.RunOverlay())
+		if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) != "" {
+			b.WriteString("\n\nLifecycle Texture control authority:\nDo not call spawn_agent. Open each new Researcher atomically inside the successful patch_texture, rewrite_texture, or record_texture_decision transition: add one controls item with open_researcher=true, an objective, and the first typed downward packet. Continue an existing bound Researcher only by target_work_item_id. Agent/work/control/update/target identities and direction are runtime-derived; never author them in packet fields.")
+		}
 	}
 	if profile == agentprofile.Processor {
 		b.WriteString(runtimeprompts.ProcessorRuntimeOverlay())

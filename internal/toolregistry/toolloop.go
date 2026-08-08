@@ -96,6 +96,7 @@ type toolLoopOptions struct {
 	providerPreconditionFallbacks []provideriface.LLMSelection
 	initialToolChoice             string
 	terminalTools                 map[string]bool
+	passivatingTools              map[string]bool
 	requiredWriteTools            map[string]bool
 	completionGuard               ToolLoopCompletionGuardFunc
 	parkWaiter                    ToolLoopParkWaiterFunc
@@ -180,12 +181,32 @@ func WithTerminalToolSuccesses(names ...string) ToolLoopOption {
 	}
 }
 
+// WithPassivatingToolSuccesses makes a successful durable-transition tool
+// passivate this activation instead of completing it. Resident actors use this
+// after committing their one semantic outcome so a later wake can resume the
+// same run and memory.
+func WithPassivatingToolSuccesses(names ...string) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		if len(names) == 0 {
+			return
+		}
+		if opts.passivatingTools == nil {
+			opts.passivatingTools = make(map[string]bool, len(names))
+		}
+		for _, name := range names {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				opts.passivatingTools[name] = true
+			}
+		}
+	}
+}
+
 // WithRequiredWriteTools specifies tools that must succeed when the initial
 // tool choice is "required" (not an exact tool name). After the first tool
-// turn, if none of the required write tools succeeded, the loop retries with
-// a targeted reminder. This prevents the model from ending the turn after
-// calling a non-write tool (e.g. record_texture_decision or spawn_agent)
-// without producing a document revision.
+// turn, if none of the configured durable-transition tools succeeded, the loop
+// retries with a targeted reminder. Callers may include a durable no-change
+// decision tool alongside canonical write tools.
 func WithRequiredWriteTools(names ...string) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		if len(names) == 0 {
@@ -733,6 +754,19 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					emit(types.EventRunProgress, "terminal_tool_success", payload)
 				}
 				return combinedFinalText(resp.Text), totalUsage, nil
+			}
+			if requiredNextTool == nil {
+				if passivatingTools := successfulTerminalToolNames(resp.ToolCalls, toolResults, options.passivatingTools); len(passivatingTools) > 0 {
+					if emit != nil {
+						payload, _ := json.Marshal(map[string]any{
+							"iteration": i + 1,
+							"tools":     passivatingTools,
+							"reason":    "durable_transition_success",
+						})
+						emit(types.EventRunProgress, "passivating_tool_success", payload)
+					}
+					return combinedFinalText(resp.Text), totalUsage, &ToolLoopPassivatedError{Reason: "durable_transition_success"}
+				}
 			}
 
 			log.Printf("tool loop: iteration %d, executed %d tools, continuing", i+1, len(resp.ToolCalls))
@@ -1473,6 +1507,14 @@ func requiredWriteToolNames(writeTools map[string]bool) []string {
 func requiredWriteToolReminderText(writeTools map[string]bool, reason string) string {
 	names := requiredWriteToolNames(writeTools)
 	listed := strings.Join(names, " or ")
+	if writeTools["record_texture_decision"] {
+		switch reason {
+		case "required_write_tool_failed":
+			return fmt.Sprintf("The previous durable transition (%s) failed. Review the tool error and retry with the current base revision. Use patch_texture or rewrite_texture for a real semantic edit, or record_texture_decision for an honest no-change, wait, or block outcome.", listed)
+		default:
+			return fmt.Sprintf("You must call %s to commit this activation's durable transition before it can park. Use patch_texture or rewrite_texture only for a real semantic edit; use record_texture_decision for an honest no-change, wait, or block outcome.", listed)
+		}
+	}
 	switch reason {
 	case "required_write_tool_failed":
 		return fmt.Sprintf("The previous %s call failed. Review the tool error, fix the issue, and call the write tool again. Use %s for full-document drafts (especially v0→v1 or v1→v2) and %s for targeted block edits. Common fixes: use the current base_revision_id from the document outline, use rewrite_texture when the change spans multiple sections, or use append_block for new paragraphs.", listed, "rewrite_texture", "patch_texture")

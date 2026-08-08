@@ -99,6 +99,7 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 			return nil, err
 		}
 		targetAgentID, targetWorkItemID := "", strings.TrimSpace(raw.TargetWorkItemID)
+		var openAgent *types.AgentRecord
 		var openWork *types.WorkItemRecord
 		if raw.OpenPersistentSuper {
 			targetAgentID = agentprofile.Super + ":" + strings.TrimSpace(rec.OwnerID)
@@ -115,6 +116,23 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 				AssignedAgentID: targetAgentID,
 			}
 			openWork = &work
+		} else if raw.OpenResearcher {
+			agentIdentity, identityErr := textureTurnRuntimeID(rec, in.ToolCallID, "researcher-agent", i)
+			if identityErr != nil {
+				return nil, identityErr
+			}
+			targetAgentID = agentprofile.Researcher + ":" + agentIdentity
+			targetWorkItemID, err = textureTurnRuntimeID(rec, in.ToolCallID, "researcher-work", i)
+			if err != nil {
+				return nil, err
+			}
+			agent := types.AgentRecord{AgentID: targetAgentID, Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: doc.DocID}
+			work := types.WorkItemRecord{
+				WorkItemID: targetWorkItemID, Objective: strings.TrimSpace(raw.Objective),
+				AuthorityProfile: agentprofile.Researcher, Status: types.WorkItemOpen,
+				AssignedAgentID: targetAgentID,
+			}
+			openAgent, openWork = &agent, &work
 		} else {
 			work, ok := workByID[targetWorkItemID]
 			if !ok || work.Status != types.WorkItemOpen || strings.TrimSpace(work.TrajectoryID) != strings.TrimSpace(doc.TrajectoryID) {
@@ -125,10 +143,13 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 				return nil, fmt.Errorf("Texture controls[%d] target work is unassigned", i)
 			}
 		}
-		// Runtime lookup is an early fail-closed refusal; the store repeats the
-		// full document/trajectory/requester/work binding proof in the batch.
-		if _, err := h.Store.GetAgentByScope(ctx, rec.OwnerID, doc.ComputerID, targetAgentID); err != nil {
-			return nil, fmt.Errorf("Texture controls[%d] load exact target: %w", i, err)
+		// Runtime lookup is an early fail-closed refusal for existing targets; a
+		// Researcher opener proves absence and creates its runtime-derived agent in
+		// the same ApplyTextureTurn CAS as work and first control.
+		if openAgent == nil {
+			if _, err := h.Store.GetAgentByScope(ctx, rec.OwnerID, doc.ComputerID, targetAgentID); err != nil {
+				return nil, fmt.Errorf("Texture controls[%d] load exact target: %w", i, err)
+			}
 		}
 		content := agentcore.BuildTextureLifecycleControlContent(packet, targetAgentID, targetWorkItemID)
 		payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
@@ -137,7 +158,7 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 		}
 		controls = append(controls, types.TextureTurnControl{
 			ControlID: controlID, TargetAgentID: targetAgentID, TargetWorkItemID: targetWorkItemID,
-			OpenWork: openWork, Packet: packet, Content: content, PayloadDigest: payloadDigest,
+			OpenAgent: openAgent, OpenWork: openWork, Packet: packet, Content: content, PayloadDigest: payloadDigest,
 		})
 	}
 	return controls, nil

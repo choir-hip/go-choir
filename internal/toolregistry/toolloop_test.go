@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -196,6 +197,38 @@ func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.
 	}
 	if !terminalProgress {
 		t.Fatal("missing terminal_tool_success progress event")
+	}
+}
+
+func TestRunToolLoopDurableTransitionPassivatesAndDecisionSatisfiesRequiredActivation(t *testing.T) {
+	for _, toolName := range []string{"patch_texture", "rewrite_texture", "record_texture_decision"} {
+		t.Run(toolName, func(t *testing.T) {
+			registry := NewToolRegistry()
+			if err := registry.Register(Tool{Name: toolName, Func: func(context.Context, json.RawMessage) (string, error) {
+				return `{"status":"stored"}`, nil
+			}}); err != nil {
+				t.Fatal(err)
+			}
+			provider := newMockToolLoopProvider(&provideriface.ToolLoopResponse{
+				StopReason: "tool_use", ToolCalls: []types.ToolCall{{ID: "call-transition", Name: toolName, Arguments: json.RawMessage(`{}`)}},
+				Usage: provideriface.TokenUsage{InputTokens: 3, OutputTokens: 2}, Model: "test-model",
+			})
+			var passivatingProgress bool
+			_, _, err := RunToolLoop(context.Background(), provider, registry,
+				[]json.RawMessage{json.RawMessage(`{"role":"user","content":"transition"}`)}, "Texture", 0,
+				func(kind types.EventKind, phase string, _ json.RawMessage) {
+					passivatingProgress = passivatingProgress || (kind == types.EventRunProgress && phase == "passivating_tool_success")
+				}, nil,
+				WithInitialToolChoice("required"),
+				WithRequiredWriteTools("patch_texture", "rewrite_texture", "record_texture_decision"),
+				WithPassivatingToolSuccesses("patch_texture", "rewrite_texture", "record_texture_decision"))
+			if !errors.Is(err, ErrToolLoopPassivated) {
+				t.Fatalf("transition error = %v, want passivation", err)
+			}
+			if provider.CallCount() != 1 || !passivatingProgress {
+				t.Fatalf("provider calls=%d progress=%v", provider.CallCount(), passivatingProgress)
+			}
+		})
 	}
 }
 
