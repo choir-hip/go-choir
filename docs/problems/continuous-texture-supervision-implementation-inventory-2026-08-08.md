@@ -781,14 +781,16 @@ no-tool requests to the same configured provider/model selections returned:
   `PRECONDITION_FAILED`;
 - Z.AI `glm-5.2`: HTTP 429, type `rate_limit_error`, code `1113`, with a
   balance-related message classification; and
-- AWS Bedrock `us.anthropic.claude-haiku-4-5-20251001-v1:0` in `us-east-1`: a
-  direct local bearer invoke returned HTTP 403. No response body was retained or exposed.
+- AWS Bedrock in `us-east-1`: direct local bearer invokes returned HTTP 403 for
+  both gateway seed `us.anthropic.claude-haiku-4-5-20251001-v1:0` and the exact
+  owner-policy-selected `us.anthropic.claude-sonnet-4-6`. No response body was
+  retained or exposed.
 
 This independently reproduces why model-policy permutation cannot restore the
 acceptance loop: every configured provider/model route failed before tool
 semantics. Account/balance attribution applies to DeepSeek/Xiaomi and the
 qualified Z.AI classification; Fireworks proves only a precondition failure,
-and Bedrock proves only that this local bearer/model/region combination was
+and Bedrock proves only that these local bearer/model/region tuples were
 forbidden. Neither local result establishes the host credential state.
 Local Codex token metadata reports an unexpired expiry and `codex login status`
 reports a ChatGPT login, but neither proves usable auth or supplies a proven or

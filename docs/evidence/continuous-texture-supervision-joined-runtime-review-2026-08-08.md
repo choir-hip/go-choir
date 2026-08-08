@@ -202,13 +202,14 @@ is not counted as product acceptance. Using gitignored operator credentials
 without printing secrets or response bodies, minimal requests returned DeepSeek
 HTTP 402 with a balance-related error classification, Xiaomi HTTP 402
 `insufficient_balance`, Fireworks HTTP 412 `PRECONDITION_FAILED`, Z.AI HTTP
-429 code `1113` with a balance/rate classification, and a direct AWS Bedrock
-bearer invoke for `us.anthropic.claude-haiku-4-5-20251001-v1:0` in
-`us-east-1` returned HTTP 403. This shows every configured provider/model route failed before tool
+429 code `1113` with a balance/rate classification, and direct AWS Bedrock
+bearer invokes in `us-east-1` returned HTTP 403 for gateway seed
+`us.anthropic.claude-haiku-4-5-20251001-v1:0` and exact owner-policy-selected
+`us.anthropic.claude-sonnet-4-6`. This shows every configured provider/model route failed before tool
 semantics; account/balance attribution applies to DeepSeek/Xiaomi and the
 qualified Z.AI classification, not the Fireworks precondition failure or
-Bedrock forbidden response. The Bedrock result is local bearer/model/region
-availability only and does not establish host credential state. Local Codex token
+Bedrock forbidden response. The Bedrock results are local bearer/model/region
+availability only and do not establish host credential state. Local Codex token
 metadata reports an unexpired expiry, which does not prove usable auth, while
 the host gateway retains stale auth.
 
