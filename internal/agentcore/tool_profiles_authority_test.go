@@ -29,7 +29,7 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 		agentprofile.Conductor: {"cancel_agent"},
 		agentprofile.Super: append(append(slices.Clone(ordinary),
 			"update_coagent"),
-			"destroy_capsule", "inspect_capsule", "list_capsules", "spawn_capsule"),
+			"assign_co_super", "cancel_co_super_assignment", "destroy_capsule", "inspect_capsule", "list_capsules", "spawn_capsule"),
 		agentprofile.CoSuper: {
 			"glob", "grep", "list_evidence", "read_evidence", "read_file", "save_evidence",
 			"update_coagent", "verify_model_capability",

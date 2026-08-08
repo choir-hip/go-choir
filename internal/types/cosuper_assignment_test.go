@@ -135,3 +135,14 @@ func TestVerificationReportSubjectIdentityContract(t *testing.T) {
 		t.Fatal("verification without immutable subject digest accepted")
 	}
 }
+
+func TestVerificationPassRequiresCapsuleCommandEvidence(t *testing.T) {
+	a := validCoSuperAssignmentFixture(CoSuperAssignmentVerification, true)
+	a.Disposition, a.BoundRunID, a.LifecycleVersion = CoSuperAssignmentBound, "run-cosuper", 2
+	a.CapsuleDisposition = CoSuperCapsuleFrozen
+	report := validAssignmentReportFixture(a)
+	report.Commands = nil
+	if err := report.ValidateAgainst(a); err == nil || !strings.Contains(err.Error(), "command evidence") {
+		t.Fatalf("empty verification pass error = %v", err)
+	}
+}

@@ -709,3 +709,78 @@ func TestAssignmentOutcomeAndCapsuleFateRemainSeparateAcrossRestart(t *testing.T
 		t.Fatalf("assignment events absent from lifecycle paging: %d/%d, %v", len(page.Events), len(snapshot.Events), err)
 	}
 }
+
+func TestOpenedAssignmentCapsuleCleanupIntentAckBeforeCancel(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-prebind-cleanup", 1, types.CoSuperAssignmentImplementation, true, "cap", "capsule-prebind")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	intent := types.SetCoSuperCapsuleDispositionRequest{CommandID: "prebind-revoke-intent", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 1, Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: "intent:prebind"}
+	intent.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(intent)
+	requested, err := s.SetCoSuperCapsuleDisposition(ctx, intent)
+	if err != nil || requested.Assignment.Disposition != types.CoSuperAssignmentOpen {
+		t.Fatalf("intent: %+v %v", requested, err)
+	}
+	ack := intent
+	ack.CommandID = "prebind-revoke-ack"
+	ack.ExpectedLifecycleVersion = 2
+	ack.Disposition = types.CoSuperCapsuleRevoked
+	ack.AckRef = "ack:absent"
+	ack.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(ack)
+	revoked, err := s.SetCoSuperCapsuleDisposition(ctx, ack)
+	if err != nil || revoked.Assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+		t.Fatalf("ack: %+v %v", revoked, err)
+	}
+	cancel := types.CancelCoSuperAssignmentRequest{CommandID: "cancel-prebind", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 3, Reason: "mint failed"}
+	cancel.CommandDigest, _ = ComputeCancelCoSuperAssignmentDigest(cancel)
+	cancelled, err := s.CancelCoSuperAssignment(ctx, cancel)
+	if err != nil || cancelled.Assignment.Disposition != types.CoSuperAssignmentCancelled || cancelled.Assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+		t.Fatalf("cancel: %+v %v", cancelled, err)
+	}
+}
+
+func TestReplayRecordedReportAfterRevokeReturnsOriginalReceipt(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-report-replay", 1, types.CoSuperAssignmentVerification, true, "cap", "capsule")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(open, f.assignedRunIDs[0], "cap")); err != nil {
+		t.Fatal(err)
+	}
+	req := assignmentReportRequest(open, 2, "report-replay", open.Binding.SubjectDigest, types.CoSuperResultCompleted, types.CoSuperVerdictPass)
+	changedCAS := req
+	changedCAS.ExpectedLifecycleVersion = 99
+	changedDigest, _ := ComputeRecordCoSuperAssignmentReportDigest(changedCAS)
+	if changedDigest != req.CommandDigest {
+		t.Fatal("CAS precondition changed semantic report occurrence digest")
+	}
+	reported, err := s.RecordCoSuperAssignmentReport(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent := types.SetCoSuperCapsuleDispositionRequest{CommandID: "replay-revoke-intent", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 3, Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: "intent:replay"}
+	intent.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(intent)
+	x, err := s.SetCoSuperCapsuleDisposition(ctx, intent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ack := intent
+	ack.CommandID = "replay-revoke-ack"
+	ack.ExpectedLifecycleVersion = x.Assignment.LifecycleVersion
+	ack.Disposition = types.CoSuperCapsuleRevoked
+	ack.AckRef = "ack:replay"
+	ack.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(ack)
+	if _, err := s.SetCoSuperCapsuleDisposition(ctx, ack); err != nil {
+		t.Fatal(err)
+	}
+	replay, err := s.ReplayRecordedCoSuperAssignmentReport(ctx, f.ownerID, f.computerID, open.AssignmentID, 1, req.Report.ReportID, req.CommandID)
+	if err != nil || !replay.Replay || replay.Report == nil || replay.Receipt.CommandDigest != reported.Receipt.CommandDigest || replay.Assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+		t.Fatalf("replay: %+v %v", replay, err)
+	}
+}

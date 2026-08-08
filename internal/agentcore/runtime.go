@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -102,9 +101,15 @@ type Runtime struct {
 	// fallback path. The actor runtime is the only execution substrate.
 	dispatchActor func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error
 
-	desktopState                *desktopstate.Handler
-	content                     *contentowner.Service
-	capsuleExecutor             *capsule.Executor
+	desktopState             *desktopstate.Handler
+	content                  *contentowner.Service
+	capsuleExecutor          *capsule.Executor
+	assignmentHandleResolver interface {
+		AssignmentHandle(string, string) (string, error)
+	}
+	assignmentLookup interface {
+		GetCoSuperAssignment(context.Context, string, string, string, uint64) (types.CoSuperAssignment, error)
+	}
 	capsuleBuilder              *transaction.TransactionBuilder
 	eventAppender               *computerevent.ComputerEventAppender
 	selfdevOperations           *selfdev.Store
@@ -2051,6 +2056,9 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 		var err error
 		if strings.TrimSpace(first.AssignedAgentID) == persistentSuperAgentID(strings.TrimSpace(first.OwnerID)) {
 			_, err = rt.reconcilePersistentSuperActor(ctx, first.OwnerID, first.AssignedAgentID)
+		} else if agentprofile.Canonical(first.AuthorityProfile) == agentprofile.CoSuper {
+			err = rt.ReconcileCoSuperAssignmentsForTrajectory(ctx, first.OwnerID,
+				firstNonEmpty(first.ComputerID, rt.TextureSandboxID()), first.TrajectoryID)
 		} else {
 			_, err = rt.reconcileAssignedWorkItemActor(ctx, workItems)
 		}
@@ -2405,12 +2413,21 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 				EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
 			})
 		case agentprofile.CoSuper:
-			ctx = WithCapsuleCtx(ctx, &CapsuleToolCtx{
-				Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rt.selfdevComputerID, Role: capsule.RoleCoSuper,
-				UpdaterRoot: os.Getenv("CHOIR_UPDATER_ROOT"), CapsuleHandle: metadataStringValue(rec.Metadata, "capsule_handle"),
-				EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
-				OperationStore: rt.selfdevOperations, EventProjection: rt.store,
-			})
+			overlay, handle, overlayErr := rt.assignedCoSuperToolOverlay(ctx, rec, registry)
+			if overlayErr != nil {
+				rt.handleExecutionError(ctx, rec, fmt.Errorf("bind assigned CoSuper tool overlay: %w", overlayErr))
+				return
+			}
+			if handle != "" {
+				registry = overlay
+				// Exact assigned CoSupers receive only their runtime-held capsule
+				// handle. No event, updater, effect, finalization, host, VM, route,
+				// materialization, checkpoint, or owner authority is injected.
+				ctx = WithCapsuleCtx(ctx, &CapsuleToolCtx{
+					Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rec.SandboxID,
+					Role: capsule.RoleCoSuper, CapsuleHandle: handle,
+				})
+			}
 		}
 	}
 	reactivateExistingMemory := metadataBoolValue(rec.Metadata, "actor_reactivate_existing_memory")

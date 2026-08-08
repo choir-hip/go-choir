@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -115,10 +116,40 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 			continue
 		}
 		if assignment.BoundRunID == "" {
+			intent := "capsule-revoke-intent:" + objectgraph.SHA256([]byte(assignment.AssignmentID+"\x00restart-pre-bind"))
+			if assignment.CapsuleDisposition == types.CoSuperCapsuleUnbound {
+				requested, fateErr := rt.store.SetCoSuperCapsuleDisposition(ctx, coSuperFateRequest(assignment, types.CoSuperCapsuleRevokeRequested, intent, ""))
+				if fateErr != nil {
+					return fateErr
+				}
+				assignment = requested.Assignment
+			}
+			if assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested {
+				if assignment.CapsuleIntentRef != intent {
+					return store.ErrCoSuperAssignmentCommandConflict
+				}
+				if rt.capsuleExecutor.HasCapsule(assignment.Binding.CapsuleID) {
+					if destroyErr := rt.capsuleExecutor.ForceDestroy(ctx, assignment.Binding.CapsuleID); destroyErr != nil {
+						return destroyErr
+					}
+				}
+				if rt.capsuleExecutor.HasCapsule(assignment.Binding.CapsuleID) {
+					return fmt.Errorf("restart pre-bind capsule remained after revoke effect")
+				}
+				ack := "capsule-revoke-ack:" + objectgraph.SHA256([]byte(intent+"\x00absent"))
+				acked, fateErr := rt.store.SetCoSuperCapsuleDisposition(ctx, coSuperFateRequest(assignment, types.CoSuperCapsuleRevoked, intent, ack))
+				if fateErr != nil {
+					return fateErr
+				}
+				assignment = acked.Assignment
+			}
+			if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+				return fmt.Errorf("restart open assignment has ambiguous capsule fate %s", assignment.CapsuleDisposition)
+			}
 			cancel := types.CancelCoSuperAssignmentRequest{
 				CommandID: fmt.Sprintf("co-super-restart-open-cancel:%s:%d", assignment.AssignmentID, assignment.Binding.Attempt),
 				OwnerID:   ownerID, ComputerID: computerID, AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
-				ExpectedLifecycleVersion: assignment.LifecycleVersion, Reason: "restart found durable assignment open without executor bind",
+				ExpectedLifecycleVersion: assignment.LifecycleVersion, Reason: "restart acknowledged absent pre-bind assignment capsule",
 			}
 			cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
 			if _, err := rt.store.CancelCoSuperAssignment(ctx, cancel); err != nil {
@@ -258,9 +289,28 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 		}
 	}
 
+	if assignment.CapsuleDisposition == types.CoSuperCapsuleFrozen && !reportExists && len(changes) == 0 {
+		handle, resolveErr := rt.capsuleExecutor.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
+		if resolveErr != nil {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("resolve frozen assignment capability: %w", resolveErr)
+		}
+		changes, resolveErr = rt.capsuleExecutor.ExtractGranted(ctx, rec.RunID, handle)
+		if resolveErr != nil {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("inspect already-frozen assignment: %w", resolveErr)
+		}
+		if len(changes) > 0 && len(report.Mutations) == 0 {
+			frozenDigest, digestErr := rt.capsuleExecutor.ResolveGrantedWorktreeDigest(ctx, rec.RunID, handle)
+			if digestErr != nil || !types.ValidSHA256Digest(frozenDigest) {
+				return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("already-frozen assignment digest unavailable: %w", digestErr)
+			}
+			report.ObservedSubjectDigest = frozenDigest
+			report.Mutations = []types.CoSuperRecordedMutation{{MutationID: "assignment-overlay:" + objectgraph.SHA256([]byte(assignment.CapsuleAckRef)), Kind: "assignment_overlay", BeforeDigest: assignment.Binding.SubjectDigest, AfterDigest: frozenDigest, EvidenceRef: "capsule-diff:" + objectgraph.SHA256([]byte(assignment.CapsuleAckRef)), SubjectBytesChanged: true}}
+		}
+	}
 	var result types.CoSuperAssignmentCommandResult
 	if reportExists {
-		result, err = rt.commitAssignedCoSuperReport(ctx, assignment, report)
+		commandID := "co-super-report:" + assignment.AssignmentID + ":" + report.ReportID
+		result, err = rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, commandID)
 	} else {
 		if assignment.CapsuleDisposition != types.CoSuperCapsuleFrozen {
 			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("terminal report requires frozen executor acknowledgement")

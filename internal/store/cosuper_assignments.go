@@ -405,6 +405,48 @@ func (s *Store) replayCoSuperAssignmentCommand(ctx context.Context, ownerID, com
 	return result, true, nil
 }
 
+// ReplayRecordedCoSuperAssignmentReport returns the original authenticated
+// lifecycle receipt and current assignment projection without synthesizing a
+// new report command after fate transitions.
+func (s *Store) ReplayRecordedCoSuperAssignmentReport(ctx context.Context, ownerID, computerID, assignmentID string, attempt uint64, reportID, commandID string) (types.CoSuperAssignmentCommandResult, error) {
+	assignment, err := s.GetCoSuperAssignment(ctx, ownerID, computerID, assignmentID, attempt)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	report, err := s.GetCoSuperAssignmentReport(ctx, ownerID, computerID, reportID)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	if report.AssignmentID != assignmentID || report.Attempt != attempt {
+		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
+	}
+	commandCanonicalID, err := lifecycleCanonicalID(ogKindLifecycleCmd, ownerID, computerID, commandID)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	obj, err := s.lifecycleGraph().GetObject(ctx, commandCanonicalID)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	receipt, err := decodeLifecycleObject[types.LifecycleCommandReceipt](obj)
+	if err != nil || receipt.CommandID != commandID || receipt.Kind != types.LifecycleRecordCoSuperAssignment {
+		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
+	}
+	result := types.CoSuperAssignmentCommandResult{Receipt: receipt, Assignment: assignment, Report: &report, Replay: true}
+	if report.CandidateID != "" {
+		candidateObj, getErr := s.lifecycleGraph().GetObject(ctx, report.CandidateID)
+		if getErr != nil {
+			return types.CoSuperAssignmentCommandResult{}, getErr
+		}
+		candidate, decodeErr := decodeLifecycleObject[types.CoSuperSubjectCandidate](candidateObj)
+		if decodeErr != nil {
+			return types.CoSuperAssignmentCommandResult{}, decodeErr
+		}
+		result.Candidate = &candidate
+	}
+	return result, nil
+}
+
 func (s *Store) commitCoSuperLifecycleCommand(ctx context.Context, transition coSuperLifecycleTransition, commandKind types.LifecycleCommandKind, eventKind types.LifecycleEventKind, commandID, digest string, assignment types.CoSuperAssignment, report *types.CoSuperAssignmentReport, candidate *types.CoSuperSubjectCandidate, reportID, reason string, artifactObjects []objectgraph.Object, conditions []objectgraph.ObjectCondition, edges []objectgraph.Edge, evidenceRefs []string) (types.CoSuperAssignmentCommandResult, error) {
 	now := assignment.UpdatedAt
 	artifactRefs := make([]string, 0, len(artifactObjects))

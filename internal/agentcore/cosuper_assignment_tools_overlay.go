@@ -22,7 +22,11 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 	if assignmentID == "" || attempt == 0 || rt.capsuleExecutor == nil || base == nil {
 		return nil, "", fmt.Errorf("assigned CoSuper tool overlay binding unavailable")
 	}
-	assignment, err := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.SandboxID, assignmentID, attempt)
+	lookup := rt.assignmentLookup
+	if lookup == nil {
+		lookup = rt.store
+	}
+	assignment, err := lookup.GetCoSuperAssignment(ctx, rec.OwnerID, rec.SandboxID, assignmentID, attempt)
 	if err != nil {
 		return nil, "", err
 	}
@@ -35,7 +39,11 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 		metadataStringValue(rec.Metadata, "assignment_kind") != string(assignment.Binding.Kind) {
 		return nil, "", fmt.Errorf("assigned CoSuper durable run binding mismatch")
 	}
-	handle, err := rt.capsuleExecutor.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
+	resolver := rt.assignmentHandleResolver
+	if resolver == nil {
+		resolver = rt.capsuleExecutor
+	}
+	handle, err := resolver.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
 	if err != nil || strings.TrimSpace(handle) == "" {
 		return nil, "", fmt.Errorf("assigned CoSuper runtime capability unavailable: %w", err)
 	}

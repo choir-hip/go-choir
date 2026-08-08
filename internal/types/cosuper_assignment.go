@@ -289,6 +289,12 @@ func (r CoSuperAssignmentReport) ValidateAgainst(a CoSuperAssignment) error {
 			return fmt.Errorf("co-super assignment report: pass requires completed result")
 		}
 	}
+	if a.Binding.Kind == CoSuperAssignmentVerification && r.Result == CoSuperResultCompleted && r.Verdict == CoSuperVerdictPass && len(r.Commands) == 0 {
+		return fmt.Errorf("co-super assignment report: verification pass requires exact capsule command evidence")
+	}
+	if a.Binding.Kind == CoSuperAssignmentImplementation && r.Result == CoSuperResultCompleted && len(r.Commands) == 0 && len(r.Mutations) == 0 {
+		return fmt.Errorf("co-super assignment report: implementation completion requires command or runtime-derived mutation evidence")
+	}
 	seen := map[string]struct{}{}
 	for _, command := range r.Commands {
 		if strings.TrimSpace(command.CommandID) == "" || !ValidSHA256Digest(command.CommandDigest) || strings.TrimSpace(command.ExecutionRef) == "" {
