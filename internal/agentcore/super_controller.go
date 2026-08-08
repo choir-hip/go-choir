@@ -36,6 +36,11 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	} else if found {
 		return &resident, nil
 	}
+	if resumed, ok, err := rt.reactivateRestartedPersistentSuperControlRun(ctx, ownerID, agentID); err != nil {
+		return nil, err
+	} else if ok {
+		return resumed, nil
+	}
 	if active, err := rt.latestActiveRunByAgent(ctx, ownerID, agentID); err == nil {
 		if active.State == types.RunBlocked {
 			blockedActive = &active
@@ -122,6 +127,16 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		return nil, err
 	}
 	if lifecycleControls {
+		// Persistent Super is deliberately non-lifecycle. createRunWithMetadata
+		// normally stamps a generic trajectory projection; remove only that
+		// projection while retaining the exact assignment_trajectory_id used by
+		// the lifecycle control-delivery authority.
+		rec.TrajectoryID = ""
+		delete(rec.Metadata, runMetadataTrajectoryID)
+		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+			rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
+			return nil, fmt.Errorf("preserve non-lifecycle persistent-Super run: %w", err)
+		}
 		if _, err := rt.bindLifecycleControlsToRun(ctx, rec, updates); err != nil {
 			rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
 			return nil, err
@@ -129,6 +144,50 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	}
 	rt.activate(rec)
 	return rec, nil
+}
+
+func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Context, ownerID, agentID string) (*types.RunRecord, bool, error) {
+	runs, err := rt.store.ListAllRunsByState(ctx, types.RunPassivated)
+	if err != nil {
+		return nil, false, fmt.Errorf("list restarted persistent-Super runs: %w", err)
+	}
+	var candidate *types.RunRecord
+	for i := range runs {
+		run := &runs[i]
+		if run.OwnerID != ownerID || run.AgentID != agentID || !isPersistentSuperAgentRun(run) ||
+			metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" ||
+			metadataStringValue(run.Metadata, "passivated_reason") != "runtime_restarted" {
+			continue
+		}
+		controls, readErr := rt.store.ListLifecycleControlsDeliveredToRun(ctx, ownerID, run.SandboxID, lifecycleControlTrajectoryForRun(run), agentID, run.RunID, 100)
+		if readErr != nil {
+			return nil, false, fmt.Errorf("validate restarted persistent-Super control run %s: %w", run.RunID, readErr)
+		}
+		if len(controls) == 0 {
+			continue
+		}
+		if candidate == nil || run.UpdatedAt.After(candidate.UpdatedAt) || (run.UpdatedAt.Equal(candidate.UpdatedAt) && run.RunID < candidate.RunID) {
+			copy := *run
+			candidate = &copy
+		}
+	}
+	if candidate == nil {
+		return nil, false, nil
+	}
+	candidate.Metadata = cloneMetadata(candidate.Metadata)
+	candidate.Metadata["actor_reactivate_existing_memory"] = true
+	candidate.Metadata["actor_reactivated_from_passivated"] = true
+	candidate.Metadata["passivated_reason"] = ""
+	candidate.State = types.RunPending
+	candidate.Error = ""
+	candidate.Result = ""
+	candidate.FinishedAt = nil
+	candidate.UpdatedAt = time.Now().UTC()
+	if err := rt.store.UpdateRun(ctx, *candidate); err != nil {
+		return nil, false, fmt.Errorf("reactivate restarted persistent-Super control run %s: %w", candidate.RunID, err)
+	}
+	rt.activate(candidate)
+	return candidate, true, nil
 }
 
 func (rt *Runtime) markPersistentSuperRunUpdatesDelivered(ctx context.Context, rec *types.RunRecord) error {
@@ -242,18 +301,20 @@ func (rt *Runtime) completeSuccessfulRunWorkItems(ctx context.Context, rec *type
 }
 
 func (rt *Runtime) maybeContinuePersistentSuperInbox(ctx context.Context, rec *types.RunRecord) {
-	if !isPersistentSuperInboxRun(rec) {
+	if !isPersistentSuperAgentRun(rec) || (rec.State != types.RunPassivated && !rec.State.Terminal()) {
 		return
 	}
-	if rec.State != types.RunCompleted {
-		return
+	if isPersistentSuperInboxRun(rec) && rec.State == types.RunCompleted {
+		if err := rt.markPersistentSuperRunUpdatesDelivered(ctx, rec); err != nil {
+			log.Printf("runtime: mark persistent super updates delivered after %s: %v", rec.RunID, err)
+			return
+		}
 	}
-	if err := rt.markPersistentSuperRunUpdatesDelivered(ctx, rec); err != nil {
-		log.Printf("runtime: mark persistent super updates delivered after %s: %v", rec.RunID, err)
-		return
-	}
+	// A persistent Super run owns exactly one lifecycle trajectory. Once that
+	// realization passivates or terminates, release the singleton actor slot and
+	// deterministically reconcile the oldest still-pending control trajectory.
 	if _, err := rt.reconcilePersistentSuperActor(ctx, rec.OwnerID, rec.AgentID); err != nil {
-		log.Printf("runtime: continue persistent super inbox after %s: %v", rec.RunID, err)
+		log.Printf("runtime: continue persistent super actor after %s: %v", rec.RunID, err)
 	}
 }
 
@@ -484,10 +545,7 @@ func (rt *Runtime) validateTargetBoundLifecycleControls(ctx context.Context, own
 	return out, nil
 }
 
-func persistentSuperExecutableUpdate(update types.CoagentSourcePacket) bool {
-	if update.DeliveredAt != nil || strings.TrimSpace(update.DeliveredToRunID) != "" {
-		return false
-	}
+func persistentSuperExecutablePacket(update types.CoagentSourcePacket) bool {
 	packet := normalizeCoagentSourcePacketPayload(update.Packet)
 	if packet.Kind != "execution_request" {
 		return false
@@ -495,9 +553,24 @@ func persistentSuperExecutableUpdate(update types.CoagentSourcePacket) bool {
 	return validateCoagentSourcePacketPayload(packet) == nil
 }
 
+func persistentSuperExecutableUpdate(update types.CoagentSourcePacket) bool {
+	if update.DeliveredAt != nil || strings.TrimSpace(update.DeliveredToRunID) != "" {
+		return false
+	}
+	return persistentSuperExecutablePacket(update)
+}
+
 func coagentUpdateDeliverableForRun(rec *types.RunRecord, update types.CoagentSourcePacket) bool {
+	if rec == nil {
+		return false
+	}
+	if update.Direction == types.LifecyclePacketDirectionControl || metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
+		if strings.TrimSpace(update.DeliveredToRunID) != strings.TrimSpace(rec.RunID) || update.DeliveredAt == nil {
+			return false
+		}
+	}
 	if isPersistentSuperAgentRun(rec) {
-		return persistentSuperExecutableUpdate(update)
+		return persistentSuperExecutablePacket(update)
 	}
 	return true
 }
@@ -736,15 +809,8 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 	}
 	computerID := strings.TrimSpace(rec.SandboxID)
 	if isPersistentSuperAgentRun(rec) {
-		if computerID != "" {
-			controls, err := rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, limit)
-			if err != nil {
-				return nil, err
-			}
-			controls = selectLifecycleControlActivation(controls, rec.TrajectoryID, lifecycleControlWorkIDsForRun(rec))
-			if len(controls) > 0 {
-				return controls, nil
-			}
+		if metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
+			return rt.store.ListLifecycleControlsDeliveredToRun(ctx, ownerID, computerID, lifecycleControlTrajectoryForRun(rec), agentID, rec.RunID, limit)
 		}
 		return rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
 	}
@@ -752,18 +818,10 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 		if computerID == "" {
 			return nil, fmt.Errorf("list pending lifecycle updates: computer_id is required")
 		}
-		updates, err := rt.store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, agentID, limit)
-		if err != nil {
-			return nil, err
-		}
 		if agentProfileForRun(rec) == agentprofile.Researcher {
-			controls, validateErr := rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, updates, false)
-			if validateErr != nil {
-				return nil, validateErr
-			}
-			return selectLifecycleControlActivation(controls, rec.TrajectoryID, lifecycleControlWorkIDsForRun(rec)), nil
+			return rt.store.ListLifecycleControlsDeliveredToRun(ctx, ownerID, computerID, lifecycleControlTrajectoryForRun(rec), agentID, rec.RunID, limit)
 		}
-		return updates, nil
+		return rt.store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, agentID, limit)
 	}
 	return rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
 }
@@ -1036,6 +1094,9 @@ func shouldPrependInitialCoagentUpdates(rec *types.RunRecord) bool {
 	}
 	requestSource := metadataStringValue(rec.Metadata, "request_source")
 	if requestSource == "update_coagent" || requestSource == "lifecycle_texture_control" {
+		return true
+	}
+	if agentProfileForRun(rec) == agentprofile.Researcher && len(lifecycleControlWorkIDsForRun(rec)) > 0 {
 		return true
 	}
 	return len(coagentUpdateIDsForRun(rec)) > 0

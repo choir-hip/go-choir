@@ -2637,6 +2637,7 @@ func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunR
 	if shouldLogWireLifecycle(rec) {
 		log.Printf("runtime: passivated idle %s reason=%s", wireLifecycleSummary(rec), reason)
 	}
+	rt.maybeContinuePersistentSuperInbox(context.Background(), rec)
 }
 
 func (rt *Runtime) sleepTextureMutationAfterIdle(ctx context.Context, rec *types.RunRecord) error {
@@ -3585,6 +3586,9 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	}
 
 	log.Printf("runtime: run %s → %s: %v", rec.RunID, state, err)
+	if state.Terminal() {
+		rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
+	}
 
 }
 

@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -151,11 +150,10 @@ func (h *Handler) HandleTextureOwnerInstruction(w http.ResponseWriter, r *http.R
 		return
 	}
 	if !result.Replay {
-		if _, wakeErr := h.ReconcileAgentWake(r.Context(), ownerID, doc.DocID); wakeErr != nil {
-			// The durable pending instruction remains authoritative; restart/reconcile
-			// may wake it without turning a successful commit into a retry ambiguity.
-			log.Printf("texture owner instruction %s committed but wake deferred: %v", instruction.InstructionID, wakeErr)
-		}
+		// QueueLifecycleOwnerInstruction is the durable authority. Exactly one
+		// occurrence-keyed actor wake follows a new commit, including when a valid
+		// Texture run is already resident; replay and refusal paths never reach it.
+		h.scheduleTextureWorkerWake(ownerID, doc.DocID, instruction.InstructionID)
 	}
 	writeAPIJSON(w, http.StatusAccepted, textureOwnerInstructionResponse{
 		Schema: textureOwnerInstructionSchemaV1, InstructionID: instruction.InstructionID, RequestID: instruction.RequestID,

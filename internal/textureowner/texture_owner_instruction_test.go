@@ -1,11 +1,13 @@
 package textureowner
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -148,10 +150,34 @@ func TestResidentTextureInjectsAndAtomicallyConsumesOrderedOwnerOccurrences(t *t
 	core, handler := testAPISetup(t)
 	start := startObservationLifecycle(t, core.Store())
 	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
+	var wakes []string
+	handler.wakeOwnerInstruction = func(_ context.Context, ownerID, docID, instructionID string) error {
+		if ownerID != start.OwnerID || docID != start.InitialDocument.DocID || instructionID == "" {
+			t.Fatalf("invalid owner wake scope owner=%q doc=%q instruction=%q", ownerID, docID, instructionID)
+		}
+		wakes = append(wakes, instructionID)
+		return nil
+	}
 	first := postOwnerInstruction(t, handler, path, start.OwnerID, "resident-one", "first private owner instruction", start.InitialRevision.RevisionID)
+	if first.Code != http.StatusAccepted || len(wakes) != 1 {
+		t.Fatalf("first queue status=%d wakes=%v", first.Code, wakes)
+	}
+	if _, err := handler.ReconcileAgentWake(t.Context(), start.OwnerID, start.InitialDocument.DocID); err != nil {
+		t.Fatalf("create resident Texture run: %v", err)
+	}
 	second := postOwnerInstruction(t, handler, path, start.OwnerID, "resident-two", "second private owner instruction", start.InitialRevision.RevisionID)
-	if first.Code != http.StatusAccepted || second.Code != http.StatusAccepted {
-		t.Fatalf("queue statuses=%d/%d", first.Code, second.Code)
+	if second.Code != http.StatusAccepted || len(wakes) != 2 || wakes[0] == wakes[1] {
+		t.Fatalf("resident queue status=%d wakes=%v", second.Code, wakes)
+	}
+	// Exact replay and refusal must not enqueue another actor occurrence.
+	if replay := postOwnerInstruction(t, handler, path, start.OwnerID, "resident-two", "second private owner instruction", start.InitialRevision.RevisionID); replay.Code != http.StatusAccepted {
+		t.Fatalf("resident replay status=%d", replay.Code)
+	}
+	if refusal := postOwnerInstruction(t, handler, path, start.OwnerID, "resident-two", "changed", start.InitialRevision.RevisionID); refusal.Code != http.StatusConflict {
+		t.Fatalf("resident refusal status=%d", refusal.Code)
+	}
+	if len(wakes) != 2 {
+		t.Fatalf("replay/refusal emitted owner wake: %v", wakes)
 	}
 	agent, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
 	if err != nil || agent.ActiveRunID == "" {
@@ -185,5 +211,62 @@ func TestResidentTextureInjectsAndAtomicallyConsumesOrderedOwnerOccurrences(t *t
 	pending, err := core.Store().ListPendingLifecycleOwnerInstructions(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID, start.Agent.AgentID, 10)
 	if err != nil || len(pending) != 0 {
 		t.Fatalf("pending after owner turn=%+v err=%v", pending, err)
+	}
+}
+
+func TestOwnerInstructionWakeSurvivesPassivationRaceAndBootReconcile(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	var actorDispatches []string
+	core.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, _, _ string) error {
+		actorDispatches = append(actorDispatches, kind+":"+content)
+		return nil
+	})
+	var wakes []string
+	handler.wakeOwnerInstruction = func(_ context.Context, ownerID, docID, instructionID string) error {
+		wakes = append(wakes, ownerID+":"+docID+":"+instructionID)
+		return nil
+	}
+	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
+	queued := postOwnerInstruction(t, handler, path, start.OwnerID, "passivation-race", "instruction survives passivation", start.InitialRevision.RevisionID)
+	if queued.Code != http.StatusAccepted || len(wakes) != 1 {
+		t.Fatalf("queue status=%d wakes=%v", queued.Code, wakes)
+	}
+	run, err := handler.ReconcileAgentWake(t.Context(), start.OwnerID, start.InitialDocument.DocID)
+	if err != nil || run == nil {
+		t.Fatalf("initial reconcile run=%+v err=%v", run, err)
+	}
+	passivate := func(commandID string, rec types.RunRecord) {
+		t.Helper()
+		rec.State = types.RunPassivated
+		rec.UpdatedAt = time.Now().UTC()
+		req := types.ReplaceLifecycleActivationRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: commandID, TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: rec}
+		req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
+		if _, err := core.Store().ReplaceLifecycleActivation(t.Context(), req); err != nil {
+			t.Fatal(err)
+		}
+	}
+	passivate("owner-wake-passivation-race", *run)
+	reactivated, err := handler.ReconcileActorWake(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	if err != nil || reactivated == nil || reactivated.RunID != run.RunID {
+		t.Fatalf("passivation-race reactivation=%+v err=%v", reactivated, err)
+	}
+	passivate("owner-wake-boot-passivation", *reactivated)
+	handler.Start(t.Context())
+	agent, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	if err != nil || agent.ActiveRunID != run.RunID {
+		t.Fatalf("boot reconciled agent=%+v err=%v dispatches=%v", agent, err, actorDispatches)
+	}
+	active, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, agent.ActiveRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inject := handler.coagentUpdateTurnInjector(&active)
+	messages, err := inject(false)
+	if err != nil || len(messages) != 1 || !strings.Contains(string(messages[0]), "instruction survives passivation") {
+		t.Fatalf("boot owner instruction injection=%s err=%v", messages, err)
+	}
+	if len(wakes) != 1 {
+		t.Fatalf("reconcile emitted extra owner occurrence wake: %v", wakes)
 	}
 }

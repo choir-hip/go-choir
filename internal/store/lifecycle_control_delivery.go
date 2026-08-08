@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -215,4 +216,107 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	objects = append(objects, receiptObj)
 	result := types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &agent, Events: events, Controls: controls}
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, result)
+}
+
+// ListLifecycleControlsDeliveredToRun returns the full typed control envelopes
+// bound by BindLifecycleControlDelivery to one exact durable run. New-run
+// selection intentionally uses ListPendingLifecycleUpdates instead; this reader
+// is only for warm/cold injection after the delivery cursor has advanced. It
+// never consults the legacy coagent mailbox.
+func (s *Store) ListLifecycleControlsDeliveredToRun(ctx context.Context, ownerID, computerID, trajectoryID, targetAgentID, targetRunID string, limit int) ([]types.CoagentSourcePacket, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	trajectoryID = strings.TrimSpace(trajectoryID)
+	targetAgentID = strings.TrimSpace(targetAgentID)
+	targetRunID = strings.TrimSpace(targetRunID)
+	if trajectoryID == "" || targetAgentID == "" || targetRunID == "" {
+		return nil, ErrLifecycleInvalidTransition
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+
+	agent, err := s.GetAgentByScope(ctx, ownerID, computerID, targetAgentID)
+	if err != nil {
+		return nil, err
+	}
+	profile := agentprofile.Canonical(agent.Profile)
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agentprofile.Canonical(agent.Role) != profile ||
+		(profile != agentprofile.Researcher && !(profile == agentprofile.Super && targetAgentID == agentprofile.Super+":"+ownerID && agent.LifecycleVersion == 0)) {
+		return nil, ErrLifecycleInvalidTransition
+	}
+	var run types.RunRecord
+	if profile == agentprofile.Super {
+		run, err = s.GetRunByOwner(ctx, ownerID, targetRunID)
+	} else {
+		run, err = s.GetLifecycleRun(ctx, ownerID, computerID, targetRunID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if run.RunID != targetRunID || run.OwnerID != ownerID || run.SandboxID != computerID || run.AgentID != targetAgentID || agentprofile.Canonical(run.AgentProfile) != profile {
+		return nil, ErrLifecycleInvalidTransition
+	}
+	if profile == agentprofile.Super {
+		if strings.TrimSpace(run.TrajectoryID) != "" || metadataStringValueStore(run.Metadata, "assignment_trajectory_id") != trajectoryID {
+			return nil, ErrLifecycleInvalidTransition
+		}
+	} else if strings.TrimSpace(run.TrajectoryID) != trajectoryID {
+		return nil, ErrLifecycleInvalidTransition
+	}
+
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("lifecycle delivered controls: object graph not initialized")
+	}
+	objects, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	updates := make([]types.CoagentSourcePacket, 0)
+	for _, obj := range objects {
+		if obj.ObjectKind != ogKindWorkerUpdate {
+			continue
+		}
+		update, decodeErr := decodeLifecycleObject[types.CoagentSourcePacket](obj)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if update.DeliveredToRunID != targetRunID {
+			continue
+		}
+		if update.OwnerID != ownerID || update.ComputerID != computerID || update.TrajectoryID != trajectoryID || update.TargetAgentID != targetAgentID ||
+			update.Direction != types.LifecyclePacketDirectionControl || update.Disposition != types.UpdatePending || update.DeliveredAt == nil ||
+			strings.TrimSpace(update.TargetWorkItemID) == "" || !lifecycleRunBindsWork(run, update.TargetWorkItemID) ||
+			update.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 || strings.TrimSpace(update.Packet.Kind) == "" || strings.TrimSpace(update.Content) == "" {
+			return nil, ErrLifecycleInvalidTransition
+		}
+		payloadDigest, digestErr := ComputeLifecycleUpdatePayloadDigest(update.Packet, update.Content)
+		if digestErr != nil || payloadDigest != update.PayloadDigest {
+			return nil, ErrLifecycleInvalidTransition
+		}
+		work, workErr := s.GetLifecycleWorkItem(ctx, ownerID, computerID, update.TargetWorkItemID)
+		if workErr != nil {
+			return nil, workErr
+		}
+		if work.OwnerID != ownerID || work.ComputerID != computerID || work.TrajectoryID != trajectoryID || work.AssignedAgentID != targetAgentID || work.Status != types.WorkItemOpen {
+			return nil, ErrLifecycleInvalidTransition
+		}
+		updates = append(updates, update)
+	}
+	sort.Slice(updates, func(i, j int) bool {
+		if updates[i].ReducerSeq != updates[j].ReducerSeq {
+			return updates[i].ReducerSeq < updates[j].ReducerSeq
+		}
+		return updates[i].UpdateID < updates[j].UpdateID
+	})
+	if len(updates) > limit {
+		updates = updates[:limit]
+	}
+	return updates, nil
 }
