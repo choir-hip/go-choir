@@ -28,12 +28,18 @@ paths to `cdaa787b` and passed sequential runtime shards/focused/vet checks;
 deployed rollback remains open: independent red-team rejected a historical
 workflow rerun because it would publish a rolling route, misstate current-main
 provenance, refresh every mutable computer, and open newer persisted state with
-older code without bounded recovery; no deployment was triggered. Authenticated
-readback kept self-development OFF generation 0, policy bytes exact, and route
-digest/epoch/build identity unchanged; real capsule/checkpoint/event-head
-comparison remains open. Effects remain OFF;
-provider restoration, real Linux product proof, complete no-effect/deployed-
-rollback evidence, and registry closure remain mandatory.
+older code without bounded recovery; no deployment was triggered. A later
+representative ac6 terminal graph then opened and started under exact old
+`460c1423` with zero actor dispatch and unchanged clean Dolt HEAD, and ac6 reopen
+retained new-only object kinds; this is local compatibility mitigation, not
+production/deployed proof. Authenticated readback kept self-development OFF
+generation 0, policy bytes exact, and route digest/epoch/build identity unchanged;
+real capsule/checkpoint/event-head comparison remains open. The current bounded
+integration slice is an independently approved canonical current-main two-leg
+rollback/forward landing with exclusive change freeze, fresh protected-state
+baselines, exact nonce identities, and immediate forward recovery on any delta.
+Effects remain OFF; provider restoration, real Linux product proof, complete no-
+effect/deployed-rollback evidence, and registry closure remain mandatory.
 
 ## Completed Definitions — Historical Evidence Authority
 

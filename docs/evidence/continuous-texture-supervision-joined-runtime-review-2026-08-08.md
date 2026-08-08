@@ -312,3 +312,64 @@ a canonical current-main revert followed by a newly reviewed forward candidate,
 or purpose-built bounded deploy-only authority with an exclusive change freeze,
 complete affected-computer/protected-state inventory, and old-code proof against
 a reconstructable current graph snapshot.
+
+
+### Representative cross-version rollback compatibility
+
+A disposable `ac6dd16b` Store fixture committed a terminal graph containing a
+cancelled trajectory, two cancelled work items and run projections, a consumed
+owner instruction, a Texture turn and two revisions, one exact-run-bound control
+later cancelled with the trajectory, a durable cancellation intent, eight
+lifecycle events, and seven command receipts. Its Dolt HEAD was
+`lvtb74ss94q6u8jpmtd32707oefj2pu5` and `dolt_status` was empty.
+
+Exact old runtime `460c142394e12b6e307949d0180da08d1b058745`, whose runtime
+tree underlies `cdaa787b`, opened the same closed marker/workspace. Old
+lifecycle/scoped snapshot, document, revision, update, work, and cancelled-run
+reads passed. `Runtime.Start` used a counting dispatch hook and produced zero
+actor dispatches. Dolt HEAD and clean status were identical before/after. A final
+ac6 reopen verified the owner instruction, cancellation intent, exact control
+binding/disposition, revisions, and every new-only object kind remained intact.
+The old runtime's best-effort localhost Qdrant ensure failed closed without Store
+mutation. Temporary probes/worktree were removed; session evidence remains at
+`/tmp/choir-rollback-proof/`.
+
+This proves representative additive-schema/unknown-object terminal startup and
+non-wake behavior, including newer Texture-turn/control object kinds absent from
+the blocked staging path; it is not a superset of the production graph or DB. It is not a production DB
+copy, full service/VM proof, or deployed rollback receipt. There is no sanctioned
+production Store export. A deployment rehearsal still requires fresh terminal-
+only product preflight, current-main provenance, bounded forward recovery, exact
+nonce identities, and before/mid/after protected-state comparison.
+
+
+### Canonical two-leg deployment rollback ceremony
+
+**Mutation class:** red. **Integration/deployment owner:** the current goal
+session, exclusively, across both legs. **Conjecture delta:** a terminal ac6
+persistent graph can restart under cdaa-equivalent source without semantic
+mutation, then under restored ac6-equivalent source, while only deployment
+identity, route certificate, and monotonic VM epoch change. The representative
+cross-version fixture supports but does not prove this product claim.
+
+**Protected surfaces:** current `origin/main`, CI and canonical rolling-Flake
+publication, Node B service identities, vmctl and the stable guest lifecycle,
+execution route/attestation, Texture lifecycle/events/revisions/controls,
+self-development/materialization/checkpoint state, policy bytes, run acceptance,
+and capsule/effect absence. **Admissible evidence:** exact 99-path tree equality
+and digests; normal applicable CI/rolling/deploy receipts for new rollback commit
+R and forward commit F; nonce-bound host/guest/route/platform identity at each
+leg; and authenticated before/R/F protected-state comparisons. R is deployed as
+its new commit identity, not mislabelled `cdaa`; F is likewise its new identity,
+with ac6 source equivalence proved separately.
+
+**Rollback/recovery:** freeze and review the forward inverse before R can deploy.
+Any R CI, rolling, deploy, identity, or midpoint failure still restores canonical
+main by pushing F through the normal landing loop; no historical rerun or old-
+runtime mutation probe is allowed. Old-code exposure is bounded to 45 minutes
+from R activation to F activation, after which failure to restore is immediately
+escalated. The allowed midpoint deltas are deployment/build receipts, route
+certificate/digest, service restart telemetry, and monotonic VM epoch only.
+**Heresy delta:** `discovered: none; introduced: none expected; repaired: none`;
+the operation closes an evidence gap, not a heresy. Effects remain OFF and
+registries remain open.
