@@ -416,3 +416,24 @@ pending delivered-control set and open work/trajectory authority remain valid.
 It must not rebind the occurrence to a new run, dispatch before a durable state
 transition, or generalize restart authority to unrelated roles. Acceptance must
 exercise the actor/runtime path, not only invoke an injector closure.
+
+
+## Cancellation-intent/report race — 2026-08-08
+
+Joined source review of the durable cancellation repair found that the intent
+currently gates ordinary lifecycle transitions but explicitly permits every
+`record_co_super_assignment` command. A terminal assignment report racing after
+the durable trajectory cancellation intent but before the first capsule revoke
+transition can therefore still freeze executor state, derive a candidate, mark
+Pass, queue an upward packet, and wake the parent. The cancellation intent has
+already made cancellation authoritative; report completion must not win this
+window.
+
+Both runtime and Store must treat the existence of the exact trajectory
+cancellation intent as late/evidence-only authority. The runtime must skip
+freeze/candidate/granted-receipt effects and retain only authenticated raw
+receipts; the Store must independently demote Pass, strip candidate/mutation
+authority, and emit no packet/wake/projection/reopen. Per-tool capsule
+revalidation must also reject further read/write/exec effects once the intent is
+durable, while the report tool remains available solely to record delayed
+evidence. A deterministic report-versus-intent race test is required.
