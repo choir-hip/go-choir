@@ -1088,7 +1088,12 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 	if assignment.LifecycleVersion != req.ExpectedLifecycleVersion || assignment.BoundRunID == "" || assignment.Disposition == types.CoSuperAssignmentOpen {
 		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
 	}
-	lateAuthority := assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked
+	_, intentErr := s.GetLifecycleCancellationIntent(ctx, req.OwnerID, req.ComputerID, assignment.Binding.TrajectoryID)
+	cancellationIntended := intentErr == nil
+	if intentErr != nil && !errors.Is(intentErr, ErrNotFound) {
+		return types.CoSuperAssignmentCommandResult{}, intentErr
+	}
+	lateAuthority := cancellationIntended || assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked
 	var parentAuthority coSuperAuthorityObjects
 	if lateAuthority {
 		parentAuthority, err = s.requireCoSuperHistoricalParentAuthority(ctx, assignment.Binding)
@@ -1393,6 +1398,13 @@ func (s *Store) SetCoSuperCapsuleDisposition(ctx context.Context, req types.SetC
 	}
 	if (req.Disposition == types.CoSuperCapsuleFrozen || req.Disposition == types.CoSuperCapsuleRevoked) && req.IntentRef != assignment.CapsuleIntentRef {
 		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
+	}
+	if _, intentErr := s.GetLifecycleCancellationIntent(ctx, req.OwnerID, req.ComputerID, assignment.Binding.TrajectoryID); intentErr == nil {
+		if req.Disposition != types.CoSuperCapsuleRevokeRequested && req.Disposition != types.CoSuperCapsuleRevoked {
+			return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
+		}
+	} else if !errors.Is(intentErr, ErrNotFound) {
+		return types.CoSuperAssignmentCommandResult{}, intentErr
 	}
 	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, req.OwnerID, req.ComputerID, assignment.Binding.TrajectoryID)
 	if err != nil {

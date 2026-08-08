@@ -39,7 +39,10 @@ func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.C
 	if assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked {
 		return assignment, nil
 	}
-	if handle, err := rt.capsuleExecutor.AssignmentHandle(assignment.BoundRunID, assignment.Binding.CapsuleID); err == nil {
+	ackRunID := assignment.BoundRunID
+	if ackRunID == "" {
+		ackRunID = "unbound:" + assignment.AssignmentID
+	} else if handle, err := rt.capsuleExecutor.AssignmentHandle(assignment.BoundRunID, assignment.Binding.CapsuleID); err == nil {
 		if err := rt.capsuleExecutor.RevokeCapability(assignment.BoundRunID, handle); err != nil {
 			return assignment, fmt.Errorf("revoke assignment capability: %w", err)
 		}
@@ -52,8 +55,8 @@ func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.C
 	if rt.capsuleExecutor.HasCapsule(assignment.Binding.CapsuleID) {
 		return assignment, fmt.Errorf("assignment capsule continued after executor acknowledgement")
 	}
-	revocationReceipt, receiptErr := rt.capsuleExecutor.PersistRevocationReceipt(assignment.BoundRunID, assignment.Binding.CapabilityDigest, assignment.Binding.CapsuleID, intentRef)
-	if receiptErr != nil || !revocationReceipt.CapsuleAbsent || revocationReceipt.AgentRunID != assignment.BoundRunID ||
+	revocationReceipt, receiptErr := rt.capsuleExecutor.PersistRevocationReceipt(ackRunID, assignment.Binding.CapabilityDigest, assignment.Binding.CapsuleID, intentRef)
+	if receiptErr != nil || !revocationReceipt.CapsuleAbsent || revocationReceipt.AgentRunID != ackRunID ||
 		revocationReceipt.CapsuleID != assignment.Binding.CapsuleID || revocationReceipt.IntentRef != intentRef ||
 		revocationReceipt.AssignmentCapabilityDigest != assignment.Binding.CapabilityDigest {
 		return assignment, fmt.Errorf("persist exact structured capsule revoke acknowledgement: %w", receiptErr)
@@ -198,7 +201,10 @@ func (rt *Runtime) cancelBoundCoSuperRun(ctx context.Context, rec types.RunRecor
 		return true, fmt.Errorf("cancel run assignment binding mismatch")
 	}
 	if assignment.Disposition.Terminal() {
-		return true, nil
+		if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+			_, err = rt.revokeAssignedCapsule(ctx, assignment, reason)
+		}
+		return true, err
 	}
 	assignment, err = rt.revokeAssignedCapsule(ctx, assignment, reason)
 	if err != nil {
@@ -357,7 +363,13 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 		"choir:co-super-report:v1", rec.OwnerID, rec.SandboxID, rec.RunID, assignmentID, fmt.Sprint(attempt), strings.TrimSpace(toolCallID),
 	}, "\x00")))
 	terminal := report.Result != types.CoSuperResultPartial
-	lateFate := assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked
+	cancellationIntended := false
+	if _, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, rec.OwnerID, rec.SandboxID, assignment.Binding.TrajectoryID); intentErr == nil {
+		cancellationIntended = true
+	} else if !errors.Is(intentErr, store.ErrNotFound) {
+		return types.CoSuperAssignmentCommandResult{}, intentErr
+	}
+	lateFate := cancellationIntended || assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked
 	// Cancellation wins: a racing verification result is evidence-only and can
 	// never retain or derive Pass semantics.
 	if lateFate && report.Verdict == types.CoSuperVerdictPass {

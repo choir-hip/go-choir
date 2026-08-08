@@ -1011,7 +1011,7 @@ func TestLifecycleCancellationIntentSurvivesAssignmentFateAndPreservesCallerCASI
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installCoSuperAssignmentAuthority(t, s, 1)
-	open := coSuperOpenRequest(f, 0, "assignment-cancel-intent", 1, types.CoSuperAssignmentImplementation, true, "cap-cancel-intent", "capsule-cancel-intent")
+	open := coSuperOpenRequest(f, 0, "assignment-cancel-intent", 1, types.CoSuperAssignmentVerification, true, "cap-cancel-intent", "capsule-cancel-intent")
 	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -1033,6 +1033,24 @@ func TestLifecycleCancellationIntentSurvivesAssignmentFateAndPreservesCallerCASI
 	if replay, err := s.PrepareLifecycleCancellation(ctx, cancel); err != nil || replay.CommandDigest != intent.CommandDigest {
 		t.Fatalf("intent replay: %+v %v", replay, err)
 	}
+	freezeAfterIntent := types.SetCoSuperCapsuleDispositionRequest{CommandID: "freeze-after-cancellation-intent", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 2, Disposition: types.CoSuperCapsuleFreezeRequested, IntentRef: "freeze-after-cancellation-intent"}
+	freezeAfterIntent.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(freezeAfterIntent)
+	if _, err := s.SetCoSuperCapsuleDisposition(ctx, freezeAfterIntent); !errors.Is(err, ErrCoSuperAssignmentInvalid) {
+		t.Fatalf("freeze after cancellation intent error = %v", err)
+	}
+	// Once cancellation intent is durable, even a terminal Pass report that
+	// wins the process scheduling race is historical evidence only.
+	changedDigest := objectgraph.SHA256([]byte("report-after-cancellation-intent"))
+	lateReport := assignmentReportRequest(open, 2, "report-after-cancellation-intent", changedDigest, types.CoSuperResultCompleted, types.CoSuperVerdictPass)
+	lateResult, err := s.RecordCoSuperAssignmentReport(ctx, lateReport)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lateResult.Report == nil || !lateResult.Report.Late || lateResult.Report.Verdict != types.CoSuperVerdictAbstain ||
+		lateResult.Report.CandidateID != "" || lateResult.Candidate != nil || lateResult.Update != nil ||
+		lateResult.Assignment.Disposition != types.CoSuperAssignmentBound {
+		t.Fatalf("report after cancellation intent retained lifecycle authority: %+v", lateResult)
+	}
 	conflict := cancel
 	conflict.RequestedLifecycleVersion++
 	conflict.ExpectedLifecycleVersion++
@@ -1040,7 +1058,7 @@ func TestLifecycleCancellationIntentSurvivesAssignmentFateAndPreservesCallerCASI
 	if _, err := s.PrepareLifecycleCancellation(ctx, conflict); !errors.Is(err, ErrLifecycleCommandConflict) {
 		t.Fatalf("changed original CAS = %v", err)
 	}
-	revoke := types.SetCoSuperCapsuleDispositionRequest{CommandID: "intent-revoke", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 2, Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: "capsule-revoke-intent:test"}
+	revoke := types.SetCoSuperCapsuleDispositionRequest{CommandID: "intent-revoke", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: lateResult.Assignment.LifecycleVersion, Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: "capsule-revoke-intent:test"}
 	revoke.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(revoke)
 	requested, err := s.SetCoSuperCapsuleDisposition(ctx, revoke)
 	if err != nil {

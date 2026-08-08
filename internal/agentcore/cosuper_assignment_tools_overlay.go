@@ -2,11 +2,13 @@ package agentcore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -79,6 +81,11 @@ func (rt *Runtime) validateAssignedCoSuperExecution(ctx context.Context, rec *ty
 	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.SandboxID, assignment.Binding.TrajectoryID)
 	if err != nil || trajectory.Status != types.TrajectoryLive {
 		return fmt.Errorf("trajectory obligation is not live: %w", err)
+	}
+	if _, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, rec.OwnerID, rec.SandboxID, assignment.Binding.TrajectoryID); intentErr == nil {
+		return fmt.Errorf("trajectory cancellation is already authoritative")
+	} else if !errors.Is(intentErr, store.ErrNotFound) {
+		return fmt.Errorf("trajectory cancellation authority unavailable: %w", intentErr)
 	}
 	work, err := rt.store.GetLifecycleWorkItem(ctx, rec.OwnerID, rec.SandboxID, assignment.Binding.AssignedWorkItemID)
 	if err != nil || work.Status != types.WorkItemOpen || work.AssignedAgentID != rec.AgentID {
