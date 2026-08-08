@@ -173,7 +173,15 @@ this acceptance authority. Sanitized local diagnostics show every configured pro
 before tool semantics; balance attribution applies only to DeepSeek/Xiaomi and
 the qualified Z.AI classification, not Fireworks. Local ChatGPT token metadata
 reports an unexpired expiry, which does not prove usable auth; none of these
-facts supplies a proven or admissible host transfer/renewal path. After that transition, exact `ac6dd16b` identity
-must be reverified and a fresh trajectory must run the complete acceptance. This
+facts supplies a proven or admissible host transfer/renewal path.
+
+A post-recurrence independent blocked-slice audit returned **NONE**: every
+remaining acceptance gap is downstream of the first successful real Texture
+provider turn; further local/source proof would duplicate already-passing
+contracts, manually created actors/evidence would be synthetic acceptance, and
+retained failures or active registries must not be deleted. After an authorized
+restoration transition, exact deployed F
+`67a61358ceda55c30e9853907f85648bb8531bb8` identity must be reverified and a
+fresh trajectory must run the complete acceptance. This
 Definition does not authorize SSH, guest credential injection, auth weakening,
 route mutation, or an unreviewed silent fallback.
