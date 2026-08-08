@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1221,19 +1222,28 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 	if _, err := s.GetDocumentAliasSourcePath(ctx, ownerID, docID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("lifecycle revision created legacy projection alias: %v", err)
 	}
-	var incorporatedInterim, boundOpenRevision bool
+	var incorporatedInterim bool
 	for _, update := range openSnapshot.Updates {
 		if update.UpdateID == queue.UpdateID {
 			incorporatedInterim = update.Disposition == types.UpdateIncorporated
 		}
-		if update.Packet.Kind == "artifact_revision" {
-			boundOpenRevision = update.Disposition == types.UpdateIncorporated &&
-				update.WorkDisposition == types.WorkItemOpen && update.WorkItemID == start.InitialWork.WorkItemID
+		if update.Packet.Kind == "artifact_revision" && update.AgentID == start.Agent.AgentID {
+			t.Fatalf("atomic Texture turn leaked synthetic self update: %+v", update)
 		}
 	}
-	if !incorporatedInterim || !boundOpenRevision {
-		t.Fatalf("interim updates omitted incorporation or assigned open work binding: %+v", openSnapshot.Updates)
+	if !incorporatedInterim || openSnapshot.WorkItems[0].Status != types.WorkItemOpen {
+		t.Fatalf("interim turn omitted incorporation or assigned open work CAS: %+v", openSnapshot)
 	}
+	decisionRun := newRun("run-explicit-work-wait", openSnapshot.HeadRevision.RevisionID)
+	decisionArgs := json.RawMessage(fmt.Sprintf(`{"doc_id":%q,"base_revision_id":%q,"decision_kind":"wait_for_evidence","reason":"await exact verification"}`, docID, openSnapshot.HeadRevision.RevisionID))
+	if _, err := registry.Execute(toolregistry.WithExecutionContext(ctx, textureToolExecutionContext(decisionRun)), "record_texture_decision", decisionArgs); err != nil {
+		t.Fatalf("commit no-revision wait turn: %v", err)
+	}
+	decisionMutation, err := s.GetAgentMutationByRun(ctx, ownerID, computerID, decisionRun.RunID)
+	if err != nil || decisionMutation == nil || decisionMutation.RevisionID != "" || decisionMutation.State != "deferred" {
+		t.Fatalf("no-revision turn wrote fake mutation revision: %+v, %v", decisionMutation, err)
+	}
+	finishRun(decisionRun)
 	rejectedWork := types.OpenLifecycleWorkRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "command-open-rejected-evidence",
 		TrajectoryID: trajectoryID, WorkItem: types.WorkItemRecord{
@@ -1356,6 +1366,9 @@ func TestTextureEditToolsRefusePresentInvalidWorkDisposition(t *testing.T) {
 		"updates_object":           json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","work_disposition":"open","update_dispositions":{}}`),
 		"updates_unknown":          json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","work_disposition":"open","update_dispositions":[{"update_id":"u","disposition":"incorporated","receipt":"fake"}]}`),
 		"rejection_without_reason": json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","work_disposition":"open","update_dispositions":[{"update_id":"u","disposition":"rejected"}]}`),
+		"control_raw_content":      json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","controls":[{"target_work_item_id":"work","content":"escape","packet":{"kind":"question","summary":"q","questions":["q"]}}]}`),
+		"control_target_agent":     json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","controls":[{"target_work_item_id":"work","target_agent_id":"researcher:foreign","packet":{"kind":"question","summary":"q","questions":["q"]}}]}`),
+		"control_direction":        json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","controls":[{"target_work_item_id":"work","packet":{"kind":"question","summary":"q","questions":["q"],"direction":"target_control"}}]}`),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := registry.Execute(ctx, "rewrite_texture", raw); err == nil {
@@ -1564,14 +1577,10 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 		if !foundInitialOpenWork {
 			t.Fatalf("initial assigned work missing after omitted work_disposition: %+v", snapshot.WorkItems)
 		}
-		foundOpenUpdate := false
 		for _, update := range snapshot.Updates {
-			if update.Disposition == types.UpdateIncorporated && update.WorkDisposition == types.WorkItemOpen {
-				foundOpenUpdate = true
+			if update.Packet.Kind == "artifact_revision" && update.AgentID == agentID {
+				t.Fatalf("omitted work_disposition leaked synthetic self update: %+v", update)
 			}
-		}
-		if !foundOpenUpdate {
-			t.Fatalf("omitted work_disposition did not fail open: %+v", snapshot.Updates)
 		}
 		other, err := s.GetLifecycleSnapshot(ctx, ownerID, "computer-a", starts["computer-a"].TrajectoryID)
 		if err != nil || other.HeadRevision.RevisionID != starts["computer-a"].InitialRevision.RevisionID {
@@ -1638,13 +1647,29 @@ func textureToolExecutionContext(run *types.RunRecord) toolregistry.ExecutionCon
 		return toolregistry.ExecutionContext{}
 	}
 	return toolregistry.ExecutionContext{
-		RunID:     run.RunID,
-		AgentID:   run.AgentID,
-		OwnerID:   run.OwnerID,
-		Profile:   run.AgentProfile,
-		Role:      run.AgentRole,
-		ChannelID: run.ChannelID,
-		SandboxID: run.SandboxID,
-		RunRecord: run,
+		RunID:      run.RunID,
+		ToolCallID: "tool-call:" + run.RunID,
+		AgentID:    run.AgentID,
+		OwnerID:    run.OwnerID,
+		Profile:    run.AgentProfile,
+		Role:       run.AgentRole,
+		ChannelID:  run.ChannelID,
+		SandboxID:  run.SandboxID,
+		RunRecord:  run,
+	}
+}
+
+func TestRecordTextureDecisionStrictlyRefusesAuthorityAndUnknownControlFields(t *testing.T) {
+	for name, raw := range map[string]json.RawMessage{
+		"unknown_top_level": json.RawMessage(`{"decision_kind":"blocker","reason":"blocked","direction":"target_control"}`),
+		"both_targets":      json.RawMessage(`{"decision_kind":"blocker","reason":"blocked","controls":[{"target_work_item_id":"work","open_persistent_super":true,"objective":"x","packet":{"kind":"question","summary":"q","questions":["q"]}}]}`),
+		"model_control_id":  json.RawMessage(`{"decision_kind":"blocker","reason":"blocked","controls":[{"target_work_item_id":"work","control_id":"fake","packet":{"kind":"question","summary":"q","questions":["q"]}}]}`),
+		"raw_content":       json.RawMessage(`{"decision_kind":"blocker","reason":"blocked","controls":[{"target_work_item_id":"work","content":"escape","packet":{"kind":"question","summary":"q","questions":["q"]}}]}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := decodeRecordTextureDecisionArgs(raw); err == nil {
+				t.Fatalf("strict decision decoder accepted %s", raw)
+			}
+		})
 	}
 }

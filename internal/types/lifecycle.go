@@ -159,6 +159,8 @@ type ApplyTextureTurnRequest struct {
 	ExpectedLifecycleVersion       int64                           `json:"expected_lifecycle_version"`
 	ExpectedCallerLifecycleVersion int64                           `json:"expected_caller_lifecycle_version"`
 	ExpectedHeadRevisionID         string                          `json:"expected_head_revision_id"`
+	CallerWorkItemID               string                          `json:"caller_work_item_id"`
+	CallerWorkDisposition          WorkItemStatus                  `json:"caller_work_disposition"`
 	Outcome                        TextureTurnOutcome              `json:"outcome"`
 	Revision                       Revision                        `json:"revision,omitempty"`
 	Reason                         string                          `json:"reason,omitempty"`
@@ -170,13 +172,15 @@ type ApplyTextureTurnRequest struct {
 // TextureTurnRecord is stored in the lifecycle command receipt. It is the
 // durable outcome authority for revision and non-revision turns alike.
 type TextureTurnRecord struct {
-	Outcome             TextureTurnOutcome `json:"outcome"`
-	PriorHeadRevisionID string             `json:"prior_head_revision_id"`
-	HeadRevisionID      string             `json:"head_revision_id"`
-	InboundUpdateIDs    []string           `json:"inbound_update_ids,omitempty"`
-	ControlUpdateIDs    []string           `json:"control_update_ids,omitempty"`
-	TargetWorkItemIDs   []string           `json:"target_work_item_ids,omitempty"`
-	Reason              string             `json:"reason,omitempty"`
+	Outcome               TextureTurnOutcome `json:"outcome"`
+	PriorHeadRevisionID   string             `json:"prior_head_revision_id"`
+	HeadRevisionID        string             `json:"head_revision_id"`
+	InboundUpdateIDs      []string           `json:"inbound_update_ids,omitempty"`
+	ControlUpdateIDs      []string           `json:"control_update_ids,omitempty"`
+	TargetWorkItemIDs     []string           `json:"target_work_item_ids,omitempty"`
+	CallerWorkItemID      string             `json:"caller_work_item_id"`
+	CallerWorkDisposition WorkItemStatus     `json:"caller_work_disposition"`
+	Reason                string             `json:"reason,omitempty"`
 }
 
 type OpenLifecycleWorkRequest struct {
