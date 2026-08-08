@@ -391,6 +391,9 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 		if err := RegisterCapsuleTools(superRegistry); err != nil {
 			return err
 		}
+		if err := RegisterAssignedCoSuperTools(superRegistry, rt); err != nil {
+			return err
+		}
 	}
 	coSuperRegistry, err := buildDelegatedCoSuperRegistry(delegatedCoSuperRegistryInputs{
 		ReadOnlyFiles: func(registry *toolregistry.ToolRegistry) error {

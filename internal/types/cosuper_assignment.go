@@ -82,6 +82,9 @@ func (b CoSuperAssignmentBinding) Validate() error {
 			return fmt.Errorf("co-super assignment: %s is required and must be canonical", name)
 		}
 	}
+	if !strings.HasPrefix(b.ParentDecisionID, "decision:sha256:") || !ValidSHA256Digest(strings.TrimPrefix(b.ParentDecisionID, "decision:")) {
+		return fmt.Errorf("co-super assignment: parent_decision_id must be runtime-derived")
+	}
 	if b.ParentAgentID != "super:"+b.OwnerID {
 		return fmt.Errorf("co-super assignment: parent_agent_id must be exact persistent super:<owner>")
 	}
@@ -361,19 +364,22 @@ type OpenCoSuperAssignmentRequest struct {
 	CommandDigest string                   `json:"command_digest"`
 	AssignmentID  string                   `json:"assignment_id"`
 	Binding       CoSuperAssignmentBinding `json:"binding"`
+	AssignedAgent AgentRecord              `json:"assigned_agent"`
+	AssignedWork  WorkItemRecord           `json:"assigned_work"`
 }
 
 type BindCoSuperAssignmentRequest struct {
-	CommandID                string `json:"command_id"`
-	CommandDigest            string `json:"command_digest"`
-	OwnerID                  string `json:"owner_id"`
-	ComputerID               string `json:"computer_id"`
-	AssignmentID             string `json:"assignment_id"`
-	Attempt                  uint64 `json:"attempt"`
-	ExpectedLifecycleVersion int64  `json:"expected_lifecycle_version"`
-	RunID                    string `json:"loop_id"`
-	OpaqueCapability         string `json:"-"`
-	CapsuleID                string `json:"capsule_id,omitempty"`
+	CommandID                string    `json:"command_id"`
+	CommandDigest            string    `json:"command_digest"`
+	OwnerID                  string    `json:"owner_id"`
+	ComputerID               string    `json:"computer_id"`
+	AssignmentID             string    `json:"assignment_id"`
+	Attempt                  uint64    `json:"attempt"`
+	ExpectedLifecycleVersion int64     `json:"expected_lifecycle_version"`
+	RunID                    string    `json:"loop_id"`
+	Run                      RunRecord `json:"run"`
+	OpaqueCapability         string    `json:"-"`
+	CapsuleID                string    `json:"capsule_id,omitempty"`
 }
 
 type RecordCoSuperAssignmentReportRequest struct {

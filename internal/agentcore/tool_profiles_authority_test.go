@@ -74,9 +74,10 @@ func TestDelegatedCoSuperCannotReachHostEffectToolsOrCallbacks(t *testing.T) {
 		// Owner decisions and product-authority writes.
 		"record_texture_decision", "record_wire_processor_decision", "patch_texture",
 		"rewrite_texture", "request_email_draft", "product_api_request",
-		// Capsule lifecycle and currently-unwired capsule-local execution.
+		// Capsule lifecycle and capsule-local execution are absent from the static
+		// host registry; exact assignments receive a per-run overlay only.
 		"spawn_capsule", "destroy_capsule", "list_capsules", "inspect_capsule",
-		"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir",
+		"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir", "record_assignment_result",
 		// Agent lifecycle authority is distinct from result reporting.
 		"spawn_agent", "cancel_agent",
 	}
@@ -136,11 +137,11 @@ func TestDelegatedCoSuperBuilderAcceptsOnlyAssignmentInstallers(t *testing.T) {
 
 func TestCapsuleLocalAndHostSelfDevelopmentInstallersAreDisjoint(t *testing.T) {
 	capsuleLocal := toolregistry.MustNewToolRegistry()
-	if err := RegisterCapsuleLocalTools(capsuleLocal); err != nil {
+	if err := RegisterCapsuleLocalTools(capsuleLocal, nil); err != nil {
 		t.Fatalf("register capsule-local tools: %v", err)
 	}
 	if got, want := registryToolNames(capsuleLocal), []string{
-		"capsule_exec", "capsule_list_dir", "capsule_read_file", "capsule_write_file",
+		"capsule_exec", "capsule_list_dir", "capsule_read_file", "capsule_write_file", "record_assignment_result",
 	}; !slices.Equal(got, want) {
 		t.Fatalf("capsule-local tools = %v, want %v", got, want)
 	}
