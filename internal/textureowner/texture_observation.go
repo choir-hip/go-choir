@@ -135,7 +135,7 @@ func (h *Handler) projectTextureLifecycleEvent(ctx context.Context, doc types.Do
 		CommandID: event.CommandID, UpdateID: event.UpdateID,
 		WorkItemID: event.WorkItemID, CommandDigest: event.CommandDigest, CreatedAt: event.CreatedAt,
 	}
-	if string(event.Kind) == "control_queued" {
+	if event.Kind == types.LifecycleControlQueued {
 		out.EventType = "control"
 		out.ControlID = event.UpdateID
 	}
