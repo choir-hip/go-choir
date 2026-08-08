@@ -171,3 +171,23 @@ weakening, route changes, or a silent model fallback. Effects remain OFF; real
 Researcher/Super/CoSuper progression, capsule isolation/cleanup, restart with
 pending controls, late evidence, no-effect comparison, rollback rehearsal, run
 acceptance, and registry closure remain open.
+
+
+### Post-escalation provider recurrence
+
+A later continuation reverified exact `ac6dd16b` product identity and did not
+assume the external blocker persisted without proof. A fresh ChatGPT trajectory
+`41cec88f-510f-53cc-a5e7-84c372b5421b` again failed at iteration zero with
+`refresh_token_reused`. After sufficient cooldown, fresh Z.AI trajectory
+`aca3504c-2ae0-5a4e-bab5-b22541e90585` failed at iteration zero because the
+provider circuit was open as upstream unhealthy. Both trajectories were
+conditionally cancelled through public lifecycle authority at version 3; the
+original policy bytes were restored at the same SHA-256, and both temporary keys
+were revoked.
+
+Structural inspection found no scoped product API or `choir` CLI for host-side
+provider credential renewal. The repository's credential deployment and
+one-time recovery paths are SSH-shaped break-glass operations, not admissible
+product acceptance. This confirms the remaining dependency is external
+protected gateway auth/provider health rather than lifecycle wake, route
+identity, or another model-policy permutation.

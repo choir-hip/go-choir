@@ -16,9 +16,10 @@ v4.7-3 panel's remaining ledger-only dissent was mechanically closed. Runtime ca
 deployment, and nonce-bound host/guest/platform identity. The repaired initial
 work projected after restart, and authenticated create, tell, model-policy
 rollback, and public lifecycle cancellation executed. Repeated supervision is
-blocked by protected gateway provider availability: ChatGPT auth is stale, Z.AI
-returned 429, configured alternate fallback chains did not complete, and no
-Researcher/Super/capsule turn was produced. Effects remain OFF; provider
+blocked by protected gateway provider availability: ChatGPT auth is stale, and
+Z.AI remained unavailable with an open unhealthy-provider circuit after a
+cooldown-aware retry; configured alternate fallback chains did not complete, and
+no Researcher/Super/capsule turn was produced. Effects remain OFF; provider
 restoration, real Linux product proof, no-effect/source-rollback evidence, and
 registry closure remain mandatory.
 

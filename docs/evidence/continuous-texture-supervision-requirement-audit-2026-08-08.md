@@ -22,8 +22,8 @@ unexecuted Researcher/Super/capsule behavior.
 | Host and product identity | PASS | Nonce-bound identity joined host, sandbox, route, deployment receipt, platform attestation, computer scope `vm-bbdbbd01c4390b7036067aaa12afeb68`, guest `computer-42850e9734d9442386c5dd8bf3afbf19`, and VM epoch 8247 to exact `ac6dd16b` |
 | Product lifecycle route | PASS | Authenticated create, tell, model-policy file/resolve, trajectory inspection, and conditional public cancel all executed on the exact candidate |
 | Initial committed-work projection | PASS deployed | No-SSH deployment restart created run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf` for the previously stranded initial work |
-| Provider-dependent acceptance | **BLOCKED** | ChatGPT returned HTTP 401 `refresh_token_reused`; Z.AI returned HTTP 429; configured DeepSeek/Fireworks fallback chains terminated on the same ChatGPT failure; Bedrock was unsupported. No Researcher/update/revision/Super/capsule was produced |
-| Acceptance-artifact cleanup | PASS | Failed trajectory `8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d` was publicly cancelled at lifecycle version 9; original model-policy bytes were restored at SHA-256 `7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`; temporary API key was revoked and then returned HTTP 401 |
+| Provider-dependent acceptance | **BLOCKED** | ChatGPT returned HTTP 401 `refresh_token_reused` on both the original and a fresh post-escalation trajectory; Z.AI returned HTTP 429 and later an open unhealthy-provider circuit after a cooldown-aware retry; configured DeepSeek/Fireworks fallback chains terminated on the same ChatGPT failure; Bedrock was unsupported. No Researcher/update/revision/Super/capsule was produced |
+| Acceptance-artifact cleanup | PASS | Original failed trajectory `8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d` was publicly cancelled at lifecycle version 9; fresh recurrence trajectories `41cec88f-510f-53cc-a5e7-84c372b5421b` and `aca3504c-2ae0-5a4e-bab5-b22541e90585` were publicly cancelled at lifecycle version 3; original model-policy bytes were restored at SHA-256 `7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`; all temporary API keys were revoked and rejected on subsequent use |
 | Source rollback | REF IDENTIFIED / REHEARSAL OPEN | Rollback target remains `cdaa787bf2d006a1d4e59c1650a232f2083d8f9d`; the owner-policy probe rollback was exercised, but a source/deployment rollback receipt is not yet admissible |
 | Registry terminal closure | OPEN | ACTIVE, mission graph, and authority manifest remain active/working; effects remain OFF |
 
@@ -91,7 +91,13 @@ triggered or cannot yet be excluded by the required evidence class.
 - later provider-probe runs recorded in the problem inventory;
 - public cancellation command
   `public-cancel:cts-failed-acceptance-cancel-ac6dd16b-v7`, terminal lifecycle
-  version/reducer sequence 9.
+  version/reducer sequence 9;
+- post-escalation ChatGPT trajectory
+  `41cec88f-510f-53cc-a5e7-84c372b5421b` / run
+  `dcf2088c-836e-47db-8173-80f0adb7dcf3`, cancelled at lifecycle version 3;
+- cooldown-aware Z.AI trajectory
+  `aca3504c-2ae0-5a4e-bab5-b22541e90585` / run
+  `f0d0e6ea-f98b-484c-9630-b6c849279118`, cancelled at lifecycle version 3.
 
 These are failure/partial-path evidence. They do not count as an accepted
 Researcher, Super, CoSuper, capsule, transclusion, or run-acceptance graph.
@@ -126,7 +132,9 @@ terminal-registry wording, and prohibition 17 classification; it confirmed the
 
 The only safe next transition is an audited renewal of server-owned ChatGPT auth
 or restoration of one configured tool-capable provider through the canonical
-gateway operator authority. After that transition, exact `ac6dd16b` identity
+gateway operator authority. Repository inspection found no scoped product API
+or `choir` CLI renewal path; the tracked credential and recovery paths are
+SSH-shaped break-glass operations outside this acceptance authority. After that transition, exact `ac6dd16b` identity
 must be reverified and a fresh trajectory must run the complete acceptance. This
 Definition does not authorize SSH, guest credential injection, auth weakening,
 route mutation, or an unreviewed silent fallback.

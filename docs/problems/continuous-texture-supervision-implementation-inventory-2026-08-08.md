@@ -716,3 +716,50 @@ identity, create-route availability, initial-work restart projection, public
 owner instructions, model-policy rollback, and public cancellation are now
 proved; the repeated supervision/capsule/no-effect acceptance remains blocked
 on protected server-side provider availability.
+
+
+### Post-escalation recurrence and structural assessment
+
+A later continuation did not assume that the external credential/capacity state
+was unchanged. Exact product identity was reverified at deployed
+`ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee`, VM epoch 8247, and the original
+model-policy SHA-256 was still
+`7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`.
+A fresh ChatGPT-policy trajectory
+`41cec88f-510f-53cc-a5e7-84c372b5421b` created document
+`7e5357f6-2a3f-535e-a948-89c8f4cf20fd`, then Texture run
+`dcf2088c-836e-47db-8173-80f0adb7dcf3` failed at iteration zero with the same
+HTTP 401 `refresh_token_reused`. It was conditionally cancelled through the
+public lifecycle endpoint; the returned trajectory lifecycle version is 3.
+
+A cooldown-aware Z.AI retry then used the authenticated owner-visible policy
+surface and fresh trajectory `aca3504c-2ae0-5a4e-bab5-b22541e90585` with
+document `a6455ce7-cda1-5bdb-8d9b-d52af06bd519`. Texture run
+`f0d0e6ea-f98b-484c-9630-b6c849279118` failed at iteration zero because the
+Z.AI gateway circuit was open as upstream unhealthy. This is stronger
+availability evidence than the earlier single HTTP 429: waiting did not restore
+the provider path. The trajectory was publicly cancelled at lifecycle version
+3, the exact original policy bytes were restored again, and both temporary API
+keys were revoked and rejected on subsequent use.
+
+The dependency graph now converges rather than suggesting another runtime
+patch: lifecycle create and committed-start wake → exact Texture actor → guest
+gateway client → host gateway provider registry → server-owned provider
+credential/capacity. Every component through the host gateway boundary is
+proved on the exact product path; failure occurs at protected upstream provider
+auth/health. Computer-owned model policy controls selection but cannot author or
+renew server-owned credentials. Repository inspection found no scoped product
+API or `choir` CLI authority for provider credential renewal. The tracked
+`nix/deploy-provider-creds.sh` and the one-time recovery workflow are SSH-shaped
+operator paths, which standing question 9 classifies as break-glass rather than
+product operability and which this Definition explicitly forbids for acceptance.
+
+After more than three provider permutations and two fresh post-deployment
+trajectories, another incremental runtime/policy probe is not convergence. No such scoped
+non-SSH replacement was found in the inspected provider, gateway, auth, CLI,
+script, and workflow surfaces. The next transition must
+be an explicit human/operator restoration of the canonical host gateway
+credential or provider account capacity, or a separately ratified red mission
+to create an auditable scoped no-SSH renewal authority. This active Definition
+cannot silently expand into auth/gateway administration. Effects remain OFF;
+all fresh failure artifacts are retained cancelled rather than deleted.
