@@ -529,3 +529,30 @@ repair:
   rather than skipping Race or deleting coverage.
 
 Deploy and acceptance remain blocked; effects remain OFF.
+
+
+## Staging immutable-route acceptance blocker — 2026-08-08
+
+Candidate `99fc3e6b7bf151ddad1f0927ca18a24ba5275d10` passed race-selected
+CI run [`31257971088`](https://github.com/choir-hip/go-choir/actions/runs/31257971088),
+and the deployment receipt reports the exact sandbox and active-computer build
+at that SHA. The authenticated product path nevertheless refuses the new
+lifecycle create route with HTTP 404 `texture endpoint not found`.
+
+The authenticated current computer is `computer-03335285269bdba4f94377e56879f9e6`
+at realization epoch 130. `/api/compute/status` joins that computer to immutable
+code commit `7122f2799be4458f4b925be11990321c7e70ffc4`, not the reviewed candidate.
+The deployment log explains the discrepancy: it preserved the constructed
+`candidate-fleet-e15cb89f25d963c220319b7b` computer and refreshed a different
+active user's computer to `99fc3e6b`. Thus host health and the published
+activation receipt are not sufficient evidence that the owner-scoped stable
+computer serving this Definition runs the accepted source.
+
+This blocks all product-path continuous-supervision evidence, including real
+Linux capsule cleanup. It must not be bypassed with SSH, a test route, or a new
+candidate/worker computer, and it does not authorize an unreviewed promotion or
+route mutation. The next safe action must identify the existing constructed
+computer's authority and either perform the standard reviewed route/promotion
+transition with rollback and exact identity receipts, or obtain a separately
+authorized product acceptance environment whose immutable computer identity is
+joined to `99fc3e6b`. Effects remain OFF and the registries remain open.
