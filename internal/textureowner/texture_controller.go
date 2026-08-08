@@ -188,6 +188,32 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 	if err != nil {
 		return nil, fmt.Errorf("list pending lifecycle owner instructions: %w", err)
 	}
+	initialWorkWake := false
+	if len(updates) == 0 && len(instructions) == 0 {
+		snapshot, snapshotErr := rt.Store.GetLifecycleSnapshot(ctx, ownerID, doc.ComputerID, doc.TrajectoryID)
+		if snapshotErr != nil {
+			return nil, fmt.Errorf("load initial lifecycle Texture work: %w", snapshotErr)
+		}
+		for _, work := range snapshot.WorkItems {
+			if work.Status == types.WorkItemOpen && work.AssignedAgentID == textureAgentID {
+				initialWorkWake = true
+				break
+			}
+		}
+		if initialWorkWake {
+			runs, runsErr := rt.Store.ListLifecycleRunsByChannel(ctx, ownerID, doc.ComputerID, docID, 0)
+			if runsErr != nil {
+				return nil, fmt.Errorf("list initial lifecycle Texture runs: %w", runsErr)
+			}
+			for i := range runs {
+				if strings.TrimSpace(runs[i].AgentID) == textureAgentID &&
+					isTextureAgentRevisionTaskType(metadataStringValue(runs[i].Metadata, "type")) {
+					initialWorkWake = false
+					break
+				}
+			}
+		}
+	}
 	var scheduledSeq int64
 	for _, update := range updates {
 		if update.MessageSeq > scheduledSeq {
@@ -204,7 +230,7 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 	} else if reactivated {
 		return rec, nil
 	}
-	if len(updates) == 0 && len(instructions) == 0 {
+	if len(updates) == 0 && len(instructions) == 0 && !initialWorkWake {
 		return nil, nil
 	}
 	pendingCleanupCtx := context.WithoutCancel(ctx)
@@ -220,13 +246,17 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 			return nil, fmt.Errorf("stale unbound pending Texture mutation: %w", staleErr)
 		}
 	}
+	intent := firstNonEmpty(func() string {
+		if initialWorkWake {
+			return "initial_owner_work"
+		}
+		if len(instructions) > 0 {
+			return "apply_owner_instruction"
+		}
+		return ""
+	}(), "integrate_execution_findings")
 	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
-		Intent: firstNonEmpty(func() string {
-			if len(instructions) > 0 {
-				return "apply_owner_instruction"
-			}
-			return ""
-		}(), "integrate_execution_findings"),
+		Intent: intent,
 	}, scheduledSeq)
 	if err != nil {
 		return nil, fmt.Errorf("start reconciled Texture revision: %w", err)

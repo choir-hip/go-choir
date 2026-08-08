@@ -264,6 +264,11 @@ func TestLifecycleTextureResearcherOpenerDerivesIdentitiesAndCommitsBeforeWake(t
 
 func TestTextureLifecycleCreateExactReplayAndChangedPayloadConflict(t *testing.T) {
 	core, handler := testAPISetup(t)
+	var dispatches []string
+	core.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, _, _ string) error {
+		dispatches = append(dispatches, kind+":"+content)
+		return nil
+	})
 	post := func(owner, title, content string) *httptest.ResponseRecorder {
 		body, _ := json.Marshal(map[string]string{"client_request_id": "create-occurrence", "title": title, "initial_content": content})
 		req := httptest.NewRequest(http.MethodPost, "/api/texture/lifecycle-documents", strings.NewReader(string(body)))
@@ -287,6 +292,19 @@ func TestTextureLifecycleCreateExactReplayAndChangedPayloadConflict(t *testing.T
 		t.Fatalf("created=%+v", created)
 	}
 	createdSnapshot, _ := core.Store().GetLifecycleSnapshot(t.Context(), "user-1", "sandbox-test", created.TrajectoryID)
+	agent, err := core.Store().GetAgentByScope(t.Context(), "user-1", "sandbox-test", created.TargetAgentID)
+	if err != nil || agent.ActiveRunID == "" {
+		t.Fatalf("initial Texture activation agent=%+v err=%v", agent, err)
+	}
+	initialRun, err := core.Store().GetLifecycleRun(t.Context(), "user-1", "sandbox-test", agent.ActiveRunID)
+	if err != nil || metadataStringValue(initialRun.Metadata, "lifecycle_work_item_id") != created.TargetWorkItemID ||
+		metadataStringValue(initialRun.Metadata, "request_intent") != "initial_owner_work" ||
+		metadataStringValue(initialRun.Metadata, "request_source") != "" {
+		t.Fatalf("initial Texture activation run=%+v err=%v", initialRun, err)
+	}
+	if len(dispatches) != 1 || !strings.HasPrefix(dispatches[0], "initial_dispatch:") {
+		t.Fatalf("initial Texture dispatches=%v", dispatches)
+	}
 	replay := post("user-1", "Title", "private initial")
 	var replayed textureLifecycleCreateResponse
 	_ = json.Unmarshal(replay.Body.Bytes(), &replayed)
@@ -303,6 +321,37 @@ func TestTextureLifecycleCreateExactReplayAndChangedPayloadConflict(t *testing.T
 	snapshot, err := core.Store().GetLifecycleSnapshot(t.Context(), "user-1", "sandbox-test", created.TrajectoryID)
 	if err != nil || snapshot.Document.DocID != created.DocID || snapshot.HeadRevision.RevisionID != created.RevisionID || snapshot.HeadRevision.Content != "private initial" || len(snapshot.WorkItems) != 1 || snapshot.WorkItems[0].AssignedAgentID != created.TargetAgentID {
 		t.Fatalf("created lifecycle snapshot=%+v err=%v", snapshot, err)
+	}
+	if len(dispatches) != 1 {
+		t.Fatalf("create replay/conflict redispatched initial work: %v", dispatches)
+	}
+}
+
+func TestLifecycleTextureInitialWorkWakeRecoversCommittedStartExactlyOnce(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	var dispatches []string
+	core.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, _, _ string) error {
+		dispatches = append(dispatches, kind+":"+content)
+		return nil
+	})
+
+	run, err := handler.ReconcileAgentWake(t.Context(), start.OwnerID, start.InitialDocument.DocID)
+	if err != nil || run == nil || run.AgentID != start.Agent.AgentID || run.TrajectoryID != start.TrajectoryID ||
+		metadataStringValue(run.Metadata, "lifecycle_work_item_id") != start.InitialWork.WorkItemID ||
+		metadataStringValue(run.Metadata, "current_revision_id") != start.InitialRevision.RevisionID ||
+		metadataStringValue(run.Metadata, "request_intent") != "initial_owner_work" ||
+		metadataStringValue(run.Metadata, "request_source") != "" {
+		t.Fatalf("committed-start recovery run=%+v err=%v", run, err)
+	}
+	if len(dispatches) != 1 || !strings.HasPrefix(dispatches[0], "initial_dispatch:") {
+		t.Fatalf("committed-start recovery dispatches=%v", dispatches)
+	}
+	if duplicate, err := handler.ReconcileAgentWake(t.Context(), start.OwnerID, start.InitialDocument.DocID); err != nil || duplicate != nil {
+		t.Fatalf("committed-start replay=%+v err=%v", duplicate, err)
+	}
+	if len(dispatches) != 1 {
+		t.Fatalf("committed-start replay redispatched: %v", dispatches)
 	}
 }
 
