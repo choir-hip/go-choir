@@ -187,10 +187,19 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 	if err != nil {
 		return nil, fmt.Errorf("list pending lifecycle Texture updates: %w", err)
 	}
+	instructions, err := rt.Store.ListPendingLifecycleOwnerInstructions(ctx, ownerID, doc.ComputerID, doc.TrajectoryID, textureAgentID, 100)
+	if err != nil {
+		return nil, fmt.Errorf("list pending lifecycle owner instructions: %w", err)
+	}
 	var scheduledSeq int64
 	for _, update := range updates {
 		if update.MessageSeq > scheduledSeq {
 			scheduledSeq = update.MessageSeq
+		}
+	}
+	for _, instruction := range instructions {
+		if instruction.ReducerSeq > scheduledSeq {
+			scheduledSeq = instruction.ReducerSeq
 		}
 	}
 	if rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq); err != nil {
@@ -198,7 +207,7 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 	} else if reactivated {
 		return rec, nil
 	}
-	if len(updates) == 0 {
+	if len(updates) == 0 && len(instructions) == 0 {
 		return nil, nil
 	}
 	pendingCleanupCtx := context.WithoutCancel(ctx)
@@ -215,7 +224,12 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 		}
 	}
 	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
-		Intent: "integrate_execution_findings",
+		Intent: firstNonEmpty(func() string {
+			if len(instructions) > 0 {
+				return "apply_owner_instruction"
+			}
+			return ""
+		}(), "integrate_execution_findings"),
 	}, scheduledSeq)
 	if err != nil {
 		return nil, fmt.Errorf("start reconciled Texture revision: %w", err)
