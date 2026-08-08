@@ -74,16 +74,13 @@ func TestPolicyFor(t *testing.T) {
 			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
 			AllowedSpawnTargets: []string{Texture}, AllowedMessageTargets: []string{Texture},
 		},
-		Email: {Profile: Email},
-		CoSuper: {
-			Profile: CoSuper, AllowReadOnlyFiles: true, AllowEvidenceTools: true,
-			AllowModelDiagnosticTools: true, AllowedMessageTargets: []string{Super, Texture},
-		},
+		Email:   {Profile: Email},
+		CoSuper: {Profile: CoSuper},
 		Super: {
 			Profile: Super, AllowReadOnlyFiles: true, AllowResearchTools: true,
 			AllowEvidenceTools: true, AllowMemoryTools: true,
 			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
-			AllowedSpawnTargets: []string{Researcher, CoSuper}, AllowedMessageTargets: []string{Texture, Researcher, CoSuper},
+			AllowedSpawnTargets: []string{Researcher}, AllowedMessageTargets: []string{Texture, Researcher},
 		},
 	}
 	for profile, want := range tests {
@@ -108,14 +105,13 @@ func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
 	profiles := []string{Conductor, Super, CoSuper, Researcher, Texture, Processor, Reconciler, Email}
 	spawn := map[string]map[string]bool{
 		Conductor:  {Texture: true},
-		Super:      {Researcher: true, CoSuper: true},
+		Super:      {Researcher: true},
 		Texture:    {Researcher: true},
 		Processor:  {Texture: true},
 		Reconciler: {Texture: true},
 	}
 	message := map[string]map[string]bool{
-		Super:      {Texture: true, Researcher: true, CoSuper: true},
-		CoSuper:    {Super: true, Texture: true},
+		Super:      {Texture: true, Researcher: true},
 		Researcher: {Texture: true},
 		Texture:    {Researcher: true, Super: true},
 		Processor:  {Texture: true},

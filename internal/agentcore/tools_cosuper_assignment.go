@@ -34,20 +34,17 @@ func newAssignCoSuperTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		Objective        string                      `json:"objective"`
 		Kind             types.CoSuperAssignmentKind `json:"kind"`
-		Attempt          uint64                      `json:"attempt"`
-		ScopeDigest      string                      `json:"scope_digest"`
-		SubjectDigest    string                      `json:"subject_digest"`
 		ParentWorkItemID string                      `json:"parent_work_item_id"`
+		CandidateID      string                      `json:"candidate_id,omitempty"`
 	}
 	return toolregistry.Tool{
 		Name: "assign_co_super", Description: "Open one exact durable assignment and, only after its bind receipt commits, wake a writable networkless capsule CoSuper.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"objective":    map[string]any{"type": "string"},
-			"kind":         map[string]any{"type": "string", "enum": []string{"implementation", "verification"}},
-			"attempt":      map[string]any{"type": "integer"},
-			"scope_digest": map[string]any{"type": "string"}, "subject_digest": map[string]any{"type": "string"},
+			"objective":           map[string]any{"type": "string"},
+			"kind":                map[string]any{"type": "string", "enum": []string{"implementation", "verification"}},
 			"parent_work_item_id": map[string]any{"type": "string"},
-		}, []string{"objective", "kind", "attempt", "scope_digest", "subject_digest", "parent_work_item_id"}, false),
+			"candidate_id":        map[string]any{"type": "string", "description": "Required only for verification; exact candidate returned by a completed implementation assignment."},
+		}, []string{"objective", "kind", "parent_work_item_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			parent, err := requirePersistentSuperExecution(ctx)
 			if err != nil {
@@ -59,8 +56,7 @@ func newAssignCoSuperTool(rt *Runtime) toolregistry.Tool {
 			}
 			execution := toolregistry.ExecutionContextFrom(ctx)
 			started, err := rt.startAssignedCoSuper(ctx, parent.RunID, parent.OwnerID, StartAssignedCoSuperRequest{
-				Objective: input.Objective, Kind: input.Kind, Attempt: input.Attempt,
-				ScopeDigest: input.ScopeDigest, SubjectDigest: input.SubjectDigest,
+				Objective: input.Objective, Kind: input.Kind, CandidateID: input.CandidateID,
 				ParentWorkItemID: input.ParentWorkItemID, ToolCallID: execution.ToolCallID,
 			})
 			if err != nil {
@@ -79,14 +75,13 @@ func newAssignCoSuperTool(rt *Runtime) toolregistry.Tool {
 func newCancelAssignedCoSuperTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		AssignmentID string `json:"assignment_id"`
-		Attempt      uint64 `json:"attempt"`
 		Reason       string `json:"reason"`
 	}
 	return toolregistry.Tool{
 		Name: "cancel_co_super_assignment", Description: "Durably revoke and executor-acknowledge one exact assignment capsule before cancellation.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"assignment_id": map[string]any{"type": "string"}, "attempt": map[string]any{"type": "integer"}, "reason": map[string]any{"type": "string"},
-		}, []string{"assignment_id", "attempt", "reason"}, false),
+			"assignment_id": map[string]any{"type": "string"}, "reason": map[string]any{"type": "string"},
+		}, []string{"assignment_id", "reason"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			parent, err := requirePersistentSuperExecution(ctx)
 			if err != nil {
@@ -96,7 +91,7 @@ func newCancelAssignedCoSuperTool(rt *Runtime) toolregistry.Tool {
 			if err := json.Unmarshal(raw, &input); err != nil {
 				return "", err
 			}
-			assignment, err := rt.cancelAssignedCoSuper(ctx, *parent, strings.TrimSpace(input.AssignmentID), input.Attempt, input.Reason)
+			assignment, err := rt.cancelAssignedCoSuper(ctx, *parent, strings.TrimSpace(input.AssignmentID), 1, input.Reason)
 			if err != nil {
 				return "", err
 			}

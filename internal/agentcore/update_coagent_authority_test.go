@@ -259,46 +259,17 @@ func legacyRequesterFixture(profile, targetProfile string) (*Runtime, *coagentAu
 	return rt, f, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&caller)), targetID
 }
 
-func TestResolveCoagentUpdateAuthoritySuperOnlyExactAssignedCoSuper(t *testing.T) {
+func TestResolveCoagentUpdateAuthorityRefusesLegacySuperCoSuperMessaging(t *testing.T) {
 	rt, f, _, _ := legacyRequesterFixture(agentprofile.CoSuper, agentprofile.Super)
 	superRun := f.legacyRuns["legacy-parent-run"]
 	child := f.legacyRuns["legacy-child-run"]
-	workID := "legacy-cosuper-work"
-	child.Metadata["work_item_ids"] = []string{workID}
-	f.legacyRuns[child.RunID] = child
-	target := f.agents[child.AgentID]
-	target.ActiveRunID = child.RunID
-	f.agents[child.AgentID] = target
-	f.legacyWork[workID] = types.WorkItemRecord{WorkItemID: workID, OwnerID: superRun.OwnerID, ComputerID: superRun.SandboxID, TrajectoryID: superRun.TrajectoryID, AssignedAgentID: child.AgentID, CreatedByRunID: superRun.RunID, Status: types.WorkItemOpen}
-	key := superRun.TrajectoryID + "\x00" + child.AgentID
-	f.slots[key] = store.CoSuperSlotRecord{OwnerID: superRun.OwnerID, TrajectoryID: superRun.TrajectoryID, RunID: child.RunID, AgentID: child.AgentID, RequestedByRunID: superRun.RunID}
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&superRun))
-	if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, child.AgentID, ""); err != nil {
-		t.Fatalf("exact assigned CoSuper refused: %v", err)
-	}
-	v := f.legacyWork[workID]
-	v.CreatedByRunID = "arbitrary-super-run"
-	f.legacyWork[workID] = v
 	if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, child.AgentID, ""); err == nil {
-		t.Fatal("CoSuper assigned to arbitrary Super accepted")
+		t.Fatal("persistent Super retained legacy update_coagent path to CoSuper")
 	}
-}
-
-func TestResolveCoagentUpdateAuthorityCoSuperOnlyExactOwningSuper(t *testing.T) {
 	rt, f, ctx, target := legacyRequesterFixture(agentprofile.CoSuper, agentprofile.Super)
-	caller := toolregistry.ExecutionContextFrom(ctx).RunRecord
-	key := caller.TrajectoryID + "\x00" + caller.AgentID
-	f.slots[key] = store.CoSuperSlotRecord{OwnerID: caller.OwnerID, TrajectoryID: caller.TrajectoryID, RunID: caller.RunID, AgentID: caller.AgentID, RequestedByRunID: caller.RequestedByRunID}
-	if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, ""); err != nil {
-		t.Fatalf("exact owning Super refused: %v", err)
-	}
-	delete(f.slots, key)
 	if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, ""); err == nil {
-		t.Fatal("CoSuper without assignment slot accepted")
-	}
-	f.errors["slot:"+key] = errors.New("slot lookup failed")
-	if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, ""); err == nil {
-		t.Fatal("CoSuper slot lookup error accepted")
+		t.Fatal("CoSuper retained legacy update_coagent path to Super")
 	}
 }
 

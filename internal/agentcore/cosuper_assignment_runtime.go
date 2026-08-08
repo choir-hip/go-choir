@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -39,9 +40,7 @@ type assignmentCapsuleRuntime interface {
 type StartAssignedCoSuperRequest struct {
 	Objective        string
 	Kind             types.CoSuperAssignmentKind
-	Attempt          uint64
-	ScopeDigest      string
-	SubjectDigest    string
+	CandidateID      string
 	ParentWorkItemID string
 	ToolCallID       string
 }
@@ -54,10 +53,7 @@ type AssignedCoSuperStart struct {
 
 func deterministicAssignmentIdentity(parent types.RunRecord, req StartAssignedCoSuperRequest) string {
 	seed := strings.Join([]string{
-		"choir:co-super-assignment:v1", parent.OwnerID, parent.SandboxID,
-		metadataStringValue(parent.Metadata, "assignment_trajectory_id"), parent.RunID,
-		strings.TrimSpace(req.ParentWorkItemID), strings.TrimSpace(req.ToolCallID),
-		fmt.Sprint(req.Attempt), string(req.Kind), strings.TrimSpace(req.ScopeDigest), strings.TrimSpace(req.SubjectDigest), strings.TrimSpace(req.Objective),
+		"choir:co-super-assignment:v2", parent.RunID, strings.TrimSpace(req.ToolCallID),
 	}, "\x00")
 	return "assignment-" + uuid.NewSHA1(uuid.NameSpaceOID, []byte(seed)).String()
 }
@@ -82,11 +78,13 @@ func (rt *Runtime) startAssignedCoSuper(ctx context.Context, parentRunID, ownerI
 }
 
 func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent types.RunRecord, req StartAssignedCoSuperRequest) (AssignedCoSuperStart, error) {
-	req.Objective = strings.TrimSpace(req.Objective)
-	if req.Objective == "" || req.Attempt == 0 || strings.TrimSpace(req.ParentWorkItemID) == "" || strings.TrimSpace(req.ToolCallID) == "" ||
-		(req.Kind != types.CoSuperAssignmentImplementation && req.Kind != types.CoSuperAssignmentVerification) ||
-		!types.ValidSHA256Digest(req.ScopeDigest) || !types.ValidSHA256Digest(req.SubjectDigest) {
-		return AssignedCoSuperStart{}, fmt.Errorf("assigned CoSuper requires objective, kind, attempt, scope digest, and immutable subject digest")
+	req.Objective, req.CandidateID = strings.TrimSpace(req.Objective), strings.TrimSpace(req.CandidateID)
+	if req.Objective == "" || strings.TrimSpace(req.ParentWorkItemID) == "" || strings.TrimSpace(req.ToolCallID) == "" ||
+		(req.Kind != types.CoSuperAssignmentImplementation && req.Kind != types.CoSuperAssignmentVerification) {
+		return AssignedCoSuperStart{}, fmt.Errorf("assigned CoSuper requires objective, kind, parent work, and authenticated tool-call identity")
+	}
+	if (req.Kind == types.CoSuperAssignmentVerification) != (req.CandidateID != "") {
+		return AssignedCoSuperStart{}, fmt.Errorf("verification requires one exact candidate_id and implementation forbids it")
 	}
 	ownerID, computerID := strings.TrimSpace(parent.OwnerID), strings.TrimSpace(parent.SandboxID)
 	if ownerID == "" || computerID == "" || parent.AgentID != persistentSuperAgentID(ownerID) ||
@@ -96,15 +94,23 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	}
 	trajectoryID := metadataStringValue(parent.Metadata, "assignment_trajectory_id")
 	parentWorkID := strings.TrimSpace(req.ParentWorkItemID)
-	parentControlID := runtimePersistentSuperControlID(parent.Metadata, trajectoryID, parentWorkID)
-	if trajectoryID == "" || parentControlID == "" {
-		return AssignedCoSuperStart{}, fmt.Errorf("persistent Super run lacks exact lifecycle control binding for selected work")
+	if trajectoryID == "" {
+		return AssignedCoSuperStart{}, fmt.Errorf("persistent Super run lacks exact lifecycle trajectory binding")
 	}
-	parentDecisionID := "decision:" + objectgraph.SHA256([]byte(strings.Join([]string{
-		"choir:co-super-decision:v1", ownerID, computerID, parent.RunID, trajectoryID, parentWorkID, parentControlID, strings.TrimSpace(req.ToolCallID),
-	}, "\x00")))
+	attempt := uint64(1) // one authenticated tool call is one runtime-derived attempt
 	assignmentID := deterministicAssignmentIdentity(parent, req)
-	if existing, getErr := rt.store.GetCoSuperAssignment(ctx, ownerID, computerID, assignmentID, req.Attempt); getErr == nil {
+	requestDigest := objectgraph.SHA256([]byte(strings.Join([]string{
+		"choir:co-super-request:v1", req.Objective, string(req.Kind), req.CandidateID, parentWorkID,
+	}, "\x00")))
+	// Replay is resolved before reading mutable current source/work projections.
+	// The authenticated provider call identity is the authority; changed semantic
+	// arguments conflict under that same identity.
+	if existing, getErr := rt.store.GetCoSuperAssignment(ctx, ownerID, computerID, assignmentID, attempt); getErr == nil {
+		if existing.Binding.ParentRunID != parent.RunID || existing.Binding.ParentWorkItemID != parentWorkID ||
+			existing.Binding.Kind != req.Kind || existing.Binding.RequestDigest != requestDigest ||
+			existing.Binding.SourceCandidateID != req.CandidateID {
+			return AssignedCoSuperStart{}, store.ErrCoSuperAssignmentCommandConflict
+		}
 		if existing.Disposition == types.CoSuperAssignmentBound || existing.Disposition.Terminal() {
 			run := types.RunRecord{}
 			if existing.BoundRunID != "" {
@@ -116,11 +122,75 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	} else if !errors.Is(getErr, store.ErrNotFound) {
 		return AssignedCoSuperStart{}, getErr
 	}
+	parentControlID := runtimePersistentSuperControlID(parent.Metadata, trajectoryID, parentWorkID)
+	if parentControlID == "" {
+		return AssignedCoSuperStart{}, fmt.Errorf("persistent Super run lacks exact lifecycle control binding for selected work")
+	}
+	parentDecisionID := "decision:" + objectgraph.SHA256([]byte(strings.Join([]string{
+		"choir:co-super-decision:v2", ownerID, computerID, parent.RunID, trajectoryID, parentWorkID, parentControlID, strings.TrimSpace(req.ToolCallID),
+	}, "\x00")))
+	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return AssignedCoSuperStart{}, fmt.Errorf("derive assignment scope: %w", err)
+	}
+	var deliveredControl *types.CoagentSourcePacket
+	var parentWork *types.WorkItemRecord
+	for i := range snapshot.Updates {
+		if snapshot.Updates[i].UpdateID == parentControlID && snapshot.Updates[i].TargetWorkItemID == parentWorkID &&
+			snapshot.Updates[i].DeliveredToRunID == parent.RunID && snapshot.Updates[i].DeliveredAt != nil {
+			copy := snapshot.Updates[i]
+			deliveredControl = &copy
+			break
+		}
+	}
+	for i := range snapshot.WorkItems {
+		if snapshot.WorkItems[i].WorkItemID == parentWorkID && snapshot.WorkItems[i].AssignedAgentID == parent.AgentID {
+			copy := snapshot.WorkItems[i]
+			parentWork = &copy
+			break
+		}
+	}
+	if deliveredControl == nil || parentWork == nil {
+		return AssignedCoSuperStart{}, fmt.Errorf("derive assignment scope: exact delivered control/work join unavailable")
+	}
+	scopeBytes, err := json.Marshal(struct {
+		Control types.CoagentSourcePacket `json:"control"`
+		Work    types.WorkItemRecord      `json:"work"`
+	}{*deliveredControl, *parentWork})
+	if err != nil {
+		return AssignedCoSuperStart{}, err
+	}
+	scopeDigest := objectgraph.SHA256(scopeBytes)
+	sourceArtifactRef := ""
+	if req.Kind == types.CoSuperAssignmentVerification {
+		candidate, candidateErr := rt.store.GetCoSuperSubjectCandidate(ctx, ownerID, computerID, req.CandidateID)
+		if candidateErr != nil || candidate.TrajectoryID != trajectoryID || candidate.ArtifactRef == "" {
+			return AssignedCoSuperStart{}, fmt.Errorf("verification candidate is unavailable or outside exact trajectory authority")
+		}
+		implementation, loadErr := rt.store.GetCoSuperAssignment(ctx, ownerID, computerID, candidate.AssignmentID, candidate.Attempt)
+		if loadErr != nil || implementation.Binding.Kind != types.CoSuperAssignmentImplementation ||
+			implementation.Binding.ParentAgentID != parent.AgentID || implementation.Binding.ParentWorkItemID != parentWorkID ||
+			implementation.Binding.TrajectoryID != trajectoryID || implementation.Disposition != types.CoSuperAssignmentCompleted {
+			return AssignedCoSuperStart{}, fmt.Errorf("verification candidate is not an exact completed implementation artifact")
+		}
+		sourceArtifactRef = candidate.ArtifactRef
+	}
+	preflight, err := rt.capsuleExecutor.PreflightSourceSnapshot(ctx, sourceArtifactRef)
+	if err != nil {
+		return AssignedCoSuperStart{}, fmt.Errorf("preflight immutable assignment subject: %w", err)
+	}
+	subjectDigest := "sha256:" + strings.TrimPrefix(preflight.SubjectDigest, "sha256:")
+	if req.Kind == types.CoSuperAssignmentVerification {
+		candidate, _ := rt.store.GetCoSuperSubjectCandidate(ctx, ownerID, computerID, req.CandidateID)
+		if candidate.SubjectDigest != subjectDigest || candidate.ArtifactRef != preflight.ArtifactRef {
+			return AssignedCoSuperStart{}, fmt.Errorf("verification candidate artifact digest mismatch")
+		}
+	}
 
 	agentID := "co-super:" + assignmentID
 	workID := "work:" + assignmentID
 	runID := "run:" + assignmentID
-	capsuleID := "capsule-" + strings.TrimPrefix(uuid.NewSHA1(uuid.NameSpaceOID, []byte(assignmentID+"\x00"+fmt.Sprint(req.Attempt))).String(), "-")
+	capsuleID := "capsule-" + strings.TrimPrefix(uuid.NewSHA1(uuid.NameSpaceOID, []byte(assignmentID+"\x00"+fmt.Sprint(attempt))).String(), "-")
 	opaque, err := opaqueAssignmentCapability()
 	if err != nil {
 		return AssignedCoSuperStart{}, err
@@ -129,13 +199,14 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
 		ParentAgentID: parent.AgentID, ParentRunID: parent.RunID, ParentDecisionID: parentDecisionID,
 		ParentControlID: parentControlID, ParentWorkItemID: parentWorkID,
-		AssignedWorkItemID: workID, AssignedAgentID: agentID, Kind: req.Kind, Attempt: req.Attempt,
-		ScopeDigest: req.ScopeDigest, CapabilityDigest: store.DigestCoSuperOpaqueCapability(opaque), SubjectDigest: req.SubjectDigest,
+		AssignedWorkItemID: workID, AssignedAgentID: agentID, Kind: req.Kind, Attempt: attempt,
+		ScopeDigest: scopeDigest, RequestDigest: requestDigest, CapabilityDigest: store.DigestCoSuperOpaqueCapability(opaque), SubjectDigest: subjectDigest,
+		SourceArtifactRef: preflight.ArtifactRef, SourceCandidateID: req.CandidateID,
 		Writable: true, CapsuleID: capsuleID, NetworkMode: types.CoSuperCapsuleNetworkForbidden,
 		FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
 	}
 	open := types.OpenCoSuperAssignmentRequest{
-		CommandID: "co-super-open:" + assignmentID + fmt.Sprintf(":%d", req.Attempt), AssignmentID: assignmentID, Binding: binding,
+		CommandID: "co-super-open:" + assignmentID + fmt.Sprintf(":%d", attempt), AssignmentID: assignmentID, Binding: binding,
 		AssignedAgent: types.AgentRecord{AgentID: agentID},
 		AssignedWork:  types.WorkItemRecord{WorkItemID: workID, AssignedAgentID: agentID, Objective: req.Objective},
 	}
@@ -148,10 +219,10 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		return AssignedCoSuperStart{}, err
 	}
 	cancelOpen := func(cause error) error {
-		current, loadErr := rt.store.GetCoSuperAssignment(context.Background(), ownerID, computerID, assignmentID, req.Attempt)
+		current, loadErr := rt.store.GetCoSuperAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
 		if loadErr == nil && !current.Disposition.Terminal() {
 			cancel := types.CancelCoSuperAssignmentRequest{CommandID: "co-super-open-failed:" + assignmentID, OwnerID: ownerID, ComputerID: computerID,
-				AssignmentID: assignmentID, Attempt: req.Attempt, ExpectedLifecycleVersion: current.LifecycleVersion, Reason: cause.Error()}
+				AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: current.LifecycleVersion, Reason: cause.Error()}
 			cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
 			_, _ = rt.store.CancelCoSuperAssignment(context.Background(), cancel)
 		}
@@ -159,12 +230,13 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	}
 	created, err := rt.capsuleExecutor.Spawn(ctx, capsule.SpawnSpec{CapsuleID: capsuleID, OwnerRunID: runID,
 		MemoryMax: coSuperAssignmentMemoryMax, CpuQuota: coSuperAssignmentCPUQuota, CpuPeriod: 100000, PidsMax: coSuperAssignmentPidsMax,
-		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium})
+		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
+		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest})
 	if err != nil {
 		return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("spawn assigned capsule after durable open: %w", err))
 	}
 	cleanupCapsule := func(cause error) error {
-		current, loadErr := rt.store.GetCoSuperAssignment(context.Background(), ownerID, computerID, assignmentID, req.Attempt)
+		current, loadErr := rt.store.GetCoSuperAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
 		if loadErr != nil {
 			return fmt.Errorf("%w (load opened assignment for capsule cleanup: %v)", cause, loadErr)
 		}
@@ -188,7 +260,7 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 			return fmt.Errorf("%w (persist pre-bind capsule revoke acknowledgement: %v)", cause, fateErr)
 		}
 		cancel := types.CancelCoSuperAssignmentRequest{CommandID: "co-super-open-failed:" + assignmentID, OwnerID: ownerID, ComputerID: computerID,
-			AssignmentID: assignmentID, Attempt: req.Attempt, ExpectedLifecycleVersion: acked.Assignment.LifecycleVersion, Reason: cause.Error()}
+			AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: acked.Assignment.LifecycleVersion, Reason: cause.Error()}
 		cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
 		if _, cancelErr := rt.store.CancelCoSuperAssignment(context.Background(), cancel); cancelErr != nil {
 			return fmt.Errorf("%w (cancel pre-bind assignment after revoke ack: %v)", cause, cancelErr)
@@ -209,16 +281,17 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 			runMetadataAgentProfile: agentprofile.CoSuper, runMetadataAgentRole: agentprofile.CoSuper, runMetadataAgentID: agentID,
 			runMetadataTrajectoryID: trajectoryID, "work_item_ids": []string{workID}, "lifecycle_work_item_id": workID,
 			"requested_by_agent_id": parent.AgentID, "requested_by_profile": agentprofile.Super,
-			"assignment_id": assignmentID, "assignment_attempt": req.Attempt, "assignment_kind": string(req.Kind),
+			"assignment_id": assignmentID, "assignment_attempt": attempt, "assignment_kind": string(req.Kind),
 			"assigned_work_item_id": workID, "capsule_id": capsuleID,
 			"parent_decision_id": parentDecisionID, "parent_control_id": parentControlID,
-			"parent_work_item_id": parentWorkID, "scope_digest": req.ScopeDigest,
-			"capability_digest": binding.CapabilityDigest, "subject_digest": req.SubjectDigest,
+			"parent_work_item_id": parentWorkID, "scope_digest": scopeDigest, "request_digest": requestDigest,
+			"capability_digest": binding.CapabilityDigest, "subject_digest": subjectDigest,
+			"source_artifact_ref": preflight.ArtifactRef, "source_candidate_id": req.CandidateID,
 		},
 	}
 	bind := types.BindCoSuperAssignmentRequest{
-		CommandID: "co-super-bind:" + assignmentID + fmt.Sprintf(":%d", req.Attempt), OwnerID: ownerID, ComputerID: computerID,
-		AssignmentID: assignmentID, Attempt: req.Attempt, ExpectedLifecycleVersion: opened.Assignment.LifecycleVersion,
+		CommandID: "co-super-bind:" + assignmentID + fmt.Sprintf(":%d", attempt), OwnerID: ownerID, ComputerID: computerID,
+		AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: opened.Assignment.LifecycleVersion,
 		RunID: runID, Run: run, OpaqueCapability: opaque, CapsuleID: capsuleID,
 	}
 	bind.CommandDigest, err = store.ComputeBindCoSuperAssignmentDigest(bind)

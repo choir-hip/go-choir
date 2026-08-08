@@ -17,9 +17,9 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
 	if assignmentID == "" && attempt == 0 {
-		return base, "", nil // legacy/unassigned CoSuper sees no capsule schemas
+		return nil, "", fmt.Errorf("unassigned CoSuper cannot execute")
 	}
-	if assignmentID == "" || attempt == 0 || rt.capsuleExecutor == nil || base == nil {
+	if assignmentID == "" || attempt == 0 || rt.capsuleExecutor == nil {
 		return nil, "", fmt.Errorf("assigned CoSuper tool overlay binding unavailable")
 	}
 	lookup := rt.assignmentLookup
@@ -36,7 +36,10 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 		metadataStringValue(rec.Metadata, "capsule_id") != assignment.Binding.CapsuleID ||
 		metadataStringValue(rec.Metadata, "capability_digest") != assignment.Binding.CapabilityDigest ||
 		metadataStringValue(rec.Metadata, "assigned_work_item_id") != assignment.Binding.AssignedWorkItemID ||
-		metadataStringValue(rec.Metadata, "assignment_kind") != string(assignment.Binding.Kind) {
+		metadataStringValue(rec.Metadata, "assignment_kind") != string(assignment.Binding.Kind) ||
+		metadataStringValue(rec.Metadata, "request_digest") != assignment.Binding.RequestDigest ||
+		metadataStringValue(rec.Metadata, "source_artifact_ref") != assignment.Binding.SourceArtifactRef ||
+		metadataStringValue(rec.Metadata, "source_candidate_id") != assignment.Binding.SourceCandidateID {
 		return nil, "", fmt.Errorf("assigned CoSuper durable run binding mismatch")
 	}
 	resolver := rt.assignmentHandleResolver
@@ -47,11 +50,11 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 	if err != nil || strings.TrimSpace(handle) == "" {
 		return nil, "", fmt.Errorf("assigned CoSuper runtime capability unavailable: %w", err)
 	}
-	registry, err := toolregistry.NewToolRegistryWithTools(base.Tools()...)
+	// Never clone the static profile registry. Assignment authority is a fresh
+	// exact closed set so no read_file/glob/grep/evidence/model/update callback
+	// can cross the durable assignment boundary by registry inheritance.
+	registry, err := buildAssignedCoSuperRegistry(rt)
 	if err != nil {
-		return nil, "", err
-	}
-	if err := RegisterCapsuleLocalTools(registry, rt); err != nil {
 		return nil, "", err
 	}
 	return registry, handle, nil

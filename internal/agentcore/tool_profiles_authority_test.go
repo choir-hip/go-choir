@@ -3,13 +3,17 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
@@ -28,12 +32,8 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 	expected := map[string][]string{
 		agentprofile.Conductor: {"cancel_agent"},
 		agentprofile.Super: append(append(slices.Clone(ordinary),
-			"update_coagent"),
-			"assign_co_super", "cancel_co_super_assignment", "destroy_capsule", "inspect_capsule", "list_capsules", "spawn_capsule"),
-		agentprofile.CoSuper: {
-			"glob", "grep", "list_evidence", "read_evidence", "read_file", "save_evidence",
-			"update_coagent", "verify_model_capability",
-		},
+			"update_coagent"), "assign_co_super", "cancel_co_super_assignment"),
+		agentprofile.CoSuper:    {},
 		agentprofile.Researcher: append(slices.Clone(ordinary), "update_coagent"),
 		agentprofile.Texture:    {"cancel_agent", "get_run_memory_entry"},
 		agentprofile.Processor: append(append(slices.Clone(ordinary), "update_coagent"),
@@ -94,43 +94,18 @@ func TestDelegatedCoSuperCannotReachHostEffectToolsOrCallbacks(t *testing.T) {
 	}
 }
 
-func TestDelegatedCoSuperBuilderAcceptsOnlyAssignmentInstallers(t *testing.T) {
-	calls := map[string]int{}
-	installer := func(name string) registryToolInstaller {
-		return func(registry *toolregistry.ToolRegistry) error {
-			calls[name]++
-			return registry.Register(toolregistry.Tool{
-				Name: name,
-				Func: func(context.Context, json.RawMessage) (string, error) {
-					calls[name+" callback"]++
-					return name, nil
-				},
-			})
-		}
-	}
-	registry, err := buildDelegatedCoSuperRegistry(delegatedCoSuperRegistryInputs{
-		ReadOnlyFiles:   installer("read"),
-		Evidence:        installer("evidence"),
-		ModelDiagnostic: installer("model-diagnostic"),
-		CoagentResult:   installer("coagent-result"),
-		CapsuleLocal:    installer("capsule-local"),
-	})
+func TestAssignedCoSuperBuilderIsExactClosedSet(t *testing.T) {
+	registry, err := buildAssignedCoSuperRegistry(nil)
 	if err != nil {
-		t.Fatalf("build delegated registry: %v", err)
+		t.Fatalf("build assigned registry: %v", err)
 	}
-	want := []string{"capsule-local", "coagent-result", "evidence", "model-diagnostic", "read"}
+	want := []string{"capsule_exec", "capsule_list_dir", "capsule_read_file", "capsule_write_file", "record_assignment_result"}
 	if got := registryToolNames(registry); !slices.Equal(got, want) {
-		t.Fatalf("delegated builder tools = %v, want %v", got, want)
+		t.Fatalf("assigned registry tools = %v, want exact %v", got, want)
 	}
-	for _, name := range want {
-		if calls[name] != 1 {
-			t.Errorf("%s installer calls = %d, want 1", name, calls[name])
-		}
-		if _, err := registry.Execute(context.Background(), name, json.RawMessage(`{}`)); err != nil {
-			t.Errorf("execute %s: %v", name, err)
-		}
-		if calls[name+" callback"] != 1 {
-			t.Errorf("%s backing callback calls = %d, want 1", name, calls[name+" callback"])
+	for _, absent := range []string{"read_file", "glob", "grep", "save_evidence", "verify_model_capability", "update_coagent", "spawn_agent", "spawn_capsule", "destroy_capsule"} {
+		if _, ok := registry.Lookup(absent); ok {
+			t.Fatalf("assigned registry inherited forbidden callback %q", absent)
 		}
 	}
 }
@@ -167,4 +142,91 @@ func registryToolNames(registry *toolregistry.ToolRegistry) []string {
 		names[index] = tool.Name
 	}
 	return names
+}
+
+func TestAssignCoSuperSchemaHasNoModelAuthoredRuntimeBindings(t *testing.T) {
+	registry := toolregistry.MustNewToolRegistry()
+	if err := RegisterAssignedCoSuperTools(registry, &Runtime{}); err != nil {
+		t.Fatal(err)
+	}
+	tool, ok := registry.Lookup("assign_co_super")
+	if !ok {
+		t.Fatal("assign_co_super missing")
+	}
+	properties, _ := tool.Parameters["properties"].(map[string]any)
+	for _, forbidden := range []string{"attempt", "scope_digest", "subject_digest", "assignment_id", "capsule_id"} {
+		if _, present := properties[forbidden]; present {
+			t.Fatalf("model-authored runtime binding %q remains in schema", forbidden)
+		}
+	}
+	for _, required := range []string{"objective", "kind", "parent_work_item_id", "candidate_id"} {
+		if _, present := properties[required]; !present {
+			t.Fatalf("assignment semantic field %q missing", required)
+		}
+	}
+	cancel, ok := registry.Lookup("cancel_co_super_assignment")
+	if !ok {
+		t.Fatal("cancel assignment missing")
+	}
+	cancelProperties, _ := cancel.Parameters["properties"].(map[string]any)
+	if _, present := cancelProperties["attempt"]; present {
+		t.Fatal("cancel schema retains model-authored attempt")
+	}
+}
+
+func TestAssignmentIdentityUsesOnlyAuthenticatedParentRunAndToolCall(t *testing.T) {
+	parent := types.RunRecord{RunID: "parent-run", OwnerID: "owner", SandboxID: "computer"}
+	left := StartAssignedCoSuperRequest{Objective: "one", Kind: types.CoSuperAssignmentImplementation, ParentWorkItemID: "work", ToolCallID: "call"}
+	right := StartAssignedCoSuperRequest{Objective: "changed", Kind: types.CoSuperAssignmentVerification, CandidateID: "candidate", ParentWorkItemID: "other", ToolCallID: "call"}
+	if deterministicAssignmentIdentity(parent, left) != deterministicAssignmentIdentity(parent, right) {
+		t.Fatal("semantic arguments changed authenticated assignment identity")
+	}
+	other := parent
+	other.RunID = "other-parent"
+	if deterministicAssignmentIdentity(parent, left) == deterministicAssignmentIdentity(other, left) {
+		t.Fatal("parent run absent from assignment identity")
+	}
+	right.ToolCallID = "other-call"
+	if deterministicAssignmentIdentity(parent, left) == deterministicAssignmentIdentity(parent, right) {
+		t.Fatal("tool call absent from assignment identity")
+	}
+}
+
+func TestStartCoagentRunHardRefusesCoSuperForEveryCaller(t *testing.T) {
+	s, err := openTestStore(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	now := time.Now().UTC()
+	parent := types.RunRecord{RunID: "parent", AgentID: "super:owner", AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, OwnerID: "owner", SandboxID: "computer", State: types.RunRunning, CreatedAt: now, UpdatedAt: now}
+	if err := s.CreateRun(context.Background(), parent); err != nil {
+		t.Fatal(err)
+	}
+	rt := &Runtime{store: s, cfg: provideriface.Config{SandboxID: "computer"}}
+	for _, constraints := range []map[string]any{
+		{runMetadataAgentProfile: agentprofile.CoSuper, runMetadataAgentRole: agentprofile.CoSuper},
+		{runMetadataAgentRole: "coagent"},
+	} {
+		if _, err := rt.StartCoagentRun(context.Background(), parent.RunID, "forbidden", parent.OwnerID, constraints); err == nil || !strings.Contains(err.Error(), "refuses all CoSuper") {
+			t.Fatalf("generic CoSuper activation error=%v", err)
+		}
+	}
+}
+
+func TestAssignedCoSuperPromptNamesExactKindWithoutFutureToolLie(t *testing.T) {
+	rt := &Runtime{}
+	for _, kind := range []types.CoSuperAssignmentKind{types.CoSuperAssignmentImplementation, types.CoSuperAssignmentVerification} {
+		rec := &types.RunRecord{RunID: "assigned", AgentID: "co-super:assigned", AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, Metadata: map[string]any{"assignment_id": "assignment", "assignment_kind": string(kind), "subject_digest": "sha256:subject", "source_candidate_id": "candidate"}}
+		prompt, err := rt.systemPromptForRun(rec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(prompt, "kind="+string(kind)) {
+			t.Fatalf("prompt does not name exact %s assignment: %s", kind, prompt)
+		}
+		if strings.Contains(prompt, "may be added later") || strings.Contains(prompt, "report one precise result through update_coagent") {
+			t.Fatalf("prompt retains future/static tool lie: %s", prompt)
+		}
+	}
 }

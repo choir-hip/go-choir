@@ -22,7 +22,10 @@ func NewExecutor(stateDir, lowerDir, brokerPath string, vmMemoryTotal int64) *Ex
 func NewExecutorWithSource(stateDir, lowerDir, sourceDir, brokerPath string, vmMemoryTotal int64) *Executor {
 	return &Executor{}
 }
-func (e *Executor) InitializationError() error                         { return stubErr("initialize") }
+func (e *Executor) InitializationError() error { return stubErr("initialize") }
+func (e *Executor) PreflightSourceSnapshot(context.Context, string) (SourcePreflight, error) {
+	return SourcePreflight{}, stubErr("preflight source")
+}
 func (e *Executor) Spawn(context.Context, SpawnSpec) (*Capsule, error) { return nil, stubErr("spawn") }
 func (e *Executor) Destroy(context.Context, string) error              { return stubErr("destroy") }
 func (e *Executor) ForceDestroy(context.Context, string) error         { return stubErr("destroy") }
@@ -48,6 +51,9 @@ func (e *Executor) ResolveGrantedCapsuleID(string, string) (string, error) {
 }
 func (e *Executor) ResolveGrantedWorktreeDigest(context.Context, string, string) (string, error) {
 	return "", stubErr("resolve")
+}
+func (e *Executor) PersistGrantedCandidate(context.Context, string, string) (SourcePreflight, error) {
+	return SourcePreflight{}, stubErr("persist candidate")
 }
 func (e *Executor) ResolveGrantedSourceSnapshotDigest(string, string) (string, error) {
 	return "", stubErr("resolve")
@@ -75,6 +81,18 @@ func (e *Executor) RevokeCapability(string, string) error       { return stubErr
 func (e *Executor) ResolveTarget(*Capability) ([]string, error) { return nil, stubErr("resolve") }
 func (e *Executor) Exec(context.Context, string, string, ExecRequest) (ExecResult, error) {
 	return ExecResult{}, stubErr("exec")
+}
+func (e *Executor) PersistGrantedFreezeReceipt(context.Context, string, string) (CapsuleFateReceipt, error) {
+	return CapsuleFateReceipt{}, stubErr("freeze receipt")
+}
+func (e *Executor) OpenCapsuleFateReceipt(string) (CapsuleFateReceipt, error) {
+	return CapsuleFateReceipt{}, stubErr("freeze receipt")
+}
+func (e *Executor) OpenExecutionReceipt(string) (ExecutionReceipt, error) {
+	return ExecutionReceipt{}, stubErr("execution receipt")
+}
+func (e *Executor) OpenGrantedExecutionReceipt(string) (GrantedExecutionReceipt, error) {
+	return GrantedExecutionReceipt{}, stubErr("execution receipt")
 }
 func (e *Executor) ResolveGrantedExecutionReceipts(context.Context, string, string, []string) ([]ExecutionReceipt, error) {
 	return nil, stubErr("execution receipts")

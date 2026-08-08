@@ -88,17 +88,9 @@ func PolicyFor(profile string) Policy {
 	case Email:
 		return Policy{Profile: Email}
 	case CoSuper:
-		// CoSuper is a delegated assignment role. Its static affordances are
-		// intentionally limited to inspection, evidence, model diagnostics, and
-		// reporting results. Capsule-local tools require a separate capability-
-		// bound registry and are not implied by this host profile policy.
-		return Policy{
-			Profile:                   CoSuper,
-			AllowReadOnlyFiles:        true,
-			AllowEvidenceTools:        true,
-			AllowModelDiagnosticTools: true,
-			AllowedMessageTargets:     []string{Super, Texture},
-		}
+		// CoSuper has no static authority. The assignment runtime constructs a
+		// fresh per-run registry from the exact capsule-local closed set.
+		return Policy{Profile: CoSuper}
 	case Super:
 		return Policy{
 			Profile:                   Super,
@@ -108,8 +100,8 @@ func PolicyFor(profile string) Policy {
 			AllowMemoryTools:          true,
 			AllowModelDiagnosticTools: true,
 			AllowCoAgentTools:         true,
-			AllowedSpawnTargets:       []string{Researcher, CoSuper},
-			AllowedMessageTargets:     []string{Texture, Researcher, CoSuper},
+			AllowedSpawnTargets:       []string{Researcher},
+			AllowedMessageTargets:     []string{Texture, Researcher},
 		}
 	default:
 		return Policy{Profile: strings.TrimSpace(profile)}

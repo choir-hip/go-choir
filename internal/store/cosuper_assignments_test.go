@@ -97,11 +97,16 @@ func coSuperOpenRequest(f coSuperAssignmentStoreFixture, index int, assignmentID
 		ParentAgentID: f.parentAgentID, ParentRunID: f.parentRunID,
 		ParentDecisionID: f.parentDecisionID, ParentControlID: f.parentControlID,
 		ParentWorkItemID: f.parentWorkID, AssignedWorkItemID: f.assignedWorkIDs[index], AssignedAgentID: f.assignedAgentIDs[index],
-		Kind: kind, Attempt: attempt, ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)),
+		Kind: kind, Attempt: attempt, ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
 		CapabilityDigest: DigestCoSuperOpaqueCapability(capability), SubjectDigest: objectgraph.SHA256([]byte("subject:" + assignmentID)),
-		Writable: writable, CapsuleID: capsuleID,
+		SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
+		Writable:          writable, CapsuleID: capsuleID,
 		NetworkMode:    types.CoSuperCapsuleNetworkForbidden,
 		FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
+	}
+	if kind == types.CoSuperAssignmentVerification {
+		binding.SourceCandidateID = "candidate-source-" + assignmentID
+		binding.SourceArtifactRef = "capsule-subject:" + binding.SubjectDigest
 	}
 	req := types.OpenCoSuperAssignmentRequest{
 		CommandID: "command-open-" + assignmentID + fmt.Sprintf("-%d", attempt), AssignmentID: assignmentID, Binding: binding,
@@ -125,8 +130,9 @@ func bindCoSuperRequest(open types.OpenCoSuperAssignmentRequest, runID, capabili
 			"assignment_id": open.AssignmentID, "assignment_attempt": open.Binding.Attempt, "assignment_kind": string(open.Binding.Kind),
 			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
 			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
-			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest,
+			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
 			"capability_digest": open.Binding.CapabilityDigest, "subject_digest": open.Binding.SubjectDigest,
+			"source_artifact_ref": open.Binding.SourceArtifactRef, "source_candidate_id": open.Binding.SourceCandidateID,
 			"coordination_contract_id":     open.Binding.CoordinationContractID,
 			"coordination_contract_digest": open.Binding.CoordinationContractDigest,
 		},
@@ -154,6 +160,7 @@ func TestCoSuperAssignmentCommandsReplayAndDigestConflict(t *testing.T) {
 	}
 	openConflict := open
 	openConflict.Binding.SubjectDigest = objectgraph.SHA256([]byte("changed-open"))
+	openConflict.Binding.SourceArtifactRef = "capsule-source-git:commit:" + openConflict.Binding.SubjectDigest
 	openConflict.CommandDigest, _ = ComputeOpenCoSuperAssignmentDigest(openConflict)
 	if _, err := s.OpenCoSuperAssignment(ctx, openConflict); !errors.Is(err, ErrCoSuperAssignmentCommandConflict) {
 		t.Fatalf("open conflict: %v", err)
@@ -459,6 +466,12 @@ func assignmentReportRequest(open types.OpenCoSuperAssignmentRequest, version in
 			Commands: []types.CoSuperRecordedCommand{{CommandID: "observed-command", CommandDigest: objectgraph.SHA256([]byte("command")), ExecutionRef: "receipt:execution"}},
 			Outputs:  []types.CoSuperRecordedOutput{{OutputID: "output", Kind: "evidence", Digest: objectgraph.SHA256([]byte("output")), Ref: "artifact:output"}},
 		},
+	}
+	if observedDigest != open.Binding.SubjectDigest {
+		req.Report.CandidateArtifactRef = "capsule-subject:" + observedDigest
+	}
+	if result == types.CoSuperResultCompleted && verdict == types.CoSuperVerdictPass {
+		req.Report.ExecutorReceiptRefs = []string{"capsule-granted-exec:sha256:test"}
 	}
 	req.CommandDigest, _ = ComputeRecordCoSuperAssignmentReportDigest(req)
 	return req
@@ -782,5 +795,53 @@ func TestReplayRecordedReportAfterRevokeReturnsOriginalReceipt(t *testing.T) {
 	replay, err := s.ReplayRecordedCoSuperAssignmentReport(ctx, f.ownerID, f.computerID, open.AssignmentID, 1, req.Report.ReportID, req.CommandID)
 	if err != nil || !replay.Replay || replay.Report == nil || replay.Receipt.CommandDigest != reported.Receipt.CommandDigest || replay.Assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
 		t.Fatalf("replay: %+v %v", replay, err)
+	}
+}
+
+func TestPartialAssignmentReportPreservesActiveCapsuleThenTerminalFreezes(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-partial-terminal", 1, types.CoSuperAssignmentImplementation, true, "cap-partial", "capsule-partial")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-partial")); err != nil {
+		t.Fatal(err)
+	}
+	partial := assignmentReportRequest(open, 2, "report-partial", open.Binding.SubjectDigest, types.CoSuperResultPartial, types.CoSuperVerdictNone)
+	progress, err := s.RecordCoSuperAssignmentReport(ctx, partial)
+	if err != nil || progress.Assignment.Disposition != types.CoSuperAssignmentBound || progress.Assignment.CapsuleDisposition != types.CoSuperCapsuleActive || progress.Assignment.TerminalAt != nil {
+		t.Fatalf("partial report froze/terminalized assignment: %+v err=%v", progress, err)
+	}
+	intent := types.SetCoSuperCapsuleDispositionRequest{CommandID: "partial-terminal-freeze-intent", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 3, Disposition: types.CoSuperCapsuleFreezeRequested, IntentRef: "intent:partial-terminal"}
+	intent.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(intent)
+	requested, err := s.SetCoSuperCapsuleDisposition(ctx, intent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ack := intent
+	ack.CommandID = "partial-terminal-freeze-ack"
+	ack.ExpectedLifecycleVersion = requested.Assignment.LifecycleVersion
+	ack.Disposition = types.CoSuperCapsuleFrozen
+	ack.AckRef = "executor-receipt:partial-terminal"
+	ack.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(ack)
+	frozen, err := s.SetCoSuperCapsuleDisposition(ctx, ack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	terminal := assignmentReportRequest(open, frozen.Assignment.LifecycleVersion, "report-terminal", open.Binding.SubjectDigest, types.CoSuperResultCompleted, types.CoSuperVerdictNone)
+	completed, err := s.RecordCoSuperAssignmentReport(ctx, terminal)
+	if err != nil || completed.Assignment.Disposition != types.CoSuperAssignmentCompleted || completed.Assignment.CapsuleDisposition != types.CoSuperCapsuleFrozen || completed.Assignment.TerminalAt == nil {
+		t.Fatalf("terminal report after progress/freeze: %+v err=%v", completed, err)
+	}
+	replayed, err := s.RecordCoSuperAssignmentReport(ctx, partial)
+	if err != nil || !replayed.Replay || replayed.Report == nil || replayed.Report.Late {
+		t.Fatalf("exact partial replay after terminal lost original receipt: %+v err=%v", replayed, err)
+	}
+	late := assignmentReportRequest(open, completed.Assignment.LifecycleVersion, "report-late-partial", open.Binding.SubjectDigest, types.CoSuperResultPartial, types.CoSuperVerdictNone)
+	lateResult, err := s.RecordCoSuperAssignmentReport(ctx, late)
+	if err != nil || lateResult.Report == nil || !lateResult.Report.Late || lateResult.Assignment.Disposition != types.CoSuperAssignmentCompleted || lateResult.Assignment.CapsuleDisposition != types.CoSuperCapsuleFrozen {
+		t.Fatalf("new late partial changed terminal fate: %+v err=%v", lateResult, err)
 	}
 }
