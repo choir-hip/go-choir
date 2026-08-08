@@ -50,6 +50,7 @@ type textureDurableEvent struct {
 	TrajectoryStatus types.TrajectoryStatus  `json:"trajectory_status"`
 	CommandID        string                  `json:"command_id"`
 	RequestID        string                  `json:"request_id,omitempty"`
+	RequestIDs       []string                `json:"request_ids,omitempty"`
 	UpdateID         string                  `json:"update_id,omitempty"`
 	ControlID        string                  `json:"control_id,omitempty"`
 	WorkItemID       string                  `json:"work_item_id,omitempty"`
@@ -132,7 +133,7 @@ func (h *Handler) projectTextureLifecycleEvent(ctx context.Context, doc types.Do
 		Schema: textureObservationSchemaV1, Cursor: event.ReducerSeq, EventID: event.EventID,
 		Kind: string(event.Kind), EventType: "lifecycle", DocID: doc.DocID, TrajectoryID: doc.TrajectoryID,
 		WorkState: workState, TrajectoryStatus: status,
-		CommandID: event.CommandID, UpdateID: event.UpdateID,
+		CommandID: event.CommandID, RequestID: event.RequestID, RequestIDs: append([]string(nil), event.RequestIDs...), UpdateID: event.UpdateID,
 		WorkItemID: event.WorkItemID, CommandDigest: event.CommandDigest, CreatedAt: event.CreatedAt,
 	}
 	if string(event.Kind) == "control_queued" {

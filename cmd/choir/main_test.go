@@ -384,6 +384,64 @@ func TestExecutionIdentityCLICommonCommitAllowsBoundMixedGeneration(t *testing.T
 	}
 }
 
+func TestTextureCreateStableJSON(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/texture/lifecycle-documents" {
+			t.Errorf("request=%s %s", r.Method, r.URL.Path)
+		}
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body["title"] != "Durable note" || body["initial_content"] != "Initial body" || body["client_request_id"] != "create-one" {
+			t.Errorf("body=%v", body)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"schema":"choir.texture_create.v1","doc_id":"doc-created","revision_id":"rev-zero","trajectory_id":"trajectory-created"}`)
+	}))
+	defer stub.Close()
+	var out, errOut bytes.Buffer
+	if code := run([]string{"texture", "create", "--host=" + stub.URL, "--title=Durable note", "--content=Initial body", "--request-id=create-one"}, &out, &errOut); code != 0 ||
+		!strings.Contains(out.String(), `"schema": "choir.texture_create.v1"`) || !strings.Contains(out.String(), `"doc_id": "doc-created"`) {
+		t.Fatalf("code/out/err=%d %s %s", code, out.String(), errOut.String())
+	}
+}
+
+func TestTextureTellAndCorrectUseClientOccurrenceAndExactHead(t *testing.T) {
+	posts := 0
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			if r.URL.Path != "/api/texture/documents/doc-owner" {
+				t.Errorf("GET path=%s", r.URL.Path)
+			}
+			_, _ = io.WriteString(w, `{"doc_id":"doc-owner","current_revision_id":"rev-current"}`)
+			return
+		}
+		posts++
+		if r.Method != http.MethodPost || (r.URL.Path != "/api/texture/documents/doc-owner/tell" && r.URL.Path != "/api/texture/documents/doc-owner/correct") {
+			t.Errorf("POST=%s %s", r.Method, r.URL.Path)
+		}
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body["expected_head_revision_id"] != "rev-current" || body["client_request_id"] == "" || body["content"] != "same prose" {
+			t.Errorf("body=%v", body)
+		}
+		_, _ = io.WriteString(w, `{"schema":"choir.texture_owner_instruction.v1","instruction_id":"instruction-`+body["client_request_id"]+`","request_id":"runtime-`+body["client_request_id"]+`","status":"pending"}`)
+	}))
+	defer stub.Close()
+	for _, args := range [][]string{
+		{"texture", "tell", "--host=" + stub.URL, "--request-id=occurrence-one", "doc-owner", "same", "prose"},
+		{"texture", "tell", "--host=" + stub.URL, "--request-id=occurrence-two", "doc-owner", "same", "prose"},
+		{"texture", "correct", "--host=" + stub.URL, "--request-id=occurrence-three", "--expected-head=rev-current", "doc-owner", "same", "prose"},
+	} {
+		var out, errOut bytes.Buffer
+		if code := run(args, &out, &errOut); code != 0 || !strings.Contains(out.String(), "choir.texture_owner_instruction.v1") {
+			t.Fatalf("args=%v code=%d out=%s err=%s", args, code, out.String(), errOut.String())
+		}
+	}
+	if posts != 3 {
+		t.Fatalf("posts=%d", posts)
+	}
+}
+
 func TestTextureShowCurrentAndExactHistoricalVersion(t *testing.T) {
 	var revisionPath string
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

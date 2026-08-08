@@ -209,29 +209,31 @@ func TestTextureLifecycleProjectionJoinsAtomicTurnAndControlIdentities(t *testin
 		DocID: start.InitialDocument.DocID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, TrajectoryID: start.TrajectoryID,
 	}, types.LifecycleEvent{
 		EventID: "turn-command:1", OwnerID: start.OwnerID, ComputerID: start.ComputerID, TrajectoryID: start.TrajectoryID,
-		Kind: types.LifecycleEventKind("texture_turn_committed"), ReducerSeq: 10, CommandID: "turn-command",
-		CommandDigest: "sha256:turn", ArtifactRefs: []string{start.InitialDocument.DocID, revision.RevisionID},
+
+		Kind: types.LifecycleTextureTurnCommitted, ReducerSeq: 10, CommandID: "turn-command",
+		CommandDigest: "sha256:turn", RequestID: "owner-request-causal", ArtifactRefs: []string{start.InitialDocument.DocID, revision.RevisionID},
 		Reason: "private actor explanation must not project", CreatedAt: now,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if turn.EventType != "version" || turn.RevisionID != revision.RevisionID || turn.VersionNumber == nil ||
-		turn.CommandID != "turn-command" || turn.RequestID != "" || turn.ControlID != "" {
+		turn.CommandID != "turn-command" || turn.RequestID != "owner-request-causal" || turn.ControlID != "" {
 		t.Fatalf("atomic turn projection = %+v", turn)
 	}
 	control, err := handler.projectTextureLifecycleEvent(context.Background(), types.Document{
 		DocID: start.InitialDocument.DocID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, TrajectoryID: start.TrajectoryID,
 	}, types.LifecycleEvent{
 		EventID: "turn-command:2", OwnerID: start.OwnerID, ComputerID: start.ComputerID, TrajectoryID: start.TrajectoryID,
-		Kind: types.LifecycleEventKind("control_queued"), ReducerSeq: 11, CommandID: "turn-command", UpdateID: "control-one",
+
+		Kind: types.LifecycleControlQueued, ReducerSeq: 11, CommandID: "turn-command", UpdateID: "control-one", RequestID: "owner-request-causal",
 		WorkItemID: "target-work", CommandDigest: "sha256:turn", Reason: "private control chatter", CreatedAt: now,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if control.EventType != "control" || control.ControlID != "control-one" || control.UpdateID != "control-one" ||
-		control.WorkItemID != "target-work" || control.RequestID != "" || control.RevisionID != "" {
+		control.WorkItemID != "target-work" || control.RequestID != "owner-request-causal" || control.RevisionID != "" {
 		t.Fatalf("control projection = %+v", control)
 	}
 	payload, _ := json.Marshal([]textureDurableEvent{turn, control})
