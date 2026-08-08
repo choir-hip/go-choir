@@ -146,6 +146,16 @@ const (
 	UpdateLate         UpdateDisposition = "late"
 )
 
+// LifecyclePacketDirection distinguishes a producer's upward report from a
+// controller's downward instruction. Direction is runtime-derived; model
+// payloads never author it.
+type LifecyclePacketDirection string
+
+const (
+	LifecyclePacketDirectionProducerReport LifecyclePacketDirection = "producer_report"
+	LifecyclePacketDirectionControl        LifecyclePacketDirection = "control"
+)
+
 // CoagentSourcePacket is the persisted delivery envelope for one addressed
 // source packet. The Packet field is the canonical update_coagent payload; the
 // surrounding fields are runtime-owned delivery/idempotency metadata.
@@ -159,7 +169,10 @@ type CoagentSourcePacket struct {
 	ChannelID           string                     `json:"channel_id"`
 	MessageSeq          int64                      `json:"message_seq"`
 	TrajectoryID        string                     `json:"trajectory_id,omitempty"`
-	WorkItemID          string                     `json:"work_item_id,omitempty"`
+	Direction           LifecyclePacketDirection   `json:"direction,omitempty"`
+	ProducerWorkItemID  string                     `json:"producer_work_item_id,omitempty"`
+	TargetWorkItemID    string                     `json:"target_work_item_id,omitempty"`
+	WorkItemID          string                     `json:"work_item_id,omitempty"` // legacy producer-work alias
 	WorkDisposition     WorkItemStatus             `json:"work_disposition,omitempty"`
 	Role                string                     `json:"role,omitempty"`
 	SourceRunID         string                     `json:"source_run_id,omitempty"`

@@ -708,6 +708,7 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 			CommandID:    "texture-lifecycle-queue:" + producerUpdateID,
 			TrajectoryID: doc.TrajectoryID, TargetAgentID: agentID, ProducerAgentID: agentID,
 			ProducerUpdateID: producerUpdateID, UpdateID: producerUpdateID,
+			ChannelID: doc.DocID, Role: rec.AgentRole, SourceRunID: rec.RunID,
 			Packet: packet, Content: materialized.Content, PayloadDigest: payloadDigest,
 			WorkDisposition: types.WorkItemStatus(workDisposition), WorkItemID: workItemID,
 		}

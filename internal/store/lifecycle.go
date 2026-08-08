@@ -218,11 +218,13 @@ func ComputeQueueLifecycleUpdateDigest(req types.QueueLifecycleUpdateRequest) (s
 	return lifecycleDigest(struct {
 		CommandID, TrajectoryID, TargetAgentID, ProducerAgentID string
 		ProducerUpdateID, PayloadDigest, WorkItemID             string
+		SourceRunID, ChannelID, Role                            string
 		WorkDisposition                                         types.WorkItemStatus
 	}{
 		CommandID: strings.TrimSpace(req.CommandID), TrajectoryID: strings.TrimSpace(req.TrajectoryID),
 		TargetAgentID: strings.TrimSpace(req.TargetAgentID), ProducerAgentID: strings.TrimSpace(req.ProducerAgentID),
 		ProducerUpdateID: strings.TrimSpace(req.ProducerUpdateID), PayloadDigest: strings.TrimSpace(req.PayloadDigest),
+		SourceRunID: strings.TrimSpace(req.SourceRunID), ChannelID: strings.TrimSpace(req.ChannelID), Role: strings.TrimSpace(req.Role),
 		WorkItemID: strings.TrimSpace(req.WorkItemID), WorkDisposition: workDisposition,
 	})
 }
@@ -1537,6 +1539,10 @@ func (s *Store) OpenLifecycleWork(ctx context.Context, req types.OpenLifecycleWo
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
+	// Open-work provenance participates in the command digest and is required
+	// to prove later controller-to-target bindings. Initial lifecycle work still
+	// discards caller retry ephemera in normalizeLifecycleWork.
+	work.CreatedByRunID = strings.TrimSpace(req.WorkItem.CreatedByRunID)
 	assignedAgent, agentErr := s.requireLifecycleAssignedAgent(ctx, ownerID, computerID, work.AssignedAgentID)
 	var resultAgent *types.AgentRecord
 	if errors.Is(agentErr, ErrNotFound) {
@@ -1811,6 +1817,7 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 		CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash,
 	})
 	previousActiveRunID := strings.TrimSpace(agent.ActiveRunID)
+	previousLifecycleVersion := agent.LifecycleVersion
 	metadata := make(map[string]any, len(run.Metadata)+1)
 	for key, value := range run.Metadata {
 		if key != lifecycleTerminalSettlementKey {
@@ -1844,7 +1851,14 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 	} else if previousActiveRunID == run.RunID {
 		agent.ActiveRunID = ""
 	}
-	agentProjectionChanged := strings.TrimSpace(agent.ActiveRunID) != previousActiveRunID
+	// The first valid work-bound Researcher activation is the cutover from a
+	// generic durable agent record to lifecycle identity. Projection does not
+	// advance the trajectory reducer, so it adopts the current reducer sequence.
+	if agent.Profile == "researcher" && agent.LifecycleVersion <= 0 && len(boundWorkItemIDs) > 0 && lifecycleRunOwnsActivation(run.State) {
+		agent.LifecycleVersion = 1
+		agent.LastReducerSeq = trajectory.ReducerSeq
+	}
+	agentProjectionChanged := strings.TrimSpace(agent.ActiveRunID) != previousActiveRunID || agent.LifecycleVersion != previousLifecycleVersion
 
 	runMetadata := map[string]any{
 		"run_id": run.RunID, "agent_id": run.AgentID, "channel_id": run.ChannelID,
@@ -2117,6 +2131,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	req.TrajectoryID, req.UpdateID = strings.TrimSpace(req.TrajectoryID), strings.TrimSpace(req.UpdateID)
 	req.TargetAgentID, req.ProducerAgentID = strings.TrimSpace(req.TargetAgentID), strings.TrimSpace(req.ProducerAgentID)
 	req.ProducerUpdateID, req.PayloadDigest = strings.TrimSpace(req.ProducerUpdateID), strings.TrimSpace(req.PayloadDigest)
+	req.SourceRunID, req.ChannelID, req.Role = strings.TrimSpace(req.SourceRunID), strings.TrimSpace(req.ChannelID), strings.TrimSpace(req.Role)
 	req.WorkItemID = strings.TrimSpace(req.WorkItemID)
 	req.WorkDisposition, err = normalizeUpdateWorkDisposition(req.WorkDisposition)
 	if err != nil {
@@ -2128,8 +2143,8 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	if err := validateLifecycleCommand(req.CommandID, req.CommandDigest, req.TrajectoryID); err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if req.UpdateID == "" || req.TargetAgentID == "" || req.ProducerAgentID == "" || req.ProducerUpdateID == "" || req.PayloadDigest == "" {
-		return types.LifecycleResult{}, fmt.Errorf("lifecycle queue update: update_id, target_agent_id, producer_agent_id, producer_update_id, and payload_digest are required")
+	if req.UpdateID == "" || req.TargetAgentID == "" || req.ProducerAgentID == "" || req.ProducerUpdateID == "" || req.PayloadDigest == "" || strings.TrimSpace(req.SourceRunID) == "" || req.WorkItemID == "" {
+		return types.LifecycleResult{}, fmt.Errorf("lifecycle queue update: update_id, target_agent_id, producer_agent_id, producer_update_id, source_run_id, work_item_id, and payload_digest are required")
 	}
 	payloadDigest, digestErr := ComputeLifecycleUpdatePayloadDigest(req.Packet, req.Content)
 	if digestErr != nil {
@@ -2152,6 +2167,21 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
+	documentID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
+	if documentID == "" || req.TargetAgentID != "texture:"+documentID || strings.TrimSpace(req.ChannelID) != documentID {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	documentObj, err := s.lifecycleGetObject(ctx, ogKindTexDoc, ownerID, computerID, documentID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	document, err := decodeLifecycleObject[types.Document](documentObj)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if document.DocID != documentID || document.OwnerID != ownerID || document.ComputerID != computerID || document.TrajectoryID != req.TrajectoryID {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
 	agentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, ownerID, computerID, req.TargetAgentID)
 	if err != nil {
 		return types.LifecycleResult{}, err
@@ -2160,7 +2190,33 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if agent.LifecycleVersion <= 0 || agent.Profile != "texture" || agent.Role != "texture" {
+	if agent.AgentID != req.TargetAgentID || agent.OwnerID != ownerID || agent.ComputerID != computerID ||
+		agent.LifecycleVersion <= 0 || agent.Profile != "texture" || agent.Role != "texture" || strings.TrimSpace(agent.ChannelID) != documentID {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	producerRunObj, err := s.lifecycleGetObject(ctx, ogKindRun, ownerID, computerID, strings.TrimSpace(req.SourceRunID))
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	producerRun, err := decodeLifecycleObject[types.RunRecord](producerRunObj)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	boundWorkItemIDs, err := lifecycleActivationWorkItemIDs(producerRun.Metadata)
+	if err != nil || producerRun.RunID != strings.TrimSpace(req.SourceRunID) || producerRun.OwnerID != ownerID ||
+		producerRun.SandboxID != computerID || producerRun.TrajectoryID != req.TrajectoryID || producerRun.AgentID != req.ProducerAgentID ||
+		strings.TrimSpace(producerRun.AgentProfile) == "" || strings.TrimSpace(producerRun.AgentRole) == "" || !producerRun.State.Valid() ||
+		strings.TrimSpace(producerRun.AgentProfile) != strings.TrimSpace(producerRun.AgentRole) ||
+		strings.TrimSpace(producerRun.AgentRole) != req.Role || strings.TrimSpace(producerRun.ChannelID) != req.ChannelID ||
+		!containsLifecycleIdentity(boundWorkItemIDs, req.WorkItemID) {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	workObj, work, err := s.lifecycleWorkObject(ctx, ownerID, computerID, req.WorkItemID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if work.TrajectoryID != req.TrajectoryID || strings.TrimSpace(work.AssignedAgentID) != req.ProducerAgentID ||
+		strings.TrimSpace(work.AuthorityProfile) != strings.TrimSpace(producerRun.AgentProfile) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	updateKey := req.TrajectoryID + "\x00" + req.TargetAgentID + "\x00" + req.ProducerAgentID + "\x00" + req.ProducerUpdateID
@@ -2173,7 +2229,12 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		if decodeErr != nil {
 			return types.LifecycleResult{}, decodeErr
 		}
-		if stored.PayloadDigest != req.PayloadDigest || strings.TrimSpace(stored.WorkItemID) != req.WorkItemID ||
+		if stored.Direction != types.LifecyclePacketDirectionProducerReport || stored.UpdateID != req.UpdateID ||
+			stored.OwnerID != ownerID || stored.ComputerID != computerID || stored.TrajectoryID != req.TrajectoryID ||
+			stored.TargetAgentID != req.TargetAgentID || stored.AgentID != req.ProducerAgentID || stored.ProducerUpdateID != req.ProducerUpdateID ||
+			strings.TrimSpace(stored.SourceRunID) != req.SourceRunID || strings.TrimSpace(stored.ChannelID) != req.ChannelID || strings.TrimSpace(stored.Role) != req.Role ||
+			stored.PayloadDigest != req.PayloadDigest || strings.TrimSpace(stored.ProducerWorkItemID) != req.WorkItemID ||
+			strings.TrimSpace(stored.WorkItemID) != req.WorkItemID || strings.TrimSpace(stored.TargetWorkItemID) != "" ||
 			stored.WorkDisposition != req.WorkDisposition {
 			return types.LifecycleResult{}, ErrLifecycleCommandConflict
 		}
@@ -2192,7 +2253,9 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 			OwnerID: ownerID, ComputerID: computerID, AgentID: req.ProducerAgentID,
 			TargetAgentID: req.TargetAgentID, TrajectoryID: req.TrajectoryID,
 			ChannelID: req.ChannelID, Role: req.Role, SourceRunID: req.SourceRunID,
-			WorkItemID: req.WorkItemID, WorkDisposition: req.WorkDisposition,
+			Direction:          types.LifecyclePacketDirectionProducerReport,
+			ProducerWorkItemID: req.WorkItemID,
+			WorkItemID:         req.WorkItemID, WorkDisposition: req.WorkDisposition,
 			MessageSeq: nextSeq, PayloadDigest: req.PayloadDigest,
 			Disposition: types.UpdateLate, DispositionRef: lifecycleTerminalTrajectoryRef(req.TrajectoryID),
 			DispositionReason: "trajectory is terminal", LifecycleVersion: 1, ReducerSeq: nextSeq,
@@ -2222,26 +2285,18 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		conditions := []objectgraph.ObjectCondition{
 			sequenceCondition,
 			{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
+			{CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash},
+			{CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash},
+			{CanonicalID: producerRunObj.CanonicalID, Exists: true, ExpectedContentHash: producerRunObj.ContentHash},
+			{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash},
 			{CanonicalID: updateObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
 		}
 		return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, []objectgraph.Object{sequenceUpdated, updateObj, eventObj, receiptObj}, types.LifecycleResult{
 			Receipt: receipt, Trajectory: trajectory, Agent: &agent, Update: &update, Events: []types.LifecycleEvent{event},
 		})
 	}
-	var workCondition *objectgraph.ObjectCondition
-	if req.WorkItemID != "" {
-		workObj, work, workErr := s.lifecycleWorkObject(ctx, ownerID, computerID, req.WorkItemID)
-		if workErr != nil {
-			return types.LifecycleResult{}, workErr
-		}
-		if work.TrajectoryID != req.TrajectoryID || work.Status != types.WorkItemOpen ||
-			strings.TrimSpace(work.AssignedAgentID) != req.ProducerAgentID {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-		condition := objectgraph.ObjectCondition{
-			CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash,
-		}
-		workCondition = &condition
+	if work.Status != types.WorkItemOpen {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	nextSeq := trajectory.ReducerSeq + 1
 	update := types.CoagentSourcePacket{
@@ -2249,7 +2304,9 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		OwnerID: ownerID, ComputerID: computerID, AgentID: req.ProducerAgentID,
 		TargetAgentID: req.TargetAgentID, TrajectoryID: req.TrajectoryID,
 		ChannelID: req.ChannelID, Role: req.Role, SourceRunID: req.SourceRunID,
-		WorkItemID: req.WorkItemID, WorkDisposition: req.WorkDisposition,
+		Direction:          types.LifecyclePacketDirectionProducerReport,
+		ProducerWorkItemID: req.WorkItemID,
+		WorkItemID:         req.WorkItemID, WorkDisposition: req.WorkDisposition,
 		PayloadDigest: req.PayloadDigest, Disposition: types.UpdatePending,
 		MessageSeq:       nextSeq,
 		LifecycleVersion: 1, ReducerSeq: nextSeq, Packet: req.Packet,
@@ -2288,11 +2345,11 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	}
 	conditions := []objectgraph.ObjectCondition{
 		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
+		{CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash},
 		{CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash},
+		{CanonicalID: producerRunObj.CanonicalID, Exists: true, ExpectedContentHash: producerRunObj.ContentHash},
+		{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash},
 		{CanonicalID: updateObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
-	}
-	if workCondition != nil {
-		conditions = append(conditions, *workCondition)
 	}
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, []objectgraph.Object{trajectoryUpdated, agentUpdated, updateObj, eventObj, receiptObj}, types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &agent, Update: &update, Events: []types.LifecycleEvent{event}})
 }
