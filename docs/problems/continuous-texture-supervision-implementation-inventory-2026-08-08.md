@@ -593,3 +593,25 @@ start commit, or wake an unrelated/terminal/non-lifecycle document.
 Effects remain OFF. The created trajectory is retained as failure evidence and
 must be cancelled through the public lifecycle authority after repair or final
 acceptance; it must not be silently deleted.
+
+
+## Concurrent initial-work reconciliation stales the winner — 2026-08-08
+
+Independent review rejected local repair candidate
+`572b49fa793ab8128254142a9f0b1172654d86f0` with a reproducible high race.
+Two `ReconcileAgentWake` callers may both pass the initial active-run check.
+Caller A can create the sole valid Texture activation and its pending mutation;
+caller B then enters the generic pending-mutation cleanup and marks A's now-bound
+mutation stale before caller B's own activation projection loses. Store CAS still
+prevents a second durable activation, but the sole dispatched winner subsequently
+fails `ValidateActivationAuthority`, leaving the initial work open and again
+without an executable projection.
+
+The reviewer reproduced the race with a 40-way barrier in all ten trials: one
+stored run/dispatch, many losing reconcile errors, and invalid authority for the
+winner every time. Repair must never stale a mutation merely because this caller
+has not yet observed an active run. Cleanup may stale only an exact mutation
+proven unbound after re-reading the agent/run authority, or the reconciler must
+reuse the concurrently installed valid activation. A concurrent regression must
+prove one authoritative winner, no winner-staling, no duplicate dispatch, and
+safe loser/replay behavior.
