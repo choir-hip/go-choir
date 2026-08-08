@@ -307,6 +307,13 @@ func ComputeSettleLifecycleTrajectoryDigest(req types.SettleLifecycleTrajectoryR
 
 func ComputeCancelLifecycleDigest(req types.CancelLifecycleRequest) (string, error) {
 	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
+	// RequestedLifecycleVersion preserves the caller's original CAS identity
+	// while ExpectedLifecycleVersion may advance only to finish a previously
+	// durable cancellation intent after assignment revoke transitions.
+	if req.RequestedLifecycleVersion > 0 {
+		req.ExpectedLifecycleVersion = req.RequestedLifecycleVersion
+		req.RequestedLifecycleVersion = 0
+	}
 	return lifecycleDigest(req)
 }
 
@@ -1435,6 +1442,24 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle: object graph not initialized")
 	}
 	storedReceipt := result.Receipt
+	if trajectoryID := strings.TrimSpace(storedReceipt.TrajectoryID); trajectoryID != "" && commandID != "" {
+		if intentObj, intentErr := s.lifecycleGetObject(ctx, ogKindLifecycleCancelIntent, ownerID, computerID, trajectoryID); intentErr == nil {
+			intent, decodeErr := decodeLifecycleObject[types.LifecycleCancellationIntent](intentObj)
+			allowedFate := storedReceipt.Kind == types.LifecycleSetCoSuperCapsuleDisposition || storedReceipt.Kind == types.LifecycleCancelCoSuperAssignment || storedReceipt.Kind == types.LifecycleRecordCoSuperAssignment
+			lateEvidence := false
+			for _, event := range result.Events {
+				if event.Kind == types.LifecycleUpdateLate {
+					lateEvidence = true
+					break
+				}
+			}
+			if decodeErr != nil || (commandID != intent.CommandID && !allowedFate && !lateEvidence) {
+				return types.LifecycleResult{}, ErrConcurrentStateChange
+			}
+		} else if !errors.Is(intentErr, ErrNotFound) {
+			return types.LifecycleResult{}, intentErr
+		}
+	}
 	storedReceipt.StoredResult = &types.LifecycleStoredResult{
 		Trajectory: result.Trajectory, Schema: result.Schema, WorkItem: result.WorkItem,
 		Agent: result.Agent, Update: result.Update, OwnerInstruction: result.OwnerInstruction, Events: result.Events,
@@ -4113,6 +4138,118 @@ func (s *Store) ArchiveLifecycleArtifact(ctx context.Context, req types.ArchiveL
 	})
 }
 
+// PrepareLifecycleCancellation durably records the exact caller cancellation
+// authority before any capsule revoke/destroy/inspection effect. Equal retry is
+// idempotent; command, original CAS, head, or reason conflict fail closed.
+func (s *Store) PrepareLifecycleCancellation(ctx context.Context, req types.CancelLifecycleRequest) (types.LifecycleCancellationIntent, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
+	if err != nil {
+		return types.LifecycleCancellationIntent{}, err
+	}
+	req.OwnerID, req.ComputerID = ownerID, computerID
+	req.CommandID, req.CommandDigest, req.TrajectoryID = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest), strings.TrimSpace(req.TrajectoryID)
+	req.ExpectedHeadRevisionID, req.Reason = strings.TrimSpace(req.ExpectedHeadRevisionID), strings.TrimSpace(req.Reason)
+	if req.RequestedLifecycleVersion == 0 {
+		req.RequestedLifecycleVersion = req.ExpectedLifecycleVersion
+	}
+	if err := validateLifecycleCommand(req.CommandID, req.CommandDigest, req.TrajectoryID); err != nil || req.RequestedLifecycleVersion <= 0 || req.ExpectedLifecycleVersion != req.RequestedLifecycleVersion || req.ExpectedHeadRevisionID == "" || req.Reason == "" {
+		return types.LifecycleCancellationIntent{}, ErrLifecycleInvalidTransition
+	}
+	computed, digestErr := ComputeCancelLifecycleDigest(req)
+	if err := requireLifecycleDigest(req.CommandDigest, computed, digestErr); err != nil {
+		return types.LifecycleCancellationIntent{}, err
+	}
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
+	intentKey := req.TrajectoryID
+	if existing, getErr := s.lifecycleGetObject(ctx, ogKindLifecycleCancelIntent, ownerID, computerID, intentKey); getErr == nil {
+		intent, decodeErr := decodeLifecycleObject[types.LifecycleCancellationIntent](existing)
+		if decodeErr != nil {
+			return types.LifecycleCancellationIntent{}, decodeErr
+		}
+		if intent.CommandID != req.CommandID || intent.CommandDigest != req.CommandDigest || intent.RequestedLifecycleVersion != req.RequestedLifecycleVersion || intent.ExpectedHeadRevisionID != req.ExpectedHeadRevisionID || intent.Reason != req.Reason {
+			return types.LifecycleCancellationIntent{}, ErrLifecycleCommandConflict
+		}
+		return intent, nil
+	} else if !errors.Is(getErr, ErrNotFound) {
+		return types.LifecycleCancellationIntent{}, getErr
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, req.TrajectoryID)
+	if err != nil {
+		return types.LifecycleCancellationIntent{}, err
+	}
+	if snapshot.Trajectory.Status != types.TrajectoryLive || snapshot.Trajectory.LifecycleVersion != req.RequestedLifecycleVersion || snapshot.HeadRevision.RevisionID != req.ExpectedHeadRevisionID {
+		return types.LifecycleCancellationIntent{}, ErrConcurrentStateChange
+	}
+	now := time.Now().UTC()
+	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, ownerID, computerID, req.TrajectoryID)
+	if err != nil {
+		return types.LifecycleCancellationIntent{}, err
+	}
+	if trajectory.Status != types.TrajectoryLive || trajectory.LifecycleVersion != req.RequestedLifecycleVersion {
+		return types.LifecycleCancellationIntent{}, ErrConcurrentStateChange
+	}
+	seq := trajectory.ReducerSeq + 1
+	intent := types.LifecycleCancellationIntent{OwnerID: ownerID, ComputerID: computerID, TrajectoryID: req.TrajectoryID,
+		CommandID: req.CommandID, CommandDigest: req.CommandDigest, RequestedLifecycleVersion: req.RequestedLifecycleVersion,
+		ExpectedHeadRevisionID: req.ExpectedHeadRevisionID, Reason: req.Reason, CreatedAt: now}
+	intentObj, err := lifecycleObject(ogKindLifecycleCancelIntent, ownerID, computerID, intentKey, intent,
+		lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, seq), now, now)
+	if err != nil {
+		return types.LifecycleCancellationIntent{}, err
+	}
+	intentCommandID := req.CommandID + ":intent"
+	intentCommandDigest, err := lifecycleDigest(struct {
+		Domain, CancelCommandID, CancelCommandDigest string
+	}{Domain: "choir.lifecycle.cancel-intent/v1", CancelCommandID: req.CommandID, CancelCommandDigest: req.CommandDigest})
+	if err != nil {
+		return types.LifecycleCancellationIntent{}, err
+	}
+	event := types.LifecycleEvent{EventID: intentCommandID + ":1", OwnerID: ownerID, ComputerID: computerID,
+		TrajectoryID: req.TrajectoryID, Kind: types.LifecycleTrajectoryCancellationRequested,
+		ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: seq, CommandID: intentCommandID,
+		CommandDigest: intentCommandDigest, ArtifactRefs: []string{intentObj.CanonicalID}, Reason: req.Reason, CreatedAt: now}
+	eventObj, err := lifecycleObject(ogKindLifecycleEvent, ownerID, computerID, event.EventID, event,
+		lifecycleMetadata("event_id", event.EventID, computerID, req.TrajectoryID, seq), now, now)
+	if err != nil {
+		return types.LifecycleCancellationIntent{}, err
+	}
+	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = seq, trajectory.LifecycleVersion+1, now
+	trajectoryUpdated, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, req.TrajectoryID, trajectory,
+		lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, seq), trajectoryObj.CreatedAt, now)
+	if err != nil {
+		return types.LifecycleCancellationIntent{}, err
+	}
+	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID,
+		intentCommandID, intentCommandDigest, types.LifecyclePrepareCancelTrajectory, seq, []objectgraph.Object{eventObj})
+	if err != nil {
+		return types.LifecycleCancellationIntent{}, err
+	}
+	conditions := []objectgraph.ObjectCondition{
+		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
+		{CanonicalID: intentObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
+	}
+	_, err = s.commitLifecycleTransition(ctx, ownerID, computerID, intentCommandID, intentCommandDigest, conditions,
+		[]objectgraph.Object{trajectoryUpdated, intentObj, eventObj, receiptObj},
+		types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Events: []types.LifecycleEvent{event}})
+	if err != nil {
+		return types.LifecycleCancellationIntent{}, err
+	}
+	return intent, nil
+}
+
+func (s *Store) GetLifecycleCancellationIntent(ctx context.Context, ownerID, computerID, trajectoryID string) (types.LifecycleCancellationIntent, error) {
+	obj, err := s.lifecycleGetObject(ctx, ogKindLifecycleCancelIntent, strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(trajectoryID))
+	if err != nil {
+		return types.LifecycleCancellationIntent{}, err
+	}
+	intent, err := decodeLifecycleObject[types.LifecycleCancellationIntent](obj)
+	if err != nil {
+		return types.LifecycleCancellationIntent{}, err
+	}
+	return intent, nil
+}
+
 // item, and every pending update in the same reducer transition.
 func (s *Store) CancelLifecycleTrajectory(ctx context.Context, req types.CancelLifecycleRequest) (types.LifecycleResult, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
@@ -4141,6 +4278,17 @@ func (s *Store) CancelLifecycleTrajectory(ctx context.Context, req types.CancelL
 	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, ownerID, computerID, req.TrajectoryID)
 	if err != nil {
 		return types.LifecycleResult{}, err
+	}
+	if req.RequestedLifecycleVersion > 0 {
+		intentObj, intentErr := s.lifecycleGetObject(ctx, ogKindLifecycleCancelIntent, ownerID, computerID, req.TrajectoryID)
+		if intentErr != nil {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		intent, decodeErr := decodeLifecycleObject[types.LifecycleCancellationIntent](intentObj)
+		if decodeErr != nil || intent.CommandID != req.CommandID || intent.CommandDigest != req.CommandDigest ||
+			intent.RequestedLifecycleVersion != req.RequestedLifecycleVersion || intent.ExpectedHeadRevisionID != req.ExpectedHeadRevisionID || intent.Reason != req.Reason {
+			return types.LifecycleResult{}, ErrLifecycleCommandConflict
+		}
 	}
 	if trajectory.Status != types.TrajectoryLive {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition

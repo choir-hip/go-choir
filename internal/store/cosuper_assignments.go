@@ -755,6 +755,7 @@ func validateCoSuperAssignmentRun(assignment types.CoSuperAssignment, assignedAg
 		metadataExactString(run.Metadata, "scope_digest") != assignment.Binding.ScopeDigest ||
 		metadataExactString(run.Metadata, "request_digest") != assignment.Binding.RequestDigest ||
 		metadataExactString(run.Metadata, "capability_digest") != assignment.Binding.CapabilityDigest ||
+		(assignment.Binding.ExecutionHandleDigest != "" && metadataExactString(run.Metadata, "execution_handle_digest") != assignment.Binding.ExecutionHandleDigest) ||
 		metadataExactString(run.Metadata, "subject_digest") != assignment.Binding.SubjectDigest ||
 		metadataExactString(run.Metadata, "source_artifact_ref") != assignment.Binding.SourceArtifactRef ||
 		metadataExactString(run.Metadata, "source_candidate_id") != assignment.Binding.SourceCandidateID ||
@@ -982,28 +983,55 @@ func (s *Store) projectCoSuperTerminal(ctx context.Context, assignment types.CoS
 	if err != nil {
 		return nil, nil, err
 	}
-	if work.Status != types.WorkItemOpen || work.AssignedAgentID != assignment.Binding.AssignedAgentID ||
-		(assignment.BoundRunID == "" && agent.ActiveRunID != "") || (assignment.BoundRunID != "" && agent.ActiveRunID != assignment.BoundRunID) {
+	if work.AssignedAgentID != assignment.Binding.AssignedAgentID {
 		return nil, nil, ErrCoSuperAssignmentInvalid
 	}
-	agent.ActiveRunID = ""
-	agent.LifecycleVersion++
-	agent.LastReducerSeq, agent.UpdatedAt = seq, now
-	work.Status, work.ResultRef, work.Reason = coSuperTerminalWorkState(assignment.Disposition), resultRef, reason
-	work.LifecycleVersion++
-	work.LastReducerSeq, work.UpdatedAt = seq, now
-	agentUpdated, err := lifecycleObject(ogKindAgent, assignment.Binding.OwnerID, assignment.Binding.ComputerID, agent.AgentID, agent,
-		lifecycleMetadata("agent_id", agent.AgentID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID, seq), agentObj.CreatedAt, now)
-	if err != nil {
-		return nil, nil, err
+	objects := []objectgraph.Object{}
+	conditions := []objectgraph.ObjectCondition{}
+	// Trajectory cancellation may already have projected the exact work and
+	// agent terminal state after durable capsule revoke intent/ack. Treat that
+	// projection as authenticated system cancellation rather than requiring a
+	// now-live parent or attempting to reopen/overwrite it.
+	if work.Status == types.WorkItemOpen {
+		if (assignment.BoundRunID == "" && agent.ActiveRunID != "") || (assignment.BoundRunID != "" && agent.ActiveRunID != assignment.BoundRunID) {
+			return nil, nil, ErrCoSuperAssignmentInvalid
+		}
+		agent.ActiveRunID = ""
+		agent.LifecycleVersion++
+		agent.LastReducerSeq, agent.UpdatedAt = seq, now
+		work.Status, work.ResultRef, work.Reason = coSuperTerminalWorkState(assignment.Disposition), resultRef, reason
+		work.LifecycleVersion++
+		work.LastReducerSeq, work.UpdatedAt = seq, now
+		agentUpdated, buildErr := lifecycleObject(ogKindAgent, assignment.Binding.OwnerID, assignment.Binding.ComputerID, agent.AgentID, agent,
+			lifecycleMetadata("agent_id", agent.AgentID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID, seq), agentObj.CreatedAt, now)
+		if buildErr != nil {
+			return nil, nil, buildErr
+		}
+		workUpdated, buildErr := lifecycleObject(ogKindWorkItem, assignment.Binding.OwnerID, assignment.Binding.ComputerID, work.WorkItemID, work,
+			lifecycleMetadata("work_item_id", work.WorkItemID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID, seq), workObj.CreatedAt, now)
+		if buildErr != nil {
+			return nil, nil, buildErr
+		}
+		objects = append(objects, agentUpdated, workUpdated)
+		conditions = append(conditions, coSuperObjectCondition(agentObj), coSuperObjectCondition(workObj))
+	} else {
+		if work.Status != types.WorkItemCancelled || assignment.Disposition != types.CoSuperAssignmentCancelled ||
+			(agent.ActiveRunID != "" && agent.ActiveRunID != assignment.BoundRunID) {
+			return nil, nil, ErrCoSuperAssignmentInvalid
+		}
+		if agent.ActiveRunID == assignment.BoundRunID && assignment.BoundRunID != "" {
+			agent.ActiveRunID = ""
+			agent.LifecycleVersion++
+			agent.LastReducerSeq, agent.UpdatedAt = seq, now
+			agentUpdated, buildErr := lifecycleObject(ogKindAgent, assignment.Binding.OwnerID, assignment.Binding.ComputerID, agent.AgentID, agent,
+				lifecycleMetadata("agent_id", agent.AgentID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID, seq), agentObj.CreatedAt, now)
+			if buildErr != nil {
+				return nil, nil, buildErr
+			}
+			objects = append(objects, agentUpdated)
+			conditions = append(conditions, coSuperObjectCondition(agentObj))
+		}
 	}
-	workUpdated, err := lifecycleObject(ogKindWorkItem, assignment.Binding.OwnerID, assignment.Binding.ComputerID, work.WorkItemID, work,
-		lifecycleMetadata("work_item_id", work.WorkItemID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID, seq), workObj.CreatedAt, now)
-	if err != nil {
-		return nil, nil, err
-	}
-	objects := []objectgraph.Object{agentUpdated, workUpdated}
-	conditions := []objectgraph.ObjectCondition{coSuperObjectCondition(agentObj), coSuperObjectCondition(workObj)}
 	if assignment.BoundRunID == "" {
 		return objects, conditions, nil
 	}
@@ -1011,9 +1039,14 @@ func (s *Store) projectCoSuperTerminal(ctx context.Context, assignment types.CoS
 	if err != nil {
 		return nil, nil, err
 	}
-	if run.RunID != assignment.BoundRunID || run.AgentID != assignment.Binding.AssignedAgentID ||
-		run.TrajectoryID != assignment.Binding.TrajectoryID || run.State.Terminal() {
+	if run.RunID != assignment.BoundRunID || run.AgentID != assignment.Binding.AssignedAgentID || run.TrajectoryID != assignment.Binding.TrajectoryID {
 		return nil, nil, ErrCoSuperAssignmentInvalid
+	}
+	if run.State.Terminal() {
+		if run.State != types.RunCancelled || assignment.Disposition != types.CoSuperAssignmentCancelled {
+			return nil, nil, ErrCoSuperAssignmentInvalid
+		}
+		return objects, conditions, nil
 	}
 	run.State = coSuperTerminalRunState(assignment.Disposition)
 	run.UpdatedAt, run.FinishedAt = now, &now
@@ -1080,7 +1113,10 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 	report.RunID, report.AssignedAgentID = assignment.BoundRunID, assignment.Binding.AssignedAgentID
 	report.Late = lateAuthority
 	if report.Late {
-		report.CertifiesOriginalSubject, report.CandidateSubjectDigest, report.CandidateID = false, "", ""
+		report.CertifiesOriginalSubject, report.CandidateSubjectDigest, report.CandidateID, report.CandidateArtifactRef = false, "", "", ""
+		if report.Verdict == types.CoSuperVerdictPass {
+			report.Verdict = types.CoSuperVerdictAbstain
+		}
 	}
 	report.Summary = strings.TrimSpace(report.Summary)
 	if report.Summary == "" {
@@ -1139,7 +1175,9 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 	}
 	assignment.ReportRefs = append(append([]string(nil), assignment.ReportRefs...), reportObj.CanonicalID)
 	previousDisposition := assignment.Disposition
-	assignment.Disposition = reducerAssignmentOutcome(report, assignment, changed)
+	if !report.Late {
+		assignment.Disposition = reducerAssignmentOutcome(report, assignment, changed)
+	}
 	if assignment.Disposition != previousDisposition && assignment.Disposition.Terminal() {
 		assignment.DispositionReason = "reducer-derived from report " + report.ReportID
 		assignment.TerminalAt = &now
@@ -1235,7 +1273,15 @@ func (s *Store) CancelCoSuperAssignment(ctx context.Context, req types.CancelCoS
 	if assignment.LifecycleVersion != req.ExpectedLifecycleVersion || assignment.Disposition.Terminal() {
 		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
 	}
-	parentAuthority, err := s.requireCoSuperParentAuthority(ctx, assignment.Binding)
+	// Once exact revoke acknowledgement is durable, cancellation is system fate
+	// completion. It authenticates the immutable assignment/control/run join and
+	// never depends on the mutable parent Super activation remaining live.
+	var parentAuthority coSuperAuthorityObjects
+	if assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked {
+		parentAuthority, err = s.requireCoSuperHistoricalParentAuthority(ctx, assignment.Binding)
+	} else {
+		parentAuthority, err = s.requireCoSuperParentAuthority(ctx, assignment.Binding)
+	}
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
@@ -1310,7 +1356,8 @@ func validCoSuperCapsuleTransition(current, next types.CoSuperCapsuleDisposition
 	case types.CoSuperCapsuleRevokeRequested:
 		return (current == types.CoSuperCapsuleUnbound || current == types.CoSuperCapsuleActive || current == types.CoSuperCapsuleFreezeRequested || current == types.CoSuperCapsuleFrozen) && intentRef != "" && ackRef == ""
 	case types.CoSuperCapsuleRevoked:
-		return current == types.CoSuperCapsuleRevokeRequested && intentRef != "" && ackRef != ""
+		return current == types.CoSuperCapsuleRevokeRequested && intentRef != "" && strings.HasPrefix(ackRef, "capsule-revoke:sha256:") &&
+			types.ValidSHA256Digest(strings.TrimPrefix(ackRef, "capsule-revoke:"))
 	default:
 		return false
 	}

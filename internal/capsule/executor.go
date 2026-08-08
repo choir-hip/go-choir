@@ -1246,6 +1246,43 @@ func (e *Executor) resolveControl(agentRunID, handle string) (string, error) {
 	return capsuleID, nil
 }
 
+// PersistRevocationReceipt durably acknowledges an already-requested exact
+// assignment fate only after this executor has no capsule/process/overlay for
+// the identity. capabilityDigest is the durable sha256 handle binding; the raw
+// handle is neither required after revocation nor reintroduced.
+func (e *Executor) PersistRevocationReceipt(agentRunID, capabilityDigest, capsuleID, intentRef string) (CapsuleRevocationReceipt, error) {
+	agentRunID, capabilityDigest = strings.TrimSpace(agentRunID), strings.TrimSpace(capabilityDigest)
+	capsuleID, intentRef = strings.TrimSpace(capsuleID), strings.TrimSpace(intentRef)
+	encodedCapability := strings.TrimPrefix(capabilityDigest, "sha256:")
+	if agentRunID == "" || capsuleID == "" || intentRef == "" || !strings.HasPrefix(capabilityDigest, "sha256:") || len(encodedCapability) != sha256.Size*2 {
+		return CapsuleRevocationReceipt{}, fmt.Errorf("capsule revocation receipt binding is invalid")
+	}
+	if _, err := hex.DecodeString(encodedCapability); err != nil {
+		return CapsuleRevocationReceipt{}, fmt.Errorf("capsule revocation receipt binding is invalid")
+	}
+	e.mu.RLock()
+	_, exists := e.capsules[capsuleID]
+	e.mu.RUnlock()
+	if exists {
+		return CapsuleRevocationReceipt{}, fmt.Errorf("capsule revocation acknowledgement requires absent capsule")
+	}
+	receipt := CapsuleRevocationReceipt{AgentRunID: agentRunID, AssignmentCapabilityDigest: capabilityDigest,
+		CapsuleID: capsuleID, IntentRef: intentRef, Disposition: "revoked", CapsuleAbsent: true, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	unsigned, err := json.Marshal(receipt)
+	if err != nil {
+		return CapsuleRevocationReceipt{}, err
+	}
+	receipt.ReceiptRef = "capsule-revoke:sha256:" + computerevent.DigestBytes(unsigned)
+	canonical, err := json.Marshal(receipt)
+	if err != nil {
+		return CapsuleRevocationReceipt{}, err
+	}
+	if err := e.persistReceiptArtifact("revocation", receipt.ReceiptRef, canonical); err != nil {
+		return CapsuleRevocationReceipt{}, err
+	}
+	return receipt, nil
+}
+
 // HasCapsule is the trusted executor acknowledgement used by durable fate
 // reconciliation. False means this executor owns no live or quarantined
 // process/cgroup/overlay for the identity.

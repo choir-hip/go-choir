@@ -119,6 +119,20 @@ type CapsuleFateReceipt struct {
 	OccurredAt             string `json:"occurred_at"`
 }
 
+// CapsuleRevocationReceipt is the executor's durable structured
+// acknowledgement that the exact run/capability/capsule authority is absent
+// after a previously durable revoke intent.
+type CapsuleRevocationReceipt struct {
+	ReceiptRef                 string `json:"receipt_ref"`
+	AgentRunID                 string `json:"agent_run_id"`
+	AssignmentCapabilityDigest string `json:"assignment_capability_digest"`
+	CapsuleID                  string `json:"capsule_id"`
+	IntentRef                  string `json:"intent_ref"`
+	Disposition                string `json:"disposition"`
+	CapsuleAbsent              bool   `json:"capsule_absent"`
+	OccurredAt                 string `json:"occurred_at"`
+}
+
 type GrantedExecutionReceipt struct {
 	ReceiptRef             string           `json:"receipt_ref"`
 	Execution              ExecutionReceipt `json:"execution"`

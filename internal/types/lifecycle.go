@@ -21,6 +21,7 @@ const (
 	LifecycleRefuseWork                   LifecycleCommandKind = "refuse_work"
 	LifecycleSettleTrajectory             LifecycleCommandKind = "settle_trajectory"
 	LifecycleCancelTrajectory             LifecycleCommandKind = "cancel_trajectory"
+	LifecyclePrepareCancelTrajectory      LifecycleCommandKind = "prepare_cancel_trajectory"
 	LifecycleArchiveArtifact              LifecycleCommandKind = "archive_artifact"
 	LifecycleApplyTextureTurn             LifecycleCommandKind = "apply_texture_turn"
 	LifecycleBindControlDelivery          LifecycleCommandKind = "bind_control_delivery"
@@ -35,30 +36,31 @@ const (
 type LifecycleEventKind string
 
 const (
-	LifecycleUpdateLate                   LifecycleEventKind = "update_late"
-	LifecycleTrajectoryStarted            LifecycleEventKind = "trajectory_started"
-	LifecycleWorkOpened                   LifecycleEventKind = "work_opened"
-	LifecycleWorkAmended                  LifecycleEventKind = "work_amended"
-	LifecycleRefsRecorded                 LifecycleEventKind = "refs_recorded"
-	LifecycleUpdateQueued                 LifecycleEventKind = "update_queued"
-	LifecycleActivationReplaced           LifecycleEventKind = "activation_replaced"
-	LifecycleUpdateApplied                LifecycleEventKind = "update_applied"
-	LifecycleArtifactHeadAdvanced         LifecycleEventKind = "artifact_head_advanced"
-	LifecycleWorkSettled                  LifecycleEventKind = "work_settled"
-	LifecycleUpdateRejected               LifecycleEventKind = "update_rejected"
-	LifecycleWorkRefused                  LifecycleEventKind = "work_refused"
-	LifecycleTrajectorySettled            LifecycleEventKind = "trajectory_settled"
-	LifecycleTrajectoryCancelled          LifecycleEventKind = "trajectory_cancelled"
-	LifecycleArtifactArchived             LifecycleEventKind = "artifact_archived"
-	LifecycleTextureTurnCommitted         LifecycleEventKind = "texture_turn_committed"
-	LifecycleControlQueued                LifecycleEventKind = "control_queued"
-	LifecycleControlDelivered             LifecycleEventKind = "control_delivered"
-	LifecycleOwnerInstructionQueued       LifecycleEventKind = "owner_instruction_queued"
-	LifecycleCoSuperAssignmentOpened      LifecycleEventKind = "co_super_assignment_opened"
-	LifecycleCoSuperAssignmentBound       LifecycleEventKind = "co_super_assignment_bound"
-	LifecycleCoSuperAssignmentReported    LifecycleEventKind = "co_super_assignment_reported"
-	LifecycleCoSuperAssignmentCancelled   LifecycleEventKind = "co_super_assignment_cancelled"
-	LifecycleCoSuperCapsuleDispositionSet LifecycleEventKind = "co_super_capsule_disposition_set"
+	LifecycleUpdateLate                      LifecycleEventKind = "update_late"
+	LifecycleTrajectoryStarted               LifecycleEventKind = "trajectory_started"
+	LifecycleWorkOpened                      LifecycleEventKind = "work_opened"
+	LifecycleWorkAmended                     LifecycleEventKind = "work_amended"
+	LifecycleRefsRecorded                    LifecycleEventKind = "refs_recorded"
+	LifecycleUpdateQueued                    LifecycleEventKind = "update_queued"
+	LifecycleActivationReplaced              LifecycleEventKind = "activation_replaced"
+	LifecycleUpdateApplied                   LifecycleEventKind = "update_applied"
+	LifecycleArtifactHeadAdvanced            LifecycleEventKind = "artifact_head_advanced"
+	LifecycleWorkSettled                     LifecycleEventKind = "work_settled"
+	LifecycleUpdateRejected                  LifecycleEventKind = "update_rejected"
+	LifecycleWorkRefused                     LifecycleEventKind = "work_refused"
+	LifecycleTrajectorySettled               LifecycleEventKind = "trajectory_settled"
+	LifecycleTrajectoryCancelled             LifecycleEventKind = "trajectory_cancelled"
+	LifecycleTrajectoryCancellationRequested LifecycleEventKind = "trajectory_cancellation_requested"
+	LifecycleArtifactArchived                LifecycleEventKind = "artifact_archived"
+	LifecycleTextureTurnCommitted            LifecycleEventKind = "texture_turn_committed"
+	LifecycleControlQueued                   LifecycleEventKind = "control_queued"
+	LifecycleControlDelivered                LifecycleEventKind = "control_delivered"
+	LifecycleOwnerInstructionQueued          LifecycleEventKind = "owner_instruction_queued"
+	LifecycleCoSuperAssignmentOpened         LifecycleEventKind = "co_super_assignment_opened"
+	LifecycleCoSuperAssignmentBound          LifecycleEventKind = "co_super_assignment_bound"
+	LifecycleCoSuperAssignmentReported       LifecycleEventKind = "co_super_assignment_reported"
+	LifecycleCoSuperAssignmentCancelled      LifecycleEventKind = "co_super_assignment_cancelled"
+	LifecycleCoSuperCapsuleDispositionSet    LifecycleEventKind = "co_super_capsule_disposition_set"
 )
 
 type StartLifecycleRequest struct {
@@ -290,14 +292,27 @@ type RefuseLifecycleWorkRequest struct {
 }
 
 type CancelLifecycleRequest struct {
-	OwnerID                  string `json:"owner_id"`
-	ComputerID               string `json:"computer_id"`
-	CommandID                string `json:"command_id"`
-	CommandDigest            string `json:"command_digest"`
-	TrajectoryID             string `json:"trajectory_id"`
-	ExpectedLifecycleVersion int64  `json:"expected_lifecycle_version"`
-	ExpectedHeadRevisionID   string `json:"expected_head_revision_id"`
-	Reason                   string `json:"reason"`
+	OwnerID                   string `json:"owner_id"`
+	ComputerID                string `json:"computer_id"`
+	CommandID                 string `json:"command_id"`
+	CommandDigest             string `json:"command_digest"`
+	TrajectoryID              string `json:"trajectory_id"`
+	ExpectedLifecycleVersion  int64  `json:"expected_lifecycle_version"`
+	RequestedLifecycleVersion int64  `json:"requested_lifecycle_version,omitempty"`
+	ExpectedHeadRevisionID    string `json:"expected_head_revision_id"`
+	Reason                    string `json:"reason"`
+}
+
+type LifecycleCancellationIntent struct {
+	OwnerID                   string    `json:"owner_id"`
+	ComputerID                string    `json:"computer_id"`
+	TrajectoryID              string    `json:"trajectory_id"`
+	CommandID                 string    `json:"command_id"`
+	CommandDigest             string    `json:"command_digest"`
+	RequestedLifecycleVersion int64     `json:"requested_lifecycle_version"`
+	ExpectedHeadRevisionID    string    `json:"expected_head_revision_id"`
+	Reason                    string    `json:"reason"`
+	CreatedAt                 time.Time `json:"created_at"`
 }
 
 type SettleLifecycleTrajectoryRequest struct {

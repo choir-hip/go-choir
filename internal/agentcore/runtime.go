@@ -107,6 +107,9 @@ type Runtime struct {
 	assignmentHandleResolver interface {
 		AssignmentHandle(string, string) (string, error)
 	}
+	assignmentReceiptResolver interface {
+		ResolveExecutionReceipts([]string) ([]capsule.ExecutionReceipt, error)
+	}
 	assignmentLookup interface {
 		GetCoSuperAssignment(context.Context, string, string, string, uint64) (types.CoSuperAssignment, error)
 	}
@@ -479,6 +482,7 @@ func WithContentService(service *contentowner.Service) RuntimeOption {
 func WithCapsuleExecutor(executor *capsule.Executor) RuntimeOption {
 	return func(rt *Runtime) {
 		rt.capsuleExecutor = executor
+		rt.assignmentReceiptResolver = executor
 		if executor != nil {
 			rt.capsuleBuilder = transaction.NewTransactionBuilder(transaction.NewClassifier())
 		}
@@ -1300,7 +1304,24 @@ func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason st
 		}
 		return fmt.Errorf("lookup run: %w", err)
 	}
-	if rec.State.Terminal() {
+	assignmentProjected := false
+	if rec.State.Active() && metadataStringValue(rec.Metadata, "assignment_id") != "" {
+		// Do not terminalize the generic run projection first: durable exact
+		// assignment revoke intent must precede capability revoke/destroy/inspect,
+		// structured executor ack, and assignment/work/run cancellation.
+		rt.runningMu.Unlock()
+		assignmentProjected, err = rt.cancelBoundCoSuperRun(context.WithoutCancel(ctx), rec, reason)
+		if err != nil {
+			return fmt.Errorf("cancel bound CoSuper run fate: %w", err)
+		}
+		rt.runningMu.Lock()
+		rec, err = rt.getRunForComputer(context.Background(), ownerID, runID)
+		if err != nil {
+			rt.runningMu.Unlock()
+			return fmt.Errorf("reload assignment-cancelled run: %w", err)
+		}
+	}
+	if rec.State.Terminal() && !assignmentProjected {
 		trajectoryID := strings.TrimSpace(trajectoryIDForRun(&rec))
 		trajectory, trajectoryErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, rec.SandboxID, trajectoryID)
 		if trajectoryErr != nil || trajectory.Status != types.TrajectoryCancelled {
@@ -1310,13 +1331,15 @@ func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason st
 	}
 
 	now := time.Now().UTC()
-	rec.State = types.RunCancelled
-	rec.Error = reason
-	rec.UpdatedAt = now
-	rec.FinishedAt = &now
-	if err := rt.store.UpdateRun(ctx, rec); err != nil {
-		rt.runningMu.Unlock()
-		return fmt.Errorf("update cancelled run: %w", err)
+	if !rec.State.Terminal() || !assignmentProjected {
+		rec.State = types.RunCancelled
+		rec.Error = reason
+		rec.UpdatedAt = now
+		rec.FinishedAt = &now
+		if err := rt.store.UpdateRun(ctx, rec); err != nil {
+			rt.runningMu.Unlock()
+			return fmt.Errorf("update cancelled run: %w", err)
+		}
 	}
 	cancel := rt.running[runID]
 	delete(rt.running, runID)
@@ -1379,36 +1402,66 @@ func (rt *Runtime) cancelTrajectoryAuthorityCommand(ctx context.Context, ownerID
 	if rt == nil || rt.store == nil {
 		return types.LifecycleResult{}, fmt.Errorf("cancel trajectory: runtime store is unavailable")
 	}
-	ownerID = strings.TrimSpace(ownerID)
-	trajectoryID = strings.TrimSpace(trajectoryID)
+	ownerID, trajectoryID = strings.TrimSpace(ownerID), strings.TrimSpace(trajectoryID)
 	if ownerID == "" || trajectoryID == "" {
 		return types.LifecycleResult{}, fmt.Errorf("cancel trajectory: owner_id and trajectory_id are required")
 	}
 	computerID := strings.TrimSpace(rt.TextureSandboxID())
 	if computerID != "" {
-		if trajectory, lifecycleErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID); lifecycleErr == nil {
-			if expectedVersion <= 0 || strings.TrimSpace(expectedHead) == "" {
-				snapshot, snapshotErr := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
-				if snapshotErr != nil {
-					return types.LifecycleResult{}, snapshotErr
-				}
-				expectedVersion = snapshot.Trajectory.LifecycleVersion
-				expectedHead = snapshot.HeadRevision.RevisionID
-			}
+		trajectory, lifecycleErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
+		if lifecycleErr == nil {
 			if strings.TrimSpace(commandID) == "" {
 				commandID = "lifecycle-cancel:" + trajectoryID
 			}
 			if strings.TrimSpace(reason) == "" {
 				reason = "owner cancellation"
 			}
-			cancel := types.CancelLifecycleRequest{
-				OwnerID: ownerID, ComputerID: computerID, CommandID: strings.TrimSpace(commandID),
-				TrajectoryID: trajectory.TrajectoryID, Reason: strings.TrimSpace(reason),
-				ExpectedLifecycleVersion: expectedVersion, ExpectedHeadRevisionID: strings.TrimSpace(expectedHead),
+			// A restart/retry resumes the durable original authority rather than
+			// deriving command identity from the trajectory version advanced by
+			// assignment fate transitions.
+			if intent, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, ownerID, computerID, trajectoryID); intentErr == nil {
+				if intent.CommandID != strings.TrimSpace(commandID) ||
+					(expectedVersion > 0 && expectedVersion != intent.RequestedLifecycleVersion) ||
+					(strings.TrimSpace(expectedHead) != "" && strings.TrimSpace(expectedHead) != intent.ExpectedHeadRevisionID) ||
+					(strings.TrimSpace(reason) != "" && strings.TrimSpace(reason) != intent.Reason) {
+					return types.LifecycleResult{}, store.ErrLifecycleCommandConflict
+				}
+				expectedVersion, expectedHead, reason = intent.RequestedLifecycleVersion, intent.ExpectedHeadRevisionID, intent.Reason
+			} else if errors.Is(intentErr, store.ErrNotFound) {
+				if expectedVersion <= 0 || strings.TrimSpace(expectedHead) == "" {
+					snapshot, snapshotErr := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+					if snapshotErr != nil {
+						return types.LifecycleResult{}, snapshotErr
+					}
+					expectedVersion, expectedHead = snapshot.Trajectory.LifecycleVersion, snapshot.HeadRevision.RevisionID
+				}
+			} else {
+				return types.LifecycleResult{}, intentErr
 			}
-			cancel.CommandDigest, _ = store.ComputeCancelLifecycleDigest(cancel)
-			return rt.store.CancelLifecycleTrajectory(ctx, cancel)
-		} else if !errors.Is(lifecycleErr, store.ErrNotFound) {
+			original := types.CancelLifecycleRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: strings.TrimSpace(commandID),
+				TrajectoryID: trajectory.TrajectoryID, Reason: strings.TrimSpace(reason), ExpectedLifecycleVersion: expectedVersion,
+				RequestedLifecycleVersion: expectedVersion, ExpectedHeadRevisionID: strings.TrimSpace(expectedHead)}
+			original.CommandDigest, _ = store.ComputeCancelLifecycleDigest(original)
+			intent, prepErr := rt.store.PrepareLifecycleCancellation(ctx, original)
+			if prepErr != nil {
+				return types.LifecycleResult{}, prepErr
+			}
+			if trajectory.Status == types.TrajectoryLive {
+				if _, fateErr := rt.prepareCoSuperTrajectoryCancellation(context.WithoutCancel(ctx), ownerID, computerID, trajectoryID, intent.Reason); fateErr != nil {
+					return types.LifecycleResult{}, fmt.Errorf("prepare trajectory assignment fate: %w", fateErr)
+				}
+			}
+			fresh, freshErr := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+			if freshErr != nil {
+				return types.LifecycleResult{}, freshErr
+			}
+			final := original
+			final.ExpectedLifecycleVersion = fresh.Trajectory.LifecycleVersion
+			final.RequestedLifecycleVersion = intent.RequestedLifecycleVersion
+			final.CommandDigest = intent.CommandDigest
+			return rt.store.CancelLifecycleTrajectory(ctx, final)
+		}
+		if !errors.Is(lifecycleErr, store.ErrNotFound) {
 			return types.LifecycleResult{}, lifecycleErr
 		}
 	}
@@ -1441,7 +1494,10 @@ func (rt *Runtime) CancelTrajectoryCommand(ctx context.Context, trajectoryID, ow
 	if result.Trajectory.Status != types.TrajectoryCancelled {
 		return result, nil, nil
 	}
-	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, strings.TrimSpace(ownerID), result.Trajectory.ComputerID, strings.TrimSpace(trajectoryID))
+	if err := rt.finishCoSuperTrajectoryCancellation(context.WithoutCancel(ctx), ownerID, result.Trajectory.ComputerID, trajectoryID, reason); err != nil {
+		return result, nil, fmt.Errorf("finish trajectory assignment cancellation: %w", err)
+	}
+	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, ownerID, result.Trajectory.ComputerID, trajectoryID)
 	return result, cancelled, err
 }
 
@@ -1450,6 +1506,7 @@ func (rt *Runtime) CancelTrajectoryCommand(ctx context.Context, trajectoryID, ow
 // before any activation is signalled. A settled trajectory is reported
 // unchanged and its activations are not cancelled.
 func (rt *Runtime) CancelTrajectory(ctx context.Context, trajectoryID, ownerID string) (types.TrajectoryRecord, []string, error) {
+	ownerID, trajectoryID = strings.TrimSpace(ownerID), strings.TrimSpace(trajectoryID)
 	trajectory, err := rt.cancelTrajectoryAuthority(ctx, ownerID, trajectoryID)
 	if err != nil {
 		return types.TrajectoryRecord{}, nil, err
@@ -1457,8 +1514,10 @@ func (rt *Runtime) CancelTrajectory(ctx context.Context, trajectoryID, ownerID s
 	if trajectory.Status != types.TrajectoryCancelled {
 		return trajectory, nil, nil
 	}
-
-	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, strings.TrimSpace(ownerID), trajectory.ComputerID, strings.TrimSpace(trajectoryID))
+	if err := rt.finishCoSuperTrajectoryCancellation(context.WithoutCancel(ctx), ownerID, trajectory.ComputerID, trajectoryID, "owner cancellation"); err != nil {
+		return trajectory, nil, fmt.Errorf("finish trajectory assignment cancellation: %w", err)
+	}
+	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, ownerID, trajectory.ComputerID, trajectoryID)
 	return trajectory, cancelled, err
 }
 
@@ -2126,6 +2185,17 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 	for _, workItems := range grouped {
 		first := workItems[0]
 		var err error
+		computerID := firstNonEmpty(first.ComputerID, rt.TextureSandboxID())
+		if intent, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, first.OwnerID, computerID, first.TrajectoryID); intentErr == nil {
+			_, _, err = rt.CancelTrajectoryCommand(ctx, first.TrajectoryID, first.OwnerID, intent.CommandID, intent.Reason, intent.RequestedLifecycleVersion, intent.ExpectedHeadRevisionID)
+			if err != nil {
+				log.Printf("runtime: boot cancellation-intent recovery owner=%s trajectory=%s: %v", first.OwnerID, first.TrajectoryID, err)
+			}
+			continue
+		} else if !errors.Is(intentErr, store.ErrNotFound) {
+			log.Printf("runtime: boot cancellation-intent lookup owner=%s trajectory=%s: %v", first.OwnerID, first.TrajectoryID, intentErr)
+			continue
+		}
 		if strings.TrimSpace(first.AssignedAgentID) == persistentSuperAgentID(strings.TrimSpace(first.OwnerID)) {
 			_, err = rt.reconcilePersistentSuperActor(ctx, first.OwnerID, first.AssignedAgentID)
 		} else if agentprofile.Canonical(first.AuthorityProfile) == agentprofile.CoSuper {
@@ -2506,6 +2576,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 				ctx = WithCapsuleCtx(ctx, &CapsuleToolCtx{
 					Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rec.SandboxID,
 					Role: capsule.RoleCoSuper, CapsuleHandle: handle,
+					ValidateCurrentObligation: func(callCtx context.Context) error {
+						return rt.validateAssignedCoSuperExecution(callCtx, rec)
+					},
 				})
 			}
 		}

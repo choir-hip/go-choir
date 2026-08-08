@@ -200,7 +200,8 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		ParentAgentID: parent.AgentID, ParentRunID: parent.RunID, ParentDecisionID: parentDecisionID,
 		ParentControlID: parentControlID, ParentWorkItemID: parentWorkID,
 		AssignedWorkItemID: workID, AssignedAgentID: agentID, Kind: req.Kind, Attempt: attempt,
-		ScopeDigest: scopeDigest, RequestDigest: requestDigest, CapabilityDigest: store.DigestCoSuperOpaqueCapability(opaque), SubjectDigest: subjectDigest,
+		ScopeDigest: scopeDigest, RequestDigest: requestDigest, CapabilityDigest: store.DigestCoSuperOpaqueCapability(opaque),
+		ExecutionHandleDigest: objectgraph.SHA256([]byte(opaque)), SubjectDigest: subjectDigest,
 		SourceArtifactRef: preflight.ArtifactRef, SourceCandidateID: req.CandidateID,
 		Writable: true, CapsuleID: capsuleID, NetworkMode: types.CoSuperCapsuleNetworkForbidden,
 		FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
@@ -254,8 +255,11 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		if rt.capsuleExecutor.HasCapsule(capsuleID) {
 			return fmt.Errorf("%w (pre-bind capsule continued after executor acknowledgement)", cause)
 		}
-		ack := "capsule-revoke-ack:" + objectgraph.SHA256([]byte(intent+"\x00absent"))
-		acked, fateErr := rt.store.SetCoSuperCapsuleDisposition(context.Background(), coSuperFateRequest(requested.Assignment, types.CoSuperCapsuleRevoked, intent, ack))
+		receipt, receiptErr := rt.capsuleExecutor.PersistRevocationReceipt(runID, requested.Assignment.Binding.CapabilityDigest, capsuleID, intent)
+		if receiptErr != nil {
+			return fmt.Errorf("%w (persist structured pre-bind revoke acknowledgement: %v)", cause, receiptErr)
+		}
+		acked, fateErr := rt.store.SetCoSuperCapsuleDisposition(context.Background(), coSuperFateRequest(requested.Assignment, types.CoSuperCapsuleRevoked, intent, receipt.ReceiptRef))
 		if fateErr != nil {
 			return fmt.Errorf("%w (persist pre-bind capsule revoke acknowledgement: %v)", cause, fateErr)
 		}
@@ -285,7 +289,7 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 			"assigned_work_item_id": workID, "capsule_id": capsuleID,
 			"parent_decision_id": parentDecisionID, "parent_control_id": parentControlID,
 			"parent_work_item_id": parentWorkID, "scope_digest": scopeDigest, "request_digest": requestDigest,
-			"capability_digest": binding.CapabilityDigest, "subject_digest": subjectDigest,
+			"capability_digest": binding.CapabilityDigest, "execution_handle_digest": binding.ExecutionHandleDigest, "subject_digest": subjectDigest,
 			"source_artifact_ref": preflight.ArtifactRef, "source_candidate_id": req.CandidateID,
 		},
 	}

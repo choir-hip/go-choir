@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -35,6 +36,7 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 		assignment.Binding.TrajectoryID != rec.TrajectoryID || assignment.Binding.ComputerID != rec.SandboxID ||
 		metadataStringValue(rec.Metadata, "capsule_id") != assignment.Binding.CapsuleID ||
 		metadataStringValue(rec.Metadata, "capability_digest") != assignment.Binding.CapabilityDigest ||
+		metadataStringValue(rec.Metadata, "execution_handle_digest") != assignment.Binding.ExecutionHandleDigest ||
 		metadataStringValue(rec.Metadata, "assigned_work_item_id") != assignment.Binding.AssignedWorkItemID ||
 		metadataStringValue(rec.Metadata, "assignment_kind") != string(assignment.Binding.Kind) ||
 		metadataStringValue(rec.Metadata, "request_digest") != assignment.Binding.RequestDigest ||
@@ -58,4 +60,41 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 		return nil, "", err
 	}
 	return registry, handle, nil
+}
+
+func (rt *Runtime) validateAssignedCoSuperExecution(ctx context.Context, rec *types.RunRecord) error {
+	if rec == nil || rt == nil || rt.store == nil || rt.capsuleExecutor == nil {
+		return fmt.Errorf("assigned CoSuper execution authority unavailable")
+	}
+	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
+	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
+	assignment, err := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.SandboxID, assignmentID, attempt)
+	if err != nil {
+		return err
+	}
+	if assignment.Disposition != types.CoSuperAssignmentBound || assignment.CapsuleDisposition != types.CoSuperCapsuleActive ||
+		assignment.BoundRunID != rec.RunID || assignment.Binding.AssignedWorkItemID != metadataStringValue(rec.Metadata, "assigned_work_item_id") {
+		return fmt.Errorf("assignment fate is not active and bound")
+	}
+	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.SandboxID, assignment.Binding.TrajectoryID)
+	if err != nil || trajectory.Status != types.TrajectoryLive {
+		return fmt.Errorf("trajectory obligation is not live: %w", err)
+	}
+	work, err := rt.store.GetLifecycleWorkItem(ctx, rec.OwnerID, rec.SandboxID, assignment.Binding.AssignedWorkItemID)
+	if err != nil || work.Status != types.WorkItemOpen || work.AssignedAgentID != rec.AgentID {
+		return fmt.Errorf("assigned work obligation is not open: %w", err)
+	}
+	storedRun, err := rt.getRunForComputer(ctx, rec.OwnerID, rec.RunID)
+	if err != nil || !storedRun.State.Active() || storedRun.AgentID != rec.AgentID || storedRun.TrajectoryID != assignment.Binding.TrajectoryID {
+		return fmt.Errorf("assigned run obligation is not active: %w", err)
+	}
+	handle, err := rt.capsuleExecutor.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
+	if err != nil || strings.TrimSpace(handle) == "" || !rt.capsuleExecutor.HasCapsule(assignment.Binding.CapsuleID) {
+		return fmt.Errorf("assignment capsule capability is absent: %w", err)
+	}
+	diagnostics, err := rt.capsuleExecutor.InspectCapsuleRaw(assignment.Binding.CapsuleID)
+	if err != nil || diagnostics.ID != assignment.Binding.CapsuleID || diagnostics.State != capsule.StateActive {
+		return fmt.Errorf("assignment capsule is not active: %w", err)
+	}
+	return nil
 }

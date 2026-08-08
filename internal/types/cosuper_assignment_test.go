@@ -16,7 +16,7 @@ func validCoSuperAssignmentFixture(kind CoSuperAssignmentKind, writable bool) Co
 		OwnerID: "owner", ComputerID: "computer", TrajectoryID: "trajectory",
 		ParentAgentID: "super:owner", ParentRunID: "run-super", ParentDecisionID: "decision:" + assignmentDigest("d"), ParentControlID: "control-1",
 		ParentWorkItemID: "work-super", AssignedWorkItemID: "work-cosuper", AssignedAgentID: "co-super:one",
-		Kind: kind, Attempt: 1, ScopeDigest: assignmentDigest("a"), RequestDigest: assignmentDigest("e"), CapabilityDigest: assignmentDigest("b"),
+		Kind: kind, Attempt: 1, ScopeDigest: assignmentDigest("a"), RequestDigest: assignmentDigest("e"), CapabilityDigest: assignmentDigest("b"), ExecutionHandleDigest: assignmentDigest("f"),
 		SubjectDigest: assignmentDigest("c"), SourceArtifactRef: "capsule-source-git:commit:" + assignmentDigest("c"), Writable: writable,
 		NetworkMode:    CoSuperCapsuleNetworkForbidden,
 		FilesystemMode: CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,

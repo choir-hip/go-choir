@@ -98,7 +98,8 @@ func coSuperOpenRequest(f coSuperAssignmentStoreFixture, index int, assignmentID
 		ParentDecisionID: f.parentDecisionID, ParentControlID: f.parentControlID,
 		ParentWorkItemID: f.parentWorkID, AssignedWorkItemID: f.assignedWorkIDs[index], AssignedAgentID: f.assignedAgentIDs[index],
 		Kind: kind, Attempt: attempt, ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-		CapabilityDigest: DigestCoSuperOpaqueCapability(capability), SubjectDigest: objectgraph.SHA256([]byte("subject:" + assignmentID)),
+		CapabilityDigest: DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
+		SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
 		SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
 		Writable:          writable, CapsuleID: capsuleID,
 		NetworkMode:    types.CoSuperCapsuleNetworkForbidden,
@@ -131,7 +132,8 @@ func bindCoSuperRequest(open types.OpenCoSuperAssignmentRequest, runID, capabili
 			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
 			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
 			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
-			"capability_digest": open.Binding.CapabilityDigest, "subject_digest": open.Binding.SubjectDigest,
+			"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
+			"subject_digest":      open.Binding.SubjectDigest,
 			"source_artifact_ref": open.Binding.SourceArtifactRef, "source_candidate_id": open.Binding.SourceCandidateID,
 			"coordination_contract_id":     open.Binding.CoordinationContractID,
 			"coordination_contract_digest": open.Binding.CoordinationContractDigest,
@@ -672,7 +674,7 @@ func TestAssignmentOutcomeAndCapsuleFateRemainSeparateAcrossRestart(t *testing.T
 		t.Fatalf("revocation without ack = %v", err)
 	}
 	revokeAck := missingAck
-	revokeAck.CommandID, revokeAck.AckRef = "command-revoke-ack", "receipt:revoke"
+	revokeAck.CommandID, revokeAck.AckRef = "command-revoke-ack", "capsule-revoke:sha256:"+strings.Repeat("a", 64)
 	revokeAck.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(revokeAck)
 	revoked, err := s.SetCoSuperCapsuleDisposition(ctx, revokeAck)
 	if err != nil || revoked.Assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked || revoked.Assignment.Disposition != types.CoSuperAssignmentCancelled {
@@ -741,7 +743,7 @@ func TestOpenedAssignmentCapsuleCleanupIntentAckBeforeCancel(t *testing.T) {
 	ack.CommandID = "prebind-revoke-ack"
 	ack.ExpectedLifecycleVersion = 2
 	ack.Disposition = types.CoSuperCapsuleRevoked
-	ack.AckRef = "ack:absent"
+	ack.AckRef = "capsule-revoke:" + objectgraph.SHA256([]byte("structured-prebind-revoke-ack"))
 	ack.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(ack)
 	revoked, err := s.SetCoSuperCapsuleDisposition(ctx, ack)
 	if err != nil || revoked.Assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
@@ -787,7 +789,7 @@ func TestReplayRecordedReportAfterRevokeReturnsOriginalReceipt(t *testing.T) {
 	ack.CommandID = "replay-revoke-ack"
 	ack.ExpectedLifecycleVersion = x.Assignment.LifecycleVersion
 	ack.Disposition = types.CoSuperCapsuleRevoked
-	ack.AckRef = "ack:replay"
+	ack.AckRef = "capsule-revoke:sha256:" + strings.Repeat("a", 64)
 	ack.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(ack)
 	if _, err := s.SetCoSuperCapsuleDisposition(ctx, ack); err != nil {
 		t.Fatal(err)
@@ -978,10 +980,23 @@ func TestCoSuperCancellationQueuesOneFailureAndLateResultIsEvidenceOnly(t *testi
 	late.Report.CandidateSubjectDigest, late.Report.CandidateID = late.Report.ObservedSubjectDigest, "late-authored-candidate"
 	late.Report.Mutations = []types.CoSuperRecordedMutation{{MutationID: "late-mutation", Kind: "assignment_overlay", BeforeDigest: open.Binding.SubjectDigest,
 		AfterDigest: late.Report.ObservedSubjectDigest, EvidenceRef: "late-capsule-diff", SubjectBytesChanged: true}}
+	late.Report.Commands = []types.CoSuperRecordedCommand{{CommandID: "late-command", CommandDigest: objectgraph.SHA256([]byte("go test ./...")), ExecutionRef: "capsule-exec:sha256:persisted-raw", ExitCode: 0}}
+	late.Report.ExecutorReceiptRefs = []string{"capsule-exec:sha256:persisted-raw"}
 	late.CommandDigest, _ = ComputeRecordCoSuperAssignmentReportDigest(late)
 	lateResult, err := s.RecordCoSuperAssignmentReport(ctx, late)
-	if err != nil || lateResult.Report == nil || !lateResult.Report.Late || lateResult.Update != nil || lateResult.Candidate != nil || lateResult.Report.CandidateID != "" || lateResult.Assignment.Disposition != types.CoSuperAssignmentCancelled {
+	if err != nil || lateResult.Report == nil || !lateResult.Report.Late || lateResult.Update != nil || lateResult.Candidate != nil || lateResult.Report.CandidateID != "" || lateResult.Assignment.Disposition != types.CoSuperAssignmentCancelled ||
+		len(lateResult.Report.ExecutorReceiptRefs) != 1 || lateResult.Report.ExecutorReceiptRefs[0] != "capsule-exec:sha256:persisted-raw" {
 		t.Fatalf("late = %+v err=%v", lateResult, err)
+	}
+	lateReplay, err := s.RecordCoSuperAssignmentReport(ctx, late)
+	if err != nil || !lateReplay.Replay || lateReplay.Update != nil || lateReplay.Candidate != nil {
+		t.Fatalf("late exact replay = %+v err=%v", lateReplay, err)
+	}
+	lateConflict := late
+	lateConflict.Report.Summary = "changed late result"
+	lateConflict.CommandDigest, _ = ComputeRecordCoSuperAssignmentReportDigest(lateConflict)
+	if _, err := s.RecordCoSuperAssignmentReport(ctx, lateConflict); !errors.Is(err, ErrCoSuperAssignmentCommandConflict) {
+		t.Fatalf("late conflict = %v", err)
 	}
 	latePartial := assignmentReportRequest(open, lateResult.Assignment.LifecycleVersion, "late-partial-result", open.Binding.SubjectDigest, types.CoSuperResultPartial, types.CoSuperVerdictNone)
 	latePartial.Report.Summary = "in-flight partial result arrived after revoke"
@@ -989,5 +1004,129 @@ func TestCoSuperCancellationQueuesOneFailureAndLateResultIsEvidenceOnly(t *testi
 	partialResult, err := s.RecordCoSuperAssignmentReport(ctx, latePartial)
 	if err != nil || partialResult.Report == nil || !partialResult.Report.Late || partialResult.Update != nil || partialResult.Assignment.Disposition != types.CoSuperAssignmentCancelled {
 		t.Fatalf("late partial = %+v err=%v", partialResult, err)
+	}
+}
+
+func TestLifecycleCancellationIntentSurvivesAssignmentFateAndPreservesCallerCASIdentity(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-cancel-intent", 1, types.CoSuperAssignmentImplementation, true, "cap-cancel-intent", "capsule-cancel-intent")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-cancel-intent")); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, f.ownerID, f.computerID, f.trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalVersion := snapshot.Trajectory.LifecycleVersion
+	cancel := types.CancelLifecycleRequest{OwnerID: f.ownerID, ComputerID: f.computerID, CommandID: "cancel-with-durable-intent", TrajectoryID: f.trajectoryID,
+		ExpectedLifecycleVersion: originalVersion, RequestedLifecycleVersion: originalVersion, ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, Reason: "owner cancelled exact assignment"}
+	cancel.CommandDigest, _ = ComputeCancelLifecycleDigest(cancel)
+	intent, err := s.PrepareLifecycleCancellation(ctx, cancel)
+	if err != nil || intent.RequestedLifecycleVersion != originalVersion {
+		t.Fatalf("prepare intent: %+v %v", intent, err)
+	}
+	if replay, err := s.PrepareLifecycleCancellation(ctx, cancel); err != nil || replay.CommandDigest != intent.CommandDigest {
+		t.Fatalf("intent replay: %+v %v", replay, err)
+	}
+	conflict := cancel
+	conflict.RequestedLifecycleVersion++
+	conflict.ExpectedLifecycleVersion++
+	conflict.CommandDigest, _ = ComputeCancelLifecycleDigest(conflict)
+	if _, err := s.PrepareLifecycleCancellation(ctx, conflict); !errors.Is(err, ErrLifecycleCommandConflict) {
+		t.Fatalf("changed original CAS = %v", err)
+	}
+	revoke := types.SetCoSuperCapsuleDispositionRequest{CommandID: "intent-revoke", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 2, Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: "capsule-revoke-intent:test"}
+	revoke.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(revoke)
+	requested, err := s.SetCoSuperCapsuleDisposition(ctx, revoke)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ack := revoke
+	ack.CommandID = "intent-revoke-ack"
+	ack.ExpectedLifecycleVersion = requested.Assignment.LifecycleVersion
+	ack.Disposition = types.CoSuperCapsuleRevoked
+	ack.AckRef = "capsule-revoke:sha256:" + strings.Repeat("a", 64)
+	ack.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(ack)
+	if _, err := s.SetCoSuperCapsuleDisposition(ctx, ack); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := s.GetLifecycleSnapshot(ctx, f.ownerID, f.computerID, f.trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel.ExpectedLifecycleVersion = fresh.Trajectory.LifecycleVersion
+	result, err := s.CancelLifecycleTrajectory(ctx, cancel)
+	if err != nil || result.Trajectory.Status != types.TrajectoryCancelled {
+		t.Fatalf("finish intent: %+v %v", result, err)
+	}
+	replayResult, err := s.CancelLifecycleTrajectory(ctx, cancel)
+	if err != nil || !replayResult.Replay {
+		t.Fatalf("final replay: %+v %v", replayResult, err)
+	}
+}
+
+func TestSystemAssignmentCancellationAfterTrajectoryProjectionUsesHistoricalAuthority(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-historical-system-cancel", 1, types.CoSuperAssignmentImplementation, true, "cap-historical", "capsule-historical")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-historical")); err != nil {
+		t.Fatal(err)
+	}
+	revoke := types.SetCoSuperCapsuleDispositionRequest{CommandID: "historical-revoke-intent", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 2, Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: "capsule-revoke-intent:historical"}
+	revoke.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(revoke)
+	requested, err := s.SetCoSuperCapsuleDisposition(ctx, revoke)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ack := revoke
+	ack.CommandID = "historical-revoke-ack"
+	ack.ExpectedLifecycleVersion = requested.Assignment.LifecycleVersion
+	ack.Disposition = types.CoSuperCapsuleRevoked
+	ack.AckRef = "capsule-revoke:sha256:" + strings.Repeat("b", 64)
+	ack.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(ack)
+	acked, err := s.SetCoSuperCapsuleDisposition(ctx, ack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, f.ownerID, f.computerID, f.trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelTrajectory := types.CancelLifecycleRequest{OwnerID: f.ownerID, ComputerID: f.computerID, CommandID: "historical-trajectory-cancel", TrajectoryID: f.trajectoryID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, Reason: "trajectory cancelled first"}
+	cancelTrajectory.CommandDigest, _ = ComputeCancelLifecycleDigest(cancelTrajectory)
+	if _, err := s.CancelLifecycleTrajectory(ctx, cancelTrajectory); err != nil {
+		t.Fatal(err)
+	}
+	parentRun, err := s.GetRunByOwner(ctx, f.ownerID, f.parentRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	parentRun.State, parentRun.FinishedAt, parentRun.UpdatedAt = types.RunCancelled, &now, now
+	if err := s.UpdateRun(ctx, parentRun); err != nil {
+		t.Fatal(err)
+	}
+	cancel := types.CancelCoSuperAssignmentRequest{CommandID: "historical-system-assignment-cancel", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: acked.Assignment.LifecycleVersion, Reason: "finish exact revoked assignment"}
+	cancel.CommandDigest, _ = ComputeCancelCoSuperAssignmentDigest(cancel)
+	result, err := s.CancelCoSuperAssignment(ctx, cancel)
+	if err != nil || result.Assignment.Disposition != types.CoSuperAssignmentCancelled || result.Assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+		t.Fatalf("historical cancel: %+v %v", result, err)
+	}
+	run, err := s.GetLifecycleRun(ctx, f.ownerID, f.computerID, f.assignedRunIDs[0])
+	if err != nil || run.State != types.RunCancelled {
+		t.Fatalf("terminal run: %+v %v", run, err)
+	}
+	work, err := s.GetLifecycleWorkItem(ctx, f.ownerID, f.computerID, open.Binding.AssignedWorkItemID)
+	if err != nil || work.Status != types.WorkItemCancelled {
+		t.Fatalf("terminal work: %+v %v", work, err)
 	}
 }

@@ -42,6 +42,9 @@ type CapsuleToolCtx struct {
 		Head(context.Context, string) (*computerevent.Head, error)
 		EventByIdempotency(context.Context, string, string) (computerevent.Event, bool, error)
 	}
+	// ValidateCurrentObligation rejoins durable run/work/trajectory/assignment
+	// fate immediately before every readable or writable capsule execution.
+	ValidateCurrentObligation func(context.Context) error
 }
 
 type capsuleCtxKey struct{}
@@ -108,8 +111,22 @@ func requireCapsuleRole(ctx context.Context, role capsule.AgentRole) (*CapsuleTo
 	}
 	return value, nil
 }
+
+func requireCurrentAssignedCapsule(ctx context.Context) (*CapsuleToolCtx, error) {
+	value, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+	if err != nil {
+		return nil, err
+	}
+	if value.ValidateCurrentObligation == nil {
+		return nil, fmt.Errorf("assigned capsule obligation validator unavailable")
+	}
+	if err := value.ValidateCurrentObligation(ctx); err != nil {
+		return nil, fmt.Errorf("assigned capsule obligation is no longer executable: %w", err)
+	}
+	return value, nil
+}
 func requireCapsuleMutationRole(ctx context.Context) (*CapsuleToolCtx, error) {
-	toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+	toolCtx, err := requireCurrentAssignedCapsule(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -722,7 +739,7 @@ func newCapsuleReadFileTool() toolregistry.Tool {
 	return toolregistry.Tool{Name: "capsule_read_file", Description: "Read a file inside the assigned capsule.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{"path": map[string]any{"type": "string"}}, []string{"path"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+			toolCtx, err := requireCurrentAssignedCapsule(ctx)
 			if err != nil {
 				return "", err
 			}
@@ -773,7 +790,7 @@ func newCapsuleListDirTool() toolregistry.Tool {
 	return toolregistry.Tool{Name: "capsule_list_dir", Description: "List a directory inside the assigned capsule.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{"path": map[string]any{"type": "string"}}, []string{"path"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+			toolCtx, err := requireCurrentAssignedCapsule(ctx)
 			if err != nil {
 				return "", err
 			}
@@ -808,7 +825,7 @@ func newRecordAssignedCoSuperReportTool(rt *Runtime) toolregistry.Tool {
 			"execution_refs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 		}, []string{"result", "verdict", "summary", "evidence_refs", "execution_refs"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleMutationRole(ctx)
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
 			if err != nil {
 				return "", err
 			}

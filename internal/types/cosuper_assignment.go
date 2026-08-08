@@ -62,6 +62,7 @@ type CoSuperAssignmentBinding struct {
 	ScopeDigest                string                `json:"scope_digest"`
 	RequestDigest              string                `json:"request_digest"`
 	CapabilityDigest           string                `json:"capability_digest"`
+	ExecutionHandleDigest      string                `json:"execution_handle_digest"`
 	SubjectDigest              string                `json:"subject_digest"`
 	SourceArtifactRef          string                `json:"source_artifact_ref"`
 	SourceCandidateID          string                `json:"source_candidate_id,omitempty"`
@@ -101,11 +102,15 @@ func (b CoSuperAssignmentBinding) Validate() error {
 		return fmt.Errorf("co-super assignment: attempt must be positive")
 	}
 	for name, digest := range map[string]string{
-		"scope_digest": b.ScopeDigest, "request_digest": b.RequestDigest, "capability_digest": b.CapabilityDigest, "subject_digest": b.SubjectDigest,
+		"scope_digest": b.ScopeDigest, "request_digest": b.RequestDigest, "capability_digest": b.CapabilityDigest,
+		"subject_digest": b.SubjectDigest,
 	} {
 		if !ValidSHA256Digest(digest) {
 			return fmt.Errorf("co-super assignment: %s must be an exact sha256 digest", name)
 		}
+	}
+	if b.ExecutionHandleDigest != "" && !ValidSHA256Digest(b.ExecutionHandleDigest) {
+		return fmt.Errorf("co-super assignment: execution_handle_digest must be an exact sha256 digest when present")
 	}
 	if strings.TrimSpace(b.SourceArtifactRef) == "" || b.SourceArtifactRef != strings.TrimSpace(b.SourceArtifactRef) {
 		return fmt.Errorf("co-super assignment: exact runtime source artifact ref is required")

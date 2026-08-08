@@ -109,6 +109,10 @@ func (e *Executor) WriteFile(context.Context, string, string, string, []byte, ui
 func (e *Executor) ListDir(context.Context, string, string, string) ([]string, error) {
 	return nil, stubErr("list")
 }
+func (e *Executor) PersistRevocationReceipt(string, string, string, string) (CapsuleRevocationReceipt, error) {
+	return CapsuleRevocationReceipt{}, stubErr("persist revocation receipt")
+}
+
 func (e *Executor) HasCapsule(string) bool { return false }
 func (e *Executor) InspectCapsuleRaw(string) (*CapsuleDiagnostics, error) {
 	return nil, stubErr("inspect")
