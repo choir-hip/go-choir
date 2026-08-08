@@ -307,7 +307,8 @@ a bounded deploy-only recovery window. Most importantly, the older runtime has
 no restart/read receipt against the current persisted object graph.
 
 No workflow was rerun and no deployment, route, checkpoint, computer, or product
-state changed. Deployed rollback remains open. A safe rehearsal requires either
+state changed at this preflight checkpoint. Deployed rollback was then open; the
+later canonical R/F receipt below supersedes that status. A safe rehearsal required either
 a canonical current-main revert followed by a newly reviewed forward candidate,
 or purpose-built bounded deploy-only authority with an exclusive change freeze,
 complete affected-computer/protected-state inventory, and old-code proof against
@@ -373,3 +374,77 @@ certificate/digest, service restart telemetry, and monotonic VM epoch only.
 **Heresy delta:** `discovered: none; introduced: none expected; repaired: none`;
 the operation closes an evidence gap, not a heresy. Effects remain OFF and
 registries remain open.
+
+
+### Canonical R/F execution receipt
+
+The frozen reverse patch landed as new current-main rollback commit
+`10d4865958b7d8deaab5665f74b37dd1b5005070` (R). Its index matched the exact
+99-path ordered scope, every scoped mode/blob matched `cdaa787b`, no document
+path changed, and independent review returned **PROCEED**. CI run [`31267448310`](https://github.com/choir-hip/go-choir/actions/runs/31267448310)
+passed selected Race/build/SBOM gates, published the canonical rolling Flake, and
+deployed exact R. Nonce-bound identity joined all host services, guest build,
+route, deployment receipt, and platform attestation to R on the same stable VM
+and guest at epoch 8248.
+
+At the read-only midpoint the durable-run digest remained
+`eb235251327268ec03909cd3c28d60b31a5edcca5f90b7b06a8cd074e8f84217`
+with twelve terminal and zero active runs. All lifecycle summaries remained
+cancelled at versions 9/3/3 with the same heads/work state; self-development
+remained OFF generation 0; policy SHA-256 remained
+`7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`;
+and route, VM/guest, and single-computer identities were stable apart from the
+allowed epoch. The full original-trajectory response digest differed because
+R's legacy response omitted exactly six stored owner-instruction `request_id`
+fields. No underlying event/head/work/run value changed, but strict forward
+observability failed and the frozen identity-ambiguity abort rule fired. The
+original trajectory full-response digest moved from
+`2a4c429fa63b7dd33722e034f791bfe754a1270a732bfaada357e37fbc09e2e8` to
+`dd5e25500a81dada79bd3400cce2064869aed641692a3c007d1f3e14ace260a9`;
+the two v3 digests remained exact. F was initiated immediately, without
+additional old-runtime probing.
+
+Forward commit `67a61358ceda55c30e9853907f85648bb8531bb8` applied the identical
+1,289,831-byte patch forward. Its whole tree
+`d1a03e3e03f25d0ff201fd8d424b38549ccdb552` is exactly the pre-R
+`2f8d912e` tree, independently proving restored ac6-equivalent runtime bytes and
+retained current docs. CI run [`31268477380`](https://github.com/choir-hip/go-choir/actions/runs/31268477380) passed, published the rolling Flake,
+and deployed exact F. R and F deployment jobs completed at `17:02:43Z` and
+`17:34:32Z`, respectively: 1,909 seconds (31m49s), inside the 45-minute bound.
+Final nonce-bound identity joined exact F on the same VM/guest at epoch 8249.
+
+The sanitized comparator was:
+
+| Comparator | Before | R | F |
+| --- | --- | --- | --- |
+| durable runs | `eb235251327268ec03909cd3c28d60b31a5edcca5f90b7b06a8cd074e8f84217` | same | same |
+| retained v9 response | `2a4c429fa63b7dd33722e034f791bfe754a1270a732bfaada357e37fbc09e2e8` | `dd5e25500a81dada79bd3400cce2064869aed641692a3c007d1f3e14ace260a9` | baseline |
+| ChatGPT v3 response | `196bbddebe3bd53d73f2a884446029ee42d94b04bef83c04bc45737866395172` | same | same |
+| Z.AI v3 response | `292a5fe35086ef253a60eee86ca888ea3aaaf28520e87bf44435dacb6680f362` | same | same |
+| policy | `7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a` | same | same |
+| route | `sha256:648d6071215206b190376ff6c24f3c93c08483b09bfb2ffc4790c00f3dd66489` | same | same |
+
+Final full response digests for all three retained trajectories, the complete
+run digest/counts, lifecycle summaries, policy bytes, self-development mode and
+generation, route digest, and single-computer inventory exactly matched the
+pre-R baseline; there were still zero active runs. Only new deployment/build receipts and monotonic epochs
+8247→8248→8249 changed. Trees were R
+`c87560fdf21c76c2b0840ec825c91459282d4c77` and F/pre-R
+`d1a03e3e03f25d0ff201fd8d424b38549ccdb552`. The scoped acceptance key was revoked and
+then returned HTTP 401. The qualified verdict is **bounded deployed rollback-and-recovery PASS; strict
+midpoint forward-observability FAIL (safely recovered)**. This closes the prior
+canonical deployed-rollback gap and strengthens the rollback/restore and Store-
+preservation conjecture, but refutes strict backward observational equivalence.
+Heresy delta: `discovered` — the legacy event projection omits forward-added
+`request_id`; `introduced` — none durably; `repaired` — none. The compatibility
+projection heresy remains unrepaired; F deployment/source restoration is the
+recovery outcome, not heresy repair. It does not
+supply the provider-blocked repeated Texture loop, real capsule/late-result,
+positive correction/source-open, canonical checkpoint inventory, or run
+acceptance.
+
+Problem-documentation-first safety exception: the binding abort gate required F
+to begin immediately when identity ambiguity appeared; pausing on old code to
+commit a problem receipt would have prolonged protected exposure. F therefore
+necessarily preceded the durable problem section, which is the first subsequent
+commit and precedes any compatibility fix. No such fix is proposed here.

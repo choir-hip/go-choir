@@ -24,7 +24,7 @@ unexecuted Researcher/Super/capsule behavior.
 | Initial committed-work projection | PASS deployed | No-SSH deployment restart created run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf` for the previously stranded initial work |
 | Provider-dependent acceptance | **BLOCKED** | Host ChatGPT returned HTTP 401 `refresh_token_reused` on both original and fresh trajectories; Z.AI returned HTTP 429 and later an open unhealthy-provider circuit; configured fallback chains ended at stale ChatGPT. Sanitized local reproduction after staging found DeepSeek/Xiaomi HTTP 402 balance failures, Fireworks HTTP 412 `PRECONDITION_FAILED`, and Z.AI HTTP 429 code `1113`; these local calls diagnose route failures but are not acceptance evidence. No Researcher/update/revision/Super/capsule was produced |
 | Acceptance-artifact cleanup | PASS | Original failed trajectory `8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d` was publicly cancelled at lifecycle version 9; fresh recurrence trajectories `41cec88f-510f-53cc-a5e7-84c372b5421b` and `aca3504c-2ae0-5a4e-bab5-b22541e90585` were publicly cancelled at lifecycle version 3; original model-policy bytes were restored at SHA-256 `7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`; all temporary API keys were revoked and rejected on subsequent use |
-| Source rollback | **LOCAL SOURCE + REPRESENTATIVE BACKWARD STARTUP PASS / DEPLOYED OPEN** | The 99-path `cdaa787b` reconstruction/tests passed; unsafe historical rerun stayed rejected. A clean ac6 Dolt fixture added terminal lifecycle/run/work, owner-instruction, Texture-turn/two-revision, exact-run control-delivery, cancellation-intent, event, and receipt objects. Exact old runtime `460c1423` opened/read/started the same workspace with zero actor dispatch, unchanged Dolt HEAD `lvtb74ss94q6u8jpmtd32707oefj2pu5`, and clean status; ac6 reopen retained new-only objects. This provides representative structural startup mitigation evidence, not exact production-DB or deployed proof. Deployment still requires either a canonical current-main two-commit rehearsal or separately authorized bounded deploy-only authority with freeze, affected-computer inventory, backward-graph proof, and exact recovery. |
+| Source rollback | **DEPLOYED BOUNDED REHEARSAL + RECOVERY PASS / STRICT MIDPOINT OBSERVABILITY FAIL** | Canonical R `10d48659` made the exact 99 non-document paths cdaa-equivalent; CI/rolling/deploy `31267448310` passed and exact R ran at epoch 8248. R preserved run/lifecycle/selfdev/policy/inventory summaries, but its legacy response omitted six stored owner-instruction `request_id` fields, so the full v9 response digest differed and the identity-ambiguity gate fired. Canonical F `67a61358` immediately restored the exact pre-R whole tree; CI/rolling/deploy `31268477380` passed, exact F ran at epoch 8249, and all captured frozen comparator response/state digests equalled baseline. Exposure was 1,909 seconds; key revoked/post-401. Canonical deployed rollback/recovery is rehearsed; strict old-runtime forward-observability and complete checkpoint/capsule acceptance remain open. |
 | Registry terminal closure | OPEN | ACTIVE, mission graph, and authority manifest remain active/working; effects remain OFF |
 
 ## Finish acceptance actions
@@ -39,7 +39,7 @@ unexecuted Researcher/Super/capsule behavior.
 | 6 | Pending controls, passivation, approved no-SSH same-build restart, same identities | Deterministic local recovery contracts passed. | **PARTIAL PASS.** Ordinary deployment restart recovered initial owner work on exact identities. Pending Researcher/Super controls and same-run append recovery remain unproved on staging. |
 | 7 | Direct owner revision plus natural-language correction | Atomic owner-head rebase and lifecycle instruction source tests passed. | **PARTIAL PASS.** Natural-language owner instructions queued durably and woke exact Texture runs. No Texture-authored revision existed to correct or rebase. |
 | 8 | In-flight cancellation, delayed authenticated result, exact retry | Deterministic cancellation and bounded evidence-only closure passed source review and Race tests. | **PARTIAL PASS.** Public conditional cancellation cancelled the failed trajectory and resident activation. No in-flight capsule effect or delayed authenticated result existed, so late-evidence semantics remain unproved. |
-| 9 | Compare event heads, self-development state, checkpoint, route, host projections before/after | Source gates refuse out-of-capsule and late promotion effects. | **PARTIAL PASS.** Exact acceptance computer self-development remained `off`, generation 0, before and after. Model policy bytes remained SHA-256 `7192b8b1…`; nonce-bound post-deploy identities before/after later probes retained the same route digest, VM epoch 8247, and host/guest `ac6dd16b` builds. The retained cancelled trajectory stayed at watermark/lifecycle version 9 and exact v0 after CLI negatives. The readback key was revoked/post-401. No real capsule effect, canonical checkpoint readback, or complete protected event-head comparison exists, so full no-effect acceptance remains open. |
+| 9 | Compare event heads, self-development state, checkpoint, route, host projections before/after | Source gates refuse out-of-capsule and late promotion effects. | **DEPLOYED BOUNDED R/F PASS / ACCEPTANCE PARTIAL.** Before/R/F comparison kept the run digest exact (12 terminal/0 active), all lifecycle summaries/heads/work states exact, self-development `off` generation 0, policy SHA-256 `7192b8b1…`, the stable VM/guest/route digest, and one-computer inventory; only deployment/build receipts and epochs 8247→8248→8249 changed. R omitted six stored request IDs from its legacy response, so strict midpoint observation failed and triggered immediate F; final F full trajectory digests exactly returned to baseline. The key was revoked/post-401. No real capsule effect or canonical checkpoint inventory exists, so the complete provider-dependent no-effect acceptance remains open. |
 
 ## Measures
 
@@ -117,6 +117,13 @@ triggered or cannot yet be excluded by the required evidence class.
   cancellation-intent, run/work/event/receipt kinds; old `460c1423`
   Store/Runtime start on the same Dolt HEAD dispatched zero actors and left
   HEAD/status unchanged; ac6 reopen retained all new-only kinds.
+- canonical deployed R/F: R `10d48659`, CI/rolling/deploy `31267448310`,
+  epoch8248; strict midpoint v9 digest `2a4c…→dd5e…` from six legacy-response
+  `request_id` omissions triggered immediate F; F `67a61358`, exact pre-R tree,
+  CI/rolling/deploy `31268477380`, epoch8249; all captured frozen comparator response/state digests exact,
+  exposure 1,909 seconds, key revoked/post-401. Qualified verdict: bounded
+  rollback and recovery pass; strict midpoint forward-observability fail, safely
+  recovered.
 
 These are failure/partial-path evidence. They do not count as an accepted
 Researcher, Super, CoSuper, capsule, transclusion, or run-acceptance graph.
@@ -126,11 +133,11 @@ Researcher, Super, CoSuper, capsule, transclusion, or run-acceptance graph.
 Still missing: a canonical audited gateway credential/provider restoration or funding/configuration of one unavailable provider account;
 authenticated repeated-cycle trajectory; three progressive revisions; two
 downward control cycles; owner correction against a Texture-authored head;
-openable research and execution sources; watch disconnect/resume and CLI parity;
+openable research and execution sources plus positive correction/CLI parity;
 parallel implementation and independent writable verification capsules; real
 Linux isolation and cleanup; restart with pending controls; actual delayed
 receipt/replay evidence; complete protected-state before/after comparison;
-owner-visible inspection; deployed source/route rollback rehearsal; run acceptance;
+owner-visible inspection; canonical checkpoint inventory and strict legacy forward-observability (if separately required); run acceptance;
 terminal registry closure; and the full accepted identity graph: owner/computer,
 document/revision, immutable source/version/hash, trajectory/run,
 producer/target work, actor, request/command/update/occurrence/digest,

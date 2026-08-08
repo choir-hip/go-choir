@@ -10,36 +10,33 @@ is the owner-ratified executable `/goal`. It connects Texture's existing durable
 inbound revision path to target-bound Researcher control, the one persistent
 Super, many capability-bound capsule-only CoSupers, progressive prose-first
 versions with canonical source transclusions, and an automatable Texture API/CLI
-surface. The final owner settlement accepts the repaired Definition after the
-v4.7-3 panel's remaining ledger-only dissent was mechanically closed. Runtime candidate
-`ac6dd16b` has passed final independent source review, selected CI, exact Node B
-deployment, and nonce-bound host/guest/platform identity. The repaired initial
-work projected after restart, and authenticated create, tell, model-policy
-rollback, and public lifecycle cancellation executed. Repeated supervision is
-blocked by protected gateway provider availability: ChatGPT auth is stale, and
-Z.AI remained unavailable with an open unhealthy-provider circuit after a
-cooldown-aware retry; sanitized local diagnostics then found DeepSeek/Xiaomi
-balance failures, Fireworks precondition failure, and Z.AI balance/rate failure.
-No Researcher/Super/capsule turn was produced. Public CLI read/show and durable
-disconnect/resume observation through cancelled cursor 9 nevertheless passed;
-positive correction, historical v1+, and source-open remain blocked. A local
-source-only rollback rehearsal exactly restored all 99 non-document candidate
-paths to `cdaa787b` and passed sequential runtime shards/focused/vet checks;
-deployed rollback remains open: independent red-team rejected a historical
-workflow rerun because it would publish a rolling route, misstate current-main
-provenance, refresh every mutable computer, and open newer persisted state with
-older code without bounded recovery; no deployment was triggered. A later
-representative ac6 terminal graph then opened and started under exact old
-`460c1423` with zero actor dispatch and unchanged clean Dolt HEAD, and ac6 reopen
-retained new-only object kinds; this is local compatibility mitigation, not
-production/deployed proof. Authenticated readback kept self-development OFF
-generation 0, policy bytes exact, and route digest/epoch/build identity unchanged;
-real capsule/checkpoint/event-head comparison remains open. The current bounded
-integration slice is an independently approved canonical current-main two-leg
-rollback/forward landing with exclusive change freeze, fresh protected-state
-baselines, exact nonce identities, and immediate forward recovery on any delta.
-Effects remain OFF; provider restoration, real Linux product proof, complete no-
-effect/deployed-rollback evidence, and registry closure remain mandatory.
+surface. Runtime source `ac6dd16b` passed final independent review, CI, exact
+Node B deployment, and nonce-bound product identity; its repaired initial work,
+public lifecycle/policy/cancellation, and partial CLI read/watch authority
+executed. Repeated supervision remains blocked by protected provider
+availability: ChatGPT auth is stale, Z.AI is circuit-open after 429,
+DeepSeek/Xiaomi lack balance, Fireworks returns precondition failure, and Bedrock
+is unsupported. No provider completed a Texture tool turn.
+
+The canonical current-main rollback/forward rehearsal is now complete with the
+qualified verdict **bounded deployed rollback-and-recovery PASS; strict midpoint
+forward-observability FAIL (safely recovered)**. R `10d48659` made the exact 99
+non-document paths cdaa-equivalent and passed CI/rolling/deploy `31267448310` at
+epoch 8248. Its legacy trajectory response omitted six stored owner-instruction
+`request_id` fields; protected run/lifecycle/selfdev/policy/inventory summaries
+remained stable, but the identity-ambiguity gate fired. F `67a61358` was
+initiated immediately without further old probing, restored the exact pre-R
+whole tree/ac6-equivalent runtime, passed CI/rolling/deploy `31268477380`, and
+joined exact product identity at epoch 8249. All captured frozen comparator response/state digests matched
+the epoch-8247 baseline; exposure was 1,909 seconds and the key was
+revoked/post-401. Canonical deployed rollback/recovery is therefore rehearsed,
+while the legacy projection is not forward-lossless.
+
+The current slice has returned to authorized provider restoration or separately
+ratified scoped no-SSH renewal. Effects remain OFF. Provider-dependent repeated
+Researcher/Super/CoSuper progression, real capsule/late-result behavior, positive
+correction/source opening, complete checkpoint/no-effect and run acceptance,
+and terminal registry closure remain mandatory.
 
 ## Completed Definitions — Historical Evidence Authority
 

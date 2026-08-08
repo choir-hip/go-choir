@@ -881,8 +881,8 @@ worktree were removed; session evidence remains under
 `/tmp/choir-rollback-proof/`.
 
 This is meaningful structural backward-startup evidence for the terminal object
-classes produced or contemplated by the blocked acceptance, including a superset
-with a Texture turn/control that staging never reached. It is not a byte-exact
+classes produced or contemplated by the blocked acceptance, including a representative graph
+with Texture-turn/control object kinds that staging never reached. It is not a byte-exact
 production database copy, full server/actor-adapter proof, VM filesystem proof,
 or deployed rollback. No sanctioned Store export/import path exists; the closed
 marker plus derived `.texture` directory is the local transferable unit. The
@@ -890,3 +890,53 @@ result satisfies the specific representative compatibility mitigation only when
 combined with a fresh terminal-only product preflight and independently bounded,
 current-main-conformant route recovery. The global routing, rolling-Flake, and
 recovery-window hazards identified above remain open.
+
+## Canonical current-main rollback rehearsal and old-response identity ambiguity — 2026-08-08
+
+The independently approved canonical two-leg rehearsal has now executed under one
+exclusive owner. Rollback commit `10d4865958b7d8deaab5665f74b37dd1b5005070`
+changed exactly the reviewed 99 non-document paths to byte-equivalence with
+`cdaa787b`; current mission docs remained. GitHub Actions run `31267448310`
+passed the selected Race/build/SBOM gates, published the canonical rolling Flake,
+and deployed the new R identity. Nonce-bound product identity joined host, guest,
+route, deployment receipt, platform attestation, stable VM
+`vm-bbdbbd01c4390b7036067aaa12afeb68`, and guest
+`computer-42850e9734d9442386c5dd8bf3afbf19` to exact R at epoch 8248.
+
+The read-only midpoint preserved the exact durable-run digest (twelve terminal,
+zero active), lifecycle version/head/work summaries, self-development OFF
+generation 0, model-policy SHA-256
+`7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`,
+route digest, and the single active interactive-computer inventory. It also
+revealed one response-identity ambiguity: R's trajectory representation omitted
+the stored `request_id` field on each of six owner-instruction events. No event,
+version, head, work, run, policy, or computer value changed, but the full response
+digest therefore differed from the frozen baseline. The rehearsal treated that
+omission as the predeclared identity-ambiguity abort condition and initiated F
+immediately without another old-runtime probe. **Problem-documentation-first
+safety exception:** the binding recovery gate required F to begin immediately;
+waiting on old code to commit this receipt would have prolonged protected
+exposure. F therefore necessarily preceded this first subsequent problem/evidence
+commit. This receipt still precedes any compatibility fix; no fix is part of
+this mission.
+
+Forward commit `67a61358ceda55c30e9853907f85648bb8531bb8` applied the same
+1,289,831-byte frozen patch forward. Its whole Git tree is exactly the pre-R
+`2f8d912ed110680f5217dd36c006a96196334f7f` tree
+(`d1a03e3e03f25d0ff201fd8d424b38549ccdb552`), so the 99 runtime paths are
+byte-equivalent to `ac6dd16b` while current docs remain. GitHub Actions run
+`31268477380` passed, published the canonical rolling Flake, and deployed exact F
+at epoch 8249. R deploy completion was `17:02:43Z`; F deploy completion was
+`17:34:32Z`, an old-runtime exposure of 1,909 seconds (31m49s), within the
+45-minute bound.
+
+Final authenticated product comparison restored exact full response digests for
+all three retained cancelled trajectories and exactly matched the pre-R run,
+policy, self-development, lifecycle, route, VM/guest, and computer-inventory
+state; only the allowed deployment/build receipts and monotonic epochs changed.
+The scoped key was revoked and returned HTTP 401. This closes the missing
+current-main-conformant deployed rollback/forward receipt and proves the
+fail-closed response-identity abort behavior. It does not repair the old response
+schema or replace the still-blocked provider-dependent repeated supervision,
+real capsule, late-result, positive correction/source-open, checkpoint, and run-
+acceptance evidence.
