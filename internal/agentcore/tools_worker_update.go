@@ -429,6 +429,9 @@ func enforceCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 		return fmt.Errorf("update_coagent target scope/profile is not authoritative")
 	}
 	if !agentprofile.CanMessage(callerProfile, targetProfile) {
+		if targetProfile == agentprofile.Email {
+			return fmt.Errorf("update_coagent %s cannot message %s; route owner intent through Texture request_email_draft artifact handoff", callerProfile, targetProfile)
+		}
 		return fmt.Errorf("update_coagent %s cannot message %s", callerProfile, targetProfile)
 	}
 	if callerProfile == agentprofile.Super && targetProfile == agentprofile.CoSuper {

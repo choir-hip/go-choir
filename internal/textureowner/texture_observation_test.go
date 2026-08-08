@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -52,43 +51,11 @@ func applyObservationSourceVersion(t *testing.T, s *store.Store, start types.Sta
 	if err != nil {
 		t.Fatalf("payload digest: %v", err)
 	}
-	now := time.Now().UTC()
-	producer := types.AgentRecord{
-		AgentID: "researcher:observation", OwnerID: start.OwnerID, ComputerID: start.ComputerID, SandboxID: start.ComputerID,
-		Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := s.UpsertAgent(context.Background(), producer); err != nil {
-		t.Fatalf("upsert producer: %v", err)
-	}
-	open := types.OpenLifecycleWorkRequest{
-		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "open-observation-producer-work", TrajectoryID: start.TrajectoryID,
-		WorkItem: types.WorkItemRecord{WorkItemID: "work-observation-producer", Objective: "produce observed source update", AuthorityProfile: "researcher", AssignedAgentID: producer.AgentID},
-	}
-	open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
-	opened, err := s.OpenLifecycleWork(context.Background(), open)
-	if err != nil || opened.WorkItem == nil {
-		t.Fatalf("open producer work: %+v, %v", opened.WorkItem, err)
-	}
-	producerRun := types.RunRecord{
-		RunID: "run-observation-producer", AgentID: producer.AgentID, AgentProfile: producer.Profile, AgentRole: producer.Role,
-		ChannelID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID, OwnerID: start.OwnerID, SandboxID: start.ComputerID,
-		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": opened.WorkItem.WorkItemID},
-	}
-	project := types.ReplaceLifecycleActivationRequest{
-		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "project-observation-producer",
-		TrajectoryID: start.TrajectoryID, AgentID: producer.AgentID, Run: producerRun,
-	}
-	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
-	if _, err := s.ReplaceLifecycleActivation(context.Background(), project); err != nil {
-		t.Fatalf("project producer: %v", err)
-	}
 	queue := types.QueueLifecycleUpdateRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "queue-observation",
 		TrajectoryID: start.TrajectoryID, TargetAgentID: start.Agent.AgentID,
-		ProducerAgentID: producer.AgentID, ProducerUpdateID: "producer-observation-1",
+		ProducerAgentID: "researcher:observation", ProducerUpdateID: "producer-observation-1",
 		UpdateID: "update-observation-1", Packet: packet, Content: "durable source update", PayloadDigest: payloadDigest,
-		SourceRunID: producerRun.RunID, ChannelID: start.InitialDocument.DocID, Role: producer.Role,
-		WorkItemID: opened.WorkItem.WorkItemID, WorkDisposition: types.WorkItemOpen,
 	}
 	queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
 	if _, err := s.QueueLifecycleUpdate(context.Background(), queue); err != nil {
@@ -242,29 +209,31 @@ func TestTextureLifecycleProjectionJoinsAtomicTurnAndControlIdentities(t *testin
 		DocID: start.InitialDocument.DocID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, TrajectoryID: start.TrajectoryID,
 	}, types.LifecycleEvent{
 		EventID: "turn-command:1", OwnerID: start.OwnerID, ComputerID: start.ComputerID, TrajectoryID: start.TrajectoryID,
+
 		Kind: types.LifecycleTextureTurnCommitted, ReducerSeq: 10, CommandID: "turn-command",
-		CommandDigest: "sha256:turn", ArtifactRefs: []string{start.InitialDocument.DocID, revision.RevisionID},
+		CommandDigest: "sha256:turn", RequestID: "owner-request-causal", ArtifactRefs: []string{start.InitialDocument.DocID, revision.RevisionID},
 		Reason: "private actor explanation must not project", CreatedAt: now,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if turn.EventType != "version" || turn.RevisionID != revision.RevisionID || turn.VersionNumber == nil ||
-		turn.CommandID != "turn-command" || turn.RequestID != "" || turn.ControlID != "" {
+		turn.CommandID != "turn-command" || turn.RequestID != "owner-request-causal" || turn.ControlID != "" {
 		t.Fatalf("atomic turn projection = %+v", turn)
 	}
 	control, err := handler.projectTextureLifecycleEvent(context.Background(), types.Document{
 		DocID: start.InitialDocument.DocID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, TrajectoryID: start.TrajectoryID,
 	}, types.LifecycleEvent{
 		EventID: "turn-command:2", OwnerID: start.OwnerID, ComputerID: start.ComputerID, TrajectoryID: start.TrajectoryID,
-		Kind: types.LifecycleControlQueued, ReducerSeq: 11, CommandID: "turn-command", UpdateID: "control-one",
+
+		Kind: types.LifecycleControlQueued, ReducerSeq: 11, CommandID: "turn-command", UpdateID: "control-one", RequestID: "owner-request-causal",
 		WorkItemID: "target-work", CommandDigest: "sha256:turn", Reason: "private control chatter", CreatedAt: now,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if control.EventType != "control" || control.ControlID != "control-one" || control.UpdateID != "control-one" ||
-		control.WorkItemID != "target-work" || control.RequestID != "" || control.RevisionID != "" {
+		control.WorkItemID != "target-work" || control.RequestID != "owner-request-causal" || control.RevisionID != "" {
 		t.Fatalf("control projection = %+v", control)
 	}
 	payload, _ := json.Marshal([]textureDurableEvent{turn, control})

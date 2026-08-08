@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -43,11 +44,20 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		return nil, fmt.Errorf("check blocked super run: %w", err)
 	}
 
-	updates, err := rt.listAndSettlePersistentSuperBacklog(ctx, ownerID, agentID)
+	computerID := strings.TrimSpace(rt.TextureSandboxID())
+	updates, err := rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100)
+	updates = selectLifecycleControlActivation(updates, "", nil)
+	lifecycleControls := len(updates) > 0
 	if err != nil {
 		return nil, err
 	}
-	updates = filterPersistentSuperExecutionUpdates(updates)
+	if !lifecycleControls {
+		updates, err = rt.listAndSettlePersistentSuperBacklog(ctx, ownerID, agentID)
+		if err != nil {
+			return nil, err
+		}
+		updates = filterPersistentSuperExecutionUpdates(updates)
+	}
 	if len(updates) == 0 {
 		if blockedActive != nil {
 			return blockedActive, nil
@@ -56,11 +66,15 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	}
 
 	first := updates[0]
+	requestSource := "update_coagent"
+	if lifecycleControls {
+		requestSource = "lifecycle_texture_control"
+	}
 	metadata := map[string]any{
 		runMetadataAgentProfile: agentprofile.Super,
 		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      agentID,
-		"request_source":        "update_coagent",
+		"request_source":        requestSource,
 		"requested_by_agent_id": first.AgentID,
 		"requested_by_profile":  strings.TrimSpace(first.Role),
 	}
@@ -68,10 +82,19 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		metadata[runMetadataChannelID] = first.ChannelID
 	}
 	if first.TrajectoryID != "" {
-		metadata[runMetadataTrajectoryID] = first.TrajectoryID
+		metadata["assignment_trajectory_id"] = first.TrajectoryID
 	}
-	if first.WorkItemID != "" {
-		metadata["lifecycle_work_item_id"] = first.WorkItemID
+	targetWorkItemID := firstNonEmpty(first.TargetWorkItemID, first.WorkItemID)
+	if targetWorkItemID != "" {
+		metadata["lifecycle_work_item_id"] = targetWorkItemID
+		workIDs, seenWork := make([]string, 0, len(updates)), map[string]bool{}
+		for _, update := range updates {
+			if id := firstNonEmpty(update.TargetWorkItemID, update.WorkItemID); id != "" && !seenWork[id] {
+				seenWork[id] = true
+				workIDs = append(workIDs, id)
+			}
+		}
+		metadata["work_item_ids"] = workIDs
 	}
 	updateIDs := make([]string, 0, len(updates))
 	for _, update := range updates {
@@ -79,7 +102,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 			updateIDs = append(updateIDs, id)
 		}
 	}
-	if len(updateIDs) > 0 {
+	if len(updateIDs) > 0 && !lifecycleControls {
 		metadata["worker_update_ids"] = updateIDs
 	}
 	if first.AgentID != "" {
@@ -97,6 +120,12 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	rec, err := rt.createRunWithMetadata(ctx, "Process pending coagent update packets for privileged execution.", ownerID, metadata)
 	if err != nil {
 		return nil, err
+	}
+	if lifecycleControls {
+		if _, err := rt.bindLifecycleControlsToRun(ctx, rec, updates); err != nil {
+			rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
+			return nil, err
+		}
 	}
 	rt.activate(rec)
 	return rec, nil
@@ -164,9 +193,12 @@ func (rt *Runtime) updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx cont
 		return nil
 	}
 	updateIDs := coagentUpdateIDsForRun(rec)
-	if runHasProfile(rec, agentprofile.Texture) {
+	if runHasProfile(rec, agentprofile.Texture) || metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
 		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
 			return err
+		}
+		if metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
+			return nil
 		}
 		return rt.completeSuccessfulRunWorkItems(ctx, rec)
 	}
@@ -303,6 +335,155 @@ func (rt *Runtime) settlePersistentSuperNonExecutionUpdates(ctx context.Context,
 	return true, nil
 }
 
+func lifecycleControlTrajectoryForRun(rec *types.RunRecord) string {
+	if rec == nil {
+		return ""
+	}
+	return strings.TrimSpace(firstNonEmpty(rec.TrajectoryID, metadataStringValue(rec.Metadata, "assignment_trajectory_id"), metadataStringValue(rec.Metadata, runMetadataTrajectoryID)))
+}
+
+func lifecycleControlWorkIDsForRun(rec *types.RunRecord) map[string]bool {
+	out := map[string]bool{}
+	if rec == nil {
+		return out
+	}
+	if id := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")); id != "" {
+		out[id] = true
+	}
+	for _, id := range metadataStringSlice(rec.Metadata["work_item_ids"]) {
+		if id = strings.TrimSpace(id); id != "" {
+			out[id] = true
+		}
+	}
+	return out
+}
+
+func selectLifecycleControlActivation(updates []types.CoagentSourcePacket, trajectoryID string, workIDs map[string]bool) []types.CoagentSourcePacket {
+	if len(updates) == 0 {
+		return nil
+	}
+	trajectoryID = strings.TrimSpace(trajectoryID)
+	if trajectoryID == "" {
+		trajectoryID = strings.TrimSpace(updates[0].TrajectoryID)
+	}
+	out := make([]types.CoagentSourcePacket, 0, len(updates))
+	for _, update := range updates {
+		if strings.TrimSpace(update.TrajectoryID) != trajectoryID {
+			continue
+		}
+		if len(workIDs) > 0 && !workIDs[strings.TrimSpace(update.TargetWorkItemID)] {
+			continue
+		}
+		out = append(out, update)
+	}
+	return out
+}
+
+func (rt *Runtime) bindLifecycleControlsToRun(ctx context.Context, rec *types.RunRecord, updates []types.CoagentSourcePacket) (types.LifecycleResult, error) {
+	if rt == nil || rt.store == nil || rec == nil || len(updates) == 0 {
+		return types.LifecycleResult{}, nil
+	}
+	updates = selectLifecycleControlActivation(updates, lifecycleControlTrajectoryForRun(rec), lifecycleControlWorkIDsForRun(rec))
+	if len(updates) == 0 {
+		return types.LifecycleResult{}, fmt.Errorf("bind lifecycle controls: no exact run/trajectory/work controls")
+	}
+	controlTrajectoryID := lifecycleControlTrajectoryForRun(rec)
+	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, rec.OwnerID, rec.SandboxID, controlTrajectoryID)
+	if err != nil {
+		return types.LifecycleResult{}, fmt.Errorf("bind lifecycle controls snapshot: %w", err)
+	}
+	items := make([]types.BindLifecycleControlDeliveryItem, 0, len(updates))
+	ids := make([]string, 0, len(updates))
+	for _, update := range updates {
+		items = append(items, types.BindLifecycleControlDeliveryItem{UpdateID: update.UpdateID, ProducerAgentID: update.AgentID, ProducerUpdateID: update.ProducerUpdateID, TargetWorkItemID: update.TargetWorkItemID})
+		ids = append(ids, update.UpdateID)
+	}
+	commandID := "bind-control-delivery:" + rec.RunID + ":" + strings.Join(ids, ",")
+	req := types.BindLifecycleControlDeliveryRequest{OwnerID: rec.OwnerID, ComputerID: rec.SandboxID, CommandID: commandID, TrajectoryID: controlTrajectoryID, TargetAgentID: rec.AgentID, TargetRunID: rec.RunID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, Controls: items}
+	req.CommandDigest, err = store.ComputeBindLifecycleControlDeliveryDigest(req)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	result, err := rt.store.BindLifecycleControlDelivery(ctx, req)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	var rebound types.RunRecord
+	if isPersistentSuperAgentRun(rec) {
+		rebound, err = rt.store.GetRunByOwner(ctx, rec.OwnerID, rec.RunID)
+	} else {
+		rebound, err = rt.store.GetLifecycleRun(ctx, rec.OwnerID, rec.SandboxID, rec.RunID)
+	}
+	if err != nil {
+		return types.LifecycleResult{}, fmt.Errorf("reload bound lifecycle control run: %w", err)
+	}
+	*rec = rebound
+	return result, nil
+}
+
+func (rt *Runtime) failUnactivatedLifecycleControlRun(ctx context.Context, rec *types.RunRecord, bindErr error) {
+	if rt == nil || rt.store == nil || rec == nil {
+		return
+	}
+	now := time.Now().UTC()
+	rec.State, rec.UpdatedAt, rec.FinishedAt = types.RunFailed, now, &now
+	if rec.Metadata == nil {
+		rec.Metadata = map[string]any{}
+	}
+	rec.Metadata["lifecycle_control_bind_failed"] = true
+	rec.Metadata["lifecycle_control_bind_failure"] = strings.TrimSpace(bindErr.Error())
+	if err := rt.store.UpdateRun(context.WithoutCancel(ctx), *rec); err != nil {
+		log.Printf("runtime: terminalize unactivated lifecycle control run %s: %v", rec.RunID, err)
+	}
+}
+
+func (rt *Runtime) listPendingPersistentSuperLifecycleControls(ctx context.Context, ownerID, computerID, agentID string, limit int) ([]types.CoagentSourcePacket, error) {
+	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
+	if ownerID == "" || computerID == "" || agentID != persistentSuperAgentID(ownerID) {
+		return nil, fmt.Errorf("list persistent-Super lifecycle controls: exact owner, computer, and persistent agent are required")
+	}
+	agent, err := rt.store.GetAgentByScope(ctx, ownerID, computerID, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("load exact persistent Super: %w", err)
+	}
+	if agentprofile.Canonical(agent.Profile) != agentprofile.Super || agentprofile.Canonical(agent.Role) != agentprofile.Super || agent.LifecycleVersion != 0 || agent.OwnerID != ownerID || agent.ComputerID != computerID {
+		return nil, fmt.Errorf("persistent Super lifecycle control target has invalid authority")
+	}
+	updates, err := rt.store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, agentID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list persistent-Super lifecycle controls: %w", err)
+	}
+	return rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, updates, true)
+}
+
+func (rt *Runtime) validateTargetBoundLifecycleControls(ctx context.Context, ownerID, computerID, agentID string, updates []types.CoagentSourcePacket, executionOnly bool) ([]types.CoagentSourcePacket, error) {
+	out := make([]types.CoagentSourcePacket, 0, len(updates))
+	for _, update := range updates {
+		if update.Direction != types.LifecyclePacketDirectionControl || update.TargetAgentID != agentID || update.OwnerID != ownerID || update.ComputerID != computerID || update.Disposition != types.UpdatePending || strings.TrimSpace(update.TargetWorkItemID) == "" || strings.TrimSpace(update.TrajectoryID) == "" {
+			return nil, fmt.Errorf("pending lifecycle control %q has ambiguous target binding", update.UpdateID)
+		}
+		snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, update.TrajectoryID)
+		if err != nil {
+			return nil, fmt.Errorf("load lifecycle control trajectory %q: %w", update.UpdateID, err)
+		}
+		bound := false
+		for _, work := range snapshot.WorkItems {
+			if work.WorkItemID == update.TargetWorkItemID && work.Status == types.WorkItemOpen && work.AssignedAgentID == agentID && work.TrajectoryID == update.TrajectoryID && work.OwnerID == ownerID && work.ComputerID == computerID {
+				bound = true
+				break
+			}
+		}
+		if !bound {
+			return nil, fmt.Errorf("pending lifecycle control %q is not joined to exact open target work", update.UpdateID)
+		}
+		if executionOnly && !persistentSuperExecutableUpdate(update) {
+			return nil, fmt.Errorf("persistent-Super lifecycle control %q is not an execution request", update.UpdateID)
+		}
+		out = append(out, update)
+	}
+	return out, nil
+}
+
 func persistentSuperExecutableUpdate(update types.CoagentSourcePacket) bool {
 	if update.DeliveredAt != nil || strings.TrimSpace(update.DeliveredToRunID) != "" {
 		return false
@@ -368,15 +549,30 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		}
 		return nil, fmt.Errorf("lookup coagent: %w", err)
 	}
-	updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
+	profile := agentprofile.Canonical(firstNonEmpty(agent.Profile, agent.Role))
+	lifecycleControls := false
+	var updates []types.CoagentSourcePacket
+	if profile == agentprofile.Researcher && agent.LifecycleVersion > 0 {
+		updates, err = rt.store.ListPendingLifecycleUpdates(ctx, ownerID, rt.TextureSandboxID(), agentID, 100)
+		if err == nil {
+			updates, err = rt.validateTargetBoundLifecycleControls(ctx, ownerID, rt.TextureSandboxID(), agentID, updates, false)
+		}
+		updates = selectLifecycleControlActivation(updates, "", nil)
+		lifecycleControls = len(updates) > 0
+	}
 	if err != nil {
-		return nil, fmt.Errorf("list coagent pending updates: %w", err)
+		return nil, err
+	}
+	if !lifecycleControls {
+		updates, err = rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
+		if err != nil {
+			return nil, fmt.Errorf("list coagent pending updates: %w", err)
+		}
 	}
 	if len(updates) == 0 {
 		return nil, nil
 	}
 	first := updates[0]
-	profile := agentprofile.Canonical(firstNonEmpty(agent.Profile, first.Role))
 	if profile == "" || profile == agentprofile.Email || profile == agentprofile.Conductor || profile == agentprofile.Super {
 		return nil, nil
 	}
@@ -388,12 +584,18 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 			updateIDs = append(updateIDs, id)
 		}
 	}
+	requestSource := "update_coagent"
+	if lifecycleControls {
+		requestSource = "lifecycle_texture_control"
+	}
 	metadata := map[string]any{
 		runMetadataAgentProfile: profile,
 		runMetadataAgentRole:    role,
 		runMetadataAgentID:      agentID,
-		"request_source":        "update_coagent",
-		"worker_update_ids":     updateIDs,
+		"request_source":        requestSource,
+	}
+	if !lifecycleControls {
+		metadata["worker_update_ids"] = updateIDs
 	}
 	if channelID != "" {
 		metadata[runMetadataChannelID] = channelID
@@ -415,6 +617,12 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	rec, err := rt.createRunWithMetadata(ctx, prompt, ownerID, metadata)
 	if err != nil {
 		return nil, err
+	}
+	if lifecycleControls {
+		if _, err := rt.bindLifecycleControlsToRun(ctx, rec, updates); err != nil {
+			rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
+			return nil, err
+		}
 	}
 	rt.activate(rec)
 	return rec, nil
@@ -526,14 +734,93 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 			return nil, fmt.Errorf("resolve lifecycle run authority: %w", err)
 		}
 	}
+	computerID := strings.TrimSpace(rec.SandboxID)
+	if isPersistentSuperAgentRun(rec) {
+		if computerID != "" {
+			controls, err := rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, limit)
+			if err != nil {
+				return nil, err
+			}
+			controls = selectLifecycleControlActivation(controls, rec.TrajectoryID, lifecycleControlWorkIDsForRun(rec))
+			if len(controls) > 0 {
+				return controls, nil
+			}
+		}
+		return rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
+	}
 	if lifecycleRun {
-		computerID := strings.TrimSpace(rec.SandboxID)
 		if computerID == "" {
 			return nil, fmt.Errorf("list pending lifecycle updates: computer_id is required")
 		}
-		return rt.store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, agentID, limit)
+		updates, err := rt.store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, agentID, limit)
+		if err != nil {
+			return nil, err
+		}
+		if agentProfileForRun(rec) == agentprofile.Researcher {
+			controls, validateErr := rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, updates, false)
+			if validateErr != nil {
+				return nil, validateErr
+			}
+			return selectLifecycleControlActivation(controls, rec.TrajectoryID, lifecycleControlWorkIDsForRun(rec)), nil
+		}
+		return updates, nil
 	}
 	return rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
+}
+
+const (
+	textureOwnerInstructionIDsMetadataRuntime = "texture_owner_instruction_ids"
+	textureOwnerRequestIDsMetadataRuntime     = "texture_owner_request_ids"
+)
+
+func (rt *Runtime) lifecycleOwnerInstructionTurnsForRun(ctx context.Context, rec *types.RunRecord, phase string) ([]json.RawMessage, error) {
+	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != agentprofile.Texture {
+		return nil, nil
+	}
+	ownerID, computerID, trajectoryID, agentID := strings.TrimSpace(rec.OwnerID), strings.TrimSpace(rec.SandboxID), strings.TrimSpace(rec.TrajectoryID), strings.TrimSpace(rec.AgentID)
+	docID := strings.TrimSpace(firstNonEmpty(metadataStringValue(rec.Metadata, "doc_id"), rec.ChannelID))
+	if ownerID == "" || computerID == "" || trajectoryID == "" || agentID == "" || docID == "" {
+		return nil, nil
+	}
+	instructions, err := rt.store.ListPendingLifecycleOwnerInstructions(ctx, ownerID, computerID, trajectoryID, agentID, 100)
+	if err != nil {
+		return nil, err
+	}
+	if rec.Metadata == nil {
+		rec.Metadata = map[string]any{}
+	}
+	rec.Metadata[textureOwnerInstructionIDsMetadataRuntime] = []string{}
+	rec.Metadata[textureOwnerRequestIDsMetadataRuntime] = []string{}
+	if len(instructions) == 0 {
+		return nil, nil
+	}
+	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil || snapshot.Document.DocID != docID || snapshot.Document.TrajectoryID != trajectoryID {
+		return nil, fmt.Errorf("owner instruction lifecycle scope is unavailable")
+	}
+	openWork := map[string]bool{}
+	for _, work := range snapshot.WorkItems {
+		if work.Status == types.WorkItemOpen && work.OwnerID == ownerID && work.ComputerID == computerID && work.TrajectoryID == trajectoryID && work.AssignedAgentID == agentID {
+			openWork[work.WorkItemID] = true
+		}
+	}
+	instructionIDs, requestIDs := make([]string, 0, len(instructions)), make([]string, 0, len(instructions))
+	for _, instruction := range instructions {
+		if instruction.Schema != types.LifecycleOwnerInstructionSchemaV1 || instruction.DocumentID != docID || instruction.TrajectoryID != trajectoryID || instruction.TargetAgentID != agentID || !openWork[instruction.TargetWorkItemID] {
+			return nil, fmt.Errorf("owner instruction %q fails exact run/work binding", instruction.InstructionID)
+		}
+		instructionIDs, requestIDs = append(instructionIDs, instruction.InstructionID), append(requestIDs, instruction.RequestID)
+	}
+	rec.Metadata[textureOwnerInstructionIDsMetadataRuntime], rec.Metadata[textureOwnerRequestIDsMetadataRuntime] = instructionIDs, requestIDs
+	payload, err := json.Marshal(map[string]any{"packet_type": "owner_instruction", "delivery_phase": phase, "document_id": docID, "trajectory_id": trajectoryID, "target_agent_id": agentID, "instructions": instructions})
+	if err != nil {
+		return nil, err
+	}
+	message, err := json.Marshal(map[string]any{"role": "user", "content": []map[string]string{{"type": "text", "text": "Choir authenticated owner instruction packet.\n\n" + string(payload)}}})
+	if err != nil {
+		return nil, err
+	}
+	return []json.RawMessage{message}, nil
 }
 
 func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecord, initialPhase string) toolregistry.InjectUserTurnsFunc {
@@ -557,7 +844,30 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 			seen[id] = true
 		}
 	}
+	seenOwnerInstructions := map[string]bool{}
 	return func(finalCheckpoint bool) ([]json.RawMessage, error) {
+		phase := coagentPacketDeliveryMid
+		if finalCheckpoint {
+			phase = coagentPacketDeliveryFinal
+		} else if initialPhase != "" {
+			phase, initialPhase = initialPhase, ""
+		}
+		ownerMessages, err := rt.lifecycleOwnerInstructionTurnsForRun(context.Background(), rec, phase)
+		if err != nil {
+			return nil, fmt.Errorf("list pending owner instruction turns: %w", err)
+		}
+		if len(ownerMessages) > 0 {
+			freshOwner := false
+			for _, id := range metadataStringSlice(rec.Metadata[textureOwnerInstructionIDsMetadataRuntime]) {
+				if !seenOwnerInstructions[id] {
+					freshOwner = true
+					seenOwnerInstructions[id] = true
+				}
+			}
+			if !freshOwner {
+				ownerMessages = nil
+			}
+		}
 		updates, err := rt.pendingCoagentUpdatesForRun(context.Background(), rec, ownerID, agentID, 100)
 		if err != nil {
 			return nil, fmt.Errorf("list pending update_coagent turns: %w", err)
@@ -566,27 +876,16 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 		updateIDs := make([]string, 0, len(updates))
 		for _, update := range updates {
 			id := strings.TrimSpace(update.UpdateID)
-			if id == "" || seen[id] {
-				continue
-			}
-			if !coagentUpdateDeliverableForRun(rec, update) {
+			if id == "" || seen[id] || !coagentUpdateDeliverableForRun(rec, update) {
 				continue
 			}
 			seen[id] = true
-			fresh = append(fresh, update)
-			updateIDs = append(updateIDs, id)
+			fresh, updateIDs = append(fresh, update), append(updateIDs, id)
 		}
 		if len(fresh) == 0 {
-			return nil, nil
+			return ownerMessages, nil
 		}
 		appendCoagentUpdateIDsForRun(rec, updateIDs)
-		phase := coagentPacketDeliveryMid
-		if finalCheckpoint {
-			phase = coagentPacketDeliveryFinal
-		} else if initialPhase != "" {
-			phase = initialPhase
-			initialPhase = ""
-		}
 		projected, err := rt.projectTerminalOutcomeContent(context.Background(), fresh)
 		if err != nil {
 			return nil, err
@@ -595,7 +894,7 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 		if err != nil {
 			return nil, err
 		}
-		return msgs, nil
+		return append(ownerMessages, msgs...), nil
 	}
 }
 
@@ -603,7 +902,11 @@ func shouldAppendInitialCoagentMailboxTurns(rec *types.RunRecord) bool {
 	if rec == nil || agentProfileForRun(rec) != agentprofile.Texture {
 		return false
 	}
-	if metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {
+	if metadataStringValue(rec.Metadata, "request_intent") == "apply_owner_instruction" {
+		return true
+	}
+	requestSource := metadataStringValue(rec.Metadata, "request_source")
+	if requestSource == "update_coagent" || requestSource == "lifecycle_texture_control" {
 		return true
 	}
 	return len(coagentUpdateIDsForRun(rec)) > 0
@@ -731,7 +1034,8 @@ func shouldPrependInitialCoagentUpdates(rec *types.RunRecord) bool {
 	if agentProfileForRun(rec) == agentprofile.Texture {
 		return false
 	}
-	if metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {
+	requestSource := metadataStringValue(rec.Metadata, "request_source")
+	if requestSource == "update_coagent" || requestSource == "lifecycle_texture_control" {
 		return true
 	}
 	return len(coagentUpdateIDsForRun(rec)) > 0
@@ -763,7 +1067,27 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 	if target == "" {
 		return
 	}
-	// The coagent update is already in the store mailbox. Send an actor
+	if update.Direction == types.LifecyclePacketDirectionControl {
+		if resident, found, err := rt.activeRunByAgent(ctx, update.OwnerID, target); err != nil {
+			log.Printf("runtime: resolve resident lifecycle control target %s: %v", target, err)
+			return
+		} else if found {
+			updates, listErr := rt.store.ListPendingLifecycleUpdates(ctx, update.OwnerID, update.ComputerID, target, 100)
+			if listErr == nil {
+				updates, listErr = rt.validateTargetBoundLifecycleControls(ctx, update.OwnerID, update.ComputerID, target, updates, agentProfileForRun(&resident) == agentprofile.Super)
+			}
+			updates = selectLifecycleControlActivation(updates, resident.TrajectoryID, lifecycleControlWorkIDsForRun(&resident))
+			if listErr != nil || len(updates) == 0 {
+				log.Printf("runtime: bind resident lifecycle controls target=%s: %v", target, listErr)
+				return
+			}
+			if _, bindErr := rt.bindLifecycleControlsToRun(ctx, &resident, updates); bindErr != nil {
+				log.Printf("runtime: bind resident lifecycle controls target=%s: %v", target, bindErr)
+				return
+			}
+		}
+	}
+	// The coagent update is already in canonical lifecycle state. Send an actor
 	// message to wake the target agent — the handler will resume the
 	// parked run (or start a new one) and inject the update via
 	// injectUserTurns. No channel signal, no reconcile-new-run.

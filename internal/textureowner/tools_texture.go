@@ -56,6 +56,16 @@ type textureUpdateDisposition struct {
 	Reason      string `json:"reason,omitempty"`
 }
 
+// textureControlArgs deliberately omits direction, target agent, command,
+// control, and update identities. The runtime derives those from the exact
+// target work binding and authenticated tool-call identity.
+type textureControlArgs struct {
+	TargetWorkItemID    string                           `json:"target_work_item_id,omitempty"`
+	OpenPersistentSuper bool                             `json:"open_persistent_super,omitempty"`
+	Objective           string                           `json:"objective,omitempty"`
+	Packet              types.CoagentSourcePacketPayload `json:"packet"`
+}
+
 type editTextureArgs struct {
 	DocID                 string                     `json:"doc_id"`
 	BaseRevisionID        string                     `json:"base_revision_id"`
@@ -63,11 +73,13 @@ type editTextureArgs struct {
 	Content               string                     `json:"content,omitempty"`
 	StructuredEdits       []textureStructuredEdit    `json:"edits,omitempty"`
 	UpdateDispositions    []textureUpdateDisposition `json:"update_dispositions,omitempty"`
+	Controls              []textureControlArgs       `json:"controls,omitempty"`
 	AvailableSources      []texturedoc.SourceEntity  `json:"-"`
 	Rationale             string                     `json:"rationale,omitempty"`
 	WorkDisposition       string                     `json:"work_disposition,omitempty"`
 	SourceTool            string                     `json:"-"`
 	UnusedSourceEntityIDs []string                   `json:"-"`
+	ToolCallID            string                     `json:"-"`
 }
 
 func decodeTextureEditArgs(toolName string, raw json.RawMessage) (editTextureArgs, error) {
@@ -76,7 +88,7 @@ func decodeTextureEditArgs(toolName string, raw json.RawMessage) (editTextureArg
 		return editTextureArgs{}, fmt.Errorf("decode %s args: %w", toolName, err)
 	}
 	allowed := map[string]bool{
-		"doc_id": true, "base_revision_id": true, "rationale": true, "work_disposition": true, "update_dispositions": true,
+		"doc_id": true, "base_revision_id": true, "rationale": true, "work_disposition": true, "update_dispositions": true, "controls": true,
 	}
 	if toolName == "patch_texture" {
 		allowed["edits"] = true
@@ -140,8 +152,79 @@ func decodeTextureEditArgs(toolName string, raw json.RawMessage) (editTextureArg
 			return editTextureArgs{}, fmt.Errorf("%s rejected update disposition requires reason", toolName)
 		}
 	}
+	if rawControls, present := fields["controls"]; present {
+		if err := validateRawTextureControls(toolName, rawControls); err != nil {
+			return editTextureArgs{}, err
+		}
+	}
+	if err := validateTextureControls(toolName, in.Controls); err != nil {
+		return editTextureArgs{}, err
+	}
 	return in, nil
 }
+func validateTextureControls(toolName string, controls []textureControlArgs) error {
+	for i := range controls {
+		control := &controls[i]
+		control.TargetWorkItemID = strings.TrimSpace(control.TargetWorkItemID)
+		control.Objective = strings.TrimSpace(control.Objective)
+		if control.OpenPersistentSuper == (control.TargetWorkItemID != "") {
+			return fmt.Errorf("%s controls[%d] must name exactly one of target_work_item_id or open_persistent_super", toolName, i)
+		}
+		if control.OpenPersistentSuper && control.Objective == "" {
+			return fmt.Errorf("%s controls[%d] persistent-Super opener requires objective", toolName, i)
+		}
+	}
+	return nil
+}
+
+func validateRawTextureControls(toolName string, raw json.RawMessage) error {
+	var controls []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &controls); err != nil {
+		return fmt.Errorf("decode %s controls: %w", toolName, err)
+	}
+	allowedControl := map[string]bool{"target_work_item_id": true, "open_persistent_super": true, "objective": true, "packet": true}
+	allowedPacket := map[string]bool{"schema_version": true, "kind": true, "summary": true, "claims": true, "sources": true, "actions": true, "questions": true, "notes": true}
+	for i, control := range controls {
+		for key := range control {
+			if !allowedControl[key] {
+				return fmt.Errorf("%s controls[%d] unknown or authority-owned field %q", toolName, i, key)
+			}
+		}
+		rawPacket, ok := control["packet"]
+		if !ok {
+			return fmt.Errorf("%s controls[%d] packet is required", toolName, i)
+		}
+		var packet map[string]json.RawMessage
+		if err := json.Unmarshal(rawPacket, &packet); err != nil {
+			return fmt.Errorf("decode %s controls[%d] packet: %w", toolName, i, err)
+		}
+		for key := range packet {
+			if !allowedPacket[key] {
+				return fmt.Errorf("%s controls[%d].packet unknown or authority-owned field %q", toolName, i, key)
+			}
+		}
+	}
+	return nil
+}
+
+func textureControlsSchema() map[string]any {
+	return map[string]any{
+		"type":        "array",
+		"description": "Ordered controls. Continue an exact bound work item by target_work_item_id, or atomically open the owner's one persistent Super with open_persistent_super and objective. Target actor, direction, command/control/update identities, and opener work identity are runtime-derived.",
+		"items": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"target_work_item_id":   map[string]any{"type": "string"},
+				"open_persistent_super": map[string]any{"type": "boolean"},
+				"objective":             map[string]any{"type": "string"},
+				"packet":                map[string]any{"type": "object", "description": "Typed coagent_source_packet.v1 payload. Persistent-Super openers require kind=execution_request with at least one action."},
+			},
+			"required":             []string{"packet"},
+			"additionalProperties": false,
+		},
+	}
+}
+
 func textureUpdateDispositionsSchema() map[string]any {
 	return map[string]any{
 		"type":        "array",
@@ -192,6 +275,7 @@ func newPatchTextureTool(rt *Handler) toolregistry.Tool {
 			"rationale":           map[string]any{"type": "string"},
 			"work_disposition":    map[string]any{"type": "string", "enum": []string{"open", "completed"}, "description": "Optional native work consequence for this revision; omission preserves assigned lifecycle work as open. Use completed only when this revision fully satisfies the assigned work."},
 			"update_dispositions": textureUpdateDispositionsSchema(),
+			"controls":            textureControlsSchema(),
 			"edits": map[string]any{
 				"type": "array",
 				"items": map[string]any{
@@ -240,6 +324,7 @@ func newRewriteTextureTool(rt *Handler) toolregistry.Tool {
 			"rationale":           map[string]any{"type": "string"},
 			"work_disposition":    map[string]any{"type": "string", "enum": []string{"open", "completed"}, "description": "Optional native work consequence for this revision; omission preserves assigned lifecycle work as open. Use completed only when this revision fully satisfies the assigned work."},
 			"update_dispositions": textureUpdateDispositionsSchema(),
+			"controls":            textureControlsSchema(),
 		}, []string{"doc_id", "base_revision_id", "content", "rationale"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			in, err := decodeTextureEditArgs("rewrite_texture", raw)
@@ -259,15 +344,20 @@ func (rt *Handler) executeTextureEditTool(ctx context.Context, toolName string, 
 	if toolregistry.ExecutionContextFrom(ctx).Profile != agentprofile.Texture {
 		return "", fmt.Errorf("%s is only available to Texture agents", toolName)
 	}
-	rec := toolregistry.ExecutionContextFrom(ctx).RunRecord
+	execution := toolregistry.ExecutionContextFrom(ctx)
+	rec := execution.RunRecord
 	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return "", fmt.Errorf("%s requires a Texture agent revision run", toolName)
+	}
+	if execution.RunID != rec.RunID || execution.AgentID != rec.AgentID || execution.OwnerID != rec.OwnerID || execution.SandboxID != rec.SandboxID {
+		return "", fmt.Errorf("%s execution identity does not match authenticated Texture run", toolName)
 	}
 	workDisposition := strings.TrimSpace(in.WorkDisposition)
 	if workDisposition != "" && workDisposition != "open" && workDisposition != "completed" {
 		return "", fmt.Errorf("%s work_disposition must be open or completed", toolName)
 	}
 	in.WorkDisposition = workDisposition
+	in.ToolCallID = strings.TrimSpace(execution.ToolCallID)
 	rev, err := rt.commitTextureToolEdit(context.Background(), rec, in)
 	if err != nil {
 		return "", err
@@ -325,11 +415,65 @@ func newRequestEmailDraftTool(rt *Handler) toolregistry.Tool {
 }
 
 type recordTextureDecisionArgs struct {
-	DocID        string   `json:"doc_id,omitempty"`
-	DecisionKind string   `json:"decision_kind"`
-	Reason       string   `json:"reason"`
-	EvidenceRefs []string `json:"evidence_refs,omitempty"`
-	NextAction   string   `json:"next_action,omitempty"`
+	DocID              string                     `json:"doc_id,omitempty"`
+	BaseRevisionID     string                     `json:"base_revision_id,omitempty"`
+	DecisionKind       string                     `json:"decision_kind"`
+	Reason             string                     `json:"reason"`
+	EvidenceRefs       []string                   `json:"evidence_refs,omitempty"`
+	NextAction         string                     `json:"next_action,omitempty"`
+	UpdateDispositions []textureUpdateDisposition `json:"update_dispositions,omitempty"`
+	Controls           []textureControlArgs       `json:"controls,omitempty"`
+}
+
+func decodeRecordTextureDecisionArgs(raw json.RawMessage) (recordTextureDecisionArgs, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return recordTextureDecisionArgs{}, fmt.Errorf("decode record_texture_decision args: %w", err)
+	}
+	allowed := map[string]bool{"doc_id": true, "base_revision_id": true, "decision_kind": true, "reason": true, "evidence_refs": true, "next_action": true, "update_dispositions": true, "controls": true}
+	for key := range fields {
+		if !allowed[key] {
+			return recordTextureDecisionArgs{}, fmt.Errorf("record_texture_decision unknown or authority-owned field %q", key)
+		}
+	}
+	var in recordTextureDecisionArgs
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return recordTextureDecisionArgs{}, fmt.Errorf("decode record_texture_decision args: %w", err)
+	}
+	if rawDecisions, present := fields["update_dispositions"]; present {
+		var decisions []map[string]json.RawMessage
+		if err := json.Unmarshal(rawDecisions, &decisions); err != nil {
+			return recordTextureDecisionArgs{}, fmt.Errorf("record_texture_decision update_dispositions must be an array: %w", err)
+		}
+		for _, decision := range decisions {
+			for key := range decision {
+				if key != "update_id" && key != "disposition" && key != "reason" {
+					return recordTextureDecisionArgs{}, fmt.Errorf("record_texture_decision update_dispositions unknown field %q", key)
+				}
+			}
+		}
+	}
+	seen := map[string]bool{}
+	for i := range in.UpdateDispositions {
+		decision := &in.UpdateDispositions[i]
+		decision.UpdateID, decision.Disposition, decision.Reason = strings.TrimSpace(decision.UpdateID), strings.TrimSpace(decision.Disposition), strings.TrimSpace(decision.Reason)
+		if decision.UpdateID == "" || (decision.Disposition != "incorporated" && decision.Disposition != "rejected") || seen[decision.UpdateID] {
+			return recordTextureDecisionArgs{}, fmt.Errorf("record_texture_decision update_dispositions require unique update_id and incorporated or rejected disposition")
+		}
+		seen[decision.UpdateID] = true
+		if decision.Disposition == "rejected" && decision.Reason == "" {
+			return recordTextureDecisionArgs{}, fmt.Errorf("record_texture_decision rejected update disposition requires reason")
+		}
+	}
+	if rawControls, present := fields["controls"]; present {
+		if err := validateRawTextureControls("record_texture_decision", rawControls); err != nil {
+			return recordTextureDecisionArgs{}, err
+		}
+	}
+	if err := validateTextureControls("record_texture_decision", in.Controls); err != nil {
+		return recordTextureDecisionArgs{}, err
+	}
+	return in, nil
 }
 
 func newRecordTextureDecisionTool(rt *Handler) toolregistry.Tool {
@@ -348,6 +492,7 @@ func newRecordTextureDecisionTool(rt *Handler) toolregistry.Tool {
 				"type":        "string",
 				"description": "The Texture document id. Omit only when the current Texture run is already scoped to the document.",
 			},
+			"base_revision_id": map[string]any{"type": "string", "description": "Required expected canonical head for lifecycle no-change, wait, or block turns."},
 			"decision_kind": map[string]any{
 				"type":        "string",
 				"enum":        allowedKinds,
@@ -366,18 +511,24 @@ func newRecordTextureDecisionTool(rt *Handler) toolregistry.Tool {
 				"type":        "string",
 				"description": "Optional concise next action or blocker discriminator.",
 			},
+			"update_dispositions": textureUpdateDispositionsSchema(),
+			"controls":            textureControlsSchema(),
 		}, []string{"decision_kind", "reason"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if toolregistry.ExecutionContextFrom(ctx).Profile != agentprofile.Texture {
+			execution := toolregistry.ExecutionContextFrom(ctx)
+			if execution.Profile != agentprofile.Texture {
 				return "", fmt.Errorf("record_texture_decision is only available to Texture agents")
 			}
-			rec := toolregistry.ExecutionContextFrom(ctx).RunRecord
+			rec := execution.RunRecord
 			if rec == nil {
 				return "", fmt.Errorf("record_texture_decision missing run context")
 			}
-			var in recordTextureDecisionArgs
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode record_texture_decision args: %w", err)
+			if execution.RunID != rec.RunID || execution.AgentID != rec.AgentID || execution.OwnerID != rec.OwnerID || execution.SandboxID != rec.SandboxID {
+				return "", fmt.Errorf("record_texture_decision execution identity does not match authenticated Texture run")
+			}
+			in, err := decodeRecordTextureDecisionArgs(raw)
+			if err != nil {
+				return "", err
 			}
 			decisionKind := strings.TrimSpace(in.DecisionKind)
 			if !validTextureDecisionKind(decisionKind) {
@@ -396,6 +547,23 @@ func newRecordTextureDecisionTool(rt *Handler) toolregistry.Tool {
 			}
 			if docID == "" {
 				return "", fmt.Errorf("doc_id is required when the Texture run is not document-scoped")
+			}
+			if subject, subjectErr := rt.Store.GetAgentByScope(ctx, rec.OwnerID, rec.SandboxID, rec.AgentID); subjectErr == nil && subject.LifecycleVersion > 0 {
+				in.DocID = docID
+				result, err := rt.commitTextureNonRevisionTurn(context.Background(), rec, in, execution.ToolCallID)
+				if err != nil {
+					return "", err
+				}
+				return toolregistry.ResultJSON(map[string]any{
+					"doc_id": docID, "status": "stored", "outcome": result.TextureTurn.Outcome,
+					"head_revision_id": result.TextureTurn.HeadRevisionID, "command_id": result.Receipt.CommandID,
+					"control_update_ids": result.TextureTurn.ControlUpdateIDs, "replay": result.Replay,
+				})
+			} else if subjectErr != nil && metadataStringValue(rec.Metadata, "lifecycle_work_item_id") != "" {
+				return "", fmt.Errorf("load scoped lifecycle Texture subject: %w", subjectErr)
+			}
+			if len(in.Controls) > 0 || len(in.UpdateDispositions) > 0 {
+				return "", fmt.Errorf("record_texture_decision controls and dispositions require durable lifecycle authority")
 			}
 			if _, err := rt.getTextureDocument(ctx, rec.OwnerID, docID); err != nil {
 				return "", fmt.Errorf("get texture document for decision: %w", err)
@@ -578,6 +746,9 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	if metadataStringValue(rec.Metadata, "lifecycle_work_item_id") != "" && !durableLifecycle {
 		return types.Revision{}, fmt.Errorf("get scoped lifecycle Texture subject: %w", subjectErr)
 	}
+	if !durableLifecycle && (len(in.Controls) > 0 || len(in.UpdateDispositions) > 0) {
+		return types.Revision{}, fmt.Errorf("Texture controls and lifecycle dispositions require durable lifecycle authority")
+	}
 	var doc types.Document
 	if durableLifecycle {
 		doc, err = rt.Store.GetLifecycleDocument(ctx, rec.OwnerID, computerID, docID)
@@ -694,78 +865,12 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 			return types.Revision{}, fmt.Errorf("build Texture source graph shadow write: %w", err)
 		}
-		producerUpdateID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{"choir:texture:lifecycle-update", doc.TrajectoryID, workItemID, baseRevisionID, objectgraph.SHA256(materialized.BodyDoc)}, ":"))).String()
-		packet := types.CoagentSourcePacketPayload{
-			SchemaVersion: types.CoagentSourcePacketSchemaV1,
-			Kind:          "artifact_revision", Summary: "Texture appagent produced a candidate artifact revision",
-		}
-		payloadDigest, digestErr := store.ComputeLifecycleUpdatePayloadDigest(packet, materialized.Content)
-		if digestErr != nil {
-			return types.Revision{}, fmt.Errorf("digest Texture lifecycle update: %w", digestErr)
-		}
-		queue := types.QueueLifecycleUpdateRequest{
-			OwnerID: rec.OwnerID, ComputerID: doc.ComputerID,
-			CommandID:    "texture-lifecycle-queue:" + producerUpdateID,
-			TrajectoryID: doc.TrajectoryID, TargetAgentID: agentID, ProducerAgentID: agentID,
-			ProducerUpdateID: producerUpdateID, UpdateID: producerUpdateID,
-			ChannelID: doc.DocID, Role: rec.AgentRole, SourceRunID: rec.RunID,
-			Packet: packet, Content: materialized.Content, PayloadDigest: payloadDigest,
-			WorkDisposition: types.WorkItemStatus(workDisposition), WorkItemID: workItemID,
-		}
-		queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
-		if _, err := rt.Store.QueueLifecycleUpdate(ctx, queue); err != nil {
-			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-			return types.Revision{}, fmt.Errorf("queue Texture lifecycle revision: %w", err)
-		}
-		apply := types.ApplyLifecycleUpdateRequest(queue)
-		apply.CommandID = "texture-lifecycle-apply:" + producerUpdateID
-		apply.Disposition, apply.DispositionRef = types.UpdateIncorporated, rev.RevisionID
-		apply.Revision = rev
-		if workDisposition == string(types.WorkItemCompleted) {
-			apply.WorkDisposition = types.WorkItemCompleted
-			apply.WorkItemID, apply.WorkResultRef = workItemID, rev.RevisionID
-		}
-		if len(in.UpdateDispositions) > 0 {
-			snapshot, snapshotErr := rt.Store.GetLifecycleSnapshot(ctx, rec.OwnerID, doc.ComputerID, doc.TrajectoryID)
-			if snapshotErr != nil {
-				return types.Revision{}, fmt.Errorf("load pending lifecycle updates: %w", snapshotErr)
-			}
-			pendingByID := make(map[string]types.CoagentSourcePacket, len(snapshot.Updates))
-			for _, pending := range snapshot.Updates {
-				if pending.UpdateID != queue.UpdateID && pending.Disposition == types.UpdatePending {
-					pendingByID[pending.UpdateID] = pending
-				}
-			}
-			for _, decision := range in.UpdateDispositions {
-				pending, ok := pendingByID[decision.UpdateID]
-				if !ok || pending.TargetAgentID != agentID {
-					_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-					return types.Revision{}, fmt.Errorf("Texture update disposition %q does not name a pending addressed lifecycle update", decision.UpdateID)
-				}
-				related := types.ApplyLifecycleRelatedUpdate{
-					TargetAgentID: pending.TargetAgentID, ProducerAgentID: pending.AgentID,
-					ProducerUpdateID: pending.ProducerUpdateID, UpdateID: pending.UpdateID,
-					Disposition: types.UpdateDisposition(decision.Disposition), DispositionRef: rev.RevisionID,
-					WorkDisposition: pending.WorkDisposition, WorkItemID: pending.WorkItemID,
-					Reason: decision.Reason,
-				}
-				if related.WorkItemID != "" && pending.WorkDisposition == types.WorkItemCompleted {
-					related.WorkResultRef = rev.RevisionID
-					if related.Disposition == types.UpdateRejected {
-						related.WorkDisposition = types.WorkItemRefused
-					}
-				}
-				apply.RelatedUpdates = append(apply.RelatedUpdates, related)
-			}
-		}
-		apply.CommandDigest = ""
-		apply.CommandDigest, _ = store.ComputeApplyLifecycleUpdateWithSourceGraphDigest(apply, graph)
-		applied, applyErr := rt.Store.ApplyLifecycleUpdateWithSourceGraph(ctx, apply, graph)
+		applied, applyErr := rt.applyTextureLifecycleTurn(ctx, rec, doc, in, types.TextureTurnRevision, rev, graph, in.Rationale)
 		if applyErr != nil {
 			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-			return types.Revision{}, fmt.Errorf("apply Texture lifecycle revision: %w", applyErr)
+			return types.Revision{}, fmt.Errorf("apply atomic Texture lifecycle turn: %w", applyErr)
 		}
-		rt.recordTextureAudit(ctx, "revision_committed", rec.OwnerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, rev.RevisionID, apply.CommandID, apply.CommandDigest, applied.Trajectory.LifecycleVersion)
+		rt.recordTextureAudit(ctx, "revision_committed", rec.OwnerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, rev.RevisionID, applied.Receipt.CommandID, applied.Receipt.CommandDigest, applied.Trajectory.LifecycleVersion)
 	} else {
 		graph, graphErr := textureToolSourceGraphWriteSet(rev, materialized, rec)
 		if graphErr != nil {
@@ -790,12 +895,11 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		auditDigest := textureAuditDigest("revision_committed", rec.OwnerID, computerID, docID, storedRev.RevisionID, storedRev.RevisionHash)
 		rt.recordTextureAudit(ctx, "revision_committed", rec.OwnerID, computerID, storedRev.TrajectoryID, docID, storedRev.RevisionID, "texture-revision:"+docID+":"+storedRev.RevisionID, auditDigest, 0)
 	}
-	if err := rt.Store.RecordAgentMutationRevision(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, rev.RevisionID); err != nil {
-		if err != store.ErrMutationAlreadyCompleted {
-			return types.Revision{}, fmt.Errorf("record Texture mutation revision: %w", err)
-		}
-	}
-	if consumedThroughSeq > 0 {
+	// Canonical lifecycle/document commit already succeeded. Mutation rows are a
+	// legacy run-completion projection and must not make durable success appear
+	// failed; restart reconciliation can derive them from the committed head.
+	_ = rt.Store.RecordAgentMutationRevision(context.WithoutCancel(ctx), rec.OwnerID, agentMutationComputerID(rec), rec.RunID, rev.RevisionID)
+	if consumedThroughSeq > 0 && !durableLifecycle {
 		if err := rt.Store.UpsertTextureControllerCheckpoint(ctx, store.TextureControllerCheckpoint{
 			DocID:                docID,
 			OwnerID:              rec.OwnerID,

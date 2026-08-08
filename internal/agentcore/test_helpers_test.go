@@ -53,43 +53,6 @@ func seedDurableTextureSubject(t *testing.T, s *store.Store, ownerID, docID stri
 	return req.TrajectoryID
 }
 
-func projectTestLifecycleProducer(t *testing.T, s *store.Store, ownerID, computerID, trajectoryID, docID, suffix string) (string, string, string) {
-	t.Helper()
-	ctx := context.Background()
-	now := time.Now().UTC()
-	agentID := "researcher:" + suffix
-	workID := "producer-work:" + suffix
-	runID := "producer-run:" + suffix
-	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
-		Profile: "researcher", Role: "researcher", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("seed lifecycle producer: %v", err)
-	}
-	open := types.OpenLifecycleWorkRequest{
-		OwnerID: ownerID, ComputerID: computerID, CommandID: "open-producer:" + suffix, TrajectoryID: trajectoryID,
-		WorkItem: types.WorkItemRecord{WorkItemID: workID, Objective: "produce durable update", AssignedAgentID: agentID, AuthorityProfile: "researcher"},
-	}
-	open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
-	if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
-		t.Fatalf("open lifecycle producer work: %v", err)
-	}
-	run := types.RunRecord{
-		RunID: runID, AgentID: agentID, ChannelID: docID, TrajectoryID: trajectoryID,
-		AgentProfile: "researcher", AgentRole: "researcher", OwnerID: ownerID, SandboxID: computerID,
-		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": workID},
-	}
-	project := types.ReplaceLifecycleActivationRequest{
-		OwnerID: ownerID, ComputerID: computerID, CommandID: "project-producer:" + suffix,
-		TrajectoryID: trajectoryID, AgentID: agentID, Run: run,
-	}
-	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
-	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
-		t.Fatalf("project lifecycle producer: %v", err)
-	}
-	return agentID, workID, runID
-}
-
 func spawnBoundTestLifecycleProducer(t *testing.T, rt *Runtime, s *store.Store, ownerID, docID, suffix, profile string) (*types.RunRecord, string) {
 	t.Helper()
 	ctx := context.Background()
@@ -461,4 +424,41 @@ func runtimeTestTextureBodyDoc(t *testing.T, docID, revisionID, content string) 
 		t.Fatal(err)
 	}
 	return body
+}
+
+func projectTestLifecycleProducer(t *testing.T, s *store.Store, ownerID, computerID, trajectoryID, docID, suffix string) (string, string, string) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	agentID := "researcher:" + suffix
+	workID := "producer-work:" + suffix
+	runID := "producer-run:" + suffix
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+		Profile: "researcher", Role: "researcher", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed lifecycle producer: %v", err)
+	}
+	open := types.OpenLifecycleWorkRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "open-producer:" + suffix, TrajectoryID: trajectoryID,
+		WorkItem: types.WorkItemRecord{WorkItemID: workID, Objective: "produce durable update", AssignedAgentID: agentID, AuthorityProfile: "researcher"},
+	}
+	open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
+	if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
+		t.Fatalf("open lifecycle producer work: %v", err)
+	}
+	run := types.RunRecord{
+		RunID: runID, AgentID: agentID, ChannelID: docID, TrajectoryID: trajectoryID,
+		AgentProfile: "researcher", AgentRole: "researcher", OwnerID: ownerID, SandboxID: computerID,
+		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": workID},
+	}
+	project := types.ReplaceLifecycleActivationRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "project-producer:" + suffix,
+		TrajectoryID: trajectoryID, AgentID: agentID, Run: run,
+	}
+	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatalf("project lifecycle producer: %v", err)
+	}
+	return agentID, workID, runID
 }

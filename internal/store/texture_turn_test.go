@@ -41,7 +41,8 @@ func textureTurnBaseRequest(t *testing.T, s *Store, start types.StartLifecycleRe
 		DocumentID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID,
 		CallerAgentID: caller.AgentID, CallerRunID: caller.RunID,
 		ExpectedLifecycleVersion: trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: agent.LifecycleVersion,
-		ExpectedHeadRevisionID: doc.CurrentRevisionID, Outcome: outcome, Reason: "explicit Texture outcome",
+		ExpectedHeadRevisionID: doc.CurrentRevisionID, CallerWorkItemID: start.InitialWork.WorkItemID,
+		CallerWorkDisposition: types.WorkItemOpen, Outcome: outcome, Reason: "explicit Texture outcome",
 	}
 }
 
@@ -439,7 +440,8 @@ func TestApplyTextureTurnRefusesUnsafeTargetsBeforeAnyControlCommit(t *testing.T
 func TestApplyTextureTurnDigestConflictsOnOrderPayloadTargetWorkHeadAndOutcome(t *testing.T) {
 	base := types.ApplyTextureTurnRequest{CommandID: "digest-turn", DocumentID: "doc", TrajectoryID: "trajectory",
 		CallerAgentID: "texture:doc", CallerRunID: "run", ExpectedLifecycleVersion: 4, ExpectedCallerLifecycleVersion: 3,
-		ExpectedHeadRevisionID: "head", Outcome: types.TextureTurnWait, Reason: "wait"}
+		ExpectedHeadRevisionID: "head", CallerWorkItemID: "texture-work", CallerWorkDisposition: types.WorkItemOpen,
+		Outcome: types.TextureTurnWait, Reason: "wait"}
 	base.Controls = []types.TextureTurnControl{textureTurnControl(t, "a", "researcher:a", "work-a"), textureTurnControl(t, "b", "researcher:b", "work-b")}
 	original, err := ComputeApplyTextureTurnDigest(base)
 	if err != nil {
@@ -478,4 +480,49 @@ func mustJSONRaw(t *testing.T, value any) []byte {
 		t.Fatal(err)
 	}
 	return data
+}
+
+func TestApplyTextureTurnCallerWorkConsequenceAtomicReplayAndRefusal(t *testing.T) {
+	t.Run("completed revision settles exact caller work and replays", func(t *testing.T) {
+		s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
+		doc := texturedoc.StructuredTextureDoc{Schema: texturedoc.SchemaV1, Doc: texturedoc.Node{Type: "doc", Attrs: map[string]any{"id": "doc-root"}, Content: []texturedoc.Node{{Type: "paragraph", Attrs: map[string]any{"id": "p-one"}, Content: []texturedoc.Node{{Type: "text", Text: "Completed result."}}}}}}
+		req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnRevision)
+		req.CommandID = "texture-turn-caller-complete"
+		req.CallerWorkDisposition = types.WorkItemCompleted
+		req.Revision = types.Revision{RevisionID: "revision-caller-complete", ParentRevisionID: req.ExpectedHeadRevisionID, AuthorKind: types.AuthorAppAgent, AuthorLabel: "appagent", BodyDoc: mustJSONRaw(t, doc), SourceEntities: json.RawMessage("[]")}
+		setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
+		result, err := s.ApplyTextureTurn(context.Background(), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.WorkItem == nil || result.WorkItem.Status != types.WorkItemCompleted || result.WorkItem.ResultRef != req.Revision.RevisionID || result.TextureTurn.CallerWorkItemID != start.InitialWork.WorkItemID {
+			t.Fatalf("caller work consequence = %+v turn=%+v", result.WorkItem, result.TextureTurn)
+		}
+		replay, err := s.ApplyTextureTurn(context.Background(), req)
+		if err != nil || !replay.Replay || replay.WorkItem == nil || replay.WorkItem.Status != types.WorkItemCompleted {
+			t.Fatalf("equal caller-work replay = %+v, %v", replay, err)
+		}
+		changed := req
+		changed.CallerWorkDisposition = types.WorkItemOpen
+		setTextureTurnDigest(t, &changed, TextureSourceGraphWriteSet{})
+		if _, err := s.ApplyTextureTurn(context.Background(), changed); !errors.Is(err, ErrLifecycleCommandConflict) {
+			t.Fatalf("changed caller-work replay err = %v", err)
+		}
+	})
+
+	t.Run("wrong caller work refuses before mutation", func(t *testing.T) {
+		s, start, caller, researcherWork := setupLifecycleTextureTargetFixture(t)
+		req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
+		req.CommandID = "texture-turn-wrong-caller-work"
+		req.CallerWorkItemID = researcherWork.WorkItemID
+		setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
+		before, _ := s.GetLifecycleSnapshot(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+		if _, err := s.ApplyTextureTurn(context.Background(), req); err == nil {
+			t.Fatal("wrong caller work accepted")
+		}
+		after, _ := s.GetLifecycleSnapshot(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+		if after.Trajectory.LifecycleVersion != before.Trajectory.LifecycleVersion || len(after.Events) != len(before.Events) || after.HeadRevision.RevisionID != before.HeadRevision.RevisionID {
+			t.Fatalf("wrong caller-work refusal mutated lifecycle")
+		}
+	})
 }

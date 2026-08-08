@@ -2047,8 +2047,14 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 		grouped[key] = append(grouped[key], item)
 	}
 	for _, workItems := range grouped {
-		if _, err := rt.reconcileAssignedWorkItemActor(ctx, workItems); err != nil {
-			first := workItems[0]
+		first := workItems[0]
+		var err error
+		if strings.TrimSpace(first.AssignedAgentID) == persistentSuperAgentID(strings.TrimSpace(first.OwnerID)) {
+			_, err = rt.reconcilePersistentSuperActor(ctx, first.OwnerID, first.AssignedAgentID)
+		} else {
+			_, err = rt.reconcileAssignedWorkItemActor(ctx, workItems)
+		}
+		if err != nil {
 			log.Printf("runtime: boot work-item sweep owner=%s agent=%s trajectory=%s: %v",
 				first.OwnerID, first.AssignedAgentID, first.TrajectoryID, err)
 		}
@@ -2192,6 +2198,23 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 	rec, err := rt.createRunWithMetadata(ctx, buildAssignedWorkItemPrompt(workItems), ownerID, metadata)
 	if err != nil {
 		return nil, err
+	}
+	if profile == agentprofile.Researcher {
+		updates, listErr := rt.store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, agentID, 100)
+		if listErr != nil {
+			return nil, listErr
+		}
+		updates, listErr = rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, updates, false)
+		if listErr != nil {
+			return nil, listErr
+		}
+		updates = selectLifecycleControlActivation(updates, trajectoryID, lifecycleControlWorkIDsForRun(rec))
+		if len(updates) > 0 {
+			if _, bindErr := rt.bindLifecycleControlsToRun(ctx, rec, updates); bindErr != nil {
+				rt.failUnactivatedLifecycleControlRun(ctx, rec, bindErr)
+				return nil, bindErr
+			}
+		}
 	}
 	rt.lifecycleWorkReconcileMu.Unlock()
 	reconcileLocked = false
@@ -3314,6 +3337,18 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 		return nil
 	}
 
+	if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(rec.SandboxID) != "" {
+		if turn, turnErr := rt.store.GetAppliedTextureTurnByCallerRun(persistCtx, rec.OwnerID, rec.SandboxID, rec.TrajectoryID, rec.RunID); turnErr == nil && turn.TextureTurn != nil {
+			if turn.TextureTurn.Outcome == types.TextureTurnRevision && turn.Revision != nil {
+				_ = rt.store.CompleteAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, turn.Revision.RevisionID)
+			} else {
+				_ = rt.store.SleepAgentMutationAfterTextureTurn(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.TrajectoryID, rec.RunID)
+			}
+			return nil
+		} else if turnErr != nil && !errors.Is(turnErr, store.ErrNotFound) {
+			log.Printf("runtime: recover committed Texture turn for run %s: %v", rec.RunID, turnErr)
+		}
+	}
 	if strings.TrimSpace(mutation.RevisionID) != "" {
 		if err := rt.store.CompleteAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, mutation.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
 			log.Printf("runtime: texture agent revision run %s: complete written mutation: %v", rec.RunID, err)

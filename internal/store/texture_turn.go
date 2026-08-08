@@ -39,7 +39,14 @@ func normalizeTextureTurnDigestRequest(req types.ApplyTextureTurnRequest) (types
 	req.TrajectoryID = strings.TrimSpace(req.TrajectoryID)
 	req.CallerAgentID = strings.TrimSpace(req.CallerAgentID)
 	req.CallerRunID = strings.TrimSpace(req.CallerRunID)
+	req.OwnerInstructions = append([]types.TextureTurnOwnerInstruction(nil), req.OwnerInstructions...)
+	for i := range req.OwnerInstructions {
+		req.OwnerInstructions[i].InstructionID = strings.TrimSpace(req.OwnerInstructions[i].InstructionID)
+		req.OwnerInstructions[i].RequestID = strings.TrimSpace(req.OwnerInstructions[i].RequestID)
+	}
 	req.ExpectedHeadRevisionID = strings.TrimSpace(req.ExpectedHeadRevisionID)
+	req.CallerWorkItemID = strings.TrimSpace(req.CallerWorkItemID)
+	req.CallerWorkDisposition = types.WorkItemStatus(strings.TrimSpace(string(req.CallerWorkDisposition)))
 	req.Outcome = types.TextureTurnOutcome(strings.TrimSpace(string(req.Outcome)))
 	req.Reason = strings.TrimSpace(req.Reason)
 	if req.SubjectRefs != nil {
@@ -127,9 +134,15 @@ func validateTextureTurnShape(req types.ApplyTextureTurnRequest, graph TextureSo
 	if err := validateLifecycleCommand(req.CommandID, req.CommandDigest, req.TrajectoryID); err != nil {
 		return err
 	}
-	if req.DocumentID == "" || req.CallerAgentID == "" || req.CallerRunID == "" || req.ExpectedHeadRevisionID == "" ||
+	if req.DocumentID == "" || req.CallerAgentID == "" || req.CallerRunID == "" || req.ExpectedHeadRevisionID == "" || req.CallerWorkItemID == "" ||
 		req.ExpectedLifecycleVersion <= 0 || req.ExpectedCallerLifecycleVersion <= 0 {
-		return fmt.Errorf("apply Texture turn: complete document, caller, run, lifecycle version, and head identity are required")
+		return fmt.Errorf("apply Texture turn: complete document, caller, run, caller work, lifecycle version, and head identity are required")
+	}
+	if req.CallerWorkDisposition != types.WorkItemOpen && req.CallerWorkDisposition != types.WorkItemCompleted {
+		return fmt.Errorf("apply Texture turn: caller work disposition must be open or completed")
+	}
+	if req.CallerWorkDisposition == types.WorkItemCompleted && req.Outcome != types.TextureTurnRevision {
+		return fmt.Errorf("apply Texture turn: completed caller work requires revision outcome")
 	}
 	if docRef, ok := req.SubjectRefs["doc_id"]; ok && docRef != req.DocumentID {
 		return fmt.Errorf("apply Texture turn: subject_refs.doc_id cannot change document authority")
@@ -294,6 +307,10 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
+	callerWorkObj, callerWork, err := s.lifecycleWorkObject(ctx, ownerID, computerID, req.CallerWorkItemID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
 	if trajectory.Status != types.TrajectoryLive || trajectory.OwnerID != ownerID || trajectory.ComputerID != computerID ||
 		trajectory.TrajectoryID != req.TrajectoryID || trajectory.LifecycleVersion != req.ExpectedLifecycleVersion ||
 		strings.TrimSpace(trajectory.SubjectRefs["doc_id"]) != req.DocumentID || document.DocID != req.DocumentID ||
@@ -305,10 +322,66 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		callerAgent.LifecycleVersion != req.ExpectedCallerLifecycleVersion || callerRun.RunID != req.CallerRunID ||
 		callerRun.AgentID != req.CallerAgentID || callerRun.OwnerID != ownerID || callerRun.SandboxID != computerID ||
 		callerRun.TrajectoryID != req.TrajectoryID || callerRun.AgentProfile != agentprofile.Texture || callerRun.AgentRole != agentprofile.Texture ||
-		callerRun.ChannelID != req.DocumentID || !callerRun.State.Active() {
+		callerRun.ChannelID != req.DocumentID || !callerRun.State.Active() || callerWork.WorkItemID != req.CallerWorkItemID ||
+		callerWork.OwnerID != ownerID || callerWork.ComputerID != computerID || callerWork.TrajectoryID != req.TrajectoryID ||
+		callerWork.Status != types.WorkItemOpen || strings.TrimSpace(callerWork.AssignedAgentID) != req.CallerAgentID ||
+		callerWork.AuthorityProfile != agentprofile.Texture {
 		return types.LifecycleResult{}, ErrConcurrentStateChange
 	}
-
+	type ownerInstructionBinding struct {
+		object     objectgraph.Object
+		workObject objectgraph.Object
+		record     types.LifecycleOwnerInstruction
+	}
+	ownerInstructions := make([]ownerInstructionBinding, 0, len(req.OwnerInstructions))
+	causalRequestIDs := make([]string, 0, len(req.OwnerInstructions))
+	ownerInstructionIDs := make([]string, 0, len(req.OwnerInstructions))
+	seenInstructions := make(map[string]bool, len(req.OwnerInstructions))
+	for _, binding := range req.OwnerInstructions {
+		if binding.InstructionID == "" || binding.RequestID == "" || seenInstructions[binding.InstructionID] {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		seenInstructions[binding.InstructionID] = true
+		instructionObj, instruction, instructionErr := s.lifecycleOwnerInstructionObject(ctx, ownerID, computerID, req.TrajectoryID, binding.InstructionID)
+		if instructionErr != nil {
+			return types.LifecycleResult{}, instructionErr
+		}
+		instructionWorkObj, instructionWork, workErr := s.lifecycleWorkObject(ctx, ownerID, computerID, instruction.TargetWorkItemID)
+		if workErr != nil {
+			return types.LifecycleResult{}, workErr
+		}
+		if instruction.Status != types.LifecycleOwnerInstructionPending || instruction.RequestID != binding.RequestID ||
+			instruction.DocumentID != req.DocumentID || instruction.TrajectoryID != req.TrajectoryID ||
+			instruction.TargetAgentID != req.CallerAgentID || instruction.HeadRevisionID != req.ExpectedHeadRevisionID ||
+			instructionWork.OwnerID != ownerID || instructionWork.ComputerID != computerID ||
+			instructionWork.Status != types.WorkItemOpen || instructionWork.TrajectoryID != req.TrajectoryID ||
+			instructionWork.AssignedAgentID != req.CallerAgentID {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		ownerInstructions = append(ownerInstructions, ownerInstructionBinding{object: instructionObj, workObject: instructionWorkObj, record: instruction})
+		ownerInstructionIDs = append(ownerInstructionIDs, instruction.InstructionID)
+		causalRequestIDs = append(causalRequestIDs, instruction.RequestID)
+	}
+	if req.Outcome == types.TextureTurnRevision {
+		pendingInstructions, pendingErr := s.ListPendingLifecycleOwnerInstructions(ctx, ownerID, computerID, req.TrajectoryID, req.CallerAgentID, 1000)
+		if pendingErr != nil {
+			return types.LifecycleResult{}, pendingErr
+		}
+		expected := make([]types.LifecycleOwnerInstruction, 0, len(pendingInstructions))
+		for _, instruction := range pendingInstructions {
+			if instruction.HeadRevisionID == req.ExpectedHeadRevisionID {
+				expected = append(expected, instruction)
+			}
+		}
+		if len(expected) != len(req.OwnerInstructions) {
+			return types.LifecycleResult{}, ErrConcurrentStateChange
+		}
+		for i := range expected {
+			if expected[i].InstructionID != req.OwnerInstructions[i].InstructionID || expected[i].RequestID != req.OwnerInstructions[i].RequestID {
+				return types.LifecycleResult{}, ErrConcurrentStateChange
+			}
+		}
+	}
 	now := time.Now().UTC()
 	conditions := []objectgraph.ObjectCondition{
 		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
@@ -316,6 +389,22 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		{CanonicalID: headObj.CanonicalID, Exists: true, ExpectedContentHash: headObj.ContentHash},
 		{CanonicalID: callerAgentObj.CanonicalID, Exists: true, ExpectedContentHash: callerAgentObj.ContentHash},
 		{CanonicalID: callerRunObj.CanonicalID, Exists: true, ExpectedContentHash: callerRunObj.ContentHash},
+		{CanonicalID: callerWorkObj.CanonicalID, Exists: true, ExpectedContentHash: callerWorkObj.ContentHash},
+	}
+	seenOwnerConditions := make(map[string]bool, len(conditions)+len(ownerInstructions)*2)
+	for _, condition := range conditions {
+		seenOwnerConditions[condition.CanonicalID] = true
+	}
+	for _, binding := range ownerInstructions {
+		for _, condition := range []objectgraph.ObjectCondition{
+			{CanonicalID: binding.object.CanonicalID, Exists: true, ExpectedContentHash: binding.object.ContentHash},
+			{CanonicalID: binding.workObject.CanonicalID, Exists: true, ExpectedContentHash: binding.workObject.ContentHash},
+		} {
+			if !seenOwnerConditions[condition.CanonicalID] {
+				conditions = append(conditions, condition)
+				seenOwnerConditions[condition.CanonicalID] = true
+			}
+		}
 	}
 	objects := make([]objectgraph.Object, 0)
 	edges := make([]objectgraph.Edge, 0)
@@ -327,7 +416,10 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 			EventID: req.CommandID + ":" + fmt.Sprintf("%d", len(events)+1), OwnerID: ownerID, ComputerID: computerID,
 			TrajectoryID: req.TrajectoryID, WorkItemID: workItemID, UpdateID: updateID, Kind: kind,
 			ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: seq, CommandID: req.CommandID,
-			CommandDigest: req.CommandDigest, ArtifactRefs: refs, Reason: reason, CreatedAt: now,
+			CommandDigest: req.CommandDigest, RequestIDs: append([]string(nil), causalRequestIDs...), ArtifactRefs: refs, Reason: reason, CreatedAt: now,
+		}
+		if len(causalRequestIDs) == 1 {
+			event.RequestID = causalRequestIDs[0]
 		}
 		events = append(events, event)
 		return nil
@@ -393,6 +485,40 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 	}
 	if err := appendEvent(types.LifecycleTextureTurnCommitted, "", "", artifactRefs, req.Reason); err != nil {
 		return types.LifecycleResult{}, err
+	}
+	for i := range ownerInstructions {
+		binding := &ownerInstructions[i]
+		binding.record.Status = types.LifecycleOwnerInstructionConsumed
+		binding.record.LifecycleVersion++
+		binding.record.ReducerSeq = seq
+		binding.record.ConsumedAt = &now
+		key := binding.record.TrajectoryID + "\x00" + binding.record.InstructionID
+		updated, buildErr := lifecycleObject(ogKindOwnerInstruction, ownerID, computerID, key, binding.record,
+			lifecycleMetadata("instruction_id", binding.record.InstructionID, computerID, req.TrajectoryID, seq), binding.object.CreatedAt, now)
+		if buildErr != nil {
+			return types.LifecycleResult{}, buildErr
+		}
+		objects = append(objects, updated)
+	}
+
+	// The caller Texture assignment is a separate obligation, never a synthetic
+	// self-addressed update. Its exact open record participates in every turn CAS;
+	// completed is permitted only with a committed revision result.
+	if req.CallerWorkDisposition == types.WorkItemCompleted {
+		seq++
+		callerWork.Status = types.WorkItemCompleted
+		callerWork.ResultRef = resultDocument.CurrentRevisionID
+		callerWork.LifecycleVersion++
+		callerWork.LastReducerSeq, callerWork.UpdatedAt = seq, now
+		callerWorkUpdated, buildErr := lifecycleObject(ogKindWorkItem, ownerID, computerID, callerWork.WorkItemID, callerWork,
+			lifecycleMetadata("work_item_id", callerWork.WorkItemID, computerID, req.TrajectoryID, seq), callerWorkObj.CreatedAt, now)
+		if buildErr != nil {
+			return types.LifecycleResult{}, buildErr
+		}
+		objects = append(objects, callerWorkUpdated)
+		if err := appendEventAtCurrent(&events, req, ownerID, computerID, seq, types.LifecycleWorkSettled, callerWork.WorkItemID, "", []string{callerWork.ResultRef}, req.Reason, now); err != nil {
+			return types.LifecycleResult{}, err
+		}
 	}
 
 	// Every inbound disposition points at the canonical head resulting from this
@@ -657,7 +783,9 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 	}
 	turnRecord := &types.TextureTurnRecord{
 		Outcome: req.Outcome, PriorHeadRevisionID: req.ExpectedHeadRevisionID, HeadRevisionID: resultDocument.CurrentRevisionID,
-		InboundUpdateIDs: inboundIDs, ControlUpdateIDs: controlIDs, TargetWorkItemIDs: targetWorkIDs, Reason: req.Reason,
+		InboundUpdateIDs: inboundIDs, ControlUpdateIDs: controlIDs, TargetWorkItemIDs: targetWorkIDs,
+		CallerWorkItemID: callerWork.WorkItemID, CallerWorkDisposition: req.CallerWorkDisposition,
+		OwnerInstructionIDs: ownerInstructionIDs, CausalRequestIDs: causalRequestIDs, Reason: req.Reason,
 	}
 	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID, req.CommandID,
 		req.CommandDigest, types.LifecycleApplyTextureTurn, seq, eventObjs)
@@ -667,7 +795,7 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 	addCondition(objectgraph.ObjectCondition{CanonicalID: receiptObj.CanonicalID})
 	objects = append(objects, receiptObj)
 	result := types.LifecycleResult{
-		Receipt: receipt, Trajectory: trajectory, Agent: &callerAgent, Events: events, Document: &resultDocument,
+		Receipt: receipt, Trajectory: trajectory, WorkItem: &callerWork, Agent: &callerAgent, Events: events, Document: &resultDocument,
 		Revision: resultRevision, TextureTurn: turnRecord, Controls: controlPackets, TargetWorkItems: targetWorkItems,
 	}
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, result, edges...)
@@ -737,4 +865,26 @@ func textureTurnWorkEquivalent(existing, requested types.WorkItemRecord) bool {
 	left, _ := json.Marshal(existing)
 	right, _ := json.Marshal(requested)
 	return string(left) == string(right)
+}
+
+// GetAppliedTextureTurnByCallerRun returns the durable Texture-turn receipt
+// whose stored result names the exact caller activation. It is the recovery
+// authority for legacy mutation projections after process-local failures.
+func (s *Store) GetAppliedTextureTurnByCallerRun(ctx context.Context, ownerID, computerID, trajectoryID, runID string) (types.LifecycleResult, error) {
+	objects, err := s.lifecycleTransitionObjects(ctx, ogKindLifecycleCmd, strings.TrimSpace(trajectoryID), strings.TrimSpace(ownerID), strings.TrimSpace(computerID))
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	for i := len(objects) - 1; i >= 0; i-- {
+		receipt, decodeErr := decodeLifecycleObject[types.LifecycleCommandReceipt](objects[i])
+		if decodeErr != nil {
+			return types.LifecycleResult{}, decodeErr
+		}
+		stored := receipt.StoredResult
+		if receipt.Kind != types.LifecycleApplyTextureTurn || stored == nil || stored.TextureTurn == nil || stored.Agent == nil || strings.TrimSpace(stored.Agent.ActiveRunID) != strings.TrimSpace(runID) {
+			continue
+		}
+		return types.LifecycleResult{Receipt: receipt, Trajectory: stored.Trajectory, Schema: stored.Schema, WorkItem: stored.WorkItem, Agent: stored.Agent, Update: stored.Update, Events: stored.Events, Document: stored.Document, Revision: stored.Revision, TextureTurn: stored.TextureTurn, Controls: stored.Controls, TargetWorkItems: stored.TargetWorkItems}, nil
+	}
+	return types.LifecycleResult{}, ErrNotFound
 }
