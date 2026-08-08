@@ -854,3 +854,39 @@ restore an exact reviewed candidate within a bounded window. Before either path,
 old-code startup/recovery must be proved against a reconstructable current graph
 snapshot. Until that authority and evidence exist, the local source rehearsal is
 the highest admissible rollback result. Effects remain OFF.
+
+
+### Representative old-runtime/current-graph compatibility receipt
+
+A disposable local cross-version probe has now reduced one part of the deployed
+rollback error field without touching staging or production data. Exact candidate
+`ac6dd16b` created and committed a representative terminal Dolt/object-graph
+fixture through Store authority: a cancelled trajectory, two cancelled work
+items and run projections, a consumed owner instruction, a Texture turn with two
+revisions, one exact-run-bound control later cancelled with the trajectory, a
+durable cancellation intent, eight lifecycle events, and seven command receipts.
+The new-only object kinds remained present. Fixture Dolt HEAD was
+`lvtb74ss94q6u8jpmtd32707oefj2pu5` with empty `dolt_status`.
+
+A detached exact-`460c1423` runtime—the deployed runtime tree underlying
+`cdaa787b`—then opened that same closed marker/workspace. Old lifecycle/scoped
+document, revision, snapshot, work, update, and cancelled-run reads passed.
+`Runtime.Start` executed with a counting actor-dispatch hook and emitted zero
+dispatches. Dolt HEAD and clean status were unchanged before and after. Reopening
+with `ac6dd16b` verified the cancellation intent, owner-instruction state, exact
+control delivery binding/disposition, revisions, and all new-only object kinds
+were intact. The old runtime's normal best-effort localhost Qdrant ensure failed
+closed and did not alter Store state. Temporary probe sources and the detached
+worktree were removed; session evidence remains under
+`/tmp/choir-rollback-proof/`.
+
+This is meaningful structural backward-startup evidence for the terminal object
+classes produced or contemplated by the blocked acceptance, including a superset
+with a Texture turn/control that staging never reached. It is not a byte-exact
+production database copy, full server/actor-adapter proof, VM filesystem proof,
+or deployed rollback. No sanctioned Store export/import path exists; the closed
+marker plus derived `.texture` directory is the local transferable unit. The
+result satisfies the specific representative compatibility mitigation only when
+combined with a fresh terminal-only product preflight and independently bounded,
+current-main-conformant route recovery. The global routing, rolling-Flake, and
+recovery-window hazards identified above remain open.
