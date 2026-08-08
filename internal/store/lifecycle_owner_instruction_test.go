@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -33,7 +34,7 @@ func TestQueueLifecycleOwnerInstructionReplayConflictOccurrenceAndAtomicTurnCons
 	first := ownerInstructionRequest(t, s, start, "one", "same prose")
 	result, err := s.QueueLifecycleOwnerInstruction(ctx, first)
 	if err != nil || result.OwnerInstruction == nil || result.Replay || len(result.Events) != 1 ||
-		result.Events[0].Kind != types.LifecycleOwnerInstructionQueued || result.Events[0].RequestID != first.RequestID {
+		result.OwnerInstruction.Schema != types.LifecycleOwnerInstructionSchemaV1 || result.Events[0].Kind != types.LifecycleOwnerInstructionQueued || result.Events[0].RequestID != first.RequestID || len(result.Events[0].ArtifactRefs) != 1 || !strings.HasPrefix(result.Events[0].ArtifactRefs[0], "obj:choir.owner_instruction:") {
 		t.Fatalf("queue owner instruction = %+v, %v", result, err)
 	}
 	replay, err := s.QueueLifecycleOwnerInstruction(ctx, first)

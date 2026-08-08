@@ -42,11 +42,16 @@ func TestTextureOwnerInstructionAPIAuthOccurrenceReplayConflictAndPrivateProject
 		firstResult.RequestID == "client-one" || firstResult.InstructionID == "" || firstResult.TargetWorkItemID != start.InitialWork.WorkItemID {
 		t.Fatalf("first result=%+v err=%v", firstResult, err)
 	}
+	afterFirst, _ := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
 	replay := postOwnerInstruction(t, handler, path, start.OwnerID, "client-one", "keep this private", start.InitialRevision.RevisionID)
 	var replayResult textureOwnerInstructionResponse
 	_ = json.Unmarshal(replay.Body.Bytes(), &replayResult)
 	if replay.Code != http.StatusAccepted || !replayResult.Replay || replayResult.InstructionID != firstResult.InstructionID {
 		t.Fatalf("replay status=%d result=%+v body=%s", replay.Code, replayResult, replay.Body.String())
+	}
+	afterReplay, _ := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if afterReplay.SnapshotCursor != afterFirst.SnapshotCursor {
+		t.Fatalf("instruction replay woke or mutated lifecycle: %d -> %d", afterFirst.SnapshotCursor, afterReplay.SnapshotCursor)
 	}
 	conflict := postOwnerInstruction(t, handler, path, start.OwnerID, "client-one", "changed", start.InitialRevision.RevisionID)
 	if conflict.Code != http.StatusConflict {
@@ -119,11 +124,16 @@ func TestTextureLifecycleCreateExactReplayAndChangedPayloadConflict(t *testing.T
 	if created.Schema != "choir.texture_create.v1" || created.DocID == "" || created.RevisionID == "" || created.TrajectoryID == "" || created.Replay {
 		t.Fatalf("created=%+v", created)
 	}
+	createdSnapshot, _ := core.Store().GetLifecycleSnapshot(t.Context(), "user-1", "sandbox-test", created.TrajectoryID)
 	replay := post("user-1", "Title", "private initial")
 	var replayed textureLifecycleCreateResponse
 	_ = json.Unmarshal(replay.Body.Bytes(), &replayed)
 	if replay.Code != http.StatusCreated || !replayed.Replay || replayed.DocID != created.DocID || replayed.TrajectoryID != created.TrajectoryID {
 		t.Fatalf("replay=%d %+v", replay.Code, replayed)
+	}
+	replayedSnapshot, _ := core.Store().GetLifecycleSnapshot(t.Context(), "user-1", "sandbox-test", created.TrajectoryID)
+	if replayedSnapshot.SnapshotCursor != createdSnapshot.SnapshotCursor {
+		t.Fatalf("create replay woke or mutated lifecycle: %d -> %d", createdSnapshot.SnapshotCursor, replayedSnapshot.SnapshotCursor)
 	}
 	if changed := post("user-1", "Changed", "private initial"); changed.Code != http.StatusConflict {
 		t.Fatalf("changed=%d %s", changed.Code, changed.Body.String())

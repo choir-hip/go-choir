@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -153,6 +154,7 @@ func (h *Handler) HandleTextureOwnerInstruction(w http.ResponseWriter, r *http.R
 		if _, wakeErr := h.ReconcileAgentWake(r.Context(), ownerID, doc.DocID); wakeErr != nil {
 			// The durable pending instruction remains authoritative; restart/reconcile
 			// may wake it without turning a successful commit into a retry ambiguity.
+			log.Printf("texture owner instruction %s committed but wake deferred: %v", instruction.InstructionID, wakeErr)
 		}
 	}
 	writeAPIJSON(w, http.StatusAccepted, textureOwnerInstructionResponse{
