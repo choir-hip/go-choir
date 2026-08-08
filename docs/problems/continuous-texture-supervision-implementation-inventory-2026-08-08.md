@@ -396,3 +396,23 @@ authenticated durable run memory. It may not trust model-authored IDs, dispose a
 packet absent from memory, or create another cursor/tape. Replay, continuation,
 partial progress, cancellation, and more than 100 packets must retain exact
 control/work authority.
+
+
+## Delivered-run restart recovery gap — 2026-08-08
+
+Repair inspection found that deriving injection deduplication from durable memory
+is necessary but not sufficient. A runtime-memory append error still flows into
+generic execution failure/terminalization, and the added unit probe only calls a
+fresh injector directly; it does not prove the actor/runtime transition. On
+process restart, generic boot recovery passivates a running Researcher, but the
+assigned-work reconciler creates a new run and cannot rebind controls already
+durably delivered to the old exact run. Only persistent Super currently has an
+exact delivered-run reactivation path. Thus an append failure or restart can
+still strand a Researcher control even when mutable seen state is correct.
+
+The repair must keep an append failure nonterminal and retryable, and must
+reactivate the same exact passivated Researcher run when its authenticated
+pending delivered-control set and open work/trajectory authority remain valid.
+It must not rebind the occurrence to a new run, dispatch before a durable state
+transition, or generalize restart authority to unrelated roles. Acceptance must
+exercise the actor/runtime path, not only invoke an injector closure.
