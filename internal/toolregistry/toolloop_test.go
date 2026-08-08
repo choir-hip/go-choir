@@ -2450,3 +2450,60 @@ func TestExecuteToolBatchPreservesExecutionContext(t *testing.T) {
 		t.Fatalf("results = %+v, want preserved caller context", results)
 	}
 }
+
+type delayedTerminalToolProvider struct {
+	provideriface.Provider
+	ready chan struct{}
+}
+
+func (p *delayedTerminalToolProvider) CallWithTools(ctx context.Context, _ provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
+	close(p.ready)
+	<-ctx.Done()
+	return &provideriface.ToolLoopResponse{StopReason: "tool_use", ToolCalls: []types.ToolCall{{
+		ID: "late-terminal-call", Name: "terminal_evidence", Arguments: json.RawMessage(`{"result":"completed"}`),
+	}}}, nil
+}
+
+func TestRunToolLoopDetachesOnlySoleSelectedTerminalEvidenceAfterProviderCancellation(t *testing.T) {
+	registry := NewToolRegistry()
+	executed := false
+	if err := registry.Register(Tool{Name: "terminal_evidence", Func: func(ctx context.Context, _ json.RawMessage) (string, error) {
+		if ctx.Err() != nil {
+			t.Fatalf("terminal evidence tool received cancelled context: %v", ctx.Err())
+		}
+		execution := ExecutionContextFrom(ctx)
+		if execution.RunRecord == nil || execution.RunRecord.RunID != "run-late" || execution.ToolCallID != "late-terminal-call" {
+			t.Fatalf("detached execution identity = %+v", execution)
+		}
+		executed = true
+		return ResultJSON(map[string]any{"late": true})
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	var persisted atomic.Int32
+	hooks := ToolLoopMemoryHooks{AfterAppendMessage: func(ctx context.Context, _ string, _ json.RawMessage) error {
+		if ctx.Err() != nil {
+			t.Fatalf("late evidence memory received cancelled context: %v", ctx.Err())
+		}
+		persisted.Add(1)
+		return nil
+	}}
+	provider := &delayedTerminalToolProvider{ready: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = WithExecutionContext(ctx, ExecutionContext{RunRecord: &types.RunRecord{RunID: "run-late"}})
+	go func() {
+		<-provider.ready
+		cancel()
+	}()
+	_, _, err := RunToolLoop(ctx, provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"report"}`)}, "system", 512, func(types.EventKind, string, json.RawMessage) {}, nil,
+		WithToolLoopMemoryHooks(hooks),
+		WithDetachedTerminalToolClosure(time.Second, func(call types.ToolCall) bool {
+			return call.Name == "terminal_evidence" && strings.Contains(string(call.Arguments), "completed")
+		}))
+	if !errors.Is(err, ErrDetachedTerminalToolCommitted) {
+		t.Fatalf("tool loop error = %v", err)
+	}
+	if !executed || persisted.Load() != 2 {
+		t.Fatalf("terminal closure executed=%t persisted=%d", executed, persisted.Load())
+	}
+}

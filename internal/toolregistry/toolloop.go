@@ -57,7 +57,10 @@ type ToolLoopParkResult struct {
 
 type ToolLoopParkWaiterFunc func(ctx context.Context, state ToolLoopParkState) (ToolLoopParkResult, error)
 
+type DetachedTerminalToolPredicate func(call types.ToolCall) bool
+
 var ErrToolLoopPassivated = errors.New("tool loop passivated")
+var ErrDetachedTerminalToolCommitted = errors.New("detached terminal tool committed")
 
 type ToolLoopPassivatedError struct {
 	Reason string
@@ -100,6 +103,8 @@ type toolLoopOptions struct {
 	requiredWriteTools            map[string]bool
 	completionGuard               ToolLoopCompletionGuardFunc
 	parkWaiter                    ToolLoopParkWaiterFunc
+	detachedTerminalTool          DetachedTerminalToolPredicate
+	detachedTerminalToolTimeout   time.Duration
 	budget                        ToolLoopBudget
 }
 
@@ -234,6 +239,19 @@ func WithParkWaiter(waiter ToolLoopParkWaiterFunc) ToolLoopOption {
 	}
 }
 
+// WithDetachedTerminalToolClosure permits one sole, runtime-selected terminal
+// evidence tool call to finish under a bounded cancellation-detached context.
+// It does not detach provider calls, mixed batches, partial tools, injected
+// turns, or any later iteration.
+func WithDetachedTerminalToolClosure(timeout time.Duration, predicate DetachedTerminalToolPredicate) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		if timeout > 0 && predicate != nil {
+			opts.detachedTerminalToolTimeout = timeout
+			opts.detachedTerminalTool = predicate
+		}
+	}
+}
+
 // WithToolLoopBudget applies cumulative loop limits. Zero-valued fields are
 // unbounded for that dimension; at least one positive field enables the budget.
 func WithToolLoopBudget(budget ToolLoopBudget) ToolLoopOption {
@@ -297,14 +315,17 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	var partialTextFragments []string
 	loopStartedAt := time.Now()
 
-	appendMessage := func(role string, msg json.RawMessage) error {
+	appendMessageWithContext := func(appendCtx context.Context, role string, msg json.RawMessage) error {
 		messages = append(messages, msg)
 		if options.memoryHooks.AfterAppendMessage != nil {
-			if err := options.memoryHooks.AfterAppendMessage(ctx, role, msg); err != nil {
+			if err := options.memoryHooks.AfterAppendMessage(appendCtx, role, msg); err != nil {
 				return err
 			}
 		}
 		return nil
+	}
+	appendMessage := func(role string, msg json.RawMessage) error {
+		return appendMessageWithContext(ctx, role, msg)
 	}
 	appendInjected := func(injected []json.RawMessage) error {
 		for _, msg := range injected {
@@ -598,6 +619,13 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				}
 			}
 
+			terminalClosure := len(resp.ToolCalls) == 1 && options.detachedTerminalTool != nil && options.detachedTerminalTool(resp.ToolCalls[0])
+			toolCtx := ctx
+			cancelToolClosure := func() {}
+			if terminalClosure {
+				toolCtx, cancelToolClosure = context.WithTimeout(context.WithoutCancel(ctx), options.detachedTerminalToolTimeout)
+			}
+
 			// Append the assistant's response (with tool calls) to conversation.
 			assistantPayload := map[string]any{
 				"role":    "assistant",
@@ -607,7 +635,8 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				assistantPayload["reasoning_content"] = resp.ReasoningContent
 			}
 			assistantMsg, _ := json.Marshal(assistantPayload)
-			if err := appendMessage("assistant", assistantMsg); err != nil {
+			if err := appendMessageWithContext(toolCtx, "assistant", assistantMsg); err != nil {
+				cancelToolClosure()
 				return "", totalUsage, fmt.Errorf("tool loop persist assistant message: %w", err)
 			}
 
@@ -615,15 +644,22 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			requiredCalled := requiredToolCalled(activeRequired, resp.ToolCalls)
 
 			// Execute tools and collect results.
-			toolResults := ExecuteToolBatch(ctx, registry, resp.ToolCalls, emit)
+			toolResults := ExecuteToolBatch(toolCtx, registry, resp.ToolCalls, emit)
 
 			// Append tool results as a user message (per Anthropic Messages API convention).
 			toolResultMsg, _ := json.Marshal(map[string]any{
 				"role":    "user",
 				"content": buildToolResultContent(toolResults),
 			})
-			if err := appendMessage("user", toolResultMsg); err != nil {
+			if err := appendMessageWithContext(toolCtx, "user", toolResultMsg); err != nil {
+				cancelToolClosure()
 				return "", totalUsage, fmt.Errorf("tool loop persist tool result message: %w", err)
+			}
+			if terminalClosure {
+				cancelToolClosure()
+				if len(toolResults) == 1 && !toolResults[0].IsError {
+					return "", totalUsage, ErrDetachedTerminalToolCommitted
+				}
 			}
 			if injectUserTurns != nil {
 				injected, err := injectUserTurns(false)

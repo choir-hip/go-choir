@@ -2570,6 +2570,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	ctx = toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec))
+	assignedCoSuperOverlay := false
 	if rt.capsuleExecutor != nil {
 		switch agentProfileForRun(rec) {
 		case agentprofile.Super:
@@ -2584,6 +2585,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 				return
 			}
 			if handle != "" {
+				assignedCoSuperOverlay = true
 				registry = overlay
 				// Exact assigned CoSupers receive only their runtime-held capsule
 				// handle. No event, updater, effect, finalization, host, VM, route,
@@ -2670,6 +2672,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		toolregistry.WithToolLoopLLMConfig(llmConfig),
 		toolregistry.WithProviderPreconditionFallbacks(preconditionFallbacks...),
 	}
+	if assignedCoSuperOverlay {
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithDetachedTerminalToolClosure(30*time.Second, terminalAssignedCoSuperReportCall))
+	}
 	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
 	}
@@ -2692,6 +2697,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 
 	text, usage, err := toolregistry.RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
 	if err != nil {
+		if errors.Is(err, toolregistry.ErrDetachedTerminalToolCommitted) {
+			return
+		}
 		if errors.Is(err, toolregistry.ErrToolLoopPassivated) {
 			rt.passivateIdleToolLoopRun(context.Background(), rec, text, usage, err)
 			return

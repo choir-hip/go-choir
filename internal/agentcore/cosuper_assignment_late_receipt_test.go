@@ -50,3 +50,25 @@ func TestLateAssignmentExecutionReceiptsAuthenticateExactDetachedAuthority(t *te
 		t.Fatal("missing persisted raw receipt accepted")
 	}
 }
+
+func TestDetachedAssignmentReportClosureSelectsOnlySoleTerminalResult(t *testing.T) {
+	tests := []struct {
+		name string
+		call types.ToolCall
+		want bool
+	}{
+		{name: "completed", call: types.ToolCall{ID: "call", Name: "record_assignment_result", Arguments: []byte(`{"result":"completed"}`)}, want: true},
+		{name: "failed", call: types.ToolCall{ID: "call", Name: "record_assignment_result", Arguments: []byte(`{"result":"failed"}`)}, want: true},
+		{name: "blocked", call: types.ToolCall{ID: "call", Name: "record_assignment_result", Arguments: []byte(`{"result":"blocked"}`)}, want: true},
+		{name: "partial", call: types.ToolCall{ID: "call", Name: "record_assignment_result", Arguments: []byte(`{"result":"partial"}`)}, want: false},
+		{name: "capsule effect", call: types.ToolCall{ID: "call", Name: "capsule_exec", Arguments: []byte(`{"result":"completed"}`)}, want: false},
+		{name: "missing runtime call id", call: types.ToolCall{Name: "record_assignment_result", Arguments: []byte(`{"result":"completed"}`)}, want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := terminalAssignedCoSuperReportCall(tc.call); got != tc.want {
+				t.Fatalf("terminal closure selection = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
