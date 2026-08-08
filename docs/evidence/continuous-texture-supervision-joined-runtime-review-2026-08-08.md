@@ -169,8 +169,10 @@ The remaining blocker belongs to protected canonical gateway credential/provider
 availability. This mission does not authorize SSH, guest token injection, auth
 weakening, route changes, or a silent model fallback. Effects remain OFF; real
 Researcher/Super/CoSuper progression, capsule isolation/cleanup, restart with
-pending controls, late evidence, no-effect comparison, rollback rehearsal, run
-acceptance, and registry closure remain open.
+pending controls, late evidence, complete checkpoint/capsule no-effect
+comparison, run acceptance, and registry closure remain open. The later
+canonical R/F section closes the deployed rollback-rehearsal gap with its
+qualified bounded-pass/strict-observability-fail verdict.
 
 
 ### Post-escalation provider recurrence
@@ -199,10 +201,14 @@ Local reproduction was performed only after exact staging provider failures and
 is not counted as product acceptance. Using gitignored operator credentials
 without printing secrets or response bodies, minimal requests returned DeepSeek
 HTTP 402 with a balance-related error classification, Xiaomi HTTP 402
-`insufficient_balance`, Fireworks HTTP 412 `PRECONDITION_FAILED`, and Z.AI HTTP
-429 code `1113` with a balance/rate classification. This shows every configured provider/model route failed before tool semantics;
-account/balance attribution applies to DeepSeek/Xiaomi and the qualified Z.AI
-classification, not the Fireworks precondition failure. Local Codex token
+`insufficient_balance`, Fireworks HTTP 412 `PRECONDITION_FAILED`, Z.AI HTTP
+429 code `1113` with a balance/rate classification, and a direct AWS Bedrock
+bearer invoke for `us.anthropic.claude-haiku-4-5-20251001-v1:0` in
+`us-east-1` returned HTTP 403. This shows every configured provider/model route failed before tool
+semantics; account/balance attribution applies to DeepSeek/Xiaomi and the
+qualified Z.AI classification, not the Fireworks precondition failure or
+Bedrock forbidden response. The Bedrock result is local bearer/model/region
+availability only and does not establish host credential state. Local Codex token
 metadata reports an unexpired expiry, which does not prove usable auth, while
 the host gateway retains stale auth.
 
