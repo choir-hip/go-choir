@@ -1005,9 +1005,10 @@ mode 0600, with access, refresh, and ID tokens present and access expiry
 `2026-08-13T00:05:24Z`. Node B's current
 `/var/lib/go-choir/codex-auth.json` is SHA-256
 `eb1b7317613de015a3f29948cb738e74e84f60f0d073186760808afadba7aeb5`,
-mode 0600, last refreshed `2026-07-24T00:10:18.068693Z`. Account-identity
-digests differ; the operator explicitly selected the local credential as the
-replacement.
+mode 0600, last refreshed `2026-07-24T00:10:18.068693Z`. After canonical newline handling, account-identity digests are equal; the
+preflight's earlier apparent difference was a local hashing-method error, not a
+credential identity change. The exact file digests still differ and the operator
+explicitly selected the newer local record as the replacement.
 
 The full helper would also regenerate `gateway-provider.env`. Per-key digest
 comparison proved every planned value already equals Node B except
@@ -1039,3 +1040,38 @@ old SHA/account digest plus fresh PID and exact-F health. Retain the backup only
 through acceptance, then delete it under recorded disposition. Heresy delta at
 preflight: discovered none, introduced none, repaired none. Effects remain OFF;
 credential restoration alone is not acceptance.
+
+### First scoped restoration attempt safely rolled back before provider proof
+
+Docs ceremony `77be0419ba28ff12c6b5375323be9ead2a38168c` and docs CI
+`31284157112` passed before mutation. Under the accepted red mechanics, the old
+auth SHA-256 `eb1b7317…` was copied to root-owned mode-0600 rollback ref
+`/var/lib/go-choir/provider-auth-backups/codex-auth.cts-chatgpt-20260808T233240Z-d42b86b444.rollback.json`.
+The local SHA-256 `cc744524…` was validated in a root-only directory, installed
+through an already-0600 same-filesystem temp, and atomically exposed. The gateway
+env remained exact at `7c5cc6e…`; only `go-choir-gateway` restarted, PID
+`3782119→3806387`, and public host health remained exact F `67a61358`.
+
+The first bounded product probe then revealed an operator-context mismatch
+before any provider call. The local `.env` `CHOIR_API_KEY` belongs owner
+`5bd6de97-3b58-408c-bf89-c42c81b083de`; its nonce-bound product route was
+candidate `candidate-fleet-e15cb89f25d963c220319b7b`, guest
+`computer-03335285269bdba4f94377e56879f9e6`, guest commit `d69e1a6f`, epoch 130,
+not acceptance owner `c72404bb-3c43-4a53-8671-b5cbc48b24a7` and its retained
+exact-F lifecycle environment. The new lifecycle endpoint therefore returned
+HTTP 404, and a legacy generic document create returned HTTP 500 with no matching
+document retained. No Texture/provider run was created and no ChatGPT request
+occurred.
+
+Because usability was unproved, the fail-closed rollback gate fired immediately.
+The already-0600 backup was atomically restored, the gateway restarted PID
+`3806387→3806702`, canonical auth returned exactly to `eb1b7317…`, env remained
+`7c5cc6e…`, and public host health remained exact F. The temporary wrong-owner
+probe key was revoked and returned HTTP 401. The root-only backup remains for the
+next bounded attempt. A normal browser session for the correct acceptance owner
+is now authenticated and can mint the proper computer-scoped key; no second auth
+mutation may occur until this problem receipt lands.
+
+Heresy delta: discovered an operator probe-owner mismatch and a sanitized digest
+method error; introduced none durably; repaired none yet. The provisional auth
+replacement was fully rolled back. Effects remain OFF.

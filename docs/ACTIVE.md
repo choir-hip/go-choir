@@ -39,7 +39,11 @@ At `2026-08-08T23:24Z` the operator explicitly authorized the existing local
 ChatGPT token and SSH Node B. Sanitized preflight selected a ChatGPT-only atomic
 auth-file replacement and gateway restart because the full tracked provider
 helper would also change Bedrock. A root-only rollback copy and unchanged gateway
-env are mandatory. Effects remain OFF. Provider-dependent repeated
+env are mandatory. The first install met those gates, but its probe used a
+different owner's legacy guest and failed before provider; exact rollback
+restored auth/env/health and revoked the key. Correct acceptance-owner browser
+auth is available for a second bounded attempt after the receipt lands. Effects
+remain OFF. Provider-dependent repeated
 Researcher/Super/CoSuper progression, real capsule/late-result behavior, positive
 correction/source opening, complete checkpoint/no-effect and run acceptance,
 and terminal registry closure remain mandatory.
