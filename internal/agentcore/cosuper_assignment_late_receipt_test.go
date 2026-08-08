@@ -36,6 +36,15 @@ func TestLateAssignmentExecutionReceiptsAuthenticateExactDetachedAuthority(t *te
 	if _, err := rt.bindLateAssignmentExecutionReceipts(assignment, report); err == nil {
 		t.Fatal("foreign run raw receipt accepted")
 	}
+	legacy := assignment
+	legacy.Binding.ExecutionHandleDigest = ""
+	rt.assignmentReceiptResolver = fixedRawAssignmentReceipts{receipts: []capsule.ExecutionReceipt{receipt}}
+	if _, err := rt.bindLateAssignmentExecutionReceipts(legacy, report); err == nil {
+		t.Fatal("receipt-bearing late evidence accepted without exact stored handle digest")
+	}
+	if narrated, err := rt.bindLateAssignmentExecutionReceipts(legacy, types.CoSuperAssignmentReport{Summary: "late command-free evidence"}); err != nil || narrated.Summary == "" {
+		t.Fatalf("command-free legacy narration rejected: %+v %v", narrated, err)
+	}
 	rt.assignmentReceiptResolver = fixedRawAssignmentReceipts{err: errors.New("detached receipt unavailable")}
 	if _, err := rt.bindLateAssignmentExecutionReceipts(assignment, report); err == nil {
 		t.Fatal("missing persisted raw receipt accepted")

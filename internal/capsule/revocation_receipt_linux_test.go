@@ -3,6 +3,7 @@
 package capsule
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,6 +18,15 @@ func TestPersistRevocationReceiptIsStructuredDurableAndRequiresAbsentCapsule(t *
 		t.Fatal("live capsule acknowledged absent")
 	}
 	delete(e.capsules, "live")
+	if err := os.MkdirAll(filepath.Join(state, "live", "root"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.PersistRevocationReceipt("run", digest, "live", "capsule-revoke-intent:exact"); err == nil {
+		t.Fatal("restart residue acknowledged absent from reconstructed in-memory map")
+	}
+	if err := e.CleanupOrphanedCapsule(context.Background(), "live"); err != nil {
+		t.Fatal(err)
+	}
 	receipt, err := e.PersistRevocationReceipt("run", digest, "live", "capsule-revoke-intent:exact")
 	if err != nil || !receipt.CapsuleAbsent || receipt.AssignmentCapabilityDigest != digest || receipt.ReceiptRef == "" {
 		t.Fatalf("receipt=%+v err=%v", receipt, err)

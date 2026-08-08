@@ -229,6 +229,18 @@ func TestCancelLifecycleTrajectoryPersistsCancelledActivationProjection(t *testi
 	}); err != nil {
 		t.Fatalf("create lifecycle activation: %v", err)
 	}
+	providerCtx, cancelProvider := context.WithCancel(context.Background())
+	rt.runningMu.Lock()
+	rt.running[runID] = cancelProvider
+	rt.runningMu.Unlock()
+	dispatchedCancel := false
+	rt.dispatchActor = func(_ context.Context, gotOwner, gotComputer, gotAgent, kind, content, gotTrajectory, _ string) error {
+		if gotOwner != ownerID || gotComputer != "sandbox-test" || gotAgent != currentTextureAgentID(docID) || kind != "cancel" || content != runID || gotTrajectory != trajectoryID {
+			t.Fatalf("cancellation dispatch = %q %q %q %q %q %q", gotOwner, gotComputer, gotAgent, kind, content, gotTrajectory)
+		}
+		dispatchedCancel = true
+		return nil
+	}
 	before, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
 	if err != nil {
 		t.Fatalf("snapshot before cancellation: %v", err)
@@ -249,6 +261,14 @@ func TestCancelLifecycleTrajectoryPersistsCancelledActivationProjection(t *testi
 	}
 	if stored.State != types.RunCancelled || stored.FinishedAt == nil {
 		t.Fatalf("cancelled activation = %+v", stored)
+	}
+	if !dispatchedCancel {
+		t.Fatal("resident lifecycle activation did not receive actor cancellation")
+	}
+	select {
+	case <-providerCtx.Done():
+	default:
+		t.Fatal("resident provider context remained live after durable cancellation")
 	}
 	after, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
 	if err != nil {

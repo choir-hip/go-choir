@@ -55,6 +55,9 @@ func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.C
 	if rt.capsuleExecutor.HasCapsule(assignment.Binding.CapsuleID) {
 		return assignment, fmt.Errorf("assignment capsule continued after executor acknowledgement")
 	}
+	if err := rt.capsuleExecutor.CleanupOrphanedCapsule(ctx, assignment.Binding.CapsuleID); err != nil {
+		return assignment, fmt.Errorf("clean exact orphaned capsule residue before acknowledgement: %w", err)
+	}
 	revocationReceipt, receiptErr := rt.capsuleExecutor.PersistRevocationReceipt(ackRunID, assignment.Binding.CapabilityDigest, assignment.Binding.CapsuleID, intentRef)
 	if receiptErr != nil || !revocationReceipt.CapsuleAbsent || revocationReceipt.AgentRunID != ackRunID ||
 		revocationReceipt.CapsuleID != assignment.Binding.CapsuleID || revocationReceipt.IntentRef != intentRef ||
@@ -581,6 +584,9 @@ func (rt *Runtime) bindLateAssignmentExecutionReceipts(assignment types.CoSuperA
 	if len(refs) == 0 {
 		return report, nil
 	}
+	if !types.ValidSHA256Digest(assignment.Binding.ExecutionHandleDigest) {
+		return report, fmt.Errorf("late assignment raw execution evidence requires exact stored execution handle digest")
+	}
 	resolver := rt.assignmentReceiptResolver
 	if resolver == nil {
 		resolver = rt.capsuleExecutor
@@ -595,7 +601,7 @@ func (rt *Runtime) bindLateAssignmentExecutionReceipts(assignment types.CoSuperA
 	seen := map[string]bool{}
 	for i, receipt := range receipts {
 		if receipt.ReceiptRef != refs[i] || receipt.AgentRunID != assignment.BoundRunID || receipt.CapsuleID != assignment.Binding.CapsuleID ||
-			(assignment.Binding.ExecutionHandleDigest != "" && "sha256:"+receipt.CapabilityHandleDigest != assignment.Binding.ExecutionHandleDigest) ||
+			"sha256:"+receipt.CapabilityHandleDigest != assignment.Binding.ExecutionHandleDigest ||
 			"sha256:"+strings.TrimPrefix(receipt.SourceTreeDigest, "sha256:") != assignment.Binding.SubjectDigest ||
 			objectgraph.SHA256([]byte(receipt.Command)) != report.Commands[i].CommandDigest || seen[receipt.ReceiptRef] {
 			return report, fmt.Errorf("late assignment raw execution evidence does not authenticate exact receipt/run/handle/capsule/source")

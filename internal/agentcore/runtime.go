@@ -1527,21 +1527,36 @@ func (rt *Runtime) drainCancelledTrajectoryActivations(ctx context.Context, owne
 
 	cancelled := []string{}
 	computerID = strings.TrimSpace(computerID)
+	resident := map[string]bool{}
+	rt.runningMu.Lock()
+	for runID := range rt.running {
+		resident[runID] = true
+	}
+	rt.runningMu.Unlock()
 	var active []types.RunRecord
 	var err error
 	if computerID != "" {
-		active, err = rt.store.ListActiveLifecycleRunsByTrajectory(drainCtx, ownerID, computerID, trajectoryID, 0)
+		var lifecycleRuns []types.RunRecord
+		lifecycleRuns, err = rt.store.ListLifecycleRunsByTrajectory(drainCtx, ownerID, computerID, trajectoryID, 0)
+		for _, run := range lifecycleRuns {
+			// The reducer may already have projected the durable run Cancelled.
+			// Retain only live durable records or the exact process-local
+			// resident intersection; never dispatch a historical terminal actor.
+			if run.State.Active() || resident[run.RunID] {
+				active = append(active, run)
+			}
+		}
+		if err == nil && len(lifecycleRuns) == 0 {
+			// Legacy trajectories may carry a run SandboxID without a scoped
+			// lifecycle authority. Lifecycle projections are excluded from this
+			// owner-only compatibility query.
+			active, err = rt.store.ListActiveRunsByTrajectory(drainCtx, ownerID, trajectoryID, 0)
+		}
 	} else {
 		active, err = rt.store.ListActiveRunsByTrajectory(drainCtx, ownerID, trajectoryID, 0)
 	}
-	if err == nil && len(active) == 0 && computerID != "" {
-		// Legacy trajectories may carry a run SandboxID without a scoped
-		// lifecycle authority. Lifecycle projections are excluded from this
-		// owner-only compatibility query.
-		active, err = rt.store.ListActiveRunsByTrajectory(drainCtx, ownerID, trajectoryID, 0)
-	}
 	if err != nil {
-		return cancelled, fmt.Errorf("list active trajectory activations: %w", err)
+		return cancelled, fmt.Errorf("list trajectory activations for resident drain: %w", err)
 	}
 	// Legacy trajectories have no computer identity; infer it only for their
 	// activation updates. Lifecycle trajectories always arrive scoped.
@@ -1565,7 +1580,7 @@ func (rt *Runtime) drainCancelledTrajectoryActivations(ctx context.Context, owne
 		}
 	}
 	for _, run := range active {
-		if run.State.Active() {
+		if run.State.Active() || resident[run.RunID] {
 			if rt.dispatchActor == nil {
 				return cancelled, fmt.Errorf("deliver trajectory cancellation: actor runtime is unavailable")
 			}

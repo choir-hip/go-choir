@@ -109,6 +109,9 @@ func (e *Executor) WriteFile(context.Context, string, string, string, []byte, ui
 func (e *Executor) ListDir(context.Context, string, string, string) ([]string, error) {
 	return nil, stubErr("list")
 }
+func (e *Executor) CleanupOrphanedCapsule(context.Context, string) error {
+	return stubErr("cleanup orphaned capsule")
+}
 func (e *Executor) PersistRevocationReceipt(string, string, string, string) (CapsuleRevocationReceipt, error) {
 	return CapsuleRevocationReceipt{}, stubErr("persist revocation receipt")
 }

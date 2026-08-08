@@ -1246,6 +1246,60 @@ func (e *Executor) resolveControl(agentRunID, handle string) (string, error) {
 	return capsuleID, nil
 }
 
+func validCapsuleResidueIdentity(capsuleID string) bool {
+	return capsuleID != "" && strings.TrimSpace(capsuleID) == capsuleID && filepath.Base(capsuleID) == capsuleID
+}
+
+func (e *Executor) capsuleResidueExists(capsuleID string) (bool, error) {
+	if !validCapsuleResidueIdentity(capsuleID) {
+		return false, fmt.Errorf("capsule residue identity is invalid")
+	}
+	if _, err := os.Lstat(filepath.Join(e.stateDir, capsuleID)); err == nil {
+		return true, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	return capsuleCgroupResidueExists(capsuleID)
+}
+
+// CleanupOrphanedCapsule closes executor residue after a guest-core restart.
+// It never trusts the reconstructed empty in-memory map: the exact cgroup is
+// killed/deleted, the exact overlay is detached, and the private state tree is
+// removed before absence can be receipted.
+func (e *Executor) CleanupOrphanedCapsule(_ context.Context, capsuleID string) error {
+	capsuleID = strings.TrimSpace(capsuleID)
+	if !validCapsuleResidueIdentity(capsuleID) {
+		return fmt.Errorf("orphan capsule cleanup identity is invalid")
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if _, live := e.capsules[capsuleID]; live {
+		return fmt.Errorf("orphan capsule cleanup cannot replace live executor destruction")
+	}
+	if err := cleanupOrphanedCapsuleCgroup(capsuleID); err != nil {
+		return err
+	}
+	base := filepath.Join(e.stateDir, capsuleID)
+	if _, err := os.Lstat(base); err == nil {
+		if err := unmountCapsuleRoot(filepath.Join(base, "root")); err != nil {
+			return err
+		}
+		if err := removePrivateTree(base); err != nil {
+			return fmt.Errorf("remove orphan capsule state: %w", err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	residue, err := e.capsuleResidueExists(capsuleID)
+	if err != nil {
+		return err
+	}
+	if residue {
+		return fmt.Errorf("orphan capsule residue remained after cleanup")
+	}
+	return nil
+}
+
 // PersistRevocationReceipt durably acknowledges an already-requested exact
 // assignment fate only after this executor has no capsule/process/overlay for
 // the identity. capabilityDigest is the durable sha256 handle binding; the raw
@@ -1261,10 +1315,16 @@ func (e *Executor) PersistRevocationReceipt(agentRunID, capabilityDigest, capsul
 		return CapsuleRevocationReceipt{}, fmt.Errorf("capsule revocation receipt binding is invalid")
 	}
 	e.mu.RLock()
-	_, exists := e.capsules[capsuleID]
-	e.mu.RUnlock()
-	if exists {
+	defer e.mu.RUnlock()
+	if _, exists := e.capsules[capsuleID]; exists {
 		return CapsuleRevocationReceipt{}, fmt.Errorf("capsule revocation acknowledgement requires absent capsule")
+	}
+	residue, residueErr := e.capsuleResidueExists(capsuleID)
+	if residueErr != nil {
+		return CapsuleRevocationReceipt{}, fmt.Errorf("inspect capsule revocation residue: %w", residueErr)
+	}
+	if residue {
+		return CapsuleRevocationReceipt{}, fmt.Errorf("capsule revocation acknowledgement requires absent process/cgroup/overlay/state residue")
 	}
 	receipt := CapsuleRevocationReceipt{AgentRunID: agentRunID, AssignmentCapabilityDigest: capabilityDigest,
 		CapsuleID: capsuleID, IntentRef: intentRef, Disposition: "revoked", CapsuleAbsent: true, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano)}

@@ -4,6 +4,7 @@ package capsule
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -171,6 +172,46 @@ func (c *CgroupManager) Delete() error {
 // Path returns the cgroup path.
 func (c *CgroupManager) Path() string {
 	return c.path
+}
+
+// cleanupOrphanedCapsuleCgroup kills every process that survived in the exact
+// capsule cgroup and deletes the hierarchy before restart reconciliation can
+// acknowledge executor absence.
+func cleanupOrphanedCapsuleCgroup(capsuleID string) error {
+	path := filepath.Join("/sys/fs/cgroup/capsule", capsuleID)
+	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("inspect orphan capsule cgroup: %w", err)
+	}
+	manager, err := cgroup2.Load(filepath.Join("/capsule", capsuleID))
+	if err != nil {
+		return fmt.Errorf("load orphan capsule cgroup: %w", err)
+	}
+	if err := manager.Kill(); err != nil {
+		return fmt.Errorf("kill orphan capsule cgroup: %w", err)
+	}
+	if err := manager.Delete(); err != nil {
+		return fmt.Errorf("delete orphan capsule cgroup: %w", err)
+	}
+	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+		if err == nil {
+			return fmt.Errorf("orphan capsule cgroup remained after delete")
+		}
+		return fmt.Errorf("verify orphan capsule cgroup absence: %w", err)
+	}
+	return nil
+}
+
+func capsuleCgroupResidueExists(capsuleID string) (bool, error) {
+	_, err := os.Lstat(filepath.Join("/sys/fs/cgroup/capsule", capsuleID))
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
 }
 
 // MountOverlayFS mounts an overlayfs filesystem with the given layers.

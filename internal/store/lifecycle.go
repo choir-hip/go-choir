@@ -963,7 +963,7 @@ func (s *Store) listLifecycleRunsByScope(ctx context.Context, ownerID, computerI
 	return runs, nil
 }
 
-func (s *Store) ListActiveLifecycleRunsByTrajectory(ctx context.Context, ownerID, computerID, trajectoryID string, limit int) ([]types.RunRecord, error) {
+func (s *Store) ListLifecycleRunsByTrajectory(ctx context.Context, ownerID, computerID, trajectoryID string, limit int) ([]types.RunRecord, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
 	if err != nil {
 		return nil, err
@@ -992,7 +992,7 @@ func (s *Store) ListActiveLifecycleRunsByTrajectory(ctx context.Context, ownerID
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
-		if run.OwnerID == ownerID && run.SandboxID == computerID && run.TrajectoryID == trajectoryID && run.State.Active() {
+		if run.OwnerID == ownerID && run.SandboxID == computerID && run.TrajectoryID == trajectoryID {
 			runs = append(runs, run)
 		}
 	}
@@ -1006,6 +1006,23 @@ func (s *Store) ListActiveLifecycleRunsByTrajectory(ctx context.Context, ownerID
 		runs = runs[:limit]
 	}
 	return runs, nil
+}
+
+func (s *Store) ListActiveLifecycleRunsByTrajectory(ctx context.Context, ownerID, computerID, trajectoryID string, limit int) ([]types.RunRecord, error) {
+	runs, err := s.ListLifecycleRunsByTrajectory(ctx, ownerID, computerID, trajectoryID, 0)
+	if err != nil {
+		return nil, err
+	}
+	active := make([]types.RunRecord, 0, len(runs))
+	for _, run := range runs {
+		if run.State.Active() {
+			active = append(active, run)
+		}
+	}
+	if limit > 0 && len(active) > limit {
+		active = active[:limit]
+	}
+	return active, nil
 }
 
 func (s *Store) GetLifecycleWorkItem(ctx context.Context, ownerID, computerID, workItemID string) (types.WorkItemRecord, error) {
