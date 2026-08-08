@@ -17,12 +17,12 @@ import (
 func TestExecutionContextRoundTripAndIsolation(t *testing.T) {
 	run := &types.RunRecord{RunID: "run-1"}
 	ctx := WithExecutionContext(context.Background(), ExecutionContext{
-		RunID: " run-1 ", ToolCallID: " call-parent ", AgentID: " agent-1 ", OwnerID: " owner-1 ", Profile: agentprofile.Texture,
+		RunID: " run-1 ", AgentID: " agent-1 ", OwnerID: " owner-1 ", Profile: agentprofile.Texture,
 		Role: " texture ", ChannelID: " channel-1 ", SandboxID: " sandbox-1 ", DesktopID: " desktop-1 ",
 		OwnerEmail: " owner@example.com ", WorkingDir: " /workspace ", RunRecord: run,
 	})
 	got := ExecutionContextFrom(ctx)
-	if got.RunID != "run-1" || got.ToolCallID != "call-parent" || got.AgentID != "agent-1" || got.OwnerID != "owner-1" || got.Profile != agentprofile.Texture || got.Role != agentprofile.Texture || got.ChannelID != "channel-1" || got.SandboxID != "sandbox-1" || got.DesktopID != "desktop-1" || got.OwnerEmail != "owner@example.com" || got.WorkingDir != "/workspace" || got.RunRecord != run {
+	if got.RunID != "run-1" || got.AgentID != "agent-1" || got.OwnerID != "owner-1" || got.Profile != agentprofile.Texture || got.Role != agentprofile.Texture || got.ChannelID != "channel-1" || got.SandboxID != "sandbox-1" || got.DesktopID != "desktop-1" || got.OwnerEmail != "owner@example.com" || got.WorkingDir != "/workspace" || got.RunRecord != run {
 		t.Fatalf("execution context = %#v", got)
 	}
 	if zero := ExecutionContextFrom(context.Background()); zero != (ExecutionContext{}) {
@@ -202,18 +202,5 @@ func TestExecuteToolBatchProjectionAndCaps(t *testing.T) {
 	large := ExecuteToolBatch(context.Background(), registry, []types.ToolCall{{ID: "2", Name: "large"}}, func(types.EventKind, string, json.RawMessage) {})[0]
 	if !strings.Contains(large.Output, "[output truncated — 103424 bytes total, showing first 102400 bytes]") {
 		t.Fatalf("large output suffix missing: len=%d", len(large.Output))
-	}
-}
-
-func TestExecuteToolBatchInstallsProviderToolCallID(t *testing.T) {
-	registry := NewToolRegistry()
-	if err := registry.Register(Tool{Name: "capture_call_id", Func: func(ctx context.Context, _ json.RawMessage) (string, error) {
-		return ExecutionContextFrom(ctx).ToolCallID, nil
-	}}); err != nil {
-		t.Fatal(err)
-	}
-	results := ExecuteToolBatch(WithExecutionContext(context.Background(), ExecutionContext{ToolCallID: "stale"}), registry, []types.ToolCall{{ID: "provider-call-42", Name: "capture_call_id"}}, func(types.EventKind, string, json.RawMessage) {})
-	if len(results) != 1 || results[0].IsError || results[0].Output != "provider-call-42" {
-		t.Fatalf("results=%+v", results)
 	}
 }

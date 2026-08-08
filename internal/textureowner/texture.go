@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"regexp"
@@ -1145,13 +1144,7 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 	}
 
 	var req textureCreateRevisionRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
-		return
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
 		return
 	}
@@ -1243,54 +1236,26 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 	}
 
 	if lifecycleBound {
-		rev.ComputerID, rev.TrajectoryID = doc.ComputerID, doc.TrajectoryID
 		snapshot, snapshotErr := h.Store.GetLifecycleSnapshot(r.Context(), ownerID, doc.ComputerID, doc.TrajectoryID)
 		if snapshotErr != nil {
 			log.Printf("texture api: load lifecycle for revision: %v", snapshotErr)
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load lifecycle revision authority"})
 			return
 		}
-		targetAgentID := currentTextureAgentID(doc.DocID)
-		targetWorkItemID := ""
-		for _, work := range snapshot.WorkItems {
-			if work.Status == types.WorkItemOpen && work.AssignedAgentID == targetAgentID && work.AuthorityProfile == agentprofile.Texture {
-				if targetWorkItemID != "" {
-					writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has multiple open Texture target work items"})
-					return
-				}
-				targetWorkItemID = work.WorkItemID
-			}
-		}
-		if snapshot.Trajectory.Status == types.TrajectoryLive && targetWorkItemID == "" {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has no open Texture target work item"})
-			return
-		}
-		requestID, instructionID := textureOwnerOccurrenceIdentity(ownerID, doc.ComputerID, doc.DocID, strings.TrimSpace(req.IdempotencyKey))
 		command := types.CommitLifecycleArtifactHeadRequest{
 			OwnerID: ownerID, ComputerID: doc.ComputerID,
 			CommandID:    "public-head:" + strings.TrimSpace(req.IdempotencyKey),
 			TrajectoryID: doc.TrajectoryID, ExpectedLifecycleVersion: req.ExpectedLifecycleVersion,
 			ExpectedHeadRevisionID: parentID, Unbound: snapshot.Trajectory.Status != types.TrajectoryLive, Revision: rev,
 		}
-		if !command.Unbound {
-			command.OwnerCorrection = &types.CommitLifecycleOwnerCorrection{
-				RequestID: requestID, InstructionID: instructionID, TargetAgentID: targetAgentID, TargetWorkItemID: targetWorkItemID,
-				Content: "Owner directly advanced the canonical Texture head to revision " + revisionID + "; reconcile supervised work from this exact correction.",
-			}
-		}
-		graph, graphErr := textureToolSourceGraphWriteSet(rev, materializedTextureEdit{BodyDoc: req.BodyDoc, SourceEntities: req.SourceEntities}, &types.RunRecord{RunID: instructionID, OwnerID: ownerID, SandboxID: doc.ComputerID})
-		if graphErr != nil {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle revision source graph"})
-			return
-		}
-		commandDigest, digestErr := store.ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(command, graph)
+		commandDigest, digestErr := store.ComputeCommitLifecycleArtifactHeadDigest(command)
 		if digestErr != nil {
 			log.Printf("texture api: digest lifecycle revision command: %v", digestErr)
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle revision payload"})
 			return
 		}
 		command.CommandDigest = commandDigest
-		result, commitErr := h.Store.CommitLifecycleArtifactHeadWithSourceGraph(r.Context(), command, graph)
+		result, commitErr := h.Store.CommitLifecycleArtifactHead(r.Context(), command)
 		if commitErr != nil {
 			if errors.Is(commitErr, store.ErrConcurrentStateChange) || errors.Is(commitErr, store.ErrLifecycleCommandConflict) || errors.Is(commitErr, store.ErrLifecycleInvalidTransition) {
 				writeAPIJSON(w, http.StatusConflict, apiError{Error: commitErr.Error()})
@@ -1304,13 +1269,8 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "lifecycle revision result unavailable"})
 			return
 		}
-		if !result.Replay {
-			h.recordTextureAudit(r.Context(), "revision_committed", ownerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, result.Revision.RevisionID, command.CommandID, command.CommandDigest, result.Trajectory.LifecycleVersion)
-			h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, *result.Revision)
-			if result.OwnerInstruction != nil {
-				h.scheduleTextureWorkerWake(ownerID, doc.DocID, result.OwnerInstruction.InstructionID)
-			}
-		}
+		h.recordTextureAudit(r.Context(), "revision_committed", ownerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, result.Revision.RevisionID, command.CommandID, command.CommandDigest, result.Trajectory.LifecycleVersion)
+		h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, *result.Revision)
 		writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), *result.Revision))
 		return
 	}
@@ -1797,10 +1757,6 @@ func (h *Handler) HandleTextureDocumentStream(w http.ResponseWriter, r *http.Req
 	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
-		return
-	}
-	if strings.TrimSpace(doc.TrajectoryID) != "" {
-		h.handleLifecycleTextureDocumentStream(w, r, doc)
 		return
 	}
 

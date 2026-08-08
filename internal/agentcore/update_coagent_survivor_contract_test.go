@@ -58,14 +58,19 @@ const validEvidenceUpdatePacket = `{
 func TestSurvivorContract_AcceptsCanonicalSurface(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
+	ctx := context.Background()
 	ownerID := "user-survivor-canonical"
 	docID := "doc-survivor"
-	researcherRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-canonical", agentprofile.Researcher)
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolContextForTestCall(researcherRun, "call-survivor-canonical"), "update_coagent", json.RawMessage(validEvidenceUpdatePacket))
+	seedDurableTextureSubject(t, s, ownerID, docID)
+	researcherRun := d9CoagentRun("run-survivor-canonical", ownerID, "researcher:survivor", agentprofile.Researcher, docID, "")
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(researcherRun)), "update_coagent", json.RawMessage(validEvidenceUpdatePacket))
 	if err != nil {
 		t.Fatalf("update_coagent canonical surface rejected: %v", err)
 	}
-	stored := lifecycleUpdateFromToolOutput(t, s, researcherRun, raw)
+	stored, err := s.GetWorkerUpdate(ctx, ownerID, d9UpdateID(t, raw))
+	if err != nil {
+		t.Fatalf("get stored packet: %v", err)
+	}
 	if stored.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 {
 		t.Fatalf("schema_version = %q, want %q", stored.Packet.SchemaVersion, types.CoagentSourcePacketSchemaV1)
 	}
@@ -152,14 +157,16 @@ func TestSurvivorContract_RejectsUnknownTopLevelField(t *testing.T) {
 func TestSurvivorContract_TextureCollatesOnlyPacketSources(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
+	ctx := context.Background()
 	ownerID := "user-survivor-collation"
 	docID := "doc-survivor-collation"
-	researcherRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-collation", agentprofile.Researcher)
+	seedDurableTextureSubject(t, s, ownerID, docID)
+	researcherRun := d9CoagentRun("run-survivor-collation", ownerID, "researcher:collation", agentprofile.Researcher, docID, "")
 	// Deliberately embed source-shaped text in notes and summary prose that
 	// must NOT be scraped: an http URL in notes, a "[Source: foo]" style
 	// label in summary, and a bare command_output: URI in claims.text. Only
 	// the single typed packet.sources entry may become an entity.
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolContextForTestCall(researcherRun, "call-survivor-collation"), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(researcherRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"Summary references [Source: prose-only] and should not be scraped.",
@@ -172,7 +179,10 @@ func TestSurvivorContract_TextureCollatesOnlyPacketSources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("update_coagent: %v", err)
 	}
-	stored := lifecycleUpdateFromToolOutput(t, s, researcherRun, raw)
+	stored, err := s.GetWorkerUpdate(ctx, ownerID, d9UpdateID(t, raw))
+	if err != nil {
+		t.Fatalf("get stored packet: %v", err)
+	}
 	if len(stored.Packet.Sources) != 1 {
 		t.Fatalf("stored packet sources = %#v, want exactly one typed source", stored.Packet.Sources)
 	}
@@ -190,11 +200,65 @@ func TestSurvivorContract_TextureCollatesOnlyPacketSources(t *testing.T) {
 // TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets by also
 // asserting the deliverable-for-run filter from the run side, so a later
 // change cannot weaken one path while leaving the other intact.
-func TestSurvivorContract_GenericCoSuperCannotAuthorPersistentSuperPackets(t *testing.T) {
-	rt, _ := testRuntime(t)
+func TestSurvivorContract_SuperExecutesOnlyExecutionRequestPackets(t *testing.T) {
+	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
-	if _, ok := rt.ToolRegistryForProfile(agentprofile.CoSuper).Lookup("update_coagent"); ok {
-		t.Fatal("static CoSuper registry retained legacy update_coagent return authority")
+	ctx := context.Background()
+	ownerID := "user-survivor-super-gate"
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ensure persistent super: %v", err)
+	}
+	// evidence_update addressed to persistent Super: must NOT be executable.
+	coSuperRun := d9CoagentRun("run-survivor-super-gate", ownerID, "cosuper:survivor-gate", agentprofile.CoSuper, "", "")
+	raw, err := rt.ToolRegistryForProfile(agentprofile.CoSuper).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(coSuperRun)), "update_coagent", json.RawMessage(`{
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"evidence_update",
+		"summary":"non-execution packet for Super",
+		"agent_id":"`+superAgent.AgentID+`",
+		"channel_id":"`+superAgent.ChannelID+`",
+		"claims":[{"text":"This packet must not start privileged execution."}]
+	}`))
+	if err != nil {
+		t.Fatalf("update_coagent evidence_update to super: %v", err)
+	}
+	// The privilege filter must reject this packet.
+	backlog, err := s.ListCoagentMailboxBacklog(ctx, ownerID, superAgent.AgentID, 10)
+	if err != nil {
+		t.Fatalf("list super backlog: %v", err)
+	}
+	for _, pkt := range backlog {
+		if persistentSuperExecutableUpdate(pkt) {
+			t.Fatalf("persistentSuperExecutableUpdate admitted non-execution packet %#v", pkt)
+		}
+	}
+	// Construct a persistent-Super-shaped RunRecord the same way the runtime
+	// would so isPersistentSuperAgentRun recognizes it; then prove the
+	// deliverable filter rejects the non-execution packet from the run side.
+	persistentSuperRun := &types.RunRecord{
+		RunID:        "run-survivor-super-gate-persistent",
+		OwnerID:      ownerID,
+		AgentID:      superAgent.AgentID,
+		AgentProfile: agentprofile.Super,
+		AgentRole:    agentprofile.Super,
+		ChannelID:    superAgent.ChannelID,
+		SandboxID:    "sandbox-test",
+	}
+	if !isPersistentSuperAgentRun(persistentSuperRun) {
+		t.Fatalf("test fixture: persistentSuperRun was not recognized as a persistent super run; agentID=%q ownerID=%q", superAgent.AgentID, ownerID)
+	}
+	// E3.2 obligation: the non-execution packet must not linger as live
+	// pending backlog forever. The current behavior leaves it pending (pinned
+	// by TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets). This
+	// assertion records the survivor contract that E3.2 must make true:
+	// after settlement, no backlog row for a non-execution packet addressed
+	// to persistent Super remains deliverable for a persistent-Super run.
+	if updateID := d9UpdateID(t, raw); updateID != "" {
+		for _, pkt := range backlog {
+			if pkt.UpdateID == updateID && coagentUpdateDeliverableForRun(persistentSuperRun, pkt) {
+				t.Fatalf("non-execution Super packet %s is still deliverable for a persistent-Super run; E3.2 settlement not yet landed", updateID)
+			}
+		}
 	}
 }
 
@@ -210,13 +274,15 @@ func TestSurvivorContract_GenericCoSuperCannotAuthorPersistentSuperPackets(t *te
 func TestSurvivorContract_RejectedSourcesAreReported(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
+	ctx := context.Background()
 	ownerID := "user-survivor-reported"
 	docID := "doc-survivor-reported"
-	researcherRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-reported", agentprofile.Researcher)
+	seedDurableTextureSubject(t, s, ownerID, docID)
+	researcherRun := d9CoagentRun("run-survivor-reported", ownerID, "researcher:reported", agentprofile.Researcher, docID, "")
 	// A packet.source with an unsupported kind that cannot materialize. The
 	// current behavior silently drops it. The survivor contract requires the
 	// drop be reported.
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolContextForTestCall(researcherRun, "call-survivor-reported"), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(researcherRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"packet with a source that cannot materialize",
@@ -236,7 +302,10 @@ func TestSurvivorContract_RejectedSourcesAreReported(t *testing.T) {
 		}
 		t.Fatalf("update_coagent: %v", err)
 	}
-	stored := lifecycleUpdateFromToolOutput(t, s, researcherRun, raw)
+	stored, err := s.GetWorkerUpdate(ctx, ownerID, d9UpdateID(t, raw))
+	if err != nil {
+		t.Fatalf("get stored packet: %v", err)
+	}
 	if len(stored.Packet.Sources) != 1 || stored.Packet.Sources[0].SourceID != "src-unsupported" {
 		t.Fatalf("unsupported source was not durably visible in its packet: %#v", stored.Packet.Sources)
 	}
@@ -251,6 +320,57 @@ func mustNow(t *testing.T) time.Time {
 // obligation: non-execution packets addressed to persistent Super are
 // automatically settled (marked delivered/settled) during reconciliation
 // so they do not linger in the mailbox backlog forever.
+func TestSurvivorContract_SuperSettlesNonExecutionRequestPackets(t *testing.T) {
+	rt, s := testRuntime(t)
+	d9InstallTools(t, rt)
+	ctx := context.Background()
+	ownerID := "user-survivor-settle"
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ensure persistent super: %v", err)
+	}
+
+	coSuperRun := d9CoagentRun("run-survivor-settle-cosuper", ownerID, "cosuper:survivor-settle", agentprofile.CoSuper, "", "")
+	raw, err := rt.ToolRegistryForProfile(agentprofile.CoSuper).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(coSuperRun)), "update_coagent", json.RawMessage(`{
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"evidence_update",
+		"summary":"non-execution packet to be settled",
+		"agent_id":"`+superAgent.AgentID+`",
+		"channel_id":"`+superAgent.ChannelID+`",
+		"claims":[{"text":"This packet is non-executable and must be settled."}]
+	}`))
+	if err != nil {
+		t.Fatalf("update_coagent: %v", err)
+	}
+	updateID := d9UpdateID(t, raw)
+
+	run, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	if err != nil {
+		t.Fatalf("reconcile persistent super: %v", err)
+	}
+	if run != nil {
+		t.Fatalf("expected no run to start, got %+v", run)
+	}
+
+	backlog, err := s.ListCoagentMailboxBacklog(ctx, ownerID, superAgent.AgentID, 10)
+	if err != nil {
+		t.Fatalf("list backlog after: %v", err)
+	}
+	if len(backlog) != 0 {
+		t.Fatalf("backlog = %+v, want 0 (settled)", backlog)
+	}
+
+	stored, err := s.GetWorkerUpdate(ctx, ownerID, updateID)
+	if err != nil {
+		t.Fatalf("get worker update: %v", err)
+	}
+	if stored.DeliveredToRunID != "settled_non_executable" {
+		t.Fatalf("delivered_to_loop_id = %q, want settled_non_executable", stored.DeliveredToRunID)
+	}
+	if stored.DeliveredAt == nil {
+		t.Fatal("expected delivered_at to be non-nil")
+	}
+}
 
 func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *testing.T) {
 	rt, s := testRuntime(t)

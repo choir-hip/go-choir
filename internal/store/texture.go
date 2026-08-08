@@ -2282,32 +2282,6 @@ func (s *Store) SleepAgentMutation(ctx context.Context, ownerID, computerID, run
 	return nil
 }
 
-// SleepAgentMutationAfterTextureTurn passivates a mutation without a fake
-// revision only when the canonical lifecycle receipt proves the exact caller
-// run committed a non-revision Texture outcome.
-func (s *Store) SleepAgentMutationAfterTextureTurn(ctx context.Context, ownerID, computerID, trajectoryID, runID string) error {
-	turn, err := s.GetAppliedTextureTurnByCallerRun(ctx, ownerID, computerID, trajectoryID, runID)
-	if err != nil {
-		return err
-	}
-	if turn.TextureTurn == nil || turn.TextureTurn.Outcome == types.TextureTurnRevision {
-		return ErrLifecycleInvalidTransition
-	}
-	now := time.Now().UTC()
-	result, err := s.textureHandle().ExecContext(ctx, `UPDATE texture_agent_mutations SET state = 'sleeping', completed_at = ? WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending' AND revision_id = ''`, now.Format(time.RFC3339Nano), strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(runID))
-	if err != nil {
-		return fmt.Errorf("sleep committed non-revision Texture mutation: %w", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rows == 0 {
-		return ErrMutationAlreadyCompleted
-	}
-	return nil
-}
-
 // ReactivateAgentMutation reopens a stale or sleeping mutation for the same
 // durable Texture actor activation. It intentionally does not revive completed,
 // failed, cancelled, or deferred mutations.

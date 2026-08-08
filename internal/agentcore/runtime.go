@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -101,18 +102,9 @@ type Runtime struct {
 	// fallback path. The actor runtime is the only execution substrate.
 	dispatchActor func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error
 
-	desktopState             *desktopstate.Handler
-	content                  *contentowner.Service
-	capsuleExecutor          *capsule.Executor
-	assignmentHandleResolver interface {
-		AssignmentHandle(string, string) (string, error)
-	}
-	assignmentReceiptResolver interface {
-		ResolveExecutionReceipts([]string) ([]capsule.ExecutionReceipt, error)
-	}
-	assignmentLookup interface {
-		GetCoSuperAssignment(context.Context, string, string, string, uint64) (types.CoSuperAssignment, error)
-	}
+	desktopState                *desktopstate.Handler
+	content                     *contentowner.Service
+	capsuleExecutor             *capsule.Executor
 	capsuleBuilder              *transaction.TransactionBuilder
 	eventAppender               *computerevent.ComputerEventAppender
 	selfdevOperations           *selfdev.Store
@@ -482,7 +474,6 @@ func WithContentService(service *contentowner.Service) RuntimeOption {
 func WithCapsuleExecutor(executor *capsule.Executor) RuntimeOption {
 	return func(rt *Runtime) {
 		rt.capsuleExecutor = executor
-		rt.assignmentReceiptResolver = executor
 		if executor != nil {
 			rt.capsuleBuilder = transaction.NewTransactionBuilder(transaction.NewClassifier())
 		}
@@ -854,10 +845,6 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	}
 	if slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" {
 		metadata[runMetadataCoSuperSlot] = slot
-	}
-	targetProfile := agentprofile.Canonical(firstNonEmptyString(metadataStringValue(metadata, runMetadataAgentProfile), metadataStringValue(metadata, runMetadataAgentRole)))
-	if targetProfile == agentprofile.CoSuper {
-		return nil, fmt.Errorf("generic StartCoagentRun refuses all CoSuper activation; use the authenticated persistent-Super assignment runtime")
 	}
 	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
 
@@ -1304,24 +1291,7 @@ func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason st
 		}
 		return fmt.Errorf("lookup run: %w", err)
 	}
-	assignmentProjected := false
-	if rec.State.Active() && metadataStringValue(rec.Metadata, "assignment_id") != "" {
-		// Do not terminalize the generic run projection first: durable exact
-		// assignment revoke intent must precede capability revoke/destroy/inspect,
-		// structured executor ack, and assignment/work/run cancellation.
-		rt.runningMu.Unlock()
-		assignmentProjected, err = rt.cancelBoundCoSuperRun(context.WithoutCancel(ctx), rec, reason)
-		if err != nil {
-			return fmt.Errorf("cancel bound CoSuper run fate: %w", err)
-		}
-		rt.runningMu.Lock()
-		rec, err = rt.getRunForComputer(context.Background(), ownerID, runID)
-		if err != nil {
-			rt.runningMu.Unlock()
-			return fmt.Errorf("reload assignment-cancelled run: %w", err)
-		}
-	}
-	if rec.State.Terminal() && !assignmentProjected {
+	if rec.State.Terminal() {
 		trajectoryID := strings.TrimSpace(trajectoryIDForRun(&rec))
 		trajectory, trajectoryErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, rec.SandboxID, trajectoryID)
 		if trajectoryErr != nil || trajectory.Status != types.TrajectoryCancelled {
@@ -1331,15 +1301,13 @@ func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason st
 	}
 
 	now := time.Now().UTC()
-	if !rec.State.Terminal() || !assignmentProjected {
-		rec.State = types.RunCancelled
-		rec.Error = reason
-		rec.UpdatedAt = now
-		rec.FinishedAt = &now
-		if err := rt.store.UpdateRun(ctx, rec); err != nil {
-			rt.runningMu.Unlock()
-			return fmt.Errorf("update cancelled run: %w", err)
-		}
+	rec.State = types.RunCancelled
+	rec.Error = reason
+	rec.UpdatedAt = now
+	rec.FinishedAt = &now
+	if err := rt.store.UpdateRun(ctx, rec); err != nil {
+		rt.runningMu.Unlock()
+		return fmt.Errorf("update cancelled run: %w", err)
 	}
 	cancel := rt.running[runID]
 	delete(rt.running, runID)
@@ -1402,66 +1370,36 @@ func (rt *Runtime) cancelTrajectoryAuthorityCommand(ctx context.Context, ownerID
 	if rt == nil || rt.store == nil {
 		return types.LifecycleResult{}, fmt.Errorf("cancel trajectory: runtime store is unavailable")
 	}
-	ownerID, trajectoryID = strings.TrimSpace(ownerID), strings.TrimSpace(trajectoryID)
+	ownerID = strings.TrimSpace(ownerID)
+	trajectoryID = strings.TrimSpace(trajectoryID)
 	if ownerID == "" || trajectoryID == "" {
 		return types.LifecycleResult{}, fmt.Errorf("cancel trajectory: owner_id and trajectory_id are required")
 	}
 	computerID := strings.TrimSpace(rt.TextureSandboxID())
 	if computerID != "" {
-		trajectory, lifecycleErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
-		if lifecycleErr == nil {
+		if trajectory, lifecycleErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID); lifecycleErr == nil {
+			if expectedVersion <= 0 || strings.TrimSpace(expectedHead) == "" {
+				snapshot, snapshotErr := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+				if snapshotErr != nil {
+					return types.LifecycleResult{}, snapshotErr
+				}
+				expectedVersion = snapshot.Trajectory.LifecycleVersion
+				expectedHead = snapshot.HeadRevision.RevisionID
+			}
 			if strings.TrimSpace(commandID) == "" {
 				commandID = "lifecycle-cancel:" + trajectoryID
 			}
 			if strings.TrimSpace(reason) == "" {
 				reason = "owner cancellation"
 			}
-			// A restart/retry resumes the durable original authority rather than
-			// deriving command identity from the trajectory version advanced by
-			// assignment fate transitions.
-			if intent, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, ownerID, computerID, trajectoryID); intentErr == nil {
-				if intent.CommandID != strings.TrimSpace(commandID) ||
-					(expectedVersion > 0 && expectedVersion != intent.RequestedLifecycleVersion) ||
-					(strings.TrimSpace(expectedHead) != "" && strings.TrimSpace(expectedHead) != intent.ExpectedHeadRevisionID) ||
-					(strings.TrimSpace(reason) != "" && strings.TrimSpace(reason) != intent.Reason) {
-					return types.LifecycleResult{}, store.ErrLifecycleCommandConflict
-				}
-				expectedVersion, expectedHead, reason = intent.RequestedLifecycleVersion, intent.ExpectedHeadRevisionID, intent.Reason
-			} else if errors.Is(intentErr, store.ErrNotFound) {
-				if expectedVersion <= 0 || strings.TrimSpace(expectedHead) == "" {
-					snapshot, snapshotErr := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
-					if snapshotErr != nil {
-						return types.LifecycleResult{}, snapshotErr
-					}
-					expectedVersion, expectedHead = snapshot.Trajectory.LifecycleVersion, snapshot.HeadRevision.RevisionID
-				}
-			} else {
-				return types.LifecycleResult{}, intentErr
+			cancel := types.CancelLifecycleRequest{
+				OwnerID: ownerID, ComputerID: computerID, CommandID: strings.TrimSpace(commandID),
+				TrajectoryID: trajectory.TrajectoryID, Reason: strings.TrimSpace(reason),
+				ExpectedLifecycleVersion: expectedVersion, ExpectedHeadRevisionID: strings.TrimSpace(expectedHead),
 			}
-			original := types.CancelLifecycleRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: strings.TrimSpace(commandID),
-				TrajectoryID: trajectory.TrajectoryID, Reason: strings.TrimSpace(reason), ExpectedLifecycleVersion: expectedVersion,
-				RequestedLifecycleVersion: expectedVersion, ExpectedHeadRevisionID: strings.TrimSpace(expectedHead)}
-			original.CommandDigest, _ = store.ComputeCancelLifecycleDigest(original)
-			intent, prepErr := rt.store.PrepareLifecycleCancellation(ctx, original)
-			if prepErr != nil {
-				return types.LifecycleResult{}, prepErr
-			}
-			if trajectory.Status == types.TrajectoryLive {
-				if _, fateErr := rt.prepareCoSuperTrajectoryCancellation(context.WithoutCancel(ctx), ownerID, computerID, trajectoryID, intent.Reason); fateErr != nil {
-					return types.LifecycleResult{}, fmt.Errorf("prepare trajectory assignment fate: %w", fateErr)
-				}
-			}
-			fresh, freshErr := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
-			if freshErr != nil {
-				return types.LifecycleResult{}, freshErr
-			}
-			final := original
-			final.ExpectedLifecycleVersion = fresh.Trajectory.LifecycleVersion
-			final.RequestedLifecycleVersion = intent.RequestedLifecycleVersion
-			final.CommandDigest = intent.CommandDigest
-			return rt.store.CancelLifecycleTrajectory(ctx, final)
-		}
-		if !errors.Is(lifecycleErr, store.ErrNotFound) {
+			cancel.CommandDigest, _ = store.ComputeCancelLifecycleDigest(cancel)
+			return rt.store.CancelLifecycleTrajectory(ctx, cancel)
+		} else if !errors.Is(lifecycleErr, store.ErrNotFound) {
 			return types.LifecycleResult{}, lifecycleErr
 		}
 	}
@@ -1494,10 +1432,7 @@ func (rt *Runtime) CancelTrajectoryCommand(ctx context.Context, trajectoryID, ow
 	if result.Trajectory.Status != types.TrajectoryCancelled {
 		return result, nil, nil
 	}
-	if err := rt.finishCoSuperTrajectoryCancellation(context.WithoutCancel(ctx), ownerID, result.Trajectory.ComputerID, trajectoryID, reason); err != nil {
-		return result, nil, fmt.Errorf("finish trajectory assignment cancellation: %w", err)
-	}
-	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, ownerID, result.Trajectory.ComputerID, trajectoryID)
+	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, strings.TrimSpace(ownerID), result.Trajectory.ComputerID, strings.TrimSpace(trajectoryID))
 	return result, cancelled, err
 }
 
@@ -1506,7 +1441,6 @@ func (rt *Runtime) CancelTrajectoryCommand(ctx context.Context, trajectoryID, ow
 // before any activation is signalled. A settled trajectory is reported
 // unchanged and its activations are not cancelled.
 func (rt *Runtime) CancelTrajectory(ctx context.Context, trajectoryID, ownerID string) (types.TrajectoryRecord, []string, error) {
-	ownerID, trajectoryID = strings.TrimSpace(ownerID), strings.TrimSpace(trajectoryID)
 	trajectory, err := rt.cancelTrajectoryAuthority(ctx, ownerID, trajectoryID)
 	if err != nil {
 		return types.TrajectoryRecord{}, nil, err
@@ -1514,10 +1448,8 @@ func (rt *Runtime) CancelTrajectory(ctx context.Context, trajectoryID, ownerID s
 	if trajectory.Status != types.TrajectoryCancelled {
 		return trajectory, nil, nil
 	}
-	if err := rt.finishCoSuperTrajectoryCancellation(context.WithoutCancel(ctx), ownerID, trajectory.ComputerID, trajectoryID, "owner cancellation"); err != nil {
-		return trajectory, nil, fmt.Errorf("finish trajectory assignment cancellation: %w", err)
-	}
-	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, ownerID, trajectory.ComputerID, trajectoryID)
+
+	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, strings.TrimSpace(ownerID), trajectory.ComputerID, strings.TrimSpace(trajectoryID))
 	return trajectory, cancelled, err
 }
 
@@ -1527,36 +1459,21 @@ func (rt *Runtime) drainCancelledTrajectoryActivations(ctx context.Context, owne
 
 	cancelled := []string{}
 	computerID = strings.TrimSpace(computerID)
-	resident := map[string]bool{}
-	rt.runningMu.Lock()
-	for runID := range rt.running {
-		resident[runID] = true
-	}
-	rt.runningMu.Unlock()
 	var active []types.RunRecord
 	var err error
 	if computerID != "" {
-		var lifecycleRuns []types.RunRecord
-		lifecycleRuns, err = rt.store.ListLifecycleRunsByTrajectory(drainCtx, ownerID, computerID, trajectoryID, 0)
-		for _, run := range lifecycleRuns {
-			// The reducer may already have projected the durable run Cancelled.
-			// Retain only live durable records or the exact process-local
-			// resident intersection; never dispatch a historical terminal actor.
-			if run.State.Active() || resident[run.RunID] {
-				active = append(active, run)
-			}
-		}
-		if err == nil && len(lifecycleRuns) == 0 {
-			// Legacy trajectories may carry a run SandboxID without a scoped
-			// lifecycle authority. Lifecycle projections are excluded from this
-			// owner-only compatibility query.
-			active, err = rt.store.ListActiveRunsByTrajectory(drainCtx, ownerID, trajectoryID, 0)
-		}
+		active, err = rt.store.ListActiveLifecycleRunsByTrajectory(drainCtx, ownerID, computerID, trajectoryID, 0)
 	} else {
 		active, err = rt.store.ListActiveRunsByTrajectory(drainCtx, ownerID, trajectoryID, 0)
 	}
+	if err == nil && len(active) == 0 && computerID != "" {
+		// Legacy trajectories may carry a run SandboxID without a scoped
+		// lifecycle authority. Lifecycle projections are excluded from this
+		// owner-only compatibility query.
+		active, err = rt.store.ListActiveRunsByTrajectory(drainCtx, ownerID, trajectoryID, 0)
+	}
 	if err != nil {
-		return cancelled, fmt.Errorf("list trajectory activations for resident drain: %w", err)
+		return cancelled, fmt.Errorf("list active trajectory activations: %w", err)
 	}
 	// Legacy trajectories have no computer identity; infer it only for their
 	// activation updates. Lifecycle trajectories always arrive scoped.
@@ -1580,7 +1497,7 @@ func (rt *Runtime) drainCancelledTrajectoryActivations(ctx context.Context, owne
 		}
 	}
 	for _, run := range active {
-		if run.State.Active() || resident[run.RunID] {
+		if run.State.Active() {
 			if rt.dispatchActor == nil {
 				return cancelled, fmt.Errorf("deliver trajectory cancellation: actor runtime is unavailable")
 			}
@@ -2021,74 +1938,6 @@ func (rt *Runtime) rewarmInterruptedLifecycleActivations(ctx context.Context) {
 			log.Printf("runtime: re-dispatched lifecycle run %s (state=%s) after restart", rec.RunID, state)
 		}
 	}
-	rt.reactivateRetryableLifecycleInjectionRuns(ctx, computerID)
-}
-
-// reactivateRetryableLifecycleInjectionRuns resumes the same passivated
-// lifecycle Researcher activation whose authenticated control append failed.
-// Texture is reconstructed by its owner and persistent Super by its controller. It does not
-// select backlog, create a run, bind controls, or reconstruct another role.
-func (rt *Runtime) reactivateRetryableLifecycleInjectionRuns(ctx context.Context, computerID string) {
-	runs, err := rt.store.ListLifecycleRunsByState(ctx, "", computerID, types.RunPassivated)
-	if err != nil {
-		log.Printf("runtime: boot lifecycle injection recovery: query passivated runs: %v", err)
-		return
-	}
-	for i := range runs {
-		rec := &runs[i]
-		if agentprofile.Canonical(rec.AgentProfile) != agentprofile.Researcher ||
-			agentprofile.Canonical(rec.AgentRole) != agentprofile.Researcher ||
-			metadataStringValue(rec.Metadata, "request_source") != "lifecycle_texture_control" ||
-			metadataStringValue(rec.Metadata, "passivated_reason") != runtimeInjectionAppendFailurePassivationReason {
-			continue
-		}
-		trajectory, trajectoryErr := rt.store.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.SandboxID, rec.TrajectoryID)
-		if trajectoryErr != nil || trajectory.Status != types.TrajectoryLive {
-			if trajectoryErr != nil {
-				log.Printf("runtime: boot lifecycle injection recovery: read trajectory for run %s: %v", rec.RunID, trajectoryErr)
-			}
-			continue
-		}
-		eligible, eligibilityErr := rt.lifecycleActivationBindingsEligible(ctx, rec)
-		if eligibilityErr != nil {
-			log.Printf("runtime: boot lifecycle injection recovery: validate work for run %s: %v", rec.RunID, eligibilityErr)
-			continue
-		}
-		if !eligible {
-			continue
-		}
-		controls, controlsErr := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, rec)
-		if controlsErr != nil {
-			log.Printf("runtime: boot lifecycle injection recovery: validate exact deliveries for run %s: %v", rec.RunID, controlsErr)
-			continue
-		}
-		if len(controls) == 0 {
-			continue
-		}
-		agent, agentErr := rt.store.GetAgentByScope(ctx, rec.OwnerID, rec.SandboxID, rec.AgentID)
-		if agentErr != nil || agentprofile.Canonical(agent.Profile) != agentprofile.Researcher ||
-			agentprofile.Canonical(agent.Role) != agentprofile.Researcher ||
-			(strings.TrimSpace(agent.ActiveRunID) != "" && strings.TrimSpace(agent.ActiveRunID) != rec.RunID) {
-			if agentErr != nil {
-				log.Printf("runtime: boot lifecycle injection recovery: validate actor for run %s: %v", rec.RunID, agentErr)
-			}
-			continue
-		}
-		rec.Metadata = cloneMetadata(rec.Metadata)
-		rec.Metadata["actor_reactivate_existing_memory"] = true
-		rec.Metadata["actor_reactivated_from_passivated"] = true
-		rec.Metadata["passivated_reason"] = ""
-		rec.State = types.RunPending
-		rec.Error = ""
-		rec.FinishedAt = nil
-		rec.UpdatedAt = time.Now().UTC()
-		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
-			log.Printf("runtime: boot lifecycle injection recovery: reactivate exact run %s: %v", rec.RunID, err)
-			continue
-		}
-		rt.activate(rec)
-		log.Printf("runtime: reactivated exact lifecycle Researcher run %s after injection append failure", rec.RunID)
-	}
 }
 
 // reconcileTerminalRunOutcomes exhausts terminal runs, repairs their outcome
@@ -2198,28 +2047,8 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 		grouped[key] = append(grouped[key], item)
 	}
 	for _, workItems := range grouped {
-		first := workItems[0]
-		var err error
-		computerID := firstNonEmpty(first.ComputerID, rt.TextureSandboxID())
-		if intent, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, first.OwnerID, computerID, first.TrajectoryID); intentErr == nil {
-			_, _, err = rt.CancelTrajectoryCommand(ctx, first.TrajectoryID, first.OwnerID, intent.CommandID, intent.Reason, intent.RequestedLifecycleVersion, intent.ExpectedHeadRevisionID)
-			if err != nil {
-				log.Printf("runtime: boot cancellation-intent recovery owner=%s trajectory=%s: %v", first.OwnerID, first.TrajectoryID, err)
-			}
-			continue
-		} else if !errors.Is(intentErr, store.ErrNotFound) {
-			log.Printf("runtime: boot cancellation-intent lookup owner=%s trajectory=%s: %v", first.OwnerID, first.TrajectoryID, intentErr)
-			continue
-		}
-		if strings.TrimSpace(first.AssignedAgentID) == persistentSuperAgentID(strings.TrimSpace(first.OwnerID)) {
-			_, err = rt.reconcilePersistentSuperActor(ctx, first.OwnerID, first.AssignedAgentID)
-		} else if agentprofile.Canonical(first.AuthorityProfile) == agentprofile.CoSuper {
-			err = rt.ReconcileCoSuperAssignmentsForTrajectory(ctx, first.OwnerID,
-				firstNonEmpty(first.ComputerID, rt.TextureSandboxID()), first.TrajectoryID)
-		} else {
-			_, err = rt.reconcileAssignedWorkItemActor(ctx, workItems)
-		}
-		if err != nil {
+		if _, err := rt.reconcileAssignedWorkItemActor(ctx, workItems); err != nil {
+			first := workItems[0]
 			log.Printf("runtime: boot work-item sweep owner=%s agent=%s trajectory=%s: %v",
 				first.OwnerID, first.AssignedAgentID, first.TrajectoryID, err)
 		}
@@ -2363,23 +2192,6 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 	rec, err := rt.createRunWithMetadata(ctx, buildAssignedWorkItemPrompt(workItems), ownerID, metadata)
 	if err != nil {
 		return nil, err
-	}
-	if profile == agentprofile.Researcher {
-		updates, listErr := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
-		if listErr != nil {
-			return nil, listErr
-		}
-		updates, listErr = rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, updates, false)
-		if listErr != nil {
-			return nil, listErr
-		}
-		updates = selectLifecycleControlActivation(updates, trajectoryID, lifecycleControlWorkIDsForRun(rec))
-		if len(updates) > 0 {
-			if _, bindErr := rt.bindLifecycleControlsToRun(ctx, rec, updates); bindErr != nil {
-				rt.failUnactivatedLifecycleControlRun(ctx, rec, bindErr)
-				return nil, bindErr
-			}
-		}
 	}
 	rt.lifecycleWorkReconcileMu.Unlock()
 	reconcileLocked = false
@@ -2529,14 +2341,6 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 	}
 
 	registry := rt.toolRegistryForRun(rec)
-	if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.CoSuper {
-		var bindErr error
-		registry, _, bindErr = rt.assignedCoSuperToolOverlay(ctx, rec, registry)
-		if bindErr != nil {
-			rt.handleExecutionError(ctx, rec, fmt.Errorf("bind assigned CoSuper registry: %w", bindErr))
-			return
-		}
-	}
 
 	// Use the tool-calling loop if a tool registry is configured and the
 	// provider supports the provideriface.ToolLoopProvider interface. Otherwise, fall back
@@ -2570,7 +2374,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	ctx = toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec))
-	assignedCoSuperOverlay := false
 	if rt.capsuleExecutor != nil {
 		switch agentProfileForRun(rec) {
 		case agentprofile.Super:
@@ -2579,25 +2382,12 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 				EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
 			})
 		case agentprofile.CoSuper:
-			overlay, handle, overlayErr := rt.assignedCoSuperToolOverlay(ctx, rec, registry)
-			if overlayErr != nil {
-				rt.handleExecutionError(ctx, rec, fmt.Errorf("bind assigned CoSuper tool overlay: %w", overlayErr))
-				return
-			}
-			if handle != "" {
-				assignedCoSuperOverlay = true
-				registry = overlay
-				// Exact assigned CoSupers receive only their runtime-held capsule
-				// handle. No event, updater, effect, finalization, host, VM, route,
-				// materialization, checkpoint, or owner authority is injected.
-				ctx = WithCapsuleCtx(ctx, &CapsuleToolCtx{
-					Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rec.SandboxID,
-					Role: capsule.RoleCoSuper, CapsuleHandle: handle,
-					ValidateCurrentObligation: func(callCtx context.Context) error {
-						return rt.validateAssignedCoSuperExecution(callCtx, rec)
-					},
-				})
-			}
+			ctx = WithCapsuleCtx(ctx, &CapsuleToolCtx{
+				Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rt.selfdevComputerID, Role: capsule.RoleCoSuper,
+				UpdaterRoot: os.Getenv("CHOIR_UPDATER_ROOT"), CapsuleHandle: metadataStringValue(rec.Metadata, "capsule_handle"),
+				EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
+				OperationStore: rt.selfdevOperations, EventProjection: rt.store,
+			})
 		}
 	}
 	reactivateExistingMemory := metadataBoolValue(rec.Metadata, "actor_reactivate_existing_memory")
@@ -2637,7 +2427,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			return
 		}
 		for _, msg := range injected {
-			if err := memory.afterAppendMessage(ctx, types.RunMemoryRoleRuntimeInjection, msg); err != nil {
+			if err := memory.afterAppendMessage(ctx, "user", msg); err != nil {
 				rt.handleExecutionError(ctx, rec, fmt.Errorf("persist initial mailbox turn: %w", err))
 				return
 			}
@@ -2672,34 +2462,18 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		toolregistry.WithToolLoopLLMConfig(llmConfig),
 		toolregistry.WithProviderPreconditionFallbacks(preconditionFallbacks...),
 	}
-	if assignedCoSuperOverlay {
-		toolLoopOptions = append(toolLoopOptions, toolregistry.WithDetachedTerminalToolClosure(30*time.Second, terminalAssignedCoSuperReportCall))
-	}
 	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
 	}
 	if runHasProfile(rec, agentprofile.Texture) {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithInitialToolChoice(initialTextureToolChoice(rec)))
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithToolLoopBudget(textureActorToolLoopBudget(rec)))
-		if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) != "" {
-			// One successful lifecycle tool commits the activation's durable
-			// transition. A canonical revision and an explicit no-change/wait/block
-			// decision are equally valid; park the resident run instead of turning
-			// either outcome into terminal run completion.
-			toolLoopOptions = append(toolLoopOptions, toolregistry.WithPassivatingToolSuccesses("patch_texture", "rewrite_texture", "record_texture_decision"))
-			toolLoopOptions = append(toolLoopOptions, toolregistry.WithRequiredWriteTools("patch_texture", "rewrite_texture", "record_texture_decision"))
-		} else {
-			// Pre-lifecycle Texture tasks retain their single-write terminal contract.
-			toolLoopOptions = append(toolLoopOptions, toolregistry.WithTerminalToolSuccesses("patch_texture", "rewrite_texture"))
-			toolLoopOptions = append(toolLoopOptions, toolregistry.WithRequiredWriteTools("patch_texture", "rewrite_texture"))
-		}
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithTerminalToolSuccesses("patch_texture", "rewrite_texture"))
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithRequiredWriteTools("patch_texture", "rewrite_texture"))
 	}
 
 	text, usage, err := toolregistry.RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
 	if err != nil {
-		if errors.Is(err, toolregistry.ErrDetachedTerminalToolCommitted) {
-			return
-		}
 		if errors.Is(err, toolregistry.ErrToolLoopPassivated) {
 			rt.passivateIdleToolLoopRun(context.Background(), rec, text, usage, err)
 			return
@@ -2780,62 +2554,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
 }
 
-const runtimeInjectionAppendFailurePassivationReason = "runtime_injection_append_failed"
-
-func retryableLifecycleRuntimeInjectionFailure(rec *types.RunRecord, err error) bool {
-	if rec == nil || !errors.Is(err, ErrRuntimeInjectionAppendFailed) {
-		return false
-	}
-	profile := agentprofile.Canonical(rec.AgentProfile)
-	role := agentprofile.Canonical(rec.AgentRole)
-	if profile != role || (profile != agentprofile.Researcher && profile != agentprofile.Texture && profile != agentprofile.Super) {
-		return false
-	}
-	if profile == agentprofile.Super && rec.AgentID != persistentSuperAgentID(rec.OwnerID) {
-		return false
-	}
-	return metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" &&
-		strings.TrimSpace(rec.OwnerID) != "" && strings.TrimSpace(rec.SandboxID) != "" &&
-		lifecycleControlTrajectoryForRun(rec) != "" && strings.TrimSpace(rec.AgentID) != "" &&
-		strings.TrimSpace(rec.RunID) != ""
-}
-
-// passivateRuntimeInjectionAppendFailure preserves the exact lifecycle run and
-// its delivery bindings when authenticated memory append fails. The control is
-// still pending and was never durably model-visible, so terminalizing this run
-// would strand already-delivered authority and invite a replacement run.
-func (rt *Runtime) passivateRuntimeInjectionAppendFailure(rec *types.RunRecord, appendErr error) {
-	if rt == nil || rt.store == nil || rec == nil {
-		return
-	}
-	now := time.Now().UTC()
-	rec.State = types.RunPassivated
-	rec.Error = ""
-	rec.FinishedAt = nil
-	rec.UpdatedAt = now
-	rec.Metadata = cloneMetadata(rec.Metadata)
-	rec.Metadata["passivated_reason"] = runtimeInjectionAppendFailurePassivationReason
-	rec.Metadata["actor_sleep_state"] = "retryable_runtime_failure"
-	rec.Metadata["runtime_injection_append_error"] = appendErr.Error()
-	persisted, err := rt.persistActivationState(context.Background(), rec)
-	if err != nil {
-		// Never fall through to terminal failure. If durable passivation itself is
-		// unavailable, boot recovery still sees the stored pending/running exact
-		// lifecycle run and re-dispatches it without changing its identity.
-		log.Printf("runtime: preserve retryable lifecycle injection failure for run %s: %v", rec.RunID, err)
-		return
-	}
-	if !persisted {
-		return
-	}
-	payload, _ := json.Marshal(map[string]string{
-		"reason": runtimeInjectionAppendFailurePassivationReason,
-		"error":  appendErr.Error(),
-	})
-	rt.emitEvent(context.Background(), rec, types.EventRunPassivated, events.CauseSupervisorRecovery, payload)
-	log.Printf("runtime: passivated exact lifecycle run %s after runtime injection append failure", rec.RunID)
-}
-
 func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunRecord, text string, usage provideriface.TokenUsage, passivationErr error) {
 	if rt == nil || rt.store == nil || rec == nil {
 		return
@@ -2896,7 +2614,6 @@ func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunR
 	if shouldLogWireLifecycle(rec) {
 		log.Printf("runtime: passivated idle %s reason=%s", wireLifecycleSummary(rec), reason)
 	}
-	rt.maybeContinuePersistentSuperInbox(context.Background(), rec)
 }
 
 func (rt *Runtime) sleepTextureMutationAfterIdle(ctx context.Context, rec *types.RunRecord) error {
@@ -3597,18 +3314,6 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 		return nil
 	}
 
-	if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(rec.SandboxID) != "" {
-		if turn, turnErr := rt.store.GetAppliedTextureTurnByCallerRun(persistCtx, rec.OwnerID, rec.SandboxID, rec.TrajectoryID, rec.RunID); turnErr == nil && turn.TextureTurn != nil {
-			if turn.TextureTurn.Outcome == types.TextureTurnRevision && turn.Revision != nil {
-				_ = rt.store.CompleteAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, turn.Revision.RevisionID)
-			} else {
-				_ = rt.store.SleepAgentMutationAfterTextureTurn(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.TrajectoryID, rec.RunID)
-			}
-			return nil
-		} else if turnErr != nil && !errors.Is(turnErr, store.ErrNotFound) {
-			log.Printf("runtime: recover committed Texture turn for run %s: %v", rec.RunID, turnErr)
-		}
-	}
 	if strings.TrimSpace(mutation.RevisionID) != "" {
 		if err := rt.store.CompleteAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, mutation.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
 			log.Printf("runtime: texture agent revision run %s: complete written mutation: %v", rec.RunID, err)
@@ -3756,10 +3461,6 @@ var durableMetadataKeys = []string{
 // critical store updates so that the run state is properly persisted even
 // during shutdown (VAL-CHOIR-009, VAL-CHOIR-010).
 func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecord, err error) {
-	if retryableLifecycleRuntimeInjectionFailure(rec, err) {
-		rt.passivateRuntimeInjectionAppendFailure(rec, err)
-		return
-	}
 	now := time.Now().UTC()
 
 	// Determine if the failure is recoverable (blocked) or permanent (failed).
@@ -3849,9 +3550,6 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	}
 
 	log.Printf("runtime: run %s → %s: %v", rec.RunID, state, err)
-	if state.Terminal() {
-		rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
-	}
 
 }
 

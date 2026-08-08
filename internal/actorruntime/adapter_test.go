@@ -58,7 +58,7 @@ func seedDurableTextureUpdate(t *testing.T, s *store.Store, ctx context.Context,
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "start:" + docID, TrajectoryID: "trajectory:" + docID,
 		Kind:            types.TrajectoryKindDocument,
 		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
-		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID},
 		InitialWork:     types.WorkItemRecord{WorkItemID: "work:" + docID, Objective: "incorporate durable update", AssignedAgentID: agentID},
 		InitialDocument: types.Document{DocID: docID, Title: "Durable Texture target"},
 		InitialRevision: types.Revision{
@@ -73,45 +73,12 @@ func seedDurableTextureUpdate(t *testing.T, s *store.Store, ctx context.Context,
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start durable lifecycle: %v", err)
 	}
-	producerAgentID := "researcher:" + docID
-	producerWorkID := "producer-work:" + docID
-	producerRunID := "producer-run:" + docID
-	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID: producerAgentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
-		Profile: "researcher", Role: "researcher", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("seed lifecycle producer: %v", err)
-	}
-	open := types.OpenLifecycleWorkRequest{
-		OwnerID: ownerID, ComputerID: computerID, CommandID: "open-producer:" + docID,
-		TrajectoryID: start.TrajectoryID,
-		WorkItem:     types.WorkItemRecord{WorkItemID: producerWorkID, Objective: "produce durable update", AssignedAgentID: producerAgentID, AuthorityProfile: "researcher"},
-	}
-	open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
-	if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
-		t.Fatalf("open lifecycle producer work: %v", err)
-	}
-	producerRun := types.RunRecord{
-		RunID: producerRunID, AgentID: producerAgentID, ChannelID: docID, TrajectoryID: start.TrajectoryID,
-		AgentProfile: "researcher", AgentRole: "researcher", OwnerID: ownerID, SandboxID: computerID,
-		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": producerWorkID},
-	}
-	projectProducer := types.ReplaceLifecycleActivationRequest{
-		OwnerID: ownerID, ComputerID: computerID, CommandID: "project-producer:" + docID,
-		TrajectoryID: start.TrajectoryID, AgentID: producerAgentID, Run: producerRun,
-	}
-	projectProducer.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(projectProducer)
-	if _, err := s.ReplaceLifecycleActivation(ctx, projectProducer); err != nil {
-		t.Fatalf("project lifecycle producer: %v", err)
-	}
 	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: content}
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 	queue := types.QueueLifecycleUpdateRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "queue:" + updateID, TrajectoryID: start.TrajectoryID,
-		TargetAgentID: agentID, ProducerAgentID: producerAgentID, ProducerUpdateID: updateID, UpdateID: updateID,
-		ChannelID: docID, Role: "researcher", SourceRunID: producerRunID,
-		WorkItemID: producerWorkID, WorkDisposition: types.WorkItemOpen,
-		Packet: packet, Content: content, PayloadDigest: payloadDigest,
+		TargetAgentID: agentID, ProducerAgentID: "researcher:" + docID, ProducerUpdateID: updateID, UpdateID: updateID,
+		ChannelID: docID, Role: "researcher", Packet: packet, Content: content, PayloadDigest: payloadDigest,
 	}
 	queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
 	if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
@@ -307,14 +274,8 @@ func TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery(t *testin
 		agentID = "texture:" + docID
 	)
 	seedDurableTextureUpdate(t, s, ctx, "sandbox-startup", ownerID, docID, "update-startup-recovery", "Durable startup finding")
-	if runs, err := s.ListLifecycleRunsByOwner(ctx, ownerID, "sandbox-startup", 20); err != nil {
-		t.Fatalf("list fixture runs before startup: %v", err)
-	} else {
-		for _, run := range runs {
-			if run.AgentID == agentID {
-				t.Fatalf("fixture unexpectedly has a Texture activation before startup: %+v", runs)
-			}
-		}
+	if runs, err := s.ListLifecycleRunsByOwner(ctx, ownerID, "sandbox-startup", 20); err != nil || len(runs) != 0 {
+		t.Fatalf("fixture unexpectedly has an activation before startup: %+v, %v", runs, err)
 	}
 
 	owner := textureowner.NewHandler(adapter.Runtime)
@@ -590,13 +551,7 @@ func TestTextureWakeIgnoresGenericParkedMemoryAndRoutesToDocumentOwner(t *testin
 	if err != nil {
 		t.Fatalf("list reconciled Texture runs: %v", err)
 	}
-	textureRuns := 0
-	for _, run := range runs {
-		if run.AgentID == agentID {
-			textureRuns++
-		}
-	}
-	if textureRuns != 2 {
+	if len(runs) != 2 {
 		t.Fatalf("Texture owner minted a replacement instead of reusing canonical memory: %+v", runs)
 	}
 }

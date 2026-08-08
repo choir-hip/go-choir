@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -190,15 +189,6 @@ func ComputeCommitLifecycleArtifactHeadDigest(req types.CommitLifecycleArtifactH
 	return lifecycleDigest(req)
 }
 
-func ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(req types.CommitLifecycleArtifactHeadRequest, graph TextureSourceGraphWriteSet) (string, error) {
-	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
-	req.Revision.OwnerID, req.Revision.ComputerID, req.Revision.CreatedAt = "", "", time.Time{}
-	return lifecycleDigest(struct {
-		Request types.CommitLifecycleArtifactHeadRequest `json:"request"`
-		Graph   TextureSourceGraphWriteSet               `json:"source_graph"`
-	}{Request: req, Graph: normalizeApplyLifecycleSourceGraphDigest(graph)})
-}
-
 func ComputeOpenLifecycleWorkDigest(req types.OpenLifecycleWorkRequest) (string, error) {
 	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
 	return lifecycleDigest(req)
@@ -225,66 +215,14 @@ func ComputeQueueLifecycleUpdateDigest(req types.QueueLifecycleUpdateRequest) (s
 	if err != nil {
 		return "", err
 	}
-	// Historical producer reports must retain their byte-identical digest
-	// shape so receipts written before target-work correlation replay forever.
 	return lifecycleDigest(struct {
 		CommandID, TrajectoryID, TargetAgentID, ProducerAgentID string
-		UpdateID, ProducerUpdateID, PayloadDigest, WorkItemID   string
-		SourceRunID, ChannelID, Role                            string
+		ProducerUpdateID, PayloadDigest, WorkItemID             string
 		WorkDisposition                                         types.WorkItemStatus
 	}{
 		CommandID: strings.TrimSpace(req.CommandID), TrajectoryID: strings.TrimSpace(req.TrajectoryID),
 		TargetAgentID: strings.TrimSpace(req.TargetAgentID), ProducerAgentID: strings.TrimSpace(req.ProducerAgentID),
-		UpdateID: strings.TrimSpace(req.UpdateID), ProducerUpdateID: strings.TrimSpace(req.ProducerUpdateID), PayloadDigest: strings.TrimSpace(req.PayloadDigest),
-		SourceRunID: strings.TrimSpace(req.SourceRunID), ChannelID: strings.TrimSpace(req.ChannelID), Role: strings.TrimSpace(req.Role),
-		WorkItemID: strings.TrimSpace(req.WorkItemID), WorkDisposition: workDisposition,
-	})
-}
-
-func ComputeQueuePersistentSuperReportDigest(req types.QueueLifecycleUpdateRequest) (string, error) {
-	workDisposition, err := normalizeUpdateWorkDisposition(req.WorkDisposition)
-	if err != nil {
-		return "", err
-	}
-	consumed := make([]string, 0, len(req.ConsumedDeliveryUpdateIDs))
-	for _, id := range req.ConsumedDeliveryUpdateIDs {
-		if id = strings.TrimSpace(id); id != "" {
-			consumed = append(consumed, id)
-		}
-	}
-	if len(consumed) > 0 {
-		return lifecycleDigest(struct {
-			Domain                                                  string
-			CommandID, TrajectoryID, TargetAgentID, ProducerAgentID string
-			UpdateID, ProducerUpdateID, PayloadDigest, WorkItemID   string
-			SourceRunID, ChannelID, Role                            string
-			ControlBindingID, TargetWorkItemID                      string
-			ConsumedDeliveryUpdateIDs                               []string
-			WorkDisposition                                         types.WorkItemStatus
-		}{
-			Domain: "choir.lifecycle.persistent-super-report/v2", CommandID: strings.TrimSpace(req.CommandID), TrajectoryID: strings.TrimSpace(req.TrajectoryID),
-			TargetAgentID: strings.TrimSpace(req.TargetAgentID), ProducerAgentID: strings.TrimSpace(req.ProducerAgentID),
-			UpdateID: strings.TrimSpace(req.UpdateID), ProducerUpdateID: strings.TrimSpace(req.ProducerUpdateID), PayloadDigest: strings.TrimSpace(req.PayloadDigest),
-			SourceRunID: strings.TrimSpace(req.SourceRunID), ChannelID: strings.TrimSpace(req.ChannelID), Role: strings.TrimSpace(req.Role),
-			ControlBindingID: strings.TrimSpace(req.ControlBindingID), TargetWorkItemID: strings.TrimSpace(req.TargetWorkItemID), ConsumedDeliveryUpdateIDs: consumed,
-			WorkItemID: strings.TrimSpace(req.WorkItemID), WorkDisposition: workDisposition,
-		})
-	}
-	// Empty consumption sets retain the historical v1 shape for old receipts.
-	return lifecycleDigest(struct {
-		Domain                                                  string
-		CommandID, TrajectoryID, TargetAgentID, ProducerAgentID string
-		UpdateID, ProducerUpdateID, PayloadDigest, WorkItemID   string
-		SourceRunID, ChannelID, Role                            string
-		ControlBindingID, TargetWorkItemID                      string
-		WorkDisposition                                         types.WorkItemStatus
-	}{
-		Domain:    "choir.lifecycle.persistent-super-report/v1",
-		CommandID: strings.TrimSpace(req.CommandID), TrajectoryID: strings.TrimSpace(req.TrajectoryID),
-		TargetAgentID: strings.TrimSpace(req.TargetAgentID), ProducerAgentID: strings.TrimSpace(req.ProducerAgentID),
-		UpdateID: strings.TrimSpace(req.UpdateID), ProducerUpdateID: strings.TrimSpace(req.ProducerUpdateID), PayloadDigest: strings.TrimSpace(req.PayloadDigest),
-		SourceRunID: strings.TrimSpace(req.SourceRunID), ChannelID: strings.TrimSpace(req.ChannelID), Role: strings.TrimSpace(req.Role),
-		ControlBindingID: strings.TrimSpace(req.ControlBindingID), TargetWorkItemID: strings.TrimSpace(req.TargetWorkItemID),
+		ProducerUpdateID: strings.TrimSpace(req.ProducerUpdateID), PayloadDigest: strings.TrimSpace(req.PayloadDigest),
 		WorkItemID: strings.TrimSpace(req.WorkItemID), WorkDisposition: workDisposition,
 	})
 }
@@ -307,13 +245,6 @@ func ComputeSettleLifecycleTrajectoryDigest(req types.SettleLifecycleTrajectoryR
 
 func ComputeCancelLifecycleDigest(req types.CancelLifecycleRequest) (string, error) {
 	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
-	// RequestedLifecycleVersion preserves the caller's original CAS identity
-	// while ExpectedLifecycleVersion may advance only to finish a previously
-	// durable cancellation intent after assignment revoke transitions.
-	if req.RequestedLifecycleVersion > 0 {
-		req.ExpectedLifecycleVersion = req.RequestedLifecycleVersion
-		req.RequestedLifecycleVersion = 0
-	}
 	return lifecycleDigest(req)
 }
 
@@ -442,9 +373,8 @@ func (s *Store) replayLifecycleCommand(ctx context.Context, ownerID, computerID,
 		receipt.StoredResult = nil
 		return types.LifecycleResult{
 			Receipt: receipt, Trajectory: stored.Trajectory, Schema: stored.Schema,
-			WorkItem: stored.WorkItem, Agent: stored.Agent, Update: stored.Update, OwnerInstruction: stored.OwnerInstruction,
+			WorkItem: stored.WorkItem, Agent: stored.Agent, Update: stored.Update,
 			Events: stored.Events, Replay: true, Document: stored.Document, Revision: stored.Revision,
-			TextureTurn: stored.TextureTurn, Controls: stored.Controls, TargetWorkItems: stored.TargetWorkItems,
 		}, true, nil
 	}
 	result := types.LifecycleResult{Receipt: receipt, Replay: true}
@@ -620,10 +550,6 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 	revision.VersionNumber, revision.ParentRevisionID, revision.CreatedAt = 0, "", now
 	if revision.AuthorKind == "" {
 		revision.AuthorKind = types.AuthorAppAgent
-	}
-	revision, _, _, err = prepareTextureRevisionV2(revision)
-	if err != nil {
-		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: prepare initial revision: %w", err)
 	}
 	expectedRevisionHash := types.ComputeStructuredRevisionHash("", revision.Content, revision.BodyDoc, revision.SourceEntities, revision.Provenance)
 	if revision.RevisionHash != "" && revision.RevisionHash != expectedRevisionHash {
@@ -963,7 +889,7 @@ func (s *Store) listLifecycleRunsByScope(ctx context.Context, ownerID, computerI
 	return runs, nil
 }
 
-func (s *Store) ListLifecycleRunsByTrajectory(ctx context.Context, ownerID, computerID, trajectoryID string, limit int) ([]types.RunRecord, error) {
+func (s *Store) ListActiveLifecycleRunsByTrajectory(ctx context.Context, ownerID, computerID, trajectoryID string, limit int) ([]types.RunRecord, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
 	if err != nil {
 		return nil, err
@@ -992,7 +918,7 @@ func (s *Store) ListLifecycleRunsByTrajectory(ctx context.Context, ownerID, comp
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
-		if run.OwnerID == ownerID && run.SandboxID == computerID && run.TrajectoryID == trajectoryID {
+		if run.OwnerID == ownerID && run.SandboxID == computerID && run.TrajectoryID == trajectoryID && run.State.Active() {
 			runs = append(runs, run)
 		}
 	}
@@ -1006,23 +932,6 @@ func (s *Store) ListLifecycleRunsByTrajectory(ctx context.Context, ownerID, comp
 		runs = runs[:limit]
 	}
 	return runs, nil
-}
-
-func (s *Store) ListActiveLifecycleRunsByTrajectory(ctx context.Context, ownerID, computerID, trajectoryID string, limit int) ([]types.RunRecord, error) {
-	runs, err := s.ListLifecycleRunsByTrajectory(ctx, ownerID, computerID, trajectoryID, 0)
-	if err != nil {
-		return nil, err
-	}
-	active := make([]types.RunRecord, 0, len(runs))
-	for _, run := range runs {
-		if run.State.Active() {
-			active = append(active, run)
-		}
-	}
-	if limit > 0 && len(active) > limit {
-		active = active[:limit]
-	}
-	return active, nil
 }
 
 func (s *Store) GetLifecycleWorkItem(ctx context.Context, ownerID, computerID, workItemID string) (types.WorkItemRecord, error) {
@@ -1219,7 +1128,7 @@ func (s *Store) ListPendingLifecycleUpdates(ctx context.Context, ownerID, comput
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
-		if update.LifecycleVersion > 0 && update.TargetAgentID == targetAgentID && update.Disposition == types.UpdatePending && update.DeliveredAt == nil && strings.TrimSpace(update.DeliveredToRunID) == "" {
+		if update.LifecycleVersion > 0 && update.TargetAgentID == targetAgentID && update.Disposition == types.UpdatePending {
 			updates = append(updates, update)
 		}
 	}
@@ -1233,13 +1142,6 @@ func (s *Store) ListPendingLifecycleUpdates(ctx context.Context, ownerID, comput
 		updates = updates[:limit]
 	}
 	return updates, nil
-}
-
-// ListAllPendingLifecycleUpdates is the activation-selection view. It avoids a
-// fixed prefix cap so one exact trajectory/work occurrence set is never split
-// merely because it contains occurrence 101.
-func (s *Store) ListAllPendingLifecycleUpdates(ctx context.Context, ownerID, computerID, targetAgentID string) ([]types.CoagentSourcePacket, error) {
-	return s.ListPendingLifecycleUpdates(ctx, ownerID, computerID, targetAgentID, int(^uint(0)>>1))
 }
 
 func (s *Store) GetLifecycleUpdate(ctx context.Context, ownerID, computerID, trajectoryID, targetAgentID, producerAgentID, producerUpdateID string) (types.CoagentSourcePacket, error) {
@@ -1332,14 +1234,6 @@ func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, t
 			if update.TrajectoryID == trajectoryID && update.LifecycleVersion > 0 {
 				snapshot.Updates = append(snapshot.Updates, update)
 			}
-		case ogKindCoSuperAssignment:
-			assignment, decodeErr := decodeLifecycleObject[types.CoSuperAssignment](obj)
-			if decodeErr != nil {
-				return types.LifecycleSnapshot{}, decodeErr
-			}
-			if assignment.Binding.TrajectoryID == trajectoryID {
-				snapshot.CoSuperAssignments = append(snapshot.CoSuperAssignments, assignment)
-			}
 		case ogKindLifecycleEvent:
 			event, decodeErr := decodeLifecycleObject[types.LifecycleEvent](obj)
 			if decodeErr != nil {
@@ -1376,12 +1270,6 @@ func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, t
 	}
 	sort.Slice(snapshot.WorkItems, func(i, j int) bool { return snapshot.WorkItems[i].WorkItemID < snapshot.WorkItems[j].WorkItemID })
 	sort.Slice(snapshot.Agents, func(i, j int) bool { return snapshot.Agents[i].AgentID < snapshot.Agents[j].AgentID })
-	sort.Slice(snapshot.CoSuperAssignments, func(i, j int) bool {
-		if snapshot.CoSuperAssignments[i].AssignmentID != snapshot.CoSuperAssignments[j].AssignmentID {
-			return snapshot.CoSuperAssignments[i].AssignmentID < snapshot.CoSuperAssignments[j].AssignmentID
-		}
-		return snapshot.CoSuperAssignments[i].Binding.Attempt < snapshot.CoSuperAssignments[j].Binding.Attempt
-	})
 	sort.Slice(snapshot.Updates, func(i, j int) bool {
 		if snapshot.Updates[i].ReducerSeq == snapshot.Updates[j].ReducerSeq {
 			return snapshot.Updates[i].UpdateID < snapshot.Updates[j].UpdateID
@@ -1459,29 +1347,10 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle: object graph not initialized")
 	}
 	storedReceipt := result.Receipt
-	if trajectoryID := strings.TrimSpace(storedReceipt.TrajectoryID); trajectoryID != "" && commandID != "" {
-		if intentObj, intentErr := s.lifecycleGetObject(ctx, ogKindLifecycleCancelIntent, ownerID, computerID, trajectoryID); intentErr == nil {
-			intent, decodeErr := decodeLifecycleObject[types.LifecycleCancellationIntent](intentObj)
-			allowedFate := storedReceipt.Kind == types.LifecycleSetCoSuperCapsuleDisposition || storedReceipt.Kind == types.LifecycleCancelCoSuperAssignment || storedReceipt.Kind == types.LifecycleRecordCoSuperAssignment
-			lateEvidence := false
-			for _, event := range result.Events {
-				if event.Kind == types.LifecycleUpdateLate {
-					lateEvidence = true
-					break
-				}
-			}
-			if decodeErr != nil || (commandID != intent.CommandID && !allowedFate && !lateEvidence) {
-				return types.LifecycleResult{}, ErrConcurrentStateChange
-			}
-		} else if !errors.Is(intentErr, ErrNotFound) {
-			return types.LifecycleResult{}, intentErr
-		}
-	}
 	storedReceipt.StoredResult = &types.LifecycleStoredResult{
 		Trajectory: result.Trajectory, Schema: result.Schema, WorkItem: result.WorkItem,
-		Agent: result.Agent, Update: result.Update, OwnerInstruction: result.OwnerInstruction, Events: result.Events,
-		Document: result.Document, Revision: result.Revision, TextureTurn: result.TextureTurn,
-		Controls: result.Controls, TargetWorkItems: result.TargetWorkItems,
+		Agent: result.Agent, Update: result.Update, Events: result.Events,
+		Document: result.Document, Revision: result.Revision,
 	}
 	receiptObj, err := lifecycleObject(ogKindLifecycleCmd, ownerID, computerID, commandID, storedReceipt,
 		lifecycleMetadata("command_id", commandID, computerID, result.Receipt.TrajectoryID, result.Receipt.ReducerSeq),
@@ -1664,10 +1533,6 @@ func (s *Store) OpenLifecycleWork(ctx context.Context, req types.OpenLifecycleWo
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	// Open-work provenance participates in the command digest and is required
-	// to prove later controller-to-target bindings. Initial lifecycle work still
-	// discards caller retry ephemera in normalizeLifecycleWork.
-	work.CreatedByRunID = strings.TrimSpace(req.WorkItem.CreatedByRunID)
 	assignedAgent, agentErr := s.requireLifecycleAssignedAgent(ctx, ownerID, computerID, work.AssignedAgentID)
 	var resultAgent *types.AgentRecord
 	if errors.Is(agentErr, ErrNotFound) {
@@ -1942,7 +1807,6 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 		CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash,
 	})
 	previousActiveRunID := strings.TrimSpace(agent.ActiveRunID)
-	previousLifecycleVersion := agent.LifecycleVersion
 	metadata := make(map[string]any, len(run.Metadata)+1)
 	for key, value := range run.Metadata {
 		if key != lifecycleTerminalSettlementKey {
@@ -1976,14 +1840,7 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 	} else if previousActiveRunID == run.RunID {
 		agent.ActiveRunID = ""
 	}
-	// The first valid work-bound Researcher activation is the cutover from a
-	// generic durable agent record to lifecycle identity. Projection does not
-	// advance the trajectory reducer, so it adopts the current reducer sequence.
-	if agent.Profile == "researcher" && agent.LifecycleVersion <= 0 && len(boundWorkItemIDs) > 0 && lifecycleRunOwnsActivation(run.State) {
-		agent.LifecycleVersion = 1
-		agent.LastReducerSeq = trajectory.ReducerSeq
-	}
-	agentProjectionChanged := strings.TrimSpace(agent.ActiveRunID) != previousActiveRunID || agent.LifecycleVersion != previousLifecycleVersion
+	agentProjectionChanged := strings.TrimSpace(agent.ActiveRunID) != previousActiveRunID
 
 	runMetadata := map[string]any{
 		"run_id": run.RunID, "agent_id": run.AgentID, "channel_id": run.ChannelID,
@@ -2246,78 +2103,6 @@ func validateUpdateWorkConsequence(disposition types.WorkItemStatus, workItemID,
 	return nil
 }
 
-func runMemoryMessageTexts(raw json.RawMessage) []string {
-	var message struct {
-		Role    string          `json:"role"`
-		Content json.RawMessage `json:"content"`
-	}
-	if json.Unmarshal(raw, &message) != nil || strings.TrimSpace(message.Role) != "user" {
-		return nil
-	}
-	var scalar string
-	if json.Unmarshal(message.Content, &scalar) == nil {
-		return []string{scalar}
-	}
-	var blocks []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
-	}
-	if json.Unmarshal(message.Content, &blocks) != nil {
-		return nil
-	}
-	out := make([]string, 0, len(blocks))
-	for _, block := range blocks {
-		if block.Type == "text" && strings.TrimSpace(block.Text) != "" {
-			out = append(out, block.Text)
-		}
-	}
-	return out
-}
-
-// lifecycleUpdateIDsInAuthenticatedRunMemory derives occurrence authority only
-// from durable messages bearing the runtime-owned injection role and an exact
-// lifecycle envelope for this run. Run metadata and caller-supplied IDs are not
-// evidence that a packet entered provider context.
-func lifecycleUpdateIDsInAuthenticatedRunMemory(entries []types.RunMemoryEntry, run types.RunRecord, trajectoryID string) map[string]bool {
-	seen := map[string]bool{}
-	for _, entry := range entries {
-		if entry.Kind != types.RunMemoryEntryMessage || entry.Role != types.RunMemoryRoleRuntimeInjection ||
-			entry.OwnerID != run.OwnerID || entry.RunID != run.RunID || entry.AgentID != run.AgentID || len(entry.Message) == 0 {
-			continue
-		}
-		for _, text := range runMemoryMessageTexts(entry.Message) {
-			start := strings.Index(text, "{")
-			if start < 0 {
-				continue
-			}
-			var envelope struct {
-				Schema        string `json:"schema"`
-				PacketType    string `json:"packet_type"`
-				OwnerID       string `json:"owner_id"`
-				ComputerID    string `json:"computer_id"`
-				TrajectoryID  string `json:"trajectory_id"`
-				TargetAgentID string `json:"target_agent_id"`
-				TargetRunID   string `json:"target_run_id"`
-				Updates       []struct {
-					UpdateID string `json:"update_id"`
-				} `json:"updates"`
-			}
-			if json.Unmarshal([]byte(text[start:]), &envelope) != nil || envelope.Schema != "choir.lifecycle_injection.v1" ||
-				envelope.PacketType != "coagent_update" || strings.TrimSpace(envelope.OwnerID) != run.OwnerID ||
-				strings.TrimSpace(envelope.ComputerID) != run.SandboxID || strings.TrimSpace(envelope.TrajectoryID) != trajectoryID ||
-				strings.TrimSpace(envelope.TargetAgentID) != run.AgentID || strings.TrimSpace(envelope.TargetRunID) != run.RunID {
-				continue
-			}
-			for _, update := range envelope.Updates {
-				if id := strings.TrimSpace(update.UpdateID); id != "" {
-					seen[id] = true
-				}
-			}
-		}
-	}
-	return seen
-}
-
 func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecycleUpdateRequest) (types.LifecycleResult, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
 	if err != nil {
@@ -2328,11 +2113,6 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	req.TrajectoryID, req.UpdateID = strings.TrimSpace(req.TrajectoryID), strings.TrimSpace(req.UpdateID)
 	req.TargetAgentID, req.ProducerAgentID = strings.TrimSpace(req.TargetAgentID), strings.TrimSpace(req.ProducerAgentID)
 	req.ProducerUpdateID, req.PayloadDigest = strings.TrimSpace(req.ProducerUpdateID), strings.TrimSpace(req.PayloadDigest)
-	req.SourceRunID, req.ChannelID, req.Role = strings.TrimSpace(req.SourceRunID), strings.TrimSpace(req.ChannelID), strings.TrimSpace(req.Role)
-	req.ControlBindingID, req.TargetWorkItemID = strings.TrimSpace(req.ControlBindingID), strings.TrimSpace(req.TargetWorkItemID)
-	for i := range req.ConsumedDeliveryUpdateIDs {
-		req.ConsumedDeliveryUpdateIDs[i] = strings.TrimSpace(req.ConsumedDeliveryUpdateIDs[i])
-	}
 	req.WorkItemID = strings.TrimSpace(req.WorkItemID)
 	req.WorkDisposition, err = normalizeUpdateWorkDisposition(req.WorkDisposition)
 	if err != nil {
@@ -2344,8 +2124,8 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	if err := validateLifecycleCommand(req.CommandID, req.CommandDigest, req.TrajectoryID); err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if req.UpdateID == "" || req.TargetAgentID == "" || req.ProducerAgentID == "" || req.ProducerUpdateID == "" || req.PayloadDigest == "" || strings.TrimSpace(req.SourceRunID) == "" || req.WorkItemID == "" {
-		return types.LifecycleResult{}, fmt.Errorf("lifecycle queue update: update_id, target_agent_id, producer_agent_id, producer_update_id, source_run_id, work_item_id, and payload_digest are required")
+	if req.UpdateID == "" || req.TargetAgentID == "" || req.ProducerAgentID == "" || req.ProducerUpdateID == "" || req.PayloadDigest == "" {
+		return types.LifecycleResult{}, fmt.Errorf("lifecycle queue update: update_id, target_agent_id, producer_agent_id, producer_update_id, and payload_digest are required")
 	}
 	payloadDigest, digestErr := ComputeLifecycleUpdatePayloadDigest(req.Packet, req.Content)
 	if digestErr != nil {
@@ -2355,9 +2135,6 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle queue update: payload digest mismatch: %w", ErrLifecycleCommandConflict)
 	}
 	computedCommandDigest, commandDigestErr := ComputeQueueLifecycleUpdateDigest(req)
-	if req.ControlBindingID != "" || req.TargetWorkItemID != "" {
-		computedCommandDigest, commandDigestErr = ComputeQueuePersistentSuperReportDigest(req)
-	}
 	if err := requireLifecycleDigest(req.CommandDigest, computedCommandDigest, commandDigestErr); err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -2371,25 +2148,6 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	// Terminal trajectories accept only authenticated historical evidence. The
-	// late branch below writes an update/event/receipt without mutating the
-	// trajectory, actor, run, or work projections.
-	lateEvidenceOnly := trajectory.Status != types.TrajectoryLive
-	documentID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
-	if documentID == "" || req.TargetAgentID != "texture:"+documentID || strings.TrimSpace(req.ChannelID) != documentID {
-		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-	}
-	documentObj, err := s.lifecycleGetObject(ctx, ogKindTexDoc, ownerID, computerID, documentID)
-	if err != nil {
-		return types.LifecycleResult{}, err
-	}
-	document, err := decodeLifecycleObject[types.Document](documentObj)
-	if err != nil {
-		return types.LifecycleResult{}, err
-	}
-	if document.DocID != documentID || document.OwnerID != ownerID || document.ComputerID != computerID || document.TrajectoryID != req.TrajectoryID {
-		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-	}
 	agentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, ownerID, computerID, req.TargetAgentID)
 	if err != nil {
 		return types.LifecycleResult{}, err
@@ -2398,171 +2156,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if agent.AgentID != req.TargetAgentID || agent.OwnerID != ownerID || agent.ComputerID != computerID ||
-		agent.LifecycleVersion <= 0 || agent.Profile != "texture" || agent.Role != "texture" || strings.TrimSpace(agent.ChannelID) != documentID {
-		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-	}
-	var producerRunObj objectgraph.Object
-	var producerRun types.RunRecord
-	var producerAuthorityConditions []objectgraph.ObjectCondition
-	type deliveredPacketConsumption struct {
-		object objectgraph.Object
-		update types.CoagentSourcePacket
-		key    string
-	}
-	var deliveredPacketConsumptions []deliveredPacketConsumption
-	persistentSuperProducer := req.ProducerAgentID == "super:"+ownerID
-	if persistentSuperProducer {
-		if req.ControlBindingID == "" || req.TargetWorkItemID == "" || req.Role != "super" {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-		producerRunObj, err = s.getRunObjectByOwnerOG(ctx, ownerID, req.SourceRunID)
-		if err == nil {
-			producerRun, err = decodeLifecycleObject[types.RunRecord](producerRunObj)
-		}
-		if err != nil {
-			return types.LifecycleResult{}, err
-		}
-		producerRunStateAllowed := persistentSuperRunStateAllowed(producerRun.State)
-		if lateEvidenceOnly {
-			producerRunStateAllowed = persistentSuperHistoricalReportRunStateAllowed(producerRun.State)
-		}
-		if producerRunObj.ComputerID != "" || producerRun.RunID != req.SourceRunID || producerRun.OwnerID != ownerID ||
-			producerRun.SandboxID != computerID || producerRun.TrajectoryID != "" || producerRun.AgentID != req.ProducerAgentID ||
-			producerRun.AgentProfile != "super" || producerRun.AgentRole != "super" || !producerRunStateAllowed ||
-			producerRun.ChannelID != req.ChannelID || metadataExactString(producerRun.Metadata, "assignment_trajectory_id") != req.TrajectoryID ||
-			!persistentSuperControlBinding(producerRun.Metadata, req.TrajectoryID, req.WorkItemID, req.ControlBindingID) {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-		controlKey := req.TrajectoryID + "\x00" + req.ProducerAgentID + "\x00" + req.TargetAgentID + "\x00" + req.ControlBindingID
-		controlObj, control, controlErr := s.textureTurnUpdateObject(ctx, ownerID, computerID, controlKey)
-		if controlErr != nil {
-			return types.LifecycleResult{}, controlErr
-		}
-		if control.UpdateID != req.ControlBindingID || control.ProducerUpdateID != req.ControlBindingID ||
-			control.Direction != types.LifecyclePacketDirectionControl || control.AgentID != req.TargetAgentID ||
-			control.TargetAgentID != req.ProducerAgentID || control.TargetWorkItemID != req.WorkItemID ||
-			control.TrajectoryID != req.TrajectoryID || control.DeliveredToRunID != req.SourceRunID || control.DeliveredAt == nil ||
-			(!lateEvidenceOnly && control.Disposition != types.UpdatePending) {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-		targetRunObj, targetRun, targetErr := s.textureTurnRunObject(ctx, ownerID, computerID, control.SourceRunID)
-		if targetErr != nil {
-			return types.LifecycleResult{}, targetErr
-		}
-		targetWorkObj, targetWork, targetErr := s.lifecycleWorkObject(ctx, ownerID, computerID, req.TargetWorkItemID)
-		if targetErr != nil {
-			return types.LifecycleResult{}, targetErr
-		}
-		targetAuthorityStateAllowed := targetWork.Status == types.WorkItemOpen && targetRun.State.Valid()
-		if lateEvidenceOnly {
-			targetAuthorityStateAllowed = workItemTerminal(targetWork.Status) &&
-				(targetRun.State.Terminal() || targetRun.State == types.RunPassivated)
-		}
-		if targetRun.RunID != control.SourceRunID || targetRun.AgentID != req.TargetAgentID || targetRun.TrajectoryID != req.TrajectoryID ||
-			targetRun.AgentProfile != "texture" || targetRun.AgentRole != "texture" || !targetAuthorityStateAllowed ||
-			!lifecycleRunBindsWork(targetRun, req.TargetWorkItemID) ||
-			targetWork.TrajectoryID != req.TrajectoryID || targetWork.AssignedAgentID != req.TargetAgentID || targetWork.AuthorityProfile != "texture" {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-		producerAuthorityConditions = append(producerAuthorityConditions,
-			coSuperObjectCondition(controlObj), coSuperObjectCondition(targetRunObj), coSuperObjectCondition(targetWorkObj))
-
-		if !lateEvidenceOnly {
-			// The complete consumable set is the canonical exact-run delivery order
-			// intersected with authenticated durable runtime-injection memory. A packet
-			// bound while the provider is in flight is deliberately left pending until
-			// a later turn appends it; a caller cannot omit an already appended packet.
-			var delivered []types.CoagentSourcePacket
-			var after int64
-			for {
-				page, pageErr := s.ListLifecycleControlsDeliveredToRunPage(ctx, ownerID, computerID, req.TrajectoryID, req.ProducerAgentID, req.SourceRunID, after, 100)
-				if pageErr != nil {
-					return types.LifecycleResult{}, pageErr
-				}
-				delivered = append(delivered, page.Packets...)
-				if !page.HasMore {
-					break
-				}
-				if page.NextCursor <= after {
-					return types.LifecycleResult{}, ErrConcurrentStateChange
-				}
-				after = page.NextCursor
-			}
-			memoryEntries, memoryErr := s.ListRunMemoryEntries(ctx, ownerID, req.SourceRunID)
-			if memoryErr != nil {
-				return types.LifecycleResult{}, memoryErr
-			}
-			memorySeen := lifecycleUpdateIDsInAuthenticatedRunMemory(memoryEntries, producerRun, req.TrajectoryID)
-			expectedConsumed := make([]types.CoagentSourcePacket, 0, len(delivered))
-			unseenPending := false
-			for _, packet := range delivered {
-				if memorySeen[strings.TrimSpace(packet.UpdateID)] {
-					expectedConsumed = append(expectedConsumed, packet)
-				} else if packet.Disposition == types.UpdatePending {
-					unseenPending = true
-				}
-			}
-			// The selected direction itself must have entered this exact run's
-			// durable provider context. This closes the empty-proof/direct-Store path.
-			if !memorySeen[req.ControlBindingID] || len(expectedConsumed) == 0 {
-				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-			}
-			// Do not terminalize a Super obligation while an arrival-during-provider
-			// packet remains unseen: it must stay executable by a later same-run turn.
-			if unseenPending && req.WorkDisposition != types.WorkItemOpen {
-				return types.LifecycleResult{}, ErrConcurrentStateChange
-			}
-			if len(expectedConsumed) != len(req.ConsumedDeliveryUpdateIDs) {
-				return types.LifecycleResult{}, ErrConcurrentStateChange
-			}
-			for i, packet := range expectedConsumed {
-				if req.ConsumedDeliveryUpdateIDs[i] == "" || req.ConsumedDeliveryUpdateIDs[i] != packet.UpdateID {
-					return types.LifecycleResult{}, ErrConcurrentStateChange
-				}
-				if packet.Disposition != types.UpdatePending {
-					continue
-				}
-				key := packet.TrajectoryID + "\x00" + packet.TargetAgentID + "\x00" + packet.AgentID + "\x00" + packet.ProducerUpdateID
-				packetObj, storedPacket, packetErr := s.textureTurnUpdateObject(ctx, ownerID, computerID, key)
-				if packetErr != nil {
-					return types.LifecycleResult{}, packetErr
-				}
-				if storedPacket.UpdateID != packet.UpdateID || storedPacket.DeliveredToRunID != req.SourceRunID || storedPacket.Disposition != types.UpdatePending {
-					return types.LifecycleResult{}, ErrConcurrentStateChange
-				}
-				deliveredPacketConsumptions = append(deliveredPacketConsumptions, deliveredPacketConsumption{object: packetObj, update: storedPacket, key: key})
-			}
-		}
-
-	} else {
-		if req.ControlBindingID != "" || req.TargetWorkItemID != "" {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-		producerRunObj, err = s.lifecycleGetObject(ctx, ogKindRun, ownerID, computerID, req.SourceRunID)
-		if err == nil {
-			producerRun, err = decodeLifecycleObject[types.RunRecord](producerRunObj)
-		}
-		if err != nil {
-			return types.LifecycleResult{}, err
-		}
-		boundWorkItemIDs, bindingErr := lifecycleActivationWorkItemIDs(producerRun.Metadata)
-		if bindingErr != nil || producerRun.RunID != req.SourceRunID || producerRun.OwnerID != ownerID ||
-			producerRun.SandboxID != computerID || producerRun.TrajectoryID != req.TrajectoryID || producerRun.AgentID != req.ProducerAgentID ||
-			strings.TrimSpace(producerRun.AgentProfile) == "" || strings.TrimSpace(producerRun.AgentRole) == "" || !producerRun.State.Valid() ||
-			strings.TrimSpace(producerRun.AgentProfile) != strings.TrimSpace(producerRun.AgentRole) ||
-			strings.TrimSpace(producerRun.AgentRole) != req.Role || strings.TrimSpace(producerRun.ChannelID) != req.ChannelID ||
-			!containsLifecycleIdentity(boundWorkItemIDs, req.WorkItemID) {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-	}
-	workObj, work, err := s.lifecycleWorkObject(ctx, ownerID, computerID, req.WorkItemID)
-	if err != nil {
-		return types.LifecycleResult{}, err
-	}
-	if work.TrajectoryID != req.TrajectoryID || strings.TrimSpace(work.AssignedAgentID) != req.ProducerAgentID ||
-		strings.TrimSpace(work.AuthorityProfile) != strings.TrimSpace(producerRun.AgentProfile) ||
-		(lateEvidenceOnly && persistentSuperProducer && !workItemTerminal(work.Status)) {
+	if agent.LifecycleVersion <= 0 || agent.Profile != "texture" || agent.Role != "texture" {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	updateKey := req.TrajectoryID + "\x00" + req.TargetAgentID + "\x00" + req.ProducerAgentID + "\x00" + req.ProducerUpdateID
@@ -2575,13 +2169,8 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		if decodeErr != nil {
 			return types.LifecycleResult{}, decodeErr
 		}
-		if stored.Direction != types.LifecyclePacketDirectionProducerReport || stored.UpdateID != req.UpdateID ||
-			stored.OwnerID != ownerID || stored.ComputerID != computerID || stored.TrajectoryID != req.TrajectoryID ||
-			stored.TargetAgentID != req.TargetAgentID || stored.AgentID != req.ProducerAgentID || stored.ProducerUpdateID != req.ProducerUpdateID ||
-			strings.TrimSpace(stored.SourceRunID) != req.SourceRunID || strings.TrimSpace(stored.ChannelID) != req.ChannelID || strings.TrimSpace(stored.Role) != req.Role ||
-			stored.PayloadDigest != req.PayloadDigest || strings.TrimSpace(stored.ProducerWorkItemID) != req.WorkItemID ||
-			strings.TrimSpace(stored.WorkItemID) != req.WorkItemID || strings.TrimSpace(stored.ControlBindingID) != req.ControlBindingID ||
-			strings.TrimSpace(stored.TargetWorkItemID) != req.TargetWorkItemID || stored.WorkDisposition != req.WorkDisposition {
+		if stored.PayloadDigest != req.PayloadDigest || strings.TrimSpace(stored.WorkItemID) != req.WorkItemID ||
+			stored.WorkDisposition != req.WorkDisposition {
 			return types.LifecycleResult{}, ErrLifecycleCommandConflict
 		}
 		return types.LifecycleResult{Trajectory: trajectory, Agent: &agent, Update: &stored, Replay: true}, nil
@@ -2589,7 +2178,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		return types.LifecycleResult{}, getErr
 	}
 	now := time.Now().UTC()
-	if lateEvidenceOnly {
+	if trajectory.Status != types.TrajectoryLive {
 		nextSeq, sequenceUpdated, sequenceCondition, sequenceErr := s.nextPostTerminalSequence(ctx, ownerID, computerID, trajectory, now)
 		if sequenceErr != nil {
 			return types.LifecycleResult{}, sequenceErr
@@ -2599,11 +2188,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 			OwnerID: ownerID, ComputerID: computerID, AgentID: req.ProducerAgentID,
 			TargetAgentID: req.TargetAgentID, TrajectoryID: req.TrajectoryID,
 			ChannelID: req.ChannelID, Role: req.Role, SourceRunID: req.SourceRunID,
-			Direction:          types.LifecyclePacketDirectionProducerReport,
-			ControlBindingID:   req.ControlBindingID,
-			ProducerWorkItemID: req.WorkItemID,
-			TargetWorkItemID:   req.TargetWorkItemID,
-			WorkItemID:         req.WorkItemID, WorkDisposition: req.WorkDisposition,
+			WorkItemID: req.WorkItemID, WorkDisposition: req.WorkDisposition,
 			MessageSeq: nextSeq, PayloadDigest: req.PayloadDigest,
 			Disposition: types.UpdateLate, DispositionRef: lifecycleTerminalTrajectoryRef(req.TrajectoryID),
 			DispositionReason: "trajectory is terminal", LifecycleVersion: 1, ReducerSeq: nextSeq,
@@ -2633,64 +2218,34 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		conditions := []objectgraph.ObjectCondition{
 			sequenceCondition,
 			{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
-			{CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash},
-			{CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash},
-			{CanonicalID: producerRunObj.CanonicalID, Exists: true, ExpectedContentHash: producerRunObj.ContentHash},
-			{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash},
 			{CanonicalID: updateObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
 		}
-		conditions = append(conditions, producerAuthorityConditions...)
 		return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, []objectgraph.Object{sequenceUpdated, updateObj, eventObj, receiptObj}, types.LifecycleResult{
 			Receipt: receipt, Trajectory: trajectory, Agent: &agent, Update: &update, Events: []types.LifecycleEvent{event},
 		})
 	}
-	if work.Status != types.WorkItemOpen {
-		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	var workCondition *objectgraph.ObjectCondition
+	if req.WorkItemID != "" {
+		workObj, work, workErr := s.lifecycleWorkObject(ctx, ownerID, computerID, req.WorkItemID)
+		if workErr != nil {
+			return types.LifecycleResult{}, workErr
+		}
+		if work.TrajectoryID != req.TrajectoryID || work.Status != types.WorkItemOpen ||
+			strings.TrimSpace(work.AssignedAgentID) != req.ProducerAgentID {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		condition := objectgraph.ObjectCondition{
+			CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash,
+		}
+		workCondition = &condition
 	}
-	nextSeq := trajectory.ReducerSeq
-	events := make([]types.LifecycleEvent, 0, len(deliveredPacketConsumptions)+1)
-	eventObjs := make([]objectgraph.Object, 0, len(deliveredPacketConsumptions)+1)
-	consumedObjects := make([]objectgraph.Object, 0, len(deliveredPacketConsumptions))
-	consumedConditions := make([]objectgraph.ObjectCondition, 0, len(deliveredPacketConsumptions))
-	for i := range deliveredPacketConsumptions {
-		consumed := &deliveredPacketConsumptions[i]
-		nextSeq++
-		consumed.update.Disposition = types.UpdateIncorporated
-		consumed.update.DispositionRef = req.UpdateID
-		consumed.update.DispositionReason = "authenticated durable run-memory delivery incorporated by Super report"
-		consumed.update.LifecycleVersion++
-		consumed.update.ReducerSeq = nextSeq
-		updatedMeta := lifecycleMetadata("update_id", consumed.update.UpdateID, computerID, req.TrajectoryID, nextSeq)
-		updatedMeta["producer_update_id"], updatedMeta["target_agent_id"] = consumed.update.ProducerUpdateID, consumed.update.TargetAgentID
-		updatedObj, buildErr := lifecycleObject(ogKindWorkerUpdate, ownerID, computerID, consumed.key, consumed.update, updatedMeta, consumed.object.CreatedAt, now)
-		if buildErr != nil {
-			return types.LifecycleResult{}, buildErr
-		}
-		consumedConditions = append(consumedConditions, coSuperObjectCondition(consumed.object))
-		consumedObjects = append(consumedObjects, updatedObj)
-		event := types.LifecycleEvent{
-			EventID: req.CommandID + ":" + fmt.Sprintf("%d", len(events)+1), OwnerID: ownerID, ComputerID: computerID,
-			TrajectoryID: req.TrajectoryID, WorkItemID: consumed.update.TargetWorkItemID, UpdateID: consumed.update.UpdateID,
-			Kind: types.LifecycleUpdateApplied, ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: nextSeq,
-			CommandID: req.CommandID, CommandDigest: req.CommandDigest, Reason: consumed.update.DispositionReason, CreatedAt: now,
-		}
-		eventObj, buildErr := lifecycleObject(ogKindLifecycleEvent, ownerID, computerID, event.EventID, event, lifecycleMetadata("event_id", event.EventID, computerID, req.TrajectoryID, nextSeq), now, now)
-		if buildErr != nil {
-			return types.LifecycleResult{}, buildErr
-		}
-		events, eventObjs = append(events, event), append(eventObjs, eventObj)
-	}
-	nextSeq++
+	nextSeq := trajectory.ReducerSeq + 1
 	update := types.CoagentSourcePacket{
 		UpdateID: req.UpdateID, ProducerUpdateID: req.ProducerUpdateID,
 		OwnerID: ownerID, ComputerID: computerID, AgentID: req.ProducerAgentID,
 		TargetAgentID: req.TargetAgentID, TrajectoryID: req.TrajectoryID,
 		ChannelID: req.ChannelID, Role: req.Role, SourceRunID: req.SourceRunID,
-		Direction:          types.LifecyclePacketDirectionProducerReport,
-		ControlBindingID:   req.ControlBindingID,
-		ProducerWorkItemID: req.WorkItemID,
-		TargetWorkItemID:   req.TargetWorkItemID,
-		WorkItemID:         req.WorkItemID, WorkDisposition: req.WorkDisposition,
+		WorkItemID: req.WorkItemID, WorkDisposition: req.WorkDisposition,
 		PayloadDigest: req.PayloadDigest, Disposition: types.UpdatePending,
 		MessageSeq:       nextSeq,
 		LifecycleVersion: 1, ReducerSeq: nextSeq, Packet: req.Packet,
@@ -2699,7 +2254,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = nextSeq, trajectory.LifecycleVersion+1, now
 	agent.LastReducerSeq, agent.LifecycleVersion, agent.UpdatedAt = nextSeq, agent.LifecycleVersion+1, now
 	event := types.LifecycleEvent{
-		EventID: req.CommandID + ":" + fmt.Sprintf("%d", len(events)+1), OwnerID: ownerID, ComputerID: computerID,
+		EventID: req.CommandID + ":1", OwnerID: ownerID, ComputerID: computerID,
 		TrajectoryID: req.TrajectoryID, UpdateID: req.UpdateID, Kind: types.LifecycleUpdateQueued,
 		ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: nextSeq,
 		CommandID: req.CommandID, CommandDigest: req.CommandDigest, CreatedAt: now,
@@ -2723,44 +2278,19 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	events, eventObjs = append(events, event), append(eventObjs, eventObj)
-	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID, req.CommandID, req.CommandDigest, types.LifecycleQueueUpdate, nextSeq, eventObjs)
+	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID, req.CommandID, req.CommandDigest, types.LifecycleQueueUpdate, nextSeq, []objectgraph.Object{eventObj})
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
 	conditions := []objectgraph.ObjectCondition{
 		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
-		{CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash},
 		{CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash},
-		{CanonicalID: producerRunObj.CanonicalID, Exists: true, ExpectedContentHash: producerRunObj.ContentHash},
-		{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash},
-		{CanonicalID: updateObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
+		{CanonicalID: updateObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
 	}
-	seenConditions := make(map[string]bool, len(conditions)+len(producerAuthorityConditions)+len(consumedConditions)+len(eventObjs))
-	for _, condition := range conditions {
-		seenConditions[condition.CanonicalID] = true
+	if workCondition != nil {
+		conditions = append(conditions, *workCondition)
 	}
-	appendCondition := func(condition objectgraph.ObjectCondition) {
-		if !seenConditions[condition.CanonicalID] {
-			conditions = append(conditions, condition)
-			seenConditions[condition.CanonicalID] = true
-		}
-	}
-	for _, condition := range producerAuthorityConditions {
-		appendCondition(condition)
-	}
-	for _, condition := range consumedConditions {
-		appendCondition(condition)
-	}
-	for _, eventObject := range eventObjs {
-		appendCondition(objectgraph.ObjectCondition{CanonicalID: eventObject.CanonicalID})
-	}
-	objects := []objectgraph.Object{trajectoryUpdated, agentUpdated, updateObj}
-	objects = append(objects, consumedObjects...)
-	objects = append(objects, eventObjs...)
-	objects = append(objects, receiptObj)
-	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &agent, Update: &update, Events: events})
-
+	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, []objectgraph.Object{trajectoryUpdated, agentUpdated, updateObj, eventObj, receiptObj}, types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &agent, Update: &update, Events: []types.LifecycleEvent{event}})
 }
 
 func unscopedGraphObject(kind objectgraph.ObjectKind, ownerID, identityKey string, body any, metadata map[string]any, now time.Time) (objectgraph.Object, error) {
@@ -2917,13 +2447,6 @@ func (s *Store) lifecycleSourceGraphBatch(ctx context.Context, rev types.Revisio
 // CommitLifecycleArtifactHead advances a live lifecycle artifact head under
 // trajectory/document/head CAS and emits the durable reducer event atomically.
 func (s *Store) CommitLifecycleArtifactHead(ctx context.Context, req types.CommitLifecycleArtifactHeadRequest) (types.LifecycleResult, error) {
-	return s.CommitLifecycleArtifactHeadWithSourceGraph(ctx, req, TextureSourceGraphWriteSet{})
-}
-
-// CommitLifecycleArtifactHeadWithSourceGraph is the canonical object-graph
-// command for an owner editor revision: revision/source graph, head CAS,
-// correction obligation, events, and receipt fate-share one conditional batch.
-func (s *Store) CommitLifecycleArtifactHeadWithSourceGraph(ctx context.Context, req types.CommitLifecycleArtifactHeadRequest, sourceGraph TextureSourceGraphWriteSet) (types.LifecycleResult, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
 	if err != nil {
 		return types.LifecycleResult{}, err
@@ -2931,34 +2454,13 @@ func (s *Store) CommitLifecycleArtifactHeadWithSourceGraph(ctx context.Context, 
 	req.OwnerID, req.ComputerID = ownerID, computerID
 	req.CommandID, req.CommandDigest = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest)
 	req.TrajectoryID, req.ExpectedHeadRevisionID = strings.TrimSpace(req.TrajectoryID), strings.TrimSpace(req.ExpectedHeadRevisionID)
-	if req.OwnerCorrection != nil {
-		correction := *req.OwnerCorrection
-		correction.RequestID, correction.InstructionID = strings.TrimSpace(correction.RequestID), strings.TrimSpace(correction.InstructionID)
-		correction.TargetAgentID, correction.TargetWorkItemID = strings.TrimSpace(correction.TargetAgentID), strings.TrimSpace(correction.TargetWorkItemID)
-		correction.Content = strings.TrimSpace(correction.Content)
-		req.OwnerCorrection = &correction
-	}
 	if err := validateLifecycleCommand(req.CommandID, req.CommandDigest, req.TrajectoryID); err != nil {
 		return types.LifecycleResult{}, err
 	}
 	if req.ExpectedLifecycleVersion <= 0 || req.ExpectedHeadRevisionID == "" {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle commit head: expected lifecycle version and head are required")
 	}
-	if req.OwnerCorrection != nil && (req.Unbound || req.OwnerCorrection.RequestID == "" || req.OwnerCorrection.InstructionID == "" || req.OwnerCorrection.TargetAgentID == "" || req.OwnerCorrection.TargetWorkItemID == "" || req.OwnerCorrection.Content == "") {
-		return types.LifecycleResult{}, fmt.Errorf("lifecycle commit head: live owner correction requires complete occurrence and Texture work binding")
-	}
-	var computedDigest string
-	var digestErr error
-	if req.OwnerCorrection == nil && len(sourceGraph.SourceEntities) == 0 && len(sourceGraph.SourceRefs) == 0 {
-		computedDigest, digestErr = ComputeCommitLifecycleArtifactHeadDigest(req)
-		if digestErr == nil && strings.TrimSpace(req.CommandDigest) != computedDigest {
-			// The explicit WithSourceGraph entry point has its own joined digest
-			// domain, while the legacy wrapper must replay historical receipts.
-			computedDigest, digestErr = ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(req, sourceGraph)
-		}
-	} else {
-		computedDigest, digestErr = ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(req, sourceGraph)
-	}
+	computedDigest, digestErr := ComputeCommitLifecycleArtifactHeadDigest(req)
 	if err := requireLifecycleDigest(req.CommandDigest, computedDigest, digestErr); err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -3022,150 +2524,41 @@ func (s *Store) CommitLifecycleArtifactHeadWithSourceGraph(ctx context.Context, 
 		return types.LifecycleResult{}, err
 	}
 	if req.Unbound {
-		return s.commitUnboundTextureArtifactHead(ctx, req, trajectoryObj, trajectory, documentObj, document, headObj, revision, sourceGraph, now)
+		return s.commitUnboundTextureArtifactHead(ctx, req, trajectoryObj, trajectory, documentObj, document, headObj, revision, now)
 	}
-	seq := trajectory.ReducerSeq + 1
-	revisionSeq := seq
-	revisionMeta := lifecycleMetadata("revision_id", revision.RevisionID, computerID, req.TrajectoryID, revisionSeq)
+	nextSeq := trajectory.ReducerSeq + 1
+	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = nextSeq, trajectory.LifecycleVersion+1, now
+	revisionMeta := lifecycleMetadata("revision_id", revision.RevisionID, computerID, req.TrajectoryID, nextSeq)
 	revisionMeta["doc_id"], revisionMeta["revision_hash"] = docID, revision.RevisionHash
 	revisionObj, err := lifecycleObject(ogKindTexRev, ownerID, computerID, revision.RevisionID, revision, revisionMeta, now, now)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	documentMeta := lifecycleMetadata("doc_id", docID, computerID, req.TrajectoryID, revisionSeq)
+	documentMeta := lifecycleMetadata("doc_id", docID, computerID, req.TrajectoryID, nextSeq)
 	documentMeta["current_revision_id"] = revision.RevisionID
 	documentUpdated, err := lifecycleObject(ogKindTexDoc, ownerID, computerID, docID, document, documentMeta, documentObj.CreatedAt, now)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	objects := []objectgraph.Object{documentUpdated, revisionObj}
-	conditions := []objectgraph.ObjectCondition{
-		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
-		{CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash},
-		{CanonicalID: headObj.CanonicalID, Exists: true, ExpectedContentHash: headObj.ContentHash},
-		{CanonicalID: revisionObj.CanonicalID},
+	trajectoryUpdated, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, req.TrajectoryID, trajectory, lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, nextSeq), trajectoryObj.CreatedAt, now)
+	if err != nil {
+		return types.LifecycleResult{}, err
 	}
-	sourceObjects, sourceConditions, sourceErr := s.lifecycleSourceGraphBatch(ctx, revision, sourceGraph, now)
-	if sourceErr != nil {
-		return types.LifecycleResult{}, fmt.Errorf("lifecycle commit head source graph: %w", sourceErr)
-	}
-	objects, conditions = append(objects, sourceObjects...), append(conditions, sourceConditions...)
-	events := []types.LifecycleEvent{{
-		EventID: req.CommandID + ":1", OwnerID: ownerID, ComputerID: computerID,
+	event := types.LifecycleEvent{
+		EventID: req.CommandID + ":" + fmt.Sprintf("%d", nextSeq), OwnerID: ownerID, ComputerID: computerID,
 		TrajectoryID: req.TrajectoryID, Kind: types.LifecycleArtifactHeadAdvanced,
-		ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: revisionSeq,
+		ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: nextSeq,
 		CommandID: req.CommandID, CommandDigest: req.CommandDigest,
 		ArtifactRefs: []string{docID, revision.RevisionID}, CreatedAt: now,
-	}}
-	var ownerInstruction *types.LifecycleOwnerInstruction
-	if req.OwnerCorrection != nil {
-		if revision.AuthorKind != types.AuthorUser {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-		correction := req.OwnerCorrection
-		if correction.TargetAgentID != "texture:"+docID {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-		agentObj, agent, agentErr := s.textureTurnAgentObject(ctx, ownerID, computerID, correction.TargetAgentID)
-		if agentErr != nil {
-			return types.LifecycleResult{}, agentErr
-		}
-		workObj, work, workErr := s.lifecycleWorkObject(ctx, ownerID, computerID, correction.TargetWorkItemID)
-		if workErr != nil {
-			return types.LifecycleResult{}, workErr
-		}
-		if agent.Profile != agentprofile.Texture || agent.Role != agentprofile.Texture || agent.ChannelID != docID ||
-			work.Status != types.WorkItemOpen || work.TrajectoryID != req.TrajectoryID || work.AssignedAgentID != correction.TargetAgentID || work.AuthorityProfile != agentprofile.Texture {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-
-		// A direct canonical edit supersedes the old head, not the owner's
-		// already-queued intent. Rebase the complete ordered old-head occurrence
-		// set to the new head in this same CAS batch, then append the edit's own
-		// correction occurrence. ReducerSeq is intentionally preserved so every
-		// pre-edit tell keeps its original order ahead of the new correction.
-		pendingOldHead, pendingErr := s.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, computerID, req.TrajectoryID, correction.TargetAgentID, req.ExpectedHeadRevisionID)
-		if pendingErr != nil {
-			return types.LifecycleResult{}, pendingErr
-		}
-		for _, oldInstruction := range pendingOldHead {
-			if oldInstruction.InstructionID == correction.InstructionID {
-				return types.LifecycleResult{}, ErrLifecycleCommandConflict
-			}
-			oldObj, storedInstruction, loadErr := s.lifecycleOwnerInstructionObject(ctx, ownerID, computerID, req.TrajectoryID, oldInstruction.InstructionID)
-			if loadErr != nil {
-				return types.LifecycleResult{}, loadErr
-			}
-			if storedInstruction.Status != types.LifecycleOwnerInstructionPending ||
-				storedInstruction.HeadRevisionID != req.ExpectedHeadRevisionID ||
-				storedInstruction.TargetAgentID != correction.TargetAgentID ||
-				storedInstruction.DocumentID != docID || storedInstruction.TrajectoryID != req.TrajectoryID {
-				return types.LifecycleResult{}, ErrConcurrentStateChange
-			}
-			storedInstruction.HeadRevisionID = revision.RevisionID
-			storedInstruction.TargetWorkItemID = correction.TargetWorkItemID
-			storedInstruction.LifecycleVersion++
-			updatedOld, buildErr := lifecycleObject(ogKindOwnerInstruction, ownerID, computerID,
-				req.TrajectoryID+"\x00"+storedInstruction.InstructionID, storedInstruction,
-				lifecycleMetadata("instruction_id", storedInstruction.InstructionID, computerID, req.TrajectoryID, storedInstruction.ReducerSeq), oldObj.CreatedAt, now)
-			if buildErr != nil {
-				return types.LifecycleResult{}, buildErr
-			}
-			conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: oldObj.CanonicalID, Exists: true, ExpectedContentHash: oldObj.ContentHash})
-			objects = append(objects, updatedOld)
-		}
-
-		seq++
-		instruction := types.LifecycleOwnerInstruction{
-			Schema: types.LifecycleOwnerInstructionSchemaV1, InstructionID: correction.InstructionID, RequestID: correction.RequestID,
-			OwnerID: ownerID, ComputerID: computerID, DocumentID: docID, TrajectoryID: req.TrajectoryID,
-			TargetAgentID: correction.TargetAgentID, TargetWorkItemID: correction.TargetWorkItemID, HeadRevisionID: revision.RevisionID,
-			Kind: types.LifecycleOwnerCorrect, Content: correction.Content, Status: types.LifecycleOwnerInstructionPending,
-			LifecycleVersion: 1, ReducerSeq: seq, CreatedAt: now,
-		}
-		instructionKey := req.TrajectoryID + "\x00" + instruction.InstructionID
-		instructionObj, buildErr := lifecycleObject(ogKindOwnerInstruction, ownerID, computerID, instructionKey, instruction,
-			lifecycleMetadata("instruction_id", instruction.InstructionID, computerID, req.TrajectoryID, seq), now, now)
-		if buildErr != nil {
-			return types.LifecycleResult{}, buildErr
-		}
-		conditions = append(conditions,
-			objectgraph.ObjectCondition{CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash},
-			objectgraph.ObjectCondition{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash},
-			objectgraph.ObjectCondition{CanonicalID: instructionObj.CanonicalID},
-		)
-		objects = append(objects, instructionObj)
-		events = append(events, types.LifecycleEvent{
-			EventID: req.CommandID + ":2", OwnerID: ownerID, ComputerID: computerID, TrajectoryID: req.TrajectoryID,
-			WorkItemID: correction.TargetWorkItemID, Kind: types.LifecycleOwnerInstructionQueued,
-			ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: seq, CommandID: req.CommandID,
-			CommandDigest: req.CommandDigest, RequestID: correction.RequestID, ArtifactRefs: []string{instructionObj.CanonicalID}, CreatedAt: now,
-		})
-		ownerInstruction = &instruction
 	}
-	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = seq, trajectory.LifecycleVersion+1, now
-	trajectoryUpdated, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, req.TrajectoryID, trajectory,
-		lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, seq), trajectoryObj.CreatedAt, now)
+	eventObj, err := lifecycleObject(ogKindLifecycleEvent, ownerID, computerID, event.EventID, event, lifecycleMetadata("event_id", event.EventID, computerID, req.TrajectoryID, nextSeq), now, now)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	objects = append(objects, trajectoryUpdated)
-	eventObjs := make([]objectgraph.Object, 0, len(events))
-	for _, event := range events {
-		eventObj, buildErr := lifecycleObject(ogKindLifecycleEvent, ownerID, computerID, event.EventID, event,
-			lifecycleMetadata("event_id", event.EventID, computerID, req.TrajectoryID, event.ReducerSeq), now, now)
-		if buildErr != nil {
-			return types.LifecycleResult{}, buildErr
-		}
-		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: eventObj.CanonicalID})
-		objects, eventObjs = append(objects, eventObj), append(eventObjs, eventObj)
-	}
-	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID, req.CommandID, req.CommandDigest, types.LifecycleCommitArtifactHead, seq, eventObjs)
+	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID, req.CommandID, req.CommandDigest, types.LifecycleCommitArtifactHead, nextSeq, []objectgraph.Object{eventObj})
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: receiptObj.CanonicalID})
-	objects = append(objects, receiptObj)
 	edgeMetadata := json.RawMessage(`{}`)
 	documentEdgeID, err := objectgraph.BuildEdgeID(revisionObj.CanonicalID, documentUpdated.CanonicalID, ogEdgeDocRevision, edgeMetadata)
 	if err != nil {
@@ -3175,12 +2568,18 @@ func (s *Store) CommitLifecycleArtifactHeadWithSourceGraph(ctx context.Context, 
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	result := types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Document: &document, Revision: &revision, OwnerInstruction: ownerInstruction, Events: events}
-	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, result,
+	conditions := []objectgraph.ObjectCondition{
+		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
+		{CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash},
+		{CanonicalID: headObj.CanonicalID, Exists: true, ExpectedContentHash: headObj.ContentHash},
+		{CanonicalID: revisionObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
+	}
+	result := types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Document: &document, Revision: &revision, Events: []types.LifecycleEvent{event}}
+	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions,
+		[]objectgraph.Object{trajectoryUpdated, documentUpdated, revisionObj, eventObj, receiptObj}, result,
 		objectgraph.Edge{EdgeID: documentEdgeID, FromID: revisionObj.CanonicalID, ToID: documentUpdated.CanonicalID, Kind: ogEdgeDocRevision, Metadata: edgeMetadata, CreatedAt: now},
 		objectgraph.Edge{EdgeID: parentEdgeID, FromID: revisionObj.CanonicalID, ToID: headObj.CanonicalID, Kind: ogEdgeRevParent, Metadata: edgeMetadata, CreatedAt: now},
 	)
-
 }
 
 func (s *Store) commitUnboundTextureArtifactHead(
@@ -3192,7 +2591,6 @@ func (s *Store) commitUnboundTextureArtifactHead(
 	document types.Document,
 	headObj objectgraph.Object,
 	revision types.Revision,
-	sourceGraph TextureSourceGraphWriteSet,
 	now time.Time,
 ) (types.LifecycleResult, error) {
 	ownerID, computerID := req.OwnerID, req.ComputerID
@@ -3239,10 +2637,6 @@ func (s *Store) commitUnboundTextureArtifactHead(
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	sourceObjects, sourceConditions, sourceErr := s.lifecycleSourceGraphBatch(ctx, revision, sourceGraph, now)
-	if sourceErr != nil {
-		return types.LifecycleResult{}, fmt.Errorf("unbound lifecycle commit head source graph: %w", sourceErr)
-	}
 	conditions := []objectgraph.ObjectCondition{
 		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
 		{CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash},
@@ -3252,14 +2646,13 @@ func (s *Store) commitUnboundTextureArtifactHead(
 		{CanonicalID: receiptObj.CanonicalID},
 		sequenceCondition,
 	}
-	conditions = append(conditions, sourceConditions...)
 	result := types.LifecycleResult{
 		Receipt: receipt, Trajectory: trajectory, Document: &document, Revision: &revision,
 		Events: []types.LifecycleEvent{event},
 	}
 	return s.commitLifecycleTransition(
 		ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions,
-		append([]objectgraph.Object{documentUpdated, revisionObj, eventObj, receiptObj, sequenceUpdated}, sourceObjects...), result,
+		[]objectgraph.Object{documentUpdated, revisionObj, eventObj, receiptObj, sequenceUpdated}, result,
 		objectgraph.Edge{EdgeID: documentEdgeID, FromID: revisionObj.CanonicalID, ToID: documentUpdated.CanonicalID, Kind: ogEdgeDocRevision, Metadata: edgeMetadata, CreatedAt: now},
 		objectgraph.Edge{EdgeID: parentEdgeID, FromID: revisionObj.CanonicalID, ToID: headObj.CanonicalID, Kind: ogEdgeRevParent, Metadata: edgeMetadata, CreatedAt: now},
 	)
@@ -3505,10 +2898,6 @@ func (s *Store) applyLifecycleUpdate(ctx context.Context, req types.ApplyLifecyc
 		revision.OwnerID, revision.ComputerID, revision.TrajectoryID = ownerID, computerID, req.TrajectoryID
 		if revision.ParentRevisionID == "" {
 			revision.ParentRevisionID = document.CurrentRevisionID
-		}
-		revision, _, _, err = prepareTextureRevisionV2(revision)
-		if err != nil {
-			return types.LifecycleResult{}, fmt.Errorf("lifecycle incorporate update: prepare revision: %w", err)
 		}
 		document, revision, buildErr := commitTextureHeadAuthority(document, &head, revision, now)
 		if errors.Is(buildErr, ErrStaleDocumentHead) {
@@ -4155,118 +3544,6 @@ func (s *Store) ArchiveLifecycleArtifact(ctx context.Context, req types.ArchiveL
 	})
 }
 
-// PrepareLifecycleCancellation durably records the exact caller cancellation
-// authority before any capsule revoke/destroy/inspection effect. Equal retry is
-// idempotent; command, original CAS, head, or reason conflict fail closed.
-func (s *Store) PrepareLifecycleCancellation(ctx context.Context, req types.CancelLifecycleRequest) (types.LifecycleCancellationIntent, error) {
-	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
-	if err != nil {
-		return types.LifecycleCancellationIntent{}, err
-	}
-	req.OwnerID, req.ComputerID = ownerID, computerID
-	req.CommandID, req.CommandDigest, req.TrajectoryID = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest), strings.TrimSpace(req.TrajectoryID)
-	req.ExpectedHeadRevisionID, req.Reason = strings.TrimSpace(req.ExpectedHeadRevisionID), strings.TrimSpace(req.Reason)
-	if req.RequestedLifecycleVersion == 0 {
-		req.RequestedLifecycleVersion = req.ExpectedLifecycleVersion
-	}
-	if err := validateLifecycleCommand(req.CommandID, req.CommandDigest, req.TrajectoryID); err != nil || req.RequestedLifecycleVersion <= 0 || req.ExpectedLifecycleVersion != req.RequestedLifecycleVersion || req.ExpectedHeadRevisionID == "" || req.Reason == "" {
-		return types.LifecycleCancellationIntent{}, ErrLifecycleInvalidTransition
-	}
-	computed, digestErr := ComputeCancelLifecycleDigest(req)
-	if err := requireLifecycleDigest(req.CommandDigest, computed, digestErr); err != nil {
-		return types.LifecycleCancellationIntent{}, err
-	}
-	s.trajectoryMu.Lock()
-	defer s.trajectoryMu.Unlock()
-	intentKey := req.TrajectoryID
-	if existing, getErr := s.lifecycleGetObject(ctx, ogKindLifecycleCancelIntent, ownerID, computerID, intentKey); getErr == nil {
-		intent, decodeErr := decodeLifecycleObject[types.LifecycleCancellationIntent](existing)
-		if decodeErr != nil {
-			return types.LifecycleCancellationIntent{}, decodeErr
-		}
-		if intent.CommandID != req.CommandID || intent.CommandDigest != req.CommandDigest || intent.RequestedLifecycleVersion != req.RequestedLifecycleVersion || intent.ExpectedHeadRevisionID != req.ExpectedHeadRevisionID || intent.Reason != req.Reason {
-			return types.LifecycleCancellationIntent{}, ErrLifecycleCommandConflict
-		}
-		return intent, nil
-	} else if !errors.Is(getErr, ErrNotFound) {
-		return types.LifecycleCancellationIntent{}, getErr
-	}
-	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, req.TrajectoryID)
-	if err != nil {
-		return types.LifecycleCancellationIntent{}, err
-	}
-	if snapshot.Trajectory.Status != types.TrajectoryLive || snapshot.Trajectory.LifecycleVersion != req.RequestedLifecycleVersion || snapshot.HeadRevision.RevisionID != req.ExpectedHeadRevisionID {
-		return types.LifecycleCancellationIntent{}, ErrConcurrentStateChange
-	}
-	now := time.Now().UTC()
-	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, ownerID, computerID, req.TrajectoryID)
-	if err != nil {
-		return types.LifecycleCancellationIntent{}, err
-	}
-	if trajectory.Status != types.TrajectoryLive || trajectory.LifecycleVersion != req.RequestedLifecycleVersion {
-		return types.LifecycleCancellationIntent{}, ErrConcurrentStateChange
-	}
-	seq := trajectory.ReducerSeq + 1
-	intent := types.LifecycleCancellationIntent{OwnerID: ownerID, ComputerID: computerID, TrajectoryID: req.TrajectoryID,
-		CommandID: req.CommandID, CommandDigest: req.CommandDigest, RequestedLifecycleVersion: req.RequestedLifecycleVersion,
-		ExpectedHeadRevisionID: req.ExpectedHeadRevisionID, Reason: req.Reason, CreatedAt: now}
-	intentObj, err := lifecycleObject(ogKindLifecycleCancelIntent, ownerID, computerID, intentKey, intent,
-		lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, seq), now, now)
-	if err != nil {
-		return types.LifecycleCancellationIntent{}, err
-	}
-	intentCommandID := req.CommandID + ":intent"
-	intentCommandDigest, err := lifecycleDigest(struct {
-		Domain, CancelCommandID, CancelCommandDigest string
-	}{Domain: "choir.lifecycle.cancel-intent/v1", CancelCommandID: req.CommandID, CancelCommandDigest: req.CommandDigest})
-	if err != nil {
-		return types.LifecycleCancellationIntent{}, err
-	}
-	event := types.LifecycleEvent{EventID: intentCommandID + ":1", OwnerID: ownerID, ComputerID: computerID,
-		TrajectoryID: req.TrajectoryID, Kind: types.LifecycleTrajectoryCancellationRequested,
-		ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: seq, CommandID: intentCommandID,
-		CommandDigest: intentCommandDigest, ArtifactRefs: []string{intentObj.CanonicalID}, Reason: req.Reason, CreatedAt: now}
-	eventObj, err := lifecycleObject(ogKindLifecycleEvent, ownerID, computerID, event.EventID, event,
-		lifecycleMetadata("event_id", event.EventID, computerID, req.TrajectoryID, seq), now, now)
-	if err != nil {
-		return types.LifecycleCancellationIntent{}, err
-	}
-	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = seq, trajectory.LifecycleVersion+1, now
-	trajectoryUpdated, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, req.TrajectoryID, trajectory,
-		lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, seq), trajectoryObj.CreatedAt, now)
-	if err != nil {
-		return types.LifecycleCancellationIntent{}, err
-	}
-	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID,
-		intentCommandID, intentCommandDigest, types.LifecyclePrepareCancelTrajectory, seq, []objectgraph.Object{eventObj})
-	if err != nil {
-		return types.LifecycleCancellationIntent{}, err
-	}
-	conditions := []objectgraph.ObjectCondition{
-		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
-		{CanonicalID: intentObj.CanonicalID}, {CanonicalID: eventObj.CanonicalID}, {CanonicalID: receiptObj.CanonicalID},
-	}
-	_, err = s.commitLifecycleTransition(ctx, ownerID, computerID, intentCommandID, intentCommandDigest, conditions,
-		[]objectgraph.Object{trajectoryUpdated, intentObj, eventObj, receiptObj},
-		types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Events: []types.LifecycleEvent{event}})
-	if err != nil {
-		return types.LifecycleCancellationIntent{}, err
-	}
-	return intent, nil
-}
-
-func (s *Store) GetLifecycleCancellationIntent(ctx context.Context, ownerID, computerID, trajectoryID string) (types.LifecycleCancellationIntent, error) {
-	obj, err := s.lifecycleGetObject(ctx, ogKindLifecycleCancelIntent, strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(trajectoryID))
-	if err != nil {
-		return types.LifecycleCancellationIntent{}, err
-	}
-	intent, err := decodeLifecycleObject[types.LifecycleCancellationIntent](obj)
-	if err != nil {
-		return types.LifecycleCancellationIntent{}, err
-	}
-	return intent, nil
-}
-
 // item, and every pending update in the same reducer transition.
 func (s *Store) CancelLifecycleTrajectory(ctx context.Context, req types.CancelLifecycleRequest) (types.LifecycleResult, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
@@ -4295,17 +3572,6 @@ func (s *Store) CancelLifecycleTrajectory(ctx context.Context, req types.CancelL
 	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, ownerID, computerID, req.TrajectoryID)
 	if err != nil {
 		return types.LifecycleResult{}, err
-	}
-	if req.RequestedLifecycleVersion > 0 {
-		intentObj, intentErr := s.lifecycleGetObject(ctx, ogKindLifecycleCancelIntent, ownerID, computerID, req.TrajectoryID)
-		if intentErr != nil {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-		intent, decodeErr := decodeLifecycleObject[types.LifecycleCancellationIntent](intentObj)
-		if decodeErr != nil || intent.CommandID != req.CommandID || intent.CommandDigest != req.CommandDigest ||
-			intent.RequestedLifecycleVersion != req.RequestedLifecycleVersion || intent.ExpectedHeadRevisionID != req.ExpectedHeadRevisionID || intent.Reason != req.Reason {
-			return types.LifecycleResult{}, ErrLifecycleCommandConflict
-		}
 	}
 	if trajectory.Status != types.TrajectoryLive {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition

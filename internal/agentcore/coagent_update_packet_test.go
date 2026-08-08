@@ -1,11 +1,14 @@
 package agentcore
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/provider"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -84,5 +87,31 @@ func TestRunSupportsCoagentUpdateInjectionIncludesTexture(t *testing.T) {
 	}
 	if !runSupportsCoagentUpdateInjection(rec) {
 		t.Fatal("texture runs should support coagent update injection")
+	}
+}
+
+func TestResolveResearcherFindingsTargetRequiresExplicitTextureAgent(t *testing.T) {
+	t.Parallel()
+	rt, _ := testRuntimeWithProviderAndRegistry(t, provider.NewStubProvider(0), nil)
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
+		Metadata: map[string]any{
+			runMetadataAgentProfile: agentprofile.Researcher,
+			"requested_by_profile":  agentprofile.Texture,
+			"requested_by_agent_id": "texture:doc-target",
+			runMetadataChannelID:    "doc-target",
+		},
+	}))
+	if _, _, err := resolveFindingsTarget(ctx, rt, ""); err == nil || !strings.Contains(err.Error(), "requires agent_id") {
+		t.Fatalf("missing agent_id err = %v, want requires agent_id", err)
+	}
+	target, channel, err := resolveFindingsTarget(ctx, rt, "texture:doc-target")
+	if err != nil {
+		t.Fatalf("resolve target: %v", err)
+	}
+	if target != "texture:doc-target" || channel != "doc-target" {
+		t.Fatalf("target/channel = %q/%q, want texture:doc-target/doc-target", target, channel)
+	}
+	if _, _, err := resolveFindingsTarget(ctx, rt, "super:primary"); err == nil || !strings.Contains(err.Error(), "Texture coagent") {
+		t.Fatalf("non-texture agent_id err = %v, want Texture coagent requirement", err)
 	}
 }

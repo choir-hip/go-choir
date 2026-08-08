@@ -1,5 +1,5 @@
 // Package agentprofile defines canonical agent profile identifiers,
-// normalization, capabilities, and spawn/message policy.
+// normalization, capabilities, and delegation policy.
 package agentprofile
 
 import "strings"
@@ -15,7 +15,7 @@ const (
 	Email      = "email"
 )
 
-// Policy is the canonical capability, spawn, and message policy for an agent profile.
+// Policy is the canonical capability and delegation policy for an agent profile.
 type Policy struct {
 	Profile                   string
 	AllowReadOnlyFiles        bool
@@ -24,18 +24,17 @@ type Policy struct {
 	AllowMemoryTools          bool
 	AllowModelDiagnosticTools bool
 	AllowCoAgentTools         bool
-	AllowedSpawnTargets       []string
-	AllowedMessageTargets     []string
+	AllowedDelegateTargets    []string
 }
 
-// PolicyFor returns the capability, spawn, and message policy for profile.
+// PolicyFor returns the capability and delegation policy for profile.
 func PolicyFor(profile string) Policy {
 	switch Canonical(profile) {
 	case Conductor:
 		return Policy{
-			Profile:             Conductor,
-			AllowCoAgentTools:   true,
-			AllowedSpawnTargets: []string{Texture},
+			Profile:                Conductor,
+			AllowCoAgentTools:      true,
+			AllowedDelegateTargets: []string{Texture},
 		}
 	case Researcher:
 		return Policy{
@@ -46,8 +45,7 @@ func PolicyFor(profile string) Policy {
 			AllowMemoryTools:          true,
 			AllowModelDiagnosticTools: true,
 			AllowCoAgentTools:         true,
-			AllowedSpawnTargets:       nil,
-			AllowedMessageTargets:     []string{Texture},
+			AllowedDelegateTargets:    nil,
 		}
 	case Texture:
 		// Texture is the artifact control plane, not an evidence gatherer. It does
@@ -55,11 +53,10 @@ func PolicyFor(profile string) Policy {
 		// the verify_model_capability diagnostic by default. It keeps run-memory
 		// retrieval so it can recover its own compacted context.
 		return Policy{
-			Profile:               Texture,
-			AllowMemoryTools:      true,
-			AllowCoAgentTools:     true,
-			AllowedSpawnTargets:   []string{Researcher},
-			AllowedMessageTargets: []string{Researcher, Super},
+			Profile:                Texture,
+			AllowMemoryTools:       true,
+			AllowCoAgentTools:      true,
+			AllowedDelegateTargets: []string{Researcher},
 		}
 	case Processor:
 		return Policy{
@@ -70,8 +67,7 @@ func PolicyFor(profile string) Policy {
 			AllowMemoryTools:          true,
 			AllowModelDiagnosticTools: true,
 			AllowCoAgentTools:         true,
-			AllowedSpawnTargets:       []string{Texture},
-			AllowedMessageTargets:     []string{Texture},
+			AllowedDelegateTargets:    []string{Texture},
 		}
 	case Reconciler:
 		return Policy{
@@ -82,14 +78,11 @@ func PolicyFor(profile string) Policy {
 			AllowMemoryTools:          true,
 			AllowModelDiagnosticTools: true,
 			AllowCoAgentTools:         true,
-			AllowedSpawnTargets:       []string{Texture},
-			AllowedMessageTargets:     []string{Texture},
+			AllowedDelegateTargets:    []string{Texture},
 		}
 	case Email:
 		return Policy{Profile: Email}
 	case CoSuper:
-		// CoSuper has no static authority. The assignment runtime constructs a
-		// fresh per-run registry from the exact capsule-local closed set.
 		return Policy{Profile: CoSuper}
 	case Super:
 		return Policy{
@@ -100,8 +93,7 @@ func PolicyFor(profile string) Policy {
 			AllowMemoryTools:          true,
 			AllowModelDiagnosticTools: true,
 			AllowCoAgentTools:         true,
-			AllowedSpawnTargets:       []string{Researcher},
-			AllowedMessageTargets:     []string{Texture, Researcher},
+			AllowedDelegateTargets:    []string{Researcher, CoSuper},
 		}
 	default:
 		return Policy{Profile: strings.TrimSpace(profile)}
@@ -139,23 +131,11 @@ func IsTexture(profile string) bool {
 	return Canonical(profile) == Texture
 }
 
-// CanSpawn reports whether callerProfile may spawn targetProfile.
-func CanSpawn(callerProfile, targetProfile string) bool {
+// CanDelegate reports whether callerProfile may delegate to targetProfile.
+func CanDelegate(callerProfile, targetProfile string) bool {
 	policy := PolicyFor(callerProfile)
 	targetProfile = Canonical(targetProfile)
-	for _, allowed := range policy.AllowedSpawnTargets {
-		if targetProfile == Canonical(allowed) {
-			return true
-		}
-	}
-	return false
-}
-
-// CanMessage reports whether callerProfile may address targetProfile.
-func CanMessage(callerProfile, targetProfile string) bool {
-	policy := PolicyFor(callerProfile)
-	targetProfile = Canonical(targetProfile)
-	for _, allowed := range policy.AllowedMessageTargets {
+	for _, allowed := range policy.AllowedDelegateTargets {
 		if targetProfile == Canonical(allowed) {
 			return true
 		}

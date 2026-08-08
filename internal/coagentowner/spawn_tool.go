@@ -18,7 +18,7 @@ import (
 // RegisterSpawnTool composes generic coagent lifecycle with the concrete owner
 // selected by the requested profile. No app owner is imported by agentcore.
 func RegisterSpawnTool(registry *toolregistry.ToolRegistry, core *agentcore.Runtime, texture *textureowner.Handler, policy agentprofile.Policy) error {
-	if registry == nil || len(policy.AllowedSpawnTargets) == 0 {
+	if registry == nil || len(policy.AllowedDelegateTargets) == 0 {
 		return nil
 	}
 	return registry.Register(newSpawnAgentTool(core, texture, policy))
@@ -30,13 +30,15 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 		Role                 string   `json:"role"`
 		Profile              string   `json:"profile,omitempty"`
 		ChannelID            string   `json:"channel_id,omitempty"`
+		Slot                 string   `json:"slot,omitempty"`
+		CapsuleHandle        string   `json:"capsule_handle,omitempty"`
 		Model                string   `json:"model,omitempty"`
 		ModelPolicyOverlayID string   `json:"model_policy_overlay_id,omitempty"`
 		Title                string   `json:"title,omitempty"`
 		InitialContent       string   `json:"initial_content,omitempty"`
 		SourceItemIDs        []string `json:"source_item_ids,omitempty"`
 	}
-	allowed := canonicalTargets(policy.AllowedSpawnTargets)
+	allowed := canonicalTargets(policy.AllowedDelegateTargets)
 	roleDescription := "Canonical role/profile name. Allowed target roles for this caller: " + strings.Join(allowed, ", ") + "."
 	description := "Spawn an allowed child agent run for the current " + policy.Profile + " profile."
 	if policy.Profile == agentprofile.Conductor {
@@ -50,6 +52,8 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 			"role":                    map[string]any{"type": "string", "enum": allowed, "description": roleDescription},
 			"profile":                 map[string]any{"type": "string", "enum": allowed, "description": "Optional canonical profile override. Usually omit; if set, it must be one of the allowed target roles for this caller."},
 			"channel_id":              map[string]any{"type": "string"},
+			"slot":                    map[string]any{"type": "string", "enum": []string{"implementation", "verifier"}, "description": "For super spawning co-super children: use implementation for the capsule writer first; use verifier only after frozen-bundle or blocker evidence exists. Reusing a live slot returns the existing child instead of launching a duplicate."},
+			"capsule_handle":          map[string]any{"type": "string", "description": "Opaque handle returned by spawn_capsule; required for a co-super implementation slot and never used for a verifier slot."},
 			"model":                   map[string]any{"type": "string"},
 			"model_policy_overlay_id": map[string]any{"type": "string", "description": "Optional owner-visible model policy overlay id from System/model-policy-overlays/<id>.toml. Use this for eval/model arms instead of passing provider metadata directly."},
 			"title":                   map[string]any{"type": "string", "description": "For role=texture from processor or reconciler: optional Texture document title for a new article."},
@@ -79,13 +83,23 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 				profile = role
 			}
 			callerProfile := agentprofile.Canonical(exec.Profile)
-			if callerProfile == agentprofile.Texture && exec.RunRecord != nil &&
-				strings.TrimSpace(exec.RunRecord.TrajectoryID) != "" &&
-				metadataString(exec.RunRecord.Metadata, "lifecycle_work_item_id") != "" {
-				return "", fmt.Errorf("lifecycle Texture cannot use spawn_agent; atomically open a Researcher with open_researcher, objective, and its first typed control in patch_texture, rewrite_texture, or record_texture_decision controls")
+			if !agentprofile.CanDelegate(callerProfile, profile) {
+				return "", fmt.Errorf("%s cannot delegate to %s", callerProfile, profile)
 			}
-			if !agentprofile.CanSpawn(callerProfile, profile) {
-				return "", fmt.Errorf("%s cannot spawn %s", callerProfile, profile)
+			slot := normalizeSlot(in.Slot)
+			if strings.TrimSpace(in.Slot) != "" && slot == "" {
+				return "", fmt.Errorf("spawn_agent slot must be implementation or verifier")
+			}
+			if callerProfile == agentprofile.Super && profile == agentprofile.CoSuper && slot == "" {
+				return "", fmt.Errorf("super spawn_agent role=co-super requires slot=\"implementation\" or slot=\"verifier\"")
+			}
+			if callerProfile == agentprofile.Super && profile == agentprofile.CoSuper {
+				if slot == "implementation" && strings.TrimSpace(in.CapsuleHandle) == "" {
+					return "", fmt.Errorf("co-super implementation requires capsule_handle from spawn_capsule")
+				}
+				if slot == "verifier" && strings.TrimSpace(in.CapsuleHandle) != "" {
+					return "", fmt.Errorf("co-super verifier must inspect the frozen bundle, not a live capsule")
+				}
 			}
 			if profile == agentprofile.Texture {
 				parent := exec.RunRecord
@@ -123,6 +137,12 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 				})
 			}
 			constraints := map[string]any{"agent_role": role, "agent_profile": profile}
+			if slot != "" {
+				constraints["co_super_slot"] = slot
+			}
+			if value := strings.TrimSpace(in.CapsuleHandle); value != "" {
+				constraints["capsule_control_handle"] = value
+			}
 			if value := strings.TrimSpace(in.ChannelID); value != "" {
 				constraints["channel_id"] = value
 			}

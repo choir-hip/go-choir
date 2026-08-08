@@ -515,9 +515,13 @@ func TestTextureCoagentSourceRefsSurviveInjectionAndDelivery(t *testing.T) {
 	if len(msgs) != 1 {
 		t.Fatalf("injected messages = %d, want 1", len(msgs))
 	}
-	entities, rejections := handler.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, []types.CoagentSourcePacket{stored})
-	mergeTextureSourceEntitiesIntoRunMetadata(rec, entities)
-	mergeCoagentSourceRejectionsIntoRunMetadata(rec, rejections)
+	entityID := stableSourceEntityID("source_service_item", "srcitem_native_panel")
+	if !messageTextContains(t, msgs[0], `"source_entities"`) ||
+		!messageTextContains(t, msgs[0], entityID) ||
+		!messageTextContains(t, msgs[0], "Texture source entities/transclusion refs") ||
+		!messageTextContains(t, msgs[0], "Do not write ordinary URL links") {
+		t.Fatalf("coagent packet missing native source entity fields: %s", string(msgs[0]))
+	}
 	if !hasSourceEntity(decodeAvailableTextureSourceEntities(rec.Metadata), "source_service_item", "srcitem_native_panel", "") {
 		t.Fatalf("run metadata missing injected available source entities: %#v", rec.Metadata[textureAvailableSourceEntitiesKey])
 	}
@@ -662,9 +666,6 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 	if _, err := inject(false); err != nil {
 		t.Fatalf("inject coagent update: %v", err)
 	}
-	entities, rejections := handler.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, []types.CoagentSourcePacket{update})
-	mergeTextureSourceEntitiesIntoRunMetadata(rec, entities)
-	mergeCoagentSourceRejectionsIntoRunMetadata(rec, rejections)
 	handler.createAgentMutationForRun(ctx, rec)
 	sourceEntities := decodeAvailableTextureSourceEntities(rec.Metadata)
 	entityID := stableSourceEntityID("content_item", contentID)

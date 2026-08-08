@@ -50,29 +50,28 @@ func TestPolicyFor(t *testing.T) {
 	tests := map[string]Policy{
 		Conductor: {
 			Profile: Conductor, AllowCoAgentTools: true,
-			AllowedSpawnTargets: []string{Texture},
+			AllowedDelegateTargets: []string{Texture},
 		},
 		Researcher: {
 			Profile: Researcher, AllowReadOnlyFiles: true, AllowResearchTools: true,
 			AllowEvidenceTools: true, AllowMemoryTools: true,
 			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
-			AllowedMessageTargets: []string{Texture},
 		},
 		Texture: {
 			Profile: Texture, AllowMemoryTools: true, AllowCoAgentTools: true,
-			AllowedSpawnTargets: []string{Researcher}, AllowedMessageTargets: []string{Researcher, Super},
+			AllowedDelegateTargets: []string{Researcher},
 		},
 		Processor: {
 			Profile: Processor, AllowReadOnlyFiles: true, AllowResearchTools: true,
 			AllowEvidenceTools: true, AllowMemoryTools: true,
 			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
-			AllowedSpawnTargets: []string{Texture}, AllowedMessageTargets: []string{Texture},
+			AllowedDelegateTargets: []string{Texture},
 		},
 		Reconciler: {
 			Profile: Reconciler, AllowReadOnlyFiles: true, AllowResearchTools: true,
 			AllowEvidenceTools: true, AllowMemoryTools: true,
 			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
-			AllowedSpawnTargets: []string{Texture}, AllowedMessageTargets: []string{Texture},
+			AllowedDelegateTargets: []string{Texture},
 		},
 		Email:   {Profile: Email},
 		CoSuper: {Profile: CoSuper},
@@ -80,7 +79,7 @@ func TestPolicyFor(t *testing.T) {
 			Profile: Super, AllowReadOnlyFiles: true, AllowResearchTools: true,
 			AllowEvidenceTools: true, AllowMemoryTools: true,
 			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
-			AllowedSpawnTargets: []string{Researcher}, AllowedMessageTargets: []string{Texture, Researcher},
+			AllowedDelegateTargets: []string{Researcher, CoSuper},
 		},
 	}
 	for profile, want := range tests {
@@ -99,58 +98,30 @@ func TestPolicyFor(t *testing.T) {
 	}
 }
 
-func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
+func TestCanDelegate(t *testing.T) {
 	t.Parallel()
 
-	profiles := []string{Conductor, Super, CoSuper, Researcher, Texture, Processor, Reconciler, Email}
-	spawn := map[string]map[string]bool{
-		Conductor:  {Texture: true},
-		Super:      {Researcher: true},
-		Texture:    {Researcher: true},
-		Processor:  {Texture: true},
-		Reconciler: {Texture: true},
-	}
-	message := map[string]map[string]bool{
-		Super:      {Texture: true, Researcher: true},
-		Researcher: {Texture: true},
-		Texture:    {Researcher: true, Super: true},
-		Processor:  {Texture: true},
-		Reconciler: {Texture: true},
-	}
-	for _, caller := range profiles {
-		caller := caller
-		t.Run(caller, func(t *testing.T) {
-			t.Parallel()
-			for _, target := range profiles {
-				if got, want := CanSpawn(caller, target), spawn[caller][target]; got != want {
-					t.Errorf("CanSpawn(%q, %q) = %v, want %v", caller, target, got, want)
-				}
-				if got, want := CanMessage(caller, target), message[caller][target]; got != want {
-					t.Errorf("CanMessage(%q, %q) = %v, want %v", caller, target, got, want)
-				}
-			}
-		})
-	}
-
-	if CanSpawn(Texture, Super) || !CanMessage(Texture, Super) {
-		t.Fatal("Texture must message but never spawn Super")
-	}
-	if CanMessage(Texture, CoSuper) {
-		t.Fatal("Texture must never message CoSuper")
-	}
-	if !CanSpawn(Conductor, "document_agent") || CanMessage(Conductor, "document_agent") {
-		t.Fatal("canonical aliases must preserve Conductor spawn-only Texture authority")
-	}
-	for _, check := range []struct {
+	for _, tt := range []struct {
 		caller string
 		target string
+		want   bool
 	}{
-		{"unknown", Researcher},
-		{Super, "unknown"},
-		{"unknown", "unknown"},
+		{Conductor, Texture, true},
+		{Conductor, "document_agent", true},
+		{Processor, Texture, true},
+		{Reconciler, Texture, true},
+		{Texture, Researcher, true},
+		{CoSuper, Researcher, false},
+		{Super, Researcher, true},
+		{Super, CoSuper, true},
+		{Researcher, Texture, false},
+		{Texture, Super, false},
+		{Email, Researcher, false},
+		{"unknown", Researcher, false},
+		{Super, "unknown", false},
 	} {
-		if CanSpawn(check.caller, check.target) || CanMessage(check.caller, check.target) {
-			t.Errorf("unknown policy unexpectedly allowed %q -> %q", check.caller, check.target)
+		if got := CanDelegate(tt.caller, tt.target); got != tt.want {
+			t.Errorf("CanDelegate(%q, %q) = %v, want %v", tt.caller, tt.target, got, tt.want)
 		}
 	}
 }

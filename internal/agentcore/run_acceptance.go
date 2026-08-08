@@ -161,14 +161,16 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		builder.addCheckpoint(runAcceptanceCheckpointTextureOpened, "passed", at, 0, []string{refID}, map[string]any{"doc_id": docID})
 	}
 
-	directionResults := collectAcceptanceToolResults(events, "apply_texture_turn")
-	if len(directionResults) > 0 {
-		item := directionResults[0]
-		ref := builder.addEventEvidence(item.event, "Texture committed a typed lifecycle direction opener", map[string]any{
-			"tool": "apply_texture_turn", "command_id": payloadString(item.output, "command_id"),
+	superResults := collectAcceptanceToolResults(events, "request_super_execution")
+	if len(superResults) > 0 {
+		item := superResults[0]
+		ref := builder.addEventEvidence(item.event, "Texture requested persistent super execution", map[string]any{
+			"tool":    "request_super_execution",
+			"loop_id": payloadString(item.output, "loop_id"),
 		})
-		builder.addCheckpoint("super_direction_opened", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, map[string]any{
-			"command_id": payloadString(item.output, "command_id"), "receipt_kind": "apply_texture_turn",
+		builder.addCheckpoint("super_requested", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, map[string]any{
+			"super_loop_id": payloadString(item.output, "loop_id"),
+			"agent_id":      payloadString(item.output, "agent_id"),
 		})
 	}
 
@@ -731,7 +733,7 @@ func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types
 	if has["submitted"] && textureOpened {
 		level = types.RunAcceptanceStagingSmokeLevel
 	}
-	if has["submitted"] && textureOpened && has["super_direction_opened"] {
+	if has["submitted"] && textureOpened && has["super_requested"] {
 		state = types.RunAcceptanceAccepted
 	}
 	// RunAcceptance is trajectory diagnostics only. Export, promotion, and
@@ -785,7 +787,7 @@ func acceptanceRecordHasPassedCheckpoint(rec types.RunAcceptanceRecord, kind str
 
 func acceptanceCheckpointPhaseOrderOK(checkpoints []types.RunAcceptanceCheckpoint) bool {
 	phaseByKind := map[string]int{
-		"super_direction_opened":        1,
+		"super_requested":               1,
 		"durable_agent_completed":       2,
 		"capsule_effect_frozen":         3,
 		"capsule_verification_recorded": 4,

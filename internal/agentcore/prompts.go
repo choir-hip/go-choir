@@ -40,13 +40,12 @@ type toolDescriptorResponse struct {
 }
 
 type rolePolicyResponse struct {
-	Profile               string   `json:"profile"`
-	AllowedSpawnTargets   []string `json:"allowed_spawn_targets,omitempty"`
-	AllowedMessageTargets []string `json:"allowed_message_targets,omitempty"`
-	AllowReadOnlyFiles    bool     `json:"allow_read_only_files"`
-	AllowResearchTools    bool     `json:"allow_research_tools"`
-	AllowEvidenceTools    bool     `json:"allow_evidence_tools"`
-	AllowCoAgentTools     bool     `json:"allow_coagent_tools"`
+	Profile                string   `json:"profile"`
+	AllowedDelegateTargets []string `json:"allowed_delegate_targets,omitempty"`
+	AllowReadOnlyFiles     bool     `json:"allow_read_only_files"`
+	AllowResearchTools     bool     `json:"allow_research_tools"`
+	AllowEvidenceTools     bool     `json:"allow_evidence_tools"`
+	AllowCoAgentTools      bool     `json:"allow_coagent_tools"`
 }
 
 func promptSourceLabel(source string) string {
@@ -62,13 +61,12 @@ func promptSourceLabel(source string) string {
 
 func rolePolicyFromSpec(spec agentprofile.Policy) rolePolicyResponse {
 	return rolePolicyResponse{
-		Profile:               spec.Profile,
-		AllowedSpawnTargets:   append([]string(nil), spec.AllowedSpawnTargets...),
-		AllowedMessageTargets: append([]string(nil), spec.AllowedMessageTargets...),
-		AllowReadOnlyFiles:    spec.AllowReadOnlyFiles,
-		AllowResearchTools:    spec.AllowResearchTools,
-		AllowEvidenceTools:    spec.AllowEvidenceTools,
-		AllowCoAgentTools:     spec.AllowCoAgentTools,
+		Profile:                spec.Profile,
+		AllowedDelegateTargets: append([]string(nil), spec.AllowedDelegateTargets...),
+		AllowReadOnlyFiles:     spec.AllowReadOnlyFiles,
+		AllowResearchTools:     spec.AllowResearchTools,
+		AllowEvidenceTools:     spec.AllowEvidenceTools,
+		AllowCoAgentTools:      spec.AllowCoAgentTools,
 	}
 }
 

@@ -33,11 +33,6 @@ const (
 	runMetadataOwnerEmail   = "owner_email"
 )
 
-type textureWakeLock struct {
-	mu   sync.Mutex
-	refs int
-}
-
 // Handler owns Texture's HTTP and lifecycle behavior while using agentcore as
 // the concrete execution substrate.
 type Handler struct {
@@ -48,37 +43,7 @@ type Handler struct {
 	ModelPolicy *modelpolicy.Manager
 	Provider    provideriface.Provider
 
-	wakeTextureControl   func(context.Context, types.CoagentSourcePacket)
-	wakeOwnerInstruction func(context.Context, string, string, string) error
-	textureEditMu        sync.Mutex
-	textureWakeLocksMu   sync.Mutex
-	textureWakeLocks     map[string]*textureWakeLock
-}
-
-func (h *Handler) lockTextureWakeScope(ownerID, computerID, docID string) func() {
-	key := strings.Join([]string{strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(docID)}, "\x00")
-	h.textureWakeLocksMu.Lock()
-	if h.textureWakeLocks == nil {
-		h.textureWakeLocks = make(map[string]*textureWakeLock)
-	}
-	lock := h.textureWakeLocks[key]
-	if lock == nil {
-		lock = &textureWakeLock{}
-		h.textureWakeLocks[key] = lock
-	}
-	lock.refs++
-	h.textureWakeLocksMu.Unlock()
-
-	lock.mu.Lock()
-	return func() {
-		lock.mu.Unlock()
-		h.textureWakeLocksMu.Lock()
-		lock.refs--
-		if lock.refs == 0 && h.textureWakeLocks[key] == lock {
-			delete(h.textureWakeLocks, key)
-		}
-		h.textureWakeLocksMu.Unlock()
-	}
+	textureEditMu sync.Mutex
 }
 
 // NewHandler composes Texture ownership over the concrete agent lifecycle.
@@ -87,16 +52,12 @@ func NewHandler(core *agentcore.Runtime) *Handler {
 		return &Handler{}
 	}
 	return &Handler{
-		Core:               core,
-		Store:              core.Store(),
-		Bus:                core.EventBus(),
-		Content:            core.TextureContentService(),
-		ModelPolicy:        core.TextureModelPolicy(),
-		Provider:           core.TextureProvider(),
-		wakeTextureControl: core.WakeUpdatedCoagent,
-		wakeOwnerInstruction: func(ctx context.Context, ownerID, docID, instructionID string) error {
-			return core.DispatchActor(ctx, ownerID, core.TextureSandboxID(), currentTextureAgentID(docID), "coagent_result", instructionID, "", "")
-		},
+		Core:        core,
+		Store:       core.Store(),
+		Bus:         core.EventBus(),
+		Content:     core.TextureContentService(),
+		ModelPolicy: core.TextureModelPolicy(),
+		Provider:    core.TextureProvider(),
 	}
 }
 

@@ -14,44 +14,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func projectTextureOwnerTestProducer(t *testing.T, s *store.Store, start types.StartLifecycleRequest, suffix string) (string, string, string) {
-	t.Helper()
-	ctx := context.Background()
-	now := time.Now().UTC()
-	agentID := "researcher:" + suffix
-	workID := "producer-work:" + suffix
-	runID := "producer-run:" + suffix
-	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID: agentID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, SandboxID: start.ComputerID,
-		Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("seed lifecycle producer: %v", err)
-	}
-	open := types.OpenLifecycleWorkRequest{
-		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "open-producer:" + suffix,
-		TrajectoryID: start.TrajectoryID,
-		WorkItem:     types.WorkItemRecord{WorkItemID: workID, Objective: "produce durable update", AssignedAgentID: agentID, AuthorityProfile: "researcher"},
-	}
-	open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
-	if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
-		t.Fatalf("open lifecycle producer work: %v", err)
-	}
-	run := types.RunRecord{
-		RunID: runID, AgentID: agentID, ChannelID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID,
-		AgentProfile: "researcher", AgentRole: "researcher", OwnerID: start.OwnerID, SandboxID: start.ComputerID,
-		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": workID},
-	}
-	project := types.ReplaceLifecycleActivationRequest{
-		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "project-producer:" + suffix,
-		TrajectoryID: start.TrajectoryID, AgentID: agentID, Run: run,
-	}
-	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
-	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
-		t.Fatalf("project lifecycle producer: %v", err)
-	}
-	return agentID, workID, runID
-}
-
 func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "texture-restart.db")
@@ -70,7 +32,7 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 		OwnerID: ownerID, ComputerID: "sandbox-texture-restart", CommandID: "start-texture-restart",
 		TrajectoryID: "trajectory-texture-restart", Kind: types.TrajectoryKindDocument,
 		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
-		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + docID},
 		InitialWork: types.WorkItemRecord{
 			WorkItemID: "work-texture-restart", Objective: "incorporate durable finding", AssignedAgentID: agentID,
 		},
@@ -88,7 +50,6 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 	if _, err := s1.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start durable lifecycle: %v", err)
 	}
-	producerAgentID, producerWorkID, producerRunID := projectTextureOwnerTestProducer(t, s1, start, "texture-restart")
 	packet := types.CoagentSourcePacketPayload{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "durable finding",
 	}
@@ -96,9 +57,8 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 	queue := types.QueueLifecycleUpdateRequest{
 		OwnerID: ownerID, ComputerID: "sandbox-texture-restart", CommandID: "queue-texture-restart",
 		TrajectoryID: start.TrajectoryID, TargetAgentID: agentID,
-		ProducerAgentID: producerAgentID, ProducerUpdateID: "update-texture-restart",
-		UpdateID: "update-texture-restart", ChannelID: docID, Role: "researcher", SourceRunID: producerRunID,
-		WorkItemID: producerWorkID, WorkDisposition: types.WorkItemOpen,
+		ProducerAgentID: "researcher:texture-restart", ProducerUpdateID: "update-texture-restart",
+		UpdateID: "update-texture-restart", ChannelID: docID, Role: "researcher",
 		Packet: packet, Content: "Durable finding", PayloadDigest: payloadDigest,
 	}
 	queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
@@ -177,7 +137,7 @@ func TestTextureOwnerRestartDoesNotCrossComputerPendingMutation(t *testing.T) {
 				Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true,
 				RequiredSubjectRefs: []string{"artifact"},
 			},
-			SubjectRefs: map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+			SubjectRefs: map[string]string{"artifact": "texture://documents/" + docID},
 			InitialWork: types.WorkItemRecord{
 				WorkItemID: "work-shared-restart", Objective: "incorporate scoped update", AssignedAgentID: agentID,
 			},
@@ -195,12 +155,6 @@ func TestTextureOwnerRestartDoesNotCrossComputerPendingMutation(t *testing.T) {
 			t.Fatalf("start lifecycle for %s: %v", computerID, err)
 		}
 	}
-	computerBStart := types.StartLifecycleRequest{
-		OwnerID: ownerID, ComputerID: "computer-b", TrajectoryID: trajectoryID,
-		InitialWork:     types.WorkItemRecord{WorkItemID: "work-shared-restart"},
-		InitialDocument: types.Document{DocID: docID},
-	}
-	producerAgentID, producerWorkID, producerRunID := projectTextureOwnerTestProducer(t, s1, computerBStart, "computer-b")
 	if err := s1.CreateAgentMutation(ctx, store.AgentMutation{
 		DocID: docID, RunID: "shared-run", OwnerID: ownerID, ComputerID: "computer-a",
 		State: "pending", CreatedAt: now,
@@ -213,10 +167,9 @@ func TestTextureOwnerRestartDoesNotCrossComputerPendingMutation(t *testing.T) {
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, "computer B update")
 	queue := types.QueueLifecycleUpdateRequest{
 		OwnerID: ownerID, ComputerID: "computer-b", CommandID: "queue:computer-b",
-		TrajectoryID: trajectoryID, TargetAgentID: agentID, ProducerAgentID: producerAgentID,
+		TrajectoryID: trajectoryID, TargetAgentID: agentID, ProducerAgentID: "researcher:computer-b",
 		ProducerUpdateID: "update-computer-b", UpdateID: "update-computer-b", ChannelID: docID,
-		Role: "researcher", SourceRunID: producerRunID, WorkItemID: producerWorkID, WorkDisposition: types.WorkItemOpen,
-		Packet: packet, Content: "computer B update", PayloadDigest: payloadDigest,
+		Role: "researcher", Packet: packet, Content: "computer B update", PayloadDigest: payloadDigest,
 	}
 	queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
 	if _, err := s1.QueueLifecycleUpdate(ctx, queue); err != nil {

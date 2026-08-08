@@ -69,11 +69,8 @@ func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.Tool
 			isError = true
 		}
 	} else {
-		execution := ExecutionContextFrom(ctx)
-		execution.ToolCallID = strings.TrimSpace(call.ID)
-		callCtx := WithExecutionContext(ctx, execution)
 		var err error
-		output, err = registry.Execute(callCtx, call.Name, call.Arguments)
+		output, err = registry.Execute(ctx, call.Name, call.Arguments)
 		if err != nil {
 			output = fmt.Sprintf("tool_error: %v", err)
 			isError = true

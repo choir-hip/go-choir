@@ -125,7 +125,7 @@ func (h *APIHandler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Requ
 	}
 	fields := map[string]any{
 		"schema": identity.Schema, "nonce": identity.Nonce, "audience": identity.Audience,
-		"computer_id":    identity.ComputerID,
+		"computer_id": identity.ComputerID,
 		"realization_id": identity.RealizationID, "vm_epoch": identity.VMEpoch,
 		"executable": identity.Executable, "guest_image_manifest": identity.GuestImageManifest,
 		"kernel_configuration": identity.KernelConfiguration, "build": identity.Build,

@@ -418,25 +418,6 @@ func TestSystemPromptForTextureDefaultsToResearch(t *testing.T) {
 	}
 }
 
-func TestSystemPromptForLifecycleTextureRoutesResearcherThroughAtomicTurnControl(t *testing.T) {
-	t.Parallel()
-	rt := testPromptRuntime(t)
-	rec := &types.RunRecord{
-		RunID: "run-lifecycle-texture", AgentID: "texture:doc-1", ChannelID: "doc-1", OwnerID: "user-alice",
-		SandboxID: "computer", TrajectoryID: "trajectory", AgentProfile: agentprofile.Texture,
-		Metadata: map[string]any{"lifecycle_work_item_id": "work-texture"},
-	}
-	prompt, err := rt.systemPromptForRun(rec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, required := range []string{"supersedes earlier generic spawn_agent guidance", "Do not call spawn_agent", "open_researcher=true", "first typed downward packet", "runtime-derived"} {
-		if !strings.Contains(prompt, required) {
-			t.Fatalf("lifecycle Texture prompt missing %q: %s", required, prompt)
-		}
-	}
-}
-
 func TestSystemPromptForSuperEnforcesCapsuleDevelopment(t *testing.T) {
 	t.Parallel()
 	rt := testPromptRuntime(t)

@@ -57,10 +57,7 @@ type ToolLoopParkResult struct {
 
 type ToolLoopParkWaiterFunc func(ctx context.Context, state ToolLoopParkState) (ToolLoopParkResult, error)
 
-type DetachedTerminalToolPredicate func(call types.ToolCall) bool
-
 var ErrToolLoopPassivated = errors.New("tool loop passivated")
-var ErrDetachedTerminalToolCommitted = errors.New("detached terminal tool committed")
 
 type ToolLoopPassivatedError struct {
 	Reason string
@@ -99,12 +96,9 @@ type toolLoopOptions struct {
 	providerPreconditionFallbacks []provideriface.LLMSelection
 	initialToolChoice             string
 	terminalTools                 map[string]bool
-	passivatingTools              map[string]bool
 	requiredWriteTools            map[string]bool
 	completionGuard               ToolLoopCompletionGuardFunc
 	parkWaiter                    ToolLoopParkWaiterFunc
-	detachedTerminalTool          DetachedTerminalToolPredicate
-	detachedTerminalToolTimeout   time.Duration
 	budget                        ToolLoopBudget
 }
 
@@ -186,32 +180,12 @@ func WithTerminalToolSuccesses(names ...string) ToolLoopOption {
 	}
 }
 
-// WithPassivatingToolSuccesses makes a successful durable-transition tool
-// passivate this activation instead of completing it. Resident actors use this
-// after committing their one semantic outcome so a later wake can resume the
-// same run and memory.
-func WithPassivatingToolSuccesses(names ...string) ToolLoopOption {
-	return func(opts *toolLoopOptions) {
-		if len(names) == 0 {
-			return
-		}
-		if opts.passivatingTools == nil {
-			opts.passivatingTools = make(map[string]bool, len(names))
-		}
-		for _, name := range names {
-			name = strings.TrimSpace(name)
-			if name != "" {
-				opts.passivatingTools[name] = true
-			}
-		}
-	}
-}
-
 // WithRequiredWriteTools specifies tools that must succeed when the initial
 // tool choice is "required" (not an exact tool name). After the first tool
-// turn, if none of the configured durable-transition tools succeeded, the loop
-// retries with a targeted reminder. Callers may include a durable no-change
-// decision tool alongside canonical write tools.
+// turn, if none of the required write tools succeeded, the loop retries with
+// a targeted reminder. This prevents the model from ending the turn after
+// calling a non-write tool (e.g. record_texture_decision or spawn_agent)
+// without producing a document revision.
 func WithRequiredWriteTools(names ...string) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		if len(names) == 0 {
@@ -236,19 +210,6 @@ func WithRequiredWriteTools(names ...string) ToolLoopOption {
 func WithParkWaiter(waiter ToolLoopParkWaiterFunc) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.parkWaiter = waiter
-	}
-}
-
-// WithDetachedTerminalToolClosure permits one sole, runtime-selected terminal
-// evidence tool call to finish under a bounded cancellation-detached context.
-// It does not detach provider calls, mixed batches, partial tools, injected
-// turns, or any later iteration.
-func WithDetachedTerminalToolClosure(timeout time.Duration, predicate DetachedTerminalToolPredicate) ToolLoopOption {
-	return func(opts *toolLoopOptions) {
-		if timeout > 0 && predicate != nil {
-			opts.detachedTerminalToolTimeout = timeout
-			opts.detachedTerminalTool = predicate
-		}
 	}
 }
 
@@ -315,21 +276,18 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	var partialTextFragments []string
 	loopStartedAt := time.Now()
 
-	appendMessageWithContext := func(appendCtx context.Context, role string, msg json.RawMessage) error {
+	appendMessage := func(role string, msg json.RawMessage) error {
 		messages = append(messages, msg)
 		if options.memoryHooks.AfterAppendMessage != nil {
-			if err := options.memoryHooks.AfterAppendMessage(appendCtx, role, msg); err != nil {
+			if err := options.memoryHooks.AfterAppendMessage(ctx, role, msg); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
-	appendMessage := func(role string, msg json.RawMessage) error {
-		return appendMessageWithContext(ctx, role, msg)
-	}
 	appendInjected := func(injected []json.RawMessage) error {
 		for _, msg := range injected {
-			if err := appendMessage(types.RunMemoryRoleRuntimeInjection, msg); err != nil {
+			if err := appendMessage(runMemoryMessageRole(msg), msg); err != nil {
 				return err
 			}
 		}
@@ -619,44 +577,32 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				}
 			}
 
-			terminalClosure := len(resp.ToolCalls) == 1 && options.detachedTerminalTool != nil && options.detachedTerminalTool(resp.ToolCalls[0])
-			runToolTurn := func() ([]types.ToolResult, error) {
-				toolCtx := ctx
-				if terminalClosure {
-					detached, cancel := context.WithTimeout(context.WithoutCancel(ctx), options.detachedTerminalToolTimeout)
-					defer cancel()
-					toolCtx = detached
-				}
-				// Append the assistant's response (with tool calls) to conversation.
-				assistantPayload := map[string]any{
-					"role":    "assistant",
-					"content": buildAssistantContent(resp.Text, resp.ToolCalls),
-				}
-				if strings.TrimSpace(resp.ReasoningContent) != "" {
-					assistantPayload["reasoning_content"] = resp.ReasoningContent
-				}
-				assistantMsg, _ := json.Marshal(assistantPayload)
-				if err := appendMessageWithContext(toolCtx, "assistant", assistantMsg); err != nil {
-					return nil, fmt.Errorf("tool loop persist assistant message: %w", err)
-				}
-				toolResults := ExecuteToolBatch(toolCtx, registry, resp.ToolCalls, emit)
-				toolResultMsg, _ := json.Marshal(map[string]any{
-					"role":    "user",
-					"content": buildToolResultContent(toolResults),
-				})
-				if err := appendMessageWithContext(toolCtx, "user", toolResultMsg); err != nil {
-					return nil, fmt.Errorf("tool loop persist tool result message: %w", err)
-				}
-				return toolResults, nil
+			// Append the assistant's response (with tool calls) to conversation.
+			assistantPayload := map[string]any{
+				"role":    "assistant",
+				"content": buildAssistantContent(resp.Text, resp.ToolCalls),
 			}
-			toolResults, toolTurnErr := runToolTurn()
-			if toolTurnErr != nil {
-				return "", totalUsage, toolTurnErr
+			if strings.TrimSpace(resp.ReasoningContent) != "" {
+				assistantPayload["reasoning_content"] = resp.ReasoningContent
 			}
+			assistantMsg, _ := json.Marshal(assistantPayload)
+			if err := appendMessage("assistant", assistantMsg); err != nil {
+				return "", totalUsage, fmt.Errorf("tool loop persist assistant message: %w", err)
+			}
+
 			activeRequired := requiredNextTool
 			requiredCalled := requiredToolCalled(activeRequired, resp.ToolCalls)
-			if terminalClosure && len(toolResults) == 1 && !toolResults[0].IsError {
-				return "", totalUsage, ErrDetachedTerminalToolCommitted
+
+			// Execute tools and collect results.
+			toolResults := ExecuteToolBatch(ctx, registry, resp.ToolCalls, emit)
+
+			// Append tool results as a user message (per Anthropic Messages API convention).
+			toolResultMsg, _ := json.Marshal(map[string]any{
+				"role":    "user",
+				"content": buildToolResultContent(toolResults),
+			})
+			if err := appendMessage("user", toolResultMsg); err != nil {
+				return "", totalUsage, fmt.Errorf("tool loop persist tool result message: %w", err)
 			}
 			if injectUserTurns != nil {
 				injected, err := injectUserTurns(false)
@@ -787,19 +733,6 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					emit(types.EventRunProgress, "terminal_tool_success", payload)
 				}
 				return combinedFinalText(resp.Text), totalUsage, nil
-			}
-			if requiredNextTool == nil {
-				if passivatingTools := successfulTerminalToolNames(resp.ToolCalls, toolResults, options.passivatingTools); len(passivatingTools) > 0 {
-					if emit != nil {
-						payload, _ := json.Marshal(map[string]any{
-							"iteration": i + 1,
-							"tools":     passivatingTools,
-							"reason":    "durable_transition_success",
-						})
-						emit(types.EventRunProgress, "passivating_tool_success", payload)
-					}
-					return combinedFinalText(resp.Text), totalUsage, &ToolLoopPassivatedError{Reason: "durable_transition_success"}
-				}
 			}
 
 			log.Printf("tool loop: iteration %d, executed %d tools, continuing", i+1, len(resp.ToolCalls))
@@ -1540,14 +1473,6 @@ func requiredWriteToolNames(writeTools map[string]bool) []string {
 func requiredWriteToolReminderText(writeTools map[string]bool, reason string) string {
 	names := requiredWriteToolNames(writeTools)
 	listed := strings.Join(names, " or ")
-	if writeTools["record_texture_decision"] {
-		switch reason {
-		case "required_write_tool_failed":
-			return fmt.Sprintf("The previous durable transition (%s) failed. Review the tool error and retry with the current base revision. Use patch_texture or rewrite_texture for a real semantic edit, or record_texture_decision for an honest no-change, wait, or block outcome.", listed)
-		default:
-			return fmt.Sprintf("You must call %s to commit this activation's durable transition before it can park. Use patch_texture or rewrite_texture only for a real semantic edit; use record_texture_decision for an honest no-change, wait, or block outcome.", listed)
-		}
-	}
 	switch reason {
 	case "required_write_tool_failed":
 		return fmt.Sprintf("The previous %s call failed. Review the tool error, fix the issue, and call the write tool again. Use %s for full-document drafts (especially v0→v1 or v1→v2) and %s for targeted block edits. Common fixes: use the current base_revision_id from the document outline, use rewrite_texture when the change spans multiple sections, or use append_block for new paragraphs.", listed, "rewrite_texture", "patch_texture")

@@ -1,13 +1,11 @@
 package textureowner
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"sort"
@@ -30,13 +28,11 @@ import (
 // creates a new canonical revision attributable to the appagent
 // (VAL-ETEXT-003).
 type textureAgentRevisionRequest struct {
-	Intent                 string                `json:"intent,omitempty"`
-	Prompt                 string                `json:"prompt,omitempty"`
-	ClientRequestID        string                `json:"client_request_id,omitempty"`
-	ExpectedHeadRevisionID string                `json:"expected_head_revision_id,omitempty"`
-	SourceEntities         []textureSourceEntity `json:"-"`
-	RequestedByRunID       string                `json:"-"`
-	Provenance             map[string]any        `json:"-"`
+	Intent           string                `json:"intent,omitempty"`
+	Prompt           string                `json:"prompt,omitempty"`
+	SourceEntities   []textureSourceEntity `json:"-"`
+	RequestedByRunID string                `json:"-"`
+	Provenance       map[string]any        `json:"-"`
 }
 
 // textureAgentRevisionResponse is the JSON response for agent revision
@@ -95,29 +91,14 @@ func (h *Handler) HandleTextureAgentRevision(w http.ResponseWriter, r *http.Requ
 	}
 	if strings.TrimSpace(doc.TrajectoryID) != "" {
 		snapshot, snapshotErr := h.Store.GetLifecycleSnapshot(r.Context(), ownerID, doc.ComputerID, doc.TrajectoryID)
-		if snapshotErr != nil || snapshot.Trajectory.Status != types.TrajectoryLive {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "durable lifecycle state is unavailable or terminal"})
+		if snapshotErr != nil {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "durable lifecycle state is unavailable"})
 			return
 		}
-		content := strings.TrimSpace(firstNonEmpty(req.Prompt, req.Intent))
-		if content == "" {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "prompt or intent is required"})
+		if snapshot.Trajectory.Status != types.TrajectoryLive {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "durable lifecycle is terminal; open new work before revising"})
 			return
 		}
-		clientRequestID := strings.TrimSpace(firstNonEmpty(req.ClientRequestID, r.Header.Get("Idempotency-Key")))
-		if clientRequestID == "" {
-			clientRequestID = uuid.NewString()
-		}
-		expectedHead := strings.TrimSpace(req.ExpectedHeadRevisionID)
-		if expectedHead == "" {
-			expectedHead = snapshot.Document.CurrentRevisionID
-		}
-		payload, _ := json.Marshal(textureOwnerInstructionRequest{ClientRequestID: clientRequestID, Content: content, ExpectedHeadRevisionID: expectedHead})
-		forward := r.Clone(r.Context())
-		forward.URL.Path = strings.TrimSuffix(r.URL.Path, "/revise") + "/tell"
-		forward.Body = io.NopCloser(bytes.NewReader(payload))
-		h.HandleTextureOwnerInstruction(w, forward)
-		return
 	}
 
 	// Check for an existing pending agent mutation on this document.
