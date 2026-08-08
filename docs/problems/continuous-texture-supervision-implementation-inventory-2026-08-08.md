@@ -800,3 +800,57 @@ the one-time recovery workflow is likewise SSH-based. No credential value was
 uploaded or changed during this inspection. A separately ratified authority
 must either create a scoped no-SSH renewal path or perform external provider
 account restoration before this Definition can resume. Effects remain OFF.
+
+
+## No bounded current-main-conformant deployed rollback rehearsal — 2026-08-08
+
+The local source-only rollback is reconstructable: reversing the 99 changed
+non-document paths from exact candidate `ac6dd16b` returns them byte-for-byte to
+rollback ref `cdaa787b`, and the sequential runtime shards, focused packages,
+vet, and diff checks pass. That does not make an old GitHub Actions rerun a safe
+deployed rollback path.
+
+An independent red-team inspected historical successful deployment run
+`31030833230` at `460c142394e12b6e307949d0180da08d1b058745`. Its deployed
+runtime tree is the one underlying `cdaa787b` (the only non-document difference
+through `cdaa787b` is the non-deployed receipt linter). Re-running the whole
+historical workflow would, however:
+
+- publish the historical rolling Flake through a mutable external action as a
+  sibling of deployment;
+- write a receipt whose preserved event says `refs/heads/main@460c…` while
+  current `origin/main` is `e50b5644…`, violating current-main source truth;
+- rebuild/switch the complete Node B closure, restart gateway, sandbox, proxy,
+  vmctl, and sourcecycled, then refresh every mutable active interactive
+  computer rather than only the acceptance scope;
+- require another normal CI/build interval before exact-`ac6dd16b` recovery if
+  the older host switch or guest refresh fails; and
+- start pre-cancellation-intent, pre-owner-instruction, pre-Texture-turn/control-
+  delivery, and pre-assignment code against the current persisted graph without
+  a backward-read/restart compatibility receipt.
+
+Fresh authenticated preflight reduced but did not eliminate those hazards. The
+compute inventory contained one mutable active interactive computer (`primary`,
+epoch 8247); all twelve durable runtime runs were terminal (four cancelled,
+five failed, three completed); the retained acceptance trajectory was cancelled
+at lifecycle/reducer/watermark 9 with exact v0 terminal head; self-development
+was OFF generation 0 and model-policy bytes were exact. A scoped preflight key
+was revoked and rejected after the decision. Zero active runs does not prove the
+older runtime can safely open every newer object kind or bound the global host
+and route effects.
+
+A job-scoped deploy rerun avoids the independent rolling-Flake sibling, but
+GitHub explicitly reruns the selected job including its dependencies. Recovery
+therefore still has approximately normal CI-and-deploy latency, and dependency
+outputs/artifacts plus current persisted-graph compatibility would require
+attempt-specific proof. No deploy was triggered.
+
+The safe error field is now explicit. A deployed rehearsal needs either (a) a
+canonical revert through current `origin/main` followed by a separately reviewed
+forward candidate, or (b) a purpose-built, authorized deploy-only rollback path
+that cannot publish rolling routes, has an exclusive CI/change freeze, inventories
+and verifies every affected computer, captures complete protected state, and can
+restore an exact reviewed candidate within a bounded window. Before either path,
+old-code startup/recovery must be proved against a reconstructable current graph
+snapshot. Until that authority and evidence exist, the local source rehearsal is
+the highest admissible rollback result. Effects remain OFF.
