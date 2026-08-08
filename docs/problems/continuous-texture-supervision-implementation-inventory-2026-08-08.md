@@ -946,3 +946,45 @@ fail-closed response-identity abort behavior. It does not repair the old respons
 schema or replace the still-blocked provider-dependent repeated supervision,
 real capsule, late-result, positive correction/source-open, checkpoint, and run-
 acceptance evidence.
+
+### Exact-F default-provider recurrence
+
+After forward commit `67a61358ceda55c30e9853907f85648bb8531bb8`
+was independently joined to the stable product at epoch 8249, the normal owner
+web session was restored without bypassing authentication and minted a fresh
+computer-scoped API key. That first key omitted `write:texture`; its attempted
+generic document create was refused HTTP 403 `missing required scope:
+write:texture` before mutation. The key was revoked and rejected post-revocation
+with HTTP 401. A replacement key with the intended Texture-write scope was then
+used. It first made the mistaken generic create described below, and the correct
+lifecycle route subsequently started the unchanged continuous-prose acceptance
+objective and produced document
+`39eafb8c-11c6-5ecc-a8c9-aec323eaa67d`, revision
+`79dc0bed-d71b-5a31-97d5-371c3c06d916`, trajectory
+`e5f85464-560b-5383-b199-cf4c62c12145`, work
+`8d62ca55-cae2-5f9a-95e5-83c0245b3fb1`, and exact Texture run
+`74a5a20f-24a3-4b25-b11c-1072f881f8a9`.
+
+The exact-F run selected the restored default policy `chatgpt/gpt-5.5` and failed
+at iteration zero with the same HTTP 401 `refresh_token_reused` response before
+any tool semantics. It created no Researcher, update, generated revision, source,
+Super control, assignment, capsule, checkpoint, materialization, route, or
+acceptance. The trajectory was retained and publicly cancelled—not deleted—at
+lifecycle/reducer/watermark 3 with its exact v0 terminal head and work cancelled.
+After cancellation the complete run inventory was thirteen terminal runs (five
+cancelled, five failed, three completed) and zero active runs; self-development
+remained OFF generation 0 and model-policy SHA-256 remained
+`7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`.
+Both temporary keys used during setup were revoked and rejected with HTTP 401.
+
+A generic non-lifecycle document create was mistakenly called before the
+lifecycle route and produced empty document
+`457320df-e047-405c-b2a1-a0263b4cb5dc`. Its product readback reports
+`current_version_number: 0` and `revision_count: 0`; it has no trajectory or run
+and was retained rather than silently deleted. This operator setup mistake is
+not counted as product acceptance or a platform defect.
+
+This exact-F recurrence rules out deployment restart alone as credential
+restoration and reconfirms that the current blocker is protected host ChatGPT
+credential authority. It does not authorize another model-policy permutation,
+credential transfer, SSH recovery, or auth weakening. Effects remain OFF.

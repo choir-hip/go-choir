@@ -16,7 +16,10 @@ public lifecycle/policy/cancellation, and partial CLI read/watch authority
 executed. Repeated supervision remains blocked by protected provider
 availability: ChatGPT auth is stale, Z.AI is circuit-open after 429,
 DeepSeek/Xiaomi lack balance, Fireworks returns precondition failure, and Bedrock
-is unsupported. No provider completed a Texture tool turn.
+is unsupported. No provider completed a Texture tool turn. A fresh exact-F default ChatGPT
+trajectory also failed iteration zero with `refresh_token_reused`, was publicly
+cancelled at version 3, preserved self-development/policy with 13 terminal and
+zero active runs, and revoked both setup keys.
 
 The canonical current-main rollback/forward rehearsal is now complete with the
 qualified verdict **bounded deployed rollback-and-recovery PASS; strict midpoint

@@ -222,6 +222,34 @@ authority was changed. The remaining transition is provider account restoration
 or a separately ratified scoped no-SSH host renewal authority.
 
 
+### Exact-F default ChatGPT recurrence
+
+A fresh normal owner session minted a short-lived computer-scoped key on exact
+deployed F `67a61358`, epoch 8249. The first key omitted `write:texture`; its
+attempted generic document create was refused HTTP 403 `missing required scope:
+write:texture` with no mutation, and the key was revoked/post-401. A replacement correctly
+scoped key first made the mistaken generic create described below; the correct
+lifecycle route then started the unchanged continuous-prose objective. Lifecycle
+identities were document `39eafb8c-11c6-5ecc-a8c9-aec323eaa67d`, v0
+`79dc0bed-d71b-5a31-97d5-371c3c06d916`, trajectory
+`e5f85464-560b-5383-b199-cf4c62c12145`, work
+`8d62ca55-cae2-5f9a-95e5-83c0245b3fb1`, and run
+`74a5a20f-24a3-4b25-b11c-1072f881f8a9`. The default policy resolved
+`chatgpt/gpt-5.5`; iteration zero returned HTTP 401 `refresh_token_reused`
+before any tool action.
+
+Public conditional cancellation retained the trajectory at lifecycle/reducer/
+watermark 3 with exact v0 terminal head and cancelled work/run. Final inventory
+was thirteen terminal runs (five cancelled, five failed, three completed), zero
+active; self-development remained OFF generation 0 and policy SHA-256 remained
+`7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`.
+Both setup keys were revoked and returned HTTP 401. A mistaken generic route call
+also left empty non-lifecycle document `457320df-e047-405c-b2a1-a0263b4cb5dc`
+with `current_version_number: 0`, `revision_count: 0`, and no trajectory/run; it
+is retained and is not acceptance or a platform defect. The recurrence proves the
+F/restart did not itself restore host ChatGPT auth; it does not justify policy permutation or credential bypass.
+
+
 ### Deployed public CLI partial acceptance
 
 A fresh scoped key exercised the checked-in `choir` CLI against retained
