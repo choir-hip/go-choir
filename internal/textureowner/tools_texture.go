@@ -562,6 +562,9 @@ func newRecordTextureDecisionTool(rt *Handler) toolregistry.Tool {
 			} else if subjectErr != nil && metadataStringValue(rec.Metadata, "lifecycle_work_item_id") != "" {
 				return "", fmt.Errorf("load scoped lifecycle Texture subject: %w", subjectErr)
 			}
+			if len(in.Controls) > 0 || len(in.UpdateDispositions) > 0 {
+				return "", fmt.Errorf("record_texture_decision controls and dispositions require durable lifecycle authority")
+			}
 			if _, err := rt.getTextureDocument(ctx, rec.OwnerID, docID); err != nil {
 				return "", fmt.Errorf("get texture document for decision: %w", err)
 			}
@@ -742,6 +745,9 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	durableLifecycle := subjectErr == nil && subject.LifecycleVersion > 0
 	if metadataStringValue(rec.Metadata, "lifecycle_work_item_id") != "" && !durableLifecycle {
 		return types.Revision{}, fmt.Errorf("get scoped lifecycle Texture subject: %w", subjectErr)
+	}
+	if !durableLifecycle && (len(in.Controls) > 0 || len(in.UpdateDispositions) > 0) {
+		return types.Revision{}, fmt.Errorf("Texture controls and lifecycle dispositions require durable lifecycle authority")
 	}
 	var doc types.Document
 	if durableLifecycle {
