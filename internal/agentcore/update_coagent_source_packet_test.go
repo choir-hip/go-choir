@@ -249,9 +249,11 @@ func TestSpawnedLifecycleResearcherQueuesOpenAndCompletedUpdates(t *testing.T) {
 	}
 	execute := func(producerUpdateID, disposition string) {
 		t.Helper()
-		raw := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"` + disposition + ` lifecycle checkpoint","agent_id":"texture:` + docID + `","channel_id":"` + docID + `","producer_update_id":"` + producerUpdateID + `","work_disposition":"` + disposition + `","claims":[{"text":"` + disposition + ` lifecycle checkpoint"}]}`)
+		raw := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"` + disposition + ` lifecycle checkpoint","agent_id":"texture:` + docID + `","channel_id":"` + docID + `","work_disposition":"` + disposition + `","claims":[{"text":"` + disposition + ` lifecycle checkpoint"}]}`)
+		execution := toolExecutionContextForRun(child)
+		execution.ToolCallID = producerUpdateID
 		if _, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(
-			toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(child)),
+			toolregistry.WithExecutionContext(ctx, execution),
 			"update_coagent", raw,
 		); err != nil {
 			t.Fatalf("queue %s spawned lifecycle update: %v", disposition, err)
@@ -746,7 +748,13 @@ func TestUpdateCoagentToolSchemaRequiresSourceTargetURIAndVocabularyEnums(t *tes
 	if !ok {
 		t.Fatal("update_coagent tool missing")
 	}
+	if !schemaRequiredContains(tool.Parameters, "agent_id") {
+		t.Fatalf("update_coagent schema required = %#v, want explicit agent_id", tool.Parameters["required"])
+	}
 	props := schemaObject(t, tool.Parameters, "properties")
+	if _, exposed := props["producer_update_id"]; exposed {
+		t.Fatal("update_coagent schema exposes model-authored producer_update_id")
+	}
 	sources := schemaObject(t, props, "sources")
 	sourceItems := schemaObject(t, sources, "items")
 	sourceProps := schemaObject(t, sourceItems, "properties")
