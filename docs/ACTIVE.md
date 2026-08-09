@@ -10,50 +10,44 @@ is the owner-ratified executable `/goal`. It connects Texture's existing durable
 inbound revision path to target-bound Researcher control, the one persistent
 Super, many capability-bound capsule-only CoSupers, progressive prose-first
 versions with canonical source transclusions, and an automatable Texture API/CLI
-surface. Runtime source `ac6dd16b` passed final independent review, CI, exact
-Node B deployment, and nonce-bound product identity; its repaired initial work,
-public lifecycle/policy/cancellation, and partial CLI read/watch authority
-executed. Repeated supervision remains blocked by protected provider
-availability: ChatGPT auth is stale, Z.AI is circuit-open after 429,
-DeepSeek/Xiaomi lack balance, Fireworks returns precondition failure, and Bedrock
-is unsupported. No provider completed a Texture tool turn. A fresh exact-F default ChatGPT
-trajectory also failed iteration zero with `refresh_token_reused`, was publicly
-cancelled at version 3, preserved self-development/policy with 13 terminal and
-zero active runs, and revoked both setup keys.
+surface.
 
-The canonical current-main rollback/forward rehearsal is now complete with the
-qualified verdict **bounded deployed rollback-and-recovery PASS; strict midpoint
-forward-observability FAIL (safely recovered)**. R `10d48659` made the exact 99
-non-document paths cdaa-equivalent and passed CI/rolling/deploy `31267448310` at
-epoch 8248. Its legacy trajectory response omitted six stored owner-instruction
-`request_id` fields; protected run/lifecycle/selfdev/policy/inventory summaries
-remained stable, but the identity-ambiguity gate fired. F `67a61358` was
-initiated immediately without further old probing, restored the exact pre-R
-whole tree/ac6-equivalent runtime, passed CI/rolling/deploy `31268477380`, and
-joined exact product identity at epoch 8249. All captured frozen comparator response/state digests matched
-the epoch-8247 baseline; exposure was 1,909 seconds and the key was
-revoked/post-401. Canonical deployed rollback/recovery is therefore rehearsed,
-while the legacy projection is not forward-lossless.
+The current deployed runtime is `7ba05599`. CI/deploy run `31310481745` passed
+all selected Race shards, aggregate Go, Differential SBOM acceptance, rolling
+publication, and Node B deployment. Public `/health` reports the exact proxy commit, and the
+deploy activation receipt exact-joins every selected host service. The deployment is host proof only. The retained
+stable guest has not yet been woken or nonce-bound to `7ba05599` because the
+same owner's retained browser sessions and scoped keys are unauthenticated,
+expired, or revoked. Its existing Chrome profile is stopped at an initiated
+Touch ID/security-key passkey ceremony. No substitute owner/computer, recovery
+bypass, SSH, internal vmctl path, or weaker identity is admissible.
 
-At `2026-08-08T23:24Z` the operator explicitly authorized the existing local
-ChatGPT token and SSH Node B. Sanitized preflight selected a ChatGPT-only atomic
-auth-file replacement and gateway restart because the full tracked provider
-helper would also change Bedrock. A root-only rollback copy and unchanged gateway
-env are mandatory. The first install was rolled back after a wrong-owner pre-provider probe. The
-second attempt nonce-verified the exact acceptance owner/computer/F identity,
-installed only auth `cc744524…`, preserved env/policy/health, and real
-`chatgpt/gpt-5.5` created the exact requested marker v1 with completed work and
-no error. Provider availability is repaired. The first full attempt then failed before
-any child: its atomic Researcher control was rejected by runtime schema, and the
-runtime prompt incorrectly treats assignment capsules as unavailable while
-effects are OFF. The live v0 trajectory is retained. Problem receipt `76eed5bf`/CI
-`31285400390` landed; read-only convergence binds a red repair to one shared
-packet schema, retryable pre-commit mutation, and the exact persistent-Super/
-assignment-capsule prompt boundary. No source edit begins before that ceremony
-lands. Key and root-only rollbacks remain narrowly retained. Effects remain OFF. Provider-dependent repeated
-Researcher/Super/CoSuper progression, real capsule/late-result behavior, positive
-correction/source opening, complete checkpoint/no-effect and run acceptance,
-and terminal registry closure remain mandatory.
+The last exact guest-proved product prefix remains `b5d907a3`: Texture published
+a continuous-prose v1 while work was open, atomically addressed its bound
+Researcher, and admitted thirteen clean ChatGPT Researcher runs/source packets.
+Fifteen reports and a durable owner correction then remained pending because the
+resident Texture mailbox did not resume, while open Researcher work amplified
+provider admission. The trajectory was publicly cancelled with retained evidence
+and no protected effects. `fd83ce64` repairs exact producer/instruction wakes,
+Researcher recovery/admission, actor acknowledgement fate, and retry collision in
+source/CI, but its first retained-computer wake exposed a boot-fatal misclassification
+of terminal Texture evidence. `7ba05599` adds the exact terminal lifecycle gate;
+its real Store+SQLite two-restart fixture preserves the pending instruction,
+cancelled producer disposition, actor row, and ambiguous passivated histories
+with zero provider or new lifecycle mutation. Independent lifecycle and security
+review both accepted the bounded repair.
+
+Provider availability and the earlier packet-schema/retry/capsule-prompt defects
+are repaired; they are not the current blocker. The canonical R/F rehearsal
+remains qualified as bounded deployed rollback-and-recovery PASS with strict
+midpoint forward-observability FAIL, safely recovered. Root-only provider-auth
+rollback copies remain pending terminal deletion or explicit retention authority.
+Effects remain OFF. After same-owner user presence, the retained computer must
+prove exact `7ba05599` guest/service identity before fresh acceptance continues
+through post-report v2, correction incorporation, a second downward cycle,
+persistent Super, two isolated writable capsules including a verifier, v3,
+source-open/CLI parity, same-build restart, delayed-result cancellation, complete
+no-effect/Trace/run-acceptance proof, key cleanup, and terminal registry closure.
 
 ## Completed Definitions — Historical Evidence Authority
 

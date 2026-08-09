@@ -1,15 +1,109 @@
 # Continuous Texture Supervision — Requirement Audit
 
-**Date:** 2026-08-08
+**Date:** 2026-08-09
 **Definition:** `choir-continuous-texture-supervision-2026-08-07`
-**Runtime candidate:** `ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee`
-**Audit verdict:** **NOT COMPLETE — exact product path reached; protected provider availability blocked the supervision loop**
+**Runtime candidate:** `7ba05599c15f6d126f86fa6fe1a44bc36a928121`
+**Audit verdict:** **NOT COMPLETE — exact host deployed; retained-guest proof requires target-owner passkey user presence**
 **Effects:** OFF
 
 This is a requirement-by-requirement audit, not a completion receipt. It
 separates source/CI proof, deployed product-path proof actually reached, and the
 remaining evidence floor. A partial product receipt does not promote the
 unexecuted Researcher/Super/capsule behavior.
+
+## Current checkpoint — 2026-08-09
+
+This checkpoint supersedes the current-state classifications in the historical
+construction narrative below without deleting those failure receipts. Runtime
+`7ba05599` passed CI/deploy `31310481745`, including selected Race shards,
+aggregate Go, Differential SBOM acceptance, rolling publication, and exact Node B
+host activation. Public `/health` reports the exact proxy commit and the deploy
+activation receipt exact-joins every selected host service. That is host evidence
+only. The retained target guest/service has not been nonce-bound to
+`7ba05599`: the same owner's existing browser contexts and scoped keys are
+unauthenticated, expired, or revoked, and its existing Chrome profile is waiting
+at an initiated Touch ID/security-key passkey ceremony. No substitute owner,
+computer, recovery bypass, SSH, internal vmctl path, or weaker identity counts.
+Effects remain OFF.
+
+The last exact guest-proved product prefix is `b5d907a3`: Texture published a
+continuous-prose v1 while work was open, atomically addressed its bound
+Researcher, and admitted thirteen clean ChatGPT Researcher runs/source packets.
+Fifteen reports and a durable owner correction then remained pending because the
+resident Texture mailbox did not resume; the trajectory was publicly cancelled
+with retained evidence and no protected effects. `fd83ce64` repairs exact mailbox
+wake, admission, acknowledgement, and retry fate in source/CI. Its first retained
+computer wake exposed a terminal-evidence boot crash. `7ba05599` repairs that
+classification in source/CI/host deploy, with lifecycle and security `ACCEPT` and
+a real Store plus SQLite two-restart fixture proving retained actor/update/
+instruction evidence, zero provider, and zero new lifecycle mutation. Neither
+repair has yet received authenticated exact-guest product proof.
+
+### Current 9 acceptance actions
+
+| # | Current disposition |
+| --- | --- |
+| 1 | **PASS (source/local/CI):** focused registry, authorization, reducer, atomic-turn, projection/transclusion, replay, cancellation, capsule, API/CLI, Race, aggregate Go, vet, and SBOM evidence passes through `7ba05599`. |
+| 2 | **PASS (local evidence class):** pre-cutover/idempotency/restart contracts pass; `fd83ce64` adds exact trigger/run-memory/ack recovery and `7ba05599` adds real Store+SQLite terminal two-restart proof. Deployed pending-control restart is action 6. |
+| 3 | **PARTIAL:** the b5 prefix proves open-work v1, one exact Researcher control, and repeated Researcher provider/source packets. Post-report v2, second control, persistent Super, parallel CoSupers, verifier capsule, and v3 are missing. |
+| 4 | **PARTIAL:** deployed create/tell/read/history/revisions/exact-show, durable watch resume, empty terminal resume, cancellation, and authority negatives exist. Positive live correction, exact incorporated source-open, and full live parity are missing. |
+| 5 | **PARTIAL:** deployed continuous-prose interim v1 exists. A differently styled case and end-to-end displayed transclusion inspection do not. |
+| 6 | **PARTIAL:** an earlier exact deployment restart recovered initial work. No post-mailbox same-build restart with pending Researcher and Super controls exists, and exact `7ba05599` guest identity is unproved. |
+| 7 | **PARTIAL:** a natural-language correction was durably queued on the b5 trajectory but not consumed before cancellation. Direct deployed owner-head edit/rebase/wake and its later controls remain missing. |
+| 8 | **PARTIAL:** public conditional cancellation and retained evidence are real. In-flight Super/CoSuper cancellation plus a real delayed authenticated result and exact retry were not exercised. |
+| 9 | **PARTIAL:** bounded prior readback kept self-development OFF generation 0 and policy/route/host state stable. Real capsule, event/checkpoint/materialization inventory, Trace-to-version, and complete post-`7ba05599` comparison are absent. |
+
+### Current 8 measures
+
+| Measure | Current disposition |
+| --- | --- |
+| `target_authority` | **PASS (source/CI);** deployed Texture→Researcher binding is positive partial product evidence. |
+| `single_delivery_authority` | **PASS (source/CI);** lifecycle Store trigger/receipt authority is single-tape and `fd83ce64` strengthens exact wake/ack fate. |
+| `revision_control_causality` | **PARTIAL:** one v1→control→report prefix exists, not two downward controls plus two causally later revisions. |
+| `authority_negative_matrix` | **PASS (source/CI);** call-time role, target, host, and effect negatives pass. Real Linux capsule execution is separate. |
+| `owner_read_amplification` | **UNPROVED:** no accepted multi-revision trajectory exists. |
+| `progressive_owner_visibility` | **PARTIAL:** b5 v1 was visible while work remained open; no later revision incorporated a result or correction. |
+| `generic_grounded_writing` | **PARTIAL:** continuous prose and exact source packets exist, but no displayed research/execution transclusion or second style case exists. |
+| `automatable_texture_surface` | **PARTIAL:** create/read/show/watch-resume and negatives are deployed; live correct/source-open/full causality is missing. |
+
+### Current 19 `not_done_when` dispositions
+
+`PASS` here means the prohibition is excluded by the named evidence class; it
+does not promote other incomplete actions.
+
+| # | Current disposition |
+| --- | --- |
+| 1 | **PASS:** owner ratification and all three active registries are present; terminal closure remains pending. |
+| 2 | **TRIGGERED:** a real product prefix exists, but the complete repeated loop still lacks product evidence. |
+| 3 | **PARTIAL:** Texture product-started/addressed Researcher; Super/CoSuper are absent and no manual substitute evidence is counted. |
+| 4 | **TRIGGERED:** there is no post-report v2 and only one downward cycle. |
+| 5 | **PASS (source/CI):** no legacy inbox or second causal truth. |
+| 6 | **PASS (source/CI):** forbidden Texture targets and host mutation authority fail. |
+| 7 | **PASS (source/CI plus retained cancellation):** unusable/duplicate packet evidence has durable fate rather than a forced semantic revision or disappearance. |
+| 8 | **PARTIAL:** bounded no-effect readback exists; real capsule and full checkpoint/event/host comparison do not. |
+| 9 | **PASS (source/CI):** lookup, non-lifecycle, and direct generic privileged enqueue fail closed. |
+| 10 | **PASS (source/CI):** producer report work and target control work remain direction-specific. |
+| 11 | **PASS (source/CI plus b5):** control commit/wake fate-shares with the atomic Texture transition. |
+| 12 | **PASS (source/CI):** direct owner commit does not wait for a provider and commit/wake authority is atomic; the required deployed positive remains action 7 partial. |
+| 13 | **PASS (source/CI):** verifier cannot finalize, append host events, or exercise protected effects. |
+| 14 | **UNPROVED on staging Linux:** no accepted capsule proves exact network/capability isolation. |
+| 15 | **PASS:** b5 produced an informative appagent v1 while assigned work remained open. |
+| 16 | **UNPROVED:** no displayed post-result transclusion exists; absence is not evidence that prose was copied. |
+| 17 | **PARTIAL:** public machine-readable watch/show exists, but positive correction/source-open/full causality remains missing. |
+| 18 | **PASS:** schema/golden contracts and deployed continuous prose exclude a forced heading/status/coding shape; the second style case remains action 5 partial. |
+| 19 | **UNPROVED deployed:** source supports isolated multiple assignments, but no product capsule topology has run. |
+
+### Exact remaining gate after owner user presence
+
+Authenticate only the same owner, recover only the retained stable computer via
+the public product path, and nonce-bind host, guest, and services to exact
+`7ba05599` before minting a narrow key. Then product-prove post-report v2,
+correction incorporation, focused redirect, persistent Super result, changed
+control/v3, two parallel isolated writable capsules including verifier-written
+test evidence, positive source-open/API/CLI parity, a second writing style,
+pending-control same-build no-SSH restart, real delayed-result cancellation,
+complete capsule/no-effect/checkpoint/Trace/run-acceptance evidence, terminal key
+and root-backup disposition, registry closure, and a final independent audit.
 
 ## Identity and landing gates
 
