@@ -34,6 +34,16 @@ func TestSelfDevelopmentModeRequiresExactComputerScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/vmctl/lookup" || r.URL.Query().Get("user_id") != user.ID || r.URL.Query().Get("computer_id") != "computer-a" {
+			t.Fatalf("ownership lookup = %s?%s", r.URL.Path, r.URL.RawQuery)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"computer_id": "computer-a", "desktop_id": "primary", "user_id": user.ID, "state": "active",
+		})
+	}))
+	defer ownership.Close()
+	handler.vmctlClient = vmctl.NewClient(ownership.URL)
 
 	request := httptest.NewRequest(http.MethodGet, "/api/computers/computer-a/self-development/mode", nil)
 	request.Header.Set("Authorization", "Bearer "+secret)

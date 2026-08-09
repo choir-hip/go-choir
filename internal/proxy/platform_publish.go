@@ -94,6 +94,13 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	desktopID := requestDesktopID(r)
+	computerTarget, ok := h.requireAPIKeyComputerTarget(w, r, authResult, "", desktopID)
+	if !ok {
+		h.lifecycle.record("platform_publish.authz", "forbidden", time.Since(started))
+		return
+	}
+
 	var req publishTextureRequest
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
@@ -121,9 +128,8 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	desktopID := requestDesktopID(r)
 	resolveStarted := time.Now()
-	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
+	sandboxURL, err := h.resolveSandboxURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
 		log.Printf("proxy: platform publish failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user sandbox"})

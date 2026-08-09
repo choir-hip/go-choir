@@ -3478,7 +3478,7 @@ func TestRunComputeRecoveryRejectsStalePreRefreshHealth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
-	current, runtimeStatus, recoveryErr := handler.runComputeRecovery(context.Background(), "owner-unready", vmctl.PrimaryDesktopID)
+	current, runtimeStatus, recoveryErr := handler.runComputeRecovery(context.Background(), "owner-unready", vmctl.PrimaryDesktopID, "")
 	if recoveryErr == nil || !strings.Contains(recoveryErr.Error(), "guest health unavailable") {
 		t.Fatalf("recovery error = %v, want guest health refusal", recoveryErr)
 	}
@@ -3487,15 +3487,37 @@ func TestRunComputeRecoveryRejectsStalePreRefreshHealth(t *testing.T) {
 	}
 }
 
+func TestComputeRecoveryDoesNotJoinDifferentStableComputerAuthority(t *testing.T) {
+	tracker := newComputeRecoveryTracker()
+	release := make(chan struct{})
+	first := tracker.startOrJoin("owner", vmctl.PrimaryDesktopID, "computer-a", "wake_current_computer", func(context.Context) computeRecoveryRunResult {
+		<-release
+		return computeRecoveryRunResult{}
+	})
+	if first == nil {
+		t.Fatal("first recovery was not admitted")
+	}
+	var wrongRun atomic.Bool
+	second := tracker.startOrJoin("owner", vmctl.PrimaryDesktopID, "computer-b", "wake_current_computer", func(context.Context) computeRecoveryRunResult {
+		wrongRun.Store(true)
+		return computeRecoveryRunResult{}
+	})
+	if second != nil || wrongRun.Load() {
+		t.Fatalf("different stable-computer authority joined or ran: second=%v ran=%v", second, wrongRun.Load())
+	}
+	close(release)
+	<-first.done
+}
+
 func TestComputeRecoveryWaiterSnapshotsOriginalOperation(t *testing.T) {
 	tracker := newComputeRecoveryTracker()
-	first := tracker.startOrJoin("owner", vmctl.PrimaryDesktopID, "wake_current_computer", func(context.Context) computeRecoveryRunResult {
+	first := tracker.startOrJoin("owner", vmctl.PrimaryDesktopID, "", "wake_current_computer", func(context.Context) computeRecoveryRunResult {
 		return computeRecoveryRunResult{Err: errors.New("first refresh failed")}
 	})
 	<-first.done
 
 	releaseSecond := make(chan struct{})
-	second := tracker.startOrJoin("owner", vmctl.PrimaryDesktopID, "wake_current_computer", func(context.Context) computeRecoveryRunResult {
+	second := tracker.startOrJoin("owner", vmctl.PrimaryDesktopID, "", "wake_current_computer", func(context.Context) computeRecoveryRunResult {
 		<-releaseSecond
 		return computeRecoveryRunResult{}
 	})
@@ -4030,7 +4052,7 @@ func TestLoadConfig_VMctlTimeoutFallsBackOnInvalidValue(t *testing.T) {
 func testProxyEnvWithAuthStore(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Server, *auth.Store) {
 	t.Helper()
 
-	handler, priv, sandbox := testProxyEnv(t)
+	handler, priv, sandbox, _ := testVMctlProxyEnv(t)
 
 	// Create an auth store and wire it into the handler for API key validation.
 	dbDir := t.TempDir()
@@ -4046,14 +4068,18 @@ func testProxyEnvWithAuthStore(t *testing.T) (*Handler, ed25519.PrivateKey, *htt
 
 // createTestAPIKey creates a user and an API key in the auth store, returning
 // the raw secret and the user.
-func createTestAPIKey(t *testing.T, store *auth.Store, label string, scopes []string, expiresAt *time.Time) (*auth.User, string) {
+func createTestAPIKey(t *testing.T, handler *Handler, store *auth.Store, label string, scopes []string, expiresAt *time.Time) (*auth.User, string) {
 	t.Helper()
 	ctx := context.Background()
 	user, err := store.CreateUser("proxy-test-user-"+label, label+"@example.com")
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	_, secret, err := store.CreateAPIKey(ctx, user.ID, label, scopes, expiresAt)
+	computer, err := handler.vmctlClient.ResolveDesktopContext(ctx, user.ID, "primary")
+	if err != nil {
+		t.Fatalf("resolve owned computer: %v", err)
+	}
+	_, secret, err := store.CreateComputerScopedAPIKey(ctx, user.ID, label, scopes, computer.ComputerID, expiresAt)
 	if err != nil {
 		t.Fatalf("create api key: %v", err)
 	}
@@ -4069,7 +4095,7 @@ func hashSecretForTest(secret string) string {
 func TestBearerTokenAuthAcceptsValidAPIKey(t *testing.T) {
 	handler, _, _, store := testProxyEnvWithAuthStore(t)
 
-	user, secret := createTestAPIKey(t, store, "valid-key", []string{"read:runtime"}, nil)
+	user, secret := createTestAPIKey(t, handler, store, "valid-key", []string{"read:runtime"}, nil)
 
 	// Make a request with the Bearer token to the bootstrap endpoint.
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
@@ -4144,7 +4170,7 @@ func TestBearerTokenAuthRejectsNonChoirPrefix(t *testing.T) {
 func TestBearerTokenAuthRejectsRevokedKey(t *testing.T) {
 	handler, _, _, store := testProxyEnvWithAuthStore(t)
 
-	user, secret := createTestAPIKey(t, store, "revoked-key", []string{"read:base"}, nil)
+	user, secret := createTestAPIKey(t, handler, store, "revoked-key", []string{"read:base"}, nil)
 
 	// Revoke the key.
 	ctx := context.Background()
@@ -4214,7 +4240,7 @@ func TestBearerTokenAuthScopePropagation(t *testing.T) {
 	sandbox.Config.Handler = sandboxMux
 
 	scopes := []string{"read:runtime", "write:runtime"}
-	user, secret := createTestAPIKey(t, store, "scope-key", scopes, nil)
+	user, secret := createTestAPIKey(t, handler, store, "scope-key", scopes, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
 	req.Header.Set("Authorization", "Bearer "+secret)
@@ -4263,7 +4289,7 @@ func TestCookieAuthPreferredOverBearerToken(t *testing.T) {
 	handler, priv, _, store := testProxyEnvWithAuthStore(t)
 
 	// Create an API key for a different user.
-	_, secret := createTestAPIKey(t, store, "other-key", []string{"read:base"}, nil)
+	_, secret := createTestAPIKey(t, handler, store, "other-key", []string{"read:base"}, nil)
 
 	// Make a request with BOTH a valid cookie and a valid Bearer token.
 	// Cookie auth should win (it's tried first).
@@ -4305,7 +4331,7 @@ func TestBearerTokenAuthProtectedAPI(t *testing.T) {
 	})
 	sandbox.Config.Handler = sandboxMux
 
-	user, secret := createTestAPIKey(t, store, "api-key", []string{"read:runtime", "write:runtime"}, nil)
+	user, secret := createTestAPIKey(t, handler, store, "api-key", []string{"read:runtime", "write:runtime"}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	req.Header.Set("Authorization", "Bearer "+secret)
@@ -4348,7 +4374,7 @@ func TestBearerTokenAuthRejectsMissingScope_whenProtectedAPIRouteRequiresRuntime
 	})
 	sandbox.Config.Handler = sandboxMux
 
-	_, secret := createTestAPIKey(t, store, "runtime-read-only", []string{"read:runtime"}, nil)
+	_, secret := createTestAPIKey(t, handler, store, "runtime-read-only", []string{"read:runtime"}, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/test", nil)
 	req.Header.Set("Authorization", "Bearer "+secret)
@@ -4366,7 +4392,7 @@ func TestBearerTokenAuthRejectsMissingScope_whenProtectedAPIRouteRequiresRuntime
 func TestBearerTokenAuthRejectsMissingScope_whenComputeRecoveryRequiresRuntimeWrite(t *testing.T) {
 	handler, _, _, store := testProxyEnvWithAuthStore(t)
 
-	_, secret := createTestAPIKey(t, store, "compute-read-only", []string{"read:runtime"}, nil)
+	_, secret := createTestAPIKey(t, handler, store, "compute-read-only", []string{"read:runtime"}, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/compute/recovery", strings.NewReader(`{"action":"wake_current_computer"}`))
 	req.Header.Set("Authorization", "Bearer "+secret)
@@ -4394,7 +4420,7 @@ func TestBearerTokenAuthAcceptsBaseReadScope_whenProtectedAPIRouteIsBaseRead(t *
 	})
 	sandbox.Config.Handler = sandboxMux
 
-	user, secret := createTestAPIKey(t, store, "base-read", []string{"read:base"}, nil)
+	user, secret := createTestAPIKey(t, handler, store, "base-read", []string{"read:base"}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/base/delta?cursor=0", nil)
 	req.Header.Set("Authorization", "Bearer "+secret)
@@ -4449,7 +4475,7 @@ func TestBearerTokenAuthStripsClientSuppliedScopes(t *testing.T) {
 	sandbox.Config.Handler = sandboxMux
 
 	scopes := []string{"read:runtime"}
-	_, secret := createTestAPIKey(t, store, "strip-key", scopes, nil)
+	_, secret := createTestAPIKey(t, handler, store, "strip-key", scopes, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
 	req.Header.Set("Authorization", "Bearer "+secret)

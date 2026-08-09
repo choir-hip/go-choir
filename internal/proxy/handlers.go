@@ -530,10 +530,14 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve the sandbox URL for this user.
+	// Resolve only the exact API-key-bound computer (cookie routing is unchanged).
 	desktopID := requestDesktopID(r)
+	computerTarget, ok := h.requireAPIKeyComputerTarget(w, r, authResult, "", desktopID)
+	if !ok {
+		return
+	}
 	resolveStarted := time.Now()
-	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
+	sandboxURL, err := h.resolveSandboxURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
 		log.Printf("proxy: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeResolveError(w, err)
@@ -589,10 +593,16 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve only the authenticated user's sandbox for VM-owned APIs.
+	// Resolve only the authenticated user's exact API-key-bound computer.
 	desktopID := requestDesktopID(r)
+	computerTarget, ok := h.requireAPIKeyComputerTarget(w, r, authResult, "", desktopID)
+	if !ok {
+		h.lifecycle.record(stagePrefix+".authz", "forbidden", time.Since(authStarted))
+		h.lifecycle.record(stagePrefix+".total", "forbidden", time.Since(started))
+		return
+	}
 	resolveStarted := time.Now()
-	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
+	sandboxURL, err := h.resolveSandboxURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
 		log.Printf("proxy: failed to resolve sandbox for owner %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeResolveError(w, err)
@@ -754,10 +764,16 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 2: Resolve the sandbox URL for this user (VAL-VM-006).
+	// Step 2: Resolve only the exact API-key-bound computer (VAL-VM-006).
 	desktopID := requestDesktopID(r)
+	computerTarget, ok := h.requireAPIKeyComputerTarget(w, r, authResult, "", desktopID)
+	if !ok {
+		h.lifecycle.record("ws.authz", "forbidden", time.Since(authStarted))
+		h.lifecycle.record("ws.total", "forbidden", time.Since(started))
+		return
+	}
 	resolveStarted := time.Now()
-	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
+	sandboxURL, err := h.resolveSandboxURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
 		log.Printf("proxy WS: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeResolveError(w, err)
@@ -870,9 +886,13 @@ func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 2: Resolve the sandbox URL for this user.
+	// Step 2: Resolve only the exact API-key-bound computer.
 	desktopID := requestDesktopID(r)
-	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
+	computerTarget, ok := h.requireAPIKeyComputerTarget(w, r, authResult, "", desktopID)
+	if !ok {
+		return
+	}
+	sandboxURL, err := h.resolveSandboxURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
 		log.Printf("proxy super console WS: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeResolveError(w, err)

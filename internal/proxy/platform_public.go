@@ -185,6 +185,13 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 		h.lifecycle.record("platform_proposal.authz", "forbidden", time.Since(started))
 		return
 	}
+
+	desktopID := requestDesktopID(r)
+	computerTarget, ok := h.requireAPIKeyComputerTarget(w, r, authResult, "", desktopID)
+	if !ok {
+		h.lifecycle.record("platform_proposal.authz", "forbidden", time.Since(started))
+		return
+	}
 	var req proposalRequest
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
@@ -199,8 +206,7 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	desktopID := requestDesktopID(r)
-	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
+	sandboxURL, err := h.resolveSandboxURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
 		log.Printf("proxy: platform proposal resolve sandbox: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user sandbox"})

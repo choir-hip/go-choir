@@ -109,6 +109,9 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	desktopID := requestDesktopID(r)
+	if _, ok := h.requireAPIKeyComputerTarget(w, r, authResult, "", desktopID); !ok {
+		return
+	}
 	resp := computeStatusResponse{
 		Status:      "ok",
 		Service:     "compute-monitor",
@@ -166,12 +169,16 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	own, err := h.vmctlClient.LookupDesktopContext(r.Context(), authResult.UserID, desktopID)
+	if authResult.AuthMethod == "api_key" && err == nil && (own == nil || own.UserID != authResult.UserID || own.ComputerID != authResult.ComputerID || own.DesktopID != desktopID) {
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "computer ownership authority unavailable"})
+		return
+	}
 	if err != nil {
 		resp.Status = "degraded"
 		resp.CurrentComputer.LookupStatus = "error"
 		resp.CurrentComputer.Protection = "computer lookup failed"
 		resp.Warnings = append(resp.Warnings, "current computer lookup failed")
-		listed, listWarnings := h.userComputersForStatus(r.Context(), authResult.UserID, resp.CurrentComputer)
+		listed, listWarnings := h.visibleComputersForStatus(r.Context(), authResult, resp.CurrentComputer)
 		resp.Computers, resp.Warnings = appendComputerList(resp.Computers, resp.Warnings, listed, listWarnings)
 		h.writeComputeStatus(w, &resp, authResult.UserID, desktopID)
 		return
@@ -182,7 +189,7 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 		resp.CurrentComputer.LookupStatus = "not_found"
 		resp.CurrentComputer.Protection = protectionText(resp.CurrentComputer.WarmnessClass)
 		resp.CurrentComputer.Reclaimable = reclaimableWarmness(resp.CurrentComputer.WarmnessClass)
-		listed, listWarnings := h.userComputersForStatus(r.Context(), authResult.UserID, resp.CurrentComputer)
+		listed, listWarnings := h.visibleComputersForStatus(r.Context(), authResult, resp.CurrentComputer)
 		resp.Computers, resp.Warnings = appendComputerList(resp.Computers, resp.Warnings, listed, listWarnings)
 		h.writeComputeStatus(w, &resp, authResult.UserID, desktopID)
 		return
@@ -226,7 +233,7 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 	if resp.PersistentDisk != nil {
 		resp.Warnings = appendPersistentDiskWarnings(resp.Warnings, resp.PersistentDisk)
 	}
-	listed, listWarnings := h.userComputersForStatus(r.Context(), authResult.UserID, resp.CurrentComputer)
+	listed, listWarnings := h.visibleComputersForStatus(r.Context(), authResult, resp.CurrentComputer)
 	resp.Computers, resp.Warnings = appendComputerList(resp.Computers, resp.Warnings, listed, listWarnings)
 
 	h.writeComputeStatus(w, &resp, authResult.UserID, desktopID)
@@ -276,6 +283,17 @@ func appendComputerList(computers []computeComputer, warnings []string, listed [
 		warnings = append(warnings, listWarnings...)
 	}
 	return computers, warnings
+}
+
+func (h *Handler) visibleComputersForStatus(ctx context.Context, authResult *AuthResult, current computeComputer) ([]computeComputer, []string) {
+	if authResult != nil && authResult.AuthMethod == "api_key" {
+		return []computeComputer{current}, nil
+	}
+	userID := ""
+	if authResult != nil {
+		userID = authResult.UserID
+	}
+	return h.userComputersForStatus(ctx, userID, current)
 }
 
 func (h *Handler) userComputersForStatus(ctx context.Context, userID string, current computeComputer) ([]computeComputer, []string) {
@@ -347,6 +365,11 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 	if !h.authorizeAPIKeyScope(w, r, authResult) {
 		return
 	}
+	requestDesktop := requestDesktopID(r)
+	computerTarget, ok := h.requireAPIKeyComputerTarget(w, r, authResult, "", requestDesktop)
+	if !ok {
+		return
+	}
 	if h.vmctlClient == nil {
 		writeJSON(w, http.StatusNotImplemented, errorResponse{Error: "computer recovery requires vmctl routing"})
 		return
@@ -360,7 +383,11 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 	action := strings.TrimSpace(req.Action)
 	desktopID := strings.TrimSpace(req.DesktopID)
 	if desktopID == "" {
-		desktopID = requestDesktopID(r)
+		desktopID = requestDesktop
+	}
+	if authResult.AuthMethod == "api_key" && (computerTarget == nil || computerTarget.DesktopID != desktopID) {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key is bound to another desktop"})
+		return
 	}
 	if err := h.ensureComputerVersionRoute(r.Context(), authResult.UserID, desktopID); err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "immutable ComputerVersion route unavailable"})
@@ -369,8 +396,8 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 
 	switch action {
 	case "wake_current_computer", "resume_current_computer":
-		op := h.recoveries.startOrJoin(authResult.UserID, desktopID, action, func(ctx context.Context) computeRecoveryRunResult {
-			current, runtimeStatus, runErr := h.runComputeRecovery(ctx, authResult.UserID, desktopID)
+		op := h.recoveries.startOrJoin(authResult.UserID, desktopID, authResult.ComputerID, action, func(ctx context.Context) computeRecoveryRunResult {
+			current, runtimeStatus, runErr := h.runComputeRecovery(ctx, authResult.UserID, desktopID, authResult.ComputerID)
 			return computeRecoveryRunResult{
 				Current: current,
 				Runtime: runtimeStatus,
@@ -419,6 +446,13 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 			})
 		}
 	case "stop_current_computer":
+		if authResult.AuthMethod == "api_key" {
+			current, lookupErr := h.vmctlClient.LookupDesktopContext(r.Context(), authResult.UserID, desktopID)
+			if lookupErr != nil || current == nil || current.UserID != authResult.UserID || current.ComputerID != authResult.ComputerID || current.DesktopID != desktopID {
+				writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "computer ownership authority unavailable"})
+				return
+			}
+		}
 		if err := h.vmctlClient.StopDesktop(authResult.UserID, desktopID); err != nil {
 			log.Printf("proxy compute recovery: stop current computer desktop=%s: %v", desktopID, err)
 			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to stop current computer"})
@@ -454,11 +488,14 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID string) (computeComputer, *computeRuntimeStatus, error) {
+func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, expectedComputerID string) (computeComputer, *computeRuntimeStatus, error) {
 	own, err := h.vmctlClient.LookupDesktopContext(ctx, userID, desktopID)
 	if err != nil {
 		log.Printf("proxy compute recovery: lookup current computer desktop=%s: %v", desktopID, err)
 		return computeComputer{}, nil, err
+	}
+	if expectedComputerID != "" && (own == nil || own.UserID != userID || own.ComputerID != expectedComputerID || own.DesktopID != desktopID) {
+		return computeComputer{}, nil, fmt.Errorf("computer ownership authority changed before recovery")
 	}
 
 	var runtimeStatus *computeRuntimeStatus
@@ -468,6 +505,9 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID stri
 		if resolveErr != nil {
 			log.Printf("proxy compute recovery: wake current computer desktop=%s: %v", desktopID, resolveErr)
 			return computeComputer{}, nil, resolveErr
+		}
+		if expectedComputerID != "" && (resolved.UserID != userID || resolved.ComputerID != expectedComputerID || resolved.DesktopID != desktopID) {
+			return computeComputer{}, nil, fmt.Errorf("computer ownership authority changed during recovery")
 		}
 		current = computeComputerFromFields(
 			resolved.DesktopID,
@@ -484,6 +524,9 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID stri
 	} else if own.State == string(vmctl.VMStateStopped) || own.State == string(vmctl.VMStateHibernated) {
 		resolved, resolveErr := h.vmctlClient.ResolveDesktopContext(ctx, userID, desktopID)
 		if resolveErr == nil {
+			if expectedComputerID != "" && (resolved.UserID != userID || resolved.ComputerID != expectedComputerID || resolved.DesktopID != desktopID) {
+				return computeComputer{}, nil, fmt.Errorf("computer ownership authority changed during recovery")
+			}
 			current = computeComputerFromFields(
 				resolved.DesktopID,
 				string(resolved.Kind),
@@ -502,6 +545,9 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID stri
 			if refreshErr != nil {
 				log.Printf("proxy compute recovery: refresh stopped current computer desktop=%s: %v", desktopID, refreshErr)
 				return computeComputer{}, nil, refreshErr
+			}
+			if expectedComputerID != "" && (refreshed.UserID != userID || refreshed.ComputerID != expectedComputerID || refreshed.DesktopID != desktopID) {
+				return computeComputer{}, nil, fmt.Errorf("computer ownership authority changed during recovery")
 			}
 			current = computeComputerFromFields(
 				refreshed.DesktopID,
@@ -543,6 +589,9 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID stri
 		if refreshErr != nil {
 			log.Printf("proxy compute recovery: refresh unreachable current computer desktop=%s: %v", desktopID, refreshErr)
 			return current, runtimeStatus, fmt.Errorf("refresh current computer: %w", refreshErr)
+		}
+		if expectedComputerID != "" && (refreshed.UserID != userID || refreshed.ComputerID != expectedComputerID || refreshed.DesktopID != desktopID) {
+			return current, runtimeStatus, fmt.Errorf("computer ownership authority changed during recovery")
 		}
 		current = computeComputerFromFields(
 			refreshed.DesktopID,

@@ -31,15 +31,16 @@ type computeRecoveryRunResult struct {
 }
 
 type computeRecoveryOperation struct {
-	action   string
-	done     chan struct{}
-	status   string
-	started  time.Time
-	updated  time.Time
-	finished time.Time
-	current  computeComputer
-	runtime  *computeRuntimeStatus
-	err      error
+	action     string
+	computerID string
+	done       chan struct{}
+	status     string
+	started    time.Time
+	updated    time.Time
+	finished   time.Time
+	current    computeComputer
+	runtime    *computeRuntimeStatus
+	err        error
 }
 
 type computeRecoveryTracker struct {
@@ -55,7 +56,7 @@ func computeRecoveryKey(userID, desktopID string) string {
 	return userID + "\x00" + desktopID
 }
 
-func (t *computeRecoveryTracker) startOrJoin(userID, desktopID, action string, run func(context.Context) computeRecoveryRunResult) *computeRecoveryOperation {
+func (t *computeRecoveryTracker) startOrJoin(userID, desktopID, computerID, action string, run func(context.Context) computeRecoveryRunResult) *computeRecoveryOperation {
 	if t == nil {
 		return nil
 	}
@@ -65,15 +66,20 @@ func (t *computeRecoveryTracker) startOrJoin(userID, desktopID, action string, r
 	t.mu.Lock()
 	t.cleanupLocked(now)
 	if existing := t.ops[key]; existing != nil && existing.status == "refreshing" {
+		if existing.computerID != computerID {
+			t.mu.Unlock()
+			return nil
+		}
 		t.mu.Unlock()
 		return existing
 	}
 	op := &computeRecoveryOperation{
-		action:  action,
-		done:    make(chan struct{}),
-		status:  "refreshing",
-		started: now,
-		updated: now,
+		action:     action,
+		computerID: computerID,
+		done:       make(chan struct{}),
+		status:     "refreshing",
+		started:    now,
+		updated:    now,
 	}
 	t.ops[key] = op
 	t.mu.Unlock()

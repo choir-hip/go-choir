@@ -4473,7 +4473,7 @@ func TestCreateAPIKeyReturnsSecretOnce(t *testing.T) {
 		t.Fatalf("create user: %v", err)
 	}
 
-	body := `{"label":"Desktop sync","scopes":["read:base","write:base"]}`
+	body := `{"label":"Desktop sync","scopes":["read:base","write:base"],"computer_id":"computer-desktop-sync"}`
 	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
 	rec := httptest.NewRecorder()
 	h.HandleCreateAPIKey(rec, req)
@@ -4534,7 +4534,7 @@ func TestListAPIKeysReturnsKeysWithoutSecret(t *testing.T) {
 
 	// Create two keys.
 	for _, label := range []string{"key-one", "key-two"} {
-		body := fmt.Sprintf(`{"label":%q,"scopes":["read:base"]}`, label)
+		body := fmt.Sprintf(`{"label":%q,"scopes":["read:base"],"computer_id":"computer-list"}`, label)
 		req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
 		rec := httptest.NewRecorder()
 		h.HandleCreateAPIKey(rec, req)
@@ -4587,7 +4587,7 @@ func TestRevokeAPIKeySoftDeletes(t *testing.T) {
 	}
 
 	// Create a key.
-	body := `{"label":"to-revoke","scopes":["read:base"]}`
+	body := `{"label":"to-revoke","scopes":["read:base"],"computer_id":"computer-revoke"}`
 	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
 	rec := httptest.NewRecorder()
 	h.HandleCreateAPIKey(rec, req)
@@ -4643,7 +4643,7 @@ func TestHandleRevokeAPIKeyRejectsNonOwner(t *testing.T) {
 	}
 
 	// Owner creates a key.
-	body := `{"label":"owner-key","scopes":["read:base"]}`
+	body := `{"label":"owner-key","scopes":["read:base"],"computer_id":"computer-owner"}`
 	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, owner.ID)
 	rec := httptest.NewRecorder()
 	h.HandleCreateAPIKey(rec, req)
@@ -4685,7 +4685,7 @@ func TestHandleCreateAPIKeyWithExpiry(t *testing.T) {
 	}
 
 	exp := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
-	body := fmt.Sprintf(`{"label":"expiring","scopes":["admin"],"expires_at":%q}`, exp)
+	body := fmt.Sprintf(`{"label":"expiring","scopes":["admin"],"computer_id":"computer-expiry","expires_at":%q}`, exp)
 	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
 	rec := httptest.NewRecorder()
 	h.HandleCreateAPIKey(rec, req)
@@ -4711,7 +4711,7 @@ func TestCreateAPIKeyRejectsPastExpiry(t *testing.T) {
 	}
 
 	exp := time.Now().Add(-1 * time.Hour).UTC().Format(time.RFC3339)
-	body := fmt.Sprintf(`{"label":"past","scopes":["admin"],"expires_at":%q}`, exp)
+	body := fmt.Sprintf(`{"label":"past","scopes":["admin"],"computer_id":"computer-past","expires_at":%q}`, exp)
 	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
 	rec := httptest.NewRecorder()
 	h.HandleCreateAPIKey(rec, req)
@@ -4732,7 +4732,7 @@ func TestListAPIKeysWithBearerToken(t *testing.T) {
 	}
 
 	// Create an API key via cookie auth.
-	body := `{"label":"first key","scopes":["read:texture","read:base"]}`
+	body := `{"label":"first key","scopes":["manage:keys"]}`
 	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
 	rec := httptest.NewRecorder()
 	h.HandleCreateAPIKey(rec, req)
@@ -4777,7 +4777,7 @@ func TestCreateAPIKeyWithBearerToken(t *testing.T) {
 	}
 
 	// Create the first API key via cookie auth.
-	body := `{"label":"first key","scopes":["manage:keys","read:texture","read:base"]}`
+	body := `{"label":"first key","scopes":["manage:keys","read:texture","read:base"],"computer_id":"computer-delegate"}`
 	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
 	rec := httptest.NewRecorder()
 	h.HandleCreateAPIKey(rec, req)
@@ -4790,7 +4790,7 @@ func TestCreateAPIKeyWithBearerToken(t *testing.T) {
 	}
 
 	// Create a second API key using the first key's Bearer token.
-	body2 := `{"label":"second key","scopes":["read:base"]}`
+	body2 := `{"label":"second key","scopes":["read:base"],"computer_id":"computer-delegate"}`
 	createReq := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body2))
 	createReq.Header.Set("Authorization", "Bearer "+firstResp.Secret)
 	createRec := httptest.NewRecorder()
@@ -4821,7 +4821,7 @@ func TestCreateAPIKeyRejectsReadOnlyBearerEscalation(t *testing.T) {
 		t.Fatalf("create read-only key: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(`{"label":"escalated","scopes":["admin"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(`{"label":"escalated","scopes":["admin"],"computer_id":"computer-escalated"}`))
 	req.Header.Set("Authorization", "Bearer "+secret)
 	rec := httptest.NewRecorder()
 	h.HandleCreateAPIKey(rec, req)
@@ -4849,7 +4849,7 @@ func TestCreateAPIKeyRejectsBearerScopeBroadening(t *testing.T) {
 		t.Fatalf("create delegating key: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(`{"label":"broader","scopes":["write:runtime"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(`{"label":"broader","scopes":["write:runtime"],"computer_id":"computer-broader"}`))
 	req.Header.Set("Authorization", "Bearer "+secret)
 	rec := httptest.NewRecorder()
 	h.HandleCreateAPIKey(rec, req)
@@ -4978,7 +4978,7 @@ func TestAdminBearerCanCreateAndRevokeOwnerKeys(t *testing.T) {
 		t.Fatalf("create admin key: %v", err)
 	}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(`{"label":"runtime writer","scopes":["write:runtime"]}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(`{"label":"runtime writer","scopes":["write:runtime"],"computer_id":"computer-runtime"}`))
 	createReq.Header.Set("Authorization", "Bearer "+adminSecret)
 	createRec := httptest.NewRecorder()
 	h.HandleCreateAPIKey(createRec, createReq)
@@ -4996,5 +4996,98 @@ func TestAdminBearerCanCreateAndRevokeOwnerKeys(t *testing.T) {
 	h.HandleRevokeAPIKey(revokeRec, revokeReq)
 	if revokeRec.Code != http.StatusNoContent {
 		t.Fatalf("revoke status: got %d, want %d; body: %s", revokeRec.Code, http.StatusNoContent, revokeRec.Body.String())
+	}
+}
+
+func TestCreateAPIKeyComputerSelectingScopesRequireBinding(t *testing.T) {
+	targetScopes := []string{
+		"admin", "acceptance:read", "read:runtime", "write:runtime",
+		"read:base", "write:base", "read:texture", "write:texture",
+		"computer:lifecycle", "computer:self_development:read",
+		"computer:self_development:genesis", "computer:self_development:propose",
+		"computer:self_development:approve", "computer:self_development:rollback",
+		"computer:self_development:mode",
+	}
+	for index, scope := range targetScopes {
+		t.Run(scope, func(t *testing.T) {
+			h, priv := testHandlerEnv(t)
+			user, err := h.store.CreateUser(fmt.Sprintf("binding-user-%d", index), fmt.Sprintf("binding-%d@example.com", index))
+			if err != nil {
+				t.Fatalf("create user: %v", err)
+			}
+			body := fmt.Sprintf(`{"label":"missing binding","scopes":[%q]}`, scope)
+			req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
+			rec := httptest.NewRecorder()
+			h.HandleCreateAPIKey(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+			}
+			keys, err := h.store.ListAPIKeys(t.Context(), user.ID)
+			if err != nil || len(keys) != 0 {
+				t.Fatalf("keys=%d err=%v, want no persisted row", len(keys), err)
+			}
+		})
+	}
+}
+
+func TestCreateAPIKeyManageKeysOnlyMayRemainUnbound(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	user, err := h.store.CreateUser("manage-only-user", "manage-only@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(`{"label":"manager","scopes":["manage:keys"]}`), priv, user.ID)
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var created createAPIKeyResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if created.ComputerID != "" {
+		t.Fatalf("computer_id=%q want empty management-only binding", created.ComputerID)
+	}
+}
+
+func TestCreateAPIKeyBoundBearerDelegationRequiresSameComputer(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	user, err := h.store.CreateUser("bound-delegation-user", "bound-delegation@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, parentSecret, err := h.store.CreateComputerScopedAPIKey(t.Context(), user.ID, "bound manager", []string{"manage:keys", "read:base"}, "computer-a", nil)
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	for _, tc := range []struct {
+		name       string
+		computerID string
+		want       int
+	}{
+		{name: "empty", want: http.StatusBadRequest},
+		{name: "different", computerID: "computer-b", want: http.StatusForbidden},
+		{name: "same", computerID: "computer-a", want: http.StatusCreated},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := fmt.Sprintf(`{"label":%q,"scopes":["read:base"],"computer_id":%q}`, "child-"+tc.name, tc.computerID)
+			req := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body))
+			req.Header.Set("Authorization", "Bearer "+parentSecret)
+			rec := httptest.NewRecorder()
+			h.HandleCreateAPIKey(rec, req)
+			if rec.Code != tc.want {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, tc.want, rec.Body.String())
+			}
+			if tc.want == http.StatusCreated {
+				var created createAPIKeyResponse
+				if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if created.ComputerID != "computer-a" {
+					t.Fatalf("computer_id=%q want computer-a", created.ComputerID)
+				}
+			}
+		})
 	}
 }

@@ -389,18 +389,17 @@ func (h *Handler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "acceptance API key scope required"})
 		return
 	}
+	desktopID := requestDesktopID(r)
+	ownership, ok := h.requireAPIKeyComputerTarget(w, r, authResult, "", desktopID)
+	if !ok {
+		return
+	}
 	expectedPlatformSignerDigest := h.platformSignerDigest
 	if !strings.HasPrefix(expectedPlatformSignerDigest, "sha256:") {
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity trust configuration unavailable"})
 		return
 	}
-	if h.vmctlClient == nil {
-		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity authority unavailable"})
-		return
-	}
-	desktopID := requestDesktopID(r)
-	ownership, err := h.vmctlClient.LookupDesktopContext(r.Context(), authResult.UserID, desktopID)
-	if err != nil || ownership == nil || ownership.State != "active" || ownership.ComputerID == "" || ownership.VMID == "" || ownership.Epoch <= 0 || ownership.SandboxURL == "" {
+	if ownership == nil || ownership.UserID != authResult.UserID || ownership.ComputerID != authResult.ComputerID || ownership.DesktopID != desktopID || ownership.State != "active" || ownership.VMID == "" || ownership.Epoch <= 0 || ownership.SandboxURL == "" {
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity authority unavailable"})
 		return
 	}

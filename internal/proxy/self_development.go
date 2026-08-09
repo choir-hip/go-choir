@@ -45,7 +45,19 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
-	if authResult.AuthMethod != "api_key" {
+	requiredScope := "computer:self_development:read"
+	if r.Method == http.MethodPut {
+		requiredScope = "computer:self_development:mode"
+	}
+	if authResult.AuthMethod == "api_key" {
+		if !hasAPIKeyScope(authResult.Scopes, "admin") && !hasAPIKeyScope(authResult.Scopes, requiredScope) {
+			writeJSON(w, http.StatusForbidden, errorResponse{Error: "missing required scope: " + requiredScope})
+			return
+		}
+		if _, ok := h.requireAPIKeyComputerTarget(w, r, authResult, computerID, ""); !ok {
+			return
+		}
+	} else {
 		if h.vmctlClient == nil {
 			writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "computer ownership authority unavailable"})
 			return
@@ -53,20 +65,6 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		ownership, ownershipErr := h.vmctlClient.LookupComputerContext(r.Context(), authResult.UserID, computerID)
 		if ownershipErr != nil || ownership == nil || ownership.ComputerID != computerID {
 			writeJSON(w, http.StatusForbidden, errorResponse{Error: "computer ownership required"})
-			return
-		}
-	}
-	requiredScope := "computer:self_development:read"
-	if r.Method == http.MethodPut {
-		requiredScope = "computer:self_development:mode"
-	}
-	if authResult.AuthMethod == "api_key" {
-		if authResult.ComputerID != computerID {
-			writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key is bound to another computer"})
-			return
-		}
-		if !hasAPIKeyScope(authResult.Scopes, "admin") && !hasAPIKeyScope(authResult.Scopes, requiredScope) {
-			writeJSON(w, http.StatusForbidden, errorResponse{Error: "missing required scope: " + requiredScope})
 			return
 		}
 	}

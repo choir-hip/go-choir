@@ -1382,9 +1382,12 @@ func validateScopes(scopes []string) error {
 	return nil
 }
 
-func hasComputerScopedAPIKeyScope(scopes []string) bool {
+// scopeRequiresComputerBinding classifies requested attenuation only. The
+// binding is not ownership evidence; computer-selecting proxy routes still
+// perform an exact use-time vmctl ownership join.
+func scopeRequiresComputerBinding(scopes []string) bool {
 	for _, scope := range scopes {
-		if strings.HasPrefix(scope, "computer:") {
+		if strings.TrimSpace(scope) != "" && scope != "manage:keys" {
 			return true
 		}
 	}
@@ -1421,8 +1424,8 @@ func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
-	if hasComputerScopedAPIKeyScope(req.Scopes) && strings.TrimSpace(req.ComputerID) == "" {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "computer_id is required for computer-scoped keys"})
+	if scopeRequiresComputerBinding(req.Scopes) && strings.TrimSpace(req.ComputerID) == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "computer_id is required for computer-selecting scopes"})
 		return
 	}
 	if !apiKeyMayManageKeys(callerKey) {

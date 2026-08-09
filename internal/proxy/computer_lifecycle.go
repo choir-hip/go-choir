@@ -39,6 +39,7 @@ type resolvedComputerTarget struct {
 	ComputerID string
 	UserID     string
 	DesktopID  string
+	VMID       string
 	SandboxURL string
 	State      string
 	Epoch      int64
@@ -53,7 +54,7 @@ func (h *Handler) resolveAuthorizedComputer(ctx context.Context, authResult *Aut
 		return nil, err
 	}
 	return &resolvedComputerTarget{
-		ComputerID: scoped.ComputerID, UserID: scoped.UserID, DesktopID: scoped.DesktopID,
+		ComputerID: scoped.ComputerID, UserID: scoped.UserID, DesktopID: scoped.DesktopID, VMID: scoped.VMID,
 		SandboxURL: scoped.SandboxURL, State: scoped.State, Epoch: scoped.Epoch,
 	}, nil
 }
@@ -73,9 +74,16 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
-	if authResult.AuthMethod == "api_key" && (authResult.ComputerID != computerID || (!hasAPIKeyScope(authResult.Scopes, "admin") && !hasAPIKeyScope(authResult.Scopes, "computer:lifecycle"))) {
+	if authResult.AuthMethod == "api_key" && !hasAPIKeyScope(authResult.Scopes, "admin") && !hasAPIKeyScope(authResult.Scopes, "computer:lifecycle") {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "missing exact computer:lifecycle scope"})
 		return
+	}
+	var ownership *resolvedComputerTarget
+	if authResult.AuthMethod == "api_key" {
+		ownership, ok = h.requireAPIKeyComputerTarget(w, r, authResult, computerID, "")
+		if !ok {
+			return
+		}
 	}
 	var request struct {
 		IdempotencyKey string `json:"idempotency_key"`
@@ -88,10 +96,12 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
-	ownership, err := h.resolveAuthorizedComputer(r.Context(), authResult, computerID)
-	if err != nil || ownership == nil || ownership.ComputerID != computerID {
-		writeJSON(w, http.StatusNotFound, errorResponse{Error: "computer not found"})
-		return
+	if authResult.AuthMethod != "api_key" {
+		ownership, err = h.resolveAuthorizedComputer(r.Context(), authResult, computerID)
+		if err != nil || ownership == nil || ownership.ComputerID != computerID {
+			writeJSON(w, http.StatusNotFound, errorResponse{Error: "computer not found"})
+			return
+		}
 	}
 	if action == "status" {
 		writeJSON(w, http.StatusOK, map[string]any{

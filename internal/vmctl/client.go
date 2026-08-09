@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,6 +21,11 @@ type Client struct {
 }
 
 const DefaultClientTimeout = 60 * time.Second
+
+// ErrComputerLookupIdentityMismatch means vmctl returned a stable ComputerID
+// other than the exact identity requested. Callers must classify it as denied
+// authority, not as a retryable control-plane outage.
+var ErrComputerLookupIdentityMismatch = errors.New("vmctl computer lookup identity mismatch")
 
 // NewClient creates a vmctl client pointing at the given base URL.
 func NewClient(baseURL string) *Client {
@@ -241,8 +247,11 @@ func (c *Client) lookupComputerContext(ctx context.Context, userID, computerID s
 		return nil, fmt.Errorf("vmctl client: computer lookup status %s", resp.Status)
 	}
 	var result ownershipResponse
-	if err := json.Unmarshal(body, &result); err != nil || result.ComputerID != computerID {
-		return nil, fmt.Errorf("vmctl client: computer lookup identity mismatch")
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("vmctl client: decode computer lookup response: %w", err)
+	}
+	if result.ComputerID != computerID {
+		return nil, fmt.Errorf("%w: requested %q", ErrComputerLookupIdentityMismatch, computerID)
 	}
 	return &result, nil
 }

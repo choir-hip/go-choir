@@ -51,7 +51,14 @@ func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 	const nonce = "nonce-bound-identity-join"
 	handler, privateKey, sandbox, authStore := testProxyEnvWithAuthStore(t)
 	defer sandbox.Close()
-	user, apiSecret := createTestAPIKey(t, authStore, "identity-join", []string{"acceptance:read"}, nil)
+	user, err := authStore.CreateUser("proxy-test-user-identity-join", "identity-join@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, apiSecret, err := authStore.CreateComputerScopedAPIKey(t.Context(), user.ID, "identity-join", []string{"acceptance:read"}, computerID, nil)
+	if err != nil {
+		t.Fatalf("create bounded api key: %v", err)
+	}
 	ownerID = user.ID
 
 	publicKey, guestPrivateKey, err := ed25519.GenerateKey(rand.Reader)
