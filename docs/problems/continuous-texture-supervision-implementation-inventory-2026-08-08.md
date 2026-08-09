@@ -1820,3 +1820,30 @@ security rereview both returned `ACCEPT`.
 The candidate is not yet deployed or product-proved. Effects remain OFF. The
 next gate is commit/push, full CI/Differential SBOM, exact Linux deployment, and
 nonce-bound wake/guest identity before any mailbox acceptance mutation.
+
+### Exact candidate deployed; target-owner authentication requires user presence
+
+Commit `7ba05599c15f6d126f86fa6fe1a44bc36a928121` passed CI run
+[`31310481745`](https://github.com/choir-hip/go-choir/actions/runs/31310481745),
+including all Race shards, aggregate Go, Differential SBOM acceptance, rolling
+publication, and Node B deployment. The public proxy health body reports that
+exact host commit, and the deploy activation receipt exact-joins all selected
+host services. This is host deployment evidence only; it does not substitute
+for the retained guest identity gate.
+
+The retained target owner's browser refresh session is no longer valid.
+`GET /auth/session` returns an unauthenticated session in each existing local
+browser context, and every previously scoped target acceptance key is expired or
+revoked as intended. The browser was reconnected to its existing Chrome CDP
+profile and an exact passkey login was initiated for the same owner; the platform
+is now waiting for Touch ID/security-key user presence. No new account, computer,
+key, recovery token, replacement guest, SSH path, internal vmctl path, or weaker
+identity probe was used. The separately authenticated different-owner computer
+remains inadmissible.
+
+Accordingly the candidate is deployed but the stable computer has not yet been
+woken or product-proved. The next admissible transition is owner user presence
+at the already-open passkey ceremony. After it succeeds, renew the same-origin
+session, inspect the retained computer, issue the normal public recovery if it
+is still failed, and require a fresh nonce-bound exact host/guest/service join
+before minting a narrowly scoped acceptance key. Effects remain OFF.
