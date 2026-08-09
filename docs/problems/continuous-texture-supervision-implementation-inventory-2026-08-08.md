@@ -2264,3 +2264,51 @@ gap. Heresy delta: `discovered` — none beyond the already recorded gap and
 aggregate SQLite contention; `introduced` — none observed by CI/deploy;
 `repaired` — source/host enforcement landed, deployed bearer-path repair still
 awaits product proof.
+
+
+### Exact-owner handoff and retained-recovery ceremonies prepared — 2026-08-09
+
+The repaired host is exact and the owner-presence gate is now the only
+prerequisite to live bearer proof. Four local helpers were prepared outside the
+repository and reviewed without executing them or inspecting any clipboard,
+key, or live evidence:
+
+- clipboard ingestion reads only after an explicit owner `copied` signal,
+  validates the exact secret shape, persists through same-directory exclusive
+  mode-`0600` creation with file and directory fsync, and proves an empty
+  clipboard without printing the secret;
+- pre-recovery proof opens that credential once with no-follow, uid,
+  regular-file, and exact-mode checks, refuses redirects, and requires in order
+  exact `fbc7ff5a` public health, retained stable-computer lifecycle `primary` /
+  failed / epoch `8253`, self-development `off` generation `0`, wrong stable
+  ComputerID path `403`, pre-recovery execution-identity `503`, and an unchanged
+  final lifecycle comparator;
+- recovery owns one persistent request-bound marker before its sole POST,
+  freshly rechecks lifecycle, single-computer/no-concurrent-recovery status, and
+  exact host identity, waits only for terminal `ready`, and then requires the
+  same stable ComputerID, logical desktop, retained `vm-bb…`, higher epoch, and
+  signed nonce-bound `fbc7ff5a` guest/host/deployment/service identity;
+- terminal cleanup selects the unique exact label/live row, requires its stable
+  binding, eight-scope set, and expiry metadata, obtains exact DELETE `204`,
+  proves same-bearer `401`, and only then removes the exact local inode and
+  proves path absence. HTTP `401` alone is never called revocation proof.
+
+The signed identity verifier was rebuilt independently twice from exact
+`fbc7ff5a` archives plus one reviewed `http.Client` no-redirect line. The two
+binaries are byte-equal at SHA-256
+`3511c9f66f80367e4c31db735cafc84cfb0f6ec31fe295b94d4cf0a5c1d1887c`;
+the sole patch is SHA-256
+`afaa760da2a15d30df0fd804aa4e335719f0f9b2bcf0aa07311bd82b29682041`.
+The binary and build receipt are installed under the owner-only mode-`0700`
+secret directory and are verified before any recovery marker or POST. The CLI
+then verifies guest and platform signatures, signer trust, validity, receipt and
+route/host/deployment digests; the recovery ceremony retains the full safe
+signed envelope.
+
+`narrow-key-probe-review` and `retained-recovery-ceremony-review` returned final
+`ACCEPT` only after rejecting and repairing sequencing, redirect, malformed
+JSON, freshness, marker durability, terminal-ready, signature/digest,
+redaction, binary provenance, hash-to-exec, and prerequisite-order defects.
+This is preparation evidence only. The direct payload, ingestion, bearer probes,
+recovery POST, verifier, and revocation helper remain unexecuted; no key exists;
+effects remain OFF.
