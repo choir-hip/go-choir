@@ -244,6 +244,33 @@ isolation, command execution, network denial, overlay behavior, or granted
 verbs. Those final evidence surfaces remain missing, so action 3 remains
 partial and may require a problem-led owner-scoped projection/CLI repair.
 
+Two independent source audits now confirm that this is a product-surface
+blocker, not merely an observer gap. Public snapshot/events expose capsule mode
+declarations and opaque refs but not the durable report/candidate or granted
+receipt bodies. Run list/detail adds binding provenance only. RunAcceptance's
+current assigned-CoSuper checkpoint does not verify kernel isolation. The
+Super-return packet drops commands, outputs, mutations, executor receipts, and
+typed sources, so existing Texture source-open cannot recover them. Executor
+receipt bodies live under `/run/choir/capsules` and cannot be treated as
+computer-restart authority. Therefore no existing public combination proves
+real namespace/cgroup/mount/process isolation, exact granted verbs, command execution,
+network denial, writable-overlay behavior, immutable verifier certification,
+full freeze/revoke/destroy history, or execution-source transclusion.
+
+This discovery is documented before any code repair. A route-only expansion
+would still be insufficient and must not retro-certify an old run. The minimal
+admissible direction is one read-only owner-scoped paginated API/CLI projection
+that reuses existing lifecycle cursors, assignments, reports, and candidates,
+plus only the runtime-derived sanitized policy plus verifier-known probe-result/execution/fate
+attestations that must be atomically persisted into that existing authority
+chain before scratch receipts disappear. It must reuse Texture's source graph,
+not create a second evidence document or ledger; fail closed when optional old
+rows lack proof; preserve the stable-computer API-key guard; expose no raw
+capability, handle, socket, host path, secret, live executor inspection, or
+unsafe command/output body; and require fresh Linux probes for denial and
+overlay claims. Exact DTO/write/probe/auth/restart/rollback contracts remain
+under review. Effects remain OFF and action 3 remains partial.
+
 ### Current 9 acceptance actions
 
 | # | Current disposition |

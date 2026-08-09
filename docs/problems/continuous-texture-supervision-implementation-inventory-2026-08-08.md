@@ -2819,3 +2819,83 @@ later reports/Texture sources/RunAcceptance must still be assessed; otherwise
 a separately documented public projection/CLI repair is required. The helper
 is **NOT EXECUTED**, the owner `copied` gate is unchanged, and action 3 remains
 partial.
+
+
+### Public capsule execution evidence is not restart-durable or owner-openable — 2026-08-09
+
+Two independent source audits after freezing the topology observer establish a
+new red product-surface blocker. This is documented before any repair. At
+`fbc7ff5a`, public lifecycle snapshots and event pages expose exact assignment
+bindings, declared capsule modes, report refs, current fate refs, and reducer
+order. Public run list/detail adds assignment metadata and a terminal report ID.
+Those surfaces are sufficient for the accepted three-assignment topology and
+nothing stronger.
+
+The full `CoSuperAssignmentReport` and `CoSuperSubjectCandidate` are durable
+Store objects, but no public route or CLI opens them. `ExecutionReceipt`,
+`GrantedExecutionReceipt`, freeze receipt, and revocation receipt contain useful
+runtime bindings, yet their bodies are executor-local and unavailable through
+an owner surface. Executor receipt artifacts are rooted under
+`/run/choir/capsules`; a computer restart can retain lifecycle assignments,
+reports, candidates, and opaque refs while losing the receipt bodies needed to
+interpret them. The final assignment row also overwrites freeze intent/ack with
+revoke intent/ack, leaving only immutable raw event refs for historical order.
+`InspectCapsuleRaw`, executor maps/files, Store getters, and internal tools are
+inadmissible substitutes.
+
+The existing Texture evidence path does not repair this. The Super-return
+packet reduces a CoSuper report to summary/claim and places generic evidence
+refs in notes; it drops commands, outputs, mutations, executor receipt refs,
+and typed sources. Therefore the generic source-entity/reference and
+source-open machinery has no capsule execution entity to transclude or open.
+RunAcceptance likewise does not verify assigned-capsule physics: its durable
+CoSuper completion checkpoint and unconditional bounded-effect invariant do not
+prove namespace/cgroup/mount/process isolation, granted verbs, command execution,
+network denial, overlay isolation, or destroy acknowledgement.
+
+The remaining error field is exact:
+
+- real Linux user/PID/mount/net/UTS/IPC/cgroup isolation is unobserved publicly;
+- the exact historical broker verb grant is not durably disclosed;
+- command and granted receipt bodies are hidden behind opaque refs;
+- `network_mode=forbidden` and the writable-overlay mode are declarations, not
+  executed denial/isolation proof;
+- implementation candidate and verifier subject joins are only partly public
+  because report/candidate/certification bodies are hidden;
+- freeze, revoke, destroy, and absence acknowledgements are not one typed
+  public history; and
+- no exact execution receipt is available as a Texture source identity that a
+  later revision can transclude and the owner can source-open.
+
+A route-only wrapper over current refs would be false repair, and no old run may
+be retro-certified from deployed source. The current minimal design conjecture is an
+additive read-only owner/computer/trajectory-scoped paginated API plus matching
+CLI, backed by the existing lifecycle cursor and assignment/report/candidate
+object graph. Before executor scratch evidence disappears, the runtime must
+sanitize and atomically fate-share the missing grant-policy plus verifier-known probe-result/execution/fate
+attestations into that existing authority chain. Old rows without the optional
+attestations must return incomplete proof, not inferred success. The projection
+must map validated evidence into the existing `CoagentPacketSource` → Texture
+source graph rather than introduce a new ledger, table, service, or competing
+source document.
+
+Design review must still freeze the exact DTO and write boundary. At minimum it
+must preserve the deployed stable-ComputerID API-key guard and owner lookup,
+reuse `read:runtime` unless an independently justified narrower scope is needed,
+page with existing cursor-expiry/replay semantics, survive Store/runtime and
+computer restart without a live executor, and expose no raw capability,
+execution handle, token, key, socket, host path, raw host/namespace PID, command secret, or
+unbounded output. Kernel/network/overlay claims require fixed runtime probes
+whose bytes and expected typed outcomes are verifier-known; declared modes or
+arbitrary shell narrative cannot substitute. Linux integration, cross-owner and
+wrong-computer auth negatives, lineage/fate races, restart byte-equivalence,
+Texture source-open, CLI parity, and RunAcceptance fail-closed behavior are
+required before deployment.
+
+Mutation class will be red because the repair touches evidence, lifecycle
+conditional writes, capsule receipt binding, stable-computer routing, Texture
+sources, and possibly RunAcceptance. Rollback is additive-schema compatible:
+revert route/CLI/enrichment readers and writers, retain already-written optional
+evidence as inert unknown fields/objects, do not destructively migrate or delete
+receipts, and keep effects OFF. Heresy delta so far is `discovered`: public
+capsule evidence is neither physically complete nor restart-durable.
