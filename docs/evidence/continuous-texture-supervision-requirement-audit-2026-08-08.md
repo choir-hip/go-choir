@@ -122,13 +122,31 @@ trajectory cancellation, byte-exact policy rollback, and narrow-key cleanup
 obligations. Final source review returned `ACCEPT`; a fully mocked run validates
 helper logic only. No product request has run, so action 3 remains partial.
 
+### Owner correction and causally joined v2 ceremony
+
+The exact next write is also prepared, independently accepted, and unexecuted.
+Helper SHA-256 is
+`c068c1c87aa9534248c5970aa96881de0ee0c2e1a6f0f6aeb8a98a9e73052dd5`;
+its one stable owner occurrence is `cts-fbc-correct-v2-c77146f860e6`, with
+412-byte content at SHA-256
+`c77146f860e6cd1ac2a24ee7240203f801ac0c209f2963315f81c2d863444d81`.
+It catches up and freezes the durable cursor before one semantic `/correct`,
+then requires the exact pending receipt, public Texture plus raw-lifecycle
+queue/turn joins, exact public v2/head/live/open state, the frozen correction
+sentence exactly once, and at least one valid canonical source identity new
+relative to v1. An intentional identical consumed replay must not duplicate the
+queue or revision. Cursor progress and recovery/cancel/rollback/cleanup
+obligations persist atomically. Two final source reviews returned `ACCEPT`; a
+fully mocked exact-contract run validates helper logic only. Actions 3 and 4
+remain partial until deployed execution.
+
 ### Current 9 acceptance actions
 
 | # | Current disposition |
 | --- | --- |
 | 1 | **PASS (source/local/CI):** focused registry, authorization, reducer, atomic-turn, projection/transclusion, replay, cancellation, capsule, API/CLI, stable-computer ownership guard, Race, aggregate Go, vet, and SBOM evidence passes through `fbc7ff5a`. |
 | 2 | **PASS (local evidence class):** pre-cutover/idempotency/restart contracts pass; `fd83ce64` adds exact trigger/run-memory/ack recovery and `7ba05599` adds real Store+SQLite terminal two-restart proof. Deployed pending-control restart is action 6. |
-| 3 | **PARTIAL:** the b5 prefix proves open-work v1, one exact Researcher control, and repeated Researcher provider/source packets. An independently accepted exact-`fbc7ff5a` start/v1/open-Researcher ceremony is prepared but unexecuted. Post-report v2, second control, persistent Super, parallel CoSupers, verifier capsule, and v3 are missing. |
+| 3 | **PARTIAL:** the b5 prefix proves open-work v1, one exact Researcher control, and repeated Researcher provider/source packets. Independently accepted exact-`fbc7ff5a` start/v1/open-Researcher and owner-correction/causal-v2/new-source ceremonies are prepared but unexecuted. Second control, persistent Super, parallel CoSupers, verifier capsule, and v3 are missing. |
 | 4 | **PARTIAL:** deployed create/tell/read/history/revisions/exact-show, durable watch resume, empty terminal resume, cancellation, and authority negatives exist. Positive live correction, exact incorporated source-open, and full live parity are missing. |
 | 5 | **PARTIAL:** deployed continuous-prose interim v1 exists. A differently styled case and end-to-end displayed transclusion inspection do not. |
 | 6 | **PARTIAL:** an earlier exact deployment restart recovered initial work. No post-mailbox same-build restart with pending Researcher and Super controls exists, and exact `fbc7ff5a` guest identity is unproved. |

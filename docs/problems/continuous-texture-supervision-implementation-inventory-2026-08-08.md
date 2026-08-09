@@ -2486,3 +2486,57 @@ fully mocked exact-contract run also reached `PASS_ACCEPTANCE_START_V1`; it was
 logic validation only, not product evidence. The helper and prompt remain **NOT
 EXECUTED** and do not prove v2, correction, Super, capsules, v3, cancellation,
 or action 9.
+
+
+### Accepted owner-correction/v2 ceremony — 2026-08-09
+
+The next red acceptance write after the accepted start/v1 gate now also has an
+exact source-reviewed ceremony. `/tmp/cts-acceptance-correct-v2.py` is SHA-256
+`c068c1c87aa9534248c5970aa96881de0ee0c2e1a6f0f6aeb8a98a9e73052dd5`.
+Its single durable owner occurrence is
+`cts-fbc-correct-v2-c77146f860e6`; the exact 412-byte correction is SHA-256
+`c77146f860e6cd1ac2a24ee7240203f801ac0c209f2963315f81c2d863444d81`.
+It asks the next continuous-prose revision to contain exactly once the ordinary
+sentence “Persistence alone is not learning; corrections must causally change
+later revisions.”, argue it from at least one newly available canonical source,
+avoid workflow formatting, and keep Texture, research, and comparison work open.
+The sentence must be absent from v1 before POST.
+
+Before the one semantic `/correct` occurrence, the helper pins the accepted
+start evidence and exact helper hash, re-proves owner/computer/route/policy and
+rollback/cleanup provenance, resumes the accepted Texture cursor to the current
+watermark, refuses any pre-existing owner instruction or v2, and requires v1 to
+remain the exact live head with the exact initial Texture and a Researcher work
+item open. A mode-`0600`, fsynced marker freezes prior evidence, route, v1,
+cursor/watermark, target work, literal request bytes/digest, client occurrence,
+and rollback obligations before POST. The first response must be the exact
+pending, non-replay `choir.texture_owner_instruction.v1` receipt; crash recovery
+may transition only the same immutable receipt from pending to consumed.
+
+PASS joins the queue receipt to both the public Texture projection and public raw
+lifecycle-event page by event/cursor/command/digest/request/work/time. It then
+joins exactly one later, singly correction-caused `texture_turn_committed`
+version event to raw lifecycle artifacts, the exact public revision, owner,
+document head, snapshot head, and still-live/open Texture plus Researcher work.
+V2 must differ from v1, contain the qualification exactly once, retain at least
+400 UTF-8 bytes of continuous prose with zero heading/list/table/status-template
+lines, carry valid canonical source identities, and include at least one exact
+ref/entity version/hash tuple absent from v1. After consumption the helper makes
+one intentional byte-identical occurrence replay; it must return
+`replay=true,status=consumed` with identical immutable receipt fields and no
+second queue or v2 occurrence. Cursor/event evidence is fsynced after every page,
+and every request and sleep is deadline-clamped.
+
+Every post-marker STOP retains exact occurrence recovery, fresh conditional
+public trajectory cancellation, accepted byte-exact policy rollback, and
+accepted DELETE-204/post-401 key cleanup in that order. PASS carries those
+obligations forward because the trajectory must remain live for the second
+control, persistent Super, parallel capsules/verifier, and v3. Two independent
+source reviews rejected the earlier unverified “new canonical source” clause;
+both returned `ACCEPT` on the exact repaired bytes. Python syntax and a fully
+mocked exact public-contract run reached `PASS_ACCEPTANCE_CORRECT_V2`, including
+pending-to-consumed replay, raw lifecycle joins, and one new source identity.
+That mock is logic validation only. The helper remains **NOT EXECUTED** and does
+not itself prove the second downward control, persistent Super, capsule
+parallelism, exact source-open parity, restart, cancellation, RunAcceptance, or
+raw Trace.
