@@ -12,26 +12,27 @@ Super, many capability-bound capsule-only CoSupers, progressive prose-first
 versions with canonical source transclusions, and an automatable Texture API/CLI
 surface.
 
-The current deployed runtime is `7ba05599`. CI/deploy run `31310481745` passed
-all selected Race shards, aggregate Go, Differential SBOM acceptance, rolling
-publication, and Node B deployment. Public `/health` reports the exact proxy commit, and the
-deploy activation receipt exact-joins every selected host service. The deployment is host proof only. A native passkey ceremony completed in ordinary headed Chrome, but exact
-retained-owner identity was not proved: target-bound registry rows were
-caller-supplied metadata, and the accidental bearer's public compute status selected primary active
-epoch `130`, incompatible with retained primary failed epoch `8253`. Both
-accidental keys are revoked/post-401, so no usable bearer remains. The prepared
-script must invoke canonical same-origin `GET /auth/session`, which may rotate
-refresh/access cookies on the RED auth surface, and require exact owner
-`c72404bb…` before its only API-key POST; mismatch makes zero key POST and
-requires a fresh retained-owner native assertion. A broader substrate gap is now
-problem-first documented: API-key binding is requested metadata, and private
-computer routes do not uniformly join it to exact vmctl ownership before
-selection/resolve/effects. The frozen direct-key payload is PAUSED until the
-shared guard is CI/deployed and publicly proved. `omp-browser` remains
-HeadlessChrome/150 with an OMP temporary profile, basic password store, and mock
-keychain; it is diagnostic-only and has no proven owner-operable native prompt. No headless
-retry, CDP virtual authenticator, substitute owner/computer, recovery bypass,
-SSH, internal vmctl path, or weaker identity is admissible.
+The current host-deployed runtime is `fbc7ff5a`. CI/deploy run `31326948312`
+passed selected Race shards, aggregate Go, differential SBOM acceptance, rolling
+publication, and Node B deployment. Public `/health` reports exact proxy commit
+`fbc7ff5a`; activation receipts exact-join auth, proxy, vmctl, gateway, corpusd,
+maild, and sourcecycled, and the activated closure updated the canonical guest
+image and sandbox pointers without refreshing the failed retained computer. This
+is host/source readiness, not retained guest proof. The shared API-key guard now
+requires every computer-selecting bearer route to use-time join exact owner and
+stable ComputerID before selection, resolve, recovery, dial, or product effect;
+independent security and route reviews returned `ACCEPT`. A native passkey
+ceremony previously completed in ordinary headed Chrome, but exact retained-owner
+identity was not proved: target-bound registry rows were caller-supplied metadata,
+and the accidental bearer's public compute status selected primary active epoch
+`130`, incompatible with retained primary failed epoch `8253`. Both accidental
+keys are revoked/post-401, so no usable bearer remains. The frozen script's
+deployment gate is satisfied, but its sole POST remains authorized only after
+canonical same-origin `GET /auth/session` proves exact owner `c72404bb…` through
+ordinary headed persistent Chrome with native physical presence. `omp-browser`
+remains diagnostic-only. No headless retry, CDP virtual authenticator, substitute
+owner/computer, recovery bypass, SSH, internal vmctl path, or weaker identity is
+admissible.
 
 A read-only reconciliation of a newly supplied F-era handoff confirms it is
 historical, not a rollback instruction. At that reconciliation checkpoint source
@@ -51,19 +52,20 @@ attenuation made one nonce-labelled child `ak_834c56be…`; local secret persist
 failed before file creation because the notebook `os` name was shadowed. The
 failure branch executed exactly: no retry, child DELETE 204/post-401, broad
 self-DELETE 204/post-401, credential files removed, and zero lifecycle/product/
-effect writes. No usable new key remains. The next ceremony must first prove exact retained
-owner `c72404bb…` via the authorized canonical session-renewal GET (fresh
-assertion on mismatch), then mint the exact <=2-hour eight-scope key directly, bound to
-stable computer `computer-42850e9734d9442386c5dd8bf3afbf19` and never VM
-`vm-bb…`; ingestion must use an isolated shell/unshadowed module path and verify
-mode `0600` before any API call. Exact stable-computer lifecycle STATUS must
-ownership-join logical desktop `primary` before self-development or any generic
-target route. The authorized RED repair must first centralize that join across
-HTTP/WS/compute/recovery/execution-identity/self-development/private publication
-routes with exact ownership and zero downstream wrong-target selection/effect tests. The independently accepted, once-ever
-direct headed-browser payload is preserved at
+effect writes. No usable new key remains. The next ceremony must first prove
+exact retained owner `c72404bb…` via the authorized canonical session-renewal GET
+(fresh assertion on mismatch), then mint the exact <=2-hour eight-scope key
+directly, bound to stable computer
+`computer-42850e9734d9442386c5dd8bf3afbf19` and never VM `vm-bb…`; ingestion must
+atomically persist mode `0600` and clear the clipboard before any API call. Exact
+stable-computer lifecycle STATUS must ownership-join logical desktop `primary`
+at failed epoch `8253` before self-development, wrong-target, or pre-recovery
+identity probes. The independently accepted once-ever direct headed-browser
+payload is preserved at
 `docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`
-(SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`); it is prepared, PAUSED, and not executed. Effects remain OFF.
+(SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`);
+its deployment gate is satisfied, it is authorized only with exact-owner physical
+presence, and it remains not executed. Effects remain OFF.
 
 The last exact guest-proved product prefix remains `b5d907a3`: Texture published
 a continuous-prose v1 while work was open, atomically addressed its bound
@@ -86,7 +88,7 @@ remains qualified as bounded deployed rollback-and-recovery PASS with strict
 midpoint forward-observability FAIL, safely recovered. Root-only provider-auth
 rollback copies remain pending terminal deletion or explicit retention authority.
 Effects remain OFF. After exact narrow-key handoff and read-only authority proof, the retained computer must
-prove exact `7ba05599` guest/service identity before fresh acceptance continues
+prove exact `fbc7ff5a` guest/service identity before fresh acceptance continues
 through post-report v2, correction incorporation, a second downward cycle,
 persistent Super, two isolated writable capsules including a verifier, v3,
 source-open/CLI parity, same-build restart, delayed-result cancellation, complete

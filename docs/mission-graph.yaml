@@ -252,36 +252,34 @@ nodes:
       Super; many capability-bound capsule-only CoSupers; mandatory independent
       writable-capsule verification; progressive prose versions; one canonical
       source_ref projection; and an automatable Texture API/CLI surface. The
-      current host-deployed runtime is 7ba05599, accepted by CI/deploy
-      31310481745 including Race shards, aggregate Go, Differential SBOM, rolling
-      publication, and Node B activation receipts. Public health reports the exact
-      proxy commit and the deploy receipt exact-joins the selected host services,
-      but retained guest/service identity remains unproved. A native Touch ID/security-key
-      ceremony completed, but exact retained-owner identity was not proved: target-bound
-      key rows were caller-supplied metadata and the accidental bearer's public compute status selected
-      primary active epoch130 rather than retained failed epoch8253. The first
-      handoff produced broad key ak_e2552ee6. Reviewed one-shot attenuation created child ak_834c56be, but
-      local storage failed before file creation. The fail-closed branch made no
-      retry, revoked child and broad with DELETE 204/post-401, removed credential
-      files, and made zero lifecycle/product/effect writes. No usable new key remains. The prepared headed session must first use canonical same-origin GET /auth/session,
-      which may rotate auth cookies, to prove exact retained owner c72404bb; any
-      mismatch performs zero API-key POST and requires a fresh native assertion. Only then may it mint the exact
-      <=2-hour eight-scope key directly. The key binds stable computer
-      computer-42850e9734d9442386c5dd8bf3afbf19 and never VM
-      vm-bbdbbd01c4390b7036067aaa12afeb68. A newly documented substrate gap means
-      registry binding is requested metadata and private computer routes do not
-      uniformly join it to exact vmctl ownership before selection/effects. The
-      authorized shared guard must land through CI/deployment/public negatives
-      before the ceremony. An independently accepted once-ever direct same-origin payload is preserved at
+      current host-deployed runtime is fbc7ff5a, accepted by CI/deploy
+      31326948312 including Race shards, aggregate Go, differential SBOM, rolling
+      publication, and Node B activation receipts. Public health reports exact
+      proxy commit fbc7ff5a; selected-service receipts exact-join auth, proxy,
+      vmctl, gateway, corpusd, maild, and sourcecycled, and the activated closure
+      updated canonical guest-image and sandbox pointers without refreshing the
+      failed retained computer. Retained guest/service identity remains unproved.
+      The shared API-key guard now use-time joins exact owner plus stable
+      ComputerID before every computer selection/resolve/effect and passed
+      independent security and route review. A native Touch ID/security-key
+      ceremony previously completed, but exact retained-owner identity was not
+      proved: target-bound key rows were caller-supplied metadata and the accidental
+      bearer's compute status selected primary active epoch130 rather than retained
+      failed epoch8253. Broad key ak_e2552ee6 and attenuation child ak_834c56be are
+      revoked with DELETE 204/post-401, credential files removed, and zero product
+      effects; no usable key remains. The frozen headed session must use canonical
+      same-origin GET /auth/session to prove exact retained owner c72404bb before
+      its only POST, mint the exact <=2-hour eight-scope key bound to stable
+      computer computer-42850e9734d9442386c5dd8bf3afbf19, and atomically persist
+      mode-0600 without treating VM metadata as authority. The independently
+      accepted once-ever payload remains byte-exact at
       docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md
-      with SHA-256 a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8; it is prepared, paused, and not executed. Independent audit previously found no
-      public no-presence renewal, then process evidence showed omp-browser is a headless
-      temporary-profile/mock-keychain diagnostic surface with no proven
-      owner-operable native prompt. Its expired challenges are not human-presence
-      attempts. A fresh assertion may start only in an ordinary headed persistent
-      browser when the owner can approve immediately; headless retries, CDP
-      virtual authenticators, substitute accounts/computers, SSH, internal
-      vmctl, or weaker identity are inadmissible. A read-only reconciliation
+      with SHA-256 a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8;
+      its deployment gate is satisfied, it is authorized only with exact-owner
+      physical presence, and it remains not executed. omp-browser is a headless
+      temporary-profile/mock-keychain diagnostic surface with no owner-operable
+      native prompt. Headless retries, CDP virtual authenticators, substitute
+      accounts/computers, SSH, internal vmctl, or weaker identity are inadmissible. A read-only reconciliation
       proves the supplied 565abc77/F/14c99be0 handoff is historical: 8ac0b27d
       deployed the packet/prompt repair, 14c99be0 was later publicly cancelled at
       lifecycle v5, and later bind/mailbox/terminal repairs culminated in
@@ -298,7 +296,7 @@ nodes:
       accepted exact lifecycle classification and a real Store plus SQLite
       two-restart no-mutation fixture. Provider availability and the earlier
       schema/retry/capsule-prompt defects are repaired, not current blockers.
-      Effects remain OFF. Fresh exact-guest acceptance, v2/correction/second
+      Effects remain OFF. Fresh exact-fbc7ff5a guest acceptance, v2/correction/second
       control/Super/v3, parallel isolated writable capsules including verifier
       test evidence, source-open and CLI parity, same-build restart, delayed-result
       cancellation, full no-effect/Trace/run acceptance, key and root-backup
