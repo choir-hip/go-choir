@@ -2237,3 +2237,259 @@ func TestAdapterSQLiteInjectionAppendRecoveryExecutesWithoutSnapshot(t *testing.
 		t.Fatalf("malformed recovery poisoned FIFO backlog=%+v err=%v", backlog, err)
 	}
 }
+
+func TestAdapterSQLiteStartAcknowledgesCancelledTextureOwnerOccurrenceWithoutMutation(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "cancelled-texture-owner-occurrence.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	const ownerID, computerID, docID = "owner-terminal-texture-boot", "computer-terminal-texture-boot", "doc-terminal-texture-boot"
+	const trajectoryID, workID = "trajectory-terminal-texture-boot", "work-terminal-texture-boot"
+	textureAgentID := agentprofile.Texture + ":" + docID
+	now := time.Now().UTC()
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "start-terminal-texture-boot", TrajectoryID: trajectoryID,
+		Kind:            types.TrajectoryKindDocument,
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+		InitialWork:     types.WorkItemRecord{WorkItemID: workID, Objective: "apply owner direction", AssignedAgentID: textureAgentID, AuthorityProfile: agentprofile.Texture},
+		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: "Terminal Texture boot", CreatedAt: now, UpdatedAt: now},
+		InitialRevision: types.Revision{RevisionID: "revision-terminal-texture-boot", DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "initial", CreatedAt: now},
+		Agent:           types.AgentRecord{AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	started, err := s.StartLifecycle(ctx, start)
+	if err != nil {
+		t.Fatalf("start lifecycle fixture: %v", err)
+	}
+
+	producerAgentID := agentprofile.Researcher + ":terminal-texture-boot"
+	producerWorkID := "producer-work-terminal-texture-boot"
+	producerRunID := "producer-run-terminal-texture-boot"
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID: producerAgentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+		Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed producer subject: %v", err)
+	}
+	openProducer := types.OpenLifecycleWorkRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "open-producer-terminal-texture-boot", TrajectoryID: trajectoryID,
+		WorkItem: types.WorkItemRecord{WorkItemID: producerWorkID, Objective: "produce cancellation fixture", AssignedAgentID: producerAgentID, AuthorityProfile: agentprofile.Researcher},
+	}
+	openProducer.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(openProducer)
+	if _, err := s.OpenLifecycleWork(ctx, openProducer); err != nil {
+		t.Fatalf("open producer work: %v", err)
+	}
+	producerRun := types.RunRecord{
+		RunID: producerRunID, OwnerID: ownerID, SandboxID: computerID, AgentID: producerAgentID,
+		AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, ChannelID: docID, TrajectoryID: trajectoryID,
+		State: types.RunRunning, Metadata: map[string]any{"lifecycle_work_item_id": producerWorkID, "work_item_ids": []string{producerWorkID}}, CreatedAt: now, UpdatedAt: now,
+	}
+	projectProducer := types.ReplaceLifecycleActivationRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "project-producer-terminal-texture-boot", TrajectoryID: trajectoryID, AgentID: producerAgentID, Run: producerRun}
+	projectProducer.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(projectProducer)
+	if _, err := s.ReplaceLifecycleActivation(ctx, projectProducer); err != nil {
+		t.Fatalf("project producer run: %v", err)
+	}
+	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "valid report cancelled before Texture boot"}
+	producerContent := "valid producer report retained as cancelled history"
+	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, producerContent)
+	producerQueue := types.QueueLifecycleUpdateRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "queue-producer-terminal-texture-boot", TrajectoryID: trajectoryID,
+		TargetAgentID: textureAgentID, ProducerAgentID: producerAgentID, ProducerUpdateID: "producer-update-terminal-texture-boot", UpdateID: "producer-update-terminal-texture-boot",
+		ChannelID: docID, Role: agentprofile.Researcher, SourceRunID: producerRunID, WorkItemID: producerWorkID, WorkDisposition: types.WorkItemOpen,
+		Packet: packet, Content: producerContent, PayloadDigest: payloadDigest,
+	}
+	producerQueue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(producerQueue)
+	if _, err := s.QueueLifecycleUpdate(ctx, producerQueue); err != nil {
+		t.Fatalf("queue valid producer update: %v", err)
+	}
+	finished := now.Add(time.Millisecond)
+	producerRun.State, producerRun.FinishedAt, producerRun.UpdatedAt = types.RunCompleted, &finished, finished
+	clearProducer := types.ReplaceLifecycleActivationRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "clear-producer-terminal-texture-boot", TrajectoryID: trajectoryID, AgentID: producerAgentID, Run: producerRun}
+	clearProducer.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(clearProducer)
+	if _, err := s.ReplaceLifecycleActivation(ctx, clearProducer); err != nil {
+		t.Fatalf("complete producer run: %v", err)
+	}
+	beforeInstruction, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	instructionReq := types.QueueLifecycleOwnerInstructionRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "queue-terminal-texture-instruction", RequestID: "request-terminal-texture-instruction",
+		InstructionID: "instruction-terminal-texture-boot", DocumentID: docID, TrajectoryID: trajectoryID,
+		TargetAgentID: textureAgentID, TargetWorkItemID: workID,
+		ExpectedLifecycleVersion: beforeInstruction.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: started.Revision.RevisionID,
+		Kind: types.LifecycleOwnerCorrect, Content: "retain this pending correction after cancellation",
+	}
+	instructionReq.CommandDigest, _ = store.ComputeQueueLifecycleOwnerInstructionDigest(instructionReq)
+	queued, err := s.QueueLifecycleOwnerInstruction(ctx, instructionReq)
+	if err != nil || queued.OwnerInstruction == nil {
+		t.Fatalf("queue owner instruction: result=%+v err=%v", queued, err)
+	}
+	occurrence, err := agentcore.TextureOwnerInstructionOccurrence(*queued.OwnerInstruction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := agentcore.EncodeTextureActorOccurrence(occurrence)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	providerCalls := &countingLifecycleProvider{targetAgentID: textureAgentID}
+	cfg := provideriface.Config{SandboxID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	adapter := New(cfg, s, events.NewEventBus(), providerCalls, nil)
+	t.Cleanup(adapter.Stop)
+	if err := adapter.BindTextureOwner(textureowner.NewHandler(adapter.Runtime)); err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.Runtime.DispatchActor(ctx, ownerID, computerID, textureAgentID, "coagent_result", content, trajectoryID, "owner:"+ownerID); err != nil {
+		t.Fatalf("persist pre-crash owner occurrence: %v", err)
+	}
+	mailboxID := scopedActorMailboxID(ownerID, computerID, textureAgentID)
+	updateID := actorDispatchUpdateID(ownerID, computerID, textureAgentID, "coagent_result", content, trajectoryID, "owner:"+ownerID)
+	if exists, processed, statusErr := adapter.log.UpdateStatus(ctx, mailboxID, updateID); statusErr != nil || !exists || processed {
+		t.Fatalf("pre-cancel actor occurrence exists=%v processed=%v err=%v", exists, processed, statusErr)
+	}
+
+	// Retain two equally plausible passivated Texture histories. A terminal boot
+	// must classify the trajectory before trying to derive one recovery authority.
+	candidateRunIDs := []string{"texture-candidate-a-terminal-boot", "texture-candidate-b-terminal-boot"}
+	for index, runID := range candidateRunIDs {
+		candidate := types.RunRecord{
+			RunID: runID, OwnerID: ownerID, SandboxID: computerID, AgentID: textureAgentID,
+			AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, ChannelID: docID, TrajectoryID: trajectoryID,
+			State:     types.RunPassivated,
+			Metadata:  map[string]any{"type": "texture_agent_revision", "doc_id": docID, "current_revision_id": started.Revision.RevisionID, "lifecycle_work_item_id": workID, "work_item_ids": []string{workID}},
+			CreatedAt: now.Add(time.Duration(index+1) * time.Second), UpdatedAt: now.Add(time.Duration(index+1) * time.Second),
+		}
+		if err := s.CreateRun(ctx, candidate); err != nil {
+			t.Fatalf("seed retained Texture candidate %s: %v", runID, err)
+		}
+		if err := s.CreateAgentMutation(ctx, store.AgentMutation{
+			DocID: docID, RunID: runID, OwnerID: ownerID, ComputerID: computerID,
+			State: "sleeping", RevisionID: started.Revision.RevisionID, CreatedAt: candidate.CreatedAt,
+		}); err != nil {
+			t.Fatalf("seed retained Texture mutation %s: %v", runID, err)
+		}
+	}
+
+	preCancel, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel := types.CancelLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "cancel-terminal-texture-boot", TrajectoryID: trajectoryID,
+		ExpectedLifecycleVersion: preCancel.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: preCancel.HeadRevision.RevisionID,
+		Reason: "terminal before actor boot sweep",
+	}
+	cancel.CommandDigest, _ = store.ComputeCancelLifecycleDigest(cancel)
+	if _, err := s.CancelLifecycleTrajectory(ctx, cancel); err != nil {
+		t.Fatalf("cancel lifecycle fixture: %v", err)
+	}
+	terminal, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil || terminal.Trajectory.Status != types.TrajectoryCancelled || len(terminal.WorkItems) != 2 {
+		t.Fatalf("terminal fixture snapshot=%+v err=%v", terminal, err)
+	}
+	for _, work := range terminal.WorkItems {
+		if work.Status != types.WorkItemCancelled {
+			t.Fatalf("terminal fixture retained nonterminal work: %+v", work)
+		}
+	}
+	terminalUpdate, err := s.GetLifecycleUpdate(ctx, ownerID, computerID, trajectoryID, textureAgentID, producerAgentID, producerQueue.ProducerUpdateID)
+	if err != nil || terminalUpdate.Disposition != types.UpdateCancelled || terminalUpdate.DispositionRef != "trajectory:"+trajectoryID || terminalUpdate.LifecycleVersion <= 1 {
+		t.Fatalf("terminal producer update=%+v err=%v", terminalUpdate, err)
+	}
+	baselineRuns, err := s.ListLifecycleRunsByChannel(ctx, ownerID, computerID, docID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baselineRevisions, err := s.ListRevisionsByScope(ctx, docID, ownerID, computerID, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var baselineMutations int
+	if err := s.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM texture_agent_mutations WHERE owner_id = ? AND computer_id = ? AND doc_id = ?`, ownerID, computerID, docID).Scan(&baselineMutations); err != nil {
+		t.Fatal(err)
+	}
+	if len(baselineRuns) != 3 || baselineMutations != len(candidateRunIDs) {
+		t.Fatalf("terminal candidate fixture runs=%+v mutations=%d", baselineRuns, baselineMutations)
+	}
+	for _, runID := range candidateRunIDs {
+		candidate, runErr := s.GetLifecycleRun(ctx, ownerID, computerID, runID)
+		mutation, mutationErr := s.GetAgentMutationByRun(ctx, ownerID, computerID, runID)
+		if runErr != nil || mutationErr != nil || candidate.State != types.RunPassivated || mutation == nil || mutation.State != "sleeping" {
+			t.Fatalf("terminal candidate %s run=%+v mutation=%+v run_err=%v mutation_err=%v", runID, candidate, mutation, runErr, mutationErr)
+		}
+	}
+
+	assertTerminalState := func(stage string, current *Adapter) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			exists, processed, statusErr := current.log.UpdateStatus(ctx, mailboxID, updateID)
+			if statusErr == nil && exists && processed {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s actor occurrence exists=%v processed=%v err=%v", stage, exists, processed, statusErr)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		var rows int
+		if err := current.logDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM actor_updates WHERE update_id = ? AND to_agent_id = ? AND content = ? AND processed_at IS NOT NULL`, updateID, mailboxID, content).Scan(&rows); err != nil || rows != 1 {
+			t.Fatalf("%s durable processed actor rows=%d err=%v", stage, rows, err)
+		}
+		instruction, instructionErr := s.GetLifecycleOwnerInstruction(ctx, ownerID, computerID, trajectoryID, instructionReq.InstructionID)
+		pending, pendingErr := s.ListPendingLifecycleOwnerInstructions(ctx, ownerID, computerID, trajectoryID, textureAgentID, 10)
+		if instructionErr != nil || pendingErr != nil || instruction.Status != types.LifecycleOwnerInstructionPending || len(pending) != 1 || pending[0].InstructionID != instructionReq.InstructionID {
+			t.Fatalf("%s retained instruction=%+v pending=%+v instruction_err=%v pending_err=%v", stage, instruction, pending, instructionErr, pendingErr)
+		}
+		cancelledUpdate, updateErr := s.GetLifecycleUpdate(ctx, ownerID, computerID, trajectoryID, textureAgentID, producerAgentID, producerQueue.ProducerUpdateID)
+		if updateErr != nil || cancelledUpdate.Disposition != terminalUpdate.Disposition || cancelledUpdate.DispositionRef != terminalUpdate.DispositionRef ||
+			cancelledUpdate.LifecycleVersion != terminalUpdate.LifecycleVersion || cancelledUpdate.ReducerSeq != terminalUpdate.ReducerSeq {
+			t.Fatalf("%s changed exact cancelled producer update: got=%+v want=%+v err=%v", stage, cancelledUpdate, terminalUpdate, updateErr)
+		}
+		for _, runID := range candidateRunIDs {
+			candidate, runErr := s.GetLifecycleRun(ctx, ownerID, computerID, runID)
+			mutation, mutationErr := s.GetAgentMutationByRun(ctx, ownerID, computerID, runID)
+			if runErr != nil || mutationErr != nil || candidate.State != types.RunPassivated || mutation == nil || mutation.State != "sleeping" || mutation.RevisionID != started.Revision.RevisionID {
+				t.Fatalf("%s derived terminal candidate %s: run=%+v mutation=%+v run_err=%v mutation_err=%v", stage, runID, candidate, mutation, runErr, mutationErr)
+			}
+		}
+		snapshot, snapshotErr := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+		runs, runsErr := s.ListLifecycleRunsByChannel(ctx, ownerID, computerID, docID, 0)
+		revisions, revisionsErr := s.ListRevisionsByScope(ctx, docID, ownerID, computerID, 100)
+		var mutations int
+		mutationsErr := s.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM texture_agent_mutations WHERE owner_id = ? AND computer_id = ? AND doc_id = ?`, ownerID, computerID, docID).Scan(&mutations)
+		if snapshotErr != nil || runsErr != nil || revisionsErr != nil || mutationsErr != nil ||
+			len(runs) != len(baselineRuns) || len(revisions) != len(baselineRevisions) || mutations != baselineMutations ||
+			len(snapshot.WorkItems) != len(terminal.WorkItems) || len(snapshot.Updates) != len(terminal.Updates) ||
+			snapshot.Trajectory.LifecycleVersion != terminal.Trajectory.LifecycleVersion || snapshot.Watermark != terminal.Watermark {
+			t.Fatalf("%s mutated terminal Texture state: runs=%d/%d revisions=%d/%d mutations=%d/%d work=%d/%d controls=%d/%d version=%d/%d watermark=%d/%d errs=[%v %v %v %v]", stage, len(runs), len(baselineRuns), len(revisions), len(baselineRevisions), mutations, baselineMutations, len(snapshot.WorkItems), len(terminal.WorkItems), len(snapshot.Updates), len(terminal.Updates), snapshot.Trajectory.LifecycleVersion, terminal.Trajectory.LifecycleVersion, snapshot.Watermark, terminal.Watermark, snapshotErr, runsErr, revisionsErr, mutationsErr)
+		}
+		if providerCalls.calls.Load() != 0 {
+			t.Fatalf("%s provider calls=%d", stage, providerCalls.calls.Load())
+		}
+	}
+
+	if err := adapter.Start(ctx); err != nil {
+		t.Fatalf("start over terminal Texture occurrence: %v", err)
+	}
+	assertTerminalState("first start", adapter)
+	adapter.Stop()
+
+	restarted := New(cfg, s, events.NewEventBus(), providerCalls, nil)
+	t.Cleanup(func() { restarted.Stop(); restarted.cleanupLog() })
+	if err := restarted.BindTextureOwner(textureowner.NewHandler(restarted.Runtime)); err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.Start(ctx); err != nil {
+		t.Fatalf("idempotent restart over processed terminal occurrence: %v", err)
+	}
+	assertTerminalState("second start", restarted)
+}

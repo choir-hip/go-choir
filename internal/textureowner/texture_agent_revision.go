@@ -24,6 +24,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+var errTextureLifecycleOpenWorkUnavailable = fmt.Errorf("Texture lifecycle open work unavailable")
+
 // textureAgentRevisionRequest is the JSON payload for
 // POST /api/texture/documents/{id}/revise.
 // Submitting a natural-language revision request from within an open document
@@ -424,7 +426,7 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 			}
 		}
 		if _, ok := runMetadata["lifecycle_work_item_id"]; !ok {
-			return nil, fmt.Errorf("load lifecycle work for Texture revision: no open assigned work")
+			return nil, fmt.Errorf("load lifecycle work for Texture revision: %w", errTextureLifecycleOpenWorkUnavailable)
 		}
 	}
 	if rt != nil && rt.Core != nil && rt.Core.TextureActorParkIdle() > 0 {

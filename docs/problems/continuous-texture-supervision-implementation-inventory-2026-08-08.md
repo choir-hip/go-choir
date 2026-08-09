@@ -1790,3 +1790,33 @@ terminal Texture state can crash the persistent computer during boot. Proposed
 repair: terminal state becomes non-runnable while evidence remains durable.
 Introduced by this repair: none accepted; any broad error suppression or silent
 acknowledgement is a new heresy and rejects the candidate. Effects remain OFF.
+
+### Terminal Texture boot repair implementation accepted locally
+
+The bounded repair now classifies exact lifecycle activation eligibility before
+any boot recovery candidate, run-memory, passivated-run, or mutation selection.
+It exact-joins owner, computer, trajectory, document, and current head; recognizes
+only `live`, `settled`, and `cancelled`; treats settled/cancelled and an exact live
+cancellation intent as non-runnable; continues live execution only when the
+intent lookup returns `ErrNotFound`; and propagates unknown state, binding
+mismatch, snapshot failure, and operational intent errors. Generic wake repeats
+the same read-only gate under the owner/computer/document lock before mutation.
+Only the typed no-open-work sentinel may trigger a final terminal recheck when
+cancellation wins during projection; the same condition remains fatal while the
+trajectory is live.
+
+A real Store plus SQLite actor restart fixture now retains a pending owner
+instruction, a producer update atomically cancelled with exact disposition/ref/
+version/sequence, two ambiguous passivated Texture histories and sleeping
+mutations, and the exact actor occurrence. Startup and a second restart both
+succeed; the occurrence row remains durable and is marked processed only through
+existing typed terminal resolution; Store evidence and ambiguous histories are
+byte-semantically unchanged; and provider/new-run/new-revision/new-mutation work
+remain zero. Focused Race passes. Full `actor`, `actorruntime`, `agentcore`, and
+`textureowner` suites pass; `go vet ./...`, docs receipt lint (21/0), doccheck,
+dashboard tests/HTTP, gofmt, and diff checks pass. Independent lifecycle and
+security rereview both returned `ACCEPT`.
+
+The candidate is not yet deployed or product-proved. Effects remain OFF. The
+next gate is commit/push, full CI/Differential SBOM, exact Linux deployment, and
+nonce-bound wake/guest identity before any mailbox acceptance mutation.

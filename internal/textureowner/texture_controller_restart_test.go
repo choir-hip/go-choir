@@ -2,6 +2,7 @@ package textureowner
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -253,4 +254,159 @@ func TestTextureOwnerRestartDoesNotCrossComputerPendingMutation(t *testing.T) {
 		}
 	}
 	t.Fatalf("computer A pending mutation suppressed computer B restart wake: %+v", runs)
+}
+
+func TestTextureOwnerStartSkipsRetainedCancelledInstructionWithoutNewActivation(t *testing.T) {
+	core, handler := testAPISetup(t)
+	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	start := startObservationLifecycle(t, core.Store())
+	handler.wakeOwnerInstruction = func(context.Context, string, string, string) error { return nil }
+	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
+	queued := postOwnerInstruction(t, handler, path, start.OwnerID, "terminal-boot", "retain terminal instruction", start.InitialRevision.RevisionID)
+	if queued.Code != 202 {
+		t.Fatalf("queue status=%d body=%s", queued.Code, queued.Body.String())
+	}
+	snapshot, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel := types.CancelLifecycleRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "cancel-terminal-texture-boot",
+		TrajectoryID: start.TrajectoryID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+		ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, Reason: "terminal boot regression",
+	}
+	cancel.CommandDigest, _ = store.ComputeCancelLifecycleDigest(cancel)
+	if _, err := core.Store().CancelLifecycleTrajectory(t.Context(), cancel); err != nil {
+		t.Fatal(err)
+	}
+	if err := handler.Start(t.Context()); err != nil {
+		t.Fatalf("terminal Texture boot reconciliation failed: %v", err)
+	}
+	runs, err := core.Store().ListLifecycleRunsByOwner(t.Context(), start.OwnerID, start.ComputerID, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, run := range runs {
+		if run.AgentID == start.Agent.AgentID {
+			t.Fatalf("terminal boot created Texture run: %+v", run)
+		}
+	}
+	pending, err := core.Store().ListPendingLifecycleOwnerInstructions(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID, start.Agent.AgentID, 10)
+	if err != nil || len(pending) != 1 || pending[0].Content != "retain terminal instruction" {
+		t.Fatalf("retained pending instruction=%+v err=%v", pending, err)
+	}
+	terminal, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil || terminal.Trajectory.Status != types.TrajectoryCancelled || terminal.WorkItems[0].Status != types.WorkItemCancelled {
+		t.Fatalf("terminal evidence=%+v err=%v", terminal, err)
+	}
+}
+
+func TestTextureOwnerWakeSkipsLiveTrajectoryWithCancellationIntent(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	handler.wakeOwnerInstruction = func(context.Context, string, string, string) error { return nil }
+	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
+	queued := postOwnerInstruction(t, handler, path, start.OwnerID, "prepared-cancel", "do not outrun cancellation", start.InitialRevision.RevisionID)
+	if queued.Code != 202 {
+		t.Fatalf("queue status=%d body=%s", queued.Code, queued.Body.String())
+	}
+	snapshot, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel := types.CancelLifecycleRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "prepare-terminal-texture-boot",
+		TrajectoryID: start.TrajectoryID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+		ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, Reason: "prepared cancellation",
+	}
+	cancel.CommandDigest, _ = store.ComputeCancelLifecycleDigest(cancel)
+	if _, err := core.Store().PrepareLifecycleCancellation(t.Context(), cancel); err != nil {
+		t.Fatal(err)
+	}
+	run, err := handler.ReconcileAgentWake(t.Context(), start.OwnerID, start.InitialDocument.DocID)
+	if err != nil || run != nil {
+		t.Fatalf("prepared cancellation wake run=%+v err=%v", run, err)
+	}
+	runs, err := core.Store().ListLifecycleRunsByOwner(t.Context(), start.OwnerID, start.ComputerID, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, candidate := range runs {
+		if candidate.AgentID == start.Agent.AgentID {
+			t.Fatalf("prepared cancellation created Texture run: %+v", candidate)
+		}
+	}
+}
+
+func TestTextureLifecycleActivationEligibilityPropagatesStoreFailure(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	doc, err := core.Store().GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mismatched := doc
+	mismatched.CurrentRevisionID = "foreign-head"
+	if eligible, mismatchErr := handler.textureLifecycleActivationEligible(t.Context(), mismatched); mismatchErr == nil || eligible {
+		t.Fatalf("mismatched snapshot eligibility=%v err=%v", eligible, mismatchErr)
+	}
+	if err := core.Store().Close(); err != nil {
+		t.Fatal(err)
+	}
+	eligible, err := handler.textureLifecycleActivationEligible(t.Context(), doc)
+	if err == nil || eligible {
+		t.Fatalf("closed Store eligibility=%v err=%v", eligible, err)
+	}
+}
+
+func TestTextureLifecycleActivationClassificationRejectsUnknownStatusAndIntentFailure(t *testing.T) {
+	core, _ := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	doc, err := core.Store().GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unknown := snapshot
+	unknown.Trajectory.Status = types.TrajectoryStatus("corrupt-status")
+	if eligible, classifyErr := classifyTextureLifecycleActivationSnapshot(doc, unknown); classifyErr == nil || eligible {
+		t.Fatalf("unknown status eligibility=%v err=%v", eligible, classifyErr)
+	}
+	operational := errors.New("intent backend unavailable")
+	if eligible, intentErr := textureCancellationIntentPermitsActivation(operational); intentErr == nil || eligible || !errors.Is(intentErr, operational) {
+		t.Fatalf("operational intent eligibility=%v err=%v", eligible, intentErr)
+	}
+	if eligible, intentErr := textureCancellationIntentPermitsActivation(store.ErrNotFound); intentErr != nil || !eligible {
+		t.Fatalf("missing intent eligibility=%v err=%v", eligible, intentErr)
+	}
+	if eligible, intentErr := textureCancellationIntentPermitsActivation(nil); intentErr != nil || eligible {
+		t.Fatalf("present intent eligibility=%v err=%v", eligible, intentErr)
+	}
+}
+
+func TestTextureOwnerWakeKeepsMissingOpenWorkFatalWhileTrajectoryIsLive(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	handler.wakeOwnerInstruction = func(context.Context, string, string, string) error { return nil }
+	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
+	queued := postOwnerInstruction(t, handler, path, start.OwnerID, "live-missing-work", "must not invent live work", start.InitialRevision.RevisionID)
+	if queued.Code != 202 {
+		t.Fatalf("queue status=%d body=%s", queued.Code, queued.Body.String())
+	}
+	refuse := types.RefuseLifecycleWorkRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "refuse-live-texture-work",
+		TrajectoryID: start.TrajectoryID, WorkItemID: start.InitialWork.WorkItemID, ActingAgentID: start.Agent.AgentID,
+		RefusalRef: "refusal://live/missing-work", Reason: "test live no-work authority",
+	}
+	refuse.CommandDigest, _ = store.ComputeRefuseLifecycleWorkDigest(refuse)
+	if _, err := core.Store().RefuseLifecycleWork(t.Context(), refuse); err != nil {
+		t.Fatal(err)
+	}
+	run, err := handler.ReconcileAgentWake(t.Context(), start.OwnerID, start.InitialDocument.DocID)
+	if err == nil || run != nil || !errors.Is(err, errTextureLifecycleOpenWorkUnavailable) {
+		t.Fatalf("live no-work wake run=%+v err=%v", run, err)
+	}
 }

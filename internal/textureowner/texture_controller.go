@@ -45,11 +45,14 @@ func (rt *Handler) Start(ctx context.Context) error {
 		if agentprofile.Canonical(subject.Profile) != agentprofile.Texture {
 			continue
 		}
-		textureSubjects = append(textureSubjects, subject)
 		docID := docIDFromTextureAgentID(subject.AgentID)
 		doc, err := rt.Store.GetLifecycleDocument(ctx, subject.OwnerID, subject.ComputerID, docID)
 		if err != nil {
 			return fmt.Errorf("load boot Texture document %s: %w", docID, err)
+		}
+		activationEligible, err := rt.textureLifecycleActivationEligible(ctx, doc)
+		if err != nil {
+			return fmt.Errorf("classify boot Texture lifecycle %s: %w", subject.AgentID, err)
 		}
 		updates, err := rt.Store.ListAllPendingLifecycleUpdates(ctx, subject.OwnerID, subject.ComputerID, subject.AgentID)
 		if err != nil {
@@ -61,8 +64,11 @@ func (rt *Handler) Start(ctx context.Context) error {
 		}
 
 		var runID, tailID, mutationIdentity string
-		candidateRunID := strings.TrimSpace(subject.ActiveRunID)
-		if candidateRunID == "" {
+		candidateRunID := ""
+		if activationEligible {
+			candidateRunID = strings.TrimSpace(subject.ActiveRunID)
+		}
+		if activationEligible && candidateRunID == "" {
 			memoryRunID, entries, memoryErr := rt.Store.LatestActorRunMemoryEntries(ctx, subject.OwnerID, subject.ComputerID, subject.AgentID, "")
 			if memoryErr == nil {
 				candidateRunID = memoryRunID
@@ -73,7 +79,7 @@ func (rt *Handler) Start(ctx context.Context) error {
 				return fmt.Errorf("load boot Texture actor memory: %w", memoryErr)
 			}
 		}
-		if candidateRunID == "" {
+		if activationEligible && candidateRunID == "" {
 			// A pre-repair passivated run can have neither ActiveRunID nor memory.
 			// Enumerate only to prove a unique exact document/trajectory/mutation
 			// join; list recency/order is never selection authority.
@@ -99,7 +105,7 @@ func (rt *Handler) Start(ctx context.Context) error {
 				candidateRunID = candidate.RunID
 			}
 		}
-		if candidateRunID != "" {
+		if activationEligible && candidateRunID != "" {
 			run, runErr := rt.Store.GetLifecycleRun(ctx, subject.OwnerID, subject.ComputerID, candidateRunID)
 			if runErr != nil {
 				return fmt.Errorf("load boot Texture run %s: %w", candidateRunID, runErr)
@@ -171,6 +177,9 @@ func (rt *Handler) Start(ctx context.Context) error {
 			if err := dispatch(base, "owner:"+base.OwnerID); err != nil {
 				return fmt.Errorf("dispatch boot Texture owner occurrence: %w", err)
 			}
+		}
+		if activationEligible {
+			textureSubjects = append(textureSubjects, subject)
 		}
 	}
 	for _, subject := range textureSubjects {
@@ -454,9 +463,69 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 	return rt.reconcileAgentWakeLocked(ctx, doc, textureAgentID)
 }
 
+func classifyTextureLifecycleActivationSnapshot(doc types.Document, snapshot types.LifecycleSnapshot) (bool, error) {
+	ownerID := strings.TrimSpace(doc.OwnerID)
+	computerID := strings.TrimSpace(doc.ComputerID)
+	trajectoryID := strings.TrimSpace(doc.TrajectoryID)
+	docID := strings.TrimSpace(doc.DocID)
+	headID := strings.TrimSpace(doc.CurrentRevisionID)
+	if ownerID == "" || computerID == "" || trajectoryID == "" || docID == "" || headID == "" {
+		return false, fmt.Errorf("classify Texture lifecycle activation: incomplete document authority")
+	}
+	if snapshot.Trajectory.OwnerID != ownerID || snapshot.Trajectory.ComputerID != computerID || snapshot.Trajectory.TrajectoryID != trajectoryID ||
+		snapshot.Document.OwnerID != ownerID || snapshot.Document.ComputerID != computerID || snapshot.Document.TrajectoryID != trajectoryID ||
+		snapshot.Document.DocID != docID || snapshot.Document.CurrentRevisionID != headID || snapshot.HeadRevision.RevisionID != headID {
+		return false, fmt.Errorf("classify Texture lifecycle activation: snapshot authority mismatch")
+	}
+	switch snapshot.Trajectory.Status {
+	case types.TrajectoryCancelled, types.TrajectorySettled:
+		return false, nil
+	case types.TrajectoryLive:
+		return true, nil
+	default:
+		return false, fmt.Errorf("classify Texture lifecycle activation: unknown trajectory status %q", snapshot.Trajectory.Status)
+	}
+}
+
+func textureCancellationIntentPermitsActivation(cancelErr error) (bool, error) {
+	if cancelErr == nil {
+		return false, nil
+	}
+	if errors.Is(cancelErr, store.ErrNotFound) {
+		return true, nil
+	}
+	return false, fmt.Errorf("load Texture lifecycle cancellation intent: %w", cancelErr)
+}
+
+func (rt *Handler) textureLifecycleActivationEligible(ctx context.Context, doc types.Document) (bool, error) {
+	if rt == nil || rt.Store == nil {
+		return false, fmt.Errorf("classify Texture lifecycle activation: Store unavailable")
+	}
+	ownerID := strings.TrimSpace(doc.OwnerID)
+	computerID := strings.TrimSpace(doc.ComputerID)
+	trajectoryID := strings.TrimSpace(doc.TrajectoryID)
+	snapshot, err := rt.Store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return false, fmt.Errorf("load Texture lifecycle activation snapshot: %w", err)
+	}
+	eligible, err := classifyTextureLifecycleActivationSnapshot(doc, snapshot)
+	if err != nil || !eligible {
+		return eligible, err
+	}
+	_, cancelErr := rt.Store.GetLifecycleCancellationIntent(ctx, ownerID, computerID, trajectoryID)
+	return textureCancellationIntentPermitsActivation(cancelErr)
+}
+
 func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Document, textureAgentID string) (*types.RunRecord, error) {
 	ownerID := strings.TrimSpace(doc.OwnerID)
 	docID := strings.TrimSpace(doc.DocID)
+	activationEligible, err := rt.textureLifecycleActivationEligible(ctx, doc)
+	if err != nil {
+		return nil, err
+	}
+	if !activationEligible {
+		return nil, nil
+	}
 	if _, err := rt.Store.GetAgentByScope(ctx, ownerID, doc.ComputerID, textureAgentID); err != nil {
 		return nil, fmt.Errorf("load durable Texture subject: %w", err)
 	}
@@ -574,6 +643,15 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		Intent: intent,
 	}, scheduledSeq)
 	if err != nil {
+		if errors.Is(err, errTextureLifecycleOpenWorkUnavailable) {
+			stillEligible, authorityErr := rt.textureLifecycleActivationEligible(ctx, doc)
+			if authorityErr != nil {
+				return nil, fmt.Errorf("recheck Texture lifecycle activation after work refusal: %w", authorityErr)
+			}
+			if !stillEligible {
+				return nil, nil
+			}
+		}
 		return nil, fmt.Errorf("start reconciled Texture revision: %w", err)
 	}
 	return rec, nil
