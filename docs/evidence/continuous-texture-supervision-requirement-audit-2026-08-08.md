@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-09
 **Definition:** `choir-continuous-texture-supervision-2026-08-07`
-**Runtime candidate:** `7ba05599c15f6d126f86fa6fe1a44bc36a928121`
-**Audit verdict:** **NOT COMPLETE — exact host deployed; accidental keys revoked; API-key computer-binding repair now precedes exact-owner/key/retained-guest proof**
+**Runtime candidate:** `fbc7ff5a048ed58d0f6dd02ae8462ae211eca328`
+**Audit verdict:** **NOT COMPLETE — exact stable-computer API-key guard deployed; exact-owner/key/bearer-route/retained-guest proof remains**
 **Effects:** OFF
 
 This is a requirement-by-requirement audit, not a completion receipt. It
@@ -38,23 +38,30 @@ epoch `8253`. The prepared session must invoke canonical same-origin `GET /auth/
 may rotate refresh/access cookies on the RED auth surface, and prove exact
 retained owner `c72404bb…` (zero API-key POST and fresh assertion on mismatch), then mint the exact
 <=2-hour eight-scope key directly, bound to stable computer `computer-42850…`, never VM `vm-bb…`.
-Source reconciliation also found the substrate gap: registry binding is requested
-metadata and private computer routes do not uniformly use-time join it to vmctl
-ownership. The authorized shared guard repair must deploy before the key ceremony.
-The exact same-origin payload is independently accepted and preserved at
+Source reconciliation also found the substrate gap: registry binding was requested
+metadata and private computer routes did not uniformly use-time join it to vmctl
+ownership. The shared exact `(UserID, stable ComputerID)` guard repair landed as
+`fbc7ff5a048ed58d0f6dd02ae8462ae211eca328`; independent security and route
+reviews accepted it, CI/deploy 31326948312 passed selected Race, aggregate Go,
+differential SBOM, rolling publication, and Node B deployment, and public health
+plus selected-service activation receipts report exact `fbc7ff5a`. The exact
+same-origin payload is independently accepted and preserved at
 `docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`
-(SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`); it is PAUSED and not executed. Effects remain OFF.
+(SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`).
+Its deployment gate is satisfied; it is authorized only with exact-owner physical
+presence and remains not executed. Effects remain OFF.
 
 This checkpoint supersedes the current-state classifications in the historical
-construction narrative below without deleting those failure receipts. Runtime
-`7ba05599` passed CI/deploy `31310481745`, including selected Race shards,
-aggregate Go, Differential SBOM acceptance, rolling publication, and exact Node B
-host activation. Public `/health` reports the exact proxy commit and the deploy
-activation receipt exact-joins every selected host service. That is host evidence
-only. The retained target guest/service has not been nonce-bound to
-`7ba05599`. An earlier audit found existing contexts unauthenticated and retained
-scoped keys unusable, and found no public same-owner renewal without WebAuthn
-presence. A native headed ceremony subsequently completed, but its exact account was not
+construction narrative below without deleting those failure receipts. Terminal
+boot repair `7ba05599` passed CI/deploy `31310481745`; the subsequent API-key
+authority repair `fbc7ff5a` passed CI/deploy `31326948312`, including selected
+Race shards, aggregate Go, differential SBOM acceptance, rolling publication,
+and exact Node B host activation. Public `/health` reports exact proxy commit
+`fbc7ff5a`, and deploy activation receipts exact-join every selected host service.
+That is host evidence only. The retained target guest/service has not been
+nonce-bound to `fbc7ff5a`. An earlier audit found existing contexts unauthenticated
+and retained scoped keys unusable, and found no public same-owner renewal without
+WebAuthn presence. A native headed ceremony subsequently completed, but its exact account was not
 proved. The prepared script's authorized canonical session GET may rotate auth cookies
 and must require exact retained owner `c72404bb…`; any other or expired session
 performs zero API-key POST and requires a
@@ -82,15 +89,15 @@ repair has yet received authenticated exact-guest product proof.
 
 | # | Current disposition |
 | --- | --- |
-| 1 | **PASS (source/local/CI):** focused registry, authorization, reducer, atomic-turn, projection/transclusion, replay, cancellation, capsule, API/CLI, Race, aggregate Go, vet, and SBOM evidence passes through `7ba05599`. |
+| 1 | **PASS (source/local/CI):** focused registry, authorization, reducer, atomic-turn, projection/transclusion, replay, cancellation, capsule, API/CLI, stable-computer ownership guard, Race, aggregate Go, vet, and SBOM evidence passes through `fbc7ff5a`. |
 | 2 | **PASS (local evidence class):** pre-cutover/idempotency/restart contracts pass; `fd83ce64` adds exact trigger/run-memory/ack recovery and `7ba05599` adds real Store+SQLite terminal two-restart proof. Deployed pending-control restart is action 6. |
 | 3 | **PARTIAL:** the b5 prefix proves open-work v1, one exact Researcher control, and repeated Researcher provider/source packets. Post-report v2, second control, persistent Super, parallel CoSupers, verifier capsule, and v3 are missing. |
 | 4 | **PARTIAL:** deployed create/tell/read/history/revisions/exact-show, durable watch resume, empty terminal resume, cancellation, and authority negatives exist. Positive live correction, exact incorporated source-open, and full live parity are missing. |
 | 5 | **PARTIAL:** deployed continuous-prose interim v1 exists. A differently styled case and end-to-end displayed transclusion inspection do not. |
-| 6 | **PARTIAL:** an earlier exact deployment restart recovered initial work. No post-mailbox same-build restart with pending Researcher and Super controls exists, and exact `7ba05599` guest identity is unproved. |
+| 6 | **PARTIAL:** an earlier exact deployment restart recovered initial work. No post-mailbox same-build restart with pending Researcher and Super controls exists, and exact `fbc7ff5a` guest identity is unproved. |
 | 7 | **PARTIAL:** a natural-language correction was durably queued on the b5 trajectory but not consumed before cancellation. Direct deployed owner-head edit/rebase/wake and its later controls remain missing. |
 | 8 | **PARTIAL:** public conditional cancellation and retained evidence are real. In-flight Super/CoSuper cancellation plus a real delayed authenticated result and exact retry were not exercised. |
-| 9 | **PARTIAL:** bounded prior readback kept self-development OFF generation 0 and policy/route/host state stable. Real capsule, event/checkpoint/materialization inventory, Trace-to-version, and complete post-`7ba05599` comparison are absent. |
+| 9 | **PARTIAL:** bounded prior readback kept self-development OFF generation 0 and policy/route/host state stable. Real capsule, event/checkpoint/materialization inventory, Trace-to-version, and complete post-`fbc7ff5a` comparison are absent. |
 
 ### Current 8 measures
 
@@ -134,16 +141,17 @@ does not promote other incomplete actions.
 
 ### Exact remaining authority, owner, and target gate
 
-First deploy and publicly prove the shared API-key `(UserID, stable ComputerID)`
-vmctl guard before every computer selection/resolve/effect. Only then may the
-frozen payload resume. After the headed session proves exact retained owner `c72404bb…` (otherwise
+The shared API-key `(UserID, stable ComputerID)` vmctl guard is deployed at
+`fbc7ff5a` with source/CI/host identity proof; live bearer-route proof remains.
+The frozen payload's deployment gate is satisfied, but execution still requires
+exact-owner physical presence. After the headed session proves exact retained owner `c72404bb…` (otherwise
 a fresh native assertion), first mint and securely hand off the exact <=2-hour eight-scope key
 bound to stable computer `computer-42850e9734d9442386c5dd8bf3afbf19`. First
 require lifecycle STATUS to ownership-join exact stable computer at logical
 desktop `primary`; only then pass self-development, exact-target,
 pre-recovery nonce-refusal, and wrong-computer probes. Only
 then recover the retained stable computer through the public product path and
-nonce-bind host, guest, and services to exact `7ba05599` before any acceptance
+nonce-bind host, guest, and services to exact `fbc7ff5a` before any acceptance
 write. Then product-prove post-report v2,
 correction incorporation, focused redirect, persistent Super result, changed
 control/v3, two parallel isolated writable capsules including verifier-written
@@ -156,13 +164,13 @@ and root-backup disposition, registry closure, and a final independent audit.
 
 | Gate | State | Evidence |
 | --- | --- | --- |
-| Frozen implementation candidate | PASS | `ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee` |
-| Independent lifecycle review | PASS | Earlier exact-control ACCEPT at `3ac0935b`; final document-scoped wake-serialization review ACCEPT at `ac6dd16b` |
-| Independent capsule/security review | PASS at source | ACCEPT at `363bf393`; protected-delta ACCEPT through `99fc3e6b` |
-| Applicable CI | PASS | GitHub Actions run `31261269488`, including build, vet, selected Race, SBOM, docs truth, and staging deployment |
-| Host and product identity | PASS | Nonce-bound identity joined host, sandbox, route, deployment receipt, platform attestation, computer scope `vm-bbdbbd01c4390b7036067aaa12afeb68`, guest `computer-42850e9734d9442386c5dd8bf3afbf19`, and VM epoch 8247 to exact `ac6dd16b` |
-| Product lifecycle route | PASS | Authenticated create, tell, model-policy file/resolve, trajectory inspection, and conditional public cancel all executed on the exact candidate |
-| Initial committed-work projection | PASS deployed | No-SSH deployment restart created run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf` for the previously stranded initial work |
+| Frozen implementation candidate | PASS at source/host | `fbc7ff5a048ed58d0f6dd02ae8462ae211eca328`, containing the joined lifecycle/Texture runtime, mailbox and terminal-boot repairs, plus the stable-computer API-key guard |
+| Independent lifecycle review | PASS at source | Earlier exact-control and wake-serialization reviews; terminal-boot lifecycle/security ACCEPT at `7ba05599` |
+| Independent capsule/security review | PASS at source | Capsule ACCEPT through `99fc3e6b`; stable-computer `binding-security-review` and `binding-route-audit` ACCEPT at `fbc7ff5a` |
+| Applicable CI | PASS | GitHub Actions run `31326948312`, including build, vet, selected Race, aggregate Go, differential SBOM, rolling publication, and staging deployment |
+| Host and product identity | **PARTIAL** | Public health and selected-service activation receipts join the host to exact `fbc7ff5a`. No current bearer or nonce-bound retained guest/service identity exists; last exact healthy retained guest was `b5d907a3` at epoch 8252, before terminal repair and binding guard. |
+| Product lifecycle route | **PARTIAL / HISTORICAL** | Authenticated create, tell, model-policy, trajectory, and conditional-cancel evidence exists on older exact candidates. `fbc7ff5a` bearer correct-target/wrong-target/no-effect and execution identity remain unproved. |
+| Initial committed-work projection | PASS deployed on historical exact candidate | No-SSH deployment restart created run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf`; current retained-computer recovery and post-repair projection remain open. |
 | Provider-dependent acceptance | **PROVIDER RESTORED — FULL ACCEPTANCE PENDING** | Host ChatGPT returned HTTP 401 `refresh_token_reused` on both original and fresh trajectories; Z.AI returned HTTP 429 and later an open unhealthy-provider circuit; configured fallback chains ended at stale ChatGPT. Sanitized local reproduction after staging found DeepSeek/Xiaomi HTTP 402 balance failures, Fireworks HTTP 412 `PRECONDITION_FAILED`, Z.AI HTTP 429 code `1113`, and direct AWS Bedrock bearer invokes in `us-east-1` returned HTTP 403 for both gateway seed `us.anthropic.claude-haiku-4-5-20251001-v1:0` and exact owner-policy-selected `us.anthropic.claude-sonnet-4-6`; these local calls diagnose availability only and are not acceptance evidence or host-credential proof. No Researcher/update/revision/Super/capsule was produced. Exact-F recurrence trajectory `e5f85464-560b-5383-b199-cf4c62c12145` / run `74a5a20f-24a3-4b25-b11c-1072f881f8a9` again failed iteration zero on ChatGPT 401 and was publicly cancelled at version 3. At `2026-08-08T23:24Z` the operator explicitly authorized the local-token/SSH Node B restoration; sanitized preflight selected a ChatGPT-only atomic auth-file replacement because full helper execution would also change Bedrock. First scoped install preserved env/health but the probe used a different owner/current legacy guest, failed before provider, and triggered exact rollback; correct acceptance-owner browser auth is now available for a second bounded attempt. Second scoped attempt used the exact acceptance owner/computer/F identity; auth `cc744524…`, env exact, PID `3806702→3807256`; ChatGPT/gpt-5.5 produced exact marker v1 `3de79895…` with completed work/no error. Probe retained/cancelled at lifecycle 4; full supervision remains pending. First full restored-provider run `2ce06146…` proves provider entry but exposed a downstream control-schema refusal before any Researcher; provider remains restored while full acceptance is blocked on runtime authority repair. |
 | Acceptance-artifact cleanup | **PARTIAL — TERMINAL DISPOSITION OPEN** | Original failed trajectory `8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d` was publicly cancelled at lifecycle version 9; fresh recurrence trajectories `41cec88f-510f-53cc-a5e7-84c372b5421b` and `aca3504c-2ae0-5a4e-bab5-b22541e90585` were publicly cancelled at lifecycle version 3; original model-policy bytes were restored at SHA-256 `7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`; all temporary API keys used before the accepted restoration were revoked and rejected on subsequent use. Exact-F recurrence was likewise retained/cancelled at version 3; the first setup key lacked `write:texture`, was refused HTTP 403 with no mutation, and both new setup keys were revoked/post-401. Empty generic document `457320df-e047-405c-b2a1-a0263b4cb5dc` from an operator route mistake is retained with current_version_number/revision_count 0 and no trajectory/run and is not acceptance. The failed attenuation child `ak_834c56be…` has public DELETE 204 plus same-secret post-401, and broad handoff key `ak_e2552ee6…` has self-DELETE 204 plus same-secret post-401; both are terminally retired. The distinct historical restoration key `ak_45ce1796-7044-4086-ad48-5f7789f6b4ba` now returns public HTTP 401 authentication required and cannot authorize current acceptance; this is unusability evidence, not registry revocation proof. Its row still requires terminal revocation/post-401 disposition, and both root-only auth rollback copies require recorded deletion or justified retention. |
 | Source rollback | **DEPLOYED BOUNDED REHEARSAL + RECOVERY PASS / STRICT MIDPOINT OBSERVABILITY FAIL** | Canonical R `10d48659` made the exact 99 non-document paths cdaa-equivalent; CI/rolling/deploy `31267448310` passed and exact R ran at epoch 8248. R preserved run/lifecycle/selfdev/policy/inventory summaries, but its legacy response omitted six stored owner-instruction `request_id` fields, so the full v9 response digest differed and the identity-ambiguity gate fired. Canonical F `67a61358` immediately restored the exact pre-R whole tree; CI/rolling/deploy `31268477380` passed, exact F ran at epoch 8249, and all captured frozen comparator response/state digests equalled baseline. Exposure was 1,909 seconds; key revoked/post-401. Canonical deployed rollback/recovery is rehearsed; strict old-runtime forward-observability and complete checkpoint/capsule acceptance remain open. |
