@@ -35,7 +35,7 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 			"update_coagent"), "assign_co_super", "cancel_co_super_assignment", "report_to_texture"),
 		agentprofile.CoSuper:    {},
 		agentprofile.Researcher: append(slices.Clone(ordinary), "update_coagent"),
-		agentprofile.Texture:    {"cancel_agent", "get_run_memory_entry"},
+		agentprofile.Texture:    {"get_run_memory_entry"},
 		agentprofile.Processor: append(append(slices.Clone(ordinary), "update_coagent"),
 			"record_wire_processor_decision"),
 		agentprofile.Reconciler: append(slices.Clone(ordinary), "update_coagent"),
@@ -50,6 +50,19 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 				t.Fatalf("%s registry tools = %v, want exact authority set %v", profile, got, want)
 			}
 		})
+	}
+}
+
+func TestTextureRegistryHasNoGenericCancellationOrCapsuleLifecycleAuthority(t *testing.T) {
+	rt := &Runtime{capsuleExecutor: new(capsule.Executor)}
+	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatalf("install tools: %v", err)
+	}
+	registry := rt.ToolRegistryForProfile(agentprofile.Texture)
+	for _, name := range []string{"cancel_agent", "assign_co_super", "cancel_co_super_assignment", "spawn_capsule", "destroy_capsule", "capsule_exec"} {
+		if _, ok := registry.Lookup(name); ok {
+			t.Fatalf("Texture exposes forbidden generic cancellation/capsule tool %q", name)
+		}
 	}
 }
 

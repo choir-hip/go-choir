@@ -116,7 +116,7 @@ func TestTexturePromptForFactualFirstRevisionForbidsUngroundedContent(t *testing
 		"Do not add factual claims, citations, or coding results from model priors as grounded",
 		"coding, execution, and verification claims require durable evidence packets",
 		"Do not include a [CMD] evidence label unless a durable source packet already contains actual command evidence",
-		"For coding or execution requests, effectful work is unavailable in this effects-OFF runtime",
+		"For coding or execution requests, use only the atomic persistent-Super control path above",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("factual first-revision prompt missing %q:\n%s", want, request)
@@ -572,7 +572,7 @@ func TestTexturePromptRestoresFinalCommandEvidenceRequirementAfterSuperDelivery(
 	}
 }
 
-func TestTexturePromptMixedObligationKeepsGeneralExecuteAffordanceWithoutKeywordBranch(t *testing.T) {
+func TestTexturePromptMixedObligationKeepsExactExecuteAffordanceWithoutKeywordBranch(t *testing.T) {
 	current := types.Revision{
 		DocID:      "doc-mixed-obligation",
 		RevisionID: "rev-mixed-obligation",
@@ -593,8 +593,8 @@ func TestTexturePromptMixedObligationKeepsGeneralExecuteAffordanceWithoutKeyword
 	for _, want := range []string{
 		"This Texture run was woken by durable execution source packets",
 		"Make useful claims and packet sources visible with patch_texture",
-		"If the follow-up needs generated artifacts, execution, or verification, record that effectful work is unavailable",
-		"do not request or spawn Super or CoSuper",
+		"If the follow-up needs generated artifacts, execution, or verification, use only an atomic open_persistent_super control",
+		"Never request or spawn CoSuper directly",
 		"Never use `[CMD]` as a pending/requested/target-only label",
 	} {
 		if !strings.Contains(request, want) {

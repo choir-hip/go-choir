@@ -55,3 +55,61 @@ func TestRunOverlayHasNoWireBranch(t *testing.T) {
 		t.Fatalf("overlay missing mark_source_unused guidance: %q", overlay)
 	}
 }
+
+func TestEffectsOffPromptAuthorityPermitsOnlyAtomicPersistentSuperCapsules(t *testing.T) {
+	prompts := map[string]string{
+		"run": RunOverlay(),
+		"revision": RevisionPolicyOverlay(RevisionPolicyOptions{
+			UserAuthoredRevision: true,
+			HasGroundedHistory:   true,
+			DocID:                "doc-1",
+			RevisionID:           "rev-1",
+		}),
+		"execution findings": RevisionExecutionFindingsOverlay(RevisionExecutionFindingsOptions{
+			ActiveExecution: true,
+		}),
+	}
+	for name, prompt := range prompts {
+		for _, want := range []string{
+			"open_persistent_super=true",
+			"valid execution_request",
+			"patch_texture, rewrite_texture, or record_texture_decision",
+			"never directly opens, requests, or spawns CoSuper",
+			"networkless disposable capsule",
+			"durable execution or capsule evidence",
+		} {
+			if !strings.Contains(prompt, want) {
+				t.Fatalf("%s prompt missing exact effects-OFF authority %q:\n%s", name, want, prompt)
+			}
+		}
+	}
+
+	for _, prompt := range []string{prompts["run"], prompts["revision"]} {
+		for _, want := range []string{
+			"Protected host, self-development, event, checkpoint, materialization, acceptance, route, VM, and SSH effects are unavailable",
+			"generic agent and execution spawn",
+			"Probe morphisms (spawn_agent researcher) gather world knowledge",
+		} {
+			if !strings.Contains(prompt, want) {
+				t.Fatalf("prompt missing protected boundary or preserved research behavior %q:\n%s", want, prompt)
+			}
+		}
+	}
+	if !strings.Contains(prompts["revision"], "call request_email_draft") {
+		t.Fatalf("revision prompt lost email draft handoff behavior:\n%s", prompts["revision"])
+	}
+
+	for name, prompt := range prompts {
+		for _, forbidden := range []string{
+			"Execution effects are unavailable in effects-OFF runtime",
+			"effectful work is unavailable in this effects-OFF runtime",
+			"record that effectful work is unavailable; do not request or spawn Super or CoSuper",
+			"effects-OFF runtime must not request or imply follow-on execution",
+			"Do not request or spawn Super or CoSuper",
+		} {
+			if strings.Contains(prompt, forbidden) {
+				t.Fatalf("%s prompt retains blanket effects-OFF prohibition %q:\n%s", name, forbidden, prompt)
+			}
+		}
+	}
+}

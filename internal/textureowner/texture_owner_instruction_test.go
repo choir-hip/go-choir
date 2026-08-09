@@ -13,9 +13,30 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+type textureRetryToolLoopProvider struct {
+	provideriface.Provider
+	responses  []*provideriface.ToolLoopResponse
+	requests   []provideriface.ToolLoopRequest
+	beforeCall func(int, provideriface.ToolLoopRequest)
+}
+
+func (p *textureRetryToolLoopProvider) CallWithTools(_ context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
+	index := len(p.requests)
+	p.requests = append(p.requests, req)
+	if p.beforeCall != nil {
+		p.beforeCall(index, req)
+	}
+	if index >= len(p.responses) {
+		return nil, fmt.Errorf("unexpected Texture retry provider call %d", index)
+	}
+	return p.responses[index], nil
+}
 
 func installSynchronousTextureOwnerWake(t *testing.T, core *agentcore.Runtime, handler *Handler) {
 	t.Helper()
@@ -260,6 +281,128 @@ func TestLifecycleTextureResearcherOpenerDerivesIdentitiesAndCommitsBeforeWake(t
 	replay, err := handler.applyTextureLifecycleTurn(t.Context(), &run, doc, args, types.TextureTurnWait, types.Revision{}, store.TextureSourceGraphWriteSet{}, "research requested")
 	if err != nil || !replay.Replay || len(replay.Controls) != 1 || replay.Controls[0].TargetAgentID != controls[0].TargetAgentID {
 		t.Fatalf("Researcher runtime opener replay=%+v err=%v", replay, err)
+	}
+}
+
+func TestLifecycleTextureSemanticControlErrorKeepsSameRunWritableForAtomicResearcherRetry(t *testing.T) {
+	core, handler := testAPISetup(t)
+	installSynchronousTextureOwnerWake(t, core, handler)
+	start := startObservationLifecycle(t, core.Store())
+	response := postOwnerInstruction(t, handler, "/api/texture/documents/"+start.InitialDocument.DocID+"/tell", start.OwnerID, "researcher-retry", "research exact gap", start.InitialRevision.RevisionID)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("tell status=%d body=%s", response.Code, response.Body.String())
+	}
+	agent, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, agent.ActiveRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handler.coagentUpdateTurnInjector(&run)(false); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := core.Store().GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	registry := toolregistry.NewToolRegistry()
+	if err := RegisterTools(registry, handler); err != nil {
+		t.Fatal(err)
+	}
+	invalidArgs, _ := json.Marshal(map[string]any{
+		"doc_id": doc.DocID, "base_revision_id": doc.CurrentRevisionID,
+		"content":   "The evidence gap remains open while focused research begins.",
+		"rationale": "Open the first focused evidence path.", "work_disposition": "open",
+		"controls": []map[string]any{{
+			"open_researcher": true, "objective": "research exact gap",
+			"packet": map[string]any{"schema_version": types.CoagentSourcePacketSchemaV1, "kind": "research_request", "summary": "research exact gap", "questions": []string{"What evidence resolves it?"}},
+		}},
+	})
+	validArgs, _ := json.Marshal(map[string]any{
+		"doc_id": doc.DocID, "base_revision_id": doc.CurrentRevisionID,
+		"content":   "The evidence gap remains open while focused research begins.",
+		"rationale": "Open the first focused evidence path.", "work_disposition": "open",
+		"controls": []map[string]any{{
+			"open_researcher": true, "objective": "research exact gap",
+			"packet": map[string]any{"schema_version": types.CoagentSourcePacketSchemaV1, "kind": "question", "summary": "research exact gap", "questions": []string{"What evidence resolves it?"}},
+		}},
+	})
+	provider := &textureRetryToolLoopProvider{responses: []*provideriface.ToolLoopResponse{
+		{StopReason: "tool_use", ToolCalls: []types.ToolCall{{ID: "tool-call-invalid-semantic-control", Name: "rewrite_texture", Arguments: invalidArgs}}, Model: "scripted-texture-retry"},
+		{StopReason: "tool_use", ToolCalls: []types.ToolCall{{ID: "tool-call-valid-semantic-control", Name: "rewrite_texture", Arguments: validArgs}}, Model: "scripted-texture-retry"},
+	}}
+	observedInvalidNoEffect := false
+	provider.beforeCall = func(index int, req provideriface.ToolLoopRequest) {
+		if index != 1 {
+			return
+		}
+		messages, _ := json.Marshal(req.Messages)
+		if !strings.Contains(string(messages), `kind \"research_request\" is not supported`) || !strings.Contains(string(messages), "previous durable transition") {
+			t.Fatalf("semantic tool error/reminder not fed into retry request: %s", messages)
+		}
+		mutation, mutationErr := core.Store().GetAgentMutationByRun(t.Context(), start.OwnerID, start.ComputerID, run.RunID)
+		if mutationErr != nil || mutation == nil || mutation.State != "pending" || mutation.RevisionID != "" {
+			t.Fatalf("correctable tool error poisoned mutation: mutation=%+v err=%v", mutation, mutationErr)
+		}
+		afterInvalid, snapshotErr := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+		if snapshotErr != nil {
+			t.Fatal(snapshotErr)
+		}
+		if afterInvalid.HeadRevision.RevisionID != before.HeadRevision.RevisionID ||
+			afterInvalid.Trajectory.LifecycleVersion != before.Trajectory.LifecycleVersion ||
+			len(afterInvalid.Agents) != len(before.Agents) || len(afterInvalid.WorkItems) != len(before.WorkItems) || len(afterInvalid.Updates) != len(before.Updates) {
+			t.Fatalf("invalid pre-commit control partially mutated lifecycle:\n before=%+v\n after=%+v", before, afterInvalid)
+		}
+		observedInvalidNoEffect = true
+	}
+	var retryEvent bool
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind == types.EventRunRetry && phase == "required_write_tool" && strings.Contains(string(payload), "required_write_tool_failed") {
+			retryEvent = true
+		}
+	}
+	execution := textureToolExecutionContext(&run)
+	_, _, loopErr := toolregistry.RunToolLoop(
+		toolregistry.WithExecutionContext(t.Context(), execution), provider, registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"research exact gap"}`)}, "Texture", 0, emit, nil,
+		toolregistry.WithInitialToolChoice("required"),
+		toolregistry.WithRequiredWriteTools("patch_texture", "rewrite_texture", "record_texture_decision"),
+		toolregistry.WithPassivatingToolSuccesses("patch_texture", "rewrite_texture", "record_texture_decision"),
+	)
+	if !errors.Is(loopErr, toolregistry.ErrToolLoopPassivated) {
+		t.Fatalf("same-run corrected tool loop error = %v, want passivation after commit", loopErr)
+	}
+	if len(provider.requests) != 2 || !observedInvalidNoEffect || !retryEvent {
+		t.Fatalf("bounded correction proof incomplete: provider_calls=%d no_effect=%v retry_event=%v", len(provider.requests), observedInvalidNoEffect, retryEvent)
+	}
+	afterValid, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterValid.HeadRevision.RevisionID == before.HeadRevision.RevisionID ||
+		len(afterValid.Agents) != len(before.Agents)+1 || len(afterValid.WorkItems) != len(before.WorkItems)+1 || len(afterValid.Updates) != len(before.Updates)+1 {
+		t.Fatalf("corrected retry did not atomically commit revision/Researcher/work/control:\n before=%+v\n after=%+v", before, afterValid)
+	}
+	var researcher types.AgentRecord
+	for _, candidate := range afterValid.Agents {
+		if strings.HasPrefix(candidate.AgentID, "researcher:") {
+			researcher = candidate
+			break
+		}
+	}
+	if researcher.AgentID == "" || researcher.Profile != "researcher" || researcher.LifecycleVersion != 1 {
+		t.Fatalf("corrected retry Researcher = %+v", researcher)
+	}
+	mutation, err := core.Store().GetAgentMutationByRun(t.Context(), start.OwnerID, start.ComputerID, run.RunID)
+	if err != nil || mutation == nil || mutation.State != "pending" || mutation.RevisionID != afterValid.HeadRevision.RevisionID {
+		t.Fatalf("committed retry mutation projection = %+v err=%v", mutation, err)
 	}
 }
 

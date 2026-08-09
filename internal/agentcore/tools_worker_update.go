@@ -32,137 +32,150 @@ type submitCoagentUpdateArgs struct {
 	types.CoagentSourcePacketPayload
 }
 
+// CoagentSourcePacketPayloadSchema is the single LLM-facing schema authority for
+// the typed packet payload shared by update_coagent and lifecycle Texture
+// controls. Delivery envelope authority (target agent, channel, work, direction,
+// and command/update identities) deliberately lives outside this schema.
+func CoagentSourcePacketPayloadSchema() map[string]any {
+	return toolregistry.JSONSchemaObject(coagentSourcePacketPayloadProperties(), []string{"schema_version", "kind", "summary"}, false)
+}
+
+func coagentSourcePacketPayloadProperties() map[string]any {
+	return map[string]any{
+		"schema_version": map[string]any{"type": "string", "enum": []string{types.CoagentSourcePacketSchemaV1}},
+		"kind":           map[string]any{"type": "string", "enum": []string{"evidence_update", "execution_request", "execution_result", "blocker", "question", "proposal", "decision_request"}},
+		"summary":        map[string]any{"type": "string"},
+		"claims": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"claim_id":            map[string]any{"type": "string"},
+					"text":                map[string]any{"type": "string"},
+					"source_ids":          stringArraySchema(),
+					"stance":              map[string]any{"type": "string", "enum": []string{"supports", "qualifies", "contradicts", "background"}},
+					"recommended_surface": map[string]any{"type": "string", "enum": []string{"inline_ref", "block_embed", "source_panel", "decision_log"}},
+				},
+				"required":             []string{"text"},
+				"additionalProperties": false,
+			},
+		},
+		"sources": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"source_id": map[string]any{"type": "string"},
+					"kind":      map[string]any{"type": "string", "enum": sourcecontract.SourceKindValues()},
+					"target": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"uri":        map[string]any{"type": "string"},
+							"title":      map[string]any{"type": "string"},
+							"media_type": map[string]any{"type": "string"},
+						},
+						"required":             []string{"uri"},
+						"additionalProperties": false,
+					},
+					"selectors": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"kind":   map[string]any{"type": "string", "enum": sourcecontract.SelectorKindValues()},
+								"quote":  map[string]any{"type": "string"},
+								"start":  map[string]any{"type": "integer"},
+								"end":    map[string]any{"type": "integer"},
+								"x":      map[string]any{"type": "number"},
+								"y":      map[string]any{"type": "number"},
+								"width":  map[string]any{"type": "number"},
+								"height": map[string]any{"type": "number"},
+							},
+							"required":             []string{"kind"},
+							"additionalProperties": false,
+						},
+					},
+					"excerpt": map[string]any{
+						"type":        "string",
+						"description": "Bounded source text to show in Texture source_ref transclusions. Use this for the short source stub when the researcher has read source content.",
+					},
+					"reader_snapshot": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"text_content":        map[string]any{"type": "string"},
+							"snapshot_kind":       map[string]any{"type": "string"},
+							"media_type":          map[string]any{"type": "string"},
+							"original_media_type": map[string]any{"type": "string"},
+							"source_url":          map[string]any{"type": "string"},
+							"access_scope":        map[string]any{"type": "string"},
+							"truncated":           map[string]any{"type": "boolean"},
+						},
+						"additionalProperties": false,
+					},
+					"evidence": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"state":        map[string]any{"type": "string", "enum": []string{"available", "pending", "blocked", "unavailable"}},
+							"confidence":   map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}},
+							"rights_scope": map[string]any{"type": "string"},
+						},
+						"additionalProperties": false,
+					},
+				},
+				"required":             []string{"kind", "target"},
+				"additionalProperties": false,
+			},
+		},
+		"actions": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action_id": map[string]any{"type": "string"},
+					"type":      map[string]any{"type": "string", "enum": []string{"run_command", "inspect_file", "produce_diff", "run_tests", "open_browser", "import_source", "revise_texture"}},
+					"objective": map[string]any{"type": "string"},
+					"inputs":    map[string]any{"type": "object"},
+					"expected_sources": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"kind":     map[string]any{"type": "string", "enum": sourcecontract.SourceKindValues()},
+								"required": map[string]any{"type": "boolean"},
+							},
+							"required":             []string{"kind"},
+							"additionalProperties": false,
+						},
+					},
+					"safety": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"mutation_class": map[string]any{"type": "string", "enum": []string{"green", "yellow", "orange", "red", "black"}},
+							"network":        map[string]any{"type": "string", "enum": []string{"forbidden", "allowed", "required"}},
+							"file_mutation":  map[string]any{"type": "string", "enum": []string{"forbidden", "allowed", "required"}},
+						},
+						"additionalProperties": false,
+					},
+				},
+				"required":             []string{"type", "objective"},
+				"additionalProperties": false,
+			},
+		},
+		"questions": stringArraySchema(),
+		"notes":     stringArraySchema(),
+	}
+}
+
 func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
+	properties := coagentSourcePacketPayloadProperties()
+	properties["agent_id"] = map[string]any{"type": "string", "description": "Required exact durable target agent id. It is never inferred from channel, caller, or requester metadata."}
+	properties["work_item_id"] = map[string]any{"type": "string", "description": "Assigned lifecycle work item addressed by this update. Required when the activation carries multiple work_item_ids; if the activation carries one item, omission selects that item."}
+	properties["channel_id"] = map[string]any{"type": "string", "description": "Optional equality assertion against the loaded target channel; never target authority."}
+	properties["work_disposition"] = map[string]any{"type": "string", "enum": []string{"open", "completed"}, "description": "Optional native producer work consequence for lifecycle updates; omission preserves assigned work as open. Use completed only when this update fully satisfies that work."}
 	return toolregistry.Tool{
 		Name:        "update_coagent",
 		Description: "Send one source packet to the explicit agent_id durably bound to this run. The target must be an allowed exact requester, owning parent, or assigned child in the same owner, computer, trajectory, and document scope; channel or metadata hints never select a target. Lifecycle Researcher, Processor, and Reconciler reports use the lifecycle backlog and require runtime call identity plus assigned work. Pre-cutover Super and CoSuper result/assignment paths use the legacy backlog only when durable run and assignment rows prove the relationship. Wake occurs only after commit.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"schema_version":   map[string]any{"type": "string", "enum": []string{types.CoagentSourcePacketSchemaV1}},
-			"kind":             map[string]any{"type": "string", "enum": []string{"evidence_update", "execution_request", "execution_result", "blocker", "question", "proposal", "decision_request"}},
-			"summary":          map[string]any{"type": "string"},
-			"agent_id":         map[string]any{"type": "string", "description": "Required exact durable target agent id. It is never inferred from channel, caller, or requester metadata."},
-			"work_item_id":     map[string]any{"type": "string", "description": "Assigned lifecycle work item addressed by this update. Required when the activation carries multiple work_item_ids; if the activation carries one item, omission selects that item."},
-			"channel_id":       map[string]any{"type": "string", "description": "Optional equality assertion against the loaded target channel; never target authority."},
-			"work_disposition": map[string]any{"type": "string", "enum": []string{"open", "completed"}, "description": "Optional native producer work consequence for lifecycle updates; omission preserves assigned work as open. Use completed only when this update fully satisfies that work."},
-			"claims": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"claim_id":            map[string]any{"type": "string"},
-						"text":                map[string]any{"type": "string"},
-						"source_ids":          stringArraySchema(),
-						"stance":              map[string]any{"type": "string", "enum": []string{"supports", "qualifies", "contradicts", "background"}},
-						"recommended_surface": map[string]any{"type": "string", "enum": []string{"inline_ref", "block_embed", "source_panel", "decision_log"}},
-					},
-					"required":             []string{"text"},
-					"additionalProperties": false,
-				},
-			},
-			"sources": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"source_id": map[string]any{"type": "string"},
-						"kind":      map[string]any{"type": "string", "enum": sourcecontract.SourceKindValues()},
-						"target": map[string]any{
-							"type": "object",
-							"properties": map[string]any{
-								"uri":        map[string]any{"type": "string"},
-								"title":      map[string]any{"type": "string"},
-								"media_type": map[string]any{"type": "string"},
-							},
-							"required":             []string{"uri"},
-							"additionalProperties": false,
-						},
-						"selectors": map[string]any{
-							"type": "array",
-							"items": map[string]any{
-								"type": "object",
-								"properties": map[string]any{
-									"kind":   map[string]any{"type": "string", "enum": sourcecontract.SelectorKindValues()},
-									"quote":  map[string]any{"type": "string"},
-									"start":  map[string]any{"type": "integer"},
-									"end":    map[string]any{"type": "integer"},
-									"x":      map[string]any{"type": "number"},
-									"y":      map[string]any{"type": "number"},
-									"width":  map[string]any{"type": "number"},
-									"height": map[string]any{"type": "number"},
-								},
-								"required":             []string{"kind"},
-								"additionalProperties": false,
-							},
-						},
-						"excerpt": map[string]any{
-							"type":        "string",
-							"description": "Bounded source text to show in Texture source_ref transclusions. Use this for the short source stub when the researcher has read source content.",
-						},
-						"reader_snapshot": map[string]any{
-							"type": "object",
-							"properties": map[string]any{
-								"text_content":        map[string]any{"type": "string"},
-								"snapshot_kind":       map[string]any{"type": "string"},
-								"media_type":          map[string]any{"type": "string"},
-								"original_media_type": map[string]any{"type": "string"},
-								"source_url":          map[string]any{"type": "string"},
-								"access_scope":        map[string]any{"type": "string"},
-								"truncated":           map[string]any{"type": "boolean"},
-							},
-							"additionalProperties": false,
-						},
-						"evidence": map[string]any{
-							"type": "object",
-							"properties": map[string]any{
-								"state":        map[string]any{"type": "string", "enum": []string{"available", "pending", "blocked", "unavailable"}},
-								"confidence":   map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}},
-								"rights_scope": map[string]any{"type": "string"},
-							},
-							"additionalProperties": false,
-						},
-					},
-					"required":             []string{"kind", "target"},
-					"additionalProperties": false,
-				},
-			},
-			"actions": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"action_id": map[string]any{"type": "string"},
-						"type":      map[string]any{"type": "string", "enum": []string{"run_command", "inspect_file", "produce_diff", "run_tests", "open_browser", "import_source", "revise_texture"}},
-						"objective": map[string]any{"type": "string"},
-						"inputs":    map[string]any{"type": "object"},
-						"expected_sources": map[string]any{
-							"type": "array",
-							"items": map[string]any{
-								"type": "object",
-								"properties": map[string]any{
-									"kind":     map[string]any{"type": "string", "enum": sourcecontract.SourceKindValues()},
-									"required": map[string]any{"type": "boolean"},
-								},
-								"required":             []string{"kind"},
-								"additionalProperties": false,
-							},
-						},
-						"safety": map[string]any{
-							"type": "object",
-							"properties": map[string]any{
-								"mutation_class": map[string]any{"type": "string", "enum": []string{"green", "yellow", "orange", "red", "black"}},
-								"network":        map[string]any{"type": "string", "enum": []string{"forbidden", "allowed", "required"}},
-								"file_mutation":  map[string]any{"type": "string", "enum": []string{"forbidden", "allowed", "required"}},
-							},
-							"additionalProperties": false,
-						},
-					},
-					"required":             []string{"type", "objective"},
-					"additionalProperties": false,
-				},
-			},
-			"questions": stringArraySchema(),
-			"notes":     stringArraySchema(),
-		}, []string{"schema_version", "kind", "summary", "agent_id"}, false),
+		Parameters:  toolregistry.JSONSchemaObject(properties, []string{"schema_version", "kind", "summary", "agent_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			if err := rejectLegacyUpdateCoagentFields(raw); err != nil {
 				return "", err

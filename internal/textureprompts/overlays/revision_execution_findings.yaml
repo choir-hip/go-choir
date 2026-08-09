@@ -11,5 +11,5 @@ body: |
   Request another researcher before editing only when the evidence is unusable for any reader-facing revision; name the precise blocker in run output.
   {{end}}{{if .ActiveExecution}}
   At least one recent delegated run is active or lacks terminal evidence.
-  Recent execution evidence may be summarized when it is already grounded in durable packets. If required execution or verification evidence is absent, preserve that absence as an explicit blocker; effects-OFF runtime must not request or imply follow-on execution.
+  Recent execution evidence may be summarized when it is already grounded in durable packets. If required execution or verification evidence is absent, preserve that absence as an explicit blocker and do not imply completion. Effects-OFF permits no generic execution spawn: any newly required execution may be opened only as the owner's exact persistent Super through a controls entry with open_persistent_super=true and a valid execution_request in the same patch_texture, rewrite_texture, or record_texture_decision call. Texture never directly opens, requests, or spawns CoSuper; the authenticated persistent Super's assignment runtime owns exact networkless disposable capsules. No result claim is allowed before durable execution or capsule evidence arrives.
   {{end}}

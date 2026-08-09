@@ -59,7 +59,7 @@ func TestPolicyFor(t *testing.T) {
 			AllowedMessageTargets: []string{Texture},
 		},
 		Texture: {
-			Profile: Texture, AllowMemoryTools: true, AllowCoAgentTools: true,
+			Profile: Texture, AllowMemoryTools: true, AllowCoAgentTools: false,
 			AllowedSpawnTargets: []string{Researcher}, AllowedMessageTargets: []string{Researcher, Super},
 		},
 		Processor: {

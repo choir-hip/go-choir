@@ -235,6 +235,16 @@ var textureControlAuthorityFields = map[string]bool{
 	"run_id": true, "source_run_id": true, "target_work_item_id": true, "producer_work_item_id": true, "work_item_id": true,
 	"direction": true, "message_seq": true, "payload_digest": true, "lifecycle_version": true, "reducer_seq": true,
 	"disposition": true, "disposition_ref": true, "delivered_to_loop_id": true, "delivered_to_run_id": true, "delivered_at": true,
+	// Persistent-Super assignment/capsule bindings and terminal outcome
+	// witnesses are trusted-runtime outputs, never model-authored action input.
+	"control_binding_id": true, "assignment_id": true, "assignment_attempt": true, "assignment_kind": true, "attempt": true,
+	"loop_id": true, "decision_id": true,
+	"capsule_id": true, "capsule_identity": true, "capability_id": true, "capability_digest": true,
+	"execution_handle": true, "execution_handle_digest": true, "subject_digest": true, "scope_digest": true, "request_digest": true,
+	"candidate_id": true, "source_candidate_id": true, "source_artifact_ref": true, "source_outcome_sha256": true,
+	"network_mode": true, "filesystem_mode": true, "writable": true,
+	"coordination_contract_id": true, "coordination_contract_digest": true,
+	"capsule_disposition": true, "capsule_intent_ref": true, "capsule_ack_ref": true,
 }
 
 // action.inputs is intentionally an open data bag, so it cannot reject unknown
@@ -314,7 +324,11 @@ func textureControlsSchema() map[string]any {
 				"open_persistent_super": map[string]any{"type": "boolean"},
 				"open_researcher":       map[string]any{"type": "boolean"},
 				"objective":             map[string]any{"type": "string"},
-				"packet":                map[string]any{"type": "object", "description": "Typed coagent_source_packet.v1 payload. Persistent-Super openers require kind=execution_request with at least one action."},
+				"packet": func() map[string]any {
+					schema := agentcore.CoagentSourcePacketPayloadSchema()
+					schema["description"] = "Typed coagent_source_packet.v1 payload. Researcher controls normally use kind=question with questions; persistent-Super openers require kind=execution_request with at least one action. Target and delivery envelope authority are runtime-derived and must not appear here."
+					return schema
+				}(),
 			},
 			"required":             []string{"packet"},
 			"additionalProperties": false,
@@ -971,7 +985,11 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 				// complete same-head owner set.
 				return types.Revision{}, fmt.Errorf("Texture head or owner-instruction set changed concurrently; reload the current Texture document and retry this same run/mutation: %w", applyErr)
 			}
-			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
+			// A failed atomic turn has no partial store commit. Keep this active
+			// mutation pending so the bounded tool loop can correct model-authored
+			// packet or transition input and retry in the same resident run. Run
+			// completion/failure remains the sole authority that terminalizes a
+			// no-write mutation.
 			return types.Revision{}, fmt.Errorf("apply atomic Texture lifecycle turn: %w", applyErr)
 		}
 		rt.recordTextureAudit(ctx, "revision_committed", rec.OwnerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, rev.RevisionID, applied.Receipt.CommandID, applied.Receipt.CommandDigest, applied.Trajectory.LifecycleVersion)

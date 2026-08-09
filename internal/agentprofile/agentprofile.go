@@ -53,11 +53,13 @@ func PolicyFor(profile string) Policy {
 		// Texture is the artifact control plane, not an evidence gatherer. It does
 		// not receive researcher-owned evidence tools (save/read/list_evidence) or
 		// the verify_model_capability diagnostic by default. It keeps run-memory
-		// retrieval so it can recover its own compacted context.
+		// retrieval so it can recover its own compacted context. Lifecycle target
+		// and cancellation authority stays in atomic Texture controls/reducers;
+		// Texture must not receive the generic model-authored cancel_agent tool.
 		return Policy{
 			Profile:               Texture,
 			AllowMemoryTools:      true,
-			AllowCoAgentTools:     true,
+			AllowCoAgentTools:     false,
 			AllowedSpawnTargets:   []string{Researcher},
 			AllowedMessageTargets: []string{Researcher, Super},
 		}
