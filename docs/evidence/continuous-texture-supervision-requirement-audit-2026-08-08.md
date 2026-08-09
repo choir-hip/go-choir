@@ -22,12 +22,14 @@ activation receipt exact-joins every selected host service. That is host evidenc
 only. The retained target guest/service has not been nonce-bound to
 `7ba05599`: the same owner's existing browser contexts and scoped keys are
 unauthenticated, expired, or revoked. Independent source/live audit found no
-public same-owner renewal without WebAuthn user presence. The stale displayed
-prompt was dismissed and a fresh five-minute login challenge was started,
-foregrounded, and notified, but expired unauthenticated. A new assertion must
-start only when the owner can immediately approve Touch ID/security-key
-presence. No unattended retry, substitute owner/computer, recovery bypass, SSH,
-internal vmctl path, or weaker identity counts. Effects remain OFF.
+public same-owner renewal without WebAuthn user presence. Process evidence then
+showed `omp-browser` is HeadlessChrome/150 with `--headless=new`, an OMP temporary
+profile, basic password store, and mock keychain. Its waiting text and two
+expired challenges were diagnostic-only; it has no proven owner-operable native
+prompt. A new assertion must start in an ordinary headed persistent browser only
+when the owner can immediately approve Touch ID/security-key presence. No
+headless retry, CDP virtual authenticator, substitute owner/computer, recovery
+bypass, SSH, internal vmctl path, or weaker identity counts. Effects remain OFF.
 
 The last exact guest-proved product prefix is `b5d907a3`: Texture published a
 continuous-prose v1 while work was open, atomically addressed its bound

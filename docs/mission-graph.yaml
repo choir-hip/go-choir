@@ -258,10 +258,13 @@ nodes:
       proxy commit and the deploy receipt exact-joins the selected host services,
       but retained guest/service identity is blocked on coordinated same-owner
       Touch ID/security-key user presence. Independent audit found no public
-      no-presence renewal; a freshly retried five-minute challenge expired
-      unauthenticated. A new assertion may start only when the owner can approve
-      immediately; unattended retries, substitute accounts/computers, SSH,
-      internal vmctl, or weaker identity are inadmissible. The
+      no-presence renewal, then process evidence showed omp-browser is a headless
+      temporary-profile/mock-keychain diagnostic surface with no proven
+      owner-operable native prompt. Its expired challenges are not human-presence
+      attempts. A fresh assertion may start only in an ordinary headed persistent
+      browser when the owner can approve immediately; headless retries, CDP
+      virtual authenticators, substitute accounts/computers, SSH, internal
+      vmctl, or weaker identity are inadmissible. The
       last guest-proved prefix at b5d907a3 produced continuous-prose v1 while work
       was open, one exact Texture-to-Researcher control, and thirteen clean
       ChatGPT Researcher runs/source packets. Fifteen reports and an owner

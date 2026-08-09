@@ -19,12 +19,14 @@ deploy activation receipt exact-joins every selected host service. The deploymen
 stable guest has not yet been woken or nonce-bound to `7ba05599` because the
 same owner's retained browser sessions and scoped keys are unauthenticated,
 expired, or revoked. Independent audit found no public same-owner renewal that
-can proceed without WebAuthn user presence. The stale displayed prompt was
-dismissed and a fresh five-minute challenge was started, foregrounded, and
-notified, but it expired unauthenticated. A new assertion must be started only
-when the owner can immediately approve Touch ID/security-key presence. No
-unattended retry, substitute owner/computer, recovery bypass, SSH, internal
-vmctl path, or weaker identity is admissible.
+can proceed without WebAuthn user presence. Process evidence then corrected the
+browser path: `omp-browser` is HeadlessChrome/150 with an OMP temporary profile,
+basic password store, and mock keychain. Its waiting text and expired challenges
+were diagnostic-only; it has no proven owner-operable native prompt. A fresh
+assertion must start in an ordinary headed persistent browser profile only when
+the owner can immediately approve Touch ID/security-key presence. No headless
+retry, CDP virtual authenticator, substitute owner/computer, recovery bypass,
+SSH, internal vmctl path, or weaker identity is admissible.
 
 The last exact guest-proved product prefix remains `b5d907a3`: Texture published
 a continuous-prose v1 while work was open, atomically addressed its bound

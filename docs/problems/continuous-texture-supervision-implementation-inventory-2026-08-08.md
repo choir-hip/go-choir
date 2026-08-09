@@ -1879,3 +1879,31 @@ new same-owner passkey assertion only when the owner can immediately approve
 Touch ID or present/touch the already-registered security key, and complete it
 within five minutes. Then verify the exact owner via `/auth/session` before any
 key mint or retained-computer wake. Effects remain OFF.
+
+### Authentication browser capability correction
+
+The retained `omp-browser` session is not an admissible human-presence surface.
+Live process evidence shows its Chrome is `--headless=new`, uses an OMP daemon
+temporary profile, `--password-store=basic`, and `--use-mock-keychain`; its user
+agent is `HeadlessChrome/150`. It has no headed browser window an owner can
+operate. The page's `Waiting for Touch ID / security key...` text and positive
+platform-authenticator capability signal are not evidence that a native Touch ID
+sheet is reachable. Activating ordinary Google Chrome foregrounded the separate
+normal headed Chrome process, not the OMP WebAuthn request. The two expired OMP
+challenges are therefore diagnostic-only headless challenges, not evidence that
+an available owner declined or missed a usable native ceremony. A CDP virtual
+authenticator would be a replacement/forged credential and remains inadmissible.
+
+The exact normal path is a fresh assertion in an ordinary headed persistent
+browser profile that holds or can invoke the retained owner's authenticator.
+Coordinate owner presence first, open canonical `https://choir.news/` in that
+browser, use its normal Sign in flow, approve the native Touch ID or registered
+security-key prompt, and finish within the five-minute server challenge TTL.
+Verify `/auth/session` returns exact owner
+`c72404bb-3c43-4a53-8671-b5cbc48b24a7` in that same headed same-origin browser;
+then mint only a narrow acceptance key through Settings/public
+`/auth/api-keys` and transfer it through the existing non-logging mode-0600
+secret path. Only then may public retained-computer inspection/wake resume.
+LaunchServices accepted a request to open canonical `https://choir.news/` in
+the already-running ordinary Google Chrome process, but no authentication claim
+or challenge was started. Effects remain OFF.
