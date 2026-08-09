@@ -21,10 +21,13 @@ host activation. Public `/health` reports the exact proxy commit and the deploy
 activation receipt exact-joins every selected host service. That is host evidence
 only. The retained target guest/service has not been nonce-bound to
 `7ba05599`: the same owner's existing browser contexts and scoped keys are
-unauthenticated, expired, or revoked, and its existing Chrome profile is waiting
-at an initiated Touch ID/security-key passkey ceremony. No substitute owner,
-computer, recovery bypass, SSH, internal vmctl path, or weaker identity counts.
-Effects remain OFF.
+unauthenticated, expired, or revoked. Independent source/live audit found no
+public same-owner renewal without WebAuthn user presence. The stale displayed
+prompt was dismissed and a fresh five-minute login challenge was started,
+foregrounded, and notified, but expired unauthenticated. A new assertion must
+start only when the owner can immediately approve Touch ID/security-key
+presence. No unattended retry, substitute owner/computer, recovery bypass, SSH,
+internal vmctl path, or weaker identity counts. Effects remain OFF.
 
 The last exact guest-proved product prefix is `b5d907a3`: Texture published a
 continuous-prose v1 while work was open, atomically addressed its bound

@@ -1847,3 +1847,35 @@ at the already-open passkey ceremony. After it succeeds, renew the same-origin
 session, inspect the retained computer, issue the normal public recovery if it
 is still failed, and require a fresh nonce-bound exact host/guest/service join
 before minting a narrowly scoped acceptance key. Effects remain OFF.
+
+### Same-owner authentication recovery audit and challenge expiry
+
+An independent read-only audit found no admissible public same-owner session or
+key renewal that can proceed without user presence. `/auth/session` renews only
+from a valid stored refresh session; API-key creation requires a valid session
+or a current non-revoked/non-expired bearer; desktop exchange requires both
+valid access and refresh authority; and the CLI has no login/recovery command.
+The public account-recovery flow does not auto-login and still culminates in a
+new platform WebAuthn registration ceremony. Moreover, its current request
+handler discards the only raw recovery token returned by Store, persists only
+the hash, and has no mail-delivery or frontend handoff, so it is not an
+end-to-end public recovery path. These findings were source-matched to deployed
+auth build `7ba05599`; focused auth tests passed. No SSH, internal API, direct DB,
+replacement account/computer, credential extraction, or auth weakening was
+used.
+
+The previously displayed Chrome login was misleadingly still labelled
+`Waiting for Touch ID / security key...` after its server challenge had exceeded
+the five-minute TTL. It was dismissed, and a fresh same-owner login challenge
+was started through `/auth/login/begin`. Chrome was foregrounded and a local
+notification requested Touch ID/security-key presence. Safe `/auth/session`
+polling for the complete five-minute challenge window remained unauthenticated,
+so that challenge is now expired too. Login-begin challenge state is the only
+new staging auth artifact; no session/key was created and no computer or provider
+transition ran.
+
+The next admissible transition is coordination with the retained owner: begin a
+new same-owner passkey assertion only when the owner can immediately approve
+Touch ID or present/touch the already-registered security key, and complete it
+within five minutes. Then verify the exact owner via `/auth/session` before any
+key mint or retained-computer wake. Effects remain OFF.
