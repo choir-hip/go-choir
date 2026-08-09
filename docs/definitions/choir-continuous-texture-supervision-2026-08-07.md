@@ -929,3 +929,118 @@ fail-open/self-target/cross-document resolution, producer/target work ambiguity,
 two-commit Texture mutation, terminal redirection gap, forced no-op revisions,
 split owner correction, and verifier self-development effects. Introduced — none
 by this Definition. Repaired — none until deployed acceptance proves the cutover.
+
+
+### 2026-08-09 deployed Researcher bind-loop repair ceremony
+
+**Mutation class:** red. This change touches lifecycle activation/control
+delivery and the durable actor acknowledgement boundary. Effects remain OFF.
+
+**Structural/root-cause clustering assessment:** the opaque packet rejection,
+pre-commit mutation terminalization, generic Texture cancellation exposure,
+recursive assignment-field exposure, and this post-commit bind loop are five
+symptoms in the same Texture-to-lifecycle control substrate. The first four are
+already repaired at shared schema/retry/policy boundaries. The new symptom is
+not another schema patch: atomic Texture commit and wake are correct, but the
+Researcher cold-wake hydrator crosses back into the deliberately legacy-only
+`ListWorkItemsByTrajectory` projection. That projection must continue excluding
+`LifecycleVersion > 0` rows. The exact existing replacement is the already
+validated control's unique `TargetWorkItemID` read through scoped
+`GetLifecycleWorkItem` (or its exact trajectory snapshot); the computer-wide
+`ListOpenAssignedLifecycleWorkItems` boot scan is explicitly not request-path
+authority. Separately, the actor substrate intentionally retries handler errors
+at least once. A random activation plus a best-effort terminal write violates
+the handler's idempotence contract and turns one canonical control into
+unbounded new runs.
+
+**Conjecture delta:** the exact `lifecycle invalid transition` occurs at
+`lifecycleRunBindsWork`, not at run-state validation: a v1 open assigned work is
+present in canonical state, while the legacy list intentionally returns no
+lifecycle work, so the pending run omits `work_item_ids`. Hydrating only the
+ordered/deduplicated work IDs named by the already selected controls, with exact
+owner/computer/trajectory/agent/open checks, should let the existing activation
+and delivery reducers commit exactly once. The second conjecture is that two distinct runtime-derived keys can make
+pre-dispatch reconciliation idempotent across actor retry, `MarkProcessed`
+failure, deployment, and process restart: a build-independent logical
+activation key names the exact owner/computer/trajectory/agent and ordered
+control/work join, while a failed-attempt key additionally includes immutable
+build commit plus canonical control/work lifecycle versions. Replay always
+reuses/rebinds an active logical activation across builds; only an exact
+same-build/same-state durably failed attempt is suppressed, so a changed build
+or changed canonical lifecycle state can recover the still-pending control. If
+either conjecture fails, no provider/capsule effect may run.
+
+**Protected surfaces:** lifecycle-scoped agent/run/work/control object graph,
+activation replacement, atomic control delivery/event cursor, actor durable
+mailbox acknowledgement/retry, restart recovery, provider activation boundary,
+and public cancellation evidence. The legacy work projection, broad boot scan,
+generic cancellation, persistent-Super authority, capsules, host/VM,
+checkpoint, route, materialization, acceptance, and provider credentials must
+not be widened.
+
+**Authorized repair boundary:**
+
+1. Keep the legacy non-lifecycle branch unchanged. For lifecycle Researcher
+   controls, hydrate only unique `TargetWorkItemID`s from the already selected
+   controls via the exact scoped getter and revalidate lifecycle version,
+   owner, computer, trajectory, assigned agent, and open status. Mixed scope,
+   closed/reassigned work, or any ambiguity refuses before run/provider creation.
+2. Stamp two runtime-derived keys. The logical activation key contains the
+   exact owner/computer/trajectory/agent and ordered/deduplicated control/work
+   joins but no build identity. Before minting a run, reuse that active logical
+   key across any deployment: an unbound pending run is rebound, and a bound
+   pending run is deterministically redispatched. The failed-attempt key adds
+   immutable build commit and the exact canonical control/work lifecycle
+   versions (or content hashes). Only a matching durably failed attempt is a
+   typed handled outcome; changed build or canonical version remains eligible
+   to recover without authoring a second run while the old logical activation
+   is active. `coagent_result` actor update IDs must also be deterministic from
+   their canonical update identity so repeated dispatch does not create a
+   second mailbox fact.
+3. Construct that typed outcome only for classified
+   `ErrLifecycleInvalidTransition` after `UpdateRun` successfully persists the
+   failed run and its fingerprint. A failed terminal write, CAS/context/store
+   error, or other unclassified bind error remains unprocessed and retryable
+   against the same active fingerprint; it must not mint a fresh run. If atomic
+   bind committed but the post-commit reload failed, the nonempty lifecycle
+   receipt forbids stale terminal overwrite; replay reloads the canonical bound
+   run and deterministically dispatches it.
+4. Actor acknowledgement remains a separate write, so correctness comes from
+   durable fingerprint replay rather than a Go error type: a crash or
+   `MarkProcessed` failure after terminal persistence re-observes the same
+   failed fingerprint and creates zero additional runs. Pending control/work
+   remain canonical evidence and may be retried by a changed build or settled by
+   public cancellation; a failed RunRecord never settles them by itself.
+
+**Admissible evidence:** (1) retain the authority test proving the legacy
+projection excludes lifecycle rows; (2) real atomic Texture open-Researcher
+control through cold `ReconcileCoagentWake`, proving exact scoped work metadata,
+one delivery receipt, one run, and no bind-failure marker before provider; (3)
+negatives for wrong owner/computer/trajectory/agent, lifecycle version,
+closed/reassigned work, mixed trajectory/target, ordering/dedup, and legacy
+compatibility, with zero delivery/provider/capsule effects; (4) deterministic
+bind rejection plus successful terminal persistence, injected terminal-persist
+failure, transient bind error, cancellation race, bind-commit/reload-failure
+classification, and terminal-write-to-actor-ack failure, proving bounded run
+identity and no stale overwrite; (5) same-build restart/replay with no additional
+failed run; old-build active pending/unbound followed by a new build reusing and
+rebinding the same run; hydration-to-bind reassignment/version race followed by
+valid canonical recovery; changed-build/changed-state failed-attempt eligibility;
+and successful-bind restart with no second delivery; (6) focused Race tests,
+sequential runtime shards, vet,
+doc/receipt checks, and independent lifecycle/security review; then exact
+CI/SBOM/deploy identity and authenticated staging recovery on a fresh trajectory.
+
+**Rollback:** source revert of exact hydration, fingerprint reconciliation, and
+deterministic actor dispatch, followed by normal exact deployment rollback.
+Pending controls/open work and failed runs remain canonical and inspectable.
+Rollback must never revive cancelled `14c99be0…` or revert restored provider auth.
+
+**Heresy delta:** discovered — a stale legacy projection was used as lifecycle
+activation authority; random pre-dispatch activation violated actor idempotence;
+and a best-effort run terminal write was treated as indefinitely retryable.
+Introduced — none intended; acknowledging a transient/unpersisted error,
+suppressing changed-build recovery, or hydrating unrelated work would each be a
+new loss-of-delivery/authority heresy and is explicitly forbidden. Repaired —
+none until focused fault/restart tests, independent review, exact deployed
+identity, and authenticated product proof pass.
