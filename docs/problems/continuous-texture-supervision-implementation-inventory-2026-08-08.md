@@ -1670,3 +1670,39 @@ The required fault matrix now explicitly includes handler return,
 snapshot with present run memory, and crash after mutation CAS/`UpdateRun` with
 the run already pending. Each must recover the same exact run/trigger without a
 second canonical Texture turn or an unauthorized provider chain.
+
+## Exact `fd83ce64` hibernated-computer wake returns 502 — 2026-08-09
+
+Runtime repair `fd83ce64209beae56f2a515d4408a1d88a2fd6e3` passed GitHub
+Actions run [`31306818891`](https://github.com/choir-hip/go-choir/actions/runs/31306818891)
+on rerun attempt 2, including the selected Race shards, aggregate Go gate,
+Differential SBOM acceptance, rolling publication, and Node B deployment. Public
+`/health` reports exact host commit `fd83ce64`.
+
+The successful deployment did not refresh the Definition's stable acceptance
+computer. Its log recorded one active computer, the immutable constructed
+computer for a different owner, and explicitly reported `No mutable active
+interactive computers need refresh`. The Definition's previously exact stable
+computer `vm-bbdbbd01c4390b7036067aaa12afeb68` / guest
+`computer-42850e9734d9442386c5dd8bf3afbf19` was hibernated and therefore absent
+from the active refresh set.
+
+At `2026-08-09T10:28Z`, reopening the retained acceptance-owner browser session
+started the normal public bootstrap/wake path. The UI remained in Choir BIOS and
+first reported `Bootstrap probe 1 is still waiting; retrying`; after more than
+210 seconds it reported repeated `VM route returned 502; retrying` and
+`BOOTSTRAP FAILED (502)`. No authenticated product API, nonce-bound guest
+execution identity, Texture mutation, provider call, capsule effect, or route
+mutation was attempted. A different-owner immutable computer still returned a
+valid joined identity whose host build was exact `fd83ce64`, but its preserved
+guest remained `d69e1a6f`; that proves host deployment only and is inadmissible
+for this Definition's product acceptance.
+
+This is a newly discovered deployment/wake blocker, not evidence that the
+Texture mailbox repair regressed and not a repaired heresy. The next action must
+remain no-SSH and read-only until public wake either converges or exposes a
+durable diagnostic surface. If it persists, diagnose the hibernated stable
+computer's ordinary vmctl wake/route transition and its exact guest build using
+public product evidence; do not substitute the other owner's immutable computer,
+create a candidate/worker computer, weaken exact identity, or mutate Node B
+without separate authority. Effects remain OFF.
