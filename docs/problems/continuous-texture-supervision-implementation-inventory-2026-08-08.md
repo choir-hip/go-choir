@@ -2540,3 +2540,61 @@ That mock is logic validation only. The helper remains **NOT EXECUTED** and does
 not itself prove the second downward control, persistent Super, capsule
 parallelism, exact source-open parity, restart, cancellation, RunAcceptance, or
 raw Trace.
+
+
+### Accepted focused second-control ceremony — 2026-08-09
+
+The next red acceptance write after causal v2 is source-frozen as
+`/tmp/cts-acceptance-second-control.py`, SHA-256
+`0f09449a67c03160aa004ce481374184b330224518cd9a07df48bd8f7628491f`.
+It uses owner occurrence `cts-fbc-second-control-v2-9c6d3392e60b` and exact
+465-byte content at SHA-256
+`9c6d3392e60b4765bf6f7d5f556869b7dcbe11e532565773b4b3d2fcb4abb1b5`.
+The tell asks for one focused, source-backed quantitative comparison on the
+existing evidence thread, keeps that obligation open, explicitly defers a
+semantic revision until evidence arrives, and forbids self-development, host,
+deployment, credential, and routing effects. It names an outcome and constraint,
+not Researcher, Super, CoSuper, a tool, or a spawn topology.
+
+Before POST, the helper pins the accepted correction/v2 evidence and helper,
+re-proves exact owner/computer/route/policy/rollback/cleanup authority, exhausts
+both public Texture and raw lifecycle cursors without expiry, and requires one
+shared current watermark equal to snapshot cursor and trajectory reducer
+sequence. Exact public document, v2 revision/body/hash, snapshot document/head,
+live trajectory, Texture obligation/agent, and subject authority must join. The
+complete history must contain exactly the accepted correction instruction and
+exactly one prior downward control. That first control is joined across public
+and raw events, snapshot update, message sequence, canonical payload, source
+Texture agent, and one still-open Researcher work/agent pair with Texture-owned
+provenance. New Researcher, Super, arbitrary role targets, unseen owner traffic,
+v3, or a second pre-existing control stop the ceremony.
+
+A mode-`0600`, fsynced marker freezes v2, the shared cursor/watermark, the full
+first-control target tuple, literal request bytes/digests, and cleanup order.
+The one semantic `/tell` occurrence must first return the exact pending,
+non-replay owner-instruction receipt. PASS then joins its exact queue event to
+raw lifecycle, exactly one non-version `texture_turn_committed` consuming only
+that tell, and exactly one later `control_queued` in the same
+command/digest/time. The control event intentionally carries no owner request;
+the same-turn join is the causal bridge. Fresh snapshot evidence must prove the
+new control is distinct, is the only set difference from total control count
+one to two, and reuses the exact same still-open Researcher and work item with
+canonical update/message/payload/agent/work joins. It does not wait for delivery,
+a Researcher result, persistent Super, capsules, or v3.
+
+One byte-identical post-consumption replay must return the same immutable
+receipt with `status=consumed,replay=true`, while cursor re-enumeration remains
+exactly one queue, one tell-consuming turn, and two controls. Marker recovery
+re-runs the complete first-control public object join rather than trusting IDs
+alone. Every post-marker STOP carries occurrence recovery, fresh conditional
+public cancellation, byte-exact policy rollback, and DELETE-204/post-401 key
+cleanup in that order; PASS carries them forward on the live trajectory.
+
+Independent review rejected an earlier runtime-NameError draft, recovery that
+retained only first-control IDs, and an owner-wide run query vulnerable to
+unrelated history. Both final reviewers returned `ACCEPT` on the exact repaired
+bytes. Fresh and marker-recovery mocked public-contract runs reached PASS before
+the final one-line source-accepted `channel_id=<doc>` narrowing; syntax passes
+on the exact final helper. These are helper-logic checks only. The ceremony
+remains **NOT EXECUTED** and persistent Super, capsule assignments, verifier,
+v3, restart, cancellation, RunAcceptance, and raw Trace remain unproved.

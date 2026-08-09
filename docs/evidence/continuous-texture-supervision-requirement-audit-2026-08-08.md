@@ -140,13 +140,30 @@ obligations persist atomically. Two final source reviews returned `ACCEPT`; a
 fully mocked exact-contract run validates helper logic only. Actions 3 and 4
 remain partial until deployed execution.
 
+### Focused second downward-control ceremony
+
+The exact next owner occurrence is independently accepted but unexecuted.
+`/tmp/cts-acceptance-second-control.py` is SHA-256
+`0f09449a67c03160aa004ce481374184b330224518cd9a07df48bd8f7628491f`;
+its 465-byte outcome-only tell is SHA-256
+`9c6d3392e60b4765bf6f7d5f556869b7dcbe11e532565773b4b3d2fcb4abb1b5`
+under stable occurrence `cts-fbc-second-control-v2-9c6d3392e60b`. It requires a
+complete public/raw cursor join and exactly one baseline control, then proves an
+exact queue → non-version tell-consuming Texture turn → same-command second
+control, with the total set changing from one to two and the new control reusing
+the exact open Researcher/work binding. Consumed replay must not duplicate any
+occurrence. It deliberately stops before delivery, Super, capsules, or v3. Two
+final source reviews returned `ACCEPT`; mocked fresh/recovery logic is not
+product evidence. Action 3 remains partial until deployed execution and later
+phases.
+
 ### Current 9 acceptance actions
 
 | # | Current disposition |
 | --- | --- |
 | 1 | **PASS (source/local/CI):** focused registry, authorization, reducer, atomic-turn, projection/transclusion, replay, cancellation, capsule, API/CLI, stable-computer ownership guard, Race, aggregate Go, vet, and SBOM evidence passes through `fbc7ff5a`. |
 | 2 | **PASS (local evidence class):** pre-cutover/idempotency/restart contracts pass; `fd83ce64` adds exact trigger/run-memory/ack recovery and `7ba05599` adds real Store+SQLite terminal two-restart proof. Deployed pending-control restart is action 6. |
-| 3 | **PARTIAL:** the b5 prefix proves open-work v1, one exact Researcher control, and repeated Researcher provider/source packets. Independently accepted exact-`fbc7ff5a` start/v1/open-Researcher and owner-correction/causal-v2/new-source ceremonies are prepared but unexecuted. Second control, persistent Super, parallel CoSupers, verifier capsule, and v3 are missing. |
+| 3 | **PARTIAL:** the b5 prefix proves open-work v1, one exact Researcher control, and repeated Researcher provider/source packets. Independently accepted exact-`fbc7ff5a` start/v1, owner-correction/causal-v2/new-source, and focused same-Researcher second-control ceremonies are prepared but unexecuted. Persistent Super, parallel CoSupers, verifier capsule, and v3 are missing. |
 | 4 | **PARTIAL:** deployed create/tell/read/history/revisions/exact-show, durable watch resume, empty terminal resume, cancellation, and authority negatives exist. Positive live correction, exact incorporated source-open, and full live parity are missing. |
 | 5 | **PARTIAL:** deployed continuous-prose interim v1 exists. A differently styled case and end-to-end displayed transclusion inspection do not. |
 | 6 | **PARTIAL:** an earlier exact deployment restart recovered initial work. No post-mailbox same-build restart with pending Researcher and Super controls exists, and exact `fbc7ff5a` guest identity is unproved. |
