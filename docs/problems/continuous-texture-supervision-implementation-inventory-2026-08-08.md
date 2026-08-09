@@ -1291,3 +1291,29 @@ Problem delta: discovered one missing recursive identity class and one
 pre-existing generic Texture cancellation authority; introduced none; repaired
 none until source and deployed proof pass. This problem-first receipt precedes
 any committed cancellation-registry fix.
+
+
+### Control-repair CI gate timeout after source acceptance
+
+Runtime candidate `8ac0b27d47c26d83392bc38488d0b62c258c60a7` passed
+local sequential runtime shards, the focused cancellation regression, full
+Texture-owner tests, focused Race, vet, schema/retry/prompt contracts, and two
+independent red rereviews. CI run `31287510605` nevertheless failed only in the
+intentional non-Race rerun of
+`TestCancelRunTrajectoryDrainsMoreThanOneActivePage`: after its Race shard
+passed, the 1,001-run Dolt fixture reached the production cancellation-drain
+context deadline while looking up the first run. The same scale test passed
+locally in isolation and in sequential shards, but timed out during a prior
+parallel local shard and an independent broad review. This is now a three-
+occurrence test-load cluster, not a new control-repair semantic failure.
+
+Mutation class for any test-only stabilization would be **yellow**; changing the
+production drain deadline or cancellation substrate would be **red** and is not
+authorized as a convenience fix. The next safe probe is a failed-job rerun on
+the exact commit. If it remains red, stop and assess whether the fixture can
+prove multi-page exhaustion without consuming the protected production drain
+budget, or whether a separately reviewed cancellation-substrate change is
+needed. Do not deploy or claim the repair while CI is red.
+
+Problem delta: discovered CI/load instability in an existing protected
+cancellation regression; introduced no known runtime defect; repaired none.
