@@ -1706,3 +1706,38 @@ computer's ordinary vmctl wake/route transition and its exact guest build using
 public product evidence; do not substitute the other owner's immutable computer,
 create a candidate/worker computer, weaken exact identity, or mutate Node B
 without separate authority. Effects remain OFF.
+
+### Public and CI diagnostics identify terminal Texture boot reconciliation crash
+
+The failed deployment attempt's retained diagnostics make the 502 cause exact.
+The refresh returned the stable VM as active at endpoint `10.206.187.2:8085`,
+and the guest reached store/schema open, network, receipt signers, capsule
+executor, and runtime initialization. Sandbox startup then exited with:
+
+```text
+actorruntime: reconcile Texture owner: reconcile subject
+c72404bb-3c43-4a53-8671-b5cbc48b24a7/
+vm-bbdbbd01c4390b7036067aaa12afeb68/
+texture:11902866-d32e-55c4-9483-d9bd47c91a6c:
+start reconciled Texture revision: load lifecycle work for Texture revision:
+no open assigned work
+```
+
+The guest repeatedly restarted, so its health endpoint never became reachable.
+The deployment's internal refresh timed out after 300 seconds even though the VM
+record said active. Rerun attempt 2 then saw the stable computer as failed rather
+than active and skipped it. Two normal public `wake_current_computer` recoveries
+subsequently refreshed epoch 8253 and each ended with public
+`recovery_timeout`; `/api/compute/status` reports state `failed`,
+`recovery_eligible: true`, no runtime, and an absent/unjoined immutable route.
+
+This narrows the blocker to the new fd83 boot reconciliation path over retained
+terminal/cancelled Texture state. The deployed trajectory was deliberately
+cancelled with no open assigned work, so absence of open work is a normal
+terminal fact, not by itself startup-fatal corruption. Any repair must still
+fail closed on operational Store failures and on ambiguous live recovery; it
+may skip or durably settle only a proved terminal occurrence whose exact
+trajectory/work state makes reactivation impossible. It must not invent open
+work, reopen the cancelled trajectory, discard mailbox evidence, acknowledge an
+operational error, or bypass exact occurrence authority. Problem documentation
+precedes any source change.
