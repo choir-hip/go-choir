@@ -184,13 +184,32 @@ logic only. Two independent reviews returned `ACCEPT`; no product request has
 run. Action 3 therefore remains partial, and Super output, CoSuper/capsules, v3,
 restart, cancellation, RunAcceptance, and raw Trace remain missing.
 
+### Corrected v3 and three-assignment capsule sequence
+
+Source inspection fixes the next order without adding product evidence. After
+the accepted first persistent-Super gate, the same Super must first return an
+open intermediate report; Texture must incorporate it into v3 and deliver a
+materially changed second control to the same open Super work before any CoSuper
+assignment. Later, two implementation assignments must overlap in distinct
+capsules; one completed implementation must produce the immutable candidate for
+a third verification assignment while the other implementation remains active.
+An immediate implementation/verifier pair is source-impossible, and a fixed
+one-plus-one topology is forbidden by the Definition.
+
+Public assignment/snapshot/run evidence can prove durable spawn/bind authority
+and declared networkless writable isolation, but final real-Linux proof still
+requires capsule command and denial receipts, immutable-subject verification,
+execution-source transclusion/source-open, and revoke acknowledgement. Internal
+capsule diagnostics and run events do not count. These gates are source-defined
+and **NOT EXECUTED**; action 3 remains partial.
+
 ### Current 9 acceptance actions
 
 | # | Current disposition |
 | --- | --- |
 | 1 | **PASS (source/local/CI):** focused registry, authorization, reducer, atomic-turn, projection/transclusion, replay, cancellation, capsule, API/CLI, stable-computer ownership guard, Race, aggregate Go, vet, and SBOM evidence passes through `fbc7ff5a`. |
 | 2 | **PASS (local evidence class):** pre-cutover/idempotency/restart contracts pass; `fd83ce64` adds exact trigger/run-memory/ack recovery and `7ba05599` adds real Store+SQLite terminal two-restart proof. Deployed pending-control restart is action 6. |
-| 3 | **PARTIAL:** the b5 prefix proves open-work v1, one exact Researcher control, and repeated Researcher provider/source packets. Independently accepted exact-`fbc7ff5a` start/v1, owner-correction/causal-v2/new-source, focused same-Researcher second-control, and GET-only persistent-Super opener/run ceremonies are prepared but unexecuted. Persistent-Super product evidence, parallel CoSupers, verifier capsule, and v3 are missing. |
+| 3 | **PARTIAL:** the b5 prefix proves open-work v1, one exact Researcher control, and repeated Researcher provider/source packets. Independently accepted exact-`fbc7ff5a` start/v1, owner-correction/causal-v2/new-source, focused same-Researcher second-control, and GET-only persistent-Super opener/run ceremonies are prepared but unexecuted. Persistent-Super product evidence, the corrected Super-intermediate/v3/changed-direction gate, two overlapping implementation capsules, the later third verifier capsule, and their real execution evidence are missing. |
 | 4 | **PARTIAL:** deployed create/tell/read/history/revisions/exact-show, durable watch resume, empty terminal resume, cancellation, and authority negatives exist. Positive live correction, exact incorporated source-open, and full live parity are missing. |
 | 5 | **PARTIAL:** deployed continuous-prose interim v1 exists. A differently styled case and end-to-end displayed transclusion inspection do not. |
 | 6 | **PARTIAL:** an earlier exact deployment restart recovered initial work. No post-mailbox same-build restart with pending Researcher and Super controls exists, and exact `fbc7ff5a` guest identity is unproved. |

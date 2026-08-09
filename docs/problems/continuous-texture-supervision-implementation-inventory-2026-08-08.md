@@ -2670,3 +2670,50 @@ fresh conditional trajectory cancellation, exact policy rollback, and exact
 narrow-key DELETE-204/post-401 cleanup in that order; PASS carries those
 obligations forward. Parallel CoSuper/capsule verification, v3, restart,
 cancellation, RunAcceptance, and raw Trace remain later gates.
+
+### Corrected v3-before-capsules topology and capsule evidence boundary — 2026-08-09
+
+Source inspection after accepting the first persistent-Super observer corrected
+the next acceptance sequence before any helper or product execution. Definition
+action 3 is authoritative: the first persistent Super must return an
+intermediate report; Texture must incorporate it into owner-visible v3 and send
+a materially changed second direction to the same open persistent-Super work;
+only then may capsule assignments begin. Jumping directly from the first Super
+bind to CoSuper assignments would overshoot the required supervision loop and
+must STOP rather than be credited retroactively.
+
+The later capsule topology also cannot be a fixed immediate implementation plus
+verifier pair. `assign_co_super` requires an exact completed implementation
+candidate before a verification assignment can open. The smallest topology
+that satisfies the Definition without introducing the forbidden fixed
+one-implementer/one-verifier design is therefore: two implementation
+assignments simultaneously bound in distinct writable capsules; one completes
+and produces a candidate; then a third verification assignment binds that exact
+candidate while the other implementation remains active. Public lifecycle
+history must contain three distinct open/bind pairs, and the candidate-producing
+report event must bind the verifier's `source_candidate_id`. This proves both
+parallel work and a separate verifier rather than manufacturing an impossible
+first-two implementation/verifier story.
+
+At `fbc7ff5a`, public trajectory events/snapshot and run detail can prove durable
+assignment authority: exact persistent-Super parent, implementation or
+verification kind, run/work/agent identity, distinct capsule id, writable=true,
+network mode forbidden, assignment-local overlay, source/subject/capability and
+execution-handle digests, active bind disposition, and later capsule fate
+acknowledgements. The bind is causally downstream of the runtime receiving an
+active spawn acknowledgement and minting the exact assignment capability. It is
+admissible activation evidence, but it is not by itself the final real-Linux
+isolation proof: there is no public capsule-diagnostics or public run-event
+route exposing namespace/cgroup/mount/PID enforcement or the granted executor
+verbs. `InspectCapsuleRaw`, capability handles, and executor diagnostics are
+internal and may not substitute.
+
+Final acceptance must therefore join the durable bind to actual commands,
+network-denial and writable-overlay probes, executor receipt refs, an immutable
+verification subject, Texture execution-source transclusion/source-open, and
+public cancellation fate through `revoke_requested` to `revoked`. If those
+facts cannot be surfaced through the later typed CoSuper report, Texture source
+projection, and RunAcceptance contracts, the next tracked change must be a
+problem-led owner-scoped evidence projection/CLI repair. It should be clustered
+with, but must not be conflated with, the already documented missing raw Trace
+route. No route repair, capsule claim, or live request has been made here.
