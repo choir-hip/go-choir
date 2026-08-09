@@ -2312,3 +2312,32 @@ redaction, binary provenance, hash-to-exec, and prerequisite-order defects.
 This is preparation evidence only. The direct payload, ingestion, bearer probes,
 recovery POST, verifier, and revocation helper remain unexecuted; no key exists;
 effects remain OFF.
+
+
+### Accepted post-recovery no-effect baseline — 2026-08-09
+
+A fifth unexecuted helper now closes the immediate observation gap between the
+accepted retained-computer recovery and the first new acceptance write.
+`/tmp/cts-post-recovery-no-effect-baseline.py` is SHA-256
+`8835b245be4d4706faa156c0ee03ff5b3cb73b254b5362dcfef48a9962079970` and
+remains outside the repository. It opens only the owner mode-`0600` narrow key
+and accepted recovery evidence, refuses redirects, performs GET-only requests,
+and exclusively fsyncs owner-only baseline evidence.
+
+The first independent review rejected the helper for three false-PASS paths:
+weak route syntax and no live immutable-route join, malformed or error-shaped
+HTTP-200 bodies, and silently truncated run/acceptance lists. The repaired exact
+helper requires an exact 64-lower-hex route digest; recomputes it from the sole
+live immutable identity; requires joined route, exact `fbc7ff5a` commit,
+positive generation, nonempty receipt, and valid ComputerVersion; and joins the
+sole API-key-visible computer to the current computer. It also requires exact
+role/provider/model/source policy resolutions without `policy_error`, exact
+`{runs:[...]}` and `{acceptances:[...]}` response shapes, and fewer than the
+explicit 500/1000 limits. Booleans cannot satisfy integer epoch/generation
+checks. `post-recovery-baseline-review` returned final `ACCEPT` on those exact
+bytes without inspecting a key, recovery artifact, or live evidence.
+
+This is preparation evidence, not a no-effect result. It must run only after the
+accepted one-POST recovery and signed nonce-bound identity pass, and before any
+new acceptance write. No bearer, recovery, guest request, or protected effect
+was exercised while preparing or reviewing it. Effects remain OFF.

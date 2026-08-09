@@ -51,6 +51,17 @@ same-origin payload is independently accepted and preserved at
 Its deployment gate is satisfied; it is authorized only with exact-owner physical
 presence and remains not executed. Effects remain OFF.
 
+The immediate post-recovery observation step is also prepared but unexecuted.
+A GET-only no-effect baseline helper at exact SHA-256
+`8835b245be4d4706faa156c0ee03ff5b3cb73b254b5362dcfef48a9962079970`
+received independent source-only `ACCEPT` after repairing three false-PASS
+paths. It requires the accepted recovery digest to equal the sole live joined
+immutable route at exact `fbc7ff5a`, strict role/provider/model/source policy
+contracts with no policy error, and exact non-truncated run and run-acceptance
+lists. It cannot run before accepted recovery and signed nonce identity, and it
+must run before any new acceptance write. This preparation is not product-path
+or no-effect evidence.
+
 This checkpoint supersedes the current-state classifications in the historical
 construction narrative below without deleting those failure receipts. Terminal
 boot repair `7ba05599` passed CI/deploy `31310481745`; the subsequent API-key
@@ -97,7 +108,7 @@ repair has yet received authenticated exact-guest product proof.
 | 6 | **PARTIAL:** an earlier exact deployment restart recovered initial work. No post-mailbox same-build restart with pending Researcher and Super controls exists, and exact `fbc7ff5a` guest identity is unproved. |
 | 7 | **PARTIAL:** a natural-language correction was durably queued on the b5 trajectory but not consumed before cancellation. Direct deployed owner-head edit/rebase/wake and its later controls remain missing. |
 | 8 | **PARTIAL:** public conditional cancellation and retained evidence are real. In-flight Super/CoSuper cancellation plus a real delayed authenticated result and exact retry were not exercised. |
-| 9 | **PARTIAL:** bounded prior readback kept self-development OFF generation 0 and policy/route/host state stable. Real capsule, event/checkpoint/materialization inventory, Trace-to-version, and complete post-`fbc7ff5a` comparison are absent. |
+| 9 | **PARTIAL:** bounded prior readback kept self-development OFF generation 0 and policy/route/host state stable. An independently accepted, unexecuted exact-`fbc7ff5a` post-recovery baseline helper now fail-closes on route join, policy contracts, and run/acceptance truncation. Real capsule, event/checkpoint/materialization inventory, Trace-to-version, and complete before/after comparison remain absent. |
 
 ### Current 8 measures
 
