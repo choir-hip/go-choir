@@ -24,6 +24,9 @@ func ComputeBindLifecycleControlDeliveryDigest(req types.BindLifecycleControlDel
 		req.Controls[i].ProducerUpdateID = strings.TrimSpace(req.Controls[i].ProducerUpdateID)
 		req.Controls[i].TargetWorkItemID = strings.TrimSpace(req.Controls[i].TargetWorkItemID)
 	}
+	if err := normalizeLifecycleControlActivationRefresh(req.ActivationRefresh); err != nil {
+		return "", err
+	}
 	return lifecycleDigest(req)
 }
 
@@ -57,6 +60,102 @@ func metadataStringValueStore(metadata map[string]any, key string) string {
 	return strings.TrimSpace(value)
 }
 
+func normalizeLifecycleControlActivationRefresh(refresh *types.LifecycleControlActivationRefresh) error {
+	if refresh == nil {
+		return nil
+	}
+	refresh.Prompt = strings.TrimSpace(refresh.Prompt)
+	refresh.LogicalActivationKey = strings.TrimSpace(refresh.LogicalActivationKey)
+	refresh.FailedAttemptKey = strings.TrimSpace(refresh.FailedAttemptKey)
+	refresh.BuildCommit = strings.TrimSpace(refresh.BuildCommit)
+	if refresh.Prompt == "" || refresh.LogicalActivationKey == "" || refresh.FailedAttemptKey == "" || refresh.BuildCommit == "" || len(refresh.Versions) == 0 || len(refresh.WorkItemIDs) == 0 {
+		return ErrLifecycleInvalidTransition
+	}
+	seenWork := map[string]bool{}
+	for i := range refresh.WorkItemIDs {
+		refresh.WorkItemIDs[i] = strings.TrimSpace(refresh.WorkItemIDs[i])
+		if refresh.WorkItemIDs[i] == "" || seenWork[refresh.WorkItemIDs[i]] {
+			return ErrLifecycleInvalidTransition
+		}
+		seenWork[refresh.WorkItemIDs[i]] = true
+	}
+	seenUpdate := map[string]bool{}
+	for i := range refresh.Versions {
+		version := &refresh.Versions[i]
+		version.UpdateID = strings.TrimSpace(version.UpdateID)
+		version.TargetWorkItemID = strings.TrimSpace(version.TargetWorkItemID)
+		if version.UpdateID == "" || version.TargetWorkItemID == "" || version.ControlLifecycleVersion <= 0 || version.WorkLifecycleVersion <= 0 || seenUpdate[version.UpdateID] || !seenWork[version.TargetWorkItemID] {
+			return ErrLifecycleInvalidTransition
+		}
+		seenUpdate[version.UpdateID] = true
+	}
+	return nil
+}
+
+// LifecycleControlActivationReplay is the canonical pre-dispatch replay view
+// for one runtime-derived lifecycle-control fingerprint.
+type LifecycleControlActivationReplay struct {
+	Active        *types.RunRecord
+	DurablyFailed *types.RunRecord
+}
+
+// ResolveLifecycleControlActivation returns the unique active logical
+// activation and exact durably failed attempt in one lifecycle scope. It never
+// consults legacy run projections. Duplicate fingerprint owners are ambiguous
+// and fail closed.
+func (s *Store) ResolveLifecycleControlActivation(ctx context.Context, ownerID, computerID, trajectoryID, agentID, logicalKey, failedAttemptKey string, versions []types.LifecycleControlActivationVersion) (LifecycleControlActivationReplay, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	if err != nil {
+		return LifecycleControlActivationReplay{}, err
+	}
+	trajectoryID, agentID = strings.TrimSpace(trajectoryID), strings.TrimSpace(agentID)
+	logicalKey, failedAttemptKey = strings.TrimSpace(logicalKey), strings.TrimSpace(failedAttemptKey)
+	if trajectoryID == "" || agentID == "" || logicalKey == "" || failedAttemptKey == "" || len(versions) == 0 {
+		return LifecycleControlActivationReplay{}, ErrLifecycleInvalidTransition
+	}
+	seenUpdates := make(map[string]bool, len(versions))
+	for _, version := range versions {
+		version.UpdateID, version.TargetWorkItemID = strings.TrimSpace(version.UpdateID), strings.TrimSpace(version.TargetWorkItemID)
+		if version.UpdateID == "" || version.TargetWorkItemID == "" || version.ControlLifecycleVersion <= 0 || version.WorkLifecycleVersion <= 0 || seenUpdates[version.UpdateID] {
+			return LifecycleControlActivationReplay{}, ErrLifecycleInvalidTransition
+		}
+		seenUpdates[version.UpdateID] = true
+		work, workErr := s.GetLifecycleWorkItem(ctx, ownerID, computerID, version.TargetWorkItemID)
+		if workErr != nil {
+			return LifecycleControlActivationReplay{}, workErr
+		}
+		if work.OwnerID != ownerID || work.ComputerID != computerID || work.TrajectoryID != trajectoryID || work.AssignedAgentID != agentID || work.LifecycleVersion != version.WorkLifecycleVersion || work.Status != types.WorkItemOpen {
+			return LifecycleControlActivationReplay{}, ErrConcurrentStateChange
+		}
+	}
+	agent, err := s.GetAgentByScope(ctx, ownerID, computerID, agentID)
+	if err != nil {
+		return LifecycleControlActivationReplay{}, err
+	}
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agentprofile.Canonical(agent.Profile) != agentprofile.Researcher || agentprofile.Canonical(agent.Role) != agentprofile.Researcher || agent.LifecycleVersion <= 0 {
+		return LifecycleControlActivationReplay{}, ErrLifecycleInvalidTransition
+	}
+	result := LifecycleControlActivationReplay{}
+	if activeRunID := strings.TrimSpace(agent.ActiveRunID); activeRunID != "" {
+		active, activeErr := s.GetLifecycleRun(ctx, ownerID, computerID, activeRunID)
+		if activeErr != nil {
+			return LifecycleControlActivationReplay{}, activeErr
+		}
+		if active.OwnerID != ownerID || active.SandboxID != computerID || active.TrajectoryID != trajectoryID || active.AgentID != agentID || !lifecycleRunOwnsActivation(active.State) {
+			return LifecycleControlActivationReplay{}, ErrLifecycleInvalidTransition
+		}
+		if metadataStringValueStore(active.Metadata, "request_source") == "lifecycle_texture_control" && metadataStringValueStore(active.Metadata, "lifecycle_logical_activation_key") == logicalKey {
+			result.Active = &active
+		}
+	}
+	failed, err := s.resolveLifecycleControlActivationFailure(ctx, ownerID, computerID, trajectoryID, agentID, logicalKey, failedAttemptKey, versions)
+	if err != nil {
+		return LifecycleControlActivationReplay{}, err
+	}
+	result.DurablyFailed = failed
+	return result, nil
+}
+
 // BindLifecycleControlDelivery atomically binds ordered committed controls to
 // one exact durable actor run. It is the delivery cursor authority; legacy
 // mailbox delivery tables never participate.
@@ -77,9 +176,15 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	for i := range req.Controls {
 		item := &req.Controls[i]
 		item.UpdateID, item.ProducerAgentID, item.ProducerUpdateID, item.TargetWorkItemID = strings.TrimSpace(item.UpdateID), strings.TrimSpace(item.ProducerAgentID), strings.TrimSpace(item.ProducerUpdateID), strings.TrimSpace(item.TargetWorkItemID)
-		if item.UpdateID == "" || item.ProducerAgentID == "" || item.ProducerUpdateID == "" || item.TargetWorkItemID == "" {
+		if item.UpdateID == "" || item.ProducerAgentID == "" || item.ProducerUpdateID == "" || item.TargetWorkItemID == "" || item.ExpectedControlLifecycleVersion <= 0 || item.ExpectedWorkLifecycleVersion <= 0 {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
+	}
+	if err := normalizeLifecycleControlActivationRefresh(req.ActivationRefresh); err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if req.ActivationRefresh != nil && len(req.ActivationRefresh.Versions) != len(req.Controls) {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	computed, digestErr := ComputeBindLifecycleControlDeliveryDigest(req)
 	if err := requireLifecycleDigest(req.CommandDigest, computed, digestErr); err != nil {
@@ -156,6 +261,14 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	eventObjs := make([]objectgraph.Object, 0, len(req.Controls))
 	controls := make([]types.CoagentSourcePacket, 0, len(req.Controls))
 	controlBindings := make([]map[string]string, 0, len(req.Controls))
+	controlWorkIDs := make([]string, 0, len(req.Controls))
+	seenControlWork := map[string]bool{}
+	refreshVersions := map[string]types.LifecycleControlActivationVersion{}
+	if req.ActivationRefresh != nil {
+		for _, version := range req.ActivationRefresh.Versions {
+			refreshVersions[version.UpdateID] = version
+		}
+	}
 	seen := map[string]bool{}
 	for _, item := range req.Controls {
 		if seen[item.UpdateID] || !lifecycleRunBindsWork(run, item.TargetWorkItemID) {
@@ -170,12 +283,24 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 		if update.UpdateID != item.UpdateID || update.Direction != types.LifecyclePacketDirectionControl || update.TargetAgentID != req.TargetAgentID || update.TargetWorkItemID != item.TargetWorkItemID || update.TrajectoryID != req.TrajectoryID || update.Disposition != types.UpdatePending || update.DeliveredAt != nil || strings.TrimSpace(update.DeliveredToRunID) != "" {
 			return types.LifecycleResult{}, ErrLifecycleCommandConflict
 		}
+		if update.LifecycleVersion != item.ExpectedControlLifecycleVersion {
+			return types.LifecycleResult{}, ErrConcurrentStateChange
+		}
 		workObj, work, err := s.lifecycleWorkObject(ctx, ownerID, computerID, item.TargetWorkItemID)
 		if err != nil {
 			return types.LifecycleResult{}, err
 		}
 		if work.Status != types.WorkItemOpen || work.TrajectoryID != req.TrajectoryID || work.AssignedAgentID != req.TargetAgentID || work.OwnerID != ownerID || work.ComputerID != computerID {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		if work.LifecycleVersion != item.ExpectedWorkLifecycleVersion {
+			return types.LifecycleResult{}, ErrConcurrentStateChange
+		}
+		if req.ActivationRefresh != nil {
+			version, ok := refreshVersions[item.UpdateID]
+			if !ok || version.TargetWorkItemID != item.TargetWorkItemID || version.ControlLifecycleVersion != item.ExpectedControlLifecycleVersion || version.WorkLifecycleVersion != item.ExpectedWorkLifecycleVersion {
+				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+			}
 		}
 		appendCondition(objectgraph.ObjectCondition{CanonicalID: updateObj.CanonicalID, Exists: true, ExpectedContentHash: updateObj.ContentHash})
 		appendCondition(objectgraph.ObjectCondition{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash})
@@ -199,6 +324,31 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 		eventObjs = append(eventObjs, eventObj)
 		controls = append(controls, update)
 		controlBindings = append(controlBindings, map[string]string{"trajectory_id": req.TrajectoryID, "update_id": update.UpdateID, "target_work_item_id": update.TargetWorkItemID, "producer_agent_id": update.AgentID})
+		if !seenControlWork[update.TargetWorkItemID] {
+			seenControlWork[update.TargetWorkItemID] = true
+			controlWorkIDs = append(controlWorkIDs, update.TargetWorkItemID)
+		}
+	}
+	if req.ActivationRefresh != nil {
+		if profile != agentprofile.Researcher || len(controlWorkIDs) != len(req.ActivationRefresh.WorkItemIDs) {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		for index := range controlWorkIDs {
+			if controlWorkIDs[index] != req.ActivationRefresh.WorkItemIDs[index] {
+				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+			}
+		}
+		run.Prompt = req.ActivationRefresh.Prompt
+		if run.Metadata == nil {
+			run.Metadata = map[string]any{}
+		}
+		run.Metadata["lifecycle_logical_activation_key"] = req.ActivationRefresh.LogicalActivationKey
+		run.Metadata["lifecycle_failed_attempt_key"] = req.ActivationRefresh.FailedAttemptKey
+		run.Metadata["lifecycle_activation_build_commit"] = req.ActivationRefresh.BuildCommit
+		run.Metadata["lifecycle_activation_versions"] = req.ActivationRefresh.Versions
+		run.Metadata["work_item_ids"] = append([]string(nil), req.ActivationRefresh.WorkItemIDs...)
+		run.Metadata["request_source"] = "lifecycle_texture_control"
+		run.Metadata["trajectory_id"] = req.TrajectoryID
 	}
 	if run.Metadata == nil {
 		run.Metadata = map[string]any{}

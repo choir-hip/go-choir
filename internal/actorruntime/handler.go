@@ -124,7 +124,7 @@ func (h *actorHandler) handleInitialDispatch(ctx context.Context, u actor.Update
 // calls ReconcileCoagentWake to create a new run for the coagent update —
 // this handles cold starts (process restart) and first-ever updates.
 func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
-	_, _, agentID, scopeErr := parseScopedActorMailboxID(u.ToAgentID)
+	ownerID, _, agentID, scopeErr := parseScopedActorMailboxID(u.ToAgentID)
 	if scopeErr != nil {
 		return nil, fmt.Errorf("actorruntime: resolve coagent_result scope: %w", scopeErr)
 	}
@@ -146,13 +146,13 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 	}
 	if rs.RunID == "" {
 		// No parked run to resume. The coagent update is in the store
-		// mailbox. Create a new run via the reconcile logic, which
-		// calls rt.activate(rec) → sends an initial_dispatch actor
-		// message. The actor loop will process it next.
-		if _, err := h.reconcileCoagentWake(ctx, u); err != nil {
-			return nil, fmt.Errorf("actorruntime: reconcile coagent wake: %w", err)
+		// mailbox. Reconcile either creates a new run and dispatches it or
+		// reports the classified, durably terminal activation outcome.
+		_, reconcileErr := h.reconcileCoagentWake(ctx, u)
+		if retryErr := acknowledgeDurablyTerminalLifecycleControlActivation(reconcileErr); retryErr != nil {
+			return nil, fmt.Errorf("actorruntime: reconcile coagent wake: %w", retryErr)
 		}
-		// Return nil memory — the new run will be started by the
+		// Return nil memory. Any new run will be started by its
 		// initial_dispatch message, not by this handler call.
 		return nil, nil
 	}
@@ -182,15 +182,41 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		if rec.State.Active() {
 			log.Printf("actorruntime: reactivating run %s in state %s (not passivated) for coagent_result", rs.RunID, rec.State)
 		}
-		// Mark the run for reactivation: load persisted conversation,
-		// inject the new coagent update via injectUserTurns, resume the
-		// tool loop.
+		lifecycleControlResearcher :=
+			(agentprofile.Canonical(rec.AgentProfile) == agentprofile.Researcher ||
+				agentprofile.Canonical(rec.AgentRole) == agentprofile.Researcher) &&
+				strings.TrimSpace(metadataString(rec.Metadata, "request_source")) == "lifecycle_texture_control"
+		if lifecycleControlResearcher {
+			if strings.TrimSpace(u.TrajectoryID) == "" || strings.TrimSpace(u.TrajectoryID) != strings.TrimSpace(rec.TrajectoryID) {
+				return nil, fmt.Errorf("actorruntime: parked lifecycle coagent wake trajectory mismatch")
+			}
+			// Bind pending lifecycle controls before any generic whole-run update,
+			// provider execution, or actor acknowledgement. Reconcile also attempts
+			// deterministic initial_dispatch; the already processed run dispatch
+			// deduplicates, leaving this handler as the synchronous execution boundary.
+			reconciled, reconcileErr := h.rt.ReconcileParkedLifecycleCoagentWake(ctx, ownerID, agentID, rs.RunID)
+			if reconcileErr != nil {
+				return nil, fmt.Errorf("actorruntime: reconcile parked lifecycle coagent wake: %w", reconcileErr)
+			}
+			if reconciled == nil || strings.TrimSpace(reconciled.RunID) != strings.TrimSpace(rs.RunID) {
+				return nil, fmt.Errorf("actorruntime: reconcile parked lifecycle coagent wake returned a different run")
+			}
+			if strings.TrimSpace(metadataString(reconciled.Metadata, "request_source")) != "lifecycle_texture_control" {
+				return nil, fmt.Errorf("actorruntime: reconciled lifecycle run lost canonical request source")
+			}
+			rec = *reconciled
+		}
+
+		// Mark the exact reconciled run for reactivation: load persisted
+		// conversation, inject the newly bound update, and resume the tool loop.
 		if rec.Metadata == nil {
 			rec.Metadata = make(map[string]any)
 		}
 		rec.Metadata["actor_reactivate_existing_memory"] = true
 		rec.Metadata["actor_reactivated_from_passivated"] = true
-		rec.Metadata["request_source"] = "update_coagent"
+		if !lifecycleControlResearcher {
+			rec.Metadata["request_source"] = "update_coagent"
+		}
 		rec.State = types.RunPending
 		rec.Error = ""
 		rec.Result = ""
@@ -203,12 +229,29 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		return h.memoryFromRunState(&rec)
 	}
 
-	// Run is terminal (completed/failed/cancelled) — create a new run
-	// for the coagent update via the reconcile path.
-	if _, err := h.reconcileCoagentWake(ctx, u); err != nil {
-		return nil, fmt.Errorf("actorruntime: reconcile coagent wake: %w", err)
+	// Run is terminal (completed/failed/cancelled) — reconcile the
+	// coagent update, either dispatching a new run or acknowledging the
+	// classified, durably terminal activation outcome.
+	_, reconcileErr := h.reconcileCoagentWake(ctx, u)
+	if retryErr := acknowledgeDurablyTerminalLifecycleControlActivation(reconcileErr); retryErr != nil {
+		return nil, fmt.Errorf("actorruntime: reconcile coagent wake: %w", retryErr)
 	}
 	return nil, nil
+}
+
+func metadataString(metadata map[string]any, key string) string {
+	if metadata == nil {
+		return ""
+	}
+	value, _ := metadata[key].(string)
+	return value
+}
+
+func acknowledgeDurablyTerminalLifecycleControlActivation(err error) error {
+	if errors.Is(err, agentcore.ErrDurablyTerminalLifecycleControlActivation) {
+		return nil
+	}
+	return err
 }
 
 func (h *actorHandler) reconcileCoagentWake(ctx context.Context, update actor.Update) (*types.RunRecord, error) {

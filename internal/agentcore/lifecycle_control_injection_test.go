@@ -3,12 +3,15 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -115,6 +118,23 @@ func bindResearcherControlFixture(t *testing.T, rt *Runtime, s *store.Store, own
 		t.Fatal(err)
 	}
 	return fixture
+}
+
+func TestLifecycleControlActorOccurrenceContentResistsDelimiterCollision(t *testing.T) {
+	left := types.CoagentSourcePacket{UpdateID: "control-a\x1fproducer", ProducerUpdateID: "update-a"}
+	right := types.CoagentSourcePacket{UpdateID: "control-a", ProducerUpdateID: "producer\x1fupdate-a"}
+	if oldLeft, oldRight := left.UpdateID+"\x1f"+left.ProducerUpdateID, right.UpdateID+"\x1f"+right.ProducerUpdateID; oldLeft != oldRight {
+		t.Fatalf("adversarial fixture does not collide under delimiter concatenation: %q != %q", oldLeft, oldRight)
+	}
+
+	leftContent := lifecycleControlActorOccurrenceContent(left)
+	rightContent := lifecycleControlActorOccurrenceContent(right)
+	if leftContent == rightContent {
+		t.Fatalf("distinct authored occurrences reused actor content %q", leftContent)
+	}
+	if replay := lifecycleControlActorOccurrenceContent(left); replay != leftContent {
+		t.Fatalf("exact occurrence replay content differs: %q != %q", replay, leftContent)
+	}
 }
 
 func TestBoundLifecycleControlWarmAndColdInjectionExactlyOnce(t *testing.T) {
@@ -507,7 +527,7 @@ func TestPersistentSuperReportToTextureCanonicalReplayWakeAndInjection(t *testin
 	if err != nil || !strings.Contains(first, `"replay":false`) {
 		t.Fatalf("first report = %s err=%v", first, err)
 	}
-	if len(dispatches) != 1 || !strings.HasPrefix(dispatches[0], "coagent_result:result:") {
+	if len(dispatches) != 1 || !strings.HasPrefix(dispatches[0], "coagent_result:sha256:") {
 		t.Fatalf("post-commit wakes = %+v", dispatches)
 	}
 	second, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(ctx, "report_to_texture", raw)
@@ -759,4 +779,952 @@ func TestSelectLifecycleControlActivationRejectsProducerReports(t *testing.T) {
 	if selected = selectLifecycleControlActivation([]types.CoagentSourcePacket{report}, "trajectory", nil); len(selected) != 0 {
 		t.Fatalf("report-only activation = %+v", selected)
 	}
+}
+
+type atomicResearcherControlFixture struct {
+	ownerID, computerID, trajectoryID, docID string
+	agentID, workID                          string
+	control                                  types.CoagentSourcePacket
+}
+
+func seedAtomicResearcherControl(t *testing.T, s *store.Store, suffix string) atomicResearcherControlFixture {
+	t.Helper()
+	ctx := context.Background()
+	ownerID, computerID := "owner-atomic-"+suffix, "sandbox-test"
+	docID, trajectoryID := "doc-atomic-"+suffix, "trajectory-atomic-"+suffix
+	textureAgentID := agentprofile.Texture + ":" + docID
+	now := time.Now().UTC()
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "start-atomic-" + suffix, TrajectoryID: trajectoryID, Kind: types.TrajectoryKindDocument,
+		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		InitialWork:     types.WorkItemRecord{WorkItemID: "texture-work-atomic-" + suffix, Objective: "author direction", AssignedAgentID: textureAgentID, AuthorityProfile: agentprofile.Texture},
+		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: "Atomic", CreatedAt: now, UpdatedAt: now},
+		InitialRevision: types.Revision{RevisionID: "revision-atomic-" + suffix, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "initial", CreatedAt: now},
+		Agent:           types.AgentRecord{AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatal(err)
+	}
+	caller := types.RunRecord{RunID: "texture-run-atomic-" + suffix, OwnerID: ownerID, SandboxID: computerID, AgentID: textureAgentID, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunRunning, Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID, "work_item_ids": []string{start.InitialWork.WorkItemID}}, CreatedAt: now, UpdatedAt: now}
+	project := types.ReplaceLifecycleActivationRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "project-texture-atomic-" + suffix, TrajectoryID: trajectoryID, AgentID: textureAgentID, Run: caller}
+	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatal(err)
+	}
+	agentID, workID := "researcher:atomic-"+suffix, "research-work-atomic-"+suffix
+	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What evidence resolves it?"}}
+	content := "research exact gap"
+	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+	snapshot, _ := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	textureAgent, _ := s.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
+	turn := types.ApplyTextureTurnRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "turn-atomic-" + suffix, DocumentID: docID, TrajectoryID: trajectoryID,
+		CallerAgentID: textureAgentID, CallerRunID: caller.RunID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion,
+		ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, CallerWorkItemID: start.InitialWork.WorkItemID, CallerWorkDisposition: types.WorkItemOpen, Outcome: types.TextureTurnWait, Reason: "wait",
+		Controls: []types.TextureTurnControl{{ControlID: "control-atomic-" + suffix, TargetAgentID: agentID, TargetWorkItemID: workID, Packet: packet, Content: content, PayloadDigest: payloadDigest,
+			OpenAgent: &types.AgentRecord{AgentID: agentID, Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID},
+			OpenWork:  &types.WorkItemRecord{WorkItemID: workID, Objective: "research exact gap", AuthorityProfile: agentprofile.Researcher, AssignedAgentID: agentID}}},
+	}
+	turn.CommandDigest, _ = store.ComputeApplyTextureTurnDigest(turn)
+	result, err := s.ApplyTextureTurn(ctx, turn)
+	if err != nil || len(result.Controls) != 1 {
+		t.Fatalf("atomic turn = %+v, %v", result, err)
+	}
+	return atomicResearcherControlFixture{ownerID: ownerID, computerID: computerID, trajectoryID: trajectoryID, docID: docID, agentID: agentID, workID: workID, control: result.Controls[0]}
+}
+
+func TestLifecycleActivationKeysSeparateLogicalJoinFromBuildAndCanonicalAttempt(t *testing.T) {
+	updates := []types.CoagentSourcePacket{{UpdateID: "u1", TargetWorkItemID: "w1", LifecycleVersion: 1}, {UpdateID: "u2", TargetWorkItemID: "w1", LifecycleVersion: 2}}
+	work := map[string]types.WorkItemRecord{"w1": {WorkItemID: "w1", LifecycleVersion: 3}}
+	logicalA, failedA, _, err := lifecycleActivationKeys("owner", "computer", "trajectory", "researcher", "build-a", updates, work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logicalB, failedB, _, _ := lifecycleActivationKeys("owner", "computer", "trajectory", "researcher", "build-b", updates, work)
+	if logicalA != logicalB || failedA == failedB {
+		t.Fatalf("build keys logical=(%s,%s) failed=(%s,%s)", logicalA, logicalB, failedA, failedB)
+	}
+	work["w1"] = types.WorkItemRecord{WorkItemID: "w1", LifecycleVersion: 4}
+	logicalC, failedC, _, _ := lifecycleActivationKeys("owner", "computer", "trajectory", "researcher", "build-a", updates, work)
+	if logicalC != logicalA || failedC == failedA {
+		t.Fatalf("version keys logical=(%s,%s) failed=(%s,%s)", logicalA, logicalC, failedA, failedC)
+	}
+	reordered := []types.CoagentSourcePacket{updates[1], updates[0]}
+	logicalD, _, _, _ := lifecycleActivationKeys("owner", "computer", "trajectory", "researcher", "build-a", reordered, work)
+	if logicalD == logicalA {
+		t.Fatal("ordered control join did not affect logical activation key")
+	}
+}
+
+func TestAtomicResearcherOpenColdWakeHydratesExactLifecycleWorkAndReplaysOneRun(t *testing.T) {
+	rt, s := testRuntime(t)
+	fixture := seedAtomicResearcherControl(t, s, "cold-wake")
+	legacy, err := s.ListWorkItemsByTrajectory(context.Background(), fixture.ownerID, fixture.trajectoryID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range legacy {
+		if item.WorkItemID == fixture.workID {
+			t.Fatal("legacy projection exposed lifecycle work")
+		}
+	}
+	var dispatches []string
+	rt.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, _, _ string) error {
+		if kind == "initial_dispatch" {
+			dispatches = append(dispatches, content)
+		}
+		return nil
+	})
+	rec, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil {
+		t.Fatalf("cold reconcile: %v", err)
+	}
+	if rec == nil || rec.State != types.RunPending || len(dispatches) != 1 || dispatches[0] != rec.RunID {
+		t.Fatalf("cold result=%+v dispatches=%v", rec, dispatches)
+	}
+	if ids := metadataStringSlice(rec.Metadata["work_item_ids"]); len(ids) != 1 || ids[0] != fixture.workID {
+		t.Fatalf("work ids=%v", ids)
+	}
+	if metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) == "" || metadataStringValue(rec.Metadata, lifecycleFailedAttemptKeyMetadata) == "" || metadataBoolValue(rec.Metadata, "lifecycle_control_bind_failed") {
+		t.Fatalf("fingerprint/failure metadata=%+v", rec.Metadata)
+	}
+	storedControl, err := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, fixture.control.AgentID, fixture.control.ProducerUpdateID)
+	if err != nil || storedControl.DeliveredToRunID != rec.RunID || storedControl.DeliveredAt == nil {
+		t.Fatalf("control=%+v err=%v", storedControl, err)
+	}
+	replayed, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil || replayed == nil || replayed.RunID != rec.RunID || len(dispatches) != 2 {
+		t.Fatalf("replay=%+v err=%v dispatches=%v", replayed, err, dispatches)
+	}
+	runs, err := s.ListLifecycleRunsByTrajectory(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, run := range runs {
+		if run.AgentID == fixture.agentID {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("researcher runs=%d all=%+v", count, runs)
+	}
+	rt.sweepOpenWorkItemActors(context.Background())
+	afterBoot, err := s.ListLifecycleRunsByTrajectory(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bootCount := 0
+	for _, run := range afterBoot {
+		if run.AgentID == fixture.agentID {
+			bootCount++
+		}
+	}
+	if bootCount != 1 {
+		t.Fatalf("successful bind restart created run: %+v", afterBoot)
+	}
+	deliveredAfterBoot, err := s.ListLifecycleControlsDeliveredToRun(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, rec.RunID, 10)
+	if err != nil || len(deliveredAfterBoot) != 1 {
+		t.Fatalf("restart delivery=%+v err=%v", deliveredAfterBoot, err)
+	}
+}
+
+func TestLifecycleControlDurableFailedAttemptSuppressesSameBuildReplay(t *testing.T) {
+	rt, s := testRuntime(t)
+	fixture := seedAtomicResearcherControl(t, s, "failed-replay")
+	work, _ := s.GetLifecycleWorkItem(context.Background(), fixture.ownerID, fixture.computerID, fixture.workID)
+	logical, failed, versions, err := lifecycleActivationKeys(fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, buildinfo.Commit, []types.CoagentSourcePacket{fixture.control}, map[string]types.WorkItemRecord{fixture.workID: work})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	pending := types.RunRecord{RunID: "failed-fingerprint-run", OwnerID: fixture.ownerID, SandboxID: fixture.computerID, AgentID: fixture.agentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, ChannelID: fixture.docID, TrajectoryID: fixture.trajectoryID, State: types.RunPending, Prompt: "persisted run missing exact work binding", CreatedAt: now, UpdatedAt: now,
+		Metadata: stampLifecycleActivationMetadata(map[string]any{"request_source": "lifecycle_texture_control", runMetadataTrajectoryID: fixture.trajectoryID}, logical, failed, buildinfo.Commit, versions)}
+	if err := s.CreateRun(context.Background(), pending); err != nil {
+		t.Fatal(err)
+	}
+	if parsed, parseErr := lifecycleActivationVersionsForRun(&pending); parseErr != nil {
+		t.Fatalf("parse versions metadata=%#v: %v", pending.Metadata[lifecycleActivationVersionsMetadata], parseErr)
+	} else if len(parsed) != 1 || parsed[0].UpdateID != fixture.control.UpdateID {
+		t.Fatalf("parsed versions=%+v control=%+v", parsed, fixture.control)
+	}
+	if err := rt.terminalizeFingerprintedLifecycleControlRun(context.Background(), &pending, []types.CoagentSourcePacket{fixture.control}, store.ErrLifecycleInvalidTransition); !errors.Is(err, ErrDurablyTerminalLifecycleControlActivation) {
+		t.Fatalf("typed terminal persistence error=%v", err)
+	}
+	stored, err := s.GetLifecycleRun(context.Background(), fixture.ownerID, fixture.computerID, pending.RunID)
+	if err != nil || stored.State != types.RunFailed || metadataStringValue(stored.Metadata, "lifecycle_control_activation_failure_command_id") == "" {
+		t.Fatalf("typed failed run=%+v err=%v", stored, err)
+	}
+	dispatches := 0
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
+		dispatches++
+		return nil
+	})
+	rec, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if !errors.Is(err, ErrDurablyTerminalLifecycleControlActivation) || rec == nil || rec.RunID != pending.RunID {
+		t.Fatalf("replay rec=%+v err=%v", rec, err)
+	}
+	runs, _ := s.ListLifecycleRunsByTrajectory(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+	count := 0
+	for _, run := range runs {
+		if run.AgentID == fixture.agentID {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("same attempt created run; runs=%+v", runs)
+	}
+	// Process-start work recovery must delegate back to the exact fingerprint
+	// reconciler. Repeated boot sweeps neither mint nor dispatch around the typed
+	// same-build failure receipt.
+	rt.sweepOpenWorkItemActors(context.Background())
+	rt.sweepOpenWorkItemActors(context.Background())
+	afterBoot, err := s.ListLifecycleRunsByTrajectory(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bootCount := 0
+	for _, run := range afterBoot {
+		if run.AgentID == fixture.agentID {
+			bootCount++
+		}
+	}
+	if bootCount != 1 || dispatches != 0 {
+		t.Fatalf("boot replay runs=%d dispatches=%d all=%+v", bootCount, dispatches, afterBoot)
+	}
+}
+
+func TestLifecycleControlTerminalPersistenceFailureRemainsRetryable(t *testing.T) {
+	rt, s := testRuntime(t)
+	fixture := seedAtomicResearcherControl(t, s, "terminal-persist-failure")
+	work, err := s.GetLifecycleWorkItem(context.Background(), fixture.ownerID, fixture.computerID, fixture.workID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logical, failed, versions, err := lifecycleActivationKeys(fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, buildinfo.Commit, []types.CoagentSourcePacket{fixture.control}, map[string]types.WorkItemRecord{fixture.workID: work})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	missing := types.RunRecord{RunID: "not-persisted-fingerprint-run", OwnerID: fixture.ownerID, SandboxID: fixture.computerID, AgentID: fixture.agentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, ChannelID: fixture.docID, TrajectoryID: fixture.trajectoryID, State: types.RunPending, Prompt: "retryable missing run", CreatedAt: now, UpdatedAt: now,
+		Metadata: stampLifecycleActivationMetadata(map[string]any{"request_source": "lifecycle_texture_control", runMetadataTrajectoryID: fixture.trajectoryID, "work_item_ids": []string{fixture.workID}}, logical, failed, buildinfo.Commit, versions)}
+	transient := rt.terminalizeFingerprintedLifecycleControlRun(context.Background(), &missing, []types.CoagentSourcePacket{fixture.control}, store.ErrConcurrentStateChange)
+	if !errors.Is(transient, store.ErrConcurrentStateChange) || errors.Is(transient, ErrDurablyTerminalLifecycleControlActivation) || missing.State != types.RunPending {
+		t.Fatalf("transient bind terminalized state=%s err=%v", missing.State, transient)
+	}
+	err = rt.terminalizeFingerprintedLifecycleControlRun(context.Background(), &missing, []types.CoagentSourcePacket{fixture.control}, store.ErrLifecycleInvalidTransition)
+	if err == nil || errors.Is(err, ErrDurablyTerminalLifecycleControlActivation) || missing.State != types.RunPending {
+		t.Fatalf("unpersisted terminal outcome state=%s err=%v", missing.State, err)
+	}
+	control, err := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, fixture.control.AgentID, fixture.control.ProducerUpdateID)
+	if err != nil || control.Disposition != types.UpdatePending || control.DeliveredAt != nil {
+		t.Fatalf("control changed=%+v err=%v", control, err)
+	}
+}
+
+func TestLifecycleControlActiveLogicalActivationRebindsSameRunAcrossBuilds(t *testing.T) {
+	rt, s := testRuntime(t)
+	fixture := seedAtomicResearcherControl(t, s, "cross-build")
+	work, err := s.GetLifecycleWorkItem(context.Background(), fixture.ownerID, fixture.computerID, fixture.workID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logical, oldFailed, versions, err := lifecycleActivationKeys(fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, "old-build", []types.CoagentSourcePacket{fixture.control}, map[string]types.WorkItemRecord{fixture.workID: work})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	pending := types.RunRecord{RunID: "cross-build-logical-run", OwnerID: fixture.ownerID, SandboxID: fixture.computerID, AgentID: fixture.agentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, ChannelID: fixture.docID, TrajectoryID: fixture.trajectoryID, State: types.RunPending, Prompt: "pending old build", CreatedAt: now, UpdatedAt: now,
+		Metadata: stampLifecycleActivationMetadata(map[string]any{"request_source": "lifecycle_texture_control", runMetadataTrajectoryID: fixture.trajectoryID, "work_item_ids": []string{fixture.workID}}, logical, oldFailed, "old-build", versions)}
+	if err := s.CreateRun(context.Background(), pending); err != nil {
+		t.Fatal(err)
+	}
+	var dispatched string
+	rt.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, _, _ string) error {
+		if kind == "initial_dispatch" {
+			dispatched = content
+		}
+		return nil
+	})
+	rebound, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil {
+		t.Fatalf("cross-build reconcile: %v", err)
+	}
+	if rebound == nil || rebound.RunID != pending.RunID || dispatched != pending.RunID {
+		t.Fatalf("rebound=%+v dispatch=%q", rebound, dispatched)
+	}
+	if got := metadataStringValue(rebound.Metadata, lifecycleActivationBuildMetadata); got != buildinfo.Commit {
+		t.Fatalf("build metadata=%q", got)
+	}
+	if got := metadataStringValue(rebound.Metadata, lifecycleFailedAttemptKeyMetadata); got == oldFailed || got == "" {
+		t.Fatalf("failed attempt key=%q old=%q", got, oldFailed)
+	}
+	control, err := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, fixture.control.AgentID, fixture.control.ProducerUpdateID)
+	if err != nil || control.DeliveredToRunID != pending.RunID {
+		t.Fatalf("control=%+v err=%v", control, err)
+	}
+}
+
+func TestLifecycleControlCancellationWinsBetweenHydrationAndBind(t *testing.T) {
+	rt, s := testRuntime(t)
+	fixture := seedAtomicResearcherControl(t, s, "cancel-bind-race")
+	work, err := s.GetLifecycleWorkItem(context.Background(), fixture.ownerID, fixture.computerID, fixture.workID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logical, failed, versions, err := lifecycleActivationKeys(fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, buildinfo.Commit, []types.CoagentSourcePacket{fixture.control}, map[string]types.WorkItemRecord{fixture.workID: work})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	pending := types.RunRecord{RunID: "cancel-bind-race-run", OwnerID: fixture.ownerID, SandboxID: fixture.computerID, AgentID: fixture.agentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, ChannelID: fixture.docID, TrajectoryID: fixture.trajectoryID, State: types.RunPending, Prompt: "cancel race", CreatedAt: now, UpdatedAt: now,
+		Metadata: stampLifecycleActivationMetadata(map[string]any{"request_source": "lifecycle_texture_control", runMetadataTrajectoryID: fixture.trajectoryID, "work_item_ids": []string{fixture.workID}}, logical, failed, buildinfo.Commit, versions)}
+	if err := s.CreateRun(context.Background(), pending); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelled, _, err := rt.CancelTrajectoryCommand(context.Background(), fixture.trajectoryID, fixture.ownerID, "cancel-before-bind", "owner cancellation wins", snapshot.Trajectory.LifecycleVersion, snapshot.HeadRevision.RevisionID)
+	if err != nil || cancelled.Trajectory.Status != types.TrajectoryCancelled {
+		t.Fatalf("cancel=%+v err=%v", cancelled, err)
+	}
+	dispatches := 0
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
+		dispatches++
+		return nil
+	})
+	if _, err := rt.bindOrReplayLifecycleControlActivation(context.Background(), &pending, []types.CoagentSourcePacket{fixture.control}); err == nil || errors.Is(err, ErrDurablyTerminalLifecycleControlActivation) {
+		t.Fatalf("post-cancel bind err=%v", err)
+	}
+	storedRun, err := s.GetLifecycleRun(context.Background(), fixture.ownerID, fixture.computerID, pending.RunID)
+	if err != nil || storedRun.State != types.RunCancelled || dispatches != 0 {
+		t.Fatalf("cancelled run=%+v dispatches=%d err=%v", storedRun, dispatches, err)
+	}
+	storedControl, err := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, fixture.control.AgentID, fixture.control.ProducerUpdateID)
+	if err != nil || storedControl.Disposition != types.UpdateCancelled || storedControl.DeliveredAt != nil {
+		t.Fatalf("cancelled control=%+v err=%v", storedControl, err)
+	}
+}
+
+func TestConcurrentLifecycleControlReconcileConvergesOnOneRunAndDelivery(t *testing.T) {
+	rt, s := testRuntime(t)
+	fixture := seedAtomicResearcherControl(t, s, "concurrent-reconcile")
+	var dispatchMu sync.Mutex
+	var dispatches []string
+	rt.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, _, _ string) error {
+		if kind == "initial_dispatch" {
+			dispatchMu.Lock()
+			dispatches = append(dispatches, content)
+			dispatchMu.Unlock()
+		}
+		return nil
+	})
+	type outcome struct {
+		rec *types.RunRecord
+		err error
+	}
+	outcomes := make(chan outcome, 2)
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rec, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+			outcomes <- outcome{rec: rec, err: err}
+		}()
+	}
+	wg.Wait()
+	close(outcomes)
+	var runID string
+	for result := range outcomes {
+		if result.err != nil || result.rec == nil {
+			t.Fatalf("concurrent outcome=%+v", result)
+		}
+		if runID == "" {
+			runID = result.rec.RunID
+		} else if result.rec.RunID != runID {
+			t.Fatalf("run IDs diverged %s != %s", result.rec.RunID, runID)
+		}
+	}
+	runs, err := s.ListLifecycleRunsByTrajectory(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, run := range runs {
+		if run.AgentID == fixture.agentID {
+			count++
+		}
+	}
+	control, err := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, fixture.control.AgentID, fixture.control.ProducerUpdateID)
+	if err != nil || count != 1 || control.DeliveredToRunID != runID || control.DeliveredAt == nil {
+		t.Fatalf("runs=%d control=%+v err=%v", count, control, err)
+	}
+}
+
+func TestHydrateLifecycleControlWorkItemsRejectsAuthorityMismatchesBeforeRun(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*testing.T, *store.Store, atomicResearcherControlFixture, []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket)
+	}{
+		{name: "wrong_owner", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+			return f.ownerID + "-wrong", f.computerID, f.agentID, u
+		}},
+		{name: "wrong_computer", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+			return f.ownerID, f.computerID + "-wrong", f.agentID, u
+		}},
+		{name: "wrong_trajectory", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+			u[0].TrajectoryID += "-wrong"
+			return f.ownerID, f.computerID, f.agentID, u
+		}},
+		{name: "wrong_agent", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+			u[0].TargetAgentID += "-wrong"
+			return f.ownerID, f.computerID, f.agentID, u
+		}},
+		{name: "duplicate_update_id", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+			return f.ownerID, f.computerID, f.agentID, append(u, u[0])
+		}},
+		{name: "delivered_control", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+			now := time.Now().UTC()
+			u[0].DeliveredAt = &now
+			u[0].DeliveredToRunID = "other"
+			return f.ownerID, f.computerID, f.agentID, u
+		}},
+		{name: "wrong_control_version", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+			u[0].LifecycleVersion++
+			return f.ownerID, f.computerID, f.agentID, u
+		}},
+		{name: "mixed_trajectory", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+			other := u[0]
+			other.UpdateID += "-other"
+			other.TrajectoryID += "-other"
+			return f.ownerID, f.computerID, f.agentID, append(u, other)
+		}},
+		{name: "closed_work", mutate: func(t *testing.T, s *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+			req := types.SettleLifecycleWorkRequest{OwnerID: f.ownerID, ComputerID: f.computerID, CommandID: "settle-before-hydrate", TrajectoryID: f.trajectoryID, WorkItemID: f.workID, ActingAgentID: f.agentID, ResultRef: "evidence://closed"}
+			req.CommandDigest, _ = store.ComputeSettleLifecycleWorkDigest(req)
+			if _, err := s.SettleLifecycleWork(context.Background(), req); err != nil {
+				t.Fatal(err)
+			}
+			return f.ownerID, f.computerID, f.agentID, u
+		}},
+		{name: "reassigned_work", mutate: func(t *testing.T, s *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+			now := time.Now().UTC()
+			replacement := f.agentID + "-replacement"
+			if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: replacement, OwnerID: f.ownerID, ComputerID: f.computerID, SandboxID: f.computerID, Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: f.docID, CreatedAt: now, UpdatedAt: now}); err != nil {
+				t.Fatal(err)
+			}
+			work, err := s.GetLifecycleWorkItem(context.Background(), f.ownerID, f.computerID, f.workID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			work.AssignedAgentID = replacement
+			req := types.AmendLifecycleWorkRequest{OwnerID: f.ownerID, ComputerID: f.computerID, CommandID: "reassign-before-hydrate", TrajectoryID: f.trajectoryID, WorkItemID: f.workID, ExpectedLifecycleVersion: work.LifecycleVersion, WorkItem: work}
+			req.CommandDigest, _ = store.ComputeAmendLifecycleWorkDigest(req)
+			if _, err := s.AmendLifecycleWork(context.Background(), req); err != nil {
+				t.Fatal(err)
+			}
+			return f.ownerID, f.computerID, f.agentID, u
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rt, s := testRuntime(t)
+			fixture := seedAtomicResearcherControl(t, s, "negative-"+strings.ReplaceAll(tt.name, "_", "-"))
+			ownerID, computerID, agentID, updates := tt.mutate(t, s, fixture, []types.CoagentSourcePacket{fixture.control})
+			if _, _, _, err := rt.hydrateLifecycleControlWorkItems(context.Background(), ownerID, computerID, agentID, updates); err == nil {
+				t.Fatal("authority mismatch hydrated")
+			}
+			runs, err := s.ListLifecycleRunsByTrajectory(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, run := range runs {
+				if run.AgentID == fixture.agentID {
+					t.Fatalf("hydration refusal created run %+v", run)
+				}
+			}
+		})
+	}
+}
+
+func TestFingerprintBoundResearcherRunAcceptsLaterControlWithoutSecondRun(t *testing.T) {
+	rt, s := testRuntime(t)
+	const suffix = "later-control"
+	fixture := seedAtomicResearcherControl(t, s, suffix)
+	var dispatchKinds []string
+	rt.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, _ string, _, _ string) error {
+		dispatchKinds = append(dispatchKinds, kind)
+		return nil
+	})
+	rec, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil || rec == nil {
+		t.Fatalf("initial cold bind=%+v err=%v", rec, err)
+	}
+
+	snapshot, err := s.GetLifecycleSnapshot(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	textureAgentID := agentprofile.Texture + ":" + fixture.docID
+	textureAgent, err := s.GetAgentByScope(context.Background(), fixture.ownerID, fixture.computerID, textureAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "later exact question", Questions: []string{"What changed later?"}}
+	content := "later control B exact content"
+	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+	turn := types.ApplyTextureTurnRequest{
+		OwnerID: fixture.ownerID, ComputerID: fixture.computerID, CommandID: "turn-later-control-b", DocumentID: fixture.docID, TrajectoryID: fixture.trajectoryID,
+		CallerAgentID: textureAgentID, CallerRunID: "texture-run-atomic-" + suffix, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion,
+		ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, CallerWorkItemID: "texture-work-atomic-" + suffix, CallerWorkDisposition: types.WorkItemOpen, Outcome: types.TextureTurnWait, Reason: "wait after later control",
+		Controls: []types.TextureTurnControl{{ControlID: "control-later-b", TargetAgentID: fixture.agentID, TargetWorkItemID: fixture.workID, Packet: packet, Content: content, PayloadDigest: payloadDigest}},
+	}
+	turn.CommandDigest, _ = store.ComputeApplyTextureTurnDigest(turn)
+	result, err := s.ApplyTextureTurn(context.Background(), turn)
+	if err != nil || len(result.Controls) != 1 {
+		t.Fatalf("later Texture control=%+v err=%v", result, err)
+	}
+	later := result.Controls[0]
+	rt.wakeUpdatedCoagent(context.Background(), later)
+	if len(dispatchKinds) != 2 || dispatchKinds[0] != "initial_dispatch" || dispatchKinds[1] != "coagent_result" {
+		t.Fatalf("dispatch kinds=%v", dispatchKinds)
+	}
+	bound, err := s.GetLifecycleRun(context.Background(), fixture.ownerID, fixture.computerID, rec.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delivered, err := s.ListLifecycleControlsDeliveredToRun(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, rec.RunID, 10)
+	if err != nil || len(delivered) != 2 || delivered[0].UpdateID != fixture.control.UpdateID || delivered[1].UpdateID != later.UpdateID {
+		t.Fatalf("delivered=%+v err=%v", delivered, err)
+	}
+	messages, err := rt.prependInitialCoagentUpdatePackets(context.Background(), &bound, []json.RawMessage{json.RawMessage(`{"role":"user","content":"base"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := ""
+	for _, message := range messages {
+		joined += string(message)
+		if strings.Contains(string(message), "Choir coagent update packet") {
+			appendAuthenticatedInjectionForTest(t, s, bound, message)
+		}
+	}
+	if strings.Count(joined, content) != 1 {
+		t.Fatalf("later control injection count=%d messages=%s", strings.Count(joined, content), joined)
+	}
+	repeated, err := rt.prependInitialCoagentUpdatePackets(context.Background(), &bound, []json.RawMessage{json.RawMessage(`{"role":"user","content":"base"}`)})
+	if err != nil || len(repeated) != 1 {
+		t.Fatalf("repeat injection=%s err=%v", repeated, err)
+	}
+	runs, err := s.ListLifecycleRunsByTrajectory(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, run := range runs {
+		if run.AgentID == fixture.agentID {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("Researcher run count=%d runs=%+v", count, runs)
+	}
+}
+
+func commitLaterControlForResidentTest(t *testing.T, s *store.Store, fixture atomicResearcherControlFixture, suffix, controlID string) types.CoagentSourcePacket {
+	t.Helper()
+	snapshot, err := s.GetLifecycleSnapshot(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	textureAgentID := agentprofile.Texture + ":" + fixture.docID
+	textureAgent, err := s.GetAgentByScope(context.Background(), fixture.ownerID, fixture.computerID, textureAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "later crash-safe question", Questions: []string{"Was this recovered?"}}
+	content := "later crash-safe control " + controlID
+	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+	turn := types.ApplyTextureTurnRequest{OwnerID: fixture.ownerID, ComputerID: fixture.computerID, CommandID: "turn-" + controlID, DocumentID: fixture.docID, TrajectoryID: fixture.trajectoryID,
+		CallerAgentID: textureAgentID, CallerRunID: "texture-run-atomic-" + suffix, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion,
+		ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, CallerWorkItemID: "texture-work-atomic-" + suffix, CallerWorkDisposition: types.WorkItemOpen, Outcome: types.TextureTurnWait, Reason: "wait after crash-safe control",
+		Controls: []types.TextureTurnControl{{ControlID: controlID, TargetAgentID: fixture.agentID, TargetWorkItemID: fixture.workID, Packet: packet, Content: content, PayloadDigest: payloadDigest}}}
+	turn.CommandDigest, _ = store.ComputeApplyTextureTurnDigest(turn)
+	result, err := s.ApplyTextureTurn(context.Background(), turn)
+	if err != nil || len(result.Controls) != 1 {
+		t.Fatalf("later control result=%+v err=%v", result, err)
+	}
+	return result.Controls[0]
+}
+
+func TestFingerprintResidentRestartReconcileBindsControlCommittedBeforeWake(t *testing.T) {
+	rt, s := testRuntime(t)
+	const suffix = "restart-later-control"
+	fixture := seedAtomicResearcherControl(t, s, suffix)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	initial, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil || initial == nil {
+		t.Fatalf("initial=%+v err=%v", initial, err)
+	}
+	later := commitLaterControlForResidentTest(t, s, fixture, suffix, "control-restart-later-b")
+	if later.DeliveredAt != nil {
+		t.Fatal("later control unexpectedly bound before simulated crash")
+	}
+	peer := testPeerRuntime(t, rt, s)
+	var dispatches int
+	peer.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, _ string, _, _ string) error {
+		if kind == "initial_dispatch" {
+			dispatches++
+		}
+		return nil
+	})
+	reconciled, err := peer.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil || reconciled == nil || reconciled.RunID != initial.RunID || dispatches != 1 {
+		t.Fatalf("restart reconcile=%+v err=%v dispatches=%d", reconciled, err, dispatches)
+	}
+	storedLater, err := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, later.AgentID, later.ProducerUpdateID)
+	if err != nil || storedLater.DeliveredToRunID != initial.RunID || storedLater.DeliveredAt == nil {
+		t.Fatalf("stored later=%+v err=%v", storedLater, err)
+	}
+	runs, _ := s.ListLifecycleRunsByTrajectory(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+	count := 0
+	for _, run := range runs {
+		if run.AgentID == fixture.agentID {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("Researcher runs=%+v", runs)
+	}
+}
+
+func TestFingerprintResidentLaterControlTransientAppendRetriesSameRun(t *testing.T) {
+	rt, s := testRuntime(t)
+	const suffix = "retry-later-control"
+	fixture := seedAtomicResearcherControl(t, s, suffix)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	initial, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil || initial == nil {
+		t.Fatalf("initial=%+v err=%v", initial, err)
+	}
+	later := commitLaterControlForResidentTest(t, s, fixture, suffix, "control-retry-later-b")
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := rt.bindAppendedLifecycleControlsToResident(cancelled, initial, []types.CoagentSourcePacket{later}); err == nil || errors.Is(err, ErrDurablyTerminalLifecycleControlActivation) {
+		t.Fatalf("transient append error=%v", err)
+	}
+	pending, err := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, later.AgentID, later.ProducerUpdateID)
+	if err != nil || pending.DeliveredAt != nil || pending.DeliveredToRunID != "" {
+		t.Fatalf("pending after transient=%+v err=%v", pending, err)
+	}
+	still, err := s.GetLifecycleRun(context.Background(), fixture.ownerID, fixture.computerID, initial.RunID)
+	if err != nil || !still.State.Active() || metadataBoolValue(still.Metadata, "lifecycle_control_bind_failed") {
+		t.Fatalf("run after transient=%+v err=%v", still, err)
+	}
+	retried, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil || retried == nil || retried.RunID != initial.RunID {
+		t.Fatalf("retry=%+v err=%v", retried, err)
+	}
+	bound, err := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, later.AgentID, later.ProducerUpdateID)
+	if err != nil || bound.DeliveredToRunID != initial.RunID || bound.DeliveredAt == nil {
+		t.Fatalf("bound after retry=%+v err=%v", bound, err)
+	}
+	runs, _ := s.ListLifecycleRunsByTrajectory(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+	count := 0
+	for _, run := range runs {
+		if run.AgentID == fixture.agentID {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("Researcher runs=%+v", runs)
+	}
+}
+
+func TestReconcileParkedLifecycleCoagentWakeTransientThenRetry(t *testing.T) {
+	rt, s := testRuntime(t)
+	const suffix = "parked-retry"
+	fixture := seedAtomicResearcherControl(t, s, suffix)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	rec, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil || rec == nil {
+		t.Fatalf("initial=%+v err=%v", rec, err)
+	}
+	parked := *rec
+	parked.State = types.RunPassivated
+	parked.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(context.Background(), parked); err != nil {
+		t.Fatal(err)
+	}
+	later := commitLaterControlForResidentTest(t, s, fixture, suffix, "control-parked-retry-b")
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := rt.ReconcileParkedLifecycleCoagentWake(cancelled, fixture.ownerID, fixture.agentID, rec.RunID); err == nil || errors.Is(err, ErrDurablyTerminalLifecycleControlActivation) {
+		t.Fatalf("cancelled parked reconcile=%v", err)
+	}
+	still, err := s.GetLifecycleRun(context.Background(), fixture.ownerID, fixture.computerID, rec.RunID)
+	if err != nil || still.State != types.RunPassivated {
+		t.Fatalf("after transient=%+v err=%v", still, err)
+	}
+	pending, _ := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, later.AgentID, later.ProducerUpdateID)
+	if pending.DeliveredAt != nil {
+		t.Fatalf("transient append delivered=%+v", pending)
+	}
+	retried, err := rt.ReconcileParkedLifecycleCoagentWake(context.Background(), fixture.ownerID, fixture.agentID, rec.RunID)
+	if err != nil || retried == nil || retried.RunID != rec.RunID || retried.State != types.RunPending {
+		t.Fatalf("retry=%+v err=%v", retried, err)
+	}
+	bound, _ := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, later.AgentID, later.ProducerUpdateID)
+	if bound.DeliveredToRunID != rec.RunID || bound.DeliveredAt == nil {
+		t.Fatalf("retry delivery=%+v", bound)
+	}
+}
+
+func TestReconcileParkedLifecycleCoagentWakeRecoversCrashAfterReactivation(t *testing.T) {
+	rt, s := testRuntime(t)
+	const suffix = "parked-reactivation-crash"
+	fixture := seedAtomicResearcherControl(t, s, suffix)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	rec, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil || rec == nil {
+		t.Fatalf("initial=%+v err=%v", rec, err)
+	}
+	parked := *rec
+	parked.State = types.RunPassivated
+	parked.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(context.Background(), parked); err != nil {
+		t.Fatal(err)
+	}
+	later := commitLaterControlForResidentTest(t, s, fixture, suffix, "control-parked-crash-b")
+	// Simulate a crash after the narrow lifecycle reactivation committed but
+	// before the pending control append ran.
+	reactivated := parked
+	reactivated.State = types.RunPending
+	reactivated.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(context.Background(), reactivated); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := rt.ReconcileParkedLifecycleCoagentWake(context.Background(), fixture.ownerID, fixture.agentID, rec.RunID)
+	if err != nil || recovered == nil || recovered.RunID != rec.RunID {
+		t.Fatalf("recovered=%+v err=%v", recovered, err)
+	}
+	bound, _ := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, later.AgentID, later.ProducerUpdateID)
+	if bound.DeliveredToRunID != rec.RunID || bound.DeliveredAt == nil {
+		t.Fatalf("crash recovery delivery=%+v", bound)
+	}
+}
+
+func TestReconcileParkedLifecycleCoagentWakeReactivatesBlockedExactRun(t *testing.T) {
+	rt, s := testRuntime(t)
+	const suffix = "parked-blocked"
+	fixture := seedAtomicResearcherControl(t, s, suffix)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	rec, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil || rec == nil {
+		t.Fatalf("initial=%+v err=%v", rec, err)
+	}
+	blocked := *rec
+	blocked.State = types.RunBlocked
+	blocked.Error = "transient provider block"
+	blocked.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(context.Background(), blocked); err != nil {
+		t.Fatal(err)
+	}
+	later := commitLaterControlForResidentTest(t, s, fixture, suffix, "control-blocked-b")
+	reactivated, err := rt.ReconcileParkedLifecycleCoagentWake(context.Background(), fixture.ownerID, fixture.agentID, rec.RunID)
+	if err != nil || reactivated == nil || reactivated.RunID != rec.RunID || reactivated.State != types.RunPending {
+		t.Fatalf("reactivated=%+v err=%v", reactivated, err)
+	}
+	bound, _ := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, later.AgentID, later.ProducerUpdateID)
+	if bound.DeliveredToRunID != rec.RunID || bound.DeliveredAt == nil {
+		t.Fatalf("blocked delivery=%+v", bound)
+	}
+}
+
+func TestLifecycleControlCanonicalAuthoritySurvivesStaleRunWriter(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	const suffix = "stale-authority"
+	fixture := seedAtomicResearcherControl(t, s, suffix)
+	initial, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil || initial == nil {
+		t.Fatalf("initial=%+v err=%v", initial, err)
+	}
+	controlB := commitLaterControlForResidentTest(t, s, fixture, suffix, "control-stale-authority-b")
+	if _, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID); err != nil {
+		t.Fatal(err)
+	}
+	staleAB, err := s.GetLifecycleRun(context.Background(), fixture.ownerID, fixture.computerID, initial.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controlC := commitLaterControlForResidentTest(t, s, fixture, suffix, "control-stale-authority-c")
+	if _, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID); err != nil {
+		t.Fatal(err)
+	}
+	afterC, err := s.GetLifecycleRun(context.Background(), fixture.ownerID, fixture.computerID, initial.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonicalAuthority := map[string]any{"prompt": afterC.Prompt}
+	for _, key := range []string{
+		"lifecycle_control_bindings", "assignment_trajectory_id", "trajectory_id",
+		"lifecycle_work_item_id", "work_item_ids", "lifecycle_logical_activation_key",
+		"lifecycle_failed_attempt_key", "lifecycle_activation_build_commit",
+		"lifecycle_activation_versions", "request_source",
+	} {
+		canonicalAuthority[key] = afterC.Metadata[key]
+	}
+	wantAuthority, _ := json.Marshal(canonicalAuthority)
+
+	// This provider/actor body was loaded before C bound. It both omits C and
+	// forges deletion/source/prompt authority. Only its non-authority execution
+	// fields may be merged onto the canonical A+B+C body.
+	staleAB.Prompt = "forged stale provider prompt"
+	staleAB.Result = "provider state from stale A+B body"
+	staleAB.Metadata["provider_state_marker"] = "preserved-nonauthority"
+	staleAB.Metadata["request_source"] = "update_coagent"
+	staleAB.Metadata["lifecycle_control_bindings"] = []any{}
+	delete(staleAB.Metadata, "work_item_ids")
+	delete(staleAB.Metadata, "lifecycle_logical_activation_key")
+	staleAB.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(context.Background(), staleAB); err != nil {
+		t.Fatalf("stale writer: %v", err)
+	}
+
+	canonical, err := s.GetLifecycleRun(context.Background(), fixture.ownerID, fixture.computerID, initial.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotAuthority := map[string]any{"prompt": canonical.Prompt}
+	for key := range canonicalAuthority {
+		if key != "prompt" {
+			gotAuthority[key] = canonical.Metadata[key]
+		}
+	}
+	gotAuthorityJSON, _ := json.Marshal(gotAuthority)
+	if string(gotAuthorityJSON) != string(wantAuthority) || canonical.Result != staleAB.Result || metadataStringValue(canonical.Metadata, "provider_state_marker") != "preserved-nonauthority" {
+		t.Fatalf("canonical authority after stale writer got=%s want=%s run=%+v", gotAuthorityJSON, wantAuthority, canonical)
+	}
+	bindings, ok := canonical.Metadata["lifecycle_control_bindings"].([]any)
+	if !ok || len(bindings) != 3 {
+		t.Fatalf("canonical bindings=%#v", canonical.Metadata["lifecycle_control_bindings"])
+	}
+	page, err := s.ListLifecycleControlsDeliveredToRunPage(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, initial.RunID, 0, 10)
+	if err != nil || len(page.Packets) != 3 || page.HasMore {
+		t.Fatalf("deliveries=%+v err=%v", page, err)
+	}
+	seen := map[string]bool{}
+	for _, packet := range page.Packets {
+		seen[packet.UpdateID] = true
+	}
+	for _, id := range []string{fixture.control.UpdateID, controlB.UpdateID, controlC.UpdateID} {
+		if !seen[id] {
+			t.Fatalf("missing canonical delivery %s from %+v", id, page.Packets)
+		}
+	}
+	injected, err := rt.coagentUpdateTurnInjector(&canonical)(false)
+	if err != nil || len(injected) != 1 {
+		t.Fatalf("injection=%s err=%v", injected, err)
+	}
+	for _, id := range []string{fixture.control.UpdateID, controlB.UpdateID, controlC.UpdateID} {
+		if !strings.Contains(string(injected[0]), id) {
+			t.Fatalf("injection missing %s: %s", id, injected[0])
+		}
+	}
+}
+
+func TestGenericReconcileFailsClosedUntilExactParkedMemoryRecovery(t *testing.T) {
+	rt, s := testRuntime(t)
+	const suffix = "boot-exact-memory"
+	fixture := seedAtomicResearcherControl(t, s, suffix)
+	var dispatched []string
+	rt.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, _, _ string) error {
+		dispatched = append(dispatched, kind+":"+content)
+		return nil
+	})
+	initial, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil || initial == nil {
+		t.Fatalf("initial=%+v err=%v", initial, err)
+	}
+	parked := *initial
+	parked.State = types.RunPassivated
+	parked.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(context.Background(), parked); err != nil {
+		t.Fatal(err)
+	}
+	later := commitLaterControlForResidentTest(t, s, fixture, suffix, "control-boot-memory-b")
+	dispatched = nil
+	if minted, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID); err == nil || minted != nil || !errors.Is(err, store.ErrLifecycleInvalidTransition) {
+		t.Fatalf("generic parked reconcile minted=%+v err=%v", minted, err)
+	}
+	pending, _ := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, later.AgentID, later.ProducerUpdateID)
+	if pending.DeliveredAt != nil {
+		t.Fatalf("generic reconcile bound without memory authority: %+v", pending)
+	}
+	runs, _ := s.ListLifecycleRunsByTrajectory(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+	count := 0
+	for _, run := range runs {
+		if run.AgentID == fixture.agentID {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("generic reconcile created runs: %+v", runs)
+	}
+
+	recovered, err := rt.ReconcileParkedLifecycleCoagentWake(context.Background(), fixture.ownerID, fixture.agentID, initial.RunID)
+	if err != nil || recovered == nil || recovered.RunID != initial.RunID {
+		t.Fatalf("exact recovery=%+v err=%v", recovered, err)
+	}
+	bound, _ := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, later.AgentID, later.ProducerUpdateID)
+	if bound.DeliveredToRunID != initial.RunID || bound.DeliveredAt == nil {
+		t.Fatalf("exact recovery delivery=%+v", bound)
+	}
+	wantOccurrences := map[string]bool{
+		"coagent_result:" + LifecycleControlActorOccurrenceContent(fixture.control): false,
+		"coagent_result:" + LifecycleControlActorOccurrenceContent(later):           false,
+	}
+	for _, dispatch := range dispatched {
+		if _, ok := wantOccurrences[dispatch]; ok {
+			wantOccurrences[dispatch] = true
+		}
+	}
+	for occurrence, seen := range wantOccurrences {
+		if !seen {
+			t.Fatalf("missing occurrence %s from %+v", occurrence, dispatched)
+		}
+	}
+}
+
+func TestStartReenqueuesCanonicalOccurrencesAfterBindBeforeSendCrash(t *testing.T) {
+	rt, s := testRuntime(t)
+	const suffix = "bind-before-send-crash"
+	fixture := seedAtomicResearcherControl(t, s, suffix)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	initial, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil || initial == nil {
+		t.Fatalf("initial=%+v err=%v", initial, err)
+	}
+	later := commitLaterControlForResidentTest(t, s, fixture, suffix, "control-bind-before-send-b")
+	if _, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID); err != nil {
+		t.Fatal(err)
+	}
+	var dispatched []string
+	rt.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, _, _ string) error {
+		dispatched = append(dispatched, kind+":"+content)
+		return nil
+	})
+	rt.Start(context.Background())
+	want := "coagent_result:" + LifecycleControlActorOccurrenceContent(later)
+	for _, got := range dispatched {
+		if got == want {
+			return
+		}
+	}
+	t.Fatalf("boot did not recover bound occurrence %s from %+v", want, dispatched)
 }

@@ -25,6 +25,7 @@ const (
 	LifecycleArchiveArtifact              LifecycleCommandKind = "archive_artifact"
 	LifecycleApplyTextureTurn             LifecycleCommandKind = "apply_texture_turn"
 	LifecycleBindControlDelivery          LifecycleCommandKind = "bind_control_delivery"
+	LifecycleFailControlActivation        LifecycleCommandKind = "fail_control_activation"
 	LifecycleQueueOwnerInstruction        LifecycleCommandKind = "queue_owner_instruction"
 	LifecycleOpenCoSuperAssignment        LifecycleCommandKind = "open_co_super_assignment"
 	LifecycleBindCoSuperAssignment        LifecycleCommandKind = "bind_co_super_assignment"
@@ -55,6 +56,7 @@ const (
 	LifecycleTextureTurnCommitted            LifecycleEventKind = "texture_turn_committed"
 	LifecycleControlQueued                   LifecycleEventKind = "control_queued"
 	LifecycleControlDelivered                LifecycleEventKind = "control_delivered"
+	LifecycleControlActivationFailed         LifecycleEventKind = "control_activation_failed"
 	LifecycleOwnerInstructionQueued          LifecycleEventKind = "owner_instruction_queued"
 	LifecycleCoSuperAssignmentOpened         LifecycleEventKind = "co_super_assignment_opened"
 	LifecycleCoSuperAssignmentBound          LifecycleEventKind = "co_super_assignment_bound"
@@ -206,11 +208,29 @@ type TextureTurnRecord struct {
 	Reason                string             `json:"reason,omitempty"`
 }
 
+type LifecycleControlActivationVersion struct {
+	UpdateID                string `json:"update_id"`
+	TargetWorkItemID        string `json:"target_work_item_id"`
+	ControlLifecycleVersion int64  `json:"control_lifecycle_version"`
+	WorkLifecycleVersion    int64  `json:"work_lifecycle_version"`
+}
+
 type BindLifecycleControlDeliveryItem struct {
-	UpdateID         string `json:"update_id"`
-	ProducerAgentID  string `json:"producer_agent_id"`
-	ProducerUpdateID string `json:"producer_update_id"`
-	TargetWorkItemID string `json:"target_work_item_id"`
+	UpdateID                        string `json:"update_id"`
+	ProducerAgentID                 string `json:"producer_agent_id"`
+	ProducerUpdateID                string `json:"producer_update_id"`
+	TargetWorkItemID                string `json:"target_work_item_id"`
+	ExpectedControlLifecycleVersion int64  `json:"expected_control_lifecycle_version"`
+	ExpectedWorkLifecycleVersion    int64  `json:"expected_work_lifecycle_version"`
+}
+
+type LifecycleControlActivationRefresh struct {
+	Prompt               string                              `json:"prompt"`
+	LogicalActivationKey string                              `json:"logical_activation_key"`
+	FailedAttemptKey     string                              `json:"failed_attempt_key"`
+	BuildCommit          string                              `json:"build_commit"`
+	Versions             []LifecycleControlActivationVersion `json:"versions"`
+	WorkItemIDs          []string                            `json:"work_item_ids"`
 }
 
 type BindLifecycleControlDeliveryRequest struct {
@@ -223,6 +243,25 @@ type BindLifecycleControlDeliveryRequest struct {
 	TargetRunID              string                             `json:"target_run_id"`
 	ExpectedLifecycleVersion int64                              `json:"expected_lifecycle_version"`
 	Controls                 []BindLifecycleControlDeliveryItem `json:"controls"`
+	ActivationRefresh        *LifecycleControlActivationRefresh `json:"activation_refresh,omitempty"`
+}
+
+type FailLifecycleControlActivationRequest struct {
+	OwnerID                  string                             `json:"owner_id"`
+	ComputerID               string                             `json:"computer_id"`
+	CommandID                string                             `json:"command_id"`
+	CommandDigest            string                             `json:"command_digest"`
+	TrajectoryID             string                             `json:"trajectory_id"`
+	AgentID                  string                             `json:"agent_id"`
+	RunID                    string                             `json:"run_id"`
+	ExpectedLifecycleVersion int64                              `json:"expected_lifecycle_version"`
+	LogicalActivationKey     string                             `json:"logical_activation_key"`
+	FailedAttemptKey         string                             `json:"failed_attempt_key"`
+	BindCommandID            string                             `json:"bind_command_id"`
+	BindCommandDigest        string                             `json:"bind_command_digest"`
+	Controls                 []BindLifecycleControlDeliveryItem `json:"controls"`
+	ActivationRefresh        *LifecycleControlActivationRefresh `json:"activation_refresh,omitempty"`
+	Failure                  string                             `json:"failure"`
 }
 
 type OpenLifecycleWorkRequest struct {
@@ -387,24 +426,31 @@ type LifecycleCommandReceipt struct {
 }
 
 type LifecycleEvent struct {
-	Schema         string             `json:"schema,omitempty"`
-	EventID        string             `json:"event_id"`
-	OwnerID        string             `json:"owner_id"`
-	ComputerID     string             `json:"computer_id"`
-	TrajectoryID   string             `json:"trajectory_id"`
-	WorkItemID     string             `json:"work_item_id,omitempty"`
-	UpdateID       string             `json:"update_id,omitempty"`
-	Kind           LifecycleEventKind `json:"kind"`
-	ReducerVersion string             `json:"reducer_version"`
-	ReducerSeq     int64              `json:"reducer_seq"`
-	CommandID      string             `json:"command_id"`
-	CommandDigest  string             `json:"command_digest"`
-	RequestID      string             `json:"request_id,omitempty"`
-	RequestIDs     []string           `json:"request_ids,omitempty"`
-	ArtifactRefs   []string           `json:"artifact_refs,omitempty"`
-	EvidenceRefs   []string           `json:"evidence_refs,omitempty"`
-	Reason         string             `json:"reason,omitempty"`
-	CreatedAt      time.Time          `json:"created_at"`
+	Schema               string                              `json:"schema,omitempty"`
+	EventID              string                              `json:"event_id"`
+	OwnerID              string                              `json:"owner_id"`
+	ComputerID           string                              `json:"computer_id"`
+	TrajectoryID         string                              `json:"trajectory_id"`
+	WorkItemID           string                              `json:"work_item_id,omitempty"`
+	UpdateID             string                              `json:"update_id,omitempty"`
+	RunID                string                              `json:"run_id,omitempty"`
+	AgentID              string                              `json:"agent_id,omitempty"`
+	LogicalActivationKey string                              `json:"logical_activation_key,omitempty"`
+	FailedAttemptKey     string                              `json:"failed_attempt_key,omitempty"`
+	BindCommandID        string                              `json:"bind_command_id,omitempty"`
+	BindCommandDigest    string                              `json:"bind_command_digest,omitempty"`
+	ControlVersions      []LifecycleControlActivationVersion `json:"control_versions,omitempty"`
+	Kind                 LifecycleEventKind                  `json:"kind"`
+	ReducerVersion       string                              `json:"reducer_version"`
+	ReducerSeq           int64                               `json:"reducer_seq"`
+	CommandID            string                              `json:"command_id"`
+	CommandDigest        string                              `json:"command_digest"`
+	RequestID            string                              `json:"request_id,omitempty"`
+	RequestIDs           []string                            `json:"request_ids,omitempty"`
+	ArtifactRefs         []string                            `json:"artifact_refs,omitempty"`
+	EvidenceRefs         []string                            `json:"evidence_refs,omitempty"`
+	Reason               string                              `json:"reason,omitempty"`
+	CreatedAt            time.Time                           `json:"created_at"`
 }
 
 type LifecycleResult struct {

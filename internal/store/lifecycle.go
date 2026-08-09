@@ -1809,6 +1809,42 @@ func lifecycleActivationWorkItemIDs(metadata map[string]any) ([]string, error) {
 	return ids, nil
 }
 
+var lifecycleControlRunAuthorityMetadataKeys = [...]string{
+	"lifecycle_control_bindings",
+	"assignment_trajectory_id",
+	"trajectory_id",
+	"lifecycle_work_item_id",
+	"work_item_ids",
+	"lifecycle_logical_activation_key",
+	"lifecycle_failed_attempt_key",
+	"lifecycle_activation_build_commit",
+	"lifecycle_activation_versions",
+	"request_source",
+}
+
+// preserveLifecycleControlRunAuthority makes the canonical object-graph run
+// the sole authority for lifecycle control identity. Provider and actor state
+// writers may be based on an older run body; they may update execution fields,
+// but cannot erase a control appended after they loaded that body.
+func preserveLifecycleControlRunAuthority(stored types.RunRecord, proposed *types.RunRecord) {
+	if proposed == nil || metadataStringValueStore(stored.Metadata, "request_source") != "lifecycle_texture_control" {
+		return
+	}
+	proposed.Prompt = stored.Prompt
+	merged := make(map[string]any, len(proposed.Metadata)+len(lifecycleControlRunAuthorityMetadataKeys))
+	for key, value := range proposed.Metadata {
+		merged[key] = value
+	}
+	for _, key := range lifecycleControlRunAuthorityMetadataKeys {
+		if value, exists := stored.Metadata[key]; exists {
+			merged[key] = value
+		} else {
+			delete(merged, key)
+		}
+	}
+	proposed.Metadata = merged
+}
+
 // ProjectTerminalLifecycleRun records the terminal state of an activation after
 // its trajectory has already become terminal. It updates only the run
 // projection: trajectory, work, update, event, and receipt authority are
@@ -1839,11 +1875,6 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 		run.AgentID != req.AgentID || run.TrajectoryID != req.TrajectoryID || !run.State.Valid() {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
-	boundWorkItemIDs, bindingErr := lifecycleActivationWorkItemIDs(run.Metadata)
-	if bindingErr != nil {
-		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-	}
-
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
 	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, ownerID, computerID, req.TrajectoryID)
@@ -1882,6 +1913,13 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 	} else if !errors.Is(getRunErr, objectgraph.ErrNotFound) {
 		return types.LifecycleResult{}, getRunErr
 	} else if trajectory.Status != types.TrajectoryLive {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	if getRunErr == nil {
+		preserveLifecycleControlRunAuthority(storedRun, &run)
+	}
+	boundWorkItemIDs, bindingErr := lifecycleActivationWorkItemIDs(run.Metadata)
+	if bindingErr != nil {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 

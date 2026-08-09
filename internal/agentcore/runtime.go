@@ -555,8 +555,10 @@ func (rt *Runtime) Start(ctx context.Context) {
 	rt.recoverOpenWirePublicationClaims(ctx)
 	terminalOutcomeTargets := rt.reconcileTerminalRunOutcomes(ctx)
 	rt.sweepPassivatedSpawnedCoagentWork(ctx)
-	rt.sweepPendingUpdateActors(ctx, terminalOutcomeTargets)
+	// Reconcile canonical lifecycle work/control joins before the generic actor
+	// update sweep can acknowledge a durable occurrence around an unbound run.
 	rt.sweepOpenWorkItemActors(ctx)
+	rt.sweepPendingUpdateActors(ctx, terminalOutcomeTargets)
 	// Best-effort: ensure the production Qdrant collection exists so the
 	// semantic dedup pass on ingestion has a target. Runs asynchronously so
 	// a slow or unreachable Qdrant cannot block runtime startup; the dedup
@@ -2018,6 +2020,20 @@ func (rt *Runtime) rewarmInterruptedLifecycleActivations(ctx context.Context) {
 				continue
 			}
 			rt.activate(rec)
+			if agentprofile.Canonical(rec.AgentProfile) == agentprofile.Researcher &&
+				metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" &&
+				metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) != "" {
+				delivered, deliveryErr := rt.lifecycleRunHasCanonicalControlDelivery(ctx, rec)
+				if deliveryErr != nil {
+					log.Printf("runtime: boot lifecycle rewarm: validate canonical delivery for run %s: %v", rec.RunID, deliveryErr)
+				} else if delivered {
+					// Recover the crash window after bind commit and before occurrence
+					// enqueue. Deterministic actor IDs make the complete replay safe.
+					if occurrenceErr := rt.enqueueCanonicalLifecycleControlOccurrences(ctx, rec); occurrenceErr != nil {
+						log.Printf("runtime: boot lifecycle rewarm: enqueue canonical occurrences for run %s: %v", rec.RunID, occurrenceErr)
+					}
+				}
+			}
 			log.Printf("runtime: re-dispatched lifecycle run %s (state=%s) after restart", rec.RunID, state)
 		}
 	}
@@ -2216,6 +2232,22 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 		} else if agentprofile.Canonical(first.AuthorityProfile) == agentprofile.CoSuper {
 			err = rt.ReconcileCoSuperAssignmentsForTrajectory(ctx, first.OwnerID,
 				firstNonEmpty(first.ComputerID, rt.TextureSandboxID()), first.TrajectoryID)
+		} else if agentprofile.Canonical(first.AuthorityProfile) == agentprofile.Researcher {
+			// The broad boot scan only identifies a recovery candidate. If exact
+			// lifecycle controls remain, delegate to the same scoped control/
+			// fingerprint reconciler used by actor wake; never mint a generic
+			// trajectory_work_item_sweep run around a durable failed attempt.
+			pendingControls, pendingErr := rt.store.ListAllPendingLifecycleUpdates(ctx, first.OwnerID, computerID, first.AssignedAgentID)
+			if pendingErr != nil {
+				err = pendingErr
+			} else if len(pendingControls) > 0 {
+				_, err = rt.reconcileUpdatedCoagentActor(ctx, first.OwnerID, first.AssignedAgentID)
+				if errors.Is(err, ErrDurablyTerminalLifecycleControlActivation) {
+					err = nil
+				}
+			} else {
+				_, err = rt.reconcileAssignedWorkItemActor(ctx, workItems)
+			}
 		} else {
 			_, err = rt.reconcileAssignedWorkItemActor(ctx, workItems)
 		}

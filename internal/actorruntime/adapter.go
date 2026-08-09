@@ -16,6 +16,8 @@ package actorruntime
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -35,6 +37,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/textureowner"
 	"github.com/yusefmosiah/go-choir/internal/trace"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // RuntimeOption configures optional adapter components.
@@ -210,13 +213,34 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	return a
 }
 
-func actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, content string) string {
-	if kind == "initial_dispatch" && strings.TrimSpace(content) != "" {
-		return uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join(
-			[]string{"choir:initial-dispatch", ownerID, computerID, toAgentID, strings.TrimSpace(content)}, "\x00",
-		))).String()
+func actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) string {
+	canonicalKind := strings.TrimSpace(kind)
+	canonicalContent := strings.TrimSpace(content)
+	canonicalTrajectoryID := strings.TrimSpace(trajectoryID)
+	canonicalFromAgentID := strings.TrimSpace(fromAgentID)
+	if canonicalContent == "" ||
+		(canonicalKind != "initial_dispatch" && canonicalKind != "coagent_result") ||
+		(canonicalKind == "coagent_result" && (canonicalTrajectoryID == "" || canonicalFromAgentID == "")) {
+		return uuid.New().String()
 	}
-	return uuid.New().String()
+
+	// Length prefixes make the occurrence identity injective even when an
+	// authored identifier contains a delimiter used by an older encoding.
+	identity := make([]byte, 0, 256)
+	for _, field := range []string{
+		"choir:actor-dispatch:v2",
+		strings.TrimSpace(ownerID),
+		strings.TrimSpace(computerID),
+		strings.TrimSpace(toAgentID),
+		canonicalKind,
+		canonicalContent,
+		canonicalTrajectoryID,
+		canonicalFromAgentID,
+	} {
+		identity = binary.AppendUvarint(identity, uint64(len(field)))
+		identity = append(identity, field...)
+	}
+	return uuid.NewSHA1(uuid.NameSpaceOID, identity).String()
 }
 
 // dispatch is the function hook that the runtime core calls to send actor
@@ -226,7 +250,7 @@ func (a *Adapter) dispatch(ctx context.Context, ownerID, computerID, toAgentID, 
 	if ownerID == "" || computerID == "" || toAgentID == "" {
 		return fmt.Errorf("actorruntime: dispatch: owner_id, computer_id, and to_agent_id are required")
 	}
-	updateID := actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, content)
+	updateID := actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID)
 	u := actor.Update{
 		UpdateID:     updateID,
 		ToAgentID:    scopedActorMailboxID(ownerID, computerID, toAgentID),
@@ -338,6 +362,60 @@ func (a *Adapter) migrateLegacyActorMailboxes(ctx context.Context) error {
 	return nil
 }
 
+func (a *Adapter) recoverParkedLifecycleMailboxSnapshots(ctx context.Context) error {
+	mailboxIDs, err := a.log.MailboxIdentities(ctx)
+	if err != nil {
+		return fmt.Errorf("inspect lifecycle actor snapshots: %w", err)
+	}
+	for _, mailboxID := range mailboxIDs {
+		ownerID, computerID, agentID, scopeErr := parseScopedActorMailboxID(mailboxID)
+		if scopeErr != nil {
+			return scopeErr
+		}
+		memory, loadErr := a.log.LoadSnapshot(ctx, mailboxID)
+		if loadErr != nil {
+			return fmt.Errorf("load lifecycle actor snapshot %q: %w", mailboxID, loadErr)
+		}
+		resume, decodeErr := decodeResumeState(memory)
+		if decodeErr != nil {
+			return fmt.Errorf("decode lifecycle actor snapshot %q: %w", mailboxID, decodeErr)
+		}
+		if strings.TrimSpace(resume.RunID) == "" {
+			continue
+		}
+		rec, runErr := a.store.GetLifecycleRun(ctx, ownerID, computerID, resume.RunID)
+		if runErr != nil {
+			if errors.Is(runErr, store.ErrNotFound) {
+				continue
+			}
+			return fmt.Errorf("load lifecycle actor snapshot run %s: %w", resume.RunID, runErr)
+		}
+		if rec.OwnerID != ownerID || rec.SandboxID != computerID || rec.AgentID != agentID ||
+			agentprofile.Canonical(rec.AgentProfile) != agentprofile.Researcher ||
+			agentprofile.Canonical(rec.AgentRole) != agentprofile.Researcher ||
+			strings.TrimSpace(metadataString(rec.Metadata, "request_source")) != "lifecycle_texture_control" ||
+			(rec.State != types.RunPassivated && rec.State != types.RunBlocked) {
+			continue
+		}
+		pending, pendingErr := a.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
+		if pendingErr != nil {
+			return fmt.Errorf("list lifecycle actor snapshot pending controls for run %s: %w", resume.RunID, pendingErr)
+		}
+		if len(pending) == 0 {
+			continue
+		}
+		recovered, recoverErr := a.Runtime.ReconcileParkedLifecycleCoagentWake(ctx, ownerID, agentID, resume.RunID)
+		if recoverErr != nil {
+			return fmt.Errorf("recover lifecycle actor snapshot run %s: %w", resume.RunID, recoverErr)
+		}
+		if recovered == nil || strings.TrimSpace(recovered.RunID) != strings.TrimSpace(resume.RunID) ||
+			strings.TrimSpace(metadataString(recovered.Metadata, "request_source")) != "lifecycle_texture_control" {
+			return fmt.Errorf("recover lifecycle actor snapshot run %s returned noncanonical run", resume.RunID)
+		}
+	}
+	return nil
+}
+
 // Start keeps actor delivery paused while the generic core and concrete Texture
 // owner reconcile durable state. Only after both scans finish are boot
 // dispatches released and the actor log swept.
@@ -357,6 +435,9 @@ func (a *Adapter) Start(ctx context.Context) error {
 				return fmt.Errorf("actorruntime: Texture owner is not bound for durable subject %s", subject.AgentID)
 			}
 		}
+	}
+	if err := a.recoverParkedLifecycleMailboxSnapshots(ctx); err != nil {
+		return fmt.Errorf("actorruntime: recover lifecycle actor snapshots: %w", err)
 	}
 	a.Runtime.Start(ctx)
 	if a.textureOwner != nil {

@@ -4,14 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/actor"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -49,6 +53,45 @@ func (p *startupBlockingProvider) Execute(ctx context.Context, task *types.RunRe
 }
 
 func (p *startupBlockingProvider) ProviderName() string { return "startup-blocking" }
+
+type targetStartupBlockingProvider struct {
+	targetAgentID string
+	started       chan struct{}
+	release       chan struct{}
+}
+
+func (p *targetStartupBlockingProvider) Execute(ctx context.Context, task *types.RunRecord, _ provideriface.EventEmitFunc) error {
+	if task.AgentID == p.targetAgentID {
+		select {
+		case p.started <- struct{}{}:
+		default:
+		}
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.release:
+		task.Result = "startup recovery completed"
+		return nil
+	}
+}
+
+func (p *targetStartupBlockingProvider) ProviderName() string { return "target-startup-blocking" }
+
+type countingLifecycleProvider struct {
+	targetAgentID string
+	calls         atomic.Int32
+}
+
+func (p *countingLifecycleProvider) Execute(_ context.Context, task *types.RunRecord, _ provideriface.EventEmitFunc) error {
+	if p.targetAgentID == "" || task.AgentID == p.targetAgentID {
+		p.calls.Add(1)
+	}
+	task.Result = "lifecycle control executed"
+	return nil
+}
+
+func (p *countingLifecycleProvider) ProviderName() string { return "counting-lifecycle" }
 
 func seedDurableTextureUpdate(t *testing.T, s *store.Store, ctx context.Context, computerID, ownerID, docID, updateID, content string) types.QueueLifecycleUpdateRequest {
 	t.Helper()
@@ -120,6 +163,100 @@ func seedDurableTextureUpdate(t *testing.T, s *store.Store, ctx context.Context,
 	return queue
 }
 
+type actorLifecycleControlFixture struct {
+	ownerID, computerID, trajectoryID, docID string
+	agentID, workID                          string
+	control                                  types.CoagentSourcePacket
+}
+
+func seedActorLifecycleControl(t *testing.T, s *store.Store, suffix string) actorLifecycleControlFixture {
+	t.Helper()
+	ctx := context.Background()
+	ownerID, computerID := "owner-actor-"+suffix, "sandbox-test"
+	docID, trajectoryID := "doc-actor-"+suffix, "trajectory-actor-"+suffix
+	textureAgentID := agentprofile.Texture + ":" + docID
+	now := time.Now().UTC()
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "start-actor-" + suffix, TrajectoryID: trajectoryID, Kind: types.TrajectoryKindDocument,
+		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		InitialWork:     types.WorkItemRecord{WorkItemID: "texture-work-actor-" + suffix, Objective: "author direction", AssignedAgentID: textureAgentID, AuthorityProfile: agentprofile.Texture},
+		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: "Actor parked wake", CreatedAt: now, UpdatedAt: now},
+		InitialRevision: types.Revision{RevisionID: "revision-actor-" + suffix, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "initial", CreatedAt: now},
+		Agent:           types.AgentRecord{AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start actor lifecycle: %v", err)
+	}
+	caller := types.RunRecord{
+		RunID: "texture-run-actor-" + suffix, OwnerID: ownerID, SandboxID: computerID, AgentID: textureAgentID,
+		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, ChannelID: docID, TrajectoryID: trajectoryID,
+		State: types.RunRunning, Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID, "work_item_ids": []string{start.InitialWork.WorkItemID}}, CreatedAt: now, UpdatedAt: now,
+	}
+	project := types.ReplaceLifecycleActivationRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "project-texture-actor-" + suffix,
+		TrajectoryID: trajectoryID, AgentID: textureAgentID, Run: caller,
+	}
+	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatalf("project actor Texture run: %v", err)
+	}
+	agentID, workID := "researcher:actor-"+suffix, "research-work-actor-"+suffix
+	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What evidence resolves it?"}}
+	content := "research exact gap"
+	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+	snapshot, _ := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	textureAgent, _ := s.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
+	turn := types.ApplyTextureTurnRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "turn-actor-" + suffix, DocumentID: docID, TrajectoryID: trajectoryID,
+		CallerAgentID: textureAgentID, CallerRunID: caller.RunID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion,
+		ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, CallerWorkItemID: start.InitialWork.WorkItemID, CallerWorkDisposition: types.WorkItemOpen,
+		Outcome: types.TextureTurnWait, Reason: "wait",
+		Controls: []types.TextureTurnControl{{
+			ControlID: "control-actor-" + suffix, TargetAgentID: agentID, TargetWorkItemID: workID, Packet: packet, Content: content, PayloadDigest: payloadDigest,
+			OpenAgent: &types.AgentRecord{AgentID: agentID, Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID},
+			OpenWork:  &types.WorkItemRecord{WorkItemID: workID, Objective: "research exact gap", AuthorityProfile: agentprofile.Researcher, AssignedAgentID: agentID},
+		}},
+	}
+	turn.CommandDigest, _ = store.ComputeApplyTextureTurnDigest(turn)
+	result, err := s.ApplyTextureTurn(ctx, turn)
+	if err != nil || len(result.Controls) != 1 {
+		t.Fatalf("apply actor Texture turn: result=%+v err=%v", result, err)
+	}
+	return actorLifecycleControlFixture{ownerID: ownerID, computerID: computerID, trajectoryID: trajectoryID, docID: docID, agentID: agentID, workID: workID, control: result.Controls[0]}
+}
+
+func commitActorLaterControl(t *testing.T, s *store.Store, fixture actorLifecycleControlFixture, suffix, controlID string) types.CoagentSourcePacket {
+	t.Helper()
+	ctx := context.Background()
+	snapshot, err := s.GetLifecycleSnapshot(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	textureAgentID := agentprofile.Texture + ":" + fixture.docID
+	textureAgent, err := s.GetAgentByScope(ctx, fixture.ownerID, fixture.computerID, textureAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "later parked question", Questions: []string{"Was this recovered?"}}
+	content := "later parked control " + controlID
+	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+	turn := types.ApplyTextureTurnRequest{
+		OwnerID: fixture.ownerID, ComputerID: fixture.computerID, CommandID: "turn-" + controlID, DocumentID: fixture.docID, TrajectoryID: fixture.trajectoryID,
+		CallerAgentID: textureAgentID, CallerRunID: "texture-run-actor-" + suffix, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion,
+		ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, CallerWorkItemID: "texture-work-actor-" + suffix, CallerWorkDisposition: types.WorkItemOpen,
+		Outcome: types.TextureTurnWait, Reason: "wait after later control",
+		Controls: []types.TextureTurnControl{{ControlID: controlID, TargetAgentID: fixture.agentID, TargetWorkItemID: fixture.workID, Packet: packet, Content: content, PayloadDigest: payloadDigest}},
+	}
+	turn.CommandDigest, _ = store.ComputeApplyTextureTurnDigest(turn)
+	result, err := s.ApplyTextureTurn(ctx, turn)
+	if err != nil || len(result.Controls) != 1 {
+		t.Fatalf("apply later actor control: result=%+v err=%v", result, err)
+	}
+	return result.Controls[0]
+}
+
 func newAdapterTestEnv(t *testing.T) *adapterTestEnv {
 	t.Helper()
 	dir := t.TempDir()
@@ -156,19 +293,83 @@ func newAdapterTestEnv(t *testing.T) *adapterTestEnv {
 }
 
 func TestInitialDispatchUpdateIdentityIsStableAndScoped(t *testing.T) {
-	first := actorDispatchUpdateID("owner-a", "computer-a", "agent-a", "initial_dispatch", "run-a")
-	replay := actorDispatchUpdateID("owner-a", "computer-a", "agent-a", "initial_dispatch", "run-a")
+	first := actorDispatchUpdateID("owner-a", "computer-a", "agent-a", "initial_dispatch", "run-a", "", "")
+	replay := actorDispatchUpdateID("owner-a", "computer-a", "agent-a", "initial_dispatch", "run-a", "", "")
 	if first != replay {
 		t.Fatalf("initial dispatch replay IDs differ: %q != %q", first, replay)
 	}
 	for name, changed := range map[string]string{
-		"owner":    actorDispatchUpdateID("owner-b", "computer-a", "agent-a", "initial_dispatch", "run-a"),
-		"computer": actorDispatchUpdateID("owner-a", "computer-b", "agent-a", "initial_dispatch", "run-a"),
-		"agent":    actorDispatchUpdateID("owner-a", "computer-a", "agent-b", "initial_dispatch", "run-a"),
-		"run":      actorDispatchUpdateID("owner-a", "computer-a", "agent-a", "initial_dispatch", "run-b"),
+		"owner":    actorDispatchUpdateID("owner-b", "computer-a", "agent-a", "initial_dispatch", "run-a", "", ""),
+		"computer": actorDispatchUpdateID("owner-a", "computer-b", "agent-a", "initial_dispatch", "run-a", "", ""),
+		"agent":    actorDispatchUpdateID("owner-a", "computer-a", "agent-b", "initial_dispatch", "run-a", "", ""),
+		"run":      actorDispatchUpdateID("owner-a", "computer-a", "agent-a", "initial_dispatch", "run-b", "", ""),
 	} {
 		if changed == first {
 			t.Fatalf("%s scope change reused initial dispatch ID %q", name, first)
+		}
+	}
+}
+
+func TestLifecycleCoagentResultUpdateIdentityUsesExactCanonicalOccurrence(t *testing.T) {
+	content := "control-a\x1fproducer-update-a"
+	first := actorDispatchUpdateID("owner-a", "computer-a", "researcher-a", "coagent_result", content, "trajectory-a", "texture-a")
+	replay := actorDispatchUpdateID("owner-a", "computer-a", "researcher-a", "coagent_result", content, "trajectory-a", "texture-a")
+	if first != replay {
+		t.Fatalf("exact occurrence replay IDs differ: %q != %q", first, replay)
+	}
+	for name, changed := range map[string]string{
+		"owner":           actorDispatchUpdateID("owner-b", "computer-a", "researcher-a", "coagent_result", content, "trajectory-a", "texture-a"),
+		"computer":        actorDispatchUpdateID("owner-a", "computer-b", "researcher-a", "coagent_result", content, "trajectory-a", "texture-a"),
+		"target":          actorDispatchUpdateID("owner-a", "computer-a", "researcher-b", "coagent_result", content, "trajectory-a", "texture-a"),
+		"kind":            actorDispatchUpdateID("owner-a", "computer-a", "researcher-a", "initial_dispatch", content, "trajectory-a", "texture-a"),
+		"trajectory":      actorDispatchUpdateID("owner-a", "computer-a", "researcher-a", "coagent_result", content, "trajectory-b", "texture-a"),
+		"producer":        actorDispatchUpdateID("owner-a", "computer-a", "researcher-a", "coagent_result", content, "trajectory-a", "texture-b"),
+		"producer_update": actorDispatchUpdateID("owner-a", "computer-a", "researcher-a", "coagent_result", "control-a\x1fproducer-update-b", "trajectory-a", "texture-a"),
+	} {
+		if changed == first {
+			t.Fatalf("%s change reused actor update ID %q", name, first)
+		}
+	}
+	// Non-lifecycle/generic coagent wakes remain independently retryable.
+	if one, two := actorDispatchUpdateID("owner-a", "computer-a", "agent-a", "coagent_result", "legacy", "", ""), actorDispatchUpdateID("owner-a", "computer-a", "agent-a", "coagent_result", "legacy", "", ""); one == two {
+		t.Fatalf("generic coagent_result unexpectedly deduplicated: %q", one)
+	}
+}
+
+func TestLifecycleCoagentResultUpdateIdentityResistsDelimiterCollision(t *testing.T) {
+	leftFields := []string{"choir:coagent-result", "owner-a", "computer-a", "researcher-a", "trajectory-a", "texture-a\x00control-a", "producer-update-a"}
+	rightFields := []string{"choir:coagent-result", "owner-a", "computer-a", "researcher-a", "trajectory-a", "texture-a", "control-a\x00producer-update-a"}
+	if left, right := strings.Join(leftFields, "\x00"), strings.Join(rightFields, "\x00"); left != right {
+		t.Fatalf("adversarial fixture does not collide under delimiter concatenation: %q != %q", left, right)
+	}
+
+	left := actorDispatchUpdateID("owner-a", "computer-a", "researcher-a", "coagent_result", "producer-update-a", "trajectory-a", "texture-a\x00control-a")
+	right := actorDispatchUpdateID("owner-a", "computer-a", "researcher-a", "coagent_result", "control-a\x00producer-update-a", "trajectory-a", "texture-a")
+	if left == right {
+		t.Fatalf("distinct lifecycle occurrences reused actor update ID %q", left)
+	}
+}
+
+func TestAcknowledgeDurablyTerminalLifecycleControlActivation(t *testing.T) {
+	terminal := agentcore.ErrDurablyTerminalLifecycleControlActivation
+	for name, err := range map[string]error{
+		"sentinel": terminal,
+		"wrapped":  fmt.Errorf("reconcile lifecycle control: %w", terminal),
+	} {
+		if got := acknowledgeDurablyTerminalLifecycleControlActivation(err); got != nil {
+			t.Errorf("%s error was not acknowledged: %v", name, got)
+		}
+	}
+
+	if got := acknowledgeDurablyTerminalLifecycleControlActivation(nil); got != nil {
+		t.Errorf("nil error = %v, want nil", got)
+	}
+	for name, retryable := range map[string]error{
+		"ordinary":  errors.New("temporary reconcile failure"),
+		"same text": errors.New(terminal.Error()),
+	} {
+		if got := acknowledgeDurablyTerminalLifecycleControlActivation(retryable); got != retryable {
+			t.Errorf("%s error = %v, want original retryable error %v", name, got, retryable)
 		}
 	}
 }
@@ -217,7 +418,7 @@ func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *te
 	}
 	mailboxID := scopedActorMailboxID(ownerID, "sandbox-test", run.AgentID)
 	dispatch := actor.Update{
-		UpdateID:  actorDispatchUpdateID(ownerID, "sandbox-test", run.AgentID, "initial_dispatch", run.RunID),
+		UpdateID:  actorDispatchUpdateID(ownerID, "sandbox-test", run.AgentID, "initial_dispatch", run.RunID, "", ""),
 		ToAgentID: mailboxID, Kind: "initial_dispatch", Content: run.RunID,
 		TrajectoryID: run.TrajectoryID, CreatedAt: now,
 	}
@@ -270,6 +471,122 @@ func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *te
 	if err != nil || stored.State != types.RunCompleted || !reactivated || mutationErr != nil || mutation == nil ||
 		mutation.State != "completed" || !mutation.CreatedAt.After(now.Add(-time.Minute)) {
 		t.Fatalf("running lifecycle activation was not owner-reactivated: run=%+v mutation=%+v run_err=%v mutation_err=%v", stored, mutation, err, mutationErr)
+	}
+}
+
+func TestAdapterStartRecoversLifecycleActorSnapshotsBeforeRuntimeSweep(t *testing.T) {
+	for _, tc := range []struct {
+		name              string
+		state             types.RunState
+		durableOccurrence bool
+	}{
+		{name: "passivated missing send", state: types.RunPassivated},
+		{name: "passivated durable unprocessed occurrence", state: types.RunPassivated, durableOccurrence: true},
+		{name: "blocked missing send", state: types.RunBlocked},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			dir := t.TempDir()
+			dbPath := filepath.Join(dir, "restart-snapshot.db")
+			s, err := store.Open(dbPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = s.Close() })
+			cfg := provideriface.Config{
+				SandboxID: "sandbox-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
+				ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+			}
+
+			seed := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
+			seed.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+			suffix := strings.ReplaceAll(tc.name, " ", "-")
+			fixture := seedActorLifecycleControl(t, s, suffix)
+			initial, err := seed.Runtime.ReconcileCoagentWake(ctx, fixture.ownerID, fixture.agentID)
+			if err != nil || initial == nil {
+				t.Fatalf("seed initial lifecycle run=%+v err=%v", initial, err)
+			}
+			initial.State = tc.state
+			initial.UpdatedAt = time.Now().UTC()
+			if err := s.UpdateRun(ctx, *initial); err != nil {
+				t.Fatalf("seed lifecycle run state %s: %v", tc.state, err)
+			}
+			mailboxID := scopedActorMailboxID(fixture.ownerID, fixture.computerID, fixture.agentID)
+			initialDispatch := actor.Update{
+				UpdateID:  actorDispatchUpdateID(fixture.ownerID, fixture.computerID, fixture.agentID, "initial_dispatch", initial.RunID, fixture.trajectoryID, ""),
+				ToAgentID: mailboxID, Kind: "initial_dispatch", Content: initial.RunID, TrajectoryID: fixture.trajectoryID, CreatedAt: time.Now().UTC(),
+			}
+			if appended, err := seed.log.Append(ctx, initialDispatch); err != nil || !appended {
+				t.Fatalf("seed processed initial dispatch appended=%v err=%v", appended, err)
+			}
+			if err := seed.log.MarkProcessed(ctx, mailboxID, initialDispatch.UpdateID); err != nil {
+				t.Fatalf("mark seed initial dispatch processed: %v", err)
+			}
+			memory, _ := json.Marshal(resumeState{RunID: initial.RunID, Phase: "parked"})
+			if err := seed.log.SaveSnapshot(ctx, mailboxID, memory); err != nil {
+				t.Fatalf("seed actor memory: %v", err)
+			}
+			later := commitActorLaterControl(t, s, fixture, suffix, "control-restart-snapshot-b")
+			occurrenceContent := agentcore.LifecycleControlActorOccurrenceContent(later)
+			occurrenceID := actorDispatchUpdateID(fixture.ownerID, fixture.computerID, fixture.agentID, "coagent_result", occurrenceContent, fixture.trajectoryID, later.AgentID)
+			if tc.durableOccurrence {
+				appended, appendErr := seed.log.Append(ctx, actor.Update{
+					UpdateID: occurrenceID, ToAgentID: mailboxID, FromAgentID: later.AgentID, Kind: "coagent_result",
+					Content: occurrenceContent, TrajectoryID: fixture.trajectoryID, CreatedAt: time.Now().UTC(),
+				})
+				if appendErr != nil || !appended {
+					t.Fatalf("seed durable B occurrence appended=%v err=%v", appended, appendErr)
+				}
+			}
+			before, err := seed.log.Unprocessed(ctx, mailboxID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			foundBefore := false
+			for _, update := range before {
+				foundBefore = foundBefore || update.UpdateID == occurrenceID
+			}
+			if foundBefore != tc.durableOccurrence {
+				t.Fatalf("pre-restart durable B occurrence=%v, want %v: %+v", foundBefore, tc.durableOccurrence, before)
+			}
+			seed.Stop()
+
+			blocking := &targetStartupBlockingProvider{targetAgentID: fixture.agentID, started: make(chan struct{}, 1), release: make(chan struct{})}
+			t.Cleanup(func() { close(blocking.release) })
+			restarted := New(cfg, s, events.NewEventBus(), blocking, nil)
+			if err := restarted.BindTextureOwner(textureowner.NewHandler(restarted.Runtime)); err != nil {
+				t.Fatalf("bind restart Texture owner: %v", err)
+			}
+			t.Cleanup(func() {
+				restarted.Stop()
+				restarted.cleanupLog()
+			})
+			if err := restarted.Start(ctx); err != nil {
+				t.Fatalf("restart adapter: %v", err)
+			}
+			bound, boundErr := s.GetLifecycleUpdate(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, later.AgentID, later.ProducerUpdateID)
+			stored, storedErr := s.GetLifecycleRun(ctx, fixture.ownerID, fixture.computerID, initial.RunID)
+			var occurrenceCount int
+			countErr := restarted.logDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM actor_updates WHERE update_id = ?`, occurrenceID).Scan(&occurrenceCount)
+			if boundErr != nil || storedErr != nil || countErr != nil || bound.DeliveredToRunID != initial.RunID || bound.DeliveredAt == nil || occurrenceCount != 1 ||
+				metadataString(stored.Metadata, "request_source") != "lifecycle_texture_control" {
+				t.Fatalf("restart recovery state=%+v B=%+v occurrence_count=%d stored_err=%v bound_err=%v count_err=%v", stored, bound, occurrenceCount, storedErr, boundErr, countErr)
+			}
+			runs, err := s.ListLifecycleRunsByTrajectory(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			lifecycleRuns := 0
+			for _, run := range runs {
+				if run.AgentID == fixture.agentID && metadataString(run.Metadata, "request_source") == "lifecycle_texture_control" {
+					lifecycleRuns++
+				}
+			}
+			if lifecycleRuns != 1 {
+				t.Fatalf("restart created %d lifecycle-control runs: %+v", lifecycleRuns, runs)
+			}
+		})
 	}
 }
 
@@ -469,6 +786,120 @@ func TestHandlerColdStartCoagentResult(t *testing.T) {
 	// the initial_dispatch message from ReconcileCoagentWake).
 	if memory != nil {
 		t.Errorf("cold start memory = %v, want nil (new run started via initial_dispatch)", memory)
+	}
+}
+
+func TestHandlerParkedLifecycleControlReconcilesBeforeRetryAcknowledgement(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "parked-lifecycle.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := &countingLifecycleProvider{}
+	cfg := provideriface.Config{
+		SandboxID: "sandbox-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
+		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+	}
+	adapter := New(cfg, s, events.NewEventBus(), provider, nil)
+	t.Cleanup(func() {
+		adapter.Stop()
+		adapter.cleanupLog()
+		_ = s.Close()
+	})
+	if err := adapter.Start(ctx); err != nil {
+		t.Fatalf("start adapter: %v", err)
+	}
+	// Keep reconciliation dispatch observable but out of the live actor loop;
+	// this test invokes the handler synchronously at the actor boundary.
+	adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+
+	const suffix = "parked-handler-retry"
+	fixture := seedActorLifecycleControl(t, s, suffix)
+	initial, err := adapter.Runtime.ReconcileCoagentWake(ctx, fixture.ownerID, fixture.agentID)
+	if err != nil || initial == nil {
+		t.Fatalf("initial lifecycle reconcile: run=%+v err=%v", initial, err)
+	}
+	parked := *initial
+	parked.State = types.RunPassivated
+	parked.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(ctx, parked); err != nil {
+		t.Fatalf("passivate lifecycle run: %v", err)
+	}
+	later := commitActorLaterControl(t, s, fixture, suffix, "control-parked-handler-b")
+	memory, err := json.Marshal(resumeState{RunID: initial.RunID, Phase: "parked"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := newActorHandler(adapter.Runtime, nil)
+	update := actor.Update{
+		UpdateID: "actor-parked-handler-b", ToAgentID: scopedActorMailboxID(fixture.ownerID, fixture.computerID, fixture.agentID),
+		FromAgentID: later.AgentID, Kind: "coagent_result", Content: later.UpdateID, TrajectoryID: fixture.trajectoryID, CreatedAt: time.Now().UTC(),
+	}
+
+	wrongTrajectory := update
+	wrongTrajectory.TrajectoryID = "trajectory-cross-scope"
+	if _, err := handler.HandleUpdate(ctx, fixture.agentID, wrongTrajectory, memory); err == nil || !strings.Contains(err.Error(), "trajectory mismatch") {
+		t.Fatalf("cross-trajectory parked wake error = %v", err)
+	}
+	unchanged, _ := s.GetLifecycleRun(ctx, fixture.ownerID, fixture.computerID, initial.RunID)
+	if unchanged.State != types.RunPassivated || provider.calls.Load() != 0 {
+		t.Fatalf("cross-trajectory wake mutated/executed run=%+v provider_calls=%d", unchanged, provider.calls.Load())
+	}
+
+	// Fail only the worker-update write in the atomic append batch. The exact
+	// parked run reactivation succeeds first, while control B remains pending
+	// and the actor update must remain unacknowledged/retryable.
+	if _, err := s.DB().ExecContext(ctx, `
+		CREATE TRIGGER fail_parked_actor_control_append
+		BEFORE INSERT ON og_objects FOR EACH ROW
+		BEGIN
+			IF NEW.object_kind = 'choir.worker_update' THEN
+				SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'injected parked actor append failure';
+			END IF;
+		END`); err != nil {
+		t.Fatalf("install append failure trigger: %v", err)
+	}
+	if _, err := handler.HandleUpdate(ctx, fixture.agentID, update, memory); err == nil || errors.Is(err, agentcore.ErrDurablyTerminalLifecycleControlActivation) {
+		t.Fatalf("first parked handler error = %v", err)
+	}
+	afterFailure, err := s.GetLifecycleRun(ctx, fixture.ownerID, fixture.computerID, initial.RunID)
+	pending, pendingErr := s.GetLifecycleUpdate(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, later.AgentID, later.ProducerUpdateID)
+	if err != nil || pendingErr != nil || afterFailure.State != types.RunPending || metadataString(afterFailure.Metadata, "request_source") != "lifecycle_texture_control" ||
+		pending.DeliveredAt != nil || pending.DeliveredToRunID != "" || provider.calls.Load() != 0 {
+		t.Fatalf("transient parked wake run=%+v pending=%+v run_err=%v pending_err=%v provider_calls=%d", afterFailure, pending, err, pendingErr, provider.calls.Load())
+	}
+	if _, err := s.DB().ExecContext(ctx, `DROP TRIGGER fail_parked_actor_control_append`); err != nil {
+		t.Fatalf("drop append failure trigger: %v", err)
+	}
+
+	gotMemory, err := handler.HandleUpdate(ctx, fixture.agentID, update, memory)
+	if err != nil {
+		t.Fatalf("retry parked handler: %v", err)
+	}
+	if gotMemory != nil {
+		t.Fatalf("completed retry memory = %s, want nil", gotMemory)
+	}
+	bound, boundErr := s.GetLifecycleUpdate(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, later.AgentID, later.ProducerUpdateID)
+	final, finalErr := s.GetLifecycleRun(ctx, fixture.ownerID, fixture.computerID, initial.RunID)
+	if boundErr != nil || finalErr != nil || bound.DeliveredToRunID != initial.RunID || bound.DeliveredAt == nil ||
+		metadataString(final.Metadata, "request_source") != "lifecycle_texture_control" || provider.calls.Load() != 1 {
+		t.Fatalf("retried parked wake final=%+v bound=%+v final_err=%v bound_err=%v provider_calls=%d", final, bound, finalErr, boundErr, provider.calls.Load())
+	}
+	runs, err := s.ListLifecycleRunsByTrajectory(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lifecycleControlRuns := 0
+	for _, run := range runs {
+		if run.AgentID == fixture.agentID && metadataString(run.Metadata, "request_source") == "lifecycle_texture_control" {
+			lifecycleControlRuns++
+		}
+	}
+	if lifecycleControlRuns != 1 {
+		t.Fatalf("parked retry created %d lifecycle-control Researcher runs: %+v", lifecycleControlRuns, runs)
 	}
 }
 

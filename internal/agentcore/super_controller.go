@@ -2,6 +2,9 @@ package agentcore
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,12 +13,98 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 const runMetadataWorkerUpdatesInjected = "worker_updates_injected"
+
+const (
+	lifecycleLogicalActivationKeyMetadata = "lifecycle_logical_activation_key"
+	lifecycleFailedAttemptKeyMetadata     = "lifecycle_failed_attempt_key"
+	lifecycleActivationBuildMetadata      = "lifecycle_activation_build_commit"
+	lifecycleActivationVersionsMetadata   = "lifecycle_activation_versions"
+)
+
+// ErrDurablyTerminalLifecycleControlActivation is a handled actor outcome. It
+// is returned only after a deterministic lifecycle bind rejection has been
+// durably persisted on the exact fingerprinted run, or when replay observes
+// that same durable failure. Actor delivery may acknowledge this error; all
+// other reconcile errors remain retryable.
+var ErrDurablyTerminalLifecycleControlActivation = errors.New("durably terminal lifecycle control activation")
+
+type lifecycleActivationVersion = types.LifecycleControlActivationVersion
+
+type lifecycleActivationIdentity struct {
+	OwnerID      string                       `json:"owner_id"`
+	ComputerID   string                       `json:"computer_id"`
+	TrajectoryID string                       `json:"trajectory_id"`
+	AgentID      string                       `json:"agent_id"`
+	Joins        []lifecycleActivationVersion `json:"joins"`
+}
+
+func digestLifecycleActivationIdentity(value any) (string, error) {
+	body, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(body)
+	return "sha256:" + hex.EncodeToString(digest[:]), nil
+}
+
+func lifecycleActivationKeys(ownerID, computerID, trajectoryID, agentID, buildCommit string, updates []types.CoagentSourcePacket, workByID map[string]types.WorkItemRecord) (string, string, []lifecycleActivationVersion, error) {
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	trajectoryID, agentID, buildCommit = strings.TrimSpace(trajectoryID), strings.TrimSpace(agentID), strings.TrimSpace(buildCommit)
+	if ownerID == "" || computerID == "" || trajectoryID == "" || agentID == "" || buildCommit == "" || len(updates) == 0 {
+		return "", "", nil, store.ErrLifecycleInvalidTransition
+	}
+	versions := make([]lifecycleActivationVersion, 0, len(updates))
+	seenUpdates := make(map[string]bool, len(updates))
+	for _, update := range updates {
+		updateID, workID := strings.TrimSpace(update.UpdateID), strings.TrimSpace(update.TargetWorkItemID)
+		work, ok := workByID[workID]
+		if updateID == "" || workID == "" || seenUpdates[updateID] || !ok || update.LifecycleVersion <= 0 || work.LifecycleVersion <= 0 {
+			return "", "", nil, store.ErrLifecycleInvalidTransition
+		}
+		seenUpdates[updateID] = true
+		versions = append(versions, lifecycleActivationVersion{UpdateID: updateID, TargetWorkItemID: workID, ControlLifecycleVersion: update.LifecycleVersion, WorkLifecycleVersion: work.LifecycleVersion})
+	}
+	identity := lifecycleActivationIdentity{OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AgentID: agentID, Joins: versions}
+	logicalIdentity := struct {
+		OwnerID      string `json:"owner_id"`
+		ComputerID   string `json:"computer_id"`
+		TrajectoryID string `json:"trajectory_id"`
+		AgentID      string `json:"agent_id"`
+		Joins        []struct {
+			UpdateID         string `json:"update_id"`
+			TargetWorkItemID string `json:"target_work_item_id"`
+		} `json:"joins"`
+	}{OwnerID: identity.OwnerID, ComputerID: identity.ComputerID, TrajectoryID: identity.TrajectoryID, AgentID: identity.AgentID}
+	logicalIdentity.Joins = make([]struct {
+		UpdateID         string `json:"update_id"`
+		TargetWorkItemID string `json:"target_work_item_id"`
+	}, 0, len(versions))
+	for _, version := range versions {
+		logicalIdentity.Joins = append(logicalIdentity.Joins, struct {
+			UpdateID         string `json:"update_id"`
+			TargetWorkItemID string `json:"target_work_item_id"`
+		}{UpdateID: version.UpdateID, TargetWorkItemID: version.TargetWorkItemID})
+	}
+	logicalKey, err := digestLifecycleActivationIdentity(logicalIdentity)
+	if err != nil {
+		return "", "", nil, err
+	}
+	failedKey, err := digestLifecycleActivationIdentity(struct {
+		BuildCommit string                      `json:"build_commit"`
+		Identity    lifecycleActivationIdentity `json:"identity"`
+	}{BuildCommit: buildCommit, Identity: identity})
+	if err != nil {
+		return "", "", nil, err
+	}
+	return logicalKey, failedKey, versions, nil
+}
 
 // reconcilePersistentSuperActor is the durable controller boundary for the
 // user's privileged execution actor. update_coagent can append addressed work
@@ -489,28 +578,82 @@ func selectLifecycleControlActivation(updates []types.CoagentSourcePacket, traje
 	return out
 }
 
-func (rt *Runtime) bindLifecycleControlsToRun(ctx context.Context, rec *types.RunRecord, updates []types.CoagentSourcePacket) (types.LifecycleResult, error) {
+func (rt *Runtime) lifecycleControlBindRequest(ctx context.Context, rec *types.RunRecord, updates []types.CoagentSourcePacket) (types.BindLifecycleControlDeliveryRequest, error) {
 	if rt == nil || rt.store == nil || rec == nil || len(updates) == 0 {
-		return types.LifecycleResult{}, nil
+		return types.BindLifecycleControlDeliveryRequest{}, store.ErrLifecycleInvalidTransition
 	}
 	updates = selectLifecycleControlActivation(updates, lifecycleControlTrajectoryForRun(rec), lifecycleControlWorkIDsForRun(rec))
 	if len(updates) == 0 {
-		return types.LifecycleResult{}, fmt.Errorf("bind lifecycle controls: no exact run/trajectory/work controls")
+		return types.BindLifecycleControlDeliveryRequest{}, fmt.Errorf("bind lifecycle controls: no exact run/trajectory/work controls")
 	}
 	controlTrajectoryID := lifecycleControlTrajectoryForRun(rec)
 	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, rec.OwnerID, rec.SandboxID, controlTrajectoryID)
 	if err != nil {
-		return types.LifecycleResult{}, fmt.Errorf("bind lifecycle controls snapshot: %w", err)
+		return types.BindLifecycleControlDeliveryRequest{}, fmt.Errorf("bind lifecycle controls snapshot: %w", err)
 	}
 	items := make([]types.BindLifecycleControlDeliveryItem, 0, len(updates))
 	ids := make([]string, 0, len(updates))
+	fingerprinted := metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) != ""
+	fingerprintedUnbound := fingerprinted
+	if fingerprinted {
+		canonicallyBound, boundErr := rt.lifecycleRunHasCanonicalControlDelivery(ctx, rec)
+		if boundErr != nil {
+			return types.BindLifecycleControlDeliveryRequest{}, fmt.Errorf("classify lifecycle activation delivery state: %w", boundErr)
+		}
+		fingerprintedUnbound = !canonicallyBound
+	}
+	versionByUpdate := map[string]types.LifecycleControlActivationVersion{}
+	var activationVersions []types.LifecycleControlActivationVersion
+	if fingerprintedUnbound {
+		activationVersions, err = lifecycleActivationVersionsForRun(rec)
+		if err != nil {
+			return types.BindLifecycleControlDeliveryRequest{}, fmt.Errorf("read lifecycle activation versions: %w", err)
+		}
+		for _, version := range activationVersions {
+			versionByUpdate[version.UpdateID] = version
+		}
+	}
 	for _, update := range updates {
-		items = append(items, types.BindLifecycleControlDeliveryItem{UpdateID: update.UpdateID, ProducerAgentID: update.AgentID, ProducerUpdateID: update.ProducerUpdateID, TargetWorkItemID: update.TargetWorkItemID})
+		work, workErr := rt.store.GetLifecycleWorkItem(ctx, rec.OwnerID, rec.SandboxID, update.TargetWorkItemID)
+		if workErr != nil {
+			return types.BindLifecycleControlDeliveryRequest{}, fmt.Errorf("bind lifecycle control work %s: %w", update.TargetWorkItemID, workErr)
+		}
+		controlVersion, workVersion := update.LifecycleVersion, work.LifecycleVersion
+		if fingerprintedUnbound {
+			version, ok := versionByUpdate[update.UpdateID]
+			if !ok || version.TargetWorkItemID != update.TargetWorkItemID {
+				return types.BindLifecycleControlDeliveryRequest{}, fmt.Errorf("lifecycle control %s has no exact activation version/work binding: %w", update.UpdateID, store.ErrLifecycleInvalidTransition)
+			}
+			controlVersion, workVersion = version.ControlLifecycleVersion, version.WorkLifecycleVersion
+		}
+		items = append(items, types.BindLifecycleControlDeliveryItem{UpdateID: update.UpdateID, ProducerAgentID: update.AgentID, ProducerUpdateID: update.ProducerUpdateID, TargetWorkItemID: update.TargetWorkItemID, ExpectedControlLifecycleVersion: controlVersion, ExpectedWorkLifecycleVersion: workVersion})
 		ids = append(ids, update.UpdateID)
 	}
 	commandID := "bind-control-delivery:" + rec.RunID + ":" + strings.Join(ids, ",")
 	req := types.BindLifecycleControlDeliveryRequest{OwnerID: rec.OwnerID, ComputerID: rec.SandboxID, CommandID: commandID, TrajectoryID: controlTrajectoryID, TargetAgentID: rec.AgentID, TargetRunID: rec.RunID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, Controls: items}
+	if fingerprintedUnbound {
+		workItemIDs := make([]string, 0, len(activationVersions))
+		seenWork := map[string]bool{}
+		for _, version := range activationVersions {
+			if !seenWork[version.TargetWorkItemID] {
+				seenWork[version.TargetWorkItemID] = true
+				workItemIDs = append(workItemIDs, version.TargetWorkItemID)
+			}
+		}
+		req.ActivationRefresh = &types.LifecycleControlActivationRefresh{Prompt: rec.Prompt, LogicalActivationKey: metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata), FailedAttemptKey: metadataStringValue(rec.Metadata, lifecycleFailedAttemptKeyMetadata), BuildCommit: metadataStringValue(rec.Metadata, lifecycleActivationBuildMetadata), Versions: activationVersions, WorkItemIDs: workItemIDs}
+	}
 	req.CommandDigest, err = store.ComputeBindLifecycleControlDeliveryDigest(req)
+	if err != nil {
+		return types.BindLifecycleControlDeliveryRequest{}, err
+	}
+	return req, nil
+}
+
+func (rt *Runtime) bindLifecycleControlsToRun(ctx context.Context, rec *types.RunRecord, updates []types.CoagentSourcePacket) (types.LifecycleResult, error) {
+	if rt == nil || rt.store == nil || rec == nil || len(updates) == 0 {
+		return types.LifecycleResult{}, nil
+	}
+	req, err := rt.lifecycleControlBindRequest(ctx, rec, updates)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -525,7 +668,10 @@ func (rt *Runtime) bindLifecycleControlsToRun(ctx context.Context, rec *types.Ru
 		rebound, err = rt.store.GetLifecycleRun(ctx, rec.OwnerID, rec.SandboxID, rec.RunID)
 	}
 	if err != nil {
-		return types.LifecycleResult{}, fmt.Errorf("reload bound lifecycle control run: %w", err)
+		// BindLifecycleControlDelivery already committed. Preserve its nonempty
+		// receipt so callers cannot mistake a post-commit reload outage for a
+		// pre-commit rejection and terminalize a stale run copy.
+		return result, fmt.Errorf("reload bound lifecycle control run: %w", err)
 	}
 	*rec = rebound
 	return result, nil
@@ -545,6 +691,51 @@ func (rt *Runtime) failUnactivatedLifecycleControlRun(ctx context.Context, rec *
 	if err := rt.store.UpdateRun(context.WithoutCancel(ctx), *rec); err != nil {
 		log.Printf("runtime: terminalize unactivated lifecycle control run %s: %v", rec.RunID, err)
 	}
+}
+
+func (rt *Runtime) terminalizeFingerprintedLifecycleControlRun(ctx context.Context, rec *types.RunRecord, updates []types.CoagentSourcePacket, bindErr error) error {
+	if rt == nil || rt.store == nil || rec == nil {
+		return bindErr
+	}
+	// CAS, context, command-conflict, and store failures are not terminal
+	// evidence. They must retry the same active logical run.
+	if !errors.Is(bindErr, store.ErrLifecycleInvalidTransition) {
+		return bindErr
+	}
+	logicalKey := metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata)
+	failedKey := metadataStringValue(rec.Metadata, lifecycleFailedAttemptKeyMetadata)
+	if logicalKey == "" || failedKey == "" {
+		return fmt.Errorf("refuse unfingerprinted lifecycle bind failure: %w", bindErr)
+	}
+	bindReq, err := rt.lifecycleControlBindRequest(context.WithoutCancel(ctx), rec, updates)
+	if err != nil {
+		return fmt.Errorf("reconstruct deterministic lifecycle bind attempt for run %s: %w", rec.RunID, err)
+	}
+	failure := types.FailLifecycleControlActivationRequest{
+		OwnerID: rec.OwnerID, ComputerID: rec.SandboxID,
+		CommandID:    store.LifecycleControlActivationFailureCommandID(failedKey),
+		TrajectoryID: bindReq.TrajectoryID, AgentID: rec.AgentID, RunID: rec.RunID,
+		ExpectedLifecycleVersion: bindReq.ExpectedLifecycleVersion,
+		LogicalActivationKey:     logicalKey, FailedAttemptKey: failedKey,
+		BindCommandID: bindReq.CommandID, BindCommandDigest: bindReq.CommandDigest,
+		Controls: bindReq.Controls, ActivationRefresh: bindReq.ActivationRefresh,
+		Failure: store.LifecycleControlActivationMissingRunWorkBindingFailure,
+	}
+	failure.CommandDigest, err = store.ComputeFailLifecycleControlActivationDigest(failure)
+	if err != nil {
+		return fmt.Errorf("digest lifecycle control activation failure for run %s: %w", rec.RunID, err)
+	}
+	result, err := rt.store.FailLifecycleControlActivation(context.WithoutCancel(ctx), failure)
+	if err != nil {
+		return fmt.Errorf("persist deterministic lifecycle bind failure for run %s: %w", rec.RunID, err)
+	}
+	if result.Receipt.Kind != types.LifecycleFailControlActivation || len(result.Events) != 1 || result.Events[0].Kind != types.LifecycleControlActivationFailed {
+		return fmt.Errorf("persist deterministic lifecycle bind failure for run %s returned invalid typed receipt", rec.RunID)
+	}
+	if failed, reloadErr := rt.store.GetLifecycleRun(context.WithoutCancel(ctx), rec.OwnerID, rec.SandboxID, rec.RunID); reloadErr == nil {
+		*rec = failed
+	}
+	return fmt.Errorf("%w: run=%s failed_attempt=%s", ErrDurablyTerminalLifecycleControlActivation, rec.RunID, failedKey)
 }
 
 func (rt *Runtime) listPendingPersistentSuperLifecycleControls(ctx context.Context, ownerID, computerID, agentID string, limit int) ([]types.CoagentSourcePacket, error) {
@@ -572,18 +763,14 @@ func (rt *Runtime) validateTargetBoundLifecycleControls(ctx context.Context, own
 		if update.Direction != types.LifecyclePacketDirectionControl || update.TargetAgentID != agentID || update.OwnerID != ownerID || update.ComputerID != computerID || update.Disposition != types.UpdatePending || strings.TrimSpace(update.TargetWorkItemID) == "" || strings.TrimSpace(update.TrajectoryID) == "" {
 			return nil, fmt.Errorf("pending lifecycle control %q has ambiguous target binding", update.UpdateID)
 		}
-		snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, update.TrajectoryID)
+		if update.LifecycleVersion <= 0 {
+			return nil, fmt.Errorf("pending lifecycle control %q has no canonical lifecycle version", update.UpdateID)
+		}
+		work, err := rt.store.GetLifecycleWorkItem(ctx, ownerID, computerID, update.TargetWorkItemID)
 		if err != nil {
-			return nil, fmt.Errorf("load lifecycle control trajectory %q: %w", update.UpdateID, err)
+			return nil, fmt.Errorf("load exact lifecycle control work %q: %w", update.UpdateID, err)
 		}
-		bound := false
-		for _, work := range snapshot.WorkItems {
-			if work.WorkItemID == update.TargetWorkItemID && work.Status == types.WorkItemOpen && work.AssignedAgentID == agentID && work.TrajectoryID == update.TrajectoryID && work.OwnerID == ownerID && work.ComputerID == computerID {
-				bound = true
-				break
-			}
-		}
-		if !bound {
+		if work.LifecycleVersion <= 0 || work.WorkItemID != update.TargetWorkItemID || work.Status != types.WorkItemOpen || work.AssignedAgentID != agentID || work.TrajectoryID != update.TrajectoryID || work.OwnerID != ownerID || work.ComputerID != computerID {
 			return nil, fmt.Errorf("pending lifecycle control %q is not joined to exact open target work", update.UpdateID)
 		}
 		if executionOnly && !persistentSuperExecutableUpdate(update) {
@@ -655,6 +842,159 @@ func buildPersistentSuperUpdatePrompt(updates []types.CoagentSourcePacket) strin
 	return strings.TrimSpace(b.String())
 }
 
+func (rt *Runtime) hydrateLifecycleControlWorkItems(ctx context.Context, ownerID, computerID, agentID string, updates []types.CoagentSourcePacket) ([]types.WorkItemRecord, map[string]types.WorkItemRecord, string, error) {
+	if len(updates) == 0 {
+		return nil, nil, "", store.ErrLifecycleInvalidTransition
+	}
+	trajectoryID := strings.TrimSpace(updates[0].TrajectoryID)
+	seenUpdates := make(map[string]bool, len(updates))
+	seenWork := make(map[string]bool, len(updates))
+	workByID := make(map[string]types.WorkItemRecord, len(updates))
+	workItems := make([]types.WorkItemRecord, 0, len(updates))
+	for _, update := range updates {
+		updateID, workID := strings.TrimSpace(update.UpdateID), strings.TrimSpace(update.TargetWorkItemID)
+		if updateID == "" || seenUpdates[updateID] || update.Direction != types.LifecyclePacketDirectionControl || update.OwnerID != ownerID || update.ComputerID != computerID || update.TargetAgentID != agentID || strings.TrimSpace(update.TrajectoryID) != trajectoryID || update.Disposition != types.UpdatePending || update.DeliveredAt != nil || strings.TrimSpace(update.DeliveredToRunID) != "" || update.LifecycleVersion <= 0 {
+			return nil, nil, "", store.ErrLifecycleInvalidTransition
+		}
+		canonical, err := rt.store.GetLifecycleUpdate(ctx, ownerID, computerID, trajectoryID, agentID, update.AgentID, update.ProducerUpdateID)
+		if err != nil {
+			return nil, nil, "", fmt.Errorf("hydrate exact lifecycle control %s: %w", updateID, err)
+		}
+		if canonical.UpdateID != updateID || canonical.LifecycleVersion != update.LifecycleVersion || canonical.TargetWorkItemID != workID || canonical.TargetAgentID != agentID || canonical.TrajectoryID != trajectoryID || canonical.OwnerID != ownerID || canonical.ComputerID != computerID || canonical.Direction != types.LifecyclePacketDirectionControl || canonical.Disposition != types.UpdatePending || canonical.DeliveredAt != nil || strings.TrimSpace(canonical.DeliveredToRunID) != "" {
+			return nil, nil, "", store.ErrLifecycleInvalidTransition
+		}
+		seenUpdates[updateID] = true
+		work, err := rt.store.GetLifecycleWorkItem(ctx, ownerID, computerID, workID)
+		if err != nil {
+			return nil, nil, "", fmt.Errorf("hydrate exact lifecycle work %s: %w", workID, err)
+		}
+		if work.WorkItemID != workID || work.OwnerID != ownerID || work.ComputerID != computerID || work.TrajectoryID != trajectoryID || work.AssignedAgentID != agentID || work.Status != types.WorkItemOpen || work.LifecycleVersion <= 0 {
+			return nil, nil, "", store.ErrLifecycleInvalidTransition
+		}
+		workByID[workID] = work
+		if !seenWork[workID] {
+			seenWork[workID] = true
+			workItems = append(workItems, work)
+		}
+	}
+	if trajectoryID == "" || len(workItems) == 0 {
+		return nil, nil, "", store.ErrLifecycleInvalidTransition
+	}
+	return workItems, workByID, trajectoryID, nil
+}
+
+func lifecycleControlActivationPrompt(workItems []types.WorkItemRecord) string {
+	prompt := "Continue assigned actor work. Process the coagent update packets in context."
+	if workPrompt := buildAssignedWorkItemPrompt(workItems); workPrompt != "" {
+		prompt += "\n\n" + workPrompt
+	}
+	return prompt
+}
+
+func lifecycleActivationVersionsForStore(versions []lifecycleActivationVersion) []types.LifecycleControlActivationVersion {
+	out := make([]types.LifecycleControlActivationVersion, 0, len(versions))
+	for _, version := range versions {
+		out = append(out, types.LifecycleControlActivationVersion{UpdateID: version.UpdateID, TargetWorkItemID: version.TargetWorkItemID, ControlLifecycleVersion: version.ControlLifecycleVersion, WorkLifecycleVersion: version.WorkLifecycleVersion})
+	}
+	return out
+}
+
+func stampLifecycleActivationMetadata(metadata map[string]any, logicalKey, failedKey, buildCommit string, versions []lifecycleActivationVersion) map[string]any {
+	metadata = cloneMetadata(metadata)
+	metadata[lifecycleLogicalActivationKeyMetadata] = logicalKey
+	metadata[lifecycleFailedAttemptKeyMetadata] = failedKey
+	metadata[lifecycleActivationBuildMetadata] = buildCommit
+	metadata[lifecycleActivationVersionsMetadata] = versions
+	return metadata
+}
+
+func lifecycleActivationVersionsForRun(rec *types.RunRecord) ([]types.LifecycleControlActivationVersion, error) {
+	if rec == nil || rec.Metadata == nil {
+		return nil, store.ErrLifecycleInvalidTransition
+	}
+	raw, ok := rec.Metadata[lifecycleActivationVersionsMetadata]
+	if !ok {
+		return nil, store.ErrLifecycleInvalidTransition
+	}
+	body, err := json.Marshal(raw)
+	if err != nil {
+		return nil, err
+	}
+	var versions []types.LifecycleControlActivationVersion
+	if err := json.Unmarshal(body, &versions); err != nil || len(versions) == 0 {
+		return nil, store.ErrLifecycleInvalidTransition
+	}
+	return versions, nil
+}
+
+func sameOrderedStringValues(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if strings.TrimSpace(left[i]) != strings.TrimSpace(right[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func (rt *Runtime) lifecycleRunHasCanonicalControlDelivery(ctx context.Context, rec *types.RunRecord) (bool, error) {
+	if rt == nil || rt.store == nil || rec == nil || strings.TrimSpace(rec.TrajectoryID) == "" {
+		return false, store.ErrLifecycleInvalidTransition
+	}
+	controls, err := rt.store.ListLifecycleControlsDeliveredToRun(ctx, rec.OwnerID, rec.SandboxID, rec.TrajectoryID, rec.AgentID, rec.RunID, 1)
+	if errors.Is(err, store.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return len(controls) > 0, nil
+}
+
+func (rt *Runtime) bindAppendedLifecycleControlsToResident(ctx context.Context, rec *types.RunRecord, updates []types.CoagentSourcePacket) (*types.RunRecord, error) {
+	result, bindErr := rt.bindLifecycleControlsToRun(ctx, rec, updates)
+	if bindErr == nil {
+		rt.activate(rec)
+		return rec, nil
+	}
+	if strings.TrimSpace(result.Receipt.CommandID) != "" {
+		bound, reloadErr := rt.store.GetLifecycleRun(context.WithoutCancel(ctx), rec.OwnerID, rec.SandboxID, rec.RunID)
+		if reloadErr == nil {
+			*rec = bound
+			rt.activate(rec)
+			return rec, nil
+		}
+		return rec, fmt.Errorf("appended lifecycle control bind committed for run %s but canonical reload failed: %w", rec.RunID, bindErr)
+	}
+	// Later-control append failures are never deterministic activation
+	// terminalization authority. Leave the control pending and the exact
+	// resident active so actor delivery remains unacknowledged and retryable.
+	return rec, bindErr
+}
+
+func (rt *Runtime) bindOrReplayLifecycleControlActivation(ctx context.Context, rec *types.RunRecord, updates []types.CoagentSourcePacket) (*types.RunRecord, error) {
+	result, bindErr := rt.bindLifecycleControlsToRun(ctx, rec, updates)
+	if bindErr == nil {
+		rt.activate(rec)
+		return rec, nil
+	}
+	if strings.TrimSpace(result.Receipt.CommandID) != "" {
+		// The atomic bind is authoritative even though its reload failed. Never
+		// write the stale pre-bind record. Best-effort canonical reload may allow
+		// immediate dispatch; otherwise actor retry will reload the bound run.
+		bound, reloadErr := rt.store.GetLifecycleRun(context.WithoutCancel(ctx), rec.OwnerID, rec.SandboxID, rec.RunID)
+		if reloadErr == nil {
+			*rec = bound
+			rt.activate(rec)
+			return rec, nil
+		}
+		return rec, fmt.Errorf("lifecycle control bind committed for run %s but canonical reload failed: %w", rec.RunID, bindErr)
+	}
+	return rec, rt.terminalizeFingerprintedLifecycleControlRun(ctx, rec, updates, bindErr)
+}
+
 func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	agentID = strings.TrimSpace(agentID)
@@ -664,12 +1004,22 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	if isTextureAgentID(agentID) {
 		return nil, nil
 	}
-	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
+	// Reconcile is a pre-provider activation transaction. Serialize it with
+	// boot work reconciliation so an actor wake and restart sweep cannot mint
+	// competing provisional runs for the same canonical control join.
+	rt.lifecycleWorkReconcileMu.Lock()
+	defer rt.lifecycleWorkReconcileMu.Unlock()
+	resident, residentFound, err := rt.activeRunByAgent(ctx, ownerID, agentID)
+	if err != nil {
 		return nil, fmt.Errorf("check resident coagent run: %w", err)
-	} else if found {
+	}
+	// This preserves the pre-cutover/legacy resident branch exactly. Only an
+	// explicitly lifecycle-control activation enters fingerprint reconciliation.
+	if residentFound && metadataStringValue(resident.Metadata, "request_source") != "lifecycle_texture_control" {
 		return &resident, nil
 	}
-	agent, err := rt.store.GetAgentByScope(ctx, ownerID, rt.TextureSandboxID(), agentID)
+	computerID := strings.TrimSpace(rt.TextureSandboxID())
+	agent, err := rt.store.GetAgentByScope(ctx, ownerID, computerID, agentID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, nil
@@ -677,20 +1027,65 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		return nil, fmt.Errorf("lookup coagent: %w", err)
 	}
 	profile := agentprofile.Canonical(firstNonEmpty(agent.Profile, agent.Role))
-	lifecycleControls := false
+	lifecycleAgent := profile == agentprofile.Researcher && agent.LifecycleVersion > 0
+	if residentFound && !lifecycleAgent {
+		return &resident, nil
+	}
+
 	var updates []types.CoagentSourcePacket
-	if profile == agentprofile.Researcher && agent.LifecycleVersion > 0 {
-		updates, err = rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, rt.TextureSandboxID(), agentID)
+	lifecycleControls := false
+	if lifecycleAgent {
+		updates, err = rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
 		if err == nil {
-			updates, err = rt.validateTargetBoundLifecycleControls(ctx, ownerID, rt.TextureSandboxID(), agentID, updates, false)
+			updates, err = rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, updates, false)
 		}
+		if err != nil {
+			return nil, err
+		}
+		if residentFound && len(updates) > 0 && metadataStringValue(resident.Metadata, lifecycleLogicalActivationKeyMetadata) != "" {
+			canonicallyBound, deliveryErr := rt.lifecycleRunHasCanonicalControlDelivery(ctx, &resident)
+			if deliveryErr != nil {
+				return &resident, fmt.Errorf("verify resident lifecycle control delivery before append: %w", deliveryErr)
+			}
+			if canonicallyBound {
+				appendUpdates := selectLifecycleControlActivation(updates, lifecycleControlTrajectoryForRun(&resident), lifecycleControlWorkIDsForRun(&resident))
+				if len(appendUpdates) > 0 {
+					return rt.bindAppendedLifecycleControlsToResident(ctx, &resident, appendUpdates)
+				}
+			}
+		}
+		// One activation owns one exact trajectory join. Other validated pending
+		// trajectories remain pending for a later wake; this is the established
+		// activation selection behavior, not cross-trajectory hydration.
 		updates = selectLifecycleControlActivation(updates, "", nil)
 		lifecycleControls = len(updates) > 0
-	}
-	if err != nil {
-		return nil, err
+		if lifecycleControls && !residentFound {
+			parked, parkedErr := rt.parkedLifecycleControlCandidate(ctx, ownerID, computerID, agentID, updates)
+			if parkedErr != nil {
+				return nil, parkedErr
+			}
+			if parked != nil {
+				// A parked actor-memory run is a valid recovery candidate but actor
+				// memory is the selection authority. Boot composition must call the
+				// exact-run entrypoint; generic reconcile must never guess or mint B.
+				return nil, fmt.Errorf("parked lifecycle run %s requires exact actor-memory recovery: %w", parked.RunID, store.ErrLifecycleInvalidTransition)
+			}
+		}
+		if !lifecycleControls && residentFound && metadataStringValue(resident.Metadata, lifecycleLogicalActivationKeyMetadata) != "" {
+			// Recover a committed bind only from canonical exact-run delivery,
+			// never from a model-shaped or stale metadata slice.
+			delivered, deliveryErr := rt.lifecycleRunHasCanonicalControlDelivery(ctx, &resident)
+			if deliveryErr != nil {
+				return nil, fmt.Errorf("verify canonical lifecycle control delivery: %w", deliveryErr)
+			}
+			if delivered {
+				rt.activate(&resident)
+				return &resident, nil
+			}
+		}
 	}
 	if !lifecycleControls {
+		// Deliberately unchanged legacy mailbox/projection path.
 		updates, err = rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
 		if err != nil {
 			return nil, fmt.Errorf("list coagent pending updates: %w", err)
@@ -711,15 +1106,11 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 			updateIDs = append(updateIDs, id)
 		}
 	}
-	requestSource := "update_coagent"
-	if lifecycleControls {
-		requestSource = "lifecycle_texture_control"
-	}
 	metadata := map[string]any{
 		runMetadataAgentProfile: profile,
 		runMetadataAgentRole:    role,
 		runMetadataAgentID:      agentID,
-		"request_source":        requestSource,
+		"request_source":        "update_coagent",
 	}
 	if !lifecycleControls {
 		metadata["worker_update_ids"] = updateIDs
@@ -730,26 +1121,84 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	if first.TrajectoryID != "" {
 		metadata[runMetadataTrajectoryID] = first.TrajectoryID
 	}
-	workItems, err := rt.assignedOpenWorkItemsForAgentUpdateBacklog(ctx, ownerID, agentID, updates)
-	if err != nil {
-		return nil, err
+
+	var workItems []types.WorkItemRecord
+	var activationVersions []lifecycleActivationVersion
+	if lifecycleControls {
+		var workByID map[string]types.WorkItemRecord
+		var trajectoryID string
+		workItems, workByID, trajectoryID, err = rt.hydrateLifecycleControlWorkItems(ctx, ownerID, computerID, agentID, updates)
+		if err != nil {
+			return nil, fmt.Errorf("hydrate lifecycle Researcher controls: %w", err)
+		}
+		logicalKey, failedKey, versions, keyErr := lifecycleActivationKeys(ownerID, computerID, trajectoryID, agentID, buildinfo.Commit, updates, workByID)
+		activationVersions = versions
+		if keyErr != nil {
+			return nil, fmt.Errorf("fingerprint lifecycle Researcher controls: %w", keyErr)
+		}
+		metadata["request_source"] = "lifecycle_texture_control"
+		metadata[runMetadataTrajectoryID] = trajectoryID
+		metadata = stampLifecycleActivationMetadata(metadata, logicalKey, failedKey, strings.TrimSpace(buildinfo.Commit), versions)
+		if workItemIDs := workItemIDsForMetadata(workItems); len(workItemIDs) > 0 {
+			metadata["work_item_ids"] = workItemIDs
+		}
+
+		replay, replayErr := rt.store.ResolveLifecycleControlActivation(ctx, ownerID, computerID, trajectoryID, agentID, logicalKey, failedKey, lifecycleActivationVersionsForStore(versions))
+		if replayErr != nil {
+			return nil, fmt.Errorf("resolve lifecycle control activation replay: %w", replayErr)
+		}
+		if replay.Active != nil {
+			active := replay.Active
+			if active.OwnerID != ownerID || active.SandboxID != computerID || active.AgentID != agentID || active.TrajectoryID != trajectoryID || !active.State.Active() {
+				return nil, store.ErrLifecycleInvalidTransition
+			}
+			// Refresh only the local desired projection. BindLifecycleControlDelivery
+			// validates the exact control/work versions and merges these narrowly
+			// owned fields into the canonical run in the same conditional batch.
+			active.Prompt = lifecycleControlActivationPrompt(workItems)
+			active.Metadata = stampLifecycleActivationMetadata(active.Metadata, logicalKey, failedKey, strings.TrimSpace(buildinfo.Commit), versions)
+			active.Metadata["request_source"] = "lifecycle_texture_control"
+			active.Metadata[runMetadataTrajectoryID] = trajectoryID
+			active.Metadata["work_item_ids"] = workItemIDsForMetadata(workItems)
+			return rt.bindOrReplayLifecycleControlActivation(ctx, active, updates)
+		}
+		if replay.DurablyFailed != nil {
+			return replay.DurablyFailed, fmt.Errorf("%w: run=%s failed_attempt=%s", ErrDurablyTerminalLifecycleControlActivation, replay.DurablyFailed.RunID, failedKey)
+		}
+		if residentFound {
+			// Another active run owns this lifecycle agent but not this exact
+			// logical join. Never replace or mint around ambiguous authority.
+			return &resident, store.ErrLifecycleInvalidTransition
+		}
+	} else {
+		workItems, err = rt.assignedOpenWorkItemsForAgentUpdateBacklog(ctx, ownerID, agentID, updates)
+		if err != nil {
+			return nil, err
+		}
+		if workItemIDs := workItemIDsForMetadata(workItems); len(workItemIDs) > 0 {
+			metadata["work_item_ids"] = workItemIDs
+		}
 	}
-	if workItemIDs := workItemIDsForMetadata(workItems); len(workItemIDs) > 0 {
-		metadata["work_item_ids"] = workItemIDs
-	}
-	prompt := "Continue assigned actor work. Process the coagent update packets in context."
-	if workPrompt := buildAssignedWorkItemPrompt(workItems); workPrompt != "" {
-		prompt = prompt + "\n\n" + workPrompt
-	}
+
+	prompt := lifecycleControlActivationPrompt(workItems)
 	rec, err := rt.createRunWithMetadata(ctx, prompt, ownerID, metadata)
 	if err != nil {
+		if lifecycleControls && (errors.Is(err, store.ErrLifecycleInvalidTransition) || errors.Is(err, store.ErrConcurrentStateChange)) {
+			logicalKey := metadataStringValue(metadata, lifecycleLogicalActivationKeyMetadata)
+			failedKey := metadataStringValue(metadata, lifecycleFailedAttemptKeyMetadata)
+			trajectoryID := metadataStringValue(metadata, runMetadataTrajectoryID)
+			replay, replayErr := rt.store.ResolveLifecycleControlActivation(ctx, ownerID, computerID, trajectoryID, agentID, logicalKey, failedKey, lifecycleActivationVersionsForStore(activationVersions))
+			if replayErr == nil && replay.Active != nil {
+				return rt.bindOrReplayLifecycleControlActivation(ctx, replay.Active, updates)
+			}
+			if replayErr == nil && replay.DurablyFailed != nil {
+				return replay.DurablyFailed, fmt.Errorf("%w: run=%s failed_attempt=%s", ErrDurablyTerminalLifecycleControlActivation, replay.DurablyFailed.RunID, failedKey)
+			}
+		}
 		return nil, err
 	}
 	if lifecycleControls {
-		if _, err := rt.bindLifecycleControlsToRun(ctx, rec, updates); err != nil {
-			rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
-			return nil, err
-		}
+		return rt.bindOrReplayLifecycleControlActivation(ctx, rec, updates)
 	}
 	rt.activate(rec)
 	return rec, nil
@@ -1262,6 +1711,189 @@ func shouldPrependInitialCoagentUpdates(rec *types.RunRecord) bool {
 	return len(coagentUpdateIDsForRun(rec)) > 0
 }
 
+// parkedLifecycleControlCandidate resolves restart recovery only inside the
+// exact pending trajectory/work join. Passivated/blocked recency is never
+// authority: exactly one fingerprinted run with canonical prior delivery must
+// exist, otherwise recovery either has no candidate or fails closed.
+func (rt *Runtime) parkedLifecycleControlCandidate(ctx context.Context, ownerID, computerID, agentID string, updates []types.CoagentSourcePacket) (*types.RunRecord, error) {
+	if len(updates) == 0 {
+		return nil, nil
+	}
+	trajectoryID := strings.TrimSpace(updates[0].TrajectoryID)
+	if trajectoryID == "" {
+		return nil, store.ErrLifecycleInvalidTransition
+	}
+	targetWork := make(map[string]struct{}, len(updates))
+	for _, update := range updates {
+		if strings.TrimSpace(update.TrajectoryID) != trajectoryID || strings.TrimSpace(update.TargetAgentID) != agentID {
+			return nil, store.ErrLifecycleInvalidTransition
+		}
+		workID := strings.TrimSpace(update.TargetWorkItemID)
+		if workID == "" {
+			return nil, store.ErrLifecycleInvalidTransition
+		}
+		targetWork[workID] = struct{}{}
+	}
+	runs, err := rt.store.ListLifecycleRunsByTrajectory(ctx, ownerID, computerID, trajectoryID, 0)
+	if err != nil {
+		return nil, err
+	}
+	var candidate *types.RunRecord
+	for index := range runs {
+		run := &runs[index]
+		if strings.TrimSpace(run.AgentID) != agentID || (run.State != types.RunPassivated && run.State != types.RunBlocked) ||
+			agentprofile.Canonical(run.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(run.AgentRole) != agentprofile.Researcher ||
+			metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" ||
+			metadataStringValue(run.Metadata, lifecycleLogicalActivationKeyMetadata) == "" || metadataStringValue(run.Metadata, lifecycleFailedAttemptKeyMetadata) == "" {
+			continue
+		}
+		runWork := make(map[string]struct{})
+		for workID := range lifecycleControlWorkIDsForRun(run) {
+			runWork[strings.TrimSpace(workID)] = struct{}{}
+		}
+		matches := true
+		for workID := range targetWork {
+			if _, ok := runWork[workID]; !ok {
+				matches = false
+				break
+			}
+		}
+		if !matches {
+			continue
+		}
+		delivered, deliveryErr := rt.lifecycleRunHasCanonicalControlDelivery(ctx, run)
+		if deliveryErr != nil {
+			return nil, fmt.Errorf("verify boot parked lifecycle candidate %s: %w", run.RunID, deliveryErr)
+		}
+		if !delivered {
+			continue
+		}
+		if candidate != nil {
+			return nil, fmt.Errorf("ambiguous canonical parked lifecycle candidates %s and %s: %w", candidate.RunID, run.RunID, store.ErrLifecycleInvalidTransition)
+		}
+		copyRun := *run
+		candidate = &copyRun
+	}
+	return candidate, nil
+}
+
+func (rt *Runtime) enqueueCanonicalLifecycleControlOccurrences(ctx context.Context, rec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || rec == nil || rt.dispatchActor == nil {
+		return fmt.Errorf("runtime lifecycle occurrence dispatch unavailable")
+	}
+	trajectoryID := lifecycleControlTrajectoryForRun(rec)
+	var after int64
+	for {
+		page, err := rt.store.ListLifecycleControlsDeliveredToRunPage(ctx, rec.OwnerID, rec.SandboxID, trajectoryID, rec.AgentID, rec.RunID, after, 100)
+		if err != nil {
+			return fmt.Errorf("list canonical lifecycle occurrences for run %s: %w", rec.RunID, err)
+		}
+		for _, update := range page.Packets {
+			content := lifecycleControlActorOccurrenceContent(update)
+			if content == "" {
+				return store.ErrLifecycleInvalidTransition
+			}
+			if err := rt.dispatchActor(context.WithoutCancel(ctx), rec.OwnerID, rec.SandboxID, rec.AgentID, "coagent_result", content, trajectoryID, update.AgentID); err != nil {
+				return fmt.Errorf("enqueue canonical lifecycle occurrence %s for run %s: %w", update.UpdateID, rec.RunID, err)
+			}
+		}
+		if !page.HasMore {
+			return nil
+		}
+		if page.NextCursor <= after {
+			return fmt.Errorf("non-advancing lifecycle occurrence cursor for run %s: %w", rec.RunID, store.ErrLifecycleInvalidTransition)
+		}
+		after = page.NextCursor
+	}
+}
+
+// ReconcileParkedLifecycleCoagentWake reactivates one exact actor-memory
+// Researcher run and appends any pending controls before the handler may
+// execute or acknowledge the wake. The actor-supplied run ID is required;
+// broad passivated-run discovery is not request-path authority.
+func (rt *Runtime) ReconcileParkedLifecycleCoagentWake(ctx context.Context, ownerID, agentID, runID string) (*types.RunRecord, error) {
+	if rt == nil || rt.store == nil {
+		return nil, fmt.Errorf("runtime store unavailable")
+	}
+	rt.lifecycleWorkReconcileMu.Lock()
+	defer rt.lifecycleWorkReconcileMu.Unlock()
+	return rt.reconcileParkedLifecycleCoagentWakeLocked(ctx, ownerID, agentID, runID)
+}
+
+func (rt *Runtime) reconcileParkedLifecycleCoagentWakeLocked(ctx context.Context, ownerID, agentID, runID string) (*types.RunRecord, error) {
+	ownerID, agentID, runID = strings.TrimSpace(ownerID), strings.TrimSpace(agentID), strings.TrimSpace(runID)
+	computerID := strings.TrimSpace(rt.TextureSandboxID())
+	if ownerID == "" || computerID == "" || agentID == "" || runID == "" {
+		return nil, store.ErrLifecycleInvalidTransition
+	}
+	agent, err := rt.store.GetAgentByScope(ctx, ownerID, computerID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agentprofile.Canonical(agent.Profile) != agentprofile.Researcher || agentprofile.Canonical(agent.Role) != agentprofile.Researcher || agent.LifecycleVersion <= 0 {
+		return nil, store.ErrLifecycleInvalidTransition
+	}
+	rec, err := rt.store.GetLifecycleRun(ctx, ownerID, computerID, runID)
+	if err != nil {
+		return nil, err
+	}
+	if rec.OwnerID != ownerID || rec.SandboxID != computerID || rec.AgentID != agentID || agentprofile.Canonical(rec.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(rec.AgentRole) != agentprofile.Researcher ||
+		(rec.State != types.RunPassivated && !rec.State.Active()) || metadataStringValue(rec.Metadata, "request_source") != "lifecycle_texture_control" ||
+		metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) == "" || metadataStringValue(rec.Metadata, lifecycleFailedAttemptKeyMetadata) == "" {
+		return nil, store.ErrLifecycleInvalidTransition
+	}
+	if activeRunID := strings.TrimSpace(agent.ActiveRunID); activeRunID != "" && activeRunID != runID {
+		return nil, store.ErrLifecycleInvalidTransition
+	}
+	canonicallyBound, err := rt.lifecycleRunHasCanonicalControlDelivery(ctx, &rec)
+	if err != nil {
+		return nil, fmt.Errorf("verify parked lifecycle control delivery: %w", err)
+	}
+	if !canonicallyBound {
+		return nil, store.ErrLifecycleInvalidTransition
+	}
+	updates, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
+	if err == nil {
+		updates, err = rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, updates, false)
+	}
+	if err != nil {
+		return nil, err
+	}
+	validatedPendingCount := len(updates)
+	updates = selectLifecycleControlActivation(updates, lifecycleControlTrajectoryForRun(&rec), lifecycleControlWorkIDsForRun(&rec))
+	if validatedPendingCount > 0 && len(updates) == 0 {
+		return nil, fmt.Errorf("pending lifecycle controls do not target exact parked run trajectory/work: %w", store.ErrLifecycleInvalidTransition)
+	}
+	if rec.State != types.RunPending && rec.State != types.RunRunning {
+		// Passivated and blocked lifecycle projections do not own Agent.ActiveRunID.
+		// Narrowly reactivate the exact actor-memory run before append.
+		rec.Metadata = cloneMetadata(rec.Metadata)
+		rec.State, rec.Error, rec.Result, rec.FinishedAt = types.RunPending, "", "", nil
+		rec.UpdatedAt = time.Now().UTC()
+		if err := rt.store.UpdateRun(ctx, rec); err != nil {
+			return nil, fmt.Errorf("reactivate exact parked lifecycle run %s: %w", runID, err)
+		}
+	}
+	if len(updates) > 0 {
+		bound, bindErr := rt.bindAppendedLifecycleControlsToResident(ctx, &rec, updates)
+		if bindErr != nil {
+			return bound, bindErr
+		}
+		if err := rt.enqueueCanonicalLifecycleControlOccurrences(ctx, bound); err != nil {
+			return bound, err
+		}
+		return bound, nil
+	}
+	// A retry after append commit but before actor acknowledgement observes no
+	// pending controls. Re-enqueue every canonical occurrence: the original A
+	// and any already durable B IDs deduplicate while an unpersisted B is created.
+	rt.activate(&rec)
+	if err := rt.enqueueCanonicalLifecycleControlOccurrences(ctx, &rec); err != nil {
+		return &rec, err
+	}
+	return &rec, nil
+}
+
 // ReconcileCoagentWake is the actor-mode entry point for creating a new run
 // when a coagent update arrives for an agent with no parked run. It is called
 // by the actor handler (handleCoagentResult) when the actor's memory snapshot
@@ -1278,6 +1910,34 @@ func (rt *Runtime) ReconcileCoagentWake(ctx context.Context, ownerID, agentID st
 		return rt.reconcilePersistentSuperActor(ctx, ownerID, agentID)
 	}
 	return rt.reconcileUpdatedCoagentActor(ctx, ownerID, agentID)
+}
+
+// LifecycleControlActorOccurrenceContent returns the deterministic actor-log
+// occurrence identity for one canonical lifecycle packet. Adapter boot recovery
+// uses the same authority when converging already durable occurrences.
+func LifecycleControlActorOccurrenceContent(update types.CoagentSourcePacket) string {
+	return lifecycleControlActorOccurrenceContent(update)
+}
+
+func lifecycleControlActorOccurrenceContent(update types.CoagentSourcePacket) string {
+	updateID := strings.TrimSpace(update.UpdateID)
+	if updateID == "" {
+		return ""
+	}
+
+	// Length prefixes make authored update identifiers unambiguous even when
+	// either one contains the delimiter used by the legacy occurrence content.
+	identity := make([]byte, 0, len(updateID)+len(update.ProducerUpdateID)+64)
+	for _, field := range []string{
+		"choir:lifecycle-control-actor-occurrence:v2",
+		updateID,
+		strings.TrimSpace(update.ProducerUpdateID),
+	} {
+		identity = binary.AppendUvarint(identity, uint64(len(field)))
+		identity = append(identity, field...)
+	}
+	digest := sha256.Sum256(identity)
+	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
 func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentSourcePacket) {
@@ -1315,7 +1975,7 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 	if rt.dispatchActor == nil {
 		panic("runtime: wakeUpdatedCoagent called without dispatchActor set — actor runtime is required")
 	}
-	if err := rt.dispatchActor(context.Background(), update.OwnerID, firstNonEmpty(update.ComputerID, rt.TextureSandboxID()), target, "coagent_result", update.UpdateID, update.TrajectoryID, update.AgentID); err != nil {
+	if err := rt.dispatchActor(context.Background(), update.OwnerID, firstNonEmpty(update.ComputerID, rt.TextureSandboxID()), target, "coagent_result", lifecycleControlActorOccurrenceContent(update), update.TrajectoryID, update.AgentID); err != nil {
 		log.Printf("runtime: actor wake coagent for update %s: %v", update.UpdateID, err)
 	}
 }

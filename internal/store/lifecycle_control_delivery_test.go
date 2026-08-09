@@ -20,7 +20,11 @@ func bindControlRequestForTest(t *testing.T, s *Store, start types.StartLifecycl
 	}
 	items := make([]types.BindLifecycleControlDeliveryItem, 0, len(controls))
 	for _, control := range controls {
-		items = append(items, types.BindLifecycleControlDeliveryItem{UpdateID: control.UpdateID, ProducerAgentID: control.AgentID, ProducerUpdateID: control.ProducerUpdateID, TargetWorkItemID: control.TargetWorkItemID})
+		work, err := s.GetLifecycleWorkItem(context.Background(), start.OwnerID, start.ComputerID, control.TargetWorkItemID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		items = append(items, types.BindLifecycleControlDeliveryItem{UpdateID: control.UpdateID, ProducerAgentID: control.AgentID, ProducerUpdateID: control.ProducerUpdateID, TargetWorkItemID: control.TargetWorkItemID, ExpectedControlLifecycleVersion: control.LifecycleVersion, ExpectedWorkLifecycleVersion: work.LifecycleVersion})
 	}
 	req := types.BindLifecycleControlDeliveryRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "bind-delivery:" + run.RunID, TrajectoryID: start.TrajectoryID, TargetAgentID: run.AgentID, TargetRunID: run.RunID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, Controls: items}
 	req.CommandDigest, err = ComputeBindLifecycleControlDeliveryDigest(req)
@@ -72,6 +76,67 @@ func TestBindLifecycleControlDeliveryResearcherAtomicReplayAndPendingExclusion(t
 	changed.CommandDigest, _ = ComputeBindLifecycleControlDeliveryDigest(changed)
 	if _, err := s.BindLifecycleControlDelivery(context.Background(), changed); !errors.Is(err, ErrLifecycleCommandConflict) {
 		t.Fatalf("changed delivery replay err=%v", err)
+	}
+}
+
+func TestBindLifecycleControlDeliveryVersionsAndActivationRefreshFateShare(t *testing.T) {
+	s, start, caller, researcherWork := setupLifecycleTextureTargetFixture(t)
+	turnReq := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
+	turnReq.CommandID = "turn-versioned-refresh"
+	turnReq.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-versioned-refresh", researcherWork.AssignedAgentID, researcherWork.WorkItemID)}
+	setTextureTurnDigest(t, &turnReq, TextureSourceGraphWriteSet{})
+	turn, err := s.ApplyTextureTurn(context.Background(), turnReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := s.GetLifecycleRun(context.Background(), start.OwnerID, start.ComputerID, "run-researcher-target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := bindControlRequestForTest(t, s, start, run, turn.Controls)
+	oldWork, err := s.GetLifecycleWorkItem(context.Background(), start.OwnerID, start.ComputerID, researcherWork.WorkItemID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale.ActivationRefresh = &types.LifecycleControlActivationRefresh{Prompt: "old objective prompt", LogicalActivationKey: "sha256:logical", FailedAttemptKey: "sha256:attempt-old", BuildCommit: "build-a", Versions: []types.LifecycleControlActivationVersion{{UpdateID: turn.Controls[0].UpdateID, TargetWorkItemID: oldWork.WorkItemID, ControlLifecycleVersion: turn.Controls[0].LifecycleVersion, WorkLifecycleVersion: oldWork.LifecycleVersion}}, WorkItemIDs: []string{oldWork.WorkItemID}}
+	stale.CommandDigest, _ = ComputeBindLifecycleControlDeliveryDigest(stale)
+
+	amended := oldWork
+	amended.Objective = "new canonical objective"
+	amend := types.AmendLifecycleWorkRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "amend-before-bind", TrajectoryID: start.TrajectoryID, WorkItemID: oldWork.WorkItemID, ExpectedLifecycleVersion: oldWork.LifecycleVersion, WorkItem: amended}
+	amend.CommandDigest, _ = ComputeAmendLifecycleWorkDigest(amend)
+	if _, err := s.AmendLifecycleWork(context.Background(), amend); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindLifecycleControlDelivery(context.Background(), stale); !errors.Is(err, ErrConcurrentStateChange) {
+		t.Fatalf("stale bind err=%v", err)
+	}
+	pending, err := s.GetLifecycleUpdate(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID, run.AgentID, turn.Controls[0].AgentID, turn.Controls[0].ProducerUpdateID)
+	if err != nil || pending.DeliveredAt != nil || pending.DeliveredToRunID != "" {
+		t.Fatalf("stale bind delivered=%+v err=%v", pending, err)
+	}
+	unchanged, err := s.GetLifecycleRun(context.Background(), start.OwnerID, start.ComputerID, run.RunID)
+	if err != nil || unchanged.Prompt == "old objective prompt" {
+		t.Fatalf("stale refresh wrote run=%+v err=%v", unchanged, err)
+	}
+
+	freshWork, err := s.GetLifecycleWorkItem(context.Background(), start.OwnerID, start.ComputerID, oldWork.WorkItemID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	freshControl, err := s.GetLifecycleUpdate(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID, run.AgentID, turn.Controls[0].AgentID, turn.Controls[0].ProducerUpdateID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := bindControlRequestForTest(t, s, start, run, []types.CoagentSourcePacket{freshControl})
+	fresh.ActivationRefresh = &types.LifecycleControlActivationRefresh{Prompt: "new canonical objective prompt", LogicalActivationKey: "sha256:logical", FailedAttemptKey: "sha256:attempt-new", BuildCommit: "build-a", Versions: []types.LifecycleControlActivationVersion{{UpdateID: freshControl.UpdateID, TargetWorkItemID: freshWork.WorkItemID, ControlLifecycleVersion: freshControl.LifecycleVersion, WorkLifecycleVersion: freshWork.LifecycleVersion}}, WorkItemIDs: []string{freshWork.WorkItemID}}
+	fresh.CommandDigest, _ = ComputeBindLifecycleControlDeliveryDigest(fresh)
+	if _, err := s.BindLifecycleControlDelivery(context.Background(), fresh); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := s.GetLifecycleRun(context.Background(), start.OwnerID, start.ComputerID, run.RunID)
+	if err != nil || stored.Prompt != fresh.ActivationRefresh.Prompt || metadataStringValueStore(stored.Metadata, "lifecycle_failed_attempt_key") != fresh.ActivationRefresh.FailedAttemptKey {
+		t.Fatalf("fresh atomic refresh=%+v err=%v", stored, err)
 	}
 }
 
