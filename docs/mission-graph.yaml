@@ -281,8 +281,11 @@ nodes:
       attempt then exposed an atomic Researcher-control schema refusal and an
       effects-OFF prompt that incorrectly disables assignment capsules; no child
       or revision committed, and the live v0 trajectory is retained. This
-      problem receipt must land before repair. Key and root-only rollbacks remain
-      narrowly retained. Effects remain OFF; provider-dependent repeated progression, real capsule/late-result,
+      problem receipt 76eed5bf/CI 31285400390 landed. Read-only convergence
+      binds a red repair to one shared packet schema, retryable pre-commit
+      mutation, and the exact persistent-Super/assignment-capsule prompt
+      boundary; no source edit begins before this ceremony lands. Key and
+      root-only rollbacks remain narrowly retained. Effects remain OFF; provider-dependent repeated progression, real capsule/late-result,
       positive correction/source-open, checkpoint/no-effect and run acceptance,
       and terminal registry closure remain mandatory.
     sources:

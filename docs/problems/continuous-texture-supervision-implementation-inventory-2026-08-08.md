@@ -1173,3 +1173,81 @@ Problem delta: provider blocker remains repaired; newly discovered deployed
 control-schema refusal and effects-authority prompt conflict block full
 acceptance. Heresy delta: discovered a likely deployed authority-boundary
 contradiction; introduced none; repaired none. Effects remain OFF.
+
+### Structural convergence and repair ceremony for the control refusal
+
+Problem receipt `76eed5bf` and docs CI `31285400390` passed before diagnosis.
+Read-only source convergence identifies three joined defects rather than a
+provider or typed-store failure.
+
+First, every atomic Texture control advertises `packet` to the model as only an
+opaque JSON object, while runtime recursively strict-decodes the complete
+`coagent_source_packet.v1` and enforces kind/content/action/safety semantics.
+The canonical complete model-facing packet schema already exists inline in
+`newUpdateCoagentTool`; the atomic Texture tools do not reuse it. Exact rejected
+call bytes are unavailable through the public run projection, so we do not claim
+which guessed field failed. The later non-writable state narrows the stage:
+outer strict decode succeeded and semantic/pre-CAS apply failed.
+
+Second, that pre-commit error calls `FailAgentMutation`. The existing required
+write-tool loop is expressly designed to let a model correct and retry a failed
+write, but the next attempt then finds mutation state `failed` and refuses it as
+non-writable. The atomic store has not committed at this stage. Terminal
+no-write run handling already owns failure if the model exhausts retries, so
+poisoning mutation on an individual pre-commit tool error is premature.
+
+Third, all three active Texture prompt overlays state that effects-OFF makes
+execution/capsule verification unavailable and forbids Super/CoSuper requests.
+The already implemented replacement is narrower: atomic `open_persistent_super`
+creates the exact bound persistent-Super work/control; wake-after-commit starts
+that non-lifecycle Super; only Super receives assignment authority; the
+assignment runtime owns networkless disposable capsule intent/effect/inspection/
+acknowledgement; assigned CoSuper receives only its exact capsule-local registry.
+Protected host, self-development, event, checkpoint, materialization,
+acceptance, route, VM, SSH, and generic spawn effects remain unavailable. The
+prompt is still describing the superseded blanket boundary and prevents the
+implemented safe path from being exercised.
+
+Mutation class is **red**. Conjecture delta: if the atomic tools reuse one
+canonical explicit packet schema, pre-commit tool errors keep the mutation
+pending for the existing bounded retry loop, and prompt overlays distinguish
+assignment-capsule effects from forbidden host effects, then a real provider can
+commit one revision plus runtime-derived Researcher/Super controls atomically and
+later Super can own isolated capsules without enabling any protected effect.
+Protected surfaces are Texture tool schemas and canonical writes, lifecycle
+control/opening and mutation state, persistent-Super wake, capsule assignment
+runtime, prompt authority, Trace, cancellation, and no-effect/run acceptance.
+
+Binding repair:
+
+1. Extract the existing packet-payload JSON schema once at the lowest practical
+   shared source layer and reuse it for `update_coagent` plus atomic Texture
+   controls. Texture sees only payload fields; runtime-owned envelope/target/
+   direction/work/identity fields remain absent and strict runtime validation
+   remains authoritative. Do not add coercion, unknown-field tolerance, or a
+   second drifting schema.
+2. Remove only premature mutation failure for a pre-commit atomic apply/tool
+   error. Preserve pending state for same-run bounded correction; preserve
+   terminal no-write failure, CAS refusal, one-revision-per-turn, exact head,
+   replay, and fail-closed authority.
+3. Replace the blanket effects-OFF prompt statements with the exact boundary:
+   Texture may request its owner's persistent Super only through an atomic
+   `open_persistent_super` control carrying a valid execution request; Texture
+   never directly spawns CoSuper or uses generic execution tools; Super alone
+   owns assignment-runtime capsules; protected effects remain unavailable; no
+   execution claim is allowed before durable capsule evidence arrives.
+
+Admissible source evidence is a shared-schema equality/closed-shape contract;
+strict invalid-packet negatives; a same-run invalid-semantic-packet then corrected
+packet proving zero partial state followed by one atomic revision/Researcher
+open; a tool-loop invalid→valid retry integration; prompt golden tests; existing
+lifecycle/capsule authority, replay, race, cancellation, and negative matrices;
+full CI. Admissible completion evidence is a new exact deployed commit and real
+provider product trajectory. Rollback is a normal origin/main revert through CI
+and deploy to F/current predecessor, followed by public cancellation or safe
+recovery of affected trajectories. Effects stay OFF throughout.
+
+Heresy delta at ceremony: discovered an opaque-schema/early-failure/stale-prompt
+join that hid an implemented replacement; introduced none; repaired none until
+source and deployed proof both pass. No code edit begins before this ceremony is
+independently reviewed, committed, pushed, and green.

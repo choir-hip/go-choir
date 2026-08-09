@@ -27,11 +27,28 @@ unexecuted Researcher/Super/capsule behavior.
 | Source rollback | **DEPLOYED BOUNDED REHEARSAL + RECOVERY PASS / STRICT MIDPOINT OBSERVABILITY FAIL** | Canonical R `10d48659` made the exact 99 non-document paths cdaa-equivalent; CI/rolling/deploy `31267448310` passed and exact R ran at epoch 8248. R preserved run/lifecycle/selfdev/policy/inventory summaries, but its legacy response omitted six stored owner-instruction `request_id` fields, so the full v9 response digest differed and the identity-ambiguity gate fired. Canonical F `67a61358` immediately restored the exact pre-R whole tree; CI/rolling/deploy `31268477380` passed, exact F ran at epoch 8249, and all captured frozen comparator response/state digests equalled baseline. Exposure was 1,909 seconds; key revoked/post-401. Canonical deployed rollback/recovery is rehearsed; strict old-runtime forward-observability and complete checkpoint/capsule acceptance remain open. |
 | Registry terminal closure | OPEN | ACTIVE, mission graph, and authority manifest remain active/working; effects remain OFF |
 
+## Control-refusal convergence and red repair gate
+
+Problem receipt `76eed5bf`/CI `31285400390` landed before source diagnosis. The
+atomic tools expose packet only as opaque object while runtime strictly validates
+a richer canonical shape already advertised by `update_coagent`; pre-commit
+semantic failure prematurely marks the mutation failed despite bounded tool-loop
+retry; prompt overlays still forbid the already implemented atomic persistent-
+Super→assignment-capsule route while effects are OFF. Exact rejected call bytes
+are not public and are not inferred as fact.
+
+Repair is gated to one shared closed packet payload schema, retryable pending
+mutation before any atomic commit, and exact prompt boundary that permits only
+persistent-Super-owned networkless assignment capsules while every protected
+host/self-development/event/checkpoint/materialization/acceptance/route/VM/SSH
+and generic spawn effect remains unavailable. Source proof and new exact deployed
+acceptance are both mandatory; effects stay OFF.
+
 ## Finish acceptance actions
 
 | # | Required action | Source/contract state | Deployed state |
 | --- | --- | --- | --- |
-| 1 | Focused registry, authorization, reducer, atomic turn, projection, transclusion, replay, cancellation, capsule, API/CLI tests | **HISTORICAL PASS; DEPLOYED DIAGNOSIS REOPENED.** Joined full/focused/Race validation and selected CI passed; independent reviews found no critical/high defect before provider restoration. Fresh deployed run `2ce06146…` now reopens exact Researcher-control schema and effects-boundary source convergence. | Local/CI remains the admissible class after the deployed failure is reproduced to the exact substrate; no code repair has begun. |
+| 1 | Focused registry, authorization, reducer, atomic turn, projection, transclusion, replay, cancellation, capsule, API/CLI tests | **HISTORICAL PASS; RED REPAIR CEREMONY PENDING.** Joined full/focused/Race validation and selected CI passed; independent reviews found no critical/high defect before provider restoration. Fresh deployed run `2ce06146…` reopened the joined opaque-schema, pre-commit mutation-failure, and effects-boundary substrate; its scoped repair is documented but not yet implemented. | Local/CI remains the admissible class after the deployed failure is reproduced to the exact substrate; no code repair has begun. |
 | 2 | Reconstruct pending controls; replay identities and pre-cutover fixtures | **PASS locally.** Exact-run Super reconstruction, same-run Researcher append recovery, authenticated-memory replay, restarted observation, create/instruction replay, CLI cursor replay, and historical show/source contracts passed. | **PARTIAL PASS.** The deployment restart recovered exact initial work into run `5ee276b3…`; restart with pending Researcher/Super controls remains unexecuted because the first full restored-provider run's attempted Researcher control was schema-refused before commitment, leaving no pending child control to restart. |
 | 3 | Real Texture→Researcher/Super→Texture repeated loop with parallel isolated CoSupers | Runtime path exists and is source-reviewed; ChatGPT provider is proven usable. | **BLOCKED AT FIRST CONTROL.** Fresh exact-F run `2ce06146-9aa5-4cda-be17-d3b246479f8e` reports its attempted atomic Researcher-control packet was rejected by runtime schema and the actor became non-writable; no revision/child committed. Its prompt also treats all capsule execution as unavailable while effects are OFF, conflicting with the accepted disposable-capsule/no-host-effect boundary. |
 | 4 | Public API/CLI create, tell/correct, watch/resume, show, open-source | Local API/CLI contracts passed. | **PARTIAL PASS.** Public create, durable tells, trajectory show, model-policy rollback, and lifecycle cancel executed. Deployed CLI `read`, `history`, `revisions`, and exact `show` returned the retained document/v0; separate `watch --once --limit 2` processes resumed cursors `0→2→4→6→8→9`, then returned empty after 9. Cancelled `tell`/`correct` failed HTTP 409 and cross-document revision `show` was rejected. The restored marker probe proves a live Texture-authored v1. The fresh full document proved deployed CLI create plus exact durable cursor-1 watch, but its first child control was schema-refused; positive source-open and full correction/resume remain blocked on that runtime problem. |

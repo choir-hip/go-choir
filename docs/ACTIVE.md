@@ -46,9 +46,11 @@ installed only auth `cc744524…`, preserved env/policy/health, and real
 no error. Provider availability is repaired. The first full attempt then failed before
 any child: its atomic Researcher control was rejected by runtime schema, and the
 runtime prompt incorrectly treats assignment capsules as unavailable while
-effects are OFF. The live v0 trajectory is retained; this problem receipt must
-land before diagnosis/repair. The key and root-only rollbacks remain narrowly
-retained. Effects remain OFF. Provider-dependent repeated
+effects are OFF. The live v0 trajectory is retained. Problem receipt `76eed5bf`/CI
+`31285400390` landed; read-only convergence binds a red repair to one shared
+packet schema, retryable pre-commit mutation, and the exact persistent-Super/
+assignment-capsule prompt boundary. No source edit begins before that ceremony
+lands. Key and root-only rollbacks remain narrowly retained. Effects remain OFF. Provider-dependent repeated
 Researcher/Super/CoSuper progression, real capsule/late-result behavior, positive
 correction/source opening, complete checkpoint/no-effect and run acceptance,
 and terminal registry closure remain mandatory.

@@ -284,6 +284,17 @@ are OFF, contradicting the accepted guest-local capsule/no-host-effect boundary.
 The trajectory remains live at lifecycle/reducer/watermark 1 with v0 and open
 work. This problem receipt precedes any retry or fix.
 
+### Control-refusal structural convergence
+
+Problem receipt `76eed5bf`/CI `31285400390` preceded read-only source diagnosis.
+Atomic controls advertise an opaque packet where runtime is strict; pre-commit
+semantic error prematurely fails mutation despite bounded retry; and prompt
+overlays forbid the already implemented atomic persistent-Super→assignment-
+capsule path. Exact rejected args are not publicly projected. The red repair is
+bound to shared explicit schema, pending mutation before commit, and precise
+capsule-vs-host effects prompt authority, with strict validators and all
+protected effects retained. No source mutation precedes ceremony landing.
+
 ### Deployed public CLI partial acceptance
 
 A fresh scoped key exercised the checked-in `choir` CLI against retained
