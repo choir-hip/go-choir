@@ -1365,3 +1365,80 @@ one carried `lifecycle_control_bind_failed`; therefore at least 200 failed
 activation attempts were retained before cancellation won. This makes the
 restart loop a severe unbounded retry symptom rather than three isolated
 failures. No execution/provider call or capsule effect occurred.
+
+### Exact-deployed Researcher progress exposed Texture mailbox starvation
+
+Runtime repair `b5d907a34d0250d966e026d13f64f6d575a4423d` passed every
+GitHub Actions job in run `31298004583`, including the fresh attempt-bound
+Differential SBOM acceptance and Node B staging deployment. A nonce-bound
+product check then joined host, guest, all services, deployment target, and
+platform attestation to that exact commit on stable VM
+`vm-bbdbbd01c4390b7036067aaa12afeb68`, guest
+`computer-42850e9734d9442386c5dd8bf3afbf19`, epoch 8252, and route digest
+`sha256:648d6071215206b190376ff6c24f3c93c08483b09bfb2ffc4790c00f3dd66489`.
+The previously retained acceptance credentials were explicitly revoked and
+returned HTTP 401; a new two-hour scoped key was minted through the already
+authenticated acceptance-owner browser session. Effects remained OFF.
+
+Fresh lifecycle document `e3b726e3-2afb-5b9d-b5b7-3a50e127c655`, v0
+`1c9315b5-3c11-566f-9dee-ac4ef8c2042f`, trajectory
+`8f7a926f-f5de-561d-9879-5f1f51818f3d`, and root work
+`6c606dd8-5491-5fe1-b84f-8bde48055b9b` then proved the repaired boundary.
+Texture published informative continuous-prose interim v1
+`a339da9e-bb46-5262-bd25-50c0485e4265` while work remained open and atomically
+opened Researcher `researcher:eebe9a14-89fa-4aaa-8ce5-b027c7fb451c`, work
+`fe786687-f92f-4704-ab77-97466122dd08`, and control
+`ddc49c43-2bdd-4841-bf63-efb07ae280bd`. Run
+`0c7be60d-3871-4857-a7c9-6a829afae2c4` bound and durably delivered that exact
+control before provider execution. Thirteen Researcher runs then completed
+cleanly through real `chatgpt/gpt-5.5` provider execution and produced exact
+source packets with IPFS CID/URI, RFC fragment, W3C selector, and Text Fragment
+evidence. None carried `lifecycle_control_bind_failed`. This is deployed product
+proof that the prior hydration/bind-loop defect is repaired rather than merely
+unit-tested.
+
+A distinct post-delivery problem then prevented convergence. Fifteen
+`producer_report` updates accumulated in canonical state with disposition
+`pending`; resident Texture run `f6eed29e-79e9-49d0-b943-896a32e6d63c` remained
+pending and created no v2, incorporated no source, and opened no persistent
+Super. Owner correction
+`owner-instruction-99bd6f13a528620a31c0c0eb1a6e63ef8697edc0b64c1a66fdc312649884432e`
+was durably queued after the partial evidence, explicitly directing immediate
+incorporation, one narrow follow-up, and the two capsule assignments, but it too
+was not processed. Meanwhile every completed Researcher activation reported
+`work_disposition=open`; canonical open work caused another provider activation
+and another report, reaching fourteen Researcher runs (thirteen completed and
+one in flight) and fifteen unconsumed reports in about fourteen minutes. This is
+not the repaired pre-provider bind loop: provider work and exact evidence
+succeeded. It is a newly observed target-mailbox/control-starvation plus
+open-worker retry amplification failure.
+
+Public cancellation retained the complete evidence while stopping the loop.
+Trajectory `8f7a926f…` is cancelled at lifecycle version 21, reducer/watermark
+23, exact terminal head `a339da9e…`; both work items are cancelled, all sixteen
+stored updates (one original control and fifteen producer reports) are
+cancelled, both agents have empty `active_run_id`, and the last activation is
+cancelled. No persistent Super, CoSuper, capsule, host, checkpoint,
+materialization, acceptance, route, VM, SSH, or self-development effect occurred.
+A non-lifecycle draft document `32474860-b3e5-41e1-9d89-53faf5c86312` was also
+created by an operator's first use of the ordinary document endpoint before the
+correct lifecycle endpoint; it has no trajectory and is retained rather than
+hidden or misrepresented as acceptance evidence.
+
+This is the required problem-first checkpoint. No source repair follows before
+this receipt is committed and pushed. Read-only convergence must separately
+trace (1) the canonical producer-report/owner-correction wake into the resident
+Texture actor and (2) why repeated open Researcher reports have no durable
+backpressure or completion bound. The preferred fix must connect an existing
+durable mailbox/reconciliation authority or delete a superseded path; it must
+not add polling, acknowledge undelivered evidence, auto-complete research,
+widen cancellation deadlines, or weaken lifecycle scope.
+
+Mutation class for any repair is **red**. Protected surfaces are producer-report
+and owner-instruction delivery, resident Texture actor memory/restart,
+lifecycle work settlement, Researcher reactivation, canonical update
+acknowledgement, provider execution, cancellation, and no-effect acceptance.
+Problem delta: repaired — exact Researcher control hydration/binding and
+provider entry; discovered — target Texture mailbox starvation and unbounded
+open-work amplification; introduced attribution remains unknown pending source
+convergence. Effects remain OFF.

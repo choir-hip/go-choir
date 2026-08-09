@@ -84,7 +84,7 @@ start_corrections:
   - corrected_at: 2026-08-07T20:34:47Z
     evidence_ref: docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
     correction: The primary worktree was clean at start capture and became dirty-but-goal-owned when the four-file candidate was frozen. Review reproduced digest 880c00cb8f7a6c546825689a7ba37c02a551f897a93080f5e1e2dbbda2cb89ed; the repaired candidate adds this evidence file and awaits a new self-normalized digest.
-    consequence: Start remains immutable; current candidate and reconciliation below, not the start inventory, carry the reviewed dirty state.
+    consequence: "Exact source, independent review, full CI/SBOM, deployment, and product identity gates passed for b5d907a3. The deployed product proves Researcher control binding and repeated provider evidence, but producer reports and a queued owner correction did not wake/advance the resident Texture actor, while open Researcher work amplified provider activations. Effects cannot turn on and registries cannot close until this newly documented mailbox/reconciliation substrate is repaired, a fresh repeated authenticated trajectory reaches persistent Super and parallel capsules, all no-effect/restart/cancellation/source-open/run-acceptance gates pass, temporary credentials/backups receive terminal disposition, and the final audit closes."
   - corrected_at: 2026-08-08T02:37:12Z
     evidence_ref: docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
     correction: The owner ratified the repaired architecture and directed promotion. The executable Definition is renamed without the draft suffix; its final candidate adds the consensus evidence, all three registry entries, and scripts/lint/cts-receipt-lint.py to the identity-bound scope.
@@ -229,23 +229,23 @@ measures:
 
 now:
   status: active
-  slice: "The canonical current-main R/F rehearsal completed under exact new commit identities. R 10d48659 changed exactly the reviewed 99 non-document paths to cdaa-equivalent bytes; CI 31267448310 and canonical rolling/deploy passed, and nonce-bound product identity joined R on the stable VM/guest at epoch 8248. The read-only midpoint preserved runs, lifecycle summaries, self-development, policy, route, and inventory, but the old response omitted six stored owner-instruction request_id fields. That fail-closed identity ambiguity triggered immediate F without further old probing. F 67a61358 restored the exact pre-R whole tree/ac6-equivalent runtime; CI 31268477380 and canonical rolling/deploy passed, exact product identity joined F at epoch 8249, and all captured frozen comparator response/state digests matched the pre-R baseline. R-to-F deployed exposure was 1,909 seconds, the key was revoked/post-401, and effects remain OFF. Repeated supervision acceptance remains blocked by protected server-side provider availability: ChatGPT auth returns refresh_token_reused, Z.AI is circuit-open after 429, DeepSeek/Xiaomi return balance failures, Fireworks returns precondition failure, and Bedrock is unsupported in staging and direct local bearer invokes in us-east-1 returned HTTP 403 for both the gateway seed model and exact owner-policy-selected us.anthropic.claude-sonnet-4-6. Local diagnostics are not staging acceptance or host-credential proof. A fresh exact-F default-policy trajectory then failed iteration zero on the same ChatGPT 401, was publicly cancelled at version 3 with v0 unchanged, left 13 terminal/0 active runs, preserved self-development/policy, and revoked both setup keys/post-401. An independent blocked-slice audit found no safe local/source action that can advance the remaining deployed evidence without becoming duplicate or synthetic acceptance. At 2026-08-08T23:24Z the operator explicitly authorized using the existing local ChatGPT token and SSH Node B. Sanitized red preflight found the tracked full provider helper would also change Bedrock, so the current slice is the helper's exact ChatGPT-only atomic auth-file copy and gateway restart subset, with a root-only rollback copy, unchanged env/policy/route, and exact-F product proof required. The first scoped install was rolled back exactly after a wrong-owner pre-provider probe. The second attempt first nonce-verified the exact acceptance owner/computer/F identity, then installed auth cc744524… with env exact and gateway-only restart; real chatgpt/gpt-5.5 produced the exact requested marker v1 3de79895… with completed work/no error. The successful probe was retained/cancelled at lifecycle 4, leaving 14 terminal/0 active runs, self-development OFF, policy/env/health exact. Provider availability is repaired. The first full attempt then exposed a deployed Researcher-control schema refusal: run 2ce06146 passivated with no revision/child after the rejected atomic packet, and the effects-OFF runtime prompt incorrectly says capsule execution is unavailable. The scoped key and root-only rollback remain live only through bounded diagnosis/repair and acceptance. Registries remain open, and provider-dependent real Researcher/Super/CoSuper, capsule, late-result, positive correction/source-open, checkpoint, and run-acceptance proof remain mandatory."
-  question: "Does restored ChatGPT now carry one exact-F trajectory through the complete repeated Texture/Researcher/Super/parallel-CoSuper product acceptance and every no-effect/rollback/registry gate?"
+  slice: "Exact candidate b5d907a34d0250d966e026d13f64f6d575a4423d passed full CI 31298004583 including fresh differential SBOM acceptance and exact Node B deployment. Nonce-bound identity joined host, guest, every service, deployment target, and platform attestation on stable VM vm-bbdbbd01c4390b7036067aaa12afeb68, guest computer-42850e9734d9442386c5dd8bf3afbf19, epoch 8252, route sha256:648d6071…. Fresh trajectory 8f7a926f-f5de-561d-9879-5f1f51818f3d product-proved the bind repair: Texture published interim v1 a339da9e while work remained open; Researcher control ddc49c43 bound/delivered exactly and thirteen real chatgpt/gpt-5.5 Researcher runs completed with source evidence and no bind-failure marker. A new blocker then surfaced: fifteen producer reports plus a focused owner correction remained unconsumed by resident Texture run f6eed29e; no v2 or persistent-Super control appeared, while open Researcher work kept reactivating. Public cancellation stopped the loop at lifecycle v21/seq23 with exact v1 terminal head, both work items cancelled, sixteen stored updates retained/cancelled, empty active_run_id fields, and no capsule/protected effects. Prior acceptance and repair keys were revoked/post-401; one current scoped key remains only for bounded diagnosis and must be revoked. Problem-first documentation is now the only authorized mutation; effects remain OFF."
+  question: "Why did exact producer-report and owner-correction occurrences fail to wake the resident Texture actor, and why did open Researcher work continue provider reactivation without target-side acknowledgement or backpressure?"
   reconciliation:
-    observed_at: 2026-08-09T00:13:53Z
-    source_ref: 67a61358ceda55c30e9853907f85648bb8531bb8
-    deploy_identity: "Nonce-bound execution identity joined API-key computer scope vm-bbdbbd01c4390b7036067aaa12afeb68, guest computer-42850e9734d9442386c5dd8bf3afbf19, VM epoch 8249, host, route, deployment receipt, and platform attestation to exact forward commit 67a61358 (ac6-equivalent runtime source)"
+    observed_at: 2026-08-09T07:04:37Z
+    source_ref: b5d907a34d0250d966e026d13f64f6d575a4423d
+    deploy_identity: "Nonce-bound exact b5d907a3 identity on stable VM vm-bbdbbd01c4390b7036067aaa12afeb68, guest computer-42850e9734d9442386c5dd8bf3afbf19, epoch 8252, route sha256:648d6071215206b190376ff6c24f3c93c08483b09bfb2ffc4790c00f3dd66489; CI/deploy 31298004583 attempt 1"
     authority_identities: [docs/choir-doctrine.md, docs/agent-product-doctrine.md, docs/computer-ontology.md, docs/supervision-protocol.md, docs/texture-agentic-invariants-2026-06-13.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, "owner directive in this run: proceed without asking", "owner directive in this run: use the Definition dashboard to supervise /goal until Texture works correctly", "owner directive 2026-08-08T23:24Z: update the ChatGPT token using the token held locally", "owner directive 2026-08-08T23:24Z: SSH Node B is authorized for this restoration"]
     policy_resolution_ref: "Authenticated model-policy file and resolve APIs; original SHA-256 7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a restored exactly after both the alternate-route probes and the post-escalation ChatGPT/Z.AI recurrence; sanitized local provider-route/availability diagnostics found HTTP 402 DeepSeek/Xiaomi balance failures, HTTP 412 Fireworks precondition failure, HTTP 429 Z.AI balance/rate failure, and direct local Bedrock bearer invokes in us-east-1 returned HTTP 403 for both gateway seed us.anthropic.claude-haiku-4-5-20251001-v1:0 and exact owner-policy-selected us.anthropic.claude-sonnet-4-6 without exposing credentials or response bodies; the Bedrock results prove only those bounded tuples were forbidden, not account or host state"
-    worktree_inventory_ref: "2026-08-08 post-R/F inventory: the exact-F provider-recurrence receipt is c6ff5a7222f67a759db9c8040faa7930e075477e (docs CI 31271496134 passed), followed by the docs-only blocked-slice truth correction containing this reconciliation. Origin/main and local main must equal the commit containing this reconciliation at handoff; staging remains exact forward runtime 67a61358. F's whole tree before the docs receipts equals pre-R 2f8d912e and its 99 runtime paths are ac6-equivalent. Current edits are goal-owned successful ChatGPT restoration/problem/evidence/audit/current-card truth only; auth cc744524… is proven usable, env/policy/health exact, and rollback/key are retained through acceptance. Unrelated worktrees remain forbidden and untouched."
+    worktree_inventory_ref: "2026-08-09 problem-first checkpoint: local/origin main b5d907a34d0250d966e026d13f64f6d575a4423d before this docs commit; staging exact b5d907a3; only this Definition and the goal-owned problem inventory are modified. Three untracked memo files are unrelated WIP and remain untouched. Current scoped acceptance key is temporary; prior acceptance/repair keys are revoked and post-401. Root-only provider-auth backups remain pending terminal deletion or explicit justified retention."
     status: reconciled
   candidate:
     id: continuous-texture-supervision-runtime-v1
-    state: rf_rehearsed_control_repair_ceremony
-    ref: git:67a61358ceda55c30e9853907f85648bb8531bb8
+    state: deployed_bind_repaired_mailbox_starvation_discovered
+    ref: git:b5d907a34d0250d966e026d13f64f6d575a4423d
     owner: current goal session
-    base: 10d4865958b7d8deaab5665f74b37dd1b5005070
-    digest: 67a61358ceda55c30e9853907f85648bb8531bb8
+    base: 4a112be6
+    digest: b5d907a34d0250d966e026d13f64f6d575a4423d
     scope: [internal/agentprofile, internal/agentcore, internal/actorruntime, internal/capsule, internal/store, internal/textureowner, internal/toolregistry, internal/types, cmd/choir, scripts/go-test-non-runtime-shards, docs/supervision-protocol.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, this Definition and adjacent focused tests]
   decision:
     selected: "Use one lifecycle object-graph reducer/event/receipt authority for bidirectional controls and one atomic Texture turn; keep persistent Super exact and non-lifecycle; make authenticated durable run memory the sole delivery-consumption proof; derive assignment/candidate/verification/cancellation fate in trusted runtime and Store; give assigned CoSupers only an empty-set capsule-local registry plus reporting; retain delayed authenticated results as evidence only; project one public version per semantic revision."
@@ -1044,3 +1044,58 @@ suppressing changed-build recovery, or hydrating unrelated work would each be a
 new loss-of-delivery/authority heresy and is explicitly forbidden. Repaired —
 none until focused fault/restart tests, independent review, exact deployed
 identity, and authenticated product proof pass.
+
+### 2026-08-09 exact-deployed Texture mailbox-starvation checkpoint
+
+**Mutation class:** red for any eventual runtime repair; this checkpoint itself
+is green documentation. Effects remain OFF.
+
+**Exact landing evidence:** `b5d907a34d0250d966e026d13f64f6d575a4423d`
+passed every job in CI/deploy run `31298004583`, including the fresh
+attempt-bound Differential SBOM acceptance. Nonce-bound product identity joined
+that exact commit across host, guest, every service, deployment receipt, and
+platform attestation on stable VM `vm-bbdbbd01c4390b7036067aaa12afeb68`,
+guest `computer-42850e9734d9442386c5dd8bf3afbf19`, epoch 8252, route digest
+`sha256:648d6071215206b190376ff6c24f3c93c08483b09bfb2ffc4790c00f3dd66489`.
+
+**Conjecture delta:** the prior activation conjecture is promoted for the exact
+product boundary exercised: lifecycle Researcher work hydrated exactly,
+control `ddc49c43…` bound/delivered before provider entry, and thirteen clean
+Researcher provider runs produced real source packets without any
+`lifecycle_control_bind_failed` marker. Full C6/C7 remains unpromoted. New
+conjectures are that producer-report and owner-correction occurrences are not
+being delivered into the resident Texture actor, and that open Researcher work
+reactivates without target-side acknowledgement/backpressure. The two may share
+one actor-mailbox/reconciliation substrate but are not yet claimed to share a
+root cause.
+
+**Protected surfaces:** resident Texture actor memory and wake, canonical
+producer-report and owner-instruction delivery/disposition, lifecycle work
+settlement and Researcher reactivation, provider execution, cancellation,
+canonical Texture revisions, persistent-Super opening, and no-effect/run
+acceptance.
+
+**Admissible evidence for diagnosis/repair:** exact actor occurrence and memory
+identities for Texture run `f6eed29e…`; the fifteen retained producer reports
+and queued correction `owner-instruction-99bd6f13…`; deterministic proof of
+whether each occurrence was enqueued, processed, or omitted; same-build
+passivation/restart reproduction; a bounded open-Researcher backpressure test;
+no acknowledgement before canonical Texture incorporation/disposition; focused
+Race and fault tests; independent lifecycle/security review; full CI/SBOM;
+exact deployment identity; then a fresh authenticated trajectory proving v2,
+focused follow-up, persistent Super, parallel capsules, source opening, and all
+remaining acceptance gates.
+
+**Rollback:** no repair exists yet. Public cancellation
+`cts-b5-final-mailbox-stall-cancel-*` is the current safe rollback and retained
+trajectory `8f7a926f…` at lifecycle v21/seq23 proves it: exact v1 terminal head,
+two cancelled work items, sixteen cancelled stored updates, no active agent
+runs, and no capsule/protected effects. A future source change uses normal
+origin/main revert, exact redeployment, and public trajectory cancellation;
+never fabricate update acknowledgement or auto-completion.
+
+**Heresy delta:** repaired — the deployed pre-provider Researcher bind loop;
+discovered — resident Texture mailbox starvation and open-worker retry
+amplification after successful provider evidence; introduced attribution is
+unknown pending read-only convergence. No code edit may precede the committed
+problem-first receipt.
