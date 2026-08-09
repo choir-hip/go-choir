@@ -2178,3 +2178,50 @@ read-only assessment; `repaired` — none until the shared guard is deployed and
 staging-proved. Effects remain OFF. The prepared direct key payload is PAUSED and
 must not execute until the repaired runtime is deployed; its bytes remain exact
 and reusable after the new host identity is recorded.
+
+
+### API-key binding repair local validation and aggregate load failure — 2026-08-09
+
+The authorized RED repair is now locally implemented but not committed or
+deployed. Target-capable scopes require non-empty stable-ComputerID attenuation
+metadata, while `manage:keys` alone may remain unbound. One shared proxy guard
+performs exact use-time `(UserID, stable ComputerID)` ownership lookup, rejects
+unbound/foreign/conflicting path and all query/header/body/default DesktopID
+selectors, and preserves the exact joined active SandboxURL and VMID rather than
+re-resolving a logical desktop for bearer traffic. Recovery joins are
+stable-computer-specific and exact identity is rechecked before wake, refresh,
+or stop. Bound compute status cannot list sibling computers. Cookie and
+non-computer corpusd/maild/public routes retain their previous behavior.
+
+Independent `binding-security-review` and `binding-route-audit` both returned
+`ACCEPT`. Focused vmctl/auth/proxy tests, their Race suites, and all
+`agentcore`/`textureowner` runtime shards passed. A fresh `go test -count=1
+./...` aggregate attempt then failed under concurrent package load in unrelated
+`internal/actorruntime`:
+
+```text
+TestAdapterSQLiteInjectionAppendRecoveryExecutesWithoutSnapshot:
+test unexpectedly relied on actor snapshot memory="" err=database is locked (5) (SQLITE_BUSY)
+```
+
+The aggregate subsequently reached the existing ten-minute package timeout
+while another activation-budget test remained loaded. The exact failing test
+passed alone in 3.144 seconds, and the full `internal/actorruntime` package
+passed alone in 51.251 seconds. This is load-sensitive validation evidence, not
+a binding-repair failure and not authority to widen production or test
+cancellation deadlines. CI's normal sharding remains the admissible aggregate
+gate; the implementation cannot deploy unless CI, Race, and differential SBOM
+all pass.
+
+Mutation class remains RED. Protected surfaces are API-key attenuation, proxy
+computer selection, vmctl ownership classification, lifecycle/recovery,
+WebSockets, self-development, execution identity, and run acceptance.
+Conjecture delta: supported locally — one exact use-time stable-computer join,
+retained through product selection rather than discarded into a desktop
+re-resolve, closes the caller-metadata authority gap. Rollback remains a revert
+of the single implementation commit followed by normal deployment to the prior
+known SHA; roll-forward is preferred because rollback reopens the gap. Heresy
+delta: `discovered` — aggregate actorruntime SQLite contention under parallel
+package load; `introduced` — none; `repaired` — the API-key gap in reviewed
+local source only, not deployed behavior. Effects remain OFF and the direct key
+payload remains PAUSED.
