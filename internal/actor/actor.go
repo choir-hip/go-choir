@@ -37,6 +37,11 @@ import (
 	"time"
 )
 
+// ErrDeferUnprocessed tells the actor substrate to retain the exact durable
+// occurrence without polling it. A later distinct mailbox update or boot Sweep
+// reactivates the ordered backlog.
+var ErrDeferUnprocessed = errors.New("actor: defer unprocessed occurrence")
+
 // Update is the one agent-to-agent message primitive (update_coagent).
 type Update struct {
 	UpdateID     string
@@ -422,14 +427,7 @@ func (rt *Runtime) Drain(timeout time.Duration) {
 // then finds the actor cold, it activates a fresh one that replays the log.
 func (rt *Runtime) loop(ctx context.Context, r *residentActor) {
 	defer rt.wg.Done()
-	// Ensure the actor is deregistered on any exit path, including panic.
-	// deregister is idempotent: if passivation already deleted the entry,
-	// this is a no-op.
 	defer rt.deregister(r)
-	// Recover from handler panics: notify the supervisor, log the stack,
-	// and let the goroutine exit. The update that caused the panic stays
-	// unprocessed in the durable log; a Sweep will re-activate the actor
-	// (the supervisor can decide whether to retry).
 	defer func() {
 		if rv := recover(); rv != nil {
 			err := fmt.Errorf("actor %s panic: %v", r.agentID, rv)
@@ -442,71 +440,56 @@ func (rt *Runtime) loop(ctx context.Context, r *residentActor) {
 	if err != nil {
 		memory = nil
 	}
-
-	// Cold start: replay durable backlog. This is the only time the log is
-	// queried as a delivery source. The skip set collects processed IDs so
-	// we can drain the channel of duplicates after replay.
 	skip := make(map[string]bool)
-	rt.processBacklog(ctx, r, &memory, skip)
+	deferredBacklog := rt.processBacklog(ctx, r, &memory, skip) != ""
 
-	// Drain channel of messages already processed during cold-start replay.
-	// Any message in the channel was also appended to the log (Send writes
-	// both), so processBacklog already handled it. Messages that arrived
-	// AFTER the last log query are NOT in skip and get processed here.
+	// Drain channel copies of facts already replayed from SQLite. When the
+	// ordered head explicitly deferred, every channel item remains in SQLite
+	// and waits behind it; do not run a second provider chain in this wake.
 drainCold:
 	for {
 		select {
 		case u := <-r.mailbox:
-			if !skip[u.UpdateID] {
-				rt.processOne(ctx, r, u, &memory, skip)
+			if !deferredBacklog && !skip[u.UpdateID] {
+				deferredBacklog = rt.processOne(ctx, r, u, &memory, skip)
 			}
 		default:
 			break drainCold
 		}
 	}
 
-	// Warm loop: Go-channel delivery with idle passivation.
 	idleTimer := time.NewTimer(rt.opts.IdleTimeout)
 	defer idleTimer.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
 			return
-
 		case u := <-r.mailbox:
-			rt.processOne(ctx, r, u, &memory, skip)
-			// Drain any more that arrived while we worked.
-		drainLoop:
+			if deferredBacklog {
+				// A distinct update is the update-driven wake for the retained
+				// ordered head. Replay SQLite order before touching channel copies.
+				deferredBacklog = rt.processBacklog(ctx, r, &memory, skip) != ""
+			} else if !skip[u.UpdateID] {
+				deferredBacklog = rt.processOne(ctx, r, u, &memory, skip)
+			}
 			for {
 				select {
 				case u2 := <-r.mailbox:
-					rt.processOne(ctx, r, u2, &memory, skip)
+					if !deferredBacklog && !skip[u2.UpdateID] {
+						deferredBacklog = rt.processOne(ctx, r, u2, &memory, skip)
+					}
 				default:
-					break drainLoop
+					goto drained
 				}
 			}
-			// Overflow check: catch updates that didn't fit in the channel
-			// buffer (Send's non-blocking send fell through to default).
-			// Also catches updates that failed handler processing (still
-			// unprocessed in the log). Skip IDs already processed from the
-			// channel. This is NOT polling — it's a single query after the
-			// channel drains.
-			rt.processBacklog(ctx, r, &memory, skip)
+		drained:
+			if !deferredBacklog {
+				deferredBacklog = rt.processBacklog(ctx, r, &memory, skip) != ""
+			}
 			resetTimer(idleTimer, rt.opts.IdleTimeout)
-
 		case <-idleTimer.C:
-			// Attempt passivation. Atomicity argument: Send appends to the
-			// log BEFORE taking rt.mu. If an append landed after our last
-			// drain, either (a) Send acquires mu before us and sends to the
-			// channel — we observe a non-empty mailbox and continue — or
-			// (b) we deregister first and Send finds the actor cold and
-			// activates a fresh one. In both cases the update is delivered:
-			// no lost wake.
 			rt.mu.Lock()
 			if len(r.mailbox) == 0 && !r.evicted {
-				// Save snapshot under the lock so callers that observe
-				// !Resident() are guaranteed to see the saved snapshot.
 				if err := rt.log.SaveSnapshot(context.Background(), r.agentID, memory); err != nil {
 					log.Printf("actor: save snapshot for %s: %v", r.agentID, err)
 					rt.mu.Unlock()
@@ -531,38 +514,41 @@ drainCold:
 // them all, looping until the backlog is empty. On handler error, the update
 // stays unprocessed and is retried after backoff. The skip set prevents
 // processing updates that were already handled from the channel.
-func (rt *Runtime) processBacklog(ctx context.Context, r *residentActor, memory *[]byte, skip map[string]bool) {
+func (rt *Runtime) processBacklog(ctx context.Context, r *residentActor, memory *[]byte, skip map[string]bool) string {
 	for {
 		if ctx.Err() != nil {
-			return
+			return ""
 		}
 		backlog, err := rt.log.Unprocessed(ctx, r.agentID)
 		if err != nil {
 			if !sleepCtx(ctx, rt.opts.HandlerRetryBackoff) {
-				return
+				return ""
 			}
 			continue
 		}
 		if len(backlog) == 0 {
-			return
+			return ""
 		}
 		for _, u := range backlog {
 			if ctx.Err() != nil {
-				return
+				return ""
 			}
 			if skip[u.UpdateID] {
-				continue // already processed from channel
+				continue
 			}
-			next, err := rt.handler.HandleUpdate(ctx, r.agentID, u, *memory)
-			if err != nil {
-				if !sleepCtx(ctx, rt.opts.HandlerRetryBackoff) {
-					return
+			next, handleErr := rt.handler.HandleUpdate(ctx, r.agentID, u, *memory)
+			if handleErr != nil {
+				if errors.Is(handleErr, ErrDeferUnprocessed) {
+					return u.UpdateID
 				}
-				break // re-query; the failed update stays unprocessed
+				if !sleepCtx(ctx, rt.opts.HandlerRetryBackoff) {
+					return ""
+				}
+				break
 			}
 			if err := rt.log.MarkProcessed(ctx, r.agentID, u.UpdateID); err != nil {
 				if !sleepCtx(ctx, rt.opts.HandlerRetryBackoff) {
-					return
+					return ""
 				}
 				break
 			}
@@ -578,26 +564,25 @@ func (rt *Runtime) processBacklog(ctx context.Context, r *residentActor, memory 
 // the update stays unprocessed in the log and is caught by the next
 // processBacklog call. The UpdateID is added to skip so processBacklog
 // doesn't double-process it.
-func (rt *Runtime) processOne(ctx context.Context, r *residentActor, u Update, memory *[]byte, skip map[string]bool) {
-	if ctx.Err() != nil {
-		return
-	}
-	if skip[u.UpdateID] {
-		return // already processed (by processBacklog or a previous processOne)
+func (rt *Runtime) processOne(ctx context.Context, r *residentActor, u Update, memory *[]byte, skip map[string]bool) bool {
+	if ctx.Err() != nil || skip[u.UpdateID] {
+		return false
 	}
 	next, err := rt.handler.HandleUpdate(ctx, r.agentID, u, *memory)
 	if err != nil {
-		// Leave unprocessed; the post-drain processBacklog will retry it.
-		// Don't add to skip — we want processBacklog to find and retry it.
+		if errors.Is(err, ErrDeferUnprocessed) {
+			return true
+		}
 		_ = sleepCtx(ctx, rt.opts.HandlerRetryBackoff)
-		return
+		return false
 	}
 	if err := rt.log.MarkProcessed(ctx, r.agentID, u.UpdateID); err != nil {
 		_ = sleepCtx(ctx, rt.opts.HandlerRetryBackoff)
-		return
+		return false
 	}
 	*memory = next
 	skip[u.UpdateID] = true
+	return false
 }
 
 // deregister removes an evicted/cancelled actor without saving a snapshot.

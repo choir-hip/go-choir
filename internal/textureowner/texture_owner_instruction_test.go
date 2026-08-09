@@ -755,6 +755,53 @@ func TestOwnerInstructionWakeSurvivesPassivationRaceAndBootReconcile(t *testing.
 	}
 }
 
+func TestPassivatedTextureWakeFailsClosedOnAmbiguousCanonicalRuns(t *testing.T) {
+	core, handler := testAPISetup(t)
+	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	start := startObservationLifecycle(t, core.Store())
+	handler.wakeOwnerInstruction = func(context.Context, string, string, string) error { return nil }
+	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
+	queued := postOwnerInstruction(t, handler, path, start.OwnerID, "ambiguous-passivated", "retain exact ambiguity", start.InitialRevision.RevisionID)
+	if queued.Code != http.StatusAccepted {
+		t.Fatalf("queue status=%d body=%s", queued.Code, queued.Body.String())
+	}
+	run, err := handler.ReconcileAgentWake(t.Context(), start.OwnerID, start.InitialDocument.DocID)
+	if err != nil || run == nil {
+		t.Fatalf("initial run=%+v err=%v", run, err)
+	}
+	passivated := *run
+	passivated.State, passivated.UpdatedAt = types.RunPassivated, time.Now().UTC()
+	req := types.ReplaceLifecycleActivationRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "passivate-ambiguous-primary", TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: passivated}
+	req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
+	if _, err := core.Store().ReplaceLifecycleActivation(t.Context(), req); err != nil {
+		t.Fatal(err)
+	}
+	duplicate := passivated
+	duplicate.RunID, duplicate.CreatedAt, duplicate.UpdatedAt = "texture-run-ambiguous-duplicate", time.Now().UTC().Add(-time.Second), time.Now().UTC()
+	if err := core.Store().CreateRun(t.Context(), duplicate); err != nil {
+		t.Fatal(err)
+	}
+	primaryMutation, err := core.Store().GetAgentMutationByRun(t.Context(), start.OwnerID, start.ComputerID, run.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	primaryMutation.RunID = duplicate.RunID
+	primaryMutation.State = "sleeping"
+	primaryMutation.CreatedAt = time.Now().UTC()
+	if err := core.Store().CreateAgentMutation(t.Context(), *primaryMutation); err != nil {
+		t.Fatal(err)
+	}
+	got, wakeErr := handler.ReconcileActorWake(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	if wakeErr == nil || !strings.Contains(wakeErr.Error(), "ambiguous passivated Texture run authority") || got != nil {
+		t.Fatalf("ambiguous wake run=%+v err=%v", got, wakeErr)
+	}
+	first, _ := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, run.RunID)
+	second, _ := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, duplicate.RunID)
+	if first.State != types.RunPassivated || second.State != types.RunPassivated {
+		t.Fatalf("ambiguity mutated candidates first=%+v second=%+v", first, second)
+	}
+}
+
 func TestResidentTextureInjectsAndConsumes101SameHeadOwnerOccurrences(t *testing.T) {
 	core, handler := testAPISetup(t)
 	installSynchronousTextureOwnerWake(t, core, handler)

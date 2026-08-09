@@ -488,6 +488,11 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	if err != nil {
 		return nil, err
 	}
+	// The adapter's checked dispatch wrapper records the synchronous SQLite
+	// append result from StartRun's unique initial occurrence.
+	if err := rt.Core.CheckedActorDispatchError("initial_dispatch", rec.RunID); err != nil {
+		return nil, fmt.Errorf("persist Texture initial dispatch: %w", err)
+	}
 
 	// Emit the texture-specific agent revision started event.
 	startedPayload, _ := json.Marshal(map[string]string{

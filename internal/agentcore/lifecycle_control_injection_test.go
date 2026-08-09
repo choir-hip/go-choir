@@ -114,6 +114,21 @@ func bindResearcherControlFixture(t *testing.T, rt *Runtime, s *store.Store, own
 	t.Helper()
 	target := agentprofile.Researcher + ":control-" + suffix
 	fixture := seedTextureLifecycleControl(t, s, ownerID, suffix, target, agentprofile.Researcher)
+	work, err := s.GetLifecycleWorkItem(context.Background(), ownerID, fixture.run.SandboxID, fixture.workID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logical, failed, versions, err := lifecycleActivationKeys(ownerID, fixture.run.SandboxID, fixture.trajectoryID, fixture.run.AgentID, buildinfo.Commit,
+		[]types.CoagentSourcePacket{fixture.control}, map[string]types.WorkItemRecord{fixture.workID: work})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.run.Metadata = stampLifecycleActivationMetadata(fixture.run.Metadata, logical, failed, buildinfo.Commit, versions)
+	fixture.run.Metadata["request_source"] = "lifecycle_texture_control"
+	fixture.run.Prompt = lifecycleControlActivationPrompt([]types.WorkItemRecord{work})
+	if err := s.UpdateRun(context.Background(), fixture.run); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := rt.bindLifecycleControlsToRun(context.Background(), &fixture.run, []types.CoagentSourcePacket{fixture.control}); err != nil {
 		t.Fatal(err)
 	}
@@ -160,6 +175,31 @@ func TestBoundLifecycleControlWarmAndColdInjectionExactlyOnce(t *testing.T) {
 	messages, err = rt.prependInitialCoagentUpdatePackets(context.Background(), &cold.run, []json.RawMessage{json.RawMessage(`{"role":"user","content":"base"}`)})
 	if err != nil || len(messages) != 1 {
 		t.Fatalf("cold duplicate injection=%s err=%v", messages, err)
+	}
+}
+
+func TestLifecycleResearcherProducerReportAuthorityUsesExactControlFingerprint(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	fixture := seedAtomicResearcherControl(t, s, "producer-report-authority")
+	rec, err := rt.ReconcileCoagentWake(t.Context(), fixture.ownerID, fixture.agentID)
+	if err != nil || rec == nil {
+		t.Fatalf("reconcile exact source run=%+v err=%v", rec, err)
+	}
+	report := types.CoagentSourcePacket{UpdateID: "report-authority", ProducerUpdateID: "producer-report-authority", OwnerID: fixture.ownerID, ComputerID: fixture.computerID, AgentID: fixture.agentID, TargetAgentID: "texture:" + fixture.docID, ChannelID: fixture.docID, TrajectoryID: fixture.trajectoryID, Direction: types.LifecyclePacketDirectionProducerReport, ProducerWorkItemID: fixture.workID, SourceRunID: rec.RunID}
+	if err := rt.ValidateLifecycleProducerReportAuthority(t.Context(), report); err != nil {
+		t.Fatalf("exact producer report authority: %v", err)
+	}
+	foreign := report
+	foreign.ChannelID = "foreign-document"
+	if err := rt.ValidateLifecycleProducerReportAuthority(t.Context(), foreign); err == nil {
+		t.Fatal("same-owner foreign-document source run was accepted")
+	}
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	operationalErr := rt.ValidateLifecycleProducerReportAuthority(cancelled, report)
+	if operationalErr == nil || errors.Is(operationalErr, ErrInvalidLifecycleProducerReportAuthority) {
+		t.Fatalf("operational Store failure misclassified as durable invalid: %v", operationalErr)
 	}
 }
 
@@ -403,7 +443,9 @@ func TestRuntimeInjectionAppendFailurePassivatesAndRestartReactivatesExactResear
 		END`); err != nil {
 		t.Fatal(err)
 	}
-	rt.ExecuteActivationSync(context.Background(), &fixture.run)
+	if err := rt.ExecuteActivationSyncChecked(context.Background(), &fixture.run); !errors.Is(err, ErrActivationOccurrenceMustRemainUnprocessed) {
+		t.Fatalf("first injection failure acknowledgement outcome=%v", err)
+	}
 	failed, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.SandboxID, fixture.run.RunID)
 	if err != nil {
 		t.Fatal(err)
@@ -432,6 +474,23 @@ func TestRuntimeInjectionAppendFailurePassivatesAndRestartReactivatesExactResear
 	trajectory, err := s.GetLifecycleTrajectory(context.Background(), failed.OwnerID, failed.SandboxID, failed.TrajectoryID)
 	if err != nil || trajectory.Status != types.TrajectoryLive {
 		t.Fatalf("live trajectory after runtime failure=%+v err=%v", trajectory, err)
+	}
+	// The same unprocessed exact occurrence may retry before restart. A second
+	// injection failure must remain unacknowledged rather than mint/collide with
+	// another recovery identity.
+	failed.State = types.RunPending
+	failed.Metadata = cloneMetadata(failed.Metadata)
+	failed.Metadata["passivated_reason"] = ""
+	failed.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(context.Background(), failed); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.ExecuteActivationSyncChecked(context.Background(), &failed); !errors.Is(err, ErrActivationOccurrenceMustRemainUnprocessed) {
+		t.Fatalf("second injection failure acknowledgement outcome=%v", err)
+	}
+	failed, err = s.GetLifecycleRun(context.Background(), failed.OwnerID, failed.SandboxID, failed.RunID)
+	if err != nil || failed.State != types.RunPassivated || metadataStringValue(failed.Metadata, "passivated_reason") != runtimeInjectionAppendFailurePassivationReason {
+		t.Fatalf("second injection failure state=%+v err=%v", failed, err)
 	}
 
 	if _, err := s.DB().ExecContext(context.Background(), `DROP TRIGGER fail_runtime_injection_append`); err != nil {
@@ -470,8 +529,8 @@ func TestRuntimeInjectionAppendFailurePassivatesAndRestartReactivatesExactResear
 	if err != nil || trajectoryAfterRestart.Status != types.TrajectoryLive {
 		t.Fatalf("restart changed live trajectory=%+v err=%v", trajectoryAfterRestart, err)
 	}
-	if len(dispatches) != 1 || !strings.Contains(dispatches[0], failed.AgentID+"|initial_dispatch|"+failed.RunID+"|") {
-		t.Fatalf("restart dispatches=%v, want only exact Researcher run", dispatches)
+	if len(dispatches) != 1 || !strings.Contains(dispatches[0], failed.AgentID+"|coagent_result|"+LifecycleResearcherAdmissionRecoveryPrefix) {
+		t.Fatalf("restart dispatches=%v, want one structured exact-run recovery occurrence", dispatches)
 	}
 
 	var targetRuns []types.RunRecord

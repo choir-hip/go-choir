@@ -95,7 +95,24 @@ func NewHandler(core *agentcore.Runtime) *Handler {
 		Provider:           core.TextureProvider(),
 		wakeTextureControl: core.WakeUpdatedCoagent,
 		wakeOwnerInstruction: func(ctx context.Context, ownerID, docID, instructionID string) error {
-			return core.DispatchActor(ctx, ownerID, core.TextureSandboxID(), currentTextureAgentID(docID), "coagent_result", instructionID, "", "")
+			computerID := core.TextureSandboxID()
+			doc, err := core.Store().GetLifecycleDocument(ctx, ownerID, computerID, docID)
+			if err != nil {
+				return fmt.Errorf("load owner instruction document: %w", err)
+			}
+			instruction, err := core.Store().GetLifecycleOwnerInstruction(ctx, ownerID, computerID, doc.TrajectoryID, instructionID)
+			if err != nil {
+				return fmt.Errorf("load owner instruction occurrence: %w", err)
+			}
+			occurrence, err := agentcore.TextureOwnerInstructionOccurrence(instruction)
+			if err != nil {
+				return err
+			}
+			content, err := agentcore.EncodeTextureActorOccurrence(occurrence)
+			if err != nil {
+				return err
+			}
+			return core.DispatchActor(ctx, ownerID, computerID, currentTextureAgentID(docID), "coagent_result", content, doc.TrajectoryID, "owner:"+ownerID)
 		},
 	}
 }

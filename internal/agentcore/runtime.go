@@ -2019,6 +2019,21 @@ func (rt *Runtime) rewarmInterruptedLifecycleActivations(ctx context.Context) {
 				log.Printf("runtime: passivated stale lifecycle run %s before restart dispatch", rec.RunID)
 				continue
 			}
+			lifecycleResearcher, admitted, refusal, admissionErr := rt.admitLifecycleResearcherProviderEntry(ctx, rec)
+			if admissionErr != nil {
+				if passivateErr := rt.passivateLifecycleResearcherAfterAdmissionError(ctx, rec, admissionErr); passivateErr != nil {
+					log.Printf("runtime: boot lifecycle rewarm: persist Researcher admission retry run %s: %v", rec.RunID, passivateErr)
+				}
+				log.Printf("runtime: boot lifecycle rewarm: Researcher admission run %s: %v", rec.RunID, admissionErr)
+				continue
+			}
+			if lifecycleResearcher && !admitted {
+				if passivateErr := rt.passivateLifecycleResearcherWithoutProviderAuthority(ctx, rec, refusal); passivateErr != nil {
+					log.Printf("runtime: boot lifecycle rewarm: persist Researcher admission refusal run %s: %v", rec.RunID, passivateErr)
+				}
+				log.Printf("runtime: boot lifecycle Researcher run %s remains idle: %s", rec.RunID, refusal)
+				continue
+			}
 			rt.activate(rec)
 			if agentprofile.Canonical(rec.AgentProfile) == agentprofile.Researcher &&
 				metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" &&
@@ -2052,10 +2067,11 @@ func (rt *Runtime) reactivateRetryableLifecycleInjectionRuns(ctx context.Context
 	}
 	for i := range runs {
 		rec := &runs[i]
+		passivatedReason := metadataStringValue(rec.Metadata, "passivated_reason")
 		if agentprofile.Canonical(rec.AgentProfile) != agentprofile.Researcher ||
 			agentprofile.Canonical(rec.AgentRole) != agentprofile.Researcher ||
 			metadataStringValue(rec.Metadata, "request_source") != "lifecycle_texture_control" ||
-			metadataStringValue(rec.Metadata, "passivated_reason") != runtimeInjectionAppendFailurePassivationReason {
+			(passivatedReason != runtimeInjectionAppendFailurePassivationReason && passivatedReason != lifecycleResearcherAdmissionRetryReason) {
 			continue
 		}
 		trajectory, trajectoryErr := rt.store.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.SandboxID, rec.TrajectoryID)
@@ -2073,7 +2089,7 @@ func (rt *Runtime) reactivateRetryableLifecycleInjectionRuns(ctx context.Context
 		if !eligible {
 			continue
 		}
-		controls, controlsErr := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, rec)
+		controls, controlsErr := rt.lifecycleResearcherAdmissionRecoveryControls(ctx, rec)
 		if controlsErr != nil {
 			log.Printf("runtime: boot lifecycle injection recovery: validate exact deliveries for run %s: %v", rec.RunID, controlsErr)
 			continue
@@ -2090,6 +2106,13 @@ func (rt *Runtime) reactivateRetryableLifecycleInjectionRuns(ctx context.Context
 			}
 			continue
 		}
+		// Actor delivery remains paused during boot. Both retry reasons require a
+		// distinct exact-run occurrence: initial_dispatch may already be processed
+		// across the MarkProcessed-before-SaveSnapshot crash cut.
+		if recoveryErr := rt.enqueueLifecycleResearcherAdmissionRecoveryOccurrence(ctx, rec, controls); recoveryErr != nil {
+			log.Printf("runtime: enqueue lifecycle Researcher recovery run %s: %v", rec.RunID, recoveryErr)
+			continue
+		}
 		rec.Metadata = cloneMetadata(rec.Metadata)
 		rec.Metadata["actor_reactivate_existing_memory"] = true
 		rec.Metadata["actor_reactivated_from_passivated"] = true
@@ -2102,9 +2125,36 @@ func (rt *Runtime) reactivateRetryableLifecycleInjectionRuns(ctx context.Context
 			log.Printf("runtime: boot lifecycle injection recovery: reactivate exact run %s: %v", rec.RunID, err)
 			continue
 		}
-		rt.activate(rec)
-		log.Printf("runtime: reactivated exact lifecycle Researcher run %s after injection append failure", rec.RunID)
+		log.Printf("runtime: reactivated exact lifecycle Researcher run %s through structured recovery occurrence (%s)", rec.RunID, passivatedReason)
+		continue
 	}
+}
+
+// enqueueLifecycleResearcherAdmissionRecoveryOccurrence emits a distinct,
+// deterministic actor wake after a provider-admission store/CAS error. Reusing
+// initial_dispatch would collide with its already processed one-shot actor row.
+func (rt *Runtime) enqueueLifecycleResearcherAdmissionRecoveryOccurrence(ctx context.Context, rec *types.RunRecord, controls []types.CoagentSourcePacket) error {
+	if rt == nil || rt.dispatchActor == nil || rec == nil || len(controls) == 0 {
+		return fmt.Errorf("lifecycle Researcher admission recovery dispatch unavailable")
+	}
+	o := LifecycleResearcherAdmissionRecoveryOccurrence{
+		OwnerID: rec.OwnerID, ComputerID: rec.SandboxID, TrajectoryID: rec.TrajectoryID,
+		AgentID: rec.AgentID, RunID: rec.RunID,
+		LogicalKey:    metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata),
+		SourceAgentID: controls[0].AgentID,
+		Controls:      make([]LifecycleResearcherAdmissionRecoveryControl, 0, len(controls)),
+	}
+	for _, control := range controls {
+		if control.AgentID != o.SourceAgentID {
+			return fmt.Errorf("lifecycle Researcher admission recovery controls have multiple sources")
+		}
+		o.Controls = append(o.Controls, LifecycleResearcherAdmissionRecoveryControl{UpdateID: control.UpdateID, LifecycleVersion: control.LifecycleVersion, ReducerSeq: control.ReducerSeq})
+	}
+	content, err := EncodeLifecycleResearcherAdmissionRecovery(o)
+	if err != nil {
+		return err
+	}
+	return rt.dispatchActor(context.WithoutCancel(ctx), rec.OwnerID, rec.SandboxID, rec.AgentID, "coagent_result", content, rec.TrajectoryID, o.SourceAgentID)
 }
 
 // reconcileTerminalRunOutcomes exhausts terminal runs, repairs their outcome
@@ -2233,10 +2283,9 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 			err = rt.ReconcileCoSuperAssignmentsForTrajectory(ctx, first.OwnerID,
 				firstNonEmpty(first.ComputerID, rt.TextureSandboxID()), first.TrajectoryID)
 		} else if agentprofile.Canonical(first.AuthorityProfile) == agentprofile.Researcher {
-			// The broad boot scan only identifies a recovery candidate. If exact
-			// lifecycle controls remain, delegate to the same scoped control/
-			// fingerprint reconciler used by actor wake; never mint a generic
-			// trajectory_work_item_sweep run around a durable failed attempt.
+			// Open lifecycle work is durable responsibility, not provider authority.
+			// Only an exact pending Texture control enters the fingerprint reconciler;
+			// otherwise the Researcher remains idle and inspectable.
 			pendingControls, pendingErr := rt.store.ListAllPendingLifecycleUpdates(ctx, first.OwnerID, computerID, first.AssignedAgentID)
 			if pendingErr != nil {
 				err = pendingErr
@@ -2245,8 +2294,6 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 				if errors.Is(err, ErrDurablyTerminalLifecycleControlActivation) {
 					err = nil
 				}
-			} else {
-				_, err = rt.reconcileAssignedWorkItemActor(ctx, workItems)
 			}
 		} else {
 			_, err = rt.reconcileAssignedWorkItemActor(ctx, workItems)
@@ -2275,6 +2322,18 @@ func (rt *Runtime) sweepPassivatedSpawnedCoagentWork(ctx context.Context) {
 			continue
 		}
 		if item.WorkItemID == "" || item.Status != types.WorkItemOpen {
+			continue
+		}
+		if item.LifecycleVersion > 0 && agentprofile.Canonical(firstNonEmpty(item.AuthorityProfile, agentProfileForRun(rec))) == agentprofile.Researcher {
+			computerID := firstNonEmpty(strings.TrimSpace(item.ComputerID), rt.TextureSandboxID())
+			pendingControls, pendingErr := rt.store.ListAllPendingLifecycleUpdates(ctx, item.OwnerID, computerID, item.AssignedAgentID)
+			if pendingErr != nil {
+				log.Printf("runtime: boot passivated Researcher control lookup run=%s work_item=%s: %v", rec.RunID, item.WorkItemID, pendingErr)
+			} else if len(pendingControls) > 0 {
+				if _, reconcileErr := rt.reconcileUpdatedCoagentActor(ctx, item.OwnerID, item.AssignedAgentID); reconcileErr != nil && !errors.Is(reconcileErr, ErrDurablyTerminalLifecycleControlActivation) {
+					log.Printf("runtime: boot passivated Researcher control reconcile run=%s work_item=%s: %v", rec.RunID, item.WorkItemID, reconcileErr)
+				}
+			}
 			continue
 		}
 		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
@@ -2356,6 +2415,12 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 		return nil, fmt.Errorf("lookup assigned work-item actor: %w", err)
 	}
 	profile := agentprofile.Canonical(firstNonEmpty(agent.Profile, first.AuthorityProfile))
+	if profile == agentprofile.Researcher && (agent.LifecycleVersion > 0 || first.LifecycleVersion > 0) {
+		// Lifecycle Researchers are activated only by the exact Texture-control
+		// fingerprint reconciler. Generic assigned-work recovery preserves the
+		// open obligation without creating or dispatching a run.
+		return nil, nil
+	}
 	switch profile {
 	case agentprofile.Researcher, agentprofile.Processor, agentprofile.Reconciler:
 		// Texture reconstruction belongs to textureowner.ReconcileAgentWake,
@@ -2460,50 +2525,276 @@ func buildAssignedWorkItemPrompt(workItems []types.WorkItemRecord) string {
 	return strings.TrimSpace(b.String())
 }
 
-func (rt *Runtime) continueOpenLifecycleWorkAfterTerminal(ctx context.Context, rec *types.RunRecord) (*types.RunRecord, error) {
-	if rt == nil || rt.store == nil || rec == nil || rec.State != types.RunCompleted {
-		return nil, nil
+// admitLifecycleResearcherProviderEntry is the single provider-boundary
+// authority check for durable lifecycle Researchers. Open work records are
+// inspectable obligations, not provider authority: execution requires one exact
+// current Texture-control fingerprint joined to the canonical run. Legacy
+// (lifecycle-version-zero) Researcher runs remain outside this invariant.
+func (rt *Runtime) admitLifecycleResearcherProviderEntry(ctx context.Context, rec *types.RunRecord) (lifecycle, admitted bool, reason string, err error) {
+	if rt == nil || rt.store == nil || rec == nil {
+		return false, false, "runtime or run unavailable", nil
+	}
+	profile := agentprofile.Canonical(rec.AgentProfile)
+	role := agentprofile.Canonical(rec.AgentRole)
+	if profile != agentprofile.Researcher && role != agentprofile.Researcher {
+		return false, true, "", nil
 	}
 	ownerID := strings.TrimSpace(rec.OwnerID)
 	computerID := strings.TrimSpace(rec.SandboxID)
+	trajectoryID := strings.TrimSpace(rec.TrajectoryID)
 	agentID := strings.TrimSpace(rec.AgentID)
+	declaresLifecycleControl := metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" ||
+		metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) != "" ||
+		metadataStringValue(rec.Metadata, lifecycleFailedAttemptKeyMetadata) != "" ||
+		metadataStringValue(rec.Metadata, lifecycleActivationBuildMetadata) != ""
+	if _, hasVersions := rec.Metadata[lifecycleActivationVersionsMetadata]; hasVersions {
+		declaresLifecycleControl = true
+	}
 	if ownerID == "" || computerID == "" || agentID == "" {
-		return nil, nil
+		return true, false, "Researcher run has incomplete owner/computer/agent authority", nil
 	}
-	workItemIDs := metadataStringSlice(rec.Metadata["work_item_ids"])
-	if singular := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")); singular != "" && !slices.Contains(workItemIDs, singular) {
-		workItemIDs = append(workItemIDs, singular)
+	if trajectoryID == "" {
+		if declaresLifecycleControl {
+			return true, false, "declared lifecycle Researcher has no trajectory authority", nil
+		}
+		return false, true, "", nil
 	}
-	if len(workItemIDs) == 0 {
-		return nil, nil
+	if !declaresLifecycleControl {
+		scopedAgent, scopeErr := rt.store.GetAgentByScope(ctx, ownerID, computerID, agentID)
+		if errors.Is(scopeErr, store.ErrNotFound) {
+			return false, true, "", nil
+		}
+		if scopeErr != nil {
+			return true, false, "", fmt.Errorf("classify lifecycle Researcher agent: %w", scopeErr)
+		}
+		if scopedAgent.LifecycleVersion <= 0 {
+			// A legacy version-zero Researcher stays outside lifecycle provider
+			// admission even when its historical metadata names a lifecycle
+			// trajectory. Only Store-owned lifecycle subject version or an exact
+			// Texture-control fingerprint opts into this boundary.
+			return false, true, "", nil
+		}
+		declaresLifecycleControl = true
 	}
-	trajectoryID := strings.TrimSpace(metadataStringValue(rec.Metadata, runMetadataTrajectoryID))
-	openWork := make([]types.WorkItemRecord, 0, len(workItemIDs))
-	seen := make(map[string]struct{}, len(workItemIDs))
-	for _, workItemID := range workItemIDs {
-		workItemID = strings.TrimSpace(workItemID)
-		if workItemID == "" {
-			continue
-		}
-		if _, duplicate := seen[workItemID]; duplicate {
-			continue
-		}
-		seen[workItemID] = struct{}{}
-		work, err := rt.store.GetLifecycleWorkItem(ctx, ownerID, computerID, workItemID)
-		if errors.Is(err, store.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("load terminal activation work item %s: %w", workItemID, err)
-		}
-		if trajectoryID != "" && strings.TrimSpace(work.TrajectoryID) != trajectoryID {
-			return nil, fmt.Errorf("terminal activation work item %s changed trajectory", workItemID)
-		}
-		if work.Status == types.WorkItemOpen && strings.TrimSpace(work.AssignedAgentID) == agentID {
-			openWork = append(openWork, work)
-		}
+	trajectory, loadErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
+	if errors.Is(loadErr, store.ErrNotFound) {
+		return true, false, "declared lifecycle Researcher has no canonical trajectory authority", nil
 	}
-	return rt.reconcileAssignedWorkItemActorWithSource(ctx, openWork, "terminal_activation_work_recovery")
+	if loadErr != nil {
+		return true, false, "", fmt.Errorf("load lifecycle trajectory: %w", loadErr)
+	}
+	lifecycle = true
+	deny := func(why string) (bool, bool, string, error) { return true, false, why, nil }
+	if ctx.Err() != nil {
+		return deny("activation context is cancelled")
+	}
+	if profile != agentprofile.Researcher || role != agentprofile.Researcher ||
+		trajectory.OwnerID != ownerID || trajectory.ComputerID != computerID || trajectory.TrajectoryID != trajectoryID ||
+		trajectory.Status != types.TrajectoryLive {
+		return deny("lifecycle Researcher scope is not exact and live")
+	}
+	if _, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, ownerID, computerID, trajectoryID); intentErr == nil {
+		return deny("trajectory has cancellation intent")
+	} else if !errors.Is(intentErr, store.ErrNotFound) {
+		return true, false, "", fmt.Errorf("load lifecycle cancellation intent: %w", intentErr)
+	}
+
+	stored, loadErr := rt.store.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
+	if loadErr != nil {
+		return true, false, "", fmt.Errorf("load exact lifecycle Researcher run: %w", loadErr)
+	}
+	if stored.RunID != strings.TrimSpace(rec.RunID) || stored.OwnerID != ownerID || stored.SandboxID != computerID ||
+		stored.TrajectoryID != trajectoryID || stored.AgentID != agentID || stored.State != rec.State ||
+		(stored.State != types.RunPending && stored.State != types.RunRunning) ||
+		agentprofile.Canonical(stored.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(stored.AgentRole) != agentprofile.Researcher {
+		return deny("run projection is stale or outside the exact lifecycle Researcher scope")
+	}
+	agent, loadErr := rt.store.GetAgentByScope(ctx, ownerID, computerID, agentID)
+	if loadErr != nil {
+		return true, false, "", fmt.Errorf("load exact lifecycle Researcher agent: %w", loadErr)
+	}
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agent.LifecycleVersion <= 0 ||
+		agentprofile.Canonical(agent.Profile) != agentprofile.Researcher || agentprofile.Canonical(agent.Role) != agentprofile.Researcher ||
+		strings.TrimSpace(agent.ActiveRunID) != stored.RunID {
+		return deny("Researcher agent does not own the exact live run")
+	}
+	if metadataStringValue(stored.Metadata, "request_source") != "lifecycle_texture_control" ||
+		metadataStringValue(stored.Metadata, lifecycleLogicalActivationKeyMetadata) == "" ||
+		metadataStringValue(stored.Metadata, lifecycleFailedAttemptKeyMetadata) == "" ||
+		metadataStringValue(stored.Metadata, lifecycleActivationBuildMetadata) == "" {
+		return deny("run has no exact lifecycle Texture-control fingerprint")
+	}
+	versions, versionErr := lifecycleActivationVersionsForRun(&stored)
+	if versionErr != nil || len(versions) == 0 {
+		return deny("run has no valid lifecycle control/work versions")
+	}
+	snapshot, loadErr := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if loadErr != nil {
+		return true, false, "", fmt.Errorf("load lifecycle Researcher admission snapshot: %w", loadErr)
+	}
+	workByID := make(map[string]types.WorkItemRecord, len(snapshot.WorkItems))
+	for _, work := range snapshot.WorkItems {
+		workByID[strings.TrimSpace(work.WorkItemID)] = work
+	}
+	controlByID := make(map[string]types.CoagentSourcePacket, len(snapshot.Updates))
+	for _, update := range snapshot.Updates {
+		controlByID[strings.TrimSpace(update.UpdateID)] = update
+	}
+	deliveredByID := map[string]types.CoagentSourcePacket{}
+	var after int64
+	for {
+		page, pageErr := rt.store.ListLifecycleControlsDeliveredToRunPage(ctx, ownerID, computerID, trajectoryID, agentID, stored.RunID, after, 100)
+		if pageErr != nil {
+			return true, false, "", fmt.Errorf("load canonical lifecycle control delivery: %w", pageErr)
+		}
+		for _, control := range page.Packets {
+			deliveredByID[strings.TrimSpace(control.UpdateID)] = control
+		}
+		if !page.HasMore {
+			break
+		}
+		if page.NextCursor <= after {
+			return deny("canonical lifecycle control delivery cursor did not advance")
+		}
+		after = page.NextCursor
+	}
+
+	fingerprintUpdates := make([]types.CoagentSourcePacket, 0, len(versions))
+	fingerprintWork := make(map[string]types.WorkItemRecord, len(versions))
+	seenUpdates := make(map[string]bool, len(versions))
+	deliveryMode := ""
+	for _, version := range versions {
+		updateID := strings.TrimSpace(version.UpdateID)
+		workID := strings.TrimSpace(version.TargetWorkItemID)
+		if updateID == "" || workID == "" || version.ControlLifecycleVersion <= 0 || version.WorkLifecycleVersion <= 0 || seenUpdates[updateID] {
+			return deny("lifecycle control fingerprint contains an invalid version join")
+		}
+		seenUpdates[updateID] = true
+		work, ok := workByID[workID]
+		if !ok || work.OwnerID != ownerID || work.ComputerID != computerID || work.TrajectoryID != trajectoryID ||
+			work.AssignedAgentID != agentID || work.Status != types.WorkItemOpen || work.LifecycleVersion != version.WorkLifecycleVersion ||
+			!lifecycleControlWorkIDsForRun(&stored)[workID] {
+			return deny("lifecycle control is not joined to the exact open work version")
+		}
+		control, ok := controlByID[updateID]
+		if !ok || control.OwnerID != ownerID || control.ComputerID != computerID || control.TrajectoryID != trajectoryID ||
+			control.TargetAgentID != agentID || control.TargetWorkItemID != workID || control.Direction != types.LifecyclePacketDirectionControl ||
+			control.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 || strings.TrimSpace(control.Content) == "" {
+			return deny("lifecycle control fingerprint does not name the exact canonical Texture control")
+		}
+		payloadDigest, digestErr := store.ComputeLifecycleUpdatePayloadDigest(control.Packet, control.Content)
+		if digestErr != nil || payloadDigest != control.PayloadDigest {
+			return deny("lifecycle control payload digest is invalid")
+		}
+		sourceAgent, sourceErr := rt.store.GetAgentByScope(ctx, ownerID, computerID, strings.TrimSpace(control.AgentID))
+		if sourceErr != nil {
+			return true, false, "", fmt.Errorf("load lifecycle control source Texture: %w", sourceErr)
+		}
+		if sourceAgent.OwnerID != ownerID || sourceAgent.ComputerID != computerID || sourceAgent.LifecycleVersion <= 0 ||
+			agentprofile.Canonical(sourceAgent.Profile) != agentprofile.Texture || agentprofile.Canonical(sourceAgent.Role) != agentprofile.Texture ||
+			sourceAgent.ChannelID == "" || sourceAgent.ChannelID != control.ChannelID || control.ChannelID != snapshot.Document.DocID ||
+			control.AgentID != sourceAgent.AgentID || snapshot.Document.TrajectoryID != trajectoryID {
+			return deny("lifecycle control source is not the exact document-bound lifecycle Texture")
+		}
+		mode := "pending"
+		if delivered, ok := deliveredByID[updateID]; ok {
+			mode = "delivered"
+			if delivered.DeliveredAt == nil || strings.TrimSpace(delivered.DeliveredToRunID) != stored.RunID ||
+				control.DeliveredAt == nil || strings.TrimSpace(control.DeliveredToRunID) != stored.RunID ||
+				(control.Disposition != types.UpdatePending && control.Disposition != types.UpdateIncorporated) ||
+				control.LifecycleVersion <= version.ControlLifecycleVersion {
+				return deny("canonical lifecycle control delivery does not match its fingerprinted run/version")
+			}
+		} else if control.Disposition != types.UpdatePending || control.DeliveredAt != nil || strings.TrimSpace(control.DeliveredToRunID) != "" ||
+			control.LifecycleVersion != version.ControlLifecycleVersion {
+			return deny("lifecycle control is neither exact pending authority nor canonically delivered to this run")
+		}
+		if deliveryMode != "" && deliveryMode != mode {
+			return deny("lifecycle control fingerprint is only partially delivered")
+		}
+		deliveryMode = mode
+		fingerprintControl := control
+		fingerprintControl.LifecycleVersion = version.ControlLifecycleVersion
+		fingerprintUpdates = append(fingerprintUpdates, fingerprintControl)
+		fingerprintWork[workID] = work
+	}
+	logicalKey, failedKey, _, keyErr := lifecycleActivationKeys(ownerID, computerID, trajectoryID, agentID,
+		metadataStringValue(stored.Metadata, lifecycleActivationBuildMetadata), fingerprintUpdates, fingerprintWork)
+	if keyErr != nil || logicalKey != metadataStringValue(stored.Metadata, lifecycleLogicalActivationKeyMetadata) ||
+		failedKey != metadataStringValue(stored.Metadata, lifecycleFailedAttemptKeyMetadata) {
+		return deny("lifecycle control fingerprint does not match the canonical control/work versions")
+	}
+	if deliveryMode == "pending" {
+		// Close the projection-before-bind crash cut before provider entry. The
+		// Store CAS joins the exact pending fingerprint to this run; a conflict or
+		// reload failure is a zero-provider retry, never permission to proceed.
+		if _, bindErr := rt.bindLifecycleControlsToRun(ctx, &stored, fingerprintUpdates); bindErr != nil {
+			return true, false, "", fmt.Errorf("bind exact pending lifecycle controls before provider entry: %w", bindErr)
+		}
+		*rec = stored
+		return rt.admitLifecycleResearcherProviderEntry(ctx, rec)
+	}
+	*rec = stored
+	return true, true, "", nil
+}
+
+const (
+	lifecycleResearcherAdmissionRefusalReason = "lifecycle_researcher_provider_admission_refused"
+	lifecycleResearcherAdmissionRetryReason   = "lifecycle_researcher_provider_admission_retry"
+	activationRetryableErrorMetadata          = "runtime_activation_retryable_error"
+)
+
+func markActivationRetryableError(rec *types.RunRecord, err error) {
+	if rec == nil || err == nil {
+		return
+	}
+	rec.Metadata = cloneMetadata(rec.Metadata)
+	rec.Metadata[activationRetryableErrorMetadata] = strings.TrimSpace(err.Error())
+}
+
+func (rt *Runtime) passivateLifecycleResearcherWithoutProviderAuthority(ctx context.Context, rec *types.RunRecord, reason string) error {
+	return rt.passivateLifecycleResearcherProviderEntry(ctx, rec, reason, lifecycleResearcherAdmissionRefusalReason)
+}
+
+func (rt *Runtime) passivateLifecycleResearcherAfterAdmissionError(ctx context.Context, rec *types.RunRecord, admissionErr error) error {
+	if admissionErr == nil {
+		return nil
+	}
+	return rt.passivateLifecycleResearcherProviderEntry(ctx, rec, admissionErr.Error(), lifecycleResearcherAdmissionRetryReason)
+}
+
+func (rt *Runtime) passivateLifecycleResearcherProviderEntry(ctx context.Context, rec *types.RunRecord, reason, passivatedReason string) error {
+	if rt == nil || rt.store == nil || rec == nil || strings.TrimSpace(rec.RunID) == "" {
+		return fmt.Errorf("passivate lifecycle Researcher: runtime, store, and run are required")
+	}
+	stored, err := rt.getRunForComputer(context.WithoutCancel(ctx), rec.OwnerID, rec.RunID)
+	if err != nil {
+		return fmt.Errorf("load lifecycle Researcher for passivation: %w", err)
+	}
+	if !stored.State.Active() {
+		*rec = stored
+		return nil
+	}
+	if _, intentErr := rt.store.GetLifecycleCancellationIntent(context.WithoutCancel(ctx), stored.OwnerID, stored.SandboxID, stored.TrajectoryID); intentErr == nil {
+		*rec = stored
+		return nil
+	} else if !errors.Is(intentErr, store.ErrNotFound) {
+		return fmt.Errorf("load lifecycle Researcher cancellation intent before passivation: %w", intentErr)
+	}
+	stored.State = types.RunPassivated
+	stored.Error = ""
+	stored.Result = ""
+	stored.FinishedAt = nil
+	stored.UpdatedAt = time.Now().UTC()
+	stored.Metadata = cloneMetadata(stored.Metadata)
+	stored.Metadata["passivated_reason"] = strings.TrimSpace(passivatedReason)
+	stored.Metadata["provider_admission_refusal"] = strings.TrimSpace(reason)
+	delete(stored.Metadata, activationRetryableErrorMetadata)
+	if err := rt.store.UpdateRun(context.WithoutCancel(ctx), stored); err != nil {
+		return fmt.Errorf("persist lifecycle Researcher provider-admission passivation: %w", err)
+	}
+	*rec = stored
+	return nil
 }
 
 // executeActivation runs one activation body using the configured provider.
@@ -2522,6 +2813,22 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 		delete(rt.running, rec.RunID)
 		rt.runningMu.Unlock()
 	}()
+
+	lifecycleResearcher, admitted, refusal, admissionErr := rt.admitLifecycleResearcherProviderEntry(ctx, rec)
+	if admissionErr != nil {
+		if passivateErr := rt.passivateLifecycleResearcherAfterAdmissionError(ctx, rec, admissionErr); passivateErr != nil {
+			markActivationRetryableError(rec, fmt.Errorf("provider admission failed (%v) and retry passivation failed: %w", admissionErr, passivateErr))
+		}
+		log.Printf("runtime: refuse lifecycle Researcher provider entry for run %s: %v", rec.RunID, admissionErr)
+		return
+	}
+	if lifecycleResearcher && !admitted {
+		if passivateErr := rt.passivateLifecycleResearcherWithoutProviderAuthority(ctx, rec, refusal); passivateErr != nil {
+			markActivationRetryableError(rec, fmt.Errorf("provider admission refusal %q could not passivate: %w", refusal, passivateErr))
+		}
+		log.Printf("runtime: lifecycle Researcher run %s remains idle: %s", rec.RunID, refusal)
+		return
+	}
 
 	now := time.Now().UTC()
 
@@ -2799,9 +3106,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		"output_tokens": usage.OutputTokens,
 	})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
-	if _, continueErr := rt.continueOpenLifecycleWorkAfterTerminal(persistCtx, rec); continueErr != nil {
-		log.Printf("runtime: continue open lifecycle work after run %s: %v", rec.RunID, continueErr)
-	}
 	if shouldLogWireLifecycle(rec) {
 		preview := rec.Result
 		if len(preview) > 160 {
@@ -3037,9 +3341,6 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	}
 	resultLenPayload, _ := json.Marshal(map[string]int{"result_length": len(result)})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
-	if _, continueErr := rt.continueOpenLifecycleWorkAfterTerminal(persistCtx, rec); continueErr != nil {
-		log.Printf("runtime: continue open lifecycle work after run %s: %v", rec.RunID, continueErr)
-	}
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
 
 }

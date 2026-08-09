@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/provider"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -207,279 +209,369 @@ func TestSpawnedLifecycleResearcherQueuesOpenAndCompletedUpdates(t *testing.T) {
 	if active, err := s.GetLatestActiveRunByAgent(ctx, ownerID, child.AgentID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("boot sweep created activation despite pending terminal disposition: %+v, %v", active, err)
 	}
-	if replacement, err := rt.continueOpenLifecycleWorkAfterTerminal(ctx, &persisted); err != nil || replacement != nil {
-		t.Fatalf("terminal producer disposition created redundant activation: %+v, %v", replacement, err)
+}
+
+type researcherAdmissionCountingProvider struct {
+	mu    sync.Mutex
+	calls int
+	stub  *provider.StubProvider
+}
+
+func newResearcherAdmissionCountingProvider() *researcherAdmissionCountingProvider {
+	return &researcherAdmissionCountingProvider{stub: provider.NewStubProvider(0)}
+}
+
+func (p *researcherAdmissionCountingProvider) Execute(ctx context.Context, rec *types.RunRecord, emit provideriface.EventEmitFunc) error {
+	p.mu.Lock()
+	p.calls++
+	p.mu.Unlock()
+	return p.stub.Execute(ctx, rec, emit)
+}
+
+func (p *researcherAdmissionCountingProvider) ProviderName() string {
+	return "researcher-admission-counting"
+}
+
+func (p *researcherAdmissionCountingProvider) Count() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.calls
+}
+
+func setSynchronousResearcherAdmissionDispatch(rt *Runtime, s *store.Store) {
+	rt.SetDispatchActor(func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
+		if kind != "initial_dispatch" {
+			return nil
+		}
+		rec, err := s.GetLifecycleRun(ctx, ownerID, computerID, strings.TrimSpace(content))
+		if err != nil {
+			rec, err = s.GetRunByOwner(ctx, ownerID, strings.TrimSpace(content))
+		}
+		if err == nil {
+			rt.ExecuteActivationSync(ctx, &rec)
+		}
+		return nil
+	})
+}
+
+func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t *testing.T) {
+	rt, s := testRuntime(t)
+	d9InstallTools(t, rt)
+	counting := newResearcherAdmissionCountingProvider()
+	rt.provider = counting
+	setSynchronousResearcherAdmissionDispatch(rt, s)
+	ctx := context.Background()
+	const ownerID, docID = "user-researcher-admission", "doc-researcher-admission"
+	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
+	initialSnapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	textureWorkID := ""
+	for _, item := range initialSnapshot.WorkItems {
+		if item.AssignedAgentID == currentTextureAgentID(docID) {
+			textureWorkID = item.WorkItemID
+			break
+		}
+	}
+	if textureWorkID == "" {
+		t.Fatal("initial Texture work is missing")
+	}
+	now := time.Now().UTC()
+	textureAgentID := currentTextureAgentID(docID)
+	parent := types.RunRecord{
+		RunID: "run-researcher-admission-texture", AgentID: textureAgentID, ChannelID: docID,
+		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
+		OwnerID: ownerID, SandboxID: "sandbox-test", State: types.RunRunning,
+		TrajectoryID: trajectoryID, CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataChannelID: docID, "lifecycle_work_item_id": textureWorkID, "work_item_ids": []string{textureWorkID}},
+	}
+	if err := s.CreateRun(ctx, parent); err != nil {
+		t.Fatal(err)
+	}
+	child, err := rt.StartCoagentRun(ctx, parent.RunID, "inspect the exact source", ownerID, map[string]any{
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
+		runMetadataChannelID:    docID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workID := metadataStringValue(child.Metadata, "lifecycle_work_item_id")
+	if counting.Count() != 0 {
+		t.Fatalf("open work alone made %d provider calls", counting.Count())
+	}
+	idle, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", child.RunID)
+	if err != nil || idle.State != types.RunPassivated || metadataStringValue(idle.Metadata, "passivated_reason") != "lifecycle_researcher_provider_admission_refused" {
+		t.Fatalf("open-work Researcher is not durably idle: %+v err=%v", idle, err)
+	}
+	work, err := s.GetLifecycleWorkItem(ctx, ownerID, "sandbox-test", workID)
+	if err != nil || work.Status != types.WorkItemOpen {
+		t.Fatalf("open work was changed by admission refusal: %+v err=%v", work, err)
+	}
+	if generic, err := rt.reconcileAssignedWorkItemActor(ctx, []types.WorkItemRecord{work}); err != nil || generic != nil {
+		t.Fatalf("generic reconciliation minted lifecycle Researcher run: %+v err=%v", generic, err)
+	}
+	for range 2 {
+		rt.sweepOpenWorkItemActors(ctx)
+		rt.sweepPassivatedSpawnedCoagentWork(ctx)
+	}
+	if counting.Count() != 0 {
+		t.Fatalf("repeated no-control reconciliation made %d provider calls", counting.Count())
+	}
+
+	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	textureAgent, err := s.GetAgentByScope(ctx, ownerID, "sandbox-test", textureAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "inspect one exact follow-up"}
+	content := "inspect one exact follow-up"
+	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+	turn := types.ApplyTextureTurnRequest{
+		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "turn-researcher-admission-control", DocumentID: docID, TrajectoryID: trajectoryID,
+		CallerAgentID: textureAgentID, CallerRunID: parent.RunID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+		ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion, ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID,
+		CallerWorkItemID: textureWorkID, CallerWorkDisposition: types.WorkItemOpen,
+		Outcome: types.TextureTurnWait, Reason: "issue one bounded follow-up",
+		Controls: []types.TextureTurnControl{{ControlID: "control-researcher-admission", TargetAgentID: child.AgentID, TargetWorkItemID: workID, Packet: packet, Content: content, PayloadDigest: payloadDigest}},
+	}
+	turn.CommandDigest, _ = store.ComputeApplyTextureTurnDigest(turn)
+	if _, err := s.ApplyTextureTurn(ctx, turn); err != nil {
+		t.Fatal(err)
+	}
+	activated, err := rt.reconcileUpdatedCoagentActor(ctx, ownerID, child.AgentID)
+	if err != nil || activated == nil {
+		t.Fatalf("later exact control did not activate: %+v err=%v", activated, err)
+	}
+	if counting.Count() != 1 {
+		t.Fatalf("one exact control made %d provider calls, want 1", counting.Count())
+	}
+	completed, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", activated.RunID)
+	if err != nil || completed.State != types.RunCompleted {
+		t.Fatalf("controlled Researcher did not finish one bounded activation: %+v err=%v", completed, err)
+	}
+	reportPacket := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "bounded report remains open", Claims: []types.CoagentPacketClaim{{Text: "bounded report remains open"}}}
+	reportContent := "bounded report remains open"
+	reportDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(reportPacket, reportContent)
+	report := types.QueueLifecycleUpdateRequest{
+		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "queue-researcher-admission-open-report",
+		TrajectoryID: trajectoryID, UpdateID: "update-researcher-admission-open-report", TargetAgentID: textureAgentID,
+		ProducerAgentID: child.AgentID, ProducerUpdateID: "producer-researcher-admission-open-report", SourceRunID: completed.RunID,
+		ChannelID: docID, Role: agentprofile.Researcher, WorkItemID: workID, WorkDisposition: types.WorkItemOpen,
+		PayloadDigest: reportDigest, Packet: reportPacket, Content: reportContent,
+	}
+	report.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(report)
+	if _, err := s.QueueLifecycleUpdate(ctx, report); err != nil {
+		t.Fatal(err)
+	}
+	parent.State = types.RunPassivated
+	parent.UpdatedAt = time.Now().UTC()
+	parent.FinishedAt = nil
+	if err := s.UpdateRun(ctx, parent); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		if next, err := rt.reconcileUpdatedCoagentActor(ctx, ownerID, child.AgentID); err != nil || next != nil {
+			t.Fatalf("open report minted generic successor: %+v err=%v", next, err)
+		}
+		rt.sweepOpenWorkItemActors(ctx)
+		rt.sweepPassivatedSpawnedCoagentWork(ctx)
+	}
+	rt.Start(ctx)
+	if counting.Count() != 1 {
+		t.Fatalf("reconcile/restart amplified one control to %d provider calls", counting.Count())
+	}
+	runs, err := s.ListLifecycleRunsByTrajectory(ctx, ownerID, "sandbox-test", trajectoryID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	researcherRuns := 0
+	for _, run := range runs {
+		if run.AgentID == child.AgentID {
+			researcherRuns++
+		}
+	}
+	if researcherRuns != 2 {
+		t.Fatalf("Researcher run count=%d want idle initial plus one controlled activation; runs=%+v", researcherRuns, runs)
 	}
 }
 
-func TestCompletedLifecycleActivationReactivatesOpenWorkWithoutSettlingFromRunResult(t *testing.T) {
-	tests := []struct {
-		name             string
-		producerUpdateID string
-		requestSource    string
-		boot             bool
-		multiple         bool
-		concurrent       bool
-		settleBefore     bool
-	}{
-		{name: "immediate", producerUpdateID: "55555555-5555-4555-8555-555555555555", requestSource: "terminal_activation_work_recovery"},
-		{name: "boot", producerUpdateID: "66666666-6666-4666-8666-666666666666", requestSource: "trajectory_work_item_sweep", boot: true},
-		{name: "boot_multiple", producerUpdateID: "77777777-7777-4777-8777-777777777777", requestSource: "trajectory_work_item_sweep", boot: true, multiple: true},
-		{name: "immediate_concurrent", producerUpdateID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", requestSource: "terminal_activation_work_recovery", concurrent: true},
-		{name: "immediate_settled_before_reconcile", producerUpdateID: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", requestSource: "terminal_activation_work_recovery", settleBefore: true},
+func TestLifecycleResearcherAdmissionErrorRecoversWithDistinctOccurrenceOnce(t *testing.T) {
+	rt, s := testRuntime(t)
+	counting := newResearcherAdmissionCountingProvider()
+	rt.provider = counting
+	fixture := bindResearcherControlFixture(t, rt, s, "owner-admission-retry", "admission-retry")
+	rt.passivateLifecycleResearcherAfterAdmissionError(context.Background(), &fixture.run, errors.New("injected admission store failure after bind"))
+	parked, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.SandboxID, fixture.run.RunID)
+	if err != nil || parked.State != types.RunPassivated || metadataStringValue(parked.Metadata, "passivated_reason") != lifecycleResearcherAdmissionRetryReason {
+		t.Fatalf("admission failure was not durably retryable: %+v err=%v", parked, err)
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			rt, s := testRuntime(t)
-			d9InstallTools(t, rt)
-			rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
-				return nil
-			})
-			ctx := context.Background()
-			ownerID := "user-terminal-lifecycle-recovery-" + tc.name
-			docID := "doc-terminal-lifecycle-recovery-" + tc.name
-			trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
-			now := time.Now().UTC()
-			parent := types.RunRecord{
-				RunID: "run-terminal-lifecycle-parent-" + tc.name, AgentID: "texture:" + docID, ChannelID: docID,
-				AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
-				OwnerID: ownerID, SandboxID: "sandbox-test", State: types.RunRunning,
-				TrajectoryID: trajectoryID, CreatedAt: now, UpdatedAt: now,
-				Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataChannelID: docID},
-			}
-			if err := s.CreateRun(ctx, parent); err != nil {
-				t.Fatalf("create lifecycle parent activation: %v", err)
-			}
-			child, err := rt.StartCoagentRun(ctx, parent.RunID, "finish the assigned evidence work", ownerID, map[string]any{
-				runMetadataAgentProfile: agentprofile.Researcher,
-				runMetadataAgentRole:    agentprofile.Researcher,
-				runMetadataChannelID:    docID,
-			})
-			if err != nil {
-				t.Fatalf("start lifecycle researcher: %v", err)
-			}
-			workItemID := metadataStringValue(child.Metadata, "lifecycle_work_item_id")
-			if workItemID == "" {
-				t.Fatal("spawned lifecycle work binding is missing")
-			}
-			secondWorkItemID := ""
-			if tc.multiple {
-				secondWorkItemID = "work-terminal-lifecycle-recovery-second-" + tc.name
-				openSecond := types.OpenLifecycleWorkRequest{
-					OwnerID: ownerID, ComputerID: "sandbox-test",
-					CommandID: "command-open-terminal-lifecycle-recovery-second-" + tc.name, TrajectoryID: trajectoryID,
-					WorkItem: types.WorkItemRecord{
-						WorkItemID: secondWorkItemID, Objective: "verify the second assigned evidence source",
-						AssignedAgentID: child.AgentID, AuthorityProfile: agentprofile.Researcher,
-						Details: map[string]any{"requested_by_run_id": child.RequestedByRunID, "requested_by_agent_id": "texture:" + docID, "requested_by_profile": agentprofile.Texture},
-					},
-				}
-				openSecond.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(openSecond)
-				if _, err := s.OpenLifecycleWork(ctx, openSecond); err != nil {
-					t.Fatalf("open second assigned lifecycle work: %v", err)
-				}
-			}
-			execution := toolExecutionContextForRun(child)
-			execution.ToolCallID = tc.producerUpdateID
-			if _, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(
-				toolregistry.WithExecutionContext(ctx, execution),
-				"update_coagent",
-				json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"interim evidence only","agent_id":"texture:`+docID+`","channel_id":"`+docID+`","work_disposition":"open","claims":[{"text":"interim evidence only"}]}`),
-			); err != nil {
-				t.Fatalf("queue open lifecycle checkpoint: %v", err)
-			}
+	var recoveryContents []string
+	rt.SetDispatchActor(func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
+		if kind != "coagent_result" {
+			t.Fatalf("admission retry reused %q instead of a distinct recovery occurrence", kind)
+		}
+		recoveryContents = append(recoveryContents, content)
+		return nil // boot delivery is paused: append first, execute after projection
+	})
+	rt.Start(context.Background())
+	if len(recoveryContents) == 1 {
+		rec, terminal, resolveErr := rt.ResolveLifecycleResearcherAdmissionRecovery(context.Background(), parked.OwnerID, parked.SandboxID, parked.AgentID, recoveryContents[0], parked.TrajectoryID, fixture.control.AgentID)
+		if resolveErr != nil || terminal || rec == nil {
+			t.Fatalf("resolve appended recovery rec=%+v terminal=%v err=%v", rec, terminal, resolveErr)
+		}
+		if err := rt.ExecuteActivationSyncChecked(context.Background(), rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(recoveryContents) != 1 || !strings.HasPrefix(recoveryContents[0], "lifecycle-researcher-admission-recovery:v1:") {
+		t.Fatalf("admission recovery occurrences=%v", recoveryContents)
+	}
+	if counting.Count() != 1 {
+		t.Fatalf("admission restart provider calls=%d want 1", counting.Count())
+	}
+	completed, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.SandboxID, fixture.run.RunID)
+	if err != nil || completed.State != types.RunCompleted {
+		t.Fatalf("admission recovery run=%+v err=%v", completed, err)
+	}
+	rt.Start(context.Background())
+	if len(recoveryContents) != 1 || counting.Count() != 1 {
+		t.Fatalf("repeated restart duplicated recovery: occurrences=%v calls=%d", recoveryContents, counting.Count())
+	}
+}
 
-			terminal := *child
-			terminal.State = types.RunCompleted
-			terminal.Result = "final prose that is not lifecycle authority"
-			finishedAt := time.Now().UTC()
-			terminal.UpdatedAt, terminal.FinishedAt = finishedAt, &finishedAt
-			project := types.ReplaceLifecycleActivationRequest{
-				OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "project-terminal-open-work-recovery-" + tc.name,
-				TrajectoryID: trajectoryID, AgentID: child.AgentID, Run: terminal,
-			}
-			project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
-			if _, err := s.ProjectTerminalLifecycleRun(ctx, project); err != nil {
-				t.Fatalf("project terminal lifecycle researcher: %v", err)
-			}
-			persisted, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", child.RunID)
-			if err != nil {
-				t.Fatalf("reload terminal lifecycle researcher: %v", err)
-			}
-			openItems, err := s.ListOpenAssignedLifecycleWorkItems(ctx, "sandbox-test", 0)
-			if err != nil {
-				t.Fatalf("list boot-recoverable lifecycle work: %v", err)
-			}
-			foundOpenWork := false
-			for _, item := range openItems {
-				if item.WorkItemID == workItemID {
-					foundOpenWork = true
-					break
-				}
-			}
-			if !foundOpenWork {
-				t.Fatalf("boot lifecycle work inventory omitted %q: %+v", workItemID, openItems)
-			}
-
-			if tc.settleBefore {
-				settle := types.SettleLifecycleWorkRequest{
-					OwnerID: ownerID, ComputerID: "sandbox-test",
-					CommandID: "command-settle-before-reconcile-" + tc.name, TrajectoryID: trajectoryID,
-					WorkItemID: workItemID, ResultRef: "artifact://terminal-recovery/already-settled",
-					ActingAgentID: child.AgentID,
-				}
-				settle.CommandDigest, _ = store.ComputeSettleLifecycleWorkDigest(settle)
-				if _, err := s.SettleLifecycleWork(ctx, settle); err != nil {
-					t.Fatalf("settle work before reconcile: %v", err)
-				}
-				replacement, err := rt.continueOpenLifecycleWorkAfterTerminal(ctx, &persisted)
-				if err != nil {
-					t.Fatalf("reconcile settled lifecycle work: %v", err)
-				}
-				if replacement != nil {
-					t.Fatalf("settled lifecycle work reactivated from stale inventory: %+v", replacement)
-				}
-				return
-			}
-			var replacement *types.RunRecord
-			if tc.boot {
-				rt.sweepOpenWorkItemActors(ctx)
-				active, found, activeErr := rt.activeRunByAgent(ctx, ownerID, child.AgentID)
-				if activeErr != nil || !found {
-					t.Fatalf("load boot replacement activation: found=%t run=%+v err=%v", found, active, activeErr)
-				}
-				replacement = &active
-			} else if tc.concurrent {
-				type continuationResult struct {
-					run *types.RunRecord
-					err error
-				}
-				results := make(chan continuationResult, 2)
-				for range 2 {
-					go func() {
-						run, continueErr := rt.continueOpenLifecycleWorkAfterTerminal(ctx, &persisted)
-						results <- continuationResult{run: run, err: continueErr}
-					}()
-				}
-				firstResult, secondResult := <-results, <-results
-				if firstResult.err != nil || secondResult.err != nil ||
-					firstResult.run == nil || secondResult.run == nil ||
-					firstResult.run.RunID != secondResult.run.RunID {
-					t.Fatalf("concurrent terminal continuations = (%+v, %v), (%+v, %v); want one activation", firstResult.run, firstResult.err, secondResult.run, secondResult.err)
-				}
-				replacement = firstResult.run
-			} else {
-				replacement, err = rt.continueOpenLifecycleWorkAfterTerminal(ctx, &persisted)
-				if err != nil {
-					t.Fatalf("continue open lifecycle work: %v", err)
-				}
-			}
-			if replacement == nil || replacement.RunID == child.RunID || replacement.State != types.RunPending {
-				t.Fatalf("replacement activation = %+v, want a distinct pending run", replacement)
-			}
-			if tc.multiple {
-				if got := metadataStringValue(replacement.Metadata, "lifecycle_work_item_id"); got != "" {
-					t.Fatalf("multi-item replacement lifecycle_work_item_id = %q, want empty", got)
-				}
-				ids := metadataStringSlice(replacement.Metadata["work_item_ids"])
-				if len(ids) != 2 || !containsString(ids, workItemID) || !containsString(ids, secondWorkItemID) {
-					t.Fatalf("multi-item replacement work_item_ids = %v, want %q and %q", ids, workItemID, secondWorkItemID)
-				}
-			} else if got := metadataStringValue(replacement.Metadata, "lifecycle_work_item_id"); got != workItemID {
-				t.Fatalf("replacement lifecycle_work_item_id = %q, want %q", got, workItemID)
-			}
-			if got := metadataStringValue(replacement.Metadata, "request_source"); got != tc.requestSource {
-				t.Fatalf("replacement request_source = %q, want %q", got, tc.requestSource)
-			}
-			if !strings.Contains(replacement.Prompt, "RunRecord completion do not settle work") ||
-				!strings.Contains(replacement.Prompt, "finish the assigned evidence work") {
-				t.Fatalf("replacement prompt does not require native terminal disposition: %q", replacement.Prompt)
-			}
-			if tc.multiple {
-				updateTool := rt.ToolRegistryForProfile(agentprofile.Researcher)
-				combinedMarkerRun := *replacement
-				combinedMarkerRun.Metadata = make(map[string]any, len(replacement.Metadata)+1)
-				for key, value := range replacement.Metadata {
-					combinedMarkerRun.Metadata[key] = value
-				}
-				combinedMarkerRun.Metadata["lifecycle_work_item_id"] = workItemID
-				executeUpdate := func(callID string, raw json.RawMessage) (string, error) {
-					execution := toolExecutionContextForRun(&combinedMarkerRun)
-					execution.ToolCallID = callID
-					return updateTool.Execute(toolregistry.WithExecutionContext(ctx, execution), "update_coagent", raw)
-				}
-				missingWorkID := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"ambiguous multi-item update","agent_id":"texture:` + docID + `","channel_id":"` + docID + `","work_disposition":"open","claims":[{"text":"must select one item"}]}`)
-				if _, err := executeUpdate("call-missing-work-"+tc.name, missingWorkID); err == nil || !strings.Contains(err.Error(), "requires one explicit assigned work binding") {
-					t.Fatalf("multi-item update without work_item_id error = %v", err)
-				}
-				unassignedWorkID := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"unassigned item update","agent_id":"texture:` + docID + `","channel_id":"` + docID + `","work_item_id":"work-not-assigned","work_disposition":"open","claims":[{"text":"must reject foreign work"}]}`)
-				if _, err := executeUpdate("call-unassigned-work-"+tc.name, unassignedWorkID); err == nil || !strings.Contains(err.Error(), "not assigned") {
-					t.Fatalf("multi-item update for unassigned work error = %v", err)
-				}
-				selectedUpdate := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"second item checkpoint","agent_id":"texture:` + docID + `","channel_id":"` + docID + `","work_item_id":"` + secondWorkItemID + `","work_disposition":"open","claims":[{"text":"second item remains open"}]}`)
-				if _, err := executeUpdate("call-selected-work-"+tc.name, selectedUpdate); err != nil {
-					t.Fatalf("queue selected multi-item lifecycle update: %v", err)
-				}
-				snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
-				if err != nil {
-					t.Fatalf("load multi-item lifecycle snapshot: %v", err)
-				}
-				foundSelectedUpdate := false
-				for _, update := range snapshot.Updates {
-					if update.WorkItemID == secondWorkItemID && update.SourceRunID == replacement.RunID {
-						foundSelectedUpdate = true
-						break
-					}
-				}
-				if !foundSelectedUpdate {
-					t.Fatalf("selected multi-item update missing or misbound: %+v", snapshot.Updates)
-				}
-
-				replacementTerminal := *replacement
-				replacementTerminal.State = types.RunCompleted
-				replacementTerminal.Result = "multi-item prose is still not work authority"
-				replacementFinishedAt := time.Now().UTC()
-				replacementTerminal.UpdatedAt, replacementTerminal.FinishedAt = replacementFinishedAt, &replacementFinishedAt
-				replaceTerminal := types.ReplaceLifecycleActivationRequest{
-					OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "project-terminal-multi-item-recovery-" + tc.name,
-					TrajectoryID: trajectoryID, AgentID: replacement.AgentID, Run: replacementTerminal,
-				}
-				replaceTerminal.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(replaceTerminal)
-				if _, err := s.ProjectTerminalLifecycleRun(ctx, replaceTerminal); err != nil {
-					t.Fatalf("project terminal multi-item replacement: %v", err)
-				}
-				persistedReplacement, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", replacement.RunID)
-				if err != nil {
-					t.Fatalf("reload terminal multi-item replacement: %v", err)
-				}
-				if err := rt.bindTerminalRunOutcome(ctx, &persistedReplacement, false); err != nil {
-					t.Fatalf("bind terminal multi-item lifecycle outcome: %v", err)
-				}
-				legacyUpdates, err := s.ListWorkerUpdatesBySourceRun(ctx, ownerID, replacement.RunID)
-				if err != nil {
-					t.Fatalf("list legacy terminal updates for multi-item lifecycle run: %v", err)
-				}
-				if len(legacyUpdates) != 0 {
-					t.Fatalf("multi-item lifecycle terminal prose synthesized legacy updates: %+v", legacyUpdates)
-				}
-				next, err := rt.continueOpenLifecycleWorkAfterTerminal(ctx, &persistedReplacement)
-				if err != nil {
-					t.Fatalf("continue multi-item lifecycle work: %v", err)
-				}
-				if next == nil || next.RunID == replacement.RunID {
-					t.Fatalf("multi-item terminal continuation = %+v, want a distinct activation", next)
-				}
-				nextIDs := metadataStringSlice(next.Metadata["work_item_ids"])
-				if len(nextIDs) != 2 || !containsString(nextIDs, workItemID) || !containsString(nextIDs, secondWorkItemID) {
-					t.Fatalf("continued multi-item work_item_ids = %v, want both open items", nextIDs)
-				}
-			}
-			work, err := s.GetLifecycleWorkItem(ctx, ownerID, "sandbox-test", workItemID)
-			if err != nil || work.Status != types.WorkItemOpen || work.ResultRef != "" {
-				t.Fatalf("RunRecord result settled lifecycle work: %+v, %v", work, err)
-			}
+func TestLifecycleResearcherProviderAdmissionFailsClosedForStaleAndCancelledRuns(t *testing.T) {
+	t.Run("stale pending projection", func(t *testing.T) {
+		rt, s := testRuntime(t)
+		counting := newResearcherAdmissionCountingProvider()
+		rt.provider = counting
+		fixture := bindResearcherControlFixture(t, rt, s, "owner-admission-stale-pending", "admission-stale-pending")
+		stale := fixture.run
+		stale.State = types.RunPending
+		rt.ExecuteActivationSync(context.Background(), &stale)
+		if counting.Count() != 0 || stale.State != types.RunPassivated {
+			t.Fatalf("stale pending projection calls=%d state=%s", counting.Count(), stale.State)
+		}
+	})
+	t.Run("stale running projection", func(t *testing.T) {
+		rt, s := testRuntime(t)
+		counting := newResearcherAdmissionCountingProvider()
+		rt.provider = counting
+		fixture := bindResearcherControlFixture(t, rt, s, "owner-admission-stale-running", "admission-stale-running")
+		canonical := fixture.run
+		canonical.State = types.RunPending
+		canonical.UpdatedAt = time.Now().UTC()
+		if err := s.UpdateRun(context.Background(), canonical); err != nil {
+			t.Fatal(err)
+		}
+		// The actor still holds the older running projection. Exact canonical
+		// state must win before provider entry.
+		rt.ExecuteActivationSync(context.Background(), &fixture.run)
+		if counting.Count() != 0 || fixture.run.State != types.RunPassivated {
+			t.Fatalf("stale running projection calls=%d state=%s", counting.Count(), fixture.run.State)
+		}
+	})
+	t.Run("legacy version-zero Researcher remains executable", func(t *testing.T) {
+		rt, _ := testRuntime(t)
+		counting := newResearcherAdmissionCountingProvider()
+		rt.provider = counting
+		rec, err := rt.createRunWithMetadata(context.Background(), "legacy Researcher work", "owner-admission-legacy", map[string]any{
+			runMetadataAgentProfile: agentprofile.Researcher,
+			runMetadataAgentRole:    agentprofile.Researcher,
+			runMetadataAgentID:      "researcher:admission-legacy",
 		})
-	}
+		if err != nil {
+			t.Fatal(err)
+		}
+		rt.ExecuteActivationSync(context.Background(), rec)
+		if counting.Count() != 1 || rec.State != types.RunCompleted {
+			t.Fatalf("legacy Researcher calls=%d state=%s", counting.Count(), rec.State)
+		}
+	})
+	t.Run("declared lifecycle missing canonical trajectory", func(t *testing.T) {
+		rt, s := testRuntime(t)
+		counting := newResearcherAdmissionCountingProvider()
+		rt.provider = counting
+		rec, err := rt.createRunWithMetadata(context.Background(), "malformed declared lifecycle control", "owner-admission-missing-trajectory", map[string]any{
+			runMetadataAgentProfile:               agentprofile.Researcher,
+			runMetadataAgentRole:                  agentprofile.Researcher,
+			runMetadataAgentID:                    "researcher:admission-missing-trajectory",
+			runMetadataTrajectoryID:               "missing-canonical-lifecycle-trajectory",
+			"request_source":                      "lifecycle_texture_control",
+			lifecycleLogicalActivationKeyMetadata: "sha256:declared-logical",
+			lifecycleFailedAttemptKeyMetadata:     "sha256:declared-attempt",
+			lifecycleActivationBuildMetadata:      "declared-build",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rt.ExecuteActivationSync(context.Background(), rec)
+		stored, err := s.GetRunByOwner(context.Background(), rec.OwnerID, rec.RunID)
+		if err != nil || counting.Count() != 0 || stored.State != types.RunPassivated {
+			t.Fatalf("missing lifecycle authority calls=%d run=%+v err=%v", counting.Count(), stored, err)
+		}
+	})
+	t.Run("cancelled trajectory", func(t *testing.T) {
+		rt, s := testRuntime(t)
+		counting := newResearcherAdmissionCountingProvider()
+		rt.provider = counting
+		fixture := bindResearcherControlFixture(t, rt, s, "owner-admission-cancelled", "admission-cancelled")
+		snapshot, err := s.GetLifecycleSnapshot(context.Background(), fixture.run.OwnerID, fixture.run.SandboxID, fixture.trajectoryID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := rt.CancelTrajectoryCommand(context.Background(), fixture.trajectoryID, fixture.run.OwnerID, "cancel-admission-before-provider", "owner cancelled before provider", snapshot.Trajectory.LifecycleVersion, snapshot.HeadRevision.RevisionID); err != nil {
+			t.Fatal(err)
+		}
+		rt.ExecuteActivationSync(context.Background(), &fixture.run)
+		rt.sweepOpenWorkItemActors(context.Background())
+		rt.sweepPassivatedSpawnedCoagentWork(context.Background())
+		if counting.Count() != 0 {
+			t.Fatalf("cancelled trajectory made %d provider calls", counting.Count())
+		}
+	})
+
+	t.Run("admission and passivation store failure is returned to actor", func(t *testing.T) {
+		rt, s := testRuntime(t)
+		counting := newResearcherAdmissionCountingProvider()
+		rt.provider = counting
+		fixture := bindResearcherControlFixture(t, rt, s, "owner-admission-store-cut", "admission-store-cut")
+		if err := s.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := rt.ExecuteActivationSyncChecked(context.Background(), &fixture.run); err == nil {
+			t.Fatal("admission plus retry-passivation failure was acknowledged")
+		}
+		if counting.Count() != 0 {
+			t.Fatalf("provider calls=%d", counting.Count())
+		}
+	})
+
+	t.Run("legacy version-zero Researcher attached to lifecycle trajectory remains executable", func(t *testing.T) {
+		rt, s := testRuntime(t)
+		counting := newResearcherAdmissionCountingProvider()
+		rt.provider = counting
+		const ownerID, docID, agentID = "owner-admission-legacy-trajectory", "doc-admission-legacy-trajectory", "researcher:legacy-trajectory"
+		trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
+		now := time.Now().UTC()
+		if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: "sandbox-test", SandboxID: "sandbox-test", Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+		rec := types.RunRecord{RunID: "run-admission-legacy-trajectory", AgentID: agentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, OwnerID: ownerID, SandboxID: "sandbox-test", ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunPending, CreatedAt: now, UpdatedAt: now}
+		if err := s.CreateRun(context.Background(), rec); err != nil {
+			t.Fatal(err)
+		}
+		if err := rt.ExecuteActivationSyncChecked(context.Background(), &rec); err != nil {
+			t.Fatal(err)
+		}
+		if counting.Count() != 1 || rec.State != types.RunCompleted {
+			t.Fatalf("legacy lifecycle-trajectory calls=%d state=%s", counting.Count(), rec.State)
+		}
+	})
 }
 
 func TestGenericAssignedWorkRecoveryDefersTextureToDocumentOwner(t *testing.T) {
@@ -1122,4 +1214,59 @@ func d9UpdateID(t *testing.T, raw string) string {
 		t.Fatalf("response missing update_id: %s", raw)
 	}
 	return resp.UpdateID
+}
+
+func TestLifecycleResearcherAdmissionErrorPassivationRecoversOnce(t *testing.T) {
+	rt, s := testRuntime(t)
+	counting := newResearcherAdmissionCountingProvider()
+	rt.provider = counting
+	fixture := bindResearcherControlFixture(t, rt, s, "owner-admission-recovery", "admission-recovery")
+	ctx := context.Background()
+
+	// Model the retryable provider-admission read/CAS failure after the exact
+	// control bind but before provider entry. The one-shot initial_dispatch may
+	// already be processed, so restart must use a distinct exact occurrence.
+	rt.passivateLifecycleResearcherAfterAdmissionError(ctx, &fixture.run, errors.New("transient admission store outage"))
+	if fixture.run.State != types.RunPassivated || metadataStringValue(fixture.run.Metadata, "passivated_reason") != lifecycleResearcherAdmissionRetryReason {
+		t.Fatalf("retryable admission failure state=%s reason=%q", fixture.run.State, metadataStringValue(fixture.run.Metadata, "passivated_reason"))
+	}
+
+	type dispatchRecord struct{ ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string }
+	var dispatches []dispatchRecord
+	rt.SetDispatchActor(func(_ context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
+		dispatches = append(dispatches, dispatchRecord{ownerID: ownerID, computerID: computerID, toAgentID: toAgentID, kind: kind, content: content, trajectoryID: trajectoryID, fromAgentID: fromAgentID})
+		return nil
+	})
+	rt.reactivateRetryableLifecycleInjectionRuns(ctx, fixture.run.SandboxID)
+	if len(dispatches) != 1 || dispatches[0].kind != "coagent_result" || !strings.HasPrefix(dispatches[0].content, "lifecycle-researcher-admission-recovery:v1:") {
+		t.Fatalf("recovery dispatches=%+v", dispatches)
+	}
+	if dispatches[0].ownerID != fixture.run.OwnerID || dispatches[0].computerID != fixture.run.SandboxID || dispatches[0].toAgentID != fixture.run.AgentID || dispatches[0].trajectoryID != fixture.run.TrajectoryID {
+		t.Fatalf("recovery dispatch scope=%+v", dispatches[0])
+	}
+	recovered, err := s.GetLifecycleRun(ctx, fixture.run.OwnerID, fixture.run.SandboxID, fixture.run.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered.State != types.RunPending {
+		t.Fatalf("recovered state=%s", recovered.State)
+	}
+
+	// The recovered exact run passes the central admission boundary once. Open
+	// work remains open, but completion does not mint a generic successor.
+	rt.ExecuteActivationSync(ctx, &recovered)
+	if counting.Count() != 1 || recovered.State != types.RunCompleted {
+		t.Fatalf("recovered provider calls=%d state=%s", counting.Count(), recovered.State)
+	}
+	rt.reactivateRetryableLifecycleInjectionRuns(ctx, fixture.run.SandboxID)
+	if len(dispatches) != 1 || counting.Count() != 1 {
+		t.Fatalf("repeated recovery dispatches=%d provider calls=%d", len(dispatches), counting.Count())
+	}
+	work, err := s.GetLifecycleWorkItem(ctx, fixture.run.OwnerID, fixture.run.SandboxID, fixture.workID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if work.Status != types.WorkItemOpen {
+		t.Fatalf("recovery silently settled open responsibility: %s", work.Status)
+	}
 }

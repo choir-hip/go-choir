@@ -827,3 +827,34 @@ func TestSQLiteLogRebindMailboxMixedSnapshotsMovesNewerLegacy(t *testing.T) {
 		t.Fatalf("scoped snapshot after merge: %q, %v", memory, err)
 	}
 }
+
+func TestDeferUnprocessedWaitsForExplicitWakeInsteadOfPolling(t *testing.T) {
+	logStore := testLog(t)
+	var attempts atomic.Int32
+	rt := NewRuntime(logStore, HandlerFunc(func(context.Context, string, Update, []byte) ([]byte, error) {
+		attempts.Add(1)
+		return nil, ErrDeferUnprocessed
+	}), Options{IdleTimeout: 40 * time.Millisecond, HandlerRetryBackoff: time.Millisecond})
+	t.Cleanup(rt.Stop)
+	update := Update{UpdateID: "defer-one", ToAgentID: "agent-defer", Kind: "coagent_result", Content: "exact trigger"}
+	if err := rt.Send(context.Background(), update); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, time.Second, func() bool { return attempts.Load() == 1 }, "first explicit wake")
+	time.Sleep(25 * time.Millisecond)
+	if got := attempts.Load(); got != 1 {
+		t.Fatalf("deferred occurrence polled without a new wake: attempts=%d", got)
+	}
+	if backlog, err := logStore.Unprocessed(context.Background(), update.ToAgentID); err != nil || len(backlog) != 1 {
+		t.Fatalf("deferred durable backlog=%v err=%v", backlog, err)
+	}
+	waitFor(t, time.Second, func() bool { return !rt.Resident(update.ToAgentID) }, "deferred actor passivation")
+	if err := rt.Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, time.Second, func() bool { return attempts.Load() == 2 }, "boot/operator sweep retry")
+	time.Sleep(20 * time.Millisecond)
+	if got := attempts.Load(); got != 2 {
+		t.Fatalf("deferred sweep polled more than once: attempts=%d", got)
+	}
+}

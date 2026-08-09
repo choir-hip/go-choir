@@ -84,6 +84,21 @@ WHERE update_id = ? AND to_agent_id = ? AND processed_at IS NULL`,
 	return err
 }
 
+// UpdateStatus reports whether an exact actor occurrence exists and whether it
+// has been processed. It is used only to derive deterministic recovery
+// occurrences; it does not mutate or reopen durable history.
+func (l *SQLiteLog) UpdateStatus(ctx context.Context, agentID, updateID string) (exists, processed bool, err error) {
+	var processedAt sql.NullTime
+	err = l.db.QueryRowContext(ctx, `SELECT processed_at FROM actor_updates WHERE update_id = ? AND to_agent_id = ?`, updateID, agentID).Scan(&processedAt)
+	if err == sql.ErrNoRows {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, err
+	}
+	return true, processedAt.Valid, nil
+}
+
 func (l *SQLiteLog) AgentsWithBacklog(ctx context.Context) ([]string, error) {
 	rows, err := l.db.QueryContext(ctx, `
 SELECT DISTINCT to_agent_id FROM actor_updates WHERE processed_at IS NULL`)

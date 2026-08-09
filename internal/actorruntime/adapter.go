@@ -208,7 +208,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	// Wire the dispatch function. From this point, rt.activate(rec)
 	// sends an actor message and rt.wakeUpdatedCoagent(...) sends an
 	// actor message. No fallback path exists.
-	rt.SetDispatchActor(a.dispatch)
+	rt.SetCheckedDispatchActor(a.dispatch)
 
 	return a
 }
@@ -243,12 +243,118 @@ func actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, content, trajec
 	return uuid.NewSHA1(uuid.NameSpaceOID, identity).String()
 }
 
+var errTextureRecoveryBaseNotProcessed = errors.New("actorruntime: Texture recovery base is not processed")
+
+// canonicalTextureDispatch upgrades every Texture wake to a complete
+// Store-derived occurrence. Compatibility with the pre-repair producer digest
+// exists only at this boundary: the durable actor row always receives the new
+// exact identity and authenticated envelope.
+func (a *Adapter) canonicalTextureDispatch(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) (string, string, string, error) {
+	if strings.TrimSpace(kind) != "coagent_result" || !strings.HasPrefix(strings.TrimSpace(toAgentID), agentprofile.Texture+":") {
+		return content, trajectoryID, fromAgentID, nil
+	}
+	if occurrence, err := agentcore.DecodeTextureActorOccurrence(content); err == nil {
+		if occurrence.OwnerID != ownerID || occurrence.ComputerID != computerID || occurrence.TargetAgentID != toAgentID {
+			return "", "", "", fmt.Errorf("actorruntime: Texture occurrence envelope scope mismatch")
+		}
+		if strings.TrimSpace(trajectoryID) != "" && occurrence.TrajectoryID != strings.TrimSpace(trajectoryID) {
+			return "", "", "", fmt.Errorf("actorruntime: Texture occurrence trajectory mismatch")
+		}
+		source := occurrence.ProducerAgentID
+		if occurrence.Kind == agentcore.TextureActorOccurrenceOwnerInstruction {
+			source = "owner:" + occurrence.OwnerID
+		}
+		if strings.TrimSpace(fromAgentID) != "" && strings.TrimSpace(fromAgentID) != source {
+			return "", "", "", fmt.Errorf("actorruntime: Texture occurrence source mismatch")
+		}
+		if occurrence.RecoveryRunID != "" || occurrence.RecoveryTailID != "" || occurrence.RecoveryHeadID != "" || occurrence.RecoveryMutation != "" {
+			base := occurrence
+			base.RecoveryRunID, base.RecoveryTailID, base.RecoveryHeadID, base.RecoveryMutation = "", "", "", ""
+			baseContent, encodeErr := agentcore.EncodeTextureActorOccurrence(base)
+			if encodeErr != nil {
+				return "", "", "", encodeErr
+			}
+			baseID := actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, baseContent, occurrence.TrajectoryID, source)
+			exists, processed, statusErr := a.log.UpdateStatus(ctx, scopedActorMailboxID(ownerID, computerID, toAgentID), baseID)
+			if statusErr != nil {
+				return "", "", "", fmt.Errorf("actorruntime: inspect Texture recovery base: %w", statusErr)
+			}
+			if !exists || !processed {
+				return "", "", "", errTextureRecoveryBaseNotProcessed
+			}
+		}
+		return content, occurrence.TrajectoryID, source, nil
+	}
+
+	// Pre-repair producer wakes carried only the v2 update digest. Resolve it
+	// against the exact target's pending canonical rows, refusing ambiguity.
+	updates, err := a.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, toAgentID)
+	if err != nil {
+		return "", "", "", fmt.Errorf("actorruntime: resolve Texture producer occurrence: %w", err)
+	}
+	var matched *types.CoagentSourcePacket
+	for i := range updates {
+		candidate := updates[i]
+		if candidate.Direction != types.LifecyclePacketDirectionProducerReport {
+			continue
+		}
+		if strings.TrimSpace(content) == agentcore.LifecycleControlActorOccurrenceContent(candidate) ||
+			strings.TrimSpace(content) == strings.TrimSpace(candidate.UpdateID) ||
+			strings.TrimSpace(content) == strings.TrimSpace(candidate.Content) {
+			if matched != nil {
+				return "", "", "", fmt.Errorf("actorruntime: ambiguous legacy Texture producer occurrence")
+			}
+			copy := candidate
+			matched = &copy
+		}
+	}
+	if matched != nil {
+		o, occurrenceErr := agentcore.TextureProducerReportOccurrence(*matched)
+		if occurrenceErr != nil {
+			return "", "", "", occurrenceErr
+		}
+		encoded, encodeErr := agentcore.EncodeTextureActorOccurrence(o)
+		if encodeErr != nil {
+			return "", "", "", encodeErr
+		}
+		return encoded, o.TrajectoryID, o.ProducerAgentID, nil
+	}
+
+	// Pre-repair owner wakes carried only instruction_id and no authenticated
+	// trajectory/source. Resolve the exact document-bound instruction.
+	docID := strings.TrimPrefix(strings.TrimSpace(toAgentID), agentprofile.Texture+":")
+	doc, docErr := a.store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+	if docErr == nil && strings.TrimSpace(doc.TrajectoryID) != "" {
+		instruction, instructionErr := a.store.GetLifecycleOwnerInstruction(ctx, ownerID, computerID, doc.TrajectoryID, strings.TrimSpace(content))
+		if instructionErr == nil && instruction.Status == types.LifecycleOwnerInstructionPending && instruction.TargetAgentID == toAgentID {
+			o, occurrenceErr := agentcore.TextureOwnerInstructionOccurrence(instruction)
+			if occurrenceErr != nil {
+				return "", "", "", occurrenceErr
+			}
+			encoded, encodeErr := agentcore.EncodeTextureActorOccurrence(o)
+			if encodeErr != nil {
+				return "", "", "", encodeErr
+			}
+			return encoded, o.TrajectoryID, "owner:" + o.OwnerID, nil
+		}
+	}
+	return "", "", "", fmt.Errorf("actorruntime: Texture wake has no exact pending canonical occurrence")
+}
+
 // dispatch is the function hook that the runtime core calls to send actor
-// messages. It is set via rt.SetDispatchActor(a.dispatch).
+// messages. It is set via rt.SetCheckedDispatchActor(a.dispatch).
 func (a *Adapter) dispatch(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
 	ownerID, computerID, toAgentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(toAgentID)
 	if ownerID == "" || computerID == "" || toAgentID == "" {
 		return fmt.Errorf("actorruntime: dispatch: owner_id, computer_id, and to_agent_id are required")
+	}
+	var canonicalErr error
+	content, trajectoryID, fromAgentID, canonicalErr = a.canonicalTextureDispatch(ctx, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID)
+	if canonicalErr != nil {
+		if errors.Is(canonicalErr, errTextureRecoveryBaseNotProcessed) {
+			return nil
+		}
+		return canonicalErr
 	}
 	updateID := actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID)
 	u := actor.Update{
@@ -262,8 +368,14 @@ func (a *Adapter) dispatch(ctx context.Context, ownerID, computerID, toAgentID, 
 	}
 	a.dispatchMu.Lock()
 	if !a.dispatchReady {
-		a.bootDispatches = append(a.bootDispatches, u)
+		// Before actor delivery is released, dispatch success means the exact
+		// occurrence is already durable in SQLite. A crash cannot lose a cold
+		// activation or canonical lifecycle trigger in a process-local queue.
+		_, err := a.log.Append(ctx, u)
 		a.dispatchMu.Unlock()
+		if err != nil {
+			return fmt.Errorf("actorruntime: boot dispatch append: %w", err)
+		}
 		return nil
 	}
 	a.dispatchMu.Unlock()
@@ -441,7 +553,9 @@ func (a *Adapter) Start(ctx context.Context) error {
 	}
 	a.Runtime.Start(ctx)
 	if a.textureOwner != nil {
-		a.textureOwner.Start(ctx)
+		if err := a.textureOwner.Start(ctx); err != nil {
+			return fmt.Errorf("actorruntime: reconcile Texture owner: %w", err)
+		}
 	}
 	if err := a.flushBootDispatches(ctx); err != nil {
 		return fmt.Errorf("actorruntime: boot dispatch flush: %w", err)

@@ -3,6 +3,8 @@ package actorruntime
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -903,132 +905,92 @@ func TestHandlerParkedLifecycleControlReconcilesBeforeRetryAcknowledgement(t *te
 	}
 }
 
-func TestTextureColdWakeRoutesToConcreteOwner(t *testing.T) {
+func TestTextureWakeAcceptsExactResearcherReportWithImplicitTargetWorkBinding(t *testing.T) {
 	env := newAdapterTestEnv(t)
-	env.adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
-		return nil
-	})
-
-	const (
-		ownerID = "user-texture-wake"
-		docID   = "doc-texture-wake"
-		agentID = "texture:" + docID
-	)
-	update := seedDurableTextureUpdate(t, env.store, env.ctx, "sandbox-test", ownerID, docID, "update-texture-wake", "Durable Texture wake")
-
+	env.adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	const suffix = "exact-report-empty-target-work"
+	const ownerID, computerID = "owner-adapter-exact-report", "sandbox-test"
+	researcherRun := seedAdapterLifecycleResearcherControl(t, env.store, env.adapter.Runtime, ownerID, computerID, suffix, false)
+	docID := "doc-adapter-admission-" + suffix
+	textureAgentID := "texture:" + docID
+	workID := "researcher-work-adapter-admission-" + suffix
+	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "exact report with implicit target work"}
+	content := "exact report with implicit target work"
+	digest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+	queue := types.QueueLifecycleUpdateRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "queue-exact-report-empty-target-work", TrajectoryID: researcherRun.TrajectoryID, TargetAgentID: textureAgentID, ProducerAgentID: researcherRun.AgentID, ProducerUpdateID: "exact-report-empty-target-work", UpdateID: "exact-report-empty-target-work", ChannelID: docID, Role: agentprofile.Researcher, SourceRunID: researcherRun.RunID, WorkItemID: workID, WorkDisposition: types.WorkItemOpen, Packet: packet, Content: content, PayloadDigest: digest}
+	queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
+	result, err := env.store.QueueLifecycleUpdate(env.ctx, queue)
+	if err != nil || result.Update == nil || result.Update.TargetWorkItemID != "" {
+		t.Fatalf("queue exact implicit-binding report result=%+v err=%v", result, err)
+	}
+	occurrence, err := agentcore.TextureProducerReportOccurrence(*result.Update)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := agentcore.EncodeTextureActorOccurrence(occurrence)
+	if err != nil {
+		t.Fatal(err)
+	}
 	handler := newActorHandler(env.adapter.Runtime, textureowner.NewHandler(env.adapter.Runtime))
-	memory, err := handler.HandleUpdate(env.ctx, agentID, actorUpdate(ownerID, "coagent_result", agentID, update.Content), nil)
-	if err != nil {
-		t.Fatalf("route Texture coagent_result: %v", err)
+	_, err = handler.HandleUpdate(env.ctx, textureAgentID, actor.Update{UpdateID: "actor-exact-report-empty-target-work", ToAgentID: scopedActorMailboxID(ownerID, computerID, textureAgentID), FromAgentID: researcherRun.AgentID, Kind: "coagent_result", Content: encoded, TrajectoryID: researcherRun.TrajectoryID, CreatedAt: time.Now().UTC()}, nil)
+	if err == nil || !strings.Contains(err.Error(), "without disposing exact trigger") {
+		t.Fatalf("exact implicit-binding report outcome=%v, want executed no-write refusal rather than zero acknowledgement", err)
 	}
-	if memory != nil {
-		t.Fatalf("cold Texture wake memory = %v, want nil", memory)
+	stored, loadErr := env.store.GetLifecycleUpdate(env.ctx, ownerID, computerID, researcherRun.TrajectoryID, textureAgentID, researcherRun.AgentID, queue.ProducerUpdateID)
+	if loadErr != nil || stored.Disposition != types.UpdatePending {
+		t.Fatalf("no-write report fate=%+v err=%v", stored, loadErr)
 	}
-	agent, err := env.store.GetAgentByScope(env.ctx, ownerID, "sandbox-test", agentID)
-	if err != nil {
-		t.Fatalf("load first-wake Texture identity: %v", err)
-	}
-	if agent.OwnerID != ownerID || agent.ChannelID != docID {
-		t.Fatalf("first-wake Texture identity = %+v", agent)
-	}
-	runs, err := env.store.ListLifecycleRunsByOwner(env.ctx, ownerID, "sandbox-test", 20)
-	if err != nil {
-		t.Fatalf("list Texture runs: %v", err)
-	}
-	for _, rec := range runs {
-		if rec.AgentID == agentID && rec.ChannelID == docID {
-			return
-		}
-	}
-	t.Fatalf("Texture coagent_result did not route to owner run: %+v", runs)
 }
 
-func TestTextureWakeIgnoresGenericParkedMemoryAndRoutesToDocumentOwner(t *testing.T) {
+func TestTextureColdWakeRejectsUnboundLegacyProducerReport(t *testing.T) {
 	env := newAdapterTestEnv(t)
-	env.adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
-		return nil
-	})
+	env.adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 
-	const (
-		ownerID = "user-texture-stale-memory"
-		docID   = "doc-texture-stale-memory"
-		agentID = "texture:" + docID
-	)
-	update := seedDurableTextureUpdate(t, env.store, env.ctx, "sandbox-test", ownerID, docID, "update-texture-stale-memory", "Durable Texture wake")
-	now := time.Now().UTC()
-	canonical := types.RunRecord{
-		RunID: "run-texture-canonical-passivated", AgentID: agentID, OwnerID: ownerID,
-		SandboxID: "sandbox-test", ChannelID: docID, TrajectoryID: update.TrajectoryID,
-		State: types.RunPassivated, Prompt: "canonical Texture revision memory",
-		AgentProfile: "texture", AgentRole: "texture",
-		CreatedAt: now.Add(-time.Minute), UpdatedAt: now.Add(-time.Minute),
-		Metadata: map[string]any{
-			"type":                "texture_agent_revision",
-			"doc_id":              docID,
-			"current_revision_id": "revision:before-successful-write",
-			"agent_profile":       "texture",
-			"agent_role":          "texture",
-			"trajectory_id":       update.TrajectoryID,
-		},
-	}
-	if err := env.store.CreateRun(env.ctx, canonical); err != nil {
-		t.Fatalf("create canonical passivated Texture run: %v", err)
-	}
-	if err := env.store.CreateAgentMutation(env.ctx, store.AgentMutation{
-		DocID: docID, RunID: canonical.RunID, OwnerID: ownerID, ComputerID: "sandbox-test",
-		State: "pending", RevisionID: "revision:" + docID, CreatedAt: now.Add(-time.Minute),
-	}); err != nil {
-		t.Fatalf("create post-write pending Texture mutation: %v", err)
-	}
-	stale := types.RunRecord{
-		RunID: "run-texture-stale-generic", AgentID: agentID, OwnerID: ownerID,
-		SandboxID: "sandbox-test", ChannelID: docID, TrajectoryID: update.TrajectoryID,
-		State: types.RunRunning, Prompt: "generic Texture recovery without revision authority",
-		AgentProfile: "texture", AgentRole: "texture",
-		CreatedAt: now, UpdatedAt: now,
-		Metadata: map[string]any{
-			"agent_profile": "texture",
-			"agent_role":    "texture",
-			"trajectory_id": update.TrajectoryID,
-		},
-	}
-	if err := env.store.CreateRun(env.ctx, stale); err != nil {
-		t.Fatalf("create stale generic Texture run: %v", err)
-	}
-	memory, err := json.Marshal(resumeState{RunID: stale.RunID, Phase: "parked"})
-	if err != nil {
-		t.Fatalf("encode stale Texture memory: %v", err)
-	}
-
+	const ownerID, docID = "user-texture-wake", "doc-texture-wake"
+	agentID := "texture:" + docID
+	update := seedDurableTextureUpdate(t, env.store, env.ctx, "sandbox-test", ownerID, docID, "update-texture-wake", "Durable Texture wake")
 	handler := newActorHandler(env.adapter.Runtime, textureowner.NewHandler(env.adapter.Runtime))
-	returned, err := handler.HandleUpdate(env.ctx, agentID, actorUpdate(ownerID, "coagent_result", agentID, update.Content), memory)
-	if err != nil {
-		t.Fatalf("route stale Texture memory through owner: %v", err)
+	memory, err := handler.HandleUpdate(env.ctx, agentID, actorUpdate(ownerID, "coagent_result", agentID, update.Content), nil)
+	if err != nil || memory != nil {
+		t.Fatalf("unbound legacy producer report outcome memory=%v err=%v, want typed zero-provider acknowledgement", memory, err)
 	}
-	if returned != nil {
-		t.Fatalf("stale generic Texture memory survived owner reconciliation: %v", returned)
-	}
-	storedStale, err := env.store.GetLifecycleRun(env.ctx, ownerID, "sandbox-test", stale.RunID)
-	if err != nil || storedStale.State != types.RunPassivated {
-		t.Fatalf("stale generic Texture run changed: %+v, %v", storedStale, err)
-	}
-	storedCanonical, err := env.store.GetLifecycleRun(env.ctx, ownerID, "sandbox-test", canonical.RunID)
-	if err != nil || storedCanonical.State != types.RunPending ||
-		storedCanonical.Metadata["current_revision_id"] != "revision:"+docID {
-		t.Fatalf("canonical post-write Texture run was not reactivated at current head: %+v, %v", storedCanonical, err)
+	pending, err := env.store.GetLifecycleUpdate(env.ctx, ownerID, "sandbox-test", update.TrajectoryID, agentID, update.ProducerAgentID, update.ProducerUpdateID)
+	if err != nil || pending.Disposition != types.UpdatePending {
+		t.Fatalf("malformed report canonical fate changed: update=%+v err=%v", pending, err)
 	}
 	runs, err := env.store.ListLifecycleRunsByOwner(env.ctx, ownerID, "sandbox-test", 20)
 	if err != nil {
-		t.Fatalf("list reconciled Texture runs: %v", err)
+		t.Fatal(err)
 	}
-	textureRuns := 0
-	for _, run := range runs {
-		if run.AgentID == agentID {
-			textureRuns++
+	for _, rec := range runs {
+		if rec.AgentID == agentID && rec.RunID != "" {
+			t.Fatalf("unbound legacy report projected Texture run: %+v", rec)
 		}
 	}
-	if textureRuns != 2 {
-		t.Fatalf("Texture owner minted a replacement instead of reusing canonical memory: %+v", runs)
+}
+
+func TestTextureWakeDoesNotLetUnboundLegacyReportReactivatePassivatedRun(t *testing.T) {
+	env := newAdapterTestEnv(t)
+	env.adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	const ownerID, docID = "user-texture-stale-memory", "doc-texture-stale-memory"
+	agentID := "texture:" + docID
+	update := seedDurableTextureUpdate(t, env.store, env.ctx, "sandbox-test", ownerID, docID, "update-texture-stale-memory", "Durable Texture wake")
+	now := time.Now().UTC()
+	canonical := types.RunRecord{RunID: "run-texture-canonical-passivated", AgentID: agentID, OwnerID: ownerID, SandboxID: "sandbox-test", ChannelID: docID, TrajectoryID: update.TrajectoryID, State: types.RunPassivated, Prompt: "canonical Texture revision memory", AgentProfile: "texture", AgentRole: "texture", CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"type": "texture_agent_revision", "doc_id": docID, "current_revision_id": "revision:" + docID, "agent_profile": "texture", "agent_role": "texture", "trajectory_id": update.TrajectoryID, "lifecycle_work_item_id": "work:" + docID}}
+	if err := env.store.CreateRun(env.ctx, canonical); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.store.CreateAgentMutation(env.ctx, store.AgentMutation{DocID: docID, RunID: canonical.RunID, OwnerID: ownerID, ComputerID: "sandbox-test", State: "pending", RevisionID: "revision:" + docID, CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	handler := newActorHandler(env.adapter.Runtime, textureowner.NewHandler(env.adapter.Runtime))
+	memory, err := handler.HandleUpdate(env.ctx, agentID, actorUpdate(ownerID, "coagent_result", agentID, update.Content), []byte(`{"run_id":"unrelated-parked-run","phase":"parked"}`))
+	if err != nil || memory != nil {
+		t.Fatalf("malformed wake outcome memory=%v err=%v", memory, err)
+	}
+	after, err := env.store.GetLifecycleRun(env.ctx, ownerID, "sandbox-test", canonical.RunID)
+	if err != nil || after.State != types.RunPassivated {
+		t.Fatalf("malformed wake reactivated run=%+v err=%v", after, err)
 	}
 }
 
@@ -1658,5 +1620,620 @@ func actorUpdate(ownerID, kind, toAgentID, content string) actor.Update {
 		Kind:      kind,
 		Content:   content,
 		CreatedAt: time.Now().UTC(),
+	}
+}
+
+func TestTextureCanonicalOccurrenceIdentitiesIncludeExactStoreScope(t *testing.T) {
+	report := types.CoagentSourcePacket{
+		UpdateID: "update-a", ProducerUpdateID: "producer-update-a", OwnerID: "owner-a", ComputerID: "computer-a",
+		AgentID: "researcher-a", TargetAgentID: "texture:doc-a", ChannelID: "doc-a", TrajectoryID: "trajectory-a",
+		Direction: types.LifecyclePacketDirectionProducerReport, ProducerWorkItemID: "producer-work-a", TargetWorkItemID: "texture-work-a",
+		LifecycleVersion: 7, ReducerSeq: 11, MessageSeq: 13, Disposition: types.UpdatePending,
+	}
+	base, err := agentcore.TextureProducerReportOccurrence(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := agentcore.EncodeTextureActorOccurrence(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := agentcore.DecodeTextureActorOccurrence(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded != base {
+		t.Fatalf("producer occurrence round trip = %+v, want %+v", decoded, base)
+	}
+
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(encoded, "texture-occurrence:"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields, at := make([]string, 23), 0
+	for i := range fields {
+		n, used := binary.Uvarint(raw[at:])
+		if used <= 0 {
+			t.Fatalf("decode test field %d", i)
+		}
+		at += used
+		fields[i] = string(raw[at : at+int(n)])
+		at += int(n)
+	}
+	malformedOccurrence := func(value string) string {
+		changed := append([]string(nil), fields...)
+		changed[16] = value
+		var body []byte
+		for _, field := range changed {
+			body = binary.AppendUvarint(body, uint64(len(field)))
+			body = append(body, field...)
+		}
+		return "texture-occurrence:" + base64.RawURLEncoding.EncodeToString(body)
+	}
+	for name, malformed := range map[string]string{"leading zero": malformedOccurrence("07"), "explicit plus": malformedOccurrence("+7"), "overflow": malformedOccurrence("9223372036854775808")} {
+		if _, err := agentcore.DecodeTextureActorOccurrence(malformed); err == nil {
+			t.Fatalf("%s noncanonical occurrence decoded: %q", name, malformed)
+		}
+	}
+
+	variations := []types.CoagentSourcePacket{report, report, report, report, report, report, report, report, report, report, report, report}
+	variations[0].OwnerID = "owner-b"
+	variations[1].ComputerID = "computer-b"
+	variations[2].TrajectoryID = "trajectory-b"
+	variations[3].TargetAgentID = "texture:doc-b"
+	variations[4].AgentID = "researcher-b"
+	variations[5].UpdateID = "update-b"
+	variations[6].ProducerUpdateID = "producer-update-b"
+	variations[7].ProducerWorkItemID = "producer-work-b"
+	variations[8].TargetWorkItemID = "texture-work-b"
+	variations[9].LifecycleVersion++
+	variations[10].ReducerSeq++
+	variations[11].MessageSeq++
+	for i, changed := range variations {
+		o, err := agentcore.TextureProducerReportOccurrence(changed)
+		if err != nil {
+			t.Fatalf("variation %d: %v", i, err)
+		}
+		got, err := agentcore.EncodeTextureActorOccurrence(o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got == encoded {
+			t.Fatalf("producer variation %d collided with canonical occurrence", i)
+		}
+	}
+
+	instruction := types.LifecycleOwnerInstruction{
+		Schema: types.LifecycleOwnerInstructionSchemaV1, InstructionID: "instruction-a", RequestID: "request-a",
+		OwnerID: "owner-a", ComputerID: "computer-a", DocumentID: "doc-a", TrajectoryID: "trajectory-a",
+		TargetAgentID: "texture:doc-a", TargetWorkItemID: "texture-work-a", HeadRevisionID: "revision-a",
+		Kind: types.LifecycleOwnerCorrect, Status: types.LifecycleOwnerInstructionPending, LifecycleVersion: 3, ReducerSeq: 17,
+	}
+	ownerOccurrence, err := agentcore.TextureOwnerInstructionOccurrence(instruction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownerEncoded, err := agentcore.EncodeTextureActorOccurrence(ownerOccurrence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ownerEncoded == encoded {
+		t.Fatal("producer and owner occurrence domains collided")
+	}
+	ownerDecoded, err := agentcore.DecodeTextureActorOccurrence(ownerEncoded)
+	if err != nil || ownerDecoded != ownerOccurrence {
+		t.Fatalf("owner occurrence round trip=%+v err=%v", ownerDecoded, err)
+	}
+
+	recovery := agentcore.TextureRecoveryOccurrence(base, "run-a", "tail-a", "revision-a", "sleeping:13:revision-a")
+	recoveryEncoded, err := agentcore.EncodeTextureActorOccurrence(recovery)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recoveryEncoded == encoded {
+		t.Fatal("recovery occurrence collided with canonical live occurrence")
+	}
+	if again, _ := agentcore.EncodeTextureActorOccurrence(recovery); again != recoveryEncoded {
+		t.Fatal("recovery occurrence is not deterministic")
+	}
+}
+
+func TestAdapterSQLitePersistsExactTextureReportAndOwnerInstructionOccurrencesBeforeBoot(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "canonical-texture-occurrences.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	const ownerID, computerID, docID = "owner-occurrence", "computer-occurrence", "doc-occurrence"
+	queued := seedDurableTextureUpdate(t, s, ctx, computerID, ownerID, docID, "report-occurrence", "exact report")
+	stored, err := s.GetLifecycleUpdate(ctx, ownerID, computerID, queued.TrajectoryID, queued.TargetAgentID, queued.ProducerAgentID, queued.ProducerUpdateID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := provideriface.Config{SandboxID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
+	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
+	owner := textureowner.NewHandler(adapter.Runtime)
+	if err := adapter.BindTextureOwner(owner); err != nil {
+		t.Fatal(err)
+	}
+	// The legacy producer API supplies its old digest; Adapter must upgrade the
+	// durable SQLite row to the complete canonical occurrence.
+	adapter.Runtime.WakeUpdatedCoagent(ctx, stored)
+
+	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, queued.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	instructionReq := types.QueueLifecycleOwnerInstructionRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "queue-owner-occurrence", RequestID: "request-occurrence",
+		InstructionID: "instruction-occurrence", DocumentID: docID, TrajectoryID: queued.TrajectoryID,
+		TargetAgentID: "texture:" + docID, TargetWorkItemID: "work:" + docID,
+		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: snapshot.Document.CurrentRevisionID,
+		Kind: types.LifecycleOwnerCorrect, Content: "exact correction",
+	}
+	instructionReq.CommandDigest, _ = store.ComputeQueueLifecycleOwnerInstructionDigest(instructionReq)
+	instructionResult, err := s.QueueLifecycleOwnerInstruction(ctx, instructionReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	instructionOccurrence, err := agentcore.TextureOwnerInstructionOccurrence(*instructionResult.OwnerInstruction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	instructionContent, err := agentcore.EncodeTextureActorOccurrence(instructionOccurrence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.Runtime.DispatchActor(ctx, ownerID, computerID, "texture:"+docID, "coagent_result", instructionContent, queued.TrajectoryID, "owner:"+ownerID); err != nil {
+		t.Fatal(err)
+	}
+
+	backlog, err := adapter.log.Unprocessed(ctx, scopedActorMailboxID(ownerID, computerID, "texture:"+docID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backlog) != 2 {
+		t.Fatalf("SQLite canonical Texture backlog=%+v", backlog)
+	}
+	seen := map[string]bool{}
+	for _, update := range backlog {
+		o, err := agentcore.DecodeTextureActorOccurrence(update.Content)
+		if err != nil {
+			t.Fatalf("decode durable occurrence %q: %v", update.Content, err)
+		}
+		if update.TrajectoryID != queued.TrajectoryID {
+			t.Fatalf("durable occurrence trajectory=%q", update.TrajectoryID)
+		}
+		if o.Kind == agentcore.TextureActorOccurrenceProducerReport && update.FromAgentID != stored.AgentID {
+			t.Fatalf("producer source=%q", update.FromAgentID)
+		}
+		if o.Kind == agentcore.TextureActorOccurrenceOwnerInstruction && update.FromAgentID != "owner:"+ownerID {
+			t.Fatalf("owner source=%q", update.FromAgentID)
+		}
+		seen[o.Kind] = true
+	}
+	if !seen[agentcore.TextureActorOccurrenceProducerReport] || !seen[agentcore.TextureActorOccurrenceOwnerInstruction] {
+		t.Fatalf("canonical kinds=%v", seen)
+	}
+}
+
+func TestAdapterSQLiteBootRecoveryUsesJoinedOccurrenceNotDuplicateInitialDispatch(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "texture-recovery-occurrence.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	const ownerID, computerID, docID = "owner-recovery", "computer-recovery", "doc-recovery"
+	queued := seedDurableTextureUpdate(t, s, ctx, computerID, ownerID, docID, "report-recovery", "recover exact report")
+	now := time.Now().UTC()
+	run := types.RunRecord{
+		RunID: "texture-run-recovery", AgentID: "texture:" + docID, ChannelID: docID, TrajectoryID: queued.TrajectoryID,
+		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, OwnerID: ownerID, SandboxID: computerID,
+		State: types.RunPassivated, CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{"type": "texture_agent_revision", "doc_id": docID, "current_revision_id": "revision:" + docID, "lifecycle_work_item_id": "work:" + docID, "trajectory_id": queued.TrajectoryID},
+	}
+	project := types.ReplaceLifecycleActivationRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "project-texture-recovery", TrajectoryID: queued.TrajectoryID, AgentID: run.AgentID, Run: run}
+	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateAgentMutation(ctx, store.AgentMutation{DocID: docID, RunID: run.RunID, OwnerID: ownerID, ComputerID: computerID, State: "sleeping", RevisionID: "revision:" + docID, CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{RunID: run.RunID, OwnerID: ownerID, AgentID: run.AgentID, Kind: types.RunMemoryEntryMessage, Role: types.RunMemoryRoleRuntimeInjection, Message: json.RawMessage(`{"role":"user","content":"prior authenticated turn"}`), CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := provideriface.Config{SandboxID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
+	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
+	owner := textureowner.NewHandler(adapter.Runtime)
+	if err := adapter.BindTextureOwner(owner); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := s.GetLifecycleUpdate(ctx, ownerID, computerID, queued.TrajectoryID, queued.TargetAgentID, queued.ProducerAgentID, queued.ProducerUpdateID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := actor.Update{UpdateID: actorDispatchUpdateID(ownerID, computerID, run.AgentID, "coagent_result", agentcore.LifecycleControlActorOccurrenceContent(stored), queued.TrajectoryID, stored.AgentID), ToAgentID: scopedActorMailboxID(ownerID, computerID, run.AgentID), FromAgentID: stored.AgentID, Kind: "coagent_result", Content: agentcore.LifecycleControlActorOccurrenceContent(stored), TrajectoryID: queued.TrajectoryID, CreatedAt: now}
+	if appended, err := adapter.log.Append(ctx, legacy); err != nil || !appended {
+		t.Fatalf("append legacy=%v err=%v", appended, err)
+	}
+	if err := adapter.log.MarkProcessed(ctx, legacy.ToAgentID, legacy.UpdateID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := owner.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	backlog, err := adapter.log.Unprocessed(ctx, legacy.ToAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var normal, recovery int
+	for _, update := range backlog {
+		if update.Kind == "initial_dispatch" {
+			t.Fatalf("boot recovery duplicated initial dispatch: %+v", backlog)
+		}
+		o, err := agentcore.DecodeTextureActorOccurrence(update.Content)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if o.RecoveryRunID == "" {
+			normal++
+		} else {
+			recovery++
+			if o.RecoveryRunID != run.RunID || o.RecoveryHeadID != "revision:"+docID || o.RecoveryTailID == "" || !strings.HasPrefix(o.RecoveryMutation, "sleeping:") {
+				t.Fatalf("recovery join=%+v", o)
+			}
+		}
+	}
+	if normal != 1 || recovery != 0 {
+		t.Fatalf("fresh canonical base must execute before recovery normal=%d recovery=%d backlog=%+v", normal, recovery, backlog)
+	}
+	projected, err := s.GetLifecycleRun(ctx, ownerID, computerID, run.RunID)
+	if err != nil || projected.State != types.RunPending {
+		t.Fatalf("recovered exact run=%+v err=%v", projected, err)
+	}
+
+	// Crash after the canonical base occurrence is processed while its Store
+	// trigger remains pending. A later boot proves that exact processed base
+	// before appending one joined recovery identity.
+	baseUpdate := backlog[0]
+	if err := adapter.log.MarkProcessed(ctx, baseUpdate.ToAgentID, baseUpdate.UpdateID); err != nil {
+		t.Fatal(err)
+	}
+	projected.State = types.RunPassivated
+	projected.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(ctx, projected); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SleepAgentMutation(ctx, ownerID, computerID, projected.RunID); err != nil {
+		t.Fatal(err)
+	}
+	if err := owner.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	backlog, err = adapter.log.Unprocessed(ctx, legacy.ToAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	normal, recovery = 0, 0
+	for _, update := range backlog {
+		o, decodeErr := agentcore.DecodeTextureActorOccurrence(update.Content)
+		if decodeErr != nil {
+			t.Fatal(decodeErr)
+		}
+		if o.RecoveryRunID == "" {
+			normal++
+		} else {
+			recovery++
+			if o.RecoveryRunID != run.RunID || o.RecoveryHeadID != "revision:"+docID || o.RecoveryTailID == "" || !strings.HasPrefix(o.RecoveryMutation, "sleeping:") {
+				t.Fatalf("recovery join=%+v", o)
+			}
+		}
+	}
+	if normal != 0 || recovery != 1 {
+		t.Fatalf("processed canonical base recovery normal=%d recovery=%d backlog=%+v", normal, recovery, backlog)
+	}
+}
+
+type admissionRecoveryCountingProvider struct {
+	calls atomic.Int32
+	stub  *provider.StubProvider
+}
+
+func (p *admissionRecoveryCountingProvider) Execute(ctx context.Context, rec *types.RunRecord, emit provideriface.EventEmitFunc) error {
+	p.calls.Add(1)
+	return p.stub.Execute(ctx, rec, emit)
+}
+func (p *admissionRecoveryCountingProvider) ProviderName() string {
+	return "admission-recovery-counting"
+}
+
+func seedAdapterLifecycleResearcherControl(t *testing.T, s *store.Store, rt *agentcore.Runtime, ownerID, computerID, suffix string, failBind bool) types.RunRecord {
+	t.Helper()
+	ctx := context.Background()
+	docID, trajectoryID := "doc-adapter-admission-"+suffix, "trajectory-adapter-admission-"+suffix
+	textureAgentID, researcherAgentID := "texture:"+docID, "researcher:"+suffix
+	now := time.Now().UTC()
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "start-adapter-admission-" + suffix,
+		TrajectoryID: trajectoryID, Kind: types.TrajectoryKindDocument,
+		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		InitialWork:     types.WorkItemRecord{WorkItemID: "texture-work-" + suffix, Objective: "author exact control", AssignedAgentID: textureAgentID, AuthorityProfile: agentprofile.Texture},
+		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: "Adapter admission", CreatedAt: now, UpdatedAt: now},
+		InitialRevision: types.Revision{RevisionID: "revision-adapter-admission-" + suffix, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "initial", CreatedAt: now},
+		Agent:           types.AgentRecord{AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	caller := types.RunRecord{RunID: "texture-run-adapter-admission-" + suffix, OwnerID: ownerID, SandboxID: computerID, AgentID: textureAgentID, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunRunning, Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID, "work_item_ids": []string{start.InitialWork.WorkItemID}}, CreatedAt: now, UpdatedAt: now}
+	project := types.ReplaceLifecycleActivationRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "project-adapter-admission-" + suffix, TrajectoryID: trajectoryID, AgentID: textureAgentID, Run: caller}
+	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatalf("project texture: %v", err)
+	}
+	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: researcherAgentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID, Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("upsert researcher: %v", err)
+	}
+	workID := "researcher-work-adapter-admission-" + suffix
+	open := types.OpenLifecycleWorkRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "open-adapter-admission-" + suffix, TrajectoryID: trajectoryID, WorkItem: types.WorkItemRecord{WorkItemID: workID, Objective: "research exact control", AuthorityProfile: agentprofile.Researcher, AssignedAgentID: researcherAgentID, CreatedByRunID: caller.RunID, Details: map[string]any{"requested_by_profile": agentprofile.Texture, "requested_by_agent_id": textureAgentID, "requested_by_run_id": caller.RunID}}}
+	open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
+	if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
+		t.Fatalf("open work: %v", err)
+	}
+	targetRun := types.RunRecord{RunID: "researcher-bootstrap-adapter-admission-" + suffix, OwnerID: ownerID, SandboxID: computerID, AgentID: researcherAgentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunRunning, Metadata: map[string]any{"lifecycle_work_item_id": workID, "work_item_ids": []string{workID}}, CreatedAt: now, UpdatedAt: now}
+	projectTarget := types.ReplaceLifecycleActivationRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "project-researcher-adapter-admission-" + suffix, TrajectoryID: trajectoryID, AgentID: researcherAgentID, Run: targetRun}
+	projectTarget.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(projectTarget)
+	if _, err := s.ReplaceLifecycleActivation(ctx, projectTarget); err != nil {
+		t.Fatalf("project researcher: %v", err)
+	}
+	finished := now.Add(time.Millisecond)
+	targetRun.State, targetRun.FinishedAt, targetRun.UpdatedAt = types.RunCompleted, &finished, finished
+	clearTarget := types.ReplaceLifecycleActivationRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "clear-researcher-adapter-admission-" + suffix, TrajectoryID: trajectoryID, AgentID: researcherAgentID, Run: targetRun}
+	clearTarget.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(clearTarget)
+	if _, err := s.ReplaceLifecycleActivation(ctx, clearTarget); err != nil {
+		t.Fatalf("clear researcher bootstrap: %v", err)
+	}
+	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "exact adapter control"}
+	content := "exact adapter control content"
+	digest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+	snapshot, _ := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	textureAgent, _ := s.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
+	turn := types.ApplyTextureTurnRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "turn-adapter-admission-" + suffix, DocumentID: docID, TrajectoryID: trajectoryID, CallerAgentID: textureAgentID, CallerRunID: caller.RunID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion, ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, CallerWorkItemID: start.InitialWork.WorkItemID, CallerWorkDisposition: types.WorkItemOpen, Outcome: types.TextureTurnWait, Reason: "wait for research", Controls: []types.TextureTurnControl{{ControlID: "control-adapter-admission-" + suffix, TargetAgentID: researcherAgentID, TargetWorkItemID: workID, Packet: packet, Content: content, PayloadDigest: digest}}}
+	turn.CommandDigest, _ = store.ComputeApplyTextureTurnDigest(turn)
+	if _, err := s.ApplyTextureTurn(ctx, turn); err != nil {
+		t.Fatalf("apply turn: %v", err)
+	}
+	if failBind {
+		if _, err := s.DB().ExecContext(ctx, `
+			CREATE TRIGGER fail_adapter_prebind_control_delivery
+			BEFORE INSERT ON og_objects FOR EACH ROW
+			BEGIN
+				IF NEW.object_kind = 'choir.worker_update' THEN
+					SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'injected pre-bind control delivery failure';
+				END IF;
+			END`); err != nil {
+			t.Fatalf("install pre-bind failure: %v", err)
+		}
+	}
+	rec, err := rt.ReconcileCoagentWake(ctx, ownerID, researcherAgentID)
+	if failBind {
+		if err == nil {
+			t.Fatal("pre-bind injection unexpectedly succeeded")
+		}
+		if _, dropErr := s.DB().ExecContext(ctx, `DROP TRIGGER fail_adapter_prebind_control_delivery`); dropErr != nil {
+			t.Fatalf("drop pre-bind failure: %v", dropErr)
+		}
+		runs, listErr := s.ListLifecycleRunsByOwner(ctx, ownerID, computerID, 100)
+		if listErr != nil {
+			t.Fatal(listErr)
+		}
+		for _, candidate := range runs {
+			if candidate.AgentID == researcherAgentID && candidate.RunID != targetRun.RunID && candidate.State == types.RunPending {
+				return candidate
+			}
+		}
+		t.Fatalf("pre-bind failure left no exact pending Researcher run: %+v", runs)
+	}
+	if err != nil {
+		t.Fatalf("reconcile control: %v", err)
+	}
+	if rec == nil {
+		t.Fatal("exact control created no Researcher run")
+	}
+	return *rec
+}
+
+func TestAdapterSQLitePreBindResearcherRecoveryBindsAndExecutesWithoutSnapshot(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "researcher-prebind-recovery.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	counting := &admissionRecoveryCountingProvider{stub: provider.NewStubProvider(0)}
+	const ownerID, computerID = "owner-adapter-prebind-recovery", "computer-adapter-prebind-recovery"
+	cfg := provideriface.Config{SandboxID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	adapter := New(cfg, s, events.NewEventBus(), counting, nil)
+	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
+	rec := seedAdapterLifecycleResearcherControl(t, s, adapter.Runtime, ownerID, computerID, "prebind-missing-snapshot", true)
+	mailboxID := scopedActorMailboxID(ownerID, computerID, rec.AgentID)
+	if memory, err := adapter.log.LoadSnapshot(ctx, mailboxID); err != nil || len(memory) != 0 {
+		t.Fatalf("pre-bind setup unexpectedly has snapshot memory=%q err=%v", memory, err)
+	}
+	if delivered, err := s.ListLifecycleControlsDeliveredToRun(ctx, ownerID, computerID, rec.TrajectoryID, rec.AgentID, rec.RunID, 10); err != nil || len(delivered) != 0 {
+		t.Fatalf("pre-bind setup already delivered controls=%+v err=%v", delivered, err)
+	}
+	adapter.Runtime.Start(ctx)
+	if err := adapter.actorRT.Sweep(ctx); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		stored, loadErr := s.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
+		if loadErr == nil && stored.State == types.RunCompleted && counting.calls.Load() == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	stored, loadErr := s.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
+	if loadErr != nil || stored.State != types.RunCompleted || counting.calls.Load() != 1 {
+		t.Fatalf("pre-bind recovery state=%s calls=%d err=%v metadata=%+v run=%s", stored.State, counting.calls.Load(), loadErr, stored.Metadata, stored.RunID)
+	}
+	delivered, deliveryErr := s.ListLifecycleControlsDeliveredToRun(ctx, ownerID, computerID, rec.TrajectoryID, rec.AgentID, rec.RunID, 10)
+	if deliveryErr != nil || len(delivered) != 1 || delivered[0].DeliveredToRunID != rec.RunID {
+		t.Fatalf("pre-bind recovery delivery=%+v err=%v", delivered, deliveryErr)
+	}
+	if memory, err := adapter.log.LoadSnapshot(ctx, mailboxID); err != nil || len(memory) != 0 {
+		t.Fatalf("pre-bind recovery relied on snapshot memory=%q err=%v", memory, err)
+	}
+}
+
+func TestAdapterSQLiteResearcherAdmissionRecoveryExecutesWithoutSnapshot(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "researcher-admission-recovery.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	counting := &admissionRecoveryCountingProvider{stub: provider.NewStubProvider(0)}
+	const ownerID, computerID = "owner-adapter-admission-recovery", "computer-adapter-admission-recovery"
+	cfg := provideriface.Config{SandboxID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	adapter := New(cfg, s, events.NewEventBus(), counting, nil)
+	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
+	rec := seedAdapterLifecycleResearcherControl(t, s, adapter.Runtime, ownerID, computerID, "missing-snapshot", false)
+
+	initialID := actorDispatchUpdateID(ownerID, computerID, rec.AgentID, "initial_dispatch", rec.RunID, rec.TrajectoryID, "")
+	mailboxID := scopedActorMailboxID(ownerID, computerID, rec.AgentID)
+	if err := adapter.log.MarkProcessed(ctx, mailboxID, initialID); err != nil {
+		t.Fatal(err)
+	}
+	rec.State = types.RunPassivated
+	metadata := make(map[string]any, len(rec.Metadata))
+	for key, value := range rec.Metadata {
+		metadata[key] = value
+	}
+	rec.Metadata = metadata
+	rec.Metadata["passivated_reason"] = "lifecycle_researcher_provider_admission_retry"
+	rec.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	// Intentionally do not save an actor snapshot. Runtime boot must enqueue a
+	// distinct recovery occurrence, and the real handler must resolve its run.
+	adapter.Runtime.Start(ctx)
+	if err := adapter.actorRT.Sweep(ctx); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		stored, loadErr := s.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
+		if loadErr == nil && stored.State == types.RunCompleted && counting.calls.Load() == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	stored, loadErr := s.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
+	if loadErr != nil || stored.State != types.RunCompleted || counting.calls.Load() != 1 {
+		t.Fatalf("recovery state=%s calls=%d err=%v metadata=%+v run=%s", stored.State, counting.calls.Load(), loadErr, stored.Metadata, stored.RunID)
+	}
+	if memory, err := adapter.log.LoadSnapshot(ctx, mailboxID); err != nil || len(memory) != 0 {
+		t.Fatalf("test unexpectedly relied on actor snapshot memory=%q err=%v", memory, err)
+	}
+	if got := counting.calls.Load(); got != 1 {
+		t.Fatalf("provider calls=%d", got)
+	}
+}
+
+func TestAdapterSQLiteInjectionAppendRecoveryExecutesWithoutSnapshot(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "researcher-injection-append-recovery.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	counting := &admissionRecoveryCountingProvider{stub: provider.NewStubProvider(0)}
+	const ownerID, computerID = "owner-adapter-injection-recovery", "computer-adapter-injection-recovery"
+	cfg := provideriface.Config{SandboxID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	adapter := New(cfg, s, events.NewEventBus(), counting, nil)
+	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
+	rec := seedAdapterLifecycleResearcherControl(t, s, adapter.Runtime, ownerID, computerID, "injection-missing-snapshot", false)
+
+	initialID := actorDispatchUpdateID(ownerID, computerID, rec.AgentID, "initial_dispatch", rec.RunID, rec.TrajectoryID, "")
+	mailboxID := scopedActorMailboxID(ownerID, computerID, rec.AgentID)
+	if err := adapter.log.MarkProcessed(ctx, mailboxID, initialID); err != nil {
+		t.Fatal(err)
+	}
+	rec.State = types.RunPassivated
+	metadata := make(map[string]any, len(rec.Metadata))
+	for key, value := range rec.Metadata {
+		metadata[key] = value
+	}
+	rec.Metadata = metadata
+	rec.Metadata["passivated_reason"] = "runtime_injection_append_failed"
+	rec.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	// A durable malformed recovery row ahead of the valid boot occurrence must
+	// be acknowledged/quarantined rather than poison the FIFO forever.
+	malformed := actor.Update{UpdateID: "malformed-recovery-before-valid", ToAgentID: mailboxID, FromAgentID: "texture:" + rec.ChannelID, Kind: "coagent_result", Content: agentcore.LifecycleResearcherAdmissionRecoveryPrefix + "malformed", TrajectoryID: rec.TrajectoryID, CreatedAt: time.Now().UTC().Add(-time.Second)}
+	if appended, err := adapter.log.Append(ctx, malformed); err != nil || !appended {
+		t.Fatalf("append malformed recovery=%v err=%v", appended, err)
+	}
+	// Intentionally do not save an actor snapshot. Runtime boot must enqueue a
+	// distinct recovery occurrence, and the real handler must resolve its run.
+	adapter.Runtime.Start(ctx)
+	for range 3 {
+		if err := adapter.actorRT.Sweep(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		stored, loadErr := s.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
+		if loadErr == nil && stored.State == types.RunCompleted && counting.calls.Load() == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	stored, loadErr := s.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
+	if loadErr != nil || stored.State != types.RunCompleted || counting.calls.Load() != 1 {
+		t.Fatalf("injection recovery state=%s calls=%d err=%v metadata=%+v run=%s", stored.State, counting.calls.Load(), loadErr, stored.Metadata, stored.RunID)
+	}
+	if memory, err := adapter.log.LoadSnapshot(ctx, mailboxID); err != nil || len(memory) != 0 {
+		t.Fatalf("test unexpectedly relied on actor snapshot memory=%q err=%v", memory, err)
+	}
+	if got := counting.calls.Load(); got != 1 {
+		t.Fatalf("provider calls=%d", got)
+	}
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		backlog, _ := adapter.log.Unprocessed(ctx, mailboxID)
+		if len(backlog) == 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if backlog, err := adapter.log.Unprocessed(ctx, mailboxID); err != nil || len(backlog) != 0 {
+		t.Fatalf("malformed recovery poisoned FIFO backlog=%+v err=%v", backlog, err)
 	}
 }

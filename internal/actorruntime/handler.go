@@ -49,6 +49,13 @@ func newActorHandler(rt *agentcore.Runtime, textureOwner *textureowner.Handler) 
 	return &actorHandler{rt: rt, textureOwner: textureOwner}
 }
 
+func deferTextureOccurrence(err error) error {
+	if err == nil {
+		return actor.ErrDeferUnprocessed
+	}
+	return fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, err)
+}
+
 func textureRunRecord(rec types.RunRecord) bool {
 	if agentprofile.Canonical(rec.AgentProfile) == agentprofile.Texture ||
 		agentprofile.Canonical(rec.AgentRole) == agentprofile.Texture {
@@ -112,7 +119,9 @@ func (h *actorHandler) handleInitialDispatch(ctx context.Context, u actor.Update
 			return nil, fmt.Errorf("actorruntime: validate Texture initial_dispatch: %w", err)
 		}
 	}
-	h.rt.ExecuteActivationSync(ctx, &rec)
+	if err := h.rt.ExecuteActivationSyncChecked(ctx, &rec); err != nil {
+		return nil, fmt.Errorf("%w: actorruntime: execute initial activation: %v", actor.ErrDeferUnprocessed, err)
+	}
 	return h.memoryFromRunState(&rec)
 }
 
@@ -124,21 +133,95 @@ func (h *actorHandler) handleInitialDispatch(ctx context.Context, u actor.Update
 // calls ReconcileCoagentWake to create a new run for the coagent update —
 // this handles cold starts (process restart) and first-ever updates.
 func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
-	ownerID, _, agentID, scopeErr := parseScopedActorMailboxID(u.ToAgentID)
+	ownerID, computerID, agentID, scopeErr := parseScopedActorMailboxID(u.ToAgentID)
 	if scopeErr != nil {
 		return nil, fmt.Errorf("actorruntime: resolve coagent_result scope: %w", scopeErr)
 	}
+	if strings.HasPrefix(strings.TrimSpace(u.Content), agentcore.LifecycleResearcherAdmissionRecoveryPrefix) {
+		rec, terminal, recoveryErr := h.rt.ResolveLifecycleResearcherAdmissionRecovery(ctx, ownerID, computerID, agentID, u.Content, u.TrajectoryID, u.FromAgentID)
+		if recoveryErr != nil {
+			if errors.Is(recoveryErr, agentcore.ErrInvalidLifecycleResearcherRecovery) {
+				return nil, nil // durable malformed/foreign recovery occurrence
+			}
+			return nil, fmt.Errorf("%w: actorruntime: defer lifecycle Researcher recovery until a distinct wake/restart: %v", actor.ErrDeferUnprocessed, recoveryErr)
+		}
+		if terminal {
+			return nil, nil
+		}
+		if rec == nil {
+			return nil, fmt.Errorf("actorruntime: lifecycle Researcher admission recovery returned no exact run")
+		}
+		if err := h.rt.ExecuteActivationSyncChecked(ctx, rec); err != nil {
+			if errors.Is(err, agentcore.ErrActivationOccurrenceMustRemainUnprocessed) {
+				return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, err)
+			}
+			return nil, fmt.Errorf("actorruntime: execute lifecycle Researcher admission recovery: %w", err)
+		}
+		return h.memoryFromRunState(rec)
+	}
 	if strings.HasPrefix(agentID, agentprofile.Texture+":") {
 		if h.textureOwner == nil {
-			return nil, fmt.Errorf("actorruntime: Texture owner is not bound")
+			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture owner is not bound"))
 		}
-		// Texture owner validates and reactivates revision-bound memory from
-		// canonical document state. Generic actor memory is not Texture
-		// revision authority and must never bypass that reconciliation.
-		if _, reconcileErr := h.reconcileCoagentWake(ctx, u); reconcileErr != nil {
-			return nil, fmt.Errorf("actorruntime: reconcile Texture coagent wake: %w", reconcileErr)
+		occurrence, fate, occurrenceErr := h.textureOwner.ResolveTextureActorOccurrence(ctx, ownerID, computerID, agentID, u.Content)
+		if occurrenceErr != nil {
+			if errors.Is(occurrenceErr, textureowner.ErrInvalidTextureActorOccurrence) {
+				return nil, nil
+			}
+			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: validate exact Texture occurrence: %w", occurrenceErr))
 		}
-		return nil, nil
+		if strings.TrimSpace(u.TrajectoryID) != "" && strings.TrimSpace(u.TrajectoryID) != occurrence.TrajectoryID {
+			return nil, nil // durable foreign trajectory envelope
+		}
+		if strings.TrimSpace(u.FromAgentID) != "" {
+			expectedSource := occurrence.ProducerAgentID
+			if occurrence.Kind == agentcore.TextureActorOccurrenceOwnerInstruction {
+				expectedSource = "owner:" + occurrence.OwnerID
+			}
+			if strings.TrimSpace(u.FromAgentID) != expectedSource {
+				return nil, nil // durable foreign source envelope
+			}
+		}
+		if fate == textureowner.TextureActorOccurrenceTerminal {
+			return nil, nil // explicit Store-owned disposed/cancelled/late outcome
+		}
+
+		// Reconcile canonical document/head/mutation authority and synchronously
+		// execute the exact selected run inside this still-unprocessed occurrence.
+		// Generic actor snapshot memory is deliberately ignored.
+		rec, reconcileErr := h.textureOwner.ReconcileActorOccurrenceWake(ctx, ownerID, computerID, agentID, occurrence.ResolvedTargetWorkItemID, occurrence)
+		if reconcileErr != nil {
+			if errors.Is(reconcileErr, textureowner.ErrInvalidTextureActorOccurrence) {
+				return nil, nil
+			}
+			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: reconcile Texture coagent wake: %w", reconcileErr))
+		}
+		if rec == nil {
+			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: pending Texture occurrence produced no exact run"))
+		}
+		if validateErr := h.textureOwner.ValidateActivationAuthority(ctx, ownerID, computerID, agentID, rec.RunID); validateErr != nil {
+			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: revalidate Texture provider authority: %w", validateErr))
+		}
+		if rec.Metadata == nil {
+			rec.Metadata = make(map[string]any)
+		}
+		rec.Metadata["actor_reactivate_existing_memory"] = true
+		rec.Metadata["actor_reactivated_from_passivated"] = true
+		rec.Metadata["texture_trigger_occurrence"] = u.Content
+		if err := h.rt.ExecuteActivationSyncChecked(ctx, rec); err != nil {
+			if errors.Is(err, agentcore.ErrActivationOccurrenceMustRemainUnprocessed) {
+				return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, err)
+			}
+			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: execute Texture resumed activation: %w", err))
+		}
+		post, postErr := h.textureOwner.TextureActorOccurrencePostcondition(ctx, occurrence, rec.RunID)
+		if postErr != nil {
+			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: verify Texture occurrence postcondition: %w", postErr))
+		}
+		if post == textureowner.TextureActorOccurrencePending {
+			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture activation returned without disposing exact trigger"))
+		}
+		return h.memoryFromRunState(rec)
 	}
 	rs, err := decodeResumeState(memory)
 	if err != nil {
@@ -225,7 +308,12 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		if err := h.rt.Store().UpdateRun(ctx, rec); err != nil {
 			return nil, fmt.Errorf("actorruntime: reactivate run %s: %w", rs.RunID, err)
 		}
-		h.rt.ExecuteActivationSync(ctx, &rec)
+		if err := h.rt.ExecuteActivationSyncChecked(ctx, &rec); err != nil {
+			if errors.Is(err, agentcore.ErrActivationOccurrenceMustRemainUnprocessed) {
+				return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, err)
+			}
+			return nil, fmt.Errorf("actorruntime: execute resumed activation: %w", err)
+		}
 		return h.memoryFromRunState(&rec)
 	}
 
