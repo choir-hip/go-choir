@@ -1317,3 +1317,51 @@ needed. Do not deploy or claim the repair while CI is red.
 
 Problem delta: discovered CI/load instability in an existing protected
 cancellation regression; introduced no known runtime defect; repaired none.
+
+
+### Exact-deployed Researcher bind failure after atomic control repair
+
+Exact deployment identity for runtime candidate `8ac0b27d47c26d83392bc38488d0b62c258c60a7`
+passed at VM `vm-bbdbbd01c4390b7036067aaa12afeb68`, guest
+`computer-42850e9734d9442386c5dd8bf3afbf19`, epoch 8250, with every
+host/guest/service/deployment commit equal to the candidate and route digest
+`sha256:648d6071215206b190376ff6c24f3c93c08483b09bfb2ffc4790c00f3dd66489`.
+The repaired runtime recovered retained trajectory
+`14c99be0-dd07-50b8-b074-a92088a0f7b9`: Texture run
+`02193ba2-20e5-4d79-8731-15696fbba274` committed revision
+`d7289837-55f7-51ee-825d-f7e2a12a641c` plus runtime-derived Researcher
+`researcher:a1c34c97-5b1c-4177-9b33-d8d331c3df79`, work, and control in one
+turn. This is deployed product proof that the opaque-schema/early-mutation
+repair reached its first intended atomic transition.
+
+The post-commit Researcher wake then failed before any provider call. At least
+three distinct Researcher runs (`876fe019-85dd-4ba7-9257-485e9170a484`,
+`c5fa1daf-36b4-4347-879b-25e4f8ad8280`, and
+`a54090f8-c945-4feb-b0f8-d15361934c9f`) terminalized immediately with durable
+metadata `lifecycle_control_bind_failed=true` and
+`lifecycle_control_bind_failure="lifecycle invalid transition"`. The open
+control/work caused repeated activation attempts; no Researcher evidence packet
+or execution claim exists. This is a new post-commit lifecycle-binding defect,
+not a provider recurrence and not a schema refusal.
+
+Mutation class is **red**. Protected surfaces are lifecycle activation/control
+binding, actor restart/wake, work/update disposition, cancellation, and
+post-commit delivery. The retained trajectory must be publicly cancelled now to
+stop repeated failed activations while preserving revision/control/failure
+evidence. No code fix is authorized until read-only convergence identifies the
+single transition authority and a reviewed repair ceremony is landed. Effects
+remain OFF.
+
+Problem delta: the atomic control repair is product-proven through commit and
+post-commit wake; a new Researcher bind/retry-loop heresy is discovered;
+introduced/repair attribution remains unknown until source convergence.
+
+Public cancellation `cts-repair-researcher-bind-cancel-v3` closed the retained
+trajectory at lifecycle version 5/reducer and watermark 7 with exact terminal
+head `d7289837-55f7-51ee-825d-f7e2a12a641c`, both work items cancelled, the
+latest activation cancelled, and zero active owner runs. The bounded public run
+listing immediately after cancellation contained 200 failed records and every
+one carried `lifecycle_control_bind_failed`; therefore at least 200 failed
+activation attempts were retained before cancellation won. This makes the
+restart loop a severe unbounded retry symptom rather than three isolated
+failures. No execution/provider call or capsule effect occurred.
