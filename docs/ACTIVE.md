@@ -15,22 +15,21 @@ surface.
 The current deployed runtime is `7ba05599`. CI/deploy run `31310481745` passed
 all selected Race shards, aggregate Go, Differential SBOM acceptance, rolling
 publication, and Node B deployment. Public `/health` reports the exact proxy commit, and the
-deploy activation receipt exact-joins every selected host service. The deployment is host proof only. The retained
-stable guest has not yet been woken or nonce-bound to `7ba05599` because the
-same owner's retained browser sessions are unauthenticated and retained scoped
-keys are unusable; only separately receipted keys are classified expired or
-revoked. Independent audit found no public same-owner renewal that
-can proceed without WebAuthn user presence. Process evidence then corrected the
-browser path: `omp-browser` is HeadlessChrome/150 with an OMP temporary profile,
-basic password store, and mock keychain. Its waiting text and expired challenges
-were diagnostic-only; it has no proven owner-operable native prompt. A fresh
-assertion must start in an ordinary headed persistent browser profile only when
-the owner can immediately approve Touch ID/security-key presence. No headless
+deploy activation receipt exact-joins every selected host service. The deployment is host proof only. Native
+same-owner passkey presence completed in ordinary headed Chrome, but the retained
+stable guest has not yet been woken or nonce-bound to `7ba05599`. Both accidental
+handoff keys are revoked/post-401 after the safe failed attenuation, so no usable
+bearer remains. The headed browser was authenticated at handoff; the owner must
+check whether that session remains valid and mint the exact narrow key directly,
+or complete a fresh native assertion if it has expired. `omp-browser` remains
+HeadlessChrome/150 with an OMP temporary profile, basic password store, and mock
+keychain; it is diagnostic-only and has no proven owner-operable native prompt. No headless
 retry, CDP virtual authenticator, substitute owner/computer, recovery bypass,
 SSH, internal vmctl path, or weaker identity is admissible.
 
 A read-only reconciliation of a newly supplied F-era handoff confirms it is
-historical, not a rollback instruction. Source is exact at `e92bacd5`; current
+historical, not a rollback instruction. At that reconciliation checkpoint source
+was exact at `e92bacd5`; current
 runtime CI/deploy `31310481745` is green; `8ac0b27d` deployed the authorized
 packet/prompt repair; and retained trajectory `14c99be0…` was later publicly
 cancelled at lifecycle version 5 before the bind, mailbox, and terminal-boot
@@ -40,19 +39,17 @@ revocation; its row and both root-only auth rollback copies remain terminal
 cleanup obligations. No restoration, SSH, credential, provider, route, guest,
 or effect mutation was repeated. Effects remain OFF.
 
-The retained owner has now completed the native headed-browser ceremony, but the
-handoff produced unbound non-expiring administrator key `ak_e2552ee6…`, not the
-requested narrow target-bound key. It is securely held mode `0600`, the clipboard
-is cleared, and it has been used only for read-only same-owner registry/status
-inspection. The registry exact-joins historical keys for retained target
-`vm-bbdbbd01c4390b7036067aaa12afeb68`. Before any lifecycle mutation, transition, or product/effect write, the reviewed RED attenuation sequence must issue one
-nonce-labelled POST for an exact <=2-hour subset bound to stable computer
-`computer-42850e9734d9442386c5dd8bf3afbf19` (not VM `vm-bb…`), verify exact
-metadata, immediately revoke the broad key with post-401 proof, and only then
-prove the narrow key through read-only exact-target and wrong-computer probes.
-Ambiguous creation or definitive-create storage/metadata failure revokes every
-nonce-matching child and the broad authority with post-401 proof before stopping;
-there is no blind retry. Effects remain OFF.
+The retained owner completed the native headed-browser ceremony, but the first
+handoff produced unbound administrator key `ak_e2552ee6…`. The reviewed
+attenuation made one nonce-labelled child `ak_834c56be…`; local secret persistence
+failed before file creation because the notebook `os` name was shadowed. The
+failure branch executed exactly: no retry, child DELETE 204/post-401, broad
+self-DELETE 204/post-401, credential files removed, and zero lifecycle/product/
+effect writes. No usable new key remains. While the headed session is valid, the
+next handoff must mint the exact <=2-hour eight-scope key directly, bound to
+stable computer `computer-42850e9734d9442386c5dd8bf3afbf19` and never VM
+`vm-bb…`; ingestion must use an isolated shell/unshadowed module path and verify
+mode `0600` before any API call. Effects remain OFF.
 
 The last exact guest-proved product prefix remains `b5d907a3`: Texture published
 a continuous-prose v1 while work was open, atomically addressed its bound
@@ -74,7 +71,7 @@ are repaired; they are not the current blocker. The canonical R/F rehearsal
 remains qualified as bounded deployed rollback-and-recovery PASS with strict
 midpoint forward-observability FAIL, safely recovered. Root-only provider-auth
 rollback copies remain pending terminal deletion or explicit retention authority.
-Effects remain OFF. After same-owner user presence, the retained computer must
+Effects remain OFF. After exact narrow-key handoff and read-only authority proof, the retained computer must
 prove exact `7ba05599` guest/service identity before fresh acceptance continues
 through post-report v2, correction incorporation, a second downward cycle,
 persistent Super, two isolated writable capsules including a verifier, v3,

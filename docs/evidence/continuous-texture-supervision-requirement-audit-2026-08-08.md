@@ -3,7 +3,7 @@
 **Date:** 2026-08-09
 **Definition:** `choir-continuous-texture-supervision-2026-08-07`
 **Runtime candidate:** `7ba05599c15f6d126f86fa6fe1a44bc36a928121`
-**Audit verdict:** **NOT COMPLETE — exact host deployed; owner ceremony complete; accidental broad key must be attenuated before retained-guest proof**
+**Audit verdict:** **NOT COMPLETE — exact host deployed; owner presence passed; both accidental keys revoked; exact narrow-key handoff and retained-guest proof remain**
 **Effects:** OFF
 
 This is a requirement-by-requirement audit, not a completion receipt. It
@@ -14,32 +14,28 @@ unexecuted Researcher/Super/capsule behavior.
 ## Superseded handoff reconciliation
 
 A read-only reconciliation of a newly supplied `565abc77`/exact-F handoff proves
-it is historical rather than current authority. Local/origin source is
-`e92bacd5`; public health is HTTP 200 at runtime `7ba05599`; dashboard is HTTP
+it is historical rather than current authority. At that reconciliation checkpoint,
+local/origin source was `e92bacd5`; public health is HTTP 200 at runtime `7ba05599`; dashboard is HTTP
 200; and CI/deploy `31310481745` is completed/success. `8ac0b27d` deployed the
 authorized packet/prompt repair and recovered `14c99be0…` through its first
 atomic control, but a later bind defect caused the trajectory to be publicly
 cancelled at lifecycle version 5. Subsequent bind, mailbox, and terminal-boot
 repairs culminated in `7ba05599`. The old `ak_45ce1796…` key now returns public
 HTTP 401; no secret, restoration, SSH, credential, provider, route, guest, or
-effect mutation occurred. Effects remain OFF. This does not change the current
-headed same-owner authentication blocker or terminal registry/backup cleanup
-obligations.
+effect mutation occurred. Effects remain OFF. This does not change the current exact narrow-key handoff/retained-guest blocker
+or terminal registry/backup cleanup obligations.
 
 ## Current checkpoint — 2026-08-09
 
-The retained owner has now completed the native headed-browser ceremony. The
-secure handoff nevertheless produced unbound, non-expiring administrator key
-`ak_e2552ee6…`, not the requested narrow target-bound key. Read-only registry
-inspection exact-joins the same owner to historical keys for target
-`vm-bbdbbd01c4390b7036067aaa12afeb68`; no lifecycle or effect call used the
-broad key. The corrected problem-first RED attenuation ceremony requires one
-nonce-labelled POST for an exact <=2-hour subset bound to stable computer
-`computer-42850e9734d9442386c5dd8bf3afbf19`, exact metadata, immediate broad-key
-revocation/post-401, then narrow-key read-only exact-target and wrong-computer
-proof before product acceptance resumes. Ambiguous creation or definitive-create storage/metadata failure revokes all
-nonce-matching children and the broad authority with post-401 proof, then stops
-without retry. Effects remain OFF.
+The retained owner completed the native headed-browser ceremony, but the first
+handoff produced unbound administrator key `ak_e2552ee6…`. Reviewed one-shot
+attenuation created nonce child `ak_834c56be…`; local secret persistence failed
+before file creation because the notebook `os` name was shadowed. The fail-closed
+branch did not retry: child DELETE 204/post-401, broad self-DELETE 204/post-401,
+credential files removed, and zero lifecycle/effect writes. No usable new key
+remains. The next headed-session handoff must mint the exact <=2-hour eight-scope
+key directly, bound to stable computer `computer-42850…`, never VM `vm-bb…`.
+Effects remain OFF.
 
 This checkpoint supersedes the current-state classifications in the historical
 construction narrative below without deleting those failure receipts. Runtime
@@ -48,15 +44,14 @@ aggregate Go, Differential SBOM acceptance, rolling publication, and exact Node 
 host activation. Public `/health` reports the exact proxy commit and the deploy
 activation receipt exact-joins every selected host service. That is host evidence
 only. The retained target guest/service has not been nonce-bound to
-`7ba05599`: the same owner's existing browser contexts are unauthenticated and
-retained scoped keys are unusable; only separately receipted keys are classified
-expired or revoked. Independent source/live audit found no
-public same-owner renewal without WebAuthn user presence. Process evidence then
-showed `omp-browser` is HeadlessChrome/150 with `--headless=new`, an OMP temporary
-profile, basic password store, and mock keychain. Its waiting text and two
-expired challenges were diagnostic-only; it has no proven owner-operable native
-prompt. A new assertion must start in an ordinary headed persistent browser only
-when the owner can immediately approve Touch ID/security-key presence. No
+`7ba05599`. An earlier audit found existing contexts unauthenticated and retained
+scoped keys unusable, and found no public same-owner renewal without WebAuthn
+presence. Native same-owner presence subsequently completed in ordinary headed
+Chrome. The browser was authenticated at handoff; the owner must check it now and
+reuse it only if still valid, otherwise complete a fresh native assertion.
+`omp-browser` remains HeadlessChrome/150 with `--headless=new`, an OMP temporary
+profile, basic password store, and mock keychain. Its waiting text and expired
+challenges were diagnostic-only; it has no proven owner-operable native prompt. No
 headless retry, CDP virtual authenticator, substitute owner/computer, recovery
 bypass, SSH, internal vmctl path, or weaker identity counts. Effects remain OFF.
 
@@ -129,9 +124,13 @@ does not promote other incomplete actions.
 
 ### Exact remaining gate after owner user presence
 
-Authenticate only the same owner, recover only the retained stable computer via
-the public product path, and nonce-bind host, guest, and services to exact
-`7ba05599` before minting a narrow key. Then product-prove post-report v2,
+Using the headed owner session only if it remains valid (otherwise a fresh native
+assertion), first mint and securely hand off the exact <=2-hour eight-scope key
+bound to stable computer `computer-42850e9734d9442386c5dd8bf3afbf19`. Pass its
+read-only lifecycle/self-development/exact-target/wrong-computer probes. Only
+then recover the retained stable computer through the public product path and
+nonce-bind host, guest, and services to exact `7ba05599` before any acceptance
+write. Then product-prove post-report v2,
 correction incorporation, focused redirect, persistent Super result, changed
 control/v3, two parallel isolated writable capsules including verifier-written
 test evidence, positive source-open/API/CLI parity, a second writing style,
@@ -151,7 +150,7 @@ and root-backup disposition, registry closure, and a final independent audit.
 | Product lifecycle route | PASS | Authenticated create, tell, model-policy file/resolve, trajectory inspection, and conditional public cancel all executed on the exact candidate |
 | Initial committed-work projection | PASS deployed | No-SSH deployment restart created run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf` for the previously stranded initial work |
 | Provider-dependent acceptance | **PROVIDER RESTORED — FULL ACCEPTANCE PENDING** | Host ChatGPT returned HTTP 401 `refresh_token_reused` on both original and fresh trajectories; Z.AI returned HTTP 429 and later an open unhealthy-provider circuit; configured fallback chains ended at stale ChatGPT. Sanitized local reproduction after staging found DeepSeek/Xiaomi HTTP 402 balance failures, Fireworks HTTP 412 `PRECONDITION_FAILED`, Z.AI HTTP 429 code `1113`, and direct AWS Bedrock bearer invokes in `us-east-1` returned HTTP 403 for both gateway seed `us.anthropic.claude-haiku-4-5-20251001-v1:0` and exact owner-policy-selected `us.anthropic.claude-sonnet-4-6`; these local calls diagnose availability only and are not acceptance evidence or host-credential proof. No Researcher/update/revision/Super/capsule was produced. Exact-F recurrence trajectory `e5f85464-560b-5383-b199-cf4c62c12145` / run `74a5a20f-24a3-4b25-b11c-1072f881f8a9` again failed iteration zero on ChatGPT 401 and was publicly cancelled at version 3. At `2026-08-08T23:24Z` the operator explicitly authorized the local-token/SSH Node B restoration; sanitized preflight selected a ChatGPT-only atomic auth-file replacement because full helper execution would also change Bedrock. First scoped install preserved env/health but the probe used a different owner/current legacy guest, failed before provider, and triggered exact rollback; correct acceptance-owner browser auth is now available for a second bounded attempt. Second scoped attempt used the exact acceptance owner/computer/F identity; auth `cc744524…`, env exact, PID `3806702→3807256`; ChatGPT/gpt-5.5 produced exact marker v1 `3de79895…` with completed work/no error. Probe retained/cancelled at lifecycle 4; full supervision remains pending. First full restored-provider run `2ce06146…` proves provider entry but exposed a downstream control-schema refusal before any Researcher; provider remains restored while full acceptance is blocked on runtime authority repair. |
-| Acceptance-artifact cleanup | **PARTIAL — TERMINAL DISPOSITION OPEN** | Original failed trajectory `8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d` was publicly cancelled at lifecycle version 9; fresh recurrence trajectories `41cec88f-510f-53cc-a5e7-84c372b5421b` and `aca3504c-2ae0-5a4e-bab5-b22541e90585` were publicly cancelled at lifecycle version 3; original model-policy bytes were restored at SHA-256 `7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`; all temporary API keys used before the accepted restoration were revoked and rejected on subsequent use. Exact-F recurrence was likewise retained/cancelled at version 3; the first setup key lacked `write:texture`, was refused HTTP 403 with no mutation, and both new setup keys were revoked/post-401. Empty generic document `457320df-e047-405c-b2a1-a0263b4cb5dc` from an operator route mistake is retained with current_version_number/revision_count 0 and no trajectory/run and is not acceptance. The historical restoration key `ak_45ce1796-7044-4086-ad48-5f7789f6b4ba` now returns public HTTP 401 authentication required and cannot authorize current acceptance; this is unusability evidence, not registry revocation proof. Its row still requires terminal revocation/post-401 disposition, and both root-only auth rollback copies require recorded deletion or justified retention. |
+| Acceptance-artifact cleanup | **PARTIAL — TERMINAL DISPOSITION OPEN** | Original failed trajectory `8f3b6ac6-dbdf-5bfe-99f0-661961c64f3d` was publicly cancelled at lifecycle version 9; fresh recurrence trajectories `41cec88f-510f-53cc-a5e7-84c372b5421b` and `aca3504c-2ae0-5a4e-bab5-b22541e90585` were publicly cancelled at lifecycle version 3; original model-policy bytes were restored at SHA-256 `7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`; all temporary API keys used before the accepted restoration were revoked and rejected on subsequent use. Exact-F recurrence was likewise retained/cancelled at version 3; the first setup key lacked `write:texture`, was refused HTTP 403 with no mutation, and both new setup keys were revoked/post-401. Empty generic document `457320df-e047-405c-b2a1-a0263b4cb5dc` from an operator route mistake is retained with current_version_number/revision_count 0 and no trajectory/run and is not acceptance. The failed attenuation child `ak_834c56be…` has public DELETE 204 plus same-secret post-401, and broad handoff key `ak_e2552ee6…` has self-DELETE 204 plus same-secret post-401; both are terminally retired. The distinct historical restoration key `ak_45ce1796-7044-4086-ad48-5f7789f6b4ba` now returns public HTTP 401 authentication required and cannot authorize current acceptance; this is unusability evidence, not registry revocation proof. Its row still requires terminal revocation/post-401 disposition, and both root-only auth rollback copies require recorded deletion or justified retention. |
 | Source rollback | **DEPLOYED BOUNDED REHEARSAL + RECOVERY PASS / STRICT MIDPOINT OBSERVABILITY FAIL** | Canonical R `10d48659` made the exact 99 non-document paths cdaa-equivalent; CI/rolling/deploy `31267448310` passed and exact R ran at epoch 8248. R preserved run/lifecycle/selfdev/policy/inventory summaries, but its legacy response omitted six stored owner-instruction `request_id` fields, so the full v9 response digest differed and the identity-ambiguity gate fired. Canonical F `67a61358` immediately restored the exact pre-R whole tree; CI/rolling/deploy `31268477380` passed, exact F ran at epoch 8249, and all captured frozen comparator response/state digests equalled baseline. Exposure was 1,909 seconds; key revoked/post-401. Canonical deployed rollback/recovery is rehearsed; strict old-runtime forward-observability and complete checkpoint/capsule acceptance remain open. |
 | Registry terminal closure | OPEN | ACTIVE, mission graph, and authority manifest remain active/working; effects remain OFF |
 

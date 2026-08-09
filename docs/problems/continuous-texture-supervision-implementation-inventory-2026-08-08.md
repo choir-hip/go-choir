@@ -1990,3 +1990,40 @@ Rollback is explicit revocation plus post-401, never expiry. Heresy delta:
 `discovered` — an over-broad perpetual key was minted during the intended narrow
 ceremony; `introduced` — none by the agent; `repaired` — none until attenuation
 and broad-key post-401 complete. Effects remain OFF.
+
+
+### First attenuation attempt failed closed before secret persistence
+
+The reviewed one-shot transaction used nonce label
+`cts-7ba05599-target-attenuation-effda9968935` and public key-management only.
+The server returned one definitive child row,
+`ak_834c56be-0d4b-4ae0-8958-56875cecfaa5`. Before any file was created, the
+local atomic-storage path failed because the long-lived Python notebook name
+`os` had been shadowed by an integer. The agent did not retry storage or key
+creation. Following the reviewed failure branch, it listed exactly one live
+nonce-matching child, revoked it by public DELETE (HTTP 204), proved its same
+secret returned HTTP 401, self-revoked broad administrator key
+`ak_e2552ee6-c1bb-40a2-aad6-5b5d0a644112` (HTTP 204), and proved that same broad
+secret returned HTTP 401. Revoked credential files were removed and newly
+introduced in-kernel secret references were cleared best-effort. No lifecycle,
+self-development, runtime, Texture, provider, route, guest, or effect write was
+attempted. Effects remain OFF.
+
+This is a safe failed ceremony, not accepted attenuation. No usable new key
+remains. The next owner handoff should mint the exact narrow key directly if/while
+the headed browser session remains valid; otherwise complete a fresh native
+assertion first: bind stable computer
+`computer-42850e9734d9442386c5dd8bf3afbf19`, never VM `vm-bb…`; use the exact
+eight-scope set; expire within two hours; and copy the once-returned secret to
+the non-logging handoff. The ingestion path must use a fresh isolated shell or
+unshadowed module alias and verify mode `0600` before any API use.
+
+
+**Attenuation outcome delta.** `discovered` — the local notebook name `os` was
+shadowed in the atomic-persistence path; `introduced` — one bounded child key
+authority existed for the single definitive create and was fully revoked;
+`repaired` — the live over-broad administrator exposure and the bounded child
+were both retired. Evidence/rollback is the exact pair of public receipts:
+child DELETE 204 plus child-secret post-401, and broad self-DELETE 204 plus
+broad-secret post-401. Acceptance-key availability remains unrepaired. Effects
+remained OFF throughout.

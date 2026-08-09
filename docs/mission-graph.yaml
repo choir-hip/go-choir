@@ -256,17 +256,17 @@ nodes:
       31310481745 including Race shards, aggregate Go, Differential SBOM, rolling
       publication, and Node B activation receipts. Public health reports the exact
       proxy commit and the deploy receipt exact-joins the selected host services,
-      but retained guest/service identity remains unproved. The same owner has now
-      completed native Touch ID/security-key presence; the resulting secure
-      handoff produced unbound non-expiring administrator key ak_e2552ee6 rather
-      than the requested narrow target-bound key. A corrected RED attenuation
-      must make one nonce-labelled POST for an exact <=2-hour subset bound to
-      stable computer computer-42850e9734d9442386c5dd8bf3afbf19, never VM
-      vm-bbdbbd01c4390b7036067aaa12afeb68; verify exact metadata; immediately
-      revoke the broad key with post-401 proof; then pass narrow-key exact-target
-      and wrong-computer read-only probes before any lifecycle mutation, transition, or product/effect write. Ambiguous creation or definitive-create
-      storage/metadata failure revokes every nonce-matching child and the broad
-      authority with post-401 proof, then stops without retry. Independent audit previously found no
+      but retained guest/service identity remains unproved. The same owner completed
+      native Touch ID/security-key presence; the first handoff produced broad key
+      ak_e2552ee6. Reviewed one-shot attenuation created child ak_834c56be, but
+      local storage failed before file creation. The fail-closed branch made no
+      retry, revoked child and broad with DELETE 204/post-401, removed credential
+      files, and made zero lifecycle/product/effect writes. No usable new key
+      remains. If the headed owner session remains valid, it must mint the exact
+      <=2-hour eight-scope key directly; otherwise native owner presence must be
+      repeated. The key binds stable computer
+      computer-42850e9734d9442386c5dd8bf3afbf19 and never VM
+      vm-bbdbbd01c4390b7036067aaa12afeb68. Independent audit previously found no
       public no-presence renewal, then process evidence showed omp-browser is a headless
       temporary-profile/mock-keychain diagnostic surface with no proven
       owner-operable native prompt. Its expired challenges are not human-presence
