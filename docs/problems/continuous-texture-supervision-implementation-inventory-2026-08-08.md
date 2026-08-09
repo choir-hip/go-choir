@@ -1961,17 +1961,32 @@ restored exact same-owner key-registry authority, but the selected UI/CLI path
 minted a perpetual administrator rather than a target-bound acceptance key.
 Protected surface: only the public API-key registry. Admissible evidence: exact
 public create/list/revoke status plus post-revocation HTTP 401, never logs or
-secret values. Authorized sequence: use the broad key only on public
-`POST /auth/api-keys` to mint a key expiring within two hours, bound to exact
-`vm-bbdbbd01c4390b7036067aaa12afeb68`, with exactly
-`computer:lifecycle`, `computer:self_development:read`, `acceptance:read`,
-`read:runtime`, `write:runtime`, `read:texture`, `write:texture`, and
-`read:base`; store its once-returned secret mode `0600`; verify its metadata and
-read-only target authority; then revoke `ak_e2552ee6…` and prove that broad key
-returns HTTP 401. If creation or verification mismatches, revoke the new key and
-stop. No product/lifecycle call is authorized before the narrow key passes.
-Rollback is revocation of the newly minted key; the broad key remains usable only
-until the narrow key is verified, then must be self-revoked. Heresy delta:
+secret values. The broad bearer is usable only on public key-management
+`POST/GET/DELETE` for this single attenuation transaction: one
+`POST /auth/api-keys` labelled
+`cts-7ba05599-target-attenuation-effda9968935`, with `GET`/`DELETE` limited to
+nonce reconciliation and revocation. The child must expire within two hours and
+bind exact stable computer `computer-42850e9734d9442386c5dd8bf3afbf19`; joined
+realization/VM `vm-bbdbbd01c4390b7036067aaa12afeb68` is not the key binding. Its
+exact scopes are `computer:lifecycle`, `computer:self_development:read`,
+`acceptance:read`, `read:runtime`, `write:runtime`, `read:texture`,
+`write:texture`, and `read:base`. Retained public evidence already joins owner,
+stable computer, VM, route, and epoch. On an ambiguous POST response, list by the
+unique label, revoke every matching child, prove each disposition, self-revoke
+the broad key, prove broad post-401, and stop without retry. On a definitive
+response, atomically store the once-returned secret mode `0600` and require
+exactly one row, exact label and scope set equality, exact stable-computer
+binding, and expiry after now but no later than two hours. If secret storage or
+any metadata/single-row check fails, revoke every nonce-matching child,
+self-revoke the broad key, prove broad post-401 and child post-401 whenever its
+secret is available, then stop. On exact success, immediately self-revoke
+`ak_e2552ee6…` and prove that same broad secret returns HTTP 401 before any target
+probe. Then use the narrow key read-only to prove exact lifecycle status,
+self-development read, nonce-bound stable-computer/VM/epoch/route/service
+identity, and a wrong-computer denial. A target-probe mismatch occurs after broad
+post-401, so it self-revokes the narrow key, proves narrow post-401, and stops. No
+write/lifecycle transition is authorized before this gate.
+Rollback is explicit revocation plus post-401, never expiry. Heresy delta:
 `discovered` — an over-broad perpetual key was minted during the intended narrow
 ceremony; `introduced` — none by the agent; `repaired` — none until attenuation
 and broad-key post-401 complete. Effects remain OFF.

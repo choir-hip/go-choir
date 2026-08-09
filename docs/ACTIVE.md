@@ -45,10 +45,14 @@ handoff produced unbound non-expiring administrator key `ak_e2552ee6…`, not th
 requested narrow target-bound key. It is securely held mode `0600`, the clipboard
 is cleared, and it has been used only for read-only same-owner registry/status
 inspection. The registry exact-joins historical keys for retained target
-`vm-bbdbbd01c4390b7036067aaa12afeb68`. Before any lifecycle call, the reviewed
-RED attenuation sequence must mint and verify an exact <=2-hour target-bound
-subset key, revoke the broad key, and prove broad-key post-401. Effects remain
-OFF.
+`vm-bbdbbd01c4390b7036067aaa12afeb68`. Before any lifecycle mutation, transition, or product/effect write, the reviewed RED attenuation sequence must issue one
+nonce-labelled POST for an exact <=2-hour subset bound to stable computer
+`computer-42850e9734d9442386c5dd8bf3afbf19` (not VM `vm-bb…`), verify exact
+metadata, immediately revoke the broad key with post-401 proof, and only then
+prove the narrow key through read-only exact-target and wrong-computer probes.
+Ambiguous creation or definitive-create storage/metadata failure revokes every
+nonce-matching child and the broad authority with post-401 proof before stopping;
+there is no blind retry. Effects remain OFF.
 
 The last exact guest-proved product prefix remains `b5d907a3`: Texture published
 a continuous-prose v1 while work was open, atomically addressed its bound

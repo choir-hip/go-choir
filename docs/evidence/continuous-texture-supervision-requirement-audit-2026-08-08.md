@@ -33,9 +33,13 @@ secure handoff nevertheless produced unbound, non-expiring administrator key
 `ak_e2552ee6…`, not the requested narrow target-bound key. Read-only registry
 inspection exact-joins the same owner to historical keys for target
 `vm-bbdbbd01c4390b7036067aaa12afeb68`; no lifecycle or effect call used the
-broad key. The problem-first receipt and RED attenuation ceremony require an
-exact <=2-hour target-bound subset key, verification, broad-key revocation, and
-broad-key post-401 before product acceptance resumes. Effects remain OFF.
+broad key. The corrected problem-first RED attenuation ceremony requires one
+nonce-labelled POST for an exact <=2-hour subset bound to stable computer
+`computer-42850e9734d9442386c5dd8bf3afbf19`, exact metadata, immediate broad-key
+revocation/post-401, then narrow-key read-only exact-target and wrong-computer
+proof before product acceptance resumes. Ambiguous creation or definitive-create storage/metadata failure revokes all
+nonce-matching children and the broad authority with post-401 proof, then stops
+without retry. Effects remain OFF.
 
 This checkpoint supersedes the current-state classifications in the historical
 construction narrative below without deleting those failure receipts. Runtime

@@ -259,10 +259,14 @@ nodes:
       but retained guest/service identity remains unproved. The same owner has now
       completed native Touch ID/security-key presence; the resulting secure
       handoff produced unbound non-expiring administrator key ak_e2552ee6 rather
-      than the requested narrow target-bound key. A documented RED attenuation
-      must mint and verify an exact <=2-hour subset bound to
-      vm-bbdbbd01c4390b7036067aaa12afeb68, revoke the broad key, and prove
-      post-401 before any lifecycle call. Independent audit previously found no
+      than the requested narrow target-bound key. A corrected RED attenuation
+      must make one nonce-labelled POST for an exact <=2-hour subset bound to
+      stable computer computer-42850e9734d9442386c5dd8bf3afbf19, never VM
+      vm-bbdbbd01c4390b7036067aaa12afeb68; verify exact metadata; immediately
+      revoke the broad key with post-401 proof; then pass narrow-key exact-target
+      and wrong-computer read-only probes before any lifecycle mutation, transition, or product/effect write. Ambiguous creation or definitive-create
+      storage/metadata failure revokes every nonce-matching child and the broad
+      authority with post-401 proof, then stops without retry. Independent audit previously found no
       public no-presence renewal, then process evidence showed omp-browser is a headless
       temporary-profile/mock-keychain diagnostic surface with no proven
       owner-operable native prompt. Its expired challenges are not human-presence
