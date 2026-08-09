@@ -1741,3 +1741,47 @@ trajectory/work state makes reactivation impossible. It must not invent open
 work, reopen the cancelled trajectory, discard mailbox evidence, acknowledge an
 operational error, or bypass exact occurrence authority. Problem documentation
 precedes any source change.
+
+### RED authorization ceremony — terminal Texture boot classification repair
+
+**Conjecture delta.** `Handler.Start` first reconstructs exact Texture actor
+occurrences, then calls generic `ReconcileActorWake` for every durable Texture
+subject. `reconcileAgentWakeLocked` currently interprets a retained pending
+owner instruction as runnable even when the trajectory snapshot is cancelled,
+reaches `submitTextureAgentRevisionRun`, and fails because cancellation correctly
+left no open Texture work. Proving terminal trajectory state before generic wake
+selection, and returning without a run for that exact terminal subject, should
+restore boot without weakening live occurrence recovery. Canonical actor rows
+will still be processed by their exact handlers and can only zero-ack through
+typed invalid classification; operational Store errors remain fatal/deferred.
+
+**Protected surfaces.** Sandbox startup, Texture actor boot reconstruction,
+lifecycle trajectory/cancellation authority, mailbox acknowledgement, mutation
+selection, run admission, and exact staging deployment/acceptance are red. The
+repair may touch only the Texture owner reconciliation boundary and focused
+tests. It may not change Store cancellation semantics, reopen work, cancel owner
+instructions generically, discard actor rows, treat missing/failed Store reads
+as terminal, widen startup suppression, change vmctl/route behavior, or alter
+provider/capsule/effects policy.
+
+**Admissible evidence.** A real Store fixture must retain a cancelled trajectory,
+cancelled work/update, pending owner instruction, durable Texture subject, and
+restart scan; `Start` must return successfully, create/reactivate no Texture run,
+preserve the instruction/evidence, and perform no provider work. Separate tests
+must prove live pending instructions still reconcile, live cancellation intent
+blocks admission, and operational snapshot/cancellation lookup errors are not
+classified terminal. Focused and full package suites, Race, vet, docs/dashboard,
+independent lifecycle/security review, complete CI/SBOM, exact Linux guest
+identity, and a fresh authenticated mailbox trajectory remain required.
+
+**Rollback.** Revert only the terminal-classification commit to exact
+`fd83ce64` source bytes; because deployed fd83 cannot boot the retained stable
+computer, rollback is a source fallback for review, not an acceptable staging
+state. If the candidate still fails boot or suppresses live work, retain all
+artifacts, stop acceptance, and revert before any further platform mutation.
+
+**Heresy delta.** Discovered and introduced by `fd83ce64`: a normal retained
+terminal Texture state can crash the persistent computer during boot. Proposed
+repair: terminal state becomes non-runnable while evidence remains durable.
+Introduced by this repair: none accepted; any broad error suppression or silent
+acknowledgement is a new heresy and rejects the candidate. Effects remain OFF.
