@@ -1941,24 +1941,31 @@ remains a fresh retained-owner assertion in an ordinary headed persistent
 browser, followed by a new narrow non-logging key handoff.
 
 
-### Headed-owner ceremony produced an over-broad unbound key
+### Headed-browser ceremony produced an over-broad unbound key
 
-At `2026-08-09T15:25Z`, the retained owner completed the headed browser
-ceremony and copied a key through the non-logging handoff. The agent ingested it
-directly to a mode-`0600` file and cleared the clipboard without displaying the
-secret. Read-only public authentication succeeded, and the bearer-visible key
-registry contains the historical keys bound to exact retained target
-`vm-bbdbbd01c4390b7036067aaa12afeb68`; this is same-owner registry evidence.
-However, the new row is `ak_e2552ee6-c1bb-40a2-aad6-5b5d0a644112`, label `CLI
-key`, with no computer binding or expiry and with `admin`, `manage:keys`, and
-broad runtime/Texture/Base authority. It is not the requested narrow acceptance
+At `2026-08-09T15:25Z`, a native headed-browser ceremony completed and copied a
+key through the non-logging handoff. The agent ingested it directly to a
+mode-`0600` file and cleared the clipboard without displaying the secret.
+Read-only bearer authentication succeeded, but exact retained-owner identity was
+not directly verified. The earlier inference that historical target-bound rows
+in this bearer-visible registry proved same ownership was invalid:
+`HandleCreateAPIKey` accepts caller-supplied `computer_id` metadata without an
+ownership join. The broad key's public compute status instead selected logical
+`primary` active at epoch `130`/code `7122f279…`, incompatible with retained
+computer `computer-42850…` at logical `primary`, failed epoch `8253`. The admissible conclusion is owner ambiguity, strongly indicating a different
+owner but not proving one; its registry rows are not retained-owner authority.
+
+The new row was `ak_e2552ee6-c1bb-40a2-aad6-5b5d0a644112`, label `CLI key`, with
+no computer binding or expiry and with `admin`, `manage:keys`, and broad
+runtime/Texture/Base authority. It was not the requested narrow acceptance
 credential. No lifecycle, provider, route, guest, effect, or acceptance mutation
-was attempted with it. A read-only compute call described another current
-computer and therefore cannot substitute for the retained target.
+was attempted with it. The different-primary compute response is refusal
+evidence, not target authority.
 
-**RED attenuation ceremony.** Conjecture delta: the successful native assertion
-restored exact same-owner key-registry authority, but the selected UI/CLI path
-minted a perpetual administrator rather than a target-bound acceptance key.
+**RED attenuation ceremony.** Conjecture delta: the native assertion restored
+key-registry authority for some authenticated browser account, not proved exact
+retained-owner authority, and the selected UI/CLI path minted a perpetual
+administrator rather than a target-bound acceptance key.
 Protected surface: only the public API-key registry. Admissible evidence: exact
 public create/list/revoke status plus post-revocation HTTP 401, never logs or
 secret values. The broad bearer is usable only on public key-management
@@ -1970,8 +1977,9 @@ bind exact stable computer `computer-42850e9734d9442386c5dd8bf3afbf19`; joined
 realization/VM `vm-bbdbbd01c4390b7036067aaa12afeb68` is not the key binding. Its
 exact scopes are `computer:lifecycle`, `computer:self_development:read`,
 `acceptance:read`, `read:runtime`, `write:runtime`, `read:texture`,
-`write:texture`, and `read:base`. Retained public evidence already joins owner,
-stable computer, VM, route, and epoch. On an ambiguous POST response, list by the
+`write:texture`, and `read:base`. Earlier retained public evidence joins the
+retained stable computer, VM, route, and epoch, but does not join this accidental
+bearer owner. On an ambiguous POST response, list by the
 unique label, revoke every matching child, prove each disposition, self-revoke
 the broad key, prove broad post-401, and stop without retry. On a definitive
 response, atomically store the once-returned secret mode `0600` and require
@@ -2010,9 +2018,10 @@ self-development, runtime, Texture, provider, route, guest, or effect write was
 attempted. Effects remain OFF.
 
 This is a safe failed ceremony, not accepted attenuation. No usable new key
-remains. The next owner handoff should mint the exact narrow key directly if/while
-the headed browser session remains valid; otherwise complete a fresh native
-assertion first: bind stable computer
+remains. The prepared direct ceremony must first require `/auth/session` exact
+owner `c72404bb-3c43-4a53-8671-b5cbc48b24a7`; on mismatch it performs no POST and
+a fresh retained-owner native assertion is required. Only an exact session may
+mint the narrow key: bind stable computer
 `computer-42850e9734d9442386c5dd8bf3afbf19`, never VM `vm-bb…`; use the exact
 eight-scope set; expire within two hours; and copy the once-returned secret to
 the non-logging handoff. The ingestion path must use a fresh isolated shell or
@@ -2043,3 +2052,37 @@ expiry, exposes the secret only to an owner-clicked clipboard operation, and
 fate-shares every non-success with all-match deletion, zero-live registry proof,
 and known-secret post-401. The reviewer returned `ACCEPT`. This is prepared,
 not executed; no registry or product mutation occurred. Effects remain OFF.
+
+
+### Exact-owner inference correction
+
+The earlier independent review accepted target-bound registry rows as transitive
+same-owner evidence. Source and live evidence now falsify that premise: key
+creation validates syntax/scopes/binding presence but does not authorize the
+caller against the supplied stable ComputerID, while the accidental bearer's public compute-status response selected logical
+`primary` active epoch `130`/code `7122f279…`, not retained logical `primary`
+failed epoch `8253`. This is a
+newly discovered audit error, not a regression and not proof of malicious use.
+The accidental child and broad key remain fully revoked/post-401, so no live
+exposure reopened. The exact owner gate is now the direct ceremony's canonical same-origin
+`GET /auth/session` check for `c72404bb-3c43-4a53-8671-b5cbc48b24a7`. That GET
+may rotate refresh/access cookies and is explicitly authorized as normal RED
+auth/session renewal; mismatch means zero API-key POST and fresh native
+assertion. Effects remain OFF.
+
+The source gap is broader than the audit mistake. Cookie-authenticated key
+creation does not vmctl-ownership-validate caller-supplied `computer_id`.
+Lifecycle STATUS later re-joins exact user/ComputerID ownership, but
+`HandleSelfDevelopmentMode` skips vmctl ownership for API-key callers and trusts
+binding plus scope, while generic runtime/Texture routes do not universally
+enforce `AuthResult.ComputerID`. The prepared ceremony compensates by requiring
+exact session owner and exact lifecycle STATUS ownership before self-development
+or any generic target call. This does not repair the platform gap; that broader
+RED authorization repair remains open before final completion.
+
+Heresy delta: `discovered` — caller-supplied key-binding metadata was mistaken
+for ownership proof; `introduced` — none by this correction; `repaired` — the
+current authority claim and ceremony gate, not the historical missing exact-owner
+proof. Admissible future repair evidence is an exact headed `/auth/session` owner
+match before the once-ever POST, followed by the target-bound read-only product
+gate.

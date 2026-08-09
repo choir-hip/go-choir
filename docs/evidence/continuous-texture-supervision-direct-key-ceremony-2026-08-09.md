@@ -12,12 +12,19 @@
 The ordinary Settings API-key form cannot express the acceptance authority:
 `frontend/src/lib/SettingsApp.svelte` sends only `label` and `scopes`, omits
 `computer_id` and `expires_at`, and does not offer the lifecycle or
-self-development scopes. The first owner handoff therefore produced a broad,
-unbound administrator key; its reviewed attenuation failed locally and retired
+self-development scopes. The first purported-owner handoff therefore produced a
+broad, unbound administrator key; subsequent source/live reconciliation showed
+that target-bound registry rows were caller-supplied metadata rather than exact
+owner proof, while the accidental bearer's public compute status selected a
+conflicting primary epoch. The admissible result is owner ambiguity, not a
+categorical different-owner claim.
+Its reviewed attenuation failed locally and retired
 both accidental authorities with DELETE-204/post-401 evidence.
 
 This direct same-origin ceremony is authorized only in ordinary headed Chrome at
-canonical `https://choir.news/`. It proves session owner
+canonical `https://choir.news/`. Its initial canonical `GET /auth/session` may
+rotate refresh/access cookies and is explicitly authorized normal RED session
+renewal. It must prove session owner
 `c72404bb-3c43-4a53-8671-b5cbc48b24a7` before the sole POST; binds stable computer
 `computer-42850e9734d9442386c5dd8bf3afbf19`, not realization VM `vm-bb…`; uses
 exactly the eight accepted scopes; expires after 105 minutes; rejects any prior

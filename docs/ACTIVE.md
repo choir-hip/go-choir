@@ -15,13 +15,15 @@ surface.
 The current deployed runtime is `7ba05599`. CI/deploy run `31310481745` passed
 all selected Race shards, aggregate Go, Differential SBOM acceptance, rolling
 publication, and Node B deployment. Public `/health` reports the exact proxy commit, and the
-deploy activation receipt exact-joins every selected host service. The deployment is host proof only. Native
-same-owner passkey presence completed in ordinary headed Chrome, but the retained
-stable guest has not yet been woken or nonce-bound to `7ba05599`. Both accidental
-handoff keys are revoked/post-401 after the safe failed attenuation, so no usable
-bearer remains. The headed browser was authenticated at handoff; the owner must
-check whether that session remains valid and mint the exact narrow key directly,
-or complete a fresh native assertion if it has expired. `omp-browser` remains
+deploy activation receipt exact-joins every selected host service. The deployment is host proof only. A native passkey ceremony completed in ordinary headed Chrome, but exact
+retained-owner identity was not proved: target-bound registry rows were
+caller-supplied metadata, and the accidental bearer's public compute status selected primary active
+epoch `130`, incompatible with retained primary failed epoch `8253`. Both
+accidental keys are revoked/post-401, so no usable bearer remains. The prepared
+script must invoke canonical same-origin `GET /auth/session`, which may rotate
+refresh/access cookies on the RED auth surface, and require exact owner
+`c72404bb…` before its only API-key POST; mismatch makes zero key POST and
+requires a fresh retained-owner native assertion. `omp-browser` remains
 HeadlessChrome/150 with an OMP temporary profile, basic password store, and mock
 keychain; it is diagnostic-only and has no proven owner-operable native prompt. No headless
 retry, CDP virtual authenticator, substitute owner/computer, recovery bypass,
@@ -39,17 +41,20 @@ revocation; its row and both root-only auth rollback copies remain terminal
 cleanup obligations. No restoration, SSH, credential, provider, route, guest,
 or effect mutation was repeated. Effects remain OFF.
 
-The retained owner completed the native headed-browser ceremony, but the first
-handoff produced unbound administrator key `ak_e2552ee6…`. The reviewed
+A native headed-browser ceremony completed for an owner-ambiguous account, and
+the first handoff produced unbound administrator key `ak_e2552ee6…`. The reviewed
 attenuation made one nonce-labelled child `ak_834c56be…`; local secret persistence
 failed before file creation because the notebook `os` name was shadowed. The
 failure branch executed exactly: no retry, child DELETE 204/post-401, broad
 self-DELETE 204/post-401, credential files removed, and zero lifecycle/product/
-effect writes. No usable new key remains. While the headed session is valid, the
-next handoff must mint the exact <=2-hour eight-scope key directly, bound to
+effect writes. No usable new key remains. The next ceremony must first prove exact retained
+owner `c72404bb…` via the authorized canonical session-renewal GET (fresh
+assertion on mismatch), then mint the exact <=2-hour eight-scope key directly, bound to
 stable computer `computer-42850e9734d9442386c5dd8bf3afbf19` and never VM
 `vm-bb…`; ingestion must use an isolated shell/unshadowed module path and verify
-mode `0600` before any API call. The independently accepted, once-ever direct
+mode `0600` before any API call. Exact stable-computer lifecycle STATUS must
+ownership-join logical desktop `primary` before self-development or any generic
+target route. The independently accepted, once-ever direct
 headed-browser payload is preserved at
 `docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`
 (SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`); it is prepared but not executed. Effects remain OFF.

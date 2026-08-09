@@ -3,7 +3,7 @@
 **Date:** 2026-08-09
 **Definition:** `choir-continuous-texture-supervision-2026-08-07`
 **Runtime candidate:** `7ba05599c15f6d126f86fa6fe1a44bc36a928121`
-**Audit verdict:** **NOT COMPLETE — exact host deployed; owner presence passed; both accidental keys revoked; exact narrow-key handoff and retained-guest proof remain**
+**Audit verdict:** **NOT COMPLETE — exact host deployed; accidental keys revoked; exact retained-owner session, narrow-key handoff, and retained-guest proof remain**
 **Effects:** OFF
 
 This is a requirement-by-requirement audit, not a completion receipt. It
@@ -27,14 +27,17 @@ or terminal registry/backup cleanup obligations.
 
 ## Current checkpoint — 2026-08-09
 
-The retained owner completed the native headed-browser ceremony, but the first
-handoff produced unbound administrator key `ak_e2552ee6…`. Reviewed one-shot
+A native headed-browser ceremony completed, but exact retained-owner identity was
+not proved; the first handoff produced unbound administrator key `ak_e2552ee6…`. Reviewed one-shot
 attenuation created nonce child `ak_834c56be…`; local secret persistence failed
 before file creation because the notebook `os` name was shadowed. The fail-closed
 branch did not retry: child DELETE 204/post-401, broad self-DELETE 204/post-401,
-credential files removed, and zero lifecycle/effect writes. No usable new key
-remains. The next headed-session handoff must mint the exact <=2-hour eight-scope
-key directly, bound to stable computer `computer-42850…`, never VM `vm-bb…`.
+credential files removed, and zero lifecycle/effect writes. No usable new key remains. Target-bound registry metadata was caller-supplied and
+the accidental bearer's public compute status selected primary active epoch `130`, not retained failed
+epoch `8253`. The prepared session must invoke canonical same-origin `GET /auth/session`, which
+may rotate refresh/access cookies on the RED auth surface, and prove exact
+retained owner `c72404bb…` (zero API-key POST and fresh assertion on mismatch), then mint the exact
+<=2-hour eight-scope key directly, bound to stable computer `computer-42850…`, never VM `vm-bb…`.
 The exact same-origin payload is independently accepted and preserved at
 `docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`
 (SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`); it is not yet executed. Effects remain OFF.
@@ -48,9 +51,11 @@ activation receipt exact-joins every selected host service. That is host evidenc
 only. The retained target guest/service has not been nonce-bound to
 `7ba05599`. An earlier audit found existing contexts unauthenticated and retained
 scoped keys unusable, and found no public same-owner renewal without WebAuthn
-presence. Native same-owner presence subsequently completed in ordinary headed
-Chrome. The browser was authenticated at handoff; the owner must check it now and
-reuse it only if still valid, otherwise complete a fresh native assertion.
+presence. A native headed ceremony subsequently completed, but its exact account was not
+proved. The prepared script's authorized canonical session GET may rotate auth cookies
+and must require exact retained owner `c72404bb…`; any other or expired session
+performs zero API-key POST and requires a
+fresh native assertion.
 `omp-browser` remains HeadlessChrome/150 with `--headless=new`, an OMP temporary
 profile, basic password store, and mock keychain. Its waiting text and expired
 challenges were diagnostic-only; it has no proven owner-operable native prompt. No
@@ -124,12 +129,14 @@ does not promote other incomplete actions.
 | 18 | **PASS:** schema/golden contracts and deployed continuous prose exclude a forced heading/status/coding shape; the second style case remains action 5 partial. |
 | 19 | **UNPROVED deployed:** source supports isolated multiple assignments, but no product capsule topology has run. |
 
-### Exact remaining gate after owner user presence
+### Exact remaining owner and target gate
 
-Using the headed owner session only if it remains valid (otherwise a fresh native
-assertion), first mint and securely hand off the exact <=2-hour eight-scope key
-bound to stable computer `computer-42850e9734d9442386c5dd8bf3afbf19`. Pass its
-read-only lifecycle/self-development/exact-target/wrong-computer probes. Only
+Only after the headed session proves exact retained owner `c72404bb…` (otherwise
+a fresh native assertion), first mint and securely hand off the exact <=2-hour eight-scope key
+bound to stable computer `computer-42850e9734d9442386c5dd8bf3afbf19`. First
+require lifecycle STATUS to ownership-join exact stable computer at logical
+desktop `primary`; only then pass self-development, exact-target,
+pre-recovery nonce-refusal, and wrong-computer probes. Only
 then recover the retained stable computer through the public product path and
 nonce-bind host, guest, and services to exact `7ba05599` before any acceptance
 write. Then product-prove post-report v2,
