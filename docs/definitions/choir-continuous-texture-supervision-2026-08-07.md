@@ -1099,3 +1099,231 @@ discovered — resident Texture mailbox starvation and open-worker retry
 amplification after successful provider evidence; introduced attribution is
 unknown pending read-only convergence. No code edit may precede the committed
 problem-first receipt.
+
+### 2026-08-09 Texture resume and bounded-continuation repair ceremony
+
+Read-only source convergence after problem receipt `4095b17d` proves two joined
+actor-substrate failures and identifies existing replacements.
+
+The target starvation occurs after the first valid report wake. A passivated
+Texture run is correctly reactivated in canonical Store state, but
+`reactivatePassivatedTextureRun` calls exported `ActivateRun`, which emits the
+same deterministic `initial_dispatch` occurrence keyed by the same run ID as the
+already processed first activation. The SQLite actor log correctly deduplicates
+that one-shot occurrence, leaving the run projected `pending` with no executable
+mailbox fact. The Texture-specific `coagent_result` handler then returns nil and
+acknowledges each distinct report/correction wake after owner reconciliation;
+later reconciliation sees the apparently valid pending mutation and returns
+early. The runtime injectors for exact producer packets and owner instructions
+therefore never execute. The deployed shape — f6 pending, v1 unchanged, fifteen
+pending reports, queued correction — is the exact signature of this seam.
+
+The replacement is already present immediately below the Texture-specific fork:
+the role-uniform `coagent_result` resume path executes an exact reconciled run
+synchronously in the current actor goroutine and returns durable memory state.
+Texture already has stronger canonical document/head/mutation validation than
+generic memory. Rewarm must connect that validation to the current occurrence;
+it must not redispatch the one-shot initial occurrence. Cold/new Texture run
+creation retains its one unique initial dispatch. Boot recovery must dispatch
+canonical pending report/instruction occurrences before projecting any
+passivated Texture run pending.
+
+A separate old continuation synthesizer amplifies the starvation.
+`continueOpenLifecycleWorkAfterTerminal`, added to preserve durable obligations,
+interprets one open work item as standing authority to mint an unlimited series
+of fresh `terminal_activation_work_recovery` runs after each provider
+completion. Pending open producer reports provide no backpressure, and
+`StepBudget`/`TokenBudget` are prompt-only. This behavior is explicitly
+normalized by an existing test, but it conflicts with the newer exact control,
+passivated-memory, and actor-occurrence substrate: durable open work records
+responsibility, not continuously runnable demand. A later exact Texture control
+is the authority to resume more Researcher work; Texture can atomically
+incorporate/reject a report, settle the producer work, or keep it open while
+issuing a focused follow-up.
+
+Mutation class is **red**. Conjecture delta: executing a canonically reactivated
+Texture run inside the current unprocessed report/correction actor occurrence,
+plus deleting no-control Researcher continuation synthesis, should make every
+committed wake either produce durable authenticated run memory and an atomic
+Texture disposition or remain unprocessed/retryable. One control then authorizes
+one bounded Researcher activation chain until a target-visible report, not
+unlimited sequential provider calls. Protected surfaces are actor log identity
+and acknowledgement, Texture document/head/mutation authority, run memory,
+producer-report/owner-instruction injection and disposition, lifecycle work and
+control delivery, restart recovery, provider calls, cancellation, and
+no-effect/run acceptance.
+
+Authorized repair boundary:
+
+1. Preserve deterministic one-shot `initial_dispatch` identity for cold/new
+   runs. For a revision-bound Texture run reactivated from passivated memory,
+   remove the duplicate `ActivateRun` bridge. Return an explicit reactivation
+   decision to the current Texture `coagent_result` handler, revalidate exact
+   owner/computer/document/head/mutation/run authority, execute synchronously in
+   that actor handler, and persist/return only the resulting actor memory state.
+   Never trust a generic/stale Texture run ID or execute before canonical
+   reactivation CAS.
+2. Boot recovery enumerates exact pending Texture producer reports and owner
+   instructions and dispatches their canonical actor occurrences; duplicates
+   deduplicate in the actor log. It does not first turn a passivated Texture run
+   into pending through an already-used initial occurrence. Initial owner work
+   with no prior run may still create one cold run and one initial dispatch.
+3. Delete the `ActivateRun` wrapper if no production caller remains. Delete
+   `continueOpenLifecycleWorkAfterTerminal`, both completion call sites, and the
+   test contract that demands generic successor runs. In the Researcher branch
+   of the broad boot work scan, pending exact controls may use the scoped
+   control/fingerprint reconciler; open work with no pending control remains
+   durably open and idle. Do not mint a no-control run from recency, generic
+   work scan, terminal completion, or provider result.
+4. Preserve all reducer authority: producer reports remain pending until a
+   Texture turn explicitly incorporates/rejects them; owner instructions remain
+   pending until bound to an exact head and applied; open work is neither
+   acknowledged nor auto-completed. A later exact control may resume the same
+   parked Researcher or create only the canonically authorized activation.
+   Cancellation and late evidence remain Store-owned.
+
+Admissible evidence is a full Adapter plus real SQLite-log test in which an
+initial Texture run writes v1/passivates and the same run consumes a producer
+report into durable runtime memory and v2; the equivalent owner-correction test;
+crash/restart cuts before actor append, after append, and after reactivation CAS;
+coalesced ordered reports plus correction; negatives for stale generic memory,
+wrong head/scope/run/mutation, failed injection append, and no-write turns; and a
+bounded Researcher contract proving one open report yields zero generic
+successor/provider call across repeated reconcile and restart until a new exact
+control arrives. Existing control-bind/restart/cancellation/Race matrices,
+independent lifecycle/security review, full CI/SBOM, exact deployment identity,
+and fresh end-to-end acceptance remain required.
+
+Rollback is a normal origin/main revert and exact redeployment followed by public
+cancellation of any affected trajectory. Pending reports, instructions, work,
+and controls remain canonical and inspectable. Never randomize initial IDs, add
+polling, mark evidence delivered before run-memory append/Texture turn, restore
+generic Researcher continuation, widen cancellation deadlines, or auto-complete
+work.
+
+Heresy delta at ceremony: discovered — a duplicate one-shot dispatch was treated
+as reactivation authority, distinct committed wakes were acknowledged against a
+non-executing pending projection, and open work was treated as unlimited
+provider authority. Introduced — none intended. Repaired — none until exact
+fault/restart tests, independent review, full landing loop, and authenticated
+product proof pass.
+
+### Independent-red-review rejection and tightened authority boundary
+
+The first ceremony review is **REJECT**, so implementation remains unauthorized
+until these gaps are incorporated. The following constraints supersede any
+looser reading above.
+
+**Occurrence authority and acknowledgement fate-sharing.** A received actor
+wake is not authority merely because the target has some pending backlog. Define
+two injective, versioned, length-prefixed canonical occurrence identities:
+
+- producer report: exact owner, computer, trajectory, target Texture agent,
+  producer agent, update id, producer-update id, producer work id, lifecycle
+  version, and reducer/message sequence from the pending Store row;
+- owner instruction: exact owner, computer, trajectory, document, target Texture
+  agent/work, instruction id, request id, head revision, kind, lifecycle version,
+  and reducer sequence from the pending Store row.
+
+Live queue and boot recovery use the same identity and complete actor envelope,
+including trajectory and an explicit authenticated owner source for owner
+instructions rather than empty/random fields. Before reactivation and again
+before provider entry, the handler reloads the exact canonical trigger row and
+joins owner, computer, live trajectory/no cancellation intent, document/current
+head, Texture agent, open Texture work, run, mutation/revision, occurrence
+version, and pending fate. Wrong, stale, foreign, terminal, cancelled, late, or
+already disposed occurrences are typed zero-provider outcomes; they never select
+global backlog or authorize a write.
+
+A handler may report success to the actor log only after the exact triggering
+occurrence is durably appended to authenticated run memory or is atomically
+incorporated, rejected, applied, cancelled, or classified late in Store. An
+injection, run-state, mutation, provider, no-write, or persistence error while the
+trigger remains pending returns an error or durably passivates plus appends a
+new explicit retry occurrence before acknowledgement; it may not terminalize the
+only resume authority. Expose a checked cold-start dispatch result: projecting a
+new run is insufficient until its unique initial occurrence append succeeds, or
+the current trigger remains unprocessed. `ExecuteActivationSync` needs an
+explicit outcome/postcondition rather than a void success assumption.
+
+Because pre-fix deployments may already contain `processed actor row + canonical
+pending row + no authenticated run-memory receipt`, add one deterministic,
+versioned recovery occurrence derived from the exact pending Store row and its
+canonical target run/memory state. It is not a random retry and cannot collide
+with the processed legacy occurrence. Recovery must first prove the absence of
+an admissible run-memory/disposition receipt, and repeated boot/reconcile must
+deduplicate it. This is a migration for retained stranded facts, not a second
+mailbox authority.
+
+**Central Researcher provider admission.** Deleting the immediate completion
+hook is necessary but insufficient. Inventory every production caller of
+`reconcileAssignedWorkItemActor*`, `sweepPassivatedSpawnedCoagentWork`, broad
+open-work sweep, interrupted activation rewarm, start/replay, and provider
+entry. Enforce once at the provider boundary: a lifecycle Researcher may execute
+only when its exact run is joined to a current pending-or-canonically-delivered
+Texture control fingerprint and exact owner/computer/live trajectory/Researcher
+agent/open-work versions. Open work alone, generic recency, a terminal provider
+result, a passivated spawned-work scan, or a stale pending/running projection is
+never provider authority. Preserve separately identified legacy non-lifecycle
+behavior. Existing lifecycle Researcher work without a control remains explicitly
+idle and inspectable, eligible only for cancellation or a later exact Texture
+control; it is not silently settled.
+
+**Expanded cross-ledger fault proof.** Add cuts at canonical trigger commit before
+actor append; actor append before handler; reactivation CAS/run update before
+execute; authenticated memory append; provider response and any tool result;
+atomic Texture-turn commit; handler return; SQLite `MarkProcessed` failure; and
+snapshot persistence. At every cut, restart must prove at most one canonical
+head/turn/disposition, exact pending or typed terminal trigger fate, no stale
+memory authority, and a measured bound on unavoidable provider replay. Counting
+provider tests must show one exact Researcher control cannot become two
+authorized provider chains across handler retry/restart/cancellation; open work
+alone produces zero calls, while a later exact control resumes safely.
+
+The negative matrix includes wrong owner, computer, trajectory, document, head,
+Texture/producer agent, target/producer work, run, mutation, update/instruction
+id, lifecycle/reducer version, cancellation intent, terminal trajectory, and
+late result, each with zero provider, Texture write, control, capsule, or
+protected effect. Coalesced reports plus correction must each have one ordered
+run-memory/disposition/actor-ack fate. No code edit begins until independent
+review accepts this tightened ceremony and the docs-only authority commit is
+pushed.
+
+### Final actor-ack and no-write clarification
+
+A second lifecycle review remains **REJECT** until the cross-ledger snapshot gap
+is explicit. The repair therefore adopts canonical replay rather than assuming
+SQLite processed state and actor snapshot update atomically.
+
+Actor snapshot is never occurrence, run, or lifecycle authority. After handler
+return, a crash may persist `MarkProcessed` before `SaveSnapshot`. Boot and live
+reconciliation must join the canonical pending trigger/disposition with exact
+Store-owned `RunMemory` entries and the canonical Texture run/mutation/head. A
+versioned recovery occurrence incorporates the exact trigger id/version, run id,
+latest authenticated run-memory tail identity, and current canonical head/turn
+identity. If the trigger is still pending, it resumes the exact canonically
+validated run even when the old actor row is processed and the actor snapshot is
+missing or stale; if the trigger was atomically disposed/applied/cancelled/late,
+it produces a typed zero-provider terminal outcome. Repeated recovery of the
+same joined state deduplicates, while an advanced run-memory/head/disposition
+state yields the next exact identity. The handler must also return an explicit
+resume-now decision for a run already projected pending by a crash after
+mutation CAS or `UpdateRun`; it may not early-return merely because that pending
+projection validates.
+
+Authenticated run memory proves model visibility, but it does not by itself
+settle or acknowledge canonical evidence. A successful Texture activation
+triggered by producer report or owner instruction must atomically name the exact
+trigger in its Texture-turn update/instruction disposition, or commit an explicit
+Store-owned waiting/blocked transition that includes a deterministic successor
+wake identity. A no-write result, a Texture turn omitting the current trigger,
+or a failed injection/persistence cannot return actor success; the triggering
+row remains unprocessed/retryable and no lifecycle update/instruction is marked
+consumed. Required-write/decision tooling must enforce this postcondition rather
+than rely only on prompt compliance.
+
+The required fault matrix now explicitly includes handler return,
+`MarkProcessed` success/failure, crash before `SaveSnapshot`, stale/missing
+snapshot with present run memory, and crash after mutation CAS/`UpdateRun` with
+the run already pending. Each must recover the same exact run/trigger without a
+second canonical Texture turn or an unauthorized provider chain.
