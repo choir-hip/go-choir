@@ -2027,3 +2027,19 @@ were both retired. Evidence/rollback is the exact pair of public receipts:
 child DELETE 204 plus child-secret post-401, and broad self-DELETE 204 plus
 broad-secret post-401. Acceptance-key availability remains unrepaired. Effects
 remained OFF throughout.
+
+
+### Exact direct narrow-key ceremony prepared
+
+Source inspection found that the ordinary Settings form cannot mint the required
+key: it sends only label/scopes, omits binding and expiry, and does not expose the
+lifecycle/self-development scopes. The independently accepted direct same-origin
+ceremony is preserved at
+`docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`.
+Its exact JavaScript payload SHA-256 is `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8` and once-ever label is
+`cts-7ba05599-direct-narrow-8b7873810a8e`. It exact-checks retained owner `c72404bb…`, performs at most one
+POST, binds stable `computer-42850…`, enforces the exact eight scopes/105-minute
+expiry, exposes the secret only to an owner-clicked clipboard operation, and
+fate-shares every non-success with all-match deletion, zero-live registry proof,
+and known-secret post-401. The reviewer returned `ACCEPT`. This is prepared,
+not executed; no registry or product mutation occurred. Effects remain OFF.

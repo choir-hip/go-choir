@@ -266,7 +266,10 @@ nodes:
       <=2-hour eight-scope key directly; otherwise native owner presence must be
       repeated. The key binds stable computer
       computer-42850e9734d9442386c5dd8bf3afbf19 and never VM
-      vm-bbdbbd01c4390b7036067aaa12afeb68. Independent audit previously found no
+      vm-bbdbbd01c4390b7036067aaa12afeb68. An independently accepted once-ever
+      direct same-origin payload is preserved at
+      docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md
+      with SHA-256 a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8; it is prepared but not executed. Independent audit previously found no
       public no-presence renewal, then process evidence showed omp-browser is a headless
       temporary-profile/mock-keychain diagnostic surface with no proven
       owner-operable native prompt. Its expired challenges are not human-presence

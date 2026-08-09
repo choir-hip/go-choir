@@ -49,7 +49,10 @@ effect writes. No usable new key remains. While the headed session is valid, the
 next handoff must mint the exact <=2-hour eight-scope key directly, bound to
 stable computer `computer-42850e9734d9442386c5dd8bf3afbf19` and never VM
 `vm-bb…`; ingestion must use an isolated shell/unshadowed module path and verify
-mode `0600` before any API call. Effects remain OFF.
+mode `0600` before any API call. The independently accepted, once-ever direct
+headed-browser payload is preserved at
+`docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`
+(SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`); it is prepared but not executed. Effects remain OFF.
 
 The last exact guest-proved product prefix remains `b5d907a3`: Texture published
 a continuous-prose v1 while work was open, atomically addressed its bound

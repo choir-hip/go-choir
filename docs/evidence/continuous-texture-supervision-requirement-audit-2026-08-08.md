@@ -35,7 +35,9 @@ branch did not retry: child DELETE 204/post-401, broad self-DELETE 204/post-401,
 credential files removed, and zero lifecycle/effect writes. No usable new key
 remains. The next headed-session handoff must mint the exact <=2-hour eight-scope
 key directly, bound to stable computer `computer-42850…`, never VM `vm-bb…`.
-Effects remain OFF.
+The exact same-origin payload is independently accepted and preserved at
+`docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`
+(SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`); it is not yet executed. Effects remain OFF.
 
 This checkpoint supersedes the current-state classifications in the historical
 construction narrative below without deleting those failure receipts. Runtime
