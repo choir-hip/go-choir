@@ -43,8 +43,12 @@ env are mandatory. The first install was rolled back after a wrong-owner pre-pro
 second attempt nonce-verified the exact acceptance owner/computer/F identity,
 installed only auth `cc744524…`, preserved env/policy/health, and real
 `chatgpt/gpt-5.5` created the exact requested marker v1 with completed work and
-no error. Provider availability is repaired; the key and root-only rollback are
-retained through immediate full acceptance. Effects remain OFF. Provider-dependent repeated
+no error. Provider availability is repaired. The first full attempt then failed before
+any child: its atomic Researcher control was rejected by runtime schema, and the
+runtime prompt incorrectly treats assignment capsules as unavailable while
+effects are OFF. The live v0 trajectory is retained; this problem receipt must
+land before diagnosis/repair. The key and root-only rollbacks remain narrowly
+retained. Effects remain OFF. Provider-dependent repeated
 Researcher/Super/CoSuper progression, real capsule/late-result behavior, positive
 correction/source opening, complete checkpoint/no-effect and run acceptance,
 and terminal registry closure remain mandatory.

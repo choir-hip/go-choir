@@ -277,9 +277,12 @@ nodes:
       second attempt nonce-verified the exact acceptance owner/computer/F
       identity, installed only auth cc744524, preserved env/policy/health, and
       real chatgpt/gpt-5.5 created the exact requested marker v1 with completed
-      work and no error. Provider availability is repaired; the key and
-      root-only rollback are retained through immediate full acceptance.
-      Effects remain OFF; provider-dependent repeated progression, real capsule/late-result,
+      work and no error. Provider availability is repaired. The first full
+      attempt then exposed an atomic Researcher-control schema refusal and an
+      effects-OFF prompt that incorrectly disables assignment capsules; no child
+      or revision committed, and the live v0 trajectory is retained. This
+      problem receipt must land before repair. Key and root-only rollbacks remain
+      narrowly retained. Effects remain OFF; provider-dependent repeated progression, real capsule/late-result,
       positive correction/source-open, checkpoint/no-effect and run acceptance,
       and terminal registry closure remain mandatory.
     sources:

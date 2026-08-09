@@ -1121,3 +1121,55 @@ discovered none, introduced none, repaired none; credential restoration is a
 protected operator repair, not an architecture heresy repair. The scoped key and
 rollback backup remain live only for the immediate full acceptance and must be
 revoked/deleted under terminal disposition.
+
+### First full restored-provider acceptance exposed control-schema refusal
+
+After restoration receipt `86559e3d` and docs CI `31284908588` passed, a fresh
+nonce-bound preflight again proved owner/computer scope, stable VM
+`vm-bbdbbd01c4390b7036067aaa12afeb68`, guest
+`computer-42850e9734d9442386c5dd8bf3afbf19`, route digest `648d6071…`, epoch
+8249, exact F, self-development OFF generation 0, policy `7192b8b1…`, and zero
+active runs. The deployed CLI then created continuous-prose document
+`82693dd5-93ad-595e-93a8-a12ea85d7f33`, v0
+`dcbbcd84-fb2e-5502-92ca-9fb1211ec336`, trajectory
+`14c99be0-dd07-50b8-b074-a92088a0f7b9`, and work
+`22cc125b-832e-56c7-8fc5-6b56c175cba9`. Correctly ordered CLI `watch --after
+0 --limit 100 --once <doc>` returned durable observation cursor 1 for the exact
+start occurrence.
+
+Real `chatgpt/gpt-5.5` run `2ce06146-9aa5-4cda-be17-d3b246479f8e` then
+passivated without a canonical revision or child control. Its public run result
+states that an attempted atomic Researcher-control packet was rejected by the
+runtime schema and that the actor became non-writable after the failure. It
+explicitly confirms no Researcher was opened, no execution/capsule evidence
+exists, and the v0 owner instruction remains canonical. Public trajectory
+readback is still live at lifecycle/reducer/watermark 1, exact v0 head, and one
+open work item; revision count remains one. This is not provider failure: the
+same restored ChatGPT path completed the preceding bounded marker proof and this
+run itself completed a real model turn.
+
+The generated runtime prompt also tells Texture that execution effects are
+unavailable while effects are OFF and to preserve execution requirements only as
+blockers. That instruction conflicts with the accepted Definition, which keeps
+protected host/materialization/checkpoint/route effects OFF while requiring
+assignment-runtime-owned disposable capsule execution as no-effect acceptance.
+The deployed product therefore currently gives the model contradictory
+obligations: use lifecycle-native Researcher/Super/capsule controls to prove the
+loop, yet treat capsule execution as unavailable.
+
+This is a newly documented platform-behavior problem, so no retry, owner tell,
+code fix, cancellation, restart, or effects change follows in this commit.
+Before another product attempt, source-level convergence must identify (1) the
+exact rejected Researcher-control schema delta and why one rejected tool made the
+activation non-writable, and (2) the stale effects-OFF prompt/authority boundary
+that incorrectly conflates disposable capsule execution with forbidden protected
+host effects. The preferred repair is substrate-level and minimal: connect the
+already implemented lifecycle/capsule authority rather than add a bridge,
+keyword workflow, prompt exception, or broad effects enablement. The retained
+trajectory remains public evidence and must later be recovered or cancelled
+through lifecycle authority.
+
+Problem delta: provider blocker remains repaired; newly discovered deployed
+control-schema refusal and effects-authority prompt conflict block full
+acceptance. Heresy delta: discovered a likely deployed authority-boundary
+contradiction; introduced none; repaired none. Effects remain OFF.

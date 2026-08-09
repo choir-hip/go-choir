@@ -271,6 +271,19 @@ exact policy, exact env, and exact-F health. This repairs provider availability,
 not the still-required full supervision acceptance. Root-only rollback remains
 retained and the temporary key remains live only through that acceptance.
 
+### First full restored-provider attempt — control refusal
+
+After restoration receipt `86559e3d`/CI `31284908588`, exact-F preflight was
+clean and the deployed CLI created document `82693dd5…`, v0 `dcbbcd84…`,
+trajectory `14c99be0…`, work `22cc125b…`; correctly ordered CLI watch returned
+exact durable start cursor 1. Real ChatGPT run `2ce06146…` then passivated with
+no revision or child. Its public result says the attempted atomic Researcher
+control was rejected by runtime schema and made the activation non-writable.
+The run prompt separately says capsule execution is unavailable while effects
+are OFF, contradicting the accepted guest-local capsule/no-host-effect boundary.
+The trajectory remains live at lifecycle/reducer/watermark 1 with v0 and open
+work. This problem receipt precedes any retry or fix.
+
 ### Deployed public CLI partial acceptance
 
 A fresh scoped key exercised the checked-in `choir` CLI against retained
