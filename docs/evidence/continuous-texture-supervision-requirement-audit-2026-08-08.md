@@ -157,13 +157,40 @@ final source reviews returned `ACCEPT`; mocked fresh/recovery logic is not
 product evidence. Action 3 remains partial until deployed execution and later
 phases.
 
+### GET-only first persistent-Super opener/run ceremony
+
+The next gate is independently accepted but unexecuted.
+`/tmp/cts-acceptance-persistent-super.py` is 60,854 bytes at SHA-256
+`3a045901107dbb43f95bb42aeb22fe68da6b8ea23ac08a316b623ffa74fcf348`.
+It is structurally GET-only and starts only from the accepted second-control
+cursor and exact Texture/Researcher run/work/control tuple. It requires the
+Researcher report while pending, exact incorporation of the second control,
+then a later same-command report disposition/work settlement plus atomic open
+work and typed execution control to literal `super:<owner>`. Lifecycle-version-0
+Super must remain absent from snapshot agents. The delivered control must join
+through `delivered_to_loop_id` to one stable public run whose list and detail
+records carry an identical, unique lifecycle-control binding. Complete
+Texture/raw event order and cursors must agree, and PASS occurs only at a final
+snapshot-last, no-progress boundary before any CoSuper assignment.
+
+The mode-0600 marker/state supports crash recovery only after exact
+pending-prefix revalidation, while an explicit STOP is durably latched,
+immutable, and preserves locally reconstructed cleanup authority. Key
+registry/expiry, route, policy, and
+cleanup authority are re-proved; STOP ordering remains conditional trajectory
+cancellation, exact policy rollback, then key DELETE-204/post-401. Fresh,
+recovery, overshoot-negative, and terminal-state mock tests validate helper
+logic only. Two independent reviews returned `ACCEPT`; no product request has
+run. Action 3 therefore remains partial, and Super output, CoSuper/capsules, v3,
+restart, cancellation, RunAcceptance, and raw Trace remain missing.
+
 ### Current 9 acceptance actions
 
 | # | Current disposition |
 | --- | --- |
 | 1 | **PASS (source/local/CI):** focused registry, authorization, reducer, atomic-turn, projection/transclusion, replay, cancellation, capsule, API/CLI, stable-computer ownership guard, Race, aggregate Go, vet, and SBOM evidence passes through `fbc7ff5a`. |
 | 2 | **PASS (local evidence class):** pre-cutover/idempotency/restart contracts pass; `fd83ce64` adds exact trigger/run-memory/ack recovery and `7ba05599` adds real Store+SQLite terminal two-restart proof. Deployed pending-control restart is action 6. |
-| 3 | **PARTIAL:** the b5 prefix proves open-work v1, one exact Researcher control, and repeated Researcher provider/source packets. Independently accepted exact-`fbc7ff5a` start/v1, owner-correction/causal-v2/new-source, and focused same-Researcher second-control ceremonies are prepared but unexecuted. Persistent Super, parallel CoSupers, verifier capsule, and v3 are missing. |
+| 3 | **PARTIAL:** the b5 prefix proves open-work v1, one exact Researcher control, and repeated Researcher provider/source packets. Independently accepted exact-`fbc7ff5a` start/v1, owner-correction/causal-v2/new-source, focused same-Researcher second-control, and GET-only persistent-Super opener/run ceremonies are prepared but unexecuted. Persistent-Super product evidence, parallel CoSupers, verifier capsule, and v3 are missing. |
 | 4 | **PARTIAL:** deployed create/tell/read/history/revisions/exact-show, durable watch resume, empty terminal resume, cancellation, and authority negatives exist. Positive live correction, exact incorporated source-open, and full live parity are missing. |
 | 5 | **PARTIAL:** deployed continuous-prose interim v1 exists. A differently styled case and end-to-end displayed transclusion inspection do not. |
 | 6 | **PARTIAL:** an earlier exact deployment restart recovered initial work. No post-mailbox same-build restart with pending Researcher and Super controls exists, and exact `fbc7ff5a` guest identity is unproved. |

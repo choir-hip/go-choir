@@ -2598,3 +2598,75 @@ the final one-line source-accepted `channel_id=<doc>` narrowing; syntax passes
 on the exact final helper. These are helper-logic checks only. The ceremony
 remains **NOT EXECUTED** and persistent Super, capsule assignments, verifier,
 v3, restart, cancellation, RunAcceptance, and raw Trace remain unproved.
+
+### Accepted GET-only persistent-Super opener observer — 2026-08-09
+
+The next acceptance gate after the focused second control is source-frozen as
+`/tmp/cts-acceptance-persistent-super.py`, 60,854 bytes at SHA-256
+`3a045901107dbb43f95bb42aeb22fe68da6b8ea23ac08a316b623ffa74fcf348`.
+It is a GET-only public product observer: its request primitive rejects every
+method except literal `GET` and every nonempty request body. It issues no owner
+instruction, tell, correction, run submission, role/spawn request, assignment,
+or other product write. Before observation it re-proves the exact accepted
+second-control evidence/helper, retained owner/computer and immutable route,
+temporary two-role policy bytes/resolutions, rollback/cleanup helper provenance,
+and the unique live narrow-key row. The key row must retain the exact label,
+computer binding, eight scopes, and at least 1,500 seconds of life. Complete
+response hashes are retained, and the full stable registry view—allowing only
+this key's expected `last_used_at` change—must remain identical with at least
+300 seconds left before PASS.
+
+A mode-`0600`, fsynced marker freezes the v2 head, accepted Texture and
+Researcher run/work identities, second-control command/cursor/digest, both
+starting cursors, and cleanup order. The observer exhausts document, history,
+revisions, exact-v2, public Texture events, raw lifecycle events, snapshot, and
+document-scoped run authorities. Every Texture `(event_id,cursor)` must equal
+the complete ordered raw `(event_id,reducer_seq)` set, with equal watermarks,
+snapshot cursor, and trajectory reducer sequence; cursor expiry, replay request,
+truncation, nonprogress, or scope divergence stops.
+
+The first admitted transition must be the already-bound Researcher's exact
+producer report. The observer must capture it while still pending. It joins the
+report's producer/target work, source run, second-control binding, message
+sequence, payload digest, and owner/computer/channel to the same-command
+`update_applied` that incorporates the second control and the following
+workless `update_queued` event. Missing that pending phase is an overshoot STOP,
+not inferred success.
+
+A later non-version Texture turn must incorporate that exact report, settle the
+same Researcher work, and in the same command/digest/time atomically open one
+work item and queue one typed `execution_request` control to literal
+`super:<owner>`. The Texture work, raw events, source run, open Super work,
+canonical packet digest, nonempty actions, and deployed action/safety enums all
+must join. Because persistent Super is owner/computer-scoped and lifecycle
+version zero, the exact Super must remain absent from `snapshot.agents`; any
+lifecycle Super identity or any CoSuper assignment stops.
+
+PASS requires the later `control_delivered` event and snapshot
+`delivered_to_loop_id` to join one unique stable public Super run. Both the
+`/api/runs` list record and exact raw run detail independently prove owner,
+computer, agent/profile/role/channel, empty top-level trajectory, requesting
+Texture run, assignment trajectory/work, and exactly one
+`lifecycle_control_bindings` tuple; their metadata must be identical on reread.
+After key, policy, and route rechecks, a final no-progress public
+event/raw/snapshot join makes the snapshot the last network read. It must retain
+v2, the active run, the delivered control, identical watermarks, and no CoSuper
+assignment. The observer passes immediately only at that fresh boundary. It
+deliberately does not wait for Super output, assignment,
+capsule, v3, or RunAcceptance.
+
+Fresh and marker-recovery mocked public-contract runs reached
+`PASS_ACCEPTANCE_PERSISTENT_SUPER`; a negative overshoot stopped when the pending
+report phase was missed, and a terminal-STOP rerun preserved the prior state
+byte-for-byte. These are helper-logic checks only. Independent deployed-source
+and fail-closed reviews returned `ACCEPT` on the exact bytes. The helper remains
+**NOT EXECUTED**. A crash may recover from its fsynced cursors only after strict
+field-for-field pending-report and prefix revalidation, but an explicit terminal
+STOP is durably latched, immutable, and non-resumable. Recovery reconstructs
+exact cancellation authority from the marker, current second-control evidence
+digest, and frozen helper hashes before any key or network gate; prior cleanup
+fields are never trusted. Every post-marker STOP carries
+fresh conditional trajectory cancellation, exact policy rollback, and exact
+narrow-key DELETE-204/post-401 cleanup in that order; PASS carries those
+obligations forward. Parallel CoSuper/capsule verification, v3, restart,
+cancellation, RunAcceptance, and raw Trace remain later gates.
