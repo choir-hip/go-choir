@@ -2717,3 +2717,51 @@ projection, and RunAcceptance contracts, the next tracked change must be a
 problem-led owner-scoped evidence projection/CLI repair. It should be clustered
 with, but must not be conflated with, the already documented missing raw Trace
 route. No route repair, capsule claim, or live request has been made here.
+
+### Accepted Super-intermediate → v3 → changed-direction observer — 2026-08-09
+
+The source-defined gate between the first persistent-Super control and capsule
+work is now executable without adding a product mutation. The mode-`0700`
+helper `/tmp/cts-acceptance-super-v3-direction.py` is 98,479 bytes with exact
+SHA-256
+`aa396bb607c3458f1055c19d4ff93f33ad6b2ff74c6552f24aa6a259e4dadc88`.
+Independent deployed-source and security/fail-closed re-reviews ACCEPT that
+exact byte sequence. Its supporting mock is outside the repository at SHA-256
+`5c05c0ebdd8edff2f7f4cc0ee72f7093272e45989be6fa1471d95cb0fe8ff91d`.
+Neither file has contacted the product or read a secret.
+
+The observer revalidates the entire accepted persistent-Super predecessor and
+secure cleanup tuple before network observation. It must catch the exact
+persistent Super's first upward report while the report is pending and the
+Super work remains open. One report-queue receipt must atomically incorporate
+only the first delivered Super control immediately before queuing that report.
+A later single Texture command must incorporate the report into exact structured
+paragraph-only continuous-prose v3 and queue one materially changed typed
+`execution_request` to the same literal `super:<owner>` and same open work. The
+observer recomputes the structured document's text projection and validates
+source-entity/reference completeness rather than accepting content disconnected
+from the structured document projection.
+
+The changed control may bind the still-resident first Super run or a new
+persistent-Super run; run identity is not continuity authority. Either case
+requires an exact active `pending`/`running` document-scoped run-list/detail
+join and a full ordered lifecycle-binding set. Through the reducer sequence of
+that control's delivery, the public history must contain no new owner
+instruction/direct artifact-head mutation, extra control, work topology
+change, later Texture revision, or CoSuper event. CoSuper events strictly after
+that boundary are retained rather than rejected so the next capsule observer
+can start from the exact prefix. PASS ends at a snapshot-last live trajectory,
+exact v3 head, open Super work, pending changed control, and active bound Super
+run.
+
+Recovery is tied to one marker-created absolute 1,200-second deadline rather
+than a restart-renewed timer. Success/error bodies are capped with a sentinel
+byte; raw lifecycle cursor omissions are retained with the deployed
+`omitempty` wire semantics rather than rewritten as explicit false; registry,
+policy, route, predecessor, helper, cleanup, terminal, and PASS receipts are
+locally revalidated. Mocked fresh/recovery observation, same/new Super run,
+local marker/PASS/terminal rerun, deadline, response-cap, raw-wire, structured
+projection, corrupt source DTO, missed pending phase, identical C2, invalid v3,
+and other negative contracts pass. The mocks do not perform a live product
+request or a full main-path credential gate. The helper remains **NOT
+EXECUTED**, the owner `copied` gate is unchanged, and action 3 remains partial.

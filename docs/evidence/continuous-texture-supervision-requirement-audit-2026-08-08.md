@@ -203,13 +203,30 @@ execution-source transclusion/source-open, and revoke acknowledgement. Internal
 capsule diagnostics and run events do not count. These gates are source-defined
 and **NOT EXECUTED**; action 3 remains partial.
 
+The exact intervening observer is now frozen at mode `0700`, 98,479 bytes,
+SHA-256
+`aa396bb607c3458f1055c19d4ff93f33ad6b2ff74c6552f24aa6a259e4dadc88`.
+Independent deployed-source and security/fail-closed re-reviews ACCEPT that
+exact byte sequence. It is structurally GET-only and binds the accepted
+persistent-Super predecessor to: a durably captured pending open report; the
+same queue command's C1 incorporation; one atomic structured continuous-prose
+v3/R/C2 turn; a materially changed executable C2 payload; active S2 list/detail authority
+for either exact run reuse or a new persistent-Super run; and a snapshot-last
+live-v3/open-work/pending-C2 handoff. Owner/manual traffic, extra control/work,
+and CoSuper transitions are forbidden through C2 delivery, while later CoSuper
+events are retained for the next observer. Marker-absolute deadlines, bounded
+bodies, raw cursor wire semantics, exact cleanup narrowing, and terminal/PASS
+receipt reruns are fail-closed. Fresh/recovery observer, local receipt, and
+negative security contracts passed mocks only. The helper is **NOT EXECUTED**,
+so it adds no product evidence and action 3 remains partial.
+
 ### Current 9 acceptance actions
 
 | # | Current disposition |
 | --- | --- |
 | 1 | **PASS (source/local/CI):** focused registry, authorization, reducer, atomic-turn, projection/transclusion, replay, cancellation, capsule, API/CLI, stable-computer ownership guard, Race, aggregate Go, vet, and SBOM evidence passes through `fbc7ff5a`. |
 | 2 | **PASS (local evidence class):** pre-cutover/idempotency/restart contracts pass; `fd83ce64` adds exact trigger/run-memory/ack recovery and `7ba05599` adds real Store+SQLite terminal two-restart proof. Deployed pending-control restart is action 6. |
-| 3 | **PARTIAL:** the b5 prefix proves open-work v1, one exact Researcher control, and repeated Researcher provider/source packets. Independently accepted exact-`fbc7ff5a` start/v1, owner-correction/causal-v2/new-source, focused same-Researcher second-control, and GET-only persistent-Super opener/run ceremonies are prepared but unexecuted. Persistent-Super product evidence, the corrected Super-intermediate/v3/changed-direction gate, two overlapping implementation capsules, the later third verifier capsule, and their real execution evidence are missing. |
+| 3 | **PARTIAL:** the b5 prefix proves open-work v1, one exact Researcher control, and repeated Researcher provider/source packets. Independently accepted exact-`fbc7ff5a` start/v1, owner-correction/causal-v2/new-source, focused same-Researcher second-control, GET-only persistent-Super opener/run, and GET-only Super-intermediate/v3/changed-direction ceremonies are prepared but unexecuted. Persistent-Super and v3-direction product evidence, two overlapping implementation capsules, the later third verifier capsule, and their real execution evidence are missing. |
 | 4 | **PARTIAL:** deployed create/tell/read/history/revisions/exact-show, durable watch resume, empty terminal resume, cancellation, and authority negatives exist. Positive live correction, exact incorporated source-open, and full live parity are missing. |
 | 5 | **PARTIAL:** deployed continuous-prose interim v1 exists. A differently styled case and end-to-end displayed transclusion inspection do not. |
 | 6 | **PARTIAL:** an earlier exact deployment restart recovered initial work. No post-mailbox same-build restart with pending Researcher and Super controls exists, and exact `fbc7ff5a` guest identity is unproved. |
