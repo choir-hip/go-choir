@@ -2341,3 +2341,49 @@ This is preparation evidence, not a no-effect result. It must run only after the
 accepted one-POST recovery and signed nonce-bound identity pass, and before any
 new acceptance write. No bearer, recovery, guest request, or protected effect
 was exercised while preparing or reviewing it. Effects remain OFF.
+
+
+### Post-recovery product-contract audit and public Trace gap — 2026-08-09
+
+A source-only audit of exact deployed source `fbc7ff5a` mapped every public
+surface needed after retained-computer recovery without inspecting a key or live
+evidence and without making network requests. The deployed product contract can
+start durable Texture work through prompt bar, read the resulting document and
+lifecycle snapshot, submit CAS-bound `tell`/`correct` instructions and direct
+owner revisions, page or stream durable Texture/lifecycle events, inspect exact
+revisions and source identities, open immutable source versions, read and cancel
+runs, conditionally cancel a trajectory, and synthesize/read RunAcceptance.
+Pending Researcher, Super, and CoSuper responsibility is observable only by
+filtering canonical snapshot work items/agent state (and CoSuper assignments),
+not by a public role-spawn route; this is correct because the owner must not
+manually manufacture the required actor topology.
+
+The audit found one exact completion blocker: `fbc7ff5a` mounts no public
+`/api/trace/*` handler. `internal/trace/query.go` contains a dormant read handler
+for event lists/details, but `internal/apihandler/routes.go` never registers it,
+and the `/api/trace/trajectories...` evidence URLs emitted by RunAcceptance have
+no implementation. The authenticated proxy therefore forwards those paths to a
+guest `404`. No `choir` Trace command exists. Lifecycle events, Texture events,
+source objects, and RunAcceptance summaries remain available, but none is raw
+Trace authority. The Definition's action 9 requires inspection of each accepted
+Texture version against typed packets, source objects, **and Trace**; a dead URL
+or derived acceptance summary cannot satisfy that clause. SSH, direct Store/DB,
+`/internal/*`, test routes, and manual evidence remain inadmissible substitutes.
+
+This is the required problem checkpoint before any Trace-surface repair. A later
+repair must expose only owner-scoped read authority through the ordinary product
+route and stable-computer guard, preserve private payload boundaries, and add
+public/CLI contract tests; it must not add mutation, a second event tape, or a
+special acceptance backdoor. Deploying such a repair changes the frozen product
+candidate and therefore requires a new exact identity/CI/deploy/acceptance gate,
+not an in-place claim about `fbc7ff5a`.
+
+The same audit reconfirmed a provider-availability risk for action 3: the exact
+restored model policy maps CoSuper and text verifier to DeepSeek
+`deepseek-v4-flash`, while the retained availability evidence for that provider
+is HTTP 402. A temporary owner-computer file-policy selection of the already
+product-proved ChatGPT `gpt-5.5`, followed by byte-exact rollback to SHA-256
+`7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`, is being
+prepared for independent review. It changes no credential and remains
+**NOT EXECUTED**. Full provider-routing ceremony and before/after proof are
+required before it can run. Effects remain OFF.

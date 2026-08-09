@@ -62,6 +62,16 @@ lists. It cannot run before accepted recovery and signed nonce identity, and it
 must run before any new acceptance write. This preparation is not product-path
 or no-effect evidence.
 
+A subsequent exact-`fbc7ff5a` source-only public-contract audit found that the
+required raw Trace inspection cannot currently be performed through an admitted
+product route. The canonical sandbox route table mounts no `/api/trace/*`
+handler; the dormant owner-query code is unregistered, emitted
+`/api/trace/trajectories...` evidence URLs resolve nowhere, and the CLI has no
+Trace command. Lifecycle/Texture events, source-open, runs, and RunAcceptance
+remain public, but derived summaries do not substitute for the Definition's
+version-to-Trace inspection. This is now documented before repair; no internal,
+Store/DB, SSH, or test-route evidence will be counted.
+
 This checkpoint supersedes the current-state classifications in the historical
 construction narrative below without deleting those failure receipts. Terminal
 boot repair `7ba05599` passed CI/deploy `31310481745`; the subsequent API-key
@@ -108,7 +118,7 @@ repair has yet received authenticated exact-guest product proof.
 | 6 | **PARTIAL:** an earlier exact deployment restart recovered initial work. No post-mailbox same-build restart with pending Researcher and Super controls exists, and exact `fbc7ff5a` guest identity is unproved. |
 | 7 | **PARTIAL:** a natural-language correction was durably queued on the b5 trajectory but not consumed before cancellation. Direct deployed owner-head edit/rebase/wake and its later controls remain missing. |
 | 8 | **PARTIAL:** public conditional cancellation and retained evidence are real. In-flight Super/CoSuper cancellation plus a real delayed authenticated result and exact retry were not exercised. |
-| 9 | **PARTIAL:** bounded prior readback kept self-development OFF generation 0 and policy/route/host state stable. An independently accepted, unexecuted exact-`fbc7ff5a` post-recovery baseline helper now fail-closes on route join, policy contracts, and run/acceptance truncation. Real capsule, event/checkpoint/materialization inventory, Trace-to-version, and complete before/after comparison remain absent. |
+| 9 | **PARTIAL / SOURCE BLOCKED:** bounded prior readback kept self-development OFF generation 0 and policy/route/host state stable. An independently accepted, unexecuted exact-`fbc7ff5a` post-recovery baseline helper now fail-closes on route join, policy contracts, and run/acceptance truncation. Real capsule, event/checkpoint/materialization inventory, and complete before/after comparison remain absent. Exact source audit additionally proves raw Trace-to-version inspection is impossible through `fbc7ff5a` public routes because no Trace handler is mounted; derived RunAcceptance evidence cannot close it. |
 
 ### Current 8 measures
 
