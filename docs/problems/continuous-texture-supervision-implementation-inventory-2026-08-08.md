@@ -1749,11 +1749,15 @@ occurrences, then calls generic `ReconcileActorWake` for every durable Texture
 subject. `reconcileAgentWakeLocked` currently interprets a retained pending
 owner instruction as runnable even when the trajectory snapshot is cancelled,
 reaches `submitTextureAgentRevisionRun`, and fails because cancellation correctly
-left no open Texture work. Proving terminal trajectory state before generic wake
+left no open Texture work. Proving the exact snapshot owner/computer/trajectory/document/head binding and
+one recognized terminal status (`settled` or `cancelled`) before generic wake
 selection, and returning without a run for that exact terminal subject, should
-restore boot without weakening live occurrence recovery. Canonical actor rows
-will still be processed by their exact handlers and can only zero-ack through
-typed invalid classification; operational Store errors remain fatal/deferred.
+restore boot without weakening live occurrence recovery. A live snapshot must
+also prove no cancellation intent. Empty/unknown status, binding mismatch, and
+all operational Store errors remain fatal/deferred. Canonical actor rows are
+processed only after their exact handler independently returns the existing
+typed `TextureActorOccurrenceTerminal` fate; malformed/foreign
+`ErrInvalidTextureActorOccurrence` remains a separate quarantine path.
 
 **Protected surfaces.** Sandbox startup, Texture actor boot reconstruction,
 lifecycle trajectory/cancellation authority, mailbox acknowledgement, mutation
@@ -1764,13 +1768,14 @@ instructions generically, discard actor rows, treat missing/failed Store reads
 as terminal, widen startup suppression, change vmctl/route behavior, or alter
 provider/capsule/effects policy.
 
-**Admissible evidence.** A real Store fixture must retain a cancelled trajectory,
+**Admissible evidence.** A real Store plus SQLite actor fixture must retain a cancelled trajectory,
 cancelled work/update, pending owner instruction, durable Texture subject, and
-restart scan; `Start` must return successfully, create/reactivate no Texture run,
-preserve the instruction/evidence, and perform no provider work. Separate tests
-must prove live pending instructions still reconcile, live cancellation intent
-blocks admission, and operational snapshot/cancellation lookup errors are not
-classified terminal. Focused and full package suites, Race, vet, docs/dashboard,
+restart scan; `Adapter.Start` must return successfully, create/reactivate no
+Texture run, preserve the canonical pending instruction/evidence, retain the
+actor row as processed only through typed terminal resolution, and perform no
+provider work. Separate tests must prove live pending instructions still
+reconcile, live cancellation intent blocks admission, and operational lookup,
+unknown-status, or exact-scope mismatch errors are not classified terminal. Focused and full package suites, Race, vet, docs/dashboard,
 independent lifecycle/security review, complete CI/SBOM, exact Linux guest
 identity, and a fresh authenticated mailbox trajectory remain required.
 
