@@ -2225,3 +2225,42 @@ delta: `discovered` — aggregate actorruntime SQLite contention under parallel
 package load; `introduced` — none; `repaired` — the API-key gap in reviewed
 local source only, not deployed behavior. Effects remain OFF and the direct key
 payload remains PAUSED.
+
+
+### API-key binding repair landed; bearer-path proof awaits exact owner — 2026-08-09
+
+The reviewed repair landed as
+`fbc7ff5a048ed58d0f6dd02ae8462ae211eca328` (`security: bind API keys to exact
+owned computers`). GitHub Actions run
+[31326948312](https://github.com/choir-hip/go-choir/actions/runs/31326948312)
+passed every selected Race shard, aggregate Go, differential SBOM acceptance,
+rolling publication, and Node B deployment lane. Deployment receipts exact-join
+`auth`, `proxy`, `vmctl`, `gateway`, `corpusd`, `maild`, and `sourcecycled` to
+`fbc7ff5a`. Public `https://choir.news/health` reports proxy `build.commit` and
+`build.deployed_commit` exact `fbc7ff5a`, with `deployed_at`
+`2026-08-09T18:09:46Z`.
+
+This closes the source, CI, SBOM, and host activation parts of the RED repair;
+it does **not** prove API-key ownership or product-route behavior. Both
+accidental keys remain revoked/post-401 and no usable bearer exists. Therefore
+correct-target lifecycle selection, wrong-target 403 with unchanged lifecycle
+epoch and zero wake/refresh/stop/product effect, pre-recovery execution-identity
+refusal, retained-computer recovery, and guest/service identity all remain
+open. `/health` is not execution identity.
+
+The next admissible authority is ordinary headed persistent Chrome plus native
+owner presence. Canonical `GET /auth/session` must return exact retained owner
+`c72404bb-3c43-4a53-8671-b5cbc48b24a7` within the challenge TTL before the
+frozen one-POST payload can run. Mismatch, expiry, missing presence, payload hash
+mismatch, copy failure, or local persistence failure creates no usable
+progress and follows the documented fail-closed cleanup branch. The payload
+remains PAUSED and effects remain OFF.
+
+Mutation class remains RED. Protected surfaces are unchanged. Conjecture delta:
+supported for source and host activation, not yet product-proved. Rollback is a
+normal revert of `fbc7ff5a` and redeploy to the preceding authorized source;
+roll-forward remains preferred because rollback reopens the bearer authority
+gap. Heresy delta: `discovered` — none beyond the already recorded gap and
+aggregate SQLite contention; `introduced` — none observed by CI/deploy;
+`repaired` — source/host enforcement landed, deployed bearer-path repair still
+awaits product proof.
