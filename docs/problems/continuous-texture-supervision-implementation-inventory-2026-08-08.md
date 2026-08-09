@@ -2765,3 +2765,57 @@ projection, corrupt source DTO, missed pending phase, identical C2, invalid v3,
 and other negative contracts pass. The mocks do not perform a live product
 request or a full main-path credential gate. The helper remains **NOT
 EXECUTED**, the owner `copied` gate is unchanged, and action 3 remains partial.
+
+
+### Accepted two-implementation → candidate → third-verifier topology observer — 2026-08-09
+
+The next source-only gate is frozen outside the repository as mode-`0700`
+`/tmp/cts-acceptance-cosuper-topology.py`, 149,983 bytes, exact SHA-256
+`785ae23b64e7336d7eb0d495ffaf75c4f6c5f58c2cf57f74fcfbd6ce80669e2b`.
+Its 16,346-byte mock has SHA-256
+`f5b332def5442baf089013a0e556be403a3fdeb63ed59cd13264105d9d6a8f66`.
+Independent deployed-source and security/fail-closed reviews ACCEPT the exact
+helper after correcting three real public-wire mismatches (list/detail
+trajectory projection, public omission of lifecycle reason, and candidate ID
+canonicalization), a concurrent fresh/recovery PASS-versus-STOP race, and exact
+report/candidate/fate receipt joins. Compile, literal-GET AST audit, fresh,
+recovered-PASS, pending-to-running list/detail retry, real lock
+contention/no-mutation, and 21 negative fail-closed mock cases pass. Neither
+file has contacted the product or read a secret.
+
+The observer revalidates the exact accepted v3/C2-delivery predecessor and its
+cleanup authority. It captures Phase A only when exactly two attempt-1
+implementation assignments coexist bound/active on the same immutable
+comparison subject, in distinct declared network-forbidden writable-overlay
+capsules, with exact opened→bound reducer events, lifecycle Agent/Work
+projections, and assignment-agent-scoped active run list/detail/prompt proof.
+It then accepts Phase B only when one implementation follows
+`freeze_requested → frozen → co_super_assignment_reported → revoke_requested →
+revoked`, emits an exact changed-subject candidate and canonical report ref,
+and carries reducer-emitted revoke intent/ack evidence refs. Only after that
+revocation may a third verification assignment open and bind the exact
+candidate while the other implementation and verifier runs remain active.
+The final snapshot cursor must be exactly the verifier bind: no verifier report,
+later Texture head, unrelated lifecycle traffic, or fourth assignment is
+allowed.
+
+The helper pages and exact-joins the complete public Texture prefix, raw
+lifecycle prefix, and snapshot events; validates deployed raw-cursor omission
+semantics; reconstructs deterministic assignment/report/candidate identities;
+and normalizes the real run-list millisecond versus run-detail nanosecond
+finished time. A safe nonblocking file lock serializes both fresh and recovery
+invocations, while a contending observer exits without creating STOP, state, or
+output. Marker-absolute deadline, response cap, immutable predecessor hashes,
+registry/policy/route stability, pre-output terminal/marker/state recheck, and
+retained PASS reconstruction remain fail-closed. The final successful network
+read is the trajectory snapshot.
+
+This observer deliberately proves only reducer-authorized public
+spawn/bind/candidate/revoke topology and declared capsule modes. It cannot prove
+live Linux namespaces, cgroups, mounts, PIDs, granted verbs, command execution,
+network-denial enforcement, or writable-overlay behavior because `fbc7ff5a`
+exposes no admissible owner-scoped capsule execution receipt surface. Typed
+later reports/Texture sources/RunAcceptance must still be assessed; otherwise
+a separately documented public projection/CLI repair is required. The helper
+is **NOT EXECUTED**, the owner `copied` gate is unchanged, and action 3 remains
+partial.

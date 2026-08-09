@@ -220,6 +220,30 @@ receipt reruns are fail-closed. Fresh/recovery observer, local receipt, and
 negative security contracts passed mocks only. The helper is **NOT EXECUTED**,
 so it adds no product evidence and action 3 remains partial.
 
+The following CoSuper topology observer is now also frozen outside the repo at
+mode `0700`, 149,983 bytes, SHA-256
+`785ae23b64e7336d7eb0d495ffaf75c4f6c5f58c2cf57f74fcfbd6ce80669e2b`.
+Independent deployed-source and security/fail-closed reviews ACCEPT that exact
+byte sequence. It is literal GET-only and revalidates the accepted C2 handoff.
+Phase A can pass only on exactly two attempt-1 implementation assignments that
+are simultaneously bound/active in distinct capsule bindings declaring
+network-forbidden writable-overlay modes, with exact reducer, Agent/Work, and
+active run joins. Phase B can pass
+only after one implementation follows the exact freeze, changed-candidate
+report, and typed revoke path; a third verifier then binds the exact
+reducer-derived candidate while the other implementation and its run remain
+active. Complete public/raw/snapshot cursor parity, deterministic report and
+candidate canonical IDs, assignment-scoped list/detail/prompt proof, exact
+revoke intent/ack evidence refs, an exclusive observer lock, and snapshot-last
+completion are revalidated on retained PASS. Its 16,346-byte mock, SHA-256
+`f5b332def5442baf089013a0e556be403a3fdeb63ed59cd13264105d9d6a8f66`,
+passes fresh, recovered-PASS, pending-to-running, lock-contention/no-mutation,
+and 21 fail-closed negative cases. The helper remains **NOT EXECUTED** and its
+own output explicitly proves only durable public topology—not physical Linux
+isolation, command execution, network denial, overlay behavior, or granted
+verbs. Those final evidence surfaces remain missing, so action 3 remains
+partial and may require a problem-led owner-scoped projection/CLI repair.
+
 ### Current 9 acceptance actions
 
 | # | Current disposition |
