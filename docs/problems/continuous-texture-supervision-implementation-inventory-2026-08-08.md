@@ -2439,3 +2439,50 @@ pre/post route continuity, provenance freshness, partial marker/PASS publication
 and recovered-rollback marker validation. The ceremony remains **NOT EXECUTED**
 until this authority checkpoint is committed and the owner gate, recovery,
 signed identity, and GET-only baseline all pass.
+
+
+### Accepted first progressive-loop start ceremony — 2026-08-09
+
+The first red acceptance write after recovery now has an exact, source-reviewed
+ceremony. `/tmp/cts-acceptance-start-v1.py` is SHA-256
+`677cc8a0bff9ffa58465d01db72774ef6080d17e18d6ec12997baf2c01d6b54c`.
+Its outcome-directed prompt is exactly 1,109 UTF-8 bytes at SHA-256
+`3726cc5037f15cc6da4bd6db8a9f2eefe07503020b2a140382c53e2b005d4cc1`
+and uses command identity `cts-fbc-full-acceptance-79a2722ca3`. The prompt asks
+for an immediate useful continuous-prose revision while evidence remains open,
+two independent source-backed angles, an executable comparison in isolated
+workspaces, independent verification, and exact research/execution
+transclusions. It does not name or force Researcher, Super, or CoSuper
+choreography, require a first tool, or forbid ordinary read-only source research;
+capsule work remains disposable and networkless.
+
+Execution is gated on the accepted exact-owner recovery, signed `fbc7ff5a`
+identity, GET-only no-effect baseline, and accepted temporary two-role policy
+apply. Before POST it re-proves the stable computer, epoch, immutable route,
+self-development OFF, temporary bytes/resolutions, exact rollback backup and
+helper, and exact key-cleanup helper. A fsynced atomic marker precedes the one
+semantic start; retries use only the same command/request bytes. The exact start
+DTO is durably persisted immediately after response and must join completed
+Conductor state, one V0 user revision, one initial Texture obligation, reducer
+sequence/cursor 1, exact subject/document, and a lifecycle digest.
+
+Observation pages the public `choir.texture_observation.v1` cursor through its
+watermark and atomically persists cursor plus events for restart, with a hard
+bounded deadline. PASS requires the exact V0 event/work join, one appagent v1
+whose event was working/live, the initial Texture obligation still open, a
+separate exact Researcher-assigned obligation open, at least 400 UTF-8 bytes,
+and zero heading, list, table, or status-template lines. Semantic usefulness
+remains bounded for owner inspection rather than being reduced to those
+mechanical gates. Exact policy and route are re-proved after v1.
+
+Every post-marker state durably names equal-command recovery, conditional public
+trajectory cancellation, the accepted byte-exact policy rollback, and accepted
+narrow-key DELETE-204/post-401 cleanup in that order. The script neither hides
+nor auto-cancels a failed trajectory. Two independent source reviews first
+rejected missing DTO joins, non-open Researcher evidence, non-resumable polling,
+weak prose checks, and missing post-POST cleanup authority; final
+`acceptance-start-v1-final-review` returned `ACCEPT` on the exact bytes. A local
+fully mocked exact-contract run also reached `PASS_ACCEPTANCE_START_V1`; it was
+logic validation only, not product evidence. The helper and prompt remain **NOT
+EXECUTED** and do not prove v2, correction, Super, capsules, v3, cancellation,
+or action 9.
