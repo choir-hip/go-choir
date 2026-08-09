@@ -17,8 +17,9 @@ all selected Race shards, aggregate Go, Differential SBOM acceptance, rolling
 publication, and Node B deployment. Public `/health` reports the exact proxy commit, and the
 deploy activation receipt exact-joins every selected host service. The deployment is host proof only. The retained
 stable guest has not yet been woken or nonce-bound to `7ba05599` because the
-same owner's retained browser sessions and scoped keys are unauthenticated,
-expired, or revoked. Independent audit found no public same-owner renewal that
+same owner's retained browser sessions are unauthenticated and retained scoped
+keys are unusable; only separately receipted keys are classified expired or
+revoked. Independent audit found no public same-owner renewal that
 can proceed without WebAuthn user presence. Process evidence then corrected the
 browser path: `omp-browser` is HeadlessChrome/150 with an OMP temporary profile,
 basic password store, and mock keychain. Its waiting text and expired challenges
@@ -27,6 +28,17 @@ assertion must start in an ordinary headed persistent browser profile only when
 the owner can immediately approve Touch ID/security-key presence. No headless
 retry, CDP virtual authenticator, substitute owner/computer, recovery bypass,
 SSH, internal vmctl path, or weaker identity is admissible.
+
+A read-only reconciliation of a newly supplied F-era handoff confirms it is
+historical, not a rollback instruction. Source is exact at `e92bacd5`; current
+runtime CI/deploy `31310481745` is green; `8ac0b27d` deployed the authorized
+packet/prompt repair; and retained trajectory `14c99be0…` was later publicly
+cancelled at lifecycle version 5 before the bind, mailbox, and terminal-boot
+repairs culminated in `7ba05599`. Historical acceptance key `ak_45ce1796…` now
+returns public HTTP 401. That makes it unusable but does not prove registry
+revocation; its row and both root-only auth rollback copies remain terminal
+cleanup obligations. No restoration, SSH, credential, provider, route, guest,
+or effect mutation was repeated. Effects remain OFF.
 
 The last exact guest-proved product prefix remains `b5d907a3`: Texture published
 a continuous-prose v1 while work was open, atomically addressed its bound

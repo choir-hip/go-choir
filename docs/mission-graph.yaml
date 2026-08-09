@@ -264,7 +264,13 @@ nodes:
       attempts. A fresh assertion may start only in an ordinary headed persistent
       browser when the owner can approve immediately; headless retries, CDP
       virtual authenticators, substitute accounts/computers, SSH, internal
-      vmctl, or weaker identity are inadmissible. The
+      vmctl, or weaker identity are inadmissible. A read-only reconciliation
+      proves the supplied 565abc77/F/14c99be0 handoff is historical: 8ac0b27d
+      deployed the packet/prompt repair, 14c99be0 was later publicly cancelled at
+      lifecycle v5, and later bind/mailbox/terminal repairs culminated in
+      7ba05599. Historical key ak_45ce1796 now returns public 401; that is
+      unusable authority, not registry revocation proof. No restoration, SSH,
+      credential, provider, route, guest, or effect mutation was repeated. The
       last guest-proved prefix at b5d907a3 produced continuous-prose v1 while work
       was open, one exact Texture-to-Researcher control, and thirteen clean
       ChatGPT Researcher runs/source packets. Fifteen reports and an owner

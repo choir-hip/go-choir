@@ -1907,3 +1907,35 @@ secret path. Only then may public retained-computer inspection/wake resume.
 LaunchServices accepted a request to open canonical `https://choir.news/` in
 the already-running ordinary Google Chrome process, but no authentication claim
 or challenge was started. Effects remain OFF.
+
+### Superseded F-era handoff and unusable acceptance-key reconciliation
+
+A later operator handoff named docs ceremony `565abc77`, exact-F runtime
+`67a61358`, retained trajectory `14c99be0…`, and acceptance key
+`ak_45ce1796-7044-4086-ad48-5f7789f6b4ba` as if they were current. Read-only
+reconciliation proves that handoff is historical rather than canonical:
+local/origin `main` were exact at docs commit `e92bacd5`; at reconciliation start,
+the only dirty paths were three preserved unrelated untracked memos (before this
+goal-owned documentation update); public `/health` is HTTP 200 and
+reports `7ba05599c15f6d126f86fa6fe1a44bc36a928121`; dashboard `/` is HTTP 200;
+and current runtime CI/deploy `31310481745` is completed/success, including Race
+shards, Differential SBOM acceptance, and Node B deployment.
+
+The authorized packet/prompt repair did deploy as `8ac0b27d` and recovered
+`14c99be0…` through its first atomic Researcher control, after which a distinct
+bind-loop defect appeared. That retained trajectory was subsequently publicly
+cancelled at lifecycle version 5/reducer-watermark 7 with evidence retained and
+zero protected effects. Later bind, mailbox, and terminal-boot repairs culminated
+in current `7ba05599`; reverting to F or replaying the old trajectory would
+violate current authority.
+
+A read-only public `/api/compute/status` request using the exact retained key ID
+`ak_45ce1796-7044-4086-ad48-5f7789f6b4ba` now returns HTTP 401 authentication
+required. No secret was printed or transferred, and no credential, provider,
+route, environment, policy, guest, effect, or SSH mutation occurred. This 401
+proves only that the old key is unusable for current acceptance; it is not
+registry revocation proof. The key row and both root-only rollback copies still
+require terminal cleanup/disposition after a newly owner-authenticated narrow
+key completes acceptance. Effects remain OFF. The admissible next transition
+remains a fresh retained-owner assertion in an ordinary headed persistent
+browser, followed by a new narrow non-logging key handoff.
