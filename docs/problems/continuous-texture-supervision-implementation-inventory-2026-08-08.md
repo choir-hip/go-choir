@@ -1939,3 +1939,39 @@ require terminal cleanup/disposition after a newly owner-authenticated narrow
 key completes acceptance. Effects remain OFF. The admissible next transition
 remains a fresh retained-owner assertion in an ordinary headed persistent
 browser, followed by a new narrow non-logging key handoff.
+
+
+### Headed-owner ceremony produced an over-broad unbound key
+
+At `2026-08-09T15:25Z`, the retained owner completed the headed browser
+ceremony and copied a key through the non-logging handoff. The agent ingested it
+directly to a mode-`0600` file and cleared the clipboard without displaying the
+secret. Read-only public authentication succeeded, and the bearer-visible key
+registry contains the historical keys bound to exact retained target
+`vm-bbdbbd01c4390b7036067aaa12afeb68`; this is same-owner registry evidence.
+However, the new row is `ak_e2552ee6-c1bb-40a2-aad6-5b5d0a644112`, label `CLI
+key`, with no computer binding or expiry and with `admin`, `manage:keys`, and
+broad runtime/Texture/Base authority. It is not the requested narrow acceptance
+credential. No lifecycle, provider, route, guest, effect, or acceptance mutation
+was attempted with it. A read-only compute call described another current
+computer and therefore cannot substitute for the retained target.
+
+**RED attenuation ceremony.** Conjecture delta: the successful native assertion
+restored exact same-owner key-registry authority, but the selected UI/CLI path
+minted a perpetual administrator rather than a target-bound acceptance key.
+Protected surface: only the public API-key registry. Admissible evidence: exact
+public create/list/revoke status plus post-revocation HTTP 401, never logs or
+secret values. Authorized sequence: use the broad key only on public
+`POST /auth/api-keys` to mint a key expiring within two hours, bound to exact
+`vm-bbdbbd01c4390b7036067aaa12afeb68`, with exactly
+`computer:lifecycle`, `computer:self_development:read`, `acceptance:read`,
+`read:runtime`, `write:runtime`, `read:texture`, `write:texture`, and
+`read:base`; store its once-returned secret mode `0600`; verify its metadata and
+read-only target authority; then revoke `ak_e2552ee6…` and prove that broad key
+returns HTTP 401. If creation or verification mismatches, revoke the new key and
+stop. No product/lifecycle call is authorized before the narrow key passes.
+Rollback is revocation of the newly minted key; the broad key remains usable only
+until the narrow key is verified, then must be self-revoked. Heresy delta:
+`discovered` — an over-broad perpetual key was minted during the intended narrow
+ceremony; `introduced` — none by the agent; `repaired` — none until attenuation
+and broad-key post-401 complete. Effects remain OFF.

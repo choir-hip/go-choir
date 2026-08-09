@@ -3,7 +3,7 @@
 **Date:** 2026-08-09
 **Definition:** `choir-continuous-texture-supervision-2026-08-07`
 **Runtime candidate:** `7ba05599c15f6d126f86fa6fe1a44bc36a928121`
-**Audit verdict:** **NOT COMPLETE — exact host deployed; retained-guest proof requires target-owner passkey user presence**
+**Audit verdict:** **NOT COMPLETE — exact host deployed; owner ceremony complete; accidental broad key must be attenuated before retained-guest proof**
 **Effects:** OFF
 
 This is a requirement-by-requirement audit, not a completion receipt. It
@@ -27,6 +27,15 @@ headed same-owner authentication blocker or terminal registry/backup cleanup
 obligations.
 
 ## Current checkpoint — 2026-08-09
+
+The retained owner has now completed the native headed-browser ceremony. The
+secure handoff nevertheless produced unbound, non-expiring administrator key
+`ak_e2552ee6…`, not the requested narrow target-bound key. Read-only registry
+inspection exact-joins the same owner to historical keys for target
+`vm-bbdbbd01c4390b7036067aaa12afeb68`; no lifecycle or effect call used the
+broad key. The problem-first receipt and RED attenuation ceremony require an
+exact <=2-hour target-bound subset key, verification, broad-key revocation, and
+broad-key post-401 before product acceptance resumes. Effects remain OFF.
 
 This checkpoint supersedes the current-state classifications in the historical
 construction narrative below without deleting those failure receipts. Runtime

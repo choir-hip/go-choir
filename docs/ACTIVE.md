@@ -40,6 +40,16 @@ revocation; its row and both root-only auth rollback copies remain terminal
 cleanup obligations. No restoration, SSH, credential, provider, route, guest,
 or effect mutation was repeated. Effects remain OFF.
 
+The retained owner has now completed the native headed-browser ceremony, but the
+handoff produced unbound non-expiring administrator key `ak_e2552ee6…`, not the
+requested narrow target-bound key. It is securely held mode `0600`, the clipboard
+is cleared, and it has been used only for read-only same-owner registry/status
+inspection. The registry exact-joins historical keys for retained target
+`vm-bbdbbd01c4390b7036067aaa12afeb68`. Before any lifecycle call, the reviewed
+RED attenuation sequence must mint and verify an exact <=2-hour target-bound
+subset key, revoke the broad key, and prove broad-key post-401. Effects remain
+OFF.
+
 The last exact guest-proved product prefix remains `b5d907a3`: Texture published
 a continuous-prose v1 while work was open, atomically addressed its bound
 Researcher, and admitted thirteen clean ChatGPT Researcher runs/source packets.
