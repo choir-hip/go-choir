@@ -1,7 +1,7 @@
 # Continuous Texture Supervision — Direct narrow-key ceremony
 
 **Date:** 2026-08-09
-**Status:** PREPARED AND INDEPENDENTLY ACCEPTED; PAUSED PENDING DEPLOYED API-KEY BINDING REPAIR; NOT EXECUTED
+**Status:** DEPLOYMENT GATE SATISFIED AT `fbc7ff5a`; AUTHORIZED ONLY WITH EXACT-OWNER PHYSICAL PRESENCE; NOT EXECUTED
 **Mutation class on execution:** RED — authenticated API-key registry
 **Exact payload file:** `continuous-texture-supervision-direct-key-ceremony-2026-08-09.payload.js`
 **Exact file bytes SHA-256 (no final newline):** `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`
@@ -9,10 +9,16 @@
 
 ## Problem and authority
 
-Execution is paused. The newly documented API-key binding substrate must first
-land through CI/deployment; do not run this payload against runtime `7ba05599`.
-The payload bytes remain frozen and will be re-authorized only after the repaired
-host commit is exact.
+The deployment gate is satisfied: repair
+`fbc7ff5a048ed58d0f6dd02ae8462ae211eca328` passed CI/deploy 31326948312,
+public proxy health reports that exact deployed commit, and selected-service
+activation receipts exact-join it. The frozen payload is now authorized for one
+execution only when ordinary headed persistent Chrome and native owner presence
+make canonical `/auth/session` return exact retained owner
+`c72404bb-3c43-4a53-8671-b5cbc48b24a7`. It remains NOT EXECUTED. Do not run it
+against any other host identity, owner, origin, profile, or headless browser.
+The historical once-ever `cts-7ba05599-…` label is part of the frozen accepted
+bytes and must not be renamed.
 
 The ordinary Settings API-key form cannot express the acceptance authority:
 `frontend/src/lib/SettingsApp.svelte` sends only `label` and `scopes`, omits

@@ -2253,8 +2253,8 @@ owner presence. Canonical `GET /auth/session` must return exact retained owner
 `c72404bb-3c43-4a53-8671-b5cbc48b24a7` within the challenge TTL before the
 frozen one-POST payload can run. Mismatch, expiry, missing presence, payload hash
 mismatch, copy failure, or local persistence failure creates no usable
-progress and follows the documented fail-closed cleanup branch. The payload
-remains PAUSED and effects remain OFF.
+progress and follows the documented fail-closed cleanup branch. The deployment gate is satisfied, so the payload is authorized for one exact-owner
+physical-presence execution; it remains NOT EXECUTED and effects remain OFF.
 
 Mutation class remains RED. Protected surfaces are unchanged. Conjecture delta:
 supported for source and host activation, not yet product-proved. Rollback is a
