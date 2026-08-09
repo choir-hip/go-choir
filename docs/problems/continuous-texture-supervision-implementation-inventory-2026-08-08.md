@@ -2387,3 +2387,55 @@ product-proved ChatGPT `gpt-5.5`, followed by byte-exact rollback to SHA-256
 prepared for independent review. It changes no credential and remains
 **NOT EXECUTED**. Full provider-routing ceremony and before/after proof are
 required before it can run. Effects remain OFF.
+
+
+#### Temporary capsule-role model-policy ceremony
+
+**Mutation class:** orange provider/model routing, with full ceremony required.
+The mutation is limited to the computer-owned `System/model-policy.toml`; it
+changes only the `roles.co-super` and `roles.verifier` provider/model selections
+from DeepSeek `deepseek-v4-flash` to the already deployed and product-proved
+ChatGPT `gpt-5.5`. It does not touch provider credentials, gateway files,
+self-development mode, route projection, ComputerVersion, host services, or any
+other role.
+
+**Conjecture delta:** the retained 402 evidence predicts that leaving the exact
+base policy unchanged may prevent the real parallel capsule/verifier portion of
+action 3 from entering a model turn. Temporarily selecting the same working
+ChatGPT provider/model already used by Texture and Super should allow those
+assignment-bound actors to execute while leaving capsule network/capability
+authority unchanged. Only actual authenticated CoSuper/verifier runs and typed
+capsule receipts can confirm this; successful policy resolution alone cannot.
+
+**Protected surfaces:** provider/model routing, the owner computer's exact policy
+bytes, model-call metadata, and later capsule/run acceptance. **Admissible
+evidence:** a fresh accepted post-recovery baseline; exact stable-computer epoch
+and immutable-route digest before and after each write; byte-exact GET/PUT/GET
+hashes; strict role/provider/model/source resolutions with no policy error; real
+run/capsule evidence; and byte-exact final restoration. No local provider probe,
+credential inspection, or response narrative can substitute.
+
+**Rollback:** before the first PUT, persist and fsync the exact 1,124 original
+bytes at SHA-256
+`7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`
+plus a request-bound apply marker. The temporary bytes are SHA-256
+`6624bb112e805ff95974052a5fb808247bd81e5b9582ca81377b7b6297f40202`.
+Rollback is the first obligation on any STOP after the apply marker, before API
+key revocation or expiry: accept the exact marker/backup even if the apply
+response or PASS receipt was lost, classify current bytes as original,
+temporary, or foreign, restore only exact temporary bytes, and prove the exact
+original file and original DeepSeek resolutions. Foreign bytes stop for human
+adjudication. Both apply and rollback require the same baseline route again
+after their final protected read and fail if identity changed.
+
+**Heresy delta:** `discovered` — the accepted base policy selects a provider with
+retained 402 availability evidence and raw Trace is not publicly mounted;
+`introduced` — one bounded, explicitly evidenced temporary policy difference,
+not a credential or second routing authority; `repaired` — zero until exact
+original bytes and resolutions are restored. Independent `acceptance-policy-ceremony-review` returned final `ACCEPT` for
+apply SHA-256 `7520e02b294c445bfe3c5ea5d18db3f5e80549c015367006a719d01f8b7d0e4b` and rollback SHA-256
+`fe752b17cde9ee2fdac7a2c47d86ac4b419db2367381303f5913bc0905d9c640` after rejecting and repairing ambiguous-apply rollback,
+pre/post route continuity, provenance freshness, partial marker/PASS publication,
+and recovered-rollback marker validation. The ceremony remains **NOT EXECUTED**
+until this authority checkpoint is committed and the owner gate, recovery,
+signed identity, and GET-only baseline all pass.

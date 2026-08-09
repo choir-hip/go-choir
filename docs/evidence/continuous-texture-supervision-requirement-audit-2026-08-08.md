@@ -160,6 +160,35 @@ does not promote other incomplete actions.
 | 18 | **PASS:** schema/golden contracts and deployed continuous prose exclude a forced heading/status/coding shape; the second style case remains action 5 partial. |
 | 19 | **UNPROVED deployed:** source supports isolated multiple assignments, but no product capsule topology has run. |
 
+### Temporary capsule-role policy ceremony
+
+Mutation class is **orange provider routing with full ceremony**. The exact base
+policy maps CoSuper and text verifier to retained-unavailable DeepSeek
+`deepseek-v4-flash`; the bounded conjecture is that selecting the already
+product-proved ChatGPT `gpt-5.5` for only those two roles permits real
+assignment-bound capsule turns without changing credentials or capability
+ownership. Protected evidence includes exact model-policy bytes, resolution and
+model-call metadata, capsule receipts, and run acceptance. Admissible proof
+requires the fresh post-recovery baseline, exact epoch/immutable-route join both
+before and after each PUT sequence, raw byte hashes and resolve contracts, and
+real capsule runs.
+
+Before apply, the helper must persist exact original SHA-256
+`7192b8b1600561a331fda32f27628296c3f5b9bd1ba30dd5fb82681985c45e2a`
+and a request-bound marker. Temporary bytes are exact SHA-256
+`6624bb112e805ff95974052a5fb808247bd81e5b9582ca81377b7b6297f40202`.
+Rollback precedes API-key revocation/expiry on any post-marker STOP, accepts the
+exact attempt marker and backup when apply PASS evidence was lost, restores only
+exact temporary bytes, closes exact-original state without a redundant write,
+and stops on foreign bytes. Heresy delta is: `discovered` — retained 402 base
+role selection and absent raw Trace route; `introduced` — one bounded temporary
+two-role selection only; `repaired` — none until exact original bytes and
+resolutions are restored. Independent source-only review returned final `ACCEPT`
+for exact apply SHA-256 `7520e02b294c445bfe3c5ea5d18db3f5e80549c015367006a719d01f8b7d0e4b` and rollback SHA-256
+`fe752b17cde9ee2fdac7a2c47d86ac4b419db2367381303f5913bc0905d9c640` after the ambiguous-response, route-continuity, provenance,
+atomic-publication, and recovered-marker defects were repaired. Both helpers
+remain unexecuted; this docs checkpoint must land before use.
+
 ### Exact remaining authority, owner, and target gate
 
 The shared API-key `(UserID, stable ComputerID)` vmctl guard is deployed at
