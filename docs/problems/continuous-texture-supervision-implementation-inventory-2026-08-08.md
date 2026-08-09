@@ -1251,3 +1251,43 @@ Heresy delta at ceremony: discovered an opaque-schema/early-failure/stale-prompt
 join that hid an implemented replacement; introduced none; repaired none until
 source and deployed proof both pass. No code edit begins before this ceremony is
 independently reviewed, committed, pushed, and green.
+
+
+### Source-review authority gap before control-repair landing
+
+Independent red source/security review of the uncommitted control repair rejected
+landing with two high authority findings and no critical finding. First,
+`actions[].inputs` is intentionally an open domain bag, but the recursive
+runtime-owned-field rejector did not yet cover persistent-Super assignment and
+capsule bindings such as control binding, assignment, capsule, capability,
+execution-handle, candidate, and terminal-outcome witness identities. Those
+fields are not envelope authority in the shared payload schema and must remain
+runtime-derived even when nested in model-authored action input.
+
+Second, Texture's installed role registry still includes the generic
+`cancel_agent` tool. Its non-Super path accepts an arbitrary model-authored agent
+id and searches active same-owner runs without exact lifecycle target/work
+binding. An assigned CoSuper target reaches `CancelRun`, which invokes assignment
+and capsule revocation. That is a pre-existing model-callable capsule-lifecycle
+path inconsistent with the settled boundary that persistent Super alone owns
+assignment capsules and Texture never controls CoSuper directly. This review
+discovered the path; the current repair did not introduce it.
+
+Mutation class remains **red**. Protected surfaces added to the immediate repair
+are role registry and cancellation entry authority. The smallest repair is to:
+(1) extend the existing recursive strict rejector with the runtime-owned
+assignment/capsule binding and outcome-witness fields plus focused nested
+negatives; and (2) remove `cancel_agent` from Texture's installed model registry
+while preserving public lifecycle cancellation, reducer intent/late-evidence
+semantics, and persistent Super's exact assigned-slot cancellation authority.
+No generic replacement, Texture→CoSuper control, or broad effect enablement is
+allowed. Admissible evidence is exact registry contract/negative tests,
+recursive nested negatives, existing lifecycle/cancellation/capsule/race
+matrices, independent source/security rereview, full CI, and exact deployed
+product proof. Rollback remains a normal origin/main revert through CI/deploy;
+effects remain OFF.
+
+Problem delta: discovered one missing recursive identity class and one
+pre-existing generic Texture cancellation authority; introduced none; repaired
+none until source and deployed proof pass. This problem-first receipt precedes
+any committed cancellation-registry fix.
