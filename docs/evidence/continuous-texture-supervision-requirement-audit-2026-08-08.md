@@ -3,7 +3,7 @@
 **Date:** 2026-08-09
 **Definition:** `choir-continuous-texture-supervision-2026-08-07`
 **Runtime candidate:** `7ba05599c15f6d126f86fa6fe1a44bc36a928121`
-**Audit verdict:** **NOT COMPLETE — exact host deployed; accidental keys revoked; exact retained-owner session, narrow-key handoff, and retained-guest proof remain**
+**Audit verdict:** **NOT COMPLETE — exact host deployed; accidental keys revoked; API-key computer-binding repair now precedes exact-owner/key/retained-guest proof**
 **Effects:** OFF
 
 This is a requirement-by-requirement audit, not a completion receipt. It
@@ -38,9 +38,12 @@ epoch `8253`. The prepared session must invoke canonical same-origin `GET /auth/
 may rotate refresh/access cookies on the RED auth surface, and prove exact
 retained owner `c72404bb…` (zero API-key POST and fresh assertion on mismatch), then mint the exact
 <=2-hour eight-scope key directly, bound to stable computer `computer-42850…`, never VM `vm-bb…`.
+Source reconciliation also found the substrate gap: registry binding is requested
+metadata and private computer routes do not uniformly use-time join it to vmctl
+ownership. The authorized shared guard repair must deploy before the key ceremony.
 The exact same-origin payload is independently accepted and preserved at
 `docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`
-(SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`); it is not yet executed. Effects remain OFF.
+(SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`); it is PAUSED and not executed. Effects remain OFF.
 
 This checkpoint supersedes the current-state classifications in the historical
 construction narrative below without deleting those failure receipts. Runtime
@@ -129,9 +132,11 @@ does not promote other incomplete actions.
 | 18 | **PASS:** schema/golden contracts and deployed continuous prose exclude a forced heading/status/coding shape; the second style case remains action 5 partial. |
 | 19 | **UNPROVED deployed:** source supports isolated multiple assignments, but no product capsule topology has run. |
 
-### Exact remaining owner and target gate
+### Exact remaining authority, owner, and target gate
 
-Only after the headed session proves exact retained owner `c72404bb…` (otherwise
+First deploy and publicly prove the shared API-key `(UserID, stable ComputerID)`
+vmctl guard before every computer selection/resolve/effect. Only then may the
+frozen payload resume. After the headed session proves exact retained owner `c72404bb…` (otherwise
 a fresh native assertion), first mint and securely hand off the exact <=2-hour eight-scope key
 bound to stable computer `computer-42850e9734d9442386c5dd8bf3afbf19`. First
 require lifecycle STATUS to ownership-join exact stable computer at logical

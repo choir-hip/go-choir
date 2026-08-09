@@ -2086,3 +2086,95 @@ current authority claim and ceremony gate, not the historical missing exact-owne
 proof. Admissible future repair evidence is an exact headed `/auth/session` owner
 match before the once-ever POST, followed by the target-bound read-only product
 gate.
+
+
+### API-key stable-computer binding authorization gap — RED repair authorized
+
+The exact-owner correction exposed one substrate defect, not a collection of
+route symptoms. Auth persists caller-requested `computer_id` after shape/scope
+checks but without ownership authority. Proxy scope checks then select logical
+desktops independently and most computer-touching routes never compare the
+selected ownership's stable ComputerID to `AuthResult.ComputerID`. Consequently,
+a registry row and even a joined execution-identity response prove only the row
+metadata or selected computer, not that the bearer is bound to it.
+
+The existing replacement substrate is already live:
+`vmctl.Client.LookupComputerContext(ctx, userID, computerID)` performs an exact `(UserID, stable ComputerID)` ownership join and returns the
+canonical logical DesktopID without resolving, assigning, waking, refreshing, or
+stopping a computer. Existing vmctl lookup may subsequently perform route,
+readiness-health, or exact-target gateway-credential maintenance after a valid
+ownership record is found; it is not an unqualified pure read. Lifecycle already applies this join before
+actuation. The repair must centralize that existing authority rather than couple
+the auth service to vmctl or patch route responses individually. Keeping key
+creation metadata-only prevents auth/session availability from fate-sharing with
+vmctl; the proxy use-time boundary owns the live authorization join.
+
+**Authorized repair boundary.** First, auth creation treats the binding as
+requested attenuation metadata and requires non-empty `computer_id` for every
+scope capable of selecting/touching a private computer: `admin`, runtime,
+Base, Texture, `acceptance:read`, and all `computer:*`; `manage:keys` alone may
+remain unbound. Bearer delegation remains subset-only and may not change a bound
+parent's ComputerID. Second, every API-key request to a computer-selecting route—including
+legacy/bootstrap/unbound `admin`—must first have non-empty
+`AuthResult.ComputerID`; empty is generic 403 before any lookup/effect. One shared
+proxy guard then joins
+`LookupComputerContext(auth.UserID, auth.ComputerID)`, exact UserID/ComputerID,
+and any requested path ComputerID or DesktopID from query,
+`X-Choir-Desktop`, recovery JSON body, or default `primary`.
+Mismatch/not-owned is generic 403; unavailable ownership authority is 503; no
+static fallback. It must run after auth/scope checks but before downstream proxy
+route lookup or ComputerVersion resolution, resolve/wake/refresh/stop, recovery `startOrJoin`,
+sandbox/WS dial, corpusd self-development call, or execution attestation. In
+particular, `computeRecoveryRequest.desktop_id` must equal the joined canonical
+DesktopID before route or recovery work begins.
+
+Wire the guard through generic protected HTTP, bootstrap, API and Super Console
+WebSockets, private publication/proposal sandbox handlers, compute status and
+recovery, execution identity, self-development, and lifecycle without weakening
+lifecycle's current ordering. Bound-key compute status exposes only the exact
+joined computer, not the owner's other computers. Do not indiscriminately gate
+mail/notifications, corpusd public reads, public publication/search/pulse, or
+server-derived cross-owner delivery routes that select no bearer computer.
+Cookie behavior and unbound `manage:keys`-only operation remain unchanged.
+Every existing unbound legacy key—including `admin`—is denied all
+computer-selecting routes but may still list/self-revoke; `admin` bypasses scopes
+only, never binding, ownership, or canonical DesktopID.
+
+**Full RED ceremony.** Mutation class: RED. Conjecture delta: falsified — stored
+binding plus scope, or a joined execution identity, is bearer ownership;
+proposed — the single use-time `(UserID, stable ComputerID)` vmctl join before
+selection/resolve is bearer computer authority. Protected surfaces: API-key
+registry/attenuation, auth/key management, proxy routing, vmctl ownership and
+lifecycle/recovery, runtime/Base/Texture routes, WebSockets, self-development,
+execution identity, and run acceptance. Admissible evidence: auth tables prove target-capable scopes (`admin`, runtime,
+Base, Texture, `acceptance:read`, all `computer:*`) without binding return 400,
+`manage:keys` alone may remain unbound, bound parents cannot delegate empty or
+different binding, and exact same binding persists only metadata. Route-family
+negative axes include wrong/not-found owner, conflicting returned UserID or
+ComputerID, path ComputerID mismatch, DesktopID mismatch from query, header,
+recovery body, and default `primary`, missing vmctl, transport/500/malformed
+operational lookup error as 503, unbound legacy/bootstrap-admin, admin
+non-bypass, cookie parity, and API-key-only execution identity. Positives cover
+every guarded family. Failures make at most one `LookupComputerContext` at the proxy boundary (none
+for unbound/missing vmctl; foreign/not-found exits before vmctl's post-record
+branch) and, after/beyond that lookup, zero proxy route resolution, desktop
+lookup/list, resolve/wake/refresh/stop, recovery `startOrJoin`, runtime probe,
+sandbox HTTP, WS upgrade/dial, corpusd self-development/lifecycle intent, guest
+identity, or platform attestation. For a valid exact ownership followed by a
+caller DesktopID mismatch, existing vmctl lookup may perform internal
+route/readiness/credential maintenance on that exact authorized computer; tests
+must not mislabel it as wrong-target product effect. Then run recovery/WS Race tests, full CI/SBOM, exact
+staging deploy identity, public correct/wrong-target receipts with unchanged wrong-target VM lifecycle
+state/epoch, no wrong-target wake/refresh/stop, and no wrong-target product effect, and execution identity whose ComputerID
+equals key metadata plus lifecycle-owned target. Registry metadata alone is
+never evidence. Rollback: no schema migration; revert the single authorization
+commit and redeploy the prior known SHA, explicitly revoke ceremony keys, and
+preserve all product evidence—while preferring roll-forward because rollback
+reopens the gap.
+
+Heresy delta: `discovered` — creation metadata was treated as ownership and
+computer-selecting routes bypassed binding; `introduced` — none by this
+read-only assessment; `repaired` — none until the shared guard is deployed and
+staging-proved. Effects remain OFF. The prepared direct key payload is PAUSED and
+must not execute until the repaired runtime is deployed; its bytes remain exact
+and reusable after the new host identity is recorded.

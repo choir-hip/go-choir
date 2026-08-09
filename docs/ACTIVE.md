@@ -23,7 +23,11 @@ accidental keys are revoked/post-401, so no usable bearer remains. The prepared
 script must invoke canonical same-origin `GET /auth/session`, which may rotate
 refresh/access cookies on the RED auth surface, and require exact owner
 `c72404bb…` before its only API-key POST; mismatch makes zero key POST and
-requires a fresh retained-owner native assertion. `omp-browser` remains
+requires a fresh retained-owner native assertion. A broader substrate gap is now
+problem-first documented: API-key binding is requested metadata, and private
+computer routes do not uniformly join it to exact vmctl ownership before
+selection/resolve/effects. The frozen direct-key payload is PAUSED until the
+shared guard is CI/deployed and publicly proved. `omp-browser` remains
 HeadlessChrome/150 with an OMP temporary profile, basic password store, and mock
 keychain; it is diagnostic-only and has no proven owner-operable native prompt. No headless
 retry, CDP virtual authenticator, substitute owner/computer, recovery bypass,
@@ -54,10 +58,12 @@ stable computer `computer-42850e9734d9442386c5dd8bf3afbf19` and never VM
 `vm-bb…`; ingestion must use an isolated shell/unshadowed module path and verify
 mode `0600` before any API call. Exact stable-computer lifecycle STATUS must
 ownership-join logical desktop `primary` before self-development or any generic
-target route. The independently accepted, once-ever direct
-headed-browser payload is preserved at
+target route. The authorized RED repair must first centralize that join across
+HTTP/WS/compute/recovery/execution-identity/self-development/private publication
+routes with exact ownership and zero downstream wrong-target selection/effect tests. The independently accepted, once-ever
+direct headed-browser payload is preserved at
 `docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`
-(SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`); it is prepared but not executed. Effects remain OFF.
+(SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`); it is prepared, PAUSED, and not executed. Effects remain OFF.
 
 The last exact guest-proved product prefix remains `b5d907a3`: Texture published
 a continuous-prose v1 while work was open, atomically addressed its bound
