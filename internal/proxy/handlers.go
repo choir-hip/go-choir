@@ -34,7 +34,7 @@ import (
 // only injects the JWT-verified user context via X-Authenticated-User.
 const (
 	proxyOriginalEscapedPathHeader = "X-Proxy-Original-Escaped-Path"
-	proxyOriginalRawQueryHeader   = "X-Proxy-Original-Raw-Query"
+	proxyOriginalRawQueryHeader    = "X-Proxy-Original-Raw-Query"
 )
 
 var clientIdentityHeaders = []string{

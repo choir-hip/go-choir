@@ -657,6 +657,7 @@ func (s *Store) buildCoSuperLifecycleEvent(now time.Time, assignment types.CoSup
 		Schema: types.CoSuperAssignmentSchemaV1, EventID: commandID + ":1",
 		OwnerID: assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
 		TrajectoryID: assignment.Binding.TrajectoryID, WorkItemID: assignment.Binding.AssignedWorkItemID,
+		RunID: assignment.BoundRunID, AgentID: assignment.Binding.AssignedAgentID,
 		Kind: kind, ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: seq,
 		CommandID: commandID, CommandDigest: digest, ArtifactRefs: artifactRefs, EvidenceRefs: evidenceRefs,
 		Reason: reason, CreatedAt: now,

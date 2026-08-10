@@ -4498,7 +4498,6 @@ func TestBearerTokenAuthStripsClientSuppliedScopes(t *testing.T) {
 	}
 }
 
-
 func TestProtectedAPIReverseProxyPreservesEscapedPathForBackendValidation(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {

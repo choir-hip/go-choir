@@ -266,6 +266,9 @@ func (s *Store) GetCoSuperCapsuleEvidence(ctx context.Context, ownerID, computer
 	reportObjects := map[string]objectgraph.Object{}
 	candidateObjects := map[string]objectgraph.Object{}
 	for _, obj := range objects {
+		if obj.Tombstone {
+			continue
+		}
 		switch obj.ObjectKind {
 		case ogKindTrajectory:
 			var v types.TrajectoryRecord
@@ -482,7 +485,7 @@ func (s *Store) GetCoSuperCapsuleEvidence(ctx context.Context, ownerID, computer
 		if eventErr != nil {
 			return CoSuperCapsuleEvidence{}, eventErr
 		}
-		if (event.RunID != "" && event.RunID != r.RunID) || (event.AgentID != "" && event.AgentID != r.AssignedAgentID) {
+		if event.RunID != r.RunID || event.AgentID != r.AssignedAgentID {
 			return CoSuperCapsuleEvidence{}, corruptEvidence("report event run or agent scope")
 		}
 		if len(r.ExecutionAttestations) > 0 {
@@ -552,6 +555,9 @@ func (s *Store) GetCoSuperCapsuleEvidence(ctx context.Context, ownerID, computer
 					sourceEvent, sourceErr := findReportEvent(robj.CanonicalID, sourceKind, srcA.Binding.AssignedWorkItemID)
 					if sourceErr != nil {
 						return CoSuperCapsuleEvidence{}, sourceErr
+					}
+					if sourceEvent.RunID != rr.RunID || sourceEvent.AgentID != rr.AssignedAgentID {
+						return CoSuperCapsuleEvidence{}, corruptEvidence("candidate source event run or agent scope")
 					}
 					source = reportJoin{rr, sourceEvent, robj.CanonicalID}
 					found = true

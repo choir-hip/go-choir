@@ -273,7 +273,7 @@ func capsuleEvidencePathCandidate(escapedPath string) bool {
 		return false
 	}
 	parts := strings.Split(strings.TrimPrefix(escapedPath, prefix), "/")
-	return len(parts) >= 2 && parts[1] == "capsule-evidence"
+	return len(parts) == 3 && parts[1] == "capsule-evidence"
 }
 
 func canonicalCapsuleEvidenceSegment(raw string) (string, bool) {
