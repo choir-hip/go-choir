@@ -268,8 +268,19 @@ not create a second evidence document or ledger; fail closed when optional old
 rows lack proof; preserve the stable-computer API-key guard; expose no raw
 capability, handle, socket, host path, secret, live executor inspection, or
 unsafe command/output body; and require fresh Linux probes for denial and
-overlay claims. Exact DTO/write/probe/auth/restart/rollback contracts remain
-under review. Effects remain OFF and action 3 remains partial.
+overlay claims. Source-aware consensus plus independent route/security reviews now freeze a
+two-gate correction. F1 reuses the existing event page and trajectory snapshot,
+adds only a strict assignment detail GET/CLI, and fate-shares runtime-derived
+grant, sanitized execution, and append-only fate attestations with existing
+Bind/RecordReport/SetDisposition commands. It must read one Store snapshot,
+allowlist every field, reject duplicates/ambiguous paths and queries, bound the
+whole response, and advertise fixed probe/Texture/RunAcceptance deficits. F2
+may begin only after F1 deployment and restart proof; it adds digest-pinned
+verifier-known Linux probes, existing Texture source-graph mapping/source-open,
+and a fail-closed RunAcceptance gate. A generic kernel assertion, second event
+page/ledger, raw PID/handle/path/command/output, or F1 isolation claim is
+forbidden. The full red ceremony and acceptance algorithm are recorded in the
+implementation inventory. Effects remain OFF and action 3 remains partial.
 
 ### Current 9 acceptance actions
 

@@ -2899,3 +2899,170 @@ revert route/CLI/enrichment readers and writers, retain already-written optional
 evidence as inert unknown fields/objects, do not destructively migrate or delete
 receipts, and keep effects OFF. Heresy delta so far is `discovered`: public
 capsule evidence is neither physically complete nor restart-durable.
+
+
+### Reviewed two-gate repair contract — 2026-08-10
+
+The problem checkpoint at `54ffd2a7` is accepted and docs CI
+`31342864830` passed. A source-aware consensus panel returned two usable
+convergent reviews and one timeout with no opinion; two additional independent
+route/security reviews challenged the proposed API shape. The result is
+`REVISE`, not permission to claim repair: one Definition may own the work, but
+two independently landable gates are required and F1 must remain explicitly
+incomplete until F2 real-Linux proof.
+
+The route is smaller than the initial conjecture. Existing
+`/api/trajectories/{T}/events` already owns pagination, reducer order, cursor
+expiry/replay, and watermark, while the trajectory snapshot owns assignment
+discovery. Adding a second capsule event page would duplicate that authority
+and still could not paginate mutable report bodies historically. The reviewed
+public addition is one exact point projection:
+
+```text
+GET /api/trajectories/{trajectory_id}/capsule-evidence/{assignment_id}?attempt=N
+choir lifecycle capsule-evidence <trajectory_id> <assignment_id> --attempt N
+```
+
+It reuses `read:runtime` and the deployed stable-ComputerID API-key guard; no
+new key scope or computer selector is introduced. The handler derives owner
+only from trusted authentication and computer only from the configured runtime,
+loads one serializable owner/computer ObjectGraph snapshot, and joins the exact
+trajectory/assignment/attempt within it. `EscapedPath` parsing must accept
+exactly the three canonical decoded segments, reject decoded slash/backslash,
+dot segments, trimming, malformed escape, extra/trailing components, and parse
+exactly one positive canonical decimal `attempt` query with no unknown key.
+Only absent or cross-scope route keys `(trajectory, assignment, attempt)`
+return uniform `404`. Optional missing grant, execution, fate, probe, or source
+fields return `200` with stable deficits and `evidence_complete=false`. A
+referenced report, candidate, or attestation that exists but fails exact scope
+or lineage makes the whole response corrupt/ambiguous and returns one
+non-oracular fail-closed error; it is never treated as optional. Method mismatch
+and response cardinality/encoded-size limits fail explicitly. The read path never opens the executor, `/run`,
+`InspectCapsuleRaw`, or a raw Store/object endpoint.
+
+The response schema is a manual allowlist, never JSON-marshaled Store structs.
+It contains current sanitized assignment identity/binding, **all** reports,
+candidates, and attestations in reducer-sequence then stable-ID order, expanded
+to sanitized projections, with exact report→candidate
+and implementation→verifier joins, grant policy, sanitized per-command
+execution attestations, append-only typed fate history, Texture source refs,
+`snapshot_cursor == watermark`, a server-derived versioned verifier contract,
+`evidence_complete`, and stable-sorted deficit enums. It excludes free-form
+summary/reason/notes, arbitrary evidence/output/mutation refs, raw execution
+refs, command/argv/env/stdin/stdout/stderr, capability/handle material, tokens,
+keys, sockets, host paths, and raw host/namespace PIDs. Duplicate/conflicting
+refs, identities, report/candidate joins, or attestation keys are errors, never
+first/last-wins. Old rows are readable only as incomplete and may never be
+retro-certified.
+
+#### F1 — durable evidence substrate and incomplete public projection
+
+F1 adds no table, ledger, service, object kind, or second cursor. Three optional
+runtime-authored DTO families ride existing authority objects and participate in
+existing command digests so equal replay is byte-equal and changed evidence
+conflicts:
+
+1. `CoSuperGrantPolicyAttestation` is derived after spawn only after the
+   runtime validates the returned signed capability's role, bound run,
+   capsule/target, and exact verb set against the compiled CoSuper policy. The
+   Store revalidates the canonical sorted verb set and digest. It is
+   fate-shared into the existing Bind conditional batch and retains a typed
+   spawn/active/grant acknowledgement joined to that exact Bind event and
+   reducer sequence, because Bind itself changes the capsule from unbound to
+   active. It contains schema/ref, role, exact sorted granted verbs, verb-set
+   and policy digests, declared network/filesystem/writable modes, bound run,
+   and safe timestamps/digests—never the handle or capability bytes.
+2. `CoSuperExecutionAttestation` is constructed while
+   `ResolveGrantedExecutionReceipts` already holds each validated receipt and
+   is fate-shared into the existing RecordReport batch. It contains the report
+   command identity/digest, exit code, bounded stdout/stderr/source/final/worktree
+   digests, granted/frozen status, occurred time, and safe content-addressed
+   attestation/ref joins, never command text, cwd, raw output, or raw handle.
+3. `CoSuperCapsuleFateStep` is append-only on the existing assignment row and
+   fate-shared with each SetCapsuleDisposition batch. It retains ordered
+   freeze-requested/frozen/revoke-requested/revoked transition identity,
+   reducer/event/command joins, intent/ack refs, safe subject digests, and typed
+   absence facts. Revoke must not overwrite freeze. The executor revocation
+   receipt must be extended only with the already-verified safe process/cgroup/
+   mount/state absence booleans needed to interpret `capsule_absent`.
+
+The Store validates exact assignment/run/capsule/report/command/candidate scope,
+attestation schema/ref/digest, order, uniqueness, and disposition-specific
+fields; model-authored fields are cleared and cannot supply evidence. A crash
+before the conditional commit produces a deterministic deficit, never a
+receipt-only partial success. The F1 detail route/CLI reads only the one Store
+snapshot, and must be byte-identical after Store reopen, service/runtime
+restart, and retained-computer restart/recovery with no executor or `/run`
+receipt available. It exposes existing logical lineage plus newly durable
+grant/execution/fate data. F1's verifier
+contract deliberately reports `isolation_probe_missing`,
+`texture_source_missing`, and `run_acceptance_gate_missing`; it cannot complete
+Linux isolation and effects remain OFF.
+
+#### F2 — fixed probes, existing Texture source graph, and acceptance gate
+
+F2 is gated on deployed F1 passing that whole-computer restart/recovery
+proof. It adds one versioned, in-repo, digest-pinned verifier-known probe bundle executed by the trusted runtime under
+the exact minted capsule grant and persisted through the F1 authority fields.
+The receipt says only which fixed probe/version ran and whether its typed
+expected and observed outcome digests match. It may not synthesize a generic
+“kernel attestation.” The final probe contract must cover safe evidence for
+user/PID/mount/net/UTS/IPC/cgroup namespace/process separation, cgroup-v2
+membership/limits, a fixed network-denial attempt, assignment-local overlay
+write/read plus cross-capsule miss and unchanged immutable source, exact granted
+and refused verbs, exec-after-freeze refusal, and revoke/destroy absence. It
+uses digest-only namespace identities and no raw PIDs or host paths. Each
+probe attestation names its existing carrier command and conditional batch:
+pre-bind spawn/grant/static probe facts ride Bind, execution/result probe facts
+ride RecordReport, and freeze/revoke/destroy facts ride SetDisposition. No
+probe-only write may create or advance evidence outside an existing lifecycle
+event/cursor. Probe scratch must be outside the canonical subject or provably
+deleted without changing it; exact broker `/proc` behavior requires Linux
+design validation.
+
+The authenticated report commit atomically places the sanitized evidence
+identity in a `CoagentPacketSource` on the durable return packet, not a new
+execution document or source API. The existing Texture source entity/ref graph
+is materialized only when Texture later authenticates and incorporates that
+packet. A later Texture revision must then actually transclude the exact source
+ref, and existing source-open must return the byte-identical sanitized evidence
+under owner/revision/ref scope.
+RunAcceptance gains an explicit fail-closed verifier contract/invariant: any
+missing/unknown/invalid grant, probe, execution, fate, lineage, or source
+transclusion is `blocked`; declarations and trace summaries cannot upgrade it.
+
+Acceptance uses existing events/snapshot plus one detail per discovered
+assignment: page events completely, fetch all details, then fetch the final
+trajectory snapshot last. PASS requires exact final assignment-key equality,
+each detail cursor/watermark equal to the final snapshot cursor, canonical
+assignment projection equality, complete gap-free event history, no deficits,
+and exact cross-assignment candidate/verifier joins; otherwise retry the whole
+GET-only set only to a bounded quiescent boundary, then STOP.
+
+#### Red ceremony
+
+- **Conjecture delta:** persisting only sanitized, runtime-derived grant,
+  execution, and fate facts inside existing assignment/report authority makes
+  those facts restart-openable; fixed probes and existing Texture source
+  transclusion can then turn declared isolation into admissible physical proof.
+- **Protected surfaces:** stable-computer/API-key routing, lifecycle command
+  digests and conditional ObjectGraph writes, capsule capability and receipt
+  binding, freeze/revoke/destroy, evidence/source graph, RunAcceptance, public
+  API/CLI, deployment identity.
+- **Admissible evidence:** focused Store replay/restart and auth tests; Linux
+  integration for the fixed probes and concurrent capsules; CI/SBOM; exact
+  deployed identity; authenticated public route/CLI parity; computer restart
+  byte-equivalence; Texture transclusion/source-open; cancellation and no-effect
+  proof. Local Darwin/stubs and source reasoning cannot prove Linux physics.
+- **Rollback:** revert additive readers/writers/routes/CLI/source/acceptance
+  gates, preserve any optional evidence fields as inert unknown retained
+  history, do not delete/migrate receipts, keep old rows incomplete and effects
+  OFF. F1 and F2 each need their own rollback commit/ref.
+- **Heresy delta:** `discovered`—public capsule effects and scratch receipts
+  were incomplete and not computer-restart durable; `introduced`—none yet;
+  `repaired`—none until fresh deployed F2 proof.
+
+F1 and F2 are separate landing loops. Do not start F2 capture before F1 Store
+validation/projection is deployed and restart-proved; do not let F1, a mode
+boolean, arbitrary shell narrative, or a runtime-authored generic assertion
+claim isolation.
