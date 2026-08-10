@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -105,9 +106,44 @@ func ComputeOpenCoSuperAssignmentDigest(req types.OpenCoSuperAssignmentRequest) 
 	return computeCoSuperCommandDigest(req)
 }
 
+func normalizeGrantAttestationForCommandDigest(att *types.CoSuperGrantPolicyAttestation) {
+	if att == nil {
+		return
+	}
+	att.Schema, att.AttestationRef = "", ""
+	att.AssignmentID, att.Attempt, att.OwnerID, att.ComputerID, att.TrajectoryID = "", 0, "", "", ""
+	att.RunID, att.CapsuleID, att.TargetCapsule = "", "", ""
+	att.NetworkMode, att.FilesystemMode, att.Writable = "", "", false
+	att.BindCommandID, att.BindEventID, att.ReducerSeq, att.RecordedAt = "", "", 0, time.Time{}
+}
+
+func normalizeExecutionAttestationForCommandDigest(att *types.CoSuperExecutionAttestation) {
+	att.Schema, att.AttestationRef = "", ""
+	att.AssignmentID, att.Attempt, att.OwnerID, att.ComputerID, att.TrajectoryID = "", 0, "", "", ""
+	att.RunID, att.CapsuleID, att.ReportID = "", "", ""
+	att.ReportCommandID, att.ReportEventID, att.ReducerSeq, att.RecordedAt = "", "", 0, time.Time{}
+}
+
+func normalizeFateStepForCommandDigest(step *types.CoSuperCapsuleFateStep) {
+	if step == nil {
+		return
+	}
+	step.Schema, step.StepRef = "", ""
+	step.AssignmentID, step.Attempt, step.OwnerID, step.ComputerID, step.TrajectoryID = "", 0, "", "", ""
+	step.RunID, step.CapsuleID, step.Disposition = "", "", ""
+	step.CommandID, step.EventID, step.ReducerSeq = "", "", 0
+	step.IntentRef, step.AckRef, step.AssignmentCapabilityDigest = "", "", ""
+	step.RecordedAt = time.Time{}
+}
+
 func ComputeBindCoSuperAssignmentDigest(req types.BindCoSuperAssignmentRequest) (string, error) {
 	capabilityDigest := DigestCoSuperOpaqueCapability(req.OpaqueCapability)
 	req.CommandDigest, req.OpaqueCapability = "", ""
+	if req.GrantPolicyAttestation != nil {
+		copy := *req.GrantPolicyAttestation
+		req.GrantPolicyAttestation = &copy
+	}
+	normalizeGrantAttestationForCommandDigest(req.GrantPolicyAttestation)
 	return computeCoSuperCommandDigest(struct {
 		Request          types.BindCoSuperAssignmentRequest `json:"request"`
 		CapabilityDigest string                             `json:"capability_digest"`
@@ -120,6 +156,7 @@ func normalizeCoSuperReportForDigest(report types.CoSuperAssignmentReport) types
 	report.RunID, report.AssignedAgentID = "", ""
 	report.Late, report.CertifiesOriginalSubject = false, false
 	report.CandidateSubjectDigest, report.CandidateID = "", ""
+	report.ExecutionAttestations = nil
 	report.CreatedAt = time.Time{}
 	return report
 }
@@ -128,6 +165,10 @@ func ComputeRecordCoSuperAssignmentReportDigest(req types.RecordCoSuperAssignmen
 	req.CommandDigest = ""
 	req.ExpectedLifecycleVersion = 0
 	req.Report = normalizeCoSuperReportForDigest(req.Report)
+	req.ExecutionAttestations = append([]types.CoSuperExecutionAttestation(nil), req.ExecutionAttestations...)
+	for i := range req.ExecutionAttestations {
+		normalizeExecutionAttestationForCommandDigest(&req.ExecutionAttestations[i])
+	}
 	return computeCoSuperCommandDigest(req)
 }
 
@@ -141,6 +182,11 @@ func ComputeCancelCoSuperAssignmentDigest(req types.CancelCoSuperAssignmentReque
 
 func ComputeSetCoSuperCapsuleDispositionDigest(req types.SetCoSuperCapsuleDispositionRequest) (string, error) {
 	req.CommandDigest = ""
+	if req.FateStep != nil {
+		copy := *req.FateStep
+		req.FateStep = &copy
+	}
+	normalizeFateStepForCommandDigest(req.FateStep)
 	return computeCoSuperCommandDigest(req)
 }
 
@@ -157,6 +203,187 @@ func requireCoSuperCommandDigest(got, want string, err error) error {
 	}
 	if strings.TrimSpace(got) != want {
 		return fmt.Errorf("co-super assignment: command digest mismatch: %w", ErrCoSuperAssignmentCommandConflict)
+	}
+	return nil
+}
+
+func coSuperCompiledVerbs() []string {
+	verbs := make([]string, 0, len(capsule.RoleVerbSets[capsule.RoleCoSuper]))
+	for verb, allowed := range capsule.RoleVerbSets[capsule.RoleCoSuper] {
+		if allowed {
+			verbs = append(verbs, verb)
+		}
+	}
+	slices.Sort(verbs)
+	return verbs
+}
+
+func coSuperVerbSetDigest(verbs []string) string {
+	payload, _ := json.Marshal(struct {
+		Schema string   `json:"schema"`
+		Role   string   `json:"role"`
+		Verbs  []string `json:"verbs"`
+	}{"choir.co_super_verb_set/v1", string(capsule.RoleCoSuper), verbs})
+	return objectgraph.SHA256(payload)
+}
+
+func coSuperPolicyDigest(role string, verbs []string, networkMode, filesystemMode string, writable bool) string {
+	payload, _ := json.Marshal(struct {
+		Schema         string   `json:"schema"`
+		Role           string   `json:"role"`
+		Verbs          []string `json:"verbs"`
+		NetworkMode    string   `json:"network_mode"`
+		FilesystemMode string   `json:"filesystem_mode"`
+		Writable       bool     `json:"writable"`
+	}{"choir.co_super_grant_policy/v1", role, verbs, networkMode, filesystemMode, writable})
+	return objectgraph.SHA256(payload)
+}
+
+func ComputeCoSuperGrantVerbSetDigest(verbs []string) string { return coSuperVerbSetDigest(verbs) }
+func ComputeCoSuperGrantPolicyDigest(role string, verbs []string, networkMode, filesystemMode string, writable bool) string {
+	return coSuperPolicyDigest(role, verbs, networkMode, filesystemMode, writable)
+}
+
+func grantAttestationRef(att types.CoSuperGrantPolicyAttestation) (string, error) {
+	att.AttestationRef = ""
+	payload, err := json.Marshal(att)
+	if err != nil {
+		return "", err
+	}
+	return "co-super-grant:sha256:" + strings.TrimPrefix(objectgraph.SHA256(payload), "sha256:"), nil
+}
+
+func executionAttestationRef(att types.CoSuperExecutionAttestation) (string, error) {
+	att.AttestationRef = ""
+	payload, err := json.Marshal(att)
+	if err != nil {
+		return "", err
+	}
+	return "co-super-execution:sha256:" + strings.TrimPrefix(objectgraph.SHA256(payload), "sha256:"), nil
+}
+
+func fateStepRef(step types.CoSuperCapsuleFateStep) (string, error) {
+	step.StepRef = ""
+	payload, err := json.Marshal(step)
+	if err != nil {
+		return "", err
+	}
+	return "co-super-fate:sha256:" + strings.TrimPrefix(objectgraph.SHA256(payload), "sha256:"), nil
+}
+
+func validCanonicalTime(value time.Time) bool { return !value.IsZero() && value.Location() == time.UTC }
+
+func validateGrantPolicyAttestation(att types.CoSuperGrantPolicyAttestation, assignment types.CoSuperAssignment) error {
+	verbs := coSuperCompiledVerbs()
+	if att.Schema != types.CoSuperGrantPolicyAttestationSchemaV1 || att.AssignmentID != assignment.AssignmentID || att.Attempt != assignment.Binding.Attempt ||
+		att.OwnerID != assignment.Binding.OwnerID || att.ComputerID != assignment.Binding.ComputerID || att.TrajectoryID != assignment.Binding.TrajectoryID ||
+		att.RunID != assignment.BoundRunID || att.CapsuleID != assignment.Binding.CapsuleID || att.TargetCapsule != assignment.Binding.CapsuleID ||
+		att.Role != string(capsule.RoleCoSuper) || !slices.Equal(att.GrantedVerbs, verbs) || att.VerbSetDigest != coSuperVerbSetDigest(verbs) ||
+		att.PolicyDigest != coSuperPolicyDigest(att.Role, verbs, assignment.Binding.NetworkMode, assignment.Binding.FilesystemMode, assignment.Binding.Writable) ||
+		!types.ValidSHA256Digest(att.SignedCapabilityDigest) || att.NetworkMode != assignment.Binding.NetworkMode ||
+		att.FilesystemMode != assignment.Binding.FilesystemMode || att.Writable != assignment.Binding.Writable ||
+		!att.SpawnAcknowledged || !att.ActiveAcknowledged || !att.GrantAcknowledged || !validCanonicalTime(att.SpawnedAt) || !validCanonicalTime(att.GrantedAt) || att.GrantedAt.Before(att.SpawnedAt) ||
+		strings.TrimSpace(att.BindCommandID) == "" || att.BindEventID != att.BindCommandID+":1" || att.ReducerSeq <= 0 || !validCanonicalTime(att.RecordedAt) {
+		return fmt.Errorf("co-super assignment: invalid runtime grant policy attestation: %w", ErrCoSuperAssignmentInvalid)
+	}
+	want, err := grantAttestationRef(att)
+	if err != nil || att.AttestationRef != want {
+		return fmt.Errorf("co-super assignment: grant attestation digest mismatch: %w", ErrCoSuperAssignmentInvalid)
+	}
+	return nil
+}
+
+func validTypedDigestRef(value, prefix string) bool {
+	return strings.HasPrefix(value, prefix) && types.ValidSHA256Digest(strings.TrimPrefix(value, prefix))
+}
+
+func validateExecutionAttestations(atts []types.CoSuperExecutionAttestation, report types.CoSuperAssignmentReport, assignment types.CoSuperAssignment) error {
+	if len(atts) != len(report.Commands) || len(atts) != len(report.ExecutorReceiptRefs) {
+		return fmt.Errorf("co-super assignment: exact execution attestation cardinality required: %w", ErrCoSuperAssignmentInvalid)
+	}
+	seen := map[string]bool{}
+	for i, att := range atts {
+		command := report.Commands[i]
+		if att.Schema != types.CoSuperExecutionAttestationSchemaV1 || att.AssignmentID != assignment.AssignmentID || att.Attempt != assignment.Binding.Attempt ||
+			att.OwnerID != assignment.Binding.OwnerID || att.ComputerID != assignment.Binding.ComputerID || att.TrajectoryID != assignment.Binding.TrajectoryID ||
+			att.RunID != assignment.BoundRunID || att.CapsuleID != assignment.Binding.CapsuleID || att.ReportID != report.ReportID ||
+			att.CommandID != command.CommandID || att.CommandDigest != command.CommandDigest || att.ExitCode != command.ExitCode ||
+			att.GrantedReceiptRef != report.ExecutorReceiptRefs[i] || !validTypedDigestRef(att.GrantedReceiptRef, "capsule-granted-exec:") || !att.Granted || !att.Frozen ||
+			!types.ValidSHA256Digest(att.StdoutDigest) || !types.ValidSHA256Digest(att.StderrDigest) ||
+			att.SourceSubjectDigest != assignment.Binding.SubjectDigest || att.FinalSubjectDigest != report.ObservedSubjectDigest ||
+			att.WorktreeDigest != att.FinalSubjectDigest || !validCanonicalTime(att.OccurredAt) || strings.TrimSpace(att.ReportCommandID) == "" ||
+			att.ReportEventID != att.ReportCommandID+":1" || att.ReducerSeq <= 0 || !validCanonicalTime(att.RecordedAt) || seen[att.AttestationRef] {
+			return fmt.Errorf("co-super assignment: invalid runtime execution attestation: %w", ErrCoSuperAssignmentInvalid)
+		}
+		want, err := executionAttestationRef(att)
+		if err != nil || att.AttestationRef != want {
+			return fmt.Errorf("co-super assignment: execution attestation digest mismatch: %w", ErrCoSuperAssignmentInvalid)
+		}
+		seen[att.AttestationRef] = true
+	}
+	return nil
+}
+
+func validateFateHistory(history []types.CoSuperCapsuleFateStep, assignment types.CoSuperAssignment) error {
+	seen := map[string]bool{}
+	lastSeq := int64(0)
+	lastDisposition := types.CoSuperCapsuleUnbound
+	if assignment.GrantPolicyAttestation != nil {
+		lastDisposition = types.CoSuperCapsuleActive
+	} else if len(history) > 0 {
+		switch history[0].Disposition {
+		case types.CoSuperCapsuleFreezeRequested:
+			lastDisposition = types.CoSuperCapsuleActive
+		case types.CoSuperCapsuleFrozen:
+			lastDisposition = types.CoSuperCapsuleFreezeRequested
+		case types.CoSuperCapsuleRevokeRequested:
+			if assignment.BoundRunID != "" {
+				lastDisposition = types.CoSuperCapsuleActive
+			}
+		case types.CoSuperCapsuleRevoked:
+			lastDisposition = types.CoSuperCapsuleRevokeRequested
+		}
+	}
+	var previous *types.CoSuperCapsuleFateStep
+	for i := range history {
+		step := history[i]
+		if step.Schema != types.CoSuperCapsuleFateStepSchemaV1 || step.AssignmentID != assignment.AssignmentID || step.Attempt != assignment.Binding.Attempt ||
+			step.OwnerID != assignment.Binding.OwnerID || step.ComputerID != assignment.Binding.ComputerID || step.TrajectoryID != assignment.Binding.TrajectoryID ||
+			step.RunID != assignment.BoundRunID || step.CapsuleID != assignment.Binding.CapsuleID || step.ReducerSeq <= lastSeq || step.EventID != step.CommandID+":1" ||
+			strings.TrimSpace(step.CommandID) == "" || strings.TrimSpace(step.IntentRef) == "" || step.AssignmentCapabilityDigest != assignment.Binding.CapabilityDigest ||
+			!validCanonicalTime(step.OccurredAt) || !validCanonicalTime(step.RecordedAt) || seen[step.StepRef] || !validCoSuperCapsuleTransition(lastDisposition, step.Disposition, step.IntentRef, step.AckRef) {
+			return fmt.Errorf("co-super assignment: invalid append-only capsule fate history: %w", ErrCoSuperAssignmentInvalid)
+		}
+		switch step.Disposition {
+		case types.CoSuperCapsuleFreezeRequested, types.CoSuperCapsuleRevokeRequested:
+			prefix := "capsule-freeze-intent:"
+			if step.Disposition == types.CoSuperCapsuleRevokeRequested {
+				prefix = "capsule-revoke-intent:"
+			}
+			if !validTypedDigestRef(step.IntentRef, prefix) || step.SourceSubjectDigest != "" || step.FinalSubjectDigest != "" || step.CapsuleAbsent {
+				return ErrCoSuperAssignmentInvalid
+			}
+		case types.CoSuperCapsuleFrozen:
+			if previous == nil || previous.Disposition != types.CoSuperCapsuleFreezeRequested || previous.IntentRef != step.IntentRef || !validTypedDigestRef(step.IntentRef, "capsule-freeze-intent:") || !validTypedDigestRef(step.AckRef, "capsule-fate:") || !types.ValidSHA256Digest(step.SourceSubjectDigest) || !types.ValidSHA256Digest(step.FinalSubjectDigest) || step.CapsuleAbsent {
+				return ErrCoSuperAssignmentInvalid
+			}
+		case types.CoSuperCapsuleRevoked:
+			if previous == nil || previous.Disposition != types.CoSuperCapsuleRevokeRequested || previous.IntentRef != step.IntentRef || !validTypedDigestRef(step.IntentRef, "capsule-revoke-intent:") || !validTypedDigestRef(step.AckRef, "capsule-revoke:") || step.SourceSubjectDigest != "" || step.FinalSubjectDigest != "" || !step.CapsuleAbsent {
+				return ErrCoSuperAssignmentInvalid
+			}
+		}
+		want, err := fateStepRef(step)
+		if err != nil || step.StepRef != want {
+			return fmt.Errorf("co-super assignment: fate step digest mismatch: %w", ErrCoSuperAssignmentInvalid)
+		}
+		seen[step.StepRef], lastSeq, lastDisposition = true, step.ReducerSeq, step.Disposition
+		previous = &history[i]
+	}
+	if len(history) > 0 {
+		last := history[len(history)-1]
+		if lastDisposition != assignment.CapsuleDisposition || last.IntentRef != assignment.CapsuleIntentRef || last.AckRef != assignment.CapsuleAckRef {
+			return fmt.Errorf("co-super assignment: fate history/current projection mismatch: %w", ErrCoSuperAssignmentInvalid)
+		}
 	}
 	return nil
 }
@@ -670,7 +897,18 @@ func (s *Store) getCoSuperAssignmentObject(ctx context.Context, ownerID, compute
 		assignment.AssignmentID != strings.TrimSpace(assignmentID) || assignment.Binding.Attempt != attempt {
 		return objectgraph.Object{}, types.CoSuperAssignment{}, ErrNotFound
 	}
-	return obj, assignment, assignment.Validate()
+	if err := assignment.Validate(); err != nil {
+		return objectgraph.Object{}, types.CoSuperAssignment{}, err
+	}
+	if assignment.GrantPolicyAttestation != nil {
+		if err := validateGrantPolicyAttestation(*assignment.GrantPolicyAttestation, assignment); err != nil {
+			return objectgraph.Object{}, types.CoSuperAssignment{}, err
+		}
+	}
+	if err := validateFateHistory(assignment.CapsuleFateHistory, assignment); err != nil {
+		return objectgraph.Object{}, types.CoSuperAssignment{}, err
+	}
+	return obj, assignment, nil
 }
 
 func (s *Store) GetCoSuperAssignment(ctx context.Context, ownerID, computerID, assignmentID string, attempt uint64) (types.CoSuperAssignment, error) {
@@ -831,6 +1069,24 @@ func (s *Store) BindCoSuperAssignment(ctx context.Context, req types.BindCoSuper
 	assignment.CapsuleDisposition = types.CoSuperCapsuleActive
 	assignment.LifecycleVersion++
 	assignment.UpdatedAt = now
+	if req.GrantPolicyAttestation != nil {
+		att := *req.GrantPolicyAttestation
+		att.Schema = types.CoSuperGrantPolicyAttestationSchemaV1
+		att.AssignmentID, att.Attempt = assignment.AssignmentID, assignment.Binding.Attempt
+		att.OwnerID, att.ComputerID, att.TrajectoryID = assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID
+		att.RunID, att.CapsuleID, att.TargetCapsule = assignment.BoundRunID, assignment.Binding.CapsuleID, assignment.Binding.CapsuleID
+		att.NetworkMode, att.FilesystemMode, att.Writable = assignment.Binding.NetworkMode, assignment.Binding.FilesystemMode, assignment.Binding.Writable
+		att.BindCommandID, att.BindEventID, att.ReducerSeq, att.RecordedAt = req.CommandID, req.CommandID+":1", transition.seq, now
+		att.AttestationRef = ""
+		att.AttestationRef, err = grantAttestationRef(att)
+		if err != nil {
+			return types.CoSuperAssignmentCommandResult{}, err
+		}
+		assignment.GrantPolicyAttestation = &att
+		if err := validateGrantPolicyAttestation(att, assignment); err != nil {
+			return types.CoSuperAssignmentCommandResult{}, err
+		}
+	}
 	updatedObj, err := lifecycleObject(ogKindCoSuperAssignment, req.OwnerID, req.ComputerID,
 		coSuperAttemptKey(req.AssignmentID, req.Attempt), assignment, coSuperAssignmentMetadata(assignment), assignmentObj.CreatedAt, now)
 	if err != nil {
@@ -1113,6 +1369,8 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
 	report := req.Report
+	// Attestations embedded in model-authored report JSON are never evidence.
+	report.ExecutionAttestations = nil
 	report.Schema, report.AssignmentID, report.Attempt = types.CoSuperAssignmentSchemaV1, assignment.AssignmentID, assignment.Binding.Attempt
 	report.OwnerID, report.ComputerID, report.TrajectoryID = assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID
 	report.RunID, report.AssignedAgentID = assignment.BoundRunID, assignment.Binding.AssignedAgentID
@@ -1171,6 +1429,35 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 	// Certification is reducer-derived. Any authored value is ignored.
 	report.CertifiesOriginalSubject = assignment.Binding.Kind == types.CoSuperAssignmentVerification && report.Verdict == types.CoSuperVerdictPass &&
 		report.Result == types.CoSuperResultCompleted && !report.Late && !changed
+	if len(req.ExecutionAttestations) > 0 && (assignment.GrantPolicyAttestation == nil || report.Late || report.Result == types.CoSuperResultPartial) {
+		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("co-super assignment: execution attestations cannot retro-certify old, late, or partial evidence: %w", ErrCoSuperAssignmentInvalid)
+	}
+	if assignment.GrantPolicyAttestation != nil && !report.Late && report.Result != types.CoSuperResultPartial {
+		commandCount := len(report.Commands)
+		if (commandCount == 0 && (len(report.ExecutorReceiptRefs) != 0 || len(req.ExecutionAttestations) != 0)) ||
+			(commandCount > 0 && (len(report.ExecutorReceiptRefs) != commandCount || len(req.ExecutionAttestations) != commandCount)) {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("co-super assignment: timely grant-attested command evidence requires exact receipt and attestation cardinality: %w", ErrCoSuperAssignmentInvalid)
+		}
+	}
+	if len(req.ExecutionAttestations) > 0 {
+		report.ExecutionAttestations = append([]types.CoSuperExecutionAttestation(nil), req.ExecutionAttestations...)
+		for i := range report.ExecutionAttestations {
+			att := &report.ExecutionAttestations[i]
+			att.Schema = types.CoSuperExecutionAttestationSchemaV1
+			att.AssignmentID, att.Attempt = assignment.AssignmentID, assignment.Binding.Attempt
+			att.OwnerID, att.ComputerID, att.TrajectoryID = assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID
+			att.RunID, att.CapsuleID, att.ReportID = assignment.BoundRunID, assignment.Binding.CapsuleID, report.ReportID
+			att.ReportCommandID, att.ReportEventID, att.ReducerSeq, att.RecordedAt = req.CommandID, req.CommandID+":1", transition.seq, now
+			att.AttestationRef = ""
+			att.AttestationRef, err = executionAttestationRef(*att)
+			if err != nil {
+				return types.CoSuperAssignmentCommandResult{}, err
+			}
+		}
+		if err := validateExecutionAttestations(report.ExecutionAttestations, report, assignment); err != nil {
+			return types.CoSuperAssignmentCommandResult{}, err
+		}
+	}
 	if err := report.ValidateAgainst(assignment); err != nil {
 		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("%w: %v", ErrCoSuperAssignmentInvalid, err)
 	}
@@ -1399,6 +1686,9 @@ func (s *Store) SetCoSuperCapsuleDisposition(ctx context.Context, req types.SetC
 	if (req.Disposition == types.CoSuperCapsuleFrozen || req.Disposition == types.CoSuperCapsuleRevoked) && req.IntentRef != assignment.CapsuleIntentRef {
 		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
 	}
+	if (assignment.GrantPolicyAttestation != nil || len(assignment.CapsuleFateHistory) > 0) && req.FateStep == nil {
+		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("co-super assignment: fate-attested assignment requires one fate step per transition: %w", ErrCoSuperAssignmentInvalid)
+	}
 	if _, intentErr := s.GetLifecycleCancellationIntent(ctx, req.OwnerID, req.ComputerID, assignment.Binding.TrajectoryID); intentErr == nil {
 		if req.Disposition != types.CoSuperCapsuleRevokeRequested && req.Disposition != types.CoSuperCapsuleRevoked {
 			return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
@@ -1418,7 +1708,29 @@ func (s *Store) SetCoSuperCapsuleDisposition(ctx context.Context, req types.SetC
 	assignment.CapsuleDisposition, assignment.CapsuleIntentRef, assignment.CapsuleAckRef = req.Disposition, req.IntentRef, req.AckRef
 	assignment.LifecycleVersion++
 	assignment.UpdatedAt = now
+	if req.FateStep != nil {
+		step := *req.FateStep
+		step.Schema = types.CoSuperCapsuleFateStepSchemaV1
+		step.AssignmentID, step.Attempt = assignment.AssignmentID, assignment.Binding.Attempt
+		step.OwnerID, step.ComputerID, step.TrajectoryID = assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID
+		step.RunID, step.CapsuleID, step.Disposition = assignment.BoundRunID, assignment.Binding.CapsuleID, req.Disposition
+		step.CommandID, step.EventID, step.ReducerSeq = req.CommandID, req.CommandID+":1", transition.seq
+		step.IntentRef, step.AckRef, step.AssignmentCapabilityDigest = req.IntentRef, req.AckRef, assignment.Binding.CapabilityDigest
+		if step.OccurredAt.IsZero() {
+			step.OccurredAt = now
+		}
+		step.RecordedAt = now
+		step.StepRef = ""
+		step.StepRef, err = fateStepRef(step)
+		if err != nil {
+			return types.CoSuperAssignmentCommandResult{}, err
+		}
+		assignment.CapsuleFateHistory = append(append([]types.CoSuperCapsuleFateStep(nil), assignment.CapsuleFateHistory...), step)
+	}
 	if err := assignment.Validate(); err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	if err := validateFateHistory(assignment.CapsuleFateHistory, assignment); err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
 	updatedObj, err := lifecycleObject(ogKindCoSuperAssignment, req.OwnerID, req.ComputerID,

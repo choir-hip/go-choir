@@ -1163,3 +1163,31 @@ func TestSelfDevelopmentModeCLIUsesExplicitComputerAndCASBody(t *testing.T) {
 		t.Fatalf("stdout=%s", stdout.String())
 	}
 }
+
+func TestLifecycleCapsuleEvidenceEscapesRouteAndPreservesJSON(t *testing.T) {
+	body := `{"schema":"choir.co_super_capsule_evidence/v1","assignment":{"assignment_id":"assignment one","attempt":3},"reports":[],"candidates":[],"execution_attestations":[],"capsule_fate_history":[],"texture_source_refs":[],"snapshot_cursor":7,"watermark":7,"verifier_contract":{"schema":"choir.co_super_capsule_evidence_verifier/v1","version":"f1-incomplete","physical_isolation_claim":false,"effects_enabled":false},"evidence_complete":false,"deficits":["isolation_probe_missing","run_acceptance_gate_missing","texture_source_missing"]}`
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.EscapedPath() != "/api/trajectories/traj%25%20one/capsule-evidence/assignment%20one" || r.URL.RawQuery != "attempt=3" {
+			t.Errorf("request=%s %s?%s", r.Method, r.URL.EscapedPath(), r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, body)
+	}))
+	defer stub.Close()
+	var out, errOut bytes.Buffer
+	code := run([]string{"lifecycle", "capsule-evidence", "--host=" + stub.URL, "--attempt=3", "traj% one", "assignment one"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, errOut.String())
+	}
+	var got, want any
+	if json.Unmarshal(out.Bytes(), &got) != nil || json.Unmarshal([]byte(body), &want) != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("json parity got=%s", out.String())
+	}
+}
+
+func TestLifecycleCapsuleEvidenceRequiresPositiveAttempt(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := run([]string{"lifecycle", "capsule-evidence", "trajectory", "assignment"}, &out, &errOut); code != 2 || !strings.Contains(errOut.String(), "positive --attempt") {
+		t.Fatalf("code=%d stderr=%s", code, errOut.String())
+	}
+}

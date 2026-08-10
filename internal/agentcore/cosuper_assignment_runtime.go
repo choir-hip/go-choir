@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -259,7 +260,11 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		if receiptErr != nil {
 			return fmt.Errorf("%w (persist structured pre-bind revoke acknowledgement: %v)", cause, receiptErr)
 		}
-		acked, fateErr := rt.store.SetCoSuperCapsuleDisposition(context.Background(), coSuperFateRequest(requested.Assignment, types.CoSuperCapsuleRevoked, intent, receipt.ReceiptRef))
+		fateAck, fateAckErr := coSuperFateAckRequest(requested.Assignment, types.CoSuperCapsuleRevoked, intent, receipt.ReceiptRef, "", "", receipt.OccurredAt, receipt.CapsuleAbsent)
+		if fateAckErr != nil {
+			return fmt.Errorf("%w (invalid revoke receipt occurred_at: %v)", cause, fateAckErr)
+		}
+		acked, fateErr := rt.store.SetCoSuperCapsuleDisposition(context.Background(), fateAck)
 		if fateErr != nil {
 			return fmt.Errorf("%w (persist pre-bind capsule revoke acknowledgement: %v)", cause, fateErr)
 		}
@@ -274,8 +279,42 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	if created.ID != capsuleID || created.State != capsule.StateActive {
 		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("assigned capsule acknowledgement mismatch"))
 	}
-	if _, err := rt.capsuleExecutor.MintCapabilityHandle(runID, capsule.RoleCoSuper, capsuleID, opaque, 24*time.Hour); err != nil {
+	spawnedAt := time.Now().UTC()
+	capability, err := rt.capsuleExecutor.MintCapabilityHandle(runID, capsule.RoleCoSuper, capsuleID, opaque, 24*time.Hour)
+	grantedAt := time.Now().UTC()
+	if err != nil {
 		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("mint exact assignment capability: %w", err))
+	}
+	compiledVerbs := make([]string, 0, len(capsule.RoleVerbSets[capsule.RoleCoSuper]))
+	for verb, allowed := range capsule.RoleVerbSets[capsule.RoleCoSuper] {
+		if allowed {
+			compiledVerbs = append(compiledVerbs, verb)
+		}
+	}
+	slices.Sort(compiledVerbs)
+	actualVerbs := make([]string, 0, len(capability.Verbs))
+	for verb, allowed := range capability.Verbs {
+		if !allowed {
+			return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("minted assignment capability contains a disabled verb"))
+		}
+		actualVerbs = append(actualVerbs, verb)
+	}
+	slices.Sort(actualVerbs)
+	if capability.AgentRole != capsule.RoleCoSuper || capability.AgentRunID != runID || capability.CapsuleID != capsuleID || capability.TargetCapsule != capsuleID ||
+		capability.Handle != opaque || !slices.Equal(actualVerbs, compiledVerbs) || len(capability.ExternalAccess) != 0 || strings.TrimSpace(capability.KeyID) == "" ||
+		len(capability.Signature) == 0 || !capability.ExpiresAt.After(grantedAt) || capability.ExpiresAt.After(grantedAt.Add(24*time.Hour+time.Second)) {
+		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("minted assignment capability acknowledgement mismatch"))
+	}
+	capabilityBytes, err := json.Marshal(capability)
+	if err != nil {
+		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("digest minted assignment capability: %w", err))
+	}
+	grantAttestation := &types.CoSuperGrantPolicyAttestation{
+		Role: string(capability.AgentRole), GrantedVerbs: actualVerbs,
+		VerbSetDigest:          store.ComputeCoSuperGrantVerbSetDigest(actualVerbs),
+		PolicyDigest:           store.ComputeCoSuperGrantPolicyDigest(string(capability.AgentRole), actualVerbs, binding.NetworkMode, binding.FilesystemMode, binding.Writable),
+		SignedCapabilityDigest: objectgraph.SHA256(capabilityBytes), SpawnAcknowledged: true, ActiveAcknowledged: true, GrantAcknowledged: true,
+		SpawnedAt: spawnedAt, GrantedAt: grantedAt,
 	}
 	run := types.RunRecord{
 		RunID: runID, AgentID: agentID, ChannelID: agentID, RequestedByRunID: parent.RunID, TrajectoryID: trajectoryID,
@@ -296,7 +335,7 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	bind := types.BindCoSuperAssignmentRequest{
 		CommandID: "co-super-bind:" + assignmentID + fmt.Sprintf(":%d", attempt), OwnerID: ownerID, ComputerID: computerID,
 		AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: opened.Assignment.LifecycleVersion,
-		RunID: runID, Run: run, OpaqueCapability: opaque, CapsuleID: capsuleID,
+		RunID: runID, Run: run, OpaqueCapability: opaque, CapsuleID: capsuleID, GrantPolicyAttestation: grantAttestation,
 	}
 	bind.CommandDigest, err = store.ComputeBindCoSuperAssignmentDigest(bind)
 	if err != nil {

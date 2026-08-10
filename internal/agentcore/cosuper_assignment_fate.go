@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -34,8 +35,31 @@ func coSuperFateRequest(assignment types.CoSuperAssignment, disposition types.Co
 		ExpectedLifecycleVersion: assignment.LifecycleVersion, Disposition: disposition,
 		IntentRef: intentRef, AckRef: ackRef,
 	}
+	if assignment.GrantPolicyAttestation != nil || len(assignment.CapsuleFateHistory) > 0 {
+		req.FateStep = &types.CoSuperCapsuleFateStep{}
+	}
 	req.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(req)
 	return req
+}
+
+func coSuperFateAckRequest(assignment types.CoSuperAssignment, disposition types.CoSuperCapsuleDisposition, intentRef, ackRef, sourceDigest, finalDigest, occurredAt string, capsuleAbsent bool) (types.SetCoSuperCapsuleDispositionRequest, error) {
+	req := coSuperFateRequest(assignment, disposition, intentRef, ackRef)
+	if req.FateStep == nil {
+		return req, nil
+	}
+	req.FateStep.SourceSubjectDigest = strings.TrimSpace(sourceDigest)
+	req.FateStep.FinalSubjectDigest = strings.TrimSpace(finalDigest)
+	req.FateStep.CapsuleAbsent = capsuleAbsent
+	occurredAt = strings.TrimSpace(occurredAt)
+	if occurredAt != "" {
+		parsed, err := time.Parse(time.RFC3339Nano, occurredAt)
+		if err != nil {
+			return types.SetCoSuperCapsuleDispositionRequest{}, fmt.Errorf("assignment command receipt occurred_at is invalid")
+		}
+		req.FateStep.OccurredAt = parsed.UTC()
+	}
+	req.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(req)
+	return req, nil
 }
 
 func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.CoSuperAssignment, reason string) (types.CoSuperAssignment, error) {
@@ -79,7 +103,11 @@ func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.C
 		return assignment, fmt.Errorf("persist exact structured capsule revoke acknowledgement: %w", receiptErr)
 	}
 	ackRef := revocationReceipt.ReceiptRef
-	acked, err := rt.store.SetCoSuperCapsuleDisposition(ctx, coSuperFateRequest(assignment, types.CoSuperCapsuleRevoked, intentRef, ackRef))
+	fateAck, fateAckErr := coSuperFateAckRequest(assignment, types.CoSuperCapsuleRevoked, intentRef, ackRef, "", "", revocationReceipt.OccurredAt, revocationReceipt.CapsuleAbsent)
+	if fateAckErr != nil {
+		return assignment, fmt.Errorf("invalid revoke receipt occurred_at: %w", fateAckErr)
+	}
+	acked, err := rt.store.SetCoSuperCapsuleDisposition(ctx, fateAck)
 	if err != nil {
 		return assignment, err
 	}
@@ -311,7 +339,11 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 				if receiptErr != nil {
 					return receiptErr
 				}
-				acked, fateErr := rt.store.SetCoSuperCapsuleDisposition(ctx, coSuperFateRequest(assignment, types.CoSuperCapsuleRevoked, intent, receipt.ReceiptRef))
+				fateAck, fateAckErr := coSuperFateAckRequest(assignment, types.CoSuperCapsuleRevoked, intent, receipt.ReceiptRef, "", "", receipt.OccurredAt, receipt.CapsuleAbsent)
+				if fateAckErr != nil {
+					return fmt.Errorf("invalid revoke receipt occurred_at: %w", fateAckErr)
+				}
+				acked, fateErr := rt.store.SetCoSuperCapsuleDisposition(ctx, fateAck)
 				if fateErr != nil {
 					return fateErr
 				}
@@ -525,7 +557,11 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("durable typed executor freeze receipt unavailable: %w", receiptErr)
 		}
 		ack := freezeReceipt.ReceiptRef
-		frozen, err := rt.store.SetCoSuperCapsuleDisposition(ctx, coSuperFateRequest(assignment, types.CoSuperCapsuleFrozen, intent, ack))
+		fateAck, fateAckErr := coSuperFateAckRequest(assignment, types.CoSuperCapsuleFrozen, intent, ack, "sha256:"+strings.TrimPrefix(freezeReceipt.SourceSubjectDigest, "sha256:"), "sha256:"+strings.TrimPrefix(freezeReceipt.FinalSubjectDigest, "sha256:"), freezeReceipt.OccurredAt, false)
+		if fateAckErr != nil {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("invalid freeze receipt occurred_at: %w", fateAckErr)
+		}
+		frozen, err := rt.store.SetCoSuperCapsuleDisposition(ctx, fateAck)
 		if err != nil {
 			return types.CoSuperAssignmentCommandResult{}, err
 		}
@@ -628,6 +664,23 @@ func (rt *Runtime) bindLateAssignmentExecutionReceipts(assignment types.CoSuperA
 	return report, nil
 }
 
+func coSuperExecutionAttestationFromReceipt(assignment types.CoSuperAssignment, reportID string, command types.CoSuperRecordedCommand, receipt capsule.ExecutionReceipt) (types.CoSuperExecutionAttestation, error) {
+	if receipt.AgentRunID != assignment.BoundRunID || receipt.CapsuleID != assignment.Binding.CapsuleID || objectgraph.SHA256([]byte(receipt.Command)) != command.CommandDigest ||
+		"sha256:"+strings.TrimPrefix(receipt.SourceTreeDigest, "sha256:") != assignment.Binding.SubjectDigest || strings.TrimSpace(receipt.GrantedReceiptRef) == "" {
+		return types.CoSuperExecutionAttestation{}, fmt.Errorf("assignment granted receipt scope is invalid")
+	}
+	occurredAt, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(receipt.OccurredAt))
+	if err != nil {
+		return types.CoSuperExecutionAttestation{}, fmt.Errorf("assignment command receipt occurred_at is invalid")
+	}
+	return types.CoSuperExecutionAttestation{
+		GrantedReceiptRef: receipt.GrantedReceiptRef, CommandID: command.CommandID, CommandDigest: command.CommandDigest,
+		ExitCode: receipt.ExitCode, StdoutDigest: "sha256:" + strings.TrimPrefix(receipt.StdoutDigest, "sha256:"), StderrDigest: "sha256:" + strings.TrimPrefix(receipt.StderrDigest, "sha256:"),
+		SourceSubjectDigest: "sha256:" + strings.TrimPrefix(receipt.SourceTreeDigest, "sha256:"), FinalSubjectDigest: "sha256:" + strings.TrimPrefix(receipt.WorktreeDigest, "sha256:"), WorktreeDigest: "sha256:" + strings.TrimPrefix(receipt.WorktreeDigest, "sha256:"),
+		Granted: true, Frozen: true, OccurredAt: occurredAt.UTC(), ReportID: reportID,
+	}, nil
+}
+
 func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, assignment types.CoSuperAssignment, handle string, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentReport, error) {
 	refs := make([]string, 0, len(report.Commands))
 	for _, command := range report.Commands {
@@ -646,7 +699,15 @@ func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, as
 			return report, fmt.Errorf("assignment command evidence does not bind unique exact final subject")
 		}
 		seen[receipt.GrantedReceiptRef] = true
+		report.Commands[i].ExitCode = receipt.ExitCode
 		report.ExecutorReceiptRefs = append(report.ExecutorReceiptRefs, receipt.GrantedReceiptRef)
+		if assignment.GrantPolicyAttestation != nil {
+			attestation, buildErr := coSuperExecutionAttestationFromReceipt(assignment, report.ReportID, report.Commands[i], receipt)
+			if buildErr != nil {
+				return report, buildErr
+			}
+			report.ExecutionAttestations = append(report.ExecutionAttestations, attestation)
+		}
 	}
 	return report, nil
 }
@@ -676,6 +737,7 @@ func (rt *Runtime) commitAssignedCoSuperReport(ctx context.Context, assignment t
 		OwnerID:   assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
 		AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
 		ExpectedLifecycleVersion: assignment.LifecycleVersion, Report: report,
+		ExecutionAttestations: append([]types.CoSuperExecutionAttestation(nil), report.ExecutionAttestations...),
 	}
 	req.CommandDigest, _ = store.ComputeRecordCoSuperAssignmentReportDigest(req)
 	return rt.store.RecordCoSuperAssignmentReport(ctx, req)

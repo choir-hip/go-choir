@@ -32,6 +32,11 @@ import (
 // client requests before forwarding to the sandbox. These headers could be used
 // to impersonate or spoof user identity, so the proxy removes them all and
 // only injects the JWT-verified user context via X-Authenticated-User.
+const (
+	proxyOriginalEscapedPathHeader = "X-Proxy-Original-Escaped-Path"
+	proxyOriginalRawQueryHeader   = "X-Proxy-Original-Raw-Query"
+)
+
 var clientIdentityHeaders = []string{
 	"X-Authenticated-User",
 	"X-Authenticated-Email",
@@ -176,9 +181,22 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		originalDirector(req)
 
 		// Override the path and query to preserve the original public request.
-		req.URL.Path = req.Header.Get("X-Original-Path")
-		req.URL.RawPath = ""
-		req.URL.RawQuery = req.Header.Get("X-Original-RawQuery")
+		// Path and RawPath must be restored together: restoring only decoded Path
+		// would normalize noncanonical escapes before the sandbox can reject them.
+		escapedPath := req.Header.Get(proxyOriginalEscapedPathHeader)
+		decodedPath, err := url.PathUnescape(escapedPath)
+		reconstructed := &url.URL{Path: decodedPath, RawPath: escapedPath}
+		if err != nil || escapedPath == "" || reconstructed.EscapedPath() != escapedPath {
+			// The handler validates this trusted header before proxying. Keep this
+			// defensive fallback off every public route if that invariant is broken.
+			req.URL.Path = "/.choir-invalid-proxy-path"
+			req.URL.RawPath = ""
+			req.URL.RawQuery = ""
+		} else {
+			req.URL.Path = decodedPath
+			req.URL.RawPath = escapedPath
+			req.URL.RawQuery = req.Header.Get(proxyOriginalRawQueryHeader)
+		}
 
 		// Check if vmctl resolved a per-user VM sandbox URL. When set,
 		// override the target to the resolved VM (VAL-VM-001, VAL-VM-002).
@@ -219,6 +237,9 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		req.Header.Del("X-Proxy-Trusted-User")
 		req.Header.Del("X-Proxy-Trusted-Email")
 		req.Header.Del("X-Proxy-Trusted-Scopes")
+		req.Header.Del(proxyOriginalEscapedPathHeader)
+		req.Header.Del(proxyOriginalRawQueryHeader)
+		// Strip legacy names too so client-supplied values cannot leak upstream.
 		req.Header.Del("X-Original-Path")
 		req.Header.Del("X-Original-RawQuery")
 		req.Header.Del("X-Resolved-Sandbox-URL")
@@ -496,6 +517,32 @@ func (h *Handler) validateAPIKey(r *http.Request) (*AuthResult, error) {
 	}, nil
 }
 
+// preserveOriginalRequestTarget captures the request target in headers that
+// only the proxy director consumes. Client values are always deleted first.
+// RawPath is rejected rather than normalized when it is not a valid encoding
+// hint for Path.
+func preserveOriginalRequestTarget(r *http.Request) bool {
+	if r == nil || r.URL == nil || r.Header == nil {
+		return false
+	}
+	r.Header.Del(proxyOriginalEscapedPathHeader)
+	r.Header.Del(proxyOriginalRawQueryHeader)
+
+	escapedPath := r.URL.EscapedPath()
+	decodedPath, err := url.PathUnescape(escapedPath)
+	reconstructed := &url.URL{Path: decodedPath, RawPath: escapedPath}
+	if err != nil || escapedPath == "" || !strings.HasPrefix(escapedPath, "/") || decodedPath != r.URL.Path || reconstructed.EscapedPath() != escapedPath {
+		return false
+	}
+	if r.URL.RawPath != "" && r.URL.RawPath != escapedPath {
+		return false
+	}
+
+	r.Header.Set(proxyOriginalEscapedPathHeader, escapedPath)
+	r.Header.Set(proxyOriginalRawQueryHeader, r.URL.RawQuery)
+	return true
+}
+
 // HandleBootstrap handles GET /api/shell/bootstrap.
 // It validates the access JWT cookie, denies requests with missing or invalid
 // auth, and forwards authenticated requests to the sandbox upstream.
@@ -529,6 +576,12 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 		h.lifecycle.record("bootstrap.total", "forbidden", time.Since(started))
 		return
 	}
+	if !preserveOriginalRequestTarget(r) {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid request path"})
+		h.lifecycle.record("bootstrap.path", "invalid", time.Since(started))
+		h.lifecycle.record("bootstrap.total", "invalid_path", time.Since(started))
+		return
+	}
 
 	// Resolve only the exact API-key-bound computer (cookie routing is unchanged).
 	desktopID := requestDesktopID(r)
@@ -550,9 +603,7 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 	// Auth is valid. Store the trusted user context for the director to inject.
 	h.setTrustedAuthHeaders(r, authResult)
 
-	// Preserve the original path and query for the director to use.
-	r.Header.Set("X-Original-Path", r.URL.Path)
-	r.Header.Set("X-Original-RawQuery", r.URL.RawQuery)
+	// The original escaped path and query were captured after authentication.
 
 	// If vmctl resolved a different URL, override the reverse proxy target.
 	if sandboxURL != h.cfg.SandboxURL {
@@ -592,6 +643,12 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 		h.lifecycle.record(stagePrefix+".total", "forbidden", time.Since(started))
 		return
 	}
+	if !preserveOriginalRequestTarget(r) {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid request path"})
+		h.lifecycle.record(stagePrefix+".path", "invalid", time.Since(started))
+		h.lifecycle.record(stagePrefix+".total", "invalid_path", time.Since(started))
+		return
+	}
 
 	// Resolve only the authenticated user's exact API-key-bound computer.
 	desktopID := requestDesktopID(r)
@@ -614,8 +671,6 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 
 	// Auth is valid. Store the trusted user context for the director.
 	h.setTrustedAuthHeaders(r, authResult)
-	r.Header.Set("X-Original-Path", r.URL.Path)
-	r.Header.Set("X-Original-RawQuery", r.URL.RawQuery)
 
 	// If vmctl resolved a different URL, override the reverse proxy target.
 	if sandboxURL != h.cfg.SandboxURL {

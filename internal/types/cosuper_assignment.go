@@ -12,6 +12,9 @@ const (
 	CoSuperCapsuleNetworkForbidden                         = "forbidden"
 	CoSuperCapsuleNetworkNone                              = "none"
 	CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay = "assignment_local_writable_overlay"
+	CoSuperGrantPolicyAttestationSchemaV1                  = "choir.co_super_grant_policy_attestation/v1"
+	CoSuperExecutionAttestationSchemaV1                    = "choir.co_super_execution_attestation/v1"
+	CoSuperCapsuleFateStepSchemaV1                         = "choir.co_super_capsule_fate_step/v1"
 )
 
 type CoSuperAssignmentKind string
@@ -154,21 +157,113 @@ func ValidSHA256Digest(value string) bool {
 	return err == nil
 }
 
+// CoSuperGrantPolicyAttestation is runtime-authored evidence about the exact
+// signed capability returned by the capsule executor. It deliberately retains
+// digests and policy facts, never capability or handle bytes.
+type CoSuperGrantPolicyAttestation struct {
+	Schema                 string    `json:"schema"`
+	AttestationRef         string    `json:"attestation_ref"`
+	AssignmentID           string    `json:"assignment_id"`
+	Attempt                uint64    `json:"attempt"`
+	OwnerID                string    `json:"owner_id"`
+	ComputerID             string    `json:"computer_id"`
+	TrajectoryID           string    `json:"trajectory_id"`
+	RunID                  string    `json:"loop_id"`
+	CapsuleID              string    `json:"capsule_id"`
+	TargetCapsule          string    `json:"target_capsule"`
+	Role                   string    `json:"role"`
+	GrantedVerbs           []string  `json:"granted_verbs"`
+	VerbSetDigest          string    `json:"verb_set_digest"`
+	PolicyDigest           string    `json:"policy_digest"`
+	SignedCapabilityDigest string    `json:"signed_capability_digest"`
+	NetworkMode            string    `json:"network_mode"`
+	FilesystemMode         string    `json:"filesystem_mode"`
+	Writable               bool      `json:"writable"`
+	SpawnAcknowledged      bool      `json:"spawn_acknowledged"`
+	ActiveAcknowledged     bool      `json:"active_acknowledged"`
+	GrantAcknowledged      bool      `json:"grant_acknowledged"`
+	SpawnedAt              time.Time `json:"spawned_at"`
+	GrantedAt              time.Time `json:"granted_at"`
+	BindCommandID          string    `json:"bind_command_id"`
+	BindEventID            string    `json:"bind_event_id"`
+	ReducerSeq             int64     `json:"reducer_seq"`
+	RecordedAt             time.Time `json:"recorded_at"`
+}
+
+// CoSuperExecutionAttestation is the sanitized durable copyout constructed
+// from one already-validated GrantedExecutionReceipt.
+type CoSuperExecutionAttestation struct {
+	Schema              string    `json:"schema"`
+	AttestationRef      string    `json:"attestation_ref"`
+	GrantedReceiptRef   string    `json:"granted_receipt_ref"`
+	AssignmentID        string    `json:"assignment_id"`
+	Attempt             uint64    `json:"attempt"`
+	OwnerID             string    `json:"owner_id"`
+	ComputerID          string    `json:"computer_id"`
+	TrajectoryID        string    `json:"trajectory_id"`
+	RunID               string    `json:"loop_id"`
+	CapsuleID           string    `json:"capsule_id"`
+	ReportID            string    `json:"report_id"`
+	CommandID           string    `json:"command_id"`
+	CommandDigest       string    `json:"command_digest"`
+	ExitCode            int       `json:"exit_code"`
+	StdoutDigest        string    `json:"stdout_digest"`
+	StderrDigest        string    `json:"stderr_digest"`
+	SourceSubjectDigest string    `json:"source_subject_digest"`
+	FinalSubjectDigest  string    `json:"final_subject_digest"`
+	WorktreeDigest      string    `json:"worktree_digest"`
+	Granted             bool      `json:"granted"`
+	Frozen              bool      `json:"frozen"`
+	OccurredAt          time.Time `json:"occurred_at"`
+	ReportCommandID     string    `json:"report_command_id"`
+	ReportEventID       string    `json:"report_event_id"`
+	ReducerSeq          int64     `json:"reducer_seq"`
+	RecordedAt          time.Time `json:"recorded_at"`
+}
+
+// CoSuperCapsuleFateStep is one append-only runtime-authored capsule fate
+// transition. Requested and acknowledged transitions remain separate entries.
+type CoSuperCapsuleFateStep struct {
+	Schema                     string                    `json:"schema"`
+	StepRef                    string                    `json:"step_ref"`
+	AssignmentID               string                    `json:"assignment_id"`
+	Attempt                    uint64                    `json:"attempt"`
+	OwnerID                    string                    `json:"owner_id"`
+	ComputerID                 string                    `json:"computer_id"`
+	TrajectoryID               string                    `json:"trajectory_id"`
+	RunID                      string                    `json:"loop_id,omitempty"`
+	CapsuleID                  string                    `json:"capsule_id"`
+	Disposition                CoSuperCapsuleDisposition `json:"capsule_disposition"`
+	CommandID                  string                    `json:"command_id"`
+	EventID                    string                    `json:"event_id"`
+	ReducerSeq                 int64                     `json:"reducer_seq"`
+	IntentRef                  string                    `json:"intent_ref"`
+	AckRef                     string                    `json:"ack_ref,omitempty"`
+	SourceSubjectDigest        string                    `json:"source_subject_digest,omitempty"`
+	FinalSubjectDigest         string                    `json:"final_subject_digest,omitempty"`
+	AssignmentCapabilityDigest string                    `json:"assignment_capability_digest"`
+	CapsuleAbsent              bool                      `json:"capsule_absent,omitempty"`
+	OccurredAt                 time.Time                 `json:"occurred_at"`
+	RecordedAt                 time.Time                 `json:"recorded_at"`
+}
+
 type CoSuperAssignment struct {
-	Schema             string                       `json:"schema"`
-	AssignmentID       string                       `json:"assignment_id"`
-	Binding            CoSuperAssignmentBinding     `json:"binding"`
-	Disposition        CoSuperAssignmentDisposition `json:"disposition"`
-	DispositionReason  string                       `json:"disposition_reason,omitempty"`
-	CapsuleDisposition CoSuperCapsuleDisposition    `json:"capsule_disposition"`
-	CapsuleIntentRef   string                       `json:"capsule_intent_ref,omitempty"`
-	CapsuleAckRef      string                       `json:"capsule_ack_ref,omitempty"`
-	BoundRunID         string                       `json:"bound_loop_id,omitempty"`
-	ReportRefs         []string                     `json:"report_refs,omitempty"`
-	LifecycleVersion   int64                        `json:"lifecycle_version"`
-	CreatedAt          time.Time                    `json:"created_at"`
-	UpdatedAt          time.Time                    `json:"updated_at"`
-	TerminalAt         *time.Time                   `json:"terminal_at,omitempty"`
+	Schema                 string                         `json:"schema"`
+	AssignmentID           string                         `json:"assignment_id"`
+	Binding                CoSuperAssignmentBinding       `json:"binding"`
+	Disposition            CoSuperAssignmentDisposition   `json:"disposition"`
+	DispositionReason      string                         `json:"disposition_reason,omitempty"`
+	CapsuleDisposition     CoSuperCapsuleDisposition      `json:"capsule_disposition"`
+	CapsuleIntentRef       string                         `json:"capsule_intent_ref,omitempty"`
+	CapsuleAckRef          string                         `json:"capsule_ack_ref,omitempty"`
+	BoundRunID             string                         `json:"bound_loop_id,omitempty"`
+	ReportRefs             []string                       `json:"report_refs,omitempty"`
+	GrantPolicyAttestation *CoSuperGrantPolicyAttestation `json:"grant_policy_attestation,omitempty"`
+	CapsuleFateHistory     []CoSuperCapsuleFateStep       `json:"capsule_fate_history,omitempty"`
+	LifecycleVersion       int64                          `json:"lifecycle_version"`
+	CreatedAt              time.Time                      `json:"created_at"`
+	UpdatedAt              time.Time                      `json:"updated_at"`
+	TerminalAt             *time.Time                     `json:"terminal_at,omitempty"`
 }
 
 func (a CoSuperAssignment) Validate() error {
@@ -259,30 +354,31 @@ type CoSuperRecordedMutation struct {
 }
 
 type CoSuperAssignmentReport struct {
-	Schema                   string                      `json:"schema"`
-	ReportID                 string                      `json:"report_id"`
-	AssignmentID             string                      `json:"assignment_id"`
-	Attempt                  uint64                      `json:"attempt"`
-	OwnerID                  string                      `json:"owner_id"`
-	ComputerID               string                      `json:"computer_id"`
-	TrajectoryID             string                      `json:"trajectory_id"`
-	RunID                    string                      `json:"loop_id"`
-	AssignedAgentID          string                      `json:"assigned_agent_id"`
-	Result                   CoSuperAssignmentResultKind `json:"result"`
-	Verdict                  CoSuperAssignmentVerdict    `json:"verdict"`
-	ObservedSubjectDigest    string                      `json:"observed_subject_digest"`
-	Commands                 []CoSuperRecordedCommand    `json:"commands,omitempty"`
-	Outputs                  []CoSuperRecordedOutput     `json:"outputs,omitempty"`
-	Mutations                []CoSuperRecordedMutation   `json:"mutations,omitempty"`
-	Late                     bool                        `json:"late"`
-	CertifiesOriginalSubject bool                        `json:"certifies_original_subject"`
-	CandidateSubjectDigest   string                      `json:"candidate_subject_digest,omitempty"`
-	CandidateID              string                      `json:"candidate_id,omitempty"`
-	CandidateArtifactRef     string                      `json:"candidate_artifact_ref,omitempty"`
-	ExecutorReceiptRefs      []string                    `json:"executor_receipt_refs,omitempty"`
-	Summary                  string                      `json:"summary,omitempty"`
-	EvidenceRefs             []string                    `json:"evidence_refs,omitempty"`
-	CreatedAt                time.Time                   `json:"created_at"`
+	Schema                   string                        `json:"schema"`
+	ReportID                 string                        `json:"report_id"`
+	AssignmentID             string                        `json:"assignment_id"`
+	Attempt                  uint64                        `json:"attempt"`
+	OwnerID                  string                        `json:"owner_id"`
+	ComputerID               string                        `json:"computer_id"`
+	TrajectoryID             string                        `json:"trajectory_id"`
+	RunID                    string                        `json:"loop_id"`
+	AssignedAgentID          string                        `json:"assigned_agent_id"`
+	Result                   CoSuperAssignmentResultKind   `json:"result"`
+	Verdict                  CoSuperAssignmentVerdict      `json:"verdict"`
+	ObservedSubjectDigest    string                        `json:"observed_subject_digest"`
+	Commands                 []CoSuperRecordedCommand      `json:"commands,omitempty"`
+	Outputs                  []CoSuperRecordedOutput       `json:"outputs,omitempty"`
+	Mutations                []CoSuperRecordedMutation     `json:"mutations,omitempty"`
+	Late                     bool                          `json:"late"`
+	CertifiesOriginalSubject bool                          `json:"certifies_original_subject"`
+	CandidateSubjectDigest   string                        `json:"candidate_subject_digest,omitempty"`
+	CandidateID              string                        `json:"candidate_id,omitempty"`
+	CandidateArtifactRef     string                        `json:"candidate_artifact_ref,omitempty"`
+	ExecutorReceiptRefs      []string                      `json:"executor_receipt_refs,omitempty"`
+	ExecutionAttestations    []CoSuperExecutionAttestation `json:"execution_attestations,omitempty"`
+	Summary                  string                        `json:"summary,omitempty"`
+	EvidenceRefs             []string                      `json:"evidence_refs,omitempty"`
+	CreatedAt                time.Time                     `json:"created_at"`
 }
 
 func (r CoSuperAssignmentReport) ValidateAgainst(a CoSuperAssignment) error {
@@ -425,28 +521,30 @@ type OpenCoSuperAssignmentRequest struct {
 }
 
 type BindCoSuperAssignmentRequest struct {
-	CommandID                string    `json:"command_id"`
-	CommandDigest            string    `json:"command_digest"`
-	OwnerID                  string    `json:"owner_id"`
-	ComputerID               string    `json:"computer_id"`
-	AssignmentID             string    `json:"assignment_id"`
-	Attempt                  uint64    `json:"attempt"`
-	ExpectedLifecycleVersion int64     `json:"expected_lifecycle_version"`
-	RunID                    string    `json:"loop_id"`
-	Run                      RunRecord `json:"run"`
-	OpaqueCapability         string    `json:"-"`
-	CapsuleID                string    `json:"capsule_id,omitempty"`
+	CommandID                string                         `json:"command_id"`
+	CommandDigest            string                         `json:"command_digest"`
+	OwnerID                  string                         `json:"owner_id"`
+	ComputerID               string                         `json:"computer_id"`
+	AssignmentID             string                         `json:"assignment_id"`
+	Attempt                  uint64                         `json:"attempt"`
+	ExpectedLifecycleVersion int64                          `json:"expected_lifecycle_version"`
+	RunID                    string                         `json:"loop_id"`
+	Run                      RunRecord                      `json:"run"`
+	OpaqueCapability         string                         `json:"-"`
+	CapsuleID                string                         `json:"capsule_id,omitempty"`
+	GrantPolicyAttestation   *CoSuperGrantPolicyAttestation `json:"grant_policy_attestation,omitempty"`
 }
 
 type RecordCoSuperAssignmentReportRequest struct {
-	CommandID                string                  `json:"command_id"`
-	CommandDigest            string                  `json:"command_digest"`
-	OwnerID                  string                  `json:"owner_id"`
-	ComputerID               string                  `json:"computer_id"`
-	AssignmentID             string                  `json:"assignment_id"`
-	Attempt                  uint64                  `json:"attempt"`
-	ExpectedLifecycleVersion int64                   `json:"expected_lifecycle_version"`
-	Report                   CoSuperAssignmentReport `json:"report"`
+	CommandID                string                        `json:"command_id"`
+	CommandDigest            string                        `json:"command_digest"`
+	OwnerID                  string                        `json:"owner_id"`
+	ComputerID               string                        `json:"computer_id"`
+	AssignmentID             string                        `json:"assignment_id"`
+	Attempt                  uint64                        `json:"attempt"`
+	ExpectedLifecycleVersion int64                         `json:"expected_lifecycle_version"`
+	Report                   CoSuperAssignmentReport       `json:"report"`
+	ExecutionAttestations    []CoSuperExecutionAttestation `json:"execution_attestations,omitempty"`
 }
 
 type CancelCoSuperAssignmentRequest struct {
@@ -471,4 +569,5 @@ type SetCoSuperCapsuleDispositionRequest struct {
 	Disposition              CoSuperCapsuleDisposition `json:"capsule_disposition"`
 	IntentRef                string                    `json:"intent_ref"`
 	AckRef                   string                    `json:"ack_ref,omitempty"`
+	FateStep                 *CoSuperCapsuleFateStep   `json:"fate_step,omitempty"`
 }

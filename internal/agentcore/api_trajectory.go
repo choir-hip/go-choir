@@ -72,6 +72,10 @@ func writeLifecycleAPIError(w http.ResponseWriter, err error) {
 // subtree. The cancel child is dispatched separately; GET detail continues to
 // answer open obligations from durable state alone.
 func (h *APIHandler) HandleTrajectoryDetail(w http.ResponseWriter, r *http.Request) {
+	if capsuleEvidencePathCandidate(r.URL.EscapedPath()) {
+		h.HandleCoSuperCapsuleEvidence(w, r)
+		return
+	}
 	if _, ok := trajectoryCancelIDFromPath(r.URL.EscapedPath()); ok || r.Method == http.MethodPost {
 		h.HandleTrajectoryCancel(w, r)
 		return
@@ -261,4 +265,93 @@ func trajectoryCancelIDFromPath(escapedPath string) (string, bool) {
 		return "", false
 	}
 	return trajectoryID, true
+}
+
+func capsuleEvidencePathCandidate(escapedPath string) bool {
+	const prefix = "/api/trajectories/"
+	if !strings.HasPrefix(escapedPath, prefix) {
+		return false
+	}
+	parts := strings.Split(strings.TrimPrefix(escapedPath, prefix), "/")
+	return len(parts) >= 2 && parts[1] == "capsule-evidence"
+}
+
+func canonicalCapsuleEvidenceSegment(raw string) (string, bool) {
+	if raw == "" {
+		return "", false
+	}
+	value, err := url.PathUnescape(raw)
+	if err != nil || value == "" || value != strings.TrimSpace(value) || value == "." || value == ".." || strings.ContainsAny(value, `/\`) || url.PathEscape(value) != raw {
+		return "", false
+	}
+	return value, true
+}
+
+func coSuperCapsuleEvidenceRoute(r *http.Request) (trajectoryID, assignmentID string, attempt uint64, ok bool) {
+	const prefix = "/api/trajectories/"
+	escapedPath := r.URL.EscapedPath()
+	if !strings.HasPrefix(escapedPath, prefix) {
+		return "", "", 0, false
+	}
+	parts := strings.Split(strings.TrimPrefix(escapedPath, prefix), "/")
+	if len(parts) != 3 || parts[1] != "capsule-evidence" {
+		return "", "", 0, false
+	}
+	trajectoryID, ok = canonicalCapsuleEvidenceSegment(parts[0])
+	if !ok {
+		return "", "", 0, false
+	}
+	assignmentID, ok = canonicalCapsuleEvidenceSegment(parts[2])
+	if !ok {
+		return "", "", 0, false
+	}
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil || len(query) != 1 {
+		return "", "", 0, false
+	}
+	values, found := query["attempt"]
+	if !found || len(values) != 1 || values[0] == "" {
+		return "", "", 0, false
+	}
+	attempt, err = strconv.ParseUint(values[0], 10, 64)
+	if err != nil || attempt == 0 || strconv.FormatUint(attempt, 10) != values[0] || r.URL.RawQuery != "attempt="+strconv.FormatUint(attempt, 10) {
+		return "", "", 0, false
+	}
+	return trajectoryID, assignmentID, attempt, true
+}
+
+// HandleCoSuperCapsuleEvidence serves a bounded, manually sanitized point
+// projection from one durable ObjectGraph snapshot. It never opens the live
+// capsule executor or a raw receipt endpoint.
+func (h *APIHandler) HandleCoSuperCapsuleEvidence(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	trajectoryID, assignmentID, attempt, ok := coSuperCapsuleEvidenceRoute(r)
+	if !ok {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid capsule evidence route"})
+		return
+	}
+	computerID := strings.TrimSpace(h.rt.TextureSandboxID())
+	if computerID == "" {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "capsule evidence unavailable"})
+		return
+	}
+	evidence, loadErr := h.rt.Store().GetCoSuperCapsuleEvidence(r.Context(), ownerID, computerID, trajectoryID, assignmentID, attempt)
+	switch {
+	case loadErr == nil:
+		writeAPIJSON(w, http.StatusOK, evidence)
+	case errors.Is(loadErr, store.ErrNotFound):
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "capsule evidence not found"})
+	case errors.Is(loadErr, store.ErrCoSuperEvidenceTooLarge):
+		writeAPIJSON(w, http.StatusRequestEntityTooLarge, apiError{Error: "capsule evidence exceeds response bounds"})
+	default:
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "capsule evidence unavailable"})
+	}
 }

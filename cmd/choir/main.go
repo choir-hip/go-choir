@@ -722,7 +722,7 @@ func validateDurableWorkResponse(raw json.RawMessage) error {
 
 func runLifecycle(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir lifecycle: subcommand required (snapshot|events)")
+		fmt.Fprintln(stderr, "choir lifecycle: subcommand required (snapshot|events|capsule-evidence)")
 		return 2
 	}
 	subcommand := args[0]
@@ -730,10 +730,32 @@ func runLifecycle(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	after := fs.Int64("after", 0, "Event cursor (events only)")
 	limit := fs.Int("limit", 100, "Maximum events per page (events only)")
+	attempt := fs.Uint64("attempt", 0, "Positive assignment attempt (capsule-evidence only)")
 	c, err := newClient(fs, args[1:], stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "choir lifecycle %s: %v\n", subcommand, err)
 		return 2
+	}
+	if subcommand == "capsule-evidence" {
+		rest := fs.Args()
+		if len(rest) != 2 || rest[0] == "" || rest[1] == "" || rest[0] != strings.TrimSpace(rest[0]) || rest[1] != strings.TrimSpace(rest[1]) || *attempt == 0 {
+			fmt.Fprintln(stderr, "choir lifecycle capsule-evidence: trajectory id, assignment id, and positive --attempt required")
+			return 2
+		}
+		var response json.RawMessage
+		path := fmt.Sprintf("/api/trajectories/%s/capsule-evidence/%s?attempt=%d", url.PathEscape(rest[0]), url.PathEscape(rest[1]), *attempt)
+		if err := c.do(http.MethodGet, path, nil, &response); err != nil {
+			fmt.Fprintf(stderr, "choir lifecycle capsule-evidence: %v\n", err)
+			return 1
+		}
+		var envelope struct {
+			Schema string `json:"schema"`
+		}
+		if err := json.Unmarshal(response, &envelope); err != nil || envelope.Schema != "choir.co_super_capsule_evidence/v1" {
+			fmt.Fprintln(stderr, "choir lifecycle capsule-evidence: invalid capsule evidence response")
+			return 1
+		}
+		return writeJSON(stdout, response)
 	}
 	if subcommand == "events" {
 		rest := fs.Args()

@@ -920,3 +920,55 @@ func TestEvaluateTrajectorySettlementIsPureDataEvaluation(t *testing.T) {
 		t.Fatalf("non-live trajectory reported ready to settle")
 	}
 }
+
+func TestCoSuperCapsuleEvidenceRouteIsStrict(t *testing.T) {
+	valid := httptest.NewRequest(http.MethodGet, "/api/trajectories/traj%25%20one/capsule-evidence/assignment%20one?attempt=12", nil)
+	trajectory, assignment, attempt, ok := coSuperCapsuleEvidenceRoute(valid)
+	if !ok || trajectory != "traj% one" || assignment != "assignment one" || attempt != 12 {
+		t.Fatalf("valid route = %q %q %d %t", trajectory, assignment, attempt, ok)
+	}
+	invalid := []string{
+		"/api/trajectories/t/capsule-evidence/a",
+		"/api/trajectories/t/capsule-evidence/a?attempt=0",
+		"/api/trajectories/t/capsule-evidence/a?attempt=01",
+		"/api/trajectories/t/capsule-evidence/a?attempt=%31",
+		"/api/trajectories/t/capsule-evidence/a?attempt=+1",
+		"/api/trajectories/t/capsule-evidence/a?attempt=1&attempt=2",
+		"/api/trajectories/t/capsule-evidence/a?attempt=1&other=2",
+		"/api/trajectories/t/capsule-evidence/a/?attempt=1",
+		"/api/trajectories/t/capsule-evidence/a/extra?attempt=1",
+		"/api/trajectories/../capsule-evidence/a?attempt=1",
+		"/api/trajectories/%2F/capsule-evidence/a?attempt=1",
+		"/api/trajectories/t/capsule-evidence/%5C?attempt=1",
+		"/api/trajectories/%20t/capsule-evidence/a?attempt=1",
+	}
+	for _, raw := range invalid {
+		r := httptest.NewRequest(http.MethodGet, raw, nil)
+		if _, _, _, ok := coSuperCapsuleEvidenceRoute(r); ok {
+			t.Errorf("accepted %q", raw)
+		}
+	}
+}
+
+func TestCoSuperCapsuleEvidenceHandlerAuthenticatesAndDispatchesBeforeCancel(t *testing.T) {
+	h := &APIHandler{}
+	unauth := httptest.NewRecorder()
+	h.HandleTrajectoryDetail(unauth, httptest.NewRequest(http.MethodGet, "/api/trajectories/t/capsule-evidence/a?attempt=1", nil))
+	if unauth.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth=%d", unauth.Code)
+	}
+	postReq := httptest.NewRequest(http.MethodPost, "/api/trajectories/t/capsule-evidence/a?attempt=1", nil)
+	postReq.Header.Set("X-Authenticated-User", "owner")
+	post := httptest.NewRecorder()
+	h.HandleTrajectoryDetail(post, postReq)
+	if post.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("post=%d body=%s", post.Code, post.Body.String())
+	}
+	badReq := httptest.NewRequest(http.MethodGet, "/api/trajectories/t/capsule-evidence/a?attempt=01", nil)
+	badReq.Header.Set("X-Authenticated-User", "owner")
+	bad := httptest.NewRecorder()
+	h.HandleTrajectoryDetail(bad, badReq)
+	if bad.Code != http.StatusBadRequest {
+		t.Fatalf("bad=%d", bad.Code)
+	}
+}

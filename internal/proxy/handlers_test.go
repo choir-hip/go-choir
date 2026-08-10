@@ -4497,3 +4497,128 @@ func TestBearerTokenAuthStripsClientSuppliedScopes(t *testing.T) {
 		t.Errorf("scopes: got %v, want %q (client-supplied scopes should be stripped)", got, "read:runtime")
 	}
 }
+
+
+func TestProtectedAPIReverseProxyPreservesEscapedPathForBackendValidation(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+
+	var gotEscapedPath, gotRawQuery string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotEscapedPath = r.URL.EscapedPath()
+		gotRawQuery = r.URL.RawQuery
+		if r.Header.Get(proxyOriginalEscapedPathHeader) != "" || r.Header.Get(proxyOriginalRawQueryHeader) != "" || r.Header.Get("X-Original-Path") != "" {
+			t.Error("internal original-target header leaked upstream")
+		}
+		switch {
+		case gotEscapedPath == "/api/trajectories/trajectory-one/capsule-evidence/assignment-one" && gotRawQuery == "attempt=1":
+			w.WriteHeader(http.StatusNoContent)
+		case gotEscapedPath == "/api/ordinary%20route" && gotRawQuery == "value=one%20two":
+			w.WriteHeader(http.StatusAccepted)
+		default:
+			http.Error(w, "noncanonical capsule evidence route", http.StatusBadRequest)
+		}
+	}))
+	defer upstream.Close()
+
+	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, SandboxURL: upstream.URL, AuthPublicKeyPath: "/unused"}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+	token := issueTestAccessJWT(priv, "escaped-path-owner")
+
+	tests := []struct {
+		name        string
+		target      string
+		spoofedPath string
+		wantPath    string
+		wantStatus  int
+	}{
+		{
+			name:       "canonical route remains canonical",
+			target:     "/api/trajectories/trajectory-one/capsule-evidence/assignment-one?attempt=1",
+			wantPath:   "/api/trajectories/trajectory-one/capsule-evidence/assignment-one",
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name:        "encoded unreserved assignment remains visible and client header cannot normalize it",
+			target:      "/api/trajectories/trajectory-one/capsule-evidence/%61ssignment-one?attempt=1",
+			spoofedPath: "/api/trajectories/trajectory-one/capsule-evidence/assignment-one",
+			wantPath:    "/api/trajectories/trajectory-one/capsule-evidence/%61ssignment-one",
+			wantStatus:  http.StatusBadRequest,
+		},
+		{
+			name:       "encoded slash fails closed",
+			target:     "/api/trajectories/trajectory-one/capsule-evidence/assignment%2Fone?attempt=1",
+			wantPath:   "/api/trajectories/trajectory-one/capsule-evidence/assignment%2Fone",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "encoded backslash fails closed",
+			target:     "/api/trajectories/trajectory-one/capsule-evidence/assignment%5Cone?attempt=1",
+			wantPath:   "/api/trajectories/trajectory-one/capsule-evidence/assignment%5Cone",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "encoded dot fails closed",
+			target:     "/api/trajectories/trajectory-one/capsule-evidence/%2e?attempt=1",
+			wantPath:   "/api/trajectories/trajectory-one/capsule-evidence/%2e",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "unrelated route keeps prefix and query",
+			target:     "/api/ordinary%20route?value=one%20two",
+			wantPath:   "/api/ordinary%20route",
+			wantStatus: http.StatusAccepted,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotEscapedPath, gotRawQuery = "", ""
+			req := httptest.NewRequest(http.MethodGet, tt.target, nil)
+			req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+			if tt.spoofedPath != "" {
+				req.Header.Set(proxyOriginalEscapedPathHeader, tt.spoofedPath)
+			}
+			rec := httptest.NewRecorder()
+			h.HandleProtectedAPI(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+			if gotEscapedPath != tt.wantPath {
+				t.Fatalf("upstream EscapedPath=%q want=%q", gotEscapedPath, tt.wantPath)
+			}
+		})
+	}
+}
+
+func TestProtectedAPIRejectsMalformedRawPathBeforeUpstream(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	upstreamReached := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamReached = true
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, SandboxURL: upstream.URL, AuthPublicKeyPath: "/unused"}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/trajectories/t/capsule-evidence/a?attempt=1", nil)
+	req.URL.RawPath = "/api/trajectories/t/capsule-evidence/%zz"
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "malformed-path-owner")})
+	rec := httptest.NewRecorder()
+	h.HandleProtectedAPI(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if upstreamReached {
+		t.Fatal("malformed RawPath reached upstream")
+	}
+}
