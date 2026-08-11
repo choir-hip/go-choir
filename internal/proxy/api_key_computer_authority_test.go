@@ -26,13 +26,23 @@ func TestRequireAPIKeyComputerTargetFailsClosed(t *testing.T) {
 		headerDesktopID    string
 		queryDesktopIDs    []string
 		headerDesktopIDs   []string
+		queryComputerID    string
+		headerComputerID   string
+		lookupComputerID   string
 		reply              authorityReply
 		withoutVMCTL       bool
 		wantStatus         int
 		wantOK             bool
 		wantLookups        int64
 	}{
-		{name: "unbound legacy admin", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", Scopes: []string{"admin"}}, wantStatus: http.StatusForbidden},
+		{name: "owner-wide unnamed", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", Scopes: []string{"admin"}}, wantStatus: http.StatusBadRequest},
+		{name: "owner-wide named via query", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", Scopes: []string{"admin"}}, queryComputerID: "computer-a", lookupComputerID: "computer-a", reply: authorityReply{status: http.StatusOK, body: `{"computer_id":"computer-a","user_id":"owner","desktop_id":"primary","kind":"interactive","state":"active","epoch":7}`}, wantOK: true, wantLookups: 1},
+		{name: "owner-wide named via header", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", Scopes: []string{"admin"}}, headerComputerID: "computer-a", lookupComputerID: "computer-a", reply: authorityReply{status: http.StatusOK, body: `{"computer_id":"computer-a","user_id":"owner","desktop_id":"primary","kind":"interactive","state":"active","epoch":7}`}, wantOK: true, wantLookups: 1},
+		{name: "owner-wide named via path", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", Scopes: []string{"admin"}}, pathComputerID: "computer-a", lookupComputerID: "computer-a", reply: authorityReply{status: http.StatusOK, body: `{"computer_id":"computer-a","user_id":"owner","desktop_id":"primary","kind":"interactive","state":"active","epoch":7}`}, wantOK: true, wantLookups: 1},
+		{name: "owner-wide foreign computer", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", Scopes: []string{"admin"}}, queryComputerID: "computer-b", lookupComputerID: "computer-b", reply: authorityReply{status: http.StatusOK, body: `{"computer_id":"computer-b","user_id":"other","desktop_id":"primary","kind":"interactive"}`}, wantStatus: http.StatusForbidden, wantLookups: 1},
+		{name: "owner-wide worker computer rejected", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", Scopes: []string{"admin"}}, queryComputerID: "computer-w", lookupComputerID: "computer-w", reply: authorityReply{status: http.StatusOK, body: `{"computer_id":"computer-w","user_id":"owner","desktop_id":"primary","kind":"worker"}`}, wantStatus: http.StatusForbidden, wantLookups: 1},
+		{name: "owner-wide conflicting path and query", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", Scopes: []string{"admin"}}, pathComputerID: "computer-a", queryComputerID: "computer-b", wantStatus: http.StatusForbidden},
+		{name: "owner-wide desktop selector mismatch", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", Scopes: []string{"admin"}}, queryComputerID: "computer-a", lookupComputerID: "computer-a", requestedDesktopID: "branch", queryDesktopID: "branch", reply: authorityReply{status: http.StatusOK, body: `{"computer_id":"computer-a","user_id":"owner","desktop_id":"primary","kind":"interactive"}`}, wantStatus: http.StatusForbidden, wantLookups: 1},
 		{name: "path target differs before lookup", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", ComputerID: "computer-a"}, pathComputerID: "computer-b", wantStatus: http.StatusForbidden},
 		{name: "vmctl missing", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", ComputerID: "computer-a"}, withoutVMCTL: true, wantStatus: http.StatusServiceUnavailable},
 		{name: "not found", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", ComputerID: "computer-a"}, reply: authorityReply{status: http.StatusNotFound}, wantStatus: http.StatusForbidden, wantLookups: 1},
@@ -41,6 +51,7 @@ func TestRequireAPIKeyComputerTargetFailsClosed(t *testing.T) {
 		{name: "non-exact owner", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", ComputerID: "computer-a"}, reply: authorityReply{status: http.StatusOK, body: `{"computer_id":"computer-a","user_id":" owner ","desktop_id":"primary"}`}, wantStatus: http.StatusForbidden, wantLookups: 1},
 		{name: "empty canonical desktop", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", ComputerID: "computer-a"}, reply: authorityReply{status: http.StatusOK, body: `{"computer_id":"computer-a","user_id":"owner"}`}, wantStatus: http.StatusServiceUnavailable, wantLookups: 1},
 		{name: "returned computer conflicts", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", ComputerID: "computer-a"}, reply: authorityReply{status: http.StatusOK, body: `{"computer_id":"computer-b","user_id":"owner","desktop_id":"primary"}`}, wantStatus: http.StatusForbidden, wantLookups: 1},
+		{name: "bound worker computer rejected", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", ComputerID: "computer-w"}, lookupComputerID: "computer-w", reply: authorityReply{status: http.StatusOK, body: `{"computer_id":"computer-w","user_id":"owner","desktop_id":"primary","kind":"worker"}`}, wantStatus: http.StatusForbidden, wantLookups: 1},
 		{name: "authority 500", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", ComputerID: "computer-a"}, reply: authorityReply{status: http.StatusInternalServerError}, wantStatus: http.StatusServiceUnavailable, wantLookups: 1},
 		{name: "malformed authority", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", ComputerID: "computer-a"}, reply: authorityReply{status: http.StatusOK, body: `{`}, wantStatus: http.StatusServiceUnavailable, wantLookups: 1},
 		{name: "default desktop mismatch", auth: AuthResult{AuthMethod: "api_key", UserID: "owner", ComputerID: "computer-a"}, requestedDesktopID: "primary", reply: authorityReply{status: http.StatusOK, body: `{"computer_id":"computer-a","user_id":"owner","desktop_id":"branch"}`}, wantStatus: http.StatusForbidden, wantLookups: 1},
@@ -60,7 +71,11 @@ func TestRequireAPIKeyComputerTargetFailsClosed(t *testing.T) {
 			if !test.withoutVMCTL {
 				server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					lookups.Add(1)
-					if r.URL.Path != "/internal/vmctl/lookup" || r.URL.Query().Get("user_id") != test.auth.UserID || r.URL.Query().Get("computer_id") != test.auth.ComputerID {
+					expected := test.lookupComputerID
+					if expected == "" {
+						expected = test.auth.ComputerID
+					}
+					if r.URL.Path != "/internal/vmctl/lookup" || r.URL.Query().Get("user_id") != test.auth.UserID || r.URL.Query().Get("computer_id") != expected {
 						t.Fatalf("lookup target=%s?%s", r.URL.Path, r.URL.RawQuery)
 					}
 					status := test.reply.status
@@ -82,6 +97,9 @@ func TestRequireAPIKeyComputerTargetFailsClosed(t *testing.T) {
 			for _, value := range test.queryDesktopIDs {
 				query.Add("desktop_id", value)
 			}
+			if test.queryComputerID != "" {
+				query.Set("computer_id", test.queryComputerID)
+			}
 			req.URL.RawQuery = query.Encode()
 			if test.headerDesktopID != "" {
 				req.Header.Set("X-Choir-Desktop", test.headerDesktopID)
@@ -89,13 +107,20 @@ func TestRequireAPIKeyComputerTargetFailsClosed(t *testing.T) {
 			for _, value := range test.headerDesktopIDs {
 				req.Header.Add("X-Choir-Desktop", value)
 			}
+			if test.headerComputerID != "" {
+				req.Header.Set("X-Choir-Computer", test.headerComputerID)
+			}
 			rec := httptest.NewRecorder()
 			resolved, ok := h.requireAPIKeyComputerTarget(rec, req, &test.auth, test.pathComputerID, test.requestedDesktopID)
 			if ok != test.wantOK {
 				t.Fatalf("ok=%v want=%v status=%d body=%s", ok, test.wantOK, rec.Code, rec.Body.String())
 			}
 			if test.wantOK {
-				if resolved == nil || resolved.ComputerID != "computer-a" || resolved.UserID != "owner" || resolved.DesktopID != "primary" {
+				expected := test.lookupComputerID
+				if expected == "" {
+					expected = test.auth.ComputerID
+				}
+				if resolved == nil || resolved.ComputerID != expected || resolved.UserID != "owner" {
 					t.Fatalf("resolved=%+v", resolved)
 				}
 			} else if rec.Code != test.wantStatus {
@@ -108,13 +133,13 @@ func TestRequireAPIKeyComputerTargetFailsClosed(t *testing.T) {
 	}
 }
 
-func TestUnboundAdminAPIKeyDeniedBeforeAllComputerRouteFamilies(t *testing.T) {
+func TestOwnerWideAdminAPIKeyRequiresNamedTargetBeforeDesktopRouteFamilies(t *testing.T) {
 	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
-	user, err := store.CreateUser("legacy-unbound-admin", "legacy-unbound-admin@example.com")
+	user, err := store.CreateUser("owner-wide-admin", "owner-wide-admin@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, secret, err := store.CreateAPIKey(context.Background(), user.ID, "legacy admin", []string{"admin"}, nil)
+	_, secret, err := store.CreateAPIKey(context.Background(), user.ID, "owner-wide admin", []string{"admin"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,6 +163,9 @@ func TestUnboundAdminAPIKeyDeniedBeforeAllComputerRouteFamilies(t *testing.T) {
 	handler.cfg.CorpusdURL = corpusd.URL
 	handler.corpusd = corpusd.Client()
 
+	// These routes select a desktop, not a path-named computer: an owner-wide
+	// key must name its target explicitly (computer_id query/header) and fails
+	// closed with 400 before any ownership lookup or downstream call.
 	tests := []struct {
 		name   string
 		method string
@@ -148,16 +176,8 @@ func TestUnboundAdminAPIKeyDeniedBeforeAllComputerRouteFamilies(t *testing.T) {
 		{name: "protected HTTP", method: http.MethodGet, path: "/api/base/delta"},
 		{name: "websocket", method: http.MethodGet, path: "/api/ws"},
 		{name: "super console websocket", method: http.MethodGet, path: "/api/super-console/ws"},
-		{name: "compute status", method: http.MethodGet, path: "/api/compute/status"},
 		{name: "compute recovery", method: http.MethodPost, path: "/api/compute/recovery", body: `{"action":"wake_current_computer","desktop_id":"primary"}`},
 		{name: "execution identity", method: http.MethodGet, path: "/api/acceptance/execution-identity"},
-		{name: "lifecycle", method: http.MethodGet, path: "/api/computers/computer-a/lifecycle/status"},
-		{name: "malformed lifecycle body", method: http.MethodPost, path: "/api/computers/computer-a/lifecycle/restart", body: `{`},
-		{name: "self development", method: http.MethodGet, path: "/api/computers/computer-a/self-development/mode"},
-		{name: "texture publication", method: http.MethodPost, path: "/api/platform/texture/publications", body: `{"doc_id":"doc-a"}`},
-		{name: "malformed texture publication body", method: http.MethodPost, path: "/api/platform/texture/publications", body: `{`},
-		{name: "publication proposal", method: http.MethodPost, path: "/api/platform/publications/pub-a/proposals", body: `{"doc_id":"doc-a"}`},
-		{name: "malformed publication proposal body", method: http.MethodPost, path: "/api/platform/publications/pub-a/proposals", body: `{`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -165,13 +185,146 @@ func TestUnboundAdminAPIKeyDeniedBeforeAllComputerRouteFamilies(t *testing.T) {
 			req.Header.Set("Authorization", "Bearer "+secret)
 			rec := httptest.NewRecorder()
 			handler.HandleAPI(rec, req)
-			if rec.Code != http.StatusForbidden {
-				t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 			}
 			if ownershipCalls.Load() != 0 || downstreamCalls.Load() != 0 {
 				t.Fatalf("ownership_calls=%d downstream_calls=%d want zero", ownershipCalls.Load(), downstreamCalls.Load())
 			}
 		})
+	}
+}
+
+func TestOwnerWideAdminAPIKeyControlsAnyOwnedComputer(t *testing.T) {
+	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
+	user, err := store.CreateUser("owner-wide-user", "owner-wide-user@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, secret, err := store.CreateAPIKey(context.Background(), user.ID, "owner-wide admin", []string{"admin"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ownershipCalls atomic.Int64
+	vmctlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/vmctl/lookup" {
+			http.Error(w, "unexpected", http.StatusInternalServerError)
+			return
+		}
+		ownershipCalls.Add(1)
+		computerID := r.URL.Query().Get("computer_id")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"computer_id": computerID, "user_id": user.ID, "desktop_id": "primary", "kind": "interactive", "state": "active", "epoch": 7,
+		})
+	}))
+	defer vmctlServer.Close()
+	handler.vmctlClient = vmctl.NewClient(vmctlServer.URL)
+	var downstreamCalls atomic.Int64
+	sandbox.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		downstreamCalls.Add(1)
+		http.Error(w, "bounded downstream stop", http.StatusInternalServerError)
+	})
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		downstreamCalls.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{"computer_id": r.URL.Query().Get("computer_id"), "mode": "off", "generation": 0})
+	}))
+	defer corpusd.Close()
+	handler.cfg.CorpusdURL = corpusd.URL
+	handler.corpusd = corpusd.Client()
+
+	// One owner-wide key reaches every owned computer; the named target in the
+	// path drives the exact ownership join.
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		body       string
+		computerID string
+	}{
+		{name: "lifecycle computer A", method: http.MethodGet, path: "/api/computers/computer-a/lifecycle/status", computerID: "computer-a"},
+		{name: "lifecycle computer B", method: http.MethodGet, path: "/api/computers/computer-b/lifecycle/status", computerID: "computer-b"},
+		{name: "self development computer B", method: http.MethodGet, path: "/api/computers/computer-b/self-development/mode", computerID: "computer-b"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			before := ownershipCalls.Load()
+			req := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
+			req.Header.Set("Authorization", "Bearer "+secret)
+			rec := httptest.NewRecorder()
+			handler.HandleAPI(rec, req)
+			if rec.Code == http.StatusForbidden || rec.Code == http.StatusUnauthorized || rec.Code == http.StatusBadRequest {
+				t.Fatalf("owner-wide key denied on owned computer: status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if ownershipCalls.Load() != before+1 {
+				t.Fatalf("guard lookups delta=%d want=1 status=%d body=%s", ownershipCalls.Load()-before, rec.Code, rec.Body.String())
+			}
+		})
+	}
+	if downstreamCalls.Load() == 0 {
+		t.Fatal("owner-wide positive route matrix never progressed beyond the ownership guard")
+	}
+}
+
+func TestOwnerWideAdminAPIKeyForeignComputerDenied(t *testing.T) {
+	handler, _, _, store := testProxyEnvWithAuthStore(t)
+	user, err := store.CreateUser("owner-wide-foreign", "owner-wide-foreign@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, secret, err := store.CreateAPIKey(context.Background(), user.ID, "owner-wide admin", []string{"admin"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ownershipCalls atomic.Int64
+	vmctlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ownershipCalls.Add(1)
+		// A foreign computer has no ownership row for this user.
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer vmctlServer.Close()
+	handler.vmctlClient = vmctl.NewClient(vmctlServer.URL)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/computers/computer-foreign/lifecycle/status", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	handler.HandleAPI(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+	if ownershipCalls.Load() != 1 {
+		t.Fatalf("ownership_calls=%d want=1", ownershipCalls.Load())
+	}
+}
+
+func TestOwnerWideAdminAPIKeyWorkerComputerDenied(t *testing.T) {
+	handler, _, _, store := testProxyEnvWithAuthStore(t)
+	user, err := store.CreateUser("owner-wide-worker", "owner-wide-worker@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, secret, err := store.CreateAPIKey(context.Background(), user.ID, "owner-wide admin", []string{"admin"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ownershipCalls atomic.Int64
+	vmctlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ownershipCalls.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"computer_id": r.URL.Query().Get("computer_id"), "user_id": user.ID, "desktop_id": "primary", "kind": "worker",
+		})
+	}))
+	defer vmctlServer.Close()
+	handler.vmctlClient = vmctl.NewClient(vmctlServer.URL)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/computers/computer-worker/lifecycle/status", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	handler.HandleAPI(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+	if ownershipCalls.Load() != 1 {
+		t.Fatalf("ownership_calls=%d want=1", ownershipCalls.Load())
 	}
 }
 
@@ -346,13 +499,13 @@ func TestUnboundAdminAPIKeyExcludesNonComputerRouteFamiliesFromGuard(t *testing.
 	}
 }
 
-func TestUnboundAdminComputeRecoveryDeniedBeforeMissingVMCTLAndBodyDecode(t *testing.T) {
+func TestOwnerWideAdminComputeRecoveryDeniedBeforeMissingVMCTLAndBodyDecode(t *testing.T) {
 	handler, _, _, store := testProxyEnvWithAuthStore(t)
-	user, err := store.CreateUser("unbound-recovery-nil-vmctl", "unbound-recovery-nil-vmctl@example.com")
+	user, err := store.CreateUser("owner-wide-recovery-nil-vmctl", "owner-wide-recovery-nil-vmctl@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, secret, err := store.CreateAPIKey(t.Context(), user.ID, "legacy admin", []string{"admin"}, nil)
+	_, secret, err := store.CreateAPIKey(t.Context(), user.ID, "owner-wide admin", []string{"admin"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,8 +514,8 @@ func TestUnboundAdminComputeRecoveryDeniedBeforeMissingVMCTLAndBodyDecode(t *tes
 	req.Header.Set("Authorization", "Bearer "+secret)
 	rec := httptest.NewRecorder()
 	handler.HandleAPI(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 }
 
@@ -559,5 +712,62 @@ func TestBoundAPIKeyDesktopMismatchDeniedAcrossComputerRouteFamilies(t *testing.
 		if rec.Code != http.StatusForbidden || guardLookups.Load() != before || downstreamCalls.Load() != 0 {
 			t.Fatalf("path=%s status=%d lookup_delta=%d downstream=%d", path, rec.Code, guardLookups.Load()-before, downstreamCalls.Load())
 		}
+	}
+}
+
+func TestOwnerWideAdminAPIKeyComputeStatusListsEveryOwnedInteractiveComputer(t *testing.T) {
+	handler, _, _, store := testProxyEnvWithAuthStore(t)
+	user, err := store.CreateUser("owner-wide-status", "owner-wide-status@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, secret, err := store.CreateAPIKey(t.Context(), user.ID, "owner-wide status", []string{"read:runtime"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const primaryID = "computer-ow-primary"
+	const branchID = "computer-ow-branch"
+	var listCalls atomic.Int64
+	vmctlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/internal/vmctl/lookup" && r.URL.Query().Get("desktop_id") == "primary":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"computer_id": primaryID, "user_id": user.ID, "desktop_id": "primary", "vm_id": "vm-ow-primary",
+				"kind": "interactive", "state": "active", "epoch": 11,
+			})
+		case r.URL.Path == "/internal/vmctl/list":
+			listCalls.Add(1)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ownerships": []any{
+				map[string]any{"computer_id": primaryID, "user_id": user.ID, "desktop_id": "primary", "kind": "interactive"},
+				map[string]any{"computer_id": branchID, "user_id": user.ID, "desktop_id": "branch", "kind": "interactive"},
+				map[string]any{"computer_id": "computer-ow-worker", "user_id": user.ID, "desktop_id": "worker", "kind": "worker"},
+				map[string]any{"computer_id": "computer-foreign", "user_id": "somebody-else", "desktop_id": "primary", "kind": "interactive"},
+			}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer vmctlServer.Close()
+	handler.vmctlClient = vmctl.NewClient(vmctlServer.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/compute/status", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	handler.HandleAPI(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var response computeStatusResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	desktopIDs := make([]string, 0, len(response.Computers))
+	for _, c := range response.Computers {
+		desktopIDs = append(desktopIDs, c.DesktopID)
+	}
+	if len(desktopIDs) != 2 || desktopIDs[0] != "primary" || desktopIDs[1] != "branch" {
+		t.Fatalf("computers=%v want [primary branch] only (worker and foreign filtered)", desktopIDs)
+	}
+	if listCalls.Load() != 1 {
+		t.Fatalf("list_calls=%d want=1", listCalls.Load())
 	}
 }

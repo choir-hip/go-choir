@@ -110,8 +110,19 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	desktopID := requestDesktopID(r)
-	if _, ok := h.requireAPIKeyComputerTarget(w, r, authResult, "", desktopID); !ok {
-		return
+	// Owner-wide keys: named target optional for read-only status (enumerated
+	// below shows every owned interactive computer); when a computer_id is
+	// provided the exact join must hold. Bound keys: exact join as today.
+	computerTarget := (*resolvedComputerTarget)(nil)
+	if authResult.AuthMethod != "api_key" || strings.TrimSpace(authResult.ComputerID) != "" || computerIDFromRequest(r) != "" {
+		var ok bool
+		computerTarget, ok = h.requireAPIKeyComputerTarget(w, r, authResult, "", desktopID)
+		if !ok {
+			return
+		}
+		if computerTarget != nil && computerTarget.DesktopID != "" {
+			desktopID = computerTarget.DesktopID
+		}
 	}
 	resp := computeStatusResponse{
 		Status:      "ok",
@@ -170,7 +181,7 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	own, err := h.vmctlClient.LookupDesktopContext(r.Context(), authResult.UserID, desktopID)
-	if authResult.AuthMethod == "api_key" && err == nil && (own == nil || own.UserID != authResult.UserID || own.ComputerID != authResult.ComputerID || own.DesktopID != desktopID) {
+	if authResult.AuthMethod == "api_key" && computerTarget != nil && err == nil && (own == nil || own.UserID != authResult.UserID || own.ComputerID != computerTarget.ComputerID || own.DesktopID != desktopID) {
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "computer ownership authority unavailable"})
 		return
 	}
@@ -268,6 +279,23 @@ func (h *Handler) currentImmutableIdentity(ctx context.Context, userID, desktopI
 	}, nil
 }
 
+// computerIDFromRequest returns the stable ComputerID named by the request
+// through the computer_id query parameter or X-Choir-Computer header, or ""
+// when none is named. It is the owner-wide key targeting channel for routes
+// that do not carry the computer in their path.
+func computerIDFromRequest(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if v := strings.TrimSpace(r.URL.Query().Get("computer_id")); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(r.Header.Get("X-Choir-Computer")); v != "" {
+		return v
+	}
+	return ""
+}
+
 func (h *Handler) writeComputeStatus(w http.ResponseWriter, resp *computeStatusResponse, userID, desktopID string) {
 	if resp != nil && h != nil && h.recoveries != nil {
 		if recovery, _, _, _, ok := h.recoveries.snapshot(userID, desktopID); ok {
@@ -288,7 +316,7 @@ func appendComputerList(computers []computeComputer, warnings []string, listed [
 }
 
 func (h *Handler) visibleComputersForStatus(ctx context.Context, authResult *AuthResult, current computeComputer) ([]computeComputer, []string) {
-	if authResult != nil && authResult.AuthMethod == "api_key" {
+	if authResult != nil && authResult.AuthMethod == "api_key" && strings.TrimSpace(authResult.ComputerID) != "" {
 		return []computeComputer{current}, nil
 	}
 	userID := ""
@@ -386,11 +414,19 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 	action := strings.TrimSpace(req.Action)
 	desktopID := strings.TrimSpace(req.DesktopID)
 	if desktopID == "" {
-		desktopID = requestDesktop
+		if authResult.AuthMethod == "api_key" && computerTarget != nil && computerTarget.DesktopID != "" {
+			desktopID = computerTarget.DesktopID
+		} else {
+			desktopID = requestDesktop
+		}
 	}
 	if authResult.AuthMethod == "api_key" && (computerTarget == nil || computerTarget.DesktopID != desktopID) {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key is bound to another desktop"})
 		return
+	}
+	computerID := authResult.ComputerID
+	if authResult.AuthMethod == "api_key" && computerTarget != nil && computerTarget.ComputerID != "" {
+		computerID = computerTarget.ComputerID
 	}
 	if err := h.ensureComputerVersionRoute(r.Context(), authResult.UserID, desktopID); err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "immutable ComputerVersion route unavailable"})
@@ -399,8 +435,8 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 
 	switch action {
 	case "wake_current_computer", "resume_current_computer":
-		op := h.recoveries.startOrJoin(authResult.UserID, desktopID, authResult.ComputerID, action, func(ctx context.Context) computeRecoveryRunResult {
-			current, runtimeStatus, runErr := h.runComputeRecovery(ctx, authResult.UserID, desktopID, authResult.ComputerID)
+		op := h.recoveries.startOrJoin(authResult.UserID, desktopID, computerID, action, func(ctx context.Context) computeRecoveryRunResult {
+			current, runtimeStatus, runErr := h.runComputeRecovery(ctx, authResult.UserID, desktopID, computerID)
 			return computeRecoveryRunResult{
 				Current: current,
 				Runtime: runtimeStatus,
@@ -431,7 +467,7 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 			recovery, current, runtimeStatus, _, _ := h.recoveries.snapshotOperation(op)
 			if current.DesktopID == "" {
 				current = computeComputerFromFields(
-					authResult.ComputerID,
+					computerID,
 					desktopID,
 					string(vmctl.VMKindInteractive),
 					"refreshing",
@@ -452,7 +488,7 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 	case "stop_current_computer":
 		if authResult.AuthMethod == "api_key" {
 			current, lookupErr := h.vmctlClient.LookupDesktopContext(r.Context(), authResult.UserID, desktopID)
-			if lookupErr != nil || current == nil || current.UserID != authResult.UserID || current.ComputerID != authResult.ComputerID || current.DesktopID != desktopID {
+			if lookupErr != nil || current == nil || current.UserID != authResult.UserID || current.ComputerID != computerID || current.DesktopID != desktopID {
 				writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "computer ownership authority unavailable"})
 				return
 			}
@@ -463,7 +499,7 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		current := computeComputerFromFields(
-			authResult.ComputerID,
+			computerID,
 			desktopID,
 			string(vmctl.VMKindInteractive),
 			string(vmctl.VMStateStopped),

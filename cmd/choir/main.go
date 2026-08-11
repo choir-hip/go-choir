@@ -1439,24 +1439,12 @@ func runAPIKeyList(args []string, stdout, stderr io.Writer) int {
 	return writeJSON(stdout, resp)
 }
 
-// scopeRequiresComputerBinding mirrors the auth handler: any scope other than
-// manage:keys (and empty) selects a computer, so a stable computer_id binding
-// is required at creation time.
-func scopeRequiresComputerBinding(scopes []string) bool {
-	for _, scope := range scopes {
-		if strings.TrimSpace(scope) != "" && scope != "manage:keys" {
-			return true
-		}
-	}
-	return false
-}
-
 func runAPIKeyCreate(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("choir api-key create", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	labelFlag := fs.String("label", "CLI key", "Label for the new API key")
 	scopesFlag := fs.String("scopes", "read:texture,read:base,read:runtime", "Comma-separated child scopes (must be within the caller's delegated scopes)")
-	computerFlag := fs.String("computer", os.Getenv("CHOIR_COMPUTER_ID"), "Stable ComputerID to bind the key to (required for computer-selecting scopes)")
+	computerFlag := fs.String("computer", os.Getenv("CHOIR_COMPUTER_ID"), "Optional stable ComputerID to attenuate the key to one computer; omit for an owner-wide key that controls every computer you own")
 	expiresFlag := fs.String("expires-at", "", "Optional RFC 3339 expiry (for example 2026-08-11T12:00:00Z); must be in the future")
 	c, err := newClient(fs, args, stdout, stderr)
 	if err != nil {
@@ -1469,10 +1457,6 @@ func runAPIKeyCreate(args []string, stdout, stderr io.Writer) int {
 		if s != "" {
 			scopes = append(scopes, s)
 		}
-	}
-	if scopeRequiresComputerBinding(scopes) && strings.TrimSpace(*computerFlag) == "" {
-		fmt.Fprintln(stderr, "choir api-key create: --computer is required for computer-selecting scopes (or $CHOIR_COMPUTER_ID); use scopes=manage:keys for a key-management-only key")
-		return 2
 	}
 	body := map[string]any{
 		"label":       strings.TrimSpace(*labelFlag),

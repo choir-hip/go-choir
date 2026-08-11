@@ -4999,7 +4999,7 @@ func TestAdminBearerCanCreateAndRevokeOwnerKeys(t *testing.T) {
 	}
 }
 
-func TestCreateAPIKeyComputerSelectingScopesRequireBinding(t *testing.T) {
+func TestCookieOwnerCreatesOwnerWideAndBoundAPIKeys(t *testing.T) {
 	targetScopes := []string{
 		"admin", "acceptance:read", "read:runtime", "write:runtime",
 		"read:base", "write:base", "read:texture", "write:texture",
@@ -5009,22 +5009,53 @@ func TestCreateAPIKeyComputerSelectingScopesRequireBinding(t *testing.T) {
 		"computer:self_development:mode",
 	}
 	for index, scope := range targetScopes {
-		t.Run(scope, func(t *testing.T) {
+		t.Run(scope+" owner-wide", func(t *testing.T) {
 			h, priv := testHandlerEnv(t)
-			user, err := h.store.CreateUser(fmt.Sprintf("binding-user-%d", index), fmt.Sprintf("binding-%d@example.com", index))
+			user, err := h.store.CreateUser(fmt.Sprintf("owner-wide-user-%d", index), fmt.Sprintf("owner-wide-%d@example.com", index))
 			if err != nil {
 				t.Fatalf("create user: %v", err)
 			}
-			body := fmt.Sprintf(`{"label":"missing binding","scopes":[%q]}`, scope)
+			body := fmt.Sprintf(`{"label":"owner-wide","scopes":[%q]}`, scope)
 			req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
 			rec := httptest.NewRecorder()
 			h.HandleCreateAPIKey(rec, req)
-			if rec.Code != http.StatusBadRequest {
-				t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+			if rec.Code != http.StatusCreated {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+			}
+			var created createAPIKeyResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if created.ComputerID != "" {
+				t.Fatalf("computer_id=%q want empty owner-wide binding", created.ComputerID)
 			}
 			keys, err := h.store.ListAPIKeys(t.Context(), user.ID)
-			if err != nil || len(keys) != 0 {
-				t.Fatalf("keys=%d err=%v, want no persisted row", len(keys), err)
+			if err != nil || len(keys) != 1 {
+				t.Fatalf("keys=%d err=%v, want exactly one persisted owner-wide row", len(keys), err)
+			}
+			if keys[0].ComputerID != "" || !apiKeyHasScope(keys[0].Scopes, scope) {
+				t.Fatalf("persisted key=%+v want owner-wide with %q", keys[0], scope)
+			}
+		})
+		t.Run(scope+" bound", func(t *testing.T) {
+			h, priv := testHandlerEnv(t)
+			user, err := h.store.CreateUser(fmt.Sprintf("bound-user-%d", index), fmt.Sprintf("bound-%d@example.com", index))
+			if err != nil {
+				t.Fatalf("create user: %v", err)
+			}
+			body := fmt.Sprintf(`{"label":"bound","scopes":[%q],"computer_id":"computer-a"}`, scope)
+			req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
+			rec := httptest.NewRecorder()
+			h.HandleCreateAPIKey(rec, req)
+			if rec.Code != http.StatusCreated {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+			}
+			var created createAPIKeyResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if created.ComputerID != "computer-a" {
+				t.Fatalf("computer_id=%q want computer-a", created.ComputerID)
 			}
 		})
 	}
@@ -5066,7 +5097,7 @@ func TestCreateAPIKeyBoundBearerDelegationRequiresSameComputer(t *testing.T) {
 		computerID string
 		want       int
 	}{
-		{name: "empty", want: http.StatusBadRequest},
+		{name: "empty", want: http.StatusForbidden},
 		{name: "different", computerID: "computer-b", want: http.StatusForbidden},
 		{name: "same", computerID: "computer-a", want: http.StatusCreated},
 	} {
@@ -5089,5 +5120,70 @@ func TestCreateAPIKeyBoundBearerDelegationRequiresSameComputer(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestOwnerWideBearerDelegationMintsOwnerWideAndBoundChildren(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	user, err := h.store.CreateUser("owner-wide-delegation-user", "owner-wide-delegation@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, parentSecret, err := h.store.CreateAPIKey(t.Context(), user.ID, "owner-wide manager", []string{"manage:keys", "read:base"}, nil)
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	for _, tc := range []struct {
+		name       string
+		computerID string
+		want       int
+		wantBound  string
+	}{
+		{name: "owner-wide child", want: http.StatusCreated, wantBound: ""},
+		{name: "bound child", computerID: "computer-c", want: http.StatusCreated, wantBound: "computer-c"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := fmt.Sprintf(`{"label":%q,"scopes":["read:base"],"computer_id":%q}`, "child-"+tc.name, tc.computerID)
+			req := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body))
+			req.Header.Set("Authorization", "Bearer "+parentSecret)
+			rec := httptest.NewRecorder()
+			h.HandleCreateAPIKey(rec, req)
+			if rec.Code != tc.want {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, tc.want, rec.Body.String())
+			}
+			var created createAPIKeyResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if created.ComputerID != tc.wantBound {
+				t.Fatalf("computer_id=%q want=%q", created.ComputerID, tc.wantBound)
+			}
+		})
+	}
+}
+
+func TestBoundBearerCannotMintOwnerWideKey(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	user, err := h.store.CreateUser("bound-no-owner-wide-user", "bound-no-owner-wide@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, parentSecret, err := h.store.CreateComputerScopedAPIKey(t.Context(), user.ID, "bound manager", []string{"manage:keys", "read:base"}, "computer-a", nil)
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	// A bound caller may never mint an owner-wide key; its delegation is
+	// confined to the exact computer it is bound to.
+	body := fmt.Sprintf(`{"label":"escape attempt","scopes":["read:base"]}`)
+	req := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+parentSecret)
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+	keys, err := h.store.ListAPIKeys(t.Context(), user.ID)
+	if err != nil || len(keys) != 1 {
+		t.Fatalf("keys=%d err=%v, want only the parent row persisted", len(keys), err)
 	}
 }

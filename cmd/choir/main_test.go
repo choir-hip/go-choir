@@ -1121,25 +1121,42 @@ func TestAPIKeyCreatePostsToAuthEndpoint(t *testing.T) {
 	}
 }
 
-// TestAPIKeyCreateRequiresComputerForComputerScopes asserts the CLI refuses to
-// POST a computer-selecting scope without a stable computer binding, matching
-// the auth handler's binding requirement.
-func TestAPIKeyCreateRequiresComputerForComputerScopes(t *testing.T) {
+// TestAPIKeyCreateOwnerWidePostsEmptyComputer asserts the CLI POSTs an
+// owner-wide key (empty computer_id) when --computer is omitted, including
+// for computer-selecting scopes.
+func TestAPIKeyCreateOwnerWidePostsEmptyComputer(t *testing.T) {
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		if r.URL.Path != "/auth/api-keys" {
+			t.Fatalf("path = %q, want /auth/api-keys", r.URL.Path)
+		}
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		scopes, ok := body["scopes"].([]any)
+		if !ok || len(scopes) != 1 || scopes[0] != "read:texture" {
+			t.Fatalf("scopes = %v, want [read:texture]", body["scopes"])
+		}
+		if body["computer_id"] != "" {
+			t.Fatalf("computer_id = %v, want empty for owner-wide key", body["computer_id"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"ak_ow","label":"owner-wide","scopes":["read:texture"],"secret":"choir_sk_ow"}`)
 	}))
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"api-key", "create", "--scopes=read:texture", "--host=" + stub.URL}, &out, &errOut)
-	if code != 2 {
-		t.Fatalf("code = %d, want 2; stderr=%s", code, errOut.String())
+	code := run([]string{"api-key", "create", "--label=owner-wide", "--scopes=read:texture", "--host=" + stub.URL}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
-	if !strings.Contains(errOut.String(), "--computer is required") {
-		t.Fatalf("stderr = %q, want --computer requirement", errOut.String())
+	var resp map[string]any
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v; stdout=%s", err, out.String())
+	}
+	if resp["secret"] != "choir_sk_ow" {
+		t.Fatalf("secret = %v, want choir_sk_ow", resp["secret"])
 	}
 
-	// manage:keys-only keys need no computer binding.
+	// manage:keys-only keys also POST without a computer binding.
 	out.Reset()
 	errOut.Reset()
 	manageStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

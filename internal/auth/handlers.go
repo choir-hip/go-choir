@@ -1382,22 +1382,12 @@ func validateScopes(scopes []string) error {
 	return nil
 }
 
-// scopeRequiresComputerBinding classifies requested attenuation only. The
-// binding is not ownership evidence; computer-selecting proxy routes still
-// perform an exact use-time vmctl ownership join.
-func scopeRequiresComputerBinding(scopes []string) bool {
-	for _, scope := range scopes {
-		if strings.TrimSpace(scope) != "" && scope != "manage:keys" {
-			return true
-		}
-	}
-	return false
-}
-
 // HandleCreateAPIKey handles POST /auth/api-keys.
 // Cookie-authenticated owners may create any valid key. Bearer callers require
 // manage:keys or admin and may delegate only a subset of their own scopes.
-// The secret is returned once and never stored in plaintext.
+// A key with computer-selecting scopes is owner-wide when computer_id is
+// omitted, or attenuated to exactly one stable ComputerID when provided. The
+// secret is returned once and never stored in plaintext.
 func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
@@ -1422,10 +1412,6 @@ func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 
 	if err := validateScopes(req.Scopes); err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
-		return
-	}
-	if scopeRequiresComputerBinding(req.Scopes) && strings.TrimSpace(req.ComputerID) == "" {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "computer_id is required for computer-selecting scopes"})
 		return
 	}
 	if !apiKeyMayManageKeys(callerKey) {

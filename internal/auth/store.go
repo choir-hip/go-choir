@@ -742,8 +742,10 @@ func (s *Store) CreateAPIKey(ctx context.Context, userID, label string, scopes [
 }
 
 // CreateComputerScopedAPIKey creates an API key whose authority is optionally
-// bound to one stable ComputerID. Callers must require a non-empty binding for
-// every computer-scoped scope.
+// bound to one stable ComputerID. An empty computerID produces an owner-wide
+// key: it reaches every interactive computer the owner owns through the exact
+// use-time vmctl ownership join in the proxy. A non-empty computerID is
+// attenuation metadata, never ownership evidence.
 func (s *Store) CreateComputerScopedAPIKey(ctx context.Context, userID, label string, scopes []string, computerID string, expiresAt *time.Time) (id, secret string, err error) {
 	if userID == "" {
 		return "", "", errors.New("create api key: user_id is required")
