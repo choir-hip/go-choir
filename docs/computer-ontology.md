@@ -70,11 +70,11 @@ different merge laws.
 | --- | --- | --- |
 | Persistent user computer and VM lifecycle | **Live** | A long-lived computer is identified by stable ComputerID; a realization is replaceable machine state. Existing lifecycle/status remain projections and actuators. |
 | Worker/background and candidate VM mutation | **Retired authority; canonical residue unclaimed** | Generic delegated agents are durable runs/trajectories. The rejected candidate's deletion is not canonical-main state; no current Definition authorizes cleanup or effects. |
-| `internal/computerversion` constructor/verifier | **Live audited construction substrate** | ComputerVersion is an immutable reconstruction checkpoint at an event head, not the evolving computer or semantic promotion authority. |
-| Computer event authority | **Live effects-OFF substrate** | One guest appender, corpusd head CAS, embedded projection, immutable event artifacts, privacy, and recovery remain the separate semantic-event authority. The completed durable-work acceptance exercised no effects. |
+| `internal/computerversion` constructor/verifier | **Live audited construction substrate** | `ComputerVersion = (CodeRef, ArtifactProgramRef)` is the **code/artifact identity** published at an event head — not by itself a complete restore address. Full restore completeness (event head + content witness + VM-local projection) is the active Definition's deliverable; do not treat the code tuple alone as "put the computer back." |
+| Computer event authority | **Live effects-OFF substrate until the active Definition's rehearsal/restore gates pass** | One guest appender, corpusd head CAS, embedded projection, immutable event artifacts, privacy, and recovery remain the separate semantic-event authority. The completed durable-work acceptance exercised no effects. The active Definition turns effects on only inside a proven reversible envelope — not as a global ON flip. |
 | Capsules | **Implemented source candidate; effect proof pending** | Guest-local namespaces, cgroup, seccomp, Landlock, capability broker, transaction tape, and fail-closed admission require a separately owner-ratified effect mission and deployed acceptance. |
 | Features adoption and activation | **Retired authority; canonical residue unclaimed** | AppChangePackage/AppAdoption/lineage records are not self-development authority or product fallback. Rejected-branch deletion is not a landed claim. |
-| Self-development acceptance/materialization | **Implemented source candidate; deployed proof pending** | Public CLI/API operations, external decision, guest updater, checkpoint, route projection, rejection, restart/reconstruction, and rollback require a future owner-ratified Definition and G1 acceptance. |
+| Self-development acceptance/materialization | **Active Definition in flight** | Executable authority is `docs/definitions/choir-supervised-self-development-effects-2026-08-11.md` (reversibility, standing-rule auto-promotion, acceptance-fenced restore). Do not resume CTS or the historical self-dev roadmap as the schedule. |
 
 Do not collapse a code-present substrate into a live product claim. A worker
 VM, forked desktop, AppChangePackage, capsule, frozen effect bundle,
@@ -98,10 +98,22 @@ are not self-development candidates or fallbacks.
 
 An accepted event changes desired state. A root-owned guest updater stages and
 health-checks the immutable release before an applied event advances effective
-state. `ComputerVersion = (CodeRef, ArtifactProgramRef)` is then a
-reconstruction checkpoint at that effective event head. vmctl may project the
-checkpoint into the serving route through its sole route-slot CAS, but the
-route is not computer identity or event authority.
+state. `ComputerVersion = (CodeRef, ArtifactProgramRef)` is then the
+**code/artifact identity** at that effective event head — not a complete restore
+handle by itself. vmctl may project the checkpoint into the serving route through
+its sole route-slot CAS, but the route is not computer identity or event
+authority.
+
+**Restore-set boundary (normative during and after the active effects Definition):**
+a user-computer restore addresses an event head and restores the release pointer
+plus VM-local embedded state only. Shared platform/world-wire Dolt and cycle/
+sourcecycled state are OUT (restoring them would rewind other computers or
+shared services). The host-served web frontend (`nix/node-b.nix` →
+`/var/www/go-choir/frontend-current`) is currently OUT of the restore set —
+either treat it as platform control-plane software, or fold it into a successor
+frontend-in-release mission; do not claim "the whole computer" was put back while
+the UI remains outside the envelope. External sends/publishes/payments are
+outside restore by nature.
 
 The normal computer is long-lived and reconstructible. A realization may be
 replaced without changing `ComputerID`; reconstruction verifies the immutable

@@ -1,11 +1,20 @@
 # Roadmap: Supervised Self-Development with Effects
 
 **Date:** 2026-08-11
-**Status:** converged consensus recommendation; not promoted doctrine
+**Status:** historical migration receipt — **not live planning authority**
+**Executable successor:**
+[`docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`](definitions/choir-supervised-self-development-effects-2026-08-11.md)
 **Mutation class:** green (documentation only)
 **Derived from:** three-round agentic consensus panel (divergent → lateral →
 convergent) over the existing substrate; evidence in
 `.agentic-consensus/self-dev-roadmap/`
+
+> **Do not schedule work from this document.** Its Mission 0 / D1 model-policy /
+> `accept_once` rehearsal / E1-as-gate / effects-OFF RLM sequencing predicates
+> were superseded by the active Definition (source-code content, standing-rule
+> auto-promotion, acceptance-fenced restore, RLM only after envelope proof with
+> envelope inheritance). Keep this file as immutable decision provenance; point
+> agents at the Definition.
 
 ## Thesis
 
@@ -149,10 +158,6 @@ downgrade to E1.
 
 ## Next actions
 
-1. Owner: ratify Mission 0 (durable computer-bound key ceremony) and C1
-   (CTS supersession) — the two gates everything else waits on.
-2. After ratification: read `docs/standing-questions.md` and draft the successor
-   Definition (Mission 2 spine) via `skill://definition`; CTS supersede with
-   evidence folding (Mission 1) as the first committed action.
-3. Mission 3 staging rehearsal before any live flip; E2 tape before any
-   registry close.
+**Superseded 2026-08-11.** Execute
+`/goal docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`.
+Do not resume Mission 0–5 from this table as a live schedule.

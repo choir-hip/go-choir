@@ -7,21 +7,23 @@ corpus and does not make an unverified graph status into a live work claim.
 
 [`definitions/choir-supervised-self-development-effects-2026-08-11.md`](definitions/choir-supervised-self-development-effects-2026-08-11.md)
 is the owner-ratified executable `/goal`, superseding Continuous Texture
-Supervision (CTS) as of 2026-08-11. It makes the stable computer's canonical
-event chain the single state authority and drives supervised self-development
-with effects through a frozen `CapsuleEffectBundle` envelope: D1 content (model
-policy) and D2 envelope mechanics are decided separately, E2 is the correction
-spine (accept A → falsify → B supersedes → restart proves B), and the E2
-expressibility pre-flight gates any rehearsal code. The full route map is
-`choir-self-development-roadmap-2026-08-11.md`; CTS remains citable evidence,
-not an entrypoint.
+Supervision (CTS) as of 2026-08-11. Proof target is **reversibility**: capsule-
+authored source change (solitaire, API-only) under a standing-rule two-seat
+auto-promotion envelope, E2 correction spine, then acceptance-fenced restore of
+VM-local state + release (platform/cycle/host frontend OUT). Reasoning and
+retired approaches live in the Definition's
+[supplement](definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md).
+`choir-self-development-roadmap-2026-08-11.md` is a **historical migration
+receipt**, not a live schedule. CTS remains citable evidence, not an entrypoint.
 
-The current host-deployed runtime is `fbc7ff5a`; CI/deploy run `31326948312`
-passed selected Race shards, aggregate Go, differential SBOM acceptance, rolling
-publication, and Node B deployment. Public `/health` reports exact proxy commit
-`fbc7ff5a`; activation receipts exact-join auth, proxy, vmctl, gateway, corpusd,
-maild, and sourcecycled. This is host/source readiness, not retained guest
-proof. The shared API-key guard requires every computer-selecting bearer route
+The current host-deployed runtime is `914f7a5d976a` (frontend and proxy both
+`914f7a5d976a`, proxy status ok, deploy time 2026-08-11T18:11:01Z, verified live
+through Settings > Runtime status). The prior reconciled deployment was
+`fbc7ff5a` via CI/deploy run `31326948312`, which passed selected Race shards,
+aggregate Go, differential SBOM acceptance, rolling publication, and Node B
+deployment; public `/health` reported exact proxy commit `fbc7ff5a` and its
+activation receipts exact-join auth, proxy, vmctl, gateway, corpusd, maild, and
+sourcecycled. Both are host/source readiness, not retained guest proof. The shared API-key guard requires every computer-selecting bearer route
 to use-time join exact owner and stable ComputerID before selection, resolve,
 recovery, dial, or product effect; creation carries the required binding from
 both callers. The settings app is a one-click bootstrap (full owner delegation,
@@ -33,24 +35,22 @@ usable bearer remains: both accidental keys are revoked/post-401, and historical
 returns public 401 without proving registry revocation — its row and both
 root-only auth rollback copies remain terminal cleanup obligations.
 
-Mission 0 is the exact-owner credential gate on the retained computer: canonical
-same-origin `GET /auth/session` proves owner `c72404bb…` through ordinary headed
-persistent Chrome with native physical presence, then mints the exact <=2-hour
-eight-scope key bound to stable computer
-`computer-42850e9734d9442386c5dd8bf3afbf19` (never VM `vm-bb…`) and atomically
-persists mode `0600` with clipboard cleared before any API call. Exact
-stable-computer lifecycle STATUS must ownership-join logical desktop `primary`
-at failed epoch `8253` before self-development, wrong-target, or pre-recovery
-identity probes. The independently accepted once-ever direct headed-browser
-payload is preserved at
+**Historical (disposed as live gate):** Mission 0 was the exact-owner credential
+gate on the retained computer — headed-browser key ceremony with frozen payload
+at
 `docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`
-(SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`);
-its deployment gate is satisfied, it is authorized only with exact-owner physical
-presence, and it remains not executed. `omp-browser` remains diagnostic-only. No
-headless retry, CDP virtual authenticator, substitute owner/computer, recovery
-bypass, SSH, internal vmctl path, or weaker identity is admissible. After that
-single owner key exists, all further issuance is API/CLI-only (Bearer child-key
-delegation via `manage:keys`).
+(SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`).
+Owner key issuance is now disposed via one-click bootstrap / API-CLI create and
+revoke proven on staging; do not schedule Mission 0 as a live pre-flight for the
+active Definition. Residual cleanup (epoch `8253` disposition; `ak_45ce1796…`
+row and root-only auth rollback copies) remains named in that Definition's
+`now` unknowns, not as a blocking headed-browser ceremony. Exact
+stable-computer lifecycle STATUS must still ownership-join logical desktop
+`primary` before self-development, wrong-target, or pre-recovery identity
+probes when those probes are authorized. `omp-browser` remains diagnostic-only.
+No headless retry, CDP virtual authenticator, substitute owner/computer, recovery
+bypass, SSH, internal vmctl path, or weaker identity is admissible. Further key
+issuance is API/CLI-only (Bearer child-key delegation via `manage:keys`).
 
 A read-only reconciliation of a newly supplied F-era handoff confirms it is
 historical, not a rollback instruction: `8ac0b27d` deployed the authorized
@@ -79,12 +79,14 @@ are repaired; they are not the current blocker. The canonical R/F rehearsal
 remains qualified as bounded deployed rollback-and-recovery PASS with strict
 midpoint forward-observability FAIL, safely recovered. Root-only provider-auth
 rollback copies remain pending terminal deletion or explicit retention authority.
-Effects remain OFF. After exact narrow-key handoff and read-only authority proof, the retained computer must
-prove exact `fbc7ff5a` guest/service identity before fresh acceptance continues
-through post-report v2, correction incorporation, a second downward cycle,
-persistent Super, two isolated writable capsules including a verifier, v3,
-source-open/CLI parity, same-build restart, delayed-result cancellation, complete
-no-effect/Trace/run-acceptance proof, key cleanup, and terminal registry closure.
+Effects remain OFF.
+
+**Historical (not live schedule):** the former CTS continuation packet required
+exact `fbc7ff5a` guest/service identity, then post-report v2 through terminal
+registry closure on the retained computer. That sequence is superseded with CTS
+itself; do not execute it as a gate for the active reversibility Definition.
+Current slice and `next_action` live only in
+`definitions/choir-supervised-self-development-effects-2026-08-11.md`.
 
 ## Completed Definitions — Historical Evidence Authority
 
@@ -173,19 +175,18 @@ it active work or revising the product umbrella's semantics.
 
 Invoke only the active supervised self-development Definition above through
 `/goal docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`.
-Its Mission 0 exact-owner key ceremony and the E2 expressibility pre-flight gate
-execution; neither makes it non-executable or authorizes a further successor.
+This index owns **no** second schedule: current slice, `next_action`, execution
+order, resumption, completion (including `finish.completion_cutover`), mutation,
+rollback sequencing, and escalation authority live exclusively in that
+Definition's `now.*` / `finish.*` frontmatter. Do not invent Mission 0 /
+accept_once / D1 rehearsal gates from historical roadmap or CTS prose.
+
 The superseded Continuous Texture Supervision Definition is historical evidence
 (superseded 2026-08-11), not an entrypoint; its receipts remain citable. The
 performance and Choir-in-Choir drafts remain blocked and non-executable;
 promoting either requires separate owner ratification and three-registry
-reconciliation.
-
-This index delegates the current slice, next action, execution order, resumption,
-completion, mutation, rollback sequencing, and escalation authority to that
-active Definition; it owns no second mission state. The completed convergence
-Definition is evidence, not an executable entrypoint. Autopaper remains
-unauthorized.
+reconciliation. The completed convergence Definition is evidence, not an
+executable entrypoint. Autopaper remains unauthorized.
 
 The OG/Dolt/heresy contract supplies the deployed D-ROUTE corpusd/vmctl CAS
 mechanics, receipt gates, H031 detection, and deletion bars. The completed

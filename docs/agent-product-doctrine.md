@@ -45,9 +45,12 @@ changes only after verified guest materialization.
 - **Acceptance before effect:** an effect bundle is inert until acceptance.
   Guest materialization, checkpoint publication, and route CAS cannot
   acknowledge or substitute for the event.
-- **ComputerVersion checkpoint:** `(CodeRef, ArtifactProgramRef)` is an
-  immutable reconstruction checkpoint at an event head, not computer identity
-  or promotion authority.
+- **ComputerVersion code identity:** `(CodeRef, ArtifactProgramRef)` names the
+  code/artifact published at an event head. It is not computer identity, not
+  promotion authority, and — alone — not a complete restore address. The active
+  effects Definition adds event-head addressing plus a VM-local content witness
+  for restore completeness; promote that fuller checkpoint binding to settled
+  doctrine only after deployed restore proof.
 - **vmctl projection:** vmctl remains the sole route-slot CAS actuator and
   verifies exact accepted-event, checkpoint, materialization, verifier, and
   route-certificate joins. Post-genesis legacy route authority refuses.
@@ -154,9 +157,13 @@ mentions that role.
 ## Runtime Configuration
 
 Provider secrets and platform model catalogs are platform-owned. Per-computer
-model policy is computer-owned durable state and should be editable through the
-product path, including by `super` in response to an owner prompt. Do not patch
-Node B environment variables or tracked server files as a substitute for a
+model policy is computer-owned durable **runtime configuration** and may remain
+editable through the product path as a config write. It is **not** the
+self-development effect content axis: the active Definition retires model-policy
+bundles as the first self-development proof (no apply path to resolution; surface
+is system-owned and scheduled for broker-mediated replacement). Do not teach
+agents that "the computer changing itself" means editing model policy. Do not
+patch Node B environment variables or tracked server files as a substitute for a
 runtime policy path unless the mission is explicitly a platform config deploy.
 
 Role defaults are policy defaults, not architecture. Any configured model may
@@ -218,14 +225,16 @@ The completed convergence Definition's terminal receipt records exact
 source/deploy/host/guest identity; artifact, subject/activation, obligation,
 update-disposition, and work-settlement refs; restart/reconstruction and
 cancellation traces; UI/headless protocol conformance; authority refusals;
-rollback; mutation and heresy deltas; and residual risk. Self-development
-effects remain OFF.
+rollback; mutation and heresy deltas; and residual risk. That receipt left
+self-development effects OFF as a **pre-gate resting state**.
 
-Do not claim deployed self-development from the superseded Definition, rejected
-Round 72 candidate, AppChangePackage/AppAdoption, RunAcceptance, worker/candidate
-VM, local tests, a verifier statement, checkpoint publication, or route
-transition. A future separately owner-ratified Definition must re-authorize and
-prove that product path over the accepted generic kernel.
+Do not claim deployed self-development from the superseded CTS Definition,
+rejected Round 72 candidate, AppChangePackage/AppAdoption, RunAcceptance,
+worker/candidate VM, local tests, a verifier statement, checkpoint publication,
+or route transition. The owner-ratified path is
+`docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`:
+effects turn on only inside a proven reversible envelope (standing-rule
+auto-promotion; irreversible effects refuse), not as a global ON boolean.
 
 `continuation-level` is transitional H008/H014 residue: the durable-actor contract re-points this
 acceptance level at trajectory/work-item settlement evidence. No deleted

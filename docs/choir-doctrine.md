@@ -134,13 +134,17 @@ Preferred vocabulary:
 - human-improving, machine-compounding mainframe (historically: self-improving
   mainframe);
 - persistent computer;
-- durable artifact, artifact program, ComputerVersion (CodeRef, ArtifactProgramRef);
+- durable artifact, artifact program, ComputerVersion (CodeRef,
+  ArtifactProgramRef) as **code/artifact identity** at an event head — not alone
+  a complete restore address;
 - trajectory and work item;
 - evidence, provenance, verifier contract, and acceptance class;
 - stable ComputerID and canonical computer event chain;
 - capsule effect bundle — frozen speculative effects, never a VM or route;
 - capsule (ephemeral effect chamber);
-- materializer, acceptance, projection, and event-derived rollback.
+- materializer, acceptance, projection, and **event-derived restore** (forward
+  rematerialization / acceptance-fenced return; prefer "restore" over "rollback"
+  when meaning product undo — git revert remains a separate repo operation).
 
 Avoid making these the root frame unless the sentence is explicitly about a
 surface: personal workspace, AI workspace, publishing system, sandbox, workflow,
@@ -166,8 +170,8 @@ their own typed artifact domains.
 `C3 asserted` A persistent computer is identified by stable `ComputerID` plus
 its canonical event chain. Risky or long-running mutation *effects* execute in
 capsules and remain inert as frozen effect bundles until an authorized
-acceptance event. Accepted state is materialized into guest releases and
-ComputerVersion checkpoints; vmctl may project a checkpoint into a serving
+acceptance event. Accepted state is materialized into guest releases and ComputerVersion code/
+artifact identities at event heads; vmctl may project a checkpoint into a serving
 route, but neither materialization, checkpoint publication, nor route CAS is
 promotion authority. A speculative self-development candidate is never a VM,
 desktop, mutable branch, package, lineage record, or candidate route.
@@ -605,9 +609,20 @@ Agents must not introduce:
 The durable-computer convergence Definition completed 2026-07-24 delivered the
 generic durable-work kernel: restart reconstruction, reducer-owned
 settlement/cancellation, signed identity, and desktop/headless conformance, with
-effects OFF. That is the substrate the product path builds on. The M-gates from
-earlier doctrine revisions are superseded by that convergence and by this
-product path.
+effects OFF as the **pre-gate resting state**. That is the substrate the product
+path builds on. The M-gates from earlier doctrine revisions are superseded by
+that convergence and by this product path.
+
+The active effects Definition
+(`choir-supervised-self-development-effects-2026-08-11`) does **not** flip a
+global effects-ON boolean. After its rehearsal and restore gates pass, the
+invariant is envelope-relative: reversible computer-local effects may
+auto-promote under an owner-armed standing rule with Super+Texture seats;
+irreversible external effects refuse without a separate decision; restore is
+acceptance-fenced and scoped (VM-local + release; platform/cycle/host frontend
+OUT unless a successor changes that). Until that Definition closes with deployed
+proof, do not teach "effects remain OFF forever" as the destination — teach it
+as the gate before the envelope.
 
 Product order follows the vision (choir-vision.md):
 

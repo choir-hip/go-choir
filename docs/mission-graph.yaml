@@ -281,19 +281,21 @@ nodes:
     enables: []
     note: >-
       Owner-ratified executable Definition superseding Continuous Texture
-      Supervision. Self-development with effects requires exact-owner durable
-      computer-bound credentials first: Mission 0 is the once-ever headed-browser
-      key ceremony on the retained computer (frozen payload at
-      docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md,
-      SHA-256 a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8)
-      or owner disposition of failed epoch 8253; API/CLI key issuance
-      (choir api-key create --computer/--expires-at, settings computer selector)
-      is the routine surface after that single owner key exists. Then Mission 1
-      proves the E2 correction spine on staging: accept A, falsify it, supersede
-      with B, restart proves B. Rehearsal code is gated on the E2-expressibility
-      pre-flight. Effects remain OFF until then.
+      Supervision. Proof target is reversibility under a standing-rule two-seat
+      auto-promotion envelope (capsule-authored solitaire, API-only), then
+      acceptance-fenced restore of VM-local state + release (platform/cycle/host
+      frontend OUT). Mission 0 headed-browser key ceremony is disposed as a live
+      gate (owner bootstrap/API-CLI issuance proven; residual epoch 8253 /
+      ak_45ce1796 cleanup named in Definition unknowns). next_action is the
+      replay completeness probe (rematerialize vs live DoltStateExtractor diff);
+      checkpoint design and restore path wait on that measurement. Effects remain
+      OFF until the staging rehearsal gate that includes proven total restore.
+      Post-acceptance finish.completion_cutover is required for goal.complete.
+      choir-self-development-roadmap-2026-08-11.md is historical migration
+      evidence only — not schedule authority.
     sources:
       - docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
+      - docs/definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md
       - docs/choir-self-development-roadmap-2026-08-11.md
       - docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
       - docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md

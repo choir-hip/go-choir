@@ -18,112 +18,185 @@ start:
       class: goal_candidate
       owner: owner-and-session
       touch: goal_owned
-      paths_or_digest: [docs/definitions/choir-supervised-self-development-effects-2026-08-11.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
+      paths_or_digest: [docs/definitions/choir-supervised-self-development-effects-2026-08-11.md, docs/definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
       recovery: revert the docs-only commit
   candidates:
     - id: none
   observed_artifact:
-    - claim: Self-development mode CAS exists, missing row resolves to OFF, accept_once requires exact operation/bundle/heads/pending transition/commitments plus a future canonical UTC expiry.
-      evidence_ref: internal/platform/self_development_modes.go NewSelfDevelopmentModeCAS/Get/Set/validateSelfDevelopmentModeTransition
-    - claim: Propose/decision/genesis/rollback API routes exist with verifyStartModeReceipt and accept_once expiry reconciliation conflict fail-close.
-      evidence_ref: internal/agentcore/api_self_development.go
-    - claim: Materializer reconciles, recovers decisions, and materializes/rolls back with signed receipts, checkpoint/route projection, TransitionPromote/TransitionRollback, and EventMaterializationApplied/EventRollbackApplied joins.
-      evidence_ref: internal/agentcore/self_development_materializer.go reconcileSelfDevelopmentMaterialization/recoverSelfDevelopmentDecision/materializeSelfDevelopmentOperation/rollbackSelfDevelopmentOperation
-    - claim: Accepted/rejected decision binding joins operation identity, verifier refs, mode receipt, and both heads; it admits exactly one InputArtifactRef (the mode receipt) and exactly one VerifierRef.
-      evidence_ref: internal/agentcore/self_development_decision_binding.go:45,53
-    - claim: The frozen CapsuleEffectBundle envelope is source-code shaped by construction — Validate refuses any bundle lacking SourceTreeRef, a capsule-exec BuildRecipeRef, RuntimeArtifactRef, TestReceipts, and DependencyToolchainRefs.
+    - claim: "Checkpoints bind no state. ComputerVersion is CodeRef plus ArtifactProgramRef only; the Dolt state extractor is read-only and ProjectionMaterializer is non-runtime; rollback re-applies a prior release while rows written under it remain. Three stores call DOLT_COMMIT; nothing in production calls checkout, branch, or reset, and those commits carry no event-head binding."
+      evidence_ref: internal/computerversion/types.go:40-48; internal/computerversion/dolt_state_extractor.go:27-83; internal/computerversion/projection_materializer.go:9-22; internal/agentcore/self_development_materializer.go:224-273; internal/platform/store.go:481-499; internal/store/store.go:119; internal/cycle/storage.go:56
+    - claim: "Per-candidate owner approval is enforced in code: the decision binding requires an external-owner: authority prefix, and accept_once requires exact operation/bundle/heads/pending-transition/commitments plus a future canonical UTC expiry. Relaxing these is in scope."
+      evidence_ref: internal/agentcore/self_development_decision_binding.go:30-33,45,53; internal/platform/self_development_modes.go:226-242
+    - claim: "The frozen CapsuleEffectBundle refuses any bundle lacking SourceTreeRef, a capsule-exec BuildRecipeRef, RuntimeArtifactRef, TestReceipts, and DependencyToolchainRefs, so every required ref must bind a real capsule execution receipt."
       evidence_ref: internal/capsule/transaction/builder.go:95-111
-    - claim: The complete CoSuper capsule authoring surface exists — spawn_capsule, capsule_write_file, capsule_exec (signed execution receipts), commit_transaction (freezes the classified diff into updaterRoot/incoming), inspect_self_development_bundle, record_self_development_verification.
-      evidence_ref: internal/agentcore/tools_capsule.go:153,251,319,398,477,713,765; internal/capsule/executor.go Exec/PersistGrantedFreezeReceipt
-    - claim: Updater applies a release by staging manifest files, swapping the current pointer, restarting the service, health-probing, and restoring the prior release on probe failure.
-      evidence_ref: internal/updater/updater.go:145-238
-    - claim: The frontend is embedded into the Go binary via go:embed, so a UI change and an API change ship as one built runtime artifact.
-      evidence_ref: cmd/desktop/main.go:24
-    - claim: There is no schema migration framework; stores create tables with CREATE TABLE IF NOT EXISTS at startup, so an additive table is created by a new binary and ignored by the prior binary after rollback.
-      evidence_ref: internal/platform/computer_events.go:18,39,63; no migration runner in internal/platform
-    - claim: No usable owner bearer was available at the prior capture; API key issuance has since been repaired and the one-click bootstrap mints an owner-wide admin key (agentic consensus Family 1: one key controls every owned interactive computer via the use-time vmctl ownership join; bound keys remain as attenuation), so Mission 0's residual is disposition, not absence of a path.
-      evidence_ref: 367265f8; 6ff6b7d0; .agentic-consensus/key-model-2026-08-11-convergent/; docs/choir-crashed-prime-session-review-2026-08-09.md
+    - claim: "Freeze/propose/verify tools have no production call site; an assigned CoSuper holds exactly five capsule-local tools and no upward channel. CoSuper lacks update_coagent, pinned by TestSurvivorContract_GenericCoSuperCannotAuthorPersistentSuperPackets, because Super reads executability from the model-written packet.kind."
+      evidence_ref: internal/agentcore/tool_profiles.go:309-315,386; internal/agentcore/tools_capsule.go:61-102; internal/agentcore/super_controller.go:784-796; internal/agentcore/update_coagent_survivor_contract_test.go:193-199
+    - claim: "The capsule can build: lower layer is the guest root, platform source is snapshotted by git commit, and go/gcc/git/make/nodejs/pkg-config/icu are on PATH with persistent Go caches and Dolt ICU CGO flags set."
+      evidence_ref: nix/sandbox-vm.nix:675-700,717-745,777-798; internal/sandbox/capsule_executor_linux.go:14-56
+    - claim: "Staging serves the web frontend from the host (Caddy on Node B, /var/www/go-choir/frontend-current), outside the updater-controlled release. The candidate is API-only."
+      evidence_ref: nix/node-b.nix:23-24,161,193-207
+    - claim: "Supersession cannot be an operation state — the selfdev machine is linear and terminal — and the decision verifier admits exactly one input artifact ref and one verifier ref, so a supersession citation must ride B's proposal event."
+      evidence_ref: internal/selfdev/operations.go:423-446; internal/agentcore/self_development_decision_binding.go:45,53
+    - claim: "Supervision already flows upward (capsule -> CoSuper -> update_coagent -> Super -> Texture), and Texture revisions already carry a metadata blob plus typed source citations separate from prose. No observation subsystem is required."
+      evidence_ref: internal/agentcore/tools_worker_update.go:176; internal/textureowner/texture.go:2303; internal/textureowner/texture_revision_metadata.go:20-60; internal/textureowner/texture_evidence_sources.go
+    - claim: "There is no migration framework; tables are created with CREATE TABLE IF NOT EXISTS at startup, so a code-only rollback leaves rows behind."
+      evidence_ref: internal/platform/computer_events.go:18,39,63
+    - claim: "Owner key issuance is disposed: one-click bootstrap mints an owner-wide admin key, with headless create and revoke proven on staging."
+      evidence_ref: 367265f8; 6ff6b7d0; .agentic-consensus/key-model-2026-08-11-convergent/
   problems_documented:
-    - id: texture-cannot-observe-self-development-2026-08-11
-      problem: "Texture has no link to self-development. internal/textureowner contains no reference to selfdev, self_development, or SelfDevelopment, so the supervision surface cannot observe operation state, frozen bundles, verifier results, decisions, materialization, or rollback. Without that link the owner can only supervise by reading the raw event tape or the database, which is not the product and not supervision."
-      evidence_ref: "grep of internal/textureowner for selfdev|self_development|SelfDevelopment returns no matches; CTS acceptance already contemplated inspecting self-development operation state alongside Texture versions (docs/definitions/choir-continuous-texture-supervision-2026-08-07.md acceptance action comparing event heads, operation state, materialization, checkpoint, route against accepted Texture versions)"
-      consequence: "Wiring self-development transitions into Texture as an evidence source is the mission's largest new build and its only red-surface addition. It is required, not optional: a solitaire change that lands without owner-readable supervision proves self-modification, not supervised self-development, and does not satisfy the vision."
-    - id: model-policy-effect-target-mismatch-2026-08-11
-      problem: "The prior content axis (D1, computer-scoped model policy) has no path to its target. The materializer's only apply surface stages bundle RuntimeFiles into the updater release tree and swaps the current pointer, while model policy is read from a separate files root on every activation. A model-policy bundle would stage, promote, restart, health-probe, and sign an applied receipt while changing nothing about resolution — a fully green proof of a change that did not happen."
-      evidence_ref: internal/agentcore/self_development_materializer.go:199; internal/updater/updater.go:145-188; internal/modelpolicy/model_policy.go:89-118; internal/provideriface/config.go:95-101
-      consequence: "Content axis changed from D1 (model policy) to D3 (source code). The mismatch is not repaired by repointing the policy path; it is dissolved by choosing content the substrate was built to carry."
-    - id: model-policy-is-system-owned-2026-08-11
-      problem: "Making model policy the first thing the computer edits about itself contradicts promoted architecture direction: model selection, fallback, and cycling are system-owned processes rather than agent-edited configuration, and internal/modelpolicy is slated for generalization into broker-mediated multi-call selection, with live overlays to be retired once the eval substrate lands."
-      evidence_ref: docs/memo-persistent-rlm-actors-2026-08-09.md (integration table, internal/modelpolicy row; Multi-Model Execution); docs/memo-live-retrospective-evals-2026-08-09.md (overlays are not counterfactual isolation)
-      consequence: "The first supervised self-development effect must not teach the computer to own a surface doctrine assigns to the system and has scheduled for replacement."
+    - id: rollback-is-code-only-2026-08-11
+      problem: "The computer cannot be returned to a point in its history: checkpoints bind no state, Dolt history is written but never read back, and rollback reinstalls a prior binary while its rows remain."
+      evidence_ref: see supplement section 3
+      consequence: "Reversibility is the proof target; building and verifying revert is in scope."
+    - id: approval-was-the-wrong-safety-property-2026-08-11
+      problem: "Per-candidate owner approval is encoded in the decision binding and accept_once, but it guards the reversible side where reversibility is the better guard, and does not guard the irreversible side at all."
+      evidence_ref: see supplement section 2
+      consequence: "Auto-promotion inside a reversible envelope replaces per-candidate approval; decisions are reserved for effects leaving that envelope."
+    - id: actor-isolation-stopgap-2026-08-11
+      problem: "CoSuper has no upward actor channel because Super derives executability from the model-written packet.kind, so holding update_coagent would let a worker open privileged execution on its supervisor."
+      evidence_ref: see supplement section 5
+      consequence: "CoSuper regains update_coagent; executability moves to sender authorization; the pinned survivor contract is replaced by a stronger assertion, never deleted."
+    - id: model-policy-retired-as-content-axis-2026-08-11
+      problem: "The original content axis (computer-scoped model policy) had no path to its target and is a system-owned surface already scheduled for replacement."
+      evidence_ref: see supplement section 1
+      consequence: "Content is source code. Model policy is excluded."
   unknowns:
-    - Whether the CoSuper capsule image carries a Go toolchain and a provisioned source tree sufficient to build and test the runtime artifact. capsule.Executor.PreflightSourceSnapshot suggests source provisioning exists; the toolchain must be confirmed at the first slice, problem-first if absent.
-    - How staging serves the web frontend. If it is served outside the updater-controlled release, the UI half of the candidate lands outside the effect boundary and the candidate must be API-only until that is resolved.
-    - Whether rival-proposal/supersession semantics for E2 are expressible on the existing event/decision/selfdev operation graph without a new settlement subsystem. Pre-flight must document this before coding; do not silently downgrade to E1.
-    - Retained computer epoch 8253 disposition; ak_45ce1796 row and root-only auth rollback cleanup.
+    - "Replay completeness: is every behavior-bearing VM-local write a deterministic function of the event chain plus pinned receipts? Answered by step 2's probe. A clean match licenses rematerialization; a diff names the writes that must be event-derived or fail the checkpoint closed."
+    - "Whether rematerialization is product-ready. ProjectionMaterializer is non-runtime today; if step 2 or step 4 shows it is not usable, restore falls back to a single-workspace pin checkout on an interim basis with the event head still the sole semantic authority."
+    - "Which effect classes are outside the reversible envelope and must refuse to promote under a standing rule."
+    - "Whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata and citations without a payload schema change."
+    - "Whether the CTS-observed registry gap (Texture production registry omitting update_coagent) is still present on the deployed staging build."
+    - "Retained computer epoch 8253 disposition; ak_45ce1796 row and root-only auth rollback cleanup."
 
 finish:
-  deliver: "One supervised self-development candidate accepted on staging, where supervision is the deliverable and the code change is its subject: a CoSuper capsule authors, builds, and tests a new solitaire capability for the computer — headless play API, durable game persistence, play history, and embedded UI — while Texture revises a canonical, owner-readable document at every consequential transition, and the owner reads that document to decide. The computer adds the capability to its own running program under granted rules, through the correction spine. Defective version A is accepted and applied; admissible headless-play evidence falsifies it; corrected version B supersedes A; restart proves B effective. A final owner-directed rollback then revokes the capability. Every owner decision in that sequence is made from Texture legibility, not from the raw event tape."
-  artifact: "An authenticated staging computer trajectory carrying: mode receipt; frozen bundle A with real SourceTreeRef, capsule-exec BuildRecipeRef, DependencyToolchainRefs, TestReceipts, RuntimeArtifactRef, and an independent verifier receipt; accepted decision A binding operation identity + verifier ref + mode receipt + both heads; materialization receipt with checkpoint and route TransitionPromote; a headless API play transcript driving the engine into the illegal state A accepted; superseding decision B carrying its own frozen bundle and forward transition; a post-restart replay of the same sequence showing B refuses the move; and a final rollback receipt showing the capability absent with game rows retained by design — all joined to the canonical computer event chain. Joined to that chain, a Texture document with at least eight causally distinct owner-readable revisions, one per consequential transition (proposal frozen, verification recorded, accepted, materialized, falsified, superseded, restart-proven, revoked), each committed while the work was still open, each citing the exact operation, bundle digest, receipt, and head it describes, and each readable through the public Texture API and the `choir texture` CLI without prose scraping or database access."
+  deliver: "The computer works autonomously inside a reversible envelope and can be put back. A CoSuper capsule authors, builds, tests, freezes, and proposes its own source change (solitaire: headless play API, durable persistence, play history); Super and Texture jointly auto-approve it inside a standing rule the owner armed, with no per-candidate owner decision; it promotes, runs, and writes real state; and then the computer is returned to a point in its history — code and state together — with the restored state verified equal to what was recorded there. Texture revises an owner-readable document throughout so the work is supervisable while it happens. The correction spine runs inside the envelope: defective A promotes, admissible evidence falsifies it, B supersedes A, restart proves B, and a full revert proves the whole excursion was undoable."
+  artifact: "An authenticated staging computer trajectory carrying: the armed standing rule and its bounds; a frozen bundle A with real SourceTreeRef, capsule-exec BuildRecipeRef, DependencyToolchainRefs, TestReceipts, RuntimeArtifactRef, and an independent verifier receipt; a CoSuper-authored proposal; two seat approvals bound to the exact bundle digest and head; a promotion receipt with checkpoint and route TransitionPromote; a checkpoint binding the target event head, code, artifact program, and a VM-local content witness, with the VM-local Dolt HEAD joined as an audit receipt rather than as restore authority; solitaire game rows written under the promoted release; a headless play transcript falsifying A; superseding candidate B and a post-restart proof that B is effective; and a total revert to a pre-promotion checkpoint — a forward restore intent naming the prior event head, VM-local state rebuilt and the release restaged — whose post-revert re-extraction reproduces the recorded schema and content hashes exactly, with the solitaire capability and its rows both absent. Joined to that chain, a Texture document with a revision at each consequential transition, carrying identity in revision metadata and typed citations while its prose stays human."
   acceptance:
-    - action: "Product-path rehearsal on staging with a trivial no-op source change: propose -> accept_once -> materialize -> rollback, with a restart-durable read of the applied artifact. Live flip gated on rehearsal PASS."
-      proves: "Landing machinery (capsule build, frozen bundle, mode CAS, materializer, checkpoint/route, forward rollback) works end to end before any live accept_once on a real capability."
+    - action: "Replay completeness probe (do this first): rematerialize VM-local state from the event chain through the current head and compare the result against a live DoltStateExtractor reading. Report the exact diff."
+      proves: "Whether every behavior-bearing VM-local write is a deterministic function of the event chain plus pinned receipts. A clean match licenses rematerialization as the restore path; a diff names precisely which writes are not event-derived and must be fixed or fail the checkpoint closed."
       evidence_class: deployed proof
-    - action: "Capsule authorship proof: a CoSuper capsule spawns, writes the solitaire source, runs build and test via capsule_exec, and freezes the bundle via commit_transaction, with every required bundle ref bound to a real execution receipt."
-      proves: "The candidate is authored by the computer under supervision, not hand-authored and pushed through the pipeline."
+    - action: "Checkpoint completeness: take a checkpoint and show it binds the target applied/effective event head, CodeRef, ArtifactProgramRef, and a VM-local content witness (extractor schema/table/content-root hashes), with the VM-local Dolt HEAD joined as an audit receipt. Show checkpoint creation refuses when a behavior-bearing local row is not event- or receipt-derivable."
+      proves: "A point in history is addressable, and the checkpoint cannot silently promise a restore it could not perform."
       evidence_class: deployed proof
-    - action: "Live E2 proof: accept A (defective solitaire) -> headless play evidence falsifies A -> correction B supersedes A -> restart -> B effective."
-      proves: "The vision correction spine lands on the canonical tape and survives restart."
+    - action: "Revert build and verification: resolve the checkpoint, quiesce writers, append a forward restore intent naming the prior event head, restage the release and rebuild VM-local state through that head, re-run the extractor, and flip visibility only on exact hash match. Prove a partial or mismatched restore keeps the prior realization and never greens."
+      proves: "Restore is an acceptance-fenced forward transaction, not a distributed commit. The extractor that today observes drift becomes the fence."
       evidence_class: deployed proof
-    - action: "Supervision legibility proof: at each consequential transition, read the current Texture version through the public API and CLI and show it names the operation, bundle digest, verifier result, and head under decision. Show at least one revision committed while capsule work was still open — before any decision was available — and one incorporating the falsifying evidence."
-      proves: "The owner can supervise the self-development in progress from a canonical prose-first document rather than reconstructing state from the event tape; supervision is continuous, not a post-hoc report."
+    - action: "Scope refusal: show that a user-computer revert does not touch the shared platform store or cycle state, and that an attempt to include them is refused."
+      proves: "One computer's restore cannot rewind another computer or shared service state."
       evidence_class: deployed proof
-    - action: "Decision-provenance proof: the owner's accept_once for A, the correction decision for B, and the revocation are each preceded by a Texture revision that presented the state being decided, and the trajectory joins each decision event to the Texture version that preceded it."
-      proves: "Owner decisions were made from the supervised document, not around it; a decision with no preceding legible revision is a supervision failure regardless of its receipts."
+    - action: "Autonomous promotion: a CoSuper capsule authors, builds, tests, freezes, and proposes; Super and Texture both sign bound to the exact bundle digest and head; the candidate promotes with no per-candidate owner decision. Prove promotion refuses when the standing rule is absent, expired, or revoked, and when either seat is missing, failed, or withheld."
+      proves: "The computer promotes its own work inside a rule the owner granted, and the envelope's edges hold."
       evidence_class: deployed proof
-    - action: "Owner-directed revocation: rollback removes the solitaire capability; the deployed API returns absent and the retained game rows are shown to persist."
-      proves: "Granted capability is revocable through the product path, with rollback asymmetry stated rather than concealed."
+    - action: "Capsule authorship proof: every required bundle ref binds a real execution receipt from the authoring capsule."
+      proves: "The candidate is authored by the computer, not hand-authored and pushed through the pipeline."
+      evidence_class: deployed proof
+    - action: "Live E2 inside the envelope: A promotes -> solitaire is played through the headless API and writes rows -> evidence falsifies A -> B supersedes A -> restart proves B effective."
+      proves: "The correction spine runs autonomously and survives restart."
+      evidence_class: deployed proof
+    - action: "Total revert of the excursion: return to a checkpoint taken before A promoted. Show the solitaire API absent, the solitaire rows absent, state hashes equal to the recorded checkpoint, and the event chain still carrying the full history of what was undone."
+      proves: "Autonomy is safe because it is reversible: weeks of work can be wound back to a chosen point without erasing the record that it happened."
+      evidence_class: deployed proof
+    - action: "Irreversible-boundary refusal: attempt an effect that leaves the reversible envelope (external send/publish) under the same standing rule and show it is refused without a decision, while internal promotion proceeds."
+      proves: "Reversibility substitutes for approval exactly where effects are reversible, and not at all where they are not."
+      evidence_class: deployed proof
+    - action: "Supervision legibility: at each consequential transition a Texture revision is readable through the public API and CLI, its prose human and its metadata and typed citations carrying operation, bundle digest, receipt, and head. At least one revision is committed while capsule work is still open."
+      proves: "The owner can watch and intervene during autonomous work rather than reading a post-hoc report."
       evidence_class: deployed proof
     - action: "Replay the accepted trajectory from canonical events."
       proves: "Single semantic authority reconstruction; no second state authority was introduced."
       evidence_class: deployed proof
-  rollback: "Mode CAS -> off; forward rollback transaction restores the prior ComputerVersion checkpoint and the prior release pointer; revert the behavior commits through origin/main and CI to the last accepted runtime. Direct file edits on the deployed node are not the proof and are not a rollback path. Rollback restores the code head only: additive solitaire tables and their rows persist and must be reported as retained, not as removed."
+
+  rollback: "Revoke the standing rule (no further promotion without a new grant); total revert to a prior checkpoint restoring the release pointer and VM-local state only, platform and cycle stores explicitly out of scope; revert the behavior commits through origin/main and CI to the last accepted runtime. Direct file edits on the deployed node are not the proof and are not a rollback path. Effects that already left the reversible envelope are not recoverable by revert and must be reported as such."
   landing:
     required: true
     environment: staging
     required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_acceptance]
+  completion_cutover:
+    required: true
+    purpose: "Staging trajectory proof alone is a false complete if haunted teaching remains live authority. These obligations are part of goal.complete, not post-hoc cleanup."
+    upon_deployed_acceptance:
+      - id: doctrine-promote
+        action: "Promote earned invariants into choir-doctrine / computer-ontology / agent-product-doctrine: checkpoint = event head + CodeRef + ArtifactProgramRef + VM-local content witness; restore acceptance-fenced and scoped; standing-rule + seats replace per-candidate approval for reversible effects; irreversible refusal lane; effects OFF is pre-gate not destination. Preserve platform/cycle/frontend OUT exclusions unless a successor changes them."
+        class: promote-to-doctrine
+      - id: lexicon-cutover
+        action: "Cut product and API vocabulary from rollback/accept_once/approval-as-safety to restore/standing_rule/seats/irreversible decision where those names teach the old world (selfdev states, CLI, Settings copy, Definition skill templates). Keep accept_once only as the irreversible/decision lane if retained."
+        class: rewrite-in-place
+      - id: roadmap-registry-archive
+        action: "Confirm choir-self-development-roadmap is historical-only in registries; stamp SUCCESS on this Definition; ensure CTS cannot be read as an entrypoint; remove live authority edges that still schedule D1/Mission-0/accept_once rehearsal."
+        class: delete-live-authority
+      - id: survivor-detector-replace
+        action: "Replace (do not merely green) survivor/detector pins of CoSuper-without-update_coagent and packet.kind executability; add detectors against standing-rule authorizing send/publish/pay and against treating ComputerVersion code tuple alone as full restore."
+        class: test/detector update
+      - id: owner-product-surface
+        action: "Ship or open a successor Definition for owner-reachable standing-rule arm/revoke, checkpoint list, restore invoke, and irreversible refusal receipts via CLI/API/Settings — restore must not remain a lab-only ceremony."
+        class: successor-mission
+      - id: ops-identity
+        action: "Land restore-aware health/identity reporting (event head + CodeRef + witness + route; distinguish product restore from failed deploy / git revert). Retain release artifacts needed for advertised checkpoints."
+        class: successor-mission
+      - id: frontend-ownership
+        action: "Decide and document: host frontend is platform control-plane OR fold into frontend-in-release successor; do not leave 'total revert of the computer' ambiguous."
+        class: "promote-to-doctrine | successor-mission"
+      - id: successor-preconditions
+        action: "Rewrite RLM / World Wire / in-choir drafts to inherit the envelope (not effects-OFF Phase 1; WW requires irreversible-decision path)."
+        class: rewrite-in-place
+      - id: residual-realism
+        action: "Name residual risks in the terminal receipt: schema-as-event vs additive-only; backup/copy boundaries; tape retention vs erasure; owner verbs (arm/revoke/restore/irreversible decide)."
+        class: residual-risk
   not_done_when:
-    - Effects remain OFF (no accepted + materialized + restart-proven source change on staging).
-    - Only E1 evidence exists (single apply without correction supersession) at registry close.
+    - "Revert is code-only: the release pointer moved and VM-local state did not."
+    - A revert touched the shared platform store or cycle state, rewinding service state or another computer.
+    - A checkpoint was created while behavior-bearing local rows were not event- or receipt-derivable, promising a restore that cannot be performed.
+    - A revert was reported as successful without re-extracting state and comparing it to the hashes recorded at the target checkpoint.
+    - Checkpoints do not bind a target event head and content witness, so no point in history is addressable and "arbitrary rollback" is aspirational.
+    - The VM-local Dolt HEAD was treated as restore authority rather than as an audit receipt joined to the event head.
+    - Promotion required a per-candidate owner decision, or promoted with no standing rule armed, or under an expired or revoked one.
+    - A candidate promoted on one seat, or the pair was quietly reduced to one when a seat failed, timed out, or withheld.
+    - An irreversible effect promoted under the standing rule without a decision.
+    - "Revert erased history: the event chain no longer shows the excursion that was undone."
     - The candidate diff was hand-authored while the report implies capsule authorship.
     - A's defect was caught by A's own verification (that proves the gate, not the correction spine).
-    - The E2 rival/supersession gap was downgraded instead of documented and fixed.
-    - Rollback is claimed as total while solitaire rows persisted.
-    - Texture exposes only a final report after the work settles, or the proof cannot identify a revision committed while capsule work was still open.
-    - Any owner decision (accept A, correct to B, revoke) has no preceding Texture revision presenting the state it decided.
-    - Texture revisions are prose narration that cannot be joined to the exact operation, bundle digest, receipt, or head they claim to describe.
-    - Supervision legibility is demonstrated by scraping generated prose, polling with sleeps, or reading the database because the Texture API and CLI cannot show version, causality, or in-progress state.
+    - CoSuper still lacks update_coagent, or regained it by weakening the privilege property rather than relocating authority to the sender.
+    - Texture exposes only a final report after the work settles, or no revision was committed while capsule work was still open.
+    - Texture prose recites machine identifiers at the owner; identity belongs in metadata, citations, and at the Super level.
+    - Texture revision metadata or citations omit the operation, bundle digest, receipt, or head, leaving prose that cannot be joined to what it claims.
+    - Only E1 evidence exists (single promotion without correction supersession) at registry close.
     - CTS remains active in all three registries without a successor pointer.
+    - Deployed trajectory proof is claimed complete while completion_cutover obligations above remain undone (haunted doctrine/roadmap/tests/CLI still teach the pre-envelope world).
+    - Product restore exists only as automation against staging with no owner-reachable arm/revoke/restore/refusal surface scheduled or shipped.
+    - Ops still treat staging SHA alone as computer identity after the first successful product restore.
 
 boundaries:
   mutation_class: red
-  authority_sources: [owner-ratified decisions, docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/standing-questions.md, docs/choir-self-development-roadmap-2026-08-11.md, AGENTS.md]
+  authority_sources: [owner-ratified decisions, docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/standing-questions.md, AGENTS.md]
   must_preserve:
     - Canonical computer event chain is the single semantic state authority.
-    - Effects stay OFF until the staging rehearsal gate passes.
+    - Effects stay OFF until the staging rehearsal gate passes, and the rehearsal gate now includes a proven total revert.
+    - Revert never erases history. Returning to a prior point is a forward transaction that restores state; the event chain retains the full record of what was done and undone.
+    - Reversibility substitutes for approval only within the reversible envelope. Effects that cross an external boundary — send, publish, pay, third-party write — are outside it and are not promotable under a standing rule.
+    - Checkpoints bind the target event head, code, artifact program, and a VM-local content witness. A checkpoint that cannot restore state is not a checkpoint, and one that cannot be rebuilt from the tape must fail closed rather than be recorded.
+    - The event chain is the address and the authority. VM-local Dolt is a projection and an audit witness, never an alternate head.
+    - "Restore is scoped to the user computer: VM-local state and the release pointer. The shared platform store and cycle state are out of scope, because restoring them would rewind other computers."
+    - "Restore is acceptance-fenced, not a distributed transaction: stage, verify against recorded content hashes, and flip visibility only on exact match. Partial never greens."
     - The candidate is authored inside a CoSuper capsule; every required bundle ref binds a real execution receipt from that capsule.
+    - CoSuper holds update_coagent and reports upward as an actor, while a CoSuper packet can never open privileged execution on Super. Executability derives from the sender's authorization, not from the model-written packet.kind. The pinned survivor contract is replaced by a stronger test, never deleted.
+    - CoSuper freezes and proposes its own candidate. Proposal is worker authority, not a supervisory gate.
+    - "Approval is joint and automatic: the Super seat and the Texture seat both sign, each bound to the exact bundle digest and the head under decision, and the candidate promotes without a per-candidate owner decision. Missing, failed, or withheld approval blocks promotion; the pair cannot be shrunk to one."
+    - Auto-promotion runs only inside a standing rule the owner armed. The owner grants the rule; the seats approve instances within it. An expired, revoked, or absent rule means no promotion, and the rule names its own bounds and expiry.
+    - The owner retains revocation and rollback at all times, and revocation does not require agent cooperation.
+    - The historical self-development roadmap is migration evidence only — not live schedule authority; execute this Definition, not Mission 0–5 from that table.
+    - "Reconnection stays minimal on purpose: the smallest change that restores the channel and holds the privilege property. The RLM/Yaegi rebase is expected to rewrite this layer, so no general authorization or quorum framework is built here."
     - A's defect is pre-declared in a Define receipt before A is proposed, so the falsification cannot later be reported as discovered.
     - Self-development schema changes are additive only — new tables via CREATE TABLE IF NOT EXISTS, never ALTER or DROP of existing tables — because there is no migration framework and rollback does not reverse schema.
-    - The solitaire candidate itself touches no protected surface: no auth/session, no event/decision path, no provider routing, and no Texture write from solitaire code. This is distinct from the mission's Texture writes, which are required — Texture supervises the self-development through its own owner and atomic reducer, and the candidate is its subject, never its author.
+    - "The solitaire candidate itself touches no protected surface: no auth/session, no event/decision path, no provider routing, and no Texture write from solitaire code. This is distinct from the mission's Texture writes, which are required — Texture supervises the self-development through its own owner and atomic reducer, and the candidate is its subject, never its author."
     - Texture's canonical write path, single-owner contract, and atomic revision transition are preserved exactly; observing self-development adds an evidence source to Texture, never a second writer or a second document authority.
     - A Texture revision is evidence and legibility, never acceptance authority; reading a revision does not accept an effect, and no Texture write may append, accept, materialize, checkpoint, or route.
     - No headless/CDP/virtual-authenticator substitute for exact owner presence; no SSH-shaped operations; product path only.
-    - Problem-documentation-first: a discovered platform problem is documented in a code-free Define receipt before any repair-code commit.
+    - "Problem-documentation-first: a discovered platform problem is documented in a code-free Define receipt before any repair-code commit."
   excluded:
     - RLM/Yaegi actor authoring (successor capability mission; Phase 1 of the RLM memo preserves effects-OFF).
     - Model-policy content as a self-development effect (see problems_documented; the surface is system-owned and slated for replacement).
     - Production environment.
-    - CTS's full downward-control choreography — Texture-originated Researcher follow-ups, Texture-to-persistent-Super execution requests, parallel multi-CoSuper assignment, and the generic transcluded-source contract. What is NOT excluded, and is now required, is CTS's supervision core: Texture revising a canonical owner-readable document at each transition while work remains open. Finishing CTS still cannot deliver the vision proof, but supervision was never the severable part.
+    - "CTS's full downward-control choreography — Texture-originated Researcher follow-ups, Texture-to-persistent-Super execution requests, parallel multi-CoSuper assignment, and the generic transcluded-source contract. What is NOT excluded, and is now required, is CTS's supervision core: Texture revising a canonical owner-readable document at each transition while work remains open. Finishing CTS still cannot deliver the vision proof, but supervision was never the severable part."
     - In-choir computer-control draft (separate successor authority).
   protected_surfaces: [self-development mode CAS, canonical computer event chain, materializer + decision binding, checkpoint/route projection, Texture canonical writes, updater root, vmctl lifecycle, auth/session renewal, gateway/provider calls, deployment routing]
   completion_evidence_floor: [deployed proof, independent review of frozen bundle + decision binding]
@@ -132,9 +205,9 @@ measures:
   - name: rehearsal pass
     kind: gate
     baseline: 0
-    desired: accept->materialize->rollback rehearsal PASS on staging before live accept_once
-    decision_use: unlocks the live flip
-    cannot_prove: the vision correction spine
+    desired: "propose -> auto-approve -> promote -> write state -> total revert -> verified hash match, PASS on staging before the live run"
+    decision_use: unlocks the live run; a rehearsal that skips revert does not count
+    cannot_prove: the correction spine, or that restore holds for a large state excursion
   - name: capsule-bound bundle refs
     kind: gate
     baseline: 0
@@ -144,7 +217,7 @@ measures:
   - name: supervised transition coverage
     kind: gate
     baseline: 0
-    desired: every consequential transition has an owner-readable Texture revision citing the exact operation, digest, receipt, and head; at least one committed while work was still open
+    desired: every consequential transition has an owner-readable Texture revision whose metadata and citations carry the exact operation, digest, receipt, and head while its prose stays human; at least one committed while work was still open
     decision_use: gates the supervision claim; an uncovered transition is an unsupervised transition
     cannot_prove: that the owner's decision was correct
   - name: tape segment count
@@ -161,14 +234,14 @@ measures:
     cannot_prove: the product works
 
 now:
-  status: active
-  slice: "Content axis pivoted from model policy to source code; the solitaire candidate, capsule authorship, and Texture supervision are settled as requirements. Next is the toolchain/frontend feasibility check, the Texture observation design, and the E2-expressibility pre-flight."
-  question: "How does Texture observe self-development transitions without becoming a second writer or a second document authority? Does the CoSuper capsule carry a Go toolchain and source tree? Does staging serve the frontend from the updater-controlled release? Is 'B supersedes A' writable on the existing decision graph given the one-input-artifact constraint?"
+  status: working
+  slice: "Proof target is reversibility; revert build and verification are in scope. Next is the replay completeness probe (route map step 1). Its diff decides the restore mechanism, and checkpoint design (step 2) does not start until it is answered."
+  question: "Is every behavior-bearing VM-local write a deterministic function of the event chain plus pinned receipts? A clean rematerialization licenses replay as the restore path; a diff names the writes that must be event-derived or fail the checkpoint closed. Which effects are classified as leaving the reversible envelope?"
   reconciliation:
     observed_at: 2026-08-11T18:18:38Z
     source_ref: main@6ff6b7d0
     deploy_identity: "staging https://choir.news reconciled 2026-08-11: frontend 914f7a5d976a, proxy 914f7a5d976a, proxy status ok, deploy time 2026-08-11T18:11:01Z; re-reconciliation completed, no longer a blocker"
-    authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/choir-self-development-roadmap-2026-08-11.md]
+    authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: 2026-08-11 read-only git status (clean)
     status: reconciled
@@ -176,17 +249,17 @@ now:
     id: none
     state: none
   decision:
-    selected: "Effects-first on existing substrate; D3 source-code content (capsule-authored solitaire: headless play API, persistence, history, embedded UI) x D2 frozen-bundle envelope; continuous Texture supervision as a required deliverable rather than a downstream nicety; E2 correction-spine acceptance followed by owner-directed revocation; RLM strictly after; CTS superseded as superseded_incomplete with its supervision core reclaimed as a requirement here."
+    selected: "Reversibility is the proof target, not acceptance. Revert is built and verified in this mission. Restore is scoped to VM-local state plus the release pointer, addressed by event head, and acceptance-fenced: rematerialize through the target head, verify against recorded content hashes, flip visibility only on exact match. The shared platform store and cycle state are out. Checkpoints bind the target event head, CodeRef, ArtifactProgramRef, and a VM-local content witness, with the VM-local Dolt HEAD as an audit receipt rather than restore authority. CoSuper authors and proposes; Super and Texture jointly auto-approve inside an owner-armed standing rule; no per-candidate owner decision. Decisions are reserved for effects leaving the reversible envelope. CoSuper regains update_coagent with executability relocated from packet.kind to sender authorization. Content remains capsule-authored solitaire, API-only. RLM strictly after."
     kind: architecture
     status: ratified
     source: orchestrator
-    evidence_ref: docs/choir-self-development-roadmap-2026-08-11.md; .agentic-consensus/self-dev-roadmap/{divergent,lateral,convergent}/; .agentic-consensus/readiness-key-2026-08-11/
-    owner_ratification_ref: "owner direction 2026-08-11: model policy rejected as the content axis ('changing model policy doesnt actually prove self-development works ... we should be changing source code'); solitaire candidate proposed by owner; capsule authorship directed by owner ('definitely written by a cosuper in a capsule'); continuous Texture supervision directed by owner as a requirement ('while the self-development occurs, texture will get updated versions so we can supervise ... this must be part of the requirement. just writing solitaire isnt getting at the essence of the point')"
-    recorded_at: 2026-08-11T18:40:00Z
-    consequence: "D1 is removed from the content axis and D3 is no longer excluded. Texture supervision moves from excluded CTS choreography into required deliverable, adding Texture canonical writes to protected surfaces and making the Texture observation link the mission's largest new build. The rehearsal slice does not start until the toolchain/frontend feasibility check, the Texture observation design, and the E2-expressibility pre-flight are documented."
+    evidence_ref: "docs/choir-self-development-roadmap-2026-08-11.md; .agentic-consensus/self-dev-roadmap/{divergent,lateral,convergent}/; .agentic-consensus/readiness-key-2026-08-11/"
+    owner_ratification_ref: "owner direction 2026-08-11, in sequence: model policy rejected as content axis ('we should be changing source code'); capsule authorship required ('definitely written by a cosuper in a capsule'); Texture supervision required ('just writing solitaire isnt getting at the essence of the point'); metadata out of prose ('that kind of information should live at the super level, and/or in citations or metadata, not in texture version prose'); CoSuper reconnection required ('cosuper absolutely needs update_coagent - thats essential'); two seats are auto-approval not a proposal gate ('because users have rollback, we can do auto-promotion'); and the reversibility reframe ('ive never once thought i was building something that requires human approval for changes ... rollback arbitrarily to any point in its history'), with Dolt revert explicitly in scope."
+    recorded_at: 2026-08-11T20:05:00Z
+    consequence: "Per-candidate owner approval is removed as a requirement and replaced by an owner-armed standing rule plus two-seat auto-approval. The decision-binding verifier and mode CAS are relaxed deliberately, which is the mission's heaviest evidence burden. Checkpoint and revert become deliverables rather than a rollback field. Effects leaving the reversible envelope gain an explicit refusal requirement. Freeze/propose authority must be wired onto CoSuper, which today has no production call site. Pre-mission haunted-authority cutover (roadmap demotion, doctrine/ontology transitional language, RLM Phase-1 re-derive note, restore-set boundary, AGENTS restore-vs-deploy note) landed green; finish.completion_cutover must still run after deployed acceptance or the goal is a false complete."
   evidence_refs: [docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "Texture cannot observe self-development at all today (no selfdev reference in internal/textureowner) and wiring it is a red-surface build against Texture's canonical write path; capsule Go toolchain and source-tree availability; staging frontend serving location; E2 expressibility pre-flight; Mission 0 residual (epoch 8253 disposition, ak_45ce1796 row, root-only auth rollback cleanup). RESOLVED 2026-08-11: staging deploy identity reconciled (914f7a5d976a); owner-bearer residual disposed (one-ask owner-wide key acceptance)."
-  next_action: "Design the Texture self-development observation link problem-first (evidence source into the existing atomic revision path, no second writer), run the feasibility check (capsule toolchain + source tree; staging frontend serving), then the E2-expressibility pre-flight; the rehearsal slice may then start without a deploy re-reconciliation step."
+  blocker_or_risk: "Revert is the mission: nothing in production reads Dolt history back, checkpoints bind no state, and Dolt commits carry no head binding. Replay completeness is unresolved and is the deciding measurement; ProjectionMaterializer is explicitly non-runtime today, so the preferred rematerialization path has no runtime implementation yet and an interim single-workspace pin checkout may be needed. Relaxing the decision-binding verifier and mode CAS touches the surfaces that make the tape trustworthy and carries the heaviest evidence burden. RESOLVED 2026-08-11: staging deploy identity reconciled; owner-bearer residual disposed; capsule build capability confirmed; frontend serving location determined (UI out of scope)."
+  next_action: "Run the replay completeness probe: rematerialize VM-local state from the event chain through the current head, diff against a live DoltStateExtractor reading, and report exactly which writes are not event-derived. That single measurement decides whether restore is rematerialization (preferred) or an interim single-workspace pin checkout, and it is the only remaining computer-science unknown in the revert design."
 
 receipts:
   - id: roadmap-consensus-2026-08-11
@@ -221,6 +294,22 @@ receipts:
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
     registry_conformance_ref: "definition_id unchanged; no registry flip required — this is a content-axis revision to an already-registered active Definition"
+  - id: dolt-revert-consistency-consensus-2026-08-11
+    boundary: define
+    commit_or_artifact: pending
+    proof_refs: [.agentic-consensus/dolt-revert-consistency-2026-08-11/divergent/, .agentic-consensus/dolt-revert-consistency-2026-08-11/convergent/]
+    rollback_ref: revert the docs-only revert-design commit
+    disposition: "accepted — panel retired the atomic-vs-ordered framing (divergent 7/8, convergent 8/8). Adopted: scope restore to VM-local plus release with platform and cycle out; address by event head; acceptance-fenced verify; rematerialization preferred over pin checkout. Dissent retained: ProjectionMaterializer is non-runtime today, so pin checkout stands as an implementation contingency."
+    problem_ref: rollback-is-code-only-2026-08-11
+    authorization_ref: owner direction 2026-08-11 (panel commissioned to settle the multi-Dolt question)
+    candidate_or_evidence_refs: [docs/definitions/choir-supervised-self-development-effects-2026-08-11.md]
+    landing:
+      source_commit: pending
+      ci_ref: pending (Docs Truth Check)
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "no registry flip; corrects a scope error in this Definition that would have swept the shared platform store into a user-computer revert"
   - id: one-ask-owner-wide-key-acceptance-2026-08-11
     boundary: acceptance
     commit_or_artifact: "914f7a5d976a (staging frontend+proxy, deploy 2026-08-11T18:11:01Z); owning code 367265f8 + a11aca50"
@@ -238,6 +327,23 @@ receipts:
       deployed_acceptance: "one-click mint -> headless create -> headless revoke, all against staging"
     registry_conformance_ref: "no registry flip; feedforward evidence for the rehearsal slice"
 
+  - id: pre-mission-haunted-authority-cutover-2026-08-11
+    boundary: define
+    commit_or_artifact: pending
+    proof_refs: [.agentic-consensus/mission-success-lateral-2026-08-11/lateral/, docs/choir-self-development-roadmap-2026-08-11.md, docs/ACTIVE.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, docs/memo-persistent-rlm-actors-2026-08-09.md, AGENTS.md, docs/doc-authority-manifest.yaml]
+    rollback_ref: revert the docs-only pre-mission cutover commit
+    disposition: "accepted — demoted roadmap as live schedule; restored-set and ComputerVersion language in ontology/doctrine; model-policy ≠ self-dev axis; RLM Phase-1 re-derive note; AGENTS restore-vs-deploy + completion_cutover Landing Loop note; finish.completion_cutover + not_done_when for post-success packet; panel repair round: Definition YAML subset-safe quoting, mission-graph note rewrite (replay probe; Mission 0 disposed), ACTIVE Mission 0/Invocation demotion + CTS fbc7ff5a sequence demoted historical, SEM-03 transitional restore/standing-rule wording; re-review panel APPROVE_START_GOAL (land docs commit before /goal)"
+    problem_ref: not_applicable
+    authorization_ref: owner direction 2026-08-11 (pre-mission changes from lateral panel; completion packet deferred)
+    candidate_or_evidence_refs: [docs/definitions/choir-supervised-self-development-effects-2026-08-11.md, docs/definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md, docs/mission-graph.yaml, docs/semantic-registry.md]
+    landing:
+      source_commit: pending
+      ci_ref: pending (Docs Truth Check)
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "roadmap registered as historical migration receipt in docs/doc-authority-manifest.yaml; Definition remains sole entrypoint; SEM-03 transitional pending full cutover promote"
+
 view:
   path: none
   generator: none
@@ -245,161 +351,162 @@ view:
 
 # Supervised Self-Development with Effects — Successor Definition
 
-This Definition supersedes `choir-continuous-texture-supervision-2026-08-07`
-as the executable path to the vision proof target (see
-[docs/choir-vision.md](../choir-vision.md)): a self-development candidate
-accepted on staging — one real change to the computer's own working state under
-granted rules, legible on the tape, durable across a restart.
+Supersedes `choir-continuous-texture-supervision-2026-08-07`. Reasoning, retired
+approaches, research findings, and panel records are in the
+[supplement](choir-supervised-self-development-effects-2026-08-11-supplement.md).
+Read that only if you need the why; everything needed to execute is here.
 
-CTS's own `not_done_when` forbids effects while OFF, so finishing CTS cannot
-deliver the vision proof; that is the supersession justification. CTS's
-evidence — mailbox gaps, policy apply/rollback helpers, requirement audit,
-implementation inventory — folds into this Definition's evidence refs.
+## What is being proved
 
-## Why the content axis is source code
+That the computer can work autonomously and be put back. It promotes its own
+source change without a per-candidate owner decision, runs it, writes real
+state — and is then returned to a chosen point in its history, code and state
+together, with the restored state verified equal to what was recorded there.
 
-The first version of this Definition proposed computer-scoped model policy as
-the content of the first effect, on the theory that it was the smallest real
-change to the computer's working state. Two findings retired that choice; both
-are recorded in `start.problems_documented` and neither is repaired by
-adjusting the model-policy plumbing.
+## Rules of the envelope
 
-The first is mechanical. The materializer's only apply surface stages the
-bundle's runtime files into the updater's release tree, swaps the `current`
-pointer, restarts, and health-probes. Model policy is read from a separate
-files root on every activation. A model-policy bundle would have produced a
-complete green trajectory — staged, promoted, restarted, health-probed, signed —
-while changing nothing about resolution. That is the precise failure this
-Definition exists to make impossible.
+**Inside the envelope, the computer promotes its own work.** CoSuper freezes and
+proposes. Super and Texture both sign, each approval bound to the exact bundle
+digest and head. The candidate promotes with no per-candidate owner decision.
 
-The second is architectural. The frozen `CapsuleEffectBundle` cannot validate
-without a source tree ref, a capsule-executed build recipe, a runtime artifact
-ref, test receipts, and dependency toolchain refs. The envelope was designed
-around one story: a capsule took a source tree, ran a recorded build with a
-recorded toolchain, ran tests, and produced a runtime artifact. Pushing a
-configuration file through it would have required stubbing five fields whose
-entire purpose is to attest to a build that never happened. The updater's
-restart-and-health-probe loop, which restores the prior release on failure, is
-likewise a binary-deployment safety loop; a configuration file exercises none
-of it.
+**The owner arms a standing rule, not each candidate.** The rule carries explicit
+bounds and expiry. Absent, expired, or revoked means no promotion. Both seats are
+required; a pair never shrinks to one because a seat failed, timed out, or
+withheld.
 
-Promoted direction agrees. Model selection, fallback, and cycling are
-system-owned processes rather than agent-edited configuration, and
-`internal/modelpolicy` is already scheduled for generalization into
-broker-mediated multi-call selection. The first thing the computer learns to
-change about itself should not be a surface the system owns and has planned to
-replace.
+**The envelope has an edge.** Reversibility substitutes for approval exactly to
+the degree an effect is reversible. Internal state, code, documents, and the
+object graph are recoverable. Anything crossing an external boundary — send,
+publish, pay, third-party write — is not, and is not promotable under a standing
+rule. That boundary is where a decision belongs.
 
-## The candidate: capsule-authored solitaire
+**Restore is scoped to the user computer.** VM-local state and the release
+pointer. The shared platform store and cycle state are out; restoring them would
+rewind other computers.
 
-A CoSuper capsule authors a solitaire capability for the computer: a rules
-engine, a headless play API sufficient for automated play without a browser,
-durable game persistence, play history, and the embedded UI. The capsule writes
-the source, runs the build and the tests through `capsule_exec`, and freezes the
-classified diff into a complete effect bundle whose five required refs are all
-bound to that capsule's own execution receipts.
+**Revert never erases history.** Returning to an earlier point is a forward
+transaction that restores state. The event chain keeps the record of what was
+done and undone.
 
-Solitaire is the right candidate for four reasons. It is unmistakably source
-code rather than configuration. It touches no protected surface. Its
-correctness is crisp, so a defect is a genuine defect rather than a staged
-marker. And because the frontend is embedded into the Go binary, the UI and the
-API ship as a single built runtime artifact inside the release the updater
-already controls.
+**Checkpoints bind the event head, code, artifact program, and a VM-local content
+witness.** The VM-local Dolt HEAD is an audit receipt joined to that head, never
+restore authority. A checkpoint that cannot restore state is not a checkpoint;
+one that cannot be rebuilt from the tape must fail closed rather than be
+recorded.
 
-## Supervision is the deliverable
+## Restore procedure
 
-Solitaire is the subject of this mission, not its point. A capsule that writes a
-card game, gets it accepted, and ships it into the running program proves that
-the computer can modify itself. The vision is narrower and harder: a computer
-that modifies itself *under supervision the owner can actually exercise*. If the
-only way to watch the work is to read the raw event tape or query the database,
-supervision has not been demonstrated, however green the receipts are.
+1. Resolve the checkpoint; refuse if incomplete.
+2. Quiesce writers / take the materialization lease.
+3. Append a forward restore intent naming the target event head.
+4. Restage the release and rebuild VM-local state through that head.
+5. Re-run `DoltStateExtractor`; require an exact content-hash match.
+6. Flip visibility and route only on green.
+7. On failure keep the prior realization. Partial never greens.
 
-Texture is that supervision surface — the canonical, owner-readable, prose-first
-document with its own owner and atomic reducer contract. This Definition
-therefore requires that Texture revise that document at every consequential
-transition of the self-development work, while the work is still open: when the
-capsule freezes a proposal, when verification is recorded, when the owner
-accepts, when materialization applies, when evidence falsifies, when a
-correction supersedes, when restart proves the new head, and when the capability
-is revoked. Each revision cites the exact operation, bundle digest, receipt, and
-head it describes, so a reader can join prose to authority rather than trust it.
+## The candidate
 
-The decision provenance matters as much as the revisions. Every owner decision
-in the spine — accept A, correct to B, revoke — must be preceded by a Texture
-revision that presented the state being decided, and the trajectory must join
-each decision event to the version that preceded it. A decision made around the
-document rather than from it is a supervision failure even when its receipts
-verify.
+A CoSuper capsule authors solitaire: rules engine, headless play API sufficient
+for automated play without a browser, durable persistence, and play history. It
+writes the source, runs build and tests through `capsule_exec`, and freezes the
+classified diff into a bundle whose five required refs all bind that capsule's
+own execution receipts.
 
-Two boundaries hold this in place. Texture writes are supervision evidence and
-legibility, never acceptance authority: reading a revision does not accept an
-effect, and no Texture write may append, accept, materialize, checkpoint, or
-route. And solitaire itself never writes Texture — the candidate is Texture's
-subject, never its author. The mission's Texture writes and the candidate's
-prohibition on Texture writes are different claims, and conflating them was an
-error in the first draft of this Definition.
+API-only. Staging serves the web frontend from the host, outside the release the
+updater controls, so a UI change would land where the browser never reads.
 
-This reclaims the core of the superseded CTS Definition. CTS's downward-control
-choreography stays out of scope, but its supervision loop was never the
-severable part; supersession was about CTS's inability to deliver effects, not a
-judgment that supervision could wait.
+Schema changes are additive only — new tables via `CREATE TABLE IF NOT EXISTS`,
+never `ALTER` or `DROP` of existing tables.
+
+The candidate touches no protected surface, and solitaire code never writes
+Texture. This is distinct from the mission's Texture writes, which are required:
+Texture supervises the work, and the candidate is its subject.
 
 ## The correction spine
 
-Version A ships with a pre-declared rule defect that its own test suite does not
-catch — for example a foundation that accepts a same-color build, or win
-detection that fires on an incomplete tableau. A is verified, accepted,
-materialized, and restarts healthy.
+Version A ships with a pre-declared rule defect its own tests do not catch — a
+foundation accepting a same-color build, or win detection firing on an incomplete
+tableau. A promotes, restarts healthy, and is played. Admissible evidence then
+falsifies it: a headless play sequence drives the engine into the illegal state A
+accepted. B corrects the rule and supersedes A as a forward transition; after
+restart the same sequence is refused.
 
-Admissible evidence then falsifies it: a headless API play sequence drives the
-engine into the illegal state A accepted, producing a verifier receipt bound to
-the operation. Version B corrects the rule and supersedes A as a forward
-transition. After restart, the same replayed sequence is refused, and B is the
-effective head.
+The defect must be genuine, pre-declared in a Define receipt before A is
+proposed, and invisible to A's own verification. If A's tests catch it, the
+bundle is refused and the mission has proven the gate rather than the correction
+spine.
 
-The defect must be genuine and pre-declared, and it must be invisible to A's own
-verification. If A's tests catch it, the bundle is refused and the mission has
-proven the gate rather than the correction spine — a different and lesser
-result. Recording the defect in a Define receipt before A is proposed is what
-keeps the falsification from being reported later as a discovery.
+Supersession is carried by ordering plus B's proposal event, because the selfdev
+state machine is linear and the decision verifier admits only one input artifact
+ref and one verifier ref.
 
-Revocation closes the mission. An owner-directed rollback removes the
-capability; the deployed API reports it absent. The additive solitaire tables
-and their rows persist, because there is no migration framework and rollback
-restores the code head, not the schema. That asymmetry is reported as a
-property, never concealed.
+The mission closes by winding the excursion back: return to a checkpoint taken
+before A promoted, and show the solitaire API absent, its rows absent, state
+hashes equal to the recorded checkpoint, and the event chain still carrying the
+history of what was undone.
+
+## Supervision
+
+Supervision rides the existing upward path: capsule → CoSuper → `update_coagent`
+→ Super → Texture revision. Build no observation subsystem.
+
+Each revision carries the operation, bundle digest, receipt, and head in
+**revision metadata and typed source citations — never in the prose**. Prose is
+for the human: what happened, what it means, what is being decided. A revision
+that recites digests at the owner has made supervision worse.
+
+Revisions are committed while work is open, not assembled into a report after it
+settles. Because promotion is autonomous, this is how the owner stays in the loop
+at all.
 
 ## Route map
 
-1. **Feasibility check (green):** confirm the CoSuper capsule carries a Go
-   toolchain and a provisioned source tree, and determine whether staging serves
-   the frontend from the updater-controlled release. Document either gap
-   problem-first; if the frontend is served outside the release, the candidate
-   becomes API-only until that is resolved.
-2. **Texture observation design (green -> red):** Texture cannot see
-   self-development today — `internal/textureowner` contains no reference to
-   `selfdev` in any form. Design the link problem-first: self-development
-   transitions become an evidence source feeding Texture's existing atomic
-   revision path, never a second writer, a second document authority, or a
-   second causal log. Decide what wakes Texture on a transition, what the
-   revision must cite to be joinable, and how an in-progress revision is
-   distinguished from a settled one. This is the mission's largest new build and
-   its only addition to a protected surface.
-3. **E2 expressibility pre-flight (green):** document one concrete way to write
-   "B supersedes A" as an ordinary write on the existing event/decision/selfdev
-   graph, or document the gap problem-first. Do not silently downgrade to E1.
-   Note the binding constraint: the decision verifier admits exactly one input
-   artifact ref (the mode receipt) and exactly one verifier ref, so the
-   supersession citation must ride B's proposal event rather than its decision
-   event.
-4. **Mission 0 residual (red):** confirm the durable computer-bound owner key
-   end to end after the recent issuance repair; recover or explicitly retire
-   retained computer epoch 8253; clean up the `ak_45ce1796` row and the
-   root-only auth rollback.
-5. **Rehearsal (orange->red):** product-path `propose -> accept_once ->
-   materialize -> rollback` on a trivial no-op source change, with a
-   restart-durable read. The live flip is gated on rehearsal PASS.
-6. **Live E2 (red):** capsule authors A -> accept -> falsify -> B supersedes ->
-   restart proves B -> owner-directed revocation.
-7. **RLM/Yaegi authoring upgrade:** explicitly NOT part of this Definition.
+1. **Replay completeness probe (green, do first).** Rematerialize VM-local state
+   from the event chain through the current head; diff against a live extractor
+   reading. This decides the restore mechanism — do not design further until it
+   is answered.
+2. **Checkpoint completeness (red).** Bind target event head, CodeRef,
+   ArtifactProgramRef, and a VM-local content witness, with the VM-local Dolt HEAD
+   as an audit receipt. Refuse checkpoint creation when a behavior-bearing local
+   row is not event- or receipt-derivable.
+3. **Revert build and verification (red, heaviest).** Implement the restore
+   procedure above. Prove partial and mismatched restores keep the prior
+   realization and never green. Prove the platform store and cycle state are
+   refused.
+4. **Reconnection (red).** Give CoSuper `update_coagent`; move Super's
+   executability decision from `packet.kind` to sender authorization; replace the
+   survivor contract with the stronger assertion. Keep minimal — the RLM rebase
+   rewrites this layer.
+5. **Freeze/propose wiring (red).** `commit_transaction`,
+   `inspect_self_development_bundle`, and `record_self_development_verification`
+   exist but have no production call site, so no live actor can freeze or propose.
+   Wire them onto the assigned CoSuper under its capsule binding, preserving the
+   capsule-local authority boundary for everything else. Without this step the
+   live proof cannot start.
+6. **Auto-promotion authority (red).** A seat-signed decision authority the
+   decision-binding verifier accepts alongside `external-owner:`, requiring both
+   seats bound to the exact bundle digest and head; a standing-rule mode beside
+   `accept_once` with owner-set bounds and expiry; refusal proofs for absent,
+   expired, and revoked rules and for a missing seat.
+7. **Irreversible boundary (red).** Classify effects leaving the envelope; prove
+   they refuse to promote under a standing rule.
+8. **Supervision wiring (green).** Confirm the upward packet carries joinable
+   identities and that Texture's production registry has `update_coagent`.
+9. **Rehearsal (orange→red).** Trivial change: propose → auto-approve → promote →
+   write state → total revert → verify. The live run is gated on this passing,
+   revert included.
+10. **Live proof (red).** Capsule authors A → promotes → played → falsified → B
+   supersedes → restart proves B → total revert of the excursion.
+
+Out of scope: RLM/Yaegi authoring, model-policy content, the web UI, production,
+and the shared platform store.
+
+## Completion cutover (after deployed acceptance)
+
+The trajectory proof is not enough. Before `goal.complete`, run every item under
+`finish.completion_cutover` in the frontmatter: promote earned doctrine, cut
+lexicon, archive haunted roadmap/registry edges, replace survivor/detector pins,
+schedule or ship owner restore/standing-rule surfaces, land restore-aware ops
+identity, decide frontend ownership, rewrite successor preconditions (RLM / Wire /
+in-choir), and name residual realism axes (schema, backups/copies, tape vs
+erasure, owner verbs). Skipping that packet is a false complete.

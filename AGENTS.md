@@ -169,6 +169,21 @@ commit -> push origin main -> monitor CI -> monitor staging deploy
 
 Do not stop at local tests or an unpushed commit when platform behavior changed.
 
+**Product restore vs platform deploy (pre-flight for the active effects
+Definition):** once a computer can acceptance-fence restore to a prior event
+head, **platform deploy SHA and computer effective identity can diverge on
+purpose**. Do not treat a successful product restore as a failed deploy, and do
+not "fix" it by pushing `main` forward. Git revert of mission commits remains
+the repo rollback path; product restore is a separate forward transaction on the
+computer's event chain. Health/identity reporting must eventually join event
+head + CodeRef + content witness + route — not SHA alone — before restore is
+routine; that tooling cutover is a completion obligation of the effects
+Definition, not a reason to skip the Landing Loop for platform source changes.
+When a Definition's `finish.completion_cutover` includes runtime-bearing items
+(survivor/detector replace, owner-reachable restore surface, ops identity),
+those items re-enter this Landing Loop before `goal.complete` — docs-only
+cutover items do not.
+
 Docs-only commits are different. The full CI/deploy workflow intentionally
 ignores `docs/**` and top-level `*.md`; do not weaken those filters to force a
 full CI or staging deploy path for docs-only changes. Docs-only pushes and pull

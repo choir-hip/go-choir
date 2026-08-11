@@ -714,7 +714,13 @@ than isolated prompts.
 - Add host-owned `models.Call`, `Parallel`, `Map`, and consensus primitives.
 - Return typed implementation, verification, evidence, and continuation
   outcomes.
-- Preserve current capsule-only effects and effects-OFF product posture.
+- Preserve current capsule-only effects. **Do not inherit a blanket effects-OFF
+  Phase 1 posture after the supervised-self-development-effects Definition
+  closes.** Re-derive Phase 1 against the proven reversible envelope:
+  standing-rule auto-promotion for reversible computer-local effects;
+  irreversible refusal for send/publish/pay; no Accept/Materialize inside the
+  interpreter. Until that Definition's deployed proof exists, keep effects-OFF
+  as the interim product resting state.
 - Prove context virtualization inside one sealed assignment before depending
   on a new shared-channel design.
 - Kill an activation mid-work, resume with a different permitted model, and
