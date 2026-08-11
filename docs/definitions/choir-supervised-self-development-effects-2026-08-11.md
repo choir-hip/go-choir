@@ -207,7 +207,7 @@ receipts:
     registry_conformance_ref: "registered 2026-08-11 across docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml (entrypoint true; supersedes choir-continuous-texture-supervision-2026-08-07)"
   - id: content-axis-pivot-2026-08-11
     boundary: define
-    commit_or_artifact: c039d1e5
+    commit_or_artifact: 56b78f83
     proof_refs: [internal/capsule/transaction/builder.go:95-111, internal/updater/updater.go:145-238, internal/modelpolicy/model_policy.go:89-118, internal/agentcore/tools_capsule.go:251,319,713]
     rollback_ref: revert the docs-only pivot commit
     disposition: accepted (owner-directed; D1 rejected, D3 adopted, capsule authorship required)
