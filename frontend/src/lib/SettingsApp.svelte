@@ -34,6 +34,7 @@
   let apiKeyNotice = '';
   let newKeyLabel = '';
   let newKeyScopes = ['read:texture', 'read:base', 'read:runtime'];
+  let apiKeyAdvanced = false;
   let newKeyComputerID = '';
   let newKeyExpiry = '';
   let computers = [];
@@ -112,15 +113,30 @@
     apiKeyError = '';
     apiKeyNotice = '';
     const label = newKeyLabel.trim() || 'CLI key';
-    if (scopesSelectComputer(newKeyScopes) && !newKeyComputerID) {
-      apiKeyError = 'Select a computer to bind this key to (computer-scoped scopes require a computer_id).';
+    // Simple mode: one click, sensible defaults bound to the current computer.
+    // Advanced mode: caller picks scopes, computer, and expiry explicitly.
+    let scopes;
+    let computerID;
+    let expiry = '';
+    if (apiKeyAdvanced) {
+      scopes = newKeyScopes;
+      computerID = newKeyComputerID;
+      expiry = newKeyExpiry;
+    } else {
+      scopes = newKeyScopes;
+      computerID = (computers.find((c) => c.current) || computers[0])?.computer_id || '';
+    }
+    if (scopesSelectComputer(scopes) && !computerID) {
+      apiKeyError = apiKeyAdvanced
+        ? 'Select a computer to bind this key to (computer-scoped scopes require a computer_id).'
+        : 'No owned computer found to bind this key to.';
       return;
     }
-    const body = { label, scopes: newKeyScopes, computer_id: newKeyComputerID };
-    if (newKeyExpiry) {
-      const expiry = new Date(newKeyExpiry);
-      if (!Number.isNaN(expiry.getTime())) {
-        body.expires_at = expiry.toISOString();
+    const body = { label, scopes, computer_id: computerID };
+    if (expiry) {
+      const parsed = new Date(expiry);
+      if (!Number.isNaN(parsed.getTime())) {
+        body.expires_at = parsed.toISOString();
       }
     }
     try {
@@ -384,7 +400,7 @@
       <section class="settings-card api-keys-card" data-settings-api-keys>
         <div>
           <h3>API keys</h3>
-          <p class="muted">Create keys for CLI access and coding agents. The secret is shown once — copy it immediately.</p>
+          <p class="muted">Create a CLI/agent key. This is the one-time bootstrap — after the first key, all issuance is API/CLI-only (<code>choir api-key create/revoke</code>). The secret is shown once — copy it immediately.</p>
         </div>
 
         {#if showNewKeySecret}
@@ -408,68 +424,98 @@
               value={newKeyLabel}
               on:input={(e) => newKeyLabel = e.currentTarget.value}
             />
-            <div class="api-key-scopes" data-api-key-scopes>
-              {#each allScopes as scope}
-                <label
-                  class="scope-chip"
-                  class:active={scope.value === 'selfdev-group'
-                    ? selfDevScopes.every((s) => newKeyScopes.includes(s))
-                    : newKeyScopes.includes(scope.value)}
-                >
-                  <input
-                    type="checkbox"
-                    checked={scope.value === 'selfdev-group'
+            {#if apiKeyAdvanced}
+              <div class="api-key-scopes" data-api-key-scopes>
+                {#each allScopes as scope}
+                  <label
+                    class="scope-chip"
+                    class:active={scope.value === 'selfdev-group'
                       ? selfDevScopes.every((s) => newKeyScopes.includes(s))
                       : newKeyScopes.includes(scope.value)}
-                    on:change={() => toggleScope(scope.value)}
-                  />
-                  <span>{scope.label}</span>
-                </label>
-              {/each}
-            </div>
-            {#if scopesSelectComputer(newKeyScopes)}
-              <div class="api-key-computer-picker" data-api-key-computer-picker>
-                {#if computersLoading}
-                  <p class="muted">Loading computers…</p>
-                {:else if computers.length === 0}
-                  <p class="theme-error">No owned computer found. Computer-scoped scopes require a stable computer binding.</p>
-                {:else}
-                  <label class="api-key-computer-label" for="api-key-computer-select">
-                    Bind key to computer
-                  </label>
-                  <select
-                    id="api-key-computer-select"
-                    class="api-key-computer-select"
-                    data-api-key-computer-select
-                    bind:value={newKeyComputerID}
                   >
-                    {#each computers as computer}
-                      <option value={computer.computer_id}>
-                        {computer.desktop_id}{computer.current ? ' (current)' : ''} — {computer.computer_id}
-                      </option>
-                    {/each}
-                  </select>
-                {/if}
+                    <input
+                      type="checkbox"
+                      checked={scope.value === 'selfdev-group'
+                        ? selfDevScopes.every((s) => newKeyScopes.includes(s))
+                        : newKeyScopes.includes(scope.value)}
+                      on:change={() => toggleScope(scope.value)}
+                    />
+                    <span>{scope.label}</span>
+                  </label>
+                {/each}
               </div>
+              {#if scopesSelectComputer(newKeyScopes)}
+                <div class="api-key-computer-picker" data-api-key-computer-picker>
+                  {#if computersLoading}
+                    <p class="muted">Loading computers…</p>
+                  {:else if computers.length === 0}
+                    <p class="theme-error">No owned computer found. Computer-scoped scopes require a stable computer binding.</p>
+                  {:else}
+                    <label class="api-key-computer-label" for="api-key-computer-select">
+                      Bind key to computer
+                    </label>
+                    <select
+                      id="api-key-computer-select"
+                      class="api-key-computer-select"
+                      data-api-key-computer-select
+                      bind:value={newKeyComputerID}
+                    >
+                      {#each computers as computer}
+                        <option value={computer.computer_id}>
+                          {computer.desktop_id}{computer.current ? ' (current)' : ''} — {computer.computer_id}
+                        </option>
+                      {/each}
+                    </select>
+                  {/if}
+                </div>
+              {/if}
+              <label class="api-key-expiry-label" for="api-key-expiry-input">
+                Optional expiry
+                <input
+                  id="api-key-expiry-input"
+                  type="datetime-local"
+                  class="api-key-expiry-input"
+                  data-api-key-expiry-input
+                  bind:value={newKeyExpiry}
+                />
+              </label>
             {/if}
-            <label class="api-key-expiry-label" for="api-key-expiry-input">
-              Optional expiry
-              <input
-                id="api-key-expiry-input"
-                type="datetime-local"
-                class="api-key-expiry-input"
-                data-api-key-expiry-input
-                bind:value={newKeyExpiry}
-              />
-            </label>
             <button
               class="secondary-action"
               data-api-key-create-btn
-              disabled={scopesSelectComputer(newKeyScopes) && !newKeyComputerID}
+              disabled={apiKeyAdvanced
+                ? scopesSelectComputer(newKeyScopes) && !newKeyComputerID
+                : computers.length === 0}
               on:click={createAPIKey}
             >
-              Create API key
+              {apiKeyAdvanced ? 'Create API key with these options' : 'Create API key'}
             </button>
+            {#if apiKeyAdvanced}
+              <button
+                class="api-key-advanced-toggle"
+                data-api-key-advanced-toggle
+                on:click={() => apiKeyAdvanced = false}
+              >
+                ← Back to simple options
+              </button>
+            {:else}
+              {#if computersLoading}
+                <p class="muted" data-api-key-simple-hint>Loading computer binding…</p>
+              {:else if computers.length === 0}
+                <p class="theme-error" data-api-key-simple-hint>No owned computer found to bind the key to.</p>
+              {:else}
+                <p class="muted" data-api-key-simple-hint>
+                  Bound to {(computers.find((c) => c.current) || computers[0]).computer_id} with default read scopes. The secret is shown once — copy it immediately.
+                </p>
+              {/if}
+              <button
+                class="api-key-advanced-toggle"
+                data-api-key-advanced-toggle
+                on:click={() => apiKeyAdvanced = true}
+              >
+                Advanced options (scopes · computer · expiry)
+              </button>
+            {/if}
           </div>
         {/if}
 
@@ -1071,6 +1117,18 @@
     border: 1px solid var(--choir-border, color-mix(in srgb, var(--choir-fg) 25%, transparent));
     border-radius: 8px;
     padding: 0.4rem 0.55rem;
+  }
+
+  .api-key-advanced-toggle {
+    justify-self: start;
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-size: 0.85rem;
+    color: var(--choir-accent, var(--choir-fg));
+    text-decoration: underline;
+    cursor: pointer;
   }
 
   .api-key-secret-banner {

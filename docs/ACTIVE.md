@@ -23,10 +23,13 @@ publication, and Node B deployment. Public `/health` reports exact proxy commit
 maild, and sourcecycled. This is host/source readiness, not retained guest
 proof. The shared API-key guard requires every computer-selecting bearer route
 to use-time join exact owner and stable ComputerID before selection, resolve,
-recovery, dial, or product effect; creation now carries the required binding
-from both the CLI (`choir api-key create --computer/--expires-at`) and the
-settings app (computer selector from `/api/compute/status`). No usable bearer
-remains: both accidental keys are revoked/post-401, and historical `ak_45ce1796…`
+recovery, dial, or product effect; creation carries the required binding from
+both callers. The settings app is a one-click bootstrap (bound to the current
+computer with default read scopes; scopes/computer/expiry are advanced options)
+— after the first key exists, all issuance is API/CLI-only via
+`choir api-key create --computer/--expires-at` and `choir api-key revoke`. No
+usable bearer remains: both accidental keys are revoked/post-401, and historical
+`ak_45ce1796…`
 returns public 401 without proving registry revocation — its row and both
 root-only auth rollback copies remain terminal cleanup obligations.
 
