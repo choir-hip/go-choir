@@ -303,12 +303,30 @@ documents:
     refresh_triggers: [successor_promotion, deployment_identity_change, durable_actor_delivery_change, artifact_lifecycle_change, trajectory_settlement_change, Texture_public_protocol_change]
 
   - path: docs/definitions/choir-continuous-texture-supervision-2026-08-07.md
+    claim_scope: historical
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: definition, authority: superseded_incomplete_mission_evidence, lifecycle: superseded, entrypoint: false}
+    superseded_by: [docs/definitions/choir-supervised-self-development-effects-2026-08-11.md]
+    witnesses: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, docs/supervision-protocol.md, docs/texture-agentic-invariants-2026-06-13.md]
+    refresh_triggers: []
+
+  - path: docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
     claim_scope: current
     is_root: [authority, entry]
     is_evidence: false
     annotations: {doc_role: definition, authority: active_product_mission, lifecycle: active, entrypoint: true}
-    witnesses: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, docs/supervision-protocol.md, docs/texture-agentic-invariants-2026-06-13.md]
-    refresh_triggers: [mission_state_change, deployment_identity_change, durable_actor_delivery_change, trajectory_work_update_change, Texture_tool_authority_change, persistent_Super_inbox_change, capsule_effect_boundary_change, deployed_acceptance, registry_closure]
+    supersedes: [docs/definitions/choir-continuous-texture-supervision-2026-08-07.md]
+    witnesses: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md]
+    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, trajectory_settlement_change, capsule_effect_boundary_change, deployed_acceptance, registry_closure]
+
+  - path: docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md
+    claim_scope: historical
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: ceremony_evidence, authority: retained_payload, lifecycle: append_only, entrypoint: false}
+    witnesses: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/definitions/choir-supervised-self-development-effects-2026-08-11.md]
+    refresh_triggers: []
 
   - path: docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md
     claim_scope: current

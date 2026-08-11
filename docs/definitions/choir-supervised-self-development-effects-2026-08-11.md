@@ -106,9 +106,9 @@ measures:
     cannot_prove: the product works
 
 now:
-  status: blocked_incomplete
-  slice: "Author the effects Definition (Mission 2); CTS supersession and key issuance remain owner gates."
-  question: "E2 rival/supersession expressibility on the existing decision-binding graph; owner ratification of CTS supersession and Mission 0."
+  status: active
+  slice: "Registry flip landed (CTS superseded, this Definition registered); next is the E2-expressibility pre-flight, then Mission 0 key issuance."
+  question: "E2 rival/supersession expressibility on the existing decision-binding graph; Mission 0 exact-owner key; retained computer epoch 8253 disposition."
   reconciliation:
     observed_at: 2026-08-11T02:10:00Z
     source_ref: main@2379616d
@@ -121,17 +121,17 @@ now:
     id: none
     state: none
   decision:
-    selected: "Effects-first on existing substrate; D1 model-policy content x D2 frozen-bundle envelope; E2 correction-spine acceptance; RLM strictly after; CTS superseded as blocked_incomplete."
+    selected: "Effects-first on existing substrate; D1 model-policy content x D2 frozen-bundle envelope; E2 correction-spine acceptance; RLM strictly after; CTS superseded as superseded_incomplete."
     kind: architecture
-    status: proposal
+    status: ratified
     source: orchestrator
-    evidence_ref: docs/choir-self-development-roadmap-2026-08-11.md; .agentic-consensus/self-dev-roadmap/{divergent,lateral,convergent}/
-    owner_ratification_ref: none
+    evidence_ref: docs/choir-self-development-roadmap-2026-08-11.md; .agentic-consensus/self-dev-roadmap/{divergent,lateral,convergent}/; .agentic-consensus/readiness-key-2026-08-11/
+    owner_ratification_ref: "owner direction 2026-08-11 (\"review other docs ... run agentic consensus to confirm it and fix as needed\") plus readiness-key panel unanimous APPROVE; registry flip landed 2026-08-11"
     recorded_at: 2026-08-11T02:10:00Z
-    consequence: "Nothing executes until the owner ratifies this architecture decision, the CTS supersession, and Mission 0; ratification must be recorded here before the rehearsal slice starts."
+    consequence: "Mission 1 registry flip executed and reconciled here; the rehearsal slice does not start until the E2-expressibility pre-flight documents supersession expressibility (or the gap problem-first) and Mission 0 provides the exact-owner durable key."
   evidence_refs: [docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md]
-  blocker_or_risk: "Owner ratification of CTS supersession (C1) and Mission 0 durable key; E2 expressibility pre-flight; retained computer epoch 8253 disposition."
-  next_action: "Owner reviews this Definition and the roadmap; on ratification, record the decision here, execute Mission 1 (registry flip: CTS superseded_incomplete + this Definition registered across ACTIVE.md/mission-graph.yaml/doc-authority-manifest.yaml), then run the E2-expressibility pre-flight."
+  blocker_or_risk: "Mission 0 exact-owner durable key (once-ever headed-browser ceremony or owner disposition); E2 expressibility pre-flight; retained computer epoch 8253 disposition; ak_45ce1796 row and root-only auth rollback cleanup."
+  next_action: "Run the E2-expressibility pre-flight (document one concrete way to write 'B supersedes A' on the existing event/decision graph, or document the gap problem-first), then execute Mission 0 key issuance."
 
 receipts:
   - id: roadmap-consensus-2026-08-11
@@ -149,7 +149,7 @@ receipts:
       deploy_ref: not_applicable
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
-    registry_conformance_ref: not_applicable (this Definition not yet registered)
+    registry_conformance_ref: "registered 2026-08-11 across docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml (entrypoint true; supersedes choir-continuous-texture-supervision-2026-08-07)"
 
 view:
   path: none

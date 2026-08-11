@@ -5,59 +5,37 @@ corpus and does not make an unverified graph status into a live work claim.
 
 ## Active Definition
 
-[`definitions/choir-continuous-texture-supervision-2026-08-07.md`](definitions/choir-continuous-texture-supervision-2026-08-07.md)
-is the owner-ratified executable `/goal`. It connects Texture's existing durable
-inbound revision path to target-bound Researcher control, the one persistent
-Super, many capability-bound capsule-only CoSupers, progressive prose-first
-versions with canonical source transclusions, and an automatable Texture API/CLI
-surface.
+[`definitions/choir-supervised-self-development-effects-2026-08-11.md`](definitions/choir-supervised-self-development-effects-2026-08-11.md)
+is the owner-ratified executable `/goal`, superseding Continuous Texture
+Supervision (CTS) as of 2026-08-11. It makes the stable computer's canonical
+event chain the single state authority and drives supervised self-development
+with effects through a frozen `CapsuleEffectBundle` envelope: D1 content (model
+policy) and D2 envelope mechanics are decided separately, E2 is the correction
+spine (accept A → falsify → B supersedes → restart proves B), and the E2
+expressibility pre-flight gates any rehearsal code. The full route map is
+`choir-self-development-roadmap-2026-08-11.md`; CTS remains citable evidence,
+not an entrypoint.
 
-The current host-deployed runtime is `fbc7ff5a`. CI/deploy run `31326948312`
+The current host-deployed runtime is `fbc7ff5a`; CI/deploy run `31326948312`
 passed selected Race shards, aggregate Go, differential SBOM acceptance, rolling
 publication, and Node B deployment. Public `/health` reports exact proxy commit
 `fbc7ff5a`; activation receipts exact-join auth, proxy, vmctl, gateway, corpusd,
-maild, and sourcecycled, and the activated closure updated the canonical guest
-image and sandbox pointers without refreshing the failed retained computer. This
-is host/source readiness, not retained guest proof. The shared API-key guard now
-requires every computer-selecting bearer route to use-time join exact owner and
-stable ComputerID before selection, resolve, recovery, dial, or product effect;
-independent security and route reviews returned `ACCEPT`. A native passkey
-ceremony previously completed in ordinary headed Chrome, but exact retained-owner
-identity was not proved: target-bound registry rows were caller-supplied metadata,
-and the accidental bearer's public compute status selected primary active epoch
-`130`, incompatible with retained primary failed epoch `8253`. Both accidental
-keys are revoked/post-401, so no usable bearer remains. The frozen script's
-deployment gate is satisfied, but its sole POST remains authorized only after
-canonical same-origin `GET /auth/session` proves exact owner `c72404bb…` through
-ordinary headed persistent Chrome with native physical presence. `omp-browser`
-remains diagnostic-only. No headless retry, CDP virtual authenticator, substitute
-owner/computer, recovery bypass, SSH, internal vmctl path, or weaker identity is
-admissible.
+maild, and sourcecycled. This is host/source readiness, not retained guest
+proof. The shared API-key guard requires every computer-selecting bearer route
+to use-time join exact owner and stable ComputerID before selection, resolve,
+recovery, dial, or product effect; creation now carries the required binding
+from both the CLI (`choir api-key create --computer/--expires-at`) and the
+settings app (computer selector from `/api/compute/status`). No usable bearer
+remains: both accidental keys are revoked/post-401, and historical `ak_45ce1796…`
+returns public 401 without proving registry revocation — its row and both
+root-only auth rollback copies remain terminal cleanup obligations.
 
-A read-only reconciliation of a newly supplied F-era handoff confirms it is
-historical, not a rollback instruction. At that reconciliation checkpoint source
-was exact at `e92bacd5`; current
-runtime CI/deploy `31310481745` is green; `8ac0b27d` deployed the authorized
-packet/prompt repair; and retained trajectory `14c99be0…` was later publicly
-cancelled at lifecycle version 5 before the bind, mailbox, and terminal-boot
-repairs culminated in `7ba05599`. Historical acceptance key `ak_45ce1796…` now
-returns public HTTP 401. That makes it unusable but does not prove registry
-revocation; its row and both root-only auth rollback copies remain terminal
-cleanup obligations. No restoration, SSH, credential, provider, route, guest,
-or effect mutation was repeated. Effects remain OFF.
-
-A native headed-browser ceremony completed for an owner-ambiguous account, and
-the first handoff produced unbound administrator key `ak_e2552ee6…`. The reviewed
-attenuation made one nonce-labelled child `ak_834c56be…`; local secret persistence
-failed before file creation because the notebook `os` name was shadowed. The
-failure branch executed exactly: no retry, child DELETE 204/post-401, broad
-self-DELETE 204/post-401, credential files removed, and zero lifecycle/product/
-effect writes. No usable new key remains. The next ceremony must first prove
-exact retained owner `c72404bb…` via the authorized canonical session-renewal GET
-(fresh assertion on mismatch), then mint the exact <=2-hour eight-scope key
-directly, bound to stable computer
-`computer-42850e9734d9442386c5dd8bf3afbf19` and never VM `vm-bb…`; ingestion must
-atomically persist mode `0600` and clear the clipboard before any API call. Exact
+Mission 0 is the exact-owner credential gate on the retained computer: canonical
+same-origin `GET /auth/session` proves owner `c72404bb…` through ordinary headed
+persistent Chrome with native physical presence, then mints the exact <=2-hour
+eight-scope key bound to stable computer
+`computer-42850e9734d9442386c5dd8bf3afbf19` (never VM `vm-bb…`) and atomically
+persists mode `0600` with clipboard cleared before any API call. Exact
 stable-computer lifecycle STATUS must ownership-join logical desktop `primary`
 at failed epoch `8253` before self-development, wrong-target, or pre-recovery
 identity probes. The independently accepted once-ever direct headed-browser
@@ -65,7 +43,18 @@ payload is preserved at
 `docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`
 (SHA-256 `a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8`);
 its deployment gate is satisfied, it is authorized only with exact-owner physical
-presence, and it remains not executed. Effects remain OFF.
+presence, and it remains not executed. `omp-browser` remains diagnostic-only. No
+headless retry, CDP virtual authenticator, substitute owner/computer, recovery
+bypass, SSH, internal vmctl path, or weaker identity is admissible. After that
+single owner key exists, all further issuance is API/CLI-only (Bearer child-key
+delegation via `manage:keys`).
+
+A read-only reconciliation of a newly supplied F-era handoff confirms it is
+historical, not a rollback instruction: `8ac0b27d` deployed the authorized
+packet/prompt repair; trajectory `14c99be0…` was later publicly cancelled at
+lifecycle version 5; bind, mailbox, and terminal-boot repairs culminated in
+`7ba05599`. No restoration, SSH, credential, provider, route, guest, or effect
+mutation was repeated. Effects remain OFF.
 
 The last exact guest-proved product prefix remains `b5d907a3`: Texture published
 a continuous-prose v1 while work was open, atomically addressed its bound
@@ -179,12 +168,15 @@ it active work or revising the product umbrella's semantics.
 
 ## Invocation
 
-Invoke only the active Continuous Texture Supervision Definition above through
-`/goal docs/definitions/choir-continuous-texture-supervision-2026-08-07.md`.
-Its provider-availability blocker does not make it non-executable or authorize a
-successor. The performance and Choir-in-Choir drafts remain blocked and
-non-executable; promoting either requires separate owner ratification and
-three-registry reconciliation.
+Invoke only the active supervised self-development Definition above through
+`/goal docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`.
+Its Mission 0 exact-owner key ceremony and the E2 expressibility pre-flight gate
+execution; neither makes it non-executable or authorizes a further successor.
+The superseded Continuous Texture Supervision Definition is historical evidence
+(superseded 2026-08-11), not an entrypoint; its receipts remain citable. The
+performance and Choir-in-Choir drafts remain blocked and non-executable;
+promoting either requires separate owner ratification and three-registry
+reconciliation.
 
 This index delegates the current slice, next action, execution order, resumption,
 completion, mutation, rollback sequencing, and escalation authority to that
@@ -196,8 +188,9 @@ The OG/Dolt/heresy contract supplies the deployed D-ROUTE corpusd/vmctl CAS
 mechanics, receipt gates, H031 detection, and deletion bars. The completed
 convergence Definition proves the stable computer's canonical lifecycle state
 as semantic authority: vmctl remains the protected lifecycle and
-route-projection actuator, not the origin of promotion. No successor may create
-a third semantic store.
+route-projection actuator, not the origin of promotion. The supervised
+self-development Definition adds no third semantic store; the canonical computer
+event chain remains single state authority.
 
 ## Unowned External Work
 
