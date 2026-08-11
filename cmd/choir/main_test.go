@@ -1076,7 +1076,7 @@ func TestAPIKeyListHitsAuthEndpoint(t *testing.T) {
 }
 
 // TestAPIKeyCreatePostsToAuthEndpoint asserts the api-key create command POSTs
-// to /auth/api-keys with label and scopes.
+// to /auth/api-keys with label, scopes, and the required computer binding.
 func TestAPIKeyCreatePostsToAuthEndpoint(t *testing.T) {
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/auth/api-keys" {
@@ -1096,13 +1096,19 @@ func TestAPIKeyCreatePostsToAuthEndpoint(t *testing.T) {
 		if !ok || len(scopes) != 1 || scopes[0] != "read:texture" {
 			t.Fatalf("scopes = %v, want [read:texture]", body["scopes"])
 		}
+		if body["computer_id"] != "computer-abc" {
+			t.Fatalf("computer_id = %v, want computer-abc", body["computer_id"])
+		}
+		if body["expires_at"] != "2026-08-12T00:00:00Z" {
+			t.Fatalf("expires_at = %v, want 2026-08-12T00:00:00Z", body["expires_at"])
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"id":"ak_new","label":"Devin CLI","scopes":["read:texture"],"secret":"choir_sk_newkey"}`)
 	}))
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"api-key", "create", "--label=Devin CLI", "--scopes=read:texture", "--host=" + stub.URL}, &out, &errOut)
+	code := run([]string{"api-key", "create", "--label=Devin CLI", "--scopes=read:texture", "--computer=computer-abc", "--expires-at=2026-08-12T00:00:00Z", "--host=" + stub.URL}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -1112,6 +1118,60 @@ func TestAPIKeyCreatePostsToAuthEndpoint(t *testing.T) {
 	}
 	if resp["secret"] != "choir_sk_newkey" {
 		t.Fatalf("secret = %v, want choir_sk_newkey", resp["secret"])
+	}
+}
+
+// TestAPIKeyCreateRequiresComputerForComputerScopes asserts the CLI refuses to
+// POST a computer-selecting scope without a stable computer binding, matching
+// the auth handler's binding requirement.
+func TestAPIKeyCreateRequiresComputerForComputerScopes(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"api-key", "create", "--scopes=read:texture", "--host=" + stub.URL}, &out, &errOut)
+	if code != 2 {
+		t.Fatalf("code = %d, want 2; stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "--computer is required") {
+		t.Fatalf("stderr = %q, want --computer requirement", errOut.String())
+	}
+
+	// manage:keys-only keys need no computer binding.
+	out.Reset()
+	errOut.Reset()
+	manageStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body["computer_id"] != "" {
+			t.Fatalf("computer_id = %v, want empty for manage:keys-only", body["computer_id"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"ak_mgmt","label":"k","scopes":["manage:keys"],"secret":"choir_sk_mgmt"}`)
+	}))
+	defer manageStub.Close()
+	code = run([]string{"api-key", "create", "--label=k", "--scopes=manage:keys", "--host=" + manageStub.URL}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("manage-only code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+}
+
+// TestAPIKeyCreateRejectsMalformedExpiry asserts --expires-at must parse as RFC 3339.
+func TestAPIKeyCreateRejectsMalformedExpiry(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"api-key", "create", "--scopes=read:texture", "--computer=computer-abc", "--expires-at=not-a-date", "--host=" + stub.URL}, &out, &errOut)
+	if code != 2 {
+		t.Fatalf("code = %d, want 2; stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "RFC 3339") {
+		t.Fatalf("stderr = %q, want RFC 3339 error", errOut.String())
 	}
 }
 

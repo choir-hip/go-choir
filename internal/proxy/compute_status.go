@@ -31,6 +31,7 @@ type computeStatusResponse struct {
 }
 
 type computeComputer struct {
+	ComputerID        string                    `json:"computer_id,omitempty"`
 	DesktopID         string                    `json:"desktop_id"`
 	Role              string                    `json:"role,omitempty"`
 	Current           bool                      `json:"current,omitempty"`
@@ -196,6 +197,7 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp.CurrentComputer = computeComputer{
+		ComputerID:       own.ComputerID,
 		DesktopID:        own.DesktopID,
 		Role:             computerRole(own.DesktopID),
 		Current:          true,
@@ -314,6 +316,7 @@ func (h *Handler) userComputersForStatus(ctx context.Context, userID string, cur
 			continue
 		}
 		computer := computeComputer{
+			ComputerID:       own.ComputerID,
 			DesktopID:        own.DesktopID,
 			Role:             computerRole(own.DesktopID),
 			Current:          own.DesktopID == current.DesktopID,
@@ -428,6 +431,7 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 			recovery, current, runtimeStatus, _, _ := h.recoveries.snapshotOperation(op)
 			if current.DesktopID == "" {
 				current = computeComputerFromFields(
+					authResult.ComputerID,
 					desktopID,
 					string(vmctl.VMKindInteractive),
 					"refreshing",
@@ -459,6 +463,7 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		current := computeComputerFromFields(
+			authResult.ComputerID,
 			desktopID,
 			string(vmctl.VMKindInteractive),
 			string(vmctl.VMStateStopped),
@@ -469,6 +474,7 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 		)
 		if own, lookupErr := h.vmctlClient.LookupDesktopContext(r.Context(), authResult.UserID, desktopID); lookupErr == nil && own != nil {
 			current = computeComputerFromFields(
+				own.ComputerID,
 				own.DesktopID,
 				string(own.Kind),
 				own.State,
@@ -510,6 +516,7 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 			return computeComputer{}, nil, fmt.Errorf("computer ownership authority changed during recovery")
 		}
 		current = computeComputerFromFields(
+			resolved.ComputerID,
 			resolved.DesktopID,
 			string(resolved.Kind),
 			resolved.State,
@@ -528,6 +535,7 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 				return computeComputer{}, nil, fmt.Errorf("computer ownership authority changed during recovery")
 			}
 			current = computeComputerFromFields(
+				resolved.ComputerID,
 				resolved.DesktopID,
 				string(resolved.Kind),
 				resolved.State,
@@ -550,6 +558,7 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 				return computeComputer{}, nil, fmt.Errorf("computer ownership authority changed during recovery")
 			}
 			current = computeComputerFromFields(
+				refreshed.ComputerID,
 				refreshed.DesktopID,
 				string(refreshed.Kind),
 				refreshed.State,
@@ -564,6 +573,7 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 		}
 	} else {
 		current = computeComputerFromFields(
+			own.ComputerID,
 			own.DesktopID,
 			string(own.Kind),
 			own.State,
@@ -594,6 +604,7 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 			return current, runtimeStatus, fmt.Errorf("computer ownership authority changed during recovery")
 		}
 		current = computeComputerFromFields(
+			refreshed.ComputerID,
 			refreshed.DesktopID,
 			string(refreshed.Kind),
 			refreshed.State,
@@ -615,8 +626,9 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 	return current, runtimeStatus, nil
 }
 
-func computeComputerFromFields(desktopID, kind, state, warmnessClass string, epoch int64, stoppedBy, lastActiveAt string) computeComputer {
+func computeComputerFromFields(computerID, desktopID, kind, state, warmnessClass string, epoch int64, stoppedBy, lastActiveAt string) computeComputer {
 	current := computeComputer{
+		ComputerID:       computerID,
 		DesktopID:        desktopID,
 		Role:             computerRole(desktopID),
 		Current:          true,

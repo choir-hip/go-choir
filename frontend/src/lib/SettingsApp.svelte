@@ -34,9 +34,22 @@
   let apiKeyNotice = '';
   let newKeyLabel = '';
   let newKeyScopes = ['read:texture', 'read:base', 'read:runtime'];
+  let newKeyComputerID = '';
+  let newKeyExpiry = '';
+  let computers = [];
+  let computersLoading = false;
   let newKeySecret = '';
   let showNewKeySecret = false;
   let copiedKey = false;
+
+  const selfDevScopes = [
+    'computer:self_development:read',
+    'computer:self_development:genesis',
+    'computer:self_development:propose',
+    'computer:self_development:approve',
+    'computer:self_development:rollback',
+    'computer:self_development:mode',
+  ];
 
   const allScopes = [
     { value: 'read:texture', label: 'Read Texture' },
@@ -46,9 +59,38 @@
     { value: 'read:runtime', label: 'Read Runtime' },
     { value: 'write:runtime', label: 'Write Runtime' },
     { value: 'acceptance:read', label: 'Read Acceptance Evidence' },
+    { value: 'computer:lifecycle', label: 'Computer Lifecycle Control' },
+    { value: 'selfdev-group', label: 'Computer Self-Development (all)' },
     { value: 'manage:keys', label: 'Manage API Keys' },
     { value: 'admin', label: 'Admin' },
   ];
+
+  // Any scope other than manage:keys selects a computer; the auth handler
+  // requires a stable computer_id binding for those keys.
+  function scopesSelectComputer(scopes) {
+    return scopes.some((s) => s !== 'manage:keys');
+  }
+
+  async function loadComputers() {
+    computersLoading = true;
+    try {
+      const res = await fetchWithRenewal('/api/compute/status', { method: 'GET' });
+      if (!res.ok) throw new Error(`Failed to load computers (${res.status})`);
+      const data = await res.json();
+      const list = Array.isArray(data.computers) ? data.computers : [];
+      computers = list.filter((c) => c.computer_id);
+      if (!computers.some((c) => c.computer_id === newKeyComputerID)) {
+        const current = computers.find((c) => c.current) || computers[0];
+        newKeyComputerID = current ? current.computer_id : '';
+      }
+    } catch (err) {
+      if (!(err instanceof AuthRequiredError)) {
+        apiKeyError = err.message || 'Failed to load computers';
+      }
+    } finally {
+      computersLoading = false;
+    }
+  }
 
   async function loadAPIKeys() {
     apiKeyLoading = true;
@@ -70,11 +112,22 @@
     apiKeyError = '';
     apiKeyNotice = '';
     const label = newKeyLabel.trim() || 'CLI key';
+    if (scopesSelectComputer(newKeyScopes) && !newKeyComputerID) {
+      apiKeyError = 'Select a computer to bind this key to (computer-scoped scopes require a computer_id).';
+      return;
+    }
+    const body = { label, scopes: newKeyScopes, computer_id: newKeyComputerID };
+    if (newKeyExpiry) {
+      const expiry = new Date(newKeyExpiry);
+      if (!Number.isNaN(expiry.getTime())) {
+        body.expires_at = expiry.toISOString();
+      }
+    }
     try {
       const res = await fetchWithRenewal('/auth/api-keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, scopes: newKeyScopes }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const body = await res.text();
@@ -107,6 +160,16 @@
   }
 
   function toggleScope(scope) {
+    if (scope === 'selfdev-group') {
+      const allSelected = selfDevScopes.every((s) => newKeyScopes.includes(s));
+      if (allSelected) {
+        newKeyScopes = newKeyScopes.filter((s) => !selfDevScopes.includes(s));
+      } else {
+        const rest = newKeyScopes.filter((s) => !selfDevScopes.includes(s));
+        newKeyScopes = [...rest, ...selfDevScopes];
+      }
+      return;
+    }
     if (newKeyScopes.includes(scope)) {
       newKeyScopes = newKeyScopes.filter(s => s !== scope);
     } else {
@@ -276,7 +339,10 @@
     themeJSON = JSON.stringify(selectedTheme, null, 2);
     lastAppliedThemeJSON = themeJSON;
     void refreshStatus();
-    if (currentUser?.email) void loadAPIKeys();
+    if (currentUser?.email) {
+      void loadAPIKeys();
+      void loadComputers();
+    }
     removeLiveListener = addLiveEventListener((message) => {
       const kind = liveEventKind(message);
       if (kind === 'theme.updated') {
@@ -344,17 +410,64 @@
             />
             <div class="api-key-scopes" data-api-key-scopes>
               {#each allScopes as scope}
-                <label class="scope-chip" class:active={newKeyScopes.includes(scope.value)}>
+                <label
+                  class="scope-chip"
+                  class:active={scope.value === 'selfdev-group'
+                    ? selfDevScopes.every((s) => newKeyScopes.includes(s))
+                    : newKeyScopes.includes(scope.value)}
+                >
                   <input
                     type="checkbox"
-                    checked={newKeyScopes.includes(scope.value)}
+                    checked={scope.value === 'selfdev-group'
+                      ? selfDevScopes.every((s) => newKeyScopes.includes(s))
+                      : newKeyScopes.includes(scope.value)}
                     on:change={() => toggleScope(scope.value)}
                   />
                   <span>{scope.label}</span>
                 </label>
               {/each}
             </div>
-            <button class="secondary-action" data-api-key-create-btn on:click={createAPIKey}>
+            {#if scopesSelectComputer(newKeyScopes)}
+              <div class="api-key-computer-picker" data-api-key-computer-picker>
+                {#if computersLoading}
+                  <p class="muted">Loading computers…</p>
+                {:else if computers.length === 0}
+                  <p class="theme-error">No owned computer found. Computer-scoped scopes require a stable computer binding.</p>
+                {:else}
+                  <label class="api-key-computer-label" for="api-key-computer-select">
+                    Bind key to computer
+                  </label>
+                  <select
+                    id="api-key-computer-select"
+                    class="api-key-computer-select"
+                    data-api-key-computer-select
+                    bind:value={newKeyComputerID}
+                  >
+                    {#each computers as computer}
+                      <option value={computer.computer_id}>
+                        {computer.desktop_id}{computer.current ? ' (current)' : ''} — {computer.computer_id}
+                      </option>
+                    {/each}
+                  </select>
+                {/if}
+              </div>
+            {/if}
+            <label class="api-key-expiry-label" for="api-key-expiry-input">
+              Optional expiry
+              <input
+                id="api-key-expiry-input"
+                type="datetime-local"
+                class="api-key-expiry-input"
+                data-api-key-expiry-input
+                bind:value={newKeyExpiry}
+              />
+            </label>
+            <button
+              class="secondary-action"
+              data-api-key-create-btn
+              disabled={scopesSelectComputer(newKeyScopes) && !newKeyComputerID}
+              on:click={createAPIKey}
+            >
               Create API key
             </button>
           </div>
@@ -935,6 +1048,29 @@
   .scope-chip input {
     margin: 0;
     accent-color: var(--choir-accent);
+  }
+
+  .api-key-computer-picker {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .api-key-computer-label,
+  .api-key-expiry-label {
+    font-size: 0.85rem;
+    color: var(--choir-fg-muted, inherit);
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .api-key-computer-select,
+  .api-key-expiry-input {
+    font: inherit;
+    color: var(--choir-fg);
+    background: var(--choir-bg);
+    border: 1px solid var(--choir-border, color-mix(in srgb, var(--choir-fg) 25%, transparent));
+    border-radius: 8px;
+    padding: 0.4rem 0.55rem;
   }
 
   .api-key-secret-banner {

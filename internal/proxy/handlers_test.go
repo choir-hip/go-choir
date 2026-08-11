@@ -3158,9 +3158,15 @@ func TestComputeStatusListsOnlyUserComputers(t *testing.T) {
 		if computer.DesktopID == vmctl.PrimaryDesktopID && computer.Role == "primary" {
 			sawPrimary = true
 		}
+		if !strings.HasPrefix(computer.ComputerID, "computer-") {
+			t.Fatalf("computer %s missing stable computer_id: %+v", computer.DesktopID, computer)
+		}
 	}
 	if !sawPrimary {
 		t.Fatalf("missing primary computer: %+v", result.Computers)
+	}
+	if result.CurrentComputer.ComputerID != result.Computers[0].ComputerID {
+		t.Fatalf("current computer_id %q != listed %q", result.CurrentComputer.ComputerID, result.Computers[0].ComputerID)
 	}
 	body := w.Body.String()
 	for _, forbidden := range []string{"other-compute-user", "compute-list-user", "vm_id", "sandbox_url", "user_id"} {
