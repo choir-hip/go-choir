@@ -24,8 +24,8 @@ maild, and sourcecycled. This is host/source readiness, not retained guest
 proof. The shared API-key guard requires every computer-selecting bearer route
 to use-time join exact owner and stable ComputerID before selection, resolve,
 recovery, dial, or product effect; creation carries the required binding from
-both callers. The settings app is a one-click bootstrap (bound to the current
-computer with default read scopes; scopes/computer/expiry are advanced options)
+both callers. The settings app is a one-click bootstrap (full owner delegation,
+bound to the current computer; scopes/computer/expiry are advanced options)
 — after the first key exists, all issuance is API/CLI-only via
 `choir api-key create --computer/--expires-at` and `choir api-key revoke`. No
 usable bearer remains: both accidental keys are revoked/post-401, and historical

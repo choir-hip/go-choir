@@ -66,6 +66,8 @@
     { value: 'admin', label: 'Admin' },
   ];
 
+  const simpleKeyScopes = ['admin'];
+
   // Any scope other than manage:keys selects a computer; the auth handler
   // requires a stable computer_id binding for those keys.
   function scopesSelectComputer(scopes) {
@@ -123,7 +125,7 @@
       computerID = newKeyComputerID;
       expiry = newKeyExpiry;
     } else {
-      scopes = newKeyScopes;
+      scopes = simpleKeyScopes;
       computerID = (computers.find((c) => c.current) || computers[0])?.computer_id || '';
     }
     if (scopesSelectComputer(scopes) && !computerID) {
@@ -505,7 +507,7 @@
                 <p class="theme-error" data-api-key-simple-hint>No owned computer found to bind the key to.</p>
               {:else}
                 <p class="muted" data-api-key-simple-hint>
-                  Bound to {(computers.find((c) => c.current) || computers[0]).computer_id} with default read scopes. The secret is shown once — copy it immediately.
+                  Full permissions bound to {(computers.find((c) => c.current) || computers[0]).computer_id}. The secret is shown once — copy it immediately.
                 </p>
               {/if}
               <button
