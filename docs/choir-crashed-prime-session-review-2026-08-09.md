@@ -210,6 +210,37 @@ machine: `/health` has logged 32 `unauthorized` errors under `api.auth`
 `go.mod` module path says `github.com/yusefmosiah/go-choir` while the repo's
 public org is `choir-hip` — cosmetic, but it will bite someone eventually.
 
+---
+
+## Landing record (2026-08-10)
+
+The F1 repair was landed on `main` at `26c53692` (commits `60267517` +
+`26c53692`), after the design review panel returned unanimous
+LAND / LAND WITH FIXES and zero HOLD. Staging serves `26c53692`; CI run
+`31445846546` succeeded including staging deploy; rollback is a clean revert
+of the two commits (feature previously unshipped, no live data migration).
+Orange mutation class; protected surfaces touched: store/agentcore/proxy/CLI
+routing. Heresy delta: `repaired` — the torn `reportJoin` write conflict
+(`{r,event,ref}` vs `{r,seq}`) is the sole compile-blocker, now fixed and
+covered by tests.
+
+### Recorded decisions (documented-as-intended)
+
+- **20k owner/computer-wide cliff.** The evidence projection snapshots the
+  owner/computer trajectory scope and fails closed (`ErrCoSuperEvidenceTooLarge`)
+  beyond hard caps. Intended: a bounded snapshot contract; a single owner
+  with more evidence than the caps is a real outlier, and the failure is
+  explicit rather than silent truncation.
+- **Whole-trajectory coupling.** Evidence for one assignment reads the full
+  trajectory's object set. Intended: cross-assignment candidate-source
+  lineage requires the sibling implementation report to be present in the
+  same snapshot; the reducer is the single writer, so the coupling is
+  deterministic and tamper-evident by construction.
+- **Source-event scope check.** The cross-assignment candidate source event
+  join now validates run/agent scope exactly like the direct report join
+  (`corruptEvidence("candidate source event run or agent scope")`), closing
+  the one scope gap the tamper suite exposed.
+
 ## In one paragraph
 
 A headless agent ran unattended for nearly two days, moved the runtime
