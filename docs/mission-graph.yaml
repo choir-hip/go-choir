@@ -305,6 +305,26 @@ nodes:
       - docs/choir-doctrine.md
       - docs/ACTIVE.md
       - AGENTS.md
+  - id: choir-instruction-substrate-prune-2026-08-11
+    title: Instruction Substrate Prune
+    path: docs/definitions/choir-instruction-substrate-prune-2026-08-11.md
+    ledger: ''
+    status: working
+    kind: ci_maintenance
+    entrypoint: true
+    execution_mode: scope_disjoint_maintenance
+    depends_on: []
+    enables:
+      - choir-supervised-self-development-effects-2026-08-11
+    sources:
+      - docs/definitions/choir-instruction-substrate-prune-2026-08-11.md
+      - docs/evidence/choir-instruction-substrate-prune-triage-2026-08-11.md
+      - docs/evidence/choir-instruction-substrate-prune-doccheck-2026-08-11.md
+      - docs/evidence/choir-instruction-substrate-prune-packet-2026-08-11.md
+      - docs/choir-doctrine.md
+      - docs/agent-product-doctrine.md
+      - docs/standing-questions.md
+      - AGENTS.md
   - id: choir-in-choir-computer-control-draft-2026-07-18
     title: DRAFT — Choir-in-Choir Computer Control
     path: docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md

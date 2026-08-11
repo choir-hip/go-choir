@@ -38,7 +38,7 @@ details remain here to define what the settled receipt proved.
 - Single lifecycle authority default is `RunRecord.State` (R4 owns full
   projection alignment; this settled receipt only covers terminal transitions
   that release admission).
-- Doctrine rejects lease as a control concept (H019). New identifiers use
+- Doctrine rejects time-bound admission locks as a control concept (H019). New identifiers use
   **progress deadline** / **activation budget** only.
 - Continuation / parent-child / channel deletion is out of scope (og-dolt).
 
@@ -63,7 +63,7 @@ details remain here to define what the settled receipt proved.
 ## Invariants
 
 - No run occupies admission indefinitely without observable progress or active execution context.
-- New code must not introduce lease-named control identifiers (conforming to H019).
+- New code must not introduce time-bound-control-named identifiers (conforming to H019).
 - Acceptance uses product CLI/API only (no platform-operator SSH).
 
 ## Completion Semantics

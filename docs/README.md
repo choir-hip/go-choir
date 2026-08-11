@@ -37,67 +37,28 @@ They are the whole default packet; historical material is opt-in.
 10. [`source-external-data-publication.md`](source-external-data-publication.md)
     — source, provenance, and publication contract.
 
-The compact registry and views point to the source documents; none can override
-the doctrine, operating contract, or an explicitly promoted domain contract.
-Read a relevant domain contract in depth before touching its protected surface.
+Views point to source authority; none can override doctrine or a domain contract.
+Read the relevant contract before touching its protected surface.
 
-## Semantics
+## Authority map
 
-- [`choir-doctrine.md`](choir-doctrine.md) is the normative optimization target,
-  conjecture set, evidence semantics, and heresy inventory.
-- [`choir-vision.md`](choir-vision.md) is the product north star — the automatic
-  computer, supervised self-development first, the World Wire downstream.
-  Mission sequencing flows from it; it is not doctrine and defers to
-  [`choir-doctrine.md`](choir-doctrine.md) on conflict.
-- [`semantic-registry.md`](semantic-registry.md) is the small semantic map. It
-  deliberately excludes deployment facts, service names, mutable work state,
-  and unpromoted architecture decisions.
-- Domain contracts above are authoritative only within their stated scope and
-  defer to the doctrine on conflict.
-
-## NOW
-
-[`NOW.md`](NOW.md) records evidence-scoped observations with an observation
-time, source, and refresh trigger. A stale observation becomes unknown; it is
-not silently treated as a live product fact. For fuller current architecture or
-desktop/app state, follow its links to
-[`current-architecture.md`](current-architecture.md) and
-[`platform-os-app-state.md`](platform-os-app-state.md).
-
-## ACTIVE
-
-[`ACTIVE.md`](ACTIVE.md) is the curated work view. A working product Definition,
-when one is promoted, is added to the default packet as the sole authority root.
-The terminal state may coherently have none. Completed Definitions, including
-[`documentation-authority-reduction-2026-07-09.md`](definitions/documentation-authority-reduction-2026-07-09.md),
-remain outside that current packet as evidence and cannot override product
-semantics.
-
-`mission-graph.yaml` is a minimal discovery index for retained Definitions. A
-Definition owns its own state; the graph, Beads, and Git history do not override
-it.
-
-## Historical Material
-
-[`archive/`](archive/README.md) is a deliberately restored, searchable corpus
-of historical designs, missions, reviews, and hypotheses. It exists because
-old thinking can hold future value; it is **not** executable mission authority,
-current doctrine, or part of the default reading packet. When a historical
-claim matters, verify it against the current doctrine, domain contracts,
-Definition, and observed system state before acting on it.
-
-The pre-purge raw process-evidence and ledger corpus remains outside the
-worktree; bounded completion evidence receipts remain where the completed Definition
-requires them. Git history is still the forensic recovery surface for material
-not represented in the historical corpus.
-
-[`doc-authority-manifest.yaml`](doc-authority-manifest.yaml) is slim
-machine-readable navigation metadata, not a second doctrine or a historical
-catalog.
-
-## Maintenance
+- `choir-doctrine.md` is apex doctrine; `choir-vision.md` is the product
+  north star and defers to doctrine.
+- `semantic-registry.md` is a compact derived map; domain contracts govern only
+  their stated scope and cannot override doctrine.
+- `NOW.md` holds dated, evidence-scoped observations. Stale observations become
+  unknown; follow its links for fuller current architecture and platform state.
+- `ACTIVE.md` is the curated work view. A promoted working Definition is the
+  sole current authority root; completed Definitions remain evidence.
+- `mission-graph.yaml` is discovery metadata. Definitions own their state; the
+  graph and Git history are not executable authority.
+- `archive/` is searchable historical material, never current doctrine,
+  executable mission authority, or part of the default packet. Verify retained
+  claims against current doctrine, contracts, Definitions, and observed state.
+- Bounded completion receipts remain in the locations required by their
+  Definitions; Git history is the forensic recovery surface for anything else.
+- `doc-authority-manifest.yaml` is navigation metadata, not doctrine or a
+  historical catalog.
 
 When a semantic, current-state, or active-work claim changes, update its source
-authority and the appropriate compact view in the same change. Do not add a
-new orientation page to the default packet. The completed documentation
-authority Definition records the retention and validation boundary.
+authority and this compact view together. Do not add another orientation page.

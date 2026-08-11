@@ -1,7 +1,7 @@
 ---
 definition_version: 2
 definition_id: choir-instruction-substrate-prune-2026-08-11
-execution_mode: mission_orchestrator
+execution_mode: scope_disjoint_maintenance
 
 start:
   captured_at: 2026-08-11T21:30:00Z
