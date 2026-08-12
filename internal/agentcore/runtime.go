@@ -78,6 +78,10 @@ type Runtime struct {
 	// creation one process-local critical section across terminal hooks and
 	// boot/periodic sweeps.
 	lifecycleWorkReconcileMu sync.Mutex
+	// workspaceReplaceMu serializes the one-shot VM-local workspace
+	// replacement so concurrent product-path calls cannot interleave
+	// quarantine and OpenFresh.
+	workspaceReplaceMu sync.Mutex
 
 	wg           sync.WaitGroup
 	toolRegistry *toolregistry.ToolRegistry

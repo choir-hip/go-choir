@@ -710,6 +710,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case isComputerLifecyclePath(path):
 		h.HandleComputerLifecycle(w, r)
 		return
+	case isComputerWorkspaceReplacePath(path):
+		h.HandleComputerWorkspaceReplace(w, r)
+		return
 	case isSelfDevelopmentModePath(path):
 		h.HandleSelfDevelopmentMode(w, r)
 		return

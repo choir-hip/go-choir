@@ -90,6 +90,10 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "authenticated computer binding required"})
 		return
 	}
+	if len(parts) == 3 && parts[1] == "lifecycle" && parts[2] == "replace-workspace" {
+		h.replaceComputerWorkspace(w, r, computerID)
+		return
+	}
 	if h == nil || h.rt == nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "self-development authority unavailable"})
 		return

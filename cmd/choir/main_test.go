@@ -1042,6 +1042,34 @@ func TestComputerLifecycleCommandsUseTargetedProductAPI(t *testing.T) {
 	}
 }
 
+func TestComputerReplaceWorkspaceUsesProductPath(t *testing.T) {
+	var method, path string
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method = r.Method
+		path = r.URL.Path
+		if r.Body != nil {
+			defer r.Body.Close()
+			body, _ := io.ReadAll(r.Body)
+			if len(body) != 0 {
+				t.Fatalf("replace-workspace sent body %s", body)
+			}
+		}
+		_, _ = io.WriteString(w, `{"computer_id":"computer-1","appended_event":false,"published_checkpoint":false,"store_closed":true}`)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	if code := run([]string{"computer", "replace-workspace", "--host=" + stub.URL, "--computer=computer-1"}, &out, &errOut); code != 0 {
+		t.Fatalf("computer replace-workspace code = %d, stderr=%s", code, errOut.String())
+	}
+	if method != http.MethodPost || path != "/api/computers/computer-1/lifecycle/replace-workspace" {
+		t.Fatalf("replace-workspace request method=%s path=%s", method, path)
+	}
+	if strings.Contains(path, "self-development/genesis") {
+		t.Fatal("replace-workspace used genesis")
+	}
+}
+
 // TestAPIKeyListHitsAuthEndpoint asserts the api-key list command GETs
 // /auth/api-keys with the Bearer token.
 func TestAPIKeyListHitsAuthEndpoint(t *testing.T) {

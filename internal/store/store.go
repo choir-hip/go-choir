@@ -686,11 +686,11 @@ func OpenFresh(dbPath string) (*Store, error) {
 // WorkspaceReplaceReceipt is the loss/quarantine record for a VM-local
 // workspace replacement. It is evidence, not a checkpoint or restore authority.
 type WorkspaceReplaceReceipt struct {
-	OriginalPath         string
-	WorkspacePath        string
-	QuarantineDir        string
-	QuarantinedMarker    string
-	QuarantinedWorkspace string
+	OriginalPath         string `json:"original_path"`
+	WorkspacePath        string `json:"workspace_path"`
+	QuarantineDir        string `json:"quarantine_dir"`
+	QuarantinedMarker    string `json:"quarantined_marker"`
+	QuarantinedWorkspace string `json:"quarantined_workspace"`
 }
 
 // ReplaceWorkspace closes the current store, moves its marker and Dolt

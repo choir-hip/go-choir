@@ -70,7 +70,7 @@ start:
       consequence: "An owner-scoped lifecycle restart at 2026-08-12T18:47:50Z refreshed the retained guest credential through the product path without source or state repair. The replay probe then completed; recurrence across capability expiry remains a residual risk and is not masked."
 
   unknowns:
-    - "Owner-scoped product-path VM-local workspace replacement is not yet built; additive CREATE TABLE IF NOT EXISTS cannot drop retired tables or the extra computer_event_index column, and POST self-development/genesis must not be reused because it appends GenesisImported and publishes a checkpoint."
+    - "Owner-scoped product-path VM-local workspace replacement is wired as POST /api/computers/{id}/lifecycle/replace-workspace (quarantine + OpenFresh, no event, no checkpoint) plus a subsequent owner-scoped restart to reopen the store. It is not yet deployed or executed on the retained computer. POST self-development/genesis remains refused because it appends GenesisImported and publishes a checkpoint."
     - "How a later non-null canonical chain is introduced without treating the existing genesis route or a cleaned null-head snapshot as restore authority."
     - "Whether rematerialization is product-ready. ProjectionMaterializer is non-runtime today; if the classification and subsequent build show it is not usable, restore falls back to a single-workspace pin checkout on an interim basis with the event head still the sole semantic authority."
     - "Which effect classes are outside the reversible envelope and must refuse to promote under a standing rule."
@@ -248,8 +248,8 @@ measures:
 
 now:
   status: working
-  slice: "The 26 replay differences are classified. Next implement an owner-scoped product-path VM-local workspace replacement onto current DDL so the diagnostic probe can report equivalent at a post-cutover snapshot. Do not append GenesisImported, do not publish a checkpoint, and do not add vertical reducers in this slice. A cleaned null-head computer stays ineligible."
-  question: "What owner-scoped lifecycle verb quarantines the retained Dolt workspace and opens a current-DDL workspace without using POST self-development/genesis or in-place ALTER/DROP?"
+  slice: "Product-path workspace replacement is wired (guest Runtime.ReplaceWorkspace, proxy owner-scoped forward, CLI choir computer replace-workspace). Next: land through CI, staging deploy, then execute replace-workspace plus restart on the retained computer and recapture replay-completeness. Expect equivalent, still-null heads, eligible=false. Do not append GenesisImported, do not publish a checkpoint, and do not add vertical reducers. A cleaned null-head computer stays ineligible."
+  question: "After the product-path cutover and restart, does the diagnostic probe report equivalent while remaining ineligible?"
 
   reconciliation:
     observed_at: 2026-08-12T06:56:12Z
@@ -260,8 +260,8 @@ now:
     worktree_inventory_ref: 2026-08-12 read-only git status (clean)
     status: reconciled
 
-  blocker_or_risk: "Classification is complete; the 26 differences remain on the retained workspace because additive Open() cannot drop residue and no product-path workspace replacement exists. Reusing self-development genesis would append an event and publish a checkpoint, which this gate still refuses. Direct-SQL writers will refill empty_until_supported tables after first use; that recurrence is fail-closed, not incomplete cleanup."
-  next_action: "Implement the owner-scoped product-path VM-local workspace replacement (quarantine old workspace, OpenFresh current DDL, append no event, publish no checkpoint), land it through CI and staging, then re-run the read-only replay probe. Expect equivalent, still-null heads, eligible=false. Do not drop or mutate the retained 26-diff evidence artifacts."
+  blocker_or_risk: "The product path exists in this worktree but is not deployed. The retained workspace still has the 26 differences. Reusing self-development genesis would append an event and publish a checkpoint, which this gate still refuses. Direct-SQL writers will refill empty_until_supported tables after first use; that recurrence is fail-closed, not incomplete cleanup."
+  next_action: "Land the owner-scoped product-path VM-local workspace replacement through CI and staging, then run choir computer replace-workspace and choir computer restart on the retained computer, then recapture replay-completeness. Expect equivalent, still-null heads, eligible=false. Do not drop or mutate the retained 26-diff evidence artifacts."
 
   candidate:
     id: none
@@ -277,7 +277,7 @@ now:
     consequence: "Per-candidate owner approval is removed as a requirement and replaced by an owner-armed standing rule plus two-seat auto-approval. The decision-binding verifier and mode CAS are relaxed deliberately, which is the mission's heaviest evidence burden. Checkpoint and revert become deliverables rather than a rollback field. Effects leaving the reversible envelope gain an explicit refusal requirement. Freeze/propose authority must be wired onto CoSuper, which today has no production call site. Pre-mission haunted-authority cutover (roadmap demotion, doctrine/ontology transitional language, RLM Phase-1 re-derive note, restore-set boundary, AGENTS restore-vs-deploy note) landed green; finish.completion_cutover must still run after deployed acceptance or the goal is a false complete."
   evidence_refs: [docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
   blocker_or_risk: "Revert is the mission: nothing in production reads Dolt history back, checkpoints bind no state, and Dolt commits carry no head binding. Replay completeness is unresolved and is the deciding measurement; ProjectionMaterializer is explicitly non-runtime today, so the preferred rematerialization path has no runtime implementation yet and an interim single-workspace pin checkout may be needed. Relaxing the decision-binding verifier and mode CAS touches the surfaces that make the tape trustworthy and carries the heaviest evidence burden. RESOLVED 2026-08-11: staging deploy identity reconciled; owner-bearer residual disposed; capsule build capability confirmed; frontend serving location determined (UI out of scope)."
-  next_action: "Implement owner-scoped product-path VM-local workspace replacement after the 2026-08-12 classification receipt; do not rerun the probe as if unclassified."
+  next_action: "Land and deploy the owner-scoped product-path VM-local workspace replacement after the 2026-08-12 classification receipt; do not rerun the probe as if unclassified."
 
 receipts:
   - id: roadmap-consensus-2026-08-11

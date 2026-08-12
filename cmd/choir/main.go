@@ -124,6 +124,7 @@ Commands:
   run list            List recent owner-scoped runs
   run cancel <id>     Cancel an owner-scoped pending or running run
   computer replay-completeness  Capture live-versus-event-replay state evidence
+  computer replace-workspace  Quarantine the VM-local workspace onto current DDL
   computer stop        Stop the current computer through owner-scoped vmctl
   computer start       Start or resume the current computer
   api-key list        List your API keys
@@ -1199,7 +1200,7 @@ func runSelfDevelopmentModeSet(args []string, stdout, stderr io.Writer) int {
 
 func runComputer(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir computer: subcommand required (status|replay-completeness|stop|start|restart)")
+		fmt.Fprintln(stderr, "choir computer: subcommand required (status|replay-completeness|replace-workspace|stop|start|restart)")
 		return 2
 	}
 	switch args[0] {
@@ -1207,6 +1208,8 @@ func runComputer(args []string, stdout, stderr io.Writer) int {
 		return runComputerStatus(args[1:], stdout, stderr)
 	case "replay-completeness":
 		return runComputerReplayCompleteness(args[1:], stdout, stderr)
+	case "replace-workspace":
+		return runComputerReplaceWorkspace(args[1:], stdout, stderr)
 	case "stop", "start", "restart":
 		return runComputerAction(args[1:], args[0], stdout, stderr)
 	default:
@@ -1254,6 +1257,28 @@ func runComputerReplayCompleteness(args []string, stdout, stderr io.Writer) int 
 	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/replay-completeness"
 	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
 		fmt.Fprintf(stderr, "choir computer replay-completeness: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, response)
+}
+
+func runComputerReplaceWorkspace(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir computer replace-workspace", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir computer replace-workspace: %v\n", err)
+		return 2
+	}
+	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir computer replace-workspace: --computer is required")
+		return 2
+	}
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/replace-workspace"
+	if err := c.do(http.MethodPost, path, nil, &response); err != nil {
+		fmt.Fprintf(stderr, "choir computer replace-workspace: %v\n", err)
 		return 1
 	}
 	return writeJSON(stdout, response)
