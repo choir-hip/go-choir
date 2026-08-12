@@ -57,7 +57,7 @@ start:
 
 finish:
   deliver: "The instruction substrate is single-owner and legible before the effects mission starts. Beads is removed after every open issue is dispositioned; doccheck reports a number that is actionable and scans only the tracked corpus; the real warnings are cleared at their source; and the mandatory reading packet is measurably smaller with no invariant left homeless."
-  artifact: "A pushed commit series carrying: a triage record dispositioning all 106 open/in_progress beads issues; removal of the beads store, hooks, and its doccheck rule with tests updated; a doccheck run reporting warnings and info separately over the tracked corpus only; a clean real-warning count; and a receipted reading-packet reduction in which every removed passage cites the document that now carries the claim. CI green on the source-bearing commits, Docs Truth Check green on the docs-only commits."
+  artifact: "Pushed commits 2bda3a2e, 8697c0ab, 006e39c0, and 4865181e carry the triage record, beads removal, doccheck signal correction, source-warning repairs, and receipted packet reduction. Full manual CI run 31548636633 passed all selected gates, including the race matrix and Docs Truth Check. The source-bearing landing deployed 006e39c0 to staging; staging health reports proxy status ok and that commit identity."
   acceptance:
     - action: "Beads triage: disposition every open and in_progress issue as (a) already delivered, (b) superseded by a later decision, (c) still real and relocated to a named Definition, mission-graph node, or docs/problems entry, or (d) explicitly abandoned. Record the disposition table with per-issue ids."
       proves: "The delete is a decision on evidence, not a bet. Nothing real is lost silently."
@@ -144,8 +144,8 @@ now:
   question: "Resolved: 106/106 open and in_progress records have durable dispositions; 0 warnings remain; the packet is 16,600 words versus the recorded 19,179-word baseline; and doctrine I1-I16 plus SEM-01-SEM-09 are equal before and after."
   reconciliation:
     observed_at: 2026-08-11
-    source_ref: main@006e39c0
-    deploy_identity: "staging 914f7a5d976a; this prep mission does not change deployed product behavior"
+    source_ref: main@4865181e
+    deploy_identity: "staging 006e39c0f4801ef6f2ffb3e1162c29f25e4f0939; deploy 2026-08-11T23:59:35Z; final receipt commit 4865181e is docs-only"
     authority_identities: [docs/choir-doctrine.md, docs/agent-product-doctrine.md, docs/computer-ontology.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "2026-08-11 final status: unrelated WIP preserved in docs/definitions/documentation-authority-reduction-2026-07-09.md and docs/definitions/choir-sandbox-autoputer-rename-2026-08-11.md"
@@ -191,9 +191,9 @@ receipts:
     coverage: "16,600 words versus the recorded 19,179-word baseline; I1-I16 and SEM-01-SEM-09 equal before and after"
     verification: "exact nine-path wc measurement and explicit before/after set comparison"
   - id: source-landing-2026-08-11
-    artifact: "origin/main at 006e39c0"
-    coverage: "source-bearing commits 8697c0ab and 006e39c0 pushed; Docs Truth Check passed; full CI rerun is the final landing check"
-    verification: "GitHub Actions run 31546940207"
+    artifact: "origin/main at 4865181e; source-bearing staging deploy at 006e39c0"
+    coverage: "Source-bearing commits 8697c0ab and 006e39c0 pushed; staging health reports proxy status ok at 006e39c0; final docs-only receipt commit 4865181e pushed."
+    verification: "GitHub Actions manual full CI run 31548636633 passed all selected gates, including race tests and Docs Truth Check; prior push run 31546940207 deployed successfully but its rerun was blocked only by missing differential-SBOM artifact."
 
 view:
   path: none
