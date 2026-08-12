@@ -21,7 +21,7 @@ for file in "$manifest" "$diff" "$candidate"; do
   fi
 done
 
-expected_packages='["auth","corpusd","frontend","gateway","maild","maildctl","obscura","proxy","autoputer","sourcecycled","vmctl","zot"]'
+expected_packages='["auth","autoputer","corpusd","frontend","gateway","maild","maildctl","obscura","proxy","sourcecycled","vmctl","zot"]'
 previous_commit=""
 if [[ -n "$baseline" && -s "$baseline/manifest.jsonl" ]]; then
   previous_commit="$(jq -r 'select(.source_commit != null) | .source_commit' "$baseline/manifest.jsonl" | head -n 1)"
