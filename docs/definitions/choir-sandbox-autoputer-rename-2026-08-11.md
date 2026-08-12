@@ -108,6 +108,10 @@ start:
       problem: "The landing CI race shard deterministically reports a data race when a test cleanup calls Runtime.Stop while ExecuteActivationSync is between registering its cancellation and incrementing the runtime WaitGroup. Stop can reach Wait before the activation calls Add, so the runtime lifecycle substrate has an unsafe shutdown boundary."
       evidence_ref: "CI run 31567927970, Go Test (race, agentcore/textureowner shard 3) job 94023605265 and failed-job rerun 94026227436; internal/agentcore/runtime.go:214-243,595"
       consequence: "The temporary rename-mode removal is not releasable until the runtime shutdown ordering is repaired and the focused race test plus a green landing CI run prove the fix."
+    - id: ci-sqlite-injection-recovery-busy-2026-08-12
+      problem: "Landing CI non-runtime shard 1 intermittently failed TestAdapterSQLiteInjectionAppendRecoveryExecutesWithoutSnapshot because the SQLite recovery assertion observed database is locked (SQLITE_BUSY) instead of completing the no-snapshot injection recovery."
+      evidence_ref: "CI run 31569560429, Go Test (race, non-runtime shard 1) job 94028457219; adapter_test.go:2224"
+      consequence: "Classify as an independent CI flake or substrate regression only after the same job is rerun against the unchanged repair commit; no code change is authorized from this single failure."
 
 finish:
   deliver: "One clean cutover with no compatibility surface. The service that runs a Choir computer is named autoputer everywhere it is a service, package, process, unit, environment variable, or vocabulary term. The persistent user computer's identity is named computer everywhere it is a field, column, index, or public JSON name. The word sandbox survives only where it genuinely means something else. No shim, alias, dual-read, or legacy field is left behind."
