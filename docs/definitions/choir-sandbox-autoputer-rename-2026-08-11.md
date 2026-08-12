@@ -64,6 +64,10 @@ start:
       problem: "The first pushed landing commit failed the CI plan contract because the generated SBOM verifier's expected package array was not sorted after the service package rename from sandbox to autoputer. Local focused Go and shell checks did not exercise this CI-only package-order assertion."
       evidence_ref: "CI run 31551473129, Plan CI Lanes job 93974880121, failed Test CI classifiers and differential SBOM reuse step; local reproduction .github/scripts/verify-sbom-candidate-test before repair"
       consequence: "The landing remains incomplete until the failure is documented first, the expected package list is corrected, the contract suite passes locally, and a new pushed CI run is green."
+    - id: ci-go-module-vendor-hash-2026-08-12
+      problem: "After the package-order repair, the pushed SBOM candidate reached the changed-package build and failed every required Go package whose module closure uses the shared flake vendorHash. Nix expected sha256-NQ3VEnZ8q5Lo1uat8z9lV7YCM4auEkQu6uiI1TcIEvs= but downloaded sha256-9dsR+XGLTVDZ49SYVzNBIEPOxPZNlNlpPplNVeAocSk=; the same fixed-output mismatch appeared for maild, maildctl, corpusd, autoputer, sourcecycled, and vmctl."
+      evidence_ref: "CI run 31551955304, Build Differential SBOM Candidate job 93976443314, Reuse semantic inventories or build changed packages logs at 2026-08-12T01:00:21Z-01:02:52Z; flake.nix:103-104"
+      consequence: "The landing remains incomplete until this independently documented build failure is repaired, the focused SBOM contract and package build path pass, and a new pushed CI run is green. No staging deployment or state drop is authorized."
   unknowns:
     - "Whether any operator surface outside this repo — a deploy script, a runbook, or a Node B local file — references SANDBOX_* variables or go-choir-sandbox unit names, which would widen the coordinated deploy surface beyond what the repo shows."
     - "Whether anything in current staging state is worth preserving before the drop, beyond the replay-probe diff this Definition requires."
@@ -156,7 +160,7 @@ measures:
 
 now:
   status: blocked_incomplete
-  slice: "Manifest-generated rename candidate and owner-authorized replay probe are implemented, compiled, vetted, and frontend-built. The source product path is verified in tests against a disposable replay workspace and live-only drift. Deployment, staging probe execution, state drop/recreation, and renamed staging acceptance remain outstanding."
+  slice: "The generated rename and read-only replay probe are committed and pushed, but staging landing is blocked by the SBOM build: CI run 31551955304 passed plan, heresy, docs, and Go gates, then failed Build Differential SBOM Candidate while building changed packages. The first package-order failure was documented and repaired; the repaired run exposed a separate SBOM/Nix build failure. Deployment, replay evidence, state recreation, and renamed acceptance remain outstanding."
   question: "Whether any operator surface outside this repository references SANDBOX_* variables or go-choir-sandbox unit names; reconcile that boundary before staging deployment."
   reconciliation:
     observed_at: 2026-08-12T00:55:15Z
