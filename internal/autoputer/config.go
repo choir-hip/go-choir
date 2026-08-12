@@ -26,10 +26,15 @@ type Config struct {
 	StorePath string
 }
 
-// LoadConfig resolves autoputer configuration from environment variables.
 func LoadConfig() Config {
 	port := portFromEnv("AUTOPUTER_PORT", "8085")
-	computerID := fromEnv("AUTOPUTER_ID", "autoputer-dev")
+	// CHOIR_COMPUTER_ID is the stable product identity. AUTOPUTER_ID is the
+	// VM realization identifier and remains only as a local-development
+	// fallback when no stable identity was supplied.
+	computerID := fromEnv("CHOIR_COMPUTER_ID", "")
+	if computerID == "" {
+		computerID = fromEnv("AUTOPUTER_ID", "autoputer-dev")
+	}
 	storePath := fromEnv("RUNTIME_STORE_PATH", "")
 	return Config{
 		Port:       port,
