@@ -220,7 +220,7 @@ now:
     owner: owner-and-session
     base: fdf7ceb1fe61a847acdd912bd6c0dcd330a5534d
     digest: f04e68284c0a241460c44677e2000412f589554665ffd8bea27713cf41cfd621
-    scope: [cmd/autoputer, cmd/choir, internal/autoputer, internal/agentcore, internal/computerevent, internal/computerevent, internal/computerversion, internal/store, flake.nix, nix/, frontend/, .github/, scripts/, docs/, AGENTS.md, README.md, .gitignore]
+    scope: [cmd/autoputer, cmd/choir, internal/autoputer, internal/agentcore, internal/computerevent, internal/computerversion, internal/store, flake.nix, nix/, frontend/, .github/, scripts/, docs/, AGENTS.md, README.md, .gitignore]
     digest_method: "sha256(git diff fdf7ceb1fe61a847acdd912bd6c0dcd330a5534d..HEAD --binary -- . excluding this Definition and the pre-edit manifest receipt)"
     selected: "Split targets, one cutover, before supervised self-development effects: service/process/package/unit/environment/workflow/vocabulary surfaces become autoputer; every persistent identity surface, including Go fields, persisted columns, indexes, public JSON, frontend, and specs, becomes computer. No compatibility surface. Run the effects replay probe before dropping staging state."
     kind: architecture
@@ -289,6 +289,22 @@ receipts:
       deploy_ref: "Deploy to Staging (Node B) job 94018717399 (success)"
       environment_identity: "https://choir.news/health deployed_commit ba27a3e8ed1815dff9853bf96741b4333cf7c1f4"
       deployed_acceptance: "pre-drop replay route and stable identity proof passed; rename acceptance remains pending state recreation"
+    registry_conformance_ref: "docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml remain the active registries"
+  - id: rename-deployed-post-drop-2026-08-12
+    boundary: acceptance
+    commit_or_artifact: docs/evidence/choir-sandbox-autoputer-rename-staging-2026-08-12.json
+    proof_refs: ["CI run 31569560429 success for deployed runtime 3cd12d1452ad1d06b5df57cf9183313568f60cb5", "Deploy to Staging (Node B) job 94032849945 success", "https://choir.news/health deployed_commit 3cd12d1452ad1d06b5df57cf9183313568f60cb5 with vmctl_status ok", "owner-scoped stop receipt 019ff4c6-28fe-7b25-aa7a-20cfde32cda2 for prior computer", "fresh non-reused computer computer-824d206c17a3406ad4d789f84ff46c87 bootstrap HTTP 200 and lifecycle state active", "deployed lifecycle acceptance 1 passed (17.3s)"]
+    rollback_ref: "Revert the rename mission commits; product state recreation is not a source rollback."
+    disposition: "accepted: renamed staging state was recreated after retaining the pre-drop replay evidence, and the existing deployed lifecycle acceptance passed"
+    problem_ref: replay-probe-no-product-path-2026-08-11
+    authorization_ref: "owner-authorized lifecycle stop and state recreation recorded in docs/evidence/choir-sandbox-autoputer-rename-staging-2026-08-12.json"
+    candidate_or_evidence_refs: [sandbox-autoputer-candidate-2026-08-11, docs/evidence/choir-sandbox-autoputer-rename-staging-2026-08-12.json]
+    landing:
+      source_commit: 3cd12d1452ad1d06b5df57cf9183313568f60cb5
+      ci_ref: "31569560429 (success)"
+      deploy_ref: "Deploy to Staging (Node B) job 94032849945 (success)"
+      environment_identity: "https://choir.news/health deployed_commit 3cd12d1452ad1d06b5df57cf9183313568f60cb5"
+      deployed_acceptance: "GO_CHOIR_RUN_DEPLOYED_LIFECYCLE=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news npx playwright test tests/adaptive-lifecycle-control-deployed.spec.js --reporter=line; 1 passed (17.3s)"
     registry_conformance_ref: "docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml remain the active registries"
 
 view:
