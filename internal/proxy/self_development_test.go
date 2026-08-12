@@ -123,16 +123,40 @@ func TestSelfDevelopmentModePathRequiresSingleEscapedComputerID(t *testing.T) {
 		}
 	}
 }
-func TestReplayCompletenessPathPassesEffectsOffGate(t *testing.T) {
-	handler, privateKey, autoputer := testProxyEnv(t)
+func TestReplayCompletenessPathUsesOwnedComputerAndTrustedBinding(t *testing.T) {
+	var gotUser, gotComputer, gotPath string
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUser = r.Header.Get("X-Authenticated-User")
+		gotComputer = r.Header.Get("X-Authenticated-Computer")
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}))
 	defer autoputer.Close()
 
+	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("computer_id") != "computer-a" || r.URL.Query().Get("user_id") != "owner-user" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"computer_id": "computer-a", "desktop_id": "primary", "user_id": "owner-user",
+			"state": "active", "computer_url": autoputer.URL,
+		})
+	}))
+	defer ownership.Close()
+
+	handler, privateKey, _ := testProxyEnv(t)
+	handler.vmctlClient = vmctl.NewClient(ownership.URL)
 	request := httptest.NewRequest(http.MethodGet, "/api/computers/computer-a/self-development/replay-completeness", nil)
 	request.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(privateKey, "owner-user")})
 	response := httptest.NewRecorder()
 	handler.HandleAPI(response, request)
-	if response.Code != http.StatusNotFound {
-		t.Fatalf("replay completeness should reach the autoputer while effects are off: status=%d body=%s", response.Code, response.Body.String())
+	if response.Code != http.StatusOK {
+		t.Fatalf("replay completeness status=%d body=%s", response.Code, response.Body.String())
+	}
+	if gotUser != "owner-user" || gotComputer != "computer-a" || gotPath != request.URL.Path {
+		t.Fatalf("upstream binding user=%q computer=%q path=%q", gotUser, gotComputer, gotPath)
 	}
 
 	for path, want := range map[string]bool{
@@ -142,7 +166,7 @@ func TestReplayCompletenessPathPassesEffectsOffGate(t *testing.T) {
 		"/api/computers/a/self-development/replay-completeness/extra":    false,
 	} {
 		if _, got := selfDevelopmentReplayCompletenessComputerID(path); got != want {
-			t.Fatalf("path %q accepted=%v, want %v", path, got, want)
+			t.Errorf("path %q accepted=%v, want %v", path, got, want)
 		}
 	}
 }
