@@ -354,6 +354,9 @@ func TestTextureRetiredNameAllowlist(t *testing.T) {
 		{"docs/mission-texture-hard-cutover-v0.md", "  `edit_" + retiredName + "` 390, `request_super_execution` 122.", true},
 		{"cmd/doccheck/main.go", `for _, term := range []string{"` + retiredName + `"}`, true},
 		{"internal/textureowner/texture.go", "// texture-cutover-allow: " + retiredName + " route shim; delete-by texture-hard-cutover-v0", true},
+		{"docs/archive/inventory.yaml", retiredDisplay + " was retained as historical evidence.", true},
+		{"docs/runtime-dissolution-inventory.yaml", "historical inventory: " + retiredDisplay, true},
+		{"internal/modelpolicy/model_policy_test.go", "generated policy rejects " + retiredDisplay + ".", true},
 		{"docs/current.md", retiredDisplay + " owns canonical versions.", false},
 		{"internal/textureowner/texture.go", "const path = \"/api/" + retiredName + "/documents\"", false},
 	}

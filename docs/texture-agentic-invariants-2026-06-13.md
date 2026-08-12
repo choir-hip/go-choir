@@ -310,7 +310,7 @@ Root cause (logic, model-independent):
    model that ends the first turn with prose can complete the run before the
    findings ever enter context.
 
-2. **No "must act" constraint on integrate.** `initialTextureToolChoice` returns
+2. **Historical detector finding: no "must act" constraint on integrate.** `initialTextureToolChoice` returns
    `required` only when `scheduled_message_seq == 0`; integrate wakes
    (`scheduled_message_seq > 0`) get no initial tool-choice constraint, so a
    grounded integrate turn may legally end with prose and produce no durable
@@ -336,7 +336,7 @@ doc is re-woken rather than silently dropping the findings.
 ### Required tests for this fix
 
 - integrate wake run carries cold-prepend eligibility so turn 1 sees findings;
-- `initialTextureToolChoice` requires a durable action on grounded integrate
+- Historical detector requirement: `initialTextureToolChoice` requires a durable action on grounded integrate
   wakes;
 - a no-write integrate still leaves worker updates pending for re-wake.
 

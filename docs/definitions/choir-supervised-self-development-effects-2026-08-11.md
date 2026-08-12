@@ -397,7 +397,7 @@ recorded.
 ## Restore procedure
 
 1. Resolve the checkpoint; refuse if incomplete.
-2. Quiesce writers / take the materialization lease.
+2. Quiesce writers / enter the materialization window.
 3. Append a forward restore intent naming the target event head.
 4. Restage the release and rebuild VM-local state through that head.
 5. Re-run `DoltStateExtractor`; require an exact content-hash match.

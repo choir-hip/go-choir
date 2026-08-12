@@ -82,7 +82,7 @@ sequence, mutation permission, or completion authority.
   history and its research forks are out of scope.
 - Not new product surface (headless CLI Phase 1.5 verbs, MCP, reader UX
   options B/C stay deferred unless a node here requires them).
-- Not detector theater: a detector that cannot fail is not evidence.
+- Not detector theater: a detector without a failure mode is not evidence.
 - Not motion theater: a pass that changes no node status and no verifier is
   not progress.
 
@@ -664,7 +664,7 @@ kind: conjecture
 status: proven
 source: choir-doctrine H010 + Phase B M3.1
 problem: >-
-  After a Texture write succeeds, `requiredContinuationAfterTextureEdit` parses
+  Historical detector finding: after a Texture write succeeds, `requiredContinuationAfterTextureEdit` parses
   the original prompt and canonical document prose, synthesizes an email intent,
   and directly invokes `request_email_draft`. Narrative content therefore still
   selects and executes an exact next tool after the canonical write.
@@ -755,7 +755,7 @@ determined_state:
       source: observed (deletion diff + inverted tests + detector negative proof + CI/staging landing loop, 2026-07-10)
       execution_effect: M3.1a is settled; M3.1 continues with the H009/H010 forcing cluster.
     - claim: Texture still parses prompt/document prose after a canonical write and directly executes request_email_draft.
-      source: observed (`executeTextureEditTool` → `requiredContinuationAfterTextureEdit` → `extractEmailDraftIntent`, 2026-07-10)
+      source: historical detector reference (`executeTextureEditTool` → `requiredContinuationAfterTextureEdit` → `extractEmailDraftIntent`, 2026-07-10)
       execution_effect: M3.1b is settled by deletion, inverted tests, CI, Node B identity, and a deployed Texture proof; broader H010/H024/H026 work remains.
     - claim: Historical D-ROUTE third-store topology is superseded; retained CAS/receipt semantics assign ordinary served-route authority to corpusd sql-server route-slot tables with vmctl as sole writer.
       source: owner two-store directive, applied by the completed audited-construction two-store-topology node

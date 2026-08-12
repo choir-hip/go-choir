@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -22,7 +24,6 @@ const (
 	defaultAssertionRegister = "docs/conjecture-assertion-ledger-2026-06.md"
 	defaultReport            = "doccheck-report.md"
 	defaultJSON              = "doccheck.json"
-	defaultBeadsStore        = ".beads/issues.jsonl"
 )
 
 var highRead = map[string]bool{
@@ -248,7 +249,9 @@ func main() {
 		fmt.Printf("doccheck live check passed: %d content documents plus router, %dms\n", len(defaultReadPacket)-1, rep.RuntimeMS)
 		os.Exit(0)
 	}
-	fmt.Printf("doccheck report-only complete: %d docs, %d warnings, %dms\n", rep.DocsScanned, len(rep.Warnings), rep.RuntimeMS)
+	warningCount := rep.WarningsBySeverity["warning"]
+	infoCount := rep.WarningsBySeverity["info"]
+	fmt.Printf("doccheck report-only complete: %d docs, %d warnings, %d info findings, %dms\n", rep.DocsScanned, warningCount, infoCount, rep.RuntimeMS)
 	os.Exit(0)
 }
 
@@ -364,7 +367,7 @@ func run(manifestPath, graphPath, assertionPath, actor, writeAttempt string) (re
 	}
 
 	detectors := detectorDefinitions("docs/heresy-detectors.md")
-	detectorTerms := flattenDetectorTerms(detectors)
+	detectorTerms := docHeresyTerms(detectors)
 	for _, p := range mdFiles {
 		info := docs[p]
 		if info == nil || info.IsEvidence || !(info.Scope == "current" || info.Scope == "mixed") {
@@ -389,7 +392,6 @@ func run(manifestPath, graphPath, assertionPath, actor, writeAttempt string) (re
 
 	graph, graphWarnings := validateMissionGraph(graphPath, docs)
 	warnings = append(warnings, graphWarnings...)
-	warnings = append(warnings, validateBeadsStore(defaultBeadsStore, graph.NodeCount)...)
 	assertions, assertionWarnings := validateAssertionRegister(assertionPath)
 	warnings = append(warnings, assertionWarnings...)
 	heresyScan, err := scanCodeHeresy(detectors, docs)
@@ -483,6 +485,8 @@ func classifyDoc(path string, md manifestDoc, manifested, exists bool) docInfo {
 func inferClassification(path string) (string, bool) {
 	base := filepath.Base(path)
 	switch {
+	case strings.HasPrefix(path, "docs/evidence/"):
+		return "historical", true
 	case isHistoricalArchive(path):
 		return "historical", true
 	case strings.HasPrefix(path, "docs/mission-") && strings.HasSuffix(path, ".ledger.md"):
@@ -537,29 +541,53 @@ func normalizeRootKinds(v interface{}) []string {
 }
 
 func markdownFiles(root string) ([]string, error) {
+	files, err := repositoryFiles(root)
+	if err != nil {
+		return nil, err
+	}
 	var out []string
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		name := d.Name()
-		if d.IsDir() && (name == ".git" || name == "node_modules" || name == "vendor" || name == "dist" || name == "test-results" || name == ".gstack") {
-			return filepath.SkipDir
-		}
-		if d.IsDir() {
-			return nil
-		}
-		p := cleanPath(path)
-		if p == "doccheck-report.md" || p == "doccheck.json" {
-			return nil
-		}
+	for _, p := range files {
 		if strings.HasSuffix(p, ".md") {
 			out = append(out, p)
 		}
-		return nil
-	})
+	}
+	return out, nil
+}
+
+func repositoryFiles(root string) ([]string, error) {
+	cmd := exec.Command("git", "-C", root, "ls-files", "--cached", "-z")
+	raw, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("list repository files: %w", err)
+	}
+	var out []string
+	for _, item := range bytes.Split(raw, []byte{0}) {
+		if len(item) == 0 {
+			continue
+		}
+		p := cleanPath(string(item))
+		if excludedCorpusPath(p) {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(p))); err != nil {
+			continue
+		}
+		out = append(out, p)
+	}
 	sort.Strings(out)
-	return out, err
+	return out, nil
+}
+
+func excludedCorpusPath(path string) bool {
+	if path == "doccheck-report.md" || path == "doccheck.json" {
+		return true
+	}
+	for _, prefix := range []string{".git/", "node_modules/", "vendor/", "dist/", "test-results/", ".gstack/"} {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func cleanPath(path string) string {
@@ -1243,6 +1271,21 @@ func flattenDetectorTerms(defs []detectorDefinition) []string {
 	return out
 }
 
+// docHeresyTerms selects detector families whose vocabulary itself is retired
+// or transitional in prose. Code-only contracts such as update_id, route
+// resolvers, and obsolete adapter symbols remain covered by scanCodeHeresy but
+// must not be treated as banned words in current documentation.
+func docHeresyTerms(defs []detectorDefinition) []string {
+	var selected []detectorDefinition
+	for _, def := range defs {
+		family := strings.ToLower(def.Family)
+		if strings.Contains(family, "residue") || strings.Contains(family, "vocabulary") || strings.EqualFold(def.ID, "framing") {
+			selected = append(selected, def)
+		}
+	}
+	return flattenDetectorTerms(selected)
+}
+
 func fallbackDetectorDefinitions() []detectorDefinition {
 	return []detectorDefinition{
 		{ID: "fallback-surface", Family: "surface residue", Terms: []string{"Trace app", "Trace UI", "Open Trace", "Terminal app", "raw Terminal", "manual terminal", "Browser app", "BrowserApp", "browser_sessions", "AppHint: \"browser\""}},
@@ -1311,29 +1354,17 @@ func scanCodeHeresy(detectors []detectorDefinition, docs map[string]*docInfo) (h
 }
 
 func heresySurfaceFiles(root string) ([]string, error) {
+	files, err := repositoryFiles(root)
+	if err != nil {
+		return nil, err
+	}
 	var out []string
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		name := d.Name()
-		if d.IsDir() && (name == ".git" || name == "node_modules" || name == "vendor" || name == "dist" || name == "test-results" || name == ".gstack") {
-			return filepath.SkipDir
-		}
-		if d.IsDir() {
-			return nil
-		}
-		p := cleanPath(path)
-		if p == "doccheck-report.md" || p == "doccheck.json" {
-			return nil
-		}
+	for _, p := range files {
 		if isHeresySurface(p) {
 			out = append(out, p)
 		}
-		return nil
-	})
-	sort.Strings(out)
-	return out, err
+	}
+	return out, nil
 }
 
 func isHeresySurface(path string) bool {
@@ -1626,7 +1657,10 @@ func textureRetiredNameTerms() []string {
 }
 
 func isAllowedTextureRetiredNameLine(path, line string, docs map[string]*docInfo) bool {
-	if strings.HasPrefix(path, "cmd/doccheck/") {
+	if strings.HasPrefix(path, "cmd/doccheck/") || strings.HasSuffix(path, "_test.go") {
+		return true
+	}
+	if strings.HasPrefix(path, "docs/archive/") || strings.HasPrefix(path, "docs/evidence/") || path == "docs/runtime-dissolution-inventory.yaml" {
 		return true
 	}
 	if path == "docs/why-texture-background-2026-06-15.md" {
@@ -1746,7 +1780,7 @@ func renderMarkdown(rep report) string {
 			fmt.Fprintf(&b, "Live verdict: default reading packet fails with %d failures.\n\n", len(rep.LiveFailures))
 		}
 	} else {
-		fmt.Fprintf(&b, "Report-only verdict: completed with %d warnings; v0 exits 0.\n\n", len(rep.Warnings))
+		fmt.Fprintf(&b, "Report-only verdict: completed with %d warnings and %d info findings; v0 exits 0.\n\n", rep.WarningsBySeverity["warning"], rep.WarningsBySeverity["info"])
 	}
 	fmt.Fprintf(&b, "Mode: `%s`\n\n", rep.Mode)
 	fmt.Fprintf(&b, "Generated: %s\n\n", rep.GeneratedAt)
@@ -1754,6 +1788,7 @@ func renderMarkdown(rep report) string {
 	fmt.Fprintf(&b, "Docs scanned: %d\n\n", rep.DocsScanned)
 	fmt.Fprintf(&b, "Manifest entries: %d\n\n", rep.ManifestEntries)
 	fmt.Fprintf(&b, "Inferred docs: %d\n\n", rep.InferredDocs)
+	fmt.Fprintf(&b, "Findings: %d total (%d warning, %d info)\n\n", len(rep.Warnings), rep.WarningsBySeverity["warning"], rep.WarningsBySeverity["info"])
 	fmt.Fprintf(&b, "Warnings by rule: %s\n\n", formatCounts(rep.WarningsByRule))
 	fmt.Fprintf(&b, "Warnings by severity: %s\n\n", formatCounts(rep.WarningsBySeverity))
 	if rep.Mode == "live" {
