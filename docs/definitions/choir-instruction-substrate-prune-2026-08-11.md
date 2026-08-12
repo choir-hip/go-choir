@@ -56,8 +56,8 @@ start:
     - "How much of the ~19,200-word instruction packet is load-bearing invariant versus restatement. Answered only by the receipted pass in step 5, where every removal must name the document that absorbs the claim."
 
 finish:
-  deliver: "The instruction substrate is single-owner and legible before the effects mission starts. Beads is removed after every open issue is dispositioned; doccheck reports a number that is actionable and scans only the tracked corpus; the real warnings are cleared at their source; and the mandatory reading packet is measurably smaller with no invariant left homeless."
-  artifact: "Pushed commits 2bda3a2e, 8697c0ab, 006e39c0, and 4865181e carry the triage record, beads removal, doccheck signal correction, source-warning repairs, and receipted packet reduction. Full manual CI run 31548636633 passed all selected gates, including the race matrix and Docs Truth Check. The source-bearing landing deployed 006e39c0 to staging; staging health reports proxy status ok and that commit identity."
+  deliver: "The instruction substrate is single-owner and legible before the effects mission starts. The retired tracker and migration artifacts are removed after every open issue is dispositioned; doccheck reports a number that is actionable and scans only the tracked corpus; the real warnings are cleared at their source; and the mandatory reading packet is measurably smaller with no invariant left homeless."
+  artifact: "Pushed commits 2bda3a2e, 8697c0ab, 006e39c0, 4865181e, and fc9aad55 carry the triage record, tracker removal, doccheck signal correction, source-warning repairs, migration-artifact cleanup, and receipted packet reduction. Full manual CI run 31548636633 passed the original selected gates; cleanup CI run 31550316152 passed all code/test/doc gates, while its staging deploy was rejected before activation by an unrelated capsule-broker fixed-output hash mismatch. Staging health remains proxy-ok at deployed commit 006e39c0."
   acceptance:
     - action: "Beads triage: disposition every open and in_progress issue as (a) already delivered, (b) superseded by a later decision, (c) still real and relocated to a named Definition, mission-graph node, or docs/problems entry, or (d) explicitly abandoned. Record the disposition table with per-issue ids."
       proves: "The delete is a decision on evidence, not a bet. Nothing real is lost silently."
@@ -140,12 +140,12 @@ measures:
 
 now:
   status: complete
-  slice: "The prep mission is complete. Beads was triaged before deletion; its store and doccheck integration are gone; doccheck now scans the non-ignored corpus and separates warnings from info; all actionable H findings are resolved; and the mandatory packet is smaller with invariant conservation recorded."
-  question: "Resolved: 106/106 open and in_progress records have durable dispositions; 0 warnings remain; the packet is 16,600 words versus the recorded 19,179-word baseline; and doctrine I1-I16 plus SEM-01-SEM-09 are equal before and after."
+  slice: "The prep mission is complete. The retired tracker, migration helper, skill, and doccheck integration are gone; doccheck now scans the non-ignored corpus and separates warnings from info; all actionable H findings are resolved; and the mandatory packet is smaller with invariant conservation recorded."
+  question: "Resolved: 106/106 open and in_progress records have durable dispositions; 0 warnings remain; the packet is 16,600 words versus the recorded 19,179-word baseline; doctrine I1-I16 plus SEM-01-SEM-09 are equal before and after; and no live source/workflow/skill reference to the retired tracker remains."
   reconciliation:
-    observed_at: 2026-08-11
-    source_ref: main@4865181e
-    deploy_identity: "staging 006e39c0f4801ef6f2ffb3e1162c29f25e4f0939; deploy 2026-08-11T23:59:35Z; final receipt commit 4865181e is docs-only"
+    observed_at: 2026-08-12
+    source_ref: main@fc9aad55
+    deploy_identity: "staging remains 006e39c0f4801ef6f2ffb3e1162c29f25e4f0939; cleanup CI 31550316152 passed all code/test/doc gates but its deploy job failed on an unrelated fixed-output capsule-broker hash mismatch, so no product deployment was accepted"
     authority_identities: [docs/choir-doctrine.md, docs/agent-product-doctrine.md, docs/computer-ontology.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "2026-08-11 final status: unrelated WIP preserved in docs/definitions/documentation-authority-reduction-2026-07-09.md and docs/definitions/choir-sandbox-autoputer-rename-2026-08-11.md"
@@ -166,7 +166,7 @@ now:
     - docs/evidence/choir-instruction-substrate-prune-triage-2026-08-11.md
     - docs/evidence/choir-instruction-substrate-prune-doccheck-2026-08-11.md
     - docs/evidence/choir-instruction-substrate-prune-packet-2026-08-11.md
-    - "go run ./cmd/doccheck --mode=full: 317 docs, 0 warnings, 37 info findings"
+    - "go run ./cmd/doccheck --mode=full: 316 docs, 0 warnings, 36 info findings after migration-artifact cleanup"
     - "go run ./cmd/doccheck --mode=live: passed; 10 content documents plus router"
     - "go test ./cmd/doccheck && go run ./cmd/doccheck --mode=full: passed in the source-bearing landing before final doc-only receipt correction"
   blocker_or_risk: "The prep mission's remaining risk is ordinary maintenance: the effects mission still requires its own runtime and staging evidence. This mission did not touch product behavior or the effects Definition's design."
@@ -179,21 +179,21 @@ receipts:
     dispositions: "12 already delivered; 94 superseded; 0 relocated; 0 abandoned"
     delete_gate: passes
   - id: beads-removal-2026-08-11
-    artifact: "commits 8697c0ab and 006e39c0"
-    coverage: ".beads/ removed; R8 reader/rule/tests and unused migration commands removed; no current beads references remain"
-    verification: "git status and scoped reference audit after landing"
+    artifact: "commits 8697c0ab, 006e39c0, and fc9aad55"
+    coverage: ".beads/ removed; R8 reader/rule/tests, unused migration commands, migration helper, and obsolete skill removed; no live beads references remain"
+    verification: "git status and scoped source/workflow/skill reference audit after fc9aad55; go test ./cmd/doccheck passed"
   - id: doccheck-signal-2026-08-11
     artifact: docs/evidence/choir-instruction-substrate-prune-doccheck-2026-08-11.md
-    coverage: "baseline 143 findings (31 warning, 112 info) to corrected 315 tracked docs (0 warning, 38 info) in the same-run receipt"
-    verification: "current full run: 317 docs, 0 warnings, 37 info findings; current live run passed"
+    coverage: "baseline 143 findings (31 warning, 112 info) to corrected tracked corpus (0 warning, 36 info) after final migration-artifact cleanup"
+    verification: "current full run: 316 docs, 0 warnings, 36 info findings; current live run passed"
   - id: packet-conservation-2026-08-11
     artifact: docs/evidence/choir-instruction-substrate-prune-packet-2026-08-11.md
     coverage: "16,600 words versus the recorded 19,179-word baseline; I1-I16 and SEM-01-SEM-09 equal before and after"
     verification: "exact nine-path wc measurement and explicit before/after set comparison"
   - id: source-landing-2026-08-11
-    artifact: "origin/main at 4865181e; source-bearing staging deploy at 006e39c0"
-    coverage: "Source-bearing commits 8697c0ab and 006e39c0 pushed; staging health reports proxy status ok at 006e39c0; final docs-only receipt commit 4865181e pushed."
-    verification: "GitHub Actions manual full CI run 31548636633 passed all selected gates, including race tests and Docs Truth Check; prior push run 31546940207 deployed successfully but its rerun was blocked only by missing differential-SBOM artifact."
+    artifact: "origin/main at fc9aad55; source-bearing staging deploy at 006e39c0"
+    coverage: "Source-bearing cleanup commit fc9aad55 pushed; CI 31550316152 passed all selected code/test/doc gates; staging remained at 006e39c0 because its deploy failed on the unrelated capsule-broker fixed-output hash mismatch."
+    verification: "GitHub Actions run 31550316152: selected gates passed; Deploy to Staging failed before activation with specified sha256-NQ3VEnZ8q5Lo1uat8z9lV7YCM4auEkQu6uiI1TcIEvs= versus fetched sha256-9dsR+XGLTVDZ49SYVzNBIEPOxPZNlNlpPplNVeAocSk=."
 
 view:
   path: none
