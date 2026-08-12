@@ -64,6 +64,10 @@ start:
       problem: "The deployed pre-drop replay completeness probe reconstructed the retained event chain into a disposable projection but returned not_equivalent: 26 deterministic DoltStateExtractor differences, with both live_head and replay_head null. Five schema observations and five table observations were absent from replay; sixteen schema/content observations differed."
       evidence_ref: docs/evidence/choir-sandbox-autoputer-replay-completeness-2026-08-12.json
       consequence: "A clean rematerialization is not licensed. Classify every difference as behavior-bearing event-derived state, pinned-receipt state, or retired/legacy residue; make behavior-bearing writes event-derived or fail checkpoint creation closed before designing restore."
+    - id: replay-probe-credential-renewal-refused-2026-08-12
+      problem: "After the replay gate repair deployed at d2ab2d2d, the owner-scoped product CLI reaches the retained active computer but fails during event-chain reconstruction: the guest capability renewal endpoint returns a non-201 response and the guest reports renewal refused. The required read-only replay diff is not recaptured; no state mutation or clean rematerialization is authorized."
+      evidence_ref: "CHOIR_HOST=https://choir.news CHOIR_TIMEOUT=10m go run ./cmd/choir computer replay-completeness --computer computer-03335285269bdba4f94377e56879f9e6 at 2026-08-12T18:46Z returned HTTP 500: replay completeness: reconstruct event chain: computer event appender: fetch durable chain: computer event client: capability: guest credential: renewal refused; /health reported deployed_commit d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c; computer status reported the requested stable computer active at realization_epoch 203."
+      consequence: "The replay acceptance remains pending. Diagnose the scoped product credential-renewal path and repair it through the repository/deployment path; do not bypass the guest capability, inject credentials, use SSH, or drop retained state."
 
   unknowns:
     - "Which of the 26 pre-drop replay differences are behavior-bearing VM-local writes versus retired or legacy residue, and what event or pinned receipt derives each behavior-bearing write?"
@@ -373,6 +377,22 @@ receipts:
       environment_identity: "https://choir.news/health deployed_commit ba27a3e8ed1815dff9853bf96741b4333cf7c1f4"
       deployed_acceptance: "pre-drop replay route and stable identity proof passed; exact non-equivalence retained"
     registry_conformance_ref: "effects Definition remains the active entrypoint; rename Definition accepted before effects resumes"
+  - id: replay-probe-credential-renewal-refused-2026-08-12
+    boundary: acceptance
+    commit_or_artifact: docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
+    proof_refs: ["CHOIR_HOST=https://choir.news CHOIR_TIMEOUT=10m go run ./cmd/choir computer replay-completeness --computer computer-03335285269bdba4f94377e56879f9e6 at 2026-08-12T18:46Z (HTTP 500: guest credential renewal refused)", "https://choir.news/health deployed_commit d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c", "choir computer status --computer computer-03335285269bdba4f94377e56879f9e6 (active, realization_epoch 203)"]
+    rollback_ref: "Revert the documentation-only finding; no deployed state or event chain was mutated by the failed read-only probe."
+    disposition: "blocked: the product-path probe did not produce a replay diff because guest capability renewal was refused during durable-chain reconstruction"
+    problem_ref: replay-probe-credential-renewal-refused-2026-08-12
+    authorization_ref: "effects Definition acceptance action 1; standing question 9 product API/CLI boundary"
+    candidate_or_evidence_refs: [docs/definitions/choir-supervised-self-development-effects-2026-08-11.md]
+    landing:
+      source_commit: pending
+      ci_ref: pending (Docs Truth Check)
+      deploy_ref: not_applicable
+      environment_identity: "staging https://choir.news deployed_commit d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c"
+      deployed_acceptance: "failed before replay diff; retained computer remains active and unchanged"
+    registry_conformance_ref: "effects Definition remains the active entrypoint; no registry topology changed"
 
 view:
   path: none
