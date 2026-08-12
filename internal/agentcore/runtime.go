@@ -220,8 +220,11 @@ func (rt *Runtime) ExecuteActivationSync(ctx context.Context, rec *types.RunReco
 		return
 	}
 	rt.running[rec.RunID] = cancel
+	// Register the activation before releasing runningMu. Stop acquires the
+	// same lock before waiting, so it cannot observe an activation after
+	// WaitGroup.Wait has already begun.
+	rt.wg.Add(1)
 	rt.runningMu.Unlock()
-
 	stopProgressDeadline := context.AfterFunc(runCtx, func() {
 		if !errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 			return
@@ -238,7 +241,6 @@ func (rt *Runtime) ExecuteActivationSync(ctx context.Context, rec *types.RunReco
 	defer stopProgressDeadline()
 	defer cancel()
 
-	rt.wg.Add(1)
 	rt.executeActivation(runCtx, &runRec)
 	*rec = runRec
 }
