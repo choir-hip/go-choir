@@ -8,7 +8,6 @@ trap 'rm -rf "$tmpdir"' EXIT
 
 source_commit=1111111111111111111111111111111111111111
 run_id=123456
-run_attempt=2
 packages=(auth proxy gateway maild maildctl corpusd autoputer sourcecycled vmctl frontend obscura zot)
 required_packages=" auth proxy gateway maild maildctl corpusd autoputer sourcecycled vmctl frontend zot "
 semantic_packages=" auth proxy gateway maild maildctl corpusd autoputer sourcecycled vmctl frontend "
@@ -108,8 +107,7 @@ make_bundle() {
   jq -n \
     --arg source_commit "$source_commit" \
     --arg run_id "$run_id" \
-    --arg run_attempt "$run_attempt" \
-    '{schema_version: 1, source_commit: $source_commit, run_id: $run_id, run_attempt: $run_attempt}' \
+    '{schema_version: 1, source_commit: $source_commit, run_id: $run_id}' \
     > "$bundle/candidate.json"
 }
 
@@ -190,7 +188,7 @@ expect_failure() {
   local name="$1"
   local bundle="$2"
   shift 2
-  if "$verifier" "$bundle" "$source_commit" "$run_id" "$run_attempt" "$@" >"$tmpdir/$name.out" 2>&1; then
+  if "$verifier" "$bundle" "$source_commit" "$run_id" "$@" >"$tmpdir/$name.out" 2>&1; then
     echo "$name: verifier unexpectedly accepted invalid candidate" >&2
     exit 1
   fi
@@ -198,7 +196,7 @@ expect_failure() {
 
 bundle="$tmpdir/valid"
 make_bundle "$bundle"
-"$verifier" "$bundle" "$source_commit" "$run_id" "$run_attempt" >/dev/null
+"$verifier" "$bundle" "$source_commit" "$run_id" >/dev/null
 
 baseline="$tmpdir/baseline"
 baseline_commit=0000000000000000000000000000000000000000
@@ -210,12 +208,12 @@ jq -c --arg commit "$baseline_commit" '.previous_commit = $commit' "$bundle/mani
 mv "$bundle/manifest.tmp" "$bundle/manifest.jsonl"
 jq --arg commit "$baseline_commit" '.previous_commit = $commit' "$bundle/diff.json" > "$bundle/diff.tmp"
 mv "$bundle/diff.tmp" "$bundle/diff.json"
-"$verifier" "$bundle" "$source_commit" "$run_id" "$run_attempt" "$baseline" >/dev/null
+"$verifier" "$bundle" "$source_commit" "$run_id" "$baseline" >/dev/null
 
 rebound_baseline="$tmpdir/rebound-baseline"
 rebound_bundle="$tmpdir/rebound-valid"
 make_rebound_bundle "$rebound_baseline" "$rebound_bundle" "$baseline_commit"
-"$verifier" "$rebound_bundle" "$source_commit" "$run_id" "$run_attempt" "$rebound_baseline" >/dev/null
+"$verifier" "$rebound_bundle" "$source_commit" "$run_id" "$rebound_baseline" >/dev/null
 
 make_rebound_bundle "$rebound_baseline" "$rebound_bundle" "$baseline_commit"
 jq --arg stale "/nix/store/stale-auth.drv" \
@@ -266,9 +264,9 @@ printf 'corrupt\n' >> "$bundle/proxy/sbom.json"
 expect_failure checksum "$bundle"
 
 make_bundle "$bundle"
-jq '.run_attempt = "1"' "$bundle/candidate.json" > "$bundle/candidate.tmp"
+jq '.run_id = "wrong"' "$bundle/candidate.json" > "$bundle/candidate.tmp"
 mv "$bundle/candidate.tmp" "$bundle/candidate.json"
-expect_failure attempt-identity "$bundle"
+expect_failure run-identity "$bundle"
 
 make_bundle "$bundle"
 jq 'del(.packages[0])' "$bundle/diff.json" > "$bundle/diff.tmp"

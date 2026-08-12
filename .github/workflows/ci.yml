@@ -415,24 +415,23 @@ jobs:
         shell: bash
         run: .github/scripts/build-sboms-differential sboms "$RUNNER_TEMP/sbom-baseline" "$GITHUB_SHA"
 
-      - name: Bind candidate to this workflow attempt
+      - name: Bind candidate to this workflow run
         shell: bash
         run: |
           jq -n \
             --arg source_commit "$GITHUB_SHA" \
             --arg run_id "$GITHUB_RUN_ID" \
-            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
-            '{schema_version: 1, source_commit: $source_commit, run_id: $run_id, run_attempt: $run_attempt}' \
+            '{schema_version: 1, source_commit: $source_commit, run_id: $run_id}' \
             > sboms/candidate.json
 
       - name: Upload unaccepted SBOM candidate
         uses: actions/upload-artifact@v7
         with:
-          name: sbom-candidate-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          name: sbom-candidate-${{ github.run_id }}-${{ github.sha }}
           path: sboms
           if-no-files-found: error
+          overwrite: true
           retention-days: 1
-
   sbom:
     name: Accept Differential SBOMs
     runs-on: ubuntu-latest
@@ -462,15 +461,15 @@ jobs:
           restore-keys: |
             sbom-bundle-v2-
 
-      - name: Download SBOM candidate from this workflow attempt
+      - name: Download SBOM candidate from this workflow run
         uses: actions/download-artifact@v8
         with:
-          name: sbom-candidate-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          name: sbom-candidate-${{ github.run_id }}-${{ github.sha }}
           path: sboms
 
       - name: Verify candidate identity, completeness, and checksums
         shell: bash
-        run: .github/scripts/verify-sbom-candidate sboms "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$RUNNER_TEMP/sbom-baseline"
+        run: .github/scripts/verify-sbom-candidate sboms "$GITHUB_SHA" "$GITHUB_RUN_ID" "$RUNNER_TEMP/sbom-baseline"
 
       - name: Stage verified bundle as accepted baseline
         shell: bash

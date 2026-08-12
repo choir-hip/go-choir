@@ -51,9 +51,11 @@ check_segment="$(sed -n '/^  check:/,/^  sbom-candidate:/p' "$ci")"
 for pattern in \
   'needs: plan' \
   'Reuse semantic inventories or build changed packages' \
-  'Bind candidate to this workflow attempt' \
+  'Bind candidate to this workflow run' \
   'actions/setup-go@v6' \
   'Upload unaccepted SBOM candidate' \
+  'name: sbom-candidate-${{ github.run_id }}-${{ github.sha }}' \
+  'overwrite: true' \
   'retention-days: 1'; do
   grep -Fq -- "$pattern" <<<"$candidate_segment" || {
     echo "SBOM candidate contract missing: $pattern" >&2
@@ -64,16 +66,22 @@ if grep -Fq -- 'actions/cache/save' <<<"$candidate_segment" || grep -Fq -- 'Uplo
   echo "SBOM candidate must not publish accepted state" >&2
   exit 1
 fi
+if grep -Fq -- 'GITHUB_RUN_ATTEMPT' <<<"$candidate_segment"; then
+  echo "SBOM candidate identity must not depend on rerun attempt" >&2
+  exit 1
+fi
 
 for pattern in \
   'needs: [plan, check, sbom-candidate]' \
   "needs.check.result == 'success'" \
   "needs.sbom-candidate.result == 'success'" \
   'actions/download-artifact@v8' \
+  'Download SBOM candidate from this workflow run' \
+  'name: sbom-candidate-${{ github.run_id }}-${{ github.sha }}' \
   'Restore accepted baseline for differential verification' \
   'actions/setup-go@v6' \
   'DeterminateSystems/nix-installer-action@v20' \
-  'verify-sbom-candidate sboms "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$RUNNER_TEMP/sbom-baseline"' \
+  'verify-sbom-candidate sboms "$GITHUB_SHA" "$GITHUB_RUN_ID" "$RUNNER_TEMP/sbom-baseline"' \
   'actions/cache/save@v6' \
   'Upload accepted SBOM artifact'; do
   grep -Fq -- "$pattern" <<<"$finalizer_segment" || {

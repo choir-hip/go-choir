@@ -5,11 +5,10 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 fingerprint_bin="${SBOM_FINGERPRINT_BIN:-$script_dir/sbom-semantic-fingerprint}"
 semantic_packages=" auth proxy gateway maild maildctl corpusd autoputer sourcecycled vmctl frontend "
 
-bundle="${1:?usage: verify-sbom-candidate BUNDLE SOURCE_COMMIT RUN_ID RUN_ATTEMPT [BASELINE]}"
+bundle="${1:?usage: verify-sbom-candidate BUNDLE SOURCE_COMMIT RUN_ID [BASELINE]}"
 source_commit="${2:?source commit is required}"
 run_id="${3:?run id is required}"
-run_attempt="${4:?run attempt is required}"
-baseline="${5:-}"
+baseline="${4:-}"
 manifest="$bundle/manifest.jsonl"
 diff="$bundle/diff.json"
 candidate="$bundle/candidate.json"
@@ -81,14 +80,12 @@ jq -e \
 
 jq -e \
   --arg source_commit "$source_commit" \
-  --arg run_id "$run_id" \
-  --arg run_attempt "$run_attempt" '
+  --arg run_id "$run_id" '
     .schema_version == 1 and
     .source_commit == $source_commit and
-    .run_id == $run_id and
-    .run_attempt == $run_attempt
+    .run_id == $run_id
   ' "$candidate" >/dev/null || {
-    echo "SBOM candidate identity does not match this workflow attempt" >&2
+    echo "SBOM candidate identity does not match this workflow run" >&2
     exit 1
   }
 
@@ -290,4 +287,4 @@ if [[ "${#sbom_files[@]}" -ne "$expected_count" ]]; then
   exit 1
 fi
 
-echo "SBOM candidate verified: source=$source_commit run=$run_id attempt=$run_attempt packages=$verified"
+echo "SBOM candidate verified: source=$source_commit run=$run_id packages=$verified"
