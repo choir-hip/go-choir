@@ -55,6 +55,10 @@ var ErrLifecycleAuthorityRequired = errors.New("durable lifecycle authority requ
 // workspace.
 var ErrFreshWorkspaceRequiresEmpty = errors.New("fresh workspace must be empty")
 
+// ErrWorkspaceReplaceRequiresQuarantine is returned when a VM-local workspace
+// replacement is requested without an exclusive quarantine directory.
+var ErrWorkspaceReplaceRequiresQuarantine = errors.New("workspace replace requires an empty quarantine directory")
+
 // ErrInvalidTextureRevision is returned when a Texture revision write fails
 // structured body/source validation before persistence.
 var ErrInvalidTextureRevision = errors.New("invalid texture revision")
@@ -677,6 +681,63 @@ func OpenFresh(dbPath string) (*Store, error) {
 		return nil, err
 	}
 	return store, nil
+}
+
+// WorkspaceReplaceReceipt is the loss/quarantine record for a VM-local
+// workspace replacement. It is evidence, not a checkpoint or restore authority.
+type WorkspaceReplaceReceipt struct {
+	OriginalPath         string
+	WorkspacePath        string
+	QuarantineDir        string
+	QuarantinedMarker    string
+	QuarantinedWorkspace string
+}
+
+// ReplaceWorkspace closes the current store, moves its marker and Dolt
+// workspace into an exclusive quarantine directory, and opens a current-DDL
+// workspace at the original path through OpenFresh. It appends no event and
+// copies no rows. Failure after quarantine leaves the original path empty;
+// the quarantined bytes are the rollback ref.
+func (s *Store) ReplaceWorkspace(quarantineDir string) (*Store, WorkspaceReplaceReceipt, error) {
+	var receipt WorkspaceReplaceReceipt
+	if s == nil {
+		return nil, receipt, fmt.Errorf("runtime store: replace workspace: nil store")
+	}
+	originalPath := strings.TrimSpace(s.path)
+	if originalPath == "" {
+		return nil, receipt, fmt.Errorf("runtime store: replace workspace: path is required")
+	}
+	quarantineDir = strings.TrimSpace(quarantineDir)
+	if quarantineDir == "" {
+		return nil, receipt, fmt.Errorf("%w: path is required", ErrWorkspaceReplaceRequiresQuarantine)
+	}
+	workspacePath := deriveTextureWorkspacePath(originalPath)
+	receipt.OriginalPath = originalPath
+	receipt.WorkspacePath = workspacePath
+	receipt.QuarantineDir = quarantineDir
+	receipt.QuarantinedMarker = filepath.Join(quarantineDir, filepath.Base(originalPath))
+	receipt.QuarantinedWorkspace = filepath.Join(quarantineDir, filepath.Base(workspacePath))
+
+	if err := s.Close(); err != nil {
+		return nil, receipt, fmt.Errorf("runtime store: replace workspace: close: %w", err)
+	}
+	if err := os.Mkdir(quarantineDir, 0o755); err != nil {
+		if os.IsExist(err) {
+			return nil, receipt, fmt.Errorf("%w: %s exists", ErrWorkspaceReplaceRequiresQuarantine, quarantineDir)
+		}
+		return nil, receipt, fmt.Errorf("runtime store: replace workspace: create quarantine: %w", err)
+	}
+	if err := os.Rename(originalPath, receipt.QuarantinedMarker); err != nil {
+		return nil, receipt, fmt.Errorf("runtime store: replace workspace: quarantine marker: %w", err)
+	}
+	if err := os.Rename(workspacePath, receipt.QuarantinedWorkspace); err != nil {
+		return nil, receipt, fmt.Errorf("runtime store: replace workspace: quarantine workspace: %w", err)
+	}
+	fresh, err := OpenFresh(originalPath)
+	if err != nil {
+		return nil, receipt, fmt.Errorf("runtime store: replace workspace: open current schema: %w", err)
+	}
+	return fresh, receipt, nil
 }
 
 // Open opens (or creates) the unified embedded Dolt workspace derived from
