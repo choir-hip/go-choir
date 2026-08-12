@@ -76,7 +76,10 @@ start:
       problem: "On CI rerun attempt 2, Build Differential SBOM Candidate completed and uploaded an artifact named with run attempt 1, while Accept Differential SBOMs looked for the attempt-2 name and failed before verification. The workflow's producer and consumer do not share the same attempt identity under rerun."
       evidence_ref: "CI run 31554455290 attempt 2, Build Differential SBOM Candidate job 93985446583, artifact list sbom-candidate-31554455290-1-e09d822499ce8533bdc8e18d1c6c48e3d4c2fe61, Accept Differential SBOMs download failure at 2026-08-12T01:56:30Z"
       consequence: "The repair CI rerun deployed successfully but the overall run is red on SBOM acceptance. The rename remains blocked until the producer/consumer artifact identity is corrected, the focused workflow contract is verified, and a new pushed CI run is green."
-  unknowns:
+    - id: replay-start-vmctl-unavailable-2026-08-12
+      problem: "The deployed read-only replay probe reached the product route but could not resolve the named computer because staging reported the computer stopped. An owner-scoped lifecycle start then timed out with lifecycle actuation failed; the following status call returned computer ownership authority unavailable and proxy health degraded with vmctl unavailable."
+      evidence_ref: "deployed e09d822499ce8533bdc8e18d1c6c48e3d4c2fe61; scoped replay command at 2026-08-12T02:29Z returned 502 failed to resolve user autoputer; status returned stopped; start command at 2026-08-12T02:30Z returned 502 lifecycle actuation failed; subsequent status returned 503; https://choir.news/health at 2026-08-12T02:31Z reports vmctl_status unavailable"
+      consequence: "The replay diff has not been captured and no state drop is authorized. The staging vmctl/ownership substrate must recover through the authorized deployment path before the probe can be rerun; direct Node B mutation remains inadmissible."
 
 finish:
   deliver: "One clean cutover with no compatibility surface. The service that runs a Choir computer is named autoputer everywhere it is a service, package, process, unit, environment variable, or vocabulary term. The persistent user computer's identity is named computer everywhere it is a field, column, index, or public JSON name. The word sandbox survives only where it genuinely means something else. No shim, alias, dual-read, or legacy field is left behind."
@@ -166,7 +169,7 @@ measures:
 
 now:
   status: blocked_incomplete
-  slice: "The generated rename and read-only replay probe are committed and pushed, but the latest CI rerun (31554455290 attempt 2) deployed successfully and then failed SBOM acceptance because the candidate artifact was uploaded with attempt 1 while the consumer requested attempt 2. Replay evidence, state recreation, and renamed acceptance remain outstanding."
+  slice: "The rename candidate and read-only replay probe are committed and pushed. CI run 31555832786 is green, but staging replay acceptance is blocked: the named computer was stopped, lifecycle start timed out, and vmctl/ownership became unavailable. Replay evidence, state recreation, and renamed acceptance remain outstanding."
   question: "Whether any operator surface outside this repository references SANDBOX_* variables or go-choir-sandbox unit names; reconcile that boundary before staging deployment."
   reconciliation:
     observed_at: 2026-08-12T00:55:15Z
@@ -203,8 +206,8 @@ now:
     recorded_at: 2026-08-12T00:00:22Z
     constraints: [disposable replay workspace, live DoltStateExtractor comparison, exact diff and digest, no event append, no current-state mutation, no general replay API]
     consequence: "The probe is the only behavior addition allowed in this mission; it is a red protected-surface change and must be deployed and exercised before staging state is dropped."
-  blocker_or_risk: "CI run 31554455290 attempt 2 passed all Go, docs, heresy, build, and deploy gates, but its SBOM acceptance failed because the producer artifact was named sbom-candidate-31554455290-1-e09d822499ce8533bdc8e18d1c6c48e3d4c2fe61 while the consumer requested the attempt-2 name. The problem is documented in ci-sbom-artifact-attempt-mismatch-2026-08-12; no replay evidence, state drop, or completion claim is authorized until the workflow identity is repaired and a new pushed CI run is green."
-  next_action: "Repair the SBOM candidate identity contract, verify its focused workflow tests locally, push through CI, and after a green deploy run choir computer replay-completeness --computer <id> against staging before any state drop."
+  blocker_or_risk: "CI run 31555832786 is green and the host remains deployed at e09d822499ce8533bdc8e18d1c6c48e3d4c2fe61, but the authorized pre-drop probe cannot currently reach the named computer: status was stopped, lifecycle start returned 502, and health now reports vmctl unavailable. The problem is documented in replay-start-vmctl-unavailable-2026-08-12; no replay evidence, state drop, or completion claim is authorized."
+  next_action: "Recover staging vmctl and ownership through the authorized deployment path, verify health and named-computer status, then rerun choir computer replay-completeness --computer <id> before any state drop."
 
 receipts:
   - id: rename-manifest-2026-08-11
