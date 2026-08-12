@@ -664,6 +664,7 @@ EOF
     bindsTo = [ "go-choir-guest-receipt-signer.service" ];
     environment = {
       CHOIR_RENAME_SCHEMA_RECOVERY = "true";
+      RUNTIME_REPLAY_PROBE_ONLY = "true";
       CHOIR_COMPUTER_CREDENTIAL_FILE = "/run/choir-bootstrap/computer-event-envelope";
       CHOIR_REVOCATION_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/revocation-capability";
       CHOIR_RESTART_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/restart-capability";
