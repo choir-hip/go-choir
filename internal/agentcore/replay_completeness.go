@@ -19,7 +19,7 @@ import (
 // failure, not a clean replay result.
 var ErrReplayCompletenessUnavailable = errors.New("replay completeness probe unavailable")
 
-const replayCompletenessSchemaVersion = 1
+const replayCompletenessSchemaVersion = 2
 
 // ReplayCompletenessReport is the read-only evidence returned by the product
 // replay probe. Replay state is built in a disposable Dolt workspace; the live
@@ -33,6 +33,7 @@ type ReplayCompletenessReport struct {
 	Live          computerversion.ObservationSet    `json:"live"`
 	Replay        computerversion.ObservationSet    `json:"replay"`
 	Result        computerversion.EquivalenceResult `json:"result"`
+	Eligibility   ReplayEligibility                 `json:"eligibility"`
 	ProbeDigest   string                            `json:"probe_digest"`
 }
 
@@ -58,7 +59,7 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: read live event head: %w", err)
 	}
 	version := replayCompletenessVersion(rt, liveHead)
-	extractor := computerversion.DoltStateExtractor{WorkspacePath: rt.store.TexturePath(), Database: "texture"}
+	extractor := replayDoltStateExtractor(rt.store.TexturePath())
 	live, err := extractor.Extract(ctx, computerversion.ExtractRequest{Name: "live-dolt", Version: version})
 	if err != nil {
 		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: extract live Dolt state: %w", err)
@@ -70,7 +71,7 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 	}
 	defer os.RemoveAll(tempRoot)
 
-	replayStore, err := choirstore.Open(filepath.Join(tempRoot, "runtime.db"))
+	replayStore, err := choirstore.OpenFresh(filepath.Join(tempRoot, "runtime.db"))
 	if err != nil {
 		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: open disposable workspace: %w", err)
 	}
@@ -82,12 +83,16 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 	if err != nil {
 		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: read replay event head: %w", err)
 	}
-	replayExtractor := computerversion.DoltStateExtractor{WorkspacePath: replayStore.TexturePath(), Database: "texture"}
+	replayExtractor := replayDoltStateExtractor(replayStore.TexturePath())
 	replay, err := replayExtractor.Extract(ctx, computerversion.ExtractRequest{Name: "event-replay-projection", Version: version})
 	if err != nil {
 		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: extract replay Dolt state: %w", err)
 	}
 
+	liveAfter, err := extractor.Extract(ctx, computerversion.ExtractRequest{Name: "live-dolt-after", Version: version})
+	if err != nil {
+		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: re-extract live Dolt state: %w", err)
+	}
 	liveHeadAfter, err := rt.store.Head(ctx, computerID)
 	if err != nil {
 		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: re-read live event head: %w", err)
@@ -95,7 +100,16 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 	if !sameReplayHead(liveHead, liveHeadAfter) {
 		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: live event head changed during probe")
 	}
+	stable := (computerversion.EquivalenceChecker{}).CheckObservationSets(
+		filterReplayHeadObservation(live), filterReplayHeadObservation(liveAfter),
+	)
+	if !stable.Equivalent() {
+		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: live Dolt state changed during probe: %v", stable.Differences)
+	}
 
+	result := (computerversion.EquivalenceChecker{}).CheckObservationSets(
+		filterReplayHeadObservation(live), filterReplayHeadObservation(replay),
+	)
 	report := ReplayCompletenessReport{
 		SchemaVersion: replayCompletenessSchemaVersion,
 		ComputerID:    computerID,
@@ -104,9 +118,8 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 		ReplayHead:    replayHead,
 		Live:          live,
 		Replay:        replay,
-		Result: (computerversion.EquivalenceChecker{}).CheckObservationSets(
-			filterReplayHeadObservation(live), filterReplayHeadObservation(replay),
-		),
+		Result:        result,
+		Eligibility:   replayEligibility(liveHead, replayHead, live, replay, result),
 	}
 	raw, err := computerevent.CanonicalJSON(report)
 	if err != nil {
@@ -128,6 +141,22 @@ func replayCompletenessVersion(rt *Runtime, head *computerevent.Head) computerve
 	return computerversion.ComputerVersion{
 		CodeRef:            computerversion.CodeRef(codeRef),
 		ArtifactProgramRef: computerversion.ArtifactProgramRef(artifactRef),
+	}
+}
+
+func replayDoltStateExtractor(workspacePath string) computerversion.DoltStateExtractor {
+	return computerversion.DoltStateExtractor{
+		WorkspacePath: workspacePath,
+		Database:      "texture",
+		IgnoredContentColumns: map[string]map[string]struct{}{
+			"computer_event_index": {
+				"prepared_at":  {},
+				"finalized_at": {},
+			},
+			"computer_event_projection_heads": {
+				"updated_at": {},
+			},
+		},
 	}
 }
 

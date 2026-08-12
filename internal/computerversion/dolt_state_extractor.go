@@ -2,8 +2,8 @@ package computerversion
 
 import (
 	"context"
-	"database/sql"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -46,9 +46,10 @@ const (
 //   - dolt:{db}:schema:{table} — a deterministic hash of each table's
 //     column definitions. Two databases with the same schema produce
 //     the same schema hashes.
-//   - dolt:{db}:table:{table} — a deterministic hash of each table's
-//     row content. Two databases with the same row data produce the
-//     same table content hash.
+//   - dolt:{db}:table:{table} — a deterministic hash of each table's row
+//     content after any explicitly configured operational-column exclusions.
+//     Two databases with the same semantic row data produce the same table
+//     content hash.
 //
 // This is the production-capable Dolt extractor that the SIAC framework
 // requires for Gate 4 cross-substrate proof on the Dolt/app-state ledger.
@@ -57,20 +58,25 @@ type DoltStateExtractor struct {
 	// (the directory containing the .dolt folder). Must be non-empty.
 	WorkspacePath string
 
-	// Database is the Dolt database name within the workspace. Must be
-	// non-empty. For the VM-embedded store this is typically "choir";
-	// for the platform store it is typically "platform".
+	// Database is the Dolt database name within the workspace. For the
+	// VM-embedded store this is typically "choir"; for the platform store it
+	// is typically "platform".
 	Database string
 
-	// CommitName is the Dolt commit author name used when opening the
-	// connection. Defaults to "Choir" if empty. The extractor does not
-	// commit, but the Dolt driver requires a commit name for the
-	// connection.
+	// CommitName is the embedded-Dolt commit author name used when opening a
+	// connection. Defaults to "Choir" if empty. The extractor does not commit,
+	// but the Dolt driver requires a commit name for the connection.
 	CommitName string
 
-	// CommitEmail is the Dolt commit author email. Defaults to
+	// CommitEmail is the embedded-Dolt commit author email. Defaults to
 	// "system@choir.local" if empty.
 	CommitEmail string
+
+	// IgnoredContentColumns lists operational, non-semantic columns to omit
+	// from table content hashes. Schema observations still include those
+	// columns. This is needed when a replay projection necessarily assigns a
+	// fresh write timestamp to an otherwise identical semantic row.
+	IgnoredContentColumns map[string]map[string]struct{}
 }
 
 var _ Extractor = DoltStateExtractor{}
@@ -167,7 +173,7 @@ func (e DoltStateExtractor) Extract(ctx context.Context, request ExtractRequest)
 		})
 
 		// Content hash.
-		contentHash, err := queryTableContentHash(ctx, db, table)
+		contentHash, err := queryTableContentHash(ctx, db, table, e.IgnoredContentColumns[table])
 		if err != nil {
 			return ObservationSet{}, fmt.Errorf("dolt state extraction: content for %s: %w", table, err)
 		}
@@ -294,12 +300,12 @@ func queryTableSchemaHash(ctx context.Context, db *sql.DB, table string) (string
 	defer rows.Close()
 
 	type columnDef struct {
-		Field    string  `json:"field"`
-		Type     string  `json:"type"`
-		Null     string  `json:"null"`
-		Key      string  `json:"key,omitempty"`
-		Default  *string `json:"default,omitempty"`
-		Extra    string  `json:"extra,omitempty"`
+		Field   string  `json:"field"`
+		Type    string  `json:"type"`
+		Null    string  `json:"null"`
+		Key     string  `json:"key,omitempty"`
+		Default *string `json:"default,omitempty"`
+		Extra   string  `json:"extra,omitempty"`
 	}
 
 	columns := make([]columnDef, 0)
@@ -334,7 +340,7 @@ func queryTableSchemaHash(ctx context.Context, db *sql.DB, table string) (string
 // queryTableContentHash queries all rows from the table, encodes them as
 // deterministic JSON, and returns a content-addressed hash. Rows are sorted
 // by their JSON encoding to ensure determinism regardless of insertion order.
-func queryTableContentHash(ctx context.Context, db *sql.DB, table string) (string, error) {
+func queryTableContentHash(ctx context.Context, db *sql.DB, table string, ignoredColumns map[string]struct{}) (string, error) {
 	rows, err := db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM `%s`", table))
 	if err != nil {
 		return "", fmt.Errorf("select from %s: %w", table, err)
@@ -363,6 +369,9 @@ func queryTableContentHash(ctx context.Context, db *sql.DB, table string) (strin
 		// Encode each row as a deterministic JSON object keyed by column name.
 		obj := make(map[string]interface{}, len(cols))
 		for i, col := range cols {
+			if _, ignored := ignoredColumns[col]; ignored {
+				continue
+			}
 			val := values[i]
 			// Convert []byte to string for stable encoding.
 			if b, ok := val.([]byte); ok {

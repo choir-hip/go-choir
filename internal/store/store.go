@@ -50,6 +50,11 @@ var ErrConcurrentStateChange = errors.New("concurrent state change")
 // mutate state owned by the durable lifecycle reducer.
 var ErrLifecycleAuthorityRequired = errors.New("durable lifecycle authority required")
 
+// ErrFreshWorkspaceRequiresEmpty is returned when a clean replay or genesis
+// workspace would accidentally reuse an existing runtime marker or Dolt
+// workspace.
+var ErrFreshWorkspaceRequiresEmpty = errors.New("fresh workspace must be empty")
+
 // ErrInvalidTextureRevision is returned when a Texture revision write fails
 // structured body/source validation before persistence.
 var ErrInvalidTextureRevision = errors.New("invalid texture revision")
@@ -632,6 +637,47 @@ CREATE INDEX IF NOT EXISTS idx_desktop_sessions_driver ON desktop_sessions(owner
 CREATE INDEX IF NOT EXISTS idx_desktop_app_instances_stack ON desktop_app_instances(owner_id, desktop_id, shared_stack_rank);
 CREATE INDEX IF NOT EXISTS idx_desktop_window_placements_instance ON desktop_window_placements(owner_id, desktop_id, app_instance_id, updated_at);
 `
+
+// OpenFresh creates a unified Dolt workspace only when its marker and derived
+// workspace path can both be exclusively reserved among OpenFresh callers.
+// It is the required constructor for disposable replay projections; it never
+// removes an existing workspace to make the call succeed.
+func OpenFresh(dbPath string) (*Store, error) {
+	dbPath = strings.TrimSpace(dbPath)
+	if dbPath == "" {
+		return nil, fmt.Errorf("%w: path is required", ErrFreshWorkspaceRequiresEmpty)
+	}
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		return nil, fmt.Errorf("runtime store: create fresh parent directory: %w", err)
+	}
+
+	marker, err := os.OpenFile(dbPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		if os.IsExist(err) {
+			return nil, fmt.Errorf("%w: %s exists", ErrFreshWorkspaceRequiresEmpty, dbPath)
+		}
+		return nil, fmt.Errorf("runtime store: reserve fresh marker: %w", err)
+	}
+	if err := marker.Close(); err != nil {
+		_ = os.Remove(dbPath)
+		return nil, fmt.Errorf("runtime store: close fresh marker: %w", err)
+	}
+
+	workspacePath := deriveTextureWorkspacePath(dbPath)
+	if err := os.Mkdir(workspacePath, 0o755); err != nil {
+		_ = os.Remove(dbPath)
+		if os.IsExist(err) {
+			return nil, fmt.Errorf("%w: %s exists", ErrFreshWorkspaceRequiresEmpty, workspacePath)
+		}
+		return nil, fmt.Errorf("runtime store: reserve fresh workspace: %w", err)
+	}
+
+	store, err := Open(dbPath)
+	if err != nil {
+		return nil, err
+	}
+	return store, nil
+}
 
 // Open opens (or creates) the unified embedded Dolt workspace derived from
 // dbPath and applies the runtime and texture schemas. A legacy SQLite file at

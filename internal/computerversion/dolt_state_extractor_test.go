@@ -149,6 +149,50 @@ func TestDoltExtractorRoundTrip(t *testing.T) {
 		len(obs.Observations), schemaCount)
 }
 
+func TestDoltExtractorIgnoredColumnsPreserveSemanticDrift(t *testing.T) {
+	ddl := "CREATE TABLE records (id INT PRIMARY KEY, status VARCHAR(64) NOT NULL, prepared_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)"
+	workspaceA := openTestDoltWorkspace(t, "testdb", ddl,
+		[]string{"INSERT INTO records (id, status, prepared_at, updated_at) VALUES (1, 'active', '2026-01-01 00:00:00', '2026-01-01 00:00:00')"})
+	workspaceB := openTestDoltWorkspace(t, "testdb", ddl,
+		[]string{"INSERT INTO records (id, status, prepared_at, updated_at) VALUES (1, 'active', '2027-01-01 00:00:00', '2027-01-01 00:00:00')"})
+	workspaceC := openTestDoltWorkspace(t, "testdb", ddl,
+		[]string{"INSERT INTO records (id, status, prepared_at, updated_at) VALUES (1, 'changed', '2026-01-01 00:00:00', '2026-01-01 00:00:00')"})
+
+	version := ComputerVersion{CodeRef: "test-code-ref", ArtifactProgramRef: "test-artifact-ref"}
+	extractor := func(workspace string) ObservationSet {
+		observations, err := (DoltStateExtractor{
+			WorkspacePath: workspace,
+			Database:      "testdb",
+			IgnoredContentColumns: map[string]map[string]struct{}{
+				"records": {"prepared_at": {}, "updated_at": {}},
+			},
+		}).Extract(context.Background(), ExtractRequest{Name: "ignored-columns", Version: version})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return observations
+	}
+	tableObservation := func(observations ObservationSet) string {
+		for _, observation := range observations.Observations {
+			if observation.Key == "dolt:testdb:table:records" {
+				return observation.Value
+			}
+		}
+		t.Fatal("records table observation missing")
+		return ""
+	}
+
+	semanticA := tableObservation(extractor(workspaceA))
+	timestampOnly := tableObservation(extractor(workspaceB))
+	semanticDrift := tableObservation(extractor(workspaceC))
+	if semanticA != timestampOnly {
+		t.Fatalf("ignored timestamp changed content hash: got %s want %s", timestampOnly, semanticA)
+	}
+	if semanticA == semanticDrift {
+		t.Fatalf("semantic column change did not change content hash: %s", semanticDrift)
+	}
+}
+
 // TestDoltExtractorCrossSubstrateEquivalence proves SIAC Gate 4 for the
 // Dolt/app-state ledger: the same Dolt database content, initialized in two
 // independent workspace directories, produces equivalent dolt_head
@@ -421,5 +465,3 @@ func filterDoltHeadObservation(obs ObservationSet) ObservationSet {
 		Observations: filtered,
 	}
 }
-
-
