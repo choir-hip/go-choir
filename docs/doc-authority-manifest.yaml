@@ -325,7 +325,7 @@ documents:
     is_evidence: false
     annotations: {doc_role: definition, authority: active_product_mission, lifecycle: active, entrypoint: true}
     supersedes: [docs/definitions/choir-continuous-texture-supervision-2026-08-07.md]
-    witnesses: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md]
+    witnesses: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md, docs/evidence/choir-supervised-self-development-replay-completeness-2026-08-12.json, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, trajectory_settlement_change, capsule_effect_boundary_change, deployed_acceptance, registry_closure]
   - path: docs/definitions/choir-instruction-substrate-prune-2026-08-11.md
     claim_scope: current

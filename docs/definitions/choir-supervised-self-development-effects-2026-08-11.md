@@ -67,7 +67,7 @@ start:
     - id: replay-probe-credential-renewal-refused-2026-08-12
       problem: "After the replay gate repair deployed at d2ab2d2d, the owner-scoped product CLI reaches the retained active computer but fails during event-chain reconstruction: the guest capability renewal endpoint returns a non-201 response and the guest reports renewal refused. The required read-only replay diff is not recaptured; no state mutation or clean rematerialization is authorized."
       evidence_ref: "CHOIR_HOST=https://choir.news CHOIR_TIMEOUT=10m go run ./cmd/choir computer replay-completeness --computer computer-03335285269bdba4f94377e56879f9e6 at 2026-08-12T18:46Z returned HTTP 500: replay completeness: reconstruct event chain: computer event appender: fetch durable chain: computer event client: capability: guest credential: renewal refused; /health reported deployed_commit d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c; computer status reported the requested stable computer active at realization_epoch 203."
-      consequence: "The replay acceptance remains pending. Diagnose the scoped product credential-renewal path and repair it through the repository/deployment path; do not bypass the guest capability, inject credentials, use SSH, or drop retained state."
+      consequence: "An owner-scoped lifecycle restart at 2026-08-12T18:47:50Z refreshed the retained guest credential through the product path without source or state repair. The replay probe then completed; recurrence across capability expiry remains a residual risk and is not masked."
 
   unknowns:
     - "Which of the 26 pre-drop replay differences are behavior-bearing VM-local writes versus retired or legacy residue, and what event or pinned receipt derives each behavior-bearing write?"
@@ -76,6 +76,7 @@ start:
     - "Which effect classes are outside the reversible envelope and must refuse to promote under a standing rule."
     - "Whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata and citations without a payload schema change."
     - "Whether the CTS-observed registry gap (Texture production registry omitting update_coagent) is still present on the deployed staging build."
+    - "Whether guest capability renewal refusal recurs after the five-minute capability lifetime, and which server-side refusal class caused the 2026-08-12 incident; the current acceptance proves only that an owner-scoped lifecycle restart restored a fresh capability."
     - "Retained computer epoch 8253 disposition; ak_45ce1796 row and root-only auth rollback cleanup."
 
 finish:
@@ -393,6 +394,22 @@ receipts:
       environment_identity: "staging https://choir.news deployed_commit d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c"
       deployed_acceptance: "failed before replay diff; retained computer remains active and unchanged"
     registry_conformance_ref: "effects Definition remains the active entrypoint; no registry topology changed"
+  - id: replay-probe-rerun-after-credential-refresh-2026-08-12
+    boundary: acceptance
+    commit_or_artifact: docs/evidence/choir-supervised-self-development-replay-completeness-2026-08-12.json
+    proof_refs: ["owner-scoped restart receipt 019ff74d-5c2f-7693-951e-b3acb8e0fa9e, idempotency_key replay-credential-renewal-20260812-1848, prior_realization_epoch 203 -> resulting_realization_epoch 204", "CHOIR_HOST=https://choir.news CHOIR_TIMEOUT=10m go run ./cmd/choir computer replay-completeness --computer computer-03335285269bdba4f94377e56879f9e6 at 2026-08-12T18:48:42Z (exit 0)", "result not_equivalent with 26 deterministic DoltStateExtractor differences", "live_head null and replay_head null", "probe_digest a6e61857598fb1761ed58e5b27c527c12ebaf19e850db4ceae9743d76a0a12f0", "https://choir.news/health deployed_commit d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c"]
+    rollback_ref: "The read-only probe appended no event and mutated no live Dolt state; the lifecycle restart is forward and separately receipt-bound."
+    disposition: "accepted as the required pre-drop observation; exact non-equivalence remains and blocks clean rematerialization/checkpoint design until every difference is classified"
+    problem_ref: replay-completeness-non-equivalence-2026-08-12
+    authorization_ref: "effects Definition acceptance action 1; owner-scoped lifecycle restart used only to refresh the retained guest credential after the documented refusal"
+    candidate_or_evidence_refs: [docs/evidence/choir-supervised-self-development-replay-completeness-2026-08-12.json, docs/evidence/choir-sandbox-autoputer-replay-completeness-2026-08-12.json]
+    landing:
+      source_commit: d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c
+      ci_ref: "31626424709 (runtime gates passed; unrelated required SBOM candidate failed)"
+      deploy_ref: "Deploy to Staging (Node B) job 94218666218 (success)"
+      environment_identity: "https://choir.news/health deployed_commit d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c"
+      deployed_acceptance: "owner-scoped restart then read-only replay probe completed; exact 26-difference report retained"
+    registry_conformance_ref: "effects Definition remains the active entrypoint; evidence artifact is referenced here and in the authority manifest"
 
 view:
   path: none
