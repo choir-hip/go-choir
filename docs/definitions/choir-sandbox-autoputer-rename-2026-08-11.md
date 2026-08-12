@@ -193,22 +193,22 @@ measures:
 
 now:
   status: blocked_incomplete
-  slice: "The rename candidate and read-only replay probe are committed and pushed. CI run 31557302447 and the authorized recovery deploy at 4a747934 are green, with staging vmctl health restored, but the named computer remains stopped and owner-scoped lifecycle start still returns 502 lifecycle actuation failed. Replay evidence, state recreation, and renamed acceptance remain outstanding."
-  question: "Whether any operator surface outside this repository references SANDBOX_* variables or go-choir-sandbox unit names; reconcile that boundary before staging deployment."
+  slice: "The deployed read-only replay probe now completed against the retained pre-drop staging state after the owner-authorized restart refreshed the guest identity. It captured an exact 26-difference report with probe digest 67ec50ed1526659eb04e7d1be6cabc02d33e6b1f16559d1e2e0036f4f3785af1 and result not_equivalent. State recreation and renamed product acceptance remain outstanding."
+  question: "Whether the authorized staging state-drop/recreation path can replace the retained pre-cutover state without mutating the durable replay evidence or leaving the temporary probe-only runtime mode enabled."
   reconciliation:
-    observed_at: 2026-08-12T03:07:29Z
-    source_ref: mission/choir-sandbox-autoputer-rename-2026-08-11@4a747934
-    deploy_identity: "staging 4a747934, CI run 31557302447, deploy completed 2026-08-12T03:03:34Z; https://choir.news/health reports vmctl_status ok"
+    observed_at: 2026-08-12T05:36:44Z
+    source_ref: mission/choir-sandbox-autoputer-rename-2026-08-11@ba51f5ba
+    deploy_identity: "staging ba27a3e8, CI run 31565423783, deploy completed 2026-08-12T05:35:07Z; https://choir.news/health reports vmctl_status ok; owner restart receipt 019ff478-7818-7cf4-9061-9643ebda07d1 advanced realization epoch 200 to 201"
     authority_identities: [docs/computer-ontology.md, docs/choir-doctrine.md, docs/agent-product-doctrine.md, AGENTS.md, owner answer 2026-08-12]
-    policy_resolution_ref: owner authorization 2026-08-12: add read-only product API/CLI replay probe
-    worktree_inventory_ref: "2026-08-12T03:07:29Z git status: clean on mission branch after recovery deployment"
+    policy_resolution_ref: "owner authorization 2026-08-12: add read-only product API/CLI replay probe"
+    worktree_inventory_ref: "2026-08-12T05:36:44Z git status to be reconciled after evidence receipt"
     operator_boundary_ref: ".github/workflows/ci.yml:848-867,1061-1063; .github/scripts/deploy-impact-classify; scripts/node-b-sync-service-pointers"
     operator_boundary: "The staging deploy fetches the immutable tested commit, hard-resets /opt/go-choir to that commit, cleans it, and installs service pointers from the checked-out repository. No external deploy script or runbook is a source/config authority for the rename; inaccessible Node B runtime files are outputs, not additional source surfaces."
     status: reconciled
   candidate:
     id: sandbox-autoputer-candidate-2026-08-11
-    state: committed_pending_ci
-    ref: "origin/main@8b283c6e plus local CI repair 8463ea78"
+    state: deployed_probe_evidence_pending_state_drop
+    ref: "origin/main@ba51f5ba; deployed runtime source ba27a3e8"
     owner: owner-and-session
     base: fdf7ceb1fe61a847acdd912bd6c0dcd330a5534d
     digest: f04e68284c0a241460c44677e2000412f589554665ffd8bea27713cf41cfd621
@@ -230,8 +230,8 @@ now:
     recorded_at: 2026-08-12T00:00:22Z
     constraints: [disposable replay workspace, live DoltStateExtractor comparison, exact diff and digest, no event append, no current-state mutation, no general replay API]
     consequence: "The probe is the only behavior addition allowed in this mission; it is a red protected-surface change and must be deployed and exercised before staging state is dropped."
-  blocker_or_risk: "CI run 31557302447 and the authorized deploy at 4a747934 are green, and https://choir.news/health reports vmctl_status ok, but the named computer remains stopped and owner-scoped start again returned 502 lifecycle actuation failed after 63 seconds. The problem is documented in replay-start-after-vmctl-recovery-2026-08-12; no replay evidence, state drop, or completion claim is authorized."
-  next_action: "Diagnose and repair the lifecycle actuation failure through the authorized repository/deployment path, then verify health and named-computer status and rerun choir computer replay-completeness --computer computer-03335285269bdba4f94377e56879f9e6 before any state drop."
+  blocker_or_risk: "The pre-drop replay evidence is captured and committed next; the remaining gates are authorized staging state drop/recreation at the renamed schema, removal of temporary RUNTIME_REPLAY_PROBE_ONLY mode, renamed product acceptance, and final Definition receipts."
+  next_action: "Commit the exact replay evidence and updated receipt, then use the authorized deployment path to drop and recreate staging state at the renamed schema; verify the temporary probe-only mode is removed before normal acceptance."
 
 receipts:
   - id: rename-manifest-2026-08-11
@@ -265,6 +265,22 @@ receipts:
       deploy_ref: not_applicable
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
+    registry_conformance_ref: "docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml remain the active registries"
+  - id: replay-probe-deployed-pre-drop-2026-08-12
+    boundary: acceptance
+    commit_or_artifact: docs/evidence/choir-sandbox-autoputer-replay-completeness-2026-08-12.json
+    proof_refs: ["choir computer replay-completeness --computer computer-03335285269bdba4f94377e56879f9e6 --timeout 10m (exit 0)", "captured_at 2026-08-12T05:36:44.159743453Z", "result not_equivalent with 26 deterministic DoltStateExtractor differences", "probe_digest 67ec50ed1526659eb04e7d1be6cabc02d33e6b1f16559d1e2e0036f4f3785af1", "live_head null and replay_head null", "staging health commit ba27a3e8; bootstrap computer_id matched requested stable ComputerID after lifecycle receipt 019ff478-7818-7cf4-9061-9643ebda07d1"]
+    rollback_ref: "Delete the evidence projection only if the mission is abandoned; the probe itself appended no event and mutated no live state."
+    disposition: "accepted as the required pre-drop observation; the exact non-equivalence is retained for the effects mission and does not authorize completion or state recreation by itself"
+    problem_ref: replay-probe-no-product-path-2026-08-11
+    authorization_ref: "owner answer 2026-08-12: add product-path probe"
+    candidate_or_evidence_refs: [sandbox-autoputer-candidate-2026-08-11, docs/evidence/choir-sandbox-autoputer-replay-completeness-2026-08-12.json]
+    landing:
+      source_commit: ba27a3e8ed1815dff9853bf96741b4333cf7c1f4
+      ci_ref: "31565423783 (success)"
+      deploy_ref: "Deploy to Staging (Node B) job 94018717399 (success)"
+      environment_identity: "https://choir.news/health deployed_commit ba27a3e8ed1815dff9853bf96741b4333cf7c1f4"
+      deployed_acceptance: "pre-drop replay route and stable identity proof passed; rename acceptance remains pending state recreation"
     registry_conformance_ref: "docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml remain the active registries"
 
 view:
