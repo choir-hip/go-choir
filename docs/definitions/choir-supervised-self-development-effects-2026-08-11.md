@@ -63,15 +63,15 @@ start:
     - id: replay-completeness-non-equivalence-2026-08-12
       problem: "The deployed pre-drop replay completeness probe reconstructed the retained event chain into a disposable projection but returned not_equivalent: 26 deterministic DoltStateExtractor differences, with both live_head and replay_head null. Five schema observations and five table observations were absent from replay; sixteen schema/content observations differed."
       evidence_ref: docs/evidence/choir-sandbox-autoputer-replay-completeness-2026-08-12.json
-      consequence: "A clean rematerialization is not licensed. Classify every difference as behavior-bearing event-derived state, pinned-receipt state, or retired/legacy residue; make behavior-bearing writes event-derived or fail checkpoint creation closed before designing restore."
+      consequence: "Classified 2026-08-12: 1 aggregate content_root, 5 retired tables (schema+table absent from current DDL), 1 event_projection schema drift (live-only supervision_transaction_json), 14 empty_until_supported direct-SQL tables. None of the 14 is event-derived or pinned-receipt. Clean rematerialization and checkpoint creation remain unlicensed. See docs/evidence/choir-supervised-self-development-replay-difference-classes-2026-08-12.md."
     - id: replay-probe-credential-renewal-refused-2026-08-12
       problem: "After the replay gate repair deployed at d2ab2d2d, the owner-scoped product CLI reaches the retained active computer but fails during event-chain reconstruction: the guest capability renewal endpoint returns a non-201 response and the guest reports renewal refused. The required read-only replay diff is not recaptured; no state mutation or clean rematerialization is authorized."
       evidence_ref: "CHOIR_HOST=https://choir.news CHOIR_TIMEOUT=10m go run ./cmd/choir computer replay-completeness --computer computer-03335285269bdba4f94377e56879f9e6 at 2026-08-12T18:46Z returned HTTP 500: replay completeness: reconstruct event chain: computer event appender: fetch durable chain: computer event client: capability: guest credential: renewal refused; /health reported deployed_commit d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c; computer status reported the requested stable computer active at realization_epoch 203."
       consequence: "An owner-scoped lifecycle restart at 2026-08-12T18:47:50Z refreshed the retained guest credential through the product path without source or state repair. The replay probe then completed; recurrence across capability expiry remains a residual risk and is not masked."
 
   unknowns:
-    - "Which of the 26 pre-drop replay differences are behavior-bearing VM-local writes versus retired or legacy residue, and what event or pinned receipt derives each behavior-bearing write?"
-    - "How the replay projection obtains the required VM-local schema and baseline when the fresh projection lacks five schema and five table observations present in the live workspace."
+    - "Owner-scoped product-path VM-local workspace replacement is not yet built; additive CREATE TABLE IF NOT EXISTS cannot drop retired tables or the extra computer_event_index column, and POST self-development/genesis must not be reused because it appends GenesisImported and publishes a checkpoint."
+    - "How a later non-null canonical chain is introduced without treating the existing genesis route or a cleaned null-head snapshot as restore authority."
     - "Whether rematerialization is product-ready. ProjectionMaterializer is non-runtime today; if the classification and subsequent build show it is not usable, restore falls back to a single-workspace pin checkout on an interim basis with the event head still the sole semantic authority."
     - "Which effect classes are outside the reversible envelope and must refuse to promote under a standing rule."
     - "Whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata and citations without a payload schema change."
@@ -199,7 +199,7 @@ boundaries:
     - The historical self-development roadmap is migration evidence only — not live schedule authority; execute this Definition, not Mission 0–5 from that table.
     - "Reconnection stays minimal on purpose: the smallest change that restores the channel and holds the privilege property. The RLM/Yaegi rebase is expected to rewrite this layer, so no general authorization or quorum framework is built here."
     - A's defect is pre-declared in a Define receipt before A is proposed, so the falsification cannot later be reported as discovered.
-    - Self-development schema changes are additive only — new tables via CREATE TABLE IF NOT EXISTS, never ALTER or DROP of existing tables — because there is no migration framework and rollback does not reverse schema.
+    - "Self-development schema changes remain additive (CREATE TABLE IF NOT EXISTS, never in-place ALTER/DROP as a migration framework) because there is no migration framework and rollback does not reverse schema. One owner-authorized pre-launch exception: a product-path VM-local workspace replacement onto current DDL may discard retired schema residue and unsupported direct-SQL rows. That replacement is a cutover, not a migration, appends no event, publishes no checkpoint, and does not license restore or effects."
     - "The solitaire candidate itself touches no protected surface: no auth/session, no event/decision path, no provider routing, and no Texture write from solitaire code. This is distinct from the mission's Texture writes, which are required — Texture supervises the self-development through its own owner and atomic reducer, and the candidate is its subject, never its author."
     - Texture's canonical write path, single-owner contract, and atomic revision transition are preserved exactly; observing self-development adds an evidence source to Texture, never a second writer or a second document authority.
     - A Texture revision is evidence and legibility, never acceptance authority; reading a revision does not accept an effect, and no Texture write may append, accept, materialize, checkpoint, or route.
@@ -248,8 +248,8 @@ measures:
 
 now:
   status: working
-  slice: "The deployed pre-drop replay completeness probe is complete: it returned not_equivalent with 26 deterministic DoltStateExtractor differences and both event heads null. Clean rematerialization is not licensed. Next classify each difference and make behavior-bearing writes event-derived or fail checkpoint creation closed before checkpoint design."
-  question: "Which differences are behavior-bearing VM-local writes versus retired or legacy residue, and what event or pinned receipt derives each one? The answer determines the restore mechanism and the checkpoint fail-closed boundary."
+  slice: "The 26 replay differences are classified. Next implement an owner-scoped product-path VM-local workspace replacement onto current DDL so the diagnostic probe can report equivalent at a post-cutover snapshot. Do not append GenesisImported, do not publish a checkpoint, and do not add vertical reducers in this slice. A cleaned null-head computer stays ineligible."
+  question: "What owner-scoped lifecycle verb quarantines the retained Dolt workspace and opens a current-DDL workspace without using POST self-development/genesis or in-place ALTER/DROP?"
 
   reconciliation:
     observed_at: 2026-08-12T06:56:12Z
@@ -260,8 +260,8 @@ now:
     worktree_inventory_ref: 2026-08-12 read-only git status (clean)
     status: reconciled
 
-  blocker_or_risk: "The deployed pre-drop probe found 26 deterministic differences, so rematerialization is not licensed. The effects mission must classify the five missing schema observations, five missing table observations, and sixteen differing observations, then either make behavior-bearing writes event/receipt-derived or refuse checkpoints that cannot restore them. ProjectionMaterializer is still non-runtime, so pin checkout remains only an implementation contingency."
-  next_action: "Document and classify the retained replay diff before any checkpoint or restore implementation. For each difference, identify its owning ledger and event/receipt derivation; retire or exclude legacy residue, repair event derivation for behavior-bearing state, and add a fail-closed checkpoint predicate for anything not reproducible. Do not rerun the probe as if unanswered, and do not drop or mutate the retained evidence."
+  blocker_or_risk: "Classification is complete; the 26 differences remain on the retained workspace because additive Open() cannot drop residue and no product-path workspace replacement exists. Reusing self-development genesis would append an event and publish a checkpoint, which this gate still refuses. Direct-SQL writers will refill empty_until_supported tables after first use; that recurrence is fail-closed, not incomplete cleanup."
+  next_action: "Implement the owner-scoped product-path VM-local workspace replacement (quarantine old workspace, OpenFresh current DDL, append no event, publish no checkpoint), land it through CI and staging, then re-run the read-only replay probe. Expect equivalent, still-null heads, eligible=false. Do not drop or mutate the retained 26-diff evidence artifacts."
 
   candidate:
     id: none
@@ -277,7 +277,7 @@ now:
     consequence: "Per-candidate owner approval is removed as a requirement and replaced by an owner-armed standing rule plus two-seat auto-approval. The decision-binding verifier and mode CAS are relaxed deliberately, which is the mission's heaviest evidence burden. Checkpoint and revert become deliverables rather than a rollback field. Effects leaving the reversible envelope gain an explicit refusal requirement. Freeze/propose authority must be wired onto CoSuper, which today has no production call site. Pre-mission haunted-authority cutover (roadmap demotion, doctrine/ontology transitional language, RLM Phase-1 re-derive note, restore-set boundary, AGENTS restore-vs-deploy note) landed green; finish.completion_cutover must still run after deployed acceptance or the goal is a false complete."
   evidence_refs: [docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
   blocker_or_risk: "Revert is the mission: nothing in production reads Dolt history back, checkpoints bind no state, and Dolt commits carry no head binding. Replay completeness is unresolved and is the deciding measurement; ProjectionMaterializer is explicitly non-runtime today, so the preferred rematerialization path has no runtime implementation yet and an interim single-workspace pin checkout may be needed. Relaxing the decision-binding verifier and mode CAS touches the surfaces that make the tape trustworthy and carries the heaviest evidence burden. RESOLVED 2026-08-11: staging deploy identity reconciled; owner-bearer residual disposed; capsule build capability confirmed; frontend serving location determined (UI out of scope)."
-  next_action: "Run the replay completeness probe: rematerialize VM-local state from the event chain through the current head, diff against a live DoltStateExtractor reading, and report exactly which writes are not event-derived. That single measurement decides whether restore is rematerialization (preferred) or an interim single-workspace pin checkout, and it is the only remaining computer-science unknown in the revert design."
+  next_action: "Implement owner-scoped product-path VM-local workspace replacement after the 2026-08-12 classification receipt; do not rerun the probe as if unclassified."
 
 receipts:
   - id: roadmap-consensus-2026-08-11
@@ -410,6 +410,22 @@ receipts:
       environment_identity: "https://choir.news/health deployed_commit d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c"
       deployed_acceptance: "owner-scoped restart then read-only replay probe completed; exact 26-difference report retained"
     registry_conformance_ref: "effects Definition remains the active entrypoint; evidence artifact is referenced here and in the authority manifest"
+  - id: replay-difference-classification-2026-08-12
+    boundary: define
+    commit_or_artifact: docs/evidence/choir-supervised-self-development-replay-difference-classes-2026-08-12.md
+    proof_refs: ["docs/evidence/choir-supervised-self-development-replay-completeness-2026-08-12.json", "internal/agentcore/replay_eligibility.go replayAirworthinessEntries", "convergent panel .agentic-consensus/replay-resolve-20260812 (6 APPROVE WITH CONDITIONS; deepseek timed out; codex excluded)", "owner direction 2026-08-12: pre-launch, no backwards compatibility"]
+    rollback_ref: "Revert the documentation-only classification; retained 26-diff artifacts are unchanged."
+    disposition: "accepted as the required classification of the 26 differences; diagnostic equivalence still requires a product-path workspace replacement; eligibility and restore remain fail-closed"
+    problem_ref: replay-completeness-non-equivalence-2026-08-12
+    authorization_ref: "effects Definition next_action classify-before-checkpoint; owner pre-launch no-compat direction"
+    candidate_or_evidence_refs: [docs/evidence/choir-supervised-self-development-replay-difference-classes-2026-08-12.md, docs/evidence/choir-supervised-self-development-replay-completeness-2026-08-12.json]
+    landing:
+      source_commit: pending
+      ci_ref: pending (Docs Truth Check)
+      deploy_ref: not_applicable
+      environment_identity: "staging https://choir.news deployed_commit d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c"
+      deployed_acceptance: "classification only; 26 differences remain on the retained workspace"
+    registry_conformance_ref: "effects Definition remains the active entrypoint; classification evidence is referenced here and in the authority manifest"
 
 view:
   path: none
