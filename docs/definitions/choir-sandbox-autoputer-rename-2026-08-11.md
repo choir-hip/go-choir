@@ -159,24 +159,24 @@ now:
   slice: "Manifest-generated rename candidate and owner-authorized replay probe are implemented, compiled, vetted, and frontend-built. The source product path is verified in tests against a disposable replay workspace and live-only drift. Deployment, staging probe execution, state drop/recreation, and renamed staging acceptance remain outstanding."
   question: "Whether any operator surface outside this repository references SANDBOX_* variables or go-choir-sandbox unit names; reconcile that boundary before staging deployment."
   reconciliation:
-    observed_at: 2026-08-12T00:38:03Z
-    source_ref: mission/choir-sandbox-autoputer-rename-2026-08-11@f1fdaf7c5895d6a40ef862fa4cfe439779b3f7db
+    observed_at: 2026-08-12T00:55:15Z
+    source_ref: mission/choir-sandbox-autoputer-rename-2026-08-11@8463ea78
     deploy_identity: "staging 914f7a5d976a, deploy 2026-08-11T18:11:01Z"
     authority_identities: [docs/computer-ontology.md, docs/choir-doctrine.md, docs/agent-product-doctrine.md, AGENTS.md, owner answer 2026-08-12]
     policy_resolution_ref: owner authorization 2026-08-12: add read-only product API/CLI replay probe
-    worktree_inventory_ref: "2026-08-12T00:38:03Z git status: 294 modified/renamed tracked candidate paths plus 4 goal-owned untracked artifacts; all dirty paths are in the manifest/source/registry scope, with no unrelated WIP"
+    worktree_inventory_ref: "2026-08-12T00:55:15Z git status: clean after commits 8b283c6e, ca907d20, and 8463ea78; no unrelated WIP"
     operator_boundary_ref: ".github/workflows/ci.yml:848-867,1061-1063; .github/scripts/deploy-impact-classify; scripts/node-b-sync-service-pointers"
     operator_boundary: "The staging deploy fetches the immutable tested commit, hard-resets /opt/go-choir to that commit, cleans it, and installs service pointers from the checked-out repository. No external deploy script or runbook is a source/config authority for the rename; inaccessible Node B runtime files are outputs, not additional source surfaces."
     status: reconciled
   candidate:
     id: sandbox-autoputer-candidate-2026-08-11
-    state: rehearsing
-    ref: "/Users/wiz/go-choir-worktrees/choir-sandbox-autoputer-rename-2026-08-11"
+    state: committed_pending_ci
+    ref: "origin/main@8b283c6e plus local CI repair 8463ea78"
     owner: owner-and-session
-    base: f1fdaf7c5895d6a40ef862fa4cfe439779b3f7db
-    digest: 070458feb9ffc64d3b6e4bce4be947e993c14f8ed9293a2347d8667cf91860d1
+    base: fdf7ceb1fe61a847acdd912bd6c0dcd330a5534d
+    digest: f04e68284c0a241460c44677e2000412f589554665ffd8bea27713cf41cfd621
     scope: [cmd/autoputer, cmd/choir, internal/autoputer, internal/agentcore, internal/computerevent, internal/computerversion, internal/store, flake.nix, nix/, frontend/, .github/, scripts/, docs/, AGENTS.md, README.md, .gitignore]
-    digest_method: "sha256(git diff HEAD --binary || sorted untracked candidate source path/content records; excludes this Definition and the pre-edit manifest receipt)"
+    digest_method: "sha256(git diff fdf7ceb1fe61a847acdd912bd6c0dcd330a5534d..HEAD --binary -- . excluding this Definition and the pre-edit manifest receipt)"
     selected: "Split targets, one cutover, before supervised self-development effects: service/process/package/unit/environment/workflow/vocabulary surfaces become autoputer; every persistent identity surface, including Go fields, persisted columns, indexes, public JSON, frontend, and specs, becomes computer. No compatibility surface. Run the effects replay probe before dropping staging state."
     kind: architecture
     status: settled
@@ -193,8 +193,8 @@ now:
     recorded_at: 2026-08-12T00:00:22Z
     constraints: [disposable replay workspace, live DoltStateExtractor comparison, exact diff and digest, no event append, no current-state mutation, no general replay API]
     consequence: "The probe is the only behavior addition allowed in this mission; it is a red protected-surface change and must be deployed and exercised before staging state is dropped."
-  blocker_or_risk: "The source candidate is complete locally, but it is not committed, deployed, or run against staging. Without deployed replay evidence before the schema drop, the rename cannot safely land and completion cannot be claimed."
-  next_action: "Commit this candidate, push it through the landing loop, then run choir computer replay-completeness --computer <id> against staging before any state drop."
+  blocker_or_risk: "Landing commit 8b283c6e reached origin/main but CI run 31551473129 failed in the SBOM package-order contract. The documentation commit ca907d20 records that problem first; repair 8463ea78 passes the focused contract suite locally but is not yet pushed or deployed. Without green CI, deployed replay evidence, and the pre-drop state diff, completion cannot be claimed."
+  next_action: "Push repair 8463ea78 through CI; after green deploy, run choir computer replay-completeness --computer <id> against staging before any state drop."
 
 receipts:
   - id: rename-manifest-2026-08-11
