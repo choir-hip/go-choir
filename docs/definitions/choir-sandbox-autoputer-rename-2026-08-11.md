@@ -200,27 +200,27 @@ measures:
     cannot_prove: that the remaining uses are correct
 
 now:
-  status: blocked_incomplete
-  slice: "The deployed read-only replay probe now completed against the retained pre-drop staging state after the owner-authorized restart refreshed the guest identity. It captured an exact 26-difference report with probe digest 67ec50ed1526659eb04e7d1be6cabc02d33e6b1f16559d1e2e0036f4f3785af1 and result not_equivalent. State recreation and renamed product acceptance remain outstanding."
-  question: "Whether the authorized staging state-drop/recreation path can replace the retained pre-cutover state without mutating the durable replay evidence or leaving the temporary probe-only runtime mode enabled."
+  status: complete
+  slice: "The rename cutover is complete. CI is green, staging serves the tested autoputer runtime, the retained pre-cutover computer was stopped through the owner-authorized lifecycle path, a fresh non-reused staging computer booted with the renamed schema and stable computer identity, the existing deployed lifecycle acceptance passed, and residual product-path scans contain only manifest-listed non-product exceptions."
+  question: "None. The pre-drop replay evidence is retained, the temporary probe-only modes are removed, state recreation is observed, and the renamed product path is accepted."
   reconciliation:
-    observed_at: 2026-08-12T05:36:44Z
-    source_ref: mission/choir-sandbox-autoputer-rename-2026-08-11@ba51f5ba
-    deploy_identity: "staging ba27a3e8, CI run 31565423783, deploy completed 2026-08-12T05:35:07Z; https://choir.news/health reports vmctl_status ok; owner restart receipt 019ff478-7818-7cf4-9061-9643ebda07d1 advanced realization epoch 200 to 201"
+    observed_at: 2026-08-12T07:02:27Z
+    source_ref: mission/choir-sandbox-autoputer-rename-2026-08-11@0d3679e3
+    deploy_identity: "staging 3cd12d14, CI run 31569560429 green after failed non-runtime shard rerun, Deploy to Staging job 94032849945 succeeded; https://choir.news/health reports deployed_commit 3cd12d1452ad1d06b5df57cf9183313568f60cb5 and vmctl_status ok"
     authority_identities: [docs/computer-ontology.md, docs/choir-doctrine.md, docs/agent-product-doctrine.md, AGENTS.md, owner answer 2026-08-12]
     policy_resolution_ref: "owner authorization 2026-08-12: add read-only product API/CLI replay probe"
-    worktree_inventory_ref: "2026-08-12T05:36:44Z git status to be reconciled after evidence receipt"
-    operator_boundary_ref: ".github/workflows/ci.yml:848-867,1061-1063; .github/scripts/deploy-impact-classify; scripts/node-b-sync-service-pointers"
-    operator_boundary: "The staging deploy fetches the immutable tested commit, hard-resets /opt/go-choir to that commit, cleans it, and installs service pointers from the checked-out repository. No external deploy script or runbook is a source/config authority for the rename; inaccessible Node B runtime files are outputs, not additional source surfaces."
+    worktree_inventory_ref: "2026-08-12T07:02:27Z evidence capture; final status to be reconciled before handoff"
+    operator_boundary_ref: ".github/workflows/ci.yml:848-867,1126-1228; scripts/node-b-deploy-impact-classify"
+    operator_boundary: "The staging deploy fetched the immutable tested commit, hard-reset /opt/go-choir to that commit, installed the autoputer package, refreshed mutable active computers through vmctl, and verified the deployed guest identity. The prior retained computer was stopped only through the owner-scoped lifecycle API; no direct Node B mutation was used."
     status: reconciled
   candidate:
     id: sandbox-autoputer-candidate-2026-08-11
-    state: deployed_probe_evidence_pending_state_drop
-    ref: "origin/main@ba51f5ba; deployed runtime source ba27a3e8"
+    state: accepted
+    ref: "origin/main@0d3679e3; deployed runtime source 3cd12d14"
     owner: owner-and-session
     base: fdf7ceb1fe61a847acdd912bd6c0dcd330a5534d
     digest: f04e68284c0a241460c44677e2000412f589554665ffd8bea27713cf41cfd621
-    scope: [cmd/autoputer, cmd/choir, internal/autoputer, internal/agentcore, internal/computerevent, internal/computerversion, internal/store, flake.nix, nix/, frontend/, .github/, scripts/, docs/, AGENTS.md, README.md, .gitignore]
+    scope: [cmd/autoputer, cmd/choir, internal/autoputer, internal/agentcore, internal/computerevent, internal/computerevent, internal/computerversion, internal/store, flake.nix, nix/, frontend/, .github/, scripts/, docs/, AGENTS.md, README.md, .gitignore]
     digest_method: "sha256(git diff fdf7ceb1fe61a847acdd912bd6c0dcd330a5534d..HEAD --binary -- . excluding this Definition and the pre-edit manifest receipt)"
     selected: "Split targets, one cutover, before supervised self-development effects: service/process/package/unit/environment/workflow/vocabulary surfaces become autoputer; every persistent identity surface, including Go fields, persisted columns, indexes, public JSON, frontend, and specs, becomes computer. No compatibility surface. Run the effects replay probe before dropping staging state."
     kind: architecture
@@ -230,16 +230,16 @@ now:
     owner_ratification_ref: "owner answer recorded 2026-08-11T23:30:01Z: split targets; land before effects"
     recorded_at: 2026-08-11T23:30:01Z
     consequence: "The rename is the pre-effects mission boundary. The effects Definition resumes only after the renamed service and computer identity surfaces pass deployed acceptance."
-  evidence_refs: [docs/computer-ontology.md, docs/definitions/choir-supervised-self-development-effects-2026-08-11.md, owner answer 2026-08-11T23:30:01Z]
+  evidence_refs: [docs/computer-ontology.md, docs/definitions/choir-supervised-self-development-effects-2026-08-11.md, owner answer 2026-08-11T23:30:01Z, docs/evidence/choir-sandbox-autoputer-rename-staging-2026-08-12.json]
   probe_authorization:
     selected: "Add one read-only owner/computer-scoped product API and CLI replay completeness probe before the rename state drop."
     source: owner
     status: settled
     recorded_at: 2026-08-12T00:00:22Z
     constraints: [disposable replay workspace, live DoltStateExtractor comparison, exact diff and digest, no event append, no current-state mutation, no general replay API]
-    consequence: "The probe is the only behavior addition allowed in this mission; it is a red protected-surface change and must be deployed and exercised before staging state is dropped."
-  blocker_or_risk: "The pre-drop replay evidence is captured and committed next; the remaining gates are authorized staging state drop/recreation at the renamed schema, removal of temporary RUNTIME_REPLAY_PROBE_ONLY mode, renamed product acceptance, and final Definition receipts."
-  next_action: "Commit the exact replay evidence and updated receipt, then use the authorized deployment path to drop and recreate staging state at the renamed schema; verify the temporary probe-only mode is removed before normal acceptance."
+    consequence: "The probe was deployed and exercised before state recreation; its exact not_equivalent diff remains retained as evidence for the effects mission."
+  blocker_or_risk: "None for this Definition. The retained pre-drop probe evidence is accepted, the staging state recreation and renamed product acceptance are observed, CI and staging deployment are green, and temporary recovery modes are absent."
+  next_action: "Resume the supervised self-development effects Definition against final autoputer/computer names; do not reintroduce compatibility or probe-only runtime modes."
 
 receipts:
   - id: rename-manifest-2026-08-11

@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "evidence_id": "choir-sandbox-autoputer-rename-staging-2026-08-12",
+  "captured_at": "2026-08-12T07:02:27Z",
+  "deployment": {
+    "ci_run": 31569560429,
+    "ci_head_sha": "3cd12d1452ad1d06b5df57cf9183313568f60cb5",
+    "ci_conclusion": "success",
+    "deploy_job": 94032849945,
+    "health_url": "https://choir.news/health",
+    "health_commit": "3cd12d1452ad1d06b5df57cf9183313568f60cb5",
+    "health_vmctl_routing": "enabled",
+    "health_vmctl_status": "ok"
+  },
+  "runtime_repair": {
+    "focused_command": "go test -race ./internal/agentcore -run '^TestSpawnMintsTrajectoryAndChildJoinsIt$' -count=5",
+    "result": "pass"
+  },
+  "state_recreation": {
+    "prior_computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+    "prior_stop_command": "go run ./cmd/choir computer stop --computer computer-03335285269bdba4f94377e56879f9e6 --idempotency-key rename-state-drop-20260812-0700",
+    "prior_stop_receipt_id": "019ff4c6-28fe-7b25-aa7a-20cfde32cda2",
+    "prior_stop_state": "stopped",
+    "prior_stop_realization_epoch": 202,
+    "fresh_state_setup_command": "node scripts/setup-auth-state.mjs --baseUrl https://choir.news --email rename-schema-20260812-final@example.com --out /tmp/choir-rename-schema-20260812-final.storage.json",
+    "fresh_state_reused": false,
+    "fresh_user_id": "e322015f-2841-43e6-a5f2-3d514211dc97",
+    "fresh_computer_id": "computer-824d206c17a3406ad4d789f84ff46c87",
+    "fresh_bootstrap_status": 200,
+    "fresh_lifecycle_status": "active",
+    "fresh_lifecycle_realization_epoch": 11539
+  },
+  "product_acceptance": {
+    "command": "GO_CHOIR_RUN_DEPLOYED_LIFECYCLE=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news npx playwright test tests/adaptive-lifecycle-control-deployed.spec.js --reporter=line",
+    "result": "1 passed (17.3s)",
+    "assertions": [
+      "public desktop booted before authentication",
+      "registration prewarm and authenticated desktop became ready",
+      "prompt-bar submission returned HTTP 202",
+      "returning login reused the same computer_id",
+      "health reported vmctl_routing=enabled and vmctl_status=ok"
+    ]
+  },
+  "residual_name_scan": {
+    "product_paths": "no matches for sandbox_id, SandboxID, sandbox_url, SANDBOX_*, PROXY_SANDBOX, VMCTL_SANDBOX, or CHOIR_SANDBOX under cmd, internal, nix, flake.nix, frontend/src, frontend/tests, .github, scripts",
+    "temporary_probe_modes": "no matches for RUNTIME_REPLAY_PROBE_ONLY, CHOIR_RENAME_SCHEMA_RECOVERY, or recoverLegacySandboxColumns under product paths",
+    "allowed_residuals": "Nix build sandbox vocabulary, HTML iframe sandbox attributes, and docs/archive historical text remain as manifest-listed exceptions"
+  }
+}
