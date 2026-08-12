@@ -72,6 +72,10 @@ start:
       problem: "The first deployment of the renamed runtime reached the existing staging VM but could not start its runtime store: the retained database still had the pre-cutover sandbox_id schema while the new bootstrap attempted an index whose key column is computer_id. vmctl therefore stayed unavailable and the deploy health gate failed."
       evidence_ref: "CI run 31552694600, Deploy to Staging job 93978717729, diagnostics at 2026-08-12T01:25:52Z-01:27:20Z: runtime Error 1072 key column computer_id does not exist in table; proxy health vmctl unavailable; incomplete receipt /var/lib/go-choir/deploy-failures/31552694600-1.json"
       consequence: "The deploy failure is documented before repair. The replay probe must still run against the pre-drop state through the product path; only then may staging state be dropped and recreated so the renamed schema can boot. No direct Node B mutation is an admissible substitute."
+    - id: ci-sbom-artifact-attempt-mismatch-2026-08-12
+      problem: "On CI rerun attempt 2, Build Differential SBOM Candidate completed and uploaded an artifact named with run attempt 1, while Accept Differential SBOMs looked for the attempt-2 name and failed before verification. The workflow's producer and consumer do not share the same attempt identity under rerun."
+      evidence_ref: "CI run 31554455290 attempt 2, Build Differential SBOM Candidate job 93985446583, artifact list sbom-candidate-31554455290-1-e09d822499ce8533bdc8e18d1c6c48e3d4c2fe61, Accept Differential SBOMs download failure at 2026-08-12T01:56:30Z"
+      consequence: "The repair CI rerun deployed successfully but the overall run is red on SBOM acceptance. The rename remains blocked until the producer/consumer artifact identity is corrected, the focused workflow contract is verified, and a new pushed CI run is green."
   unknowns:
 
 finish:
@@ -162,7 +166,7 @@ measures:
 
 now:
   status: blocked_incomplete
-  slice: "The generated rename and read-only replay probe are committed and pushed, but staging landing is blocked by the SBOM build: CI run 31551955304 passed plan, heresy, docs, and Go gates, then failed Build Differential SBOM Candidate while building changed packages. The first package-order failure was documented and repaired; the repaired run exposed a separate SBOM/Nix build failure. Deployment, replay evidence, state recreation, and renamed acceptance remain outstanding."
+  slice: "The generated rename and read-only replay probe are committed and pushed, but the latest CI rerun (31554455290 attempt 2) deployed successfully and then failed SBOM acceptance because the candidate artifact was uploaded with attempt 1 while the consumer requested attempt 2. Replay evidence, state recreation, and renamed acceptance remain outstanding."
   question: "Whether any operator surface outside this repository references SANDBOX_* variables or go-choir-sandbox unit names; reconcile that boundary before staging deployment."
   reconciliation:
     observed_at: 2026-08-12T00:55:15Z
@@ -199,8 +203,8 @@ now:
     recorded_at: 2026-08-12T00:00:22Z
     constraints: [disposable replay workspace, live DoltStateExtractor comparison, exact diff and digest, no event append, no current-state mutation, no general replay API]
     consequence: "The probe is the only behavior addition allowed in this mission; it is a red protected-surface change and must be deployed and exercised before staging state is dropped."
-  blocker_or_risk: "Landing commit 8b283c6e reached origin/main but CI run 31551473129 failed in the SBOM package-order contract. The documentation commit ca907d20 records that problem first; repair 8463ea78 passes the focused contract suite locally but is not yet pushed or deployed. Without green CI, deployed replay evidence, and the pre-drop state diff, completion cannot be claimed."
-  next_action: "Push repair 8463ea78 through CI; after green deploy, run choir computer replay-completeness --computer <id> against staging before any state drop."
+  blocker_or_risk: "CI run 31554455290 attempt 2 passed all Go, docs, heresy, build, and deploy gates, but its SBOM acceptance failed because the producer artifact was named sbom-candidate-31554455290-1-e09d822499ce8533bdc8e18d1c6c48e3d4c2fe61 while the consumer requested the attempt-2 name. The problem is documented in ci-sbom-artifact-attempt-mismatch-2026-08-12; no replay evidence, state drop, or completion claim is authorized until the workflow identity is repaired and a new pushed CI run is green."
+  next_action: "Repair the SBOM candidate identity contract, verify its focused workflow tests locally, push through CI, and after a green deploy run choir computer replay-completeness --computer <id> against staging before any state drop."
 
 receipts:
   - id: rename-manifest-2026-08-11
