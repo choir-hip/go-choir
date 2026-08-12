@@ -27,7 +27,7 @@ func testBrowserSetup(t *testing.T) *Handler {
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	handler := NewHandler(provideriface.Config{SandboxID: "sandbox-test", StorePath: dbPath}, s, events.NewEventBus())
+	handler := NewHandler(provideriface.Config{ComputerID: "autoputer-test", StorePath: dbPath}, s, events.NewEventBus())
 	t.Cleanup(func() {
 		handler.Close()
 		_ = s.Close()

@@ -328,7 +328,7 @@ test('deployed origin does not make direct service port calls', async ({
       // Must not be a direct service port call.
       expect(url.port).not.toBe('8081'); // auth
       expect(url.port).not.toBe('8082'); // proxy
-      expect(url.port).not.toBe('8085'); // sandbox
+      expect(url.port).not.toBe('8085'); // autoputer
     }
   }
 });

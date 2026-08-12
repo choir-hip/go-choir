@@ -134,7 +134,7 @@ func TestRequireAPIKeyComputerTargetFailsClosed(t *testing.T) {
 }
 
 func TestOwnerWideAdminAPIKeyRequiresNamedTargetBeforeDesktopRouteFamilies(t *testing.T) {
-	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
+	handler, _, autoputer, store := testProxyEnvWithAuthStore(t)
 	user, err := store.CreateUser("owner-wide-admin", "owner-wide-admin@example.com")
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +151,7 @@ func TestOwnerWideAdminAPIKeyRequiresNamedTargetBeforeDesktopRouteFamilies(t *te
 	defer vmctlServer.Close()
 	handler.vmctlClient = vmctl.NewClient(vmctlServer.URL)
 	var downstreamCalls atomic.Int64
-	sandbox.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	autoputer.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		downstreamCalls.Add(1)
 		http.Error(w, "must not be reached", http.StatusInternalServerError)
 	})
@@ -196,7 +196,7 @@ func TestOwnerWideAdminAPIKeyRequiresNamedTargetBeforeDesktopRouteFamilies(t *te
 }
 
 func TestOwnerWideAdminAPIKeyControlsAnyOwnedComputer(t *testing.T) {
-	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
+	handler, _, autoputer, store := testProxyEnvWithAuthStore(t)
 	user, err := store.CreateUser("owner-wide-user", "owner-wide-user@example.com")
 	if err != nil {
 		t.Fatal(err)
@@ -220,7 +220,7 @@ func TestOwnerWideAdminAPIKeyControlsAnyOwnedComputer(t *testing.T) {
 	defer vmctlServer.Close()
 	handler.vmctlClient = vmctl.NewClient(vmctlServer.URL)
 	var downstreamCalls atomic.Int64
-	sandbox.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	autoputer.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		downstreamCalls.Add(1)
 		http.Error(w, "bounded downstream stop", http.StatusInternalServerError)
 	})
@@ -519,42 +519,42 @@ func TestOwnerWideAdminComputeRecoveryDeniedBeforeMissingVMCTLAndBodyDecode(t *t
 	}
 }
 
-func TestBoundAPIKeyUsesExactJoinedSandboxWithoutDesktopReresolve(t *testing.T) {
+func TestBoundAPIKeyUsesExactJoinedAutoputerWithoutDesktopReresolve(t *testing.T) {
 	handler, _, _, store := testProxyEnvWithAuthStore(t)
-	user, err := store.CreateUser("exact-sandbox-owner", "exact-sandbox-owner@example.com")
+	user, err := store.CreateUser("exact-autoputer-owner", "exact-autoputer-owner@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	const computerID = "computer-exact-sandbox"
-	_, secret, err := store.CreateComputerScopedAPIKey(t.Context(), user.ID, "exact sandbox", []string{"read:runtime"}, computerID, nil)
+	const computerID = "computer-exact-autoputer"
+	_, secret, err := store.CreateComputerScopedAPIKey(t.Context(), user.ID, "exact autoputer", []string{"read:runtime"}, computerID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var exactCalls atomic.Int64
-	exactSandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	exactAutoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		exactCalls.Add(1)
 		_ = json.NewEncoder(w).Encode(map[string]any{"user": r.Header.Get("X-Authenticated-User")})
 	}))
-	defer exactSandbox.Close()
-	var wrongSandboxCalls atomic.Int64
-	wrongSandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		wrongSandboxCalls.Add(1)
-		http.Error(w, "wrong sandbox", http.StatusTeapot)
+	defer exactAutoputer.Close()
+	var wrongAutoputerCalls atomic.Int64
+	wrongAutoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wrongAutoputerCalls.Add(1)
+		http.Error(w, "wrong autoputer", http.StatusTeapot)
 	}))
-	defer wrongSandbox.Close()
+	defer wrongAutoputer.Close()
 	var desktopResolveCalls atomic.Int64
 	vmctlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/internal/vmctl/lookup" && r.URL.Query().Get("computer_id") == computerID {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"computer_id": computerID, "user_id": user.ID, "desktop_id": "primary", "vm_id": "vm-exact",
-				"sandbox_url": exactSandbox.URL, "state": "active", "epoch": 7,
+				"computer_url": exactAutoputer.URL, "state": "active", "epoch": 7,
 			})
 			return
 		}
 		desktopResolveCalls.Add(1)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"computer_id": "computer-wrong", "user_id": user.ID, "desktop_id": "primary", "vm_id": "vm-wrong",
-			"sandbox_url": wrongSandbox.URL, "state": "active", "epoch": 1,
+			"computer_url": wrongAutoputer.URL, "state": "active", "epoch": 1,
 		})
 	}))
 	defer vmctlServer.Close()
@@ -566,8 +566,8 @@ func TestBoundAPIKeyUsesExactJoinedSandboxWithoutDesktopReresolve(t *testing.T) 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if exactCalls.Load() != 1 || desktopResolveCalls.Load() != 0 || wrongSandboxCalls.Load() != 0 {
-		t.Fatalf("exact=%d desktop_resolve=%d wrong=%d want 1/0/0", exactCalls.Load(), desktopResolveCalls.Load(), wrongSandboxCalls.Load())
+	if exactCalls.Load() != 1 || desktopResolveCalls.Load() != 0 || wrongAutoputerCalls.Load() != 0 {
+		t.Fatalf("exact=%d desktop_resolve=%d wrong=%d want 1/0/0", exactCalls.Load(), desktopResolveCalls.Load(), wrongAutoputerCalls.Load())
 	}
 }
 
@@ -631,7 +631,7 @@ func TestBoundAPIKeyComputeStatusNeverListsOrExposesSiblingComputers(t *testing.
 }
 
 func TestBoundAPIKeyDesktopMismatchDeniedAcrossComputerRouteFamilies(t *testing.T) {
-	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
+	handler, _, autoputer, store := testProxyEnvWithAuthStore(t)
 	user, err := store.CreateUser("desktop-mismatch-owner", "desktop-mismatch-owner@example.com")
 	if err != nil {
 		t.Fatal(err)
@@ -648,7 +648,7 @@ func TestBoundAPIKeyDesktopMismatchDeniedAcrossComputerRouteFamilies(t *testing.
 			guardLookups.Add(1)
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"computer_id": computerID, "user_id": user.ID, "desktop_id": "primary", "vm_id": "vm-primary",
-				"sandbox_url": sandbox.URL, "state": "active", "epoch": 3,
+				"computer_url": autoputer.URL, "state": "active", "epoch": 3,
 			})
 			return
 		}
@@ -657,7 +657,7 @@ func TestBoundAPIKeyDesktopMismatchDeniedAcrossComputerRouteFamilies(t *testing.
 	}))
 	defer vmctlServer.Close()
 	handler.vmctlClient = vmctl.NewClient(vmctlServer.URL)
-	sandbox.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	autoputer.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		downstreamCalls.Add(1)
 		http.Error(w, "must not be reached", http.StatusInternalServerError)
 	})

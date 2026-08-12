@@ -236,9 +236,9 @@
     "code_closure": {
       "artifacts": [
         {
-          "name": "sandbox-runtime.tar",
+          "name": "autoputer-runtime.tar",
           "sha256": "88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485",
-          "uri": "artifact+sha256://88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485/computer-inputs/candidates/control-20260716/sandbox-runtime.tar"
+          "uri": "artifact+sha256://88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485/computer-inputs/candidates/control-20260716/autoputer-runtime.tar"
         }
       ],
       "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380",
@@ -382,9 +382,9 @@
       "code": {
         "artifacts": [
           {
-            "name": "sandbox-runtime.tar",
+            "name": "autoputer-runtime.tar",
             "sha256": "88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485",
-            "uri": "artifact+sha256://88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485/computer-inputs/candidates/control-20260716/sandbox-runtime.tar"
+            "uri": "artifact+sha256://88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485/computer-inputs/candidates/control-20260716/autoputer-runtime.tar"
           }
         ],
         "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380",
@@ -470,7 +470,7 @@
         "commit": "e6fa53f10db3ba9499175d7a1d7912a0cbe2f876",
         "status": "active"
       },
-      "sandbox": {
+      "autoputer": {
         "commit": "e6fa53f10db3ba9499175d7a1d7912a0cbe2f876",
         "status": "installed"
       },
@@ -507,7 +507,7 @@
       "kind": "interactive",
       "last_active_at": "2026-05-14T01:00:55.270949232Z",
       "published": true,
-      "sandbox_url": "http://172.3.0.2:8085",
+      "computer_url": "http://172.3.0.2:8085",
       "state": "hibernated",
       "stopped_by": "idle",
       "user_id": "mission-restart-1778558340",
@@ -544,7 +544,7 @@
     "last_active_at": "2026-05-14T01:00:55.270Z",
     "objective_fingerprint": "4c71c8317e402caeb2192883005ab94867dc1e6472bae51aad3e662602c35d3f",
     "published": true,
-    "sandbox_url": "http://172.3.0.2:8085",
+    "computer_url": "http://172.3.0.2:8085",
     "state": "hibernated",
     "stopped_by": "idle",
     "user_id": "mission-restart-1778558340",
@@ -991,7 +991,7 @@
     "build": {
       "built_at": "20260716215836",
       "commit": "7122f2799be4458f4b925be11990321c7e70ffc4",
-      "service": "sandbox",
+      "service": "autoputer",
       "version": "0.1.0"
     },
     "persistent_disk": {
@@ -1009,8 +1009,8 @@
     "running_processor_runs": 0,
     "running_runs": 0,
     "runtime_health": "ready",
-    "sandbox_id": "candidate-g4-bootstrap-rollback-20260717",
-    "service": "sandbox",
+    "computer_id": "candidate-g4-bootstrap-rollback-20260717",
+    "service": "autoputer",
     "status": "ready"
   },
   "legacy_data_image_stat": {
@@ -1026,7 +1026,7 @@
     "kind": "interactive",
     "last_active_at": "2026-05-14T01:00:55.270949232Z",
     "published": true,
-    "sandbox_url": "http://172.3.0.2:8085",
+    "computer_url": "http://172.3.0.2:8085",
     "state": "hibernated",
     "stopped_by": "idle",
     "user_id": "mission-restart-1778558340",
@@ -1100,9 +1100,9 @@
         "code": {
           "artifacts": [
             {
-              "name": "sandbox-runtime.tar",
+              "name": "autoputer-runtime.tar",
               "sha256": "88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485",
-              "uri": "artifact+sha256://88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485/computer-inputs/candidates/control-20260716/sandbox-runtime.tar"
+              "uri": "artifact+sha256://88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485/computer-inputs/candidates/control-20260716/autoputer-runtime.tar"
             }
           ],
           "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380",
@@ -1558,9 +1558,9 @@
     "code_closure": {
       "artifacts": [
         {
-          "name": "sandbox-runtime.tar",
+          "name": "autoputer-runtime.tar",
           "sha256": "88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485",
-          "uri": "artifact+sha256://88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485/computer-inputs/candidates/control-20260716/sandbox-runtime.tar"
+          "uri": "artifact+sha256://88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485/computer-inputs/candidates/control-20260716/autoputer-runtime.tar"
         }
       ],
       "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380",

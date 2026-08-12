@@ -1200,14 +1200,14 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 	if len(files) == 0 || files[0].Path == "" {
 		return nil, "", fmt.Errorf("capsule release contains no frozen runtime artifacts")
 	}
-	hasSandbox := false
+	hasAutoputer := false
 	for _, file := range files {
-		if file.Path == "bin/sandbox" && file.Mode&0o111 != 0 {
-			hasSandbox = true
+		if file.Path == "bin/autoputer" && file.Mode&0o111 != 0 {
+			hasAutoputer = true
 		}
 	}
-	if !hasSandbox {
-		return nil, "", fmt.Errorf("capsule release must contain executable bin/sandbox")
+	if !hasAutoputer {
+		return nil, "", fmt.Errorf("capsule release must contain executable bin/autoputer")
 	}
 	cleanup = false
 	return files, temporary, nil

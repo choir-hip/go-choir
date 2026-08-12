@@ -1,40 +1,40 @@
-// Package sandbox provides the sandbox service that hosts the placeholder
+// Package autoputer provides the autoputer service that hosts the placeholder
 // shell handlers and the runtime engine for Mission 3.
 //
-// The sandbox service runs as a host process on port 8085 (during the
+// The autoputer service runs as a host process on port 8085 (during the
 // host-process milestone) and provides both the legacy placeholder endpoints
 // and the real runtime API endpoints for task submission, status lookup,
 // and event streaming.
-package sandbox
+package autoputer
 
 import (
 	"os"
 )
 
-// Config holds the sandbox service configuration resolved from environment
+// Config holds the autoputer service configuration resolved from environment
 // variables.
 type Config struct {
-	// Port is the listen port for the sandbox HTTP server.
+	// Port is the listen port for the autoputer HTTP server.
 	Port string
 
-	// SandboxID is the stable identity string returned in bootstrap and
-	// validation responses. It proves which sandbox instance handled a request.
-	SandboxID string
+	// ComputerID is the stable identity string returned in bootstrap and
+	// validation responses. It proves which autoputer instance handled a request.
+	ComputerID string
 
 	// StorePath is the marker path used to derive the embedded Dolt workspace.
 	// If empty, the runtime package default is used.
 	StorePath string
 }
 
-// LoadConfig resolves sandbox configuration from environment variables.
+// LoadConfig resolves autoputer configuration from environment variables.
 func LoadConfig() Config {
-	port := portFromEnv("SANDBOX_PORT", "8085")
-	sandboxID := fromEnv("SANDBOX_ID", "sandbox-dev")
+	port := portFromEnv("AUTOPUTER_PORT", "8085")
+	computerID := fromEnv("AUTOPUTER_ID", "autoputer-dev")
 	storePath := fromEnv("RUNTIME_STORE_PATH", "")
 	return Config{
-		Port:      port,
-		SandboxID: sandboxID,
-		StorePath: storePath,
+		Port:       port,
+		ComputerID: computerID,
+		StorePath:  storePath,
 	}
 }
 

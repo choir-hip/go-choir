@@ -48,7 +48,7 @@ func lifecycleRunFixture(start types.StartLifecycleRequest, runID string, state 
 	run := types.RunRecord{
 		RunID: runID, AgentID: start.Agent.AgentID, ChannelID: start.Agent.ChannelID,
 		TrajectoryID: start.TrajectoryID, AgentProfile: start.Agent.Profile, AgentRole: start.Agent.Role,
-		OwnerID: start.OwnerID, SandboxID: start.ComputerID, State: state,
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, State: state,
 		Prompt: "resume durable work", CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID},
 	}
@@ -322,7 +322,7 @@ func queueLifecycleUpdateFixture(t *testing.T, s *Store, req types.StartLifecycl
 		run := types.RunRecord{
 			RunID: sourceRunID, AgentID: req.Agent.AgentID, ChannelID: req.InitialDocument.DocID,
 			TrajectoryID: req.TrajectoryID, AgentProfile: req.Agent.Profile, AgentRole: req.Agent.Role,
-			OwnerID: req.OwnerID, SandboxID: req.ComputerID, State: types.RunPending,
+			OwnerID: req.OwnerID, ComputerID: req.ComputerID, State: types.RunPending,
 			Prompt: "produce lifecycle update", CreatedAt: now, UpdatedAt: now,
 			Metadata: map[string]any{"lifecycle_work_item_id": req.InitialWork.WorkItemID},
 		}
@@ -1603,7 +1603,7 @@ func TestLifecycleReplaceActivationWritesProjectionWithoutAdvancingReducer(t *te
 	run := types.RunRecord{
 		RunID: "run-lifecycle-activation-1", AgentID: started.Agent.AgentID, ChannelID: started.Agent.ChannelID,
 		TrajectoryID: start.TrajectoryID, AgentProfile: started.Agent.Profile, AgentRole: started.Agent.Role,
-		OwnerID: start.OwnerID, SandboxID: start.ComputerID, State: types.RunPending,
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, State: types.RunPending,
 		Prompt: "resume durable work", CreatedAt: now, UpdatedAt: now,
 	}
 	replace := types.ReplaceLifecycleActivationRequest{
@@ -1945,7 +1945,7 @@ func TestLifecycleActivationAdmissionUsesCanonicalAgentCAS(t *testing.T) {
 		run := types.RunRecord{
 			RunID: runID, AgentID: started.Agent.AgentID, ChannelID: started.Agent.ChannelID,
 			TrajectoryID: start.TrajectoryID, AgentProfile: started.Agent.Profile, AgentRole: started.Agent.Role,
-			OwnerID: start.OwnerID, SandboxID: start.ComputerID, State: types.RunPending,
+			OwnerID: start.OwnerID, ComputerID: start.ComputerID, State: types.RunPending,
 			Prompt: "resume durable work", CreatedAt: now, UpdatedAt: now,
 			Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID},
 		}
@@ -2042,7 +2042,7 @@ func TestBlockedLifecycleActivationReleasesCanonicalAdmission(t *testing.T) {
 		run := types.RunRecord{
 			RunID: runID, AgentID: started.Agent.AgentID, ChannelID: started.Agent.ChannelID,
 			TrajectoryID: start.TrajectoryID, AgentProfile: started.Agent.Profile, AgentRole: started.Agent.Role,
-			OwnerID: start.OwnerID, SandboxID: start.ComputerID, State: state,
+			OwnerID: start.OwnerID, ComputerID: start.ComputerID, State: state,
 			Prompt: "resume durable work", CreatedAt: now, UpdatedAt: now,
 			Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID},
 		}
@@ -2095,7 +2095,7 @@ func TestBlockedLifecycleProjectionAfterSettlementReleasesCanonicalAdmission(t *
 		Run: types.RunRecord{
 			RunID: "run-settled-blocked", AgentID: started.Agent.AgentID, ChannelID: started.Agent.ChannelID,
 			TrajectoryID: start.TrajectoryID, AgentProfile: started.Agent.Profile, AgentRole: started.Agent.Role,
-			OwnerID: start.OwnerID, SandboxID: start.ComputerID, State: types.RunRunning,
+			OwnerID: start.OwnerID, ComputerID: start.ComputerID, State: types.RunRunning,
 			Prompt: "finish durable work", CreatedAt: now, UpdatedAt: now,
 			Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID},
 		},
@@ -2160,7 +2160,7 @@ func TestLifecycleActiveRunIDIsReducerOwnedAcrossOtherAgentWriters(t *testing.T)
 		const channelID = "researcher-active-run-channel"
 		const workItemID = "work-active-run-authority"
 		agent := types.AgentRecord{
-			AgentID: agentID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, SandboxID: start.ComputerID,
+			AgentID: agentID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 			Profile: "researcher", Role: "researcher", ChannelID: channelID,
 		}
 		if err := s.UpsertAgent(ctx, agent); err != nil {
@@ -2182,7 +2182,7 @@ func TestLifecycleActiveRunIDIsReducerOwnedAcrossOtherAgentWriters(t *testing.T)
 		run := types.RunRecord{
 			RunID: "run-active-run-authority", AgentID: agentID, ChannelID: channelID,
 			TrajectoryID: start.TrajectoryID, AgentProfile: "researcher", AgentRole: "researcher",
-			OwnerID: start.OwnerID, SandboxID: start.ComputerID, State: types.RunPending,
+			OwnerID: start.OwnerID, ComputerID: start.ComputerID, State: types.RunPending,
 			Prompt: "resume durable research", CreatedAt: now, UpdatedAt: now,
 			Metadata: map[string]any{"lifecycle_work_item_id": workItemID},
 		}
@@ -2269,7 +2269,7 @@ func TestLifecycleActiveRunIDIsReducerOwnedAcrossOtherAgentWriters(t *testing.T)
 		start := lifecycleStartFixture()
 		now := time.Now().UTC()
 		storedAgent := start.Agent
-		storedAgent.OwnerID, storedAgent.ComputerID, storedAgent.SandboxID = start.OwnerID, start.ComputerID, start.ComputerID
+		storedAgent.OwnerID, storedAgent.ComputerID, storedAgent.ComputerID = start.OwnerID, start.ComputerID, start.ComputerID
 		storedAgent.ActiveRunID = "run-start-preserves-active"
 		storedAgent.CreatedAt, storedAgent.UpdatedAt = now, now
 		agentObj, err := lifecycleObject(
@@ -2390,7 +2390,7 @@ func TestLifecycleActivationAdmissionRequiresCurrentOpenWork(t *testing.T) {
 				RunID:   "run-activation-admission-" + tc.name,
 				AgentID: started.Agent.AgentID, ChannelID: started.Agent.ChannelID,
 				TrajectoryID: start.TrajectoryID, AgentProfile: started.Agent.Profile, AgentRole: started.Agent.Role,
-				OwnerID: start.OwnerID, SandboxID: start.ComputerID, State: types.RunPending,
+				OwnerID: start.OwnerID, ComputerID: start.ComputerID, State: types.RunPending,
 				Prompt: "resume bound lifecycle work", CreatedAt: now, UpdatedAt: now,
 				Metadata: map[string]any{
 					"lifecycle_work_item_id": workItemID,
@@ -2431,7 +2431,7 @@ func TestLifecycleRunProjectionIsComputerScoped(t *testing.T) {
 		run := types.RunRecord{
 			RunID: runID, AgentID: started.Agent.AgentID, ChannelID: started.Agent.ChannelID,
 			TrajectoryID: start.TrajectoryID, AgentProfile: started.Agent.Profile, AgentRole: started.Agent.Role,
-			OwnerID: start.OwnerID, SandboxID: computerID, State: types.RunPending,
+			OwnerID: start.OwnerID, ComputerID: computerID, State: types.RunPending,
 			Prompt: "resume scoped work", CreatedAt: now, UpdatedAt: now,
 		}
 		replace := types.ReplaceLifecycleActivationRequest{
@@ -2445,7 +2445,7 @@ func TestLifecycleRunProjectionIsComputerScoped(t *testing.T) {
 	}
 	for _, computerID := range []string{"computer-a", "computer-b"} {
 		run, err := s.GetLifecycleRun(ctx, "owner-lifecycle", computerID, runID)
-		if err != nil || run.SandboxID != computerID {
+		if err != nil || run.ComputerID != computerID {
 			t.Fatalf("scoped run on %s = %+v, %v", computerID, run, err)
 		}
 	}
@@ -2608,7 +2608,7 @@ func TestLifecycleRejectsEffectsCapableSubjectAndAssignment(t *testing.T) {
 	now := time.Now().UTC()
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
 		AgentID: "super:forbidden", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		SandboxID: start.ComputerID, Profile: "super", Role: "super", CreatedAt: now, UpdatedAt: now,
+		Profile: "super", Role: "super", CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -3198,7 +3198,7 @@ func TestScopedAndLegacyListsExhaustPagesBeforeAuthorityFilters(t *testing.T) {
 		computerID := fmt.Sprintf("computer-decoy-%03d", i)
 		runID := fmt.Sprintf("run-authority-decoy-%03d", i)
 		run := types.RunRecord{
-			RunID: runID, OwnerID: start.OwnerID, SandboxID: computerID,
+			RunID: runID, OwnerID: start.OwnerID, ComputerID: computerID,
 			AgentID: "agent-authority-decoy", ChannelID: legacyRun.ChannelID,
 			TrajectoryID: start.TrajectoryID, State: types.RunPending,
 			CreatedAt: now.Add(time.Duration(i) * time.Second), UpdatedAt: now.Add(time.Duration(i) * time.Second),

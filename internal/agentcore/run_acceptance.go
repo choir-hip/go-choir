@@ -112,7 +112,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		return types.RunAcceptanceRecord{}, fmt.Errorf("synthesize run acceptance: trajectory not found")
 	}
 
-	build := buildinfo.Snapshot("sandbox")
+	build := buildinfo.Snapshot("autoputer")
 	deploymentCommit := acceptanceServingCommit(build)
 	sourceObjective := strings.TrimSpace(in.SourcePromptObjective)
 	if sourceObjective == "" {

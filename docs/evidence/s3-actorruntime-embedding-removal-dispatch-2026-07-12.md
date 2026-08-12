@@ -10,22 +10,22 @@
 
 ## Problem Record
 
-S3-I9 and S3-I10 extracted the storage-independent tool-loop state machine, batch executor, and typed execution context into `internal/toolregistry`, but `internal/actorruntime.Adapter` still anonymously embeds `*runtime.Runtime`. That embedding promotes every runtime method onto the production adapter, hides the actual remaining caller boundary, and preserves the exact wrapper topology forbidden by S3 step 2. The production sandbox currently uses only explicit runtime capabilities plus `Start`; the anonymous promotion envelope is broader than the live caller contract.
+S3-I9 and S3-I10 extracted the storage-independent tool-loop state machine, batch executor, and typed execution context into `internal/toolregistry`, but `internal/actorruntime.Adapter` still anonymously embeds `*runtime.Runtime`. That embedding promotes every runtime method onto the production adapter, hides the actual remaining caller boundary, and preserves the exact wrapper topology forbidden by S3 step 2. The production autoputer currently uses only explicit runtime capabilities plus `Start`; the anonymous promotion envelope is broader than the live caller contract.
 
 This is substrate boundary debt, not an app symptom. Adding forwarding methods would recreate the wrapper surface; removing `runtime` wholesale would cross into ordered S3 steps 3-6. The smallest clean step-2 cut is to make the transitional runtime core a named, non-embedded field and migrate every caller to that field directly, leaving `Adapter` ownership only for actor lifecycle and dispatch.
 
 ## Exact Mutation Lock
 
-Replace the anonymous `*runtime.Runtime` embed in `internal/actorruntime.Adapter` with one explicit named field. Update all adapter internals, handler construction, options, tests, and `cmd/sandbox` callers to use that field or an already-existing adapter-owned lifecycle method. Do not add accessors, forwarding methods, aliases, interfaces, optional/fallback cores, a constructor result edge, or a second runtime instance.
+Replace the anonymous `*runtime.Runtime` embed in `internal/actorruntime.Adapter` with one explicit named field. Update all adapter internals, handler construction, options, tests, and `cmd/autoputer` callers to use that field or an already-existing adapter-owned lifecycle method. Do not add accessors, forwarding methods, aliases, interfaces, optional/fallback cores, a constructor result edge, or a second runtime instance.
 
-Preserve runtime construction, ActorBridge dispatch wiring, trace option application, Start/Stop/Drain order, actor log durability/recovery, API route wiring, tool installation/profile lookup, product-event emission, and every existing sandbox behavior. Do not move API/config/bootstrap ownership, delete `apihandler`, remove direct sandbox runtime imports, modify tools/routes/state/models/apps, or begin step 3.
+Preserve runtime construction, ActorBridge dispatch wiring, trace option application, Start/Stop/Drain order, actor log durability/recovery, API route wiring, tool installation/profile lookup, product-event emission, and every existing autoputer behavior. Do not move API/config/bootstrap ownership, delete `apihandler`, remove direct autoputer runtime imports, modify tools/routes/state/models/apps, or begin step 3.
 
 ## Acceptance
 
 - `Adapter` contains no anonymous `*runtime.Runtime` field and no promoted runtime method set;
 - one explicit named core field points at the existing runtime instance;
 - production/test callers use that boundary without a new accessor, forwarder, callback, interface, constructor result, or compatibility seam;
-- focused actorruntime and sandbox build/tests pass;
+- focused actorruntime and autoputer build/tests pass;
 - every ratchet authority count is non-increasing;
 - independent verification, full CI, staging identity/product smoke, consensus, and adjudication pass.
 
@@ -40,7 +40,7 @@ Smallest repair: retain one explicit named `Runtime *runtime.Runtime` field and 
 - Repaired isolated commit `9fae2d61f677a260671a814d673dde758ffb568d`, integrated as `e9de3b98`.
 - `Adapter` now has exactly one explicit named non-anonymous `Runtime *runtime.Runtime` field; `New` remains single-result and constructs one runtime instance.
 - No constructor result edge, accessor, forwarder, callback, interface, fallback, duplicate core, or promoted runtime method remains.
-- `go test ./internal/actorruntime ./cmd/sandbox -count=1` passes.
+- `go test ./internal/actorruntime ./cmd/autoputer -count=1` passes.
 - The canonical runtime ratchet passes with wrappers flat at `5`; every gated authority count is non-increasing.
 
 ## S3-I11 Independent Verification

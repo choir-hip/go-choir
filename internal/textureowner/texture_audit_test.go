@@ -87,7 +87,7 @@ func auditedTextureAPISetup(t *testing.T, failPrivate bool) (*agentcore.Runtime,
 		}
 		pinner = &textureAuditTestPinner{key: signingKey, failPrivate: failPrivate}
 		appender, err := computerevent.NewComputerEventAppender(
-			"sandbox-test",
+			"autoputer-test",
 			pinner,
 			productStore,
 			textureAuditTestCAS{key: signingKey, projection: productStore},
@@ -103,7 +103,7 @@ func auditedTextureAPISetup(t *testing.T, failPrivate bool) (*agentcore.Runtime,
 		genesis := computerevent.Event{
 			SchemaVersion:                computerevent.SchemaVersionV1,
 			EventID:                      genesisID,
-			ComputerID:                   "sandbox-test",
+			ComputerID:                   "autoputer-test",
 			EventKind:                    computerevent.EventGenesisImported,
 			OccurredAt:                   time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey:               "genesis",
@@ -118,7 +118,7 @@ func auditedTextureAPISetup(t *testing.T, failPrivate bool) (*agentcore.Runtime,
 		if _, err := appender.AppendNew(t.Context(), genesis, computerevent.TransitionInput{TargetStateCommitment: strings.Repeat("a", 64)}, nil); err != nil {
 			t.Fatal(err)
 		}
-		cipher, err := computerevent.LoadGuestPrivateArtifactCipher(filepath.Join(dir, "privacy-key.json"), "sandbox-test", true)
+		cipher, err := computerevent.LoadGuestPrivateArtifactCipher(filepath.Join(dir, "privacy-key.json"), "autoputer-test", true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -134,7 +134,7 @@ func seedAuditDocument(t *testing.T, handler *Handler, suffix string) (types.Doc
 	t.Helper()
 	now := time.Now().UTC().Add(-time.Minute)
 	doc := types.Document{
-		DocID: "audit-doc-" + suffix, OwnerID: "user-1", ComputerID: "sandbox-test",
+		DocID: "audit-doc-" + suffix, OwnerID: "user-1", ComputerID: "autoputer-test",
 		Title: "A", CreatedAt: now, UpdatedAt: now,
 	}
 	if err := handler.Store.CreateDocument(t.Context(), doc); err != nil {
@@ -169,7 +169,7 @@ func TestTextureAuditFailureDoesNotFailCommittedRevision(t *testing.T) {
 	if pinner.privateAttempts != 1 {
 		t.Fatalf("private audit attempts = %d, want 1", pinner.privateAttempts)
 	}
-	head, err := rt.Store().Head(t.Context(), rt.TextureSandboxID())
+	head, err := rt.Store().Head(t.Context(), rt.TextureComputerID())
 	if err != nil || head.Sequence != 1 {
 		t.Fatalf("canonical head after failed audit = %#v, %v", head, err)
 	}
@@ -180,7 +180,7 @@ func TestTextureAuditRecordsTitleCycleMergeAndRestore(t *testing.T) {
 	doc, base := seedAuditDocument(t, handler, "coverage")
 	assertSequence := func(want uint64) {
 		t.Helper()
-		head, err := rt.Store().Head(t.Context(), rt.TextureSandboxID())
+		head, err := rt.Store().Head(t.Context(), rt.TextureComputerID())
 		if err != nil || head.Sequence != want {
 			t.Fatalf("canonical head = %#v, %v; want sequence %d", head, err, want)
 		}

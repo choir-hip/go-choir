@@ -131,7 +131,7 @@ func TestSelfDevelopmentRollbackCreatesOneHeadBoundPendingOperation(t *testing.T
 		_ = json.NewEncoder(w).Encode(vmctl.RouteResolution{Slot: slot, LatestReceipt: currentRouteReceipt, CodeClosure: newCode, ArtifactProgram: newProgram})
 	}))
 	defer routeServer.Close()
-	runtime := &Runtime{cfg: provideriface.Config{SandboxID: computerID}, store: productStore, eventAppender: appender, selfdevOperations: operations, selfdevRoute: vmctl.NewClient(routeServer.URL), selfdevRouteOwnerID: "owner", selfdevRouteDesktopID: "primary"}
+	runtime := &Runtime{cfg: provideriface.Config{ComputerID: computerID}, store: productStore, eventAppender: appender, selfdevOperations: operations, selfdevRoute: vmctl.NewClient(routeServer.URL), selfdevRouteOwnerID: "owner", selfdevRouteDesktopID: "primary"}
 	handler := &APIHandler{rt: runtime}
 	requestBody := selfDevelopmentRollbackRequest{ExpectedDesiredHead: currentHead.DesiredEventHead, CurrentAppliedHead: currentHead.EffectiveEventHead, ToAppliedHead: genesisDigest, PriorMaterialization: target.MaterializationReceipt, PriorCheckpoint: target.CheckpointRef, ExpectedRouteGeneration: slot.Generation, IdempotencyKey: "rollback-api"}
 	body, _ := json.Marshal(requestBody)
@@ -376,7 +376,7 @@ func TestGuestStartRefusesAbsentModeBeforeAnyEffect(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := &APIHandler{rt: &Runtime{
-		cfg: provideriface.Config{SandboxID: computerID}, store: productStore, selfdevOperations: operations,
+		cfg: provideriface.Config{ComputerID: computerID}, store: productStore, selfdevOperations: operations,
 	}}
 	body, err := json.Marshal(selfDevelopmentStartRequest{IdempotencyKey: "mode-off-start", Prompt: "change runtime"})
 	if err != nil {
@@ -428,7 +428,7 @@ func TestFinalizedStartEventRepairsMissingOperationWithoutCurrentMode(t *testing
 	prompt := "recover exact proposal"
 	runtime, _ := testRuntime(t)
 	productStore := runtime.store
-	runtime.cfg.SandboxID = computerID
+	runtime.cfg.ComputerID = computerID
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -497,7 +497,7 @@ func TestConcurrentExactRetriesRepairOneRequestedOperationRun(t *testing.T) {
 	computerID := "computer-requested-retry"
 	idempotencyKey := "requested-retry"
 	prompt := "repair one durable run"
-	runtime.cfg.SandboxID = computerID
+	runtime.cfg.ComputerID = computerID
 	operations, err := selfdev.NewStore(productStore, productStore)
 	if err != nil {
 		t.Fatal(err)

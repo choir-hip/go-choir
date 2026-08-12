@@ -504,7 +504,7 @@ from fresh caller evidence, but the dependency order is fixed:
    package proved by the S0 caller graph (default `internal/agentcore` only if
    that graph supports it), and remove `*runtime.Runtime` embedding;
 3. move real API/config/bootstrap ownership and remove the `apihandler` wrapper
-   plus direct `cmd/sandbox` runtime imports;
+   plus direct `cmd/autoputer` runtime imports;
 4. cut over one live app/domain per landing, deleting the old path atomically;
 5. retire duplicate candidate/promotion mutation paths and align the extracted
    boundary to the one receipted ComputerVersion route contract; S3 does not
@@ -698,7 +698,7 @@ run_checkpoint_and_resumption_state:
     S0: {status: complete, started_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, completed_at_sha: 2327fcef4716aef070eb4b819296f01b44267364, evidence_refs: [docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md, docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md, agent://S0RatchetVerifier, artifact://461, https://github.com/choir-hip/go-choir/actions/runs/29176500535], rollback_refs: [008a7b88cf200119c0f762cc51cfba6be3007445], blockers: []}
     S1: {status: complete, started_at_sha: 2327fcef4716aef070eb4b819296f01b44267364, completed_at_sha: 9dff3690, evidence_refs: [docs/definitions/choir-run-deploy-unblock-2026-07-11.md, docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md, agent://S1DeployVerifier, https://github.com/choir-hip/go-choir/actions/runs/29179656372, /tmp/choir-s1-final-consensus-20260712, /tmp/choir-s1-post-repair-consensus-20260712], rollback_refs: [2327fcef4716aef070eb4b819296f01b44267364], blockers: []}
     S2: {status: complete, started_at_sha: 9dff3690, completed_at_sha: b7b1262e455a779ca00c8d968ef28b3fa6af9b50, evidence_refs: [docs/definitions/choir-wire-store-conformance-2026-07-11.md, docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md, agent://S2LifecycleVerifier, agent://S2MigrationVerifier, /tmp/choir-s2-final-repair-consensus-20260712, https://github.com/choir-hip/go-choir/actions/runs/29188248479], rollback_refs: [9dff3690, 481fb8c8], blockers: []}
-    S3: {status: blocked_incomplete, started_at_sha: b7b1262e455a779ca00c8d968ef28b3fa6af9b50, completed_at_sha: '', evidence_refs: [docs/runtime-dissolution-inventory.yaml, docs/evidence/s3-runtime-dissolution-dispatch-2026-07-12.md, docs/evidence/s3-step2-phase-gate-2026-07-13.md, docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md, docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md, docs/evidence/s3-product-api-tool-ownership-dispatch-2026-07-13.md, docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md, docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md, docs/evidence/s3-api-handler-ownership-blocker-2026-07-13.md], rollback_refs: [b7b1262e455a779ca00c8d968ef28b3fa6af9b50, edd2d5517537980f63706163f095c947cc2155f8], blockers: [owner_authority_required_for_S3_handler_business_operation_boundary_and_order]}
+    S3: {status: blocked_incomplete, started_at_sha: b7b1262e455a779ca00c8d968ef28b3fa6af9b50, completed_at_sha: '', evidence_refs: [docs/runtime-dissolution-inventory.yaml, docs/evidence/s3-runtime-dissolution-dispatch-2026-07-12.md, docs/evidence/s3-step2-phase-gate-2026-07-13.md, docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md, docs/evidence/s3-autoputer-runtime-import-cutover-dispatch-2026-07-13.md, docs/evidence/s3-product-api-tool-ownership-dispatch-2026-07-13.md, docs/evidence/s3-autoputer-bootstrap-ownership-dispatch-2026-07-13.md, docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md, docs/evidence/s3-api-handler-ownership-blocker-2026-07-13.md], rollback_refs: [b7b1262e455a779ca00c8d968ef28b3fa6af9b50, edd2d5517537980f63706163f095c947cc2155f8], blockers: [owner_authority_required_for_S3_handler_business_operation_boundary_and_order]}
     S4: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S3]}
     S5: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S4]}
     S6: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S5]}
@@ -899,11 +899,11 @@ run_checkpoint_and_resumption_state:
         - {status: verifying, transition_id: s1-deploy-unblock-verifying-39, recorded_at: 2026-07-12T03:17:32Z, actor: Main, expected_parent_sha: 26d7aa2a96e8748b63afcd4074636eb8b563994e, precondition: pushed_S1_implementation_and_exact_verifier_contract, postcondition: independent_S1DeployVerifier_started, external_operation_id: not_applicable}
         - {status: blocked_incomplete, transition_id: s1-deploy-unblock-verification-failed-40, recorded_at: 2026-07-12T03:21:53Z, actor: S1DeployVerifier, expected_parent_sha: e649ee28c4661071a07526637c82585b7a7a9b9f, precondition: independent_read_only_verification_of_canonical_S1, postcondition: stale_two_prospective_citer_entries_make_default_ratchet_fail_165_vs_163_while_lifecycle_behavior_passes, external_operation_id: not_applicable}
         - {status: committed, transition_id: s1-ratchet-baseline-repaired-41, recorded_at: 2026-07-12T03:25:20Z, actor: Main, expected_parent_sha: 210800a0eb56b1f7e7fd9a424d1d8c1d2a4591f0, precondition: S1_VER_001_reproduced_and_documented, postcondition: final_canonical_inventory_regenerated_default_ratchet_PASS_and_independent_reverification_PASS, external_operation_id: not_applicable}
-        - {status: deployed, transition_id: s1-deploy-unblock-deployed-41a, recorded_at: 2026-07-12T03:54:15Z, actor: GitHub_Actions, expected_parent_sha: 26d7aa2accda63e20daa19c42381d13aec14baed, precondition: full_CI_gates_green_and_stale_runs_passivated, postcondition: activation_receipt_records_ordinary_guest_sandbox_active_computers_and_gateway_at_S1_commit, external_operation_id: github_actions_run_29178010201_attempt_3}
+        - {status: deployed, transition_id: s1-deploy-unblock-deployed-41a, recorded_at: 2026-07-12T03:54:15Z, actor: GitHub_Actions, expected_parent_sha: 26d7aa2accda63e20daa19c42381d13aec14baed, precondition: full_CI_gates_green_and_stale_runs_passivated, postcondition: activation_receipt_records_ordinary_guest_autoputer_active_computers_and_gateway_at_S1_commit, external_operation_id: github_actions_run_29178010201_attempt_3}
         - {status: accepted, transition_id: s1-deploy-unblock-accepted-42, recorded_at: 2026-07-12T03:57:52Z, actor: Main, expected_parent_sha: 210800a0eb56b1f7e7fd9a424d1d8c1d2a4591f0, precondition: green_deploy_identity_and_owner_scoped_product_routes, postcondition: list_observed_active_run_cancel_returned_200_and_durable_state_cancelled_with_finished_at, external_operation_id: run_8d203e02-29b7-4f6b-a7e2-bfb95434cf9d}
         - {status: blocked_incomplete, transition_id: s1-final-consensus-blocked-43, recorded_at: 2026-07-12T04:04:00Z, actor: Codex_consensus_reviewer, expected_parent_sha: 76a26022d90554c6f4c43bd2fceb7eaf8abc6d86, precondition: deployed_acceptance_and_final_S1_checkpoint_panel, postcondition: S1_CONS_001_confirmed_passivation_direct_write_can_overwrite_cancelled_or_failed_terminal_state, external_operation_id: consensus_dir_tmp_choir_s1_final_consensus_20260712}
         - {status: committed, transition_id: s1-consensus-race-repaired-45, recorded_at: 2026-07-12T04:24:23Z, actor: Main, expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab, precondition: S1_CONS_001_documented_and_reproduced, postcondition: idle_passivation_uses_stored_terminal_wins_guard_regression_and_ratchet_PASS_independent_verifier_PASS, external_operation_id: not_applicable}
-        - {status: deployed, transition_id: s1-consensus-race-repair-deployed-46, recorded_at: 2026-07-12T04:37:20Z, actor: GitHub_Actions, expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab, precondition: full_CI_and_race_shards_green, postcondition: sandbox_and_gateway_activation_receipt_at_repair_commit, external_operation_id: github_actions_run_29179656372}
+        - {status: deployed, transition_id: s1-consensus-race-repair-deployed-46, recorded_at: 2026-07-12T04:37:20Z, actor: GitHub_Actions, expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab, precondition: full_CI_and_race_shards_green, postcondition: autoputer_and_gateway_activation_receipt_at_repair_commit, external_operation_id: github_actions_run_29179656372}
         - {status: accepted, transition_id: s1-consensus-race-repair-accepted-46a, recorded_at: 2026-07-12T04:49:30Z, actor: Main, expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab, precondition: repair_deployed_and_product_CLI_available, postcondition: actual_choir_run_cancel_returned_cancelled_for_two_active_runs, external_operation_id: runs_2d37e688_and_7b0cb532}
         - {status: consensus, transition_id: s1-post-repair-consensus-open-47, recorded_at: 2026-07-12T04:51:11Z, actor: Main, expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab, precondition: repaired_green_deployed_independently_verified_and_CLI_accepted, postcondition: six_member_post_repair_panel_running, external_operation_id: consensus_dir_tmp_choir_s1_post_repair_consensus_20260712}
         - {status: adjudicated, transition_id: s1-post-repair-consensus-adjudicated-48, recorded_at: 2026-07-12T05:15:00Z, actor: Main, expected_parent_sha: 9dff3690, precondition: four_explicit_PASS_no_completed_blocker_one_incomplete_no_verdict_one_stalled_no_output_and_final_ratchet_PASS, postcondition: S1_CONS_001_repaired_and_S1_checkpoint_PASS, external_operation_id: consensus_dir_tmp_choir_s1_post_repair_consensus_20260712}
@@ -966,7 +966,7 @@ run_checkpoint_and_resumption_state:
       stage_history:
         - {status: dispatch_intent, transition_id: s2-a-dispatch-intent-50, recorded_at: 2026-07-12T05:21:52Z, actor: Main, expected_parent_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591, precondition: S1_complete_S2_working_fresh_inventory_recorded, postcondition: exact_migration_deletion_slice_is_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s2-a-dispatched-51, recorded_at: 2026-07-12T05:21:52Z, actor: Main, expected_parent_sha: 5da44349, precondition: canonical_dispatch_intent_and_live_lock_epoch_8, postcondition: S2MigrationDelete_started_with_recorded_nonce_and_exact_mutation_lock, external_operation_id: not_applicable}
-        - {status: implementation_returned, transition_id: s2-a-returned-52, recorded_at: 2026-07-12T06:26:17Z, actor: S2MigrationDelete, expected_parent_sha: e96655a82e6aa32088200c16ab91960492b89ffa, precondition: one_matching_agent_result, postcondition: isolated_commit_integrated_and_focused_store_sandbox_tests_PASS, external_operation_id: not_applicable}
+        - {status: implementation_returned, transition_id: s2-a-returned-52, recorded_at: 2026-07-12T06:26:17Z, actor: S2MigrationDelete, expected_parent_sha: e96655a82e6aa32088200c16ab91960492b89ffa, precondition: one_matching_agent_result, postcondition: isolated_commit_integrated_and_focused_store_autoputer_tests_PASS, external_operation_id: not_applicable}
         - {status: committed, transition_id: s2-a-committed-53, recorded_at: 2026-07-12T06:26:17Z, actor: Main, expected_parent_sha: e96655a82e6aa32088200c16ab91960492b89ffa, precondition: integrated_atomic_S2_and_final_ratchet_PASS, postcondition: canonical_code_ready_for_push_and_independent_verification, external_operation_id: not_applicable}
         - {status: pushed, transition_id: s2-a-pushed-54, recorded_at: 2026-07-12T06:28:54Z, actor: Main, expected_parent_sha: 5d056d90674505ed241b2cd281202611bc105d0c, precondition: integrated_atomic_S2_doccheck_and_ratchet_PASS, postcondition: origin_main_contains_S2_implementation, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s2-a-verifying-55, recorded_at: 2026-07-12T06:28:54Z, actor: Main, expected_parent_sha: 5d056d90674505ed241b2cd281202611bc105d0c, precondition: pushed_S2_implementation_and_exact_verifier_contract, postcondition: independent_S2IndependentVerifier_authorized, external_operation_id: not_applicable}
@@ -974,7 +974,7 @@ run_checkpoint_and_resumption_state:
       lock_expires_at: 2026-07-12T07:15:00Z
       mutation_class: red
       protected_surfaces: [VM_lifecycle, VM_local_private_store]
-      exact_files_packages_routes_state_authorities: [internal/store/migration.go, internal/store/migration_test.go, internal/store/store.go, cmd/sandbox/main.go, cmd/sandbox/main_test.go, docs/runtime-dissolution-inventory.yaml]
+      exact_files_packages_routes_state_authorities: [internal/store/migration.go, internal/store/migration_test.go, internal/store/store.go, cmd/autoputer/main.go, cmd/autoputer/main_test.go, docs/runtime-dissolution-inventory.yaml]
       forbidden_targets: [migration_shim, compatibility_alias, feature_flag, corpusd_state, production_deploy_before_atomic_S2_landing]
       authority_edges_locked: [VM_local_private_state_only, no_boot_time_retired_SQL_replay]
       implementer_agent: S2MigrationDelete
@@ -985,17 +985,17 @@ run_checkpoint_and_resumption_state:
       external_operation_id: not_applicable
       effect_authority: canonical_git_ref_then_staging_VM_boot
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
-      expected_precondition: sandbox_boot_replays_retired_relational_rows_into_VM_local_objectgraph
-      observed_postcondition: relational_objectgraph_replay_APIs_tables_background_loop_and_dead_helpers_deleted_store_and_sandbox_tests_PASS
+      expected_precondition: autoputer_boot_replays_retired_relational_rows_into_VM_local_objectgraph
+      observed_postcondition: relational_objectgraph_replay_APIs_tables_background_loop_and_dead_helpers_deleted_store_and_autoputer_tests_PASS
       external_operation_idempotent: true
       implementation_sha_or_dirty_snapshot: 9fcfc978d14f5e5a9eafa216ec86609d877b6145
       implementation_commit_sha: e96655a82e6aa32088200c16ab91960492b89ffa
       push_ref: b7b1262e455a779ca00c8d968ef28b3fa6af9b50
       ci_run_ref: https://github.com/choir-hip/go-choir/actions/runs/29188248479
-      deploy_ref: activation_receipt_29188248479_sandbox_b7b1262e_at_2026-07-12T10:00:44Z
+      deploy_ref: activation_receipt_29188248479_autoputer_b7b1262e_at_2026-07-12T10:00:44Z
       deployed_sha: b7b1262e455a779ca00c8d968ef28b3fa6af9b50
       acceptance_ref: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md#s2-cons-001-repair-receipt
-      acceptance_contract: sandbox_boot_has_no_retired_SQL_replay_API_or_background_loop
+      acceptance_contract: autoputer_boot_has_no_retired_SQL_replay_API_or_background_loop
       evidence_refs: [docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md]
       open_findings: []
       landed_commit_sha: b7b1262e455a779ca00c8d968ef28b3fa6af9b50
@@ -1058,7 +1058,7 @@ run_checkpoint_and_resumption_state:
       implementation_commit_sha: e96655a82e6aa32088200c16ab91960492b89ffa
       push_ref: b7b1262e455a779ca00c8d968ef28b3fa6af9b50
       ci_run_ref: https://github.com/choir-hip/go-choir/actions/runs/29188248479
-      deploy_ref: activation_receipt_29188248479_sandbox_b7b1262e_at_2026-07-12T10:00:44Z
+      deploy_ref: activation_receipt_29188248479_autoputer_b7b1262e_at_2026-07-12T10:00:44Z
       deployed_sha: b7b1262e455a779ca00c8d968ef28b3fa6af9b50
       acceptance_ref: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md#s2-d-deployed-acceptance-receipt
       acceptance_contract: canonical_corpusd_publications_render_existing_story_contract_without_runtime_local_edition
@@ -1121,7 +1121,7 @@ run_checkpoint_and_resumption_state:
       implementation_commit_sha: e96655a82e6aa32088200c16ab91960492b89ffa
       push_ref: b7b1262e455a779ca00c8d968ef28b3fa6af9b50
       ci_run_ref: https://github.com/choir-hip/go-choir/actions/runs/29188248479
-      deploy_ref: activation_receipt_29188248479_sandbox_b7b1262e_at_2026-07-12T10:00:44Z
+      deploy_ref: activation_receipt_29188248479_autoputer_b7b1262e_at_2026-07-12T10:00:44Z
       deployed_sha: b7b1262e455a779ca00c8d968ef28b3fa6af9b50
       acceptance_ref: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md#final-post-repair-consensus-adjudication
       acceptance_contract: sourcecycled_publishes_canonical_capture_graph_without_user_VM_boot_or_runtime_projection_route
@@ -1166,7 +1166,7 @@ run_checkpoint_and_resumption_state:
         - {status: verified, transition_id: s3-i1-verified-69, recorded_at: 2026-07-12T11:22:00Z, actor: S3I1Verifier, expected_parent_sha: e372abce, precondition: canonical_diff_and_independent_reviewer_identity, postcondition: PASS_confidence_0_91_no_findings_source_contracts_and_ratchet_decrease_confirmed, external_operation_id: S3I1Verifier}
         - {status: ci_pending, transition_id: s3-i1-ci-rerun-intent-70, recorded_at: 2026-07-12T11:22:00Z, actor: Main, expected_parent_sha: e372abce, precondition: behavior_push_CI_29190541541_canceled_by_subsequent_ledger_push, postcondition: same_behavior_run_rerun_only_after_durable_intent, external_operation_id: pending_rerun_29190541541}
         - {status: ci_passed, transition_id: s3-i1-ci-passed-72, recorded_at: 2026-07-12T12:04:42Z, actor: Main, expected_parent_sha: 25ac3ff9, precondition: rerun_attempt_2_for_behavior_checkpoint, postcondition: all_selected_normal_and_race_gates_PASS, external_operation_id: github_actions_29190541541_attempt_2}
-        - {status: deployed, transition_id: s3-i1-deployed-73, recorded_at: 2026-07-12T12:04:42Z, actor: Main, expected_parent_sha: 25ac3ff9, precondition: CI_PASS_and_deploy_job_success, postcondition: sandbox_and_gateway_active_at_405a97bc, external_operation_id: activation_receipt_29190541541_attempt_2}
+        - {status: deployed, transition_id: s3-i1-deployed-73, recorded_at: 2026-07-12T12:04:42Z, actor: Main, expected_parent_sha: 25ac3ff9, precondition: CI_PASS_and_deploy_job_success, postcondition: autoputer_and_gateway_active_at_405a97bc, external_operation_id: activation_receipt_29190541541_attempt_2}
         - {status: accepted, transition_id: s3-i1-accepted-74, recorded_at: 2026-07-12T12:04:42Z, actor: Main, expected_parent_sha: 25ac3ff9, precondition: deployed_identity_405a97bc, postcondition: retired_routes_404_registered_loops_200_registered_prompt_validation_400, external_operation_id: authenticated_staging_probe_2026_07_12T11_37Z}
         - {status: consensus_repair, transition_id: s3-i1-consensus-repair-75, recorded_at: 2026-07-12T12:04:42Z, actor: Main, expected_parent_sha: 25ac3ff9, precondition: panel_three_PASS_one_procedural_BLOCKING, postcondition: ratchet_citer_drift_and_stale_status_comment_repaired_before_final_panel, external_operation_id: /tmp/choir-s3-i1-consensus-20260712}
         - {status: consensus, transition_id: s3-i1-final-consensus-76, recorded_at: 2026-07-12T12:40:47Z, actor: Main, expected_parent_sha: af0479db, precondition: repaired_ratchet_PASS_comment_repaired_CI_29192061906_PASS_deployed_af0479db, postcondition: three_substantive_PASS_one_incomplete_no_confirmed_blocker, external_operation_id: /tmp/choir-s3-i1-final-consensus-20260712}
@@ -1184,7 +1184,7 @@ run_checkpoint_and_resumption_state:
       rollback_commit_or_ref: c4173c6d
       accepted_slice_dependency_refs: [S2@b7b1262e455a779ca00c8d968ef28b3fa6af9b50]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: six_unregistered_exported_API_handlers_have_no_production_callers
       observed_postcondition: six_unregistered_handlers_and_handler_only_tests_deleted_registered_routes_byte_identical_non_HTTP_behavior_tests_preserved
@@ -1238,7 +1238,7 @@ run_checkpoint_and_resumption_state:
         - {status: verified, transition_id: s3-i2-verified-86, recorded_at: 2026-07-12T13:06:59Z, actor: S3I2Verifier, expected_parent_sha: 4a94c05f, precondition: canonical_diff_and_independent_reviewer_identity, postcondition: PASS_confidence_0_97_no_findings_exact_scope_and_ratchet_decrease_confirmed, external_operation_id: S3I2Verifier}
         - {status: ci_pending, transition_id: s3-i2-ci-rerun-intent-87, recorded_at: 2026-07-12T13:06:59Z, actor: Main, expected_parent_sha: 4a94c05f, precondition: behavior_push_CI_29193594601_canceled_by_subsequent_ledger_push, postcondition: same_behavior_run_rerun_only_after_durable_intent, external_operation_id: pending_rerun_29193594601}
         - {status: ci_passed, transition_id: s3-i2-ci-passed-89, recorded_at: 2026-07-12T13:35:02Z, actor: Main, expected_parent_sha: 195ef87b, precondition: rerun_attempt_2_for_behavior_checkpoint, postcondition: all_selected_normal_and_race_gates_PASS, external_operation_id: github_actions_29193594601_attempt_2}
-        - {status: deployed, transition_id: s3-i2-deployed-90, recorded_at: 2026-07-12T13:35:02Z, actor: Main, expected_parent_sha: 195ef87b, precondition: CI_PASS_and_deploy_job_success, postcondition: sandbox_and_gateway_active_at_6180be79, external_operation_id: activation_receipt_29193594601_attempt_2}
+        - {status: deployed, transition_id: s3-i2-deployed-90, recorded_at: 2026-07-12T13:35:02Z, actor: Main, expected_parent_sha: 195ef87b, precondition: CI_PASS_and_deploy_job_success, postcondition: autoputer_and_gateway_active_at_6180be79, external_operation_id: activation_receipt_29193594601_attempt_2}
         - {status: accepted, transition_id: s3-i2-accepted-91, recorded_at: 2026-07-12T13:35:02Z, actor: Main, expected_parent_sha: 195ef87b, precondition: deployed_identity_6180be79, postcondition: authenticated_registered_run_list_200_and_all_deploy_health_checks_PASS, external_operation_id: staging_probe_2026_07_12T13_22Z}
         - {status: consensus, transition_id: s3-i2-consensus-intent-92, recorded_at: 2026-07-12T13:35:02Z, actor: Main, expected_parent_sha: 195ef87b, precondition: deployed_accepted_verified_ratchet_PASS, postcondition: post_implementation_consensus_ready, external_operation_id: pending_agentic_consensus_S3_I2}
         - {status: consensus, transition_id: s3-i2-consensus-blocked-93, recorded_at: 2026-07-12T13:55:41Z, actor: Main, expected_parent_sha: 464e58cc, precondition: four_reviewer_panel_complete, postcondition: three_PASS_one_confirmed_receipt_citer_blocker, external_operation_id: /tmp/choir-s3-i2-consensus-20260712}
@@ -1258,7 +1258,7 @@ run_checkpoint_and_resumption_state:
       rollback_commit_or_ref: 2bc15174
       accepted_slice_dependency_refs: [S3-I1@af0479db1e2afe0fafb5c3ca017f71c2d85cbdb4]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: three_exports_have_declaration_only_reference_sets
       observed_postcondition: three_declaration_only_helpers_deleted_no_route_tool_registration_or_state_authority_line_changed
@@ -1326,7 +1326,7 @@ run_checkpoint_and_resumption_state:
       rollback_commit_or_ref: ce0cc940
       accepted_slice_dependency_refs: [S3-I2@8146b7d201b09ac05cfc162a06e1fe6378602c28]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: three_in_scope_exports_have_no_production_callers_and_tests_can_use_direct_setup
       observed_postcondition: three_wrappers_deleted_StartRun_caller_restored_direct_internal_compaction_proof_PASS
@@ -1394,7 +1394,7 @@ run_checkpoint_and_resumption_state:
       rollback_commit_or_ref: 691bbf1d
       accepted_slice_dependency_refs: [S3-I3@bc1419fc]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: one_prompt_export_has_only_self_declaration_reference
       observed_postcondition: one_prompt_export_deleted_channel_APIs_unchanged_ratchet_PASS
@@ -1461,7 +1461,7 @@ run_checkpoint_and_resumption_state:
       rollback_commit_or_ref: e299ab97
       accepted_slice_dependency_refs: [S3-I4@b1e2d214]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: one_same_package_test_caller_no_production_caller
       observed_postcondition: option_wrapper_deleted_identical_test_closure_ratchet_PASS
@@ -1529,7 +1529,7 @@ run_checkpoint_and_resumption_state:
       rollback_commit_or_ref: 50ff30bd
       accepted_slice_dependency_refs: [S3-I5@f7c96382]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: one_declaration_self_reference_no_callers
       observed_postcondition: ToolFunc_alias_deleted_toolregistry_authority_preserved_ratchet_PASS
@@ -1594,7 +1594,7 @@ run_checkpoint_and_resumption_state:
       rollback_commit_or_ref: 72299d24
       accepted_slice_dependency_refs: [S3-I6@cbcf7a11]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: one_same_package_test_caller_no_production_caller
       observed_postcondition: runtime_alias_deleted_test_uses_authoritative_constructor_ratchet_PASS
@@ -1659,7 +1659,7 @@ run_checkpoint_and_resumption_state:
       rollback_commit_or_ref: bf60ae14
       accepted_slice_dependency_refs: [S3-I7@b055aa25]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: all_constructor_alias_callers_are_tests_no_production_caller
       observed_postcondition: all_86_test_callers_cut_to_toolregistry_alias_deleted_ratchet_PASS
@@ -1730,7 +1730,7 @@ run_checkpoint_and_resumption_state:
       rollback_commit_or_ref: 259537f0
       accepted_slice_dependency_refs: [S3-I8@c8ba9017]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: live_tool_loop_engine_runtime_owned_toolregistry_types_already_authoritative
       observed_postcondition: tool_loop_engine_and_tests_toolregistry_owned_runtime_required_executor_only_ratchet_PASS
@@ -1797,7 +1797,7 @@ run_checkpoint_and_resumption_state:
       rollback_commit_or_ref: 5b532da2
       accepted_slice_dependency_refs: [S3-I9@55196d0e]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: tool_loop_toolregistry_owned_batch_executor_runtime_owned_with_private_context
       observed_postcondition: toolregistry_sole_batch_executor_and_typed_context_old_runtime_paths_deleted_ratchet_PASS
@@ -1852,16 +1852,16 @@ run_checkpoint_and_resumption_state:
       lock_expires_at: 2026-07-13T01:24:10Z
       mutation_class: orange
       protected_surfaces: []
-      exact_files_packages_routes_state_authorities: [internal/actorruntime/adapter.go, internal/actorruntime/handler.go, internal/actorruntime/adapter_test.go, cmd/sandbox/main.go, focused_direct_tests, docs/runtime-dissolution-inventory.yaml]
-      forbidden_targets: [forwarding_methods, accessors, aliases, interfaces, optional_or_fallback_cores, second_runtime_instance, API_config_bootstrap_ownership, apihandler_removal, direct_sandbox_runtime_import_removal, tools, routes, state, models, apps, step3]
-      authority_edges_locked: [one_existing_runtime_core_instance, actor_dispatch_and_lifecycle_owned_by_actorruntime, runtime_business_behavior_unchanged, sandbox_routes_tools_state_unchanged]
+      exact_files_packages_routes_state_authorities: [internal/actorruntime/adapter.go, internal/actorruntime/handler.go, internal/actorruntime/adapter_test.go, cmd/autoputer/main.go, focused_direct_tests, docs/runtime-dissolution-inventory.yaml]
+      forbidden_targets: [forwarding_methods, accessors, aliases, interfaces, optional_or_fallback_cores, second_runtime_instance, API_config_bootstrap_ownership, apihandler_removal, direct_autoputer_runtime_import_removal, tools, routes, state, models, apps, step3]
+      authority_edges_locked: [one_existing_runtime_core_instance, actor_dispatch_and_lifecycle_owned_by_actorruntime, runtime_business_behavior_unchanged, autoputer_routes_tools_state_unchanged]
       implementer_agent: S3I11Implementer
       verifier_agent: S3I11Verifier
       pre_mutation_sha: ccc5c91a
       rollback_commit_or_ref: ccc5c91a
       accepted_slice_dependency_refs: [S3-I10@7b294b83]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: actorruntime_adapter_anonymously_embeds_runtime_Runtime_and_promotes_full_method_set
       observed_postcondition: one_explicit_named_nonanonymous_runtime_core_edge_no_promoted_method_set_ratchet_nonincreasing
@@ -1917,14 +1917,14 @@ run_checkpoint_and_resumption_state:
       protected_surfaces: []
       exact_files_packages_routes_state_authorities: [internal/runtime/config.go, internal/runtime/config_test.go, internal/provideriface, all_direct_config_callers_and_tests, docs/runtime-dissolution-inventory.yaml]
       forbidden_targets: [aliases, forwarders, duplicate_defaults, fallback_loaders, new_config_package, runtime_construction_behavior, API_routes, apihandler, bootstrap_topology, tools, state, models, apps, provider_routing, step4]
-      authority_edges_locked: [provideriface_sole_config_schema_defaults_loader_normalizer_authority, environment_and_default_behavior_unchanged, runtime_and_sandbox_behavior_unchanged]
+      authority_edges_locked: [provideriface_sole_config_schema_defaults_loader_normalizer_authority, environment_and_default_behavior_unchanged, runtime_and_autoputer_behavior_unchanged]
       implementer_agent: S3I12Implementer
       verifier_agent: S3I12Verifier
       pre_mutation_sha: 27e1567d
       rollback_commit_or_ref: 27e1567d
       accepted_slice_dependency_refs: [S3-step2-gate@27e1567d]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: provideriface_owns_Config_schema_runtime_owns_alias_defaults_loader_normalizer
       observed_postcondition: provideriface_sole_config_schema_defaults_loader_normalizer_runtime_config_files_deleted_ratchet_decreased
@@ -1944,7 +1944,7 @@ run_checkpoint_and_resumption_state:
       last_reconciled_at: 2026-07-13T01:52:47Z
       reconciliation_result: S3_I12_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
       close_condition: extraction_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
-    - slice_id: S3-I13-sandbox-runtime-import-cutover
+    - slice_id: S3-I13-autoputer-runtime-import-cutover
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 21
@@ -1952,12 +1952,12 @@ run_checkpoint_and_resumption_state:
       dispatch_nonce: s3-runtime-dissolution-i13-nonce-01
       dispatch_ref: S3I13Implementer
       agent_session_ref: agent://S3I13Implementer
-      dispatch_prompt_ref: docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md#exact-mutation-lock
+      dispatch_prompt_ref: docs/evidence/s3-autoputer-runtime-import-cutover-dispatch-2026-07-13.md#exact-mutation-lock
       implementer_job_ref: S3I13Implementer
       implementer_output_ref: agent://S3I13Implementer
       verifier_job_ref: S3I13RepairVerifierFollowup
       verifier_output_ref: agent://S3I13RepairVerifierFollowup
-      worktree_or_branch_ref: s3-i13-sandbox-runtime-import-cutover@6efcae63e2abd4a8fb83503966f137c0eefe183c
+      worktree_or_branch_ref: s3-i13-autoputer-runtime-import-cutover@6efcae63e2abd4a8fb83503966f137c0eefe183c
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, named_branch_in_shared_worktree]
       mutation_delivery_mode: named_branch_in_shared_worktree_reconciled_nonconforming
       direct_shared_worktree_allowed: false
@@ -1968,7 +1968,7 @@ run_checkpoint_and_resumption_state:
       transition_id: s3-i13-dispatch-intent-210
       expected_parent_sha: b9a08cdf
       stage_history:
-        - {status: dispatch_intent, transition_id: s3-i13-dispatch-intent-210, recorded_at: 2026-07-13T01:56:13Z, actor: Main, expected_parent_sha: 6ee86dd1, precondition: S3_I12_landed_config_authority_extracted_step3_continues, postcondition: exact_sandbox_runtime_import_cutover_slice_canonical, external_operation_id: not_applicable}
+        - {status: dispatch_intent, transition_id: s3-i13-dispatch-intent-210, recorded_at: 2026-07-13T01:56:13Z, actor: Main, expected_parent_sha: 6ee86dd1, precondition: S3_I12_landed_config_authority_extracted_step3_continues, postcondition: exact_autoputer_runtime_import_cutover_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i13-dispatched-211, recorded_at: 2026-07-13T01:57:59Z, actor: Main, expected_parent_sha: 9b8af38b, precondition: canonical_problem_record_exact_mutation_lock_and_live_epoch_20, postcondition: S3I13Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
         - {status: committed, transition_id: s3-i13-implementation-returned-212, recorded_at: 2026-07-13T02:49:31Z, actor: Main, expected_parent_sha: 08049400, precondition: clean_named_branch_commit_returned_with_shared_worktree_switch_detected, postcondition: canonical_main_restored_same_commit_integrated_focused_tests_and_ratchet_PASS_substrate_defect_reconciled, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i13-verifier-dispatched-213, recorded_at: 2026-07-13T02:51:18Z, actor: Main, expected_parent_sha: 7c014386, precondition: canonical_implementation_focused_tests_and_ratchet_PASS, postcondition: independent_S3I13Verifier_authorized, external_operation_id: not_applicable}
@@ -1985,19 +1985,19 @@ run_checkpoint_and_resumption_state:
       lock_expires_at: 2026-07-13T05:21:50Z
       mutation_class: orange
       protected_surfaces: []
-      exact_files_packages_routes_state_authorities: [cmd/sandbox/main.go, cmd/sandbox/main_test.go, internal/runtime/provider.go, internal/runtime/model_policy.go, internal/provideriface, internal/agentprofile, internal/toolregistry, all_direct_stub_profile_registry_model_path_callers_and_tests, docs/runtime-dissolution-inventory.yaml]
+      exact_files_packages_routes_state_authorities: [cmd/autoputer/main.go, cmd/autoputer/main_test.go, internal/runtime/provider.go, internal/runtime/model_policy.go, internal/provideriface, internal/agentprofile, internal/toolregistry, all_direct_stub_profile_registry_model_path_callers_and_tests, docs/runtime-dissolution-inventory.yaml]
       forbidden_targets: [aliases, forwarders, wrappers, callbacks, duplicate_stub_paths, fallback_constructors, new_package, API_routes, apihandler, runtime_construction_behavior, state, models, apps, provider_routing_semantics, lifecycle_order, step4]
-      authority_edges_locked: [cmd_sandbox_no_runtime_import, canonical_agentprofile_and_toolregistry_symbols, provideriface_model_policy_path_authority, one_complete_nonruntime_stub_provider_behavior]
+      authority_edges_locked: [cmd_autoputer_no_runtime_import, canonical_agentprofile_and_toolregistry_symbols, provideriface_model_policy_path_authority, one_complete_nonruntime_stub_provider_behavior]
       implementer_agent: S3I13Implementer
       verifier_agent: S3I13Verifier
       pre_mutation_sha: 6ee86dd1
       rollback_commit_or_ref: 6ee86dd1
       accepted_slice_dependency_refs: [S3-I12@58593d85]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
-      expected_precondition: cmd_sandbox_directly_imports_runtime_for_stub_profiles_registry_and_model_policy_path
-      observed_postcondition: cmd_sandbox_runtime_import_deleted_stub_profiles_registry_model_path_moved_to_canonical_owners_ratchet_decreased
+      expected_precondition: cmd_autoputer_directly_imports_runtime_for_stub_profiles_registry_and_model_policy_path
+      observed_postcondition: cmd_autoputer_runtime_import_deleted_stub_profiles_registry_model_path_moved_to_canonical_owners_ratchet_decreased
       external_operation_idempotent: true
       implementation_sha_or_dirty_snapshot: 2c04d346
       implementation_commit_sha: 08049400
@@ -2005,9 +2005,9 @@ run_checkpoint_and_resumption_state:
       ci_run_ref: https://github.com/choir-hip/go-choir/actions/runs/29222195480#attempt-3
       deploy_ref: https://github.com/choir-hip/go-choir/actions/runs/29222195480#job-86731205884
       deployed_sha: 2c04d34660fc45db417d608f3e838345b0ad345c
-      acceptance_ref: docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md#s3-i13-product-path-proof-correction
-      acceptance_contract: cmd_sandbox_runtime_import_deleted_stub_and_bootstrap_symbols_moved_to_canonical_owners_behavior_preserved
-      evidence_refs: [docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md, docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md, agent://S3I13Implementer, agent://S3I13Verifier, agent://S3I13RepairVerifier, agent://S3I13RepairVerifierFollowup, https://github.com/choir-hip/go-choir/actions/runs/29222195480#attempt-3]
+      acceptance_ref: docs/evidence/s3-autoputer-runtime-import-cutover-dispatch-2026-07-13.md#s3-i13-product-path-proof-correction
+      acceptance_contract: cmd_autoputer_runtime_import_deleted_stub_and_bootstrap_symbols_moved_to_canonical_owners_behavior_preserved
+      evidence_refs: [docs/evidence/s3-autoputer-runtime-import-cutover-dispatch-2026-07-13.md, docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md, agent://S3I13Implementer, agent://S3I13Verifier, agent://S3I13RepairVerifier, agent://S3I13RepairVerifierFollowup, https://github.com/choir-hip/go-choir/actions/runs/29222195480#attempt-3]
       open_findings: []
       landed_commit_sha: 2c04d346
       adjudication: three_PASS_no_blockers_one_inconclusive_permission_stop_S3_I13_closed_next_step3_API_iteration_authorized
@@ -2048,7 +2048,7 @@ run_checkpoint_and_resumption_state:
       lock_expires_at: 2026-07-13T06:40:01Z
       mutation_class: orange
       protected_surfaces: []
-      exact_files_packages_routes_state_authorities: [internal/runtime/tools_product_api.go, internal/runtime/tools_product_api_test.go, internal/runtime/tool_profiles.go, internal/runtime/agent_tools_test.go, internal/apihandler/product_api_tool.go, internal/apihandler/product_api_tool_test.go, cmd/sandbox/main.go, docs/runtime-dissolution-inventory.yaml]
+      exact_files_packages_routes_state_authorities: [internal/runtime/tools_product_api.go, internal/runtime/tools_product_api_test.go, internal/runtime/tool_profiles.go, internal/runtime/agent_tools_test.go, internal/apihandler/product_api_tool.go, internal/apihandler/product_api_tool_test.go, cmd/autoputer/main.go, docs/runtime-dissolution-inventory.yaml]
       forbidden_targets: [runtime_APIHandler, apihandler_wrapper, route_changes, app_domain_code, actor_lifecycle, provider_selection, state, models, step4, aliases, interfaces, callbacks, forwarders, accessors, fallback_registration, second_server_or_mux, new_package]
       authority_edges_locked: [one_canonical_server_route_table, apihandler_owns_product_API_tool_transport, runtime_no_production_API_constructor_caller, super_only_owner_scoped_product_tool_behavior_preserved]
       implementer_agent: S3I14Implementer
@@ -2057,7 +2057,7 @@ run_checkpoint_and_resumption_state:
       rollback_commit_or_ref: 9ee58796
       accepted_slice_dependency_refs: [S3-I13@2c04d346]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_public_product_API
       expected_precondition: runtime_product_tool_constructs_duplicate_server_handler_and_route_table_per_call
       observed_postcondition: apihandler_product_tool_bound_to_canonical_server_runtime_duplicate_constructor_and_registration_deleted
@@ -2077,7 +2077,7 @@ run_checkpoint_and_resumption_state:
       last_reconciled_at: 2026-07-13T05:48:20Z
       reconciliation_result: S3_I14_landed_deployed_public_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
       close_condition: prerequisite_landed_deployed_public_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
-    - slice_id: S3-I15-sandbox-bootstrap-ownership
+    - slice_id: S3-I15-autoputer-bootstrap-ownership
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 23
@@ -2085,12 +2085,12 @@ run_checkpoint_and_resumption_state:
       dispatch_nonce: s3-runtime-dissolution-i15-nonce-01
       dispatch_ref: S3I15Implementer
       agent_session_ref: agent://S3I15Implementer
-      dispatch_prompt_ref: docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md#exact-mutation-lock
+      dispatch_prompt_ref: docs/evidence/s3-autoputer-bootstrap-ownership-dispatch-2026-07-13.md#exact-mutation-lock
       implementer_job_ref: S3I15Implementer
       implementer_output_ref: agent://S3I15Implementer
       verifier_job_ref: S3I15Verifier
       verifier_output_ref: agent://S3I15Verifier
-      worktree_or_branch_ref: agent/s3-i15-sandbox-bootstrap@2c950a7eb6439cd4148ce7b87554676c70d00609
+      worktree_or_branch_ref: agent/s3-i15-autoputer-bootstrap@2c950a7eb6439cd4148ce7b87554676c70d00609
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
       direct_shared_worktree_allowed: false
@@ -2101,10 +2101,10 @@ run_checkpoint_and_resumption_state:
       transition_id: s3-i15-dispatch-intent-233
       expected_parent_sha: efd763c3
       stage_history:
-        - {status: dispatch_intent, transition_id: s3-i15-dispatch-intent-233, recorded_at: 2026-07-13T05:52:40Z, actor: Main, expected_parent_sha: 3c651e58, precondition: S3_I14_landed_duplicate_API_constructor_deleted, postcondition: exact_sandbox_bootstrap_ownership_and_apihandler_wrapper_deletion_slice_canonical, external_operation_id: not_applicable}
+        - {status: dispatch_intent, transition_id: s3-i15-dispatch-intent-233, recorded_at: 2026-07-13T05:52:40Z, actor: Main, expected_parent_sha: 3c651e58, precondition: S3_I14_landed_duplicate_API_constructor_deleted, postcondition: exact_autoputer_bootstrap_ownership_and_apihandler_wrapper_deletion_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i15-dispatched-235, recorded_at: 2026-07-13T05:54:27Z, actor: Main, expected_parent_sha: ced98b5b, precondition: canonical_problem_record_exact_mutation_lock_and_live_epoch_23, postcondition: S3I15Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
-        - {status: blocked_incomplete, transition_id: s3-i15-cycle-blocker-236, recorded_at: 2026-07-13T06:02:57Z, actor: Main, expected_parent_sha: 9caf31c6, precondition: exact_bootstrap_move_compile_probe, postcondition: preexisting_runtime_to_sandbox_ResolveFilesRoot_reverse_edge_documented_provideriface_ownership_repair_required, external_operation_id: not_applicable}
-        - {status: committed, transition_id: s3-i15-implementation-returned-237, recorded_at: 2026-07-13T06:19:21Z, actor: Main, expected_parent_sha: 887bbdde, precondition: clean_isolated_commit_2c950a7e_descends_from_problem_record_5d427cc3, postcondition: sandbox_bootstrap_owned_wrapper_and_reverse_dependency_deleted_focused_tests_smoke_ratchet_PASS, external_operation_id: not_applicable}
+        - {status: blocked_incomplete, transition_id: s3-i15-cycle-blocker-236, recorded_at: 2026-07-13T06:02:57Z, actor: Main, expected_parent_sha: 9caf31c6, precondition: exact_bootstrap_move_compile_probe, postcondition: preexisting_runtime_to_autoputer_ResolveFilesRoot_reverse_edge_documented_provideriface_ownership_repair_required, external_operation_id: not_applicable}
+        - {status: committed, transition_id: s3-i15-implementation-returned-237, recorded_at: 2026-07-13T06:19:21Z, actor: Main, expected_parent_sha: 887bbdde, precondition: clean_isolated_commit_2c950a7e_descends_from_problem_record_5d427cc3, postcondition: autoputer_bootstrap_owned_wrapper_and_reverse_dependency_deleted_focused_tests_smoke_ratchet_PASS, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i15-verifier-dispatched-238, recorded_at: 2026-07-13T06:19:21Z, actor: Main, expected_parent_sha: 887bbdde, precondition: canonical_implementation_focused_tests_smoke_and_ratchet_PASS, postcondition: independent_S3I15Verifier_authorized, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i15-verifier-pass-239, recorded_at: 2026-07-13T06:46:41Z, actor: S3I15Verifier, expected_parent_sha: 13ee64d3, precondition: independent_bootstrap_wrapper_cycle_and_behavior_verification, postcondition: PASS_confidence_0_98_no_findings, external_operation_id: not_applicable}
         - {status: accepted, transition_id: s3-i15-ci-deploy-accepted-240, recorded_at: 2026-07-13T06:46:41Z, actor: Main, expected_parent_sha: 13ee64d3, precondition: full_CI_attempt_2_deploy_and_public_product_smoke_complete, postcondition: deployed_887bbdde_public_Texture_documents_200_consensus_pending, external_operation_id: github_actions_29228634606_attempt_2}
@@ -2112,19 +2112,19 @@ run_checkpoint_and_resumption_state:
       lock_expires_at: 2026-07-13T07:52:40Z
       mutation_class: orange
       protected_surfaces: []
-      exact_files_packages_routes_state_authorities: [cmd/sandbox/main.go, cmd/sandbox/main_test.go, internal/sandbox/run.go, internal/sandbox/run_test.go, internal/sandbox/files.go, internal/apihandler/api.go, internal/provideriface/config.go, internal/provideriface/config_test.go, internal/runtime/api.go, internal/runtime/texture_import.go, internal/runtime/texture_live_llm_workflow_test.go, docs/runtime-dissolution-inventory.yaml]
+      exact_files_packages_routes_state_authorities: [cmd/autoputer/main.go, cmd/autoputer/main_test.go, internal/autoputer/run.go, internal/autoputer/run_test.go, internal/autoputer/files.go, internal/apihandler/api.go, internal/provideriface/config.go, internal/provideriface/config_test.go, internal/runtime/api.go, internal/runtime/texture_import.go, internal/runtime/texture_live_llm_workflow_test.go, docs/runtime-dissolution-inventory.yaml]
       forbidden_targets: [runtime_APIHandler_method_move, app_domain_code, routes, actor_lifecycle, provider_semantics, state, models, health_policy, deployment_config, step4, new_package, aliases, interfaces, callbacks, accessors, forwarders, fallback_bootstrap, second_server_or_mux, compatibility_shims]
-      authority_edges_locked: [internal_sandbox_sole_bootstrap_composition_owner, cmd_sandbox_process_entry_only, apihandler_wrapper_deleted, one_runtime_API_declaration_and_route_path, product_tool_same_canonical_server]
+      authority_edges_locked: [internal_autoputer_sole_bootstrap_composition_owner, cmd_autoputer_process_entry_only, apihandler_wrapper_deleted, one_runtime_API_declaration_and_route_path, product_tool_same_canonical_server]
       implementer_agent: S3I15Implementer
       verifier_agent: S3I15Verifier
       pre_mutation_sha: 3c651e58
       rollback_commit_or_ref: 3c651e58
       accepted_slice_dependency_refs: [S3-I14@ca9b3142]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_public_product_API
-      expected_precondition: cmd_sandbox_owns_bootstrap_and_apihandler_wraps_runtime_API
-      observed_postcondition: internal_sandbox_sole_bootstrap_owner_cmd_entry_only_apihandler_wrapper_and_runtime_to_sandbox_reverse_dependency_deleted
+      expected_precondition: cmd_autoputer_owns_bootstrap_and_apihandler_wraps_runtime_API
+      observed_postcondition: internal_autoputer_sole_bootstrap_owner_cmd_entry_only_apihandler_wrapper_and_runtime_to_autoputer_reverse_dependency_deleted
       external_operation_idempotent: true
       implementation_sha_or_dirty_snapshot: 887bbdde
       implementation_commit_sha: 887bbdde
@@ -2132,9 +2132,9 @@ run_checkpoint_and_resumption_state:
       ci_run_ref: https://github.com/choir-hip/go-choir/actions/runs/29228634606#attempt-2
       deploy_ref: https://github.com/choir-hip/go-choir/actions/runs/29228634606#job-86749938685
       deployed_sha: 887bbdde2f06d2a0b3636cd4e8186227498da304
-      acceptance_ref: docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md#s3-i15-ci-deploy-and-acceptance
-      acceptance_contract: sandbox_package_sole_bootstrap_owner_cmd_entry_only_apihandler_wrapper_deleted_behavior_preserved
-      evidence_refs: [docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md, /tmp/choir-s3-i15-final-consensus-20260713, agent://S3I15Implementer, agent://S3I15Verifier, https://github.com/choir-hip/go-choir/actions/runs/29228634606#attempt-2]
+      acceptance_ref: docs/evidence/s3-autoputer-bootstrap-ownership-dispatch-2026-07-13.md#s3-i15-ci-deploy-and-acceptance
+      acceptance_contract: autoputer_package_sole_bootstrap_owner_cmd_entry_only_apihandler_wrapper_deleted_behavior_preserved
+      evidence_refs: [docs/evidence/s3-autoputer-bootstrap-ownership-dispatch-2026-07-13.md, /tmp/choir-s3-i15-final-consensus-20260713, agent://S3I15Implementer, agent://S3I15Verifier, https://github.com/choir-hip/go-choir/actions/runs/29228634606#attempt-2]
       open_findings: [nonattributable_staging_gateway_readiness_local_runtime_dolt_ollama_refused]
       landed_commit_sha: 887bbdde2f06d2a0b3636cd4e8186227498da304
       adjudication: PASS_four_independent_consensus_verdicts_no_blockers_S3_I15_closed_only
@@ -2176,18 +2176,18 @@ run_checkpoint_and_resumption_state:
       lock_expires_at: 2026-07-13T09:00:11Z
       mutation_class: orange
       protected_surfaces: []
-      exact_files_packages_routes_state_authorities: [internal/apihandler/routes.go, internal/runtime/api.go, internal/runtime/api_candidate_package_intake.go, internal/sandbox/run.go, directly_affected_route_registration_tests, docs/runtime-dissolution-inventory.yaml]
+      exact_files_packages_routes_state_authorities: [internal/apihandler/routes.go, internal/runtime/api.go, internal/runtime/api_candidate_package_intake.go, internal/autoputer/run.go, directly_affected_route_registration_tests, docs/runtime-dissolution-inventory.yaml]
       forbidden_targets: [APIHandler_method_or_body_move, app_domain_behavior, route_path_or_order_change, runtime_method_config_provider_store_trace_actor_lifecycle_change, step4, new_package, interface, callback_table, generic_constraint_facade, reflection, alias, accessor, forwarder, wrapper, test_only_registrar_copy, compatibility_shim, dual_registration_path, second_server_or_mux]
-      authority_edges_locked: [internal_apihandler_sole_live_route_table_owner, internal_runtime_zero_registrar_declarations, internal_sandbox_one_canonical_registrar_call, product_tool_same_canonical_server]
+      authority_edges_locked: [internal_apihandler_sole_live_route_table_owner, internal_runtime_zero_registrar_declarations, internal_autoputer_one_canonical_registrar_call, product_tool_same_canonical_server]
       implementer_agent: S3I16Implementer
       verifier_agent: S3I16Verifier
       pre_mutation_sha: 560f0942
       rollback_commit_or_ref: 560f0942
       accepted_slice_dependency_refs: [S3-I15@887bbdde]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_public_product_API
-      expected_precondition: runtime_owns_live_route_table_sandbox_calls_runtime_registrar
+      expected_precondition: runtime_owns_live_route_table_autoputer_calls_runtime_registrar
       observed_postcondition: apihandler_sole_live_route_registrar_runtime_registrars_deleted_exact_46_slot_order_preserved
       external_operation_idempotent: true
       implementation_sha_or_dirty_snapshot: 3b10893c
@@ -2298,16 +2298,16 @@ run_checkpoint_and_resumption_state:
       conjecture_delta: route_owner_can_atomically_own_handler_transport_while_runtime_retains_cohesive_business_operations
       heresy_delta: {discovered: runtime_still_owns_HTTP_handler_implementation_after_route_cutover, introduced: none_allowed, repaired: runtime_APIHandler_and_receiver_authority_zero}
       admissible_evidence_class: exact_source_and_dependency_proof_focused_behavior_independent_red_verification_full_CI_race_SBoM_deploy_identity_authenticated_controlled_write_read_and_public_read_consensus
-      exact_files_packages_routes_state_authorities: [internal/apihandler, internal/runtime/api.go, internal/runtime/api_app_promotion.go, internal/runtime/api_candidate_package_intake.go, internal/runtime/api_costs.go, internal/runtime/api_texture_prompt_eval.go, internal/runtime/api_trajectory.go, internal/runtime/browser.go, internal/runtime/content.go, internal/runtime/desktop.go, internal/runtime/live_ws.go, internal/runtime/media_state.go, internal/runtime/podcast.go, internal/runtime/prompts.go, internal/runtime/runtime_refresh.go, internal/runtime/texture.go, internal/runtime/texture_agent_revision.go, internal/runtime/texture_import.go, internal/runtime/texture_lineage.go, internal/runtime/texture_merge.go, internal/runtime/texture_proposals.go, internal/sandbox/run.go, direct_tests, docs/runtime-dissolution-inventory.yaml]
+      exact_files_packages_routes_state_authorities: [internal/apihandler, internal/runtime/api.go, internal/runtime/api_app_promotion.go, internal/runtime/api_candidate_package_intake.go, internal/runtime/api_costs.go, internal/runtime/api_texture_prompt_eval.go, internal/runtime/api_trajectory.go, internal/runtime/browser.go, internal/runtime/content.go, internal/runtime/desktop.go, internal/runtime/live_ws.go, internal/runtime/media_state.go, internal/runtime/podcast.go, internal/runtime/prompts.go, internal/runtime/runtime_refresh.go, internal/runtime/texture.go, internal/runtime/texture_agent_revision.go, internal/runtime/texture_import.go, internal/runtime/texture_lineage.go, internal/runtime/texture_merge.go, internal/runtime/texture_proposals.go, internal/autoputer/run.go, direct_tests, docs/runtime-dissolution-inventory.yaml]
       forbidden_targets: [route_path_order_method_status_body_schema_auth_change, domain_state_semantics_change, candidate_promotion_provider_store_actor_lifecycle_Texture_authority_move, new_package, alias, wrapper, interface, callback_table, generic_facade, accessor, forwarder, dual_handler, dual_route, duplicate_registrar, compatibility_path, unrelated_formatting]
-      authority_edges_locked: [apihandler_sole_handler_type_constructor_and_route_table, runtime_zero_APIHandler_declarations_receivers_aliases, sandbox_one_handler_construction, same_canonical_server_product_tool, runtime_business_operations_unchanged]
+      authority_edges_locked: [apihandler_sole_handler_type_constructor_and_route_table, runtime_zero_APIHandler_declarations_receivers_aliases, autoputer_one_handler_construction, same_canonical_server_product_tool, runtime_business_operations_unchanged]
       implementer_agent: S3I18Implementer
       verifier_agent: pending_distinct_red_verifier
       pre_mutation_sha: e20a7e01
       rollback_commit_or_ref: e20a7e01
       accepted_slice_dependency_refs: [S3-I16@3b10893c, S3-I17@rejected_with_evidence, /tmp/choir-s3-i17-blocker-consensus-20260713]
       external_operation_id: not_applicable
-      effect_authority: canonical_git_ref_then_staging_sandbox
+      effect_authority: canonical_git_ref_then_staging_autoputer
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_public_product_API
       expected_precondition: apihandler_owns_routes_but_runtime_owns_APIHandler_and_128_receivers
       observed_postcondition: clean_no_source_commit_mechanical_cutover_fails_with_238_compile_errors_77_private_declaration_classes_21_private_runtime_members_and_11_test_ownership_files
@@ -2368,10 +2368,10 @@ run_checkpoint_and_resumption_state:
   evidence_artifact_refs:
     - docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md
     - docs/evidence/s3-step2-phase-gate-2026-07-13.md
-    - docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md
+    - docs/evidence/s3-autoputer-runtime-import-cutover-dispatch-2026-07-13.md
     - docs/evidence/s3-product-api-tool-ownership-dispatch-2026-07-13.md
     - docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md
-    - docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md
+    - docs/evidence/s3-autoputer-bootstrap-ownership-dispatch-2026-07-13.md
     - docs/evidence/s3-api-handler-ownership-dispatch-2026-07-13.md
     - docs/evidence/s3-candidate-intake-harness-deletion-dispatch-2026-07-13.md
     - docs/evidence/s3-api-handler-ownership-blocker-2026-07-13.md

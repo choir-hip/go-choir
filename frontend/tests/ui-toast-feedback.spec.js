@@ -19,7 +19,7 @@ test('conductor feedback is announced and can be dismissed', async ({ page }) =>
     const pathname = new URL(route.request().url()).pathname;
     let body = {};
     if (pathname === '/api/preferences/theme') body = { theme: {} };
-    else if (pathname === '/api/shell/bootstrap') body = { sandbox_id: 'ux-test-computer' };
+    else if (pathname === '/api/shell/bootstrap') body = { computer_id: 'ux-test-computer' };
     else if (pathname === '/api/prompt-bar') body = { submission_id: 'ux-toast' };
     else if (pathname === '/api/prompt-bar/submissions/ux-toast') {
       body = { state: 'completed', decision: { action: 'toast', message: 'Request acknowledged' } };

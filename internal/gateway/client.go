@@ -17,22 +17,22 @@ import (
 
 // GatewayClient is a provider.Provider implementation that routes LLM calls
 // through the gateway service instead of calling upstream providers directly.
-// The sandbox runtime uses this client when the gateway is the configured
+// The autoputer runtime uses this client when the gateway is the configured
 // provider boundary.
 //
-// The client authenticates to the gateway using a sandbox credential issued
+// The client authenticates to the gateway using a autoputer credential issued
 // by the gateway's identity registry. The gateway injects host-side provider
 // credentials before calling the upstream (VAL-GATEWAY-004).
 type GatewayClient struct {
 	gatewayURL string // base URL of the gateway service
-	token      string // sandbox credential token
+	token      string // autoputer credential token
 	httpClient *http.Client
 }
 
 const gatewayClientHTTPTimeout = 10*time.Minute + 30*time.Second
 
 // NewGatewayClient creates a GatewayClient pointing at the given gateway URL
-// with the given sandbox credential token.
+// with the given autoputer credential token.
 func NewGatewayClient(gatewayURL, token string) *GatewayClient {
 	return &GatewayClient{
 		gatewayURL: gatewayURL,
@@ -50,14 +50,14 @@ func (c *GatewayClient) IsReal() bool { return true }
 func (c *GatewayClient) setAuthorization(req *http.Request) error {
 	token := strings.TrimSpace(c.token)
 	if token == "" {
-		return fmt.Errorf("gateway client: missing sandbox credential")
+		return fmt.Errorf("gateway client: missing autoputer credential")
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	return nil
 }
 
 // Call sends the LLM request through the gateway. The gateway authenticates
-// the sandbox caller, injects host-side credentials, calls the upstream
+// the autoputer caller, injects host-side credentials, calls the upstream
 // provider, and returns the response with sanitized errors.
 func (c *GatewayClient) Call(ctx context.Context, req provider.LLMRequest) (*provider.LLMResponse, error) {
 	endpoint := c.gatewayURL + "/provider/v1/inference"

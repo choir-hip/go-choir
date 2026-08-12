@@ -115,7 +115,7 @@ func registerRoutesForTest(t *testing.T, srv *server.Server, enableTestAPIs bool
 		t.Fatalf("open route test store: %v", err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	core := agentcore.New(provideriface.Config{SandboxID: "routes-test", EnableTestAPIs: enableTestAPIs}, s, events.NewEventBus(), provider.NewStubProvider(0))
+	core := agentcore.New(provideriface.Config{ComputerID: "routes-test", EnableTestAPIs: enableTestAPIs}, s, events.NewEventBus(), provider.NewStubProvider(0))
 	RegisterRoutes(
 		srv,
 		agentcore.NewAPIHandler(core),

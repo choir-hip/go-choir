@@ -65,7 +65,7 @@ func (rt *Runtime) verifyRequiredTextureRevisions(ctx context.Context, rec *type
 		if docID == "" {
 			continue
 		}
-		revisions, err := rt.store.ListRevisionsByScope(ctx, docID, rec.OwnerID, rec.SandboxID, 200)
+		revisions, err := rt.store.ListRevisionsByScope(ctx, docID, rec.OwnerID, rec.ComputerID, 200)
 		if err == nil && len(revisions) == 0 {
 			revisions, err = rt.store.ListRevisionsByDoc(ctx, docID, rec.OwnerID, 200)
 		}

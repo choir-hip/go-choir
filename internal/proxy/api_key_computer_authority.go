@@ -104,13 +104,13 @@ func (h *Handler) requireAPIKeyComputerTarget(
 			}
 		}
 		return &resolvedComputerTarget{
-			ComputerID: ownership.ComputerID,
-			UserID:     ownership.UserID,
-			DesktopID:  ownership.DesktopID,
-			VMID:       strings.TrimSpace(ownership.VMID),
-			SandboxURL: strings.TrimSpace(ownership.SandboxURL),
-			State:      strings.TrimSpace(ownership.State),
-			Epoch:      ownership.Epoch,
+			ComputerID:  ownership.ComputerID,
+			UserID:      ownership.UserID,
+			DesktopID:   ownership.DesktopID,
+			VMID:        strings.TrimSpace(ownership.VMID),
+			ComputerURL: strings.TrimSpace(ownership.ComputerURL),
+			State:       strings.TrimSpace(ownership.State),
+			Epoch:       ownership.Epoch,
 		}, true
 	}
 	if named := strings.TrimSpace(pathComputerID); named != "" && named != boundComputerID {
@@ -151,27 +151,27 @@ func (h *Handler) requireAPIKeyComputerTarget(
 		}
 	}
 	return &resolvedComputerTarget{
-		ComputerID: ownership.ComputerID,
-		UserID:     ownership.UserID,
-		DesktopID:  ownership.DesktopID,
-		VMID:       strings.TrimSpace(ownership.VMID),
-		SandboxURL: strings.TrimSpace(ownership.SandboxURL),
-		State:      strings.TrimSpace(ownership.State),
-		Epoch:      ownership.Epoch,
+		ComputerID:  ownership.ComputerID,
+		UserID:      ownership.UserID,
+		DesktopID:   ownership.DesktopID,
+		VMID:        strings.TrimSpace(ownership.VMID),
+		ComputerURL: strings.TrimSpace(ownership.ComputerURL),
+		State:       strings.TrimSpace(ownership.State),
+		Epoch:       ownership.Epoch,
 	}, true
 }
 
-// resolveSandboxURLForComputerTarget preserves the exact stable-computer join
+// resolveComputerURLForComputerTarget preserves the exact stable-computer join
 // for API keys. Unlike cookie requests, a bearer request never re-resolves or
 // wakes a logical desktop after authorization: it uses only the exact joined
 // ownership's current active realization. Recovery remains an explicit
 // computer route and rechecks the same stable ComputerID before effects.
-func (h *Handler) resolveSandboxURLForComputerTarget(ctx context.Context, authResult *AuthResult, target *resolvedComputerTarget, desktopID string) (string, error) {
+func (h *Handler) resolveComputerURLForComputerTarget(ctx context.Context, authResult *AuthResult, target *resolvedComputerTarget, desktopID string) (string, error) {
 	if authResult == nil {
 		return "", fmt.Errorf("authentication authority unavailable")
 	}
 	if authResult.AuthMethod != "api_key" {
-		return h.resolveSandboxURL(ctx, authResult.UserID, desktopID)
+		return h.resolveComputerURL(ctx, authResult.UserID, desktopID)
 	}
 	if target == nil || target.UserID != authResult.UserID || target.ComputerID == "" {
 		return "", fmt.Errorf("api key computer authority unavailable")
@@ -179,11 +179,11 @@ func (h *Handler) resolveSandboxURLForComputerTarget(ctx context.Context, authRe
 	if authResult.ComputerID != "" && target.ComputerID != authResult.ComputerID {
 		return "", fmt.Errorf("api key computer authority unavailable")
 	}
-	if target.State != "active" || target.SandboxURL == "" {
+	if target.State != "active" || target.ComputerURL == "" {
 		return "", fmt.Errorf("api key computer realization unavailable")
 	}
 	if err := h.ensureComputerVersionRoute(ctx, target.UserID, target.DesktopID); err != nil {
 		return "", err
 	}
-	return target.SandboxURL, nil
+	return target.ComputerURL, nil
 }

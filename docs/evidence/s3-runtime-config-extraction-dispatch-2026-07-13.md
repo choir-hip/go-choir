@@ -10,7 +10,7 @@
 
 ## Problem Record
 
-The unanimous S3 step-2 gate authorized step 3: move real API/config/bootstrap ownership, remove the `apihandler` wrapper, and remove direct `cmd/sandbox` runtime imports. `provideriface.Config` already owns the pure runtime configuration schema, but `internal/runtime/config.go` still re-exports that type, owns every default and environment loader/normalizer, and is the config source used by sandbox bootstrap. This leaves config authority in the package targeted for extinction and retains a compatibility alias explicitly classified `delete` by the executable inventory.
+The unanimous S3 step-2 gate authorized step 3: move real API/config/bootstrap ownership, remove the `apihandler` wrapper, and remove direct `cmd/autoputer` runtime imports. `provideriface.Config` already owns the pure runtime configuration schema, but `internal/runtime/config.go` still re-exports that type, owns every default and environment loader/normalizer, and is the config source used by autoputer bootstrap. This leaves config authority in the package targeted for extinction and retains a compatibility alias explicitly classified `delete` by the executable inventory.
 
 This is step-3 substrate debt, not an app-domain cutover. `provideriface` is the existing acyclic owner of the schema consumed by runtime, actorruntime, provider, and bootstrap; creating a second config package or leaving aliases would add authority. The smallest first step-3 slice is a clean move of config defaults/loading/normalization into `provideriface`, with every caller migrated and the runtime config file deleted. API and bootstrap-wrapper deletion remain later step-3 slices.
 
@@ -18,14 +18,14 @@ This is step-3 substrate debt, not an app-domain cutover. `provideriface` is the
 
 Move all live declarations and behavior from `internal/runtime/config.go` into `internal/provideriface` beside the canonical `Config` schema. Move the complete behavioral tests from `internal/runtime/config_test.go` to the owning package. Migrate every production, test, build-tag, and external caller directly to `provideriface.Config`, `provideriface.LoadConfig`, and provideriface-owned defaults. Delete runtime's `Config` alias, config file, and all config helper declarations; leave no aliases, forwarders, duplicate defaults, wrappers, or fallback loaders.
 
-Preserve every environment name, default value, normalization rule, filesystem derivation, explicit-zero behavior, config field value, app-promotion command, provider timeout, activation budget, model policy, trace, Qdrant/Ollama, and test behavior byte-for-byte. Do not alter runtime construction, API/routes, `apihandler`, cmd/sandbox bootstrap topology beyond direct config symbol qualification, tools, state, models, apps, provider routing, or begin app/domain step 4.
+Preserve every environment name, default value, normalization rule, filesystem derivation, explicit-zero behavior, config field value, app-promotion command, provider timeout, activation budget, model policy, trace, Qdrant/Ollama, and test behavior byte-for-byte. Do not alter runtime construction, API/routes, `apihandler`, cmd/autoputer bootstrap topology beyond direct config symbol qualification, tools, state, models, apps, provider routing, or begin app/domain step 4.
 
 ## Acceptance
 
 - one canonical config schema/default/loader/normalizer authority exists in `internal/provideriface`;
 - `internal/runtime/config.go` and `config_test.go` are deleted;
 - no runtime config alias/forwarder/default/helper or replacement config path remains;
-- all default, focused config, runtime, actorruntime, provider, gatewayruntime, and cmd/sandbox caller paths compile and focused behavior tests pass;
+- all default, focused config, runtime, actorruntime, provider, gatewayruntime, and cmd/autoputer caller paths compile and focused behavior tests pass;
 - runtime production/test LOC, exports, caller edges, compatibility markers, and unused-export debt decrease while every gated authority count is non-increasing;
 - independent verification, full CI, staging identity/product smoke, consensus, and adjudication pass.
 
@@ -33,8 +33,8 @@ Preserve every environment name, default value, normalization rule, filesystem d
 
 - Integrated implementation `58593d85` from isolated commit `c435257234137e4aaa16ed63c171168a7c9630dd`.
 - `provideriface` now solely owns `Config`, all defaults, `LoadConfig`, `NormalizeConfig`, and private parsing/filesystem helpers; runtime config source and tests are deleted or moved to their behavioral owner.
-- All mechanically located production, default-test, integration-tag, comprehensive-tag, actorruntime, provider/gatewayruntime, and sandbox callers use provideriface directly; no runtime alias, forwarder, duplicate helper/default, or fallback loader remains.
-- Focused provideriface config, sandbox bootstrap-value, runtime activation/run-memory, actorruntime, and integration-tag runtime checks pass. Comprehensive-tag compilation reproduces only the identical pre-existing `prompts_test.go`/`texture_test.go` failures.
+- All mechanically located production, default-test, integration-tag, comprehensive-tag, actorruntime, provider/gatewayruntime, and autoputer callers use provideriface directly; no runtime alias, forwarder, duplicate helper/default, or fallback loader remains.
+- Focused provideriface config, autoputer bootstrap-value, runtime activation/run-memory, actorruntime, and integration-tag runtime checks pass. Comprehensive-tag compilation reproduces only the identical pre-existing `prompts_test.go`/`texture_test.go` failures.
 - Ratchet passed after canonical regeneration: Go files `147 -> 146`, production files `77 -> 76`, production LOC `44680 -> 44338`, test LOC `50266 -> 50172`, exports `1061 -> 1031`, caller edges `549 -> 520`, compatibility markers `13 -> 12`; every other gated authority count is flat.
 
 ## S3-I12 Independent Verification
@@ -54,4 +54,4 @@ Preserve every environment name, default value, normalization rule, filesystem d
 
 - Four-reviewer panel returned four `PASS` verdicts, no blocking findings, and confidence `0.96-1.0`.
 - Every reviewer authorized closing S3-I12 and proceeding only to the next ordered S3 step-3 iteration.
-- Adjudication: `PASS`; comprehensive-tag parent drift is residual evidence, not an in-slice blocker. API/apihandler/bootstrap/direct-sandbox-import work remains open.
+- Adjudication: `PASS`; comprehensive-tag parent drift is residual evidence, not an in-slice blocker. API/apihandler/bootstrap/direct-autoputer-import work remains open.

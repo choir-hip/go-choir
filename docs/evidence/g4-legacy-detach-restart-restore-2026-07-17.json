@@ -34,7 +34,7 @@
         "commit": "b746fd71756fd9d0ed84a1317bda549cf351fd22",
         "status": "active"
       },
-      "sandbox": {
+      "autoputer": {
         "commit": "b746fd71756fd9d0ed84a1317bda549cf351fd22",
         "status": "installed"
       },
@@ -71,7 +71,7 @@
       "kind": "interactive",
       "last_active_at": "2026-05-14T01:00:55.270949232Z",
       "published": true,
-      "sandbox_url": "http://172.3.0.2:8085",
+      "computer_url": "http://172.3.0.2:8085",
       "state": "hibernated",
       "stopped_by": "idle",
       "user_id": "mission-restart-1778558340",
@@ -108,7 +108,7 @@
     "last_active_at": "2026-05-14T01:00:55.270Z",
     "objective_fingerprint": "4c71c8317e402caeb2192883005ab94867dc1e6472bae51aad3e662602c35d3f",
     "published": true,
-    "sandbox_url": "http://172.3.0.2:8085",
+    "computer_url": "http://172.3.0.2:8085",
     "state": "hibernated",
     "stopped_by": "idle",
     "user_id": "mission-restart-1778558340",
@@ -263,7 +263,7 @@
         "kind": "interactive",
         "last_active_at": "2026-05-14T01:00:55.270949232Z",
         "published": true,
-        "sandbox_url": "http://172.3.0.2:8085",
+        "computer_url": "http://172.3.0.2:8085",
         "state": "hibernated",
         "stopped_by": "idle",
         "user_id": "mission-restart-1778558340",
@@ -282,7 +282,7 @@
     "kind": "interactive",
     "last_active_at": "2026-05-14T01:00:55.270949232Z",
     "published": true,
-    "sandbox_url": "http://172.3.0.2:8085",
+    "computer_url": "http://172.3.0.2:8085",
     "state": "hibernated",
     "stopped_by": "idle",
     "user_id": "mission-restart-1778558340",

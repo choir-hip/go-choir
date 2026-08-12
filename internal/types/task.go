@@ -1,4 +1,4 @@
-// Package types defines the core runtime types for the go-choir sandbox runtime.
+// Package types defines the core runtime types for the go-choir autoputer runtime.
 //
 // These types represent the foundational vocabulary for Mission 3: run handles,
 // lifecycle states, event records, and the minimal type surface needed for stable
@@ -120,8 +120,8 @@ type RunRecord struct {
 	// Status and event surfaces scope by owner (VAL-RUNTIME-006).
 	OwnerID string `json:"owner_id"`
 
-	// SandboxID is the sandbox identity that accepted the run.
-	SandboxID string `json:"sandbox_id"`
+	// ComputerID is the autoputer identity that accepted the run.
+	ComputerID string `json:"computer_id"`
 
 	// State is the current lifecycle state of the run.
 	State RunState `json:"state"`
@@ -539,7 +539,6 @@ type AgentRecord struct {
 	AgentID          string    `json:"agent_id"`
 	OwnerID          string    `json:"owner_id"`
 	ComputerID       string    `json:"computer_id"`
-	SandboxID        string    `json:"sandbox_id"`
 	Profile          string    `json:"profile"`
 	Role             string    `json:"role"`
 	ChannelID        string    `json:"channel_id"`

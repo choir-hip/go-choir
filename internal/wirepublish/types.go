@@ -3,7 +3,7 @@ package wirepublish
 import "encoding/json"
 
 // PublishTextureRequest is the corpusd internal publish payload shape used by
-// autonomous Wire publication. Kept in wirepublish so sandbox runtime does not
+// autonomous Wire publication. Kept in wirepublish so autoputer runtime does not
 // import internal/platform.
 type PublishTextureRequest struct {
 	OwnerID          string          `json:"owner_id"`

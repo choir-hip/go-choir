@@ -115,7 +115,7 @@ func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.C
 }
 
 func (rt *Runtime) cancelAssignedCoSuper(ctx context.Context, parent types.RunRecord, assignmentID string, attempt uint64, reason string) (types.CoSuperAssignmentCommandResult, error) {
-	assignment, err := rt.store.GetCoSuperAssignment(ctx, parent.OwnerID, parent.SandboxID, strings.TrimSpace(assignmentID), attempt)
+	assignment, err := rt.store.GetCoSuperAssignment(ctx, parent.OwnerID, parent.ComputerID, strings.TrimSpace(assignmentID), attempt)
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
@@ -238,7 +238,7 @@ func (rt *Runtime) cancelBoundCoSuperRun(ctx context.Context, rec types.RunRecor
 	if assignmentID == "" || attempt == 0 {
 		return false, nil
 	}
-	assignment, err := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.SandboxID, assignmentID, attempt)
+	assignment, err := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
 	if err != nil {
 		return true, err
 	}
@@ -412,11 +412,11 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 		// has won. The next attempt is forced through the evidence-only path.
 		assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 		assignmentAttempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
-		current, loadErr := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.SandboxID, assignmentID, assignmentAttempt)
+		current, loadErr := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, assignmentAttempt)
 		if loadErr != nil {
 			return types.CoSuperAssignmentCommandResult{}, loadErr
 		}
-		_, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, rec.OwnerID, rec.SandboxID, current.Binding.TrajectoryID)
+		_, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, rec.OwnerID, rec.ComputerID, current.Binding.TrajectoryID)
 		cancellationWon := intentErr == nil
 		if intentErr != nil && !errors.Is(intentErr, store.ErrNotFound) {
 			return types.CoSuperAssignmentCommandResult{}, intentErr
@@ -434,7 +434,7 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 	}
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
-	assignment, err := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.SandboxID, assignmentID, attempt)
+	assignment, err := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
@@ -442,11 +442,11 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("report run is not the exact bound assignment")
 	}
 	report.ReportID = "report:" + objectgraph.SHA256([]byte(strings.Join([]string{
-		"choir:co-super-report:v1", rec.OwnerID, rec.SandboxID, rec.RunID, assignmentID, fmt.Sprint(attempt), strings.TrimSpace(toolCallID),
+		"choir:co-super-report:v1", rec.OwnerID, rec.ComputerID, rec.RunID, assignmentID, fmt.Sprint(attempt), strings.TrimSpace(toolCallID),
 	}, "\x00")))
 	terminal := report.Result != types.CoSuperResultPartial
 	cancellationIntended := false
-	if _, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, rec.OwnerID, rec.SandboxID, assignment.Binding.TrajectoryID); intentErr == nil {
+	if _, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, rec.OwnerID, rec.ComputerID, assignment.Binding.TrajectoryID); intentErr == nil {
 		cancellationIntended = true
 	} else if !errors.Is(intentErr, store.ErrNotFound) {
 		return types.CoSuperAssignmentCommandResult{}, intentErr
@@ -467,7 +467,7 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 	}
 	terminalFingerprint := objectgraph.SHA256([]byte(strings.Join(fingerprintParts, "\x00")))
 
-	storedReport, reportErr := rt.store.GetCoSuperAssignmentReport(ctx, rec.OwnerID, rec.SandboxID, report.ReportID)
+	storedReport, reportErr := rt.store.GetCoSuperAssignmentReport(ctx, rec.OwnerID, rec.ComputerID, report.ReportID)
 	reportExists := reportErr == nil
 	if reportErr != nil && !errors.Is(reportErr, store.ErrNotFound) {
 		return types.CoSuperAssignmentCommandResult{}, reportErr

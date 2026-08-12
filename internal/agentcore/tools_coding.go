@@ -32,7 +32,7 @@ func newReadFileTool(cwd string) toolregistry.Tool {
 		Path string `json:"path"`
 	}
 	return toolregistry.Tool{Name: "read_file",
-		Description: "Read a file from disk relative to the sandbox working directory.",
+		Description: "Read a file from disk relative to the autoputer working directory.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"path": map[string]any{"type": "string"},
 		}, []string{"path"}, false),
@@ -67,7 +67,7 @@ func newGlobTool(cwd string) toolregistry.Tool {
 		Limit   int    `json:"limit,omitempty"`
 	}
 	return toolregistry.Tool{Name: "glob",
-		Description: "Find files by glob-like pattern relative to the sandbox working directory.",
+		Description: "Find files by glob-like pattern relative to the autoputer working directory.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"pattern": map[string]any{"type": "string"},
 			"limit":   map[string]any{"type": "integer"},

@@ -247,8 +247,8 @@ gcc, git, gnumake, nodejs, pkg-config, and icu, with `GOPATH`/`GOMODCACHE`/
 `GOCACHE` on the persistent volume, `GOTOOLCHAIN=local`, and `CGO_CFLAGS`/
 `PKG_CONFIG_PATH` set for Dolt's ICU dependency. The guest was provisioned for
 exactly this.
-*Evidence:* `nix/sandbox-vm.nix:675-700,717-745,777-798`;
-`internal/sandbox/capsule_executor_linux.go:14-56`;
+*Evidence:* `nix/autoputer-vm.nix:675-700,717-745,777-798`;
+`internal/autoputer/capsule_executor_linux.go:14-56`;
 `internal/capsule/executor.go:113-136,224-266`.
 
 **The UI cannot ship in the effect.** Caddy on Node B serves `/` and `/assets/*`

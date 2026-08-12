@@ -91,7 +91,7 @@ func (c *Config) validate() error {
 		return fmt.Errorf("MAILD_PROVIDER_MAX_BYTES must be positive")
 	}
 	if c.VmctlURL == "" {
-		return fmt.Errorf("MAILD_VMCTL_URL is required (host sandbox fallback removed)")
+		return fmt.Errorf("MAILD_VMCTL_URL is required (host autoputer fallback removed)")
 	}
 	return nil
 }

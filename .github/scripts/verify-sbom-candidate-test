@@ -9,9 +9,9 @@ trap 'rm -rf "$tmpdir"' EXIT
 source_commit=1111111111111111111111111111111111111111
 run_id=123456
 run_attempt=2
-packages=(auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend obscura zot)
-required_packages=" auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend zot "
-semantic_packages=" auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend "
+packages=(auth proxy gateway maild maildctl corpusd autoputer sourcecycled vmctl frontend obscura zot)
+required_packages=" auth proxy gateway maild maildctl corpusd autoputer sourcecycled vmctl frontend zot "
+semantic_packages=" auth proxy gateway maild maildctl corpusd autoputer sourcecycled vmctl frontend "
 
 mkdir -p "$tmpdir/bin"
 cat > "$tmpdir/bin/nix" <<'EOF'
@@ -120,7 +120,7 @@ make_rebound_bundle() {
   local package old_drv old_out sha
 
   make_bundle "$baseline"
-  for package in auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend; do
+  for package in auth proxy gateway maild maildctl corpusd autoputer sourcecycled vmctl frontend; do
     old_drv="/nix/store/old-artifact-$package.drv"
     old_out="/nix/store/old-output-$package"
     jq \

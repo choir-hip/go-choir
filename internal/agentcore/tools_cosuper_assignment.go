@@ -215,7 +215,7 @@ func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
 			if trajectoryID == "" {
 				return "", fmt.Errorf("report_to_texture requires one exact delivered lifecycle control trajectory")
 			}
-			trajectory, err := rt.store.GetLifecycleTrajectory(ctx, parent.OwnerID, parent.SandboxID, trajectoryID)
+			trajectory, err := rt.store.GetLifecycleTrajectory(ctx, parent.OwnerID, parent.ComputerID, trajectoryID)
 			if err != nil {
 				return "", err
 			}
@@ -223,7 +223,7 @@ func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
 			if trajectory.Status == types.TrajectoryLive {
 				delivered, err = rt.listAllLifecyclePacketsDeliveredToRun(ctx, parent)
 			} else {
-				delivered, err = rt.store.ListHistoricalLifecycleControlsDeliveredToRun(ctx, parent.OwnerID, parent.SandboxID, trajectoryID, parent.AgentID, parent.RunID)
+				delivered, err = rt.store.ListHistoricalLifecycleControlsDeliveredToRun(ctx, parent.OwnerID, parent.ComputerID, trajectoryID, parent.AgentID, parent.RunID)
 			}
 
 			if err != nil {
@@ -282,7 +282,7 @@ func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
 					control = candidate
 				}
 			}
-			targetRun, err := rt.store.GetLifecycleRun(ctx, parent.OwnerID, parent.SandboxID, control.SourceRunID)
+			targetRun, err := rt.store.GetLifecycleRun(ctx, parent.OwnerID, parent.ComputerID, control.SourceRunID)
 			if err != nil {
 				return "", err
 			}
@@ -298,7 +298,7 @@ func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
 			if strings.TrimSpace(execution.ToolCallID) == "" {
 				return "", fmt.Errorf("report_to_texture requires authenticated provider tool-call identity")
 			}
-			occurrence := objectgraph.SHA256([]byte(strings.Join([]string{"choir:persistent-super-report:v1", parent.OwnerID, parent.SandboxID, parent.RunID, execution.ToolCallID}, "\x00")))
+			occurrence := objectgraph.SHA256([]byte(strings.Join([]string{"choir:persistent-super-report:v1", parent.OwnerID, parent.ComputerID, parent.RunID, execution.ToolCallID}, "\x00")))
 			producerUpdateID := "super-report:" + occurrence
 			content := strings.TrimSpace(packet.Summary)
 			payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
@@ -310,7 +310,7 @@ func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
 				consumedForReport = consumedDeliveryIDs
 			}
 			req := types.QueueLifecycleUpdateRequest{
-				OwnerID: parent.OwnerID, ComputerID: parent.SandboxID, CommandID: "queue-" + producerUpdateID,
+				OwnerID: parent.OwnerID, ComputerID: parent.ComputerID, CommandID: "queue-" + producerUpdateID,
 				TrajectoryID: trajectoryID, TargetAgentID: control.AgentID, ProducerAgentID: parent.AgentID,
 				ControlBindingID: control.UpdateID, TargetWorkItemID: targetWorkID,
 				ConsumedDeliveryUpdateIDs: consumedForReport,

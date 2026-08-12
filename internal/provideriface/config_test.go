@@ -8,7 +8,7 @@ import (
 )
 
 func TestLoadConfigDefaultsResearcherCount(t *testing.T) {
-	t.Setenv("SANDBOX_ID", "")
+	t.Setenv("AUTOPUTER_ID", "")
 	t.Setenv("RUNTIME_STORE_PATH", "")
 	t.Setenv("RUNTIME_PROVIDER_TIMEOUT", "")
 	t.Setenv("RUNTIME_SUPERVISION_INTERVAL", "")
@@ -129,7 +129,7 @@ func TestDefaultModelPolicyPath(t *testing.T) {
 }
 
 func TestResolveFilesRootPrecedence(t *testing.T) {
-	t.Setenv("SANDBOX_FILES_ROOT", "/environment/files")
+	t.Setenv("AUTOPUTER_FILES_ROOT", "/environment/files")
 	if got := ResolveFilesRoot("/explicit/files"); got != "/explicit/files" {
 		t.Fatalf("explicit files root = %q, want %q", got, "/explicit/files")
 	}
@@ -137,7 +137,7 @@ func TestResolveFilesRootPrecedence(t *testing.T) {
 		t.Fatalf("environment files root = %q, want %q", got, "/environment/files")
 	}
 
-	t.Setenv("SANDBOX_FILES_ROOT", "")
+	t.Setenv("AUTOPUTER_FILES_ROOT", "")
 	if got := ResolveFilesRoot(""); got != DefaultFilesRoot {
 		t.Fatalf("default files root = %q, want %q", got, DefaultFilesRoot)
 	}

@@ -7,7 +7,7 @@
 # - Firewall allows only ports 22, 80, 443 externally
 # - Caddy is the sole public edge; internal service ports are never exposed
 # - Each service has Restart=on-failure with a backoff, plus a watchdog
-# - Proxy depends on both auth and sandbox; if either restarts, proxy
+# - Proxy depends on both auth and autoputer; if either restarts, proxy
 #   re-verifies health on the next request and returns degraded state
 #   through /health while the upstream recovers
 # - Auth persists sessions in SQLite, so sessions survive auth restarts
@@ -22,8 +22,8 @@ let
   authSigningDir = "/var/lib/go-choir/auth-signing";
   frontendRoot = "/var/www/go-choir";
   frontendCurrent = "/var/www/go-choir/frontend-current";
-  sandboxFilesDir = "/var/lib/go-choir/files";
-  sandboxRuntimeDir = "/var/lib/go-choir/runtime";
+  autoputerFilesDir = "/var/lib/go-choir/files";
+  autoputerRuntimeDir = "/var/lib/go-choir/runtime";
   sourceServiceDir = "/var/lib/go-choir/source-service";
   mailDir = "/var/lib/go-choir/mail";
   platformDoltDir = "/var/lib/go-choir/platform-dolt";
@@ -46,8 +46,8 @@ let
     export LD_LIBRARY_PATH="${goServiceLibraryPath}''${LD_LIBRARY_PATH:+:}''${LD_LIBRARY_PATH:-}"
     pointer="/var/lib/go-choir/services/${name}/bin/${name}"
     if [ -x "$pointer" ]; then
-      if [ "${name}" = "sandbox" ] && [ -d "/var/lib/go-choir/services/sandbox/share/go-choir/skills" ]; then
-        export RUNTIME_SKILLS_ROOT="/var/lib/go-choir/services/sandbox/share/go-choir/skills"
+      if [ "${name}" = "autoputer" ] && [ -d "/var/lib/go-choir/services/autoputer/share/go-choir/skills" ]; then
+        export RUNTIME_SKILLS_ROOT="/var/lib/go-choir/services/autoputer/share/go-choir/skills"
       fi
       exec "$pointer" "$@"
     fi
@@ -275,25 +275,25 @@ in
   };
 
   # ── Systemd services ──────────────────────────────────────────────────
-  # Host services: auth, proxy, vmctl, gateway, sandbox, maild, corpusd,
+  # Host services: auth, proxy, vmctl, gateway, autoputer, maild, corpusd,
   # and sourcecycled.
-  # Sandbox workloads for authenticated traffic are expected to run inside
+  # Autoputer workloads for authenticated traffic are expected to run inside
   # Firecracker microVMs managed by vmctl. Node B disables vmctl's
   # host-process fallback so deployed routing fails closed instead of silently
-  # landing on the placeholder host sandbox.
+  # landing on the placeholder host autoputer.
   #
   # Guest images are repo-built (VAL-VM-010):
   #   nix build .#guest-image  →  kernel (vmlinux) + rootfs (ext4) + initrd
-  # The guest contains ONLY the sandbox binary — no provider credentials,
+  # The guest contains ONLY the autoputer binary — no provider credentials,
   # no auth signing keys, no gateway secrets (VAL-VM-011).
   #
   # Restart and recovery behavior (VAL-DEPLOY-008 / VAL-CROSS-118):
   # - Each service uses Restart=on-failure with a 3-second backoff.
-  # - Proxy depends on auth and sandbox; auth and sandbox restart
+  # - Proxy depends on auth and autoputer; auth and autoputer restart
   #   independently. After an auth restart, existing access JWTs remain
   #   valid because the signing key file persists across restarts. After
-  #   a sandbox restart, the proxy /health endpoint reports "degraded"
-  #   until the sandbox comes back, then returns to "ok".
+  #   a autoputer restart, the proxy /health endpoint reports "degraded"
+  #   until the autoputer comes back, then returns to "ok".
   # - Auth sessions are persisted in SQLite, so session state survives
   #   auth restart. Browser users either rehydrate via refresh-token
   #   rotation or fall back safely to the guest state.
@@ -343,11 +343,11 @@ in
       Environment = [
         "SERVER_HOST=0.0.0.0"
         "PROXY_PORT=8082"
-        "PROXY_SANDBOX_URL=http://127.0.0.1:8085"
+        "PROXY_AUTOPUTER_URL=http://127.0.0.1:8085"
         "PROXY_AUTH_PUBLIC_KEY_PATH=${authSigningDir}/ed25519-key.pub"
         "PROXY_AUTH_DB_PATH=/var/lib/go-choir/auth/auth.db"
         # When vmctl is running, the proxy resolves user VM ownership
-        # through vmctl instead of using the static sandbox URL
+        # through vmctl instead of using the static autoputer URL
         # (VAL-VM-001, VAL-VM-002).
         "PROXY_VMCTL_URL=http://127.0.0.1:8083"
         # Bounded fail-fast timeout for the proxy -> vmctl resolve path. A hung
@@ -378,7 +378,7 @@ in
       EnvironmentFile = "-/var/lib/go-choir/maild.env";
       ReadWritePaths = [ mailDir ];
       Environment = [
-        # Sandbox guest VMs persist Email appagent drafts via the host tap
+        # Autoputer guest VMs persist Email appagent drafts via the host tap
         # address. The host firewall still keeps 8087 closed externally.
         "SERVER_HOST=0.0.0.0"
         "MAILD_PORT=8087"
@@ -386,7 +386,7 @@ in
         "MAILD_STORAGE_ROOT=${mailDir}"
         "MAILD_PRIMARY_DOMAIN=choir.news"
         # Maild routes trace events through vmctl to user VMs. The host
-        # sandbox fallback (MAILD_RUNTIME_URL) was removed in PR 5.
+        # autoputer fallback (MAILD_RUNTIME_URL) was removed in PR 5.
         "MAILD_VMCTL_URL=http://127.0.0.1:8083"
       ];
     };
@@ -456,7 +456,7 @@ in
         "SOURCE_SERVICE_RUNTIME_OWNER_ID=universal-wire-platform"
         "SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS=1"
         "SOURCE_SERVICE_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS=60"
-        "VMCTL_SANDBOX_PROXY_SOCK=/run/go-choir/vmctl.sock"
+        "VMCTL_AUTOPUTER_PROXY_SOCK=/run/go-choir/vmctl.sock"
       ];
     };
   };
@@ -511,11 +511,11 @@ in
         "VMCTL_ARTIFACTS_ROOT=${platformArtifactsDir}"
         "VMCTL_BASE_BLOB_ROOT=${platformArtifactsDir}/computer-inputs/blobs"
         "VMCTL_PROMOTION_AUTHORITY_PUBLIC_KEY=oEdoKFfUCLiOsxNX5J8bT3PQDrjqjVeuU8usTLHSYZ4="
-        # Guest images are a stable boot substrate. At boot, guest sandboxes
-        # fetch the current sandbox service package from this host-side pointer
+        # Guest images are a stable boot substrate. At boot, guest autoputeres
+        # fetch the current autoputer service package from this host-side pointer
         # and execute it from their writable data disk, so ordinary runtime code
         # deploys do not have to rebuild the whole microVM image.
-        "VMCTL_SANDBOX_PACKAGE_DIR=/var/lib/go-choir/services/sandbox"
+        "VMCTL_AUTOPUTER_PACKAGE_DIR=/var/lib/go-choir/services/autoputer"
         # Firecracker VM configuration (VAL-VM-010):
         # Guest images are built from the repo via `nix build .#guest-image`.
         # The microvm.nix approach produces:
@@ -579,13 +579,13 @@ in
         "VMCTL_RETENTION_SHADOW_EPHEMERAL_MIN_AGE=24h"
         "VMCTL_RETENTION_SHADOW_MAX_DELETES=100"
         "VMCTL_RETENTION_SHADOW_MAX_BYTES_MIB=122880"
-        # Gateway URL for issuing sandbox credentials to VM guests.
+        # Gateway URL for issuing autoputer credentials to VM guests.
         # vmctl calls this endpoint to get a token before booting each VM.
         "VMCTL_GATEWAY_URL=http://127.0.0.1:8084"
         "VMCTL_CORPUSD_URL=http://127.0.0.1:8086"
         "VMCTL_ALLOW_HOST_PROCESS=false"
         "VMCTL_PLATFORM_WIRE_ENABLED=true"
-        "VMCTL_SANDBOX_PROXY_SOCK=/run/go-choir/vmctl.sock"
+        "VMCTL_AUTOPUTER_PROXY_SOCK=/run/go-choir/vmctl.sock"
         # Path to system binaries (ip, iptables, mkfs.ext4) for network/disk setup.
         "PATH=/run/current-system/sw/bin:/bin:/usr/bin"
       ];
@@ -652,7 +652,7 @@ in
       EnvironmentFile = "-/var/lib/go-choir/gateway-provider.env";
       ReadWritePaths = [ "/var/lib/go-choir" ];
       Environment = [
-        # Guest sandboxes call the host gateway via the tap subnet
+        # Guest autoputeres call the host gateway via the tap subnet
         # (172.X.0.1:8084). Keep operator-only credential endpoints locked to
         # loopback at the handler layer, but let the process accept guest
         # traffic on tap addresses.
@@ -662,10 +662,10 @@ in
         "GATEWAY_IDENTITY_STORE_PATH=/var/lib/go-choir/gateway-identities.json"
         "GATEWAY_CHATGPT_MODELS=gpt-5.5,gpt-5.4,gpt-5.4-mini"
         "GATEWAY_CHATGPT_REASONING_EFFORT=low"
-        # Tokens are currently issued at sandbox/VM bootstrap and not
+        # Tokens are currently issued at autoputer/VM bootstrap and not
         # proactively rotated. Use a longer TTL in staging to avoid
         # authentication lapses during normal multi-hour sessions.
-        "GATEWAY_SANDBOX_TOKEN_TTL=720h"
+        "GATEWAY_AUTOPUTER_TOKEN_TTL=720h"
         # SearXNG self-hosted meta-search (free, no credits). SearXNGProvider
         # is first in the provider list, so this absorbs the majority of
         # search load. Paid providers (Tavily, Brave, etc.) act as fallback.
@@ -807,30 +807,30 @@ in
     echo "go-choir guest image pointer updated to $src" || true
   '';
 
-  # Host sandbox service deleted in PR 5 of store-consolidation mission.
+  # Host autoputer service deleted in PR 5 of store-consolidation mission.
   # All runtime work happens in VMs via vmctl. Served proxy routes require an
   # immutable D-ROUTE slot and fail before VM lookup when route authority is
-  # unavailable; PROXY_SANDBOX_URL is not a production fallback.
+  # unavailable; PROXY_AUTOPUTER_URL is not a production fallback.
   #
-  # The sandbox binary is still built and packaged (goChoirPackages.sandbox)
-  # because it runs inside Firecracker VMs (nix/sandbox-vm.nix). vmctl serves
-  # it to VMs from /var/lib/go-choir/services/sandbox. Since the systemd
+  # The autoputer binary is still built and packaged (goChoirPackages.autoputer)
+  # because it runs inside Firecracker VMs (nix/autoputer-vm.nix). vmctl serves
+  # it to VMs from /var/lib/go-choir/services/autoputer. Since the systemd
   # service is gone, node-b-sync-service-pointers can no longer discover the
   # package via systemctl show. This activation script installs the pointer
   # directly from the Nix closure on every NixOS switch.
-  system.activationScripts.go-choir-sandbox-package-pointer = ''
+  system.activationScripts.go-choir-autoputer-package-pointer = ''
     mkdir -p /var/lib/go-choir/services
-    src="${goChoirPackages.sandbox}"
-    if [ -x "$src/bin/sandbox" ]; then
-      rm -rf /var/lib/go-choir/services/.sandbox-next
-      mkdir -p /var/lib/go-choir/services/.sandbox-next
-      cp -a "$src/." /var/lib/go-choir/services/.sandbox-next/
-      rm -rf /var/lib/go-choir/services/sandbox-previous
-      if [ -e /var/lib/go-choir/services/sandbox ]; then
-        mv /var/lib/go-choir/services/sandbox /var/lib/go-choir/services/sandbox-previous
+    src="${goChoirPackages.autoputer}"
+    if [ -x "$src/bin/autoputer" ]; then
+      rm -rf /var/lib/go-choir/services/.autoputer-next
+      mkdir -p /var/lib/go-choir/services/.autoputer-next
+      cp -a "$src/." /var/lib/go-choir/services/.autoputer-next/
+      rm -rf /var/lib/go-choir/services/autoputer-previous
+      if [ -e /var/lib/go-choir/services/autoputer ]; then
+        mv /var/lib/go-choir/services/autoputer /var/lib/go-choir/services/autoputer-previous
       fi
-      mv /var/lib/go-choir/services/.sandbox-next /var/lib/go-choir/services/sandbox
-      echo "go-choir sandbox package pointer updated from NixOS closure"
+      mv /var/lib/go-choir/services/.autoputer-next /var/lib/go-choir/services/autoputer
+      echo "go-choir autoputer package pointer updated from NixOS closure"
     fi
   '';
 
@@ -838,7 +838,7 @@ in
   # Auth persistence and signing material must live in writable runtime
   # locations, not in the repo checkout or the Nix store.  Secrets are never
   # committed to git or embedded in the Nix store — the signing key is
-  # generated on the host at first deploy.  The sandbox and proxy are
+  # generated on the host at first deploy.  The autoputer and proxy are
   # stateless for dev and need no writable directories.
   #
   # Firecracker guest image directory (VAL-VM-010): the repo-built guest
@@ -850,7 +850,7 @@ in
     "d /var/www/go-choir 0755 root root -"
     "d /var/lib/go-choir 0750 root root -"
     "d /var/lib/go-choir/services 0755 root root -"
-    "d ${sandboxRuntimeDir} 0750 root root -"
+    "d ${autoputerRuntimeDir} 0750 root root -"
     "d /var/lib/go-choir/auth 0750 root root -"
     "d /var/lib/go-choir/auth-signing 0750 root root -"
     "d ${mailDir} 0700 root root -"

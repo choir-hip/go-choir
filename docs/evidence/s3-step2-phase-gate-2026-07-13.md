@@ -13,7 +13,7 @@ After S3-I9/I10 extracted the tool-loop state machine, batch executor, and typed
 
 Four independent reviewers returned `STEP2_COMPLETE` with no blocking findings and confidence `0.88-1.0`.
 
-The canonical criterion at suite lines 512-514 requires extraction of the live execution/tool-loop core and removal of `*runtime.Runtime` embedding. It does not require deletion of every named runtime dependency. Step 3 separately owns API/config/bootstrap movement, `apihandler` removal, and the direct `cmd/sandbox` runtime import; steps 4 and 6 own app/domain and final core residue.
+The canonical criterion at suite lines 512-514 requires extraction of the live execution/tool-loop core and removal of `*runtime.Runtime` embedding. It does not require deletion of every named runtime dependency. Step 3 separately owns API/config/bootstrap movement, `apihandler` removal, and the direct `cmd/autoputer` runtime import; steps 4 and 6 own app/domain and final core residue.
 
 The extracted authority is concrete:
 
@@ -27,7 +27,7 @@ The extracted authority is concrete:
 
 `STEP2_COMPLETE`. The S3-I11 statement that the named adapter and handler edges were necessarily further step-2 debt was over-conservative and is superseded by this phase-gate interpretation. It was orchestrator-authored evidence, not a settled owner authority change. No doctrine or suite criterion is changed.
 
-Authorize S3 step 3 only: move real API/config/bootstrap ownership, remove the `apihandler` wrapper, and remove direct `cmd/sandbox` runtime imports. Do not infer S3 completion or authorize app/domain step 4 before step 3 lands and passes its own gate.
+Authorize S3 step 3 only: move real API/config/bootstrap ownership, remove the `apihandler` wrapper, and remove direct `cmd/autoputer` runtime imports. Do not infer S3 completion or authorize app/domain step 4 before step 3 lands and passes its own gate.
 
 ## Residuals
 

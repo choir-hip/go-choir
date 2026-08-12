@@ -13,7 +13,7 @@ The S2 authority audit found a live split-brain world-wire implementation:
 1. `internal/runtime/universal_wire.go` serves `/api/universal-wire/stories` from VM-local Texture documents and an edition alias, while corpusd already owns published public objects.
 2. `internal/runtime/wire_publication.go` publishes the article to corpusd and then creates and advances a second VM-local `Wire.texture` edition as feed authority.
 3. `cmd/sourcecycled/main.go` projects durable web captures through `/internal/runtime/objectgraph/web-captures`, forcing the shared world-wire write through a user-computer runtime even though corpusd already exposes canonical object-graph writes.
-4. `internal/store/migration.go` and sandbox startup still replay retired relational runtime state into the VM-local object graph on every computer boot.
+4. `internal/store/migration.go` and autoputer startup still replay retired relational runtime state into the VM-local object graph on every computer boot.
 5. The proxy already forwards canonical publication writes and corpusd already owns publication, route, revision, blob, provenance, retrieval, and object-graph APIs. Connecting those existing capabilities is cheaper and safer than extending the superseded runtime paths.
 
 This document records the reliable authority failure before any S2 behavior-changing fix, satisfying Doctrine I11.
@@ -42,17 +42,17 @@ This document records the reliable authority failure before any S2 behavior-chan
 - `internal/runtime/universal_wire.go`: runtime-local story read model and `/api/universal-wire/stories` registration.
 - `internal/runtime/wire_publication.go`: VM-local edition bootstrap/advance and edition settlement reference.
 - `internal/runtime/objectgraph_runtime.go`: shared capture publication handler inside a user computer.
-- `internal/store/migration.go`, migration tests, `OpenOptions.DeferObjectGraphBackfill`, `BackfillObjectGraph*`, and `cmd/sandbox` startup loop: boot-time retired relational replay.
+- `internal/store/migration.go`, migration tests, `OpenOptions.DeferObjectGraphBackfill`, `BackfillObjectGraph*`, and `cmd/autoputer` startup loop: boot-time retired relational replay.
 
 ## Atomic Mutation Slices
 
 ### S2-A — Delete boot-time retired SQL replay
 
-Allowed paths: `internal/store/migration.go`, `internal/store/migration_test.go`, `internal/store/store.go`, directly dependent `internal/store/*_test.go`, `cmd/sandbox/main.go`, `cmd/sandbox/main_test.go`, and the runtime ratchet inventory.
+Allowed paths: `internal/store/migration.go`, `internal/store/migration_test.go`, `internal/store/store.go`, directly dependent `internal/store/*_test.go`, `cmd/autoputer/main.go`, `cmd/autoputer/main_test.go`, and the runtime ratchet inventory.
 
-Change: remove the migration implementation, completion/cursor tables and APIs, deferred-open option, sandbox background replay loop, and tests that normalize replay. Preserve normal schema initialization and VM-local private store opening. No migration shim, feature flag, or compatibility alias.
+Change: remove the migration implementation, completion/cursor tables and APIs, deferred-open option, autoputer background replay loop, and tests that normalize replay. Preserve normal schema initialization and VM-local private store opening. No migration shim, feature flag, or compatibility alias.
 
-Acceptance: store and sandbox focused tests pass; a fresh sandbox opens without invoking any replay API; ratchet records fewer production files/LOC and no new compatibility marker.
+Acceptance: store and autoputer focused tests pass; a fresh autoputer opens without invoking any replay API; ratchet records fewer production files/LOC and no new compatibility marker.
 
 ### S2-B — Make corpusd the only public wire read and edition authority
 
@@ -141,12 +141,12 @@ Commit `f6a47440f10de2a96bb9eed6609d9bf93e80d90c` deletes `internal/store/migrat
 Focused proof passed:
 
 - `go test ./internal/store -run 'Test(OpenDoesNotImportLegacySQLiteRuntimeRows|OpenMigratesWorkerUpdatesBeforeDeliveryIndex)' -count=1`;
-- `go test ./internal/store ./cmd/sandbox -count=1`;
+- `go test ./internal/store ./cmd/autoputer -count=1`;
 - `go run ./cmd/runtime-ratchet`.
 
-Independent reviewer `S2MigrationVerifier` returned PASS at confidence `0.98`: all importer machinery and its sole startup invocation are gone; sandbox and proxy serving callsites use the repaired `Store.Open`; normal current-Dolt schema bootstrap, reopen, and derived-state maintenance remain; no compatibility or fallback path remains.
+Independent reviewer `S2MigrationVerifier` returned PASS at confidence `0.98`: all importer machinery and its sole startup invocation are gone; autoputer and proxy serving callsites use the repaired `Store.Open`; normal current-Dolt schema bootstrap, reopen, and derived-state maintenance remain; no compatibility or fallback path remains.
 
-GitHub Actions run `29186793178` passed all selected gates, including non-runtime race coverage, and deployed successfully. Its activation receipt records sandbox artifact `f6a47440f10de2a96bb9eed6609d9bf93e80d90c` active at `2026-07-12T09:14:13Z`; the deploy refreshed the active computer, whose product status reports epoch `1860`, `last_active_at` `2026-07-12T09:14:14.860Z`, runtime `ready`, and current state `active`. The post-refresh Wire feed still returns `100` articles with first story ID `source-network-texture-202ba0b3-48b9-40fb-8ab5-40dd190c8155`. The public proxy health identity remains `7fa4e62f` because this internal/store change selected the sandbox artifact, not a proxy rebuild; the artifact-specific activation receipt is the deployed identity authority for this repair.
+GitHub Actions run `29186793178` passed all selected gates, including non-runtime race coverage, and deployed successfully. Its activation receipt records autoputer artifact `f6a47440f10de2a96bb9eed6609d9bf93e80d90c` active at `2026-07-12T09:14:13Z`; the deploy refreshed the active computer, whose product status reports epoch `1860`, `last_active_at` `2026-07-12T09:14:14.860Z`, runtime `ready`, and current state `active`. The post-refresh Wire feed still returns `100` articles with first story ID `source-network-texture-202ba0b3-48b9-40fb-8ab5-40dd190c8155`. The public proxy health identity remains `7fa4e62f` because this internal/store change selected the autoputer artifact, not a proxy rebuild; the artifact-specific activation receipt is the deployed identity authority for this repair.
 
 Heresy delta: `discovered` one retained startup migration path; `introduced` none; `repaired` one. Residual risk is limited to rollback requiring a code revert if current Dolt schema opening regresses; retired SQLite rows are deliberately no longer recoverable through serving startup.
 
@@ -159,8 +159,8 @@ The post-repair panel at `/tmp/choir-s2-final-repair-consensus-20260712` produce
 - Codex: the executable S2 repair passes, but stale live comments still described SQLite as an import/runtime store and therefore BLOCKING under the deletion-citer rule, confidence `0.97`;
 - Opencode: no verdict; its output terminated after read-only `/tmp` permission rejection and contributes neither a vote nor a finding.
 
-The Codex finding was concrete and was repaired rather than outvoted. Commits `981bd74a` and `b7b1262e` remove the stale import/runtime-store claims from `internal/store/store.go`, `internal/runtime/config.go`, `internal/provideriface/provider.go`, `internal/sandbox/config.go`, and `docs/current-architecture.md`; the regenerated ratchet decreases compatibility markers from `16` to `15`. The only remaining `legacy-import` production-tree matches are historical evidence text and an unrelated Texture import fixture name. Focused store, sandbox, provider-interface, ratchet, and ratchet-test proof passes.
+The Codex finding was concrete and was repaired rather than outvoted. Commits `981bd74a` and `b7b1262e` remove the stale import/runtime-store claims from `internal/store/store.go`, `internal/runtime/config.go`, `internal/provideriface/provider.go`, `internal/autoputer/config.go`, and `docs/current-architecture.md`; the regenerated ratchet decreases compatibility markers from `16` to `15`. The only remaining `legacy-import` production-tree matches are historical evidence text and an unrelated Texture import fixture name. Focused store, autoputer, provider-interface, ratchet, and ratchet-test proof passes.
 
 Adjudication: S2 has no confirmed open finding after the deletion-citer repair. The two substantive PASS verdicts, the repaired Codex finding, `S2LifecycleVerifier`, and `S2MigrationVerifier` provide independent coverage; Opencode's incomplete transcript is excluded explicitly rather than treated as assent.
 
-Final cleanup run `29188248479` passed, published sandbox and gateway activation receipt `b7b1262e455a779ca00c8d968ef28b3fa6af9b50` at `2026-07-12T10:00:44Z`, refreshed the active computer, and left product status `active`/runtime `ready` with the same `100`-article feed and first story ID. S2 is complete at that artifact identity.
+Final cleanup run `29188248479` passed, published autoputer and gateway activation receipt `b7b1262e455a779ca00c8d968ef28b3fa6af9b50` at `2026-07-12T10:00:44Z`, refreshed the active computer, and left product status `active`/runtime `ready` with the same `100`-article feed and first story ID. S2 is complete at that artifact identity.

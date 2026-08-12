@@ -10,7 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/textureowner"
 )
 
-// RegisterRoutes registers the canonical sandbox API route table.
+// RegisterRoutes registers the canonical autoputer API route table.
 // The health handler overrides the default server health handler to report
 // runtime readiness.
 func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureowner.Handler, api *Handler, browser *browsercontrol.Handler, desktop *desktopstate.Handler, contentOwner *content.Service, mediaOwner *mediastate.Handler, enableTestAPIs bool) {

@@ -16,20 +16,20 @@ func TestOGUpsertAndGetAgent(t *testing.T) {
 	ctx := context.Background()
 
 	rec := types.AgentRecord{
-		AgentID:   "agent-og-1",
-		OwnerID:   "owner-og",
-		SandboxID: "sandbox-1",
-		Profile:   "researcher",
-		Role:      "researcher",
-		ChannelID: "ch-1",
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		AgentID:    "agent-og-1",
+		OwnerID:    "owner-og",
+		ComputerID: "autoputer-1",
+		Profile:    "researcher",
+		Role:       "researcher",
+		ChannelID:  "ch-1",
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
 	}
 	if err := s.UpsertAgentOG(ctx, rec); err != nil {
 		t.Fatalf("upsert agent: %v", err)
 	}
 
-	got, err := s.GetAgentByScopeOG(ctx, rec.OwnerID, rec.SandboxID, rec.AgentID)
+	got, err := s.GetAgentByScopeOG(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID)
 	if err != nil {
 		t.Fatalf("get agent: %v", err)
 	}
@@ -52,8 +52,8 @@ func TestGetAgentByScopeSeparatesComputers(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	for _, rec := range []types.AgentRecord{
-		{AgentID: "processor:doc-1", OwnerID: "owner-og", ComputerID: "computer-a", SandboxID: "computer-a", Profile: "processor", Role: "processor", ChannelID: "channel-a", CreatedAt: now, UpdatedAt: now},
-		{AgentID: "processor:doc-1", OwnerID: "owner-og", ComputerID: "computer-b", SandboxID: "computer-b", Profile: "processor", Role: "processor", ChannelID: "channel-b", CreatedAt: now, UpdatedAt: now},
+		{AgentID: "processor:doc-1", OwnerID: "owner-og", ComputerID: "computer-a", Profile: "processor", Role: "processor", ChannelID: "channel-a", CreatedAt: now, UpdatedAt: now},
+		{AgentID: "processor:doc-1", OwnerID: "owner-og", ComputerID: "computer-b", Profile: "processor", Role: "processor", ChannelID: "channel-b", CreatedAt: now, UpdatedAt: now},
 	} {
 		if err := s.UpsertAgentOG(ctx, rec); err != nil {
 			t.Fatalf("upsert scoped agent: %v", err)
@@ -76,7 +76,7 @@ func TestResolveLegacyAgentScopeRequiresExactlyOneOwner(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	base := types.AgentRecord{
-		AgentID: "legacy-agent", OwnerID: "owner-a", ComputerID: "computer-a", SandboxID: "computer-a",
+		AgentID: "legacy-agent", OwnerID: "owner-a", ComputerID: "computer-a",
 		Profile: "processor", Role: "processor", ChannelID: "channel-a", CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.UpsertAgentOG(ctx, base); err != nil {
@@ -110,7 +110,7 @@ func TestResolveLegacyAgentScopeUsesUniqueRunWitness(t *testing.T) {
 	)
 	for _, runID := range []string{"run-a", "run-b"} {
 		if err := s.CreateRunOG(ctx, types.RunRecord{
-			RunID: runID, AgentID: agentID, OwnerID: "owner-a", SandboxID: computerID,
+			RunID: runID, AgentID: agentID, OwnerID: "owner-a", ComputerID: computerID,
 			State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
 		}); err != nil {
 			t.Fatalf("create run witness %s: %v", runID, err)
@@ -124,7 +124,7 @@ func TestResolveLegacyAgentScopeUsesUniqueRunWitness(t *testing.T) {
 		t.Fatalf("wrong-computer run witness error = %v, want ErrNotFound", err)
 	}
 	if err := s.CreateRunOG(ctx, types.RunRecord{
-		RunID: "run-other-owner", AgentID: agentID, OwnerID: "owner-b", SandboxID: computerID,
+		RunID: "run-other-owner", AgentID: agentID, OwnerID: "owner-b", ComputerID: computerID,
 		State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("create ambiguous run witness: %v", err)
@@ -139,14 +139,14 @@ func TestOGUpsertAgentUpdate(t *testing.T) {
 	ctx := context.Background()
 
 	rec := types.AgentRecord{
-		AgentID:   "agent-og-2",
-		OwnerID:   "owner-og",
-		SandboxID: "sandbox-1",
-		Profile:   "researcher",
-		Role:      "researcher",
-		ChannelID: "ch-1",
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		AgentID:    "agent-og-2",
+		OwnerID:    "owner-og",
+		ComputerID: "autoputer-1",
+		Profile:    "researcher",
+		Role:       "researcher",
+		ChannelID:  "ch-1",
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
 	}
 	if err := s.UpsertAgentOG(ctx, rec); err != nil {
 		t.Fatalf("upsert agent: %v", err)
@@ -159,7 +159,7 @@ func TestOGUpsertAgentUpdate(t *testing.T) {
 		t.Fatalf("upsert agent (update): %v", err)
 	}
 
-	got, err := s.GetAgentByScopeOG(ctx, rec.OwnerID, rec.SandboxID, rec.AgentID)
+	got, err := s.GetAgentByScopeOG(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID)
 	if err != nil {
 		t.Fatalf("get agent: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestOGCreateAndGetRun(t *testing.T) {
 		RunID:        "run-og-1",
 		AgentID:      "agent-og-1",
 		OwnerID:      "owner-og",
-		SandboxID:    "sandbox-1",
+		ComputerID:   "autoputer-1",
 		State:        types.RunRunning,
 		Prompt:       "test prompt",
 		CreatedAt:    now,
@@ -227,14 +227,14 @@ func TestOGUpdateRun(t *testing.T) {
 
 	now := time.Now().UTC()
 	rec := types.RunRecord{
-		RunID:     "run-og-2",
-		AgentID:   "agent-og-2",
-		OwnerID:   "owner-og",
-		SandboxID: "sandbox-1",
-		State:     types.RunRunning,
-		Prompt:    "test prompt",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "run-og-2",
+		AgentID:    "agent-og-2",
+		OwnerID:    "owner-og",
+		ComputerID: "autoputer-1",
+		State:      types.RunRunning,
+		Prompt:     "test prompt",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := s.CreateRunOG(ctx, rec); err != nil {
 		t.Fatalf("create run: %v", err)
@@ -272,14 +272,14 @@ func TestOGListRunsByOwner(t *testing.T) {
 	now := time.Now().UTC()
 	for i := range 3 {
 		rec := types.RunRecord{
-			RunID:     "run-og-list-" + string(rune('A'+i)),
-			AgentID:   "agent-1",
-			OwnerID:   "owner-list",
-			SandboxID: "sandbox-1",
-			State:     types.RunRunning,
-			Prompt:    "test",
-			CreatedAt: now.Add(time.Duration(i) * time.Second),
-			UpdatedAt: now.Add(time.Duration(i) * time.Second),
+			RunID:      "run-og-list-" + string(rune('A'+i)),
+			AgentID:    "agent-1",
+			OwnerID:    "owner-list",
+			ComputerID: "autoputer-1",
+			State:      types.RunRunning,
+			Prompt:     "test",
+			CreatedAt:  now.Add(time.Duration(i) * time.Second),
+			UpdatedAt:  now.Add(time.Duration(i) * time.Second),
 		}
 		if err := s.CreateRunOG(ctx, rec); err != nil {
 			t.Fatalf("create run %d: %v", i, err)
@@ -288,14 +288,14 @@ func TestOGListRunsByOwner(t *testing.T) {
 
 	// Add a different owner's run.
 	other := types.RunRecord{
-		RunID:     "run-og-other",
-		AgentID:   "agent-1",
-		OwnerID:   "other-owner",
-		SandboxID: "sandbox-1",
-		State:     types.RunRunning,
-		Prompt:    "test",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "run-og-other",
+		AgentID:    "agent-1",
+		OwnerID:    "other-owner",
+		ComputerID: "autoputer-1",
+		State:      types.RunRunning,
+		Prompt:     "test",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := s.CreateRunOG(ctx, other); err != nil {
 		t.Fatalf("create other run: %v", err)
@@ -322,28 +322,28 @@ func TestOGListRunsByState(t *testing.T) {
 	now := time.Now().UTC()
 	for i := range 2 {
 		rec := types.RunRecord{
-			RunID:     "run-og-state-running-" + string(rune('A'+i)),
-			AgentID:   "agent-1",
-			OwnerID:   "owner-state",
-			SandboxID: "sandbox-1",
-			State:     types.RunRunning,
-			Prompt:    "test",
-			CreatedAt: now,
-			UpdatedAt: now,
+			RunID:      "run-og-state-running-" + string(rune('A'+i)),
+			AgentID:    "agent-1",
+			OwnerID:    "owner-state",
+			ComputerID: "autoputer-1",
+			State:      types.RunRunning,
+			Prompt:     "test",
+			CreatedAt:  now,
+			UpdatedAt:  now,
 		}
 		if err := s.CreateRunOG(ctx, rec); err != nil {
 			t.Fatalf("create running run %d: %v", i, err)
 		}
 	}
 	completed := types.RunRecord{
-		RunID:     "run-og-state-completed",
-		AgentID:   "agent-1",
-		OwnerID:   "owner-state",
-		SandboxID: "sandbox-1",
-		State:     types.RunCompleted,
-		Prompt:    "test",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "run-og-state-completed",
+		AgentID:    "agent-1",
+		OwnerID:    "owner-state",
+		ComputerID: "autoputer-1",
+		State:      types.RunCompleted,
+		Prompt:     "test",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := s.CreateRunOG(ctx, completed); err != nil {
 		t.Fatalf("create completed run: %v", err)
@@ -369,13 +369,13 @@ func TestListAllRunsByStateOGExhaustsKeysetPages(t *testing.T) {
 	now := time.Now().UTC()
 	for i := range 3 {
 		rec := types.RunRecord{
-			RunID:     "run-og-state-page-" + string(rune('A'+i)),
-			AgentID:   "researcher:page",
-			OwnerID:   "owner-state-page",
-			SandboxID: "sandbox-1",
-			State:     types.RunCompleted,
-			CreatedAt: now,
-			UpdatedAt: now,
+			RunID:      "run-og-state-page-" + string(rune('A'+i)),
+			AgentID:    "researcher:page",
+			OwnerID:    "owner-state-page",
+			ComputerID: "autoputer-1",
+			State:      types.RunCompleted,
+			CreatedAt:  now,
+			UpdatedAt:  now,
 		}
 		if err := s.CreateRunOG(ctx, rec); err != nil {
 			t.Fatalf("create paged terminal run %d: %v", i, err)

@@ -58,8 +58,8 @@ func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persis
 	// a second worker-update authority from the RunRecord outcome.
 	hasLifecycleMarker := strings.TrimSpace(metadataStringValue(persisted.Metadata, "lifecycle_work_item_id")) != "" ||
 		len(metadataStringSlice(persisted.Metadata["work_item_ids"])) > 0
-	if hasLifecycleMarker && strings.TrimSpace(persisted.SandboxID) != "" {
-		if _, err := rt.store.GetLifecycleRun(ctx, persisted.OwnerID, persisted.SandboxID, persisted.RunID); err == nil {
+	if hasLifecycleMarker && strings.TrimSpace(persisted.ComputerID) != "" {
+		if _, err := rt.store.GetLifecycleRun(ctx, persisted.OwnerID, persisted.ComputerID, persisted.RunID); err == nil {
 			return terminalOutcomeBinding{}, nil
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return terminalOutcomeBinding{}, fmt.Errorf("resolve terminal run lifecycle authority: %w", err)
@@ -182,7 +182,7 @@ func (rt *Runtime) terminalOutcomeRequesterTarget(ctx context.Context, rec *type
 	if targetAgentID == "" {
 		return "", "", false, nil
 	}
-	if target, err := rt.store.GetAgentByScope(ctx, rec.OwnerID, rec.SandboxID, targetAgentID); err == nil {
+	if target, err := rt.store.GetAgentByScope(ctx, rec.OwnerID, rec.ComputerID, targetAgentID); err == nil {
 		if strings.TrimSpace(target.ChannelID) != "" {
 			channelID = strings.TrimSpace(target.ChannelID)
 		}

@@ -87,7 +87,7 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	if (req.Kind == types.CoSuperAssignmentVerification) != (req.CandidateID != "") {
 		return AssignedCoSuperStart{}, fmt.Errorf("verification requires one exact candidate_id and implementation forbids it")
 	}
-	ownerID, computerID := strings.TrimSpace(parent.OwnerID), strings.TrimSpace(parent.SandboxID)
+	ownerID, computerID := strings.TrimSpace(parent.OwnerID), strings.TrimSpace(parent.ComputerID)
 	if ownerID == "" || computerID == "" || parent.AgentID != persistentSuperAgentID(ownerID) ||
 		agentprofile.Canonical(parent.AgentProfile) != agentprofile.Super || agentprofile.Canonical(parent.AgentRole) != agentprofile.Super ||
 		parent.TrajectoryID != "" || !persistentSuperRunStateAllowedRuntime(parent.State) {
@@ -318,7 +318,7 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	}
 	run := types.RunRecord{
 		RunID: runID, AgentID: agentID, ChannelID: agentID, RequestedByRunID: parent.RunID, TrajectoryID: trajectoryID,
-		AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, OwnerID: ownerID, SandboxID: computerID,
+		AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, OwnerID: ownerID, ComputerID: computerID,
 		State: types.RunPending, Prompt: req.Objective,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: agentprofile.CoSuper, runMetadataAgentRole: agentprofile.CoSuper, runMetadataAgentID: agentID,

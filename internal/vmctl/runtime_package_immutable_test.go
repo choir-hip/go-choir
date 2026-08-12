@@ -41,7 +41,7 @@ func TestHandleRuntimePackageServesImmutableCodeClosureArtifact(t *testing.T) {
 	var archive bytes.Buffer
 	tw := tar.NewWriter(&archive)
 	content := []byte("runtime")
-	if err := tw.WriteHeader(&tar.Header{Name: "bin/sandbox", Mode: 0o755, Size: int64(len(content)), Typeflag: tar.TypeReg}); err != nil {
+	if err := tw.WriteHeader(&tar.Header{Name: "bin/autoputer", Mode: 0o755, Size: int64(len(content)), Typeflag: tar.TypeReg}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tw.Write(content); err != nil {
@@ -54,15 +54,15 @@ func TestHandleRuntimePackageServesImmutableCodeClosureArtifact(t *testing.T) {
 	digest := sha256.Sum256(payload)
 	hexDigest := hex.EncodeToString(digest[:])
 	closure, err := computerversion.NewCodeClosure(strings.Repeat("a", 40), []computerversion.CodeArtifact{{
-		Name: "sandbox-runtime.tar", SHA256: hexDigest, URI: "artifact+sha256://" + hexDigest + "/runtime/sandbox.tar",
+		Name: "autoputer-runtime.tar", SHA256: hexDigest, URI: "artifact+sha256://" + hexDigest + "/runtime/autoputer.tar",
 	}}, time.Date(2026, 7, 16, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(NewOwnershipRegistry("http://sandbox.test"))
+	handler := NewHandler(NewOwnershipRegistry("http://autoputer.test"))
 	handler.routeAuthority = &RouteAuthority{inputs: runtimeInputFixture{closure: closure}}
 	handler.SetImmutableArtifactOpener(runtimeArtifactFixture{payload: payload})
-	request := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/sandbox?code_ref="+string(closure.Ref), nil)
+	request := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/autoputer?code_ref="+string(closure.Ref), nil)
 	request.Header.Set("X-Internal-Caller", "true")
 	response := httptest.NewRecorder()
 	handler.HandleRuntimePackage(response, request)
@@ -80,7 +80,7 @@ func TestValidateRuntimePackageTarRefusesEscapingSymlink(t *testing.T) {
 	if err := tw.WriteHeader(&tar.Header{Name: "bin", Mode: 0o755, Typeflag: tar.TypeDir}); err != nil {
 		t.Fatal(err)
 	}
-	if err := tw.WriteHeader(&tar.Header{Name: "bin/sandbox", Mode: 0o755, Typeflag: tar.TypeSymlink, Linkname: "../../host"}); err != nil {
+	if err := tw.WriteHeader(&tar.Header{Name: "bin/autoputer", Mode: 0o755, Typeflag: tar.TypeSymlink, Linkname: "../../host"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := tw.Close(); err != nil {

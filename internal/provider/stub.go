@@ -45,10 +45,10 @@ func (p *StubProvider) ProviderName() string { return "stub" }
 func (p *StubProvider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
 	return provideriface.ProviderPolicy{
 		ActiveProvider:              "stub",
-		ModelSelection:              "No real upstream model is configured. The sandbox is returning stub responses.",
+		ModelSelection:              "No real upstream model is configured. The autoputer is returning stub responses.",
 		SupportsPerRunModelOverride: false,
 		Notes: []string{
-			"Use a real provider or gateway-backed sandbox to exercise actual model/tool behavior.",
+			"Use a real provider or gateway-backed autoputer to exercise actual model/tool behavior.",
 		},
 	}
 }

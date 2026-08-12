@@ -188,7 +188,7 @@ func TestAssignCoSuperSchemaHasNoModelAuthoredRuntimeBindings(t *testing.T) {
 }
 
 func TestAssignmentIdentityUsesOnlyAuthenticatedParentRunAndToolCall(t *testing.T) {
-	parent := types.RunRecord{RunID: "parent-run", OwnerID: "owner", SandboxID: "computer"}
+	parent := types.RunRecord{RunID: "parent-run", OwnerID: "owner", ComputerID: "computer"}
 	left := StartAssignedCoSuperRequest{Objective: "one", Kind: types.CoSuperAssignmentImplementation, ParentWorkItemID: "work", ToolCallID: "call"}
 	right := StartAssignedCoSuperRequest{Objective: "changed", Kind: types.CoSuperAssignmentVerification, CandidateID: "candidate", ParentWorkItemID: "other", ToolCallID: "call"}
 	if deterministicAssignmentIdentity(parent, left) != deterministicAssignmentIdentity(parent, right) {
@@ -212,11 +212,11 @@ func TestStartCoagentRunHardRefusesCoSuperForEveryCaller(t *testing.T) {
 	}
 	defer s.Close()
 	now := time.Now().UTC()
-	parent := types.RunRecord{RunID: "parent", AgentID: "super:owner", AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, OwnerID: "owner", SandboxID: "computer", State: types.RunRunning, CreatedAt: now, UpdatedAt: now}
+	parent := types.RunRecord{RunID: "parent", AgentID: "super:owner", AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, OwnerID: "owner", ComputerID: "computer", State: types.RunRunning, CreatedAt: now, UpdatedAt: now}
 	if err := s.CreateRun(context.Background(), parent); err != nil {
 		t.Fatal(err)
 	}
-	rt := &Runtime{store: s, cfg: provideriface.Config{SandboxID: "computer"}}
+	rt := &Runtime{store: s, cfg: provideriface.Config{ComputerID: "computer"}}
 	for _, constraints := range []map[string]any{
 		{runMetadataAgentProfile: agentprofile.CoSuper, runMetadataAgentRole: agentprofile.CoSuper},
 		{runMetadataAgentRole: "coagent"},

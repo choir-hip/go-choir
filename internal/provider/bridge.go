@@ -1,5 +1,5 @@
 // Package provider implements real LLM provider bridges for the go-choir
-// sandbox runtime.
+// autoputer runtime.
 package provider
 
 import (
@@ -58,42 +58,42 @@ func (b *BridgeProvider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
 	case *BedrockProvider:
 		policy.DefaultModel = inner.modelID
 		policy.Notes = []string{
-			"Direct sandbox mode using AWS Bedrock credentials in the sandbox process.",
+			"Direct autoputer mode using AWS Bedrock credentials in the autoputer process.",
 			"Bedrock is selected only when runtime config explicitly selects it.",
 		}
 	case *ZAIProvider:
 		policy.DefaultModel = inner.modelID
 		policy.Notes = []string{
-			"Direct sandbox mode using Z.AI credentials in the sandbox process.",
+			"Direct autoputer mode using Z.AI credentials in the autoputer process.",
 			"Z.AI is selected only when runtime config explicitly selects it.",
 		}
 	case *FireworksProvider:
 		policy.DefaultModel = inner.modelID
 		policy.Notes = []string{
-			"Direct sandbox mode using Fireworks credentials in the sandbox process.",
+			"Direct autoputer mode using Fireworks credentials in the autoputer process.",
 			"Fireworks is selected only when runtime config explicitly selects it.",
 		}
 	case *DeepSeekProvider:
 		policy.DefaultModel = inner.modelID
 		policy.Notes = []string{
-			"Direct sandbox mode using DeepSeek credentials in the sandbox process.",
+			"Direct autoputer mode using DeepSeek credentials in the autoputer process.",
 			"DeepSeek is selected only when runtime config explicitly selects it.",
 		}
 	case *XiaomiProvider:
 		policy.DefaultModel = inner.modelID
 		policy.Notes = []string{
-			"Direct sandbox mode using Xiaomi MiMo credentials in the sandbox process.",
+			"Direct autoputer mode using Xiaomi MiMo credentials in the autoputer process.",
 			"Xiaomi is selected only when runtime config explicitly selects it.",
 		}
 	case *ChatGPTProvider:
 		policy.DefaultModel = inner.modelID
 		policy.Notes = []string{
-			"Direct sandbox mode using ChatGPT Codex OAuth from the sandbox process.",
+			"Direct autoputer mode using ChatGPT Codex OAuth from the autoputer process.",
 			"ChatGPT is selected only when runtime config explicitly selects it.",
 		}
 	default:
 		policy.Notes = []string{
-			"Direct sandbox mode using a real provider bridge.",
+			"Direct autoputer mode using a real provider bridge.",
 		}
 	}
 	return policy
@@ -123,7 +123,7 @@ func (b *BridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emi
 	// Build the LLM request from the task prompt with streaming enabled.
 	req := LLMRequest{
 		Model:           llmConfig.Model,
-		System:          "You are a helpful assistant running inside the ChoirOS sandbox runtime. Respond concisely and helpfully.",
+		System:          "You are a helpful assistant running inside the ChoirOS autoputer runtime. Respond concisely and helpfully.",
 		ReasoningEffort: llmConfig.ReasoningEffort,
 		Messages: []Message{
 			{
@@ -371,15 +371,15 @@ func convertRawMessages(raw []json.RawMessage) []Message {
 
 // GatewayBridgeProvider adapts the gateway.GatewayClient to both the
 // provideriface.Provider and provideriface.ToolLoopProvider interfaces. When the
-// sandbox runtime is configured with a gateway URL (PROXY_VMCTL_URL /
+// autoputer runtime is configured with a gateway URL (PROXY_VMCTL_URL /
 // RUNTIME_GATEWAY_URL), LLM calls route through the host-side gateway
 // instead of resolving providers directly. This ensures provider
-// credentials stay host-side and sandbox processes never touch them
+// credentials stay host-side and autoputer processes never touch them
 // directly (VAL-GATEWAY-001, VAL-GATEWAY-004).
 //
 // The GatewayBridgeProvider delegates all LLM calls to the underlying
 // gateway.GatewayClient, which authenticates to the gateway using a
-// sandbox credential token.
+// autoputer credential token.
 type GatewayBridgeProvider struct {
 	client          GatewayCaller
 	llmProvider     string
@@ -424,12 +424,12 @@ func (g *GatewayBridgeProvider) SetRuntimeLLMConfig(providerName, model, reasoni
 func (g *GatewayBridgeProvider) ProviderName() string { return g.client.Name() }
 
 // RuntimeProviderPolicy returns the effective provider/model policy for a
-// gateway-routed sandbox.
+// gateway-routed autoputer.
 func (g *GatewayBridgeProvider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
 	return provideriface.ProviderPolicy{
 		ActiveProvider:              g.client.Name(),
 		DefaultModel:                g.llmModel,
-		ModelSelection:              "The sandbox routes through the host gateway with explicit runtime provider/model configuration.",
+		ModelSelection:              "The autoputer routes through the host gateway with explicit runtime provider/model configuration.",
 		SupportsPerRunModelOverride: true,
 		Notes: []string{
 			"Gateway-routed mode keeps provider credentials on the host side.",
@@ -451,7 +451,7 @@ func (g *GatewayBridgeProvider) Execute(ctx context.Context, task *types.RunReco
 	req := LLMRequest{
 		Provider:        providerName,
 		Model:           model,
-		System:          "You are a helpful assistant running inside the ChoirOS sandbox runtime. Respond concisely and helpfully.",
+		System:          "You are a helpful assistant running inside the ChoirOS autoputer runtime. Respond concisely and helpfully.",
 		ReasoningEffort: reasoning,
 		Messages: []Message{
 			{Role: "user", Content: []Block{{Type: "text", Text: task.Prompt}}},

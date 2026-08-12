@@ -478,7 +478,7 @@ func TestResearcherPlainTerminalResultBindsAddressedOutcome(t *testing.T) {
 				types.RunCompleted,
 				now,
 			)
-			rec.SandboxID = rt.TextureSandboxID()
+			rec.ComputerID = rt.TextureComputerID()
 			tc.marker(rec.Metadata)
 			if err := s.CreateRun(ctx, rec); err != nil {
 				t.Fatalf("create terminal researcher run: %v", err)

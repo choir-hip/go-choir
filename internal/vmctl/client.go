@@ -46,7 +46,7 @@ func NewClientWithTimeout(baseURL string, timeout time.Duration) *Client {
 }
 
 // Resolve resolves or assigns a VM for the given user ID. Returns the
-// ownership information including the sandbox URL where the user's VM
+// ownership information including the autoputer URL where the user's VM
 // is reachable (VAL-VM-001).
 func (c *Client) Resolve(userID string) (*resolveResponse, error) {
 	return c.ResolveDesktop(userID, PrimaryDesktopID)

@@ -1,4 +1,4 @@
-package sandbox
+package autoputer
 
 import (
 	"encoding/json"
@@ -17,8 +17,8 @@ import (
 )
 
 // requireAuth checks that the X-Authenticated-User header exists, providing
-// defense-in-depth auth gating at the sandbox level. The proxy validates the
-// JWT and injects this header; this check ensures direct access to the sandbox
+// defense-in-depth auth gating at the autoputer level. The proxy validates the
+// JWT and injects this header; this check ensures direct access to the autoputer
 // without proxy authentication is denied.
 func requireAuth(r *http.Request) error {
 	user := r.Header.Get("X-Authenticated-User")
@@ -61,7 +61,7 @@ type FilesHandler struct {
 }
 
 // NewFilesHandler creates a new file browser handler rooted at rootDir.
-// If rootDir is empty, the SANDBOX_FILES_ROOT env var is used, falling back
+// If rootDir is empty, the AUTOPUTER_FILES_ROOT env var is used, falling back
 // to /tmp/go-choir-files.
 func NewFilesHandler(rootDir string) *FilesHandler {
 	return NewFilesHandlerWithObserver(rootDir, nil)
@@ -107,7 +107,7 @@ func (fh *FilesHandler) emitChange(r *http.Request, event FileChangeEvent) {
 }
 
 // resolvePath safely resolves a user-supplied relative path against the
-// sandbox root. It returns an error if the resolved path escapes the root.
+// autoputer root. It returns an error if the resolved path escapes the root.
 func (fh *FilesHandler) resolvePath(relativePath string) (string, error) {
 	// Remove leading slashes to treat the path as relative, then clean.
 	rel := strings.TrimLeft(relativePath, "/")
@@ -117,14 +117,14 @@ func (fh *FilesHandler) resolvePath(relativePath string) (string, error) {
 	// under root. But if cleaned starts with "..", Join will walk up. Check
 	// for that explicitly.
 	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("path escapes sandbox root")
+		return "", fmt.Errorf("path escapes autoputer root")
 	}
 
 	absPath := filepath.Join(fh.rootDir, cleaned)
 
 	// Final safety check: the result must be under the root.
 	if !strings.HasPrefix(absPath, fh.rootDir+string(filepath.Separator)) && absPath != fh.rootDir {
-		return "", fmt.Errorf("path escapes sandbox root")
+		return "", fmt.Errorf("path escapes autoputer root")
 	}
 	return absPath, nil
 }

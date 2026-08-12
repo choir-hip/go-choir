@@ -28,9 +28,9 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// testProxyEnv sets up a proxy Handler with a real backend sandbox and
-// Ed25519 key material for JWT validation. The sandbox backend includes
-// HTTP bootstrap and WebSocket echo endpoints matching the real sandbox
+// testProxyEnv sets up a proxy Handler with a real backend autoputer and
+// Ed25519 key material for JWT validation. The autoputer backend includes
+// HTTP bootstrap and WebSocket echo endpoints matching the real autoputer
 // surface used in production.
 func testProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Server) {
 	t.Helper()
@@ -41,9 +41,9 @@ func testProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Server)
 		t.Fatalf("generate ed25519 key: %v", err)
 	}
 
-	// Create a fake sandbox backend that echoes request data and supports WS.
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+	// Create a fake autoputer backend that echoes request data and supports WS.
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -51,7 +51,7 @@ func testProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Server)
 		user := r.Header.Get("X-Authenticated-User")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"sandbox_id":  "sandbox-test",
+			"computer_id": "autoputer-test",
 			"user":        user,
 			"bootstrap":   "placeholder-shell-v1",
 			"path":        r.URL.Path,
@@ -60,21 +60,21 @@ func testProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Server)
 			"status_code": 200,
 		})
 	})
-	sandboxMux.HandleFunc("/api/shell/error", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux.HandleFunc("/api/shell/error", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"sandbox_id":  "sandbox-test",
+			"computer_id": "autoputer-test",
 			"status_code": 500,
-			"error":       "deliberate sandbox error",
+			"error":       "deliberate autoputer error",
 		})
 	})
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "sandbox"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "autoputer"})
 	})
-	// WebSocket echo endpoint matching the real sandbox surface.
-	sandboxMux.HandleFunc("/api/ws", func(w http.ResponseWriter, r *http.Request) {
+	// WebSocket echo endpoint matching the real autoputer surface.
+	autoputerMux.HandleFunc("/api/ws", func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get("X-Authenticated-User")
 		upgrader := websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
@@ -87,10 +87,10 @@ func testProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Server)
 
 		// Send initial connected message.
 		connected := map[string]interface{}{
-			"sandbox_id": "sandbox-test",
-			"user":       user,
-			"type":       "connected",
-			"payload":    "websocket channel open",
+			"computer_id": "autoputer-test",
+			"user":        user,
+			"type":        "connected",
+			"payload":     "websocket channel open",
 		}
 		if err := conn.WriteJSON(connected); err != nil {
 			return
@@ -106,10 +106,10 @@ func testProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Server)
 			var incoming map[string]interface{}
 			if json.Unmarshal(msg, &incoming) == nil {
 				echo := map[string]interface{}{
-					"sandbox_id": "sandbox-test",
-					"user":       user,
-					"type":       "echo",
-					"payload":    incoming["payload"],
+					"computer_id": "autoputer-test",
+					"user":        user,
+					"type":        "echo",
+					"payload":     incoming["payload"],
 				}
 				if err := conn.WriteJSON(echo); err != nil {
 					break
@@ -123,11 +123,11 @@ func testProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Server)
 		}
 	})
 
-	sandboxServer := httptest.NewServer(sandboxMux)
-	t.Cleanup(func() { sandboxServer.Close() })
+	autoputerServer := httptest.NewServer(autoputerMux)
+	t.Cleanup(func() { autoputerServer.Close() })
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandboxServer.URL,
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputerServer.URL,
 		AuthPublicKeyPath: "/unused/in/test"}
 
 	handler, err := NewHandler(cfg, pub)
@@ -135,7 +135,7 @@ func testProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Server)
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	return handler, priv, sandboxServer
+	return handler, priv, autoputerServer
 }
 
 // testWSProxyEnv sets up a full proxy server with WS support and returns
@@ -358,10 +358,10 @@ func TestBootstrapDeniesWrongSigningKey(t *testing.T) {
 	// Create a handler with the original public key.
 	origPub := priv.Public().(ed25519.PublicKey)
 
-	sandboxServer := httptest.NewServer(http.NewServeMux())
-	defer sandboxServer.Close()
+	autoputerServer := httptest.NewServer(http.NewServeMux())
+	defer autoputerServer.Close()
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: autoputerServer.URL, AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, origPub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -385,9 +385,9 @@ func TestBootstrapDeniesWrongSigningKey(t *testing.T) {
 
 // --- VAL-PROXY-002: Authenticated proxying preserves request and response behavior ---
 
-func TestBootstrapAuthenticatedReachesSandbox(t *testing.T) {
-	h, priv, sandbox := testProxyEnv(t)
-	_ = sandbox
+func TestBootstrapAuthenticatedReachesAutoputer(t *testing.T) {
+	h, priv, autoputer := testProxyEnv(t)
+	_ = autoputer
 
 	accessToken := issueTestAccessJWT(priv, "user-456")
 
@@ -408,9 +408,9 @@ func TestBootstrapAuthenticatedReachesSandbox(t *testing.T) {
 		t.Fatalf("decode bootstrap response: %v", err)
 	}
 
-	// The sandbox should have received the request and returned its identity.
-	if resp["sandbox_id"] != "sandbox-test" {
-		t.Errorf("sandbox_id: got %v, want %q", resp["sandbox_id"], "sandbox-test")
+	// The autoputer should have received the request and returned its identity.
+	if resp["computer_id"] != "autoputer-test" {
+		t.Errorf("computer_id: got %v, want %q", resp["computer_id"], "autoputer-test")
 	}
 }
 
@@ -432,7 +432,7 @@ func TestBootstrapPreservesPublicRequestPath(t *testing.T) {
 		t.Fatalf("decode bootstrap response: %v", err)
 	}
 
-	// The sandbox should receive the same public path.
+	// The autoputer should receive the same public path.
 	if resp["path"] != "/api/shell/bootstrap" {
 		t.Errorf("path: got %v, want %q", resp["path"], "/api/shell/bootstrap")
 	}
@@ -497,34 +497,34 @@ func TestBootstrapPreservesUpstreamStatus(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.HandleBootstrap(w, req)
 
-	// The sandbox returns 200, so the proxy should pass that through.
+	// The autoputer returns 200, so the proxy should pass that through.
 	if w.Code != http.StatusOK {
 		t.Errorf("upstream status: got %d, want %d", w.Code, http.StatusOK)
 	}
 }
 
 func TestBootstrapPreservesUpstreamNon2xx(t *testing.T) {
-	// Set up a proxy with a sandbox that has an error endpoint.
+	// Set up a proxy with a autoputer that has an error endpoint.
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/shell/error", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/shell/error", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"sandbox_id":  "sandbox-test",
+			"computer_id": "autoputer-test",
 			"status_code": 500,
-			"error":       "deliberate sandbox error",
+			"error":       "deliberate autoputer error",
 		})
 	})
 
-	sandboxServer := httptest.NewServer(sandboxMux)
-	defer sandboxServer.Close()
+	autoputerServer := httptest.NewServer(autoputerMux)
+	defer autoputerServer.Close()
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: autoputerServer.URL, AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -550,8 +550,8 @@ func TestBootstrapPreservesUpstreamNon2xx(t *testing.T) {
 		t.Fatalf("decode error response: %v", err)
 	}
 
-	if resp["error"] != "deliberate sandbox error" {
-		t.Errorf("upstream error body: got %v, want %q", resp["error"], "deliberate sandbox error")
+	if resp["error"] != "deliberate autoputer error" {
+		t.Errorf("upstream error body: got %v, want %q", resp["error"], "deliberate autoputer error")
 	}
 }
 
@@ -573,7 +573,7 @@ func TestBootstrapInjectsUserContext(t *testing.T) {
 		t.Fatalf("decode bootstrap response: %v", err)
 	}
 
-	// The sandbox should receive the user context from the JWT subject.
+	// The autoputer should receive the user context from the JWT subject.
 	if resp["user"] != "user-context-test" {
 		t.Errorf("user context: got %v, want %q", resp["user"], "user-context-test")
 	}
@@ -606,10 +606,10 @@ func TestBootstrapIgnoresClientSuppliedUserContext(t *testing.T) {
 }
 
 func TestBootstrapProxyDoesNotLeakToSignedOutUsers(t *testing.T) {
-	h, _, sandbox := testProxyEnv(t)
-	_ = sandbox
+	h, _, autoputer := testProxyEnv(t)
+	_ = autoputer
 
-	// Request without auth should not reach the sandbox (no sandbox data in response).
+	// Request without auth should not reach the autoputer (no autoputer data in response).
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
 	w := httptest.NewRecorder()
 	h.HandleBootstrap(w, req)
@@ -618,7 +618,7 @@ func TestBootstrapProxyDoesNotLeakToSignedOutUsers(t *testing.T) {
 		t.Errorf("signed-out request: got status %d, want %d", w.Code, http.StatusUnauthorized)
 	}
 
-	// The response should be an auth error, not sandbox data.
+	// The response should be an auth error, not autoputer data.
 	var resp errorResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode error response: %v", err)
@@ -628,13 +628,13 @@ func TestBootstrapProxyDoesNotLeakToSignedOutUsers(t *testing.T) {
 		t.Error("expected non-empty auth error")
 	}
 
-	// Verify the error is not a sandbox payload (no sandbox_id field).
+	// Verify the error is not a autoputer payload (no computer_id field).
 	var raw map[string]interface{}
 	_ = json.NewDecoder(w.Body).Decode(&raw) // decode again from already-consumed body
-	// The error response should only have "error", not sandbox fields.
-	_, hasSandboxID := raw["sandbox_id"]
-	if hasSandboxID {
-		t.Error("signed-out response should not contain sandbox_id")
+	// The error response should only have "error", not autoputer fields.
+	_, hasComputerID := raw["computer_id"]
+	if hasComputerID {
+		t.Error("signed-out response should not contain computer_id")
 	}
 }
 
@@ -758,7 +758,7 @@ func TestHandlePulseSummaryIsPublicAndAggregateOnly(t *testing.T) {
 }
 
 // TestHandleAPIForwardsPromptBarRoutes verifies that prompt-bar product
-// routes are forwarded to the sandbox through the proxy
+// routes are forwarded to the autoputer through the proxy
 // rather than hitting the generic 404 fallback.
 func TestHandleAPIForwardsPromptBarRoutes(t *testing.T) {
 	h, priv, _ := testProxyEnv(t)
@@ -782,13 +782,13 @@ func TestHandleAPIForwardsPromptBarRoutes(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.HandleAPI(w, req)
 
-			// The sandbox mock doesn't handle these routes, so we'll get
-			// a 404 or 502 from the sandbox rather than the proxy's own
+			// The autoputer mock doesn't handle these routes, so we'll get
+			// a 404 or 502 from the autoputer rather than the proxy's own
 			// auth-gated 404. The key assertion is that we do NOT get the
 			// proxy's 404 JSON body, meaning the request was forwarded.
 			body := w.Body.String()
 			if w.Code == http.StatusNotFound && strings.Contains(body, `"error":"not found"`) {
-				t.Errorf("%s was NOT forwarded to sandbox; proxy returned its own 404", route.path)
+				t.Errorf("%s was NOT forwarded to autoputer; proxy returned its own 404", route.path)
 			}
 		})
 	}
@@ -819,8 +819,8 @@ func TestValidateAccessJWTWithWrongKey(t *testing.T) {
 		t.Fatalf("generate wrong key: %v", err)
 	}
 
-	sandboxServer := httptest.NewServer(http.NewServeMux())
-	defer sandboxServer.Close()
+	autoputerServer := httptest.NewServer(http.NewServeMux())
+	defer autoputerServer.Close()
 
 	// Handler uses the original public key.
 	origPub, _, err := ed25519.GenerateKey(nil)
@@ -828,7 +828,7 @@ func TestValidateAccessJWTWithWrongKey(t *testing.T) {
 		t.Fatalf("generate original key: %v", err)
 	}
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: autoputerServer.URL, AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, origPub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -1034,7 +1034,7 @@ func TestWSAuthenticatedUpgradesAndRelays(t *testing.T) {
 	conn := wsDialWithCookie(t, proxyServer.URL, accessToken)
 	defer func() { _ = conn.Close() }()
 
-	// Read the initial connected message from the sandbox (relayed through proxy).
+	// Read the initial connected message from the autoputer (relayed through proxy).
 	var connected map[string]interface{}
 	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	if err := conn.ReadJSON(&connected); err != nil {
@@ -1044,8 +1044,8 @@ func TestWSAuthenticatedUpgradesAndRelays(t *testing.T) {
 	if connected["type"] != "connected" {
 		t.Errorf("connected type: got %v, want %q", connected["type"], "connected")
 	}
-	if connected["sandbox_id"] != "sandbox-test" {
-		t.Errorf("connected sandbox_id: got %v, want %q", connected["sandbox_id"], "sandbox-test")
+	if connected["computer_id"] != "autoputer-test" {
+		t.Errorf("connected computer_id: got %v, want %q", connected["computer_id"], "autoputer-test")
 	}
 
 	// Send a message and verify it is echoed back via the proxy relay.
@@ -1068,8 +1068,8 @@ func TestWSAuthenticatedUpgradesAndRelays(t *testing.T) {
 	if echo["payload"] != "hello-through-proxy" {
 		t.Errorf("echo payload: got %v, want %q", echo["payload"], "hello-through-proxy")
 	}
-	if echo["sandbox_id"] != "sandbox-test" {
-		t.Errorf("echo sandbox_id: got %v, want %q", echo["sandbox_id"], "sandbox-test")
+	if echo["computer_id"] != "autoputer-test" {
+		t.Errorf("echo computer_id: got %v, want %q", echo["computer_id"], "autoputer-test")
 	}
 }
 
@@ -1080,7 +1080,7 @@ func TestWSAuthenticatedInjectsUserContext(t *testing.T) {
 	conn := wsDialWithCookie(t, proxyServer.URL, accessToken)
 	defer func() { _ = conn.Close() }()
 
-	// The connected message from the sandbox should contain the proxy-injected
+	// The connected message from the autoputer should contain the proxy-injected
 	// user context matching the JWT subject.
 	var connected map[string]interface{}
 	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
@@ -1128,7 +1128,7 @@ func TestWSIgnoresClientSuppliedUserContext(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	// The sandbox should see the JWT-verified user, not the spoofed header.
+	// The autoputer should see the JWT-verified user, not the spoofed header.
 	var connected map[string]interface{}
 	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	if err := conn.ReadJSON(&connected); err != nil {
@@ -1230,7 +1230,7 @@ func TestWSRelaysBinaryFrames(t *testing.T) {
 		t.Errorf("binary echo message type: got %d, want %d", mt, websocket.BinaryMessage)
 	}
 
-	// The sandbox echoes raw binary back.
+	// The autoputer echoes raw binary back.
 	if len(msg) != len(binaryPayload) {
 		t.Errorf("binary echo length: got %d, want %d", len(msg), len(binaryPayload))
 	}
@@ -1307,9 +1307,9 @@ func TestWSAuthDenialReturnsJSONWithoutUpgrade(t *testing.T) {
 	}
 }
 
-// --- VAL-PROXY-005: Spoofed identity headers, same sandbox, distinct user context ---
+// --- VAL-PROXY-005: Spoofed identity headers, same autoputer, distinct user context ---
 
-func TestBootstrapTwoDistinctUsersSameSandboxDifferentContext(t *testing.T) {
+func TestBootstrapTwoDistinctUsersSameAutoputerDifferentContext(t *testing.T) {
 	h, priv, _ := testProxyEnv(t)
 
 	// User A requests bootstrap.
@@ -1344,9 +1344,9 @@ func TestBootstrapTwoDistinctUsersSameSandboxDifferentContext(t *testing.T) {
 		t.Fatalf("decode user B bootstrap: %v", err)
 	}
 
-	// Both users must reach the same sandbox instance.
-	if respA["sandbox_id"] != respB["sandbox_id"] {
-		t.Errorf("sandbox identity mismatch: user A saw %v, user B saw %v", respA["sandbox_id"], respB["sandbox_id"])
+	// Both users must reach the same autoputer instance.
+	if respA["computer_id"] != respB["computer_id"] {
+		t.Errorf("autoputer identity mismatch: user A saw %v, user B saw %v", respA["computer_id"], respB["computer_id"])
 	}
 
 	// Each user must see their own authenticated context.
@@ -1404,12 +1404,12 @@ func TestBootstrapStripsAdditionalSpoofedIdentityHeaders(t *testing.T) {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	// Create a sandbox that echoes all received identity headers.
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+	// Create a autoputer that echoes all received identity headers.
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"sandbox_id":       "sandbox-test",
+			"computer_id":      "autoputer-test",
 			"user":             r.Header.Get("X-Authenticated-User"),
 			"x_user_id":        r.Header.Get("X-User-Id"),
 			"x_forwarded_user": r.Header.Get("X-Forwarded-User"),
@@ -1419,10 +1419,10 @@ func TestBootstrapStripsAdditionalSpoofedIdentityHeaders(t *testing.T) {
 			"path":             r.URL.Path,
 		})
 	})
-	sandboxServer := httptest.NewServer(sandboxMux)
-	defer sandboxServer.Close()
+	autoputerServer := httptest.NewServer(autoputerMux)
+	defer autoputerServer.Close()
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: autoputerServer.URL, AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -1457,15 +1457,15 @@ func TestBootstrapStripsAdditionalSpoofedIdentityHeaders(t *testing.T) {
 		t.Errorf("X-Authenticated-User: got %v, want %q", resp["user"], "user-real-identity")
 	}
 
-	// All other identity headers must be stripped — not forwarded to sandbox.
+	// All other identity headers must be stripped — not forwarded to autoputer.
 	for _, header := range []string{"x_user_id", "x_forwarded_user", "x_remote_user", "x_auth_user", "x_user_name"} {
 		if resp[header] != "" {
-			t.Errorf("spoofed header %q leaked to sandbox: got %v", header, resp[header])
+			t.Errorf("spoofed header %q leaked to autoputer: got %v", header, resp[header])
 		}
 	}
 }
 
-func TestWSAuthenticatedTwoDistinctUsersSameSandboxDifferentContext(t *testing.T) {
+func TestWSAuthenticatedTwoDistinctUsersSameAutoputerDifferentContext(t *testing.T) {
 	proxyServer, priv := testWSProxyEnv(t)
 
 	// User A connects via WS.
@@ -1490,9 +1490,9 @@ func TestWSAuthenticatedTwoDistinctUsersSameSandboxDifferentContext(t *testing.T
 		t.Fatalf("user B: read connected: %v", err)
 	}
 
-	// Both users must reach the same sandbox instance.
-	if connectedA["sandbox_id"] != connectedB["sandbox_id"] {
-		t.Errorf("sandbox identity mismatch: user A saw %v, user B saw %v", connectedA["sandbox_id"], connectedB["sandbox_id"])
+	// Both users must reach the same autoputer instance.
+	if connectedA["computer_id"] != connectedB["computer_id"] {
+		t.Errorf("autoputer identity mismatch: user A saw %v, user B saw %v", connectedA["computer_id"], connectedB["computer_id"])
 	}
 
 	// Each user must see their own authenticated context.
@@ -1543,15 +1543,15 @@ func TestWSNoStaleIdentityLeakBetweenUsers(t *testing.T) {
 	}
 }
 
-func TestWSSpoofedIdentityHeadersDoNotReachSandbox(t *testing.T) {
-	// Create a sandbox that echoes all received identity headers over WS.
+func TestWSSpoofedIdentityHeadersDoNotReachAutoputer(t *testing.T) {
+	// Create a autoputer that echoes all received identity headers over WS.
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/ws", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/ws", func(w http.ResponseWriter, r *http.Request) {
 		upgrader := websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		}
@@ -1563,7 +1563,7 @@ func TestWSSpoofedIdentityHeadersDoNotReachSandbox(t *testing.T) {
 
 		// Echo all identity headers we received.
 		connected := map[string]interface{}{
-			"sandbox_id":       "sandbox-test",
+			"computer_id":      "autoputer-test",
 			"user":             r.Header.Get("X-Authenticated-User"),
 			"x_user_id":        r.Header.Get("X-User-Id"),
 			"x_forwarded_user": r.Header.Get("X-Forwarded-User"),
@@ -1574,10 +1574,10 @@ func TestWSSpoofedIdentityHeadersDoNotReachSandbox(t *testing.T) {
 			return
 		}
 	})
-	sandboxServer := httptest.NewServer(sandboxMux)
-	defer sandboxServer.Close()
+	autoputerServer := httptest.NewServer(autoputerMux)
+	defer autoputerServer.Close()
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: autoputerServer.URL, AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -1616,10 +1616,10 @@ func TestWSSpoofedIdentityHeadersDoNotReachSandbox(t *testing.T) {
 		t.Errorf("X-Authenticated-User: got %v, want %q", connected["user"], "user-real-ws")
 	}
 
-	// All other identity headers must NOT reach the sandbox.
+	// All other identity headers must NOT reach the autoputer.
 	for _, header := range []string{"x_user_id", "x_forwarded_user", "x_remote_user"} {
 		if connected[header] != "" {
-			t.Errorf("spoofed header %q leaked to sandbox via WS: got %v", header, connected[header])
+			t.Errorf("spoofed header %q leaked to autoputer via WS: got %v", header, connected[header])
 		}
 	}
 }
@@ -1660,7 +1660,7 @@ func TestWSDeniesWrongSigningKey(t *testing.T) {
 
 // TestProtectedBootstrapDeniesSignedOut verifies that the shell bootstrap
 // route returns a machine-readable 401 JSON denial to signed-out callers
-// and does not expose any sandbox payload.
+// and does not expose any autoputer payload.
 //
 // VAL-DEPLOY-005: "Protected shell routes deny signed-out callers before
 // shell data or live state are exposed"
@@ -1689,11 +1689,11 @@ func TestProtectedBootstrapDeniesSignedOut(t *testing.T) {
 		t.Error("denial should have a non-empty error message")
 	}
 
-	// Must not contain sandbox payload data.
+	// Must not contain autoputer payload data.
 	body := w.Body.String()
-	for _, field := range []string{"sandbox_id", "bootstrap", "user"} {
+	for _, field := range []string{"computer_id", "bootstrap", "user"} {
 		if strings.Contains(body, field) {
-			t.Errorf("denial response should not contain sandbox field %q", field)
+			t.Errorf("denial response should not contain autoputer field %q", field)
 		}
 	}
 }
@@ -1786,10 +1786,10 @@ func TestAllAPIRoutesDenySignedOutCallers(t *testing.T) {
 				t.Errorf("denial for %s should have a non-empty error message", tt.path)
 			}
 
-			// Must not contain sandbox data.
+			// Must not contain autoputer data.
 			body := w.Body.String()
-			if strings.Contains(body, "sandbox_id") {
-				t.Errorf("denial for %s should not contain sandbox_id", tt.path)
+			if strings.Contains(body, "computer_id") {
+				t.Errorf("denial for %s should not contain computer_id", tt.path)
 			}
 		})
 	}
@@ -1797,7 +1797,7 @@ func TestAllAPIRoutesDenySignedOutCallers(t *testing.T) {
 
 // TestAuthenticatedFutureAPIRouteIsForwarded verifies that authenticated
 // HTTP /api/* routes are forwarded by default. The proxy should not require a
-// code change every time the sandbox adds a new app API.
+// code change every time the autoputer adds a new app API.
 func TestAuthenticatedFutureAPIRouteIsForwarded(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
@@ -1808,8 +1808,8 @@ func TestAuthenticatedFutureAPIRouteIsForwarded(t *testing.T) {
 	gotPath := ""
 	gotMethod := ""
 	gotQuery := ""
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/future-app/widget", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/future-app/widget", func(w http.ResponseWriter, r *http.Request) {
 		gotUser = r.Header.Get("X-Authenticated-User")
 		gotPath = r.URL.Path
 		gotMethod = r.Method
@@ -1820,11 +1820,11 @@ func TestAuthenticatedFutureAPIRouteIsForwarded(t *testing.T) {
 			"path": r.URL.Path,
 		})
 	})
-	sandbox := httptest.NewServer(sandboxMux)
-	t.Cleanup(func() { sandbox.Close() })
+	autoputer := httptest.NewServer(autoputerMux)
+	t.Cleanup(func() { autoputer.Close() })
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandbox.URL,
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputer.URL,
 		AuthPublicKeyPath: "/unused/in/test"}
 	h, err := NewHandler(cfg, pub)
 	if err != nil {
@@ -1864,8 +1864,8 @@ func TestAuthenticatedTextureRouteIsForwarded(t *testing.T) {
 
 	gotUser := ""
 	gotPath := ""
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/texture/documents", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/texture/documents", func(w http.ResponseWriter, r *http.Request) {
 		gotUser = r.Header.Get("X-Authenticated-User")
 		gotPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
@@ -1873,11 +1873,11 @@ func TestAuthenticatedTextureRouteIsForwarded(t *testing.T) {
 			"documents": []any{},
 		})
 	})
-	sandbox := httptest.NewServer(sandboxMux)
-	t.Cleanup(func() { sandbox.Close() })
+	autoputer := httptest.NewServer(autoputerMux)
+	t.Cleanup(func() { autoputer.Close() })
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandbox.URL,
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputer.URL,
 		AuthPublicKeyPath: "/unused/in/test"}
 	h, err := NewHandler(cfg, pub)
 	if err != nil {
@@ -1911,8 +1911,8 @@ func TestAuthenticatedTraceRouteIsForwarded(t *testing.T) {
 
 	gotUser := ""
 	gotPath := ""
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/trace/trajectories", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/trace/trajectories", func(w http.ResponseWriter, r *http.Request) {
 		gotUser = r.Header.Get("X-Authenticated-User")
 		gotPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
@@ -1920,11 +1920,11 @@ func TestAuthenticatedTraceRouteIsForwarded(t *testing.T) {
 			"trajectories": []any{},
 		})
 	})
-	sandbox := httptest.NewServer(sandboxMux)
-	t.Cleanup(func() { sandbox.Close() })
+	autoputer := httptest.NewServer(autoputerMux)
+	t.Cleanup(func() { autoputer.Close() })
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandbox.URL,
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputer.URL,
 		AuthPublicKeyPath: "/unused/in/test"}
 	h, err := NewHandler(cfg, pub)
 	if err != nil {
@@ -1958,8 +1958,8 @@ func TestAuthenticatedTestRouteIsForwarded(t *testing.T) {
 
 	gotUser := ""
 	gotPath := ""
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/test/texture/worker-update", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/test/texture/worker-update", func(w http.ResponseWriter, r *http.Request) {
 		gotUser = r.Header.Get("X-Authenticated-User")
 		gotPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
@@ -1967,11 +1967,11 @@ func TestAuthenticatedTestRouteIsForwarded(t *testing.T) {
 			"status": "submitted",
 		})
 	})
-	sandbox := httptest.NewServer(sandboxMux)
-	t.Cleanup(func() { sandbox.Close() })
+	autoputer := httptest.NewServer(autoputerMux)
+	t.Cleanup(func() { autoputer.Close() })
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandbox.URL,
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputer.URL,
 		AuthPublicKeyPath: "/unused/in/test"}
 	h, err := NewHandler(cfg, pub)
 	if err != nil {
@@ -1998,13 +1998,13 @@ func TestAuthenticatedTestRouteIsForwarded(t *testing.T) {
 	}
 }
 
-// TestSignedOutCallersNeverSeeSandboxData is a comprehensive test verifying
-// that no proxy response to a signed-out caller ever contains sandbox-origin
-// data (sandbox_id, bootstrap payloads, user context from the upstream).
+// TestSignedOutCallersNeverSeeAutoputerData is a comprehensive test verifying
+// that no proxy response to a signed-out caller ever contains autoputer-origin
+// data (computer_id, bootstrap payloads, user context from the upstream).
 //
 // VAL-DEPLOY-005: "Protected shell routes deny signed-out callers before
 // shell data or live state are exposed"
-func TestSignedOutCallersNeverSeeSandboxData(t *testing.T) {
+func TestSignedOutCallersNeverSeeAutoputerData(t *testing.T) {
 	h, _, _ := testProxyEnv(t)
 
 	paths := []string{
@@ -2022,10 +2022,10 @@ func TestSignedOutCallersNeverSeeSandboxData(t *testing.T) {
 
 			body := w.Body.String()
 
-			// Must not contain any sandbox-origin data.
-			for _, field := range []string{"sandbox_id", "placeholder-shell", "websocket channel"} {
+			// Must not contain any autoputer-origin data.
+			for _, field := range []string{"computer_id", "placeholder-shell", "websocket channel"} {
 				if strings.Contains(body, field) {
-					t.Errorf("signed-out response for %s contains sandbox data field %q", path, field)
+					t.Errorf("signed-out response for %s contains autoputer data field %q", path, field)
 				}
 			}
 
@@ -2043,7 +2043,7 @@ func TestSignedOutCallersNeverSeeSandboxData(t *testing.T) {
 
 // TestProxyHealthReportsOkWhenUpstreamIsHealthy verifies that the proxy
 // /health endpoint returns "ok" status with "ok" upstream when the
-// sandbox backend is reachable.
+// autoputer backend is reachable.
 //
 // VAL-DEPLOY-008: "protected-request backend health is observable"
 func TestProxyHealthReportsOkWhenUpstreamIsHealthy(t *testing.T) {
@@ -2081,7 +2081,7 @@ func TestProxyHealthReportsOkWhenUpstreamIsHealthy(t *testing.T) {
 
 // TestProxyHealthReportsDegradedWhenUpstreamIsUnreachable verifies that
 // the proxy /health endpoint returns "degraded" status with "unreachable"
-// upstream when the sandbox backend is not available. This makes it
+// upstream when the autoputer backend is not available. This makes it
 // possible for operators and monitoring to distinguish between a healthy
 // proxy and a degraded proxy whose backend is down.
 //
@@ -2092,21 +2092,21 @@ func TestProxyHealthReportsDegradedWhenUpstreamIsUnreachable(t *testing.T) {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	// Create a sandbox server that we can close to simulate unreachability.
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	// Create a autoputer server that we can close to simulate unreachability.
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "sandbox"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "autoputer"})
 	})
-	sandboxServer := httptest.NewServer(sandboxMux)
+	autoputerServer := httptest.NewServer(autoputerMux)
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: autoputerServer.URL, AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	// Verify health is ok while sandbox is up.
+	// Verify health is ok while autoputer is up.
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 	handler.HandleHealth(w, req)
@@ -2122,8 +2122,8 @@ func TestProxyHealthReportsDegradedWhenUpstreamIsUnreachable(t *testing.T) {
 		t.Errorf("upstream before shutdown: got %q, want %q", respOk.Upstream, "ok")
 	}
 
-	// Shut down the sandbox to simulate an upstream failure.
-	sandboxServer.Close()
+	// Shut down the autoputer to simulate an upstream failure.
+	autoputerServer.Close()
 
 	// Wait briefly for connections to drain.
 	time.Sleep(100 * time.Millisecond)
@@ -2147,7 +2147,7 @@ func TestProxyHealthReportsDegradedWhenUpstreamIsUnreachable(t *testing.T) {
 
 // TestProxyHealthReportsDegradedWithNoUpstreamAtStartup verifies that
 // the proxy health endpoint correctly reports "degraded" when started
-// with an unreachable sandbox URL (e.g., sandbox hasn't started yet).
+// with an unreachable autoputer URL (e.g., autoputer hasn't started yet).
 //
 // VAL-DEPLOY-008: "protected-request backend health is observable"
 func TestProxyHealthReportsDegradedWithNoUpstreamAtStartup(t *testing.T) {
@@ -2157,7 +2157,7 @@ func TestProxyHealthReportsDegradedWithNoUpstreamAtStartup(t *testing.T) {
 	}
 
 	// Point proxy at a non-existent upstream.
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: "http://127.0.0.1:1", AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: "http://127.0.0.1:1", AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -2200,7 +2200,7 @@ func TestProxyHealthRejectsNonGet(t *testing.T) {
 
 // TestProxyHealthRecoversAfterUpstreamRestart verifies that the proxy
 // health endpoint transitions from "degraded" back to "ok" when the
-// upstream sandbox recovers. This simulates the restart recovery path
+// upstream autoputer recovers. This simulates the restart recovery path
 // required by VAL-DEPLOY-008 and VAL-CROSS-118.
 //
 // VAL-CROSS-118: "Restarting auth or proxy returns the system to healthy state"
@@ -2211,15 +2211,15 @@ func TestProxyHealthRecoversAfterUpstreamRestart(t *testing.T) {
 	}
 
 	// Use a custom port that's unlikely to conflict.
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "sandbox"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "autoputer"})
 	})
 
-	// Start the sandbox, create proxy pointing at it.
-	sandboxServer := httptest.NewServer(sandboxMux)
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
+	// Start the autoputer, create proxy pointing at it.
+	autoputerServer := httptest.NewServer(autoputerMux)
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: autoputerServer.URL, AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -2235,8 +2235,8 @@ func TestProxyHealthRecoversAfterUpstreamRestart(t *testing.T) {
 		t.Fatalf("initial status: got %q, want %q", resp1.Status, "ok")
 	}
 
-	// Stop the sandbox (simulate crash).
-	sandboxServer.Close()
+	// Stop the autoputer (simulate crash).
+	autoputerServer.Close()
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify health reports degraded.
@@ -2249,22 +2249,22 @@ func TestProxyHealthRecoversAfterUpstreamRestart(t *testing.T) {
 		t.Fatalf("degraded status: got %q, want %q", resp2.Status, "degraded")
 	}
 
-	// "Restart" the sandbox on the same address by creating a new test server.
+	// "Restart" the autoputer on the same address by creating a new test server.
 	// Since httptest.Server uses random ports, we need a different approach:
-	// create a new sandbox server and update the handler's config to point to it.
-	newSandboxMux := http.NewServeMux()
-	newSandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	// create a new autoputer server and update the handler's config to point to it.
+	newAutoputerMux := http.NewServeMux()
+	newAutoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "sandbox"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "autoputer"})
 	})
-	newSandboxServer := httptest.NewServer(newSandboxMux)
-	defer newSandboxServer.Close()
+	newAutoputerServer := httptest.NewServer(newAutoputerMux)
+	defer newAutoputerServer.Close()
 
-	// Re-create the handler pointing to the new sandbox.
-	newSandboxURL, _ := url.Parse(newSandboxServer.URL)
-	proxy := httputil.NewSingleHostReverseProxy(newSandboxURL)
-	handler2, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        newSandboxServer.URL,
+	// Re-create the handler pointing to the new autoputer.
+	newComputerURL, _ := url.Parse(newAutoputerServer.URL)
+	proxy := httputil.NewSingleHostReverseProxy(newComputerURL)
+	handler2, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       newAutoputerServer.URL,
 		AuthPublicKeyPath: "/unused"}, pub)
 	_ = proxy
 	if err != nil {
@@ -2344,8 +2344,8 @@ func TestProviderRouteDeniedWithAuth(t *testing.T) {
 // --- VAL-VM-001, VAL-VM-002: vmctl-backed routing tests ---
 
 // testVMctlProxyEnv sets up a proxy Handler with a vmctl service backend,
-// a fake sandbox backend, and Ed25519 key material. Returns the handler,
-// signing key, sandbox server, and vmctl test server.
+// a fake autoputer backend, and Ed25519 key material. Returns the handler,
+// signing key, autoputer server, and vmctl test server.
 func testVMctlProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Server, *httptest.Server) {
 	t.Helper()
 
@@ -2354,19 +2354,19 @@ func testVMctlProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Se
 		t.Fatalf("generate ed25519 key: %v", err)
 	}
 
-	// Create a fake sandbox backend.
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+	// Create a fake autoputer backend.
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get("X-Authenticated-User")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"sandbox_id": "sandbox-vmctl-test",
-			"user":       user,
-			"bootstrap":  "vm-routed",
-			"path":       r.URL.Path,
+			"computer_id": "autoputer-vmctl-test",
+			"user":        user,
+			"bootstrap":   "vm-routed",
+			"path":        r.URL.Path,
 		})
 	})
-	sandboxMux.HandleFunc("/api/prompt-bar", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux.HandleFunc("/api/prompt-bar", func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get("X-Authenticated-User")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
@@ -2375,11 +2375,11 @@ func testVMctlProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Se
 			"state":         "accepted",
 		})
 	})
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":           "ready",
-			"service":          "sandbox",
+			"service":          "autoputer",
 			"runtime_health":   "ready",
 			"running_runs":     0,
 			"researcher_count": 1,
@@ -2397,11 +2397,11 @@ func testVMctlProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Se
 		})
 	})
 
-	sandboxServer := httptest.NewServer(sandboxMux)
-	t.Cleanup(func() { sandboxServer.Close() })
+	autoputerServer := httptest.NewServer(autoputerMux)
+	t.Cleanup(func() { autoputerServer.Close() })
 
 	// Create a vmctl service.
-	reg := vmctl.NewOwnershipRegistry(sandboxServer.URL)
+	reg := vmctl.NewOwnershipRegistry(autoputerServer.URL)
 	vmctlHandler := vmctl.NewHandler(reg)
 
 	vmctlMux := http.NewServeMux()
@@ -2416,8 +2416,8 @@ func testVMctlProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Se
 	t.Cleanup(func() { vmctlServer.Close() })
 
 	// Create proxy config with vmctl routing enabled.
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandboxServer.URL,
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputerServer.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		VmctlURL:          vmctlServer.URL}
 
@@ -2430,32 +2430,32 @@ func testVMctlProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Se
 		t.Fatalf("NewHandler with vmctl: %v", err)
 	}
 
-	return handler, priv, sandboxServer, vmctlServer
+	return handler, priv, autoputerServer, vmctlServer
 }
 
-func TestResolveSandboxURLHasNoProductionStaticFallback(t *testing.T) {
+func TestResolveComputerURLHasNoProductionStaticFallback(t *testing.T) {
 	var backendCalls atomic.Int64
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		backendCalls.Add(1)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer backend.Close()
-	h, err := NewHandler(&Config{SandboxURL: backend.URL}, make(ed25519.PublicKey, ed25519.PublicKeySize))
+	h, err := NewHandler(&Config{ComputerURL: backend.URL}, make(ed25519.PublicKey, ed25519.PublicKeySize))
 	if err != nil {
 		t.Fatalf("new handler: %v", err)
 	}
-	if _, err := h.resolveSandboxURL(context.Background(), "owner", "primary"); err == nil {
-		t.Fatal("production route used static sandbox without vmctl")
+	if _, err := h.resolveComputerURL(context.Background(), "owner", "primary"); err == nil {
+		t.Fatal("production route used static autoputer without vmctl")
 	}
 	if backendCalls.Load() != 0 {
-		t.Fatalf("static sandbox calls = %d, want zero", backendCalls.Load())
+		t.Fatalf("static autoputer calls = %d, want zero", backendCalls.Load())
 	}
 }
 
-func TestResolveSandboxURLRequiresJoinedComputerVersionRoute(t *testing.T) {
+func TestResolveComputerURLRequiresJoinedComputerVersionRoute(t *testing.T) {
 	createdAt := time.Date(2026, 7, 16, 1, 0, 0, 0, time.UTC)
 	closure, err := computerversion.NewCodeClosure(strings.Repeat("1", 40), []computerversion.CodeArtifact{{
-		Name: "sandbox", SHA256: strings.Repeat("a", 64), URI: "nix-store+sha256://" + strings.Repeat("a", 64) + "/nix/store/test-sandbox",
+		Name: "autoputer", SHA256: strings.Repeat("a", 64), URI: "nix-store+sha256://" + strings.Repeat("a", 64) + "/nix/store/test-autoputer",
 	}}, createdAt)
 	if err != nil {
 		t.Fatal(err)
@@ -2468,8 +2468,8 @@ func TestResolveSandboxURLRequiresJoinedComputerVersionRoute(t *testing.T) {
 	}
 	version := computerversion.ComputerVersion{CodeRef: closure.Ref, ArtifactProgramRef: program.Ref}
 	var routeCalls, resolveCalls atomic.Int64
-	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
-	defer sandbox.Close()
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	defer autoputer.Close()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/internal/vmctl/computer-version-routes/resolve", func(w http.ResponseWriter, r *http.Request) {
 		routeCalls.Add(1)
@@ -2485,25 +2485,25 @@ func TestResolveSandboxURLRequiresJoinedComputerVersionRoute(t *testing.T) {
 		resolveCalls.Add(1)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"vm_id": "vm-joined", "user_id": "owner", "desktop_id": "primary",
-			"published": true, "sandbox_url": sandbox.URL, "state": "active",
+			"published": true, "computer_url": autoputer.URL, "state": "active",
 		})
 	})
 	vmctlServer := httptest.NewServer(mux)
 	defer vmctlServer.Close()
-	h, err := NewHandler(&Config{SandboxURL: sandbox.URL, VmctlURL: vmctlServer.URL}, make(ed25519.PublicKey, ed25519.PublicKeySize))
+	h, err := NewHandler(&Config{ComputerURL: autoputer.URL, VmctlURL: vmctlServer.URL}, make(ed25519.PublicKey, ed25519.PublicKeySize))
 	if err != nil {
 		t.Fatalf("new handler: %v", err)
 	}
-	got, err := h.resolveSandboxURL(context.Background(), "owner", "primary")
+	got, err := h.resolveComputerURL(context.Background(), "owner", "primary")
 	if err != nil {
 		t.Fatalf("resolve joined route: %v", err)
 	}
-	if got != sandbox.URL || routeCalls.Load() != 1 || resolveCalls.Load() != 1 {
+	if got != autoputer.URL || routeCalls.Load() != 1 || resolveCalls.Load() != 1 {
 		t.Fatalf("joined route result url=%q route_calls=%d resolve_calls=%d", got, routeCalls.Load(), resolveCalls.Load())
 	}
 }
 
-func TestResolveSandboxURLRefusesBeforeVMResolutionWhenRouteMissing(t *testing.T) {
+func TestResolveComputerURLRefusesBeforeVMResolutionWhenRouteMissing(t *testing.T) {
 	var resolveCalls atomic.Int64
 	mux := http.NewServeMux()
 	mux.HandleFunc("/internal/vmctl/computer-version-routes/resolve", func(w http.ResponseWriter, _ *http.Request) {
@@ -2515,11 +2515,11 @@ func TestResolveSandboxURLRefusesBeforeVMResolutionWhenRouteMissing(t *testing.T
 	})
 	vmctlServer := httptest.NewServer(mux)
 	defer vmctlServer.Close()
-	h, err := NewHandler(&Config{SandboxURL: "http://invalid", VmctlURL: vmctlServer.URL}, make(ed25519.PublicKey, ed25519.PublicKeySize))
+	h, err := NewHandler(&Config{ComputerURL: "http://invalid", VmctlURL: vmctlServer.URL}, make(ed25519.PublicKey, ed25519.PublicKeySize))
 	if err != nil {
 		t.Fatalf("new handler: %v", err)
 	}
-	if _, err := h.resolveSandboxURL(context.Background(), "owner", "primary"); err == nil {
+	if _, err := h.resolveComputerURL(context.Background(), "owner", "primary"); err == nil {
 		t.Fatal("missing D-ROUTE reached VM resolution")
 	}
 	if resolveCalls.Load() != 0 {
@@ -2549,7 +2549,7 @@ func TestVMctlRouting_BootstrapRoutesThroughVM(t *testing.T) {
 		t.Fatalf("decode result: %v", err)
 	}
 
-	// The sandbox should have received the user context.
+	// The autoputer should have received the user context.
 	if result["user"] != "user-vm-1" {
 		t.Errorf("expected user user-vm-1, got %v", result["user"])
 	}
@@ -2623,17 +2623,17 @@ func TestVMctlRouting_UnknownDesktopSelectorDoesNotMintVM(t *testing.T) {
 	}
 }
 
-func TestResolveSandboxURLRetriesTransientVMctlFailure(t *testing.T) {
-	oldWindow := sandboxResolveRetryWindow
-	oldBaseDelay := sandboxResolveRetryBaseDelay
-	oldMaxDelay := sandboxResolveRetryMaxDelay
-	sandboxResolveRetryWindow = 100 * time.Millisecond
-	sandboxResolveRetryBaseDelay = time.Millisecond
-	sandboxResolveRetryMaxDelay = 5 * time.Millisecond
+func TestResolveComputerURLRetriesTransientVMctlFailure(t *testing.T) {
+	oldWindow := autoputerResolveRetryWindow
+	oldBaseDelay := autoputerResolveRetryBaseDelay
+	oldMaxDelay := autoputerResolveRetryMaxDelay
+	autoputerResolveRetryWindow = 100 * time.Millisecond
+	autoputerResolveRetryBaseDelay = time.Millisecond
+	autoputerResolveRetryMaxDelay = 5 * time.Millisecond
 	t.Cleanup(func() {
-		sandboxResolveRetryWindow = oldWindow
-		sandboxResolveRetryBaseDelay = oldBaseDelay
-		sandboxResolveRetryMaxDelay = oldMaxDelay
+		autoputerResolveRetryWindow = oldWindow
+		autoputerResolveRetryBaseDelay = oldBaseDelay
+		autoputerResolveRetryMaxDelay = oldMaxDelay
 	})
 
 	attempts := 0
@@ -2645,31 +2645,31 @@ func TestResolveSandboxURLRetriesTransientVMctlFailure(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"vm_id":       "vm-retry",
-			"user_id":     "alice",
-			"desktop_id":  vmctl.PrimaryDesktopID,
-			"kind":        string(vmctl.VMKindInteractive),
-			"published":   true,
-			"sandbox_url": "http://127.0.0.1:8085",
-			"state":       string(vmctl.VMStateActive),
+			"vm_id":        "vm-retry",
+			"user_id":      "alice",
+			"desktop_id":   vmctl.PrimaryDesktopID,
+			"kind":         string(vmctl.VMKindInteractive),
+			"published":    true,
+			"computer_url": "http://127.0.0.1:8085",
+			"state":        string(vmctl.VMStateActive),
 		})
 	}))
 	defer vmctlSrv.Close()
 
-	handler := &Handler{cfg: &Config{AllowDirectSandboxForTests: true}, vmctlClient: vmctl.NewClient(vmctlSrv.URL)}
-	got, err := handler.resolveSandboxURL(context.Background(), "alice", vmctl.PrimaryDesktopID)
+	handler := &Handler{cfg: &Config{AllowDirectAutoputerForTests: true}, vmctlClient: vmctl.NewClient(vmctlSrv.URL)}
+	got, err := handler.resolveComputerURL(context.Background(), "alice", vmctl.PrimaryDesktopID)
 	if err != nil {
-		t.Fatalf("resolveSandboxURL: %v", err)
+		t.Fatalf("resolveComputerURL: %v", err)
 	}
 	if got != "http://127.0.0.1:8085" {
-		t.Fatalf("sandbox URL = %q, want proxy target", got)
+		t.Fatalf("autoputer URL = %q, want proxy target", got)
 	}
 	if attempts != 2 {
 		t.Fatalf("attempts = %d, want 2", attempts)
 	}
 }
 
-func TestResolveSandboxURLUsesResolveForUniversalWirePlatformComputer(t *testing.T) {
+func TestResolveComputerURLUsesResolveForUniversalWirePlatformComputer(t *testing.T) {
 	resolveCalls := 0
 	lookupCalls := 0
 	vmctlSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2693,7 +2693,7 @@ func TestResolveSandboxURLUsesResolveForUniversalWirePlatformComputer(t *testing
 				"desktop_id":     vmctl.UniversalWirePlatformDesktopID,
 				"kind":           string(vmctl.VMKindInteractive),
 				"published":      true,
-				"sandbox_url":    "http://10.203.141.2:8085",
+				"computer_url":   "http://10.203.141.2:8085",
 				"state":          string(vmctl.VMStateActive),
 				"warmness_class": "public_platform",
 			})
@@ -2706,13 +2706,13 @@ func TestResolveSandboxURLUsesResolveForUniversalWirePlatformComputer(t *testing
 	}))
 	t.Cleanup(func() { vmctlSrv.Close() })
 
-	handler := &Handler{cfg: &Config{AllowDirectSandboxForTests: true}, vmctlClient: vmctl.NewClient(vmctlSrv.URL)}
-	got, err := handler.resolveSandboxURL(context.Background(), vmctl.UniversalWirePlatformOwnerID, vmctl.UniversalWirePlatformDesktopID)
+	handler := &Handler{cfg: &Config{AllowDirectAutoputerForTests: true}, vmctlClient: vmctl.NewClient(vmctlSrv.URL)}
+	got, err := handler.resolveComputerURL(context.Background(), vmctl.UniversalWirePlatformOwnerID, vmctl.UniversalWirePlatformDesktopID)
 	if err != nil {
-		t.Fatalf("resolveSandboxURL: %v", err)
+		t.Fatalf("resolveComputerURL: %v", err)
 	}
 	if got != "http://10.203.141.2:8085" {
-		t.Fatalf("sandbox URL = %q, want platform sandbox", got)
+		t.Fatalf("autoputer URL = %q, want platform autoputer", got)
 	}
 	if resolveCalls != 1 || lookupCalls != 0 {
 		t.Fatalf("vmctl calls: resolve=%d lookup=%d, want resolve-only", resolveCalls, lookupCalls)
@@ -2972,7 +2972,7 @@ func TestVMctlRouting_HealthReportsRedactedVMctlStatus(t *testing.T) {
 		t.Errorf("expected vmctl_status=ok, got %s", result.VMctlStatus)
 	}
 	body := w.Body.String()
-	for _, forbidden := range []string{"vmctl_url", "vmctl_health", "active_vms", "total_ownerships", "memory_available_bytes", "sandbox_url", "reclaim", "warmness"} {
+	for _, forbidden := range []string{"vmctl_url", "vmctl_health", "active_vms", "total_ownerships", "memory_available_bytes", "computer_url", "reclaim", "warmness"} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("health leaked %q in %s", forbidden, body)
 		}
@@ -2982,7 +2982,7 @@ func TestVMctlRouting_HealthReportsRedactedVMctlStatus(t *testing.T) {
 func TestCurrentImmutableIdentityJoinsRedactedProductEvidence(t *testing.T) {
 	createdAt := time.Date(2026, 7, 17, 19, 0, 0, 0, time.UTC)
 	closure, err := computerversion.NewCodeClosure(strings.Repeat("1", 40), []computerversion.CodeArtifact{{
-		Name: "sandbox", SHA256: strings.Repeat("a", 64), URI: "nix-store+sha256://" + strings.Repeat("a", 64) + "/nix/store/test-sandbox",
+		Name: "autoputer", SHA256: strings.Repeat("a", 64), URI: "nix-store+sha256://" + strings.Repeat("a", 64) + "/nix/store/test-autoputer",
 	}}, createdAt)
 	if err != nil {
 		t.Fatal(err)
@@ -3020,7 +3020,7 @@ func TestCurrentImmutableIdentityJoinsRedactedProductEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, forbidden := range []string{"owner-private", slotID, "vm_id", "sandbox_url", "device_path", "construction_disk_receipt_id"} {
+	for _, forbidden := range []string{"owner-private", slotID, "vm_id", "computer_url", "device_path", "construction_disk_receipt_id"} {
 		if strings.Contains(string(body), forbidden) {
 			t.Fatalf("immutable identity leaked %q in %s", forbidden, body)
 		}
@@ -3089,7 +3089,7 @@ func TestComputeStatusDoesNotCreateOwnershipAndRedactsIdentity(t *testing.T) {
 	for _, forbidden := range []string{
 		"compute-status-user",
 		"vm_id",
-		"sandbox_url",
+		"computer_url",
 		"user_id",
 		"state_dir",
 		"vmctl",
@@ -3169,7 +3169,7 @@ func TestComputeStatusListsOnlyUserComputers(t *testing.T) {
 		t.Fatalf("current computer_id %q != listed %q", result.CurrentComputer.ComputerID, result.Computers[0].ComputerID)
 	}
 	body := w.Body.String()
-	for _, forbidden := range []string{"other-compute-user", "compute-list-user", "vm_id", "sandbox_url", "user_id"} {
+	for _, forbidden := range []string{"other-compute-user", "compute-list-user", "vm_id", "computer_url", "user_id"} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("compute status leaked %q in %s", forbidden, body)
 		}
@@ -3243,7 +3243,7 @@ func TestComputeRecoveryWakeCreatesRedactedCurrentComputer(t *testing.T) {
 	}
 
 	body := w.Body.String()
-	for _, forbidden := range []string{"compute-recovery-user", "vm_id", "sandbox_url", "user_id", "state_dir", "build", "active_provider"} {
+	for _, forbidden := range []string{"compute-recovery-user", "vm_id", "computer_url", "user_id", "state_dir", "build", "active_provider"} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("compute recovery leaked %q in %s", forbidden, body)
 		}
@@ -3295,20 +3295,20 @@ func TestComputeRecoveryWakeRefreshesUnreachableCurrentComputer(t *testing.T) {
 	}
 
 	var refreshed atomic.Bool
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if !refreshed.Load() {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "boot_failed"})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "sandbox"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "autoputer"})
 	})
-	sandboxSrv := httptest.NewServer(sandboxMux)
-	t.Cleanup(func() { sandboxSrv.Close() })
+	autoputerSrv := httptest.NewServer(autoputerMux)
+	t.Cleanup(func() { autoputerSrv.Close() })
 
-	reg := vmctl.NewOwnershipRegistry(sandboxSrv.URL)
+	reg := vmctl.NewOwnershipRegistry(autoputerSrv.URL)
 	vmctlHandler := vmctl.NewHandler(reg)
 	vmctlMux := http.NewServeMux()
 	vmctlMux.HandleFunc("/internal/vmctl/resolve", vmctlHandler.HandleResolve)
@@ -3322,8 +3322,8 @@ func TestComputeRecoveryWakeRefreshesUnreachableCurrentComputer(t *testing.T) {
 	vmctlSrv := httptest.NewServer(vmctlMux)
 	t.Cleanup(func() { vmctlSrv.Close() })
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandboxSrv.URL,
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputerSrv.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		VmctlURL:          vmctlSrv.URL}
 	handler, err := NewHandler(cfg, pub)
@@ -3366,14 +3366,14 @@ func TestComputeRecoveryWakeReportsUnreachableRefreshFailure(t *testing.T) {
 		t.Fatalf("generate ed25519 key: %v", err)
 	}
 
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "boot_pending"})
 	})
-	sandboxSrv := httptest.NewServer(sandboxMux)
-	t.Cleanup(func() { sandboxSrv.Close() })
+	autoputerSrv := httptest.NewServer(autoputerMux)
+	t.Cleanup(func() { autoputerSrv.Close() })
 
 	var refreshCalled atomic.Bool
 	writeOwnership := func(w http.ResponseWriter) {
@@ -3384,7 +3384,7 @@ func TestComputeRecoveryWakeReportsUnreachableRefreshFailure(t *testing.T) {
 			"kind":           string(vmctl.VMKindInteractive),
 			"warmness_class": "primary",
 			"published":      true,
-			"sandbox_url":    sandboxSrv.URL,
+			"computer_url":   autoputerSrv.URL,
 			"state":          string(vmctl.VMStateActive),
 			"created_at":     "2026-06-15T10:00:00.000Z",
 			"last_active_at": "2026-06-15T10:01:00.000Z",
@@ -3406,8 +3406,8 @@ func TestComputeRecoveryWakeReportsUnreachableRefreshFailure(t *testing.T) {
 	vmctlSrv := httptest.NewServer(vmctlMux)
 	t.Cleanup(func() { vmctlSrv.Close() })
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandboxSrv.URL,
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputerSrv.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		VmctlURL:          vmctlSrv.URL}
 	handler, err := NewHandler(cfg, pub)
@@ -3454,17 +3454,17 @@ func TestComputeRecoveryWakeReportsUnreachableRefreshFailure(t *testing.T) {
 }
 
 func TestRunComputeRecoveryRejectsStalePreRefreshHealth(t *testing.T) {
-	oldSandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	oldAutoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}))
-	t.Cleanup(oldSandbox.Close)
+	t.Cleanup(oldAutoputer.Close)
 
 	vmctlMux := http.NewServeMux()
 	vmctlMux.HandleFunc("/internal/vmctl/lookup", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"vm_id": "vm-unready", "user_id": "owner-unready", "desktop_id": vmctl.PrimaryDesktopID,
 			"kind": string(vmctl.VMKindInteractive), "warmness_class": "primary",
-			"sandbox_url": oldSandbox.URL, "state": string(vmctl.VMStateFailed), "epoch": 8,
+			"computer_url": oldAutoputer.URL, "state": string(vmctl.VMStateFailed), "epoch": 8,
 		})
 	})
 	vmctlMux.HandleFunc("/internal/vmctl/refresh", func(w http.ResponseWriter, _ *http.Request) {
@@ -3478,7 +3478,7 @@ func TestRunComputeRecoveryRejectsStalePreRefreshHealth(t *testing.T) {
 	t.Cleanup(vmctlServer.Close)
 
 	handler, err := NewHandler(&Config{
-		AllowDirectSandboxForTests: true, Port: "0", SandboxURL: oldSandbox.URL,
+		AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: oldAutoputer.URL,
 		AuthPublicKeyPath: "/unused/in/test", VmctlURL: vmctlServer.URL,
 	}, nil)
 	if err != nil {
@@ -3550,20 +3550,20 @@ func TestComputeRecoveryWakeRefreshesCurrentComputerWithoutBlockingResolve(t *te
 
 	var refreshed atomic.Bool
 	var resolveCalled atomic.Bool
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if !refreshed.Load() {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "boot_pending"})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "sandbox"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "autoputer"})
 	})
-	sandboxSrv := httptest.NewServer(sandboxMux)
-	t.Cleanup(func() { sandboxSrv.Close() })
+	autoputerSrv := httptest.NewServer(autoputerMux)
+	t.Cleanup(func() { autoputerSrv.Close() })
 
-	reg := vmctl.NewOwnershipRegistry(sandboxSrv.URL)
+	reg := vmctl.NewOwnershipRegistry(autoputerSrv.URL)
 	vmctlHandler := vmctl.NewHandler(reg)
 
 	vmctlMux := http.NewServeMux()
@@ -3589,8 +3589,8 @@ func TestComputeRecoveryWakeRefreshesCurrentComputerWithoutBlockingResolve(t *te
 		t.Fatalf("precreated ownership lookup = %+v, err=%v", own, err)
 	}
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandboxSrv.URL,
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputerSrv.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		VmctlURL:          vmctlSrv.URL}
 	handler, err := NewHandler(cfg, pub)
@@ -3632,13 +3632,13 @@ func TestComputeRecoveryWakeRefreshesStoppedCurrentComputerWhenResolveFails(t *t
 		t.Fatalf("generate ed25519 key: %v", err)
 	}
 
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "sandbox"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "autoputer"})
 	})
-	sandboxSrv := httptest.NewServer(sandboxMux)
-	t.Cleanup(func() { sandboxSrv.Close() })
+	autoputerSrv := httptest.NewServer(autoputerMux)
+	t.Cleanup(func() { autoputerSrv.Close() })
 
 	var resolveCalled atomic.Bool
 	var refreshCalled atomic.Bool
@@ -3651,7 +3651,7 @@ func TestComputeRecoveryWakeRefreshesStoppedCurrentComputerWhenResolveFails(t *t
 			"kind":           string(vmctl.VMKindInteractive),
 			"warmness_class": "primary",
 			"published":      true,
-			"sandbox_url":    "http://10.203.109.2:8085",
+			"computer_url":   "http://10.203.109.2:8085",
 			"state":          string(vmctl.VMStateStopped),
 			"created_at":     "2026-06-09T20:00:00.000Z",
 			"last_active_at": "2026-06-09T20:30:00.000Z",
@@ -3672,7 +3672,7 @@ func TestComputeRecoveryWakeRefreshesStoppedCurrentComputerWhenResolveFails(t *t
 			"kind":           string(vmctl.VMKindInteractive),
 			"warmness_class": "primary",
 			"published":      true,
-			"sandbox_url":    sandboxSrv.URL,
+			"computer_url":   autoputerSrv.URL,
 			"state":          string(vmctl.VMStateActive),
 		})
 	})
@@ -3682,8 +3682,8 @@ func TestComputeRecoveryWakeRefreshesStoppedCurrentComputerWhenResolveFails(t *t
 	vmctlSrv := httptest.NewServer(vmctlMux)
 	t.Cleanup(func() { vmctlSrv.Close() })
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandboxSrv.URL,
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputerSrv.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		VmctlURL:          vmctlSrv.URL}
 	handler, err := NewHandler(cfg, pub)
@@ -3726,27 +3726,27 @@ func TestComputeRecoveryContinuesAfterClientCancelAndStatusBootstrapObserveReady
 	}
 
 	var refreshed atomic.Bool
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if !refreshed.Load() {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "boot_pending"})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "sandbox"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "autoputer"})
 	})
-	sandboxMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if !refreshed.Load() {
 			w.WriteHeader(http.StatusBadGateway)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "route not ready"})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"sandbox_id": "vm-cancel-recovered"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"computer_id": "vm-cancel-recovered"})
 	})
-	sandboxSrv := httptest.NewServer(sandboxMux)
-	t.Cleanup(func() { sandboxSrv.Close() })
+	autoputerSrv := httptest.NewServer(autoputerMux)
+	t.Cleanup(func() { autoputerSrv.Close() })
 
 	refreshStarted := make(chan struct{})
 	releaseRefresh := make(chan struct{})
@@ -3762,7 +3762,7 @@ func TestComputeRecoveryContinuesAfterClientCancelAndStatusBootstrapObserveReady
 			"kind":           string(vmctl.VMKindInteractive),
 			"warmness_class": "primary",
 			"published":      true,
-			"sandbox_url":    sandboxSrv.URL,
+			"computer_url":   autoputerSrv.URL,
 			"state":          state,
 			"created_at":     "2026-06-15T10:00:00.000Z",
 			"last_active_at": "2026-06-15T10:01:00.000Z",
@@ -3800,8 +3800,8 @@ func TestComputeRecoveryContinuesAfterClientCancelAndStatusBootstrapObserveReady
 	vmctlSrv := httptest.NewServer(vmctlMux)
 	t.Cleanup(func() { vmctlSrv.Close() })
 
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandboxSrv.URL,
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputerSrv.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		VmctlURL:          vmctlSrv.URL}
 	handler, err := NewHandler(cfg, pub)
@@ -3904,8 +3904,8 @@ func TestComputeRecoveryContinuesAfterClientCancelAndStatusBootstrapObserveReady
 	if err := json.NewDecoder(bootstrapW.Body).Decode(&bootstrap); err != nil {
 		t.Fatalf("decode bootstrap after detached recovery: %v", err)
 	}
-	if bootstrap["sandbox_id"] != "vm-cancel-recovered" {
-		t.Fatalf("bootstrap sandbox_id = %q, want vm-cancel-recovered", bootstrap["sandbox_id"])
+	if bootstrap["computer_id"] != "vm-cancel-recovered" {
+		t.Fatalf("bootstrap computer_id = %q, want vm-cancel-recovered", bootstrap["computer_id"])
 	}
 }
 
@@ -3952,18 +3952,18 @@ func TestProxyHealthReportsRedactedLifecycleAggregates(t *testing.T) {
 }
 
 // TestVMctlRouting_GracefulDegradation tests that when vmctl is unreachable,
-// the proxy falls back to the static sandbox URL.
+// the proxy falls back to the static autoputer URL.
 func TestVMctlRouting_GracefulDegradation(t *testing.T) {
-	oldWindow := sandboxResolveRetryWindow
-	oldBaseDelay := sandboxResolveRetryBaseDelay
-	oldMaxDelay := sandboxResolveRetryMaxDelay
-	sandboxResolveRetryWindow = 100 * time.Millisecond
-	sandboxResolveRetryBaseDelay = time.Millisecond
-	sandboxResolveRetryMaxDelay = 5 * time.Millisecond
+	oldWindow := autoputerResolveRetryWindow
+	oldBaseDelay := autoputerResolveRetryBaseDelay
+	oldMaxDelay := autoputerResolveRetryMaxDelay
+	autoputerResolveRetryWindow = 100 * time.Millisecond
+	autoputerResolveRetryBaseDelay = time.Millisecond
+	autoputerResolveRetryMaxDelay = 5 * time.Millisecond
 	t.Cleanup(func() {
-		sandboxResolveRetryWindow = oldWindow
-		sandboxResolveRetryBaseDelay = oldBaseDelay
-		sandboxResolveRetryMaxDelay = oldMaxDelay
+		autoputerResolveRetryWindow = oldWindow
+		autoputerResolveRetryBaseDelay = oldBaseDelay
+		autoputerResolveRetryMaxDelay = oldMaxDelay
 	})
 
 	pub, priv, err := ed25519.GenerateKey(nil)
@@ -3971,25 +3971,25 @@ func TestVMctlRouting_GracefulDegradation(t *testing.T) {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	// Create a sandbox backend.
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+	// Create a autoputer backend.
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get("X-Authenticated-User")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"sandbox_id": "sandbox-fallback",
-			"user":       user,
+			"computer_id": "autoputer-fallback",
+			"user":        user,
 		})
 	})
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
-	sandboxServer := httptest.NewServer(sandboxMux)
-	t.Cleanup(func() { sandboxServer.Close() })
+	autoputerServer := httptest.NewServer(autoputerMux)
+	t.Cleanup(func() { autoputerServer.Close() })
 
 	// Create proxy pointing at an unreachable vmctl.
-	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandboxServer.URL,
+	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputerServer.URL,
 		AuthPublicKeyPath: "/unused",
 		VmctlURL:          "http://127.0.0.1:1", // unreachable port
 	}
@@ -4006,7 +4006,7 @@ func TestVMctlRouting_GracefulDegradation(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.HandleBootstrap(w, req)
 
-	// Multi-desktop routing must fail closed. Falling back to a different sandbox
+	// Multi-desktop routing must fail closed. Falling back to a different autoputer
 	// would land the user on the wrong desktop.
 	if w.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when vmctl is unavailable, got %d", w.Code)
@@ -4015,12 +4015,12 @@ func TestVMctlRouting_GracefulDegradation(t *testing.T) {
 
 // TestConfig_VmctlRoutingEnabled tests the vmctl routing config flag.
 func TestConfig_VmctlRoutingEnabled(t *testing.T) {
-	cfg1 := &Config{AllowDirectSandboxForTests: true, VmctlURL: "http://localhost:8083"}
+	cfg1 := &Config{AllowDirectAutoputerForTests: true, VmctlURL: "http://localhost:8083"}
 	if !cfg1.VmctlRoutingEnabled() {
 		t.Error("expected vmctl routing enabled when URL is set")
 	}
 
-	cfg2 := &Config{AllowDirectSandboxForTests: true, VmctlURL: ""}
+	cfg2 := &Config{AllowDirectAutoputerForTests: true, VmctlURL: ""}
 	if cfg2.VmctlRoutingEnabled() {
 		t.Error("expected vmctl routing disabled when URL is empty")
 	}
@@ -4052,13 +4052,13 @@ func TestLoadConfig_VMctlTimeoutFallsBackOnInvalidValue(t *testing.T) {
 
 // --- Bearer Token (API Key) Auth Tests ---
 
-// testProxyEnvWithAuthStore sets up a proxy Handler with a real backend sandbox
+// testProxyEnvWithAuthStore sets up a proxy Handler with a real backend autoputer
 // and an auth store for API key validation. It returns the handler, signing
-// key, sandbox server, and the auth store.
+// key, autoputer server, and the auth store.
 func testProxyEnvWithAuthStore(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Server, *auth.Store) {
 	t.Helper()
 
-	handler, priv, sandbox, _ := testVMctlProxyEnv(t)
+	handler, priv, autoputer, _ := testVMctlProxyEnv(t)
 
 	// Create an auth store and wire it into the handler for API key validation.
 	dbDir := t.TempDir()
@@ -4069,7 +4069,7 @@ func testProxyEnvWithAuthStore(t *testing.T) (*Handler, ed25519.PrivateKey, *htt
 	t.Cleanup(func() { _ = store.Close() })
 
 	handler.SetAPIKeyValidator(store)
-	return handler, priv, sandbox, store
+	return handler, priv, autoputer, store
 }
 
 // createTestAPIKey creates a user and an API key in the auth store, returning
@@ -4113,17 +4113,17 @@ func TestBearerTokenAuthAcceptsValidAPIKey(t *testing.T) {
 		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 
-	// Verify the sandbox received the authenticated user header.
+	// Verify the autoputer received the authenticated user header.
 	var resp map[string]interface{}
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if got := resp["user"]; got != user.ID {
-		t.Errorf("sandbox user: got %v, want %q", got, user.ID)
+		t.Errorf("autoputer user: got %v, want %q", got, user.ID)
 	}
 
 	// Verify scopes were injected as a header to the upstream.
-	// The sandbox test backend doesn't echo scopes, but we can verify the
+	// The autoputer test backend doesn't echo scopes, but we can verify the
 	// auth result had scopes by checking last_used_at was updated.
 	ctx := context.Background()
 	ak, err := store.GetAPIKeyByHash(ctx, hashSecretForTest(secret))
@@ -4228,22 +4228,22 @@ func TestBearerTokenAuthRejectsExpiredKey(t *testing.T) {
 }
 
 func TestBearerTokenAuthScopePropagation(t *testing.T) {
-	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
+	handler, _, autoputer, store := testProxyEnvWithAuthStore(t)
 
-	// Use a sandbox backend that echoes the X-Authenticated-Scopes header.
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+	// Use a autoputer backend that echoes the X-Authenticated-Scopes header.
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"user":   r.Header.Get("X-Authenticated-User"),
 			"scopes": r.Header.Get("X-Authenticated-Scopes"),
 		})
 	})
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
-	// Replace the sandbox server handler.
-	sandbox.Config.Handler = sandboxMux
+	// Replace the autoputer server handler.
+	autoputer.Config.Handler = autoputerMux
 
 	scopes := []string{"read:runtime", "write:runtime"}
 	user, secret := createTestAPIKey(t, handler, store, "scope-key", scopes, nil)
@@ -4319,11 +4319,11 @@ func TestCookieAuthPreferredOverBearerToken(t *testing.T) {
 }
 
 func TestBearerTokenAuthProtectedAPI(t *testing.T) {
-	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
+	handler, _, autoputer, store := testProxyEnvWithAuthStore(t)
 
-	// Use a sandbox that echoes the user header.
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/test", func(w http.ResponseWriter, r *http.Request) {
+	// Use a autoputer that echoes the user header.
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/test", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"user":          r.Header.Get("X-Authenticated-User"),
@@ -4332,10 +4332,10 @@ func TestBearerTokenAuthProtectedAPI(t *testing.T) {
 			"cookie":        r.Header.Get("Cookie"),
 		})
 	})
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
-	sandbox.Config.Handler = sandboxMux
+	autoputer.Config.Handler = autoputerMux
 
 	user, secret := createTestAPIKey(t, handler, store, "api-key", []string{"read:runtime", "write:runtime"}, nil)
 
@@ -4367,18 +4367,18 @@ func TestBearerTokenAuthProtectedAPI(t *testing.T) {
 }
 
 func TestBearerTokenAuthRejectsMissingScope_whenProtectedAPIRouteRequiresRuntimeWrite(t *testing.T) {
-	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
+	handler, _, autoputer, store := testProxyEnvWithAuthStore(t)
 
 	var upstreamReached bool
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/test", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/test", func(w http.ResponseWriter, r *http.Request) {
 		upstreamReached = true
 		w.WriteHeader(http.StatusNoContent)
 	})
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
-	sandbox.Config.Handler = sandboxMux
+	autoputer.Config.Handler = autoputerMux
 
 	_, secret := createTestAPIKey(t, handler, store, "runtime-read-only", []string{"read:runtime"}, nil)
 
@@ -4411,20 +4411,20 @@ func TestBearerTokenAuthRejectsMissingScope_whenComputeRecoveryRequiresRuntimeWr
 }
 
 func TestBearerTokenAuthAcceptsBaseReadScope_whenProtectedAPIRouteIsBaseRead(t *testing.T) {
-	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
+	handler, _, autoputer, store := testProxyEnvWithAuthStore(t)
 
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/base/delta", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/base/delta", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"user":   r.Header.Get("X-Authenticated-User"),
 			"scopes": r.Header.Get("X-Authenticated-Scopes"),
 		})
 	})
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
-	sandbox.Config.Handler = sandboxMux
+	autoputer.Config.Handler = autoputerMux
 
 	user, secret := createTestAPIKey(t, handler, store, "base-read", []string{"read:base"}, nil)
 
@@ -4465,20 +4465,20 @@ func TestBearerTokenAuthWithoutValidatorSkipsAPIKey(t *testing.T) {
 }
 
 func TestBearerTokenAuthStripsClientSuppliedScopes(t *testing.T) {
-	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
+	handler, _, autoputer, store := testProxyEnvWithAuthStore(t)
 
-	// Use a sandbox that echoes the scopes header.
-	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+	// Use a autoputer that echoes the scopes header.
+	autoputerMux := http.NewServeMux()
+	autoputerMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"scopes": r.Header.Get("X-Authenticated-Scopes"),
 		})
 	})
-	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
-	sandbox.Config.Handler = sandboxMux
+	autoputer.Config.Handler = autoputerMux
 
 	scopes := []string{"read:runtime"}
 	_, secret := createTestAPIKey(t, handler, store, "strip-key", scopes, nil)
@@ -4528,7 +4528,7 @@ func TestProtectedAPIReverseProxyPreservesEscapedPathForBackendValidation(t *tes
 	}))
 	defer upstream.Close()
 
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, SandboxURL: upstream.URL, AuthPublicKeyPath: "/unused"}, pub)
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, ComputerURL: upstream.URL, AuthPublicKeyPath: "/unused"}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
@@ -4610,7 +4610,7 @@ func TestProtectedAPIRejectsMalformedRawPathBeforeUpstream(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer upstream.Close()
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, SandboxURL: upstream.URL, AuthPublicKeyPath: "/unused"}, pub)
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, ComputerURL: upstream.URL, AuthPublicKeyPath: "/unused"}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}

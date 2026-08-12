@@ -159,7 +159,7 @@ func (r executionIdentityKeyResolver) ResolveReceiptKey(domain, _ string, keyID 
 func verifyGuestExecutionIdentity(guest guestExecutionIdentityEnvelope) error {
 	publicKey, err := base64.RawStdEncoding.DecodeString(guest.SignerPublicKey)
 	if err != nil || len(publicKey) != ed25519.PublicKeySize || guest.Receipt.ReceiptKind != "ExecutionIdentity" ||
-		guest.Receipt.Issuer != "choir-sandbox" || len(guest.Receipt.RequiredSigners) != 1 ||
+		guest.Receipt.Issuer != "choir-autoputer" || len(guest.Receipt.RequiredSigners) != 1 ||
 		guest.Receipt.RequiredSigners[0].SignerDomain != "guest-core" {
 		return fmt.Errorf("invalid guest execution identity signer")
 	}
@@ -326,14 +326,14 @@ func executionIdentityCommitsJoin(receipt deploymentIdentityReceipt, host buildi
 		return false
 	}
 	if routeAbsent {
-		rawSandbox, selected := receipt.Artifacts["sandbox"]
-		var sandbox struct {
+		rawAutoputer, selected := receipt.Artifacts["autoputer"]
+		var autoputer struct {
 			Commit string `json:"commit"`
 			Status string `json:"status"`
 		}
 		if routeCommit != "" || guest.Commit != target || !selected ||
-			json.Unmarshal(rawSandbox, &sandbox) != nil ||
-			sandbox.Commit != target || (sandbox.Status != "installed" && sandbox.Status != "active") {
+			json.Unmarshal(rawAutoputer, &autoputer) != nil ||
+			autoputer.Commit != target || (autoputer.Status != "installed" && autoputer.Status != "active") {
 			return false
 		}
 		rawProxy, proxySelected := receipt.Artifacts["proxy"]
@@ -399,7 +399,7 @@ func (h *Handler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity trust configuration unavailable"})
 		return
 	}
-	if ownership == nil || ownership.UserID != authResult.UserID || ownership.ComputerID != authResult.ComputerID || ownership.DesktopID != desktopID || ownership.State != "active" || ownership.VMID == "" || ownership.Epoch <= 0 || ownership.SandboxURL == "" {
+	if ownership == nil || ownership.UserID != authResult.UserID || ownership.ComputerID != authResult.ComputerID || ownership.DesktopID != desktopID || ownership.State != "active" || ownership.VMID == "" || ownership.Epoch <= 0 || ownership.ComputerURL == "" {
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity authority unavailable"})
 		return
 	}
@@ -408,7 +408,7 @@ func (h *Handler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity route join unavailable"})
 		return
 	}
-	upstreamURL, err := joinBasePath(ownership.SandboxURL, r.URL.Path)
+	upstreamURL, err := joinBasePath(ownership.ComputerURL, r.URL.Path)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity guest join unavailable"})
 		return

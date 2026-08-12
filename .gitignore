@@ -9,7 +9,7 @@
 /maildctl
 /corpusd
 /proxy
-/sandbox
+/autoputer
 /sourcecycled
 /vmctl
 /zot
@@ -49,7 +49,7 @@ auth.db
 auth.log
 gateway.log
 proxy.log
-sandbox.log
+autoputer.log
 vmctl.log
 
 # GStack

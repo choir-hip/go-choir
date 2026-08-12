@@ -26,7 +26,7 @@ peeled a real failure onion, one layer per deploy cycle:
 3. Migration blocking listener startup → listener-first ordering.
 4. Stale concurrent VM ensure killing a healthy newer generation → per-VM
    lifecycle serialization.
-5. Deploy verifier conflating workflow SHA with sandbox artifact SHA →
+5. Deploy verifier conflating workflow SHA with autoputer artifact SHA →
    artifact-aware verification.
 6. Sourcecycled reusing a completed run receipt from an older cycle → status
    reconciliation through the proxy.
@@ -105,7 +105,7 @@ Three instances of the same conflation:
   deploys were recorded as failures** (at least jobs 86471236444, 86512939750,
   86517633591, 86518660425, 86524844627, and the 62742ee attempt), and each
   rerun refreshed the guest again, guaranteeing non-convergence.
-- Any request through `HandleSandboxProxy`/`HandleResolve` can trigger
+- Any request through `HandleAutoputerProxy`/`HandleResolve` can trigger
   `EnsureUniversalWirePlatformComputer` — i.e., a read can boot or recover a
   VM. The `cb694846` observation showed the lethal form: a stale concurrent
   ensure hit its deadline and **killed a newer, healthy, already-listening
@@ -316,7 +316,7 @@ loop. Nine of the run's code commits serviced this migration.
 
 The autopaper activation definition — authored **two days after D-WIRE** —
 hard-codes the opposite topology in its Real Artifact section and forbids
-deviation: sourcecycled → vmctl sandbox proxy → guest runtime → VM-local
+deviation: sourcecycled → vmctl autoputer proxy → guest runtime → VM-local
 **embedded** Dolt (`/internal/runtime/objectgraph/web-captures`,
 `/internal/runtime/runs`). Every attempt executing that definition therefore
 rebuilt and reinforced the pre-decision topology. The 12-hour run spent most

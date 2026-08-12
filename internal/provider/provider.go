@@ -1,5 +1,5 @@
 // Package provider implements real LLM provider bridges for the go-choir
-// sandbox runtime. It supports Bedrock (Anthropic Messages API over AWS
+// autoputer runtime. It supports Bedrock (Anthropic Messages API over AWS
 // Bedrock invoke endpoint), Z.AI (Anthropic-compatible API), DeepSeek
 // (OpenAI-compatible Chat Completions API plus Anthropic-compatible Messages
 // API), Xiaomi MiMo (OpenAI-compatible Chat Completions API plus
@@ -278,7 +278,7 @@ type Provider interface {
 
 // ProviderConfig holds runtime configuration for which model each provider
 // backend should use. This is the configuration surface that the host-side
-// caller (gateway, direct sandbox) uses to select models. It is NOT resolved
+// caller (gateway, direct autoputer) uses to select models. It is NOT resolved
 // from environment variables — model selection is a runtime concern, not an
 // infrastructure one.
 //
@@ -347,7 +347,7 @@ type ProviderConfig struct {
 	// requests that do not carry a per-request value.
 	ChatGPTReasoningEffort string
 
-	// SelectedProvider is the explicitly selected provider for direct sandbox
+	// SelectedProvider is the explicitly selected provider for direct autoputer
 	// runtime calls. Empty means no direct provider is selected.
 	SelectedProvider string
 }
@@ -3455,7 +3455,7 @@ func ResolveAll(cfg ProviderConfig) *MultiProvider {
 }
 
 // ResolveProvider resolves the explicitly selected provider for direct
-// sandbox mode. It does not guess or fall back; callers that want a provider
+// autoputer mode. It does not guess or fall back; callers that want a provider
 // must set ProviderConfig.SelectedProvider.
 func ResolveProvider(cfg ProviderConfig) (Provider, error) {
 	selected := strings.TrimSpace(cfg.SelectedProvider)

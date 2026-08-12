@@ -1,4 +1,4 @@
-package sandbox
+package autoputer
 
 import (
 	"context"
@@ -37,7 +37,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/zot"
 )
 
-// RunZotSession runs the sandbox binary's zot-session process mode.
+// RunZotSession runs the autoputer binary's zot-session process mode.
 func RunZotSession(stdin io.Reader, stdout, stderr io.Writer) int {
 	return zot.RunSession(zot.SessionConfig{
 		SessionID: os.Getenv("ZOT_SESSION_ID"),
@@ -46,17 +46,17 @@ func RunZotSession(stdin io.Reader, stdout, stderr io.Writer) int {
 	}, stdin, stdout, stderr)
 }
 
-// Run starts the sandbox service.
+// Run starts the autoputer service.
 func Run() {
 	cfg := LoadConfig()
 
-	s := server.NewServer("sandbox", cfg.Port)
+	s := server.NewServer("autoputer", cfg.Port)
 
 	// Initialize the placeholder shell handlers.
-	h := NewHandler(cfg.SandboxID)
+	h := NewHandler(cfg.ComputerID)
 	RegisterRoutes(s, h)
 
-	filesRoot := provideriface.ResolveFilesRoot(os.Getenv("SANDBOX_FILES_ROOT"))
+	filesRoot := provideriface.ResolveFilesRoot(os.Getenv("AUTOPUTER_FILES_ROOT"))
 
 	// Initialize the singleton Super Console PTY handler. The PTY process is
 	// zot, not an interactive shell.
@@ -69,27 +69,27 @@ func Run() {
 
 	// Ensure the store directory exists.
 	if err := os.MkdirAll(storeDir(rtCfg.StorePath), 0o755); err != nil {
-		log.Fatalf("sandbox: create store directory: %v", err)
+		log.Fatalf("autoputer: create store directory: %v", err)
 	}
 
-	log.Printf("sandbox: startup phase=dolt-maintenance status=starting")
+	log.Printf("autoputer: startup phase=dolt-maintenance status=starting")
 	if err := store.MaybeRunDoltGC(filepath.Dir(rtCfg.StorePath), rtCfg.StorePath); err != nil {
-		log.Printf("sandbox: dolt gc maintenance: %v", err)
+		log.Printf("autoputer: dolt gc maintenance: %v", err)
 	}
-	log.Printf("sandbox: startup phase=dolt-maintenance status=complete")
+	log.Printf("autoputer: startup phase=dolt-maintenance status=complete")
 
-	log.Printf("sandbox: startup phase=runtime-store-open status=starting")
+	log.Printf("autoputer: startup phase=runtime-store-open status=starting")
 	db, err := store.Open(rtCfg.StorePath)
 	if err != nil {
-		log.Fatalf("sandbox: open runtime store: %v", err)
+		log.Fatalf("autoputer: open runtime store: %v", err)
 	}
-	log.Printf("sandbox: startup phase=runtime-store-open status=complete")
+	log.Printf("autoputer: startup phase=runtime-store-open status=complete")
 	defer func() {
 		_ = db.Close()
 	}()
 
 	// Start periodic DoltDB garbage collection to reclaim disk space between
-	// sandbox restarts (milestone-based, idempotent).
+	// autoputer restarts (milestone-based, idempotent).
 	go func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -117,16 +117,16 @@ func Run() {
 	if gatewayURL != "" {
 		gatewayToken := os.Getenv("RUNTIME_GATEWAY_TOKEN")
 		if strings.TrimSpace(gatewayToken) == "" {
-			log.Printf("sandbox: gateway provider configured without RUNTIME_GATEWAY_TOKEN; LLM calls will fail until the VM receives a sandbox credential")
+			log.Printf("autoputer: gateway provider configured without RUNTIME_GATEWAY_TOKEN; LLM calls will fail until the VM receives a autoputer credential")
 		}
 		bridge := gatewayruntime.New(gatewayURL, gatewayToken)
 		bridge.SetRuntimeLLMConfig(rtCfg.LLMProvider, rtCfg.LLMModel, rtCfg.LLMReasoningEffort)
 		rtProvider = bridge
-		log.Printf("sandbox: using gateway provider (url=%s provider=%s model=%s reasoning=%s)",
+		log.Printf("autoputer: using gateway provider (url=%s provider=%s model=%s reasoning=%s)",
 			gatewayURL, rtCfg.LLMProvider, rtCfg.LLMModel, rtCfg.LLMReasoningEffort)
 	} else {
 		rtProvider = provider.NewStubProvider(rtCfg.ProviderTimeout)
-		log.Printf("sandbox: using stub provider (no gateway configured)")
+		log.Printf("autoputer: using stub provider (no gateway configured)")
 	}
 
 	// Compose product owners into the runtime core explicitly; adapter options
@@ -137,11 +137,11 @@ func Run() {
 	}
 	capsuleExecutor, capsuleConfigured, err := configuredCapsuleExecutor()
 	if err != nil {
-		log.Fatalf("sandbox: configure production capsule executor: %v", err)
+		log.Fatalf("autoputer: configure production capsule executor: %v", err)
 	}
 	if capsuleConfigured {
 		coreOpts = append(coreOpts, agentcore.WithCapsuleExecutor(capsuleExecutor))
-		log.Printf("sandbox: production networkless assignment capsule executor enabled")
+		log.Printf("autoputer: production networkless assignment capsule executor enabled")
 	}
 	if credentialPath := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_CREDENTIAL_FILE")); credentialPath != "" {
 		computerID := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))
@@ -191,23 +191,23 @@ func Run() {
 		}
 		if err != nil {
 			cancel()
-			log.Fatalf("sandbox: acquire or recover computer event credential: %v", err)
+			log.Fatalf("autoputer: acquire or recover computer event credential: %v", err)
 		}
 		eventClient, err := computerevent.NewGuestHTTPClient(platformURL, credentials.Capability)
 		if err != nil {
 			cancel()
-			log.Fatalf("sandbox: configure computer event client: %v", err)
+			log.Fatalf("autoputer: configure computer event client: %v", err)
 		}
 		canonicalHead, err := eventClient.Head(bootstrapCtx, computerID)
 		if err != nil {
 			cancel()
-			log.Fatalf("sandbox: resolve canonical event head before keyring: %v", err)
+			log.Fatalf("autoputer: resolve canonical event head before keyring: %v", err)
 		}
 		privacyKeyPath := strings.TrimSpace(os.Getenv("CHOIR_PRIVACY_KEY_FILE"))
 		privateCipher, err := computerevent.LoadGuestPrivateArtifactCipher(privacyKeyPath, computerID, canonicalHead == nil)
 		if err != nil {
 			cancel()
-			log.Fatalf("sandbox: configure guest-owned private artifact cipher: %v", err)
+			log.Fatalf("autoputer: configure guest-owned private artifact cipher: %v", err)
 		}
 		appender, err := computerevent.NewComputerEventAppender(
 			computerID, eventClient, db, eventClient,
@@ -223,7 +223,7 @@ func Run() {
 				actionField, _ := lifecycleReceipt.KindFields["action"].(string)
 				if payloadErr != nil || lifecycleReceipt.ReceiptKind != "LifecycleReceipt" || lifecycleReceipt.Verify(credentials.KeyResolver()) != nil ||
 					computerField != computerID || (actionField != "start" && actionField != "stop" && actionField != "restart" && actionField != "credential_envelope_consumed") {
-					err = fmt.Errorf("sandbox: pending lifecycle receipt binding refused")
+					err = fmt.Errorf("autoputer: pending lifecycle receipt binding refused")
 					break
 				}
 				eventID, eventErr := computerevent.NewEventID()
@@ -261,10 +261,10 @@ func Run() {
 		}
 		cancel()
 		if err != nil {
-			log.Fatalf("sandbox: reconstruct computer event authority: %v", err)
+			log.Fatalf("autoputer: reconstruct computer event authority: %v", err)
 		}
 		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher))
-		log.Printf("sandbox: computer event authority reconstructed; self-development effects disabled")
+		log.Printf("autoputer: computer event authority reconstructed; self-development effects disabled")
 	}
 	var rtOpts []actorruntime.RuntimeOption
 
@@ -276,16 +276,16 @@ func Run() {
 	if rtCfg.TracePersistenceEnabled {
 		traceStore, err := trace.NewDoltStore(db.DB())
 		if err != nil {
-			log.Printf("sandbox: trace persistence disabled (dolt store init failed, continuing without): %v", err)
+			log.Printf("autoputer: trace persistence disabled (dolt store init failed, continuing without): %v", err)
 		} else {
 			rtOpts = append(rtOpts, actorruntime.WithTraceStore(traceStore))
-			log.Printf("sandbox: trace persistence enabled (dolt-backed observability store mounted)")
+			log.Printf("autoputer: trace persistence enabled (dolt-backed observability store mounted)")
 		}
 	}
 
 	rt := actorruntime.New(rtCfg, db, bus, rtProvider, coreOpts, rtOpts...)
 
-	// Initialize the file browser handler with sandbox files root. File
+	// Initialize the file browser handler with autoputer files root. File
 	// mutations publish owner-scoped product events after the filesystem write
 	// succeeds so other devices can refresh Files without manual reload UI.
 	fileHandler := NewFilesHandlerWithObserver(filesRoot, func(r *http.Request, event FileChangeEvent) {
@@ -303,7 +303,7 @@ func Run() {
 			"source_device_id": strings.TrimSpace(r.Header.Get("X-Choir-Device")),
 		})
 		if err != nil {
-			log.Printf("sandbox: file change event failed: %v", err)
+			log.Printf("autoputer: file change event failed: %v", err)
 		}
 	})
 	RegisterFileRoutes(s, fileHandler)
@@ -319,19 +319,19 @@ func Run() {
 			toolCWD = filesRoot
 		}
 		if err := rt.Runtime.InstallDefaultAgentTools(toolCWD); err != nil {
-			log.Fatalf("sandbox: install default agent tools: %v", err)
+			log.Fatalf("autoputer: install default agent tools: %v", err)
 		}
 	} else {
-		log.Printf("sandbox: tool profiles DISABLED via RUNTIME_DISABLE_TOOLS (stub-only mode)")
+		log.Printf("autoputer: tool profiles DISABLED via RUNTIME_DISABLE_TOOLS (stub-only mode)")
 	}
 
 	textureHandler := textureowner.NewHandler(rt.Runtime)
 	if err := rt.BindTextureOwner(textureHandler); err != nil {
-		log.Fatalf("sandbox: bind Texture lifecycle owner: %v", err)
+		log.Fatalf("autoputer: bind Texture lifecycle owner: %v", err)
 	}
 	if toolsEnabled {
 		if err := textureowner.RegisterTools(rt.Runtime.ToolRegistryForProfile(agentprofile.Texture), textureHandler); err != nil {
-			log.Fatalf("sandbox: register Texture tools: %v", err)
+			log.Fatalf("autoputer: register Texture tools: %v", err)
 		}
 		for _, profile := range []string{
 			agentprofile.Conductor,
@@ -343,7 +343,7 @@ func Run() {
 			agentprofile.Reconciler,
 		} {
 			if err := coagentowner.RegisterSpawnTool(rt.Runtime.ToolRegistryForProfile(profile), rt.Runtime, textureHandler, agentprofile.PolicyFor(profile)); err != nil {
-				log.Fatalf("sandbox: register coagent spawn tool for %s: %v", profile, err)
+				log.Fatalf("autoputer: register coagent spawn tool for %s: %v", profile, err)
 			}
 		}
 	}
@@ -355,9 +355,9 @@ func Run() {
 	if toolsEnabled {
 		superRegistry := rt.Runtime.ToolRegistryForProfile(agentprofile.Super)
 		if err := apihandler.RegisterProductAPIRequestTool(s, superRegistry); err != nil {
-			log.Fatalf("sandbox: register product API tool: %v", err)
+			log.Fatalf("autoputer: register product API tool: %v", err)
 		}
-		log.Printf("sandbox: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
+		log.Printf("autoputer: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
 			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Conductor)),
 			superRegistry.Size(),
 			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Researcher)),
@@ -368,21 +368,21 @@ func Run() {
 	// Readiness endpoint: probes Qdrant and Ollama, the two external
 	// dependencies of the semantic-dedup path. Both degrade gracefully via
 	// circuit breakers, so an unhealthy dependency reports "degraded" (200)
-	// rather than "unhealthy" (503) — the sandbox can still serve requests
+	// rather than "unhealthy" (503) — the autoputer can still serve requests
 	// with content-hash dedup only. The result is cached for 5s to keep the
 	// endpoint lightweight.
-	readyAgg := health.NewAggregator("sandbox", 5*time.Second,
+	readyAgg := health.NewAggregator("autoputer", 5*time.Second,
 		health.HTTPChecker{NameStr: "qdrant", URL: strings.TrimRight(rtCfg.QdrantURL, "/") + "/healthz", Timeout: 2 * time.Second},
 		health.HTTPChecker{NameStr: "ollama", URL: strings.TrimRight(rtCfg.OllamaURL, "/") + "/api/tags", Timeout: 2 * time.Second},
 	)
-	s.HandleFunc("/health/ready", health.ReadinessHandler("sandbox", readyAgg))
+	s.HandleFunc("/health/ready", health.ReadinessHandler("autoputer", readyAgg))
 
 	// Start the runtime engine and supervisor.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	log.Printf("sandbox: orchestration topology (super=1, researchers=%d)", rtCfg.ResearcherCount)
+	log.Printf("autoputer: orchestration topology (super=1, researchers=%d)", rtCfg.ResearcherCount)
 	if err := rt.Start(ctx); err != nil {
-		log.Fatalf("sandbox: runtime startup refused: %v", err)
+		log.Fatalf("autoputer: runtime startup refused: %v", err)
 	}
 
 	s.Start()
@@ -403,7 +403,7 @@ func storeDir(path string) string {
 
 func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot string) provideriface.Config {
 	rtCfg := provideriface.Config{
-		SandboxID:                       cfg.SandboxID,
+		ComputerID:                      cfg.ComputerID,
 		StorePath:                       cfg.StorePath,
 		PromptRoot:                      rtRuntimeCfg.PromptRoot,
 		SkillsRoot:                      rtRuntimeCfg.SkillsRoot,

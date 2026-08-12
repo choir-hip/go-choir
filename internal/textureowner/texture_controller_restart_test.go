@@ -23,7 +23,7 @@ func projectTextureOwnerTestProducer(t *testing.T, s *store.Store, start types.S
 	workID := "producer-work:" + suffix
 	runID := "producer-run:" + suffix
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID: agentID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, SandboxID: start.ComputerID,
+		AgentID: agentID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 		Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("seed lifecycle producer: %v", err)
@@ -39,7 +39,7 @@ func projectTextureOwnerTestProducer(t *testing.T, s *store.Store, start types.S
 	}
 	run := types.RunRecord{
 		RunID: runID, AgentID: agentID, ChannelID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID,
-		AgentProfile: "researcher", AgentRole: "researcher", OwnerID: start.OwnerID, SandboxID: start.ComputerID,
+		AgentProfile: "researcher", AgentRole: "researcher", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": workID},
 	}
 	project := types.ReplaceLifecycleActivationRequest{
@@ -68,7 +68,7 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 	)
 	now := time.Now().UTC()
 	start := types.StartLifecycleRequest{
-		OwnerID: ownerID, ComputerID: "sandbox-texture-restart", CommandID: "start-texture-restart",
+		OwnerID: ownerID, ComputerID: "autoputer-texture-restart", CommandID: "start-texture-restart",
 		TrajectoryID: "trajectory-texture-restart", Kind: types.TrajectoryKindDocument,
 		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
@@ -81,7 +81,7 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 			Content: "Durable content before restart",
 		},
 		Agent: types.AgentRecord{
-			AgentID: agentID, OwnerID: ownerID, ComputerID: "sandbox-texture-restart", SandboxID: "sandbox-texture-restart",
+			AgentID: agentID, OwnerID: ownerID, ComputerID: "autoputer-texture-restart",
 			Profile: "texture", Role: "texture", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
 		},
 	}
@@ -95,7 +95,7 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 	}
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, "Durable finding")
 	queue := types.QueueLifecycleUpdateRequest{
-		OwnerID: ownerID, ComputerID: "sandbox-texture-restart", CommandID: "queue-texture-restart",
+		OwnerID: ownerID, ComputerID: "autoputer-texture-restart", CommandID: "queue-texture-restart",
 		TrajectoryID: start.TrajectoryID, TargetAgentID: agentID,
 		ProducerAgentID: producerAgentID, ProducerUpdateID: "update-texture-restart",
 		UpdateID: "update-texture-restart", ChannelID: docID, Role: "researcher", SourceRunID: producerRunID,
@@ -108,13 +108,13 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 	}
 	if err := s1.CreateAgentMutation(ctx, store.AgentMutation{
 		DocID: docID, RunID: "orphan-preprojection-run", OwnerID: ownerID,
-		ComputerID: "sandbox-texture-restart", State: "pending", CreatedAt: now,
+		ComputerID: "autoputer-texture-restart", State: "pending", CreatedAt: now,
 	}); err != nil {
 		t.Fatalf("create orphan pre-projection mutation: %v", err)
 	}
 	if err := s1.CreateAgentMutation(ctx, store.AgentMutation{
 		DocID: docID, RunID: "orphan-preprojection-run-newer", OwnerID: ownerID,
-		ComputerID: "sandbox-texture-restart", State: "pending", CreatedAt: now.Add(time.Second),
+		ComputerID: "autoputer-texture-restart", State: "pending", CreatedAt: now.Add(time.Second),
 	}); err != nil {
 		t.Fatalf("create newer orphan pre-projection mutation: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = s2.Close() })
 	rt := agentcore.New(provideriface.Config{
-		SandboxID:           "sandbox-texture-restart",
+		ComputerID:          "autoputer-texture-restart",
 		StorePath:           dbPath,
 		PromptRoot:          filepath.Join(t.TempDir(), "prompts"),
 		ProviderTimeout:     time.Second,
@@ -138,14 +138,14 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 	t.Cleanup(rt.Stop)
 
 	NewHandler(rt).Start(ctx)
-	runs, err := s2.ListLifecycleRunsByOwner(ctx, ownerID, "sandbox-texture-restart", 20)
+	runs, err := s2.ListLifecycleRunsByOwner(ctx, ownerID, "autoputer-texture-restart", 20)
 	if err != nil {
 		t.Fatalf("list recovered runs: %v", err)
 	}
 	for _, run := range runs {
 		if run.AgentID == agentID && run.ChannelID == docID && run.State == types.RunPending {
 			for _, orphanRunID := range []string{"orphan-preprojection-run", "orphan-preprojection-run-newer"} {
-				orphan, orphanErr := s2.GetAgentMutationByRun(ctx, ownerID, "sandbox-texture-restart", orphanRunID)
+				orphan, orphanErr := s2.GetAgentMutationByRun(ctx, ownerID, "autoputer-texture-restart", orphanRunID)
 				if orphanErr != nil || orphan == nil || orphan.State != "stale_activation" {
 					t.Fatalf("orphan mutation %s was not staled before recovery: %+v, %v", orphanRunID, orphan, orphanErr)
 				}
@@ -187,7 +187,7 @@ func TestTextureOwnerRestartDoesNotCrossComputerPendingMutation(t *testing.T) {
 				RevisionID: "revision-shared-restart", AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "Initial scoped content",
 			},
 			Agent: types.AgentRecord{
-				AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+				AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
 				Profile: "texture", Role: "texture", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
 			},
 		}
@@ -233,7 +233,7 @@ func TestTextureOwnerRestartDoesNotCrossComputerPendingMutation(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = s2.Close() })
 	rt := agentcore.New(provideriface.Config{
-		SandboxID: "computer-b", StorePath: dbPath, PromptRoot: filepath.Join(t.TempDir(), "prompts"),
+		ComputerID: "computer-b", StorePath: dbPath, PromptRoot: filepath.Join(t.TempDir(), "prompts"),
 		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
 	}, s2, events.NewEventBus(), provider.NewStubProvider(0))
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })

@@ -1,4 +1,4 @@
-// Package store provides durable runtime storage for the go-choir sandbox runtime.
+// Package store provides durable runtime storage for the go-choir autoputer runtime.
 //
 // The store persists run records, agent records, channel messages, and event
 // records using the same embedded Dolt workspace that owns Texture state, enabling
@@ -141,7 +141,7 @@ const schemaDDL = `
 CREATE TABLE IF NOT EXISTS agents (
 	agent_id    VARCHAR(255) PRIMARY KEY,
 	owner_id    VARCHAR(255) NOT NULL,
-	sandbox_id  VARCHAR(255) NOT NULL,
+	computer_id  VARCHAR(255) NOT NULL,
 	profile     VARCHAR(255) NOT NULL DEFAULT '',
 	role        VARCHAR(255) NOT NULL DEFAULT '',
 	channel_id  VARCHAR(255) NOT NULL DEFAULT '',
@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS runs (
 	agent_profile VARCHAR(255) NOT NULL DEFAULT '',
 	agent_role VARCHAR(255) NOT NULL DEFAULT '',
 	owner_id    VARCHAR(255) NOT NULL,
-	sandbox_id  VARCHAR(255) NOT NULL,
+	computer_id  VARCHAR(255) NOT NULL,
 	state       VARCHAR(64) NOT NULL,
 	prompt      LONGTEXT NOT NULL DEFAULT '',
 	result      LONGTEXT NOT NULL DEFAULT '',
@@ -416,7 +416,7 @@ CREATE INDEX IF NOT EXISTS idx_agents_owner_id ON agents(owner_id);
 CREATE INDEX IF NOT EXISTS idx_agents_channel_id ON agents(channel_id);
 CREATE INDEX IF NOT EXISTS idx_runs_owner_id ON runs(owner_id);
 CREATE INDEX IF NOT EXISTS idx_runs_state ON runs(state);
-CREATE INDEX IF NOT EXISTS idx_runs_sandbox_id ON runs(sandbox_id);
+CREATE INDEX IF NOT EXISTS idx_runs_computer_id ON runs(computer_id);
 CREATE INDEX IF NOT EXISTS idx_runs_agent_id ON runs(agent_id);
 CREATE INDEX IF NOT EXISTS idx_runs_owner_agent_state_updated ON runs(owner_id, agent_id, state, updated_at);
 CREATE INDEX IF NOT EXISTS idx_runs_channel_id ON runs(channel_id);
@@ -965,7 +965,7 @@ func lifecycleTerminalSettlementRequested(rec types.RunRecord) bool {
 // that a product caller should try; it is not settlement authority.
 func (s *Store) ReconcileLifecycleSettlementForTerminalRun(ctx context.Context, rec types.RunRecord) error {
 	rec.TrajectoryID = runTrajectoryID(rec)
-	stored, err := s.GetLifecycleRun(ctx, rec.OwnerID, rec.SandboxID, rec.RunID)
+	stored, err := s.GetLifecycleRun(ctx, rec.OwnerID, rec.ComputerID, rec.RunID)
 	if err != nil {
 		return err
 	}
@@ -973,7 +973,7 @@ func (s *Store) ReconcileLifecycleSettlementForTerminalRun(ctx context.Context, 
 		return nil
 	}
 	for attempt := 0; attempt < lifecycleTerminalSettlementAttempts; attempt++ {
-		snapshot, snapshotErr := s.GetLifecycleSnapshot(ctx, stored.OwnerID, stored.SandboxID, stored.TrajectoryID)
+		snapshot, snapshotErr := s.GetLifecycleSnapshot(ctx, stored.OwnerID, stored.ComputerID, stored.TrajectoryID)
 		if snapshotErr != nil {
 			return snapshotErr
 		}
@@ -991,7 +991,7 @@ func (s *Store) ReconcileLifecycleSettlementForTerminalRun(ctx context.Context, 
 		}
 		req := types.SettleLifecycleTrajectoryRequest{
 			OwnerID:                  stored.OwnerID,
-			ComputerID:               stored.SandboxID,
+			ComputerID:               stored.ComputerID,
 			CommandID:                lifecycleTerminalSettlementCommandID(stored.RunID),
 			TrajectoryID:             stored.TrajectoryID,
 			ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
@@ -1010,10 +1010,10 @@ func (s *Store) ReconcileLifecycleSettlementForTerminalRun(ctx context.Context, 
 
 func (s *Store) persistLifecycleRun(ctx context.Context, rec types.RunRecord) (bool, error) {
 	rec.TrajectoryID = runTrajectoryID(rec)
-	if strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.SandboxID) == "" || strings.TrimSpace(rec.TrajectoryID) == "" {
+	if strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.ComputerID) == "" || strings.TrimSpace(rec.TrajectoryID) == "" {
 		return false, nil
 	}
-	trajectory, err := s.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.SandboxID, rec.TrajectoryID)
+	trajectory, err := s.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return false, nil
@@ -1026,7 +1026,7 @@ func (s *Store) persistLifecycleRun(ctx context.Context, rec types.RunRecord) (b
 		return true, err
 	}
 	req := types.ReplaceLifecycleActivationRequest{
-		OwnerID: rec.OwnerID, ComputerID: rec.SandboxID,
+		OwnerID: rec.OwnerID, ComputerID: rec.ComputerID,
 		CommandID:    "lifecycle-activation:" + strings.TrimPrefix(objectgraph.SHA256(body), "sha256:"),
 		TrajectoryID: rec.TrajectoryID, AgentID: rec.AgentID, Run: rec,
 	}
@@ -1719,7 +1719,7 @@ func (s *Store) latestLifecycleRunByAgent(ctx context.Context, ownerID, computer
 		if decodeErr != nil {
 			return types.RunRecord{}, decodeErr
 		}
-		if rec.OwnerID != ownerID || rec.SandboxID != computerID || rec.AgentID != agentID || !match(rec.State) {
+		if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID || !match(rec.State) {
 			continue
 		}
 		if latest == nil || rec.UpdatedAt.After(latest.UpdatedAt) {
@@ -1744,7 +1744,7 @@ func (s *Store) GetLatestPassivatedLifecycleRunByAgent(ctx context.Context, owne
 }
 
 func (s *Store) listRunsWhere(ctx context.Context, where string, args []any, limit int) ([]types.RunRecord, error) {
-	query := `SELECT loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
+	query := `SELECT loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, computer_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
 	            FROM runs`
 	if where != "" {
 		query += " WHERE " + where
@@ -2614,7 +2614,7 @@ func scanRun(row interface{ Scan(...any) error }) (types.RunRecord, error) {
 		&rec.AgentProfile,
 		&rec.AgentRole,
 		&rec.OwnerID,
-		&rec.SandboxID,
+		&rec.ComputerID,
 		&rec.State,
 		&rec.Prompt,
 		&rec.Result,
@@ -2663,7 +2663,7 @@ func scanAgent(row interface{ Scan(...any) error }) (types.AgentRecord, error) {
 	err := row.Scan(
 		&rec.AgentID,
 		&rec.OwnerID,
-		&rec.SandboxID,
+		&rec.ComputerID,
 		&rec.Profile,
 		&rec.Role,
 		&rec.ChannelID,

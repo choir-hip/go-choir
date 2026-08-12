@@ -435,12 +435,12 @@ func TestTextureLifecycleCreateExactReplayAndChangedPayloadConflict(t *testing.T
 	if created.Schema != "choir.texture_create.v1" || created.DocID == "" || created.RevisionID == "" || created.TrajectoryID == "" || created.Replay {
 		t.Fatalf("created=%+v", created)
 	}
-	createdSnapshot, _ := core.Store().GetLifecycleSnapshot(t.Context(), "user-1", "sandbox-test", created.TrajectoryID)
-	agent, err := core.Store().GetAgentByScope(t.Context(), "user-1", "sandbox-test", created.TargetAgentID)
+	createdSnapshot, _ := core.Store().GetLifecycleSnapshot(t.Context(), "user-1", "autoputer-test", created.TrajectoryID)
+	agent, err := core.Store().GetAgentByScope(t.Context(), "user-1", "autoputer-test", created.TargetAgentID)
 	if err != nil || agent.ActiveRunID == "" {
 		t.Fatalf("initial Texture activation agent=%+v err=%v", agent, err)
 	}
-	initialRun, err := core.Store().GetLifecycleRun(t.Context(), "user-1", "sandbox-test", agent.ActiveRunID)
+	initialRun, err := core.Store().GetLifecycleRun(t.Context(), "user-1", "autoputer-test", agent.ActiveRunID)
 	if err != nil || metadataStringValue(initialRun.Metadata, "lifecycle_work_item_id") != created.TargetWorkItemID ||
 		metadataStringValue(initialRun.Metadata, "request_intent") != "initial_owner_work" ||
 		metadataStringValue(initialRun.Metadata, "request_source") != "" {
@@ -455,14 +455,14 @@ func TestTextureLifecycleCreateExactReplayAndChangedPayloadConflict(t *testing.T
 	if replay.Code != http.StatusCreated || !replayed.Replay || replayed.DocID != created.DocID || replayed.TrajectoryID != created.TrajectoryID {
 		t.Fatalf("replay=%d %+v", replay.Code, replayed)
 	}
-	replayedSnapshot, _ := core.Store().GetLifecycleSnapshot(t.Context(), "user-1", "sandbox-test", created.TrajectoryID)
+	replayedSnapshot, _ := core.Store().GetLifecycleSnapshot(t.Context(), "user-1", "autoputer-test", created.TrajectoryID)
 	if replayedSnapshot.SnapshotCursor != createdSnapshot.SnapshotCursor {
 		t.Fatalf("create replay woke or mutated lifecycle: %d -> %d", createdSnapshot.SnapshotCursor, replayedSnapshot.SnapshotCursor)
 	}
 	if changed := post("user-1", "Changed", "private initial"); changed.Code != http.StatusConflict {
 		t.Fatalf("changed=%d %s", changed.Code, changed.Body.String())
 	}
-	snapshot, err := core.Store().GetLifecycleSnapshot(t.Context(), "user-1", "sandbox-test", created.TrajectoryID)
+	snapshot, err := core.Store().GetLifecycleSnapshot(t.Context(), "user-1", "autoputer-test", created.TrajectoryID)
 	if err != nil || snapshot.Document.DocID != created.DocID || snapshot.HeadRevision.RevisionID != created.RevisionID || snapshot.HeadRevision.Content != "private initial" || len(snapshot.WorkItems) != 1 || snapshot.WorkItems[0].AssignedAgentID != created.TargetAgentID {
 		t.Fatalf("created lifecycle snapshot=%+v err=%v", snapshot, err)
 	}

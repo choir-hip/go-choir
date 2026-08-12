@@ -37,7 +37,7 @@ jobs:
             --property=ActiveState,SubState,ExecMainStartTimestamp,ExecMainStatus,NRestarts
           ownership_json="$(curl -fsS -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/list)"
           printf '%s\n' "$ownership_json" |
-            jq '{ownerships: [.ownerships[] | select((.epoch // 0) >= 8197) | {computer_id,vm_id,desktop_id,state,epoch,sandbox_url,immutable_identity}]}'
+            jq '{ownerships: [.ownerships[] | select((.epoch // 0) >= 8197) | {computer_id,vm_id,desktop_id,state,epoch,computer_url,immutable_identity}]}'
           failed_vm="$(printf '%s\n' "$ownership_json" | jq -r '[.ownerships[] | select(.state == "failed" and (.vm_id // "") != "")] | max_by(.epoch // 0) | .vm_id // empty')"
           echo '==> signer-gated deployment journal'
           journalctl -u go-choir-vmctl.service \

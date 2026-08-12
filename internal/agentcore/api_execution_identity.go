@@ -91,13 +91,13 @@ func (h *APIHandler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Requ
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "execution identity unavailable"})
 		return
 	}
-	executable, executableErr := digestIdentityArtifact("sandbox-service", executablePath)
+	executable, executableErr := digestIdentityArtifact("autoputer-service", executablePath)
 	guestManifest, guestErr := digestIdentityArtifact("guest-image-manifest", os.Getenv("CHOIR_GUEST_IMAGE_MANIFEST"))
 	kernelConfig, kernelErr := digestIdentityArtifact("guest-kernel-configuration", os.Getenv("CHOIR_KERNEL_CONFIG"))
 	computerID := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))
 	realizationID := strings.TrimSpace(os.Getenv("CHOIR_REALIZATION_ID"))
 	epoch := strings.TrimSpace(os.Getenv("VM_EPOCH"))
-	build := buildinfo.Snapshot("sandbox")
+	build := buildinfo.Snapshot("autoputer")
 	if executableErr != nil || guestErr != nil || kernelErr != nil || computerID == "" || realizationID == "" || epoch == "" || build.Commit == "" || build.Commit == "local" || build.DeployedCommit == "" || build.DeployedCommit != build.Commit {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "execution identity unavailable", Reason: "incomplete or conflicting executable, realization, epoch, closure, or deploy identity"})
 		return
@@ -131,7 +131,7 @@ func (h *APIHandler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Requ
 		"kernel_configuration": identity.KernelConfiguration, "build": identity.Build,
 		"expires_at": identity.ExpiresAt,
 	}
-	receipt, err := signer.SignReceipt(r.Context(), "ExecutionIdentity", "choir-sandbox", fields, now)
+	receipt, err := signer.SignReceipt(r.Context(), "ExecutionIdentity", "choir-autoputer", fields, now)
 	if err != nil {
 		log.Printf("execution identity: sign receipt: %v", err)
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "execution identity signature unavailable"})

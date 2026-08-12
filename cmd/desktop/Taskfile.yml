@@ -36,7 +36,7 @@ tasks:
     generates:
       - frontend/dist/**/*
 
-  # Build the Choir backend service binaries (auth, gateway, sandbox, proxy)
+  # Build the Choir backend service binaries (auth, gateway, autoputer, proxy)
   build:services:
     desc: Build Choir backend services for local mode
     dir: ../..
@@ -44,7 +44,7 @@ tasks:
       - mkdir -p bin
       - go build -o bin/auth ./cmd/auth
       - go build -o bin/gateway ./cmd/gateway
-      - go build -o bin/sandbox ./cmd/sandbox
+      - go build -o bin/autoputer ./cmd/autoputer
       - go build -o bin/proxy ./cmd/proxy
       - echo "Services built to bin/"
 

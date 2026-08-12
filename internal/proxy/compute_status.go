@@ -156,14 +156,14 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 	if h.vmctlClient == nil {
 		resp.Status = "degraded"
 		resp.Computers = []computeComputer{resp.CurrentComputer}
-		if h.cfg != nil && h.cfg.AllowDirectSandboxForTests {
+		if h.cfg != nil && h.cfg.AllowDirectAutoputerForTests {
 			resp.CurrentComputer.State = "static"
 			resp.CurrentComputer.WarmnessClass = "static"
 			resp.CurrentComputer.LookupStatus = "test-direct"
-			resp.CurrentComputer.Protection = "test-only direct sandbox routing"
+			resp.CurrentComputer.Protection = "test-only direct autoputer routing"
 			resp.Computers = []computeComputer{resp.CurrentComputer}
-			if strings.TrimSpace(h.cfg.SandboxURL) != "" {
-				resp.Runtime = h.probeRuntimeHealthForTarget(h.cfg.SandboxURL)
+			if strings.TrimSpace(h.cfg.ComputerURL) != "" {
+				resp.Runtime = h.probeRuntimeHealthForTarget(h.cfg.ComputerURL)
 			}
 		} else {
 			resp.Warnings = append(resp.Warnings, "ComputerVersion route authority is not configured")
@@ -235,8 +235,8 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 	} else {
 		resp.CurrentComputer.ImmutableIdentity = identity
 	}
-	if own.SandboxURL != "" && strings.EqualFold(own.State, string(vmctl.VMStateActive)) {
-		resp.Runtime = h.probeRuntimeHealthForTarget(own.SandboxURL)
+	if own.ComputerURL != "" && strings.EqualFold(own.State, string(vmctl.VMStateActive)) {
+		resp.Runtime = h.probeRuntimeHealthForTarget(own.ComputerURL)
 	}
 	if resp.Runtime != nil && resp.Runtime.PersistentDisk != nil {
 		resp.PersistentDisk = resp.Runtime.PersistentDisk
@@ -561,8 +561,8 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 			"",
 			"",
 		)
-		if resolved.SandboxURL != "" {
-			runtimeStatus = h.probeRuntimeHealthForTarget(resolved.SandboxURL)
+		if resolved.ComputerURL != "" {
+			runtimeStatus = h.probeRuntimeHealthForTarget(resolved.ComputerURL)
 		}
 	} else if own.State == string(vmctl.VMStateStopped) || own.State == string(vmctl.VMStateHibernated) {
 		resolved, resolveErr := h.vmctlClient.ResolveDesktopContext(ctx, userID, desktopID)
@@ -580,8 +580,8 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 				"",
 				"",
 			)
-			if resolved.SandboxURL != "" {
-				runtimeStatus = h.probeRuntimeHealthForTarget(resolved.SandboxURL)
+			if resolved.ComputerURL != "" {
+				runtimeStatus = h.probeRuntimeHealthForTarget(resolved.ComputerURL)
 			}
 		} else {
 			log.Printf("proxy compute recovery: wake current computer failed; refreshing stopped desktop=%s: %v", desktopID, resolveErr)
@@ -603,8 +603,8 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 				"",
 				"",
 			)
-			if refreshed.SandboxURL != "" {
-				runtimeStatus = h.probeRuntimeHealthForTarget(refreshed.SandboxURL)
+			if refreshed.ComputerURL != "" {
+				runtimeStatus = h.probeRuntimeHealthForTarget(refreshed.ComputerURL)
 			}
 		}
 	} else {
@@ -621,10 +621,10 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 	}
 
 	ownWasStopped := own != nil && (own.State == string(vmctl.VMStateStopped) || own.State == string(vmctl.VMStateHibernated))
-	if own != nil && !ownWasStopped && own.SandboxURL != "" {
-		runtimeStatus = h.probeRuntimeHealthForTarget(own.SandboxURL)
+	if own != nil && !ownWasStopped && own.ComputerURL != "" {
+		runtimeStatus = h.probeRuntimeHealthForTarget(own.ComputerURL)
 	}
-	shouldRefresh := own != nil && !ownWasStopped && (own.SandboxURL == "" ||
+	shouldRefresh := own != nil && !ownWasStopped && (own.ComputerURL == "" ||
 		own.State == string(vmctl.VMStateBooting) ||
 		own.State == string(vmctl.VMStateDegraded) ||
 		own.State == string(vmctl.VMStateFailed) ||
@@ -649,8 +649,8 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 			"",
 			"",
 		)
-		if refreshed.SandboxURL != "" {
-			runtimeStatus = h.probeRuntimeHealthForTarget(refreshed.SandboxURL)
+		if refreshed.ComputerURL != "" {
+			runtimeStatus = h.probeRuntimeHealthForTarget(refreshed.ComputerURL)
 		}
 	}
 	if current.State != string(vmctl.VMStateActive) {
@@ -777,7 +777,7 @@ func protectionText(class string) string {
 	case string(vmctl.WarmnessClassPublicPlatform):
 		return "public platform computer lane"
 	case "static":
-		return "static sandbox routing"
+		return "static autoputer routing"
 	default:
 		return "priority class unavailable"
 	}

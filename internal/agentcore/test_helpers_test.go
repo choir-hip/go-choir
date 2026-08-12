@@ -32,7 +32,7 @@ func seedDurableTextureSubject(t *testing.T, s *store.Store, ownerID, docID stri
 	agentID := currentTextureAgentID(docID)
 	now := time.Now().UTC()
 	req := types.StartLifecycleRequest{
-		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "test-start:" + ownerID + ":" + docID,
+		OwnerID: ownerID, ComputerID: "autoputer-test", CommandID: "test-start:" + ownerID + ":" + docID,
 		TrajectoryID: "test-trajectory:" + ownerID + ":" + docID, Kind: types.TrajectoryKindDocument,
 		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID},
@@ -42,7 +42,7 @@ func seedDurableTextureSubject(t *testing.T, s *store.Store, ownerID, docID stri
 			RevisionID: "test-revision:" + ownerID + ":" + docID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "Initial durable test content",
 		},
 		Agent: types.AgentRecord{
-			AgentID: agentID, OwnerID: ownerID, ComputerID: "sandbox-test", SandboxID: "sandbox-test",
+			AgentID: agentID, OwnerID: ownerID, ComputerID: "autoputer-test",
 			Profile: "texture", Role: "texture", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
 		},
 	}
@@ -61,7 +61,7 @@ func spawnBoundTestLifecycleProducer(t *testing.T, rt *Runtime, s *store.Store, 
 	parent := types.RunRecord{
 		RunID: "texture-requester:" + suffix, AgentID: "texture:" + docID, ChannelID: docID,
 		TrajectoryID: trajectoryID, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
-		OwnerID: ownerID, SandboxID: rt.TextureSandboxID(), State: types.RunRunning,
+		OwnerID: ownerID, ComputerID: rt.TextureComputerID(), State: types.RunRunning,
 		CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataChannelID: docID},
 	}
 	if err := s.CreateRun(ctx, parent); err != nil {
@@ -86,7 +86,7 @@ func toolContextForTestCall(run *types.RunRecord, callID string) context.Context
 func lifecycleUpdateFromToolOutput(t *testing.T, s *store.Store, run *types.RunRecord, raw string) types.CoagentSourcePacket {
 	t.Helper()
 	updateID := d9UpdateID(t, raw)
-	snapshot, err := s.GetLifecycleSnapshot(context.Background(), run.OwnerID, run.SandboxID, trajectoryIDForRun(run))
+	snapshot, err := s.GetLifecycleSnapshot(context.Background(), run.OwnerID, run.ComputerID, trajectoryIDForRun(run))
 	if err != nil {
 		t.Fatalf("get lifecycle snapshot: %v", err)
 	}
@@ -103,7 +103,7 @@ func startBoundLegacyCoSuperResultRun(t *testing.T, s *store.Store, target types
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()
-	computerID := firstNonEmpty(target.ComputerID, target.SandboxID)
+	computerID := firstNonEmpty(target.ComputerID, target.ComputerID)
 	trajectoryID := "legacy-result:" + suffix
 	parentRunID := "legacy-super:" + suffix
 	callerRunID := "legacy-cosuper:" + suffix
@@ -111,14 +111,14 @@ func startBoundLegacyCoSuperResultRun(t *testing.T, s *store.Store, target types
 	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{TrajectoryID: trajectoryID, OwnerID: target.OwnerID, ComputerID: computerID, Kind: types.TrajectoryKindTask, SubjectRefs: map[string]string{"channel_id": target.ChannelID}, Status: types.TrajectoryLive, SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true}}); err != nil {
 		t.Fatalf("create legacy result trajectory: %v", err)
 	}
-	parent := types.RunRecord{RunID: parentRunID, AgentID: target.AgentID, ChannelID: target.ChannelID, TrajectoryID: trajectoryID, AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, OwnerID: target.OwnerID, SandboxID: computerID, State: types.RunCompleted, CreatedAt: now, UpdatedAt: now, FinishedAt: &now, Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataAgentID: target.AgentID, runMetadataAgentProfile: agentprofile.Super, runMetadataAgentRole: agentprofile.Super, runMetadataChannelID: target.ChannelID}}
+	parent := types.RunRecord{RunID: parentRunID, AgentID: target.AgentID, ChannelID: target.ChannelID, TrajectoryID: trajectoryID, AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, OwnerID: target.OwnerID, ComputerID: computerID, State: types.RunCompleted, CreatedAt: now, UpdatedAt: now, FinishedAt: &now, Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataAgentID: target.AgentID, runMetadataAgentProfile: agentprofile.Super, runMetadataAgentRole: agentprofile.Super, runMetadataChannelID: target.ChannelID}}
 	if err := s.CreateRun(ctx, parent); err != nil {
 		t.Fatalf("create owning Super run: %v", err)
 	}
-	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: callerAgentID, OwnerID: target.OwnerID, ComputerID: computerID, SandboxID: computerID, Profile: agentprofile.CoSuper, Role: agentprofile.CoSuper, ChannelID: target.ChannelID, CreatedAt: now, UpdatedAt: now}); err != nil {
+	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: callerAgentID, OwnerID: target.OwnerID, ComputerID: computerID, Profile: agentprofile.CoSuper, Role: agentprofile.CoSuper, ChannelID: target.ChannelID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatalf("upsert CoSuper: %v", err)
 	}
-	caller := &types.RunRecord{RunID: callerRunID, AgentID: callerAgentID, RequestedByRunID: parentRunID, ChannelID: target.ChannelID, TrajectoryID: trajectoryID, AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, OwnerID: target.OwnerID, SandboxID: computerID, State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataAgentID: callerAgentID, runMetadataAgentProfile: agentprofile.CoSuper, runMetadataAgentRole: agentprofile.CoSuper, runMetadataChannelID: target.ChannelID, "requested_by_run_id": parentRunID, "requested_by_agent_id": target.AgentID, "requested_by_profile": agentprofile.Super}}
+	caller := &types.RunRecord{RunID: callerRunID, AgentID: callerAgentID, RequestedByRunID: parentRunID, ChannelID: target.ChannelID, TrajectoryID: trajectoryID, AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, OwnerID: target.OwnerID, ComputerID: computerID, State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataAgentID: callerAgentID, runMetadataAgentProfile: agentprofile.CoSuper, runMetadataAgentRole: agentprofile.CoSuper, runMetadataChannelID: target.ChannelID, "requested_by_run_id": parentRunID, "requested_by_agent_id": target.AgentID, "requested_by_profile": agentprofile.Super}}
 	if err := s.CreateRun(ctx, *caller); err != nil {
 		t.Fatalf("create CoSuper result run: %v", err)
 	}
@@ -188,7 +188,7 @@ func testAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 
 	bus := events.NewEventBus()
 	rt := New(provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     time.Second,
@@ -312,7 +312,7 @@ func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 
 	bus := events.NewEventBus()
 	rt := New(provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     time.Second,
@@ -388,7 +388,7 @@ func testPromptRuntime(t *testing.T) *Runtime {
 	promptRoot := filepath.Join(t.TempDir(), "prompts")
 	return &Runtime{
 		cfg: provideriface.Config{
-			SandboxID:           "sandbox-prompt-test",
+			ComputerID:          "autoputer-prompt-test",
 			PromptRoot:          promptRoot,
 			SupervisionInterval: time.Hour,
 		},
@@ -434,7 +434,7 @@ func projectTestLifecycleProducer(t *testing.T, s *store.Store, ownerID, compute
 	workID := "producer-work:" + suffix
 	runID := "producer-run:" + suffix
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+		AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
 		Profile: "researcher", Role: "researcher", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("seed lifecycle producer: %v", err)
@@ -449,7 +449,7 @@ func projectTestLifecycleProducer(t *testing.T, s *store.Store, ownerID, compute
 	}
 	run := types.RunRecord{
 		RunID: runID, AgentID: agentID, ChannelID: docID, TrajectoryID: trajectoryID,
-		AgentProfile: "researcher", AgentRole: "researcher", OwnerID: ownerID, SandboxID: computerID,
+		AgentProfile: "researcher", AgentRole: "researcher", OwnerID: ownerID, ComputerID: computerID,
 		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": workID},
 	}
 	project := types.ReplaceLifecycleActivationRequest{

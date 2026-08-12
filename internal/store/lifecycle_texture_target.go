@@ -94,7 +94,7 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 		return LifecycleTextureControlTargetBinding{}, fmt.Errorf("validate lifecycle Texture control target: lookup caller run: %w", err)
 	}
 	expectedTextureAgentID := agentprofile.Texture + ":" + req.DocumentID
-	if callerRun.RunID != req.CallerRunID || callerRun.OwnerID != ownerID || callerRun.SandboxID != computerID ||
+	if callerRun.RunID != req.CallerRunID || callerRun.OwnerID != ownerID || callerRun.ComputerID != computerID ||
 		callerRun.TrajectoryID != req.TrajectoryID || callerRun.AgentID != req.CallerAgentID || req.CallerAgentID != expectedTextureAgentID ||
 		strings.TrimSpace(callerRun.AgentProfile) != agentprofile.Texture || strings.TrimSpace(callerRun.AgentRole) != agentprofile.Texture ||
 		strings.TrimSpace(callerRun.ChannelID) != req.DocumentID || !callerRun.State.Active() {
@@ -160,7 +160,7 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 				return LifecycleTextureControlTargetBinding{}, fmt.Errorf("validate lifecycle Texture control target: lookup target run: %w", err)
 			}
 			workItemIDs, bindingErr := lifecycleActivationWorkItemIDs(targetRun.Metadata)
-			if bindingErr != nil || targetRun.RunID != activeRunID || targetRun.OwnerID != ownerID || targetRun.SandboxID != computerID ||
+			if bindingErr != nil || targetRun.RunID != activeRunID || targetRun.OwnerID != ownerID || targetRun.ComputerID != computerID ||
 				targetRun.TrajectoryID != req.TrajectoryID || targetRun.AgentID != req.TargetAgentID ||
 				strings.TrimSpace(targetRun.AgentProfile) != agentprofile.Researcher || strings.TrimSpace(targetRun.AgentRole) != agentprofile.Researcher ||
 				!targetRun.State.Active() || !containsLifecycleIdentity(workItemIDs, req.TargetWorkItemID) {

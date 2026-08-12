@@ -460,7 +460,7 @@ func (rt *Handler) executeTextureEditTool(ctx context.Context, toolName string, 
 	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return "", fmt.Errorf("%s requires a Texture agent revision run", toolName)
 	}
-	if execution.RunID != rec.RunID || execution.AgentID != rec.AgentID || execution.OwnerID != rec.OwnerID || execution.SandboxID != rec.SandboxID {
+	if execution.RunID != rec.RunID || execution.AgentID != rec.AgentID || execution.OwnerID != rec.OwnerID || execution.ComputerID != rec.ComputerID {
 		return "", fmt.Errorf("%s execution identity does not match authenticated Texture run", toolName)
 	}
 	workDisposition := strings.TrimSpace(in.WorkDisposition)
@@ -634,7 +634,7 @@ func newRecordTextureDecisionTool(rt *Handler) toolregistry.Tool {
 			if rec == nil {
 				return "", fmt.Errorf("record_texture_decision missing run context")
 			}
-			if execution.RunID != rec.RunID || execution.AgentID != rec.AgentID || execution.OwnerID != rec.OwnerID || execution.SandboxID != rec.SandboxID {
+			if execution.RunID != rec.RunID || execution.AgentID != rec.AgentID || execution.OwnerID != rec.OwnerID || execution.ComputerID != rec.ComputerID {
 				return "", fmt.Errorf("record_texture_decision execution identity does not match authenticated Texture run")
 			}
 			in, err := decodeRecordTextureDecisionArgs(raw)
@@ -659,7 +659,7 @@ func newRecordTextureDecisionTool(rt *Handler) toolregistry.Tool {
 			if docID == "" {
 				return "", fmt.Errorf("doc_id is required when the Texture run is not document-scoped")
 			}
-			if subject, subjectErr := rt.Store.GetAgentByScope(ctx, rec.OwnerID, rec.SandboxID, rec.AgentID); subjectErr == nil && subject.LifecycleVersion > 0 {
+			if subject, subjectErr := rt.Store.GetAgentByScope(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID); subjectErr == nil && subject.LifecycleVersion > 0 {
 				in.DocID = docID
 				result, err := rt.commitTextureNonRevisionTurn(context.Background(), rec, in, execution.ToolCallID)
 				if err != nil {
@@ -851,7 +851,7 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		return types.Revision{}, fmt.Errorf("texture mutation does not match edit target")
 	}
 
-	computerID := strings.TrimSpace(rec.SandboxID)
+	computerID := strings.TrimSpace(rec.ComputerID)
 	subject, subjectErr := rt.Store.GetAgentByScope(ctx, rec.OwnerID, computerID, rec.AgentID)
 	durableLifecycle := subjectErr == nil && subject.LifecycleVersion > 0
 	if metadataStringValue(rec.Metadata, "lifecycle_work_item_id") != "" && !durableLifecycle {

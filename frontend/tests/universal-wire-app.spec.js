@@ -201,7 +201,7 @@ test('Universal Wire platform read does not taint ordinary Texture document read
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ sandbox_id: 'sandbox-dev' }),
+      body: JSON.stringify({ computer_id: 'autoputer-dev' }),
     });
   });
   await page.route('**/api/desktop/state**', async (route) => {
@@ -393,7 +393,7 @@ test('Universal Wire renders empty feed diagnostics without synthetic stories', 
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ sandbox_id: 'sandbox-dev' }),
+      body: JSON.stringify({ computer_id: 'autoputer-dev' }),
     });
   });
   await page.route('**/api/desktop/state**', async (route) => {
@@ -529,7 +529,7 @@ test('Universal Wire opens graph capture sources through Source Viewer by defaul
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ sandbox_id: 'sandbox-dev' }),
+      body: JSON.stringify({ computer_id: 'autoputer-dev' }),
     });
   });
   await page.route('**/api/desktop/state**', async (route) => {

@@ -12,7 +12,7 @@ func TestLoadConfigDefaults(t *testing.T) {
 	origCorpusdURL := os.Getenv("PROXY_CORPUSD_URL")
 	origMaildURL := os.Getenv("PROXY_MAILD_URL")
 	_ = os.Unsetenv("PROXY_PORT")
-	_ = os.Unsetenv("PROXY_SANDBOX_URL")
+	_ = os.Unsetenv("PROXY_AUTOPUTER_URL")
 	_ = os.Unsetenv("PROXY_AUTH_PUBLIC_KEY_PATH")
 	_ = os.Unsetenv("PROXY_CORPUSD_URL")
 	_ = os.Unsetenv("PROXY_MAILD_URL")
@@ -43,8 +43,8 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if cfg.Port != "8082" {
 		t.Errorf("Port: got %q, want %q", cfg.Port, "8082")
 	}
-	if cfg.SandboxURL != "http://127.0.0.1:8085" {
-		t.Errorf("SandboxURL: got %q, want %q", cfg.SandboxURL, "http://127.0.0.1:8085")
+	if cfg.ComputerURL != "http://127.0.0.1:8085" {
+		t.Errorf("ComputerURL: got %q, want %q", cfg.ComputerURL, "http://127.0.0.1:8085")
 	}
 	if cfg.AuthPublicKeyPath != "/tmp/go-choir-m2/auth-signing-key.pub" {
 		t.Errorf("AuthPublicKeyPath: got %q, want %q", cfg.AuthPublicKeyPath, "/tmp/go-choir-m2/auth-signing-key.pub")
@@ -62,14 +62,14 @@ func TestLoadConfigFromEnv(t *testing.T) {
 	origCorpusdURL := os.Getenv("PROXY_CORPUSD_URL")
 	origMaildURL := os.Getenv("PROXY_MAILD_URL")
 	_ = os.Setenv("PROXY_PORT", "9999")
-	_ = os.Setenv("PROXY_SANDBOX_URL", "http://example.com:8085")
+	_ = os.Setenv("PROXY_AUTOPUTER_URL", "http://example.com:8085")
 	_ = os.Setenv("PROXY_AUTH_PUBLIC_KEY_PATH", "/tmp/test-pub.key")
 	_ = os.Setenv("PROXY_CORPUSD_URL", "http://example.com:8086")
 	_ = os.Setenv("PROXY_MAILD_URL", "http://example.com:8087")
 	_ = os.Unsetenv("AUTH_JWT_PRIVATE_KEY_PATH")
 	defer func() {
 		_ = os.Unsetenv("PROXY_PORT")
-		_ = os.Unsetenv("PROXY_SANDBOX_URL")
+		_ = os.Unsetenv("PROXY_AUTOPUTER_URL")
 		_ = os.Unsetenv("PROXY_AUTH_PUBLIC_KEY_PATH")
 		if origMaildURL == "" {
 			_ = os.Unsetenv("PROXY_MAILD_URL")
@@ -96,8 +96,8 @@ func TestLoadConfigFromEnv(t *testing.T) {
 	if cfg.Port != "9999" {
 		t.Errorf("Port: got %q, want %q", cfg.Port, "9999")
 	}
-	if cfg.SandboxURL != "http://example.com:8085" {
-		t.Errorf("SandboxURL: got %q, want %q", cfg.SandboxURL, "http://example.com:8085")
+	if cfg.ComputerURL != "http://example.com:8085" {
+		t.Errorf("ComputerURL: got %q, want %q", cfg.ComputerURL, "http://example.com:8085")
 	}
 	if cfg.AuthPublicKeyPath != "/tmp/test-pub.key" {
 		t.Errorf("AuthPublicKeyPath: got %q, want %q", cfg.AuthPublicKeyPath, "/tmp/test-pub.key")

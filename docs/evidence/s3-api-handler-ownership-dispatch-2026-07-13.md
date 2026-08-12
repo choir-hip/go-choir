@@ -49,7 +49,7 @@ Move the `APIHandler` type and `NewAPIHandler` constructor plus all `128` receiv
 
 Move HTTP-only request/response DTOs, authentication/JSON/path/route helpers, and handler-only free functions required by those receivers. Leave non-HTTP `Runtime` methods, domain types, state authority, stores, and business helpers in runtime.
 
-Update `internal/apihandler/routes.go` to use its package-local handler and `internal/sandbox/run.go` to construct that handler once using the already loaded runtime and provider configuration. Carry all eleven S3-I17 candidate mutation receivers and their real calls through this cutover; do not alter the candidate domain operations or ratchet debt authority.
+Update `internal/apihandler/routes.go` to use its package-local handler and `internal/autoputer/run.go` to construct that handler once using the already loaded runtime and provider configuration. Carry all eleven S3-I17 candidate mutation receivers and their real calls through this cutover; do not alter the candidate domain operations or ratchet debt authority.
 
 ## Private Dependency Rule
 
@@ -63,7 +63,7 @@ Resolve cross-package dependencies in the same atomic landing, in this order:
 
 ## Exact Mutation Lock
 
-Allowed production paths: `internal/apihandler/**`, the twenty named `internal/runtime` files only for moving/deleting handler-owned declarations and minimal cohesive Runtime operation visibility required by compilation, `internal/sandbox/run.go`, direct moved-handler tests, and `docs/runtime-dissolution-inventory.yaml` after focused proof.
+Allowed production paths: `internal/apihandler/**`, the twenty named `internal/runtime` files only for moving/deleting handler-owned declarations and minimal cohesive Runtime operation visibility required by compilation, `internal/autoputer/run.go`, direct moved-handler tests, and `docs/runtime-dissolution-inventory.yaml` after focused proof.
 
 Forbidden: changing any route/path/order/method/status/body/schema/auth/owner/internal-call behavior; candidate/promotion/provider/store/actor/lifecycle/Texture semantics; moving non-HTTP business ownership; new package; compatibility layer; generated bulk copy left beside originals; broad unrelated formatting or test churn.
 
@@ -73,7 +73,7 @@ The implementation must be one clean atomic commit. No intermediate commit may c
 
 - Exactly one `APIHandler` and constructor exist in `internal/apihandler`; zero runtime declarations, receivers, aliases, or callers remain.
 - All 128 receivers are accounted for by move or evidence-backed deletion; the eleven candidate receivers remain production callers until ordered step 4.
-- Exact 46-slot live route table/order and test gating are unchanged; one sandbox construction/call path and the same canonical server/product tool remain.
+- Exact 46-slot live route table/order and test gating are unchanged; one autoputer construction/call path and the same canonical server/product tool remain.
 - Initial unused-export debt is `<=16`. Runtime-scoped routes stay `2` until candidate step 4, while runtime production LOC, exports, and caller edges decrease materially. No new wrapper/interface/accessor/compatibility marker; the one apihandler->runtime concrete dependency is explicit deletion debt.
-- Focused apihandler/runtime/sandbox and each moved domain surface tests pass; runtime ratchet passes.
+- Focused apihandler/runtime/autoputer and each moved domain surface tests pass; runtime ratchet passes.
 - Independent verifier, full CI/deploy identity, authenticated staging controlled write/read and public read acceptance, consensus, and adjudication pass before closure.

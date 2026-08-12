@@ -107,26 +107,26 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 	}))
 	defer corpusd.Close()
 
-	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Authenticated-User") != "user-1" {
-			t.Fatalf("sandbox trusted user header: got %q", r.Header.Get("X-Authenticated-User"))
+			t.Fatalf("autoputer trusted user header: got %q", r.Header.Get("X-Authenticated-User"))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/texture/documents/doc-1":
-			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
+			_ = json.NewEncoder(w).Encode(autoputerTextureDocument{
 				DocID:             "doc-1",
 				OwnerID:           "user-1",
 				Title:             "My Note",
 				CurrentRevisionID: "rev-head",
 			})
 		case "/api/texture/documents/doc-1/revisions":
-			_ = json.NewEncoder(w).Encode(sandboxTextureRevisionList{Revisions: []sandboxTextureRevision{
+			_ = json.NewEncoder(w).Encode(autoputerTextureRevisionList{Revisions: []autoputerTextureRevision{
 				{RevisionID: "rev-2", DocID: "doc-1", OwnerID: "user-1", VersionNumber: 2, Content: "public projection content [1]", RevisionHash: "h2", CreatedAt: "2026-01-02T00:00:00.000Z"},
 				{RevisionID: "rev-1", DocID: "doc-1", OwnerID: "user-1", VersionNumber: 1, Content: "older draft", RevisionHash: "h1", CreatedAt: "2026-01-01T00:00:00.000Z"},
 			}})
 		case "/api/texture/revisions/rev-2":
-			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
+			_ = json.NewEncoder(w).Encode(autoputerTextureRevision{
 				RevisionID:     "rev-2",
 				DocID:          "doc-1",
 				OwnerID:        "user-1",
@@ -137,7 +137,7 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 				Metadata:       json.RawMessage(`{}`),
 			})
 		case "/api/content/items/content-public-1":
-			_ = json.NewEncoder(w).Encode(sandboxContentItem{
+			_ = json.NewEncoder(w).Encode(autoputerContentItem{
 				ContentID:    "content-public-1",
 				OwnerID:      "user-1",
 				SourceType:   "extracted_url",
@@ -150,13 +150,13 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 				ContentHash:  "hash-public-source",
 			})
 		default:
-			t.Fatalf("sandbox path: got %s", r.URL.Path)
+			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
 	}))
-	defer sandbox.Close()
+	defer autoputer.Close()
 
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandbox.URL,
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputer.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
@@ -229,18 +229,18 @@ func TestHandleTexturePublicationRejectsSourceEntitiesWithoutBodyDocBeforeEnrich
 	defer corpusd.Close()
 
 	contentFetches := 0
-	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/texture/documents/doc-detached":
-			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
+			_ = json.NewEncoder(w).Encode(autoputerTextureDocument{
 				DocID:             "doc-detached",
 				OwnerID:           "user-1",
 				Title:             "Detached Note",
 				CurrentRevisionID: "rev-detached",
 			})
 		case "/api/texture/revisions/rev-detached":
-			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
+			_ = json.NewEncoder(w).Encode(autoputerTextureRevision{
 				RevisionID: "rev-detached",
 				DocID:      "doc-detached",
 				OwnerID:    "user-1",
@@ -259,13 +259,13 @@ func TestHandleTexturePublicationRejectsSourceEntitiesWithoutBodyDocBeforeEnrich
 			contentFetches += 1
 			t.Fatalf("source import should not be called for detached source_entities")
 		default:
-			t.Fatalf("sandbox path: got %s", r.URL.Path)
+			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
 	}))
-	defer sandbox.Close()
+	defer autoputer.Close()
 
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandbox.URL,
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputer.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
@@ -304,8 +304,8 @@ func TestHandleTexturePublicationRejectsMalformedPolicy(t *testing.T) {
 	}))
 	defer corpusd.Close()
 
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        "http://127.0.0.1:1",
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       "http://127.0.0.1:1",
 		AuthPublicKeyPath: "/unused/in/test",
 		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
@@ -357,25 +357,25 @@ func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T)
 	defer corpusd.Close()
 
 	var importCalled bool
-	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Authenticated-User") != "user-1" {
-			t.Fatalf("sandbox trusted user header: got %q", r.Header.Get("X-Authenticated-User"))
+			t.Fatalf("autoputer trusted user header: got %q", r.Header.Get("X-Authenticated-User"))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/texture/documents/doc-url":
-			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
+			_ = json.NewEncoder(w).Encode(autoputerTextureDocument{
 				DocID:             "doc-url",
 				OwnerID:           "user-1",
 				Title:             "URL Note",
 				CurrentRevisionID: "rev-url",
 			})
 		case "/api/texture/documents/doc-url/revisions":
-			_ = json.NewEncoder(w).Encode(sandboxTextureRevisionList{Revisions: []sandboxTextureRevision{
+			_ = json.NewEncoder(w).Encode(autoputerTextureRevisionList{Revisions: []autoputerTextureRevision{
 				{RevisionID: "rev-url", DocID: "doc-url", OwnerID: "user-1", VersionNumber: 1, Content: "public projection content [1]", RevisionHash: "hurl", CreatedAt: "2026-01-01T00:00:00.000Z"},
 			}})
 		case "/api/texture/revisions/rev-url":
-			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
+			_ = json.NewEncoder(w).Encode(autoputerTextureRevision{
 				RevisionID:     "rev-url",
 				DocID:          "doc-url",
 				OwnerID:        "user-1",
@@ -400,7 +400,7 @@ func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T)
 				t.Fatalf("import query: got %q", body["query"])
 			}
 			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(sandboxContentItem{
+			_ = json.NewEncoder(w).Encode(autoputerContentItem{
 				ContentID:    "content-url-1",
 				OwnerID:      "user-1",
 				SourceType:   "extracted_url",
@@ -415,13 +415,13 @@ func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T)
 				Provenance:   json.RawMessage(`{"warnings":["extracted text is low-content","used html readable fallback"]}`),
 			})
 		default:
-			t.Fatalf("sandbox path: got %s", r.URL.Path)
+			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
 	}))
-	defer sandbox.Close()
+	defer autoputer.Close()
 
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandbox.URL,
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputer.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
@@ -496,22 +496,22 @@ func TestHandleTexturePublicationRecordsURLSnapshotImportFailureState(t *testing
 	}))
 	defer corpusd.Close()
 
-	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/texture/documents/doc-url":
-			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
+			_ = json.NewEncoder(w).Encode(autoputerTextureDocument{
 				DocID:             "doc-url",
 				OwnerID:           "user-1",
 				Title:             "URL Note",
 				CurrentRevisionID: "rev-url",
 			})
 		case "/api/texture/documents/doc-url/revisions":
-			_ = json.NewEncoder(w).Encode(sandboxTextureRevisionList{Revisions: []sandboxTextureRevision{
+			_ = json.NewEncoder(w).Encode(autoputerTextureRevisionList{Revisions: []autoputerTextureRevision{
 				{RevisionID: "rev-url", DocID: "doc-url", OwnerID: "user-1", VersionNumber: 1, Content: "public projection content [1]", RevisionHash: "hurl", CreatedAt: "2026-01-01T00:00:00.000Z"},
 			}})
 		case "/api/texture/revisions/rev-url":
-			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
+			_ = json.NewEncoder(w).Encode(autoputerTextureRevision{
 				RevisionID:     "rev-url",
 				DocID:          "doc-url",
 				OwnerID:        "user-1",
@@ -523,13 +523,13 @@ func TestHandleTexturePublicationRecordsURLSnapshotImportFailureState(t *testing
 		case "/api/content/import-url":
 			http.Error(w, `{"error":"URL import failed: 403 Forbidden"}`, http.StatusBadGateway)
 		default:
-			t.Fatalf("sandbox path: got %s", r.URL.Path)
+			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
 	}))
-	defer sandbox.Close()
+	defer autoputer.Close()
 
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandbox.URL,
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputer.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
@@ -584,22 +584,22 @@ func TestHandleTexturePublicationDoesNotPublishPrivateSourceSnapshots(t *testing
 	defer corpusd.Close()
 
 	contentFetches := 0
-	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/texture/documents/doc-private":
-			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
+			_ = json.NewEncoder(w).Encode(autoputerTextureDocument{
 				DocID:             "doc-private",
 				OwnerID:           "user-1",
 				Title:             "Private Note",
 				CurrentRevisionID: "rev-private",
 			})
 		case "/api/texture/documents/doc-private/revisions":
-			_ = json.NewEncoder(w).Encode(sandboxTextureRevisionList{Revisions: []sandboxTextureRevision{
+			_ = json.NewEncoder(w).Encode(autoputerTextureRevisionList{Revisions: []autoputerTextureRevision{
 				{RevisionID: "rev-private", DocID: "doc-private", OwnerID: "user-1", VersionNumber: 1, Content: "public projection with private source excerpt [1]", RevisionHash: "hpriv", CreatedAt: "2026-01-01T00:00:00.000Z"},
 			}})
 		case "/api/texture/revisions/rev-private":
-			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
+			_ = json.NewEncoder(w).Encode(autoputerTextureRevision{
 				RevisionID:     "rev-private",
 				DocID:          "doc-private",
 				OwnerID:        "user-1",
@@ -610,19 +610,19 @@ func TestHandleTexturePublicationDoesNotPublishPrivateSourceSnapshots(t *testing
 			})
 		case "/api/content/items/content-private-1":
 			contentFetches += 1
-			_ = json.NewEncoder(w).Encode(sandboxContentItem{
+			_ = json.NewEncoder(w).Encode(autoputerContentItem{
 				ContentID:   "content-private-1",
 				OwnerID:     "user-1",
 				TextContent: "private full source text",
 			})
 		default:
-			t.Fatalf("sandbox path: got %s", r.URL.Path)
+			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
 	}))
-	defer sandbox.Close()
+	defer autoputer.Close()
 
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandbox.URL,
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputer.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
@@ -684,15 +684,15 @@ func publicationSourceEntity(t *testing.T, raw json.RawMessage, entityID string)
 }
 
 func TestContentItemAllowsPublishedSnapshotRejectsPrivateProvenance(t *testing.T) {
-	if !contentItemAllowsPublishedSnapshot(sandboxContentItem{}) {
+	if !contentItemAllowsPublishedSnapshot(autoputerContentItem{}) {
 		t.Fatalf("empty provenance should not block an entity-level public publication decision")
 	}
-	if contentItemAllowsPublishedSnapshot(sandboxContentItem{
+	if contentItemAllowsPublishedSnapshot(autoputerContentItem{
 		Provenance: json.RawMessage(`{"rights_scope":"private_user_source"}`),
 	}) {
 		t.Fatalf("private_user_source content item must not publish a reader snapshot")
 	}
-	if !contentItemAllowsPublishedSnapshot(sandboxContentItem{
+	if !contentItemAllowsPublishedSnapshot(autoputerContentItem{
 		Provenance: json.RawMessage(`{"rights_scope":"public_source"}`),
 	}) {
 		t.Fatalf("public_source content item should allow a reader snapshot")
@@ -713,8 +713,8 @@ func TestHandleAPIDispatchesTexturePublication(t *testing.T) {
 	}))
 	defer corpusd.Close()
 
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        "http://127.0.0.1:1",
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       "http://127.0.0.1:1",
 		AuthPublicKeyPath: "/unused/in/test",
 		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {

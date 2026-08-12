@@ -39,7 +39,7 @@ engine is running. The socket path is:
 - `ChoirFileProvider/Info.plist` — the extension's Info.plist with
   `NSExtensionPointIdentifier = com.apple.fileprovider-nonui`.
 - `ChoirFileProvider/ChoirFileProvider.entitlements` — development
-  entitlements (app sandbox + app group + fileprovider capability).
+  entitlements (app autoputer + app group + fileprovider capability).
 - `ChoirFileProvider.xcodeproj/` — the Xcode project for building the
   extension target.
 
@@ -108,7 +108,7 @@ engine is running. The socket path is:
 ### Development (current)
 
 The `ChoirFileProvider.entitlements` file uses:
-- `com.apple.security.app-sandbox` = true
+- `com.apple.security.app-autoputer` = true
 - `com.apple.security.application-groups` = `$(TeamIdentifierPrefix)news.choir`
 - `com.apple.developer.fileprovider` = true
 

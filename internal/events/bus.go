@@ -1,5 +1,5 @@
 // Package events provides the runtime event bus and vocabulary for the
-// go-choir sandbox runtime.
+// go-choir autoputer runtime.
 //
 // The event bus supports in-process pub/sub for runtime lifecycle events,
 // task progress, and health state changes. Events are published by the runtime

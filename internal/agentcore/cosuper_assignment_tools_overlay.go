@@ -29,13 +29,13 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 	if lookup == nil {
 		lookup = rt.store
 	}
-	assignment, err := lookup.GetCoSuperAssignment(ctx, rec.OwnerID, rec.SandboxID, assignmentID, attempt)
+	assignment, err := lookup.GetCoSuperAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
 	if err != nil {
 		return nil, "", err
 	}
 	if assignment.Disposition != types.CoSuperAssignmentBound || assignment.CapsuleDisposition != types.CoSuperCapsuleActive ||
 		assignment.BoundRunID != rec.RunID || assignment.Binding.AssignedAgentID != rec.AgentID ||
-		assignment.Binding.TrajectoryID != rec.TrajectoryID || assignment.Binding.ComputerID != rec.SandboxID ||
+		assignment.Binding.TrajectoryID != rec.TrajectoryID || assignment.Binding.ComputerID != rec.ComputerID ||
 		metadataStringValue(rec.Metadata, "capsule_id") != assignment.Binding.CapsuleID ||
 		metadataStringValue(rec.Metadata, "capability_digest") != assignment.Binding.CapabilityDigest ||
 		metadataStringValue(rec.Metadata, "execution_handle_digest") != assignment.Binding.ExecutionHandleDigest ||
@@ -70,7 +70,7 @@ func (rt *Runtime) validateAssignedCoSuperExecution(ctx context.Context, rec *ty
 	}
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
-	assignment, err := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.SandboxID, assignmentID, attempt)
+	assignment, err := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
 	if err != nil {
 		return err
 	}
@@ -78,16 +78,16 @@ func (rt *Runtime) validateAssignedCoSuperExecution(ctx context.Context, rec *ty
 		assignment.BoundRunID != rec.RunID || assignment.Binding.AssignedWorkItemID != metadataStringValue(rec.Metadata, "assigned_work_item_id") {
 		return fmt.Errorf("assignment fate is not active and bound")
 	}
-	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.SandboxID, assignment.Binding.TrajectoryID)
+	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.ComputerID, assignment.Binding.TrajectoryID)
 	if err != nil || trajectory.Status != types.TrajectoryLive {
 		return fmt.Errorf("trajectory obligation is not live: %w", err)
 	}
-	if _, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, rec.OwnerID, rec.SandboxID, assignment.Binding.TrajectoryID); intentErr == nil {
+	if _, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, rec.OwnerID, rec.ComputerID, assignment.Binding.TrajectoryID); intentErr == nil {
 		return fmt.Errorf("trajectory cancellation is already authoritative")
 	} else if !errors.Is(intentErr, store.ErrNotFound) {
 		return fmt.Errorf("trajectory cancellation authority unavailable: %w", intentErr)
 	}
-	work, err := rt.store.GetLifecycleWorkItem(ctx, rec.OwnerID, rec.SandboxID, assignment.Binding.AssignedWorkItemID)
+	work, err := rt.store.GetLifecycleWorkItem(ctx, rec.OwnerID, rec.ComputerID, assignment.Binding.AssignedWorkItemID)
 	if err != nil || work.Status != types.WorkItemOpen || work.AssignedAgentID != rec.AgentID {
 		return fmt.Errorf("assigned work obligation is not open: %w", err)
 	}

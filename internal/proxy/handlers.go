@@ -29,7 +29,7 @@ import (
 )
 
 // clientIdentityHeaders is the list of HTTP headers that must be stripped from
-// client requests before forwarding to the sandbox. These headers could be used
+// client requests before forwarding to the autoputer. These headers could be used
 // to impersonate or spoof user identity, so the proxy removes them all and
 // only injects the JWT-verified user context via X-Authenticated-User.
 const (
@@ -50,13 +50,13 @@ var clientIdentityHeaders = []string{
 }
 
 var (
-	// sandboxResolveRetryWindow bounds retries for transient vmctl errors that
+	// autoputerResolveRetryWindow bounds retries for transient vmctl errors that
 	// return quickly (e.g. connection refused, 503). It must stay below the
 	// vmctl client timeout (DefaultClientTimeout = 60s) so a hung call does not
 	// trigger a second long attempt.
-	sandboxResolveRetryWindow    = 10 * time.Second
-	sandboxResolveRetryBaseDelay = 200 * time.Millisecond
-	sandboxResolveRetryMaxDelay  = time.Second
+	autoputerResolveRetryWindow    = 10 * time.Second
+	autoputerResolveRetryBaseDelay = 200 * time.Millisecond
+	autoputerResolveRetryMaxDelay  = time.Second
 )
 
 // errorResponse is a generic JSON error envelope.
@@ -132,8 +132,8 @@ type Handler struct {
 	dialer               *websocket.Dialer
 	corpusd              *http.Client
 	maild                *http.Client
-	sandboxHTTP          *http.Client
-	sandboxURL           *url.URL      // parsed sandbox URL for WS dial derivation
+	autoputerHTTP        *http.Client
+	autoputerURL         *url.URL      // parsed autoputer URL for WS dial derivation
 	vmctlClient          *vmctl.Client // optional vmctl client for VM-backed routing
 	lifecycle            *lifecycleRecorder
 	recoveries           *computeRecoveryTracker
@@ -153,12 +153,12 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 	if strings.TrimSpace(cfg.MaildURL) == "" {
 		cfg.MaildURL = DefaultMaildURL
 	}
-	sandboxURL, err := url.Parse(cfg.SandboxURL)
+	autoputerURL, err := url.Parse(cfg.ComputerURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse sandbox URL %s: %w", cfg.SandboxURL, err)
+		return nil, fmt.Errorf("parse autoputer URL %s: %w", cfg.ComputerURL, err)
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(sandboxURL)
+	proxy := httputil.NewSingleHostReverseProxy(autoputerURL)
 
 	// Flush immediately for SSE streaming responses (for example Trace) and
 	// other streaming endpoints. A value of -1 means flush after each
@@ -168,7 +168,7 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 
 	// Customize the director to preserve the original request path and query
 	// without rewriting. The default NewSingleHostReverseProxy director
-	// replaces the path, but we want the sandbox to receive the same public
+	// replaces the path, but we want the autoputer to receive the same public
 	// path (e.g., /api/shell/bootstrap) so that prefix preservation is
 	// observable end to end.
 	//
@@ -182,7 +182,7 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 
 		// Override the path and query to preserve the original public request.
 		// Path and RawPath must be restored together: restoring only decoded Path
-		// would normalize noncanonical escapes before the sandbox can reject them.
+		// would normalize noncanonical escapes before the autoputer can reject them.
 		escapedPath := req.Header.Get(proxyOriginalEscapedPathHeader)
 		decodedPath, err := url.PathUnescape(escapedPath)
 		reconstructed := &url.URL{Path: decodedPath, RawPath: escapedPath}
@@ -198,17 +198,17 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 			req.URL.RawQuery = req.Header.Get(proxyOriginalRawQueryHeader)
 		}
 
-		// Check if vmctl resolved a per-user VM sandbox URL. When set,
+		// Check if vmctl resolved a per-user VM autoputer URL. When set,
 		// override the target to the resolved VM (VAL-VM-001, VAL-VM-002).
-		if resolved := req.Header.Get("X-Resolved-Sandbox-URL"); resolved != "" {
+		if resolved := req.Header.Get("X-Resolved-Autoputer-URL"); resolved != "" {
 			if resolvedURL, err := url.Parse(resolved); err == nil {
 				req.URL.Scheme = resolvedURL.Scheme
 				req.URL.Host = resolvedURL.Host
 				req.Host = resolvedURL.Host
 			}
 		} else {
-			// Set the Host header to the default sandbox host.
-			req.Host = sandboxURL.Host
+			// Set the Host header to the default autoputer host.
+			req.Host = autoputerURL.Host
 		}
 
 		// Strip ALL client-supplied identity headers to prevent spoofing.
@@ -242,7 +242,7 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		// Strip legacy names too so client-supplied values cannot leak upstream.
 		req.Header.Del("X-Original-Path")
 		req.Header.Del("X-Original-RawQuery")
-		req.Header.Del("X-Resolved-Sandbox-URL")
+		req.Header.Del("X-Resolved-Autoputer-URL")
 	}
 
 	// Optional vmctl client for VM-backed routing.
@@ -303,8 +303,8 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		dialer:               websocket.DefaultDialer,
 		corpusd:              &http.Client{Timeout: 30 * time.Second},
 		maild:                &http.Client{Timeout: 30 * time.Second},
-		sandboxHTTP:          &http.Client{Timeout: 30 * time.Second},
-		sandboxURL:           sandboxURL,
+		autoputerHTTP:        &http.Client{Timeout: 30 * time.Second},
+		autoputerURL:         autoputerURL,
 		vmctlClient:          vmctlCli,
 		lifecycle:            newLifecycleRecorder(),
 		recoveries:           newComputeRecoveryTracker(),
@@ -545,9 +545,9 @@ func preserveOriginalRequestTarget(r *http.Request) bool {
 
 // HandleBootstrap handles GET /api/shell/bootstrap.
 // It validates the access JWT cookie, denies requests with missing or invalid
-// auth, and forwards authenticated requests to the sandbox upstream.
+// auth, and forwards authenticated requests to the autoputer upstream.
 // When vmctl routing is enabled, resolves through VM ownership instead of
-// the static sandbox fallback (VAL-VM-001, VAL-VM-002).
+// the static autoputer fallback (VAL-VM-001, VAL-VM-002).
 // The proxy injects the authenticated user context via the
 // X-Authenticated-User header and preserves the original request path, method,
 // query string, and upstream status/body.
@@ -590,9 +590,9 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resolveStarted := time.Now()
-	sandboxURL, err := h.resolveSandboxURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
+	autoputerURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
-		log.Printf("proxy: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
+		log.Printf("proxy: failed to resolve autoputer for user %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeResolveError(w, err)
 		h.lifecycle.record("bootstrap.resolve", "error", time.Since(resolveStarted))
 		h.lifecycle.record("bootstrap.total", "resolve_error", time.Since(started))
@@ -606,8 +606,8 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 	// The original escaped path and query were captured after authentication.
 
 	// If vmctl resolved a different URL, override the reverse proxy target.
-	if sandboxURL != h.cfg.SandboxURL {
-		r.Header.Set("X-Resolved-Sandbox-URL", sandboxURL)
+	if autoputerURL != h.cfg.ComputerURL {
+		r.Header.Set("X-Resolved-Autoputer-URL", autoputerURL)
 	}
 
 	upstreamStarted := time.Now()
@@ -619,8 +619,8 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 
 // HandleProtectedAPI is a generic handler for /api/* routes that require auth.
 // It validates the access JWT and forwards authenticated requests to the
-// sandbox. When vmctl routing is enabled, it resolves the user's VM through
-// vmctl ownership instead of using the static sandbox URL (VAL-VM-001,
+// autoputer. When vmctl routing is enabled, it resolves the user's VM through
+// vmctl ownership instead of using the static autoputer URL (VAL-VM-001,
 // VAL-VM-002).
 func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
@@ -659,9 +659,9 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resolveStarted := time.Now()
-	sandboxURL, err := h.resolveSandboxURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
+	autoputerURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
-		log.Printf("proxy: failed to resolve sandbox for owner %s desktop %s: %v", authResult.UserID, desktopID, err)
+		log.Printf("proxy: failed to resolve autoputer for owner %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeResolveError(w, err)
 		h.lifecycle.record(stagePrefix+".resolve", "error", time.Since(resolveStarted))
 		h.lifecycle.record(stagePrefix+".total", "resolve_error", time.Since(started))
@@ -673,8 +673,8 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 	h.setTrustedAuthHeaders(r, authResult)
 
 	// If vmctl resolved a different URL, override the reverse proxy target.
-	if sandboxURL != h.cfg.SandboxURL {
-		r.Header.Set("X-Resolved-Sandbox-URL", sandboxURL)
+	if autoputerURL != h.cfg.ComputerURL {
+		r.Header.Set("X-Resolved-Autoputer-URL", autoputerURL)
 	}
 
 	upstreamStarted := time.Now()
@@ -687,7 +687,7 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 // HandleAPI routes /api/* traffic. It applies auth gating for every HTTP
 // /api/* route and dispatches to specific handlers only where the proxy must
 // speak a different protocol, such as WebSocket upgrades. Authenticated HTTP
-// /api/* requests are forwarded by default so new sandbox apps do not require
+// /api/* requests are forwarded by default so new autoputer apps do not require
 // proxy allowlist changes. Signed-out callers still see a 401 denial rather
 // than a route-specific 404 that might suggest which routes exist.
 func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
@@ -762,8 +762,8 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	case strings.HasPrefix(path, "/api/"):
 		// All HTTP /api/* routes are auth-gated at the proxy level and
-		// forwarded to the sandbox with trusted user context injected. The
-		// sandbox owns app route dispatch and route-specific 404s.
+		// forwarded to the autoputer with trusted user context injected. The
+		// autoputer owns app route dispatch and route-specific 404s.
 		h.HandleProtectedAPI(w, r)
 		return
 	default:
@@ -796,9 +796,9 @@ func (h *Handler) HandlePulseSummary(w http.ResponseWriter, r *http.Request) {
 // HandleWS handles GET /api/ws. It validates the access JWT cookie, denies
 // requests with missing or invalid auth without upgrading the connection, and
 // relays WebSocket frames bidirectionally between the client and the
-// VM-backed sandbox. When vmctl routing is enabled, the WS dial targets the
+// VM-backed autoputer. When vmctl routing is enabled, the WS dial targets the
 // user's resolved VM (VAL-VM-006). The proxy injects the authenticated user
-// context via the X-Authenticated-User header on the sandbox dial and strips
+// context via the X-Authenticated-User header on the autoputer dial and strips
 // any client-supplied identity headers.
 func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
@@ -828,9 +828,9 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resolveStarted := time.Now()
-	sandboxURL, err := h.resolveSandboxURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
+	autoputerURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
-		log.Printf("proxy WS: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
+		log.Printf("proxy WS: failed to resolve autoputer for user %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeResolveError(w, err)
 		h.lifecycle.record("ws.resolve", "error", time.Since(resolveStarted))
 		h.lifecycle.record("ws.total", "resolve_error", time.Since(started))
@@ -854,25 +854,25 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	// state.
 	clientW := &wsWriter{conn: clientConn}
 
-	// Step 4: Dial the sandbox WebSocket endpoint.
-	// Use the resolved sandbox URL instead of the static host fallback.
-	sandboxWSURL := h.sandboxWSURLForTarget(sandboxURL, r.URL.RawQuery)
-	sandboxHeader := http.Header{}
+	// Step 4: Dial the autoputer WebSocket endpoint.
+	// Use the resolved autoputer URL instead of the static host fallback.
+	autoputerWSURL := h.autoputerWSURLForTarget(autoputerURL, r.URL.RawQuery)
+	autoputerHeader := http.Header{}
 	// Inject the trusted user context; strip any client-supplied value.
 	// The proxy is the trust boundary — only verified identity flows.
-	sandboxHeader.Set("X-Authenticated-User", authResult.UserID)
+	autoputerHeader.Set("X-Authenticated-User", authResult.UserID)
 	if authResult.Email != "" {
-		sandboxHeader.Set("X-Authenticated-Email", authResult.Email)
+		autoputerHeader.Set("X-Authenticated-Email", authResult.Email)
 	}
 	if len(authResult.Scopes) > 0 {
-		sandboxHeader.Set("X-Authenticated-Scopes", strings.Join(authResult.Scopes, ","))
+		autoputerHeader.Set("X-Authenticated-Scopes", strings.Join(authResult.Scopes, ","))
 	}
 
 	dialStarted := time.Now()
-	sandboxConn, _, err := h.dialer.Dial(sandboxWSURL, sandboxHeader)
+	autoputerConn, _, err := h.dialer.Dial(autoputerWSURL, autoputerHeader)
 	if err != nil {
-		log.Printf("proxy WS: dial sandbox %s: %v", sandboxWSURL, err)
-		// Close the client connection since we can't reach the sandbox.
+		log.Printf("proxy WS: dial autoputer %s: %v", autoputerWSURL, err)
+		// Close the client connection since we can't reach the autoputer.
 		_ = clientW.writeMessage(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream unavailable"))
 		h.lifecycle.record("ws.dial", "error", time.Since(dialStarted))
@@ -881,26 +881,26 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	h.lifecycle.record("ws.dial", "connected", time.Since(dialStarted))
 	h.lifecycle.record("ws.total", "connected", time.Since(started))
-	defer func() { _ = sandboxConn.Close() }()
+	defer func() { _ = autoputerConn.Close() }()
 
-	// Wrap the sandbox connection in its own wsWriter for the same reason as
-	// clientW: the client->sandbox relay and the teardown close-frame write
-	// both write to sandboxConn.
-	sandboxW := &wsWriter{conn: sandboxConn}
+	// Wrap the autoputer connection in its own wsWriter for the same reason as
+	// clientW: the client->autoputer relay and the teardown close-frame write
+	// both write to autoputerConn.
+	autoputerW := &wsWriter{conn: autoputerConn}
 
 	// Step 5: Relay frames bidirectionally until either side closes or errors.
 	relayDone := make(chan struct{}, 2)
 
-	// Client -> Sandbox relay.
+	// Client -> Autoputer relay.
 	go func() {
 		defer func() { relayDone <- struct{}{} }()
-		h.relayFrames(clientConn, sandboxW, "client->sandbox")
+		h.relayFrames(clientConn, autoputerW, "client->autoputer")
 	}()
 
-	// Sandbox -> Client relay.
+	// Autoputer -> Client relay.
 	go func() {
 		defer func() { relayDone <- struct{}{} }()
-		h.relayFrames(sandboxConn, clientW, "sandbox->client")
+		h.relayFrames(autoputerConn, clientW, "autoputer->client")
 	}()
 
 	// Wait for one direction to finish, then close both connections.
@@ -911,23 +911,23 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	// writes via the per-connection wsWriter mutex.
 	_ = clientW.writeMessage(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-	_ = sandboxW.writeMessage(websocket.CloseMessage,
+	_ = autoputerW.writeMessage(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 
 	// Wait briefly for the second goroutine to finish.
 	<-relayDone
 }
 
-// sandboxWSURL derives the WebSocket URL for the sandbox /api/ws endpoint
-// from the configured HTTP sandbox URL (static fallback).
+// autoputerWSURL derives the WebSocket URL for the autoputer /api/ws endpoint
+// from the configured HTTP autoputer URL (static fallback).
 // nolint:unused
-func (h *Handler) sandboxWSURL() string {
-	return sandboxWSURLForBase(h.sandboxURL.String(), "")
+func (h *Handler) autoputerWSURL() string {
+	return autoputerWSURLForBase(h.autoputerURL.String(), "")
 }
 
 // HandleSuperConsoleWS handles GET /api/super-console/ws. It validates the access JWT
 // cookie, denies requests with missing or invalid auth without upgrading, and
-// relays WebSocket frames bidirectionally between the client and the sandbox
+// relays WebSocket frames bidirectionally between the client and the autoputer
 // singleton zot PTY endpoint. This allows the browser to connect to zot through
 // the auth-gated proxy without exposing a raw terminal app.
 func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
@@ -947,9 +947,9 @@ func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	sandboxURL, err := h.resolveSandboxURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
+	autoputerURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
-		log.Printf("proxy super console WS: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
+		log.Printf("proxy super console WS: failed to resolve autoputer for user %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeResolveError(w, err)
 		return
 	}
@@ -967,41 +967,41 @@ func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
 	// gorilla/websocket connections are not safe for concurrent writes.
 	clientW := &wsWriter{conn: clientConn}
 
-	// Step 4: Dial the sandbox terminal WebSocket endpoint.
-	terminalWSURL := h.superConsoleWSURLForTarget(sandboxURL, r.URL.RawQuery)
-	sandboxHeader := http.Header{}
-	sandboxHeader.Set("X-Authenticated-User", authResult.UserID)
+	// Step 4: Dial the autoputer terminal WebSocket endpoint.
+	terminalWSURL := h.superConsoleWSURLForTarget(autoputerURL, r.URL.RawQuery)
+	autoputerHeader := http.Header{}
+	autoputerHeader.Set("X-Authenticated-User", authResult.UserID)
 	if authResult.Email != "" {
-		sandboxHeader.Set("X-Authenticated-Email", authResult.Email)
+		autoputerHeader.Set("X-Authenticated-Email", authResult.Email)
 	}
 	if len(authResult.Scopes) > 0 {
-		sandboxHeader.Set("X-Authenticated-Scopes", strings.Join(authResult.Scopes, ","))
+		autoputerHeader.Set("X-Authenticated-Scopes", strings.Join(authResult.Scopes, ","))
 	}
 
-	sandboxConn, _, err := h.dialer.Dial(terminalWSURL, sandboxHeader)
+	autoputerConn, _, err := h.dialer.Dial(terminalWSURL, autoputerHeader)
 	if err != nil {
-		log.Printf("proxy super console WS: dial sandbox %s: %v", terminalWSURL, err)
+		log.Printf("proxy super console WS: dial autoputer %s: %v", terminalWSURL, err)
 		_ = clientW.writeMessage(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream unavailable"))
 		return
 	}
-	defer func() { _ = sandboxConn.Close() }()
+	defer func() { _ = autoputerConn.Close() }()
 
-	// Wrap the sandbox connection in its own wsWriter; the client->sandbox
-	// relay and the teardown close-frame write both write to sandboxConn.
-	sandboxW := &wsWriter{conn: sandboxConn}
+	// Wrap the autoputer connection in its own wsWriter; the client->autoputer
+	// relay and the teardown close-frame write both write to autoputerConn.
+	autoputerW := &wsWriter{conn: autoputerConn}
 
 	// Step 5: Relay frames bidirectionally until either side closes or errors.
 	relayDone := make(chan struct{}, 2)
 
 	go func() {
 		defer func() { relayDone <- struct{}{} }()
-		h.relayFrames(clientConn, sandboxW, "client->super-console")
+		h.relayFrames(clientConn, autoputerW, "client->super-console")
 	}()
 
 	go func() {
 		defer func() { relayDone <- struct{}{} }()
-		h.relayFrames(sandboxConn, clientW, "super-console->client")
+		h.relayFrames(autoputerConn, clientW, "super-console->client")
 	}()
 
 	<-relayDone
@@ -1010,14 +1010,14 @@ func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
 	// per-connection wsWriter mutex.
 	_ = clientW.writeMessage(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-	_ = sandboxW.writeMessage(websocket.CloseMessage,
+	_ = autoputerW.writeMessage(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 
 	<-relayDone
 }
 
 // superConsoleWSURLForTarget derives the Super Console WebSocket URL for a specific
-// sandbox target URL.
+// autoputer target URL.
 func (h *Handler) superConsoleWSURLForTarget(targetURL, rawQuery string) string {
 	u, err := url.Parse(targetURL)
 	if err != nil {
@@ -1034,13 +1034,13 @@ func (h *Handler) superConsoleWSURLForTarget(targetURL, rawQuery string) string 
 	return u.String()
 }
 
-// sandboxWSURLForTarget derives the WebSocket URL for a specific sandbox URL.
-func (h *Handler) sandboxWSURLForTarget(targetURL, rawQuery string) string {
-	return sandboxWSURLForBase(targetURL, rawQuery)
+// autoputerWSURLForTarget derives the WebSocket URL for a specific autoputer URL.
+func (h *Handler) autoputerWSURLForTarget(targetURL, rawQuery string) string {
+	return autoputerWSURLForBase(targetURL, rawQuery)
 }
 
-// sandboxWSURLForBase derives the WebSocket URL from an HTTP base URL.
-func sandboxWSURLForBase(baseURL, rawQuery string) string {
+// autoputerWSURLForBase derives the WebSocket URL from an HTTP base URL.
+func autoputerWSURLForBase(baseURL, rawQuery string) string {
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return "ws://127.0.0.1:8085/api/ws"
@@ -1056,13 +1056,13 @@ func sandboxWSURLForBase(baseURL, rawQuery string) string {
 	return u.String()
 }
 
-// resolveSandboxURL resolves one immutable D-ROUTE slot before consulting
+// resolveComputerURL resolves one immutable D-ROUTE slot before consulting
 // vmctl for its current disposable realization. Missing route authority is a
-// product-visible refusal; there is no static sandbox fallback.
-func (h *Handler) resolveSandboxURL(ctx context.Context, userID, desktopID string) (string, error) {
+// product-visible refusal; there is no static autoputer fallback.
+func (h *Handler) resolveComputerURL(ctx context.Context, userID, desktopID string) (string, error) {
 	if h.vmctlClient == nil {
-		if h.cfg != nil && h.cfg.AllowDirectSandboxForTests {
-			return h.cfg.SandboxURL, nil
+		if h.cfg != nil && h.cfg.AllowDirectAutoputerForTests {
+			return h.cfg.ComputerURL, nil
 		}
 		return "", fmt.Errorf("ComputerVersion route authority is not configured")
 	}
@@ -1071,33 +1071,33 @@ func (h *Handler) resolveSandboxURL(ctx context.Context, userID, desktopID strin
 	}
 
 	start := time.Now()
-	delay := sandboxResolveRetryBaseDelay
+	delay := autoputerResolveRetryBaseDelay
 	for attempt := 0; ; attempt++ {
-		sandboxURL, err := h.resolveSandboxURLOnce(ctx, userID, desktopID)
+		autoputerURL, err := h.resolveComputerURLOnce(ctx, userID, desktopID)
 		if err == nil {
 			if attempt > 0 {
-				log.Printf("proxy: resolved sandbox after transient vmctl error attempts=%d elapsed=%s", attempt+1, time.Since(start).Round(time.Millisecond))
+				log.Printf("proxy: resolved autoputer after transient vmctl error attempts=%d elapsed=%s", attempt+1, time.Since(start).Round(time.Millisecond))
 			}
-			return sandboxURL, nil
+			return autoputerURL, nil
 		}
-		if !isTransientVMCTLResolveError(err) || time.Since(start) >= sandboxResolveRetryWindow {
+		if !isTransientVMCTLResolveError(err) || time.Since(start) >= autoputerResolveRetryWindow {
 			return "", err
 		}
 		if delay <= 0 {
 			delay = time.Millisecond
 		}
-		if delay > sandboxResolveRetryMaxDelay {
-			delay = sandboxResolveRetryMaxDelay
+		if delay > autoputerResolveRetryMaxDelay {
+			delay = autoputerResolveRetryMaxDelay
 		}
-		if time.Since(start)+delay > sandboxResolveRetryWindow {
-			delay = sandboxResolveRetryWindow - time.Since(start)
+		if time.Since(start)+delay > autoputerResolveRetryWindow {
+			delay = autoputerResolveRetryWindow - time.Since(start)
 			if delay <= 0 {
 				return "", err
 			}
 		}
 		select {
 		case <-ctx.Done():
-			return "", fmt.Errorf("resolve sandbox canceled after transient vmctl error: %w", err)
+			return "", fmt.Errorf("resolve autoputer canceled after transient vmctl error: %w", err)
 		case <-time.After(delay):
 		}
 		delay *= 2
@@ -1105,7 +1105,7 @@ func (h *Handler) resolveSandboxURL(ctx context.Context, userID, desktopID strin
 }
 
 func (h *Handler) ensureComputerVersionRoute(ctx context.Context, userID, desktopID string) error {
-	if h.cfg != nil && h.cfg.AllowDirectSandboxForTests {
+	if h.cfg != nil && h.cfg.AllowDirectAutoputerForTests {
 		return nil
 	}
 	if h.vmctlClient == nil {
@@ -1126,7 +1126,7 @@ func (h *Handler) ensureComputerVersionRoute(ctx context.Context, userID, deskto
 	return nil
 }
 
-func (h *Handler) resolveSandboxURLOnce(ctx context.Context, userID, desktopID string) (string, error) {
+func (h *Handler) resolveComputerURLOnce(ctx context.Context, userID, desktopID string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -1146,7 +1146,7 @@ func (h *Handler) resolveSandboxURLOnce(ctx context.Context, userID, desktopID s
 	if err != nil {
 		return "", err
 	}
-	return resp.SandboxURL, nil
+	return resp.ComputerURL, nil
 }
 
 func isTransientVMCTLResolveError(err error) bool {
@@ -1172,7 +1172,7 @@ func isTransientVMCTLResolveError(err error) bool {
 	return false
 }
 
-// isResolveTimeoutError reports whether an error from resolveSandboxURL is a
+// isResolveTimeoutError reports whether an error from resolveComputerURL is a
 // timeout (vmctl client deadline, context deadline, or URL-level timeout).
 // This matters for the public response code: timeouts are 504 Gateway Timeout,
 // other resolve failures are 502 Bad Gateway.
@@ -1190,7 +1190,7 @@ func isResolveTimeoutError(err error) bool {
 	return false
 }
 
-// writeResolveError writes the appropriate JSON error response for a sandbox
+// writeResolveError writes the appropriate JSON error response for a autoputer
 // resolve failure. Timeouts surface as 504 Gateway Timeout; other failures are
 // 502 Bad Gateway.
 func writeResolveError(w http.ResponseWriter, err error) {
@@ -1198,7 +1198,7 @@ func writeResolveError(w http.ResponseWriter, err error) {
 	if isResolveTimeoutError(err) {
 		status = http.StatusGatewayTimeout
 	}
-	writeJSON(w, status, errorResponse{Error: "failed to resolve user sandbox"})
+	writeJSON(w, status, errorResponse{Error: "failed to resolve user autoputer"})
 }
 
 // wsWriter serializes writes to a single websocket.Conn. gorilla/websocket
@@ -1253,7 +1253,7 @@ func (h *Handler) relayFrames(src *websocket.Conn, dst *wsWriter, direction stri
 }
 
 // HandleHealth handles GET /health for the proxy service. It checks the
-// upstream sandbox reachability in addition to the proxy's own health,
+// upstream autoputer reachability in addition to the proxy's own health,
 // making the protected-request backend health observable (VAL-DEPLOY-008).
 // The response includes:
 //   - status: "ok" when the proxy and upstream are healthy, "degraded" when
@@ -1261,8 +1261,8 @@ func (h *Handler) relayFrames(src *websocket.Conn, dst *wsWriter, direction stri
 //   - upstream: "ok" or "unreachable"
 //   - vmctl_routing: "enabled" or omitted when using static routing
 //
-// When vmctl routing is enabled, the static sandbox upstream probe is
-// skipped (the host sandbox was deleted in PR 5; per-user VMs are the
+// When vmctl routing is enabled, the static autoputer upstream probe is
+// skipped (the host autoputer was deleted in PR 5; per-user VMs are the
 // real upstream and vmctl health is the authoritative signal).
 func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -1276,11 +1276,11 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 	if h.cfg.VmctlRoutingEnabled() {
 		// vmctl routing: vmctl health is the authoritative upstream signal.
-		// The static sandbox URL probe is skipped because the host sandbox
+		// The static autoputer URL probe is skipped because the host autoputer
 		// was deleted (PR 5) and per-user VMs are the real upstream.
 		upstreamStatus = "vmctl"
 	} else {
-		// Static routing fallback: probe the configured sandbox URL.
+		// Static routing fallback: probe the configured autoputer URL.
 		upstreamHealthy, build := h.probeUpstreamHealth()
 		upstreamBuild = build
 		if !upstreamHealthy {
@@ -1341,12 +1341,12 @@ func (h *Handler) probeVMctlHealth() (*proxyVMctlHealthSummary, bool) {
 	return &body, true
 }
 
-// probeUpstreamHealth probes the upstream sandbox's /health endpoint with a
-// short timeout. When available, it also surfaces the sandbox build identity so
+// probeUpstreamHealth probes the upstream autoputer's /health endpoint with a
+// short timeout. When available, it also surfaces the autoputer build identity so
 // deployed browsers can prove they are talking to the expected backend build.
 func (h *Handler) probeUpstreamHealth() (bool, *buildinfo.Info) {
 	client := &http.Client{Timeout: 2 * time.Second}
-	url := h.sandboxURL.String() + "/health"
+	url := h.autoputerURL.String() + "/health"
 	resp, err := client.Get(url)
 	if err != nil {
 		return false, nil
@@ -1388,10 +1388,10 @@ func (h *Handler) HandleVMctlDeny(w http.ResponseWriter, r *http.Request) {
 // RegisterRoutes registers all proxy routes on the given server.
 // The proxy /health handler is registered via SetHealthHandler to
 // override the default server health handler with one that reports
-// upstream sandbox reachability.
+// upstream autoputer reachability.
 // HandlePlatformTextureRead serves published Texture document and revision reads
 // from corpusd's DoltDB for Universal Wire articles. Published articles
-// carry their full revision history in corpusd, not the platform sandbox.
+// carry their full revision history in corpusd, not the platform autoputer.
 func (h *Handler) HandlePlatformTextureRead(w http.ResponseWriter, r *http.Request) {
 	authResult, err := h.authenticate(r)
 	if err != nil {
@@ -1517,7 +1517,7 @@ func (h *Handler) HandlePlatformObjectGraph(w http.ResponseWriter, r *http.Reque
 }
 
 // isPlatformTextureReadRequest returns true for read-only Texture requests that
-// should be served from corpusd's published store rather than the sandbox.
+// should be served from corpusd's published store rather than the autoputer.
 func isPlatformTextureReadRequest(r *http.Request) bool {
 	if r == nil || r.URL == nil {
 		return false

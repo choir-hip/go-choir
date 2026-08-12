@@ -123,7 +123,7 @@ problem_cluster_historical:
   - generic service health, including auth, exposes no compiled build identity
   - the deploy job tests one immutable workflow commit but Node B independently selects a moving branch tip
   - fast and Nix fallback builds use separate source/dependency declarations and inject different build identity fields
-  - vmctl stamps its own process build identity into the separately built sandbox runtime package
+  - vmctl stamps its own process build identity into the separately built autoputer runtime package
   - deployed-origin acceptance requires frontend and proxy compiled commits to be equal even though differential deployments intentionally advance them independently
   - cmd/choir is not installed on Node B or guest images, yet its source falls through to the conservative full host plus both guest-image deploy class
   - cmd/desktop is a separate Wails distribution module, but its native-only source also falls through to the full platform deploy class; only shared frontend changes belong to Node B
@@ -133,7 +133,7 @@ root_cause_historical:
   - the remote checkout trusts origin/main rather than the immutable workflow SHA that passed CI
   - the auth Nix source filter does not carry internal/server's internal/buildinfo dependency and common Nix ldflags omit Commit and BuiltAt
   - a global cross-component equality assertion substitutes for selected-component activation receipts
-  - runtime-package generation inherits vmctl identity instead of consuming a sandbox artifact manifest
+  - runtime-package generation inherits vmctl identity instead of consuming a autoputer artifact manifest
   - the landing loop treated proxy-global identity as proof for an affected auth service
   - path fallback substitutes repository-wide deployment for an explicit artifact dependency map
 protected_surfaces: [deployment routing, run acceptance, service build identity]
@@ -151,7 +151,7 @@ deployed_evidence:
   - CI run 29091595925 / deploy job 86359870572 / receipt attempt 1
   - proxy /health build.service=proxy with commit=deployed_commit=944d4d94...
   - auth /session X-Choir-Build-Service=auth and X-Choir-Build-Commit=944d4d94...
-  - receipt artifacts auth/proxy/vmctl/gateway/corpusd/maild/sourcecycled/frontend/sandbox/ordinary_guest/active_computers active (playwright_guest installed) all at 944d4d94
+  - receipt artifacts auth/proxy/vmctl/gateway/corpusd/maild/sourcecycled/frontend/autoputer/ordinary_guest/active_computers active (playwright_guest installed) all at 944d4d94
   - deploy-impact classifier ignores undistributed cmd/choir and cmd/desktop native paths
 execution_effect: >-
   Settled after seam-repair service-scoped deployMetadata plus staging
@@ -353,7 +353,7 @@ proven_partial:
   - RouteProfile writers emit owner_id/computer_id
   - resolver normalizes legacy route: values at read time
   - staging lineage reads for desktop and computer-universal-wire-platform return owner_id/computer_id
-  - shell bootstrap succeeds against lineage-backed sandbox routing
+  - shell bootstrap succeeds against lineage-backed autoputer routing
 unproven:
   - no staging PromoteAppAdoption/RollbackAppAdoption mutation (no app-change packages present)
   - OG truth-gate slice still owns served-route receipt requirements for active/rollback-success claims
@@ -923,7 +923,7 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
     The repaired deployed-origin test can prove identity presence and internal
     proxy header/body consistency, but selected-component equality belongs to
     the deploy workflow rather than a timeless cross-component browser test.
-- claim: the sandbox runtime package inherits vmctl identity instead of carrying its own artifact identity.
+- claim: the autoputer runtime package inherits vmctl identity instead of carrying its own artifact identity.
   definition_node: deployment-identity-follows-activation
   evidence_class: source call graph
   command_or_observation: >-
@@ -932,19 +932,19 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
     RUNTIME_WORKER_REPO_BASE_SHA.
   result: >-
     One artifact claims another process's identity. A vmctl rebuild can change
-    the runtime-package commit even when the installed sandbox artifact did
-    not change, and a sandbox-only package change has no independent manifest
+    the runtime-package commit even when the installed autoputer artifact did
+    not change, and a autoputer-only package change has no independent manifest
     authority.
   uncertainty: >-
     This PC-0 repair records but does not yet replace the package contract.
-    The follow-up must create a sandbox manifest at build/install time and have
+    The follow-up must create a autoputer manifest at build/install time and have
     vmctl transport that manifest without re-authoring its identity.
 - claim: one shared vendor checksum still materializes one vendor output per service derivation.
   definition_node: deployment-identity-follows-activation
   evidence_class: Nix derivation graph + independently generated vendor trees
   command_or_observation: >-
     Evaluate all nine Go service derivations and generate the filtered vendor
-    tree for auth, sourcecycled, and sandbox.
+    tree for auth, sourcecycled, and autoputer.
   result: >-
     All filtered trees converge on
     sha256-JxOGfaZ3J71NVicFEhn1Vsgy5nOa1Sk74gQ0oroAhLA=, but buildGoModule
@@ -969,7 +969,7 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
     344 seconds. During activation, proxy already served compiled/header
     commit f2d1d330 while deployed_commit remained empty; it advanced only
     after verification. The durable receipt names ordinary_guest active,
-    playwright_guest installed, sandbox and one active computer active, all
+    playwright_guest installed, autoputer and one active computer active, all
     seven host services active, and frontend asset index-CDCcbfLL.js active,
     every one at f2d1d330. Public proxy health then reported compiled commit,
     header commit, and deployed_commit all equal to f2d1d330; auth independently
@@ -979,7 +979,7 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
     - .github/scripts/deploy-workflow-contract-test
     - internal/buildinfo activation-receipt validation
     - internal/server immutable identity middleware
-    - sandbox runtime build manifest and active-computer commit poll
+    - autoputer runtime build manifest and active-computer commit poll
   acceptance_level: deployed selected-artifact activation receipt plus public product identity proof
   accepted_deploy_id: "29083767049/1"
   rollback_refs:
@@ -990,9 +990,9 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
   mutation_class: red
   protected_surfaces: [deployment routing, service identity, guest activation, run acceptance]
   heresy_delta:
-    discovered: [moving-main checkout, dual builders, handwritten dependency closures, cross-component identity equality, inherited sandbox identity, nonfatal refresh]
+    discovered: [moving-main checkout, dual builders, handwritten dependency closures, cross-component identity equality, inherited autoputer identity, nonfatal refresh]
     introduced: []
-    repaired: [moving-main checkout, dual builders, handwritten dependency closures, cross-component identity equality, inherited sandbox identity, nonfatal refresh]
+    repaired: [moving-main checkout, dual builders, handwritten dependency closures, cross-component identity equality, inherited autoputer identity, nonfatal refresh]
   conjecture_delta: >-
     Deployment truth is not one repository-wide SHA assertion. It is one
     immutable tested source commit projected into independently observable
@@ -1013,7 +1013,7 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
     .github/scripts/deploy-impact-classify
   result: >-
     Receipt 29091595925/1 names auth/proxy/vmctl/gateway/corpusd/maild/
-    sourcecycled/frontend/sandbox/ordinary_guest/active_computers active and
+    sourcecycled/frontend/autoputer/ordinary_guest/active_computers active and
     playwright_guest installed, all at 944d4d94. Live proxy /health reports
     build.service=proxy with commit=deployed_commit=944d4d94...; auth session
     headers report X-Choir-Build-Service=auth and matching commit. Undistributed
@@ -1033,7 +1033,7 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
     GET /api/shell/bootstrap; POST /api/computers/desktop/adoptions without package
   result: >-
     Lineage route_profile values are owner_id/computer_id with no route: prefix.
-    Bootstrap succeeds against lineage-backed sandbox routing. Adoption without a
+    Bootstrap succeeds against lineage-backed autoputer routing. Adoption without a
     package returns 400 package-not-found; no app-change packages exist, so
     PromoteAppAdoption/RollbackAppAdoption was not executed.
   uncertainty: >-

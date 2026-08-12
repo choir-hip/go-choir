@@ -43,7 +43,7 @@ Source Service owns platform-level external source ingestion and retrieval:
 - search and item-resolution APIs.
 
 Source Service may store high-churn ingestion state in service-local storage.
-That storage is private to the service. Runtime, sandbox, Texture, and publication
+That storage is private to the service. Runtime, autoputer, Texture, and publication
 call Source Service APIs; they do not mount or read the service database.
 
 ### ContentItem

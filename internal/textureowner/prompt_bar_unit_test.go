@@ -170,7 +170,7 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) 
 		decisions[0].Reason != "M3.2 staging proof: user supplied the needed content and requested no research or execution worker." {
 		t.Fatalf("decision record = %+v", decisions[0])
 	}
-	seedRev, err := rt.Store().GetLifecycleRevision(context.Background(), "user-alice", rt.TextureSandboxID(), decision.UserRevisionID)
+	seedRev, err := rt.Store().GetLifecycleRevision(context.Background(), "user-alice", rt.TextureComputerID(), decision.UserRevisionID)
 	if err != nil {
 		t.Fatalf("get seed revision: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) 
 	if metadataBoolValue(decodeRevisionMetadata(seedRev.Metadata), "prompt_bar_instruction_revision") {
 		t.Fatalf("prompt-bar V0 must not carry the deleted prompt_bar_instruction_revision marker")
 	}
-	doc, err := rt.Store().GetLifecycleDocument(context.Background(), "user-alice", rt.TextureSandboxID(), decision.DocID)
+	doc, err := rt.Store().GetLifecycleDocument(context.Background(), "user-alice", rt.TextureComputerID(), decision.DocID)
 	if err != nil {
 		t.Fatalf("get document: %v", err)
 	}
@@ -393,7 +393,7 @@ func TestHandlePromptBarStableCommandReplaysOneLifecycle(t *testing.T) {
 	if firstDecision.InitialLoopID == "" || replayDecision.InitialLoopID != firstDecision.InitialLoopID {
 		t.Fatalf("initial activation diverged: first=%+v replay=%+v", firstDecision, replayDecision)
 	}
-	snapshot, err := rt.Store().GetLifecycleSnapshot(context.Background(), ownerID, rt.TextureSandboxID(), first.TrajectoryID)
+	snapshot, err := rt.Store().GetLifecycleSnapshot(context.Background(), ownerID, rt.TextureComputerID(), first.TrajectoryID)
 	if err != nil {
 		t.Fatal(err)
 	}

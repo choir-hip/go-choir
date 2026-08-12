@@ -87,7 +87,7 @@ func ComputeStartLifecycleRequestDigest(req types.StartLifecycleRequest) (string
 		delete(metadata, "prompt_unix_ts")
 		req.InitialRevision.Metadata, _ = json.Marshal(metadata)
 	}
-	req.Agent.OwnerID, req.Agent.ComputerID, req.Agent.SandboxID = "", "", ""
+	req.Agent.OwnerID, req.Agent.ComputerID, req.Agent.ComputerID = "", "", ""
 	req.Agent.CreatedAt, req.Agent.UpdatedAt = time.Time{}, time.Time{}
 	return lifecycleDigest(req)
 }
@@ -603,8 +603,8 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 	if strings.TrimSpace(work.AuthorityProfile) != strings.TrimSpace(agent.Profile) {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: initial work authority does not match assigned agent: %w", ErrLifecycleInvalidTransition)
 	}
-	if agent.SandboxID == "" {
-		agent.SandboxID = computerID
+	if agent.ComputerID == "" {
+		agent.ComputerID = computerID
 	}
 	agent.LifecycleVersion, agent.LastReducerSeq = 1, 1
 	if agent.CreatedAt.IsZero() {
@@ -704,7 +704,7 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 			return types.LifecycleResult{}, decodeErr
 		}
 		if storedAgent.AgentID != agent.AgentID || storedAgent.OwnerID != ownerID ||
-			storedAgent.ComputerID != computerID || storedAgent.SandboxID != computerID ||
+			storedAgent.ComputerID != computerID ||
 			storedAgent.Profile != agent.Profile || storedAgent.Role != agent.Role ||
 			storedAgent.ChannelID != agent.ChannelID {
 			return types.LifecycleResult{}, fmt.Errorf("lifecycle start: existing durable subject binding conflicts with %s", agent.AgentID)
@@ -779,7 +779,7 @@ func (s *Store) GetLifecycleRun(ctx context.Context, ownerID, computerID, runID 
 	if err != nil {
 		return types.RunRecord{}, err
 	}
-	if run.OwnerID != strings.TrimSpace(ownerID) || run.SandboxID != strings.TrimSpace(computerID) || run.RunID != strings.TrimSpace(runID) {
+	if run.OwnerID != strings.TrimSpace(ownerID) || run.ComputerID != strings.TrimSpace(computerID) || run.RunID != strings.TrimSpace(runID) {
 		return types.RunRecord{}, ErrLifecycleInvalidTransition
 	}
 	return run, nil
@@ -853,7 +853,7 @@ func (s *Store) ListLifecycleRunsByState(ctx context.Context, ownerID, computerI
 		}
 		run, decodeErr := decodeLifecycleObject[types.RunRecord](obj)
 		if decodeErr != nil || !lifecycleRunProjection(obj, run) ||
-			(ownerID != "" && run.OwnerID != ownerID) || run.SandboxID != computerID || run.State != state {
+			(ownerID != "" && run.OwnerID != ownerID) || run.ComputerID != computerID || run.State != state {
 			continue
 		}
 		runs = append(runs, run)
@@ -947,7 +947,7 @@ func (s *Store) listLifecycleRunsByScope(ctx context.Context, ownerID, computerI
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
-		if run.OwnerID == ownerID && run.SandboxID == computerID && (match == nil || match(run)) {
+		if run.OwnerID == ownerID && run.ComputerID == computerID && (match == nil || match(run)) {
 			runs = append(runs, run)
 		}
 	}
@@ -992,7 +992,7 @@ func (s *Store) ListLifecycleRunsByTrajectory(ctx context.Context, ownerID, comp
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
-		if run.OwnerID == ownerID && run.SandboxID == computerID && run.TrajectoryID == trajectoryID {
+		if run.OwnerID == ownerID && run.ComputerID == computerID && run.TrajectoryID == trajectoryID {
 			runs = append(runs, run)
 		}
 	}
@@ -1870,8 +1870,8 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 	}
 	run := req.Run
 	run.RunID, run.OwnerID, run.AgentID = strings.TrimSpace(run.RunID), strings.TrimSpace(run.OwnerID), strings.TrimSpace(run.AgentID)
-	run.SandboxID, run.TrajectoryID = strings.TrimSpace(run.SandboxID), strings.TrimSpace(run.TrajectoryID)
-	if run.RunID == "" || run.OwnerID != ownerID || run.SandboxID != computerID ||
+	run.ComputerID, run.TrajectoryID = strings.TrimSpace(run.ComputerID), strings.TrimSpace(run.TrajectoryID)
+	if run.RunID == "" || run.OwnerID != ownerID || run.ComputerID != computerID ||
 		run.AgentID != req.AgentID || run.TrajectoryID != req.TrajectoryID || !run.State.Valid() {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
@@ -1900,7 +1900,7 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 		if decodeErr != nil {
 			return types.LifecycleResult{}, decodeErr
 		}
-		if storedRun.OwnerID != ownerID || storedRun.SandboxID != computerID ||
+		if storedRun.OwnerID != ownerID || storedRun.ComputerID != computerID ||
 			storedRun.TrajectoryID != req.TrajectoryID || storedRun.AgentID != req.AgentID {
 			return types.LifecycleResult{}, ErrLifecycleCommandConflict
 		}
@@ -2026,7 +2026,7 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 	runMetadata := map[string]any{
 		"run_id": run.RunID, "agent_id": run.AgentID, "channel_id": run.ChannelID,
 		"requested_by_run_id": run.RequestedByRunID, "trajectory_id": run.TrajectoryID,
-		"agent_profile": run.AgentProfile, "agent_role": run.AgentRole, "sandbox_id": run.SandboxID,
+		"agent_profile": run.AgentProfile, "agent_role": run.AgentRole, "computer_id": run.ComputerID,
 		"state": string(run.State), "created_at": run.CreatedAt.UTC().Format(time.RFC3339Nano),
 		"updated_at": run.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
@@ -2342,7 +2342,7 @@ func lifecycleUpdateIDsInAuthenticatedRunMemory(entries []types.RunMemoryEntry, 
 			}
 			if json.Unmarshal([]byte(text[start:]), &envelope) != nil || envelope.Schema != "choir.lifecycle_injection.v1" ||
 				envelope.PacketType != "coagent_update" || strings.TrimSpace(envelope.OwnerID) != run.OwnerID ||
-				strings.TrimSpace(envelope.ComputerID) != run.SandboxID || strings.TrimSpace(envelope.TrajectoryID) != trajectoryID ||
+				strings.TrimSpace(envelope.ComputerID) != run.ComputerID || strings.TrimSpace(envelope.TrajectoryID) != trajectoryID ||
 				strings.TrimSpace(envelope.TargetAgentID) != run.AgentID || strings.TrimSpace(envelope.TargetRunID) != run.RunID {
 				continue
 			}
@@ -2466,7 +2466,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 			producerRunStateAllowed = persistentSuperHistoricalReportRunStateAllowed(producerRun.State)
 		}
 		if producerRunObj.ComputerID != "" || producerRun.RunID != req.SourceRunID || producerRun.OwnerID != ownerID ||
-			producerRun.SandboxID != computerID || producerRun.TrajectoryID != "" || producerRun.AgentID != req.ProducerAgentID ||
+			producerRun.ComputerID != computerID || producerRun.TrajectoryID != "" || producerRun.AgentID != req.ProducerAgentID ||
 			producerRun.AgentProfile != "super" || producerRun.AgentRole != "super" || !producerRunStateAllowed ||
 			producerRun.ChannelID != req.ChannelID || metadataExactString(producerRun.Metadata, "assignment_trajectory_id") != req.TrajectoryID ||
 			!persistentSuperControlBinding(producerRun.Metadata, req.TrajectoryID, req.WorkItemID, req.ControlBindingID) {
@@ -2586,7 +2586,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		}
 		boundWorkItemIDs, bindingErr := lifecycleActivationWorkItemIDs(producerRun.Metadata)
 		if bindingErr != nil || producerRun.RunID != req.SourceRunID || producerRun.OwnerID != ownerID ||
-			producerRun.SandboxID != computerID || producerRun.TrajectoryID != req.TrajectoryID || producerRun.AgentID != req.ProducerAgentID ||
+			producerRun.ComputerID != computerID || producerRun.TrajectoryID != req.TrajectoryID || producerRun.AgentID != req.ProducerAgentID ||
 			strings.TrimSpace(producerRun.AgentProfile) == "" || strings.TrimSpace(producerRun.AgentRole) == "" || !producerRun.State.Valid() ||
 			strings.TrimSpace(producerRun.AgentProfile) != strings.TrimSpace(producerRun.AgentRole) ||
 			strings.TrimSpace(producerRun.AgentRole) != req.Role || strings.TrimSpace(producerRun.ChannelID) != req.ChannelID ||

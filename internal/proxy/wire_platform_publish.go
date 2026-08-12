@@ -31,8 +31,8 @@ type wirePlatformPublishRequest struct {
 }
 
 // HandleInternalWirePlatformPublish is the host-mediated choke point for autonomous
-// Universal Wire publication. Platform sandboxes call this route; proxy re-reads
-// the revision from the platform sandbox and forwards to corpusd.
+// Universal Wire publication. Platform autoputeres call this route; proxy re-reads
+// the revision from the platform autoputer and forwards to corpusd.
 func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
@@ -64,20 +64,20 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 	}
 
 	desktopID := vmctl.UniversalWirePlatformDesktopID
-	sandboxURL, err := h.resolveSandboxURL(r.Context(), platformOwner, desktopID)
+	autoputerURL, err := h.resolveComputerURL(r.Context(), platformOwner, desktopID)
 	if err != nil {
-		log.Printf("proxy: wire publish failed to resolve sandbox for %s: %v", platformOwner, err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve platform sandbox"})
+		log.Printf("proxy: wire publish failed to resolve autoputer for %s: %v", platformOwner, err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve platform autoputer"})
 		return
 	}
 
-	var doc sandboxTextureDocument
-	var rev sandboxTextureRevision
+	var doc autoputerTextureDocument
+	var rev autoputerTextureRevision
 	if strings.TrimSpace(req.Title) != "" || strings.TrimSpace(req.Content) != "" || len(req.BodyDoc) > 0 || len(req.SourceEntities) > 0 || len(req.Metadata) > 0 || len(req.Citations) > 0 {
-		doc = sandboxTextureDocument{DocID: req.DocID, OwnerID: platformOwner, Title: strings.TrimSpace(req.Title)}
-		rev = sandboxTextureRevision{RevisionID: req.RevisionID, DocID: req.DocID, OwnerID: platformOwner, Content: req.Content, BodyDoc: req.BodyDoc, SourceEntities: req.SourceEntities, Citations: req.Citations, Metadata: req.Metadata}
+		doc = autoputerTextureDocument{DocID: req.DocID, OwnerID: platformOwner, Title: strings.TrimSpace(req.Title)}
+		rev = autoputerTextureRevision{RevisionID: req.RevisionID, DocID: req.DocID, OwnerID: platformOwner, Content: req.Content, BodyDoc: req.BodyDoc, SourceEntities: req.SourceEntities, Citations: req.Citations, Metadata: req.Metadata}
 	} else {
-		if err := h.fetchSandboxJSON(r, sandboxURL, "/internal/texture/documents/"+url.PathEscape(req.DocID), platformOwner, &doc); err != nil {
+		if err := h.fetchAutoputerJSON(r, autoputerURL, "/internal/texture/documents/"+url.PathEscape(req.DocID), platformOwner, &doc); err != nil {
 			log.Printf("proxy: wire publish fetch document: %v", err)
 			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load wire document"})
 			return
@@ -86,7 +86,7 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 			writeJSON(w, http.StatusForbidden, errorResponse{Error: "document does not belong to platform owner"})
 			return
 		}
-		if err := h.fetchSandboxJSON(r, sandboxURL, "/internal/texture/revisions/"+url.PathEscape(req.RevisionID), platformOwner, &rev); err != nil {
+		if err := h.fetchAutoputerJSON(r, autoputerURL, "/internal/texture/revisions/"+url.PathEscape(req.RevisionID), platformOwner, &rev); err != nil {
 			log.Printf("proxy: wire publish fetch revision: %v", err)
 			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load wire revision"})
 			return
@@ -133,7 +133,7 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		return
 	}
 
-	enrichedSourceEntities, err := h.enrichTexturePublicationSourceEntities(r, sandboxURL, platformOwner, rev.SourceEntities)
+	enrichedSourceEntities, err := h.enrichTexturePublicationSourceEntities(r, autoputerURL, platformOwner, rev.SourceEntities)
 	if err != nil {
 		log.Printf("proxy: wire publish enrich metadata: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to prepare publication source metadata"})
@@ -172,7 +172,7 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 
 	// Sync the full Texture (all revisions) to corpusd so published articles
 	// carry their complete revision history.
-	go h.syncTextureToCorpusd(r, sandboxURL, platformOwner, req.DocID, doc.Title, []sandboxRevisionEntry{{
+	go h.syncTextureToCorpusd(r, autoputerURL, platformOwner, req.DocID, doc.Title, []autoputerRevisionEntry{{
 		RevisionID:       rev.RevisionID,
 		ParentRevisionID: rev.ParentRevisionID,
 		AuthorKind:       rev.AuthorKind,
@@ -195,8 +195,8 @@ func textureSourceEntitiesRequireBodyDoc(sourceEntities, bodyDoc json.RawMessage
 	return strings.TrimSpace(string(bodyDoc)) == ""
 }
 
-// sandboxRevisionEntry matches the sandbox /api/texture/revisions list item shape.
-type sandboxRevisionEntry struct {
+// autoputerRevisionEntry matches the autoputer /api/texture/revisions list item shape.
+type autoputerRevisionEntry struct {
 	RevisionID       string          `json:"revision_id"`
 	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
 	AuthorKind       string          `json:"author_kind,omitempty"`
@@ -208,21 +208,21 @@ type sandboxRevisionEntry struct {
 	Metadata         json.RawMessage `json:"metadata"`
 }
 
-type sandboxTextureRevisionListResponse struct {
-	Revisions []sandboxRevisionEntry `json:"revisions"`
+type autoputerTextureRevisionListResponse struct {
+	Revisions []autoputerRevisionEntry `json:"revisions"`
 }
 
 // syncTextureToCorpusd fetches all revisions of a Texture document from the
-// platform sandbox and syncs them to corpusd's DoltDB. This runs
+// platform autoputer and syncs them to corpusd's DoltDB. This runs
 // asynchronously after a successful publication so the publish response is
 // not delayed.
-func (h *Handler) syncTextureToCorpusd(r *http.Request, sandboxURL, ownerID, docID, title string, fallbackRevisions []sandboxRevisionEntry) {
+func (h *Handler) syncTextureToCorpusd(r *http.Request, autoputerURL, ownerID, docID, title string, fallbackRevisions []autoputerRevisionEntry) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var list sandboxTextureRevisionListResponse
-	if err := h.fetchSandboxJSONWithContext(ctx, sandboxURL, "/api/texture/documents/"+url.PathEscape(docID)+"/revisions", ownerID, &list); err != nil {
-		if len(fallbackRevisions) == 0 || !sandboxRevisionEntriesHaveContent(fallbackRevisions) {
+	var list autoputerTextureRevisionListResponse
+	if err := h.fetchAutoputerJSONWithContext(ctx, autoputerURL, "/api/texture/documents/"+url.PathEscape(docID)+"/revisions", ownerID, &list); err != nil {
+		if len(fallbackRevisions) == 0 || !autoputerRevisionEntriesHaveContent(fallbackRevisions) {
 			log.Printf("proxy: sync texture to corpusd: fetch revisions for %s: %v", docID, err)
 			return
 		}
@@ -285,7 +285,7 @@ func (h *Handler) syncTextureToCorpusd(r *http.Request, sandboxURL, ownerID, doc
 	log.Printf("proxy: synced %d revisions for doc %s to corpusd", len(revisions), docID)
 }
 
-func sandboxRevisionEntriesHaveContent(revisions []sandboxRevisionEntry) bool {
+func autoputerRevisionEntriesHaveContent(revisions []autoputerRevisionEntry) bool {
 	for _, rev := range revisions {
 		if strings.TrimSpace(rev.RevisionID) != "" && strings.TrimSpace(rev.Content) != "" {
 			return true

@@ -314,7 +314,7 @@ func TestUpdaterImportsImmutableBaselineOnce(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(source, "bin"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(source, "bin", "sandbox"), []byte("baseline"), 0o555); err != nil {
+	if err := os.WriteFile(filepath.Join(source, "bin", "autoputer"), []byte("baseline"), 0o555); err != nil {
 		t.Fatal(err)
 	}
 	manifest, err := BuildBaselineManifest(source, "computer-test", "code:baseline", "artifact-program:baseline")

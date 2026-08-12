@@ -108,7 +108,7 @@ staging landing loop, and what counts as proof.
 The documentation spine is [docs/README.md](docs/README.md), with authority
 claims in [docs/doc-authority-manifest.yaml](docs/doc-authority-manifest.yaml)
 and the normative architecture in [docs/choir-doctrine.md](docs/choir-doctrine.md).
-Older docs may still use retired framing (chat, sandbox, AI workspace); treat
+Older docs may still use retired framing (chat, autoputer, AI workspace); treat
 that as historical unless a current doctrine document promotes it.
 
 Tests:

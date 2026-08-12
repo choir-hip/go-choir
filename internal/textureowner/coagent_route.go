@@ -152,7 +152,7 @@ func (h *Handler) coagentTextureTargetDocument(ctx context.Context, parentRec *t
 		metadataString(parentRec.Metadata, "source_network_request_id"),
 		metadataString(parentRec.Metadata, "ingestion_handoff_request_id"),
 	)
-	computerID := strings.TrimSpace(parentRec.SandboxID)
+	computerID := strings.TrimSpace(parentRec.ComputerID)
 	if commandSeed == "" || computerID == "" {
 		return types.Document{}, false, "", fmt.Errorf("create Texture lifecycle: durable command and computer identity are required")
 	}
@@ -218,7 +218,7 @@ func (h *Handler) coagentTextureTargetDocument(ctx context.Context, parentRec *t
 		},
 		InitialDocument: doc, InitialRevision: seedRev,
 		Agent: types.AgentRecord{
-			AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+			AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
 			Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: doc.DocID,
 			CreatedAt: now, UpdatedAt: now,
 		},

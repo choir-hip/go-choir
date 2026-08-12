@@ -18,12 +18,12 @@ func TestUniversalWireStoriesReadsCorpusdWithoutVMLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	var sandboxCalls atomic.Int32
-	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sandboxCalls.Add(1)
-		http.Error(w, "sandbox must not be called", http.StatusInternalServerError)
+	var autoputerCalls atomic.Int32
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		autoputerCalls.Add(1)
+		http.Error(w, "autoputer must not be called", http.StatusInternalServerError)
 	}))
-	defer sandbox.Close()
+	defer autoputer.Close()
 	var vmctlCalls atomic.Int32
 	vmctlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		vmctlCalls.Add(1)
@@ -53,7 +53,7 @@ func TestUniversalWireStoriesReadsCorpusdWithoutVMLifecycle(t *testing.T) {
 	}))
 	defer corpusd.Close()
 
-	handler, err := NewHandler(&Config{AllowDirectSandboxForTests: true, SandboxURL: sandbox.URL, CorpusdURL: corpusd.URL, VmctlURL: vmctlServer.URL}, pub)
+	handler, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, ComputerURL: autoputer.URL, CorpusdURL: corpusd.URL, VmctlURL: vmctlServer.URL}, pub)
 	if err != nil {
 		t.Fatalf("new handler: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestUniversalWireStoriesReadsCorpusdWithoutVMLifecycle(t *testing.T) {
 	if corpusdCalls.Load() != 1 {
 		t.Fatalf("corpusd calls = %d, want 1", corpusdCalls.Load())
 	}
-	if vmctlCalls.Load() != 0 || sandboxCalls.Load() != 0 {
-		t.Fatalf("vmctl calls = %d sandbox calls = %d, want zero", vmctlCalls.Load(), sandboxCalls.Load())
+	if vmctlCalls.Load() != 0 || autoputerCalls.Load() != 0 {
+		t.Fatalf("vmctl calls = %d autoputer calls = %d, want zero", vmctlCalls.Load(), autoputerCalls.Load())
 	}
 }

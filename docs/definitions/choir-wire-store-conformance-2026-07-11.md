@@ -96,13 +96,13 @@ match the decisions that already exist.
    authority.
 2. **The stories read path never touches VM lifecycle.** `/api/universal-wire/
    stories` is served from the world-wire store (via corpusd or the proxy's
-   product API), with no vmctl resolve, no sandbox proxy, no guest health in
+   product API), with no vmctl resolve, no autoputer proxy, no guest health in
    the request path. Reading the news requires only corpusd and its store.
 3. **Delete `backfillOGFromSQL` and its migration machinery.** No boot-time
    legacy migration anywhere. Fresh stores start empty; pre-launch data is
    discarded per the owner decision above.
 4. **Sourcecycled writes captures to the world-wire store** (directly or via
-   a corpusd/host API), not through the vmctl sandbox proxy into a guest
+   a corpusd/host API), not through the vmctl autoputer proxy into a guest
    objectgraph. Booting a VM must never be a side effect of ingesting a feed.
 5. **Processor runs become workers against the wire store.** Wherever the
    processor executes (the platform computer is acceptable as an execution
@@ -158,7 +158,7 @@ The mission is `complete` when all of the following are observed on staging:
    codebase; a fresh platform guest boots to a ready runtime in bounded time
    with no migration log lines.
 2. A sourcecycled cycle writes captures into the world-wire store with no
-   vmctl sandbox-proxy call on the ingestion path.
+   vmctl autoputer-proxy call on the ingestion path.
 3. A processor run produces at least one article durably present in the
    world-wire store (corpusd), with ingestion lineage intact.
 4. `/api/universal-wire/stories` returns that article with the platform VM

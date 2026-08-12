@@ -8,14 +8,14 @@ import (
 	"testing"
 )
 
-func newEmailTestHandler(t *testing.T, maildURL, sandboxURL string) (*Handler, ed25519.PrivateKey) {
+func newEmailTestHandler(t *testing.T, maildURL, autoputerURL string) (*Handler, ed25519.PrivateKey) {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandboxURL,
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputerURL,
 		AuthPublicKeyPath: "/unused",
 		CorpusdURL:        DefaultCorpusdURL,
 		MaildURL:          maildURL}, pub)
@@ -38,9 +38,9 @@ func TestEmailAPIForwardsToMaildWithTrustedUser(t *testing.T) {
 		})
 	}))
 	defer maild.Close()
-	sandbox := httptest.NewServer(http.NewServeMux())
-	defer sandbox.Close()
-	h, priv := newEmailTestHandler(t, maild.URL, sandbox.URL)
+	autoputer := httptest.NewServer(http.NewServeMux())
+	defer autoputer.Close()
+	h, priv := newEmailTestHandler(t, maild.URL, autoputer.URL)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/email/messages?folder=inbox", nil)
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWTWithEmail(priv, "user-real", "owner@example.com")})
@@ -89,13 +89,13 @@ func TestEmailDraftSendPathIsOnlyForwardedToMaild(t *testing.T) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	}))
 	defer maild.Close()
-	sandboxCalled := false
-	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sandboxCalled = true
+	autoputerCalled := false
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		autoputerCalled = true
 		t.Fatalf("proxy must not submit email to prompt-bar")
 	}))
-	defer sandbox.Close()
-	h, priv := newEmailTestHandler(t, maild.URL, sandbox.URL)
+	defer autoputer.Close()
+	h, priv := newEmailTestHandler(t, maild.URL, autoputer.URL)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/email/drafts/draft-1/send", nil)
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-real")})
@@ -108,8 +108,8 @@ func TestEmailDraftSendPathIsOnlyForwardedToMaild(t *testing.T) {
 	if !maildCalled {
 		t.Fatal("maild was not called")
 	}
-	if sandboxCalled {
-		t.Fatal("sandbox prompt bar was called")
+	if autoputerCalled {
+		t.Fatal("autoputer prompt bar was called")
 	}
 }
 
@@ -118,9 +118,9 @@ func TestEmailWebhookPathIsNotProxiedThroughAuthenticatedAPI(t *testing.T) {
 		t.Fatalf("webhook path should not be proxied through generic proxy")
 	}))
 	defer maild.Close()
-	sandbox := httptest.NewServer(http.NewServeMux())
-	defer sandbox.Close()
-	h, priv := newEmailTestHandler(t, maild.URL, sandbox.URL)
+	autoputer := httptest.NewServer(http.NewServeMux())
+	defer autoputer.Close()
+	h, priv := newEmailTestHandler(t, maild.URL, autoputer.URL)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/email/resend/webhook", nil)
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-real")})

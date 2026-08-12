@@ -21,12 +21,12 @@ import (
 func main() {
 	port := server.PortFromEnv("VMCTL_PORT", "8083")
 
-	// The sandbox URL base is where VM-backed sandbox runtimes are
-	// reachable. In host-process mode this is the local sandbox.
+	// The autoputer URL base is where VM-backed autoputer runtimes are
+	// reachable. In host-process mode this is the local autoputer.
 	// In production with Firecracker, vmctl will return per-VM URLs.
-	sandboxURLBase := envOr("VMCTL_SANDBOX_URL_BASE", "http://127.0.0.1:8085")
+	autoputerURLBase := envOr("VMCTL_AUTOPUTER_URL_BASE", "http://127.0.0.1:8085")
 
-	registry := vmctl.NewOwnershipRegistry(sandboxURLBase)
+	registry := vmctl.NewOwnershipRegistry(autoputerURLBase)
 	if ownershipPath := os.Getenv("VMCTL_OWNERSHIP_PATH"); ownershipPath != "" {
 		if err := registry.SetPersistencePath(ownershipPath); err != nil {
 			log.Fatalf("vmctl: load ownership registry: %v", err)
@@ -40,8 +40,8 @@ func main() {
 		log.Printf("vmctl: ownership persistence enabled (%s)", ownershipPath)
 	}
 
-	// Configure the gateway URL for issuing sandbox credentials to VM guests.
-	// When Firecracker VMs are active, each guest sandbox needs a token to
+	// Configure the gateway URL for issuing autoputer credentials to VM guests.
+	// When Firecracker VMs are active, each guest autoputer needs a token to
 	// authenticate to the host-side gateway for provider access.
 	if gwURL := os.Getenv("VMCTL_GATEWAY_URL"); gwURL != "" {
 		registry.SetGatewayURL(gwURL)
@@ -113,7 +113,7 @@ func main() {
 
 		log.Printf("vmctl: Firecracker VM manager started (kernel=%s rootfs=%s)", mgrCfg.KernelImagePath, mgrCfg.RootfsPath)
 	} else {
-		log.Fatal("vmctl: Firecracker is mandatory; host-process sandbox mode is forbidden")
+		log.Fatal("vmctl: Firecracker is mandatory; host-process autoputer mode is forbidden")
 	}
 	handler := vmctl.NewHandler(registry)
 	handler.RequireRouteAuthority()
@@ -155,22 +155,22 @@ func main() {
 		log.Printf("vmctl: route-gated idle sweeper interval set to %s", idleSweepInterval)
 	}
 	startUniversalWirePlatformComputer(registry, handler.AuthorizeComputerVersionRoute)
-	if dir := strings.TrimSpace(os.Getenv("VMCTL_SANDBOX_PACKAGE_DIR")); dir != "" {
-		handler.SetSandboxRuntimePackageDir(dir)
-		log.Printf("vmctl: sandbox runtime package directory configured (%s)", dir)
+	if dir := strings.TrimSpace(os.Getenv("VMCTL_AUTOPUTER_PACKAGE_DIR")); dir != "" {
+		handler.SetAutoputerRuntimePackageDir(dir)
+		log.Printf("vmctl: autoputer runtime package directory configured (%s)", dir)
 	}
 
 	s := server.NewServer("vmctl", port)
 	vmctl.RegisterRoutes(s, handler)
 
-	if socketPath := strings.TrimSpace(os.Getenv("VMCTL_SANDBOX_PROXY_SOCK")); socketPath != "" {
+	if socketPath := strings.TrimSpace(os.Getenv("VMCTL_AUTOPUTER_PROXY_SOCK")); socketPath != "" {
 		if err := s.SetUnixSocket(socketPath); err != nil {
 			log.Fatalf("vmctl: set unix socket %s: %v", socketPath, err)
 		}
-		log.Printf("vmctl: sandbox proxy UDS listener on %s", socketPath)
+		log.Printf("vmctl: autoputer proxy UDS listener on %s", socketPath)
 	}
 
-	log.Printf("vmctl: ownership registry initialized (sandbox_url_base=%s)", sandboxURLBase)
+	log.Printf("vmctl: ownership registry initialized (computer_url_base=%s)", autoputerURLBase)
 	s.Start()
 }
 

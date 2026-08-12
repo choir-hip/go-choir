@@ -28,7 +28,7 @@ require 'deploy-receipt.json'
 require 'Refusing to publish an activation receipt with no verified artifacts'
 require 'deploy-failures'
 require 'verify_artifact_manifest'
-require 'sandbox_commit=$(verify_artifact_manifest /var/lib/go-choir/services/sandbox/share/go-choir/build.json sandbox)'
+require 'autoputer_commit=$(verify_artifact_manifest /var/lib/go-choir/services/autoputer/share/go-choir/build.json autoputer)'
 require 'source scripts/node-b-sync-service-pointers'
 require 'active_path="/var/lib/go-choir/services/${service}"'
 require 'active_commit=$(artifact_manifest_commit "$active_path/share/go-choir/build.json" "$service")'
@@ -46,11 +46,11 @@ reject 'package_commit=$(verify_artifact_manifest "$package_path/share/go-choir/
 reject 'jq --arg service "$service" --arg path "$package_path" --arg digest "$package_digest" --arg commit "$service_commit"'
 reject 'service_commit=$(curl -fsS --max-time 5 "http://127.0.0.1:${port}/health" | jq -er '\''.build.commit'\'')'
 reject 'package_path=$(readlink -f "/var/lib/go-choir/services/${service}")'
-require 'wait_for_sandbox_commit "$refresh_sandbox_url" "$refresh_vm_id" "$sandbox_runtime_commit"'
-require 'Sandbox runtime selected without canonical guest boot refresh; refusing an undeployable service-pointer-only artifact'
-require 'Canonical guest boot refresh selected without a same-commit sandbox runtime package'
-require 'sandbox_runtime_commit=$sandbox_commit'
-require 'echo "host_services=sandbox"'
+require 'wait_for_autoputer_commit "$refresh_computer_url" "$refresh_vm_id" "$autoputer_runtime_commit"'
+require 'Autoputer runtime selected without canonical guest boot refresh; refusing an undeployable service-pointer-only artifact'
+require 'Canonical guest boot refresh selected without a same-commit autoputer runtime package'
+require 'autoputer_runtime_commit=$autoputer_commit'
+require 'echo "host_services=autoputer"'
 require 'record_receipt_artifact active_computers "$DEPLOY_COMMIT" empty'
 require 'No mutable active interactive computers were refreshed; immutable realizations remain untouched'
 reject '/internal/runtime/refresh'
@@ -89,7 +89,7 @@ jq -n --argjson artifacts "$artifacts_json" '{observed_artifacts: $artifacts}' |
 
 # Constructed ComputerVersion realizations are immutable function results. Global
 # deploy refresh may update ordinary active primaries, never these frozen rows.
-mixed_inventory='{"ownerships":[{"user_id":"mutable-owner","desktop_id":"primary","vm_id":"vm-mutable","sandbox_url":"http://10.0.0.2:8085","state":"active","kind":"interactive"},{"user_id":"frozen-owner","desktop_id":"primary","vm_id":"vm-frozen","sandbox_url":"http://10.0.0.3:8085","state":"active","kind":"interactive","snapshot_kind":"constructed-computer-version","construction_version":{"code_ref":"code:sha256:frozen","artifact_program_ref":"artifact-program:sha256:frozen"},"construction_disk_receipt_id":"disk-instantiation:sha256:frozen"},{"user_id":"sleeping-owner","desktop_id":"primary","vm_id":"vm-sleeping","state":"hibernated","kind":"interactive"}]}'
+mixed_inventory='{"ownerships":[{"user_id":"mutable-owner","desktop_id":"primary","vm_id":"vm-mutable","computer_url":"http://10.0.0.2:8085","state":"active","kind":"interactive"},{"user_id":"frozen-owner","desktop_id":"primary","vm_id":"vm-frozen","computer_url":"http://10.0.0.3:8085","state":"active","kind":"interactive","snapshot_kind":"constructed-computer-version","construction_version":{"code_ref":"code:sha256:frozen","artifact_program_ref":"artifact-program:sha256:frozen"},"construction_disk_receipt_id":"disk-instantiation:sha256:frozen"},{"user_id":"sleeping-owner","desktop_id":"primary","vm_id":"vm-sleeping","state":"hibernated","kind":"interactive"}]}'
 mutable_ids=$(printf '%s' "$mixed_inventory" | jq -r '.ownerships[] | select(.state == "active") | select((.kind == null) or (.kind == "") or (.kind == "interactive")) | select((.snapshot_kind // "") != "constructed-computer-version") | .vm_id')
 immutable_ids=$(printf '%s' "$mixed_inventory" | jq -r '.ownerships[] | select(.state == "active") | select((.kind == null) or (.kind == "") or (.kind == "interactive")) | select((.snapshot_kind // "") == "constructed-computer-version") | .vm_id')
 [ "$mutable_ids" = "vm-mutable" ]

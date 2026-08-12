@@ -14,65 +14,65 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provider"
 )
 
-// --- PerSandboxRateLimiter unit tests ---
+// --- PerAutoputerRateLimiter unit tests ---
 
 func TestRateLimiterAllowsUnderLimit(t *testing.T) {
-	rl := NewPerSandboxRateLimiter(5, 1*time.Second)
+	rl := NewPerAutoputerRateLimiter(5, 1*time.Second)
 
 	for i := 0; i < 5; i++ {
-		if !rl.Allow("sandbox-1") {
+		if !rl.Allow("autoputer-1") {
 			t.Fatalf("request %d should be allowed", i+1)
 		}
 	}
 }
 
 func TestRateLimiterBlocksOverLimit(t *testing.T) {
-	rl := NewPerSandboxRateLimiter(3, 1*time.Second)
+	rl := NewPerAutoputerRateLimiter(3, 1*time.Second)
 
 	for i := 0; i < 3; i++ {
-		if !rl.Allow("sandbox-1") {
+		if !rl.Allow("autoputer-1") {
 			t.Fatalf("request %d should be allowed", i+1)
 		}
 	}
 
-	if rl.Allow("sandbox-1") {
+	if rl.Allow("autoputer-1") {
 		t.Fatal("request 4 should be blocked (over limit)")
 	}
 }
 
-func TestRateLimiterIsolationBetweenSandboxes(t *testing.T) {
-	rl := NewPerSandboxRateLimiter(2, 1*time.Second)
+func TestRateLimiterIsolationBetweenAutoputeres(t *testing.T) {
+	rl := NewPerAutoputerRateLimiter(2, 1*time.Second)
 
-	// sandbox-1 uses its full quota.
-	rl.Allow("sandbox-1")
-	rl.Allow("sandbox-1")
+	// autoputer-1 uses its full quota.
+	rl.Allow("autoputer-1")
+	rl.Allow("autoputer-1")
 
-	// sandbox-1 is now blocked.
-	if rl.Allow("sandbox-1") {
-		t.Fatal("sandbox-1 should be blocked after using its quota")
+	// autoputer-1 is now blocked.
+	if rl.Allow("autoputer-1") {
+		t.Fatal("autoputer-1 should be blocked after using its quota")
 	}
 
-	// sandbox-2 is independent and should still succeed.
-	if !rl.Allow("sandbox-2") {
-		t.Fatal("sandbox-2 should be allowed (independent quota)")
+	// autoputer-2 is independent and should still succeed.
+	if !rl.Allow("autoputer-2") {
+		t.Fatal("autoputer-2 should be allowed (independent quota)")
 	}
-	if !rl.Allow("sandbox-2") {
-		t.Fatal("sandbox-2 second request should be allowed")
-	}
-
-	// sandbox-2 is now also blocked.
-	if rl.Allow("sandbox-2") {
-		t.Fatal("sandbox-2 should be blocked after using its quota")
+	if !rl.Allow("autoputer-2") {
+		t.Fatal("autoputer-2 second request should be allowed")
 	}
 
-	// sandbox-1 is still blocked (its quota was not freed by sandbox-2).
-	if rl.Allow("sandbox-1") {
-		t.Fatal("sandbox-1 should still be blocked")
+	// autoputer-2 is now also blocked.
+	if rl.Allow("autoputer-2") {
+		t.Fatal("autoputer-2 should be blocked after using its quota")
+	}
+
+	// autoputer-1 is still blocked (its quota was not freed by autoputer-2).
+	if rl.Allow("autoputer-1") {
+		t.Fatal("autoputer-1 should still be blocked")
 	}
 }
 
 func TestRateLimiterConcurrentAccess(t *testing.T) {
-	rl := NewPerSandboxRateLimiter(100, 1*time.Second)
+	rl := NewPerAutoputerRateLimiter(100, 1*time.Second)
 
 	var wg sync.WaitGroup
 	allowed := atomic.Int32{}
@@ -81,7 +81,7 @@ func TestRateLimiterConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if rl.Allow("sandbox-1") {
+			if rl.Allow("autoputer-1") {
 				allowed.Add(1)
 			}
 		}()
@@ -94,90 +94,90 @@ func TestRateLimiterConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestRateLimiterConcurrentMultiSandbox(t *testing.T) {
-	rl := NewPerSandboxRateLimiter(50, 1*time.Second)
+func TestRateLimiterConcurrentMultiAutoputer(t *testing.T) {
+	rl := NewPerAutoputerRateLimiter(50, 1*time.Second)
 
 	var wg sync.WaitGroup
-	sandbox1Allowed := atomic.Int32{}
-	sandbox2Allowed := atomic.Int32{}
+	autoputer1Allowed := atomic.Int32{}
+	autoputer2Allowed := atomic.Int32{}
 
 	for i := 0; i < 100; i++ {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			if rl.Allow("sandbox-1") {
-				sandbox1Allowed.Add(1)
+			if rl.Allow("autoputer-1") {
+				autoputer1Allowed.Add(1)
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			if rl.Allow("sandbox-2") {
-				sandbox2Allowed.Add(1)
+			if rl.Allow("autoputer-2") {
+				autoputer2Allowed.Add(1)
 			}
 		}()
 	}
 	wg.Wait()
 
-	s1 := sandbox1Allowed.Load()
-	s2 := sandbox2Allowed.Load()
+	s1 := autoputer1Allowed.Load()
+	s2 := autoputer2Allowed.Load()
 	if s1 != 50 {
-		t.Fatalf("sandbox-1: expected 50 allowed, got %d", s1)
+		t.Fatalf("autoputer-1: expected 50 allowed, got %d", s1)
 	}
 	if s2 != 50 {
-		t.Fatalf("sandbox-2: expected 50 allowed, got %d", s2)
+		t.Fatalf("autoputer-2: expected 50 allowed, got %d", s2)
 	}
 }
 
 func TestRateLimiterWindowReset(t *testing.T) {
-	rl := NewPerSandboxRateLimiter(2, 100*time.Millisecond)
+	rl := NewPerAutoputerRateLimiter(2, 100*time.Millisecond)
 
-	rl.Allow("sandbox-1")
-	rl.Allow("sandbox-1")
+	rl.Allow("autoputer-1")
+	rl.Allow("autoputer-1")
 
-	if rl.Allow("sandbox-1") {
+	if rl.Allow("autoputer-1") {
 		t.Fatal("should be blocked")
 	}
 
 	// Wait for the window to pass.
 	time.Sleep(150 * time.Millisecond)
 
-	if !rl.Allow("sandbox-1") {
+	if !rl.Allow("autoputer-1") {
 		t.Fatal("should be allowed after window reset")
 	}
 }
 
 func TestRateLimiterRecordUpdatesUsage(t *testing.T) {
-	rl := NewPerSandboxRateLimiter(5, 1*time.Second)
+	rl := NewPerAutoputerRateLimiter(5, 1*time.Second)
 
 	// Record should update the bucket.
-	if !rl.Record("sandbox-1") {
+	if !rl.Record("autoputer-1") {
 		t.Fatal("first record should succeed")
 	}
 
 	// After recording, Allow should count that usage.
 	// We already used 1 via Record, so Allow should work 4 more times.
 	for i := 0; i < 4; i++ {
-		if !rl.Allow("sandbox-1") {
+		if !rl.Allow("autoputer-1") {
 			t.Fatalf("allow %d should succeed (1 record + %d allows = 5 total)", i+1, i+1)
 		}
 	}
 
 	// 6th attempt should fail.
-	if rl.Allow("sandbox-1") {
+	if rl.Allow("autoputer-1") {
 		t.Fatal("should be blocked after 1 record + 4 allows + 1 more = 6 total")
 	}
 }
 
 func TestRateLimiterRecordReturnsFalseOverLimit(t *testing.T) {
-	rl := NewPerSandboxRateLimiter(2, 1*time.Second)
+	rl := NewPerAutoputerRateLimiter(2, 1*time.Second)
 
-	if !rl.Record("sandbox-1") {
+	if !rl.Record("autoputer-1") {
 		t.Fatal("first record should succeed")
 	}
-	if !rl.Record("sandbox-1") {
+	if !rl.Record("autoputer-1") {
 		t.Fatal("second record should succeed")
 	}
-	if rl.Record("sandbox-1") {
+	if rl.Record("autoputer-1") {
 		t.Fatal("third record should fail (over limit)")
 	}
 }
@@ -216,7 +216,7 @@ func TestHandleInference_RateLimited(t *testing.T) {
 	h, reg, mp := setupHandlerWithRateLimit(t, 3, 1*time.Second)
 	_ = mp
 
-	result, _ := reg.IssueCredential("sandbox-1")
+	result, _ := reg.IssueCredential("autoputer-1")
 
 	payload := ProviderRequest{
 		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
@@ -268,7 +268,7 @@ func TestSearchRateLimitDoesNotConsumeInferenceBudget(t *testing.T) {
 		},
 	}}, 1)
 
-	cred, err := reg.IssueCredential("sandbox-mixed-rate")
+	cred, err := reg.IssueCredential("autoputer-mixed-rate")
 	if err != nil {
 		t.Fatalf("issue credential: %v", err)
 	}
@@ -305,20 +305,20 @@ func TestSearchRateLimitDoesNotConsumeInferenceBudget(t *testing.T) {
 	}
 }
 
-func TestHandleInference_RateLimitIsolationBetweenSandboxes(t *testing.T) {
-	// VAL-GATEWAY-005: One noisy sandbox can hit its limit while another
-	// sandbox continues to receive provider-backed responses.
+func TestHandleInference_RateLimitIsolationBetweenAutoputeres(t *testing.T) {
+	// VAL-GATEWAY-005: One noisy autoputer can hit its limit while another
+	// autoputer continues to receive provider-backed responses.
 	h, reg, _ := setupHandlerWithRateLimit(t, 2, 1*time.Second)
 
-	result1, _ := reg.IssueCredential("sandbox-1")
-	result2, _ := reg.IssueCredential("sandbox-2")
+	result1, _ := reg.IssueCredential("autoputer-1")
+	result2, _ := reg.IssueCredential("autoputer-2")
 
 	payload := ProviderRequest{
 		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
 	}
 	body, _ := json.Marshal(payload)
 
-	// sandbox-1 uses its full quota.
+	// autoputer-1 uses its full quota.
 	for i := 0; i < 2; i++ {
 		req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
 		req.Header.Set("Authorization", "Bearer "+result1.RawToken)
@@ -328,11 +328,11 @@ func TestHandleInference_RateLimitIsolationBetweenSandboxes(t *testing.T) {
 		h.HandleInference(w, req)
 
 		if w.Code != http.StatusOK {
-			t.Fatalf("sandbox-1 request %d: status = %d, want %d", i+1, w.Code, http.StatusOK)
+			t.Fatalf("autoputer-1 request %d: status = %d, want %d", i+1, w.Code, http.StatusOK)
 		}
 	}
 
-	// sandbox-1 is now rate-limited.
+	// autoputer-1 is now rate-limited.
 	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
 	req.Header.Set("Authorization", "Bearer "+result1.RawToken)
 	req.Header.Set("Content-Type", "application/json")
@@ -341,10 +341,10 @@ func TestHandleInference_RateLimitIsolationBetweenSandboxes(t *testing.T) {
 	h.HandleInference(w, req)
 
 	if w.Code != http.StatusTooManyRequests {
-		t.Fatalf("sandbox-1 rate-limited: status = %d, want %d", w.Code, http.StatusTooManyRequests)
+		t.Fatalf("autoputer-1 rate-limited: status = %d, want %d", w.Code, http.StatusTooManyRequests)
 	}
 
-	// sandbox-2 should still succeed.
+	// autoputer-2 should still succeed.
 	req = httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
 	req.Header.Set("Authorization", "Bearer "+result2.RawToken)
 	req.Header.Set("Content-Type", "application/json")
@@ -353,7 +353,7 @@ func TestHandleInference_RateLimitIsolationBetweenSandboxes(t *testing.T) {
 	h.HandleInference(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("sandbox-2 should still succeed: status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		t.Fatalf("autoputer-2 should still succeed: status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 }
 
@@ -376,7 +376,7 @@ func TestHandleInference_RateLimitDoesNotAffectAuth(t *testing.T) {
 func TestHandleInference_RateLimitWindowReset(t *testing.T) {
 	h, reg, _ := setupHandlerWithRateLimit(t, 1, 100*time.Millisecond)
 
-	result, _ := reg.IssueCredential("sandbox-1")
+	result, _ := reg.IssueCredential("autoputer-1")
 
 	payload := ProviderRequest{
 		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
@@ -423,22 +423,22 @@ func TestHandleInference_RateLimitWindowReset(t *testing.T) {
 	}
 }
 
-func TestHandleInference_ParallelSandboxIsolation(t *testing.T) {
-	// Parallel requests from two sandboxes: one hitting its limit
+func TestHandleInference_ParallelAutoputerIsolation(t *testing.T) {
+	// Parallel requests from two autoputeres: one hitting its limit
 	// must not affect the other.
 	h, reg, _ := setupHandlerWithRateLimit(t, 5, 1*time.Second)
 
-	result1, _ := reg.IssueCredential("sandbox-1")
-	result2, _ := reg.IssueCredential("sandbox-2")
+	result1, _ := reg.IssueCredential("autoputer-1")
+	result2, _ := reg.IssueCredential("autoputer-2")
 
 	payload := ProviderRequest{
 		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
 	}
 	body, _ := json.Marshal(payload)
 
-	// Fire 8 requests from sandbox-1 (only 5 should succeed).
+	// Fire 8 requests from autoputer-1 (only 5 should succeed).
 	var wg sync.WaitGroup
-	sandbox1Statuses := make(chan int, 8)
+	autoputer1Statuses := make(chan int, 8)
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
 		go func() {
@@ -449,15 +449,15 @@ func TestHandleInference_ParallelSandboxIsolation(t *testing.T) {
 
 			w := httptest.NewRecorder()
 			h.HandleInference(w, req)
-			sandbox1Statuses <- w.Code
+			autoputer1Statuses <- w.Code
 		}()
 	}
 
 	wg.Wait()
-	close(sandbox1Statuses)
+	close(autoputer1Statuses)
 
 	var s1ok, s1limited int
-	for code := range sandbox1Statuses {
+	for code := range autoputer1Statuses {
 		switch code {
 		case http.StatusOK:
 			s1ok++
@@ -467,13 +467,13 @@ func TestHandleInference_ParallelSandboxIsolation(t *testing.T) {
 	}
 
 	if s1ok != 5 {
-		t.Errorf("sandbox-1: expected 5 ok, got %d", s1ok)
+		t.Errorf("autoputer-1: expected 5 ok, got %d", s1ok)
 	}
 	if s1limited != 3 {
-		t.Errorf("sandbox-1: expected 3 rate-limited, got %d", s1limited)
+		t.Errorf("autoputer-1: expected 3 rate-limited, got %d", s1limited)
 	}
 
-	// sandbox-2 should still have its full quota.
+	// autoputer-2 should still have its full quota.
 	for i := 0; i < 5; i++ {
 		req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
 		req.Header.Set("Authorization", "Bearer "+result2.RawToken)
@@ -483,7 +483,7 @@ func TestHandleInference_ParallelSandboxIsolation(t *testing.T) {
 		h.HandleInference(w, req)
 
 		if w.Code != http.StatusOK {
-			t.Fatalf("sandbox-2 request %d: status = %d, want %d", i+1, w.Code, http.StatusOK)
+			t.Fatalf("autoputer-2 request %d: status = %d, want %d", i+1, w.Code, http.StatusOK)
 		}
 	}
 }
@@ -491,7 +491,7 @@ func TestHandleInference_ParallelSandboxIsolation(t *testing.T) {
 func TestRateLimitHeadersIn429Response(t *testing.T) {
 	h, reg, _ := setupHandlerWithRateLimit(t, 1, 1*time.Second)
 
-	result, _ := reg.IssueCredential("sandbox-1")
+	result, _ := reg.IssueCredential("autoputer-1")
 
 	payload := ProviderRequest{
 		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
@@ -549,7 +549,7 @@ func TestHandleHealth_WithRateLimiter(t *testing.T) {
 // --- Helpers ---
 
 // setupHandlerWithRateLimit creates a Handler with a mock provider and
-// a per-sandbox rate limiter configured with the given parameters.
+// a per-autoputer rate limiter configured with the given parameters.
 func setupHandlerWithRateLimit(t *testing.T, maxReqs int, window time.Duration) (*Handler, *IdentityRegistry, *mockProvider) {
 	t.Helper()
 	reg := NewIdentityRegistry(1 * time.Hour)
@@ -565,6 +565,6 @@ func setupHandlerWithRateLimit(t *testing.T, maxReqs int, window time.Duration) 
 			Usage:        provider.Usage{InputTokens: 10, OutputTokens: 20},
 		},
 	}
-	rl := NewPerSandboxRateLimiter(maxReqs, window)
+	rl := NewPerAutoputerRateLimiter(maxReqs, window)
 	return NewHandlerWithRateLimit(reg, mp, rl), reg, mp
 }

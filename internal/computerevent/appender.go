@@ -541,6 +541,28 @@ func (a *ComputerEventAppender) Reconstruct(ctx context.Context, source EventSou
 	return nil
 }
 
+// ReconstructInto replays the canonical event source into a separate
+// projection. It is intentionally a dry-run seam for state-completeness
+// probes: the appender's live projection is never touched. The CAS dependency
+// must also expose EventSource, as the production HTTP client does.
+func (a *ComputerEventAppender) ReconstructInto(ctx context.Context, projection ProjectionStore) error {
+	if a == nil || projection == nil {
+		return fmt.Errorf("computer event appender: replay projection is required")
+	}
+	source, ok := a.cas.(EventSource)
+	if !ok {
+		return fmt.Errorf("computer event appender: CAS does not expose event replay")
+	}
+	dryRun := &ComputerEventAppender{
+		computerID: a.computerID,
+		pins:       a.pins,
+		projection: projection,
+		cas:        a.cas,
+		verifier:   a.verifier,
+	}
+	return dryRun.Reconstruct(ctx, source)
+}
+
 const (
 	// PlatformControlTrustKeyID and PlatformControlTrustPublicKey pin the
 	// repository-reviewed staging trust root. Rotation requires a reviewed

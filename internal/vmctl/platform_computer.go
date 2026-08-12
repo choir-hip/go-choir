@@ -17,8 +17,8 @@ const (
 
 // EnsureUniversalWirePlatformComputer boots or resumes the always-on platform
 // computer. It returns an error if the platform computer could not be made
-// ready. Dispatch routing is handled by the sandbox proxy (UDS) — callers
-// no longer need the sandbox URL directly.
+// ready. Dispatch routing is handled by the autoputer proxy (UDS) — callers
+// no longer need the autoputer URL directly.
 func (r *OwnershipRegistry) EnsureUniversalWirePlatformComputer(ctx context.Context) error {
 	own, err := r.ensureUniversalWirePlatformOwnership(ctx)
 	if err != nil {
@@ -78,7 +78,7 @@ func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer(ctx context.Contex
 			r.mu.Lock()
 			current, ok := r.ownerships[key]
 			if ok && current != nil {
-				current.SandboxURL = info.HostURL
+				current.ComputerURL = info.HostURL
 				current.Epoch = info.Epoch
 				current.State = VMStateActive
 				current.LastActiveAt = time.Now()
@@ -113,7 +113,7 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 					return r.ensureUniversalWirePlatformOwnership(ctx)
 				}
 				if info != nil {
-					current.SandboxURL = info.HostURL
+					current.ComputerURL = info.HostURL
 					current.Epoch = info.Epoch
 				}
 				current.State = VMStateActive
@@ -145,7 +145,7 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 					r.mu.Unlock()
 					return nil, fmt.Errorf("platform computer ownership disappeared during resume")
 				}
-				current.SandboxURL = info.HostURL
+				current.ComputerURL = info.HostURL
 				current.Epoch = info.Epoch
 				current.State = VMStateActive
 				current.LastActiveAt = time.Now()
@@ -183,7 +183,7 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 
 			// A persisted booting state without an in-memory pending boot can
 			// survive a vmctl restart. Treat it as stale and recover it instead
-			// of letting callers route to the placeholder sandbox URL forever.
+			// of letting callers route to the placeholder autoputer URL forever.
 			mgr := r.vmManager
 			if mgr == nil {
 				r.mu.Unlock()
@@ -223,7 +223,7 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 				return r.ensureUniversalWirePlatformOwnership(ctx)
 			}
 			if info != nil {
-				current.SandboxURL = info.HostURL
+				current.ComputerURL = info.HostURL
 				current.Epoch = info.Epoch
 			}
 			current.State = VMStateActive
@@ -254,7 +254,7 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 				r.mu.Unlock()
 				return nil, fmt.Errorf("platform computer ownership disappeared during recovery")
 			}
-			current.SandboxURL = info.HostURL
+			current.ComputerURL = info.HostURL
 			current.Epoch = info.Epoch
 			current.State = VMStateActive
 			current.LastActiveAt = time.Now()
@@ -298,7 +298,7 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 		UserID:        UniversalWirePlatformOwnerID,
 		DesktopID:     UniversalWirePlatformDesktopID,
 		VMID:          vmID,
-		SandboxURL:    info.HostURL,
+		ComputerURL:   info.HostURL,
 		Epoch:         info.Epoch,
 		Kind:          VMKindInteractive,
 		WarmnessClass: WarmnessClassPublicPlatform,

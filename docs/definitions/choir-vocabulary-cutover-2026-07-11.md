@@ -14,7 +14,7 @@ rename work cannot preserve code that runtime dissolution should delete.
 ## Why this mission exists
 
 Doctrine terms and code names drifted (`loop.*` events for runs, lease-shaped
-identifiers, `universal-wire` vs world-wire, host `sandbox` vs autoputer).
+identifiers, `universal-wire` vs world-wire, host `autoputer` vs autoputer).
 Folding those renames into the run-lifecycle correctness mission blocked
 tangible completion. This Definition owns rename cutovers as their own exit
 receipt: staging green under new names with aliases drained.
@@ -34,7 +34,7 @@ behavior change, stop, return it to the owning phase, and resume rename later.
 4. `docs/standing-questions.md`, `AGENTS.md`.
 5. Observed baselines (2026-07-11, refresh at Phase 0):
    - `universal wire` ~619 non-docs matches; `world wire` ~0 in code
-   - host `sandbox` packages + ~77 CI refs
+   - host `autoputer` packages + ~77 CI refs
    - H019 lease detectors ~90±10 non-`release` in `internal/`+`cmd/`
    - `"loop.` wire strings: 28
    - `prompt-bar`/`PromptBar`: ~271 in `internal/`+`cmd/` (~333 with frontend)
@@ -56,7 +56,7 @@ green under the new names:
 
 1. `universal wire` → `world wire` (all casings), including an atomic
    `/api/world-wire/*` route and caller cutover with no old HTTP alias.
-2. Choir-host `sandbox` → `autoputer` (not OS/browser/test sandboxing; those
+2. Choir-host `autoputer` → `autoputer` (not OS/browser/test autoputering; those
    stay allowlisted). Same-commit `deploy-impact-classify` updates.
 3. H019 lease vocabulary → worker handle / activation budget / progress
    deadline / trajectory obligation (detectors: `lease`, `leased`,

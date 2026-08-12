@@ -286,12 +286,12 @@ Use this as a compact search menu. Choose a few; do not run the whole list.
 ### Frame and ontology
 
 - **Object transform:** What is the real object: file, process, relationship, market, ritual, theorem, memory, state machine, public symbol, learning system?
-- **Name transform:** Rename the object and watch the affordances change. “Sandbox” -> “computer” changes the local gradient.
+- **Name transform:** Rename the object and watch the affordances change. “Autoputer” -> “computer” changes the local gradient.
 - **Substrate transform:** What substrate does this live on: code, hardware, habit, incentive, myth, law, social proof, memory, capital, energy, institution, relation?
 - **Interface transform:** Is the apparent problem an interface between systems: user/tool, market/product, model/artifact, state/firm, past/future?
 - **Boundary transform:** Move the boundary. Is this inside the product, user, institution, model, or harness?
 - **Unit transform:** Change the unit: token, task, run, computer, user, household, firm, school, scene, nation, civilization.
-- **Category error transform:** Are we treating a learner as a database, a society as an economy, a computer as a sandbox, or a relationship as a transaction?
+- **Category error transform:** Are we treating a learner as a database, a society as an economy, a computer as a autoputer, or a relationship as a transaction?
 - **Projection transform:** What higher-dimensional object is projected into this surface, and what is lost?
 - **Latent variable transform:** What hidden variable would make confusing observations unsurprising?
 - **Reification transform:** What story, market, institution, or metric is being mistaken for a natural fact?

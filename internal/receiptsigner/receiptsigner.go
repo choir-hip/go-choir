@@ -77,7 +77,7 @@ func (h *Handler) signReceipt(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "typed guest receipt refused"})
 		return
 	}
-	validIssuer := (request.ReceiptKind == "ExecutionIdentity" && request.Issuer == "choir-sandbox") || (request.ReceiptKind != "ExecutionIdentity" && request.Issuer == "choir-updater")
+	validIssuer := (request.ReceiptKind == "ExecutionIdentity" && request.Issuer == "choir-autoputer") || (request.ReceiptKind != "ExecutionIdentity" && request.Issuer == "choir-updater")
 	if !validIssuer || !allowedGuestReceipt(request.ReceiptKind) || fmt.Sprint(request.KindFields["computer_id"]) != h.computerID {
 		log.Printf("receipt signer: refused kind=%q issuer=%q computer_id=%q want_computer_id=%q valid_issuer=%v", request.ReceiptKind, request.Issuer, fmt.Sprint(request.KindFields["computer_id"]), h.computerID, validIssuer)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "typed guest receipt refused"})

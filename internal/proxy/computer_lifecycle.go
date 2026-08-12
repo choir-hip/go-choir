@@ -36,13 +36,13 @@ func isComputerLifecyclePath(path string) bool {
 }
 
 type resolvedComputerTarget struct {
-	ComputerID string
-	UserID     string
-	DesktopID  string
-	VMID       string
-	SandboxURL string
-	State      string
-	Epoch      int64
+	ComputerID  string
+	UserID      string
+	DesktopID   string
+	VMID        string
+	ComputerURL string
+	State       string
+	Epoch       int64
 }
 
 func (h *Handler) resolveAuthorizedComputer(ctx context.Context, authResult *AuthResult, computerID string) (*resolvedComputerTarget, error) {
@@ -55,7 +55,7 @@ func (h *Handler) resolveAuthorizedComputer(ctx context.Context, authResult *Aut
 	}
 	return &resolvedComputerTarget{
 		ComputerID: scoped.ComputerID, UserID: scoped.UserID, DesktopID: scoped.DesktopID, VMID: scoped.VMID,
-		SandboxURL: scoped.SandboxURL, State: scoped.State, Epoch: scoped.Epoch,
+		ComputerURL: scoped.ComputerURL, State: scoped.State, Epoch: scoped.Epoch,
 	}, nil
 }
 

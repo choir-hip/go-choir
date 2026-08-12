@@ -15,7 +15,7 @@ func TestToolRegistryRegister(t *testing.T) {
 	registry := NewToolRegistry()
 	tool := Tool{
 		Name:        "read_file",
-		Description: "Read a file from the sandbox filesystem",
+		Description: "Read a file from the autoputer filesystem",
 		Func: func(context.Context, json.RawMessage) (string, error) {
 			return "file contents", nil
 		},

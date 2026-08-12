@@ -39,7 +39,7 @@ After implementation, regenerate `docs/runtime-dissolution-inventory.yaml`. Acce
 
 - Independent `S3I7Verifier` returned `PASS` at confidence `0.98` with no findings on canonical `3d7d29ce`.
 - GitHub Actions run `29204058610`, attempt `2`, passed every selected normal/race gate and deployed checkpoint `67a3bd82e5a38b19e2e2fcf5f46bdd051d600512`.
-- Deployment job `86681456930` published the activation receipt at `2026-07-12T18:47:41Z`; sandbox and gateway artifacts were active at `67a3bd82e5a38b19e2e2fcf5f46bdd051d600512`.
+- Deployment job `86681456930` published the activation receipt at `2026-07-12T18:47:41Z`; autoputer and gateway artifacts were active at `67a3bd82e5a38b19e2e2fcf5f46bdd051d600512`.
 - Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`, proving the registered run-list product path remained live after alias deletion.
 - Residual risk: none within S3-I7; later ordered S3 deletion work remains.
 

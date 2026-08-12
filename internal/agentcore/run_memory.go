@@ -86,7 +86,7 @@ func (m *runMemoryManager) seedActorMemorySnapshot(ctx context.Context) error {
 		return nil
 	}
 	ownerID := strings.TrimSpace(m.rec.OwnerID)
-	computerID := strings.TrimSpace(m.rec.SandboxID)
+	computerID := strings.TrimSpace(m.rec.ComputerID)
 	agentID := strings.TrimSpace(m.rec.AgentID)
 	runID := strings.TrimSpace(m.rec.RunID)
 	if ownerID == "" || computerID == "" || agentID == "" || runID == "" {

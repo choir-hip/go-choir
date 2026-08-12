@@ -112,7 +112,7 @@ func (c ManagerConfig) Validate() error {
 // IsFirecrackerAvailable returns true if the Firecracker binary is
 // present on the system (i.e., we are on Node B with KVM).
 // On macOS or environments without Firecracker, this returns false
-// and the vmctl service falls back to host-process sandbox mode.
+// and the vmctl service falls back to host-process autoputer mode.
 func IsFirecrackerAvailable() bool {
 	bin := os.Getenv("VM_FIRECRACKER_BIN")
 	if bin == "" {
@@ -129,7 +129,6 @@ func IsFirecrackerAvailable() bool {
 	}
 	return true
 }
-
 
 func findInPath(name string) (string, error) {
 	path := os.Getenv("PATH")

@@ -666,8 +666,8 @@
             <dd data-settings-proxy-commit>{shortCommit(health?.build?.commit)}</dd>
           </div>
           <div>
-            <dt>Sandbox commit</dt>
-            <dd data-settings-sandbox-commit>{shortCommit(health?.upstream_build?.commit)}</dd>
+            <dt>Autoputer commit</dt>
+            <dd data-settings-autoputer-commit>{shortCommit(health?.upstream_build?.commit)}</dd>
           </div>
           <div>
             <dt>Deploy time</dt>

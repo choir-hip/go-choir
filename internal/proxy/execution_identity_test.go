@@ -49,8 +49,8 @@ func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 	const vmID = "vm-identity-join"
 	const epoch = int64(42)
 	const nonce = "nonce-bound-identity-join"
-	handler, privateKey, sandbox, authStore := testProxyEnvWithAuthStore(t)
-	defer sandbox.Close()
+	handler, privateKey, autoputer, authStore := testProxyEnvWithAuthStore(t)
+	defer autoputer.Close()
 	user, err := authStore.CreateUser("proxy-test-user-identity-join", "identity-join@example.com")
 	if err != nil {
 		t.Fatalf("create user: %v", err)
@@ -87,7 +87,7 @@ func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 			"schema": executionIdentitySchemaV1, "nonce": r.URL.Query().Get("nonce"),
 			"audience":    executionIdentityAudience,
 			"computer_id": computerID, "realization_id": vmID + "-epoch-42", "vm_epoch": "42",
-			"executable":           map[string]string{"path": "/nix/store/sandbox/bin/choir", "sha256": "sha256:guest"},
+			"executable":           map[string]string{"path": "/nix/store/autoputer/bin/choir", "sha256": "sha256:guest"},
 			"guest_image_manifest": map[string]string{"path": "/nix/store/guest", "sha256": "sha256:image"},
 			"kernel_configuration": map[string]string{"path": "/nix/store/kernel", "sha256": "sha256:kernel"},
 			"build":                buildinfo.Info{Commit: commit, DeployedCommit: commit},
@@ -99,7 +99,7 @@ func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 				fields[key] = value
 			}
 		}
-		receipt, receiptErr := computerevent.NewSignedReceipt("ExecutionIdentity", "choir-sandbox", fields, []computerevent.SigningKey{signer}, issuedAt)
+		receipt, receiptErr := computerevent.NewSignedReceipt("ExecutionIdentity", "choir-autoputer", fields, []computerevent.SigningKey{signer}, issuedAt)
 		if receiptErr != nil {
 			t.Fatal(receiptErr)
 		}
@@ -111,7 +111,7 @@ func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 	defer guest.Close()
 
 	createdAt := time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC)
-	closure, err := computerversion.NewCodeClosure(commit, []computerversion.CodeArtifact{{Name: "sandbox", SHA256: strings.Repeat("a", 64), URI: "nix-store+sha256://" + strings.Repeat("a", 64) + "/nix/store/test-sandbox"}}, createdAt)
+	closure, err := computerversion.NewCodeClosure(commit, []computerversion.CodeArtifact{{Name: "autoputer", SHA256: strings.Repeat("a", 64), URI: "nix-store+sha256://" + strings.Repeat("a", 64) + "/nix/store/test-autoputer"}}, createdAt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 	vmctlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/internal/vmctl/lookup":
-			_ = json.NewEncoder(w).Encode(map[string]any{"vm_id": vmID, "computer_id": computerID, "user_id": ownerID, "desktop_id": vmctl.PrimaryDesktopID, "sandbox_url": guest.URL, "state": "active", "epoch": epoch})
+			_ = json.NewEncoder(w).Encode(map[string]any{"vm_id": vmID, "computer_id": computerID, "user_id": ownerID, "desktop_id": vmctl.PrimaryDesktopID, "computer_url": guest.URL, "state": "active", "epoch": epoch})
 		case "/internal/vmctl/computer-version-routes/resolve":
 			_ = json.NewEncoder(w).Encode(vmctl.RouteResolution{Slot: routeledger.Slot{ID: slotID, Current: version, Generation: 1, LatestReceiptID: routeReceipt.ID}, LatestReceipt: routeReceipt, CodeClosure: closure, ArtifactProgram: program})
 		default:
@@ -288,8 +288,8 @@ func TestExecutionIdentityCommitsJoinAllowsBoundMixedGeneration(t *testing.T) {
 	}
 	routeAbsent := selected
 	routeAbsent.Artifacts = map[string]json.RawMessage{
-		"proxy":   json.RawMessage(`{"commit":"1234567890abcdef1234567890abcdef12345678","status":"active"}`),
-		"sandbox": json.RawMessage(`{"commit":"1234567890abcdef1234567890abcdef12345678","status":"installed"}`),
+		"proxy":     json.RawMessage(`{"commit":"1234567890abcdef1234567890abcdef12345678","status":"active"}`),
+		"autoputer": json.RawMessage(`{"commit":"1234567890abcdef1234567890abcdef12345678","status":"installed"}`),
 	}
 	ordinaryGuest := buildinfo.Info{Commit: targetCommit, DeployedCommit: targetCommit}
 	if !executionIdentityCommitsJoin(routeAbsent, selectedHost, "", true, ordinaryGuest) {
@@ -300,7 +300,7 @@ func TestExecutionIdentityCommitsJoinAllowsBoundMixedGeneration(t *testing.T) {
 	}
 	routeAbsentNoProxy := routeAbsent
 	routeAbsentNoProxy.Artifacts = map[string]json.RawMessage{
-		"sandbox": json.RawMessage(`{"commit":"1234567890abcdef1234567890abcdef12345678","status":"installed"}`),
+		"autoputer": json.RawMessage(`{"commit":"1234567890abcdef1234567890abcdef12345678","status":"installed"}`),
 	}
 	if executionIdentityCommitsJoin(routeAbsentNoProxy, selectedHost, "", true, ordinaryGuest) {
 		t.Fatal("route-absent identity accepted a missing proxy artifact")

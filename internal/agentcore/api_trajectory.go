@@ -109,7 +109,7 @@ func (h *APIHandler) HandleTrajectoryDetail(w http.ResponseWriter, r *http.Reque
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle event cursor"})
 			return
 		}
-		page, pageErr := h.rt.Store().ListLifecycleEventPage(r.Context(), ownerID, h.rt.TextureSandboxID(), trajectoryID, after, limit)
+		page, pageErr := h.rt.Store().ListLifecycleEventPage(r.Context(), ownerID, h.rt.TextureComputerID(), trajectoryID, after, limit)
 		if pageErr != nil {
 			writeLifecycleAPIError(w, pageErr)
 			return
@@ -123,7 +123,7 @@ func (h *APIHandler) HandleTrajectoryDetail(w http.ResponseWriter, r *http.Reque
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "trajectory not found"})
 		return
 	}
-	if snapshot, snapshotErr := h.rt.Store().GetLifecycleSnapshot(r.Context(), ownerID, h.rt.TextureSandboxID(), trajectoryID); snapshotErr == nil {
+	if snapshot, snapshotErr := h.rt.Store().GetLifecycleSnapshot(r.Context(), ownerID, h.rt.TextureComputerID(), trajectoryID); snapshotErr == nil {
 		writeAPIJSON(w, http.StatusOK, snapshot)
 		return
 	} else if !errors.Is(snapshotErr, store.ErrNotFound) {
@@ -163,7 +163,7 @@ func (h *APIHandler) streamLifecycleEvents(w http.ResponseWriter, r *http.Reques
 	defer heartbeat.Stop()
 	cursor := after
 	for {
-		page, pageErr := h.rt.Store().ListLifecycleEventPage(r.Context(), ownerID, h.rt.TextureSandboxID(), trajectoryID, cursor, 256)
+		page, pageErr := h.rt.Store().ListLifecycleEventPage(r.Context(), ownerID, h.rt.TextureComputerID(), trajectoryID, cursor, 256)
 		if errors.Is(pageErr, store.ErrLifecycleCursorExpired) {
 			payload, _ := json.Marshal(types.LifecycleEventPage{Schema: types.DurableWorkSchemaV1, CursorExpired: true, ReplayRequired: true, NextCursor: cursor, Watermark: page.Watermark})
 			fmt.Fprintf(w, "event: replay_required\ndata: %s\n\n", payload)
@@ -240,7 +240,7 @@ func (h *APIHandler) HandleTrajectoryCancel(w http.ResponseWriter, r *http.Reque
 		writeLifecycleAPIError(w, err)
 		return
 	}
-	snapshot, snapshotErr := h.rt.Store().GetLifecycleSnapshot(r.Context(), ownerID, h.rt.TextureSandboxID(), trajectoryID)
+	snapshot, snapshotErr := h.rt.Store().GetLifecycleSnapshot(r.Context(), ownerID, h.rt.TextureComputerID(), trajectoryID)
 	if snapshotErr != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load cancelled lifecycle snapshot"})
 		return
@@ -338,7 +338,7 @@ func (h *APIHandler) HandleCoSuperCapsuleEvidence(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid capsule evidence route"})
 		return
 	}
-	computerID := strings.TrimSpace(h.rt.TextureSandboxID())
+	computerID := strings.TrimSpace(h.rt.TextureComputerID())
 	if computerID == "" {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "capsule evidence unavailable"})
 		return

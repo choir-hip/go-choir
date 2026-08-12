@@ -483,7 +483,7 @@ func pinSQLVersion(t *testing.T, catalog *computerversion.SQLInputCatalog, tag s
 	t.Helper()
 	codeDigest := digestString("code-content:" + tag)
 	closure, err := computerversion.NewCodeClosure(digestString("source-commit:"+tag), []computerversion.CodeArtifact{{
-		Name: "sandbox", SHA256: codeDigest, URI: "artifact+sha256://" + codeDigest + "/tests/" + tag + "/sandbox",
+		Name: "autoputer", SHA256: codeDigest, URI: "artifact+sha256://" + codeDigest + "/tests/" + tag + "/autoputer",
 	}}, time.Date(2026, 7, 16, 1, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("new code closure %s: %v", tag, err)

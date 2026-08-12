@@ -29,20 +29,20 @@ func TestHandleInternalWirePlatformPublishPostsToCorpusd(t *testing.T) {
 	sourceEntities := json.RawMessage(`[{"source_entity_id":"src-proxy","target":{"kind":"url","uri":"https://example.com/proxy"},"display":{"mode":"numbered_ref","title":"Proxy source"},"evidence":{"state":"available","open_surface":"source"}}]`)
 	syncSeen := make(chan platform.SyncTextureDocumentRequest, 1)
 
-	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Authenticated-User") != platformOwner {
-			t.Fatalf("sandbox user header = %q", r.Header.Get("X-Authenticated-User"))
+			t.Fatalf("autoputer user header = %q", r.Header.Get("X-Authenticated-User"))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/internal/texture/documents/doc-wire-proxy", "/api/texture/documents/doc-wire-proxy":
-			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
+			_ = json.NewEncoder(w).Encode(autoputerTextureDocument{
 				DocID:   "doc-wire-proxy",
 				OwnerID: platformOwner,
 				Title:   "Proxy story.texture",
 			})
 		case "/internal/texture/revisions/rev-wire-proxy", "/api/texture/revisions/rev-wire-proxy":
-			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
+			_ = json.NewEncoder(w).Encode(autoputerTextureRevision{
 				RevisionID:     "rev-wire-proxy",
 				DocID:          "doc-wire-proxy",
 				OwnerID:        platformOwner,
@@ -52,13 +52,13 @@ func TestHandleInternalWirePlatformPublishPostsToCorpusd(t *testing.T) {
 				Metadata:       meta,
 			})
 		case "/api/texture/documents/doc-wire-proxy/revisions":
-			_ = json.NewEncoder(w).Encode(sandboxTextureRevisionListResponse{Revisions: []sandboxRevisionEntry{{RevisionID: "rev-wire-proxy", Content: "# Proxy story", BodyDoc: bodyDoc, SourceEntities: sourceEntities, Metadata: meta}}})
+			_ = json.NewEncoder(w).Encode(autoputerTextureRevisionListResponse{Revisions: []autoputerRevisionEntry{{RevisionID: "rev-wire-proxy", Content: "# Proxy story", BodyDoc: bodyDoc, SourceEntities: sourceEntities, Metadata: meta}}})
 		default:
 			// Async sync goroutine may hit unexpected paths; log instead of fatal.
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	defer sandbox.Close()
+	defer autoputer.Close()
 
 	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -92,8 +92,8 @@ func TestHandleInternalWirePlatformPublishPostsToCorpusd(t *testing.T) {
 	}))
 	defer corpusd.Close()
 
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandbox.URL,
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputer.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
@@ -137,7 +137,7 @@ func TestHandleInternalWirePlatformPublishPostsToCorpusd(t *testing.T) {
 	}
 }
 
-func TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenSandboxHistoryMisses(t *testing.T) {
+func TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenAutoputerHistoryMisses(t *testing.T) {
 	pub, _, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -153,7 +153,7 @@ func TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenSandboxHistor
 	sourceEntities := json.RawMessage(`[{"source_entity_id":"src-fallback","target":{"kind":"url","uri":"https://example.com/fallback"},"display":{"mode":"numbered_ref","title":"Fallback source"},"evidence":{"state":"available","open_surface":"source"}}]`)
 	syncSeen := make(chan platform.SyncTextureDocumentRequest, 1)
 
-	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/texture/documents/doc-wire-fallback/revisions" {
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(errorResponse{Error: "document not found"})
@@ -161,7 +161,7 @@ func TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenSandboxHistor
 		}
 		w.WriteHeader(http.StatusNotFound)
 	}))
-	defer sandbox.Close()
+	defer autoputer.Close()
 
 	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -192,8 +192,8 @@ func TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenSandboxHistor
 	}))
 	defer corpusd.Close()
 
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandbox.URL,
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputer.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
@@ -204,7 +204,7 @@ func TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenSandboxHistor
 		"doc_id":          "doc-wire-fallback",
 		"revision_id":     "rev-wire-fallback",
 		"title":           "Proxy fallback story.texture",
-		"content":         "# Proxy fallback story\n\nThe supplied revision should sync when sandbox history misses.",
+		"content":         "# Proxy fallback story\n\nThe supplied revision should sync when autoputer history misses.",
 		"body_doc":        bodyDoc,
 		"source_entities": sourceEntities,
 		"metadata":        json.RawMessage(meta),
@@ -246,11 +246,11 @@ func TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc(t 
 		t.Fatalf("generate key: %v", err)
 	}
 	platformOwner := wirepublish.PlatformOwnerID()
-	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{})
 	}))
-	defer sandbox.Close()
+	defer autoputer.Close()
 
 	platformCalled := false
 	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -259,8 +259,8 @@ func TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc(t 
 	}))
 	defer corpusd.Close()
 
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandbox.URL,
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputer.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {

@@ -104,7 +104,7 @@ type openAIError struct {
 }
 
 // HandleOpenAIChatCompletions adapts OpenAI Chat Completions requests to the
-// sandbox-authenticated Choir gateway provider contract for OpenAI-compatible
+// autoputer-authenticated Choir gateway provider contract for OpenAI-compatible
 // clients such as Zot.
 func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -112,7 +112,7 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	sandboxID, ok := h.authorizeOpenAICompatibleRequest(w, r, "openai_chat")
+	computerID, ok := h.authorizeOpenAICompatibleRequest(w, r, "openai_chat")
 	if !ok {
 		return
 	}
@@ -130,7 +130,7 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 	}
 	p, err := h.resolveProvider(gwReq)
 	if err != nil {
-		log.Printf("gateway: openai-compatible provider resolution failed for sandbox %s: %v", sandboxID, err)
+		log.Printf("gateway: openai-compatible provider resolution failed for autoputer %s: %v", computerID, err)
 		writeGatewayJSON(w, http.StatusBadRequest, openAIErrorResponse(err.Error()))
 		return
 	}
@@ -151,15 +151,15 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 		ReasoningEffort: gwReq.ReasoningEffort,
 	}
 
-	log.Printf("gateway: openai-compatible chat request from sandbox %s (provider=%s model=%s messages=%d tools=%d reasoning=%s stream=%v)",
-		sandboxID, p.Name(), gwReq.Model, len(gwReq.Messages), len(gwReq.Tools), gwReq.ReasoningEffort, gwReq.Stream)
+	log.Printf("gateway: openai-compatible chat request from autoputer %s (provider=%s model=%s messages=%d tools=%d reasoning=%s stream=%v)",
+		computerID, p.Name(), gwReq.Model, len(gwReq.Messages), len(gwReq.Tools), gwReq.ReasoningEffort, gwReq.Stream)
 
 	if req.Stream {
 		if len(llmReq.Tools) > 0 {
-			h.handleOpenAIStreamingToolChatCompletions(w, r, p, llmReq, sandboxID)
+			h.handleOpenAIStreamingToolChatCompletions(w, r, p, llmReq, computerID)
 			return
 		}
-		h.handleOpenAIStreamingChatCompletions(w, r, p, llmReq, sandboxID)
+		h.handleOpenAIStreamingChatCompletions(w, r, p, llmReq, computerID)
 		return
 	}
 
@@ -168,7 +168,7 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 	resp, err := p.Call(ctx, llmReq)
 	if err != nil {
 		sanitized := sanitizeError(err)
-		log.Printf("gateway: openai-compatible provider call failed for sandbox %s: %v (sanitized: %s)", sandboxID, err, sanitized)
+		log.Printf("gateway: openai-compatible provider call failed for autoputer %s: %v (sanitized: %s)", computerID, err, sanitized)
 		writeGatewayJSON(w, http.StatusBadGateway, openAIErrorResponse(sanitized))
 		return
 	}
@@ -203,15 +203,15 @@ func (h *Handler) HandleOpenAIModels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) authorizeOpenAICompatibleRequest(w http.ResponseWriter, r *http.Request, scope string) (string, bool) {
-	sandboxID, err := h.authenticateSandbox(r)
+	computerID, err := h.authenticateAutoputer(r)
 	if err != nil {
 		log.Printf("gateway: openai-compatible authentication denied: %v", err)
 		writeGatewayJSON(w, http.StatusUnauthorized, openAIErrorResponse("authentication required"))
 		return "", false
 	}
 	if h.rateLimiter != nil {
-		if !h.rateLimiter.Record(rateLimitBucketKey(sandboxID, scope)) {
-			_, _, resetIn := h.rateLimiter.Status(rateLimitBucketKey(sandboxID, scope))
+		if !h.rateLimiter.Record(rateLimitBucketKey(computerID, scope)) {
+			_, _, resetIn := h.rateLimiter.Status(rateLimitBucketKey(computerID, scope))
 			retrySeconds := int(resetIn.Seconds())
 			if retrySeconds < 1 {
 				retrySeconds = 1
@@ -221,7 +221,7 @@ func (h *Handler) authorizeOpenAICompatibleRequest(w http.ResponseWriter, r *htt
 			return "", false
 		}
 	}
-	return sandboxID, true
+	return computerID, true
 }
 
 func convertOpenAIChatRequest(req openAIChatCompletionRequest) (ProviderRequest, error) {
@@ -406,7 +406,7 @@ func providerToolCallsToOpenAI(calls []provider.ContentToolCall) []openAIChatToo
 	return out
 }
 
-func (h *Handler) handleOpenAIStreamingChatCompletions(w http.ResponseWriter, r *http.Request, p provider.Provider, llmReq provider.LLMRequest, sandboxID string) {
+func (h *Handler) handleOpenAIStreamingChatCompletions(w http.ResponseWriter, r *http.Request, p provider.Provider, llmReq provider.LLMRequest, computerID string) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -461,7 +461,7 @@ func (h *Handler) handleOpenAIStreamingChatCompletions(w http.ResponseWriter, r 
 	})
 	if err != nil {
 		sanitized := sanitizeError(err)
-		log.Printf("gateway: openai-compatible streaming provider call failed for sandbox %s: %v (sanitized: %s)", sandboxID, err, sanitized)
+		log.Printf("gateway: openai-compatible streaming provider call failed for autoputer %s: %v (sanitized: %s)", computerID, err, sanitized)
 		writeOpenAISSE(w, canFlush, flusher, openAIErrorResponse(sanitized))
 		fmt.Fprintf(w, "data: [DONE]\n\n")
 		if canFlush {
@@ -485,7 +485,7 @@ func (h *Handler) handleOpenAIStreamingChatCompletions(w http.ResponseWriter, r 
 	}
 }
 
-func (h *Handler) handleOpenAIStreamingToolChatCompletions(w http.ResponseWriter, r *http.Request, p provider.Provider, llmReq provider.LLMRequest, sandboxID string) {
+func (h *Handler) handleOpenAIStreamingToolChatCompletions(w http.ResponseWriter, r *http.Request, p provider.Provider, llmReq provider.LLMRequest, computerID string) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -499,7 +499,7 @@ func (h *Handler) handleOpenAIStreamingToolChatCompletions(w http.ResponseWriter
 	resp, err := p.Call(ctx, llmReq)
 	if err != nil {
 		sanitized := sanitizeError(err)
-		log.Printf("gateway: openai-compatible streaming tool provider call failed for sandbox %s: %v (sanitized: %s)", sandboxID, err, sanitized)
+		log.Printf("gateway: openai-compatible streaming tool provider call failed for autoputer %s: %v (sanitized: %s)", computerID, err, sanitized)
 		writeOpenAISSE(w, canFlush, flusher, openAIErrorResponse(sanitized))
 		fmt.Fprintf(w, "data: [DONE]\n\n")
 		if canFlush {

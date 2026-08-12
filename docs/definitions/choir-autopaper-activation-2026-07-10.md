@@ -31,7 +31,7 @@ completes Autoputer and explicitly authorizes a successor editorial mission.
    - `internal/runtime/sourcecycled_web_captures.go`
    - `internal/runtime/api.go` (typed ingestion handoff idempotency)
    - `internal/vmctl/platform_computer.go` and `internal/vmctl/handlers.go`
-     (`HandleSandboxProxy`, `HandleResolve`)
+     (`HandleAutoputerProxy`, `HandleResolve`)
    - `internal/proxy/handlers.go` (`/api/universal-wire/stories`)
 9. Staging evidence: `systemctl` status/logs, `journalctl`, `vmctl` pulse/health,
    sourcecycled `/health/ready`, runtime `/health`, and the resulting run,
@@ -66,7 +66,7 @@ historical Autopaper corpus or a separate service. It is:
 
 - `cmd/sourcecycled` polling configured sources and producing one typed ingestion
   handoff per cycle;
-- `internal/vmctl` resolving and maintaining the platform computer sandbox so
+- `internal/vmctl` resolving and maintaining the platform computer autoputer so
   sourcecycled can reach `/internal/runtime/objectgraph/web-captures` and
   `/internal/runtime/runs`;
 - `internal/runtime` receiving web captures, durably storing them, and accepting
@@ -150,7 +150,7 @@ definition: >-
   The `cmd/sourcecycled` host process that polls `sources.Registry`, projects
   captured items to the objectgraph, builds `IngestionHandoff`, and dispatches
   processor/reconciler requests to `/internal/runtime/runs` via the vmctl
-  sandbox proxy.
+  autoputer proxy.
 non_definition:
   - A service that boots the platform computer.
   - A service that writes Texture editions directly.
@@ -181,7 +181,7 @@ non_definition:
 observables:
   - `vmctl` list/pulse output showing `universal-wire-platform` state.
   - `vmctl` `/internal/vmctl/resolve` for the platform owner.
-  - Runtime `/health` inside the sandbox.
+  - Runtime `/health` inside the autoputer.
   - `journalctl` for `go-choir-vmctl` and VM boot logs.
 execution_effect:
   - The platform computer is the execution substrate for the Autopaper runs.
@@ -190,15 +190,15 @@ settlement:
   settled_by: evidence
 
 ---
-id: vmctl_sandbox_proxy
+id: vmctl_autoputer_proxy
 kind: object
 status: settled
 source: observed
-term: vmctl sandbox proxy
+term: vmctl autoputer proxy
 definition: >-
-  The `HandleSandboxProxy` path `/internal/vmctl/sandbox-proxy/{owner}/{rest}`
+  The `HandleAutoputerProxy` path `/internal/vmctl/autoputer-proxy/{owner}/{rest}`
   that resolves the owner (booting the platform computer if needed) and
-  reverse-proxies the request to the sandbox runtime.
+  reverse-proxies the request to the autoputer runtime.
 non_definition:
   - A direct TCP/HTTP connection from sourcecycled to the runtime.
 observables:
@@ -334,7 +334,7 @@ definition: >-
     the runtime inside the platform computer is not healthy, causing a VM
     recovery loop.
   - H2: sourcecycled's short retry/backoff (8 attempts, 2-second delay) hammers
-    the sandbox proxy while the VM is still booting, causing the proxy to
+    the autoputer proxy while the VM is still booting, causing the proxy to
     trigger repeated `EnsureUniversalWirePlatformComputer` attempts.
   - H3: sourcecycled's 5-minute HTTP timeout and 1-minute drain ticker overlap,
     creating concurrent dispatch attempts that overload the VM.
@@ -443,12 +443,12 @@ determined_state:
       source: observed
       execution_effect: All fixes must keep this flow intact; any change here is a
         red mutation.
-    - claim: Sourcecycled dispatches to the runtime through the vmctl sandbox proxy
-        (`/internal/vmctl/sandbox-proxy/universal-wire-platform/...`).
+    - claim: Sourcecycled dispatches to the runtime through the vmctl autoputer proxy
+        (`/internal/vmctl/autoputer-proxy/universal-wire-platform/...`).
       source: observed
       execution_effect: Sourcecycled cannot bypass the proxy; the proxy is the
         only route to the runtime and the platform computer.
-    - claim: The vmctl sandbox proxy calls `EnsureUniversalWirePlatformComputer`,
+    - claim: The vmctl autoputer proxy calls `EnsureUniversalWirePlatformComputer`,
         which may boot, resume, or recover the platform VM.
       source: observed
       execution_effect: The platform computer lifecycle is triggered by
@@ -463,15 +463,15 @@ determined_state:
       source: observed
       execution_effect: The active failure is a platform guest/runtime startup
         failure, not a systemd restart loop in either host daemon.
-    - claim: The universal-wire guest reaches its sandbox runtime service launcher,
+    - claim: The universal-wire guest reaches its autoputer runtime service launcher,
         but the runtime does not bind port 8085 before vmctl's three-minute readiness
         deadline.
       source: observed
-      execution_effect: Investigation moves inside sandbox startup before HTTP
+      execution_effect: Investigation moves inside autoputer startup before HTTP
         serving; sourcecycled retry cadence is downstream amplification, not yet
         the root cause.
     - claim: A fresh universal-wire guest stalls inside relational-to-objectgraph
-        startup backfill after every earlier sandbox startup phase completes.
+        startup backfill after every earlier autoputer startup phase completes.
       source: observed
       execution_effect: The next probe belongs inside `backfillOGFromSQL`; changing
         vmctl readiness or sourcecycled retry timing would mask the substrate bug.
@@ -509,7 +509,7 @@ determined_state:
 ## Authority Boundaries
 
 - This mission may change `cmd/sourcecycled`, `internal/vmctl` (platform computer
-  and sandbox proxy), `internal/runtime` (typed ingestion handoff and web
+  and autoputer proxy), `internal/runtime` (typed ingestion handoff and web
   captures), and `internal/proxy` (`/api/universal-wire/stories` routing) only
   after the root cause is identified and the red mutation ceremony is applied.
 - It may not change `docs/choir-doctrine.md`, `AGENTS.md`, `docs/computer-ontology.md`,
@@ -615,7 +615,7 @@ evidence_ledger:
     result: Confirmed
     uncertainty: Does not cover races between sourcecycled retries and runtime commits.
     promotion_relevance: Single-authoritative-activation is partly enforced.
-  - claim: The platform computer lifecycle is triggered by the sandbox proxy.
+  - claim: The platform computer lifecycle is triggered by the autoputer proxy.
     definition_node: platform_computer
     evidence_class: code-level proof
     source: internal/vmctl/platform_computer.go
@@ -642,8 +642,8 @@ evidence_ledger:
       services reported NRestarts=0 and healthy service endpoints. The host pressure
       sample reported 82.3% memory available and no memory, CPU, IO, or disk pressure.
     uncertainty: >-
-      The guest console reports that the sandbox runtime service started and that
-      its wire publish URL is configured, but emits none of cmd/sandbox's later
+      The guest console reports that the autoputer runtime service started and that
+      its wire publish URL is configured, but emits none of cmd/autoputer's later
       runtime-topology logs. The exact blocking call before HTTP listen is not yet
       identified; persistent workspace bootstrap, Dolt maintenance, and store.Open
       remain candidates.
@@ -657,7 +657,7 @@ evidence_ledger:
     command_or_observation: >-
       Deploy c6b422bb; verify https://choir.news/health reports c6b422bb; inspect
       journalctl -u go-choir-vmctl from 2026-07-10T19:55:00Z.
-    artifact_path: cmd/sandbox/main.go + internal/store/store.go
+    artifact_path: cmd/autoputer/main.go + internal/store/store.go
     result: >-
       On a fresh boot, source workspace bootstrap, Dolt maintenance, workspace open,
       runtime schema, objectgraph schema, Texture schema, and legacy import all
@@ -721,7 +721,7 @@ evidence_ledger:
     source: 94f6c744 fresh-boot trace on Node B
     command_or_observation: >-
       Inspect vmctl guest-console ordering after deploy job 86464853189.
-    artifact_path: cmd/sandbox/main.go
+    artifact_path: cmd/autoputer/main.go
     result: >-
       On the persistent platform guest, `objectgraph-backfill status=deferred` and
       orchestration topology logged, then the background migration entered `runs`.
@@ -755,28 +755,28 @@ evidence_ledger:
     promotion_relevance: >-
       Reopens platform stability and the reboot-loop conjecture. The resumable store
       migration repair remains supported but cannot settle lifecycle stability alone.
-  - claim: The exact-SHA deploy verifier collapses workflow identity and sandbox
+  - claim: The exact-SHA deploy verifier collapses workflow identity and autoputer
       artifact identity during vmctl-only active-computer refreshes.
     definition_node: platform_computer_stability
     evidence_class: CI/deploy trace + code-level proof
     source: CI run 29125293553, failed Node B deploy job 86471236444
     command_or_observation: >-
       Inspect the deploy impact classes, selected builds, refresh trace, and
-      wait_for_sandbox_commit implementation for 83b1f594.
+      wait_for_autoputer_commit implementation for 83b1f594.
     artifact_path: .github/workflows/ci.yml + .github/scripts/deploy-impact-classify
     result: >-
       All standard and race lanes passed. The deploy selected and activated only
-      the vmctl host package, intentionally skipped the sandbox package and guest
+      the vmctl host package, intentionally skipped the autoputer package and guest
       images, refreshed an active computer successfully, then waited for that guest
       to report workflow commit 83b1f594. The guest correctly reported the installed
-      sandbox artifact cb694846, so the verifier timed out and recorded incomplete
+      autoputer artifact cb694846, so the verifier timed out and recorded incomplete
       deployment evidence. f2d1d330 introduced the unconditional workflow-SHA
-      comparison while the classifier still models vmctl and sandbox as independent
+      comparison while the classifier still models vmctl and autoputer as independent
       deployed artifacts.
     uncertainty: >-
-      A refreshed guest must prove readiness and the identity of the sandbox artifact
+      A refreshed guest must prove readiness and the identity of the autoputer artifact
       actually selected for that deployment. Workflow-SHA equality remains mandatory
-      only when sandbox or the ordinary guest artifact was rebuilt from that SHA.
+      only when autoputer or the ordinary guest artifact was rebuilt from that SHA.
     promotion_relevance: >-
       Blocks exact-SHA deployment acceptance for the lifecycle repair without
       falsifying its tests or host activation. The verifier must preserve artifact
@@ -947,7 +947,7 @@ evidence_ledger:
     result: >-
       The focused pagination regression and full internal/store suite passed, and
       every standard/race CI lane passed. Epoch 8170 reported the exact c4320c8a
-      sandbox artifact, listened at 03:48:52, and entered the event migration.
+      autoputer artifact, listened at 03:48:52, and entered the event migration.
       Fifteen direct health samples from 03:49:33 through 03:50:46 all timed out
       after three seconds; vmctl independently recorded failures every fifteen
       seconds through 03:51:02. Firecracker remained alive at about 4.15 GiB RSS
@@ -974,7 +974,7 @@ active_red_mutation:
     Completion-aware migration and listener-first startup repair guest readiness.
     Per-VM operation serialization and generation-guarded failure transitions should
     prevent a stale ensure from failing a newer healthy generation. Exact staging
-    proof is now gated by a deploy verifier that compares an unchanged sandbox
+    proof is now gated by a deploy verifier that compares an unchanged autoputer
     artifact to the workflow SHA during a vmctl-only boot-contract refresh.
   protected_surfaces:
     - Embedded Dolt runtime and objectgraph startup/migration.
@@ -996,7 +996,7 @@ active_red_mutation:
       - Concurrent platform ensures share one VM identity without an effective
         generation guard at the failure transition.
       - Active-computer deployment verification collapses workflow identity into
-        sandbox artifact identity even when the sandbox artifact was not selected.
+        autoputer artifact identity even when the autoputer artifact was not selected.
       - Fresh source handoff drains can reuse a completed runtime receipt from an
         older cycle while reporting processor_submitted=1 for the new drain.
       - The Universal Wire edition alias exists but targets a missing Texture
@@ -1026,8 +1026,8 @@ active_red_mutation:
       - Same-identity VM lifecycle operations are serialized, different identities
         remain concurrent, and stale process monitors cannot fail a replacement instance.
       - Refreshed-guest deploy verification respects the independently selected
-        sandbox artifact identity.
-      - Sourcecycled run-status reads traverse the vmctl sandbox proxy, so completed
+        autoputer artifact identity.
+      - Sourcecycled run-status reads traverse the vmctl autoputer proxy, so completed
         handoffs are reconciled instead of reset and resubmitted with stale receipts.
       - A dangling Universal Wire edition alias is replaced through the existing
         canonical bootstrap, allowing eligible Texture articles into Wire.texture.
@@ -1081,7 +1081,7 @@ Escalate to the human before implementing changes that:
 - Add a new service, binary, or long-lived scheduler for Autopaper.
 - Change the authority boundary between sourcecycled, vmctl, and runtime.
 - Modify the `universal-wire-platform` ownership or VM lifecycle doctrine.
-- Introduce a substrate replacement (e.g., a new VM manager, a different sandbox
+- Introduce a substrate replacement (e.g., a new VM manager, a different autoputer
   model) rather than a targeted fix.
 - Require a trade-off between retry reliability and VM boot time that cannot be
   decided by observational evidence.
@@ -1094,7 +1094,7 @@ run_checkpoint_and_resumption_state:
   status: superseded
   last_checkpoint: grounded reconciler provider-circuit failure 2026-07-11T05:18Z-05:48Z
   current_artifact_state: >-
-    949342e2 is deployed as the exact sandbox/gateway artifact and resumes legacy-event
+    949342e2 is deployed as the exact autoputer/gateway artifact and resumes legacy-event
     projection one legacy event per bounded invocation. The platform remained
     on one guest while sourcecycled completed multiple cycles and processor, Texture,
     and reconciler runs. Sourcecycled released terminal processor capacity with
@@ -1107,7 +1107,7 @@ run_checkpoint_and_resumption_state:
     reconciler handoff and passed local runtime shards, focused race coverage, and all
     exact-SHA CI gates. Its Node B deploy partially activated the ordinary guest at the
     exact SHA, but failed acceptance because universal-wire-platform remained registered
-    active at an unreachable sandbox URL (10.200.143.2:8085, HTTP 000). No staging
+    active at an unreachable autoputer URL (10.200.143.2:8085, HTTP 000). No staging
     reconciler proof for 60d9b29a is admissible yet.
     Deploy rerun attempt 2 subsequently produced an exact-SHA activation receipt and
     the platform returned healthy. Fresh cycle cycle_e7e5c01f012b267c5a33673c then
@@ -1119,17 +1119,17 @@ run_checkpoint_and_resumption_state:
     - 94f6c744 completion-aware resumable OG migration with deferred-open support.
     - cb694846 runtime recovery and listener publication before background migration.
     - 83b1f594 per-VM lifecycle serialization and stale-instance failure guard.
-    - 838a4799 artifact-aware refreshed-sandbox deploy verification.
-    - ce6b6455 sourcecycled status reconciliation through the vmctl sandbox proxy.
+    - 838a4799 artifact-aware refreshed-autoputer deploy verification.
+    - ce6b6455 sourcecycled status reconciliation through the vmctl autoputer proxy.
     - 614a3c9a dangling Universal Wire edition-alias recovery.
     - 20644c66 cycle-correlated, per-cycle-deduplicated publish reconciler activation
       with queue/timer/dispatch lifecycle markers.
     - 949342e2 structurally bounded and durably resumable legacy-event projection.
     - 60d9b29a canonical Texture context in publish-reconciler handoffs, activated on
-      exact-SHA sandbox/gateway artifacts in CI attempt 2.
+      exact-SHA autoputer/gateway artifacts in CI attempt 2.
   what_was_proven:
     - The loop is platform guest readiness/recovery churn, not a host daemon restart.
-    - The guest never reaches cmd/sandbox's post-store runtime-topology log or HTTP listen.
+    - The guest never reaches cmd/autoputer's post-store runtime-topology log or HTTP listen.
     - Host memory, CPU, IO, and state-disk pressure did not cause the observed loop.
   unproven_or_partial_claims:
     - Reconciler content review over the canonical documents that triggered its run.
@@ -1153,7 +1153,7 @@ run_checkpoint_and_resumption_state:
     - Fresh cb694846 proof confirms that ordering, then reveals a stale ensure for an
       older tap IP can kill the newer booted epoch by shared VM ID.
     - 83b1f594 passes all CI and race lanes; its deploy verifier fails because a
-      vmctl-only refresh cannot make an unchanged sandbox artifact report that SHA.
+      vmctl-only refresh cannot make an unchanged autoputer artifact report that SHA.
     - 838a4799 passes all CI/race lanes and deploys successfully; receipt and every
       host health endpoint report the exact SHA.
     - Concurrent platform resolves return the same active epoch 8102, which remains
@@ -1165,7 +1165,7 @@ run_checkpoint_and_resumption_state:
     - Canonical Texture story revisions now exist with publication refs and source
       lineage, but edition publication fails because the edition alias target is missing.
     - 614a3c9a passed all local runtime shards and its focused race test, then deployed
-      as exact sandbox/gateway artifact SHA in CI run 29129997504, deploy job
+      as exact autoputer/gateway artifact SHA in CI run 29129997504, deploy job
       86484654190. The post-deploy Texture run 6f783283 completed without crash/OOM;
       `/api/universal-wire/stories` returned 200 from
       `universal-wire-edition-texture` with canonical doc d608c407 and edition doc
@@ -1176,7 +1176,7 @@ run_checkpoint_and_resumption_state:
       revision handles and writes no ingestion_handoff_cycle_id or request id.
     - 20644c66 passed 351 local runtime tests and focused race coverage, then every
       exact-SHA standard/race lane in CI run 29131530054. Deploy job 86488846194
-      activated sandbox/gateway commit 20644c66 at 00:10:27Z; sourcecycled and vmctl
+      activated autoputer/gateway commit 20644c66 at 00:10:27Z; sourcecycled and vmctl
       remained active with NRestarts=0.
     - Fresh RSS and Telegram cycles completed after deployment, but every dispatch
       reported in-flight=1 and submitCap=0. Telegram cycle
@@ -1208,7 +1208,7 @@ run_checkpoint_and_resumption_state:
       incomplete evidence at deploy-failures/29140336567-1.json; exact-SHA platform
       activation and product acceptance are therefore unproven.
     - CI run 29140336567 attempt 2 and deploy job 86514067793 completed successfully;
-      deploy-receipt.json records sandbox and gateway active on exact SHA 60d9b29a at
+      deploy-receipt.json records autoputer and gateway active on exact SHA 60d9b29a at
       05:18:59Z. The reattached platform runtime became healthy on the same SHA without
       vmctl recovery or service restart.
     - Cycle cycle_e7e5c01f012b267c5a33673c has one actual processor runtime run,
@@ -1245,14 +1245,14 @@ run_checkpoint_and_resumption_state:
       86520721334 completed in 5m05s, and deploy-receipt.json records exact target
       5035bfa2 with active host, frontend, and active-computer artifacts at 06:54:00Z.
       The platform computer was healthy on its refreshed address 10.200.146.2 with
-      exact sandbox SHA 5035bfa2; sourcecycled, vmctl, and gateway were active with
+      exact autoputer SHA 5035bfa2; sourcecycled, vmctl, and gateway were active with
       NRestarts=0.
     - The first exact-SHA all-source cycle fetched 3,624 items and reported
       in-flight=0, submitCap=1, but every bounded submission attempt returned runtime
       429 `too many active processor runs`. Runtime run 671d7610 was state=completed
       while its trajectory remained live with two open work items and only 19 of 20
       source items resolved. Sourcecycled had projected its durable request runtime
-      status to completed, while sandbox health still reported one running processor.
+      status to completed, while autoputer health still reported one running processor.
     - After capacity released, cycle cycle_865b8c07e12f746f4581139b admitted processor
       run 0f6db0fe. It opened canonical Texture docs 9d824cd2 and 3f70e054; their
       processor-owned Texture runs 4926ffc6 and 7adf7d23 produced canonical revisions
@@ -1267,7 +1267,7 @@ run_checkpoint_and_resumption_state:
       spawned Texture.
     - 99d1fcdf passed every standard and race gate in CI run 29144650218, but deploy
       job 86524844627 failed before receipt creation. Incomplete evidence
-      deploy-failures/29144650218-1.json records the exact sandbox artifact installed.
+      deploy-failures/29144650218-1.json records the exact autoputer artifact installed.
       The refreshed platform guest became healthy on exact SHA 99d1fcdf at 07:50:37Z,
       about one minute after the deploy failed.
     - Guest console evidence shows the runtime spent roughly 293 seconds repeatedly
@@ -1279,7 +1279,7 @@ run_checkpoint_and_resumption_state:
       foreground-availability boundary. The existing bounded migration is wired; its
       rescheduling primitive, not the migration batch contract, is the root cause.
     - 774b272d repaired the post-step yield and passed CI run 29145287811. Deploy
-      receipt activation at 08:02:24Z records exact sandbox SHA 774b272d; three health
+      receipt activation at 08:02:24Z records exact autoputer SHA 774b272d; three health
       probes during the still-running event migration returned 200 in 0.7-1.2 seconds.
       Sourcecycled, vmctl, and gateway remained active with NRestarts=0.
     - Exact-SHA processor run 16214cbf opened and published canonical docs 3d175eb4
@@ -1296,7 +1296,7 @@ run_checkpoint_and_resumption_state:
       cycles with zero runtime run ids can be ordered ahead of already-activated cycles,
       preserving FIFO within each class.
     - 62742eea passed its standard CI gates, but deploy job in run 29146630716 failed
-      before receipt creation. Incomplete evidence records the exact sandbox artifact
+      before receipt creation. Incomplete evidence records the exact autoputer artifact
       installed. The refreshed platform became healthy on exact SHA 62742eea at
       08:56:26Z while bounded event migration continued.
     - The post-failure health request completed in about three seconds. The deploy
@@ -1306,7 +1306,7 @@ run_checkpoint_and_resumption_state:
       not an identity, total-iteration, or migration-yield failure.
     - Forced CI run 29146984044 passed every standard and race gate. Deploy job
       86531210064 published the exact 6e893d90 activation receipt at 09:19:40Z for
-      sourcecycled, vmctl, gateway, sandbox-backed active computers, and the other
+      sourcecycled, vmctl, gateway, autoputer-backed active computers, and the other
       selected artifacts. The platform VM remained active and healthy on exact SHA
       6e893d90 with sourcecycled, vmctl, and gateway NRestarts=0.
     - Cycle cycle_7327b116c3b6423ceb6b0c19 started at 09:24:06Z after that receipt.
@@ -1373,14 +1373,14 @@ run_checkpoint_and_resumption_state:
     - The bounded event migration has not yet emitted its durable completion marker;
       intermittent foreground health latency remains while batches continue.
     - Exact-SHA platform reattachment still exposes a short startup interval in which
-      vmctl reports the VM active before sandbox health is ready; attempt 2 completed
+      vmctl reports the VM active before autoputer health is ready; attempt 2 completed
       its receipt and the runtime has remained healthy afterward.
     - The first grounded reconciler encountered an upstream provider circuit before its
       first tool iteration. The dedupe contract has no same-run recovery semantics for
       this terminal failure, so a fresh lineage is currently required for another attempt.
     - A blocked processor cannot currently release sourcecycled admission capacity or
       be resumed by sourcecycled, so a transient provider 429 can freeze all later cycles.
-    - The deploy verifier's 60-second sandbox identity window is shorter than the
+    - The deploy verifier's 60-second autoputer identity window is shorter than the
       repeatedly observed platform guest startup, preventing an admissible f1ceba58 receipt.
     - Runtime refresh can leave a processor passivated while its trajectory remains live;
       sourcecycled counts that request as in flight indefinitely and has no demonstrated

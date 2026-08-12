@@ -121,7 +121,7 @@ computers or worker VMs.
 ## Computer Model
 
 The product object is one persistent user **computer**, not a disposable
-sandbox or a set of active/background/candidate machine forks. Use `sandbox`
+autoputer or a set of active/background/candidate machine forks. Use `autoputer`
 only for the current runtime service/process name.
 
 The computer is identified by stable `ComputerID` and canonical event chain. Its

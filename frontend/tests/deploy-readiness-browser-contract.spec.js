@@ -379,7 +379,7 @@ test('VAL-CROSS-103: no direct service port calls in browser traffic', async ({
     if (!isLocalDev && !isDataOrExtension) {
       expect(url.port).not.toBe('8081'); // auth
       expect(url.port).not.toBe('8082'); // proxy
-      expect(url.port).not.toBe('8085'); // sandbox
+      expect(url.port).not.toBe('8085'); // autoputer
     }
   }
 

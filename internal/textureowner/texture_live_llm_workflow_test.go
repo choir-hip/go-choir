@@ -83,7 +83,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchTextureEffectsOff(t *testin
 	t.Cleanup(func() { _ = db.Close() })
 
 	rt := choirruntime.New(provideriface.Config{
-		SandboxID:           "sandbox-live-llm",
+		ComputerID:          "autoputer-live-llm",
 		StorePath:           filepath.Join(dir, "runtime.db"),
 		PromptRoot:          filepath.Join(dir, "prompts"),
 		ProviderTimeout:     180 * time.Second,
@@ -180,7 +180,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchTextureEffectsOff(t *testin
 	if _, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
 		RunID: initialTextureRun.RunID, AgentID: initialTextureRun.AgentID, OwnerID: initialTextureRun.OwnerID,
 		Profile: initialTextureRun.AgentProfile, Role: initialTextureRun.AgentRole, ChannelID: initialTextureRun.ChannelID,
-		SandboxID: initialTextureRun.SandboxID, RunRecord: initialTextureRun,
+		ComputerID: initialTextureRun.ComputerID, RunRecord: initialTextureRun,
 	}), "request_super_execution", json.RawMessage(`{"objective":"effect request must be unavailable"}`)); err == nil {
 		t.Fatal("effects-OFF Texture registry exposed request_super_execution")
 	}

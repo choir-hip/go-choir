@@ -52,7 +52,7 @@ GATEWAY_PID=$!
 wait_for_url http://127.0.0.1:8084/health gateway || exit 1
 
 export VMCTL_PORT="${VMCTL_PORT:-8083}"
-export VMCTL_SANDBOX_URL_BASE="${VMCTL_SANDBOX_URL_BASE:-http://127.0.0.1:8085}"
+export VMCTL_AUTOPUTER_URL_BASE="${VMCTL_AUTOPUTER_URL_BASE:-http://127.0.0.1:8085}"
 export VMCTL_GATEWAY_URL="${VMCTL_GATEWAY_URL:-http://127.0.0.1:8084}"
 export VMCTL_IDLE_TIMEOUT="${VMCTL_IDLE_TIMEOUT:-30m}"
 export VMCTL_PRIMARY_KEEPALIVE_MODE="${VMCTL_PRIMARY_KEEPALIVE_MODE:-under-capacity}"
@@ -105,25 +105,25 @@ RUNTIME_GATEWAY_TOKEN="$(curl -sf -X POST \
   http://127.0.0.1:8084/provider/v1/credentials/issue \
   -H "Content-Type: application/json" \
   -H "X-Internal-Caller: true" \
-  -d '{"sandbox_id":"sandbox-dev"}' | jq -r .RawToken)"
+  -d '{"computer_id":"autoputer-dev"}' | jq -r .RawToken)"
 export RUNTIME_GATEWAY_TOKEN
 export RUNTIME_GATEWAY_URL="http://127.0.0.1:8084"
 export RUNTIME_LLM_PROVIDER="${RUNTIME_LLM_PROVIDER:-chatgpt}"
 export RUNTIME_LLM_MODEL="${RUNTIME_LLM_MODEL:-gpt-5.5}"
 export RUNTIME_LLM_REASONING_EFFORT="${RUNTIME_LLM_REASONING_EFFORT:-low}"
 export RUNTIME_VMCTL_URL="${RUNTIME_VMCTL_URL:-http://127.0.0.1:${VMCTL_PORT}}"
-export RUNTIME_SELF_URL="${RUNTIME_SELF_URL:-http://127.0.0.1:${SANDBOX_PORT:-8085}}"
+export RUNTIME_SELF_URL="${RUNTIME_SELF_URL:-http://127.0.0.1:${AUTOPUTER_PORT:-8085}}"
 export RUNTIME_LOCAL_WORKER_MODE="${RUNTIME_LOCAL_WORKER_MODE:-worktree}"
 export RUNTIME_SUPER_FOREGROUND_MUTATION_MODE="${RUNTIME_SUPER_FOREGROUND_MUTATION_MODE:-worker_only}"
 export RUNTIME_TOOL_CWD="${RUNTIME_TOOL_CWD:-$(pwd)}"
-export SANDBOX_PORT="${SANDBOX_PORT:-8085}" SANDBOX_ID="${SANDBOX_ID:-sandbox-dev}" RUNTIME_ENABLE_TEST_APIS="${RUNTIME_ENABLE_TEST_APIS:-0}"
-nohup go run ./cmd/sandbox > sandbox.log 2>&1 &
-SANDBOX_PID=$!
-[ "${CHOIR_SERVICES_FOREGROUND:-0}" = "1" ] || disown "$SANDBOX_PID"
+export AUTOPUTER_PORT="${AUTOPUTER_PORT:-8085}" AUTOPUTER_ID="${AUTOPUTER_ID:-autoputer-dev}" RUNTIME_ENABLE_TEST_APIS="${RUNTIME_ENABLE_TEST_APIS:-0}"
+nohup go run ./cmd/autoputer > autoputer.log 2>&1 &
+AUTOPUTER_PID=$!
+[ "${CHOIR_SERVICES_FOREGROUND:-0}" = "1" ] || disown "$AUTOPUTER_PID"
 wait_for_url http://127.0.0.1:8081/health auth || exit 1
-wait_for_url http://127.0.0.1:8085/health sandbox || exit 1
+wait_for_url http://127.0.0.1:8085/health autoputer || exit 1
 
-export PROXY_PORT=8082 PROXY_SANDBOX_URL="http://127.0.0.1:8085" PROXY_VMCTL_URL="${PROXY_VMCTL_URL:-http://127.0.0.1:${VMCTL_PORT}}" PROXY_CORPUSD_URL="${PROXY_CORPUSD_URL:-http://127.0.0.1:${CORPUSD_PORT:-8086}}" PROXY_VMCTL_TIMEOUT="${PROXY_VMCTL_TIMEOUT:-60s}"
+export PROXY_PORT=8082 PROXY_AUTOPUTER_URL="http://127.0.0.1:8085" PROXY_VMCTL_URL="${PROXY_VMCTL_URL:-http://127.0.0.1:${VMCTL_PORT}}" PROXY_CORPUSD_URL="${PROXY_CORPUSD_URL:-http://127.0.0.1:${CORPUSD_PORT:-8086}}" PROXY_VMCTL_TIMEOUT="${PROXY_VMCTL_TIMEOUT:-60s}"
 nohup go run ./cmd/proxy > proxy.log 2>&1 &
 PROXY_PID=$!
 [ "${CHOIR_SERVICES_FOREGROUND:-0}" = "1" ] || disown "$PROXY_PID"
@@ -136,7 +136,7 @@ wait_for_url http://localhost:4173 frontend || exit 1
 echo "Services started successfully"
 if [ "${CHOIR_SERVICES_FOREGROUND:-0}" = "1" ]; then
   cleanup_services() {
-    kill "$FRONTEND_PID" "$PROXY_PID" "$SANDBOX_PID" "$CORPUSD_PID" "$PLATFORM_DOLT_PID" "$VMCTL_PID" "$GATEWAY_PID" "$AUTH_PID" 2>/dev/null || true
+    kill "$FRONTEND_PID" "$PROXY_PID" "$AUTOPUTER_PID" "$CORPUSD_PID" "$PLATFORM_DOLT_PID" "$VMCTL_PID" "$GATEWAY_PID" "$AUTH_PID" 2>/dev/null || true
   }
   trap cleanup_services INT TERM EXIT
   wait

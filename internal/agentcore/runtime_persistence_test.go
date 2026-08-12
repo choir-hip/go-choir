@@ -48,14 +48,14 @@ func (s *fakeRunSubmissionStore) AppendEvent(_ context.Context, event *types.Eve
 func TestPersistSubmittedRunUsesRuntimeStoreInterfaceWithoutDolt(t *testing.T) {
 	createdAt := time.Date(2026, 5, 24, 1, 2, 3, 0, time.UTC)
 	agent := types.AgentRecord{
-		AgentID:   "texture:doc-1",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-test",
-		Profile:   agentprofile.Texture,
-		Role:      agentprofile.Texture,
-		ChannelID: "doc-1",
-		CreatedAt: createdAt,
-		UpdatedAt: createdAt,
+		AgentID:    "texture:doc-1",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-test",
+		Profile:    agentprofile.Texture,
+		Role:       agentprofile.Texture,
+		ChannelID:  "doc-1",
+		CreatedAt:  createdAt,
+		UpdatedAt:  createdAt,
 	}
 	rec := &types.RunRecord{
 		RunID:        "run-1",
@@ -64,7 +64,7 @@ func TestPersistSubmittedRunUsesRuntimeStoreInterfaceWithoutDolt(t *testing.T) {
 		AgentProfile: agent.Profile,
 		AgentRole:    agent.Role,
 		OwnerID:      agent.OwnerID,
-		SandboxID:    agent.SandboxID,
+		ComputerID:   agent.ComputerID,
 		State:        types.RunPending,
 		Prompt:       "revise",
 		CreatedAt:    createdAt,
@@ -117,13 +117,13 @@ func TestPersistSubmittedRunFailsClosedWithoutTextureMutationAuthority(t *testin
 	rec := &types.RunRecord{
 		RunID: "run-no-mutation", AgentID: "texture:doc-no-mutation", ChannelID: "doc-no-mutation",
 		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
-		OwnerID: "user-alice", SandboxID: "sandbox-test", State: types.RunPending,
+		OwnerID: "user-alice", ComputerID: "autoputer-test", State: types.RunPending,
 		Metadata: map[string]any{
 			"type": "texture_agent_revision", "doc_id": "doc-no-mutation",
 		},
 	}
 	agent := types.AgentRecord{
-		AgentID: rec.AgentID, OwnerID: rec.OwnerID, SandboxID: rec.SandboxID,
+		AgentID: rec.AgentID, OwnerID: rec.OwnerID, ComputerID: rec.ComputerID,
 		Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: rec.ChannelID,
 	}
 	fake := &fakeRunSubmissionStore{mutationErr: errors.New("mutation store unavailable")}

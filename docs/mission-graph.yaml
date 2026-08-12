@@ -268,6 +268,31 @@ nodes:
       - docs/texture-agentic-invariants-2026-06-13.md
       - docs/ACTIVE.md
       - AGENTS.md
+  - id: choir-sandbox-autoputer-rename-2026-08-11
+    title: Autoputer to Autoputer Rename
+    path: docs/definitions/choir-sandbox-autoputer-rename-2026-08-11.md
+    ledger: ''
+    status: working
+    kind: subordinate_contract
+    entrypoint: false
+    member_of: choir-supervised-self-development-effects-2026-08-11
+    suite_phases: [pre-effects-rename]
+    execution_mode: subordinate_only
+    depends_on: []
+    enables: [choir-supervised-self-development-effects-2026-08-11]
+    note: >-
+      Owner-ratified pre-effects clean cutover. Service/process/package/unit/
+      environment surfaces become autoputer; persistent identity fields,
+      columns, indexes, URLs, and JSON become computer. The contract has no
+      compatibility surface. State-drop and deployment remain blocked until the
+      effects replay completeness probe has an admissible product path.
+    sources:
+      - docs/definitions/choir-sandbox-autoputer-rename-2026-08-11.md
+      - docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
+      - docs/computer-ontology.md
+      - docs/choir-doctrine.md
+      - docs/standing-questions.md
+      - AGENTS.md
   - id: choir-supervised-self-development-effects-2026-08-11
     title: Supervised Self-Development with Effects
     path: docs/definitions/choir-supervised-self-development-effects-2026-08-11.md

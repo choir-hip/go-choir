@@ -28,7 +28,7 @@ individual phases are classified below:
   reports and which commit a service claims to be.
 - **Phase B** (`RouteProfile` format): **red** — changes the route-slot promotion
   path and proxy routing identity.
-- **Phase C** (source-workspace identity fallback): **red** — changes sandbox
+- **Phase C** (source-workspace identity fallback): **red** — changes autoputer
   source-lineage identity.
 - **Phase D** (dead-code deletion): **black** — removes tracked files; requires
   explicit human approval per batch and a pre-delete rollback commit.
@@ -43,7 +43,7 @@ A single, coherent authority graph for five product paths:
    reported by each service `/health`.
 2. **Promotion route** — one route-slot writer that produces `RouteProfile`
    values the proxy resolver can parse and route through.
-3. **Source-workspace identity** — one compiled commit identity for sandbox
+3. **Source-workspace identity** — one compiled commit identity for autoputer
    source lineage, with no mutable env fallback.
 4. **Dead-code removal** — no unwired `route:`, SyncEngine, or contract-builder
    paths remain as product authority.
@@ -59,7 +59,7 @@ consolidation of the half-finished seams from the previous run.
 
 - Close the two verified contradictions: unscoped `buildinfo.DeployMetadata`
   and the `RouteProfile` format mismatch.
-- Remove the remaining mutable env fallback for sandbox source lineage.
+- Remove the remaining mutable env fallback for autoputer source lineage.
 - Delete the dead code left behind by the previous deletion pass.
 - Refresh the product completion Definition so its statuses match the code.
 - Use `agentic-consensus` as a gate before every red mutation and as a final
@@ -166,10 +166,10 @@ id: source_workspace_compiled_identity_only
 kind: boundary
 status: settled
 source: observed
-term: Sandbox source lineage uses only compiled commit
+term: Autoputer source lineage uses only compiled commit
 definition: >-
   The source workspace projection uses the commit compiled into the running
-  sandbox binary as its platform_base_commit. It does not fall back to
+  autoputer binary as its platform_base_commit. It does not fall back to
   CHOIR_DEPLOYED_COMMIT, CHOIR_BUILD_SHA, or RUNTIME_WORKER_REPO_BASE_SHA.
   vmctl no longer writes these env vars into choir-runtime.env for identity
   purposes.
@@ -178,22 +178,22 @@ non_definition:
   - A local dev build that uses "unknown" because the compiled commit is "local".
   - A mutable env string being treated as equivalent to a compiled linker stamp.
 observables:
-  - internal/sandbox/source_workspace.go baseCommit uses
+  - internal/autoputer/source_workspace.go baseCommit uses
     compiledSourceWorkspaceCommit() only and drops the env fallback.
   - internal/vmctl/handlers.go no longer emits CHOIR_DEPLOYED_COMMIT or
     RUNTIME_WORKER_REPO_BASE_SHA in choir-runtime.env.
-  - A test or staging proof confirms that a sandbox reports its compiled commit
+  - A test or staging proof confirms that a autoputer reports its compiled commit
     in source lineage even when the env vars are unset.
-  - go test ./internal/sandbox passes.
+  - go test ./internal/autoputer passes.
 execution_effect:
-  - The sandbox has one identity source for its source lineage.
+  - The autoputer has one identity source for its source lineage.
   - The env fallback path is removed.
 settlement:
-  rule: Code change plus test/staging proof that the sandbox still reports the
+  rule: Code change plus test/staging proof that the autoputer still reports the
     correct commit.
   settled_by: evidence
   invalidation_triggers:
-    - The sandbox still reads an env var for source-lineage commit.
+    - The autoputer still reads an env var for source-lineage commit.
     - A production build reports "unknown" because the fallback was removed.
 ```
 
@@ -375,7 +375,7 @@ determined_state:
         "owner_id/computer_id" and reject malformed values.
     - claim: source_workspace_compiled_identity_only is implemented and tested.
       source: code + test + staging evidence
-      execution_effect: Sandbox source-lineage identity uses only the compiled
+      execution_effect: Autoputer source-lineage identity uses only the compiled
         commit.
     - claim: dead_code_excision is complete.
       source: code + build/test
@@ -401,7 +401,7 @@ These must remain true across every phase:
    from a per-service receipt check.
 2. `RouteProfile` is always `owner_id/computer_id` when present; the resolver
    never silently falls back to hard-coded constants for a well-formed profile.
-3. Sandbox source lineage uses the compiled binary commit as its identity.
+3. Autoputer source lineage uses the compiled binary commit as its identity.
 4. No Wails SyncService or `/api/base` handler is wired or registered as product
    authority.
 5. The product completion Definition does not declare a node `settled` before
@@ -413,7 +413,7 @@ These must remain true across every phase:
 - `internal/buildinfo` is the sole authority for deployment identity.
 - `internal/proxy/lineage_route_resolver` and `internal/runtime` promotion route
   together are the sole authority for platform routing.
-- `internal/sandbox` is the sole authority for sandbox source-lineage commit.
+- `internal/autoputer` is the sole authority for autoputer source-lineage commit.
 - `internal/base` and `internal/computerversion` concrete substrate files are
   the future Base authority; `internal/desktop` SyncEngine is not.
 - `docs/definitions/choir-product-completion-2026-07-10.md` is the sole
@@ -442,7 +442,7 @@ conjectures:
     evidence_class: code search + build/test
     falsifier: A build or runtime failure after deletion.
   - id: c4_env_fallback_can_be_removed
-    claim: The sandbox Nix build sets buildinfo.Commit, so the env fallback can
+    claim: The autoputer Nix build sets buildinfo.Commit, so the env fallback can
       be removed.
     status: settled
     evidence_class: build evidence + staging proof
@@ -515,15 +515,15 @@ shift(node)       # change observer, vocabulary, or prover
 
 ### Phase C — Source workspace compiled identity (red)
 
-- Run agentic-consensus on the diff for `internal/sandbox/source_workspace.go`
+- Run agentic-consensus on the diff for `internal/autoputer/source_workspace.go`
   and `internal/vmctl/handlers.go`.
 - Remove the env fallback in `sourceWorkspaceProjection` baseCommit.
 - Remove `CHOIR_DEPLOYED_COMMIT` and `RUNTIME_WORKER_REPO_BASE_SHA` from the
   `choir-runtime.env` emitted by `vmctl` (or keep them only for non-identity
   tooling if a separate need is documented).
-- Add or update a test that verifies the sandbox source lineage uses the
+- Add or update a test that verifies the autoputer source lineage uses the
   compiled commit.
-- Run `go test ./internal/sandbox ./internal/vmctl`.
+- Run `go test ./internal/autoputer ./internal/vmctl`.
 - Update the evidence ledger.
 
 ### Phase D — Dead code excision (black)
@@ -599,7 +599,7 @@ evidence_ledger:
   - claim: source_workspace has a mutable env fallback for source-lineage commit.
     definition_node: source_workspace_compiled_identity_only
     evidence_class: observed file
-    source: internal/sandbox/source_workspace.go:98-103;
+    source: internal/autoputer/source_workspace.go:98-103;
       internal/vmctl/handlers.go:1201-1209
     result: verified
     uncertainty: none
@@ -640,9 +640,9 @@ evidence_ledger:
       After Node B activation, proxy /health reported service=proxy,
       commit=deployed_commit=944d4d94f376dcabea2dba3c52c0ce207000d24f with matching
       X-Choir-Build-* headers. Auth /session independently reported service=auth at
-      the same commit. Bootstrap resolved to sandbox service headers at the same
+      the same commit. Bootstrap resolved to autoputer service headers at the same
       commit. Receipt 29091595925/1 names auth/proxy/vmctl/gateway/corpusd/maild/
-      sourcecycled/frontend/sandbox/ordinary_guest/active_computers active (and
+      sourcecycled/frontend/autoputer/ordinary_guest/active_computers active (and
       playwright_guest installed) all at 944d4d94.
     result: verified
     uncertainty: none
@@ -654,7 +654,7 @@ evidence_ledger:
     command_or_observation: >-
       Authenticated lineage reads returned route_profile values
       "<owner_id>/<computer_id>" with no route: prefix. Shell bootstrap succeeded
-      against the owner sandbox (vm-5b0c1bef...), exercising lineage-backed routing.
+      against the owner autoputer (vm-5b0c1bef...), exercising lineage-backed routing.
       POST /api/computers/desktop/adoptions without a package correctly returned 400
       package-not-found; no app-change packages exist on staging, so a full
       PromoteAppAdoption/RollbackAppAdoption mutation was not executed.
@@ -747,7 +747,7 @@ run_checkpoint_and_resumption_state:
     - deleted SyncEngine/contract/wire surfaces have no remaining Go callers; go build/tests green
     - live doccheck L4 passes with choir-product-completion as sole authority-root Definition
     - CI run 29091595925 succeeded and Node B activated 944d4d94
-    - proxy/auth/sandbox/frontend identities on choir.news match 944d4d94 under service-scoped headers
+    - proxy/auth/autoputer/frontend identities on choir.news match 944d4d94 under service-scoped headers
     - staging lineage RouteProfile values are owner_id/computer_id; bootstrap routing succeeds
   unproven_or_partial_claims:
     - no staging PromoteAppAdoption/RollbackAppAdoption mutation (no app-change packages present)

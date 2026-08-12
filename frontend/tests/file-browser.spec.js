@@ -309,7 +309,7 @@ test('clicking text file opens in Texture', async ({ desktopSession }) => {
   const fileName = 'notes.txt';
   const fileContent = 'hello from file browser';
 
-  // Create a text file in the sandbox root directly via the file API.
+  // Create a text file in the autoputer root directly via the file API.
   await page.evaluate(async () => {
     const res = await fetch('/api/files/notes.txt', {
       method: 'PUT',

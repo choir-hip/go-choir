@@ -49,8 +49,8 @@ func setupLifecycleTextureTargetFixtureWithStore(t *testing.T, s *Store) (*Store
 	now := time.Now().UTC()
 	researcher := types.AgentRecord{
 		AgentID: "researcher:texture-target", OwnerID: start.OwnerID,
-		ComputerID: start.ComputerID, SandboxID: start.ComputerID,
-		Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID,
+		ComputerID: start.ComputerID,
+		Profile:    "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.UpsertAgent(ctx, researcher); err != nil {
@@ -135,7 +135,7 @@ func TestValidateLifecycleTextureControlTargetAcceptsBoundResearcherAndExactPers
 	now := time.Now().UTC()
 	superID := "super:" + start.OwnerID
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, SandboxID: start.ComputerID,
+		AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 		Profile: "super", Role: "super", ChannelID: superID, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("upsert persistent Super: %v", err)
@@ -161,7 +161,7 @@ func TestValidateLifecycleTextureControlTargetRejectsScopeRoleAndWorkMismatches(
 		{AgentID: "researcher:unbound", Profile: "researcher", Role: "researcher"},
 		{AgentID: "researcher:non-lifecycle", Profile: "researcher", Role: "researcher"},
 	} {
-		agent.OwnerID, agent.ComputerID, agent.SandboxID = start.OwnerID, start.ComputerID, start.ComputerID
+		agent.OwnerID, agent.ComputerID, agent.ComputerID = start.OwnerID, start.ComputerID, start.ComputerID
 		agent.ChannelID, agent.CreatedAt, agent.UpdatedAt = start.InitialDocument.DocID, now, now
 		if err := s.UpsertAgent(ctx, agent); err != nil {
 			t.Fatalf("upsert negative target %s: %v", agent.AgentID, err)
@@ -205,7 +205,7 @@ func TestValidateLifecycleTextureControlTargetRejectsScopeRoleAndWorkMismatches(
 	legacyCaller := types.RunRecord{
 		RunID: "run-non-lifecycle-texture", AgentID: "legacy:texture-caller", ChannelID: caller.ChannelID,
 		AgentProfile: "texture", AgentRole: "texture",
-		OwnerID: start.OwnerID, SandboxID: start.ComputerID, State: types.RunRunning,
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, State: types.RunRunning,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	// The generic run store is intentionally not lifecycle authority. The
@@ -446,8 +446,8 @@ func TestQueueLifecycleUpdateRequiresCanonicalTextureTargetAndProducerActivation
 	now := time.Now().UTC()
 	researcher := types.AgentRecord{
 		AgentID: "researcher:wrong-source-run", OwnerID: start.OwnerID,
-		ComputerID: start.ComputerID, SandboxID: start.ComputerID,
-		Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID,
+		ComputerID: start.ComputerID,
+		Profile:    "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.UpsertAgent(ctx, researcher); err != nil {

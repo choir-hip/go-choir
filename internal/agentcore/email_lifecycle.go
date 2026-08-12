@@ -101,14 +101,14 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	now := time.Now().UTC()
 	runID := uuid.NewString()
 	if err := rt.store.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   agentID,
-		OwnerID:   ownerID,
-		SandboxID: rt.cfg.SandboxID,
-		Profile:   agentprofile.Email,
-		Role:      agentprofile.Email,
-		ChannelID: agentID,
-		CreatedAt: now,
-		UpdatedAt: now,
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		ComputerID: rt.cfg.ComputerID,
+		Profile:    agentprofile.Email,
+		Role:       agentprofile.Email,
+		ChannelID:  agentID,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}); err != nil {
 		return nil, fmt.Errorf("persist email appagent: %w", err)
 	}
@@ -229,7 +229,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		AgentProfile:     agentprofile.Email,
 		AgentRole:        agentprofile.Email,
 		OwnerID:          ownerID,
-		SandboxID:        rt.cfg.SandboxID,
+		ComputerID:       rt.cfg.ComputerID,
 		State:            types.RunCompleted,
 		Prompt:           "Create an Email appagent draft request from Texture artifact " + revisionID,
 		Result:           string(resultBytes),

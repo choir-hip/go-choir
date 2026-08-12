@@ -296,7 +296,7 @@ func TestLoadServiceHealthURLs_Override(t *testing.T) {
 // repeated failures").
 func TestInferencePath_CircuitBreakerOpen(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Hour)
-	result, _ := reg.IssueCredential("sandbox-1")
+	result, _ := reg.IssueCredential("autoputer-1")
 
 	// Wrap a stub provider with a circuit breaker and force it open.
 	stub := &stubProvider{name: "stub", real: true}

@@ -1,4 +1,4 @@
-package sandbox
+package autoputer
 
 import (
 	"encoding/json"
@@ -538,7 +538,7 @@ func TestSessionCommandUsesPersistentZotHome(t *testing.T) {
 func TestSessionCommandConfiguresRealZotForGateway(t *testing.T) {
 	rootDir := t.TempDir()
 	t.Setenv("RUNTIME_GATEWAY_URL", "http://127.0.0.1:8084")
-	t.Setenv("RUNTIME_GATEWAY_TOKEN", "sandbox-secret-token")
+	t.Setenv("RUNTIME_GATEWAY_TOKEN", "autoputer-secret-token")
 
 	th := &TerminalHandler{
 		command: []string{"/opt/choir/bin/zot"},
@@ -561,7 +561,7 @@ func TestSessionCommandConfiguresRealZotForGateway(t *testing.T) {
 		t.Fatalf("cmd.Args = %#v, want %#v", cmd.Args, wantArgs)
 	}
 	for _, arg := range cmd.Args {
-		if strings.Contains(arg, "sandbox-secret-token") {
+		if strings.Contains(arg, "autoputer-secret-token") {
 			t.Fatalf("gateway token leaked into argv: %#v", cmd.Args)
 		}
 	}
@@ -573,16 +573,16 @@ func TestSessionCommandConfiguresRealZotForGateway(t *testing.T) {
 			env[key] = value
 		}
 	}
-	if env["OPENAI_API_KEY"] != "sandbox-secret-token" {
+	if env["OPENAI_API_KEY"] != "autoputer-secret-token" {
 		t.Fatalf("OPENAI_API_KEY = %q, want gateway token", env["OPENAI_API_KEY"])
 	}
 }
 
 func TestSessionCommandLeavesFallbackZotSessionUnchanged(t *testing.T) {
 	t.Setenv("RUNTIME_GATEWAY_URL", "http://127.0.0.1:8084")
-	t.Setenv("RUNTIME_GATEWAY_TOKEN", "sandbox-secret-token")
+	t.Setenv("RUNTIME_GATEWAY_TOKEN", "autoputer-secret-token")
 	th := &TerminalHandler{
-		command: []string{"/opt/choir/bin/sandbox", "zot-session"},
+		command: []string{"/opt/choir/bin/autoputer", "zot-session"},
 		rootDir: t.TempDir(),
 	}
 

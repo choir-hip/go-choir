@@ -85,7 +85,7 @@ func newTraceWiringRuntime(t *testing.T, traceStore trace.Store) (*Runtime, func
 
 	opts := []RuntimeOption{WithTraceStore(traceStore)}
 	rt := New(provideriface.Config{
-		SandboxID:           "sandbox-trace-test",
+		ComputerID:          "autoputer-trace-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     time.Second,
@@ -111,14 +111,14 @@ func TestEmitEventProjectsToTraceStore(t *testing.T) {
 	defer cleanup()
 
 	rec := &types.RunRecord{
-		RunID:     "run-trace-1",
-		AgentID:   "agent-trace",
-		ChannelID: "chan-trace",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-trace-test",
-		State:     types.RunRunning,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		RunID:      "run-trace-1",
+		AgentID:    "agent-trace",
+		ChannelID:  "chan-trace",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-trace-test",
+		State:      types.RunRunning,
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
 	}
 	if err := rt.store.CreateRun(context.Background(), *rec); err != nil {
 		t.Fatalf("create run: %v", err)
@@ -149,14 +149,14 @@ func TestPersistEventProjectsToTraceStore(t *testing.T) {
 	defer cleanup()
 
 	rec := &types.RunRecord{
-		RunID:     "run-trace-2",
-		AgentID:   "agent-trace",
-		ChannelID: "chan-trace",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-trace-test",
-		State:     types.RunRunning,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		RunID:      "run-trace-2",
+		AgentID:    "agent-trace",
+		ChannelID:  "chan-trace",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-trace-test",
+		State:      types.RunRunning,
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
 	}
 	if err := rt.store.CreateRun(context.Background(), *rec); err != nil {
 		t.Fatalf("create run: %v", err)
@@ -183,14 +183,14 @@ func TestEmitEventDegradesGracefullyOnTraceStoreFailure(t *testing.T) {
 	defer cleanup()
 
 	rec := &types.RunRecord{
-		RunID:     "run-trace-3",
-		AgentID:   "agent-trace",
-		ChannelID: "chan-trace",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-trace-test",
-		State:     types.RunRunning,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		RunID:      "run-trace-3",
+		AgentID:    "agent-trace",
+		ChannelID:  "chan-trace",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-trace-test",
+		State:      types.RunRunning,
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
 	}
 	if err := rt.store.CreateRun(context.Background(), *rec); err != nil {
 		t.Fatalf("create run: %v", err)
@@ -235,14 +235,14 @@ func TestNilTraceStoreIsNoOp(t *testing.T) {
 		t.Fatal("expected nil trace store")
 	}
 	rec := &types.RunRecord{
-		RunID:     "run-trace-4",
-		AgentID:   "agent-trace",
-		ChannelID: "chan-trace",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-trace-test",
-		State:     types.RunRunning,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		RunID:      "run-trace-4",
+		AgentID:    "agent-trace",
+		ChannelID:  "chan-trace",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-trace-test",
+		State:      types.RunRunning,
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
 	}
 	if err := rt.store.CreateRun(context.Background(), *rec); err != nil {
 		t.Fatalf("create run: %v", err)
@@ -260,14 +260,14 @@ func TestPersistSubmittedRunProjectsToTraceStore(t *testing.T) {
 
 	createdAt := time.Date(2026, 5, 24, 1, 2, 3, 0, time.UTC)
 	agent := types.AgentRecord{
-		AgentID:   "agent-sub",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-trace-test",
-		Profile:   agentprofile.Texture,
-		Role:      agentprofile.Texture,
-		ChannelID: "chan-sub",
-		CreatedAt: createdAt,
-		UpdatedAt: createdAt,
+		AgentID:    "agent-sub",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-trace-test",
+		Profile:    agentprofile.Texture,
+		Role:       agentprofile.Texture,
+		ChannelID:  "chan-sub",
+		CreatedAt:  createdAt,
+		UpdatedAt:  createdAt,
 	}
 	rec := &types.RunRecord{
 		RunID:        "run-sub-1",
@@ -276,7 +276,7 @@ func TestPersistSubmittedRunProjectsToTraceStore(t *testing.T) {
 		AgentProfile: agent.Profile,
 		AgentRole:    agent.Role,
 		OwnerID:      agent.OwnerID,
-		SandboxID:    agent.SandboxID,
+		ComputerID:   agent.ComputerID,
 		State:        types.RunPending,
 		Prompt:       "revise",
 		CreatedAt:    createdAt,
@@ -321,14 +321,14 @@ func TestEmitEventProjectsToSQLiteTraceStore(t *testing.T) {
 	defer cleanup()
 
 	rec := &types.RunRecord{
-		RunID:     "run-sqlite-1",
-		AgentID:   "agent-sqlite",
-		ChannelID: "chan-sqlite",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-trace-test",
-		State:     types.RunRunning,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		RunID:      "run-sqlite-1",
+		AgentID:    "agent-sqlite",
+		ChannelID:  "chan-sqlite",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-trace-test",
+		State:      types.RunRunning,
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
 	}
 	if err := rt.store.CreateRun(context.Background(), *rec); err != nil {
 		t.Fatalf("create run: %v", err)

@@ -66,7 +66,7 @@ At canonical `e649ee28`, `S1DeployVerifier` reported **BLOCKING**. Focused runti
 GitHub Actions run `29178010201`, attempt 3, completed successfully after the
 first retry had passivated the stale pre-S1 runs. The deploy activation receipt
 records target `26d7aa2accda63e20daa19c42381d13aec14baed` with `ordinary_guest`,
-`sandbox`, `active_computers`, and `gateway` active. The full rerun passed all
+`autoputer`, `active_computers`, and `gateway` active. The full rerun passed all
 selected build, test, race, ratchet, health, and deploy gates.
 
 The deployed product CLI then proved the owner-scoped surfaces:
@@ -119,7 +119,7 @@ calls, four interface candidates, and 164 citers. `S1DeployVerifier`
 independently returned PASS on the repair and exact regression.
 
 GitHub Actions run `29179656372` passed all selected build, test, race, ratchet,
-SBOM, and deploy gates. Its activation receipt records `sandbox` and `gateway`
+SBOM, and deploy gates. Its activation receipt records `autoputer` and `gateway`
 active at `4973ee40570382c25398ea50e15148569cf351ab` at
 `2026-07-12T04:37:20Z`.
 

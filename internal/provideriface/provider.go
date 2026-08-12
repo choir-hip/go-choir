@@ -153,14 +153,14 @@ type ToolDefinition struct {
 // concurrency behavior. Extracted from internal/runtime so the actorruntime
 // adapter can load and use config without importing the old runtime.
 type Config struct {
-	// SandboxID is the stable identity of this sandbox instance.
-	SandboxID string
+	// ComputerID is the stable identity of this autoputer instance.
+	ComputerID string
 
 	// StorePath is the marker path used to derive the embedded Dolt workspace
 	// for task/event persistence. Retired SQLite content is never imported.
 	StorePath string
 
-	// PromptRoot is the sandbox-owned filesystem root for editable role prompts.
+	// PromptRoot is the autoputer-owned filesystem root for editable role prompts.
 	PromptRoot string
 
 	// SkillsRoot is the repo-owned filesystem root for natural-language skills
@@ -199,12 +199,12 @@ type Config struct {
 	MaildURL string
 
 	// WirePublishURL is the host-mediated proxy route for autonomous Universal
-	// Wire platform publication. Platform VM sandboxes call this instead of
+	// Wire platform publication. Platform VM autoputeres call this instead of
 	// corpusd directly.
 	WirePublishURL string
 
 	// CorpusdURL is an optional direct corpusd endpoint for local publish
-	// tests or host-colocated sandboxes when WirePublishURL is unset.
+	// tests or host-colocated autoputeres when WirePublishURL is unset.
 	CorpusdURL string
 
 	// LLMProvider is the explicitly selected provider for runtime LLM calls.

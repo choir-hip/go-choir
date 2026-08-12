@@ -40,7 +40,7 @@ Acceptance requires zero residual runtime constructor alias/callers, focused tes
 
 - Independent `S3I8Verifier` returned `PASS` at confidence `0.97` with no findings on canonical `e88b2727`.
 - GitHub Actions run `29205831071`, attempt `2`, passed every selected normal/race gate and deployed checkpoint `331ad4834aa5fcd5489d15aeddc8c7e4cfc9e148`.
-- Deployment job `86686164550` published the activation receipt at `2026-07-12T19:43:07Z`; sandbox and gateway artifacts were active at `331ad4834aa5fcd5489d15aeddc8c7e4cfc9e148`.
+- Deployment job `86686164550` published the activation receipt at `2026-07-12T19:43:07Z`; autoputer and gateway artifacts were active at `331ad4834aa5fcd5489d15aeddc8c7e4cfc9e148`.
 - Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`.
 - Residual risk: pre-existing comprehensive-tag test drift remains outside S3-I8; no in-slice residual risk.
 

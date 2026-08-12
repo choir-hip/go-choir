@@ -61,7 +61,7 @@ func TestRefreshConfigForCurrentDeployUsesCurrentMicroVMArtifacts(t *testing.T) 
 		MachineCPUCount:   2,
 		MachineMemSizeMib: 4096,
 		PersistentDir:     "/state/vm-stale/persist",
-		GatewayToken:      "sandbox-token",
+		GatewayToken:      "autoputer-token",
 		Epoch:             7,
 		ComputerKind:      "active",
 		OwnerID:           "owner-old",
@@ -996,7 +996,7 @@ func TestBuildFirecrackerConfig_NoHostControlPlaneAccess(t *testing.T) {
 
 	fcConfig := mgr.buildFirecrackerConfig(vmCfg, 9001)
 
-	// Verify the guest port is the sandbox port, not a control-plane port.
+	// Verify the guest port is the autoputer port, not a control-plane port.
 	bootSource := fcConfig["boot-source"].(map[string]interface{})
 	bootArgs := bootSource["boot_args"].(string)
 	if !containsStr(bootArgs, "guest_port=8085") {
@@ -1084,7 +1084,7 @@ func TestBuildFirecrackerConfig_ComprehensiveSecretExclusion(t *testing.T) {
 		"api-key",
 		// Host secret paths
 		"gateway-provider.env",
-		"sandbox-gateway-token.env",
+		"autoputer-gateway-token.env",
 		"auth-signing",
 	}
 	for _, pattern := range forbiddenPatterns {
@@ -1128,7 +1128,7 @@ func TestBuildFirecrackerConfig_ComprehensiveSecretExclusion(t *testing.T) {
 }
 
 func TestBuildFirecrackerConfig_GuestPortInBootArgs(t *testing.T) {
-	// Verify the guest port is passed via boot args so the guest sandbox
+	// Verify the guest port is passed via boot args so the guest autoputer
 	// knows which port to listen on. This is the only way the guest receives
 	// network configuration — no host IPs or control-plane ports are exposed.
 	cfg := DefaultManagerConfig()
@@ -1294,9 +1294,9 @@ func TestGuestInitScript_NoProviderCredentials(t *testing.T) {
 	// init script in nix/guest-image.nix to ensure it stays clean.
 	//
 	// The guest init script sets only:
-	//   - SANDBOX_PORT (from guest_port kernel param)
-	//   - SANDBOX_ID (from vm_id kernel param)
-	//   - RUNTIME_GATEWAY_URL / RUNTIME_GATEWAY_TOKEN (sandbox auth only)
+	//   - AUTOPUTER_PORT (from guest_port kernel param)
+	//   - AUTOPUTER_ID (from vm_id kernel param)
+	//   - RUNTIME_GATEWAY_URL / RUNTIME_GATEWAY_TOKEN (autoputer auth only)
 	//   - RUNTIME_VMCTL_URL (tap-subnet control plane for super VM tools)
 	//   - RUNTIME_MAILD_URL (tap-subnet draft persistence only)
 	//   - RUNTIME_WIRE_PUBLISH_URL (tap-subnet host-mediated wire publish only)
@@ -1307,8 +1307,8 @@ func TestGuestInitScript_NoProviderCredentials(t *testing.T) {
 	//
 	// No provider credentials or host-side secret paths are set.
 	guestEnvVars := []string{
-		"SANDBOX_PORT",
-		"SANDBOX_ID",
+		"AUTOPUTER_PORT",
+		"AUTOPUTER_ID",
 		"RUNTIME_GATEWAY_URL",
 		"RUNTIME_GATEWAY_TOKEN",
 		"RUNTIME_VMCTL_URL",

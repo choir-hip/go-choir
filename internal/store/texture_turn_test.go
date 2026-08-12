@@ -228,7 +228,7 @@ func TestApplyTextureTurnPersistentSuperOpenerIsAtomic(t *testing.T) {
 	now := time.Now().UTC()
 	superID := "super:" + start.OwnerID
 	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		SandboxID: start.ComputerID, Profile: "super", Role: "super", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
+		Profile: "super", Role: "super", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
@@ -529,14 +529,14 @@ func TestApplyTextureTurnRefusesUnsafeTargetsBeforeAnyControlCommit(t *testing.T
 			s, start, caller, work := setupLifecycleTextureTargetFixture(t)
 			ctx := context.Background()
 			now := time.Now().UTC()
-			target := types.AgentRecord{AgentID: targetID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, SandboxID: start.ComputerID, ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now}
+			target := types.AgentRecord{AgentID: targetID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now}
 			switch targetID {
 			case "co-super:direct":
 				target.Profile, target.Role = "co-super", "co-super"
 			case "super:arbitrary":
 				target.Profile, target.Role = "super", "super"
 			case "researcher:cross-scope":
-				target.Profile, target.Role, target.ComputerID, target.SandboxID = "researcher", "researcher", "computer-foreign", "computer-foreign"
+				target.Profile, target.Role, target.ComputerID, target.ComputerID = "researcher", "researcher", "computer-foreign", "computer-foreign"
 			}
 			if err := s.UpsertAgent(ctx, target); err != nil {
 				t.Fatal(err)

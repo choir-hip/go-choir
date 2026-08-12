@@ -11,7 +11,7 @@
           with the Choir desktop app
         - com.apple.developer.fileprovider: to register as a File Provider
     -->
-    <key>com.apple.security.app-sandbox</key>
+    <key>com.apple.security.app-autoputer</key>
     <true/>
 
     <key>com.apple.security.application-groups</key>
@@ -24,7 +24,7 @@
 
     <!--
       For development (without a paid Developer ID), we use a minimal
-      sandbox. The app group allows the extension and the host app to
+      autoputer. The app group allows the extension and the host app to
       share the Unix socket file in ~/Library/Application Support/Choir/.
     -->
 </dict>

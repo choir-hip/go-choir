@@ -91,7 +91,7 @@ reasoning = "medium"
 		t.Fatalf("conductor overlay = %q; metadata=%+v", got, conductor.Metadata)
 	}
 
-	runs, err := core.Store().ListLifecycleRunsByChannel(context.Background(), "user-alice", "sandbox-test", resp.DocID, 20)
+	runs, err := core.Store().ListLifecycleRunsByChannel(context.Background(), "user-alice", "autoputer-test", resp.DocID, 20)
 	if err != nil {
 		t.Fatalf("ListRunsByChannel: %v", err)
 	}
@@ -132,7 +132,7 @@ func promptEvalTestSetup(t *testing.T, policyPath string) (*agentcore.Runtime, *
 	}
 	bus := events.NewEventBus()
 	core := agentcore.New(provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		PromptRoot:          filepath.Join(dir, "prompts"),
 		ModelPolicyPath:     policyPath,

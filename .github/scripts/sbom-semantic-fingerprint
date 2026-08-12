@@ -7,7 +7,7 @@ repo_root="$(cd "$repo_root" && pwd -P)"
 go_bin="${SBOM_GO_BIN:-go}"
 
 case "$package" in
-  auth|proxy|gateway|maild|maildctl|corpusd|sandbox|sourcecycled|vmctl)
+  auth|proxy|gateway|maild|maildctl|corpusd|autoputer|sourcecycled|vmctl)
     kind=go
     ;;
   frontend)

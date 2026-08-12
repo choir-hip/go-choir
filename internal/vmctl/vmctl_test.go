@@ -49,8 +49,8 @@ func TestOwnershipRegistry_ResolveOrAssignCreatesVM(t *testing.T) {
 	if own.State != VMStateActive {
 		t.Errorf("expected state active, got %s", own.State)
 	}
-	if own.SandboxURL == "" {
-		t.Error("expected non-empty SandboxURL")
+	if own.ComputerURL == "" {
+		t.Error("expected non-empty ComputerURL")
 	}
 }
 
@@ -81,14 +81,14 @@ func TestOwnershipRegistry_ResolveOrAssignReturnsSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveOrAssign: %v", err)
 	}
-	own.SandboxURL = "http://caller-mutated"
+	own.ComputerURL = "http://caller-mutated"
 	own.State = VMStateFailed
 
 	got := reg.GetOwnership("user-snapshot")
 	if got == nil {
 		t.Fatal("expected registry ownership")
 	}
-	if got.SandboxURL == "http://caller-mutated" {
+	if got.ComputerURL == "http://caller-mutated" {
 		t.Fatal("ResolveOrAssign returned a live ownership pointer")
 	}
 	if got.State != VMStateActive {
@@ -285,11 +285,11 @@ func TestOwnershipRegistry_BootingRequestsWaitForReadyVM(t *testing.T) {
 	if firstOwn.VMID != secondOwn.VMID {
 		t.Fatalf("expected both resolves to share one VM, got %s and %s", firstOwn.VMID, secondOwn.VMID)
 	}
-	if firstOwn.SandboxURL != "http://127.0.0.1:9009" {
-		t.Fatalf("first resolve sandbox URL = %q, want VM URL", firstOwn.SandboxURL)
+	if firstOwn.ComputerURL != "http://127.0.0.1:9009" {
+		t.Fatalf("first resolve autoputer URL = %q, want VM URL", firstOwn.ComputerURL)
 	}
-	if secondOwn.SandboxURL != "http://127.0.0.1:9009" {
-		t.Fatalf("second resolve sandbox URL = %q, want VM URL", secondOwn.SandboxURL)
+	if secondOwn.ComputerURL != "http://127.0.0.1:9009" {
+		t.Fatalf("second resolve autoputer URL = %q, want VM URL", secondOwn.ComputerURL)
 	}
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
@@ -346,8 +346,8 @@ func TestOwnershipRegistry_BootingWaitRespectsContextCancellation(t *testing.T) 
 	if err != nil {
 		t.Fatalf("retry resolve: %v", err)
 	}
-	if retryOwn.SandboxURL != "http://127.0.0.1:9009" {
-		t.Fatalf("retry sandbox URL = %q, want VM URL", retryOwn.SandboxURL)
+	if retryOwn.ComputerURL != "http://127.0.0.1:9009" {
+		t.Fatalf("retry autoputer URL = %q, want VM URL", retryOwn.ComputerURL)
 	}
 }
 
@@ -485,17 +485,17 @@ func TestOwnershipRegistry_InteractiveVMUsesBuildCapableMemoryEnvelope(t *testin
 	}
 }
 
-func TestOwnershipRegistry_SetSandboxCredential(t *testing.T) {
+func TestOwnershipRegistry_SetAutoputerCredential(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 
 	own, _ := reg.ResolveOrAssign("user-1")
-	if err := reg.SetSandboxCredential(own.VMID, "cred-123"); err != nil {
-		t.Fatalf("SetSandboxCredential: %v", err)
+	if err := reg.SetAutoputerCredential(own.VMID, "cred-123"); err != nil {
+		t.Fatalf("SetAutoputerCredential: %v", err)
 	}
 
 	updated := reg.GetOwnership("user-1")
-	if updated.SandboxCredential != "cred-123" {
-		t.Errorf("expected credential cred-123, got %s", updated.SandboxCredential)
+	if updated.AutoputerCredential != "cred-123" {
+		t.Errorf("expected credential cred-123, got %s", updated.AutoputerCredential)
 	}
 }
 
@@ -566,14 +566,14 @@ func newTestServer(t *testing.T) (*httptest.Server, *OwnershipRegistry) {
 	mux.HandleFunc("/internal/vmctl/recover", handler.HandleRecover)
 	mux.HandleFunc("/internal/vmctl/logout", handler.HandleLogout)
 	mux.HandleFunc("/internal/vmctl/idle-check", handler.HandleIdleCheck)
-	mux.HandleFunc("/internal/vmctl/runtime-package/sandbox", handler.HandleRuntimePackage)
+	mux.HandleFunc("/internal/vmctl/runtime-package/autoputer", handler.HandleRuntimePackage)
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv, reg
 }
 
-func TestHandler_RuntimePackageStreamsSandboxPackage(t *testing.T) {
+func TestHandler_RuntimePackageStreamsAutoputerPackage(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	handler := NewHandler(reg)
 	pkgDir := t.TempDir()
@@ -583,20 +583,20 @@ func TestHandler_RuntimePackageStreamsSandboxPackage(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(pkgDir, "share", "go-choir", "skills"), 0o755); err != nil {
 		t.Fatalf("mkdir skills: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(pkgDir, "bin", "sandbox"), []byte("sandbox-binary"), 0o755); err != nil {
-		t.Fatalf("write sandbox: %v", err)
+	if err := os.WriteFile(filepath.Join(pkgDir, "bin", "autoputer"), []byte("autoputer-binary"), 0o755); err != nil {
+		t.Fatalf("write autoputer: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(pkgDir, "share", "go-choir", "skills", "SKILL.md"), []byte("skill"), 0o644); err != nil {
 		t.Fatalf("write skill: %v", err)
 	}
-	const sandboxCommit = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-	manifest := `{"schema_version":1,"artifact":"sandbox","version":"0.1.0","commit":"` + sandboxCommit + `","built_at":"2026-07-10T12:00:00Z"}`
+	const autoputerCommit = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	manifest := `{"schema_version":1,"artifact":"autoputer","version":"0.1.0","commit":"` + autoputerCommit + `","built_at":"2026-07-10T12:00:00Z"}`
 	if err := os.WriteFile(filepath.Join(pkgDir, "share", "go-choir", "build.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatalf("write build manifest: %v", err)
 	}
-	handler.SetSandboxRuntimePackageDir(pkgDir)
+	handler.SetAutoputerRuntimePackageDir(pkgDir)
 
-	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/sandbox", nil)
+	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/autoputer", nil)
 	req.Header.Set("X-Internal-Caller", "true")
 	req.Host = "10.203.154.1:8083"
 	rr := httptest.NewRecorder()
@@ -626,8 +626,8 @@ func TestHandler_RuntimePackageStreamsSandboxPackage(t *testing.T) {
 			entries[hdr.Name] = string(data)
 		}
 	}
-	if entries["bin/sandbox"] != "sandbox-binary" {
-		t.Fatalf("bin/sandbox entry = %q", entries["bin/sandbox"])
+	if entries["bin/autoputer"] != "autoputer-binary" {
+		t.Fatalf("bin/autoputer entry = %q", entries["bin/autoputer"])
 	}
 	if entries["share/go-choir/skills/SKILL.md"] != "skill" {
 		t.Fatalf("skills entry = %q", entries["share/go-choir/skills/SKILL.md"])
@@ -638,18 +638,18 @@ func TestHandler_RuntimePackageStreamsSandboxPackage(t *testing.T) {
 	}
 }
 
-func TestHandler_RuntimePackageRejectsMissingSandboxBuildManifest(t *testing.T) {
+func TestHandler_RuntimePackageRejectsMissingAutoputerBuildManifest(t *testing.T) {
 	handler := NewHandler(NewOwnershipRegistry("http://127.0.0.1:8085"))
 	pkgDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(pkgDir, "bin"), 0o755); err != nil {
 		t.Fatalf("mkdir bin: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(pkgDir, "bin", "sandbox"), []byte("sandbox-binary"), 0o755); err != nil {
-		t.Fatalf("write sandbox: %v", err)
+	if err := os.WriteFile(filepath.Join(pkgDir, "bin", "autoputer"), []byte("autoputer-binary"), 0o755); err != nil {
+		t.Fatalf("write autoputer: %v", err)
 	}
-	handler.SetSandboxRuntimePackageDir(pkgDir)
+	handler.SetAutoputerRuntimePackageDir(pkgDir)
 
-	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/sandbox", nil)
+	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/autoputer", nil)
 	req.Header.Set("X-Internal-Caller", "true")
 	rr := httptest.NewRecorder()
 	handler.HandleRuntimePackage(rr, req)
@@ -661,9 +661,9 @@ func TestHandler_RuntimePackageRejectsMissingSandboxBuildManifest(t *testing.T) 
 
 func TestHandler_RuntimePackageDeniesExternalCaller(t *testing.T) {
 	handler := NewHandler(NewOwnershipRegistry("http://127.0.0.1:8085"))
-	handler.SetSandboxRuntimePackageDir(t.TempDir())
+	handler.SetAutoputerRuntimePackageDir(t.TempDir())
 
-	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/sandbox", nil)
+	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/autoputer", nil)
 	req.Host = "choir.news"
 	req.RemoteAddr = "203.0.113.10:4444"
 	rr := httptest.NewRecorder()
@@ -1181,8 +1181,8 @@ func TestHandler_ResolveCreatesVM(t *testing.T) {
 	if result.VMID == "" {
 		t.Error("expected non-empty VMID")
 	}
-	if result.SandboxURL == "" {
-		t.Error("expected non-empty SandboxURL")
+	if result.ComputerURL == "" {
+		t.Error("expected non-empty ComputerURL")
 	}
 	if result.State != "active" {
 		t.Errorf("expected active state, got %s", result.State)
@@ -1292,13 +1292,13 @@ func TestHandler_LookupDemotesUnhealthyActiveOwnership(t *testing.T) {
 		t.Fatalf("SetPersistencePath: %v", err)
 	}
 	own := &VMOwnership{
-		VMID:       "vm-unhealthy",
-		ComputerID: "computer-unhealthy",
-		UserID:     "user-unhealthy",
-		DesktopID:  PrimaryDesktopID,
-		SandboxURL: "http://127.0.0.1:9001",
-		State:      VMStateActive,
-		Epoch:      7,
+		VMID:        "vm-unhealthy",
+		ComputerID:  "computer-unhealthy",
+		UserID:      "user-unhealthy",
+		DesktopID:   PrimaryDesktopID,
+		ComputerURL: "http://127.0.0.1:9001",
+		State:       VMStateActive,
+		Epoch:       7,
 	}
 	initialEpoch := own.Epoch
 	key := ownershipKey(own.UserID, own.DesktopID)
@@ -1308,7 +1308,7 @@ func TestHandler_LookupDemotesUnhealthyActiveOwnership(t *testing.T) {
 	manager := &mockVMManager{
 		getVMs: map[string]*VMInstanceInfo{
 			own.VMID: {
-				HostURL: own.SandboxURL,
+				HostURL: own.ComputerURL,
 				Epoch:   own.Epoch,
 				Healthy: false,
 				State:   "running",
@@ -1384,13 +1384,13 @@ func TestHandler_LookupDemotesUnhealthyActiveOwnership(t *testing.T) {
 func TestHandler_LookupAuthorizesRouteBeforeHealthMutation(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	own := &VMOwnership{
-		VMID:       "vm-route-refused",
-		ComputerID: "computer-route-refused",
-		UserID:     "user-route-refused",
-		DesktopID:  PrimaryDesktopID,
-		SandboxURL: "http://127.0.0.1:9001",
-		State:      VMStateActive,
-		Epoch:      7,
+		VMID:        "vm-route-refused",
+		ComputerID:  "computer-route-refused",
+		UserID:      "user-route-refused",
+		DesktopID:   PrimaryDesktopID,
+		ComputerURL: "http://127.0.0.1:9001",
+		State:       VMStateActive,
+		Epoch:       7,
 	}
 	key := ownershipKey(own.UserID, own.DesktopID)
 	reg.ownerships[key] = own
@@ -1421,13 +1421,13 @@ func TestHandler_LookupAuthorizesRouteBeforeHealthMutation(t *testing.T) {
 func TestHandler_LookupProjectsBootingWithoutRacingRefresh(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	own := &VMOwnership{
-		VMID:       "vm-refreshing",
-		ComputerID: "computer-refreshing",
-		UserID:     "user-refreshing",
-		DesktopID:  PrimaryDesktopID,
-		SandboxURL: "http://127.0.0.1:9001",
-		State:      VMStateActive,
-		Epoch:      7,
+		VMID:        "vm-refreshing",
+		ComputerID:  "computer-refreshing",
+		UserID:      "user-refreshing",
+		DesktopID:   PrimaryDesktopID,
+		ComputerURL: "http://127.0.0.1:9001",
+		State:       VMStateActive,
+		Epoch:       7,
 	}
 	initialEpoch := own.Epoch
 	key := ownershipKey(own.UserID, own.DesktopID)
@@ -1436,7 +1436,7 @@ func TestHandler_LookupProjectsBootingWithoutRacingRefresh(t *testing.T) {
 	manager := &mockVMManager{
 		getVMs: map[string]*VMInstanceInfo{
 			own.VMID: {
-				HostURL: own.SandboxURL,
+				HostURL: own.ComputerURL,
 				Epoch:   own.Epoch,
 				Healthy: true,
 				State:   "running",
@@ -1495,13 +1495,13 @@ func TestHandler_LookupProjectsBootingWithoutRacingRefresh(t *testing.T) {
 func TestOwnershipRegistry_DegradedRecoveryFailureDoesNotPublishActive(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	own := &VMOwnership{
-		VMID:       "vm-recovery-fails",
-		ComputerID: "computer-recovery-fails",
-		UserID:     "user-recovery-fails",
-		DesktopID:  PrimaryDesktopID,
-		SandboxURL: "http://127.0.0.1:9001",
-		State:      VMStateDegraded,
-		Epoch:      7,
+		VMID:        "vm-recovery-fails",
+		ComputerID:  "computer-recovery-fails",
+		UserID:      "user-recovery-fails",
+		DesktopID:   PrimaryDesktopID,
+		ComputerURL: "http://127.0.0.1:9001",
+		State:       VMStateDegraded,
+		Epoch:       7,
 	}
 	key := ownershipKey(own.UserID, own.DesktopID)
 	reg.ownerships[key] = own
@@ -1509,7 +1509,7 @@ func TestOwnershipRegistry_DegradedRecoveryFailureDoesNotPublishActive(t *testin
 	manager := &mockVMManager{
 		getVMs: map[string]*VMInstanceInfo{
 			own.VMID: {
-				HostURL: own.SandboxURL,
+				HostURL: own.ComputerURL,
 				Epoch:   own.Epoch,
 				Healthy: false,
 				State:   "running",
@@ -2476,8 +2476,8 @@ func TestHandler_ResumeBootsPersistedVMWhenManagerLostInstance(t *testing.T) {
 	if result3.VMID != result1.VMID {
 		t.Fatalf("resumed VMID = %s, want %s", result3.VMID, result1.VMID)
 	}
-	if result3.SandboxURL != "http://127.0.0.1:9101" {
-		t.Fatalf("SandboxURL = %s, want boot fallback URL", result3.SandboxURL)
+	if result3.ComputerURL != "http://127.0.0.1:9101" {
+		t.Fatalf("ComputerURL = %s, want boot fallback URL", result3.ComputerURL)
 	}
 	if len(mock.boots) != 1 || mock.boots[0].VMID != result1.VMID {
 		t.Fatalf("boot fallback = %+v, want one boot for %s", mock.boots, result1.VMID)
@@ -2907,7 +2907,7 @@ func TestOwnershipRegistry_ResolveReconcilesExistingGatewayCredential(t *testing
 		}
 		ensuredRawToken = req.RawToken
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"sandbox_id":"vm-existing-old-account","status":"imported"}`))
+		_, _ = w.Write([]byte(`{"computer_id":"vm-existing-old-account","status":"imported"}`))
 	})
 	gatewayServer := httptest.NewServer(gatewayMux)
 	t.Cleanup(gatewayServer.Close)
@@ -2927,7 +2927,7 @@ func TestOwnershipRegistry_ResolveReconcilesExistingGatewayCredential(t *testing
 		UserID:       "user-old-account",
 		DesktopID:    PrimaryDesktopID,
 		Kind:         VMKindInteractive,
-		SandboxURL:   "http://127.0.0.1:9001",
+		ComputerURL:  "http://127.0.0.1:9001",
 		State:        VMStateActive,
 		CreatedAt:    now,
 		LastActiveAt: now,
@@ -2958,7 +2958,7 @@ func TestOwnershipRegistry_ResolveRecoversUnhealthyActiveVMBeforeRouting(t *test
 		UserID:       "user-old-account",
 		DesktopID:    PrimaryDesktopID,
 		Kind:         VMKindInteractive,
-		SandboxURL:   "http://127.0.0.1:9001",
+		ComputerURL:  "http://127.0.0.1:9001",
 		State:        VMStateActive,
 		CreatedAt:    now,
 		LastActiveAt: now,
@@ -2971,7 +2971,7 @@ func TestOwnershipRegistry_ResolveRecoversUnhealthyActiveVMBeforeRouting(t *test
 	mock := &mockVMManager{
 		getVMs: map[string]*VMInstanceInfo{
 			own.VMID: {
-				HostURL:       own.SandboxURL,
+				HostURL:       own.ComputerURL,
 				Epoch:         own.Epoch,
 				Healthy:       false,
 				State:         "running",
@@ -3002,8 +3002,8 @@ func TestOwnershipRegistry_ResolveRecoversUnhealthyActiveVMBeforeRouting(t *test
 	if len(mock.recovers) != 1 || mock.recovers[0] != own.VMID {
 		t.Fatalf("recovers = %+v, want [%s]", mock.recovers, own.VMID)
 	}
-	if resolved.SandboxURL != "http://127.0.0.1:9044" {
-		t.Fatalf("SandboxURL = %q, want recovered host URL", resolved.SandboxURL)
+	if resolved.ComputerURL != "http://127.0.0.1:9044" {
+		t.Fatalf("ComputerURL = %q, want recovered host URL", resolved.ComputerURL)
 	}
 	if resolved.Epoch != 4 {
 		t.Fatalf("Epoch = %d, want 4", resolved.Epoch)
@@ -3022,7 +3022,7 @@ func TestOwnershipRegistry_ResolvePreservesRecentlyHealthyActiveVM(t *testing.T)
 		UserID:       "user-busy",
 		DesktopID:    PrimaryDesktopID,
 		Kind:         VMKindInteractive,
-		SandboxURL:   "http://127.0.0.1:9001",
+		ComputerURL:  "http://127.0.0.1:9001",
 		State:        VMStateActive,
 		CreatedAt:    now.Add(-time.Hour),
 		LastActiveAt: now.Add(-time.Minute),
@@ -3057,8 +3057,8 @@ func TestOwnershipRegistry_ResolvePreservesRecentlyHealthyActiveVM(t *testing.T)
 	if len(mock.recovers) != 0 {
 		t.Fatalf("recovers = %+v, want none for transient health failure", mock.recovers)
 	}
-	if resolved.SandboxURL != "http://127.0.0.1:9009" {
-		t.Fatalf("SandboxURL = %q, want current manager host URL", resolved.SandboxURL)
+	if resolved.ComputerURL != "http://127.0.0.1:9009" {
+		t.Fatalf("ComputerURL = %q, want current manager host URL", resolved.ComputerURL)
 	}
 	if resolved.Epoch != own.Epoch {
 		t.Fatalf("Epoch = %d, want %d", resolved.Epoch, own.Epoch)
@@ -3073,7 +3073,7 @@ func TestOwnershipRegistry_ResolvePreservesPendingActiveBoot(t *testing.T) {
 		UserID:       "user-pending",
 		DesktopID:    PrimaryDesktopID,
 		Kind:         VMKindInteractive,
-		SandboxURL:   "http://127.0.0.1:9001",
+		ComputerURL:  "http://127.0.0.1:9001",
 		State:        VMStateActive,
 		CreatedAt:    now.Add(-time.Hour),
 		LastActiveAt: now.Add(-time.Minute),
@@ -3103,8 +3103,8 @@ func TestOwnershipRegistry_ResolvePreservesPendingActiveBoot(t *testing.T) {
 	if len(mock.recovers) != 0 {
 		t.Fatalf("recovers = %+v, want none for in-flight boot", mock.recovers)
 	}
-	if resolved.SandboxURL != "http://127.0.0.1:9010" {
-		t.Fatalf("SandboxURL = %q, want current pending host URL", resolved.SandboxURL)
+	if resolved.ComputerURL != "http://127.0.0.1:9010" {
+		t.Fatalf("ComputerURL = %q, want current pending host URL", resolved.ComputerURL)
 	}
 	if resolved.Epoch != own.Epoch {
 		t.Fatalf("Epoch = %d, want %d", resolved.Epoch, own.Epoch)
@@ -3119,7 +3119,7 @@ func TestOwnershipRegistry_ResolveStartsActiveOwnershipMissingFromManager(t *tes
 		UserID:       "user-old-account",
 		DesktopID:    PrimaryDesktopID,
 		Kind:         VMKindInteractive,
-		SandboxURL:   "http://127.0.0.1:9001",
+		ComputerURL:  "http://127.0.0.1:9001",
 		State:        VMStateActive,
 		CreatedAt:    now,
 		LastActiveAt: now,
@@ -3153,8 +3153,8 @@ func TestOwnershipRegistry_ResolveStartsActiveOwnershipMissingFromManager(t *tes
 	if mock.boots[0].VMID != own.VMID {
 		t.Fatalf("BootVM VMID = %q, want %q", mock.boots[0].VMID, own.VMID)
 	}
-	if resolved.SandboxURL != "http://127.0.0.1:9045" {
-		t.Fatalf("SandboxURL = %q, want restarted host URL", resolved.SandboxURL)
+	if resolved.ComputerURL != "http://127.0.0.1:9045" {
+		t.Fatalf("ComputerURL = %q, want restarted host URL", resolved.ComputerURL)
 	}
 }
 
@@ -3166,7 +3166,7 @@ func TestOwnershipRegistry_ResolveRecoversFailedManagerInstanceForHibernatedDesk
 		UserID:       "user-existing-account",
 		DesktopID:    PrimaryDesktopID,
 		Kind:         VMKindInteractive,
-		SandboxURL:   "http://127.0.0.1:9001",
+		ComputerURL:  "http://127.0.0.1:9001",
 		State:        VMStateHibernated,
 		CreatedAt:    now,
 		LastActiveAt: now,
@@ -3180,7 +3180,7 @@ func TestOwnershipRegistry_ResolveRecoversFailedManagerInstanceForHibernatedDesk
 		resumeError: fmt.Errorf("vm vm-failed-cold-resume cannot be resumed (state=failed)"),
 		getVMs: map[string]*VMInstanceInfo{
 			own.VMID: {
-				HostURL: own.SandboxURL,
+				HostURL: own.ComputerURL,
 				Epoch:   own.Epoch,
 				Healthy: false,
 				State:   "failed",
@@ -3208,8 +3208,8 @@ func TestOwnershipRegistry_ResolveRecoversFailedManagerInstanceForHibernatedDesk
 	if resolved.VMID != own.VMID {
 		t.Fatalf("resolved VMID = %q, want %q", resolved.VMID, own.VMID)
 	}
-	if resolved.SandboxURL != "http://127.0.0.1:9046" {
-		t.Fatalf("SandboxURL = %q, want recovered host URL", resolved.SandboxURL)
+	if resolved.ComputerURL != "http://127.0.0.1:9046" {
+		t.Fatalf("ComputerURL = %q, want recovered host URL", resolved.ComputerURL)
 	}
 	if resolved.Epoch != 8 {
 		t.Fatalf("Epoch = %d, want 8", resolved.Epoch)
@@ -3221,7 +3221,7 @@ func TestOwnershipRegistry_ResolveRecoversFailedManagerInstanceForHibernatedDesk
 
 func TestOwnershipRegistry_DelegatesBootToVMManager(t *testing.T) {
 	// When a VMManager is set, ResolveOrAssign should boot a real VM
-	// and use the returned HostURL instead of the static sandbox URL base.
+	// and use the returned HostURL instead of the static autoputer URL base.
 	mock := &mockVMManager{
 		bootResponse: &VMInstanceInfo{
 			HostURL: "http://127.0.0.1:9042",
@@ -3247,9 +3247,9 @@ func TestOwnershipRegistry_DelegatesBootToVMManager(t *testing.T) {
 		t.Errorf("expected boot VMID %s, got %s", own.VMID, mock.boots[0].VMID)
 	}
 
-	// Verify the sandbox URL came from the VM manager response.
-	if own.SandboxURL != "http://127.0.0.1:9042" {
-		t.Errorf("expected sandbox URL from VM manager, got %s", own.SandboxURL)
+	// Verify the autoputer URL came from the VM manager response.
+	if own.ComputerURL != "http://127.0.0.1:9042" {
+		t.Errorf("expected autoputer URL from VM manager, got %s", own.ComputerURL)
 	}
 
 	// Verify epoch came from the VM manager response.
@@ -3305,7 +3305,7 @@ func TestOwnershipRegistry_StartsFreshRealizationThroughVMManager(t *testing.T) 
 	reg.SetVMManager(mock)
 
 	initial, _ := reg.ResolveOrAssign("user-resume-vm")
-	mock.getVMs[initial.VMID] = &VMInstanceInfo{HostURL: initial.SandboxURL, Epoch: initial.Epoch, Healthy: true, State: "stopped"}
+	mock.getVMs[initial.VMID] = &VMInstanceInfo{HostURL: initial.ComputerURL, Epoch: initial.Epoch, Healthy: true, State: "stopped"}
 	_ = reg.HibernateVM("user-resume-vm")
 
 	own, err := reg.ResumeVM("user-resume-vm")
@@ -3315,7 +3315,7 @@ func TestOwnershipRegistry_StartsFreshRealizationThroughVMManager(t *testing.T) 
 	if len(mock.recovers) != 1 {
 		t.Fatalf("expected 1 fresh realization recovery call, got %d", len(mock.recovers))
 	}
-	if own.SandboxURL != "http://127.0.0.1:9043" || own.Epoch != 5 {
+	if own.ComputerURL != "http://127.0.0.1:9043" || own.Epoch != 5 {
 		t.Errorf("fresh realization = %+v", own)
 	}
 }
@@ -3351,12 +3351,12 @@ func TestOwnershipRegistry_DelegatesRecoverToVMManager(t *testing.T) {
 		t.Fatalf("recover config identity = %+v, want active ownership identity", recoverCfg)
 	}
 
-	// Verify the epoch and sandbox URL came from the recovery response.
+	// Verify the epoch and autoputer URL came from the recovery response.
 	if own.Epoch != 99 {
 		t.Errorf("expected epoch 99 from recover response, got %d", own.Epoch)
 	}
-	if own.SandboxURL != "http://127.0.0.1:9044" {
-		t.Errorf("expected sandbox URL from recover response, got %s", own.SandboxURL)
+	if own.ComputerURL != "http://127.0.0.1:9044" {
+		t.Errorf("expected autoputer URL from recover response, got %s", own.ComputerURL)
 	}
 }
 
@@ -3398,12 +3398,12 @@ func TestOwnershipRegistry_RefreshActiveVMDelegatesToVMManager(t *testing.T) {
 	if own.Epoch != 100 {
 		t.Fatalf("epoch = %d, want 100", own.Epoch)
 	}
-	if own.SandboxURL != "http://127.0.0.1:9045" {
-		t.Fatalf("sandbox URL = %s", own.SandboxURL)
+	if own.ComputerURL != "http://127.0.0.1:9045" {
+		t.Fatalf("autoputer URL = %s", own.ComputerURL)
 	}
 }
 
-func TestOwnershipRegistry_LiveSandboxURLSnapshotsDuringRefresh(t *testing.T) {
+func TestOwnershipRegistry_LiveComputerURLSnapshotsDuringRefresh(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetCorpusdURL(testComputerCredentialIssuerURL(t))
 	reg.SetVMManager(&mockVMManager{
@@ -3425,8 +3425,8 @@ func TestOwnershipRegistry_LiveSandboxURLSnapshotsDuringRefresh(t *testing.T) {
 		defer wg.Done()
 		<-start
 		for i := 0; i < 200; i++ {
-			if _, err := reg.LiveSandboxURL("user-live-url-refresh", PrimaryDesktopID); err != nil {
-				t.Errorf("LiveSandboxURL: %v", err)
+			if _, err := reg.LiveComputerURL("user-live-url-refresh", PrimaryDesktopID); err != nil {
+				t.Errorf("LiveComputerURL: %v", err)
 				return
 			}
 		}
@@ -3472,7 +3472,7 @@ func TestOwnershipRegistry_ResolveReturnSnapshotDuringRefresh(t *testing.T) {
 		defer wg.Done()
 		<-start
 		for i := 0; i < 200; i++ {
-			_ = own.SandboxURL
+			_ = own.ComputerURL
 			_ = own.State
 			_ = own.Epoch
 		}
@@ -3511,7 +3511,7 @@ func TestOwnershipRegistry_RefreshAllowsHibernatedVM(t *testing.T) {
 	}
 	mock.getVMs = map[string]*VMInstanceInfo{
 		initial.VMID: {
-			HostURL: initial.SandboxURL,
+			HostURL: initial.ComputerURL,
 			Epoch:   initial.Epoch,
 			Healthy: true,
 			State:   "running",
@@ -3550,7 +3550,7 @@ func TestOwnershipRegistry_ResolveCoalescesStoppedComputerStart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveOrAssign: %v", err)
 	}
-	mgr.getVMs[initial.VMID] = &VMInstanceInfo{HostURL: initial.SandboxURL, Epoch: initial.Epoch, Healthy: true, State: "running"}
+	mgr.getVMs[initial.VMID] = &VMInstanceInfo{HostURL: initial.ComputerURL, Epoch: initial.Epoch, Healthy: true, State: "running"}
 	if err := reg.StopVM("user-coalesce-stopped"); err != nil {
 		t.Fatalf("StopVM: %v", err)
 	}
@@ -3592,8 +3592,8 @@ func TestOwnershipRegistry_ResolveCoalescesStoppedComputerStart(t *testing.T) {
 		if own.State != VMStateActive {
 			t.Fatalf("state = %s, want active", own.State)
 		}
-		if own.SandboxURL != "http://127.0.0.1:9048" {
-			t.Fatalf("sandbox URL = %q, want resumed URL", own.SandboxURL)
+		if own.ComputerURL != "http://127.0.0.1:9048" {
+			t.Fatalf("autoputer URL = %q, want resumed URL", own.ComputerURL)
 		}
 	}
 	mgr.mu.Lock()
@@ -3641,8 +3641,8 @@ func TestOwnershipRegistry_RefreshStoppedVMWithoutManagerInstanceBootsFromOwners
 	if own.State != VMStateActive || own.StoppedBy != "" {
 		t.Fatalf("booted ownership state=%s stopped_by=%q, want active/empty", own.State, own.StoppedBy)
 	}
-	if own.SandboxURL != "http://127.0.0.1:9047" {
-		t.Fatalf("sandbox URL = %s, want boot response URL", own.SandboxURL)
+	if own.ComputerURL != "http://127.0.0.1:9047" {
+		t.Fatalf("autoputer URL = %s, want boot response URL", own.ComputerURL)
 	}
 }
 
@@ -3691,7 +3691,7 @@ func TestOwnershipRegistry_RefreshFailedPersistedVMWithoutManagerInstanceBootsRe
 	if mock.boots[0].ComputerID != loaded.ComputerID || mock.boots[0].ComputerCredentialEnvelope == "" {
 		t.Fatalf("boot config lost retained identity or fresh credential: %+v", mock.boots[0])
 	}
-	if refreshed.State != VMStateActive || refreshed.SandboxURL != "http://127.0.0.1:9049" {
+	if refreshed.State != VMStateActive || refreshed.ComputerURL != "http://127.0.0.1:9049" {
 		t.Fatalf("refreshed ownership = %+v", refreshed)
 	}
 }
@@ -3748,7 +3748,7 @@ func TestOwnershipRegistry_BootFailureReturnsError(t *testing.T) {
 }
 
 func TestOwnershipRegistry_NoVMManagerUsesHostProcessMode(t *testing.T) {
-	// Without a VMManager, ResolveOrAssign should use the static sandbox URL.
+	// Without a VMManager, ResolveOrAssign should use the static autoputer URL.
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 
 	own, err := reg.ResolveOrAssign("user-no-vm")
@@ -3756,9 +3756,9 @@ func TestOwnershipRegistry_NoVMManagerUsesHostProcessMode(t *testing.T) {
 		t.Fatalf("ResolveOrAssign: %v", err)
 	}
 
-	// Sandbox URL should be the static base URL.
-	if own.SandboxURL != "http://127.0.0.1:8085" {
-		t.Errorf("expected static sandbox URL in host-process mode, got %s", own.SandboxURL)
+	// Autoputer URL should be the static base URL.
+	if own.ComputerURL != "http://127.0.0.1:8085" {
+		t.Errorf("expected static autoputer URL in host-process mode, got %s", own.ComputerURL)
 	}
 }
 
@@ -3775,7 +3775,7 @@ func TestOwnershipRegistry_StartOnResolveUsesFreshRealization(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetVMManager(mock)
 	own1, _ := reg.ResolveOrAssign("user-resume-resolve")
-	mock.getVMs[own1.VMID] = &VMInstanceInfo{HostURL: own1.SandboxURL, Epoch: own1.Epoch, Healthy: true, State: "running"}
+	mock.getVMs[own1.VMID] = &VMInstanceInfo{HostURL: own1.ComputerURL, Epoch: own1.Epoch, Healthy: true, State: "running"}
 	_ = reg.HibernateVM("user-resume-resolve")
 
 	own2, err := reg.ResolveOrAssign("user-resume-resolve")
@@ -3785,7 +3785,7 @@ func TestOwnershipRegistry_StartOnResolveUsesFreshRealization(t *testing.T) {
 	if own1.VMID != own2.VMID {
 		t.Errorf("expected stable VM slot, got %s and %s", own1.VMID, own2.VMID)
 	}
-	if own2.SandboxURL != "http://127.0.0.1:9050" || own2.Epoch != 3 {
+	if own2.ComputerURL != "http://127.0.0.1:9050" || own2.Epoch != 3 {
 		t.Errorf("fresh realization = %+v", own2)
 	}
 	if len(mock.recovers) != 1 {
@@ -3848,8 +3848,8 @@ func TestOwnershipRegistry_PersistsOwnershipAndRebootsSameVMIDAfterRestart(t *te
 	if resolved.VMID != own.VMID {
 		t.Fatalf("resolved VMID = %s, want persisted %s", resolved.VMID, own.VMID)
 	}
-	if resolved.SandboxURL != "http://127.0.0.1:9099" {
-		t.Fatalf("resolved SandboxURL = %s, want manager boot URL", resolved.SandboxURL)
+	if resolved.ComputerURL != "http://127.0.0.1:9099" {
+		t.Fatalf("resolved ComputerURL = %s, want manager boot URL", resolved.ComputerURL)
 	}
 	if resolved.State != VMStateActive {
 		t.Fatalf("resolved state = %s, want active", resolved.State)
@@ -3944,7 +3944,7 @@ func TestOwnershipRegistry_ReattachReconcilesGatewayCredential(t *testing.T) {
 		}
 		ensured <- req.RawToken
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"sandbox_id":"vm-reattach-old-token","status":"imported"}`))
+		_, _ = w.Write([]byte(`{"computer_id":"vm-reattach-old-token","status":"imported"}`))
 	}))
 	t.Cleanup(gateway.Close)
 
@@ -3956,7 +3956,7 @@ func TestOwnershipRegistry_ReattachReconcilesGatewayCredential(t *testing.T) {
 		UserID:       "user-old-account",
 		DesktopID:    PrimaryDesktopID,
 		Kind:         VMKindInteractive,
-		SandboxURL:   "http://127.0.0.1:9001",
+		ComputerURL:  "http://127.0.0.1:9001",
 		State:        VMStateStopped,
 		CreatedAt:    now,
 		LastActiveAt: now,
@@ -4005,9 +4005,9 @@ func TestIssueGatewayToken_Success(t *testing.T) {
 		w.WriteHeader(http.StatusCreated)
 		// Mirror the real gateway CredentialResult JSON shape.
 		resp := map[string]string{
-			"SandboxID": "vm-test-123",
-			"RawToken":  credValue,
-			"ExpiresAt": "2025-01-01T00:00:00Z",
+			"ComputerID": "vm-test-123",
+			"RawToken":   credValue,
+			"ExpiresAt":  "2025-01-01T00:00:00Z",
 		}
 		jsonData, _ := json.Marshal(resp)
 		w.Write(jsonData)
@@ -4031,9 +4031,9 @@ func TestIssueGatewayToken_LegacyJSONShapeStillWorks(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		resp := map[string]string{
-			"sandbox_id": "vm-test-legacy",
-			"raw_token":  credValue,
-			"expires_at": "2025-01-01T00:00:00Z",
+			"computer_id": "vm-test-legacy",
+			"raw_token":   credValue,
+			"expires_at":  "2025-01-01T00:00:00Z",
 		}
 		jsonData, _ := json.Marshal(resp)
 		w.Write(jsonData)

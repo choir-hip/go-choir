@@ -322,7 +322,7 @@ test('user A -> logout -> user B produces only user-B shell state', async ({
   try { await waitForLiveConnected(page, 5_000); } catch (_e) {}
 
   // Verify no stale user-A identity in bootstrap data.
-  // The sandbox returns a `user` field with the user's UUID (not username),
+  // The autoputer returns a `user` field with the user's UUID (not username),
   // so we check by comparing user IDs from the session.
   const userBId = sessionB.user.id;
 

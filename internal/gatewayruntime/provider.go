@@ -1,4 +1,4 @@
-// Package gatewayruntime adapts a sandbox runtime to the host gateway without
+// Package gatewayruntime adapts a autoputer runtime to the host gateway without
 // importing host-side provider adapters. VM guests should only know the gateway
 // wire contract; provider credentials and upstream adapter code stay host-side.
 package gatewayruntime
@@ -55,7 +55,7 @@ func (p *Provider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
 	return provideriface.ProviderPolicy{
 		ActiveProvider:              "gateway",
 		DefaultModel:                p.llmModel,
-		ModelSelection:              "The sandbox routes through the host gateway with explicit runtime provider/model configuration.",
+		ModelSelection:              "The autoputer routes through the host gateway with explicit runtime provider/model configuration.",
 		SupportsPerRunModelOverride: true,
 		Notes: []string{
 			"Gateway-routed mode keeps provider credentials on the host side.",
@@ -76,7 +76,7 @@ func (p *Provider) Execute(ctx context.Context, task *types.RunRecord, emit prov
 	req := llmRequest{
 		Provider:        providerName,
 		Model:           model,
-		System:          "You are a helpful assistant running inside the ChoirOS sandbox runtime. Respond concisely and helpfully.",
+		System:          "You are a helpful assistant running inside the ChoirOS autoputer runtime. Respond concisely and helpfully.",
 		ReasoningEffort: reasoning,
 		Messages: []message{
 			{Role: "user", Content: []block{{Type: "text", Text: task.Prompt}}},
@@ -199,7 +199,7 @@ func (p *Provider) do(ctx context.Context, req llmRequest, accept string) (*http
 		return nil, fmt.Errorf("gateway client: missing gateway URL")
 	}
 	if p.token == "" {
-		return nil, fmt.Errorf("gateway client: missing sandbox credential")
+		return nil, fmt.Errorf("gateway client: missing autoputer credential")
 	}
 	data, err := json.Marshal(req)
 	if err != nil {

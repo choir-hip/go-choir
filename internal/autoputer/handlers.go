@@ -1,4 +1,4 @@
-package sandbox
+package autoputer
 
 import (
 	"encoding/json"
@@ -10,10 +10,10 @@ import (
 )
 
 // BootstrapResponse is the JSON payload returned by GET /api/shell/bootstrap.
-// It includes the sandbox identity, the authenticated user context forwarded by
+// It includes the autoputer identity, the authenticated user context forwarded by
 // the proxy, and a bootstrap payload for the shell.
 type BootstrapResponse struct {
-	SandboxID  string `json:"sandbox_id"`
+	ComputerID string `json:"computer_id"`
 	User       string `json:"user,omitempty"`
 	Bootstrap  string `json:"bootstrap"`
 	Path       string `json:"path"`
@@ -24,25 +24,25 @@ type BootstrapResponse struct {
 
 // ErrorResponse is the JSON payload returned by deliberate non-2xx paths.
 type ErrorResponse struct {
-	SandboxID  string `json:"sandbox_id"`
+	ComputerID string `json:"computer_id"`
 	StatusCode int    `json:"status_code"`
 	Error      string `json:"error"`
 }
 
-// Handler provides the placeholder sandbox HTTP handlers.
+// Handler provides the placeholder autoputer HTTP handlers.
 type Handler struct {
 	cfg Config
 }
 
-// NewHandler creates a sandbox handler with the given sandbox ID.
-func NewHandler(sandboxID string) *Handler {
+// NewHandler creates a autoputer handler with the given autoputer ID.
+func NewHandler(computerID string) *Handler {
 	return &Handler{
-		cfg: Config{SandboxID: sandboxID},
+		cfg: Config{ComputerID: computerID},
 	}
 }
 
 // HandleBootstrap handles GET /api/shell/bootstrap.
-// It returns the shell bootstrap payload including sandbox identity,
+// It returns the shell bootstrap payload including autoputer identity,
 // authenticated user context, and request echo data.
 func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -53,7 +53,7 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 	user := r.Header.Get("X-Authenticated-User")
 
 	resp := BootstrapResponse{
-		SandboxID:  h.cfg.SandboxID,
+		ComputerID: h.cfg.ComputerID,
 		User:       user,
 		Bootstrap:  "placeholder-shell-v1",
 		Path:       r.URL.Path,
@@ -70,9 +70,9 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 // HandleError returns a deliberate 500 response for proxy passthrough testing.
 func (h *Handler) HandleError(w http.ResponseWriter, r *http.Request) {
 	resp := ErrorResponse{
-		SandboxID:  h.cfg.SandboxID,
+		ComputerID: h.cfg.ComputerID,
 		StatusCode: 500,
-		Error:      "deliberate sandbox error for passthrough testing",
+		Error:      "deliberate autoputer error for passthrough testing",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -80,15 +80,15 @@ func (h *Handler) HandleError(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// RegisterRoutes registers all sandbox routes on the given server.
+// RegisterRoutes registers all autoputer routes on the given server.
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/api/shell/bootstrap", h.HandleBootstrap)
-	if sandboxTestRoutesEnabled() {
+	if autoputerTestRoutesEnabled() {
 		s.HandleFunc("/api/shell/error", h.HandleError)
 	}
 }
 
-func sandboxTestRoutesEnabled() bool {
+func autoputerTestRoutesEnabled() bool {
 	switch strings.TrimSpace(strings.ToLower(os.Getenv("RUNTIME_ENABLE_TEST_APIS"))) {
 	case "1", "true", "yes", "on":
 		return true

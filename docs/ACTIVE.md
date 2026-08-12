@@ -16,6 +16,13 @@ retired approaches live in the Definition's
 `choir-self-development-roadmap-2026-08-11.md` is a **historical migration
 receipt**, not a live schedule. CTS remains citable evidence, not an entrypoint.
 
+The active Definition has one owner-ratified pre-effects subordinate contract:
+[`definitions/choir-sandbox-autoputer-rename-2026-08-11.md`](definitions/choir-sandbox-autoputer-rename-2026-08-11.md).
+It owns the single clean naming cutover before effects work resumes: service
+surfaces become `autoputer`, persistent computer identity surfaces become
+`computer`, and no compatibility path is permitted. It is not a second
+entrypoint; its current state and blocker live only in that Definition.
+
 The current host-deployed runtime is `914f7a5d976a` (frontend and proxy both
 `914f7a5d976a`, proxy status ok, deploy time 2026-08-11T18:11:01Z, verified live
 through Settings > Runtime status). The prior reconciled deployment was

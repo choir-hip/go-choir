@@ -30,7 +30,7 @@ type gatewayHealthResponse struct {
 }
 
 // ProviderRequest is the JSON payload for POST /provider/v1/inference.
-// Sandbox callers send this to request an LLM inference call through
+// Autoputer callers send this to request an LLM inference call through
 // the gateway, which injects host-side credentials before forwarding
 // to the upstream provider (VAL-GATEWAY-004).
 type ProviderRequest struct {
@@ -75,7 +75,7 @@ type ProviderResponse struct {
 	Text string `json:"text"`
 
 	// ReasoningContent is hidden provider context for compatible reasoning
-	// models. It is returned to sandbox runtimes for multi-turn provider
+	// models. It is returned to autoputer runtimes for multi-turn provider
 	// continuity, not rendered as user-facing answer text.
 	ReasoningContent string `json:"reasoning_content,omitempty"`
 
@@ -105,11 +105,11 @@ type ErrorResponse struct {
 // Handler provides HTTP handlers for the gateway service.
 type Handler struct {
 	registry     *IdentityRegistry
-	provider     provider.Provider       // single provider mode (backward compat)
-	providers    *provider.MultiProvider // multi-provider mode (may be nil)
-	rateLimiter  *PerSandboxRateLimiter  // per-sandbox rate limiter (may be nil)
-	searchClient *SearchClient           // web search client with rotation (may be nil)
-	breakers     *BreakerRegistry        // per-provider circuit breakers (may be nil)
+	provider     provider.Provider        // single provider mode (backward compat)
+	providers    *provider.MultiProvider  // multi-provider mode (may be nil)
+	rateLimiter  *PerAutoputerRateLimiter // per-autoputer rate limiter (may be nil)
+	searchClient *SearchClient            // web search client with rotation (may be nil)
+	breakers     *BreakerRegistry         // per-provider circuit breakers (may be nil)
 	// serviceCheckers maps a dependency service name to its health probe.
 	// Used by GET /health/{service} so operators can observe backend
 	// dependency health (sourcecycled, runtime, qdrant, dolt, ollama) from
@@ -134,11 +134,11 @@ func NewHandler(registry *IdentityRegistry, p provider.Provider) *Handler {
 	}
 }
 
-// NewHandlerWithRateLimit creates a gateway Handler with per-sandbox rate
-// limiting and a single provider. Each sandbox identity gets an independent
-// request quota so one noisy sandbox cannot starve another
+// NewHandlerWithRateLimit creates a gateway Handler with per-autoputer rate
+// limiting and a single provider. Each autoputer identity gets an independent
+// request quota so one noisy autoputer cannot starve another
 // (VAL-GATEWAY-005, VAL-CROSS-115).
-func NewHandlerWithRateLimit(registry *IdentityRegistry, p provider.Provider, rl *PerSandboxRateLimiter) *Handler {
+func NewHandlerWithRateLimit(registry *IdentityRegistry, p provider.Provider, rl *PerAutoputerRateLimiter) *Handler {
 	return &Handler{
 		registry:     registry,
 		provider:     p,
@@ -162,8 +162,8 @@ func NewMultiHandler(registry *IdentityRegistry, mp *provider.MultiProvider) *Ha
 }
 
 // NewMultiHandlerWithRateLimit creates a gateway Handler with multi-provider
-// routing and per-sandbox rate limiting.
-func NewMultiHandlerWithRateLimit(registry *IdentityRegistry, mp *provider.MultiProvider, rl *PerSandboxRateLimiter) *Handler {
+// routing and per-autoputer rate limiting.
+func NewMultiHandlerWithRateLimit(registry *IdentityRegistry, mp *provider.MultiProvider, rl *PerAutoputerRateLimiter) *Handler {
 	return &Handler{
 		registry:     registry,
 		provider:     nil,
@@ -324,7 +324,7 @@ func (h *Handler) HandleServiceHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleInference handles POST /provider/v1/inference.
-// It authenticates the sandbox caller via Bearer token, resolves the
+// It authenticates the autoputer caller via Bearer token, resolves the
 // appropriate provider (multi-provider routing or single-provider
 // fallback), injects host-side provider credentials, calls the upstream
 // provider, and returns the response with sanitized errors
@@ -335,27 +335,27 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 1: Authenticate the sandbox caller.
-	sandboxID, err := h.authenticateSandbox(r)
+	// Step 1: Authenticate the autoputer caller.
+	computerID, err := h.authenticateAutoputer(r)
 	if err != nil {
 		log.Printf("gateway: authentication denied: %v", err)
 		writeGatewayJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
 		return
 	}
 
-	// Step 2: Enforce per-sandbox rate limiting (VAL-GATEWAY-005).
+	// Step 2: Enforce per-autoputer rate limiting (VAL-GATEWAY-005).
 	if h.rateLimiter != nil {
-		if !h.rateLimiter.Record(sandboxID) {
-			_, _, resetIn := h.rateLimiter.Status(sandboxID)
+		if !h.rateLimiter.Record(computerID) {
+			_, _, resetIn := h.rateLimiter.Status(computerID)
 			retrySeconds := int(resetIn.Seconds())
 			if retrySeconds < 1 {
 				retrySeconds = 1
 			}
-			log.Printf("gateway: rate limit exceeded for sandbox %s", sandboxID)
+			log.Printf("gateway: rate limit exceeded for autoputer %s", computerID)
 			w.Header().Set("Retry-After", fmt.Sprintf("%d", retrySeconds))
 			writeGatewayJSON(w, http.StatusTooManyRequests, ErrorResponse{
-				Error: fmt.Sprintf("rate limit exceeded for sandbox %s (limit %d requests per %s)",
-					sandboxID, h.rateLimiter.maxReqs, h.rateLimiter.window),
+				Error: fmt.Sprintf("rate limit exceeded for autoputer %s (limit %d requests per %s)",
+					computerID, h.rateLimiter.maxReqs, h.rateLimiter.window),
 			})
 			return
 		}
@@ -371,12 +371,12 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 	// Step 4: Resolve the provider (multi-provider or single-provider).
 	p, err := h.resolveProvider(req)
 	if err != nil {
-		log.Printf("gateway: provider resolution failed for sandbox %s: %v", sandboxID, err)
+		log.Printf("gateway: provider resolution failed for autoputer %s: %v", computerID, err)
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 	if p == nil {
-		log.Printf("gateway: no provider configured for request from sandbox %s", sandboxID)
+		log.Printf("gateway: no provider configured for request from autoputer %s", computerID)
 		writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{
 			Error: "no provider configured",
 		})
@@ -396,15 +396,15 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		ReasoningEffort: req.ReasoningEffort,
 	}
 
-	log.Printf("gateway: inference request from sandbox %s (provider=%s model=%s messages=%d tools=%d tool_choice=%s system_chars=%d max_tokens=%d reasoning=%s stream=%v)",
-		sandboxID, p.Name(), req.Model, len(req.Messages), len(req.Tools), req.ToolChoice, len(req.System), req.MaxTokens, req.ReasoningEffort, req.Stream)
+	log.Printf("gateway: inference request from autoputer %s (provider=%s model=%s messages=%d tools=%d tool_choice=%s system_chars=%d max_tokens=%d reasoning=%s stream=%v)",
+		computerID, p.Name(), req.Model, len(req.Messages), len(req.Tools), req.ToolChoice, len(req.System), req.MaxTokens, req.ReasoningEffort, req.Stream)
 
 	ctx, cancel := context.WithTimeout(r.Context(), inferenceTimeout)
 	defer cancel()
 
 	// If the client requests streaming, use SSE streaming.
 	if req.Stream {
-		h.handleStreamingInference(w, r, p, llmReq, sandboxID)
+		h.handleStreamingInference(w, r, p, llmReq, computerID)
 		return
 	}
 
@@ -414,15 +414,15 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		// credentials, or auth headers in the response
 		// (VAL-GATEWAY-007).
 		sanitized := sanitizeError(err)
-		log.Printf("gateway: provider call failed for sandbox %s: %v (sanitized: %s)",
-			sandboxID, err, sanitized)
+		log.Printf("gateway: provider call failed for autoputer %s: %v (sanitized: %s)",
+			computerID, err, sanitized)
 		writeGatewayJSON(w, http.StatusBadGateway, ErrorResponse{Error: sanitized})
 		return
 	}
 
 	// Step 6: Return the successful response.
-	log.Printf("gateway: inference succeeded for sandbox %s (provider=%s tokens=%d+%d text_len=%d)",
-		sandboxID, resp.ProviderName, resp.Usage.InputTokens, resp.Usage.OutputTokens, len(resp.Text))
+	log.Printf("gateway: inference succeeded for autoputer %s (provider=%s tokens=%d+%d text_len=%d)",
+		computerID, resp.ProviderName, resp.Usage.InputTokens, resp.Usage.OutputTokens, len(resp.Text))
 
 	writeGatewayJSON(w, http.StatusOK, ProviderResponse{
 		ID:               resp.ID,
@@ -439,7 +439,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 // handleStreamingInference handles streaming inference requests by setting up
 // an SSE response and forwarding chunks from the provider to the client in
 // real-time (VAL-LLM-003, VAL-LLM-004).
-func (h *Handler) handleStreamingInference(w http.ResponseWriter, r *http.Request, p provider.Provider, llmReq provider.LLMRequest, sandboxID string) {
+func (h *Handler) handleStreamingInference(w http.ResponseWriter, r *http.Request, p provider.Provider, llmReq provider.LLMRequest, computerID string) {
 	// Set up SSE response headers.
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -470,8 +470,8 @@ func (h *Handler) handleStreamingInference(w http.ResponseWriter, r *http.Reques
 		// If we haven't written any SSE data yet, we can return an HTTP error.
 		// Otherwise, send an error event.
 		sanitized := sanitizeError(err)
-		log.Printf("gateway: streaming provider call failed for sandbox %s: %v (sanitized: %s)",
-			sandboxID, err, sanitized)
+		log.Printf("gateway: streaming provider call failed for autoputer %s: %v (sanitized: %s)",
+			computerID, err, sanitized)
 
 		errData, _ := json.Marshal(map[string]string{"error": sanitized})
 		fmt.Fprintf(w, "data: %s\n\n", errData)
@@ -487,8 +487,8 @@ func (h *Handler) handleStreamingInference(w http.ResponseWriter, r *http.Reques
 		flusher.Flush()
 	}
 
-	log.Printf("gateway: streaming inference succeeded for sandbox %s (provider=%s tokens=%d+%d text_len=%d)",
-		sandboxID, resp.ProviderName, resp.Usage.InputTokens, resp.Usage.OutputTokens, len(resp.Text))
+	log.Printf("gateway: streaming inference succeeded for autoputer %s (provider=%s tokens=%d+%d text_len=%d)",
+		computerID, resp.ProviderName, resp.Usage.InputTokens, resp.Usage.OutputTokens, len(resp.Text))
 }
 
 // resolveProvider selects the appropriate provider for the given request.
@@ -569,7 +569,7 @@ func (h *Handler) resolveFromMultiProvider(req ProviderRequest) (provider.Provid
 }
 
 // HandleIssueCredential handles POST /provider/v1/credentials/issue.
-// This is an internal operator endpoint for issuing sandbox credentials after
+// This is an internal operator endpoint for issuing autoputer credentials after
 // the authenticated desktop/bootstrap path has resolved a host-side runtime.
 // The browser must never receive these credentials directly, so only explicit
 // loopback-marked host callers may issue them.
@@ -585,30 +585,30 @@ func (h *Handler) HandleIssueCredential(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var req struct {
-		SandboxID string `json:"sandbox_id"`
+		ComputerID string `json:"computer_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
 		return
 	}
-	if req.SandboxID == "" {
-		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "sandbox_id is required"})
+	if req.ComputerID == "" {
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "computer_id is required"})
 		return
 	}
 
-	result, err := h.registry.IssueCredential(req.SandboxID)
+	result, err := h.registry.IssueCredential(req.ComputerID)
 	if err != nil {
 		writeGatewayJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to issue credential"})
 		return
 	}
 
-	log.Printf("gateway: issued credential for sandbox %s (expires=%s)", req.SandboxID, result.ExpiresAt)
+	log.Printf("gateway: issued credential for autoputer %s (expires=%s)", req.ComputerID, result.ExpiresAt)
 
 	writeGatewayJSON(w, http.StatusCreated, result)
 }
 
 // HandleRevokeCredential handles POST /provider/v1/credentials/revoke.
-// This is an internal operator endpoint for revoking sandbox credentials
+// This is an internal operator endpoint for revoking autoputer credentials
 // after lifecycle changes (VAL-GATEWAY-008).
 func (h *Handler) HandleRevokeCredential(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -622,25 +622,25 @@ func (h *Handler) HandleRevokeCredential(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req struct {
-		SandboxID string `json:"sandbox_id"`
+		ComputerID string `json:"computer_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
 		return
 	}
-	if req.SandboxID == "" {
-		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "sandbox_id is required"})
+	if req.ComputerID == "" {
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "computer_id is required"})
 		return
 	}
 
-	h.registry.RevokeCredential(req.SandboxID)
-	log.Printf("gateway: revoked credential for sandbox %s", req.SandboxID)
+	h.registry.RevokeCredential(req.ComputerID)
+	log.Printf("gateway: revoked credential for autoputer %s", req.ComputerID)
 
 	writeGatewayJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
 // HandleRotateCredential handles POST /provider/v1/credentials/rotate.
-// This is an internal operator endpoint for rotating sandbox credentials.
+// This is an internal operator endpoint for rotating autoputer credentials.
 func (h *Handler) HandleRotateCredential(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
@@ -653,24 +653,24 @@ func (h *Handler) HandleRotateCredential(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req struct {
-		SandboxID string `json:"sandbox_id"`
+		ComputerID string `json:"computer_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
 		return
 	}
-	if req.SandboxID == "" {
-		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "sandbox_id is required"})
+	if req.ComputerID == "" {
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "computer_id is required"})
 		return
 	}
 
-	result, err := h.registry.RotateCredential(req.SandboxID)
+	result, err := h.registry.RotateCredential(req.ComputerID)
 	if err != nil {
 		writeGatewayJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to rotate credential"})
 		return
 	}
 
-	log.Printf("gateway: rotated credential for sandbox %s (expires=%s)", req.SandboxID, result.ExpiresAt)
+	log.Printf("gateway: rotated credential for autoputer %s (expires=%s)", req.ComputerID, result.ExpiresAt)
 
 	writeGatewayJSON(w, http.StatusOK, result)
 }
@@ -708,15 +708,15 @@ func (h *Handler) HandleEnsureCredential(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if result.Status == "imported" {
-		log.Printf("gateway: imported existing credential for sandbox %s (expires=%s)", result.SandboxID, result.ExpiresAt)
+		log.Printf("gateway: imported existing credential for autoputer %s (expires=%s)", result.ComputerID, result.ExpiresAt)
 	}
 	writeGatewayJSON(w, http.StatusOK, result)
 }
 
-// authenticateSandbox validates the Bearer token from the Authorization
-// header against the identity registry. Returns the sandbox ID if valid
+// authenticateAutoputer validates the Bearer token from the Authorization
+// header against the identity registry. Returns the autoputer ID if valid
 // (VAL-GATEWAY-003).
-func (h *Handler) authenticateSandbox(r *http.Request) (string, error) {
+func (h *Handler) authenticateAutoputer(r *http.Request) (string, error) {
 	auth := r.Header.Get("Authorization")
 	if auth == "" {
 		return "", fmt.Errorf("missing authorization header")
@@ -731,14 +731,14 @@ func (h *Handler) authenticateSandbox(r *http.Request) (string, error) {
 		return "", fmt.Errorf("empty bearer token")
 	}
 
-	sandboxID, err := h.registry.ValidateCredential(token)
+	computerID, err := h.registry.ValidateCredential(token)
 	if err != nil {
 		return "", err
 	}
 	if !isAuthorizedRuntimePeer(r) {
 		return "", fmt.Errorf("gateway access is limited to choir runtime peers")
 	}
-	return sandboxID, nil
+	return computerID, nil
 }
 
 // sanitizeError converts a provider error into a safe, bounded error
@@ -852,7 +852,7 @@ func drainBody(resp *http.Response) {
 }
 
 // HandleSearch handles POST /provider/v1/search for web search requests.
-// It authenticates the sandbox caller, validates the request, and routes
+// It authenticates the autoputer caller, validates the request, and routes
 // to available search providers with round-robin rotation and fallback.
 func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -860,29 +860,29 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 1: Authenticate the sandbox caller.
-	sandboxID, err := h.authenticateSandbox(r)
+	// Step 1: Authenticate the autoputer caller.
+	computerID, err := h.authenticateAutoputer(r)
 	if err != nil {
 		log.Printf("gateway: search authentication denied: %v", err)
 		writeGatewayJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
 		return
 	}
 
-	// Step 2: Enforce per-sandbox search rate limiting. Search uses a separate
+	// Step 2: Enforce per-autoputer search rate limiting. Search uses a separate
 	// bucket from inference so exploratory search bursts cannot starve the
 	// model calls needed to summarize findings or revise documents.
 	if h.rateLimiter != nil {
-		bucketKey := rateLimitBucketKey(sandboxID, "search")
+		bucketKey := rateLimitBucketKey(computerID, "search")
 		if !h.rateLimiter.Record(bucketKey) {
 			_, _, resetIn := h.rateLimiter.Status(bucketKey)
 			retrySeconds := int(resetIn.Seconds())
 			if retrySeconds < 1 {
 				retrySeconds = 1
 			}
-			log.Printf("gateway: search rate limit exceeded for sandbox %s", sandboxID)
+			log.Printf("gateway: search rate limit exceeded for autoputer %s", computerID)
 			w.Header().Set("Retry-After", fmt.Sprintf("%d", retrySeconds))
 			writeGatewayJSON(w, http.StatusTooManyRequests, ErrorResponse{
-				Error: fmt.Sprintf("rate limit exceeded for sandbox %s", sandboxID),
+				Error: fmt.Sprintf("rate limit exceeded for autoputer %s", computerID),
 			})
 			return
 		}
@@ -908,8 +908,8 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("gateway: search request from sandbox %s (query=%q max_results=%d)",
-		sandboxID, req.Query, req.MaxResults)
+	log.Printf("gateway: search request from autoputer %s (query=%q max_results=%d)",
+		computerID, req.Query, req.MaxResults)
 
 	// Step 5: Execute the search with timeout.
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
@@ -918,18 +918,18 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.searchClient.Search(ctx, req)
 	if err != nil {
 		if outage, ok := searchOutageResponse(err); ok {
-			log.Printf("gateway: search outage for sandbox %s (query=%q)", sandboxID, req.Query)
+			log.Printf("gateway: search outage for autoputer %s (query=%q)", computerID, req.Query)
 			writeGatewayJSON(w, http.StatusServiceUnavailable, outage)
 			return
 		}
 		sanitized := sanitizeError(err)
-		log.Printf("gateway: search failed for sandbox %s: %v", sandboxID, sanitized)
+		log.Printf("gateway: search failed for autoputer %s: %v", computerID, sanitized)
 		writeGatewayJSON(w, http.StatusBadGateway, ErrorResponse{Error: sanitized})
 		return
 	}
 
-	log.Printf("gateway: search succeeded for sandbox %s (provider=%s providers=%s results=%d)",
-		sandboxID, resp.Provider, strings.Join(resp.Providers, ","), len(resp.Results))
+	log.Printf("gateway: search succeeded for autoputer %s (provider=%s providers=%s results=%d)",
+		computerID, resp.Provider, strings.Join(resp.Providers, ","), len(resp.Results))
 
 	writeGatewayJSON(w, http.StatusOK, resp)
 }
@@ -1001,13 +1001,13 @@ func (h *Handler) HandleSearchHealthReset(w http.ResponseWriter, r *http.Request
 	writeGatewayJSON(w, http.StatusOK, map[string]string{"status": "reset", "provider": req.Provider})
 }
 
-func rateLimitBucketKey(sandboxID, scope string) string {
-	sandboxID = strings.TrimSpace(sandboxID)
+func rateLimitBucketKey(computerID, scope string) string {
+	computerID = strings.TrimSpace(computerID)
 	scope = strings.TrimSpace(scope)
 	if scope == "" {
-		return sandboxID
+		return computerID
 	}
-	return sandboxID + ":" + scope
+	return computerID + ":" + scope
 }
 
 // HandleProviderBreakers handles GET /provider/v1/breakers. It reports the

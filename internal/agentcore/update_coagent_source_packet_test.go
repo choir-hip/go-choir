@@ -125,7 +125,7 @@ func TestSpawnedLifecycleResearcherQueuesOpenAndCompletedUpdates(t *testing.T) {
 	parent := types.RunRecord{
 		RunID: "run-spawned-lifecycle-parent", AgentID: "texture:" + docID, ChannelID: docID,
 		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
-		OwnerID: ownerID, SandboxID: "sandbox-test", State: types.RunRunning,
+		OwnerID: ownerID, ComputerID: "autoputer-test", State: types.RunRunning,
 		TrajectoryID: trajectoryID, CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataChannelID: docID},
 	}
@@ -158,7 +158,7 @@ func TestSpawnedLifecycleResearcherQueuesOpenAndCompletedUpdates(t *testing.T) {
 	}
 	execute("33333333-3333-4333-8333-333333333333", "open")
 	execute("44444444-4444-4444-8444-444444444444", "completed")
-	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
+	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "autoputer-test", trajectoryID)
 	if err != nil {
 		t.Fatalf("snapshot spawned lifecycle updates: %v", err)
 	}
@@ -186,14 +186,14 @@ func TestSpawnedLifecycleResearcherQueuesOpenAndCompletedUpdates(t *testing.T) {
 	finishedAt := time.Now().UTC()
 	terminal.UpdatedAt, terminal.FinishedAt = finishedAt, &finishedAt
 	project := types.ReplaceLifecycleActivationRequest{
-		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "project-terminal-spawned-researcher",
+		OwnerID: ownerID, ComputerID: "autoputer-test", CommandID: "project-terminal-spawned-researcher",
 		TrajectoryID: trajectoryID, AgentID: child.AgentID, Run: terminal,
 	}
 	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
 	if _, err := s.ProjectTerminalLifecycleRun(ctx, project); err != nil {
 		t.Fatalf("project terminal lifecycle researcher: %v", err)
 	}
-	persisted, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", child.RunID)
+	persisted, err := s.GetLifecycleRun(ctx, ownerID, "autoputer-test", child.RunID)
 	if err != nil {
 		t.Fatalf("reload terminal lifecycle researcher: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t 
 	ctx := context.Background()
 	const ownerID, docID = "user-researcher-admission", "doc-researcher-admission"
 	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
-	initialSnapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
+	initialSnapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "autoputer-test", trajectoryID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +282,7 @@ func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t 
 	parent := types.RunRecord{
 		RunID: "run-researcher-admission-texture", AgentID: textureAgentID, ChannelID: docID,
 		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
-		OwnerID: ownerID, SandboxID: "sandbox-test", State: types.RunRunning,
+		OwnerID: ownerID, ComputerID: "autoputer-test", State: types.RunRunning,
 		TrajectoryID: trajectoryID, CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataChannelID: docID, "lifecycle_work_item_id": textureWorkID, "work_item_ids": []string{textureWorkID}},
 	}
@@ -301,11 +301,11 @@ func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t 
 	if counting.Count() != 0 {
 		t.Fatalf("open work alone made %d provider calls", counting.Count())
 	}
-	idle, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", child.RunID)
+	idle, err := s.GetLifecycleRun(ctx, ownerID, "autoputer-test", child.RunID)
 	if err != nil || idle.State != types.RunPassivated || metadataStringValue(idle.Metadata, "passivated_reason") != "lifecycle_researcher_provider_admission_refused" {
 		t.Fatalf("open-work Researcher is not durably idle: %+v err=%v", idle, err)
 	}
-	work, err := s.GetLifecycleWorkItem(ctx, ownerID, "sandbox-test", workID)
+	work, err := s.GetLifecycleWorkItem(ctx, ownerID, "autoputer-test", workID)
 	if err != nil || work.Status != types.WorkItemOpen {
 		t.Fatalf("open work was changed by admission refusal: %+v err=%v", work, err)
 	}
@@ -320,11 +320,11 @@ func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t 
 		t.Fatalf("repeated no-control reconciliation made %d provider calls", counting.Count())
 	}
 
-	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
+	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "autoputer-test", trajectoryID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	textureAgent, err := s.GetAgentByScope(ctx, ownerID, "sandbox-test", textureAgentID)
+	textureAgent, err := s.GetAgentByScope(ctx, ownerID, "autoputer-test", textureAgentID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +332,7 @@ func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t 
 	content := "inspect one exact follow-up"
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 	turn := types.ApplyTextureTurnRequest{
-		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "turn-researcher-admission-control", DocumentID: docID, TrajectoryID: trajectoryID,
+		OwnerID: ownerID, ComputerID: "autoputer-test", CommandID: "turn-researcher-admission-control", DocumentID: docID, TrajectoryID: trajectoryID,
 		CallerAgentID: textureAgentID, CallerRunID: parent.RunID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
 		ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion, ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID,
 		CallerWorkItemID: textureWorkID, CallerWorkDisposition: types.WorkItemOpen,
@@ -350,7 +350,7 @@ func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t 
 	if counting.Count() != 1 {
 		t.Fatalf("one exact control made %d provider calls, want 1", counting.Count())
 	}
-	completed, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", activated.RunID)
+	completed, err := s.GetLifecycleRun(ctx, ownerID, "autoputer-test", activated.RunID)
 	if err != nil || completed.State != types.RunCompleted {
 		t.Fatalf("controlled Researcher did not finish one bounded activation: %+v err=%v", completed, err)
 	}
@@ -358,7 +358,7 @@ func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t 
 	reportContent := "bounded report remains open"
 	reportDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(reportPacket, reportContent)
 	report := types.QueueLifecycleUpdateRequest{
-		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "queue-researcher-admission-open-report",
+		OwnerID: ownerID, ComputerID: "autoputer-test", CommandID: "queue-researcher-admission-open-report",
 		TrajectoryID: trajectoryID, UpdateID: "update-researcher-admission-open-report", TargetAgentID: textureAgentID,
 		ProducerAgentID: child.AgentID, ProducerUpdateID: "producer-researcher-admission-open-report", SourceRunID: completed.RunID,
 		ChannelID: docID, Role: agentprofile.Researcher, WorkItemID: workID, WorkDisposition: types.WorkItemOpen,
@@ -385,7 +385,7 @@ func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t 
 	if counting.Count() != 1 {
 		t.Fatalf("reconcile/restart amplified one control to %d provider calls", counting.Count())
 	}
-	runs, err := s.ListLifecycleRunsByTrajectory(ctx, ownerID, "sandbox-test", trajectoryID, 0)
+	runs, err := s.ListLifecycleRunsByTrajectory(ctx, ownerID, "autoputer-test", trajectoryID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,7 +406,7 @@ func TestLifecycleResearcherAdmissionErrorRecoversWithDistinctOccurrenceOnce(t *
 	rt.provider = counting
 	fixture := bindResearcherControlFixture(t, rt, s, "owner-admission-retry", "admission-retry")
 	rt.passivateLifecycleResearcherAfterAdmissionError(context.Background(), &fixture.run, errors.New("injected admission store failure after bind"))
-	parked, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.SandboxID, fixture.run.RunID)
+	parked, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, fixture.run.RunID)
 	if err != nil || parked.State != types.RunPassivated || metadataStringValue(parked.Metadata, "passivated_reason") != lifecycleResearcherAdmissionRetryReason {
 		t.Fatalf("admission failure was not durably retryable: %+v err=%v", parked, err)
 	}
@@ -420,7 +420,7 @@ func TestLifecycleResearcherAdmissionErrorRecoversWithDistinctOccurrenceOnce(t *
 	})
 	rt.Start(context.Background())
 	if len(recoveryContents) == 1 {
-		rec, terminal, resolveErr := rt.ResolveLifecycleResearcherAdmissionRecovery(context.Background(), parked.OwnerID, parked.SandboxID, parked.AgentID, recoveryContents[0], parked.TrajectoryID, fixture.control.AgentID)
+		rec, terminal, resolveErr := rt.ResolveLifecycleResearcherAdmissionRecovery(context.Background(), parked.OwnerID, parked.ComputerID, parked.AgentID, recoveryContents[0], parked.TrajectoryID, fixture.control.AgentID)
 		if resolveErr != nil || terminal || rec == nil {
 			t.Fatalf("resolve appended recovery rec=%+v terminal=%v err=%v", rec, terminal, resolveErr)
 		}
@@ -434,7 +434,7 @@ func TestLifecycleResearcherAdmissionErrorRecoversWithDistinctOccurrenceOnce(t *
 	if counting.Count() != 1 {
 		t.Fatalf("admission restart provider calls=%d want 1", counting.Count())
 	}
-	completed, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.SandboxID, fixture.run.RunID)
+	completed, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, fixture.run.RunID)
 	if err != nil || completed.State != types.RunCompleted {
 		t.Fatalf("admission recovery run=%+v err=%v", completed, err)
 	}
@@ -520,7 +520,7 @@ func TestLifecycleResearcherProviderAdmissionFailsClosedForStaleAndCancelledRuns
 		counting := newResearcherAdmissionCountingProvider()
 		rt.provider = counting
 		fixture := bindResearcherControlFixture(t, rt, s, "owner-admission-cancelled", "admission-cancelled")
-		snapshot, err := s.GetLifecycleSnapshot(context.Background(), fixture.run.OwnerID, fixture.run.SandboxID, fixture.trajectoryID)
+		snapshot, err := s.GetLifecycleSnapshot(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, fixture.trajectoryID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -558,10 +558,10 @@ func TestLifecycleResearcherProviderAdmissionFailsClosedForStaleAndCancelledRuns
 		const ownerID, docID, agentID = "owner-admission-legacy-trajectory", "doc-admission-legacy-trajectory", "researcher:legacy-trajectory"
 		trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
 		now := time.Now().UTC()
-		if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: "sandbox-test", SandboxID: "sandbox-test", Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
+		if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: "autoputer-test", Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
 			t.Fatal(err)
 		}
-		rec := types.RunRecord{RunID: "run-admission-legacy-trajectory", AgentID: agentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, OwnerID: ownerID, SandboxID: "sandbox-test", ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunPending, CreatedAt: now, UpdatedAt: now}
+		rec := types.RunRecord{RunID: "run-admission-legacy-trajectory", AgentID: agentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, OwnerID: ownerID, ComputerID: "autoputer-test", ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunPending, CreatedAt: now, UpdatedAt: now}
 		if err := s.CreateRun(context.Background(), rec); err != nil {
 			t.Fatal(err)
 		}
@@ -580,7 +580,7 @@ func TestGenericAssignedWorkRecoveryDefersTextureToDocumentOwner(t *testing.T) {
 	ownerID := "user-texture-recovery-authority"
 	docID := "doc-texture-recovery-authority"
 	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
-	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
+	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "autoputer-test", trajectoryID)
 	if err != nil {
 		t.Fatalf("load durable Texture lifecycle: %v", err)
 	}
@@ -807,14 +807,14 @@ func TestLifecycleRunInjectorReadsComputerScopedPendingUpdates(t *testing.T) {
 	)
 	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
 	targetAgentID := currentTextureAgentID(docID)
-	producerAgentID, producerWorkID, producerRunID := projectTestLifecycleProducer(t, s, ownerID, "sandbox-test", trajectoryID, docID, "lifecycle-injector")
+	producerAgentID, producerWorkID, producerRunID := projectTestLifecycleProducer(t, s, ownerID, "autoputer-test", trajectoryID, docID, "lifecycle-injector")
 	packet := types.CoagentSourcePacketPayload{
 		SchemaVersion: "coagent_source_packet.v1",
 		Kind:          "evidence_update",
 		Summary:       "computer-scoped lifecycle update",
 	}
 	req := types.QueueLifecycleUpdateRequest{
-		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "queue-lifecycle-injector",
+		OwnerID: ownerID, ComputerID: "autoputer-test", CommandID: "queue-lifecycle-injector",
 		TrajectoryID: trajectoryID, TargetAgentID: targetAgentID, ProducerAgentID: producerAgentID,
 		ProducerUpdateID: "producer-lifecycle-injector", UpdateID: "update-lifecycle-injector",
 		ChannelID: docID, Role: agentprofile.Researcher, SourceRunID: producerRunID,
@@ -830,7 +830,7 @@ func TestLifecycleRunInjectorReadsComputerScopedPendingUpdates(t *testing.T) {
 	rec := &types.RunRecord{
 		RunID: "run-lifecycle-injector", OwnerID: ownerID, AgentID: targetAgentID,
 		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
-		SandboxID: "sandbox-test", ChannelID: docID, TrajectoryID: trajectoryID,
+		ComputerID: "autoputer-test", ChannelID: docID, TrajectoryID: trajectoryID,
 		State: types.RunPending, CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: agentprofile.Texture,
@@ -838,7 +838,7 @@ func TestLifecycleRunInjectorReadsComputerScopedPendingUpdates(t *testing.T) {
 		},
 	}
 	project := types.ReplaceLifecycleActivationRequest{
-		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "activation:" + rec.RunID,
+		OwnerID: ownerID, ComputerID: "autoputer-test", CommandID: "activation:" + rec.RunID,
 		TrajectoryID: trajectoryID, AgentID: targetAgentID, Run: *rec,
 	}
 	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
@@ -910,11 +910,11 @@ func TestUpdateCoagentRejectsTrajectoryMarkerAsLifecycleAuthority(t *testing.T) 
 		"run-legacy-producer-lifecycle-collision", ownerID,
 		"researcher:legacy-producer-lifecycle-collision", agentprofile.Researcher, docID, "",
 	)
-	legacy.SandboxID, legacy.TrajectoryID = "sandbox-test", trajectoryID
+	legacy.ComputerID, legacy.TrajectoryID = "autoputer-test", trajectoryID
 	legacy.Metadata[runMetadataTrajectoryID] = trajectoryID
 	now := time.Now().UTC()
 	legacy.State, legacy.CreatedAt, legacy.UpdatedAt = types.RunRunning, now, now
-	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: legacy.AgentID, OwnerID: ownerID, ComputerID: "sandbox-test", SandboxID: "sandbox-test", Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
+	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: legacy.AgentID, OwnerID: ownerID, ComputerID: "autoputer-test", Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatalf("upsert durable legacy producer: %v", err)
 	}
 	if err := s.CreateRunOG(ctx, *legacy); err != nil {
@@ -928,7 +928,7 @@ func TestUpdateCoagentRejectsTrajectoryMarkerAsLifecycleAuthority(t *testing.T) 
 	if err == nil {
 		t.Fatal("marker-only legacy producer bypassed lifecycle authority")
 	}
-	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
+	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "autoputer-test", trajectoryID)
 	if err != nil || len(snapshot.Updates) != 0 {
 		t.Fatalf("marker-only legacy producer queued lifecycle update: %+v, %v", snapshot.Updates, err)
 	}
@@ -959,7 +959,7 @@ func d9CoagentRun(runID, ownerID, agentID, profile, channelID, requestedTextureA
 		AgentProfile: profile,
 		AgentRole:    profile,
 		ChannelID:    channelID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		Metadata:     metadata,
 	}
 }
@@ -983,13 +983,13 @@ func TestLifecycleRuntimeSubmissionPreservesCanonicalActivationAdmission(t *test
 	const channelID = "researcher-runtime-active-run-channel"
 	const workItemID = "work-runtime-active-run-cas"
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID: agentID, OwnerID: ownerID, ComputerID: rt.TextureSandboxID(), SandboxID: rt.TextureSandboxID(),
+		AgentID: agentID, OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 		Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: channelID,
 	}); err != nil {
 		t.Fatalf("seed researcher agent: %v", err)
 	}
 	open := types.OpenLifecycleWorkRequest{
-		OwnerID: ownerID, ComputerID: rt.TextureSandboxID(),
+		OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 		CommandID: "command-open-runtime-active-run-cas", TrajectoryID: trajectoryID,
 		WorkItem: types.WorkItemRecord{
 			WorkItemID: workItemID, Objective: "admit exactly one runtime activation",
@@ -1048,7 +1048,7 @@ func TestLifecycleRuntimeSubmissionPreservesCanonicalActivationAdmission(t *test
 	if winner == nil {
 		t.Fatalf("runtime submissions admitted no activation: %+v", outcomes)
 	}
-	agent, err := s.GetAgentByScope(ctx, ownerID, rt.TextureSandboxID(), agentID)
+	agent, err := s.GetAgentByScope(ctx, ownerID, rt.TextureComputerID(), agentID)
 	if err != nil || agent.ActiveRunID != winner.RunID {
 		t.Fatalf("canonical active_run_id = %q, %v; want %q", agent.ActiveRunID, err, winner.RunID)
 	}
@@ -1077,7 +1077,7 @@ func TestGenericRestartRewarmDefersTexturePendingLifecycleBindingsToDocumentOwne
 			if tc.multiple {
 				secondWorkItemID = "work-lifecycle-rewarm-second-" + tc.name
 				open := types.OpenLifecycleWorkRequest{
-					OwnerID: ownerID, ComputerID: rt.TextureSandboxID(),
+					OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 					CommandID: "command-open-lifecycle-rewarm-second-" + tc.name, TrajectoryID: trajectoryID,
 					WorkItem: types.WorkItemRecord{
 						WorkItemID: secondWorkItemID, Objective: "retain the still-open restart binding",
@@ -1093,7 +1093,7 @@ func TestGenericRestartRewarmDefersTexturePendingLifecycleBindingsToDocumentOwne
 			now := time.Now().UTC()
 			run := types.RunRecord{
 				RunID:   "run-lifecycle-rewarm-terminal-" + tc.name,
-				AgentID: agentID, OwnerID: ownerID, SandboxID: rt.TextureSandboxID(),
+				AgentID: agentID, OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 				ChannelID: docID, TrajectoryID: trajectoryID,
 				State: types.RunRunning, Prompt: "interrupted lifecycle producer",
 				AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
@@ -1118,7 +1118,7 @@ func TestGenericRestartRewarmDefersTexturePendingLifecycleBindingsToDocumentOwne
 			content := "terminal typed disposition already queued"
 			payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 			queue := types.QueueLifecycleUpdateRequest{
-				OwnerID: ownerID, ComputerID: rt.TextureSandboxID(),
+				OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 				CommandID:    "command-queue-lifecycle-rewarm-terminal-" + tc.name,
 				TrajectoryID: trajectoryID, TargetAgentID: agentID, ProducerAgentID: agentID,
 				ProducerUpdateID: "producer-lifecycle-rewarm-terminal-" + tc.name,
@@ -1137,7 +1137,7 @@ func TestGenericRestartRewarmDefersTexturePendingLifecycleBindingsToDocumentOwne
 			}
 			var dispatched []string
 			rt.SetDispatchActor(func(_ context.Context, gotOwnerID, gotComputerID, toAgentID, kind, content, gotTrajectoryID, _ string) error {
-				if kind == "initial_dispatch" && gotOwnerID == ownerID && gotComputerID == rt.TextureSandboxID() &&
+				if kind == "initial_dispatch" && gotOwnerID == ownerID && gotComputerID == rt.TextureComputerID() &&
 					gotTrajectoryID == trajectoryID && toAgentID == agentID {
 					dispatched = append(dispatched, content)
 				}
@@ -1147,7 +1147,7 @@ func TestGenericRestartRewarmDefersTexturePendingLifecycleBindingsToDocumentOwne
 			if len(dispatched) != 0 {
 				t.Fatalf("generic restart claimed Texture dispatch authority: %v", dispatched)
 			}
-			stale, err := s.GetLifecycleRun(ctx, ownerID, rt.TextureSandboxID(), run.RunID)
+			stale, err := s.GetLifecycleRun(ctx, ownerID, rt.TextureComputerID(), run.RunID)
 			if err != nil || stale.State != types.RunPassivated {
 				t.Fatalf("stale restart activation = %+v, %v; want passivated", stale, err)
 			}
@@ -1237,14 +1237,14 @@ func TestLifecycleResearcherAdmissionErrorPassivationRecoversOnce(t *testing.T) 
 		dispatches = append(dispatches, dispatchRecord{ownerID: ownerID, computerID: computerID, toAgentID: toAgentID, kind: kind, content: content, trajectoryID: trajectoryID, fromAgentID: fromAgentID})
 		return nil
 	})
-	rt.reactivateRetryableLifecycleInjectionRuns(ctx, fixture.run.SandboxID)
+	rt.reactivateRetryableLifecycleInjectionRuns(ctx, fixture.run.ComputerID)
 	if len(dispatches) != 1 || dispatches[0].kind != "coagent_result" || !strings.HasPrefix(dispatches[0].content, "lifecycle-researcher-admission-recovery:v1:") {
 		t.Fatalf("recovery dispatches=%+v", dispatches)
 	}
-	if dispatches[0].ownerID != fixture.run.OwnerID || dispatches[0].computerID != fixture.run.SandboxID || dispatches[0].toAgentID != fixture.run.AgentID || dispatches[0].trajectoryID != fixture.run.TrajectoryID {
+	if dispatches[0].ownerID != fixture.run.OwnerID || dispatches[0].computerID != fixture.run.ComputerID || dispatches[0].toAgentID != fixture.run.AgentID || dispatches[0].trajectoryID != fixture.run.TrajectoryID {
 		t.Fatalf("recovery dispatch scope=%+v", dispatches[0])
 	}
-	recovered, err := s.GetLifecycleRun(ctx, fixture.run.OwnerID, fixture.run.SandboxID, fixture.run.RunID)
+	recovered, err := s.GetLifecycleRun(ctx, fixture.run.OwnerID, fixture.run.ComputerID, fixture.run.RunID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1258,11 +1258,11 @@ func TestLifecycleResearcherAdmissionErrorPassivationRecoversOnce(t *testing.T) 
 	if counting.Count() != 1 || recovered.State != types.RunCompleted {
 		t.Fatalf("recovered provider calls=%d state=%s", counting.Count(), recovered.State)
 	}
-	rt.reactivateRetryableLifecycleInjectionRuns(ctx, fixture.run.SandboxID)
+	rt.reactivateRetryableLifecycleInjectionRuns(ctx, fixture.run.ComputerID)
 	if len(dispatches) != 1 || counting.Count() != 1 {
 		t.Fatalf("repeated recovery dispatches=%d provider calls=%d", len(dispatches), counting.Count())
 	}
-	work, err := s.GetLifecycleWorkItem(ctx, fixture.run.OwnerID, fixture.run.SandboxID, fixture.workID)
+	work, err := s.GetLifecycleWorkItem(ctx, fixture.run.OwnerID, fixture.run.ComputerID, fixture.workID)
 	if err != nil {
 		t.Fatal(err)
 	}

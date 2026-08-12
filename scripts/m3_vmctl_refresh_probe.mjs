@@ -54,10 +54,10 @@ function vmctlRefresh(userID) {
   );
 }
 
-function vmHealth(sandboxURL) {
-  if (!sandboxURL) return null;
+function vmHealth(autoputerURL) {
+  if (!autoputerURL) return null;
   return nodeBJSON(
-    `curl -fsS --max-time 5 '${sandboxURL.replace(/'/g, "'\\''")}/health' | jq -c '{status, service, runtime_health, running_runs, running_processor_runs, build, persistent_disk}'`,
+    `curl -fsS --max-time 5 '${autoputerURL.replace(/'/g, "'\\''")}/health' | jq -c '{status, service, runtime_health, running_runs, running_processor_runs, build, persistent_disk}'`,
   );
 }
 
@@ -257,19 +257,19 @@ async function waitForOwnershipAdvance(userID, beforeEpoch, timeout = 120_000) {
   throw new Error(`vmctl ownership epoch for ${userID} did not advance beyond ${beforeEpoch}`);
 }
 
-async function waitForVMHealth(sandboxURL, timeout = 180_000) {
+async function waitForVMHealth(autoputerURL, timeout = 180_000) {
   const deadline = Date.now() + timeout;
   let last = null;
   while (Date.now() < deadline) {
     try {
-      last = vmHealth(sandboxURL);
+      last = vmHealth(autoputerURL);
       if (last?.status === 'ready' || last?.status === 'ok') return last;
     } catch (error) {
       last = { error: error.message };
     }
     await new Promise((resolve) => setTimeout(resolve, 1500));
   }
-  throw new Error(`vm health never recovered for ${sandboxURL}: ${JSON.stringify(last)}`);
+  throw new Error(`vm health never recovered for ${autoputerURL}: ${JSON.stringify(last)}`);
 }
 
 async function waitForRecoveredProgress(page, trajectoryID, docID, refreshAtMs, timeout = 420_000) {
@@ -388,10 +388,10 @@ try {
 
   const ownerID = initialState.doc.owner_id;
   result.vmctl_before = vmctlOwnership(ownerID);
-  if (!result.vmctl_before?.sandbox_url) {
-    throw new Error(`vmctl ownership missing sandbox_url for owner ${ownerID}`);
+  if (!result.vmctl_before?.computer_url) {
+    throw new Error(`vmctl ownership missing computer_url for owner ${ownerID}`);
   }
-  result.vm_health_before = vmHealth(result.vmctl_before.sandbox_url);
+  result.vm_health_before = vmHealth(result.vmctl_before.computer_url);
 
   const inFlight = await waitForCoordinationInFlight(page, result.submission.submission_id, decision.doc_id);
   result.pre_refresh = {
@@ -413,12 +413,12 @@ try {
     desktop_id: 'primary',
     before_vm_id: result.vmctl_before.vm_id,
     before_epoch: result.vmctl_before.epoch,
-    before_sandbox_url: result.vmctl_before.sandbox_url,
+    before_computer_url: result.vmctl_before.computer_url,
     at: new Date(refreshAtMs).toISOString(),
   };
   result.vmctl_refresh_response = vmctlRefresh(ownerID);
   result.vmctl_after = await waitForOwnershipAdvance(ownerID, result.vmctl_before.epoch);
-  result.vm_health_after = await waitForVMHealth(result.vmctl_after.sandbox_url);
+  result.vm_health_after = await waitForVMHealth(result.vmctl_after.computer_url);
   result.health_after = await fetchJSON(page, '/health');
   result.bootstrap_after = await bootstrap(page);
   result.compute_status_after = await fetchJSON(page, '/api/compute/status');

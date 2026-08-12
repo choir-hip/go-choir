@@ -17,10 +17,10 @@ import (
 
 func textureTurnRuntimeID(rec *types.RunRecord, toolCallID, kind string, ordinal int) (string, error) {
 	toolCallID = strings.TrimSpace(toolCallID)
-	if rec == nil || toolCallID == "" || strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.SandboxID) == "" || strings.TrimSpace(rec.RunID) == "" {
+	if rec == nil || toolCallID == "" || strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.ComputerID) == "" || strings.TrimSpace(rec.RunID) == "" {
 		return "", fmt.Errorf("Texture lifecycle turn requires authenticated runtime tool_call_id and run scope")
 	}
-	seed := strings.Join([]string{rec.OwnerID, rec.SandboxID, rec.RunID, toolCallID, kind, fmt.Sprintf("%d", ordinal)}, "\x00")
+	seed := strings.Join([]string{rec.OwnerID, rec.ComputerID, rec.RunID, toolCallID, kind, fmt.Sprintf("%d", ordinal)}, "\x00")
 	sum := sha256.Sum256([]byte(seed))
 	raw := append([]byte(nil), sum[:16]...)
 	raw[6] = (raw[6] & 0x0f) | 0x40
@@ -264,7 +264,7 @@ func (h *Handler) commitTextureNonRevisionTurn(ctx context.Context, rec *types.R
 	}
 	h.textureEditMu.Lock()
 	defer h.textureEditMu.Unlock()
-	computerID := strings.TrimSpace(rec.SandboxID)
+	computerID := strings.TrimSpace(rec.ComputerID)
 	docID := strings.TrimSpace(in.DocID)
 	if docID == "" {
 		docID = strings.TrimSpace(firstNonEmpty(metadataStringValue(rec.Metadata, "doc_id"), rec.ChannelID))

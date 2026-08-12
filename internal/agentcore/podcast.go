@@ -66,7 +66,7 @@ type podcastSubscriptionsResponse struct {
 	Errors        []string                    `json:"errors,omitempty"`
 }
 
-// Podcast APIs run from the sandbox runtime package so ordinary app fixes can
+// Podcast APIs run from the autoputer runtime package so ordinary app fixes can
 // deploy without rebuilding the base guest image.
 func (h *APIHandler) HandlePodcastSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

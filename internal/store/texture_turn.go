@@ -96,7 +96,7 @@ func normalizeTextureTurnDigestRequest(req types.ApplyTextureTurnRequest) (types
 		if control.OpenAgent != nil {
 			agent := *control.OpenAgent
 			agent.AgentID = strings.TrimSpace(agent.AgentID)
-			agent.OwnerID, agent.ComputerID, agent.SandboxID = "", "", ""
+			agent.OwnerID, agent.ComputerID, agent.ComputerID = "", "", ""
 			agent.Profile, agent.Role, agent.ChannelID = strings.TrimSpace(agent.Profile), strings.TrimSpace(agent.Role), strings.TrimSpace(agent.ChannelID)
 			agent.ActiveRunID = ""
 			agent.LifecycleVersion, agent.LastReducerSeq = 0, 0
@@ -348,7 +348,7 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		callerAgent.OwnerID != ownerID || callerAgent.ComputerID != computerID || callerAgent.Profile != agentprofile.Texture ||
 		callerAgent.Role != agentprofile.Texture || callerAgent.ChannelID != req.DocumentID || callerAgent.ActiveRunID != req.CallerRunID ||
 		callerAgent.LifecycleVersion != req.ExpectedCallerLifecycleVersion || callerRun.RunID != req.CallerRunID ||
-		callerRun.AgentID != req.CallerAgentID || callerRun.OwnerID != ownerID || callerRun.SandboxID != computerID ||
+		callerRun.AgentID != req.CallerAgentID || callerRun.OwnerID != ownerID || callerRun.ComputerID != computerID ||
 		callerRun.TrajectoryID != req.TrajectoryID || callerRun.AgentProfile != agentprofile.Texture || callerRun.AgentRole != agentprofile.Texture ||
 		callerRun.ChannelID != req.DocumentID || !callerRun.State.Active() || callerWork.WorkItemID != req.CallerWorkItemID ||
 		callerWork.OwnerID != ownerID || callerWork.ComputerID != computerID || callerWork.TrajectoryID != req.TrajectoryID ||
@@ -641,7 +641,7 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		var targetAgent types.AgentRecord
 		if control.OpenAgent != nil {
 			targetAgent = *control.OpenAgent
-			targetAgent.OwnerID, targetAgent.ComputerID, targetAgent.SandboxID = ownerID, computerID, computerID
+			targetAgent.OwnerID, targetAgent.ComputerID, targetAgent.ComputerID = ownerID, computerID, computerID
 			targetAgent.LifecycleVersion, targetAgent.LastReducerSeq = 1, seq+1
 			targetAgent.CreatedAt, targetAgent.UpdatedAt = now, now
 			if targetAgent.AgentID != control.TargetAgentID || targetAgent.Profile != agentprofile.Researcher || targetAgent.Role != agentprofile.Researcher || targetAgent.ChannelID != req.DocumentID || targetAgent.ActiveRunID != "" {

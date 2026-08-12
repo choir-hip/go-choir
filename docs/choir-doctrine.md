@@ -113,7 +113,7 @@ of that new debt.
 
 Current framing: Choir is a human-improving, machine-compounding mainframe made
 of persistent computers. Older framings such as personal writing system,
-publishing system, AI workspace, sandbox, workflow app, StoryGraph app, or chat
+publishing system, AI workspace, autoputer, workflow app, StoryGraph app, or chat
 interface are historical, surface-specific, or deprecated unless this document
 explicitly promotes them. Where those terms reappear below, they are quoted as
 detector vocabulary or historical evidence, not endorsed naming.
@@ -147,7 +147,7 @@ Preferred vocabulary:
   when meaning product undo — git revert remains a separate repo operation).
 
 Avoid making these the root frame unless the sentence is explicitly about a
-surface: personal workspace, AI workspace, publishing system, sandbox, workflow,
+surface: personal workspace, AI workspace, publishing system, autoputer, workflow,
 chat, StoryGraph, or demo app.
 
 ## Conjecture Set
@@ -161,7 +161,7 @@ Each conjecture is tagged as one of:
 ### Object-Level Conjectures
 
 `C1 asserted` Choir's primary product object is a persistent computer composed
-of multiple ledgers, not a disposable sandbox and not a chat session.
+of multiple ledgers, not a disposable autoputer and not a chat session.
 
 `C2 asserted` Canonical user-facing truth is versioned artifact state. Texture is
 the canonical document and artifact control-plane core; other appagents own

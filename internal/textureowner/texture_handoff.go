@@ -210,7 +210,7 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 	if commandID == "" {
 		return ConductorDecision{}, fmt.Errorf("start Texture lifecycle: durable command identity unavailable")
 	}
-	computerID := strings.TrimSpace(h.Core.TextureSandboxID())
+	computerID := strings.TrimSpace(h.Core.TextureComputerID())
 	if computerID == "" {
 		return ConductorDecision{}, fmt.Errorf("start Texture lifecycle: computer identity unavailable")
 	}
@@ -255,7 +255,7 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 		},
 		InitialDocument: doc, InitialRevision: userRev,
 		Agent: types.AgentRecord{
-			AgentID: agentID, OwnerID: rec.OwnerID, ComputerID: computerID, SandboxID: computerID,
+			AgentID: agentID, OwnerID: rec.OwnerID, ComputerID: computerID,
 			Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: doc.DocID,
 			CreatedAt: now, UpdatedAt: now,
 		},

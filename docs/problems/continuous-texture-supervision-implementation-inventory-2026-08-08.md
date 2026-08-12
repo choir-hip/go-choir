@@ -103,7 +103,7 @@ acceptance. Effects remain OFF.
   isolation, broker verb checks, network namespace, seccomp, Landlock, receipts,
   and freeze behavior. It also allows multiple grants into one capsule and has
   no assignment-specific cancellation/restart authority.
-- Production `internal/sandbox/run.go` never constructs a capsule executor or
+- Production `internal/autoputer/run.go` never constructs a capsule executor or
   calls `WithCapsuleExecutor`. Deployed role registries therefore omit capsule
   tools entirely. This is a connection problem, not proof that capsules work in
   the product path.
@@ -535,7 +535,7 @@ Deploy and acceptance remain blocked; effects remain OFF.
 
 Candidate `99fc3e6b7bf151ddad1f0927ca18a24ba5275d10` passed race-selected
 CI run [`31257971088`](https://github.com/choir-hip/go-choir/actions/runs/31257971088),
-and the deployment receipt reports the exact sandbox and active-computer build
+and the deployment receipt reports the exact autoputer and active-computer build
 at that SHA. The authenticated product path nevertheless refuses the new
 lifecycle create route with HTTP 404 `texture endpoint not found`.
 
@@ -562,7 +562,7 @@ joined to `99fc3e6b`. Effects remain OFF and the registries remain open.
 
 An already-authorized staging acceptance account was recovered through its
 existing authenticated browser session. A nonce-bound execution-identity join
-proved host, guest sandbox, deployment receipt, VM epoch 8245, and platform
+proved host, guest autoputer, deployment receipt, VM epoch 8245, and platform
 attestation all bind exact candidate
 `99fc3e6b7bf151ddad1f0927ca18a24ba5275d10`. This resolves the earlier lack of
 an exact-candidate product environment without mutating the preserved
@@ -641,7 +641,7 @@ for one document does not delay an unrelated document's reconcile/dispatch.
 Candidate `ac6dd16b1980a1a3faedd7d1d83fefa79395a1ee` passed selected CI run
 [`31261269488`](https://github.com/choir-hip/go-choir/actions/runs/31261269488)
 and deployed successfully. A fresh nonce-bound execution identity joined the
-same stable acceptance computer, VM epoch 8247, guest sandbox, host build, and
+same stable acceptance computer, VM epoch 8247, guest autoputer, host build, and
 deployment receipt to exact `ac6dd16b`. Boot recovery then correctly created
 Texture run `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf` for the previously stranded
 initial work, proving the repaired committed-start projection executed after a
@@ -826,7 +826,7 @@ historical workflow would, however:
   sibling of deployment;
 - write a receipt whose preserved event says `refs/heads/main@460c…` while
   current `origin/main` is `e50b5644…`, violating current-main source truth;
-- rebuild/switch the complete Node B closure, restart gateway, sandbox, proxy,
+- rebuild/switch the complete Node B closure, restart gateway, autoputer, proxy,
   vmctl, and sourcecycled, then refresh every mutable active interactive
   computer rather than only the acceptance scope;
 - require another normal CI/build interval before exact-`ac6dd16b` recovery if
@@ -1712,7 +1712,7 @@ without separate authority. Effects remain OFF.
 The failed deployment attempt's retained diagnostics make the 502 cause exact.
 The refresh returned the stable VM as active at endpoint `10.206.187.2:8085`,
 and the guest reached store/schema open, network, receipt signers, capsule
-executor, and runtime initialization. Sandbox startup then exited with:
+executor, and runtime initialization. Autoputer startup then exited with:
 
 ```text
 actorruntime: reconcile Texture owner: reconcile subject
@@ -1759,7 +1759,7 @@ processed only after their exact handler independently returns the existing
 typed `TextureActorOccurrenceTerminal` fate; malformed/foreign
 `ErrInvalidTextureActorOccurrence` remains a separate quarantine path.
 
-**Protected surfaces.** Sandbox startup, Texture actor boot reconstruction,
+**Protected surfaces.** Autoputer startup, Texture actor boot reconstruction,
 lifecycle trajectory/cancellation authority, mailbox acknowledgement, mutation
 selection, run admission, and exact staging deployment/acceptance are red. The
 repair may touch only the Texture owner reconciliation boundary and focused
@@ -2124,12 +2124,12 @@ and any requested path ComputerID or DesktopID from query,
 Mismatch/not-owned is generic 403; unavailable ownership authority is 503; no
 static fallback. It must run after auth/scope checks but before downstream proxy
 route lookup or ComputerVersion resolution, resolve/wake/refresh/stop, recovery `startOrJoin`,
-sandbox/WS dial, corpusd self-development call, or execution attestation. In
+autoputer/WS dial, corpusd self-development call, or execution attestation. In
 particular, `computeRecoveryRequest.desktop_id` must equal the joined canonical
 DesktopID before route or recovery work begins.
 
 Wire the guard through generic protected HTTP, bootstrap, API and Super Console
-WebSockets, private publication/proposal sandbox handlers, compute status and
+WebSockets, private publication/proposal autoputer handlers, compute status and
 recovery, execution identity, self-development, and lifecycle without weakening
 lifecycle's current ordering. Bound-key compute status exposes only the exact
 joined computer, not the owner's other computers. Do not indiscriminately gate
@@ -2159,7 +2159,7 @@ every guarded family. Failures make at most one `LookupComputerContext` at the p
 for unbound/missing vmctl; foreign/not-found exits before vmctl's post-record
 branch) and, after/beyond that lookup, zero proxy route resolution, desktop
 lookup/list, resolve/wake/refresh/stop, recovery `startOrJoin`, runtime probe,
-sandbox HTTP, WS upgrade/dial, corpusd self-development/lifecycle intent, guest
+autoputer HTTP, WS upgrade/dial, corpusd self-development/lifecycle intent, guest
 identity, or platform attestation. For a valid exact ownership followed by a
 caller DesktopID mismatch, existing vmctl lookup may perform internal
 route/readiness/credential maintenance on that exact authorized computer; tests
@@ -2187,7 +2187,7 @@ deployed. Target-capable scopes require non-empty stable-ComputerID attenuation
 metadata, while `manage:keys` alone may remain unbound. One shared proxy guard
 performs exact use-time `(UserID, stable ComputerID)` ownership lookup, rejects
 unbound/foreign/conflicting path and all query/header/body/default DesktopID
-selectors, and preserves the exact joined active SandboxURL and VMID rather than
+selectors, and preserves the exact joined active ComputerURL and VMID rather than
 re-resolving a logical desktop for bearer traffic. Recovery joins are
 stable-computer-specific and exact identity is rechecked before wake, refresh,
 or stop. Bound compute status cannot list sibling computers. Cookie and

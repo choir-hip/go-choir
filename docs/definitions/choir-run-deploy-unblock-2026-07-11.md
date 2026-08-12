@@ -15,7 +15,7 @@ predecessor receipt; the active mission does not rerun it during resumption.
 
 Historical failure evidence recorded that `Deploy to Staging (Node B)` was
 blocked because `vm-universal-wire-platform` reported `running_runs: 1`. The
-run was **`running`**, not `blocked`; hot-refresh waited for sandbox `/health`
+run was **`running`**, not `blocked`; hot-refresh waited for autoputer `/health`
 with the new commit while admission remained occupied.
 
 The later accepted receipt restored Deploy with a progress deadline, operator

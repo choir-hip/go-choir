@@ -13,7 +13,7 @@ func TestPersistActivationStateDoesNotOverwriteStoreTerminalizedAssignmentRun(t 
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	stored := types.RunRecord{RunID: "run-store-terminal-assignment", AgentID: "co-super:terminal-assignment", OwnerID: "owner-store-terminal-assignment", SandboxID: rt.TextureSandboxID(),
+	stored := types.RunRecord{RunID: "run-store-terminal-assignment", AgentID: "co-super:terminal-assignment", OwnerID: "owner-store-terminal-assignment", ComputerID: rt.TextureComputerID(),
 		AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, State: types.RunRunning, Prompt: "assigned work", CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{"assignment_id": "assignment-terminal", "assignment_attempt": 1}}
 	if err := s.CreateRun(ctx, stored); err != nil {

@@ -215,7 +215,7 @@ func TestTextureRevisionAPICommitsLifecycleBoundHeadThroughReducer(t *testing.T)
 		return nil
 	}
 	start := types.StartLifecycleRequest{
-		OwnerID: "user-1", ComputerID: rt.TextureSandboxID(), CommandID: "start-public-revision",
+		OwnerID: "user-1", ComputerID: rt.TextureComputerID(), CommandID: "start-public-revision",
 		TrajectoryID: "trajectory-public-revision", Kind: types.TrajectoryKindDocument,
 		SubjectRefs:     map[string]string{"artifact": "texture://document/public-revision", "doc_id": "document-public-revision"},
 		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},

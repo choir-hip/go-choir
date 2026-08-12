@@ -64,7 +64,7 @@ func TestTaskRecordJSONRoundTrip(t *testing.T) {
 	rec := RunRecord{
 		RunID:      "task-001",
 		OwnerID:    "user-alice",
-		SandboxID:  "sandbox-dev",
+		ComputerID: "autoputer-dev",
 		State:      RunCompleted,
 		Prompt:     "explain closures in Go",
 		Result:     "Closures in Go capture variables...",
@@ -113,13 +113,13 @@ func TestTaskRecordJSONRoundTrip(t *testing.T) {
 func TestTaskRecordWithoutOptionalFields(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	rec := RunRecord{
-		RunID:     "task-002",
-		OwnerID:   "user-bob",
-		SandboxID: "sandbox-dev",
-		State:     RunPending,
-		Prompt:    "hello world",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "task-002",
+		OwnerID:    "user-bob",
+		ComputerID: "autoputer-dev",
+		State:      RunPending,
+		Prompt:     "hello world",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 
 	data, err := json.Marshal(rec)

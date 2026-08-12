@@ -59,7 +59,7 @@ func persistLifecycleSubmittedRun(ctx context.Context, st *store.Store, bus *eve
 		}
 	}
 	req := types.ReplaceLifecycleActivationRequest{
-		OwnerID: rec.OwnerID, ComputerID: rec.SandboxID, CommandID: "activation:" + rec.RunID,
+		OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, CommandID: "activation:" + rec.RunID,
 		TrajectoryID: rec.TrajectoryID, AgentID: rec.AgentID, Run: *rec,
 	}
 	req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
@@ -85,7 +85,7 @@ func persistLifecycleSubmittedRun(ctx context.Context, st *store.Store, bus *eve
 		passivated.Metadata = cloneMetadata(passivated.Metadata)
 		passivated.Metadata["passivated_reason"] = "submission_projection_failed"
 		rollback := types.ReplaceLifecycleActivationRequest{
-			OwnerID: passivated.OwnerID, ComputerID: passivated.SandboxID,
+			OwnerID: passivated.OwnerID, ComputerID: passivated.ComputerID,
 			CommandID:    "activation-submission-failed:" + passivated.RunID,
 			TrajectoryID: passivated.TrajectoryID, AgentID: passivated.AgentID, Run: passivated,
 		}
@@ -144,7 +144,7 @@ func agentMutationComputerID(rec *types.RunRecord) string {
 	if rec == nil || strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) == "" {
 		return ""
 	}
-	return strings.TrimSpace(rec.SandboxID)
+	return strings.TrimSpace(rec.ComputerID)
 }
 
 func agentMutationForRun(rec *types.RunRecord) *store.AgentMutation {

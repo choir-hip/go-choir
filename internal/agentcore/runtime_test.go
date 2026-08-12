@@ -47,8 +47,8 @@ func TestSubmitTaskReturnsStableHandle(t *testing.T) {
 	if rec.Prompt != "explain closures in Go" {
 		t.Errorf("prompt: got %q, want original prompt", rec.Prompt)
 	}
-	if rec.SandboxID != "sandbox-test" {
-		t.Errorf("sandbox_id: got %q, want sandbox-test", rec.SandboxID)
+	if rec.ComputerID != "autoputer-test" {
+		t.Errorf("computer_id: got %q, want autoputer-test", rec.ComputerID)
 	}
 	if rec.CreatedAt.IsZero() {
 		t.Error("created_at should not be zero")
@@ -199,7 +199,7 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 		t.Fatalf("prompt creation should start a product-path texture run %q; runs=%+v", result.InitialRunID, runs)
 	}
 	waitForRunTerminalState(t, rt, result.InitialRunID, "user-alice", 5*time.Second)
-	if mutation, err := s.GetPendingAgentMutationByDoc(ctx, "user-alice", "sandbox-test", result.DocID); err != nil {
+	if mutation, err := s.GetPendingAgentMutationByDoc(ctx, "user-alice", "autoputer-test", result.DocID); err != nil {
 		t.Fatalf("get pending mutation: %v", err)
 	} else if mutation != nil {
 		t.Fatalf("initial texture run should not leave a dangling pending mutation after completion, got %+v", mutation)
@@ -423,7 +423,7 @@ func TestSystemPromptForLifecycleTextureRoutesResearcherThroughAtomicTurnControl
 	rt := testPromptRuntime(t)
 	rec := &types.RunRecord{
 		RunID: "run-lifecycle-texture", AgentID: "texture:doc-1", ChannelID: "doc-1", OwnerID: "user-alice",
-		SandboxID: "computer", TrajectoryID: "trajectory", AgentProfile: agentprofile.Texture,
+		ComputerID: "computer", TrajectoryID: "trajectory", AgentProfile: agentprofile.Texture,
 		Metadata: map[string]any{"lifecycle_work_item_id": "work-texture"},
 	}
 	prompt, err := rt.systemPromptForRun(rec)
@@ -792,7 +792,7 @@ func TestProviderFailureSurfacesStructuredOutcome(t *testing.T) {
 	}
 
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: 1 * time.Hour,
@@ -912,7 +912,7 @@ func TestEventsPersistedToStore(t *testing.T) {
 func TestTaskRecoveryAcrossRestart(t *testing.T) {
 	t.Parallel()
 	// VAL-RUNTIME-010: accepted task state remains recoverable after
-	// sandbox restart.
+	// autoputer restart.
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create temp dir: %v", err)
@@ -928,7 +928,7 @@ func TestTaskRecoveryAcrossRestart(t *testing.T) {
 
 	bus1 := events.NewEventBus()
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: 1 * time.Hour,
@@ -983,7 +983,7 @@ func TestTaskRecoveryAcrossRestart(t *testing.T) {
 
 func TestInterruptedRunningTasksPassivatedOnStart(t *testing.T) {
 	t.Parallel()
-	// When the sandbox restarts, runs that were running should be passivated:
+	// When the autoputer restarts, runs that were running should be passivated:
 	// the in-process activation is gone, but durable agent work is not failed.
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -1002,13 +1002,13 @@ func TestInterruptedRunningTasksPassivatedOnStart(t *testing.T) {
 
 	now := time.Now().UTC()
 	interruptedTask := types.RunRecord{
-		RunID:     "interrupted-task-001",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-test",
-		State:     types.RunRunning, // was running when process exited
-		Prompt:    "interrupted prompt",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "interrupted-task-001",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-test",
+		State:      types.RunRunning, // was running when process exited
+		Prompt:     "interrupted prompt",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := s1.CreateRun(ctx, interruptedTask); err != nil {
 		t.Fatalf("create interrupted task: %v", err)
@@ -1024,7 +1024,7 @@ func TestInterruptedRunningTasksPassivatedOnStart(t *testing.T) {
 
 	bus := events.NewEventBus()
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: 1 * time.Hour,
@@ -1083,13 +1083,13 @@ func TestInterruptedActivationPassivationDrainsBatches(t *testing.T) {
 	for _, state := range states {
 		for i := 0; i < 105; i++ {
 			rec := types.RunRecord{
-				RunID:     fmt.Sprintf("interrupted-%s-%03d", state, i),
-				OwnerID:   "user-alice",
-				SandboxID: "sandbox-test",
-				State:     state,
-				Prompt:    "interrupted prompt",
-				CreatedAt: now,
-				UpdatedAt: now,
+				RunID:      fmt.Sprintf("interrupted-%s-%03d", state, i),
+				OwnerID:    "user-alice",
+				ComputerID: "autoputer-test",
+				State:      state,
+				Prompt:     "interrupted prompt",
+				CreatedAt:  now,
+				UpdatedAt:  now,
 			}
 			if err := s.CreateRun(ctx, rec); err != nil {
 				t.Fatalf("create %s run %d: %v", state, i, err)
@@ -1097,7 +1097,7 @@ func TestInterruptedActivationPassivationDrainsBatches(t *testing.T) {
 		}
 	}
 
-	rt := New(provideriface.Config{SandboxID: "sandbox-test"}, s, events.NewEventBus(), provider.NewStubProvider(0))
+	rt := New(provideriface.Config{ComputerID: "autoputer-test"}, s, events.NewEventBus(), provider.NewStubProvider(0))
 	setTestDispatch(rt, s)
 	rt.passivateInterruptedActivations(ctx)
 
@@ -1129,7 +1129,7 @@ func TestRestartReDispatchesProjectedLifecycleActivation(t *testing.T) {
 	now := time.Now().UTC()
 	run := types.RunRecord{
 		RunID: "run-lifecycle-projection-before-dispatch", AgentID: currentTextureAgentID(docID),
-		OwnerID: ownerID, SandboxID: rt.TextureSandboxID(), ChannelID: docID, TrajectoryID: trajectoryID,
+		OwnerID: ownerID, ComputerID: rt.TextureComputerID(), ChannelID: docID, TrajectoryID: trajectoryID,
 		State: types.RunPending, Prompt: "resume durable lifecycle obligation", AgentProfile: "texture", AgentRole: "texture",
 		CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{
@@ -1143,7 +1143,7 @@ func TestRestartReDispatchesProjectedLifecycleActivation(t *testing.T) {
 	}
 	var dispatched []string
 	rt.SetDispatchActor(func(_ context.Context, gotOwnerID, gotComputerID, _ string, kind, content, gotTrajectoryID, _ string) error {
-		if kind == "initial_dispatch" && gotOwnerID == ownerID && gotComputerID == rt.TextureSandboxID() && gotTrajectoryID == trajectoryID {
+		if kind == "initial_dispatch" && gotOwnerID == ownerID && gotComputerID == rt.TextureComputerID() && gotTrajectoryID == trajectoryID {
 			dispatched = append(dispatched, content)
 		}
 		return nil
@@ -1152,7 +1152,7 @@ func TestRestartReDispatchesProjectedLifecycleActivation(t *testing.T) {
 	if len(dispatched) != 1 || dispatched[0] != run.RunID {
 		t.Fatalf("restart lifecycle dispatches = %v, want [%s]", dispatched, run.RunID)
 	}
-	stored, err := s.GetLifecycleRun(ctx, ownerID, rt.TextureSandboxID(), run.RunID)
+	stored, err := s.GetLifecycleRun(ctx, ownerID, rt.TextureComputerID(), run.RunID)
 	if err != nil || stored.State != types.RunPending {
 		t.Fatalf("restart mutated lifecycle run projection: %+v, %v", stored, err)
 	}
@@ -1166,7 +1166,7 @@ func TestRestartReconcilesDurableTerminalLifecycleSettlementTrigger(t *testing.T
 	now := time.Now().UTC()
 	run := types.RunRecord{
 		RunID: "run-terminal-settlement-before-restart", AgentID: currentTextureAgentID(docID),
-		OwnerID: ownerID, SandboxID: rt.TextureSandboxID(), ChannelID: docID, TrajectoryID: trajectoryID,
+		OwnerID: ownerID, ComputerID: rt.TextureComputerID(), ChannelID: docID, TrajectoryID: trajectoryID,
 		State: types.RunPending, Prompt: "complete durable lifecycle", AgentProfile: "texture", AgentRole: "texture",
 		CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{
@@ -1179,7 +1179,7 @@ func TestRestartReconcilesDurableTerminalLifecycleSettlementTrigger(t *testing.T
 		t.Fatalf("create lifecycle activation: %v", err)
 	}
 	settleWork := types.SettleLifecycleWorkRequest{
-		OwnerID: ownerID, ComputerID: rt.TextureSandboxID(),
+		OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 		CommandID: "command-terminal-settlement-work", TrajectoryID: trajectoryID,
 		WorkItemID: "test-work:" + ownerID + ":" + docID, ActingAgentID: currentTextureAgentID(docID),
 		ResultRef: "test-revision:" + ownerID + ":" + docID,
@@ -1192,7 +1192,7 @@ func TestRestartReconcilesDurableTerminalLifecycleSettlementTrigger(t *testing.T
 	run.UpdatedAt = time.Now().UTC()
 	run.FinishedAt = &run.UpdatedAt
 	project := types.ReplaceLifecycleActivationRequest{
-		OwnerID: ownerID, ComputerID: rt.TextureSandboxID(),
+		OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 		CommandID: "command-terminal-projection-before-restart", TrajectoryID: trajectoryID,
 		AgentID: run.AgentID, Run: run,
 	}
@@ -1200,7 +1200,7 @@ func TestRestartReconcilesDurableTerminalLifecycleSettlementTrigger(t *testing.T
 	if _, err := s.ProjectTerminalLifecycleRun(ctx, project); err != nil {
 		t.Fatalf("project terminal lifecycle run: %v", err)
 	}
-	before, err := s.GetLifecycleSnapshot(ctx, ownerID, rt.TextureSandboxID(), trajectoryID)
+	before, err := s.GetLifecycleSnapshot(ctx, ownerID, rt.TextureComputerID(), trajectoryID)
 	if err != nil || before.Trajectory.Status != types.TrajectoryLive {
 		t.Fatalf("terminal projection settled without reducer caller: %+v, %v", before, err)
 	}
@@ -1213,12 +1213,12 @@ func TestRestartReconcilesDurableTerminalLifecycleSettlementTrigger(t *testing.T
 			t.Fatalf("lifecycle run leaked into generic boot listing: %+v", genericRun)
 		}
 	}
-	lifecycleRuns, err := s.ListLifecycleRunsByState(ctx, ownerID, rt.TextureSandboxID(), types.RunCompleted)
+	lifecycleRuns, err := s.ListLifecycleRunsByState(ctx, ownerID, rt.TextureComputerID(), types.RunCompleted)
 	if err != nil || len(lifecycleRuns) != 1 || lifecycleRuns[0].RunID != run.RunID {
 		t.Fatalf("lifecycle boot listing = %+v, %v", lifecycleRuns, err)
 	}
 	rt.reconcileTerminalRunOutcomes(ctx)
-	after, err := s.GetLifecycleSnapshot(ctx, ownerID, rt.TextureSandboxID(), trajectoryID)
+	after, err := s.GetLifecycleSnapshot(ctx, ownerID, rt.TextureComputerID(), trajectoryID)
 	if err != nil || after.Trajectory.Status != types.TrajectorySettled ||
 		after.Activation.State != types.RunCompleted {
 		t.Fatalf("boot settlement reconciliation = %+v, %v", after, err)
@@ -1233,7 +1233,7 @@ func TestRuntimeTerminalPersistenceSettlesReadyLifecycle(t *testing.T) {
 	now := time.Now().UTC()
 	run := types.RunRecord{
 		RunID: "run-runtime-terminal-settlement", AgentID: currentTextureAgentID(docID),
-		OwnerID: ownerID, SandboxID: rt.TextureSandboxID(), ChannelID: docID, TrajectoryID: trajectoryID,
+		OwnerID: ownerID, ComputerID: rt.TextureComputerID(), ChannelID: docID, TrajectoryID: trajectoryID,
 		State: types.RunPending, Prompt: "complete durable lifecycle", AgentProfile: "texture", AgentRole: "texture",
 		CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{
@@ -1246,7 +1246,7 @@ func TestRuntimeTerminalPersistenceSettlesReadyLifecycle(t *testing.T) {
 		t.Fatalf("create lifecycle activation: %v", err)
 	}
 	settleWork := types.SettleLifecycleWorkRequest{
-		OwnerID: ownerID, ComputerID: rt.TextureSandboxID(),
+		OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 		CommandID: "command-runtime-terminal-work", TrajectoryID: trajectoryID,
 		WorkItemID: "test-work:" + ownerID + ":" + docID, ActingAgentID: currentTextureAgentID(docID),
 		ResultRef: "test-revision:" + ownerID + ":" + docID,
@@ -1262,7 +1262,7 @@ func TestRuntimeTerminalPersistenceSettlesReadyLifecycle(t *testing.T) {
 	if err != nil || !persisted {
 		t.Fatalf("persist runtime terminal activation: persisted=%t err=%v", persisted, err)
 	}
-	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, rt.TextureSandboxID(), trajectoryID)
+	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, rt.TextureComputerID(), trajectoryID)
 	if err != nil || snapshot.Trajectory.Status != types.TrajectorySettled ||
 		snapshot.Activation.State != types.RunCompleted {
 		t.Fatalf("runtime terminal settlement = %+v, %v", snapshot, err)
@@ -1510,7 +1510,7 @@ func testRuntimeWithBridge(t *testing.T, bridge provideriface.Provider) (*Runtim
 
 	bus := events.NewEventBus()
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-bridge-test",
+		ComputerID:          "autoputer-bridge-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     50 * time.Millisecond,
 		SupervisionInterval: 1 * time.Hour,

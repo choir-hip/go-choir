@@ -199,7 +199,7 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 			workDisposition := strings.TrimSpace(in.WorkDisposition)
 			update := types.CoagentSourcePacket{
 				OwnerID:         authority.callerRun.OwnerID,
-				ComputerID:      authority.callerRun.SandboxID,
+				ComputerID:      authority.callerRun.ComputerID,
 				AgentID:         authority.callerRun.AgentID,
 				TargetAgentID:   authority.target.AgentID,
 				ChannelID:       authority.target.ChannelID,
@@ -331,13 +331,13 @@ func resolveCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 		return authority, fmt.Errorf("update_coagent requires explicit agent_id; channel, caller, and requester hints are not target authority")
 	}
 	ownerID := strings.TrimSpace(execution.OwnerID)
-	computerID := strings.TrimSpace(execution.SandboxID)
+	computerID := strings.TrimSpace(execution.ComputerID)
 	callerAgentID := strings.TrimSpace(execution.AgentID)
 	callerRunID := strings.TrimSpace(execution.RunID)
 	if ownerID == "" || computerID == "" || callerAgentID == "" || callerRunID == "" || execution.RunRecord == nil {
 		return authority, fmt.Errorf("update_coagent missing owner/computer/agent/run authority")
 	}
-	if configuredComputerID := strings.TrimSpace(rt.TextureSandboxID()); configuredComputerID == "" || configuredComputerID != computerID {
+	if configuredComputerID := strings.TrimSpace(rt.TextureComputerID()); configuredComputerID == "" || configuredComputerID != computerID {
 		return authority, fmt.Errorf("update_coagent caller computer does not match runtime computer")
 	}
 
@@ -403,14 +403,14 @@ func resolveCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 
 func validateLoadedCallerRun(execution toolregistry.ExecutionContext, run types.RunRecord, profile, computerID string) error {
 	if run.RunID != strings.TrimSpace(execution.RunID) || run.AgentID != strings.TrimSpace(execution.AgentID) ||
-		run.OwnerID != strings.TrimSpace(execution.OwnerID) || run.SandboxID != computerID ||
+		run.OwnerID != strings.TrimSpace(execution.OwnerID) || run.ComputerID != computerID ||
 		agentprofile.Canonical(configuredAgentProfileForRun(&run)) != profile ||
 		agentprofile.Canonical(agentRoleForRun(&run)) != profile {
 		return fmt.Errorf("update_coagent durable caller run does not match execution identity")
 	}
 	provided := execution.RunRecord
 	if provided == nil || provided.RunID != run.RunID || provided.AgentID != run.AgentID ||
-		provided.OwnerID != run.OwnerID || provided.SandboxID != run.SandboxID ||
+		provided.OwnerID != run.OwnerID || provided.ComputerID != run.ComputerID ||
 		strings.TrimSpace(trajectoryIDForRun(provided)) != strings.TrimSpace(trajectoryIDForRun(&run)) {
 		return fmt.Errorf("update_coagent caller run context does not match durable run")
 	}
@@ -430,7 +430,7 @@ func enforceCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 	}
 	execution := toolregistry.ExecutionContextFrom(ctx)
 	ownerID := strings.TrimSpace(execution.OwnerID)
-	computerID := strings.TrimSpace(execution.SandboxID)
+	computerID := strings.TrimSpace(execution.ComputerID)
 	callerAgentID := strings.TrimSpace(execution.AgentID)
 	callerRunID := strings.TrimSpace(execution.RunID)
 	callerProfile := agentprofile.Canonical(execution.Profile)
@@ -479,11 +479,11 @@ func validateLifecycleCoagentUpdateAuthority(ctx context.Context, authorityStore
 	if trajectoryID == "" {
 		return fmt.Errorf("update_coagent lifecycle caller trajectory is required")
 	}
-	trajectory, err := authorityStore.GetLifecycleTrajectory(ctx, authority.callerRun.OwnerID, authority.callerRun.SandboxID, trajectoryID)
+	trajectory, err := authorityStore.GetLifecycleTrajectory(ctx, authority.callerRun.OwnerID, authority.callerRun.ComputerID, trajectoryID)
 	if err != nil {
 		return fmt.Errorf("resolve lifecycle caller trajectory: %w", err)
 	}
-	if trajectory.TrajectoryID != trajectoryID || trajectory.OwnerID != authority.callerRun.OwnerID || trajectory.ComputerID != authority.callerRun.SandboxID {
+	if trajectory.TrajectoryID != trajectoryID || trajectory.OwnerID != authority.callerRun.OwnerID || trajectory.ComputerID != authority.callerRun.ComputerID {
 		return fmt.Errorf("update_coagent lifecycle trajectory scope mismatch")
 	}
 	docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
@@ -498,11 +498,11 @@ func validateLifecycleCoagentUpdateAuthority(ctx context.Context, authorityStore
 	if err != nil {
 		return err
 	}
-	work, err := authorityStore.GetLifecycleWorkItem(ctx, authority.callerRun.OwnerID, authority.callerRun.SandboxID, workItemID)
+	work, err := authorityStore.GetLifecycleWorkItem(ctx, authority.callerRun.OwnerID, authority.callerRun.ComputerID, workItemID)
 	if err != nil {
 		return fmt.Errorf("resolve lifecycle producer work: %w", err)
 	}
-	if work.OwnerID != authority.callerRun.OwnerID || work.ComputerID != authority.callerRun.SandboxID ||
+	if work.OwnerID != authority.callerRun.OwnerID || work.ComputerID != authority.callerRun.ComputerID ||
 		work.TrajectoryID != trajectoryID || work.Status != types.WorkItemOpen || work.AssignedAgentID != authority.callerRun.AgentID ||
 		agentprofile.Canonical(work.AuthorityProfile) != authority.callerProfile {
 		return fmt.Errorf("update_coagent lifecycle producer work binding mismatch")
@@ -526,7 +526,7 @@ func loadLifecycleRequesterRun(ctx context.Context, authorityStore coagentUpdate
 	if requesterAgentID != target.AgentID || requesterProfile != agentprofile.Texture {
 		return types.RunRecord{}, fmt.Errorf("update_coagent lifecycle caller was not requested by the target Texture")
 	}
-	parent, err := authorityStore.GetLifecycleRun(ctx, caller.OwnerID, caller.SandboxID, requesterRunID)
+	parent, err := authorityStore.GetLifecycleRun(ctx, caller.OwnerID, caller.ComputerID, requesterRunID)
 	if err != nil {
 		return types.RunRecord{}, fmt.Errorf("resolve requesting lifecycle Texture run: %w", err)
 	}
@@ -591,7 +591,7 @@ func validatePreCutoverCoagentUpdateAuthority(ctx context.Context, authorityStor
 		return fmt.Errorf("update_coagent pre-cutover run cannot address a lifecycle target")
 	}
 	if authority.trajectoryID != "" {
-		if _, err := authorityStore.GetLifecycleTrajectory(ctx, authority.callerRun.OwnerID, authority.callerRun.SandboxID, authority.trajectoryID); err == nil {
+		if _, err := authorityStore.GetLifecycleTrajectory(ctx, authority.callerRun.OwnerID, authority.callerRun.ComputerID, authority.trajectoryID); err == nil {
 			return store.ErrLifecycleAuthorityRequired
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return fmt.Errorf("check lifecycle trajectory before pre-cutover dispatch: %w", err)
@@ -600,7 +600,7 @@ func validatePreCutoverCoagentUpdateAuthority(ctx context.Context, authorityStor
 		if err != nil {
 			return fmt.Errorf("resolve pre-cutover trajectory: %w", err)
 		}
-		if computerID := strings.TrimSpace(trajectory.ComputerID); computerID != "" && computerID != authority.callerRun.SandboxID {
+		if computerID := strings.TrimSpace(trajectory.ComputerID); computerID != "" && computerID != authority.callerRun.ComputerID {
 			return fmt.Errorf("update_coagent pre-cutover trajectory computer mismatch")
 		}
 		if channelID := strings.TrimSpace(trajectory.SubjectRefs["channel_id"]); channelID != "" && channelID != authority.target.ChannelID {
@@ -637,7 +637,7 @@ func loadLegacyRequesterRun(ctx context.Context, authorityStore coagentUpdateAut
 		agentprofile.Canonical(metadataStringValue(caller.Metadata, "requested_by_profile")) != agentprofile.Canonical(target.Profile) {
 		return types.RunRecord{}, fmt.Errorf("update_coagent target does not match caller requester metadata")
 	}
-	parent, err := loadScopedLegacyRun(ctx, authorityStore, caller.OwnerID, caller.SandboxID, requesterRunID)
+	parent, err := loadScopedLegacyRun(ctx, authorityStore, caller.OwnerID, caller.ComputerID, requesterRunID)
 	if err != nil {
 		return types.RunRecord{}, fmt.Errorf("resolve pre-cutover requester run: %w", err)
 	}
@@ -653,7 +653,7 @@ func loadScopedLegacyRun(ctx context.Context, authorityStore coagentUpdateAuthor
 	if err != nil {
 		return types.RunRecord{}, err
 	}
-	if run.OwnerID != ownerID || run.SandboxID != computerID || run.RunID != strings.TrimSpace(runID) {
+	if run.OwnerID != ownerID || run.ComputerID != computerID || run.RunID != strings.TrimSpace(runID) {
 		return types.RunRecord{}, fmt.Errorf("pre-cutover run scope mismatch")
 	}
 	return run, nil
@@ -664,7 +664,7 @@ func validateLegacyOwnedChild(ctx context.Context, authorityStore coagentUpdateA
 	if targetRunID == "" {
 		return fmt.Errorf("update_coagent assigned child has no durable active run")
 	}
-	child, err := loadScopedLegacyRun(ctx, authorityStore, authority.callerRun.OwnerID, authority.callerRun.SandboxID, targetRunID)
+	child, err := loadScopedLegacyRun(ctx, authorityStore, authority.callerRun.OwnerID, authority.callerRun.ComputerID, targetRunID)
 	if err != nil {
 		return fmt.Errorf("resolve assigned child run: %w", err)
 	}
@@ -723,7 +723,7 @@ func validateCoSuperTextureResultPath(ctx context.Context, authorityStore coagen
 	if !found || slot.RunID != authority.callerRun.RunID || strings.TrimSpace(slot.RequestedByRunID) == "" {
 		return fmt.Errorf("update_coagent calling co-super lacks exact assignment")
 	}
-	owningSuper, err := loadScopedLegacyRun(ctx, authorityStore, authority.callerRun.OwnerID, authority.callerRun.SandboxID, slot.RequestedByRunID)
+	owningSuper, err := loadScopedLegacyRun(ctx, authorityStore, authority.callerRun.OwnerID, authority.callerRun.ComputerID, slot.RequestedByRunID)
 	if err != nil {
 		return fmt.Errorf("resolve owning super run: %w", err)
 	}
@@ -895,8 +895,8 @@ func deriveLifecycleProducerUpdateID(execution toolregistry.ExecutionContext, ru
 	if callID == "" {
 		return "", fmt.Errorf("update_coagent lifecycle delivery requires runtime tool_call_id authority")
 	}
-	if strings.TrimSpace(run.OwnerID) == "" || strings.TrimSpace(run.SandboxID) == "" || strings.TrimSpace(run.RunID) == "" ||
-		execution.OwnerID != run.OwnerID || execution.SandboxID != run.SandboxID || execution.RunID != run.RunID {
+	if strings.TrimSpace(run.OwnerID) == "" || strings.TrimSpace(run.ComputerID) == "" || strings.TrimSpace(run.RunID) == "" ||
+		execution.OwnerID != run.OwnerID || execution.ComputerID != run.ComputerID || execution.RunID != run.RunID {
 		return "", fmt.Errorf("update_coagent cannot derive producer identity from mismatched run authority")
 	}
 	seed, _ := json.Marshal(struct {
@@ -904,7 +904,7 @@ func deriveLifecycleProducerUpdateID(execution toolregistry.ExecutionContext, ru
 		ComputerID string `json:"computer_id"`
 		RunID      string `json:"run_id"`
 		ToolCallID string `json:"tool_call_id"`
-	}{run.OwnerID, run.SandboxID, run.RunID, callID})
+	}{run.OwnerID, run.ComputerID, run.RunID, callID})
 	sum := sha256.Sum256(seed)
 	raw := append([]byte(nil), sum[:16]...)
 	raw[6] = (raw[6] & 0x0f) | 0x40

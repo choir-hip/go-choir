@@ -547,7 +547,7 @@ exports:
     - id: internal/agentcore/api.go:func:NewAPIHandler
       disposition: api
       production_callers:
-        - internal/sandbox/run.go
+        - internal/autoputer/run.go
     - id: internal/agentcore/api.go:method(*APIHandler):HandleCancel
       disposition: api
       production_callers:
@@ -961,7 +961,7 @@ exports:
       disposition: core
       production_callers:
         - internal/agentcore/product_events.go
-        - internal/sandbox/run.go
+        - internal/autoputer/run.go
     - id: internal/agentcore/prompts.go:method(*APIHandler):HandlePromptList
       disposition: model
       production_callers:
@@ -1051,11 +1051,11 @@ exports:
     - id: internal/agentcore/runtime.go:func:WithContentService
       disposition: lifecycle
       production_callers:
-        - internal/sandbox/run.go
+        - internal/autoputer/run.go
     - id: internal/agentcore/runtime.go:func:WithDesktopStateOwner
       disposition: lifecycle
       production_callers:
-        - internal/sandbox/run.go
+        - internal/autoputer/run.go
     - id: internal/agentcore/runtime.go:func:WithTraceStore
       disposition: lifecycle
       production_callers:
@@ -1162,7 +1162,7 @@ exports:
         - internal/agentcore/api.go
         - internal/agentcore/live_ws.go
         - internal/agentcore/podcast.go
-        - internal/sandbox/run.go
+        - internal/autoputer/run.go
         - internal/textureowner/handler.go
     - id: internal/agentcore/runtime.go:type:Runtime
       disposition: lifecycle
@@ -1205,7 +1205,7 @@ exports:
       production_callers:
         - internal/actorruntime/adapter.go
         - internal/agentcore/runtime.go
-        - internal/sandbox/run.go
+        - internal/autoputer/run.go
     - id: internal/agentcore/runtime_persistence_test.go:func:TestPersistSubmittedRunUsesRuntimeStoreInterfaceWithoutDolt
       disposition: lifecycle
     - id: internal/agentcore/runtime_persistence_test.go:method(*fakeRunSubmissionStore):AppendEvent
@@ -1363,7 +1363,7 @@ exports:
       disposition: texture
       production_callers:
         - internal/textureowner/texture_agent_revision.go
-    - id: internal/agentcore/texture_lifecycle_api.go:method(*Runtime):TextureSandboxID
+    - id: internal/agentcore/texture_lifecycle_api.go:method(*Runtime):TextureComputerID
       disposition: texture
       production_callers:
         - internal/textureowner/texture_controller.go
@@ -1418,12 +1418,12 @@ exports:
     - id: internal/agentcore/tool_profiles.go:method(*Runtime):InstallDefaultAgentTools
       disposition: tools
       production_callers:
-        - internal/sandbox/run.go
+        - internal/autoputer/run.go
     - id: internal/agentcore/tool_profiles.go:method(*Runtime):ToolRegistryForProfile
       disposition: tools
       production_callers:
         - internal/agentcore/prompts.go
-        - internal/sandbox/run.go
+        - internal/autoputer/run.go
         - internal/textureowner/texture.go
     - id: internal/agentcore/toolloop_test.go:func:TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool
       disposition: tools
@@ -1780,7 +1780,7 @@ exports:
     - id: internal/textureowner/handler.go:func:NewHandler
       disposition: texture
       production_callers:
-        - internal/sandbox/run.go
+        - internal/autoputer/run.go
     - id: internal/textureowner/handler.go:type:Handler
       disposition: texture
       production_callers:
@@ -2450,7 +2450,7 @@ exports:
     - id: internal/textureowner/tools_texture.go:func:RegisterTools
       disposition: texture
       production_callers:
-        - internal/sandbox/run.go
+        - internal/autoputer/run.go
     - id: internal/textureowner/tools_texture_provenance_test.go:func:TestBuildStructuredAppagentRevisionProvenanceNoSources
       disposition: texture
     - id: internal/textureowner/tools_texture_provenance_test.go:func:TestBuildStructuredAppagentRevisionProvenanceSystemAttributed
@@ -3334,7 +3334,7 @@ interface_candidates:
     - id: internal/agentcore/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/agentcore.runSubmissionStore.UpsertAgent
       disposition: lifecycle
 citers:
-    - id: .github/workflows/ci.yml:"${refresh_sandbox_url}/internal/runtime/refresh" || true)
+    - id: .github/workflows/ci.yml:"${refresh_computer_url}/internal/runtime/refresh" || true)
       disposition: block
     - id: docs/ACTIVE.md:1. keep `internal/runtime` extinct after its direct `agentcore` and
       disposition: block
@@ -3382,9 +3382,9 @@ citers:
       disposition: historical_evidence
     - id: docs/archive/dispatch-proxy-architecture-2026-06-10.md:4. Strips the proxy prefix, yielding `/internal/runtime/runs`
       disposition: historical_evidence
-    - id: docs/archive/dispatch-proxy-architecture-2026-06-10.md:5. Reverse-proxies the request to `{sandbox_url}/internal/runtime/runs`
+    - id: docs/archive/dispatch-proxy-architecture-2026-06-10.md:5. Reverse-proxies the request to `{computer_url}/internal/runtime/runs`
       disposition: historical_evidence
-    - id: docs/archive/dispatch-proxy-architecture-2026-06-10.md:POST /internal/vmctl/sandbox-proxy/{owner-id}/internal/runtime/runs
+    - id: docs/archive/dispatch-proxy-architecture-2026-06-10.md:POST /internal/vmctl/autoputer-proxy/{owner-id}/internal/runtime/runs
       disposition: historical_evidence
     - id: docs/archive/handoff-texture-structured-doc-legacy-surfaces-2026-06-22.md:- `go build ./internal/runtime/...` -- clean
       disposition: historical_evidence
@@ -3518,7 +3518,7 @@ citers:
       disposition: historical_evidence
     - id: docs/archive/mission-deploy-impact-isolation-cache-v1.md:- `internal/runtime`, `internal/store`, `internal/types`, `internal/events`,
       disposition: historical_evidence
-    - id: docs/archive/mission-deploy-impact-isolation-cache-v1.md:`internal/runtime/model_policy.go` is a sandbox service plus ordinary guest
+    - id: docs/archive/mission-deploy-impact-isolation-cache-v1.md:`internal/runtime/model_policy.go` is a autoputer service plus ordinary guest
       disposition: historical_evidence
     - id: docs/archive/mission-deploy-impact-isolation-cache-v1.md:`internal/runtime/podcast.go` comment-only change.
       disposition: historical_evidence
@@ -3866,7 +3866,7 @@ citers:
       disposition: historical_evidence
     - id: docs/archive/mission-runtime-human-proof-experiment-rerun-v1.md:- nix develop -c go test ./internal/runtime -run 'TestVSuperSpawnAgentEnforcesActiveChildBudget|TestVSuperVerifierSpawnRequiresCompletedImplementation|TestWorkerVSuperDelegateContractPreventsCheckoutR… [sha256:aea18f1da2a78947ef52764e15e100ff11ac6ec1a84fabe0554650791de9776d]
       disposition: historical_evidence
-    - id: 'docs/archive/mission-runtime-model-context-substrate-v0.md:evidence artifact refs: local `nix develop -c go test ./cmd/gateway ./cmd/sandbox ./internal/auth ./internal/provider ./internal/store -count=1`; local `nix develop -c go test ./internal/runtime -run … [sha256:3948a3f13964da5be093dec3efc31cc246ff28cdb85c323cabeb94c925c7d4cf]'
+    - id: 'docs/archive/mission-runtime-model-context-substrate-v0.md:evidence artifact refs: local `nix develop -c go test ./cmd/gateway ./cmd/autoputer ./internal/auth ./internal/provider ./internal/store -count=1`; local `nix develop -c go test ./internal/runtime -run … [sha256:3948a3f13964da5be093dec3efc31cc246ff28cdb85c323cabeb94c925c7d4cf]'
       disposition: historical_evidence
     - id: docs/archive/mission-runtime-test-pyramid-hardening-v0.md:- Full `go test ./internal/runtime ./internal/provider` has timed out locally
       disposition: historical_evidence
@@ -4096,13 +4096,13 @@ citers:
       disposition: historical_evidence
     - id: 'docs/archive/mission-source-system-simplify-secure-smart-v0.md:internal/runtime/content_test.go:'
       disposition: historical_evidence
-    - id: docs/archive/mission-source-system-simplify-secure-smart-v0.md:internal/runtime/runtime.go -> gateway/sandbox service pointers
+    - id: docs/archive/mission-source-system-simplify-secure-smart-v0.md:internal/runtime/runtime.go -> gateway/autoputer service pointers
       disposition: historical_evidence
     - id: 'docs/archive/mission-source-system-simplify-secure-smart-v0.md:internal/runtime/runtime.go:'
       disposition: historical_evidence
     - id: docs/archive/mission-source-system-simplify-secure-smart-v0.md:internal/runtime/source_fetch_policy_test.go
       disposition: historical_evidence
-    - id: docs/archive/mission-source-system-simplify-secure-smart-v0.md:internal/runtime/vtext.go -> gateway/sandbox service pointers
+    - id: docs/archive/mission-source-system-simplify-secure-smart-v0.md:internal/runtime/vtext.go -> gateway/autoputer service pointers
       disposition: historical_evidence
     - id: 'docs/archive/mission-source-system-simplify-secure-smart-v0.md:internal/runtime/vtext.go:'
       disposition: historical_evidence
@@ -4156,7 +4156,7 @@ citers:
       disposition: historical_evidence
     - id: docs/archive/mission-source-system-simplify-secure-smart-v0.md:| VText file open | `POST /api/vtext/files/open` in `internal/runtime/vtext.go` | Text-like file opens as canonical `.vtext` title/source path and creates original content lineage. | Contract-shaped p… [sha256:0caafadf15e003be4f8361f83fe4c95bdc854650046a571f9e52a73f43853b53]
       disposition: historical_evidence
-    - id: docs/archive/mission-super-console-source-mount-promotion-v0.md:nix develop -c go test ./cmd/vmctl ./internal/vmmanager ./internal/vmctl ./internal/sandbox ./internal/runtime ./cmd/sandbox
+    - id: docs/archive/mission-super-console-source-mount-promotion-v0.md:nix develop -c go test ./cmd/vmctl ./internal/vmmanager ./internal/vmctl ./internal/autoputer ./internal/runtime ./cmd/autoputer
       disposition: historical_evidence
     - id: docs/archive/mission-texture-hard-cutover-v0.md:(13), `internal/runtime/vtext_controller.go` (11),
       disposition: historical_evidence
@@ -4976,7 +4976,7 @@ citers:
       disposition: historical_evidence
     - id: docs/archive/mission-youtube-review-studio-v0.md:`nix develop -c go test ./internal/runtime -run TestDoesNotExist`.
       disposition: historical_evidence
-    - id: 'docs/archive/mission-youtube-review-studio-v0.md:evidence artifact refs: CI 26676482105; staging /health proxy+sandbox deployed_commit 673a8ed38113b3822725598599739ae87d76b206; local tests `nix develop -c go test -tags comprehensive ./internal/runti… [sha256:6f0aa876d71dd1f224c9339f55fa8514725c58dcf750def0545689eb21399ec5]'
+    - id: 'docs/archive/mission-youtube-review-studio-v0.md:evidence artifact refs: CI 26676482105; staging /health proxy+autoputer deployed_commit 673a8ed38113b3822725598599739ae87d76b206; local tests `nix develop -c go test -tags comprehensive ./internal/runti… [sha256:6f0aa876d71dd1f224c9339f55fa8514725c58dcf750def0545689eb21399ec5]'
       disposition: historical_evidence
     - id: docs/archive/news-system-current-state-and-improvements-2026-06-06.md:- [internal/runtime/tools_research.go](/Users/wiz/.codex/worktrees/5b24/go-choir/internal/runtime/tools_research.go)
       disposition: historical_evidence
@@ -5350,7 +5350,7 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:`/internal/runtime/runs`;
       disposition: block
-    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:and sandbox proxy), `internal/runtime` (typed ingestion handoff and web
+    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:and autoputer proxy), `internal/runtime` (typed ingestion handoff and web
       disposition: block
     - id: 'docs/definitions/choir-autopaper-activation-2026-07-10.md:artifact_path: cmd/sourcecycled/main.go + internal/runtime/api.go'
       disposition: block
@@ -5682,15 +5682,15 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:deletion_target_reference: internal/runtime'
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [cmd/sandbox/main.go, cmd/sandbox/main_test.go, internal/runtime/provider.go, internal/runtime/model_policy.go, internal/provideriface, internal/agentpro… [sha256:d4ab90f5639a5a656867a5073a5c92a3d07a12ab98749f0b293825b880999f1b]'
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [cmd/autoputer/main.go, cmd/autoputer/main_test.go, internal/runtime/provider.go, internal/runtime/model_policy.go, internal/provideriface, internal/agentpro… [sha256:d4ab90f5639a5a656867a5073a5c92a3d07a12ab98749f0b293825b880999f1b]'
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [cmd/sandbox/main.go, cmd/sandbox/main_test.go, internal/sandbox/run.go, internal/sandbox/run_test.go, internal/sandbox/files.go, internal/apihandler/api… [sha256:dc92641b04b6082d6483abd50c11af2d3442e9ab9a3e6ab3b399328a6fb6ed35]'
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [cmd/autoputer/main.go, cmd/autoputer/main_test.go, internal/autoputer/run.go, internal/autoputer/run_test.go, internal/autoputer/files.go, internal/apihandler/api… [sha256:dc92641b04b6082d6483abd50c11af2d3442e9ab9a3e6ab3b399328a6fb6ed35]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [cmd/sourcecycled, internal/cycle/web_capture_graph.go, internal/proxy/platform_objectgraph.go, internal/platform/objectgraph_handlers.go, internal/runti… [sha256:2549ae29a8205c9d40642e75fdb52d0a57ffd8ba620d7d73bc89ef3463077988]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/apihandler, internal/runtime/api.go, internal/runtime/api_app_promotion.go, internal/runtime/api_candidate_package_intake.go, internal/runtime/… [sha256:6870beb4529de2524e696078923aaed741bb03829dea35ca3ce9b21a900e364d]'
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/apihandler/routes.go, internal/runtime/api.go, internal/runtime/api_candidate_package_intake.go, internal/sandbox/run.go, directly_affected_rou… [sha256:02840826d5772800db955ac244086e96b40d0bd73c24f4470edb7646fb390f64]'
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/apihandler/routes.go, internal/runtime/api.go, internal/runtime/api_candidate_package_intake.go, internal/autoputer/run.go, directly_affected_rou… [sha256:02840826d5772800db955ac244086e96b40d0bd73c24f4470edb7646fb390f64]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/platform, internal/proxy, internal/runtime/universal_wire.go, internal/runtime/wire_publication.go, /api/universal-wire/stories, docs/runtime-dissolution-inventory.yaml]'
       disposition: block
@@ -5840,7 +5840,7 @@ citers:
       disposition: historical_evidence
     - id: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:The Codex finding was concrete and was repaired rather than outvoted. Commits `981bd74a` and `b7b1262e` remove the stale import/runtime-store claims from `internal/store/store.go`, `internal/runtime/c… [sha256:ab07aa27be75e130458a6a85cf9f02f8c68c2f08e5df6df6ba86b2cefd918419]
       disposition: historical_evidence
-    - id: docs/evidence/s3-api-handler-ownership-blocker-2026-07-13.md:- After discarding the diagnostic, `go test ./internal/apihandler ./internal/runtime ./internal/sandbox -run '^$'` passed (`artifact://2618`), focused route tests passed (`artifact://2625`), and the i… [sha256:7446a8cecc259c2a69e93cc62e30109abb2b7c00e27ede03cb5c1d3c0b5f5a69]
+    - id: docs/evidence/s3-api-handler-ownership-blocker-2026-07-13.md:- After discarding the diagnostic, `go test ./internal/apihandler ./internal/runtime ./internal/autoputer -run '^$'` passed (`artifact://2618`), focused route tests passed (`artifact://2625`), and the i… [sha256:7446a8cecc259c2a69e93cc62e30109abb2b7c00e27ede03cb5c1d3c0b5f5a69]
       disposition: historical_evidence
     - id: docs/evidence/s3-api-handler-ownership-blocker-2026-07-13.md:- `go test -gcflags=all=-e ./internal/runtime -run '^$'` against the diagnostic split failed with 38 errors across eleven same-package test files. Those tests directly name the old handler and private… [sha256:586dc17d695c5ed16575858dfee4b78b97859a2612344e3b34c28287932b997b]
       disposition: historical_evidence
@@ -5854,7 +5854,7 @@ citers:
       disposition: historical_evidence
     - id: docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md:- `internal/runtime/api_candidate_package_intake.go` (delete registrar declaration only)
       disposition: historical_evidence
-    - id: docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md:S3-I15 deleted the `internal/apihandler` wrapper and moved complete process composition to `internal/sandbox`, but `internal/runtime` still owns the live HTTP route table through `RegisterRoutes`, `Re… [sha256:16050d4be13cdee46396fd607bb65c4b3917b843962671580b3d14a797619530]
+    - id: docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md:S3-I15 deleted the `internal/apihandler` wrapper and moved complete process composition to `internal/autoputer`, but `internal/runtime` still owns the live HTTP route table through `RegisterRoutes`, `Re… [sha256:16050d4be13cdee46396fd607bb65c4b3917b843962671580b3d14a797619530]
       disposition: historical_evidence
     - id: docs/evidence/s3-batch-executor-extraction-dispatch-2026-07-12.md:- `internal/runtime/tools.go`, `tool_profiles.go`, and direct executor/context consumers/tests;
       disposition: historical_evidence
@@ -5878,7 +5878,7 @@ citers:
       disposition: historical_evidence
     - id: docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md:Move all live declarations and behavior from `internal/runtime/config.go` into `internal/provideriface` beside the canonical `Config` schema. Move the complete behavioral tests from `internal/runtime/… [sha256:4cd6a3962f2b1dc6767f3a8bd0a8069157579bbb674899ced17867a70e29fb85]
       disposition: historical_evidence
-    - id: 'docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md:The unanimous S3 step-2 gate authorized step 3: move real API/config/bootstrap ownership, remove the `apihandler` wrapper, and remove direct `cmd/sandbox` runtime imports. `provideriface.Config` alrea… [sha256:ef974f0df953d82fdc399358a587693893a479de8aac88227032fcc19669be10]'
+    - id: 'docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md:The unanimous S3 step-2 gate authorized step 3: move real API/config/bootstrap ownership, remove the `apihandler` wrapper, and remove direct `cmd/autoputer` runtime imports. `provideriface.Config` alrea… [sha256:ef974f0df953d82fdc399358a587693893a479de8aac88227032fcc19669be10]'
       disposition: historical_evidence
     - id: 'docs/evidence/s3-runtime-dead-helper-dispatch-2026-07-12.md:- `internal/runtime/promptspec/promptspec.go: Document.MustRender`;'
       disposition: historical_evidence
@@ -5924,15 +5924,15 @@ citers:
       disposition: historical_evidence
     - id: 'docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md:Allowed production file: `internal/runtime/runtime.go`, deleting exactly the three in-scope wrappers and attached comments. `(*Runtime).StartRun` is forbidden in this iteration.'
       disposition: historical_evidence
-    - id: docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md:- Migrate `internal/runtime/texture_live_llm_workflow_test.go` from the deleted wrapper to its package-local runtime handler constructor.
+    - id: docs/evidence/s3-autoputer-bootstrap-ownership-dispatch-2026-07-13.md:- Migrate `internal/runtime/texture_live_llm_workflow_test.go` from the deleted wrapper to its package-local runtime handler constructor.
       disposition: historical_evidence
-    - id: docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md:- `cmd/sandbox` has no direct `internal/runtime` import or runtime-qualified symbol;
+    - id: docs/evidence/s3-autoputer-runtime-import-cutover-dispatch-2026-07-13.md:- `cmd/autoputer` has no direct `internal/runtime` import or runtime-qualified symbol;
       disposition: historical_evidence
-    - id: docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md:Remove the direct `internal/runtime` import from `cmd/sandbox/main.go` and its tests. Replace runtime profile and registry compatibility symbols with `agentprofile` and `toolregistry`. Move `DefaultMo… [sha256:1196623c6a4f0ccaa899e02b448a142b0bc6278480affd74f89d307d8e5375de]
+    - id: docs/evidence/s3-autoputer-runtime-import-cutover-dispatch-2026-07-13.md:Remove the direct `internal/runtime` import from `cmd/autoputer/main.go` and its tests. Replace runtime profile and registry compatibility symbols with `agentprofile` and `toolregistry`. Move `DefaultMo… [sha256:1196623c6a4f0ccaa899e02b448a142b0bc6278480affd74f89d307d8e5375de]
       disposition: historical_evidence
-    - id: docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md:S3-I12 moved config authority to `provideriface`, but `cmd/sandbox/main.go` still directly imports `internal/runtime`, violating the explicit S3 step-3 cutover criterion. The remaining named uses are … [sha256:745a5ded84130b6ae964c5bbc30f49e5480eba85c9f0fe24722e158986ed0613]
+    - id: docs/evidence/s3-autoputer-runtime-import-cutover-dispatch-2026-07-13.md:S3-I12 moved config authority to `provideriface`, but `cmd/autoputer/main.go` still directly imports `internal/runtime`, violating the explicit S3 step-3 cutover criterion. The remaining named uses are … [sha256:745a5ded84130b6ae964c5bbc30f49e5480eba85c9f0fe24722e158986ed0613]
       disposition: historical_evidence
-    - id: docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md:This is bootstrap/provider substrate debt, not an API or app-domain cutover. Adding an actorruntime/sandbox forwarder would hide the import rather than remove authority. The smallest atomic cut is to … [sha256:fe1a71f242177196d24ff57b1f73ab291407ee151bff68a9bfdf51dd81f9209e]
+    - id: docs/evidence/s3-autoputer-runtime-import-cutover-dispatch-2026-07-13.md:This is bootstrap/provider substrate debt, not an API or app-domain cutover. Adding an actorruntime/autoputer forwarder would hide the import rather than remove authority. The smallest atomic cut is to … [sha256:fe1a71f242177196d24ff57b1f73ab291407ee151bff68a9bfdf51dd81f9209e]
       disposition: historical_evidence
     - id: docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md:- Retained the three runtime-consumed helpers in `internal/runtime/toolloop_test.go`; they remain test-only and create no production alias or execution path.
       disposition: historical_evidence

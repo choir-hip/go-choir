@@ -72,14 +72,14 @@ func (h *Handler) resolveTraceRuntimeURL(ctx context.Context, ownerID string) (s
 	if ownerID == "" {
 		return "", fmt.Errorf("owner_id is required")
 	}
-	sandboxURL, err := resolveOwnerSandboxURL(ctx, h.cfg.VmctlURL, ownerID)
+	autoputerURL, err := resolveOwnerComputerURL(ctx, h.cfg.VmctlURL, ownerID)
 	if err != nil {
 		return "", err
 	}
-	return sandboxURL, nil
+	return autoputerURL, nil
 }
 
-func resolveOwnerSandboxURL(ctx context.Context, vmctlURL, ownerID string) (string, error) {
+func resolveOwnerComputerURL(ctx context.Context, vmctlURL, ownerID string) (string, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	slotID, err := routeledger.RouteSlotID(ownerID, primaryDesktopID)
 	if err != nil {
@@ -93,10 +93,10 @@ func resolveOwnerSandboxURL(ctx context.Context, vmctlURL, ownerID string) (stri
 	if err != nil {
 		return "", err
 	}
-	if resolved == nil || strings.TrimSpace(resolved.SandboxURL) == "" {
-		return "", fmt.Errorf("vmctl resolved empty sandbox_url")
+	if resolved == nil || strings.TrimSpace(resolved.ComputerURL) == "" {
+		return "", fmt.Errorf("vmctl resolved empty computer_url")
 	}
-	return strings.TrimSpace(resolved.SandboxURL), nil
+	return strings.TrimSpace(resolved.ComputerURL), nil
 }
 
 func emailAppagentRunIDFromSourceRef(raw string) string {

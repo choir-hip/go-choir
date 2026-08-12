@@ -32,7 +32,7 @@ import (
 func fileReadTool(baseDir string) toolregistry.Tool {
 	return toolregistry.Tool{
 		Name:        "file_read",
-		Description: "Read the contents of a file from the sandbox filesystem. Provide the file path as a relative or absolute path.",
+		Description: "Read the contents of a file from the autoputer filesystem. Provide the file path as a relative or absolute path.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -640,7 +640,7 @@ func TestToolLoopEndToEndWithRuntime(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a file that the tool will read.
-	testContent := "ChoirOS Sandbox Runtime v1.0\nBuild: 2024-04-12\nFeatures: tools, streaming"
+	testContent := "ChoirOS Autoputer Runtime v1.0\nBuild: 2024-04-12\nFeatures: tools, streaming"
 	testFile := filepath.Join(tmpDir, "version.txt")
 	if err := os.WriteFile(testFile, []byte(testContent), 0o644); err != nil {
 		t.Fatalf("write version file: %v", err)
@@ -667,7 +667,7 @@ func TestToolLoopEndToEndWithRuntime(t *testing.T) {
 		},
 		&provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
-			Text:       "Based on the version file, this is ChoirOS Sandbox Runtime v1.0, built on 2024-04-12, with tools and streaming features.",
+			Text:       "Based on the version file, this is ChoirOS Autoputer Runtime v1.0, built on 2024-04-12, with tools and streaming features.",
 			Usage:      provideriface.TokenUsage{InputTokens: 60, OutputTokens: 25},
 			Model:      "test-model",
 		},
@@ -697,7 +697,7 @@ func TestToolLoopEndToEndWithRuntime(t *testing.T) {
 	}
 
 	// The result should reference the file content.
-	expectedResult := "Based on the version file, this is ChoirOS Sandbox Runtime v1.0, built on 2024-04-12, with tools and streaming features."
+	expectedResult := "Based on the version file, this is ChoirOS Autoputer Runtime v1.0, built on 2024-04-12, with tools and streaming features."
 	if fetched.Result != expectedResult {
 		t.Errorf("result:\ngot:  %q\nwant: %q", fetched.Result, expectedResult)
 	}

@@ -20,13 +20,13 @@ import (
 func TestIssueAndValidateCredential(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Hour)
 
-	result, err := reg.IssueCredential("sandbox-1")
+	result, err := reg.IssueCredential("autoputer-1")
 	if err != nil {
 		t.Fatalf("issue credential: %v", err)
 	}
 
-	if result.SandboxID != "sandbox-1" {
-		t.Errorf("SandboxID = %q, want %q", result.SandboxID, "sandbox-1")
+	if result.ComputerID != "autoputer-1" {
+		t.Errorf("ComputerID = %q, want %q", result.ComputerID, "autoputer-1")
 	}
 	if result.RawToken == "" {
 		t.Error("RawToken is empty")
@@ -36,21 +36,21 @@ func TestIssueAndValidateCredential(t *testing.T) {
 	}
 
 	// Validate the credential.
-	sandboxID, err := reg.ValidateCredential(result.RawToken)
+	computerID, err := reg.ValidateCredential(result.RawToken)
 	if err != nil {
 		t.Fatalf("validate credential: %v", err)
 	}
-	if sandboxID != "sandbox-1" {
-		t.Errorf("sandbox ID = %q, want %q", sandboxID, "sandbox-1")
+	if computerID != "autoputer-1" {
+		t.Errorf("autoputer ID = %q, want %q", computerID, "autoputer-1")
 	}
 }
 
-func TestValidateCredentialUnknownSandbox(t *testing.T) {
+func TestValidateCredentialUnknownAutoputer(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Hour)
 
-	_, err := reg.ValidateCredential("unknown-sandbox:sometoken")
+	_, err := reg.ValidateCredential("unknown-autoputer:sometoken")
 	if err == nil {
-		t.Fatal("expected error for unknown sandbox")
+		t.Fatal("expected error for unknown autoputer")
 	}
 }
 
@@ -66,10 +66,10 @@ func TestValidateCredentialInvalidFormat(t *testing.T) {
 func TestValidateCredentialWrongToken(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Hour)
 
-	result, _ := reg.IssueCredential("sandbox-1")
+	result, _ := reg.IssueCredential("autoputer-1")
 
 	// Modify the token to be wrong.
-	wrongToken := "sandbox-1:deadbeef"
+	wrongToken := "autoputer-1:deadbeef"
 	_, err := reg.ValidateCredential(wrongToken)
 	if err == nil {
 		t.Fatal("expected error for wrong token")
@@ -85,9 +85,9 @@ func TestValidateCredentialWrongToken(t *testing.T) {
 func TestRevokeCredential(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Hour)
 
-	result, _ := reg.IssueCredential("sandbox-1")
+	result, _ := reg.IssueCredential("autoputer-1")
 
-	reg.RevokeCredential("sandbox-1")
+	reg.RevokeCredential("autoputer-1")
 
 	_, err := reg.ValidateCredential(result.RawToken)
 	if err == nil {
@@ -101,10 +101,10 @@ func TestRevokeCredential(t *testing.T) {
 func TestRotateCredential(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Hour)
 
-	result1, _ := reg.IssueCredential("sandbox-1")
+	result1, _ := reg.IssueCredential("autoputer-1")
 
 	// Rotate: old credential should stop working, new one should work.
-	result2, err := reg.RotateCredential("sandbox-1")
+	result2, err := reg.RotateCredential("autoputer-1")
 	if err != nil {
 		t.Fatalf("rotate credential: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestRotateCredential(t *testing.T) {
 func TestExpiredCredential(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Nanosecond) // immediate expiry
 
-	result, _ := reg.IssueCredential("sandbox-1")
+	result, _ := reg.IssueCredential("autoputer-1")
 
 	// Wait for expiry.
 	time.Sleep(10 * time.Millisecond)
@@ -142,8 +142,8 @@ func TestExpiredCredential(t *testing.T) {
 func TestIssueCredentialReplacesExisting(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Hour)
 
-	result1, _ := reg.IssueCredential("sandbox-1")
-	result2, _ := reg.IssueCredential("sandbox-1")
+	result1, _ := reg.IssueCredential("autoputer-1")
+	result2, _ := reg.IssueCredential("autoputer-1")
 
 	// First credential should be invalidated.
 	_, err := reg.ValidateCredential(result1.RawToken)
@@ -165,7 +165,7 @@ func TestIdentityRegistryPersistsCredentialAcrossRestart(t *testing.T) {
 	if err := reg.SetPersistencePath(path); err != nil {
 		t.Fatalf("set persistence path: %v", err)
 	}
-	result, err := reg.IssueCredential("sandbox-persist")
+	result, err := reg.IssueCredential("autoputer-persist")
 	if err != nil {
 		t.Fatalf("issue credential: %v", err)
 	}
@@ -178,8 +178,8 @@ func TestIdentityRegistryPersistsCredentialAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("validate persisted credential: %v", err)
 	}
-	if got != "sandbox-persist" {
-		t.Fatalf("sandbox ID = %q, want sandbox-persist", got)
+	if got != "autoputer-persist" {
+		t.Fatalf("autoputer ID = %q, want autoputer-persist", got)
 	}
 	if restarted.ActiveCount() != 1 {
 		t.Fatalf("active count = %d, want 1", restarted.ActiveCount())
@@ -193,11 +193,11 @@ func TestIdentityRegistryPersistsRevocation(t *testing.T) {
 	if err := reg.SetPersistencePath(path); err != nil {
 		t.Fatalf("set persistence path: %v", err)
 	}
-	result, err := reg.IssueCredential("sandbox-revoked")
+	result, err := reg.IssueCredential("autoputer-revoked")
 	if err != nil {
 		t.Fatalf("issue credential: %v", err)
 	}
-	reg.RevokeCredential("sandbox-revoked")
+	reg.RevokeCredential("autoputer-revoked")
 
 	restarted := NewIdentityRegistry(1 * time.Hour)
 	if err := restarted.SetPersistencePath(path); err != nil {
@@ -213,7 +213,7 @@ func TestIdentityRegistryPersistsRevocation(t *testing.T) {
 
 func TestEnsureCredentialImportsHostHeldTokenAfterRegistryRestart(t *testing.T) {
 	path := t.TempDir() + "/gateway-identities.json"
-	rawToken := "sandbox-pre-persistence:host-held-token"
+	rawToken := "autoputer-pre-persistence:host-held-token"
 
 	reg := NewIdentityRegistry(1 * time.Hour)
 	if err := reg.SetPersistencePath(path); err != nil {
@@ -227,8 +227,8 @@ func TestEnsureCredentialImportsHostHeldTokenAfterRegistryRestart(t *testing.T) 
 	if err != nil {
 		t.Fatalf("ensure credential: %v", err)
 	}
-	if result.SandboxID != "sandbox-pre-persistence" {
-		t.Fatalf("SandboxID = %q, want sandbox-pre-persistence", result.SandboxID)
+	if result.ComputerID != "autoputer-pre-persistence" {
+		t.Fatalf("ComputerID = %q, want autoputer-pre-persistence", result.ComputerID)
 	}
 	if result.Status != "imported" {
 		t.Fatalf("Status = %q, want imported", result.Status)
@@ -257,18 +257,18 @@ func TestEnsureCredentialImportsHostHeldTokenAfterRegistryRestart(t *testing.T) 
 func TestEnsureCredentialRefusesConflictAndRevokedIdentity(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Hour)
 
-	result, err := reg.IssueCredential("sandbox-conflict")
+	result, err := reg.IssueCredential("autoputer-conflict")
 	if err != nil {
 		t.Fatalf("issue credential: %v", err)
 	}
-	if _, err := reg.EnsureCredential("sandbox-conflict:different-token"); err == nil {
+	if _, err := reg.EnsureCredential("autoputer-conflict:different-token"); err == nil {
 		t.Fatal("expected conflicting credential ensure to fail")
 	}
 	if _, err := reg.ValidateCredential(result.RawToken); err != nil {
 		t.Fatalf("original credential should remain valid after conflict: %v", err)
 	}
 
-	reg.RevokeCredential("sandbox-conflict")
+	reg.RevokeCredential("autoputer-conflict")
 	if _, err := reg.EnsureCredential(result.RawToken); err == nil {
 		t.Fatal("expected revoked credential ensure to fail")
 	}
@@ -285,7 +285,7 @@ type mockProvider struct {
 	lastReq  *provider.LLMRequest
 
 	// mu guards lastReq. The race detector flagged concurrent writes to
-	// lastReq when parallel tests (e.g. TestHandleInference_ParallelSandboxIsolation)
+	// lastReq when parallel tests (e.g. TestHandleInference_ParallelAutoputerIsolation)
 	// invoke Call from multiple goroutines. The mutex serializes the test-only
 	// capture of the last request without changing the provider's external
 	// behavior (the mock still returns the same canned response).
@@ -372,7 +372,7 @@ func TestHandleInference_AuthSuccess(t *testing.T) {
 	h, reg, _ := setupHandler(t)
 
 	// Issue a credential.
-	result, _ := reg.IssueCredential("sandbox-1")
+	result, _ := reg.IssueCredential("autoputer-1")
 
 	// Make an inference request.
 	payload := ProviderRequest{
@@ -408,7 +408,7 @@ func TestHandleInference_AuthSuccess(t *testing.T) {
 func TestHandleInference_DeniesExternalPeerWithValidToken(t *testing.T) {
 	h, reg, _ := setupHandler(t)
 
-	result, _ := reg.IssueCredential("sandbox-1")
+	result, _ := reg.IssueCredential("autoputer-1")
 
 	payload := ProviderRequest{
 		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
@@ -507,7 +507,7 @@ func TestHandleInference_ForgedAuth(t *testing.T) {
 
 	// Use a forged token with wrong hash.
 	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader("{}"))
-	req.Header.Set("Authorization", "Bearer sandbox-1:deadbeeffaketoken")
+	req.Header.Set("Authorization", "Bearer autoputer-1:deadbeeffaketoken")
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -521,8 +521,8 @@ func TestHandleInference_ForgedAuth(t *testing.T) {
 func TestHandleInference_RevokedCredential(t *testing.T) {
 	h, reg, _ := setupHandler(t)
 
-	result, _ := reg.IssueCredential("sandbox-1")
-	reg.RevokeCredential("sandbox-1")
+	result, _ := reg.IssueCredential("autoputer-1")
+	reg.RevokeCredential("autoputer-1")
 
 	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader("{}"))
 	req.Header.Set("Authorization", "Bearer "+result.RawToken)
@@ -539,7 +539,7 @@ func TestHandleInference_RevokedCredential(t *testing.T) {
 func TestHandleInference_NoProvider(t *testing.T) {
 	h, reg := setupHandlerNoProvider(t)
 
-	result, _ := reg.IssueCredential("sandbox-1")
+	result, _ := reg.IssueCredential("autoputer-1")
 
 	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader("{}"))
 	req.Header.Set("Authorization", "Bearer "+result.RawToken)
@@ -556,7 +556,7 @@ func TestHandleInference_NoProvider(t *testing.T) {
 func TestHandleInference_UnsupportedProvider(t *testing.T) {
 	h, reg, _ := setupHandler(t)
 
-	result, _ := reg.IssueCredential("sandbox-1")
+	result, _ := reg.IssueCredential("autoputer-1")
 
 	payload := ProviderRequest{
 		Provider: "openai", // not configured
@@ -580,7 +580,7 @@ func TestHandleInference_ProviderError(t *testing.T) {
 	h, reg, mp := setupHandler(t)
 	mp.err = fmt.Errorf("bedrock: status 503 Service Unavailable (sanitized)")
 
-	result, _ := reg.IssueCredential("sandbox-1")
+	result, _ := reg.IssueCredential("autoputer-1")
 
 	payload := ProviderRequest{
 		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
@@ -634,7 +634,7 @@ func TestHandleInference_MethodNotAllowed(t *testing.T) {
 func TestHandleIssueCredential(t *testing.T) {
 	h, _ := setupHandlerNoProvider(t)
 
-	body := `{"sandbox_id": "sandbox-test"}`
+	body := `{"computer_id": "autoputer-test"}`
 	req := httptest.NewRequest(http.MethodPost, "/provider/v1/credentials/issue", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Caller", "true")
@@ -652,8 +652,8 @@ func TestHandleIssueCredential(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if result.SandboxID != "sandbox-test" {
-		t.Errorf("SandboxID = %q, want %q", result.SandboxID, "sandbox-test")
+	if result.ComputerID != "autoputer-test" {
+		t.Errorf("ComputerID = %q, want %q", result.ComputerID, "autoputer-test")
 	}
 	if result.RawToken == "" {
 		t.Error("RawToken is empty")
@@ -663,7 +663,7 @@ func TestHandleIssueCredential(t *testing.T) {
 func TestHandleIssueCredential_NonLocalhost(t *testing.T) {
 	h, _ := setupHandlerNoProvider(t)
 
-	body := `{"sandbox_id": "sandbox-test"}`
+	body := `{"computer_id": "autoputer-test"}`
 	req := httptest.NewRequest(http.MethodPost, "/provider/v1/credentials/issue", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Caller", "true")
@@ -681,7 +681,7 @@ func TestHandleIssueCredential_NonLocalhost(t *testing.T) {
 func TestHandleIssueCredential_SpoofedLocalhostHostDenied(t *testing.T) {
 	h, _ := setupHandlerNoProvider(t)
 
-	body := `{"sandbox_id": "sandbox-test"}`
+	body := `{"computer_id": "autoputer-test"}`
 	req := httptest.NewRequest(http.MethodPost, "/provider/v1/credentials/issue", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Caller", "true")
@@ -699,7 +699,7 @@ func TestHandleIssueCredential_SpoofedLocalhostHostDenied(t *testing.T) {
 func TestHandleIssueCredential_MissingInternalHeaderDenied(t *testing.T) {
 	h, _ := setupHandlerNoProvider(t)
 
-	body := `{"sandbox_id": "sandbox-test"}`
+	body := `{"computer_id": "autoputer-test"}`
 	req := httptest.NewRequest(http.MethodPost, "/provider/v1/credentials/issue", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Host = "localhost:8084"
@@ -717,10 +717,10 @@ func TestHandleRevokeCredential(t *testing.T) {
 	h, reg := setupHandlerNoProvider(t)
 
 	// Issue a credential first.
-	result, _ := reg.IssueCredential("sandbox-test")
+	result, _ := reg.IssueCredential("autoputer-test")
 
 	// Revoke it.
-	body := `{"sandbox_id": "sandbox-test"}`
+	body := `{"computer_id": "autoputer-test"}`
 	req := httptest.NewRequest(http.MethodPost, "/provider/v1/credentials/revoke", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Caller", "true")
@@ -745,10 +745,10 @@ func TestHandleRotateCredential(t *testing.T) {
 	h, reg := setupHandlerNoProvider(t)
 
 	// Issue a credential first.
-	result1, _ := reg.IssueCredential("sandbox-test")
+	result1, _ := reg.IssueCredential("autoputer-test")
 
 	// Rotate it.
-	body := `{"sandbox_id": "sandbox-test"}`
+	body := `{"computer_id": "autoputer-test"}`
 	req := httptest.NewRequest(http.MethodPost, "/provider/v1/credentials/rotate", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Caller", "true")
@@ -782,7 +782,7 @@ func TestHandleRotateCredential(t *testing.T) {
 
 func TestHandleEnsureCredentialImportsUnknownCredentialWithoutEchoingToken(t *testing.T) {
 	h, reg := setupHandlerNoProvider(t)
-	rawToken := "sandbox-existing-vm:host-held-token"
+	rawToken := "autoputer-existing-vm:host-held-token"
 
 	body := `{"raw_token":"` + rawToken + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/provider/v1/credentials/ensure", strings.NewReader(body))
@@ -815,7 +815,7 @@ func TestHandleEnsureCredentialImportsUnknownCredentialWithoutEchoingToken(t *te
 func TestHandleEnsureCredentialDeniedWithoutInternalCaller(t *testing.T) {
 	h, _ := setupHandlerNoProvider(t)
 
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/credentials/ensure", strings.NewReader(`{"raw_token":"sandbox-existing-vm:host-held-token"}`))
+	req := httptest.NewRequest(http.MethodPost, "/provider/v1/credentials/ensure", strings.NewReader(`{"raw_token":"autoputer-existing-vm:host-held-token"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Host = "localhost:8084"
 	req.RemoteAddr = "127.0.0.1:12345"
@@ -832,10 +832,10 @@ func TestStaleCredentialAfterRotation(t *testing.T) {
 	// VAL-GATEWAY-008: After rotation, the old credential stops working.
 	h, reg, mp := setupHandler(t)
 
-	result1, _ := reg.IssueCredential("sandbox-1")
+	result1, _ := reg.IssueCredential("autoputer-1")
 
 	// Rotate the credential.
-	result2, _ := reg.RotateCredential("sandbox-1")
+	result2, _ := reg.RotateCredential("autoputer-1")
 
 	// Try inference with the old credential.
 	payload := ProviderRequest{
@@ -898,8 +898,8 @@ func TestGatewayClientCall(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	// Issue a credential for the sandbox.
-	result, err := reg.IssueCredential("sandbox-client-test")
+	// Issue a credential for the autoputer.
+	result, err := reg.IssueCredential("autoputer-client-test")
 	if err != nil {
 		t.Fatalf("issue credential: %v", err)
 	}
@@ -950,8 +950,8 @@ func TestGatewayClientCall_MissingTokenFailsBeforeHTTP(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing credential error")
 	}
-	if !strings.Contains(err.Error(), "missing sandbox credential") {
-		t.Fatalf("error = %q, want missing sandbox credential", err.Error())
+	if !strings.Contains(err.Error(), "missing autoputer credential") {
+		t.Fatalf("error = %q, want missing autoputer credential", err.Error())
 	}
 	if called {
 		t.Fatal("gateway server was called despite missing token")
@@ -973,8 +973,8 @@ func TestGatewayClientStream_MissingTokenFailsBeforeHTTP(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing credential error")
 	}
-	if !strings.Contains(err.Error(), "missing sandbox credential") {
-		t.Fatalf("error = %q, want missing sandbox credential", err.Error())
+	if !strings.Contains(err.Error(), "missing autoputer credential") {
+		t.Fatalf("error = %q, want missing autoputer credential", err.Error())
 	}
 	if called {
 		t.Fatal("gateway server was called despite missing token")
@@ -991,7 +991,7 @@ func TestGatewayClientCall_InvalidToken(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	client := NewGatewayClient(server.URL, "invalid-sandbox:invalid-token")
+	client := NewGatewayClient(server.URL, "invalid-autoputer:invalid-token")
 
 	_, err := client.Call(context.Background(), provider.LLMRequest{
 		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
@@ -1015,8 +1015,8 @@ func TestGatewayClientCall_RevokedToken(t *testing.T) {
 	defer server.Close()
 
 	// Issue and immediately revoke.
-	result, _ := reg.IssueCredential("sandbox-revoke-test")
-	reg.RevokeCredential("sandbox-revoke-test")
+	result, _ := reg.IssueCredential("autoputer-revoke-test")
+	reg.RevokeCredential("autoputer-revoke-test")
 
 	client := NewGatewayClient(server.URL, result.RawToken)
 
@@ -1051,7 +1051,7 @@ func TestGatewayClientStream(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	result, err := reg.IssueCredential("sandbox-stream-test")
+	result, err := reg.IssueCredential("autoputer-stream-test")
 	if err != nil {
 		t.Fatalf("issue credential: %v", err)
 	}
@@ -1117,7 +1117,7 @@ func TestGatewayClientStream_Error(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	result, err := reg.IssueCredential("sandbox-stream-err")
+	result, err := reg.IssueCredential("autoputer-stream-err")
 	if err != nil {
 		t.Fatalf("issue credential: %v", err)
 	}
@@ -1260,13 +1260,13 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.Port != "8084" {
 		t.Errorf("Port = %q, want %q", cfg.Port, "8084")
 	}
-	if cfg.SandboxTokenTTL != 1*time.Hour {
-		t.Errorf("SandboxTokenTTL = %v, want %v", cfg.SandboxTokenTTL, 1*time.Hour)
+	if cfg.AutoputerTokenTTL != 1*time.Hour {
+		t.Errorf("AutoputerTokenTTL = %v, want %v", cfg.AutoputerTokenTTL, 1*time.Hour)
 	}
 }
 
 // --- Browser Denial Tests (VAL-GATEWAY-002) ---
-// The gateway denies browser-like callers that don't present valid sandbox
+// The gateway denies browser-like callers that don't present valid autoputer
 // credentials. Even if a browser-like request reaches the gateway, it
 // fails because:
 // 1. No Authorization header → 401
@@ -1331,36 +1331,36 @@ func TestAuthorizedRuntimePeerIncludesVMManagerSubnetRollover(t *testing.T) {
 	}
 }
 
-// --- Multiple Sandbox Isolation Tests ---
+// --- Multiple Autoputer Isolation Tests ---
 
-func TestMultipleSandboxesIsolated(t *testing.T) {
+func TestMultipleAutoputeresIsolated(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Hour)
 
-	result1, _ := reg.IssueCredential("sandbox-1")
-	result2, _ := reg.IssueCredential("sandbox-2")
+	result1, _ := reg.IssueCredential("autoputer-1")
+	result2, _ := reg.IssueCredential("autoputer-2")
 
-	// Each sandbox's token only identifies itself.
+	// Each autoputer's token only identifies itself.
 	id1, _ := reg.ValidateCredential(result1.RawToken)
-	if id1 != "sandbox-1" {
-		t.Errorf("token 1 → %q, want %q", id1, "sandbox-1")
+	if id1 != "autoputer-1" {
+		t.Errorf("token 1 → %q, want %q", id1, "autoputer-1")
 	}
 
 	id2, _ := reg.ValidateCredential(result2.RawToken)
-	if id2 != "sandbox-2" {
-		t.Errorf("token 2 → %q, want %q", id2, "sandbox-2")
+	if id2 != "autoputer-2" {
+		t.Errorf("token 2 → %q, want %q", id2, "autoputer-2")
 	}
 
-	// Revoking sandbox-1 doesn't affect sandbox-2.
-	reg.RevokeCredential("sandbox-1")
+	// Revoking autoputer-1 doesn't affect autoputer-2.
+	reg.RevokeCredential("autoputer-1")
 
 	_, err := reg.ValidateCredential(result1.RawToken)
 	if err == nil {
-		t.Fatal("sandbox-1 credential should be revoked")
+		t.Fatal("autoputer-1 credential should be revoked")
 	}
 
 	_, err = reg.ValidateCredential(result2.RawToken)
 	if err != nil {
-		t.Fatalf("sandbox-2 credential should still work: %v", err)
+		t.Fatalf("autoputer-2 credential should still work: %v", err)
 	}
 }
 
@@ -1437,7 +1437,7 @@ func TestMultiProvider_RoutesToFireworksByProviderField(t *testing.T) {
 	// VAL-LLM-001: Request with provider=fireworks routes to Fireworks provider.
 	h, reg := setupMultiProviderHandler(t)
 
-	result, _ := reg.IssueCredential("sandbox-fw")
+	result, _ := reg.IssueCredential("autoputer-fw")
 
 	payload := ProviderRequest{
 		Provider:  "fireworks",
@@ -1480,7 +1480,7 @@ func TestMultiProvider_RoutesToFireworksByModel(t *testing.T) {
 	// VAL-LLM-005: Request with Fireworks model routes to Fireworks provider.
 	h, reg := setupMultiProviderHandler(t)
 
-	result, _ := reg.IssueCredential("sandbox-fw-model")
+	result, _ := reg.IssueCredential("autoputer-fw-model")
 
 	payload := ProviderRequest{
 		Model:     "accounts/fireworks/models/deepseek-v4-flash",
@@ -1514,7 +1514,7 @@ func TestMultiProvider_RoutesToZAIByProviderField(t *testing.T) {
 	// VAL-LLM-006: Request with provider=zai routes to Z.AI provider.
 	h, reg := setupMultiProviderHandler(t)
 
-	result, _ := reg.IssueCredential("sandbox-zai")
+	result, _ := reg.IssueCredential("autoputer-zai")
 
 	payload := ProviderRequest{
 		Provider:  "zai",
@@ -1548,7 +1548,7 @@ func TestMultiProvider_RoutesToZAIByModel(t *testing.T) {
 	// Model-based routing: glm-5-turbo → zai.
 	h, reg := setupMultiProviderHandler(t)
 
-	result, _ := reg.IssueCredential("sandbox-zai-model")
+	result, _ := reg.IssueCredential("autoputer-zai-model")
 
 	payload := ProviderRequest{
 		Model:     "glm-5-turbo",
@@ -1582,7 +1582,7 @@ func TestMultiProvider_RoutesToBedrockByProviderField(t *testing.T) {
 	// Request with provider=bedrock routes to Bedrock provider.
 	h, reg := setupMultiProviderHandler(t)
 
-	result, _ := reg.IssueCredential("sandbox-br")
+	result, _ := reg.IssueCredential("autoputer-br")
 
 	payload := ProviderRequest{
 		Provider:  "bedrock",
@@ -1616,7 +1616,7 @@ func TestMultiProvider_RejectsUnknownProvider(t *testing.T) {
 	// VAL-LLM-007: Request with unknown provider returns 400.
 	h, reg := setupMultiProviderHandler(t)
 
-	result, _ := reg.IssueCredential("sandbox-bad")
+	result, _ := reg.IssueCredential("autoputer-bad")
 
 	payload := ProviderRequest{
 		Provider:  "openai",
@@ -1648,7 +1648,7 @@ func TestMultiProvider_RejectsUnknownProvider(t *testing.T) {
 func TestMultiProviderRequiresProviderOrModel(t *testing.T) {
 	h, reg := setupMultiProviderHandler(t)
 
-	result, _ := reg.IssueCredential("sandbox-default")
+	result, _ := reg.IssueCredential("autoputer-default")
 
 	payload := ProviderRequest{
 		Messages:  []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
@@ -1691,7 +1691,7 @@ func TestMultiProvider_ProviderErrorSanitized(t *testing.T) {
 
 	h := NewMultiHandler(reg, mp)
 
-	result, _ := reg.IssueCredential("sandbox-fw-err")
+	result, _ := reg.IssueCredential("autoputer-fw-err")
 
 	payload := ProviderRequest{
 		Provider: "fireworks",
@@ -1748,7 +1748,7 @@ func TestMultiProvider_FireworksToolCalls(t *testing.T) {
 
 	h := NewMultiHandler(reg, mp)
 
-	result, _ := reg.IssueCredential("sandbox-fw-tools")
+	result, _ := reg.IssueCredential("autoputer-fw-tools")
 
 	payload := ProviderRequest{
 		Provider: "fireworks",
@@ -1834,10 +1834,10 @@ func TestMultiProvider_RateLimitStillWorks(t *testing.T) {
 	mp := provider.NewMultiProvider()
 	mp.Register("fireworks", fireworksProvider)
 
-	rl := NewPerSandboxRateLimiter(2, 1*time.Minute) // 2 requests per minute
+	rl := NewPerAutoputerRateLimiter(2, 1*time.Minute) // 2 requests per minute
 	h := NewMultiHandlerWithRateLimit(reg, mp, rl)
 
-	result, _ := reg.IssueCredential("sandbox-rl")
+	result, _ := reg.IssueCredential("autoputer-rl")
 
 	payload := ProviderRequest{
 		Provider: "fireworks",
@@ -1894,7 +1894,7 @@ func TestMultiProvider_FireworksWithSystemPrompt(t *testing.T) {
 
 	h := NewMultiHandler(reg, mp)
 
-	result, _ := reg.IssueCredential("sandbox-fw-sys")
+	result, _ := reg.IssueCredential("autoputer-fw-sys")
 
 	payload := ProviderRequest{
 		Provider:  "fireworks",
@@ -1948,7 +1948,7 @@ func TestHandleInference_StreamingZAI(t *testing.T) {
 
 	h := NewMultiHandler(reg, mp)
 
-	result, _ := reg.IssueCredential("sandbox-zai-stream")
+	result, _ := reg.IssueCredential("autoputer-zai-stream")
 
 	payload := ProviderRequest{
 		Provider:  "zai",
@@ -2009,7 +2009,7 @@ func TestHandleInference_StreamingFireworks(t *testing.T) {
 
 	h := NewMultiHandler(reg, mp)
 
-	result, _ := reg.IssueCredential("sandbox-fw-stream")
+	result, _ := reg.IssueCredential("autoputer-fw-stream")
 
 	payload := ProviderRequest{
 		Provider:  "fireworks",
@@ -2054,7 +2054,7 @@ func TestHandleOpenAIChatCompletions_RoutesThroughGateway(t *testing.T) {
 	mp := provider.NewMultiProvider()
 	mp.Register("chatgpt", chatProvider)
 	h := NewMultiHandler(reg, mp)
-	credential, _ := reg.IssueCredential("sandbox-openai")
+	credential, _ := reg.IssueCredential("autoputer-openai")
 
 	body := `{
 		"model":"gpt-5.5",
@@ -2124,7 +2124,7 @@ func TestHandleOpenAIChatCompletions_StreamingSSE(t *testing.T) {
 	mp := provider.NewMultiProvider()
 	mp.Register("chatgpt", chatProvider)
 	h := NewMultiHandler(reg, mp)
-	credential, _ := reg.IssueCredential("sandbox-openai-stream")
+	credential, _ := reg.IssueCredential("autoputer-openai-stream")
 
 	body := `{"model":"gpt-5.5","messages":[{"role":"user","content":"hello"}],"reasoning_effort":"medium","stream":true}`
 	req := httptest.NewRequest(http.MethodPost, "/provider/openai/v1/chat/completions", strings.NewReader(body))
@@ -2172,7 +2172,7 @@ func TestHandleOpenAIChatCompletions_StreamingToolCallsAreComplete(t *testing.T)
 	mp := provider.NewMultiProvider()
 	mp.Register("chatgpt", chatProvider)
 	h := NewMultiHandler(reg, mp)
-	credential, _ := reg.IssueCredential("sandbox-openai-stream-tools")
+	credential, _ := reg.IssueCredential("autoputer-openai-stream-tools")
 
 	body := `{
 		"model":"gpt-5.5",
@@ -2254,7 +2254,7 @@ func TestHandleOpenAIChatCompletions_StreamingToolCallsAreComplete(t *testing.T)
 	}
 }
 
-func TestHandleOpenAIModelsRequiresSandboxAuth(t *testing.T) {
+func TestHandleOpenAIModelsRequiresAutoputerAuth(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Hour)
 	h := NewHandler(reg, nil)
 
@@ -2265,7 +2265,7 @@ func TestHandleOpenAIModelsRequiresSandboxAuth(t *testing.T) {
 		t.Fatalf("status = %d, want 401", w.Code)
 	}
 
-	credential, _ := reg.IssueCredential("sandbox-openai-models")
+	credential, _ := reg.IssueCredential("autoputer-openai-models")
 	req = httptest.NewRequest(http.MethodGet, "/provider/openai/v1/models", nil)
 	req.Header.Set("Authorization", "Bearer "+credential.RawToken)
 	w = httptest.NewRecorder()
@@ -2329,7 +2329,7 @@ func TestHandleInference_StreamingProviderError(t *testing.T) {
 
 	h := NewMultiHandler(reg, mp)
 
-	result, _ := reg.IssueCredential("sandbox-zai-stream-err")
+	result, _ := reg.IssueCredential("autoputer-zai-stream-err")
 
 	payload := ProviderRequest{
 		Provider: "zai",
@@ -2374,7 +2374,7 @@ func TestHandleInference_NonStreamingStillWorks(t *testing.T) {
 
 	h := NewMultiHandler(reg, mp)
 
-	result, _ := reg.IssueCredential("sandbox-nostream")
+	result, _ := reg.IssueCredential("autoputer-nostream")
 
 	// Test with stream=false explicitly.
 	payload := ProviderRequest{
@@ -2472,7 +2472,7 @@ func TestProviderRouting(t *testing.T) {
 	h := NewMultiHandler(reg, mp)
 
 	// Issue a single credential for all sub-tests.
-	cred, _ := reg.IssueCredential("sandbox-routing-test")
+	cred, _ := reg.IssueCredential("autoputer-routing-test")
 
 	tests := []struct {
 		name             string
@@ -2690,7 +2690,7 @@ func TestProviderRouting_SupportedModelsTable(t *testing.T) {
 	}
 
 	h := NewMultiHandler(reg, mp)
-	cred, _ := reg.IssueCredential("sandbox-model-table")
+	cred, _ := reg.IssueCredential("autoputer-model-table")
 
 	for _, mi := range provider.SupportedModels() {
 		t.Run(mi.ID+"_routes_to_"+mi.Provider, func(t *testing.T) {
@@ -2743,7 +2743,7 @@ func TestProviderRouting_InvalidProviderDoesNotLeakCredentials(t *testing.T) {
 	mp.Register("zai", zaiProvider)
 
 	h := NewMultiHandler(reg, mp)
-	cred, _ := reg.IssueCredential("sandbox-cred-leak")
+	cred, _ := reg.IssueCredential("autoputer-cred-leak")
 
 	for _, providerName := range []string{"openai", "bedrock", "deepseek", "nonexistent"} {
 		t.Run("provider_"+providerName, func(t *testing.T) {
@@ -2781,7 +2781,7 @@ func TestHandleInference_StreamingModelRoutingToZAI(t *testing.T) {
 	// VAL-LLM-006: Streaming request with glm-5-turbo model routes to Z.AI.
 	h, reg := setupMultiProviderHandler(t)
 
-	result, _ := reg.IssueCredential("sandbox-zai-stream-model")
+	result, _ := reg.IssueCredential("autoputer-zai-stream-model")
 
 	payload := ProviderRequest{
 		Model:     "glm-5-turbo",

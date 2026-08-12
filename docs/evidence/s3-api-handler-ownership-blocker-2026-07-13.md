@@ -25,13 +25,13 @@ The isolated implementer moved all 128 receivers across 20 files plus their dire
 - The 77 missing declaration classes comprise 20 types, 21 constants, and 36 functions owned by 18 production files outside the exact mutation lock.
 - The 21 private `Runtime` members comprise five fields and sixteen methods. Existing `Store()` and `EventBus()` operations and handler-owned configuration/synchronization can resolve only a minority. Provider policy, prompt-bar completion, Texture route/revision/merge operations, Browser operations, product events, persistent-Super reconciliation, app-adoption preview, and system-prompt rendering have no approved cohesive public operation boundary.
 - `go test -gcflags=all=-e ./internal/runtime -run '^$'` against the diagnostic split failed with 38 errors across eleven same-package test files. Those tests directly name the old handler and private HTTP support declarations; `runtime` cannot import `apihandler` because `apihandler` imports `runtime`.
-- After discarding the diagnostic, `go test ./internal/apihandler ./internal/runtime ./internal/sandbox -run '^$'` passed (`artifact://2618`), focused route tests passed (`artifact://2625`), and the isolated worktree was clean at `edd2d551` (`artifact://2616`).
+- After discarding the diagnostic, `go test ./internal/apihandler ./internal/runtime ./internal/autoputer -run '^$'` passed (`artifact://2618`), focused route tests passed (`artifact://2625`), and the isolated worktree was clean at `edd2d551` (`artifact://2616`).
 - Canonical boundary remains: one runtime handler type, one runtime constructor, 128 runtime receivers, and zero apihandler handler types/constructors/receivers.
 
 ## Dependency Graph
 
 ```text
-cmd/sandbox
+cmd/autoputer
   -> apihandler.RegisterRoutes
   -> runtime.NewAPIHandler
   -> runtime.APIHandler (128 HTTP receivers)

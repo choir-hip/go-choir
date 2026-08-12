@@ -53,9 +53,9 @@ export default function () {
   check(res, {
     'bootstrap authenticated': (r) => r.status !== 401,
     'bootstrap ok': (r) => r.status >= 200 && r.status < 300,
-    'bootstrap has sandbox id': (r) => {
+    'bootstrap has autoputer id': (r) => {
       try {
-        return Boolean(JSON.parse(r.body).sandbox_id);
+        return Boolean(JSON.parse(r.body).computer_id);
       } catch (_err) {
         return false;
       }

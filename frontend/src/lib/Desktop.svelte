@@ -887,7 +887,7 @@
   async function stabilizeBootstrap() {
     bootstrapStable = false;
     bootstrapError = '';
-    let previousSandboxId = '';
+    let previousAutoputerId = '';
     let attempt = 0;
     let recoveryRequested = false;
     const deadline = Date.now() + BOOTSTRAP_STABILITY_DEADLINE_MS;
@@ -927,18 +927,18 @@
         continue;
       }
       bootstrapData = await res.json();
-      const sandboxId = (bootstrapData?.sandbox_id || '').trim();
-      if (sandboxId !== '' && sandboxId === previousSandboxId) {
+      const autoputerId = (bootstrapData?.computer_id || '').trim();
+      if (autoputerId !== '' && autoputerId === previousAutoputerId) {
         bootstrapStable = true;
         appendBootLine('Stable computer route confirmed');
         return true;
       }
-      if (sandboxId !== '') {
-        appendBootLine(previousSandboxId ? 'Waiting for route to stabilize' : 'Computer route found');
+      if (autoputerId !== '') {
+        appendBootLine(previousAutoputerId ? 'Waiting for route to stabilize' : 'Computer route found');
       } else {
         appendBootLine('Waiting for computer identity');
       }
-      previousSandboxId = sandboxId;
+      previousAutoputerId = autoputerId;
       await delay(BOOTSTRAP_STABILITY_DELAY_MS);
     }
     bootstrapError = 'Desktop routing is still stabilizing';

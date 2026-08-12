@@ -123,7 +123,7 @@ Commands:
   run status <id>     Get the status of a prompt-bar submission
   run list            List recent owner-scoped runs
   run cancel <id>     Cancel an owner-scoped pending or running run
-  computer status      Observe the current computer through the product API
+  computer replay-completeness  Capture live-versus-event-replay state evidence
   computer stop        Stop the current computer through owner-scoped vmctl
   computer start       Start or resume the current computer
   api-key list        List your API keys
@@ -1199,12 +1199,14 @@ func runSelfDevelopmentModeSet(args []string, stdout, stderr io.Writer) int {
 
 func runComputer(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir computer: subcommand required (status|stop|start|restart)")
+		fmt.Fprintln(stderr, "choir computer: subcommand required (status|replay-completeness|stop|start|restart)")
 		return 2
 	}
 	switch args[0] {
 	case "status":
 		return runComputerStatus(args[1:], stdout, stderr)
+	case "replay-completeness":
+		return runComputerReplayCompleteness(args[1:], stdout, stderr)
 	case "stop", "start", "restart":
 		return runComputerAction(args[1:], args[0], stdout, stderr)
 	default:
@@ -1230,6 +1232,28 @@ func runComputerStatus(args []string, stdout, stderr io.Writer) int {
 	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/status"
 	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
 		fmt.Fprintf(stderr, "choir computer status: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, response)
+}
+
+func runComputerReplayCompleteness(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir computer replay-completeness", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir computer replay-completeness: %v\n", err)
+		return 2
+	}
+	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir computer replay-completeness: --computer is required")
+		return 2
+	}
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/replay-completeness"
+	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
+		fmt.Fprintf(stderr, "choir computer replay-completeness: %v\n", err)
 		return 1
 	}
 	return writeJSON(stdout, response)

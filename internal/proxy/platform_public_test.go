@@ -50,8 +50,8 @@ func TestPlatformPublicationResolveIsPublicAndInternalOnly(t *testing.T) {
 	}))
 	defer corpusd.Close()
 
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        "http://127.0.0.1:1",
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       "http://127.0.0.1:1",
 		AuthPublicKeyPath: "/unused/in/test",
 		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
@@ -100,8 +100,8 @@ func TestPlatformPublicationResolveAndExportPropagateNotFound(t *testing.T) {
 	}))
 	defer corpusd.Close()
 
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        "http://127.0.0.1:1",
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       "http://127.0.0.1:1",
 		AuthPublicKeyPath: "/unused/in/test",
 		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
@@ -168,14 +168,14 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 	defer corpusd.Close()
 
 	delivered := false
-	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/texture/documents/doc-1":
 			if r.Header.Get("X-Authenticated-User") != "reader-1" {
-				t.Fatalf("sandbox trusted user header: got %q", r.Header.Get("X-Authenticated-User"))
+				t.Fatalf("autoputer trusted user header: got %q", r.Header.Get("X-Authenticated-User"))
 			}
-			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
+			_ = json.NewEncoder(w).Encode(autoputerTextureDocument{
 				DocID:             "doc-1",
 				OwnerID:           "reader-1",
 				Title:             "My derivative",
@@ -183,9 +183,9 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 			})
 		case "/api/texture/revisions/rev-1":
 			if r.Header.Get("X-Authenticated-User") != "reader-1" {
-				t.Fatalf("sandbox trusted user header: got %q", r.Header.Get("X-Authenticated-User"))
+				t.Fatalf("autoputer trusted user header: got %q", r.Header.Get("X-Authenticated-User"))
 			}
-			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
+			_ = json.NewEncoder(w).Encode(autoputerTextureRevision{
 				RevisionID: "rev-1",
 				DocID:      "doc-1",
 				OwnerID:    "reader-1",
@@ -203,13 +203,13 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 				State:         "delivered",
 			})
 		default:
-			t.Fatalf("sandbox path: got %s", r.URL.Path)
+			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
 	}))
-	defer sandbox.Close()
+	defer autoputer.Close()
 
-	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
-		SandboxURL:        sandbox.URL,
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       autoputer.URL,
 		AuthPublicKeyPath: "/unused/in/test",
 		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {

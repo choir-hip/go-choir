@@ -15,7 +15,7 @@ import { chromium } from '@playwright/test';
   // Check all relevant APIs
   const endpoints = [
     '/api/health',
-    '/api/sandbox/health',
+    '/api/autoputer/health',
     '/api/shell/bootstrap',
     '/api/vm/status',
     '/api/trace/trajectories',

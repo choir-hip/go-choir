@@ -66,7 +66,7 @@ func TestExecutionIdentityReturnsNonceBoundGuestSignature(t *testing.T) {
 	deployReceipt := filepath.Join(dir, "deploy-receipt.json")
 	receiptBody := map[string]any{
 		"schema_version": 1, "target_commit": commit, "activated_at": time.Now().UTC().Format(time.RFC3339),
-		"artifacts": map[string]any{"sandbox": map[string]any{"commit": commit, "status": "active"}},
+		"artifacts": map[string]any{"autoputer": map[string]any{"commit": commit, "status": "active"}},
 	}
 	raw, _ := json.Marshal(receiptBody)
 	if err := os.WriteFile(deployReceipt, raw, 0o600); err != nil {

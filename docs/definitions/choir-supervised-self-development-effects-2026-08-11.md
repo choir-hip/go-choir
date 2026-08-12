@@ -32,7 +32,7 @@ start:
     - claim: "Freeze/propose/verify tools have no production call site; an assigned CoSuper holds exactly five capsule-local tools and no upward channel. CoSuper lacks update_coagent, pinned by TestSurvivorContract_GenericCoSuperCannotAuthorPersistentSuperPackets, because Super reads executability from the model-written packet.kind."
       evidence_ref: internal/agentcore/tool_profiles.go:309-315,386; internal/agentcore/tools_capsule.go:61-102; internal/agentcore/super_controller.go:784-796; internal/agentcore/update_coagent_survivor_contract_test.go:193-199
     - claim: "The capsule can build: lower layer is the guest root, platform source is snapshotted by git commit, and go/gcc/git/make/nodejs/pkg-config/icu are on PATH with persistent Go caches and Dolt ICU CGO flags set."
-      evidence_ref: nix/sandbox-vm.nix:675-700,717-745,777-798; internal/sandbox/capsule_executor_linux.go:14-56
+      evidence_ref: nix/autoputer-vm.nix:675-700,717-745,777-798; internal/autoputer/capsule_executor_linux.go:14-56
     - claim: "Staging serves the web frontend from the host (Caddy on Node B, /var/www/go-choir/frontend-current), outside the updater-controlled release. The candidate is API-only."
       evidence_ref: nix/node-b.nix:23-24,161,193-207
     - claim: "Supersession cannot be an operation state — the selfdev machine is linear and terminal — and the decision verifier admits exactly one input artifact ref and one verifier ref, so a supersession citation must ride B's proposal event."

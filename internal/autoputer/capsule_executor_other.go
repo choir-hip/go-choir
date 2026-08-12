@@ -1,6 +1,6 @@
 //go:build !linux
 
-package sandbox
+package autoputer
 
 import "github.com/yusefmosiah/go-choir/internal/capsule"
 

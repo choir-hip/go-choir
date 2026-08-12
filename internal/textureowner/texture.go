@@ -1,5 +1,5 @@
 // Package runtime provides texture document API handlers for the go-choir
-// sandbox runtime. These handlers expose the document CRUD, revision,
+// autoputer runtime. These handlers expose the document CRUD, revision,
 // history, snapshot, diff, blame, and agent revision APIs through the
 // authenticated same-origin proxy path.
 //
@@ -937,7 +937,7 @@ func (h *Handler) HandleInternalTextureDocument(w http.ResponseWriter, r *http.R
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
-	writeAPIJSON(w, http.StatusOK, sandboxTextureDocumentResponseFromRecord(doc))
+	writeAPIJSON(w, http.StatusOK, autoputerTextureDocumentResponseFromRecord(doc))
 }
 
 func (h *Handler) HandleInternalTextureRevision(w http.ResponseWriter, r *http.Request) {
@@ -964,10 +964,10 @@ func (h *Handler) HandleInternalTextureRevision(w http.ResponseWriter, r *http.R
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
 		return
 	}
-	writeAPIJSON(w, http.StatusOK, h.sandboxTextureRevisionResponseFromRecord(r.Context(), rev))
+	writeAPIJSON(w, http.StatusOK, h.autoputerTextureRevisionResponseFromRecord(r.Context(), rev))
 }
 
-func sandboxTextureDocumentResponseFromRecord(doc types.Document) map[string]any {
+func autoputerTextureDocumentResponseFromRecord(doc types.Document) map[string]any {
 	return map[string]any{
 		"doc_id":              doc.DocID,
 		"owner_id":            doc.OwnerID,
@@ -976,7 +976,7 @@ func sandboxTextureDocumentResponseFromRecord(doc types.Document) map[string]any
 	}
 }
 
-func sandboxTextureRevisionResponseFromRecord(rev types.Revision) map[string]any {
+func autoputerTextureRevisionResponseFromRecord(rev types.Revision) map[string]any {
 	return map[string]any{
 		"revision_id":     rev.RevisionID,
 		"doc_id":          rev.DocID,
@@ -991,8 +991,8 @@ func sandboxTextureRevisionResponseFromRecord(rev types.Revision) map[string]any
 	}
 }
 
-func (h *Handler) sandboxTextureRevisionResponseFromRecord(ctx context.Context, rev types.Revision) map[string]any {
-	resp := sandboxTextureRevisionResponseFromRecord(rev)
+func (h *Handler) autoputerTextureRevisionResponseFromRecord(ctx context.Context, rev types.Revision) map[string]any {
+	resp := autoputerTextureRevisionResponseFromRecord(rev)
 	enriched := h.revisionResponseFromRecord(ctx, rev)
 	if len(enriched.SourceEntityObjects) > 0 {
 		resp["source_entity_objects"] = enriched.SourceEntityObjects
@@ -1067,7 +1067,7 @@ func (h *Handler) handleTextureUpdateDocument(w http.ResponseWriter, r *http.Req
 	}
 	computerID := strings.TrimSpace(doc.ComputerID)
 	if computerID == "" && h.Core != nil {
-		computerID = strings.TrimSpace(h.Core.TextureSandboxID())
+		computerID = strings.TrimSpace(h.Core.TextureComputerID())
 	}
 	doc, err = h.Store.UpdateTextureDocumentTitleAuthority(r.Context(), docID, ownerID, computerID, req.Title)
 	if err != nil {
@@ -1097,7 +1097,7 @@ func (h *Handler) handleTextureDeleteDocument(w http.ResponseWriter, r *http.Req
 	}
 	computerID := ""
 	if h.Core != nil {
-		computerID = strings.TrimSpace(h.Core.TextureSandboxID())
+		computerID = strings.TrimSpace(h.Core.TextureComputerID())
 	}
 	document, err := h.Store.ArchiveTextureDocumentAuthority(r.Context(), docID, ownerID, computerID)
 	if err != nil {
@@ -1278,7 +1278,7 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 				Content: "Owner directly advanced the canonical Texture head to revision " + revisionID + "; reconcile supervised work from this exact correction.",
 			}
 		}
-		graph, graphErr := textureToolSourceGraphWriteSet(rev, materializedTextureEdit{BodyDoc: req.BodyDoc, SourceEntities: req.SourceEntities}, &types.RunRecord{RunID: instructionID, OwnerID: ownerID, SandboxID: doc.ComputerID})
+		graph, graphErr := textureToolSourceGraphWriteSet(rev, materializedTextureEdit{BodyDoc: req.BodyDoc, SourceEntities: req.SourceEntities}, &types.RunRecord{RunID: instructionID, OwnerID: ownerID, ComputerID: doc.ComputerID})
 		if graphErr != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle revision source graph"})
 			return
@@ -1322,7 +1322,7 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 				req.Content = content
 				rebased, rebaseErr := h.createRebasedUserRevision(r.Context(), docID, ownerID, req, parentID, citations, metadata, now)
 				if rebaseErr == nil {
-					auditComputerID := firstNonEmpty(doc.ComputerID, h.Core.TextureSandboxID())
+					auditComputerID := firstNonEmpty(doc.ComputerID, h.Core.TextureComputerID())
 					auditDigest := textureAuditDigest("revision_committed", ownerID, auditComputerID, docID, rebased.RevisionID, rebased.RevisionHash)
 					h.recordTextureAudit(r.Context(), "revision_committed", ownerID, auditComputerID, rebased.TrajectoryID, docID, rebased.RevisionID, "texture-revision:"+docID+":"+rebased.RevisionID, auditDigest, 0)
 					h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, rebased)
@@ -1347,7 +1347,7 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load created revision"})
 		return
 	}
-	auditComputerID := firstNonEmpty(doc.ComputerID, h.Core.TextureSandboxID())
+	auditComputerID := firstNonEmpty(doc.ComputerID, h.Core.TextureComputerID())
 	auditDigest := textureAuditDigest("revision_committed", ownerID, auditComputerID, docID, storedRev.RevisionID, storedRev.RevisionHash)
 	h.recordTextureAudit(r.Context(), "revision_committed", ownerID, auditComputerID, storedRev.TrajectoryID, docID, storedRev.RevisionID, "texture-revision:"+docID+":"+storedRev.RevisionID, auditDigest, 0)
 	h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, storedRev)
@@ -2052,7 +2052,7 @@ func (h *Handler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http.Re
 	}
 	auditComputerID := strings.TrimSpace(doc.ComputerID)
 	if auditComputerID == "" && h.Core != nil {
-		auditComputerID = strings.TrimSpace(h.Core.TextureSandboxID())
+		auditComputerID = strings.TrimSpace(h.Core.TextureComputerID())
 	}
 	auditDigest := textureAuditDigest("revision_committed", ownerID, auditComputerID, docID, storedRev.RevisionID, storedRev.RevisionHash)
 	h.recordTextureAudit(r.Context(), "revision_committed", ownerID, auditComputerID, storedRev.TrajectoryID, docID, storedRev.RevisionID, "texture-revision:"+docID+":"+storedRev.RevisionID, auditDigest, 0)
@@ -2236,7 +2236,7 @@ func (h *Handler) HandleTestTextureWorkerUpdate(w http.ResponseWriter, r *http.R
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "computer identity unavailable"})
 		return
 	}
-	if _, err := h.Store.GetAgentByScope(r.Context(), ownerID, h.Core.TextureSandboxID(), targetAgentID); err != nil {
+	if _, err := h.Store.GetAgentByScope(r.Context(), ownerID, h.Core.TextureComputerID(), targetAgentID); err != nil {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "Texture agent is not initialized for this document"})
 		return
 	}

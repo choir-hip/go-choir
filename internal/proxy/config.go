@@ -19,17 +19,17 @@ type Config struct {
 	// Port is the TCP port the proxy service listens on.
 	Port string
 
-	// SandboxURL initializes the reverse-proxy transport and supports explicit
+	// ComputerURL initializes the reverse-proxy transport and supports explicit
 	// package tests. Production served routes must override it with a vmctl
 	// realization reached through an immutable D-ROUTE slot.
-	SandboxURL string
+	ComputerURL string
 
 	// AuthPublicKeyPath is the path to the Ed25519 public key used to verify
 	// auth-issued access JWTs.
 	AuthPublicKeyPath string
 
 	// VmctlURL is the base URL of the vmctl service. Production routing fails
-	// closed when it is absent; there is no static sandbox fallback.
+	// closed when it is absent; there is no static autoputer fallback.
 	VmctlURL string
 
 	// VmctlTimeout is the proxy -> vmctl request timeout. It is bounded to
@@ -52,18 +52,18 @@ type Config struct {
 	// auth is disabled and only cookie auth is used.
 	AuthDBPath string
 
-	// AllowDirectSandboxForTests permits package tests to exercise proxying
+	// AllowDirectAutoputerForTests permits package tests to exercise proxying
 	// without constructing a vmctl service. Production configuration never sets
 	// this field; served routes otherwise fail closed without D-ROUTE authority.
-	AllowDirectSandboxForTests bool
+	AllowDirectAutoputerForTests bool
 }
 
 const (
 	// DefaultProxyPort is the default proxy service port.
 	DefaultProxyPort = "8082"
 
-	// DefaultSandboxURL is the default placeholder sandbox URL.
-	DefaultSandboxURL = "http://127.0.0.1:8085"
+	// DefaultComputerURL is the default placeholder autoputer URL.
+	DefaultComputerURL = "http://127.0.0.1:8085"
 
 	// defaultLocalDir is the base directory for local worker defaults when
 	// explicit path env vars are omitted.
@@ -91,7 +91,7 @@ const (
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		Port:              envOr("PROXY_PORT", DefaultProxyPort),
-		SandboxURL:        envOr("PROXY_SANDBOX_URL", DefaultSandboxURL),
+		ComputerURL:       envOr("PROXY_AUTOPUTER_URL", DefaultComputerURL),
 		AuthPublicKeyPath: defaultAuthPublicKeyPath(),
 		VmctlURL:          os.Getenv("PROXY_VMCTL_URL"),
 		VmctlTimeout:      durationEnvOr("PROXY_VMCTL_TIMEOUT", DefaultVmctlTimeout),
@@ -112,8 +112,8 @@ func (c *Config) validate() error {
 	if c.Port == "" {
 		return fmt.Errorf("proxy config: PROXY_PORT must not be empty")
 	}
-	if c.SandboxURL == "" {
-		return fmt.Errorf("proxy config: PROXY_SANDBOX_URL must not be empty")
+	if c.ComputerURL == "" {
+		return fmt.Errorf("proxy config: PROXY_AUTOPUTER_URL must not be empty")
 	}
 	if c.AuthPublicKeyPath == "" {
 		return fmt.Errorf("proxy config: PROXY_AUTH_PUBLIC_KEY_PATH must not be empty")
@@ -155,7 +155,7 @@ func (c *Config) EnsureDirs() error {
 
 // VmctlRoutingEnabled returns true when vmctl-backed routing is configured.
 // When true, protected routes resolve through vmctl ownership rather than
-// falling back to the static host sandbox URL (VAL-VM-002).
+// falling back to the static host autoputer URL (VAL-VM-002).
 func (c *Config) VmctlRoutingEnabled() bool {
 	return c.VmctlURL != ""
 }

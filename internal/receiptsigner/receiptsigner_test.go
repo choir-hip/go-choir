@@ -39,7 +39,7 @@ func TestGuestSignerScopesExecutionIdentityIssuer(t *testing.T) {
 	now := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
 	handler := testHandler(t, ModeGuestCore, now)
 	request := SignReceiptRequest{
-		ReceiptKind: "ExecutionIdentity", Issuer: "choir-sandbox", IssuedAt: now.Format(time.RFC3339Nano),
+		ReceiptKind: "ExecutionIdentity", Issuer: "choir-autoputer", IssuedAt: now.Format(time.RFC3339Nano),
 		KindFields: map[string]any{"computer_id": "computer-1", "nonce": "nonce-bound-client-challenge"},
 	}
 	if response := invoke(t, handler, "/v1/sign-receipt", request); response.Code != http.StatusOK {

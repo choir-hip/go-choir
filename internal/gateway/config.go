@@ -1,8 +1,8 @@
 // Package gateway implements the host-side provider gateway for Mission 3.
 //
 // The gateway is the only component that holds real provider credentials and
-// makes upstream LLM calls. Sandboxes authenticate to the gateway using
-// per-sandbox credentials that the gateway issues and manages. Browser callers
+// makes upstream LLM calls. Autoputeres authenticate to the gateway using
+// per-autoputer credentials that the gateway issues and manages. Browser callers
 // are denied at the proxy level.
 //
 // Key invariants:
@@ -12,7 +12,7 @@
 //   - Gateway denies unauthenticated or forged callers (VAL-GATEWAY-003).
 //   - Upstream failures are sanitized before returning to callers
 //     (VAL-GATEWAY-007).
-//   - Stale sandbox credentials are invalidated after lifecycle changes
+//   - Stale autoputer credentials are invalidated after lifecycle changes
 //     (VAL-GATEWAY-008).
 package gateway
 
@@ -34,10 +34,10 @@ type Config struct {
 	// Port is the gateway listen port.
 	Port string
 
-	// SandboxTokenTTL is how long issued sandbox credentials remain valid.
-	SandboxTokenTTL time.Duration
+	// AutoputerTokenTTL is how long issued autoputer credentials remain valid.
+	AutoputerTokenTTL time.Duration
 
-	// IdentityStorePath persists sandbox credential hashes so gateway restarts
+	// IdentityStorePath persists autoputer credential hashes so gateway restarts
 	// do not invalidate still-running desktop VMs.
 	IdentityStorePath string
 
@@ -55,14 +55,14 @@ const (
 	// DefaultGatewayPort is the default gateway service port.
 	DefaultGatewayPort = "8084"
 
-	// DefaultSandboxTokenTTL is the default TTL for sandbox credentials.
-	DefaultSandboxTokenTTL = 1 * time.Hour
+	// DefaultAutoputerTokenTTL is the default TTL for autoputer credentials.
+	DefaultAutoputerTokenTTL = 1 * time.Hour
 )
 
 // DefaultServiceHealthURLs are the default probe URLs for the per-service
 // health endpoint. Each points at a localhost-only backend service the
 // gateway depends on (directly or transitively). "dolt" is probed through
-// the sandbox runtime readiness endpoint because Dolt is an embedded store
+// the autoputer runtime readiness endpoint because Dolt is an embedded store
 // owned by the runtime, not a standalone TCP service. Operators can override
 // any entry via GATEWAY_HEALTH_<SERVICE>_URL.
 var DefaultServiceHealthURLs = map[string]string{
@@ -77,8 +77,8 @@ var DefaultServiceHealthURLs = map[string]string{
 func LoadConfig() Config {
 	port := envOr("GATEWAY_PORT", DefaultGatewayPort)
 
-	ttl := DefaultSandboxTokenTTL
-	if v := os.Getenv("GATEWAY_SANDBOX_TOKEN_TTL"); v != "" {
+	ttl := DefaultAutoputerTokenTTL
+	if v := os.Getenv("GATEWAY_AUTOPUTER_TOKEN_TTL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			ttl = d
 		}
@@ -86,7 +86,7 @@ func LoadConfig() Config {
 
 	return Config{
 		Port:              port,
-		SandboxTokenTTL:   ttl,
+		AutoputerTokenTTL: ttl,
 		IdentityStorePath: os.Getenv("GATEWAY_IDENTITY_STORE_PATH"),
 		ServiceHealthURLs: loadServiceHealthURLs(),
 	}
@@ -137,11 +137,11 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-// SandboxIdentity represents a registered sandbox caller with its
+// AutoputerIdentity represents a registered autoputer caller with its
 // authentication credential.
-type SandboxIdentity struct {
-	// SandboxID is the unique sandbox identifier.
-	SandboxID string
+type AutoputerIdentity struct {
+	// ComputerID is the unique autoputer identifier.
+	ComputerID string
 
 	// TokenHash is the SHA-256 hash of the issued credential. The raw
 	// credential is only returned once at issuance time and is never stored.
@@ -158,12 +158,12 @@ type SandboxIdentity struct {
 	Active bool
 }
 
-// IdentityRegistry manages sandbox identities and their credentials.
+// IdentityRegistry manages autoputer identities and their credentials.
 // It supports issuance, validation, revocation, and invalidation of
 // stale credentials (VAL-GATEWAY-008).
 type IdentityRegistry struct {
 	mu              sync.Mutex
-	identities      map[string]*SandboxIdentity // sandbox_id -> identity
+	identities      map[string]*AutoputerIdentity // computer_id -> identity
 	tokenTTL        time.Duration
 	persistencePath string
 }
@@ -172,7 +172,7 @@ type IdentityRegistry struct {
 // credential TTL.
 func NewIdentityRegistry(tokenTTL time.Duration) *IdentityRegistry {
 	return &IdentityRegistry{
-		identities: make(map[string]*SandboxIdentity),
+		identities: make(map[string]*AutoputerIdentity),
 		tokenTTL:   tokenTTL,
 	}
 }
@@ -202,12 +202,12 @@ func (r *IdentityRegistry) loadLocked() error {
 		return nil
 	}
 
-	var identities map[string]*SandboxIdentity
+	var identities map[string]*AutoputerIdentity
 	if err := json.Unmarshal(data, &identities); err != nil {
 		return fmt.Errorf("decode identity store: %w", err)
 	}
 	if identities == nil {
-		identities = make(map[string]*SandboxIdentity)
+		identities = make(map[string]*AutoputerIdentity)
 	}
 	r.identities = identities
 	return nil
@@ -235,26 +235,26 @@ func (r *IdentityRegistry) persistLocked() error {
 }
 
 // CredentialResult is returned when a new credential is issued.
-// The RawToken is shown once and must be communicated to the sandbox
+// The RawToken is shown once and must be communicated to the autoputer
 // out-of-band (e.g., via VM bootstrap material).
 type CredentialResult struct {
-	SandboxID string
-	RawToken  string
-	ExpiresAt time.Time
+	ComputerID string
+	RawToken   string
+	ExpiresAt  time.Time
 }
 
 // CredentialEnsureResult is returned when an existing VM bootstrap token has
 // been reconciled into the gateway's durable identity store.
 type CredentialEnsureResult struct {
-	SandboxID string    `json:"sandbox_id"`
-	Status    string    `json:"status"`
-	ExpiresAt time.Time `json:"expires_at"`
+	ComputerID string    `json:"computer_id"`
+	Status     string    `json:"status"`
+	ExpiresAt  time.Time `json:"expires_at"`
 }
 
-// IssueCredential creates a new credential for the given sandbox ID.
+// IssueCredential creates a new credential for the given autoputer ID.
 // If an existing credential exists, it is revoked and replaced.
 // Returns the raw token (shown once) and an error if generation fails.
-func (r *IdentityRegistry) IssueCredential(sandboxID string) (*CredentialResult, error) {
+func (r *IdentityRegistry) IssueCredential(computerID string) (*CredentialResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -266,32 +266,32 @@ func (r *IdentityRegistry) IssueCredential(sandboxID string) (*CredentialResult,
 	now := time.Now()
 	hash := sha256.Sum256([]byte(token))
 
-	// Revoke any existing credential for this sandbox.
-	if existing, ok := r.identities[sandboxID]; ok {
+	// Revoke any existing credential for this autoputer.
+	if existing, ok := r.identities[computerID]; ok {
 		existing.Active = false
 	}
 
-	identity := &SandboxIdentity{
-		SandboxID: sandboxID,
-		TokenHash: hex.EncodeToString(hash[:]),
-		IssuedAt:  now,
-		ExpiresAt: now.Add(r.tokenTTL),
-		Active:    true,
+	identity := &AutoputerIdentity{
+		ComputerID: computerID,
+		TokenHash:  hex.EncodeToString(hash[:]),
+		IssuedAt:   now,
+		ExpiresAt:  now.Add(r.tokenTTL),
+		Active:     true,
 	}
-	r.identities[sandboxID] = identity
+	r.identities[computerID] = identity
 	if err := r.persistLocked(); err != nil {
 		return nil, err
 	}
 
 	return &CredentialResult{
-		SandboxID: sandboxID,
-		RawToken:  sandboxID + ":" + token,
-		ExpiresAt: identity.ExpiresAt,
+		ComputerID: computerID,
+		RawToken:   computerID + ":" + token,
+		ExpiresAt:  identity.ExpiresAt,
 	}, nil
 }
 
-// EnsureCredential imports an already-issued raw sandbox credential into the
-// registry if the sandbox identity is currently unknown. This is intentionally
+// EnsureCredential imports an already-issued raw autoputer credential into the
+// registry if the autoputer identity is currently unknown. This is intentionally
 // narrower than IssueCredential: it never returns the raw token, refuses to
 // overwrite a different known credential, and refuses to reactivate revoked or
 // expired credentials. It exists to repair VMs that were booted before gateway
@@ -301,15 +301,15 @@ func (r *IdentityRegistry) EnsureCredential(rawToken string) (*CredentialEnsureR
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	sandboxID, token, ok := splitCredential(rawToken)
-	if !ok || strings.TrimSpace(sandboxID) == "" || strings.TrimSpace(token) == "" {
+	computerID, token, ok := splitCredential(rawToken)
+	if !ok || strings.TrimSpace(computerID) == "" || strings.TrimSpace(token) == "" {
 		return nil, fmt.Errorf("invalid credential format")
 	}
 	hash := sha256.Sum256([]byte(token))
 	hashText := hex.EncodeToString(hash[:])
 	now := time.Now()
 
-	if existing, ok := r.identities[sandboxID]; ok {
+	if existing, ok := r.identities[computerID]; ok {
 		if existing.TokenHash != hashText {
 			return nil, fmt.Errorf("credential conflict")
 		}
@@ -320,44 +320,44 @@ func (r *IdentityRegistry) EnsureCredential(rawToken string) (*CredentialEnsureR
 			return nil, fmt.Errorf("credential expired")
 		}
 		return &CredentialEnsureResult{
-			SandboxID: sandboxID,
-			Status:    "already_active",
-			ExpiresAt: existing.ExpiresAt,
+			ComputerID: computerID,
+			Status:     "already_active",
+			ExpiresAt:  existing.ExpiresAt,
 		}, nil
 	}
 
-	identity := &SandboxIdentity{
-		SandboxID: sandboxID,
-		TokenHash: hashText,
-		IssuedAt:  now,
-		ExpiresAt: now.Add(r.tokenTTL),
-		Active:    true,
+	identity := &AutoputerIdentity{
+		ComputerID: computerID,
+		TokenHash:  hashText,
+		IssuedAt:   now,
+		ExpiresAt:  now.Add(r.tokenTTL),
+		Active:     true,
 	}
-	r.identities[sandboxID] = identity
+	r.identities[computerID] = identity
 	if err := r.persistLocked(); err != nil {
 		return nil, err
 	}
 	return &CredentialEnsureResult{
-		SandboxID: sandboxID,
-		Status:    "imported",
-		ExpiresAt: identity.ExpiresAt,
+		ComputerID: computerID,
+		Status:     "imported",
+		ExpiresAt:  identity.ExpiresAt,
 	}, nil
 }
 
-// ValidateCredential checks whether a sandbox credential is valid.
-// Returns the sandbox ID if valid, or an error explaining why not.
+// ValidateCredential checks whether a autoputer credential is valid.
+// Returns the autoputer ID if valid, or an error explaining why not.
 func (r *IdentityRegistry) ValidateCredential(rawToken string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	sandboxID, token, ok := splitCredential(rawToken)
+	computerID, token, ok := splitCredential(rawToken)
 	if !ok {
 		return "", fmt.Errorf("invalid credential format")
 	}
 
-	identity, ok := r.identities[sandboxID]
+	identity, ok := r.identities[computerID]
 	if !ok {
-		return "", fmt.Errorf("unknown sandbox identity")
+		return "", fmt.Errorf("unknown autoputer identity")
 	}
 
 	if !identity.Active {
@@ -374,27 +374,27 @@ func (r *IdentityRegistry) ValidateCredential(rawToken string) (string, error) {
 		return "", fmt.Errorf("invalid credential")
 	}
 
-	return sandboxID, nil
+	return computerID, nil
 }
 
-// RevokeCredential revokes the credential for the given sandbox ID.
+// RevokeCredential revokes the credential for the given autoputer ID.
 // After revocation, the old credential no longer authorizes provider
 // requests (VAL-GATEWAY-008).
-func (r *IdentityRegistry) RevokeCredential(sandboxID string) {
+func (r *IdentityRegistry) RevokeCredential(computerID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if identity, ok := r.identities[sandboxID]; ok {
+	if identity, ok := r.identities[computerID]; ok {
 		identity.Active = false
 		_ = r.persistLocked()
 	}
 }
 
 // RotateCredential revokes the existing credential and issues a new one.
-// This is used when sandbox credentials are rotated for security or
+// This is used when autoputer credentials are rotated for security or
 // after lifecycle changes.
-func (r *IdentityRegistry) RotateCredential(sandboxID string) (*CredentialResult, error) {
-	return r.IssueCredential(sandboxID)
+func (r *IdentityRegistry) RotateCredential(computerID string) (*CredentialResult, error) {
+	return r.IssueCredential(computerID)
 }
 
 // ActiveCount reports currently active, unexpired identities.
@@ -422,8 +422,8 @@ func generateSecureToken(byteLen int) (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// splitCredential splits a "sandboxID:token" credential into its parts.
-func splitCredential(raw string) (sandboxID, token string, ok bool) {
+// splitCredential splits a "computerID:token" credential into its parts.
+func splitCredential(raw string) (computerID, token string, ok bool) {
 	for i := 0; i < len(raw); i++ {
 		if raw[i] == ':' {
 			return raw[:i], raw[i+1:], true

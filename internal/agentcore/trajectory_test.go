@@ -225,7 +225,7 @@ func TestCancelRunTrajectoryPersistsFallbackTrajectoryID(t *testing.T) {
 		AgentProfile: agentprofile.Texture,
 		AgentRole:    agentprofile.Texture,
 		OwnerID:      "user-alice",
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunPending,
 		Prompt:       "legacy row with metadata trajectory",
 		CreatedAt:    now,
@@ -315,7 +315,7 @@ func TestCancelRunTrajectoryDrainsMoreThanOneActivePage(t *testing.T) {
 			AgentProfile: agentprofile.CoSuper,
 			AgentRole:    agentprofile.CoSuper,
 			OwnerID:      "user-alice",
-			SandboxID:    "sandbox-test",
+			ComputerID:   "autoputer-test",
 			State:        types.RunPending,
 			Prompt:       "pending trajectory activation",
 			TrajectoryID: trajectoryID,
@@ -390,7 +390,7 @@ func TestCancelTrajectoryIsOwnerScopedTerminalizesAuthorityAndActiveRuns(t *test
 		AgentProfile: agentprofile.CoSuper,
 		AgentRole:    agentprofile.CoSuper,
 		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunPending,
 		Prompt:       "active trajectory activation",
 		TrajectoryID: trajectoryID,
@@ -498,7 +498,7 @@ func TestCancelTrajectoryRetriesActivationDrainForAlreadyCancelledAuthority(t *t
 		AgentProfile: agentprofile.CoSuper,
 		AgentRole:    agentprofile.CoSuper,
 		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunPending,
 		Prompt:       "activation left behind after durable cancellation",
 		TrajectoryID: trajectoryID,
@@ -565,7 +565,7 @@ func TestCancelTrajectoryReturnsSettledTruthWithoutCancellingActivations(t *test
 		AgentProfile: agentprofile.CoSuper,
 		AgentRole:    agentprofile.CoSuper,
 		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunPending,
 		Prompt:       "activation associated with settled authority",
 		TrajectoryID: trajectoryID,
@@ -623,7 +623,7 @@ func TestCancelledRequestDoesNotInterruptPostAuthorityActivationDrain(t *testing
 		AgentProfile: agentprofile.CoSuper,
 		AgentRole:    agentprofile.CoSuper,
 		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunPending,
 		Prompt:       "activation drained after request cancellation",
 		TrajectoryID: trajectoryID,
@@ -646,7 +646,7 @@ func TestCancelledRequestDoesNotInterruptPostAuthorityActivationDrain(t *testing
 	}
 	cancel()
 
-	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, ownerID, "sandbox-test", trajectoryID)
+	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, ownerID, "autoputer-test", trajectoryID)
 	if err != nil {
 		t.Fatalf("drain after request cancellation: %v", err)
 	}
@@ -740,7 +740,7 @@ func TestHandleTrajectoryDetailPreservesGETAndRoutesOwnerScopedCancellation(t *t
 		AgentProfile: agentprofile.CoSuper,
 		AgentRole:    agentprofile.CoSuper,
 		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunPending,
 		Prompt:       "active API trajectory activation",
 		TrajectoryID: trajectoryID,
@@ -828,7 +828,7 @@ func TestTrajectoryCancelPublicCommandReplaysAndConflicts(t *testing.T) {
 	const ownerID = "user-public-cancel"
 	trajectoryID := seedDurableTextureSubject(t, s, ownerID, "doc-public-cancel")
 	path := "/api/trajectories/" + url.PathEscape(trajectoryID) + "/cancel"
-	snapshot, err := s.GetLifecycleSnapshot(context.Background(), ownerID, rt.TextureSandboxID(), trajectoryID)
+	snapshot, err := s.GetLifecycleSnapshot(context.Background(), ownerID, rt.TextureComputerID(), trajectoryID)
 	if err != nil {
 		t.Fatalf("snapshot before cancel: %v", err)
 	}

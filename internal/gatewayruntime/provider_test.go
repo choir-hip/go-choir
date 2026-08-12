@@ -39,7 +39,7 @@ func TestCallWithToolsRoutesThroughGatewayWireContract(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := New(server.URL, "sandbox-token")
+	provider := New(server.URL, "autoputer-token")
 	provider.SetRuntimeLLMConfig("fireworks", "accounts/fireworks/models/deepseek-v4-flash", "none")
 
 	resp, err := provider.CallWithTools(context.Background(), provideriface.ToolLoopRequest{
@@ -56,7 +56,7 @@ func TestCallWithToolsRoutesThroughGatewayWireContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CallWithTools returned error: %v", err)
 	}
-	if gotAuth != "Bearer sandbox-token" {
+	if gotAuth != "Bearer autoputer-token" {
 		t.Fatalf("authorization = %q, want bearer token", gotAuth)
 	}
 	if gotReq.Provider != "fireworks" || gotReq.Model != "accounts/fireworks/models/deepseek-v4-flash" || gotReq.ReasoningEffort != "none" {
@@ -90,7 +90,7 @@ func TestExecuteStreamsGatewayDeltas(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := New(server.URL, "sandbox-token")
+	provider := New(server.URL, "autoputer-token")
 	provider.SetRuntimeLLMConfig("fireworks", "accounts/fireworks/models/deepseek-v4-flash", "none")
 	run := &types.RunRecord{RunID: "run-1", Prompt: "tell me a story"}
 	var deltas []string
@@ -126,7 +126,7 @@ func TestExecuteStreamsGatewayReasoningWithoutRendering(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := New(server.URL, "sandbox-token")
+	provider := New(server.URL, "autoputer-token")
 	provider.SetRuntimeLLMConfig("fireworks", "accounts/fireworks/models/kimi-k2p6", "medium")
 	run := &types.RunRecord{RunID: "run-1", Prompt: "tell me a story"}
 	var deltas []string

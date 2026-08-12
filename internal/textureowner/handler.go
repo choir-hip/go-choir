@@ -95,7 +95,7 @@ func NewHandler(core *agentcore.Runtime) *Handler {
 		Provider:           core.TextureProvider(),
 		wakeTextureControl: core.WakeUpdatedCoagent,
 		wakeOwnerInstruction: func(ctx context.Context, ownerID, docID, instructionID string) error {
-			computerID := core.TextureSandboxID()
+			computerID := core.TextureComputerID()
 			doc, err := core.Store().GetLifecycleDocument(ctx, ownerID, computerID, docID)
 			if err != nil {
 				return fmt.Errorf("load owner instruction document: %w", err)
@@ -123,7 +123,7 @@ func (h *Handler) getTextureDocument(ctx context.Context, ownerID, docID string)
 	}
 	computerID := ""
 	if h.Core != nil {
-		computerID = strings.TrimSpace(h.Core.TextureSandboxID())
+		computerID = strings.TrimSpace(h.Core.TextureComputerID())
 	}
 	if computerID != "" {
 		doc, err := h.Store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
@@ -150,7 +150,7 @@ func (h *Handler) getTextureRevision(ctx context.Context, ownerID, revisionID st
 	}
 	computerID := ""
 	if h.Core != nil {
-		computerID = strings.TrimSpace(h.Core.TextureSandboxID())
+		computerID = strings.TrimSpace(h.Core.TextureComputerID())
 	}
 	if computerID != "" {
 		revision, err := h.Store.GetLifecycleRevision(ctx, ownerID, computerID, revisionID)
@@ -183,7 +183,7 @@ func (h *Handler) listTextureDocuments(ctx context.Context, ownerID string, limi
 	}
 	computerID := ""
 	if h.Core != nil {
-		computerID = strings.TrimSpace(h.Core.TextureSandboxID())
+		computerID = strings.TrimSpace(h.Core.TextureComputerID())
 	}
 	if computerID == "" {
 		return legacy, nil
@@ -302,15 +302,15 @@ func toolExecutionContextForRun(rec *types.RunRecord) toolregistry.ExecutionCont
 		return toolregistry.ExecutionContext{}
 	}
 	execution := toolregistry.ExecutionContext{
-		RunID:     rec.RunID,
-		AgentID:   agentIDForRun(rec),
-		OwnerID:   rec.OwnerID,
-		Profile:   configuredAgentProfileForRun(rec),
-		Role:      agentRoleForRun(rec),
-		ChannelID: channelIDForRun(rec),
-		SandboxID: rec.SandboxID,
-		DesktopID: desktopIDForRun(rec),
-		RunRecord: rec,
+		RunID:      rec.RunID,
+		AgentID:    agentIDForRun(rec),
+		OwnerID:    rec.OwnerID,
+		Profile:    configuredAgentProfileForRun(rec),
+		Role:       agentRoleForRun(rec),
+		ChannelID:  channelIDForRun(rec),
+		ComputerID: rec.ComputerID,
+		DesktopID:  desktopIDForRun(rec),
+		RunRecord:  rec,
 	}
 	if rec.Metadata != nil {
 		execution.WorkingDir, _ = rec.Metadata[runMetadataToolCWD].(string)

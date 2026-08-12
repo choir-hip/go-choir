@@ -49,7 +49,7 @@ func testConcurrentSetup(t *testing.T) (*Runtime, *APIHandler, string) {
 	// Use a slow provider so runs stay running for concurrent observation.
 	provider := provider.NewStubProvider(500 * time.Millisecond)
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-concurrent-test",
+		ComputerID:          "autoputer-concurrent-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     2 * time.Second,
 		SupervisionInterval: 1 * time.Hour,
@@ -622,7 +622,7 @@ func TestConcurrentWorkers_TasksActuallyRunConcurrently(t *testing.T) {
 	// Each task takes 200ms.
 	provider := provider.NewStubProvider(200 * time.Millisecond)
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-concurrent-timing",
+		ComputerID:          "autoputer-concurrent-timing",
 		StorePath:           dbPath,
 		ProviderTimeout:     200 * time.Millisecond,
 		SupervisionInterval: 1 * time.Hour,
@@ -773,7 +773,7 @@ func TestConcurrentWorkers_FailedChildPostsErrorToParentChannel(t *testing.T) {
 		FailErr: fmt.Errorf("simulated provider failure"),
 	}
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-fail-test",
+		ComputerID:          "autoputer-fail-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     10 * time.Millisecond,
 		SupervisionInterval: 1 * time.Hour,
@@ -994,7 +994,7 @@ func TestConcurrentWorkers_SpawnWithSlowProvider_HighConcurrency(t *testing.T) {
 	bus := events.NewEventBus()
 	provider := provider.NewStubProvider(300 * time.Millisecond)
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-high-concurrency",
+		ComputerID:          "autoputer-high-concurrency",
 		StorePath:           dbPath,
 		ProviderTimeout:     300 * time.Millisecond,
 		SupervisionInterval: 1 * time.Hour,
@@ -1132,7 +1132,7 @@ func TestConcurrentWorkers_MixedPassFailWorkers(t *testing.T) {
 	}
 
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-mixed-test",
+		ComputerID:          "autoputer-mixed-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     50 * time.Millisecond,
 		SupervisionInterval: 1 * time.Hour,

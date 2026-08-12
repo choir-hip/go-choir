@@ -14,7 +14,7 @@ The cache is mechanically healthy but has ineffective first-party granularity. C
 ## Hosted evidence
 
 - Main run `29559210595` restored cache key `sbom-bundle-v2-ec593c3901a4ff724d6e61e02c0328d31884eade` successfully, then spent 16m34s in the differential script and reported `10 built, 1 reused, 1 unchanged optional failures skipped`.
-- Its source delta from baseline `ec593c3901a4ff724d6e61e02c0328d31884eade` changed vmctl production code but no source for most other first-party services. Nevertheless `auth`, `proxy`, `gateway`, `maild`, `maildctl`, `corpusd`, `sandbox`, `sourcecycled`, `vmctl`, and `frontend` all received new SBOM derivations. Only externally pinned `zot` reused an identical derivation.
+- Its source delta from baseline `ec593c3901a4ff724d6e61e02c0328d31884eade` changed vmctl production code but no source for most other first-party services. Nevertheless `auth`, `proxy`, `gateway`, `maild`, `maildctl`, `corpusd`, `autoputer`, `sourcecycled`, `vmctl`, and `frontend` all received new SBOM derivations. Only externally pinned `zot` reused an identical derivation.
 - Main run `29570035893` repeated the result: the candidate job took 19m30s; its accepted manifest reported the same ten first-party packages as `built`, `zot` as `reused`, and `obscura` as an unchanged optional failure.
 - Every rebuilt first-party package in accepted artifact `8403147713` had empty `added` and `removed` dependency sets relative to accepted commit `42e50b6b1fa3ae7461bb789ec173521a768b548d`.
 - Comparing accepted `auth` SBOMs across `ec593c3` and `b746fd7` found changes only in root derivation/output paths, generation timestamp, and UUID. The dependency set did not change.

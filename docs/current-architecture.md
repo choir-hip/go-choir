@@ -116,7 +116,7 @@ Retired vocabulary: **"continuation"** (named two unrelated mechanisms; both
 are replaced — work items and warm steering). **Parent/child as control**
 (provenance-only edge remains). **"Channel"** unqualified — say *mailbox* for
 delivery, *document/trajectory channel* for the product surface, *Go channel*
-for the primitive. **"Sandbox" as product ontology** — the product object is a
+for the primitive. **"Autoputer" as product ontology** — the product object is a
 persistent computer (code/service rename deferred until capsules land).
 
 The self-improvement frame (one promotion discipline at every grain):
@@ -143,7 +143,7 @@ services, appagents, and NixOS-on-NixOS VM infrastructure. A native macOS app
 (Wails v3) wraps the web desktop with `ASWebAuthenticationSession` for passkey
 auth, transparent title bar, and cloud-mode-by-default. See
 [cmd/desktop/README.md](../cmd/desktop/README.md).
-The product object is a persistent user **computer**, not a disposable sandbox.
+The product object is a persistent user **computer**, not a disposable autoputer.
 The current work is not to invent the product from scratch. The current work is
 to stabilize the deployed system around the right causal model.
 
@@ -257,9 +257,9 @@ Important boundary rules:
   gains write authority over the live private source document.
 
 This topology supersedes older architecture sketches that described a generic
-local-first multiagent runtime, shared scheduler, or broad sandbox-owned "OS
+local-first multiagent runtime, shared scheduler, or broad autoputer-owned "OS
 layer" as the product ontology. The product object is the persistent computer;
-`sandbox` remains an implementation/service name.
+`autoputer` remains an implementation/service name.
 
 Run acceptance records are historical evidence projections. Self-development
 acceptance remains separately defined by canonical computer events, frozen

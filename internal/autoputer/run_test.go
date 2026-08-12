@@ -1,4 +1,4 @@
-package sandbox
+package autoputer
 
 import (
 	"bytes"
@@ -13,8 +13,8 @@ import (
 
 func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
 	cfg := Config{
-		SandboxID: "vm-test",
-		StorePath: "/tmp/runtime.db",
+		ComputerID: "vm-test",
+		StorePath:  "/tmp/runtime.db",
 	}
 	loaded := provideriface.Config{
 		PromptRoot:           "/prompts",
@@ -33,8 +33,8 @@ func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
 	}
 
 	got := buildRuntimeConfig(cfg, loaded, "/files")
-	if got.SandboxID != cfg.SandboxID || got.StorePath != cfg.StorePath {
-		t.Fatalf("sandbox identity/store not preserved: %+v", got)
+	if got.ComputerID != cfg.ComputerID || got.StorePath != cfg.StorePath {
+		t.Fatalf("autoputer identity/store not preserved: %+v", got)
 	}
 	if got.VmctlURL != loaded.VmctlURL {
 		t.Fatalf("VmctlURL = %q, want %q", got.VmctlURL, loaded.VmctlURL)
@@ -48,7 +48,7 @@ func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
 }
 
 func TestBuildRuntimeConfigDerivesCanonicalModelPolicyPath(t *testing.T) {
-	got := buildRuntimeConfig(Config{SandboxID: "vm-test"}, provideriface.Config{}, "/files")
+	got := buildRuntimeConfig(Config{ComputerID: "vm-test"}, provideriface.Config{}, "/files")
 	if got.ModelPolicyPath != "/files/System/model-policy.toml" {
 		t.Fatalf("ModelPolicyPath = %q, want canonical files path", got.ModelPolicyPath)
 	}

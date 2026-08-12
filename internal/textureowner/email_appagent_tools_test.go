@@ -19,7 +19,7 @@ import (
 func startDurableTextureParent(t *testing.T, rt *agentcore.Runtime, ownerID, docID, prompt string, extra map[string]any) *types.RunRecord {
 	t.Helper()
 	agentID := "texture:" + docID
-	computerID := rt.TextureSandboxID()
+	computerID := rt.TextureComputerID()
 	now := time.Now().UTC()
 	start := types.StartLifecycleRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "email-start:" + docID, TrajectoryID: "email-trajectory:" + docID,
@@ -32,7 +32,7 @@ func startDurableTextureParent(t *testing.T, rt *agentcore.Runtime, ownerID, doc
 			RevisionID: "email-revision:" + docID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: prompt,
 		},
 		Agent: types.AgentRecord{
-			AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+			AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
 			Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now,
 		},
 	}
@@ -159,7 +159,7 @@ func TestTextureRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) 
 		t.Fatalf("approval email endpoint was not called/result missing: %+v", out)
 	}
 
-	agent, err := s.GetAgentByScope(context.Background(), "user-alice", "sandbox-test", persistentEmailAgentID("user-alice"))
+	agent, err := s.GetAgentByScope(context.Background(), "user-alice", "autoputer-test", persistentEmailAgentID("user-alice"))
 	if err != nil {
 		t.Fatalf("get email agent: %v", err)
 	}
@@ -239,14 +239,14 @@ func TestCoagentCastCannotAddressEmailAppagentDirectly(t *testing.T) {
 	rt, _ := testRuntime(t)
 	now := testNow()
 	if err := rt.Store().UpsertAgent(context.Background(), types.AgentRecord{
-		AgentID:   persistentEmailAgentID("user-alice"),
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-test",
-		Profile:   agentprofile.Email,
-		Role:      agentprofile.Email,
-		ChannelID: persistentEmailAgentID("user-alice"),
-		CreatedAt: now,
-		UpdatedAt: now,
+		AgentID:    persistentEmailAgentID("user-alice"),
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-test",
+		Profile:    agentprofile.Email,
+		Role:       agentprofile.Email,
+		ChannelID:  persistentEmailAgentID("user-alice"),
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}); err != nil {
 		t.Fatalf("upsert email agent: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestEditTextureEmailProseDoesNotForceEmailAppagentContinuation(t *testing.T
 		AgentID:      "texture:" + doc.DocID,
 		ChannelID:    doc.DocID,
 		OwnerID:      doc.OwnerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunRunning,
 		Prompt:       "Revise the document",
 		CreatedAt:    now,
@@ -413,7 +413,7 @@ func TestGroundedEmailArtifactDoesNotForceEmailAppagentContinuation(t *testing.T
 		AgentID:      "texture:" + doc.DocID,
 		ChannelID:    doc.DocID,
 		OwnerID:      doc.OwnerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunRunning,
 		Prompt:       "Integrate worker findings",
 		CreatedAt:    now.Add(2 * time.Second),
@@ -569,7 +569,7 @@ func persistentEmailAgentID(ownerID string) string {
 
 func listCoagentRunsByRequester(t *testing.T, s *store.Store, ownerID, requesterRunID string, limit int) []types.RunRecord {
 	t.Helper()
-	runs, err := s.ListLifecycleRunsByOwner(context.Background(), ownerID, "sandbox-test", limit)
+	runs, err := s.ListLifecycleRunsByOwner(context.Background(), ownerID, "autoputer-test", limit)
 	if err != nil {
 		t.Fatalf("list runs by owner: %v", err)
 	}

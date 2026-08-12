@@ -78,7 +78,7 @@ func settingsPreviewRun(ownerID, role string) *types.RunRecord {
 		AgentID:      "settings-preview-agent",
 		ChannelID:    "<channel_id>",
 		OwnerID:      ownerID,
-		SandboxID:    "settings-preview",
+		ComputerID:   "settings-preview",
 		AgentProfile: role,
 		AgentRole:    role,
 		Metadata: map[string]any{

@@ -5,7 +5,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     # Upstream microvm.nix for building NixOS guest VM images.
     # Used to generate the Firecracker-compatible kernel, initrd, rootfs,
-    # and erofs store disk for sandbox VMs. The Go control plane
+    # and erofs store disk for autoputer VMs. The Go control plane
     # (vmmanager/vmctl) launches Firecracker with these artifacts.
     # Not using the fork — upstream is stable and well-maintained.
     microvm = {
@@ -114,7 +114,7 @@
 
       # Frontend package — built Svelte SPA via buildNpmPackage.
       # Local development uses pnpm (pnpm-lock.yaml); the Nix build uses npm
-      # with a checked-in package-lock.json for reproducibility in the sandbox.
+      # with a checked-in package-lock.json for reproducibility in the autoputer.
       # npmDepsHash was computed with `nix run nixpkgs#prefetch-npm-deps --
       # frontend/package-lock.json`. If dependencies change, re-run the
       # prefetch command (or set npmDepsHash to "" and read the correct hash
@@ -262,9 +262,9 @@
           pname = "sourcecycled";
           subPackage = "cmd/sourcecycled";
         };
-        sandbox = mkGoService {
-          pname = "sandbox";
-          subPackage = "cmd/sandbox";
+        autoputer = mkGoService {
+          pname = "autoputer";
+          subPackage = "cmd/autoputer";
           includeSkills = true;
         };
         frontend = frontendPkg;
@@ -275,7 +275,7 @@
     in
     let
       # ── Guest VM artifacts ──────────────────────────────────────────────
-      # The sandbox guest VM is defined as a NixOS configuration using
+      # The autoputer guest VM is defined as a NixOS configuration using
       # microvm.nix. From it we extract the individual artifacts that
       # vmmanager needs to launch Firecracker:
       #   - vmlinux (kernel)
@@ -288,7 +288,7 @@
       # open and must not see those files truncated in place.
       #   nix build .#guest-image
       #   install to a temp dir, then mv artifacts into /var/lib/go-choir/guest/
-      guestVmConfig = self.nixosConfigurations.go-choir-sandbox-vm.config;
+      guestVmConfig = self.nixosConfigurations.go-choir-autoputer-vm.config;
 
       mkGuestImage = name: vmConfig:
         let
@@ -372,7 +372,7 @@ EOF
           '';
       in builtins.mapAttrs mkSbom goChoirPackages;
 
-      # ── Sandbox guest VM NixOS configuration ──────────────────────────
+      # ── Autoputer guest VM NixOS configuration ──────────────────────────
       # This defines the guest VM that runs inside Firecracker on Node B.
       # Uses upstream microvm.nix to build the guest kernel, initrd, rootfs,
       # and erofs store disk. The Go vmmanager launches Firecracker with
@@ -383,9 +383,9 @@ EOF
       # Key design (aligned with choiros-rs proven approach):
       #   - systemd as init (proper NixOS boot, not custom init script)
       #   - erofs for shared nix store with KSM deduplication
-      #   - virtio-blk for data volumes (mutable sandbox state)
+      #   - virtio-blk for data volumes (mutable autoputer state)
       #   - No virtiofs/9p shares (simpler, no host daemon needed)
-      nixosConfigurations.go-choir-sandbox-vm = nixpkgs.lib.nixosSystem {
+      nixosConfigurations.go-choir-autoputer-vm = nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
         specialArgs = {
           goChoirPackages = goChoirPackages;
@@ -393,7 +393,7 @@ EOF
         };
         modules = [
           microvm.nixosModules.microvm
-          ./nix/sandbox-vm.nix
+          ./nix/autoputer-vm.nix
         ];
       };
 

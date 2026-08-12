@@ -301,7 +301,7 @@ build_cmd() {
   CMD=()
   case "$agent" in
     codex)
-      CMD=(codex exec --cd "$CWD" --sandbox read-only -c 'approval_policy="never"' --ephemeral --skip-git-repo-check)
+      CMD=(codex exec --cd "$CWD" --autoputer read-only -c 'approval_policy="never"' --ephemeral --skip-git-repo-check)
       [[ -n "$CODEX_MODEL" ]] && CMD+=(-m "$CODEX_MODEL")
       CMD+=("$AGENT_PROMPT") ;;
     devin)

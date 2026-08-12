@@ -32,7 +32,7 @@ baseline for later differential reuse.
 `flake.nix` implements each SBOM as a `runCommand` derivation that invokes
 sbomnix on a package output. sbomnix determines runtime dependencies by invoking
 `nix build` for its target. That creates a nested Nix invocation inside the
-outer Nix build sandbox. The nested invocation cannot initialize the normal Nix
+outer Nix build autoputer. The nested invocation cannot initialize the normal Nix
 profile path, so every SBOM derivation fails after its package build completes.
 
 This is a substrate failure in the SBOM execution topology, not twelve
@@ -44,7 +44,7 @@ The pre-consolidation CI path already used the viable topology:
 
 1. build the package with Nix on the GitHub runner;
 2. run the pinned sbomnix executable on the runner, outside the Nix build
-   sandbox;
+   autoputer;
 3. write the resulting CycloneDX JSON into the workflow artifact directory.
 
 The repair should reconnect that host-side generation path while retaining the
@@ -57,7 +57,7 @@ The replacement opportunity was implemented by commit
 `c96c7b490e5efb9999ae6ab8ee6c8b790387eee3`. The current differential builder
 builds each package on the GitHub runner, builds pinned sbomnix from the
 repository's `flake.lock`, and invokes sbomnix outside the package's Nix build
-sandbox. Main workflow run
+autoputer. Main workflow run
 [29295978398](https://github.com/choir-hip/go-choir/actions/runs/29295978398),
 job `86971008658`, succeeded on that topology in 13m15s on 2026-07-14.
 
@@ -92,7 +92,7 @@ mutated by this failed run.
 ## Heresy Delta
 
 - `discovered`: nested Nix runtime-SBOM generation was treated as cacheable but
-  is not executable in the build sandbox.
+  is not executable in the build autoputer.
 - `introduced`: none by this evidence record.
-- `repaired`: host-side generation replaced the nested-sandbox topology in
+- `repaired`: host-side generation replaced the nested-autoputer topology in
   `c96c7b49` and succeeded in run `29295978398`.

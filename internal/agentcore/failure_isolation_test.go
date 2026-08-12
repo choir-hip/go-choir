@@ -54,7 +54,7 @@ func failureIsolationSetup(t *testing.T, provider provideriface.Provider) (*Runt
 
 	bus := events.NewEventBus()
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-failure-test",
+		ComputerID:          "autoputer-failure-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     500 * time.Millisecond,
 		SupervisionInterval: 1 * time.Hour,
@@ -884,7 +884,7 @@ func TestCancellation_CancelViaAPI(t *testing.T) {
 	}
 }
 
-// --- VAL-CHOIR-014: Recovery After Sandbox Restart ---
+// --- VAL-CHOIR-014: Recovery After Autoputer Restart ---
 
 // TestRecovery_InterruptedTasksPassivatedOnRestart verifies that runs in
 // non-terminal states when the runtime stops are released as passivated
@@ -906,13 +906,13 @@ func TestRecovery_InterruptedTasksPassivatedOnRestart(t *testing.T) {
 
 	// Create a parent task in running state (simulating interrupted).
 	parent := types.RunRecord{
-		RunID:     "parent-recovery-test",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-recovery-test",
-		State:     types.RunRunning,
-		Prompt:    "parent for recovery test",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "parent-recovery-test",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-recovery-test",
+		State:      types.RunRunning,
+		Prompt:     "parent for recovery test",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := s1.CreateRun(context.Background(), parent); err != nil {
 		t.Fatalf("create parent: %v", err)
@@ -920,14 +920,14 @@ func TestRecovery_InterruptedTasksPassivatedOnRestart(t *testing.T) {
 
 	// Create a child task in running state (simulating interrupted).
 	child := types.RunRecord{
-		RunID:     "child-recovery-test",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-recovery-test",
-		State:     types.RunRunning,
-		Prompt:    "task that will be interrupted",
-		CreatedAt: now,
-		UpdatedAt: now,
-		Metadata:  map[string]any{"requested_by": "parent-recovery-test"},
+		RunID:      "child-recovery-test",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-recovery-test",
+		State:      types.RunRunning,
+		Prompt:     "task that will be interrupted",
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		Metadata:   map[string]any{"requested_by": "parent-recovery-test"},
 	}
 	if err := s1.CreateRun(context.Background(), child); err != nil {
 		t.Fatalf("create child: %v", err)
@@ -943,7 +943,7 @@ func TestRecovery_InterruptedTasksPassivatedOnRestart(t *testing.T) {
 	}
 	bus2 := events.NewEventBus()
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-recovery-test",
+		ComputerID:          "autoputer-recovery-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     500 * time.Millisecond,
 		SupervisionInterval: 1 * time.Hour,
@@ -1006,13 +1006,13 @@ func TestRecovery_RecoveredTasksEmitPassivatedEvents(t *testing.T) {
 
 	now := time.Now().UTC()
 	task := types.RunRecord{
-		RunID:     "recovery-event-test",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-recovery-events",
-		State:     types.RunRunning,
-		Prompt:    "interrupted task for events",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "recovery-event-test",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-recovery-events",
+		State:      types.RunRunning,
+		Prompt:     "interrupted task for events",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := s1.CreateRun(context.Background(), task); err != nil {
 		t.Fatalf("create task: %v", err)
@@ -1026,7 +1026,7 @@ func TestRecovery_RecoveredTasksEmitPassivatedEvents(t *testing.T) {
 	}
 	bus2 := events.NewEventBus()
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-recovery-events",
+		ComputerID:          "autoputer-recovery-events",
 		StorePath:           dbPath,
 		ProviderTimeout:     50 * time.Millisecond,
 		SupervisionInterval: 1 * time.Hour,
@@ -1081,13 +1081,13 @@ func TestRecovery_RuntimeAcceptsNewTasksAfterRecovery(t *testing.T) {
 
 	now := time.Now().UTC()
 	task := types.RunRecord{
-		RunID:     "old-interrupted-task",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-recovery-accept",
-		State:     types.RunRunning,
-		Prompt:    "interrupted task",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "old-interrupted-task",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-recovery-accept",
+		State:      types.RunRunning,
+		Prompt:     "interrupted task",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := s1.CreateRun(context.Background(), task); err != nil {
 		t.Fatalf("create task: %v", err)
@@ -1102,7 +1102,7 @@ func TestRecovery_RuntimeAcceptsNewTasksAfterRecovery(t *testing.T) {
 	bus2 := events.NewEventBus()
 	fastProvider := provider.NewStubProvider(50 * time.Millisecond)
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-recovery-accept",
+		ComputerID:          "autoputer-recovery-accept",
 		StorePath:           dbPath,
 		ProviderTimeout:     50 * time.Millisecond,
 		SupervisionInterval: 1 * time.Hour,

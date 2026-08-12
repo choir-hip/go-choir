@@ -12,19 +12,19 @@
 
 Fresh caller mapping found a production dependency-cycle blocker beneath the false `apihandler` wrapper. The Super-only `product_api_request` tool is implemented in `internal/runtime/tools_product_api.go`; every tool call constructs a private `server.Server`, constructs the runtime `APIHandler`, and registers the complete route table again. Runtime therefore remains a production caller of its own HTTP constructor and registrar. Moving HTTP ownership to `internal/apihandler` now would create the illegal cycle `apihandler -> runtime -> apihandler`, while deleting or renaming only the current wrapper would not reduce authority.
 
-The duplicate per-call route table is also false product authority. The sandbox already owns one production `server.Server` with the canonical route table. The product tool must execute against that server rather than constructing a second mux whose route set can drift.
+The duplicate per-call route table is also false product authority. The autoputer already owns one production `server.Server` with the canonical route table. The product tool must execute against that server rather than constructing a second mux whose route set can drift.
 
 This is a substrate prerequisite, not S3 step-3 completion. The wrapper remains until a later atomic HTTP-ownership extraction; step 4 remains unauthorized.
 
 ## Boundary Review
 
-A four-runner architecture panel completed. Codex identified the hidden production caller and recommended removing it as the smallest deletion-bearing prerequisite at confidence `0.92`. Gemini recommended moving the larger sandbox bootstrap into the existing sandbox package; OpenCode recommended an actor-adapter registrar. Those alternatives either miss the runtime-owned duplicate route constructor or relocate the false seam. The orchestrator adjudicates the hidden production caller as the first dependency because deleting it makes the later ownership graph acyclic without adding a facade.
+A four-runner architecture panel completed. Codex identified the hidden production caller and recommended removing it as the smallest deletion-bearing prerequisite at confidence `0.92`. Gemini recommended moving the larger autoputer bootstrap into the existing autoputer package; OpenCode recommended an actor-adapter registrar. Those alternatives either miss the runtime-owned duplicate route constructor or relocate the false seam. The orchestrator adjudicates the hidden production caller as the first dependency because deleting it makes the later ownership graph acyclic without adding a facade.
 
 ## Exact Mutation Lock
 
 - Move the complete `product_api_request` tool implementation and behavioral tests from runtime to `internal/apihandler`.
 - Bind the tool to the already constructed canonical `*server.Server`; it must not construct a server, mux, handler, or route table.
-- Register the tool exactly once into the existing Super registry from `cmd/sandbox/main.go` after default tool installation and canonical route registration.
+- Register the tool exactly once into the existing Super registry from `cmd/autoputer/main.go` after default tool installation and canonical route registration.
 - Remove runtime's default-tool registration of `newProductAPIRequestTool`.
 - Delete `internal/runtime/tools_product_api.go` and `internal/runtime/tools_product_api_test.go` after all behavior assertions move.
 - Use canonical `toolregistry.Tool` directly. Preserve name, description, JSON schema, method/path normalization, product-route allowlist, execution-context/profile/owner enforcement, auth headers, JSON content type, response body cap, truncation marker, status/error result shape, and tool-disabled behavior.
@@ -39,7 +39,7 @@ A four-runner architecture panel completed. Codex identified the hidden producti
 - Allowed owner-scoped public Texture request succeeds with authenticated owner identity.
 - Internal, test, agent, prompt-config, raw-event, non-Super, missing-owner, invalid-method/path, oversized-body, and oversized-response cases retain exact rejection/truncation behavior.
 - Disabled tools leave the product API tool absent; enabled tools register it once, and duplicate registration fails explicitly.
-- Focused `internal/apihandler`, runtime, sandbox, and actor-runtime tests pass.
+- Focused `internal/apihandler`, runtime, autoputer, and actor-runtime tests pass.
 - Runtime production LOC, API constructor caller edges, and runtime-scoped tool declarations decrease; routes and the enabled product tool catalog remain flat; wrappers do not increase; every other gated authority count is non-increasing except classified durable citers.
 - Independent verification, full CI, deploy identity, authenticated public product-path smoke, consensus, and adjudication pass before closure.
 
@@ -47,10 +47,10 @@ A four-runner architecture panel completed. Codex identified the hidden producti
 
 - Integrated isolated commit `d72d86a93576fdc10e757b1986907dd3940c4665` as canonical `ca9b3142`.
 - `internal/apihandler` now owns `product_api_request` as a canonical `toolregistry.Tool` bound to the already constructed production server. No per-call server, mux, handler, route registrar, callback, interface, accessor, alias, or fallback remains.
-- Sandbox installs default registries, registers the one canonical route table, then registers the server-bound tool exactly once in the existing Super registry only when tools are enabled.
+- Autoputer installs default registries, registers the one canonical route table, then registers the server-bound tool exactly once in the existing Super registry only when tools are enabled.
 - Runtime's product tool implementation/test files and default registration are deleted. The runtime default-catalog regression now asserts that server-bound transport is absent; apihandler tests cover canonical-server identity, owner/email headers, schema, nil/duplicate registration, allowlist/rejections, size limits, truncation, and result shape.
-- Focused tests passed for apihandler, runtime, sandbox, and actor-runtime. The runtime ratchet passes.
-- Ratchet deltas: Go files `146 -> 144`, production files `76 -> 75`, test files `70 -> 69`, production LOC `44216 -> 44032`, test LOC `50223 -> 50142`, exports `1014 -> 1012`, caller edges `372 -> 368`, runtime-scoped tool declarations `49 -> 48`; routes, production importers, wrappers, compatibility markers, store calls, interface candidates, and initial unused-export debt are flat. The enabled product catalog remains behaviorally flat because sandbox registers the same tool after runtime's duplicate constructor-backed registration is deleted. Three durable dispatch/suite citers are classified (`241 -> 244`).
+- Focused tests passed for apihandler, runtime, autoputer, and actor-runtime. The runtime ratchet passes.
+- Ratchet deltas: Go files `146 -> 144`, production files `76 -> 75`, test files `70 -> 69`, production LOC `44216 -> 44032`, test LOC `50223 -> 50142`, exports `1014 -> 1012`, caller edges `372 -> 368`, runtime-scoped tool declarations `49 -> 48`; routes, production importers, wrappers, compatibility markers, store calls, interface candidates, and initial unused-export debt are flat. The enabled product catalog remains behaviorally flat because autoputer registers the same tool after runtime's duplicate constructor-backed registration is deleted. Three durable dispatch/suite citers are classified (`241 -> 244`).
 
 ## S3-I14 Independent Verification
 

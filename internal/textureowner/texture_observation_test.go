@@ -29,7 +29,7 @@ func observationBodyDoc(text string) json.RawMessage {
 func startObservationLifecycle(t *testing.T, s *store.Store) types.StartLifecycleRequest {
 	t.Helper()
 	req := types.StartLifecycleRequest{
-		OwnerID: "user-1", ComputerID: "sandbox-test", CommandID: "start-observation",
+		OwnerID: "user-1", ComputerID: "autoputer-test", CommandID: "start-observation",
 		TrajectoryID: "trajectory-observation", Kind: types.TrajectoryKindTask,
 		SubjectRefs:     map[string]string{"artifact": "texture://document/doc-observation", "doc_id": "doc-observation"},
 		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
@@ -54,7 +54,7 @@ func applyObservationSourceVersion(t *testing.T, s *store.Store, start types.Sta
 	}
 	now := time.Now().UTC()
 	producer := types.AgentRecord{
-		AgentID: "researcher:observation", OwnerID: start.OwnerID, ComputerID: start.ComputerID, SandboxID: start.ComputerID,
+		AgentID: "researcher:observation", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 		Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.UpsertAgent(context.Background(), producer); err != nil {
@@ -71,7 +71,7 @@ func applyObservationSourceVersion(t *testing.T, s *store.Store, start types.Sta
 	}
 	producerRun := types.RunRecord{
 		RunID: "run-observation-producer", AgentID: producer.AgentID, AgentProfile: producer.Profile, AgentRole: producer.Role,
-		ChannelID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID, OwnerID: start.OwnerID, SandboxID: start.ComputerID,
+		ChannelID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": opened.WorkItem.WorkItemID},
 	}
 	project := types.ReplaceLifecycleActivationRequest{
@@ -101,7 +101,7 @@ func applyObservationSourceVersion(t *testing.T, s *store.Store, start types.Sta
 		AuthorKind: types.AuthorAppAgent, AuthorLabel: "Texture", BodyDoc: bodyDoc, SourceEntities: sourceEntities,
 	}
 	graph, err := textureToolSourceGraphWriteSet(revision, materializedTextureEdit{BodyDoc: bodyDoc, SourceEntities: sourceEntities}, &types.RunRecord{
-		RunID: "run-observation", OwnerID: start.OwnerID, SandboxID: start.ComputerID, TrajectoryID: start.TrajectoryID,
+		RunID: "run-observation", OwnerID: start.OwnerID, ComputerID: start.ComputerID, TrajectoryID: start.TrajectoryID,
 	})
 	if err != nil {
 		t.Fatalf("build source graph: %v", err)
@@ -136,7 +136,7 @@ func applyObservationTextureTurnWithInbound(t *testing.T, s *store.Store, start 
 	now := time.Now().UTC()
 	caller := types.RunRecord{
 		RunID: "run-observation-texture", AgentID: start.Agent.AgentID, AgentProfile: "texture", AgentRole: "texture",
-		ChannelID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID, OwnerID: start.OwnerID, SandboxID: start.ComputerID,
+		ChannelID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID},
 	}
 	projectCaller := types.ReplaceLifecycleActivationRequest{
@@ -149,7 +149,7 @@ func applyObservationTextureTurnWithInbound(t *testing.T, s *store.Store, start 
 	}
 
 	producer := types.AgentRecord{
-		AgentID: "researcher:observation-turn", OwnerID: start.OwnerID, ComputerID: start.ComputerID, SandboxID: start.ComputerID,
+		AgentID: "researcher:observation-turn", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 		Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.UpsertAgent(ctx, producer); err != nil {
@@ -170,7 +170,7 @@ func applyObservationTextureTurnWithInbound(t *testing.T, s *store.Store, start 
 	}
 	producerRun := types.RunRecord{
 		RunID: "run-observation-turn-producer", AgentID: producer.AgentID, AgentProfile: "researcher", AgentRole: "researcher",
-		ChannelID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID, OwnerID: start.OwnerID, SandboxID: start.ComputerID,
+		ChannelID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, RequestedByRunID: caller.RunID,
 		Metadata: map[string]any{"lifecycle_work_item_id": opened.WorkItem.WorkItemID},
 	}

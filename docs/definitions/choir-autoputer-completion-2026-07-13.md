@@ -505,7 +505,7 @@ state_capsule:
           status: success
           activated_at: 2026-07-14T01:31:55Z
           target_commit: fb97e4b36ec32df9b6edb6b3eaf69e812e722b4e
-          active_artifacts: [ordinary_guest, sandbox, active_computers, gateway]
+          active_artifacts: [ordinary_guest, autoputer, active_computers, gateway]
           artifact_ref: artifact://229
         acceptance:
           level: E5
@@ -643,7 +643,7 @@ state_capsule:
           status: success
           activated_at: 2026-07-14T02:24:11Z
           ordinary_guest: active
-          sandbox: active
+          autoputer: active
           active_computers: active
           gateway: active
         staging_computer:
@@ -988,14 +988,14 @@ state_capsule:
           observation: gopls reported no diagnostics in the owner, research tool, or profile registry wiring; LSP resolved the constructor to one production caller plus direct owner tests, Client to three runtime boundaries, and Response to runtime projection plus two projection tests
         - class: E5
           observation: >-
-            Canonical CI run 29306556937 and deploy job 87001461766 succeeded for landed commit 59f514efae75bd00a07743c4944a7018d23a49d8; the activation receipt bound both sandbox and gateway to that commit. Authenticated diagnostic trajectory 4ba004d6-ac56-4a2a-9c49-284c15376b82 created researcher run 6eeedde6-7e44-40c0-91d5-55c7c2f491c4, whose single web_search durably returned exact JSON with attempts empty and gateway provider_health for all seven configured providers: Brave cooling down after HTTP 422 because count exceeded twenty; Exa, Parallel, Serper, and Tavily quota-limited; SerpAPI rate-limited with no searches remaining; and SearXNG cooling down after repeated empty success. The expected public-edge HTTP 403 on the internal events route preserved product isolation. Two independent verifiers accepted this durable authenticated result as the lock's product-path Trace artifact proving an honest structured gateway outage.
+            Canonical CI run 29306556937 and deploy job 87001461766 succeeded for landed commit 59f514efae75bd00a07743c4944a7018d23a49d8; the activation receipt bound both autoputer and gateway to that commit. Authenticated diagnostic trajectory 4ba004d6-ac56-4a2a-9c49-284c15376b82 created researcher run 6eeedde6-7e44-40c0-91d5-55c7c2f491c4, whose single web_search durably returned exact JSON with attempts empty and gateway provider_health for all seven configured providers: Brave cooling down after HTTP 422 because count exceeded twenty; Exa, Parallel, Serper, and Tavily quota-limited; SerpAPI rate-limited with no searches remaining; and SearXNG cooling down after repeated empty success. The expected public-edge HTTP 403 on the internal events route preserved product isolation. Two independent verifiers accepted this durable authenticated result as the lock's product-path Trace artifact proving an honest structured gateway outage.
       validation_notes:
         - Runtime baseline before this Define is go_files 134, production_files 70, test_files 64, production_loc 43230, test_loc 49847, exports 957, export_caller_edges 308, initial_unused_export_debt 16, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 307.
         - This Define mechanically raises documentation citers from 307 to exactly 333 before implementation; all source-category counts remain unchanged. The implementation must rebaseline that authorized documentation-only rise, then reduce runtime production files, test files, production LOC, and test LOC without increasing any other source category; interface candidates must remain flat at four.
         - 'Problem documented before ratchet correction: the first implementation measurement showed interface_candidates remained four, not lower. That category enumerates four pre-existing runtime-to-store interface call boundaries and does not count the private webSearchClient declaration being moved. Requiring a decrease would force unrelated scope or a false reclassification. Correcting the lock to require the category remain flat preserves debt authority and changes no source behavior.'
         - Local and ratchet proof covers exact transport, response, outage, projection, role wiring, and source authority. Provider routing and agent-visible search remain protected and require canonical CI/deploy plus staging product-path proof before completion.
         - 'Problem documented before any further probe or fix: the first authenticated deployed coagent web_search after commit 59f514efae75bd00a07743c4944a7018d23a49d8 returned structured search_outage and no results. This is a search-provider/gateway substrate failure observation, not evidence that the ownership cutover caused it. An honest structured outage is admissible E5 only when Trace proves it; the durable researcher result alone is indirect, and the public edge correctly forbids the internal events route. Do not label the lock complete until an admissible product-path artifact independently proves the structured gateway response or a later deployed coagent search returns gateway-backed results.'
-      completion_adjudication: Complete at E6. Canonical CI and deploy bound sandbox and gateway to the landed implementation; the authenticated staging coagent transition exercised the relocated client and returned the exact structured outage projection with gateway-only aggregate health for all seven providers; two independent verifiers accepted the durable run result as admissible product-path Trace and required no raw internal-route bypass. The observed provider cooldown and quota exhaustion predate and remain outside this ownership-only cutover; no provider policy, credential, route, model, cadence, or fallback was changed. The exact caller graph, golden transport/response vectors, ratchet delta, immutable-candidate review, and staging evidence leave no authority seam or residual obligation in this lock.
+      completion_adjudication: Complete at E6. Canonical CI and deploy bound autoputer and gateway to the landed implementation; the authenticated staging coagent transition exercised the relocated client and returned the exact structured outage projection with gateway-only aggregate health for all seven providers; two independent verifiers accepted the durable run result as admissible product-path Trace and required no raw internal-route bypass. The observed provider cooldown and quota exhaustion predate and remain outside this ownership-only cutover; no provider policy, credential, route, model, cadence, or fallback was changed. The exact caller graph, golden transport/response vectors, ratchet delta, immutable-candidate review, and staging evidence leave no authority seam or residual obligation in this lock.
       heresy_delta:
         discovered:
           - gateway-backed search transport and response authority are nested in runtime beside an unwired internal/search package that directly selects providers and reads provider credentials
@@ -1221,7 +1221,7 @@ state_capsule:
         - texture-document:ee5c16e2-be99-49b0-b730-25a06e79d381
         - texture-revision:7b837837-29b8-4a6c-a6ad-491f42a024ae
       rollback_refs: [f4d47c1b5cd412333384de7ef516a7d723c443b3]
-      result: CI and all race shards passed; activation receipt bound ordinary guest, sandbox, active computers, and gateway to the implementation commit; an authenticated CLI prompt completed and its fetched Texture artifact contained the exact requested deployed-parser sentence.
+      result: CI and all race shards passed; activation receipt bound ordinary guest, autoputer, active computers, and gateway to the implementation commit; an authenticated CLI prompt completed and its fetched Texture artifact contained the exact requested deployed-parser sentence.
       invalidation_triggers: [reproduced prompt parsing or rendering failure, old package path reintroduced, runtime ratchet regression]
     - id: R1-prompt-packages-cutover-02
       status: complete
@@ -1233,7 +1233,7 @@ state_capsule:
         - texture-document:51d1047f-4727-481e-8aa2-3b6019796eab
         - texture-revision:8fb7afe3-2d2b-4286-9cea-52a4dcc34f25
       rollback_refs: [6627cc3294c8e950f5b7c5339b8e0bb056ace3d8]
-      result: CI, every selected race shard, differential SBOM, and deploy passed; the activation receipt bound ordinary guest, sandbox, active computers, and gateway to the implementation commit; an authenticated CLI prompt completed and its fetched Texture artifact contained the exact requested relocated-package acceptance sentence.
+      result: CI, every selected race shard, differential SBOM, and deploy passed; the activation receipt bound ordinary guest, autoputer, active computers, and gateway to the implementation commit; an authenticated CLI prompt completed and its fetched Texture artifact contained the exact requested relocated-package acceptance sentence.
       invalidation_triggers: [reproduced prompt rendering or embedded asset failure, old package path reintroduced, runtime ratchet regression]
   artifact_identity:
     source: refs/heads/main@origin@1b28520d6a3d31ecf36b2a645623367b4630faa0

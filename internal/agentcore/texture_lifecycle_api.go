@@ -111,12 +111,12 @@ func (rt *Runtime) TextureActorParkIdle() time.Duration {
 	return rt.cfg.TextureActorParkIdle
 }
 
-// TextureSandboxID returns the runtime sandbox identity used for durable actor records.
-func (rt *Runtime) TextureSandboxID() string {
+// TextureComputerID returns the runtime autoputer identity used for durable actor records.
+func (rt *Runtime) TextureComputerID() string {
 	if rt == nil {
 		return ""
 	}
-	return rt.cfg.SandboxID
+	return rt.cfg.ComputerID
 }
 
 // TextureActiveRunByAgent returns the latest executing lifecycle run for one computer-scoped actor.
@@ -194,7 +194,7 @@ func (rt *Runtime) LatestTextureActorToolLoopBudgetSpend(ctx context.Context, ow
 	if ownerID == "" || agentID == "" {
 		return spend, false, nil
 	}
-	sourceRunID, _, err := rt.store.LatestActorRunMemoryEntries(ctx, ownerID, rt.TextureSandboxID(), agentID, "")
+	sourceRunID, _, err := rt.store.LatestActorRunMemoryEntries(ctx, ownerID, rt.TextureComputerID(), agentID, "")
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return spend, false, nil
@@ -552,7 +552,7 @@ func (rt *Runtime) ValidateLifecycleProducerReportAuthority(ctx context.Context,
 	if profile == agentprofile.Super {
 		trajectoryBound = run.TrajectoryID == "" && metadataStringValue(run.Metadata, "assignment_trajectory_id") == report.TrajectoryID
 	}
-	if run.RunID != report.SourceRunID || run.OwnerID != report.OwnerID || run.SandboxID != report.ComputerID || run.AgentID != report.AgentID || !trajectoryBound || run.ChannelID != report.ChannelID || !lifecycleControlWorkIDsForRun(run)[report.ProducerWorkItemID] {
+	if run.RunID != report.SourceRunID || run.OwnerID != report.OwnerID || run.ComputerID != report.ComputerID || run.AgentID != report.AgentID || !trajectoryBound || run.ChannelID != report.ChannelID || !lifecycleControlWorkIDsForRun(run)[report.ProducerWorkItemID] {
 		return invalidLifecycleProducerReportAuthority("producer report source run authority mismatch")
 	}
 	if profile == agentprofile.Super {
@@ -620,7 +620,7 @@ func (rt *Runtime) lifecycleResearcherAdmissionRecoveryControls(ctx context.Cont
 	if err != nil || len(versions) == 0 {
 		return nil, invalidLifecycleResearcherRecovery("recovery has no exact activation versions: %v", err)
 	}
-	pending, err := rt.store.ListAllPendingLifecycleUpdates(ctx, rec.OwnerID, rec.SandboxID, rec.AgentID)
+	pending, err := rt.store.ListAllPendingLifecycleUpdates(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID)
 	if err != nil {
 		return nil, err
 	}
@@ -636,7 +636,7 @@ func (rt *Runtime) lifecycleResearcherAdmissionRecoveryControls(ctx context.Cont
 			control.Direction != types.LifecyclePacketDirectionControl || control.Disposition != types.UpdatePending || control.DeliveredAt != nil || control.DeliveredToRunID != "" || control.LifecycleVersion != version.ControlLifecycleVersion {
 			return nil, invalidLifecycleResearcherRecovery("pending control %q is not exact", version.UpdateID)
 		}
-		work, workErr := rt.store.GetLifecycleWorkItem(ctx, rec.OwnerID, rec.SandboxID, version.TargetWorkItemID)
+		work, workErr := rt.store.GetLifecycleWorkItem(ctx, rec.OwnerID, rec.ComputerID, version.TargetWorkItemID)
 		if workErr != nil || work.Status != types.WorkItemOpen || work.AssignedAgentID != rec.AgentID || work.TrajectoryID != rec.TrajectoryID || work.LifecycleVersion != version.WorkLifecycleVersion {
 			if workErr != nil {
 				if errors.Is(workErr, store.ErrNotFound) {
@@ -649,7 +649,7 @@ func (rt *Runtime) lifecycleResearcherAdmissionRecoveryControls(ctx context.Cont
 		controls = append(controls, control)
 		workByID[work.WorkItemID] = work
 	}
-	logical, failed, _, err := lifecycleActivationKeys(rec.OwnerID, rec.SandboxID, rec.TrajectoryID, rec.AgentID, metadataStringValue(rec.Metadata, lifecycleActivationBuildMetadata), controls, workByID)
+	logical, failed, _, err := lifecycleActivationKeys(rec.OwnerID, rec.ComputerID, rec.TrajectoryID, rec.AgentID, metadataStringValue(rec.Metadata, lifecycleActivationBuildMetadata), controls, workByID)
 	if err != nil || logical != metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) || failed != metadataStringValue(rec.Metadata, lifecycleFailedAttemptKeyMetadata) {
 		return nil, invalidLifecycleResearcherRecovery("pending fingerprint mismatch")
 	}
@@ -697,7 +697,7 @@ func (rt *Runtime) ResolveLifecycleResearcherAdmissionRecovery(ctx context.Conte
 	if rec.State == types.RunPassivated && (metadataStringValue(rec.Metadata, "passivated_reason") == lifecycleResearcherAdmissionRetryReason || metadataStringValue(rec.Metadata, "passivated_reason") == runtimeInjectionAppendFailurePassivationReason) {
 		return nil, false, fmt.Errorf("lifecycle Researcher recovery run is awaiting boot projection")
 	}
-	if rec.OwnerID != o.OwnerID || rec.SandboxID != o.ComputerID || rec.TrajectoryID != o.TrajectoryID || rec.AgentID != o.AgentID ||
+	if rec.OwnerID != o.OwnerID || rec.ComputerID != o.ComputerID || rec.TrajectoryID != o.TrajectoryID || rec.AgentID != o.AgentID ||
 		(rec.State != types.RunPending && rec.State != types.RunRunning) || metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) != o.LogicalKey {
 		return nil, false, invalidLifecycleResearcherRecovery("run authority mismatch")
 	}

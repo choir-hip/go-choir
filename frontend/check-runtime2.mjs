@@ -16,7 +16,7 @@ import { chromium } from '@playwright/test';
   // Check all relevant APIs with full URLs
   const endpoints = [
     'https://choir.news/api/health',
-    'https://choir.news/api/sandbox/health',
+    'https://choir.news/api/autoputer/health',
     'https://choir.news/api/shell/bootstrap',
     'https://choir.news/api/vm/status',
     'https://choir.news/api/trace/trajectories',

@@ -17,7 +17,7 @@ type ExecutionContext struct {
 	Profile    string
 	Role       string
 	ChannelID  string
-	SandboxID  string
+	ComputerID string
 	DesktopID  string
 	OwnerEmail string
 	WorkingDir string
@@ -35,7 +35,7 @@ func WithExecutionContext(ctx context.Context, execution ExecutionContext) conte
 	execution.Profile = strings.TrimSpace(execution.Profile)
 	execution.Role = strings.TrimSpace(execution.Role)
 	execution.ChannelID = strings.TrimSpace(execution.ChannelID)
-	execution.SandboxID = strings.TrimSpace(execution.SandboxID)
+	execution.ComputerID = strings.TrimSpace(execution.ComputerID)
 	execution.DesktopID = strings.TrimSpace(execution.DesktopID)
 	execution.OwnerEmail = strings.TrimSpace(execution.OwnerEmail)
 	execution.WorkingDir = strings.TrimSpace(execution.WorkingDir)

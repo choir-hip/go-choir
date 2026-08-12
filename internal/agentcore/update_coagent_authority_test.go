@@ -113,10 +113,10 @@ func (f *coagentAuthorityFakeStore) CoSuperSlotByAgentAndTrajectory(_ context.Co
 func lifecycleAuthorityFixture(profile string) (*Runtime, *coagentAuthorityFakeStore, context.Context, string) {
 	const owner, computer, doc, trajectory = "owner-a", "computer-a", "doc-a", "trajectory-a"
 	targetID, callerID, callerRunID, parentRunID, workID := "texture:"+doc, profile+":producer-a", "run-producer-a", "run-texture-a", "work-producer-a"
-	target := types.AgentRecord{AgentID: targetID, OwnerID: owner, ComputerID: computer, SandboxID: computer, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: doc, LifecycleVersion: 2}
-	callerAgent := types.AgentRecord{AgentID: callerID, OwnerID: owner, ComputerID: computer, SandboxID: computer, Profile: profile, Role: profile, ChannelID: doc}
-	parent := types.RunRecord{RunID: parentRunID, AgentID: targetID, OwnerID: owner, SandboxID: computer, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, ChannelID: doc, TrajectoryID: trajectory}
-	caller := types.RunRecord{RunID: callerRunID, AgentID: callerID, OwnerID: owner, SandboxID: computer, AgentProfile: profile, AgentRole: profile, ChannelID: doc, TrajectoryID: trajectory, RequestedByRunID: parentRunID, Metadata: map[string]any{
+	target := types.AgentRecord{AgentID: targetID, OwnerID: owner, ComputerID: computer, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: doc, LifecycleVersion: 2}
+	callerAgent := types.AgentRecord{AgentID: callerID, OwnerID: owner, ComputerID: computer, Profile: profile, Role: profile, ChannelID: doc}
+	parent := types.RunRecord{RunID: parentRunID, AgentID: targetID, OwnerID: owner, ComputerID: computer, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, ChannelID: doc, TrajectoryID: trajectory}
+	caller := types.RunRecord{RunID: callerRunID, AgentID: callerID, OwnerID: owner, ComputerID: computer, AgentProfile: profile, AgentRole: profile, ChannelID: doc, TrajectoryID: trajectory, RequestedByRunID: parentRunID, Metadata: map[string]any{
 		"requested_by_run_id": parentRunID, "requested_by_agent_id": targetID, "requested_by_profile": agentprofile.Texture,
 		"trajectory_id": trajectory, "lifecycle_work_item_id": workID, "work_item_ids": []string{workID},
 	}}
@@ -129,7 +129,7 @@ func lifecycleAuthorityFixture(profile string) (*Runtime, *coagentAuthorityFakeS
 			"requested_by_run_id": parentRunID, "requested_by_agent_id": targetID, "requested_by_profile": agentprofile.Texture,
 		}}}, legacyWork: map[string]types.WorkItemRecord{}, slots: map[string]store.CoSuperSlotRecord{}, errors: map[string]error{},
 	}
-	rt := &Runtime{cfg: provideriface.Config{SandboxID: computer}}
+	rt := &Runtime{cfg: provideriface.Config{ComputerID: computer}}
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&caller))
 	return rt, f, ctx, targetID
 }
@@ -176,11 +176,11 @@ func TestResolveCoagentUpdateAuthorityRequiresExplicitScopedTargetAndEveryLookup
 
 func TestResolveCoagentUpdateAuthorityRefusesScopeDocumentTrajectoryRequesterAndWorkDrift(t *testing.T) {
 	cases := map[string]func(*Runtime, *coagentAuthorityFakeStore, *toolregistry.ExecutionContext, string){
-		"absent sandbox": func(_ *Runtime, _ *coagentAuthorityFakeStore, e *toolregistry.ExecutionContext, _ string) {
-			e.SandboxID = ""
+		"absent autoputer": func(_ *Runtime, _ *coagentAuthorityFakeStore, e *toolregistry.ExecutionContext, _ string) {
+			e.ComputerID = ""
 		},
 		"runtime computer mismatch": func(rt *Runtime, _ *coagentAuthorityFakeStore, _ *toolregistry.ExecutionContext, _ string) {
-			rt.cfg.SandboxID = "computer-b"
+			rt.cfg.ComputerID = "computer-b"
 		},
 		"target computer": func(_ *Runtime, f *coagentAuthorityFakeStore, _ *toolregistry.ExecutionContext, target string) {
 			v := f.agents[target]
@@ -250,12 +250,12 @@ func legacyRequesterFixture(profile, targetProfile string) (*Runtime, *coagentAu
 	const owner, computer, trajectory = "legacy-owner", "legacy-computer", "legacy-trajectory"
 	targetID, callerID, parentRunID, callerRunID := targetProfile+":legacy-parent", profile+":legacy-child", "legacy-parent-run", "legacy-child-run"
 	channel := "legacy-doc"
-	target := types.AgentRecord{AgentID: targetID, OwnerID: owner, ComputerID: computer, SandboxID: computer, Profile: targetProfile, Role: targetProfile, ChannelID: channel}
-	callerAgent := types.AgentRecord{AgentID: callerID, OwnerID: owner, ComputerID: computer, SandboxID: computer, Profile: profile, Role: profile, ChannelID: channel}
-	parent := types.RunRecord{RunID: parentRunID, AgentID: targetID, OwnerID: owner, SandboxID: computer, AgentProfile: targetProfile, AgentRole: targetProfile, ChannelID: channel, TrajectoryID: trajectory}
-	caller := types.RunRecord{RunID: callerRunID, AgentID: callerID, OwnerID: owner, SandboxID: computer, AgentProfile: profile, AgentRole: profile, ChannelID: channel, TrajectoryID: trajectory, RequestedByRunID: parentRunID, Metadata: map[string]any{"requested_by_run_id": parentRunID, "requested_by_agent_id": targetID, "requested_by_profile": targetProfile, "trajectory_id": trajectory}}
+	target := types.AgentRecord{AgentID: targetID, OwnerID: owner, ComputerID: computer, Profile: targetProfile, Role: targetProfile, ChannelID: channel}
+	callerAgent := types.AgentRecord{AgentID: callerID, OwnerID: owner, ComputerID: computer, Profile: profile, Role: profile, ChannelID: channel}
+	parent := types.RunRecord{RunID: parentRunID, AgentID: targetID, OwnerID: owner, ComputerID: computer, AgentProfile: targetProfile, AgentRole: targetProfile, ChannelID: channel, TrajectoryID: trajectory}
+	caller := types.RunRecord{RunID: callerRunID, AgentID: callerID, OwnerID: owner, ComputerID: computer, AgentProfile: profile, AgentRole: profile, ChannelID: channel, TrajectoryID: trajectory, RequestedByRunID: parentRunID, Metadata: map[string]any{"requested_by_run_id": parentRunID, "requested_by_agent_id": targetID, "requested_by_profile": targetProfile, "trajectory_id": trajectory}}
 	f := &coagentAuthorityFakeStore{agents: map[string]types.AgentRecord{targetID: target, callerID: callerAgent}, lifecycleRuns: map[string]types.RunRecord{}, legacyRuns: map[string]types.RunRecord{parentRunID: parent, callerRunID: caller}, lifecycleTraj: map[string]types.TrajectoryRecord{}, legacyTraj: map[string]types.TrajectoryRecord{trajectory: {TrajectoryID: trajectory, OwnerID: owner, ComputerID: computer, SubjectRefs: map[string]string{"channel_id": channel}}}, lifecycleWork: map[string]types.WorkItemRecord{}, legacyWork: map[string]types.WorkItemRecord{}, slots: map[string]store.CoSuperSlotRecord{}, errors: map[string]error{}}
-	rt := &Runtime{cfg: provideriface.Config{SandboxID: computer}}
+	rt := &Runtime{cfg: provideriface.Config{ComputerID: computer}}
 	return rt, f, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&caller)), targetID
 }
 
@@ -341,7 +341,7 @@ func TestUpdateCoagentLifecycleExactToolCallReplayWakesOnce(t *testing.T) {
 	const ownerID, docID = "owner-call-replay", "doc-call-replay"
 	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
 	now := time.Now().UTC()
-	parent := types.RunRecord{RunID: "run-texture-call-replay", AgentID: "texture:" + docID, ChannelID: docID, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, OwnerID: ownerID, SandboxID: "sandbox-test", State: types.RunRunning, TrajectoryID: trajectoryID, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataChannelID: docID}}
+	parent := types.RunRecord{RunID: "run-texture-call-replay", AgentID: "texture:" + docID, ChannelID: docID, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, OwnerID: ownerID, ComputerID: "autoputer-test", State: types.RunRunning, TrajectoryID: trajectoryID, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataChannelID: docID}}
 	if err := s.CreateRun(ctx, parent); err != nil {
 		t.Fatalf("create lifecycle parent: %v", err)
 	}
@@ -383,8 +383,8 @@ func TestUpdateCoagentLifecycleExactToolCallReplayWakesOnce(t *testing.T) {
 }
 
 func TestDeriveLifecycleProducerUpdateIDIsRuntimeBoundUUIDv4(t *testing.T) {
-	run := types.RunRecord{RunID: "run-a", OwnerID: "owner-a", SandboxID: "computer-a"}
-	execution := toolregistry.ExecutionContext{RunID: run.RunID, OwnerID: run.OwnerID, SandboxID: run.SandboxID, ToolCallID: "call-a"}
+	run := types.RunRecord{RunID: "run-a", OwnerID: "owner-a", ComputerID: "computer-a"}
+	execution := toolregistry.ExecutionContext{RunID: run.RunID, OwnerID: run.OwnerID, ComputerID: run.ComputerID, ToolCallID: "call-a"}
 	first, err := deriveLifecycleProducerUpdateID(execution, run)
 	if err != nil {
 		t.Fatal(err)

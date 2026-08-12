@@ -41,7 +41,7 @@ type liveWSAckMessage struct {
 var liveWSUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		// Same-origin auth and routing are enforced by the edge proxy. The
-		// sandbox runtime should not second-guess proxy origin policy.
+		// autoputer runtime should not second-guess proxy origin policy.
 		return true
 	},
 }

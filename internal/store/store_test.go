@@ -131,7 +131,7 @@ func TestOpenDoesNotImportLegacySQLiteRuntimeRows(t *testing.T) {
 	if _, err := legacy.Exec(`CREATE TABLE runs (
 		loop_id TEXT PRIMARY KEY,
 		owner_id TEXT NOT NULL,
-		sandbox_id TEXT NOT NULL,
+		computer_id TEXT NOT NULL,
 		state TEXT NOT NULL,
 		prompt TEXT NOT NULL DEFAULT '',
 		created_at TEXT NOT NULL,
@@ -141,9 +141,9 @@ func TestOpenDoesNotImportLegacySQLiteRuntimeRows(t *testing.T) {
 		t.Fatalf("create legacy runs table: %v", err)
 	}
 	if _, err := legacy.Exec(
-		`INSERT INTO runs (loop_id, owner_id, sandbox_id, state, prompt, created_at, updated_at)
+		`INSERT INTO runs (loop_id, owner_id, computer_id, state, prompt, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		"legacy-run", "user-legacy", "sandbox-legacy", types.RunRunning, "do not import", now, now,
+		"legacy-run", "user-legacy", "autoputer-legacy", types.RunRunning, "do not import", now, now,
 	); err != nil {
 		_ = legacy.Close()
 		t.Fatalf("insert legacy run: %v", err)
@@ -293,7 +293,7 @@ CREATE TABLE runs (
 	agent_profile VARCHAR(255) NOT NULL DEFAULT '',
 	agent_role VARCHAR(255) NOT NULL DEFAULT '',
 	owner_id    VARCHAR(255) NOT NULL DEFAULT '',
-	sandbox_id  VARCHAR(255) NOT NULL DEFAULT '',
+	computer_id  VARCHAR(255) NOT NULL DEFAULT '',
 	state       VARCHAR(64) NOT NULL DEFAULT '',
 	prompt      LONGTEXT NOT NULL DEFAULT '',
 	result      LONGTEXT NOT NULL DEFAULT '',
@@ -352,13 +352,13 @@ func TestCreateAndGetRun(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	rec := types.RunRecord{
-		RunID:     "task-001",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-dev",
-		State:     types.RunPending,
-		Prompt:    "explain closures in Go",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "task-001",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-dev",
+		State:      types.RunPending,
+		Prompt:     "explain closures in Go",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 		Metadata: map[string]any{
 			"model": "claude-3",
 		},
@@ -379,8 +379,8 @@ func TestCreateAndGetRun(t *testing.T) {
 	if got.OwnerID != rec.OwnerID {
 		t.Errorf("owner_id: got %q, want %q", got.OwnerID, rec.OwnerID)
 	}
-	if got.SandboxID != rec.SandboxID {
-		t.Errorf("sandbox_id: got %q, want %q", got.SandboxID, rec.SandboxID)
+	if got.ComputerID != rec.ComputerID {
+		t.Errorf("computer_id: got %q, want %q", got.ComputerID, rec.ComputerID)
 	}
 	if got.State != rec.State {
 		t.Errorf("state: got %q, want %q", got.State, rec.State)
@@ -402,15 +402,15 @@ func TestRunPersistenceNormalizesInvalidUTF8(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	invalid := string([]byte{'o', 'k', ' ', 0xe2, 0x86})
 	rec := types.RunRecord{
-		RunID:     "task-invalid-unicode",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-dev",
-		State:     types.RunPending,
-		Prompt:    invalid,
-		Result:    invalid,
-		Error:     invalid,
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "task-invalid-unicode",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-dev",
+		State:      types.RunPending,
+		Prompt:     invalid,
+		Result:     invalid,
+		Error:      invalid,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := s.CreateRun(ctx, rec); err != nil {
 		t.Fatalf("create run with invalid utf8: %v", err)
@@ -456,13 +456,13 @@ func TestGetRunRespondsWhileWriteTransactionOpen(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	rec := types.RunRecord{
-		RunID:     "task-control-plane-read",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-dev",
-		State:     types.RunRunning,
-		Prompt:    "status should remain observable",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "task-control-plane-read",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-dev",
+		State:      types.RunRunning,
+		Prompt:     "status should remain observable",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := s.CreateRun(ctx, rec); err != nil {
 		t.Fatalf("create run: %v", err)
@@ -497,13 +497,13 @@ func TestUpdateRun(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	rec := types.RunRecord{
-		RunID:     "task-002",
-		OwnerID:   "user-bob",
-		SandboxID: "sandbox-dev",
-		State:     types.RunPending,
-		Prompt:    "write a hello world",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "task-002",
+		OwnerID:    "user-bob",
+		ComputerID: "autoputer-dev",
+		State:      types.RunPending,
+		Prompt:     "write a hello world",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 
 	if err := s.CreateRun(ctx, rec); err != nil {
@@ -562,7 +562,7 @@ func TestUpdateRunAndMarkWorkerUpdatesDelivered(t *testing.T) {
 		AgentProfile: "cosuper",
 		AgentRole:    "implementation",
 		OwnerID:      "user-alice",
-		SandboxID:    "sandbox-dev",
+		ComputerID:   "autoputer-dev",
 		State:        types.RunRunning,
 		Prompt:       "process update_coagent delivery",
 		CreatedAt:    now,
@@ -937,13 +937,13 @@ func TestListRunsByOwner(t *testing.T) {
 	for i, owner := range []string{"alice", "bob", "alice"} {
 		taskID := fmtRunID(i)
 		rec := types.RunRecord{
-			RunID:     taskID,
-			OwnerID:   owner,
-			SandboxID: "sandbox-dev",
-			State:     types.RunPending,
-			Prompt:    "prompt " + taskID,
-			CreatedAt: now.Add(time.Duration(i) * time.Second),
-			UpdatedAt: now.Add(time.Duration(i) * time.Second),
+			RunID:      taskID,
+			OwnerID:    owner,
+			ComputerID: "autoputer-dev",
+			State:      types.RunPending,
+			Prompt:     "prompt " + taskID,
+			CreatedAt:  now.Add(time.Duration(i) * time.Second),
+			UpdatedAt:  now.Add(time.Duration(i) * time.Second),
 		}
 		if err := s.CreateRun(ctx, rec); err != nil {
 			t.Fatalf("create task %s: %v", taskID, err)
@@ -982,13 +982,13 @@ func TestListRunsByState(t *testing.T) {
 	for i, state := range states {
 		taskID := fmtRunID(i)
 		rec := types.RunRecord{
-			RunID:     taskID,
-			OwnerID:   "user-test",
-			SandboxID: "sandbox-dev",
-			State:     state,
-			Prompt:    "prompt " + taskID,
-			CreatedAt: now.Add(time.Duration(i) * time.Second),
-			UpdatedAt: now.Add(time.Duration(i) * time.Second),
+			RunID:      taskID,
+			OwnerID:    "user-test",
+			ComputerID: "autoputer-dev",
+			State:      state,
+			Prompt:     "prompt " + taskID,
+			CreatedAt:  now.Add(time.Duration(i) * time.Second),
+			UpdatedAt:  now.Add(time.Duration(i) * time.Second),
 		}
 		if err := s.CreateRun(ctx, rec); err != nil {
 			t.Fatalf("create task %s: %v", taskID, err)
@@ -1026,13 +1026,13 @@ func TestListRuns(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		taskID := fmtRunID(i)
 		rec := types.RunRecord{
-			RunID:     taskID,
-			OwnerID:   "user-test",
-			SandboxID: "sandbox-dev",
-			State:     types.RunPending,
-			Prompt:    "prompt " + taskID,
-			CreatedAt: now.Add(time.Duration(i) * time.Second),
-			UpdatedAt: now.Add(time.Duration(i) * time.Second),
+			RunID:      taskID,
+			OwnerID:    "user-test",
+			ComputerID: "autoputer-dev",
+			State:      types.RunPending,
+			Prompt:     "prompt " + taskID,
+			CreatedAt:  now.Add(time.Duration(i) * time.Second),
+			UpdatedAt:  now.Add(time.Duration(i) * time.Second),
 		}
 		if err := s.CreateRun(ctx, rec); err != nil {
 			t.Fatalf("create task %s: %v", taskID, err)
@@ -1059,13 +1059,13 @@ func TestTaskStateTransitionFromPendingToRunning(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	rec := types.RunRecord{
-		RunID:     "task-transition",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-dev",
-		State:     types.RunPending,
-		Prompt:    "test transition",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "task-transition",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-dev",
+		State:      types.RunPending,
+		Prompt:     "test transition",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := s.CreateRun(ctx, rec); err != nil {
 		t.Fatalf("create task: %v", err)
@@ -1104,13 +1104,13 @@ func TestTaskStateTransitionFromPendingToRunning(t *testing.T) {
 
 	// Runtime should remain available for new runs after failure.
 	nextTask := types.RunRecord{
-		RunID:     "task-after-failure",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-dev",
-		State:     types.RunPending,
-		Prompt:    "next prompt after failure",
-		CreatedAt: now.Add(10 * time.Second),
-		UpdatedAt: now.Add(10 * time.Second),
+		RunID:      "task-after-failure",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-dev",
+		State:      types.RunPending,
+		Prompt:     "next prompt after failure",
+		CreatedAt:  now.Add(10 * time.Second),
+		UpdatedAt:  now.Add(10 * time.Second),
 	}
 	if err := s.CreateRun(ctx, nextTask); err != nil {
 		t.Fatalf("create task after failure: %v", err)
@@ -1254,13 +1254,13 @@ func TestTaskRecoveryAcrossReopen(t *testing.T) {
 	}
 
 	rec := types.RunRecord{
-		RunID:     "task-recovery",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-dev",
-		State:     types.RunRunning,
-		Prompt:    "test recovery across restart",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "task-recovery",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-dev",
+		State:      types.RunRunning,
+		Prompt:     "test recovery across restart",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := s1.CreateRun(ctx, rec); err != nil {
 		t.Fatalf("create task: %v", err)
@@ -1334,7 +1334,7 @@ func TestCoSuperSlotRunAndActiveSlotCountUseTrajectorySlots(t *testing.T) {
 			RunID:            "slot-implementation-run",
 			AgentID:          "agent-implementation",
 			OwnerID:          "user-alice",
-			SandboxID:        "sandbox-test",
+			ComputerID:       "autoputer-test",
 			State:            types.RunRunning,
 			Prompt:           "implement",
 			TrajectoryID:     "traj-slot",
@@ -1347,7 +1347,7 @@ func TestCoSuperSlotRunAndActiveSlotCountUseTrajectorySlots(t *testing.T) {
 			RunID:            "slot-verifier-run",
 			AgentID:          "agent-verifier",
 			OwnerID:          "user-alice",
-			SandboxID:        "sandbox-test",
+			ComputerID:       "autoputer-test",
 			State:            types.RunRunning,
 			Prompt:           "verify",
 			TrajectoryID:     "traj-slot",
@@ -1360,7 +1360,7 @@ func TestCoSuperSlotRunAndActiveSlotCountUseTrajectorySlots(t *testing.T) {
 			RunID:            "other-trajectory-child-run",
 			AgentID:          "agent-other",
 			OwnerID:          "user-alice",
-			SandboxID:        "sandbox-test",
+			ComputerID:       "autoputer-test",
 			State:            types.RunRunning,
 			Prompt:           "other trajectory",
 			TrajectoryID:     "traj-other",
@@ -1373,7 +1373,7 @@ func TestCoSuperSlotRunAndActiveSlotCountUseTrajectorySlots(t *testing.T) {
 			RunID:            "same-agent-other-trajectory-run",
 			AgentID:          "agent-implementation",
 			OwnerID:          "user-alice",
-			SandboxID:        "sandbox-test",
+			ComputerID:       "autoputer-test",
 			State:            types.RunRunning,
 			Prompt:           "same agent other trajectory",
 			TrajectoryID:     "traj-other-same-agent",
@@ -1559,7 +1559,7 @@ func TestTaskWithFailedStatePersistsError(t *testing.T) {
 	rec := types.RunRecord{
 		RunID:      "task-failed",
 		OwnerID:    "user-alice",
-		SandboxID:  "sandbox-dev",
+		ComputerID: "autoputer-dev",
 		State:      types.RunFailed,
 		Prompt:     "prompt that fails",
 		Error:      "provider timeout after 30s",
@@ -1593,14 +1593,14 @@ func TestTaskWithBlockedState(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
 	rec := types.RunRecord{
-		RunID:     "task-blocked",
-		OwnerID:   "user-alice",
-		SandboxID: "sandbox-dev",
-		State:     types.RunBlocked,
-		Prompt:    "prompt that gets blocked",
-		Error:     "provider rate limit exceeded",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "task-blocked",
+		OwnerID:    "user-alice",
+		ComputerID: "autoputer-dev",
+		State:      types.RunBlocked,
+		Prompt:     "prompt that gets blocked",
+		Error:      "provider rate limit exceeded",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := s.CreateRun(ctx, rec); err != nil {
 		t.Fatalf("create task: %v", err)

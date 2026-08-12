@@ -40,7 +40,7 @@ test('compute monitor opens through product UI with redacted status evidence', a
   expect(api.status).toBe(200);
   expect(api.body.service).toBe('compute-monitor');
   expect(api.text).not.toContain(email);
-  expect(api.text).not.toContain('sandbox_url');
+  expect(api.text).not.toContain('computer_url');
   expect(api.text).not.toContain('vm_id');
   expect(api.text).not.toContain('vmctl');
   expect(api.text).not.toContain('active_vms');

@@ -63,7 +63,7 @@ func testAPISetupWithOptions(t *testing.T, optionsForStore func(*store.Store, st
 		options = append(options, optionsForStore(s, dir)...)
 	}
 	core := agentcore.New(provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		PromptRoot:          filepath.Join(dir, "prompts"),
 		ProviderTimeout:     time.Second,

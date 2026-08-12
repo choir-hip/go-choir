@@ -23,7 +23,7 @@ async function fetchJSON(page, path) {
 async function bootstrap(page) {
   const result = await fetchJSON(page, '/api/shell/bootstrap');
   expect(result.status).toBe(200);
-  expect(result.body?.sandbox_id).toBeTruthy();
+  expect(result.body?.computer_id).toBeTruthy();
   return result.body;
 }
 
@@ -105,7 +105,7 @@ test('adaptive lifecycle control deployed product path', async ({ page }, testIn
   }
   await expect(page.locator('[data-desktop][data-authenticated="true"][data-desktop-ready="true"]')).toBeVisible({ timeout: 300_000 });
   const returningBootstrap = await bootstrap(page);
-  expect(returningBootstrap.sandbox_id).toBe(firstBootstrap.sandbox_id);
+  expect(returningBootstrap.computer_id).toBe(firstBootstrap.computer_id);
 
   const health = await fetchJSON(page, '/health');
   expect(health.status).toBe(200);
@@ -128,8 +128,8 @@ test('adaptive lifecycle control deployed product path', async ({ page }, testIn
     body: JSON.stringify({
       email,
       timings,
-      first_vm: firstBootstrap.sandbox_id,
-      returning_vm: returningBootstrap.sandbox_id,
+      first_vm: firstBootstrap.computer_id,
+      returning_vm: returningBootstrap.computer_id,
       prewarm_requests: prewarmRequests.length,
       lifecycle_stages: health.body.lifecycle?.stages || [],
       vmctl_status: health.body.vmctl_status || null,

@@ -32,8 +32,8 @@ func TestLiveWSPublishesOwnerScopedProductEvents(t *testing.T) {
 	if _, ok := connected["user"]; ok {
 		t.Fatalf("connected message exposed user: %#v", connected)
 	}
-	if _, ok := connected["sandbox_id"]; ok {
-		t.Fatalf("connected message exposed sandbox_id: %#v", connected)
+	if _, ok := connected["computer_id"]; ok {
+		t.Fatalf("connected message exposed computer_id: %#v", connected)
 	}
 
 	_, err := rt.EmitProductEvent(context.Background(), "user-live", "branch-a", types.EventThemeUpdated, map[string]any{

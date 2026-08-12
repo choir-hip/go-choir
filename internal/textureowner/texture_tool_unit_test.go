@@ -469,7 +469,7 @@ func TestTextureToolSourceGraphUsesComputerScopedIdentity(t *testing.T) {
 		}
 		graph, err := textureToolSourceGraphWriteSet(rev, materializedTextureEdit{
 			BodyDoc: bodyDoc, SourceEntities: sourceEntities,
-		}, &types.RunRecord{RunID: "run-shared", SandboxID: computerID})
+		}, &types.RunRecord{RunID: "run-shared", ComputerID: computerID})
 		if err != nil {
 			t.Fatalf("build %s source graph: %v", computerID, err)
 		}
@@ -683,7 +683,7 @@ func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing
 		AgentID:      currentTextureAgentID(doc.DocID),
 		ChannelID:    doc.DocID,
 		OwnerID:      doc.OwnerID,
-		SandboxID:    "sandbox-texture-test",
+		ComputerID:   "autoputer-texture-test",
 		State:        types.RunRunning,
 		Prompt:       "Patch structured Texture.",
 		CreatedAt:    now,
@@ -1070,7 +1070,7 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	const (
 		ownerID      = "owner-explicit-work"
-		computerID   = "sandbox-texture-test"
+		computerID   = "autoputer-texture-test"
 		docID        = "doc-explicit-work"
 		trajectoryID = "trajectory-explicit-work"
 		workItemID   = "work-explicit-work"
@@ -1091,7 +1091,7 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 		t.Fatalf("start lifecycle: %v", err)
 	}
 	producerRun := types.RunRecord{
-		RunID: "run-explicit-work-producer", AgentID: agentID, ChannelID: docID, OwnerID: ownerID, SandboxID: computerID,
+		RunID: "run-explicit-work-producer", AgentID: agentID, ChannelID: docID, OwnerID: ownerID, ComputerID: computerID,
 		TrajectoryID: trajectoryID, State: types.RunRunning, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
 		CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": workItemID},
 	}
@@ -1134,7 +1134,7 @@ func TestTextureLifecycleRevisionKeepsWorkOpenUntilExplicitCompletion(t *testing
 	}
 	newRun := func(runID, baseRevisionID string) *types.RunRecord {
 		run := &types.RunRecord{
-			RunID: runID, AgentID: agentID, ChannelID: docID, OwnerID: ownerID, SandboxID: computerID, TrajectoryID: trajectoryID,
+			RunID: runID, AgentID: agentID, ChannelID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
 			State: types.RunRunning, Prompt: "Revise the artifact.", CreatedAt: now, UpdatedAt: now,
 			AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
 			Metadata: map[string]any{
@@ -1399,7 +1399,7 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 			t.Fatalf("open store: %v", err)
 		}
 		core := agentcore.New(provideriface.Config{
-			SandboxID: "computer-b", StorePath: dbPath, PromptRoot: promptRoot,
+			ComputerID: "computer-b", StorePath: dbPath, PromptRoot: promptRoot,
 			ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
 		}, s, events.NewEventBus(), provider.NewStubProvider(0))
 		handler := NewHandler(core)
@@ -1503,7 +1503,7 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 	}
 	newRun := func(runID, baseRevisionID string) *types.RunRecord {
 		return &types.RunRecord{
-			RunID: runID, AgentID: agentID, ChannelID: docID, OwnerID: ownerID, SandboxID: "computer-b",
+			RunID: runID, AgentID: agentID, ChannelID: docID, OwnerID: ownerID, ComputerID: "computer-b",
 			State: types.RunRunning, Prompt: "Revise the scoped artifact.", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
 			AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
 			Metadata: map[string]any{
@@ -1605,7 +1605,7 @@ func textureToolCommitRuntime(t *testing.T) (*store.Store, *Handler, *toolregist
 		t.Fatalf("open store: %v", err)
 	}
 	core := agentcore.New(provideriface.Config{
-		SandboxID:           "sandbox-texture-test",
+		ComputerID:          "autoputer-texture-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     time.Second,
@@ -1637,7 +1637,7 @@ func textureToolExecutionContext(run *types.RunRecord) toolregistry.ExecutionCon
 		Profile:    run.AgentProfile,
 		Role:       run.AgentRole,
 		ChannelID:  run.ChannelID,
-		SandboxID:  run.SandboxID,
+		ComputerID: run.ComputerID,
 		RunRecord:  run,
 	}
 }

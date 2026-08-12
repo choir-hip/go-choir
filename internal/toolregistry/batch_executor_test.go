@@ -18,11 +18,11 @@ func TestExecutionContextRoundTripAndIsolation(t *testing.T) {
 	run := &types.RunRecord{RunID: "run-1"}
 	ctx := WithExecutionContext(context.Background(), ExecutionContext{
 		RunID: " run-1 ", ToolCallID: " call-parent ", AgentID: " agent-1 ", OwnerID: " owner-1 ", Profile: agentprofile.Texture,
-		Role: " texture ", ChannelID: " channel-1 ", SandboxID: " sandbox-1 ", DesktopID: " desktop-1 ",
+		Role: " texture ", ChannelID: " channel-1 ", ComputerID: " autoputer-1 ", DesktopID: " desktop-1 ",
 		OwnerEmail: " owner@example.com ", WorkingDir: " /workspace ", RunRecord: run,
 	})
 	got := ExecutionContextFrom(ctx)
-	if got.RunID != "run-1" || got.ToolCallID != "call-parent" || got.AgentID != "agent-1" || got.OwnerID != "owner-1" || got.Profile != agentprofile.Texture || got.Role != agentprofile.Texture || got.ChannelID != "channel-1" || got.SandboxID != "sandbox-1" || got.DesktopID != "desktop-1" || got.OwnerEmail != "owner@example.com" || got.WorkingDir != "/workspace" || got.RunRecord != run {
+	if got.RunID != "run-1" || got.ToolCallID != "call-parent" || got.AgentID != "agent-1" || got.OwnerID != "owner-1" || got.Profile != agentprofile.Texture || got.Role != agentprofile.Texture || got.ChannelID != "channel-1" || got.ComputerID != "autoputer-1" || got.DesktopID != "desktop-1" || got.OwnerEmail != "owner@example.com" || got.WorkingDir != "/workspace" || got.RunRecord != run {
 		t.Fatalf("execution context = %#v", got)
 	}
 	if zero := ExecutionContextFrom(context.Background()); zero != (ExecutionContext{}) {

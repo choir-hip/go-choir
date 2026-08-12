@@ -38,7 +38,7 @@ func installCoSuperAssignmentAuthority(t *testing.T, s *Store, count int) coSupe
 	document := types.Document{DocID: "document-assignment", OwnerID: f.ownerID, ComputerID: f.computerID, Title: "Assignment authority", CurrentRevisionID: "revision-assignment", CreatedAt: now, UpdatedAt: now}
 	revision := types.Revision{RevisionID: "revision-assignment", DocID: document.DocID, OwnerID: f.ownerID, ComputerID: f.computerID, AuthorKind: types.AuthorAppAgent, AuthorLabel: "Choir", Content: "assignment authority", CreatedAt: now}
 	parentAgent := types.AgentRecord{
-		AgentID: f.parentAgentID, OwnerID: f.ownerID, ComputerID: f.computerID, SandboxID: f.computerID,
+		AgentID: f.parentAgentID, OwnerID: f.ownerID, ComputerID: f.computerID,
 		Profile: "super", Role: "super", ChannelID: f.parentAgentID, ActiveRunID: f.parentRunID,
 		LifecycleVersion: 0, CreatedAt: now, UpdatedAt: now,
 	}
@@ -49,7 +49,7 @@ func installCoSuperAssignmentAuthority(t *testing.T, s *Store, count int) coSupe
 	}
 	parentRun := types.RunRecord{
 		RunID: f.parentRunID, AgentID: f.parentAgentID, ChannelID: f.parentAgentID,
-		AgentProfile: "super", AgentRole: "super", OwnerID: f.ownerID, SandboxID: f.computerID,
+		AgentProfile: "super", AgentRole: "super", OwnerID: f.ownerID, ComputerID: f.computerID,
 		State: types.RunRunning, Prompt: "coordinate", CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{
 			"assignment_trajectory_id": f.trajectoryID, "work_item_ids": []string{f.parentWorkID},
@@ -123,7 +123,7 @@ func bindCoSuperRequest(open types.OpenCoSuperAssignmentRequest, runID, capabili
 	run := types.RunRecord{
 		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
 		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-		AgentProfile: "co-super", AgentRole: "co-super", OwnerID: open.Binding.OwnerID, SandboxID: open.Binding.ComputerID,
+		AgentProfile: "co-super", AgentRole: "co-super", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
 		State: types.RunPending, Prompt: open.AssignedWork.Objective,
 		Metadata: map[string]any{
 			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
@@ -355,7 +355,7 @@ func TestCoSuperAssignmentRejectsGenericLifecycleSuperSubstitute(t *testing.T) {
 		now := time.Now().UTC()
 		lifecycleRun := types.RunRecord{
 			RunID: f.parentRunID, AgentID: f.parentAgentID, TrajectoryID: f.trajectoryID,
-			AgentProfile: "super", AgentRole: "super", OwnerID: f.ownerID, SandboxID: f.computerID,
+			AgentProfile: "super", AgentRole: "super", OwnerID: f.ownerID, ComputerID: f.computerID,
 			State: types.RunRunning, CreatedAt: now, UpdatedAt: now,
 			Metadata: map[string]any{"assignment_trajectory_id": f.trajectoryID, "parent_work_item_id": f.parentWorkID,
 				"parent_decision_id": f.parentDecisionID, "parent_control_id": f.parentControlID},

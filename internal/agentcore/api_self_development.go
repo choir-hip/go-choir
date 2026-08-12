@@ -90,7 +90,28 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "authenticated computer binding required"})
 		return
 	}
-	if h == nil || h.rt == nil || h.rt.selfdevOperations == nil {
+	if h == nil || h.rt == nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "self-development authority unavailable"})
+		return
+	}
+	if len(parts) == 3 && parts[1] == "self-development" && parts[2] == "replay-completeness" {
+		if r.Method != http.MethodGet {
+			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+			return
+		}
+		report, err := h.rt.ReplayCompleteness(r.Context(), computerID)
+		if err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, ErrReplayCompletenessUnavailable) {
+				status = http.StatusServiceUnavailable
+			}
+			writeAPIJSON(w, status, apiError{Error: err.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, report)
+		return
+	}
+	if h.rt.selfdevOperations == nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "self-development operation authority unavailable"})
 		return
 	}

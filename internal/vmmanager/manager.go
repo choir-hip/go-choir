@@ -3,7 +3,7 @@
 // This package manages the full lifecycle of Firecracker microVMs:
 // boot, health checking, stop, hibernate, resume, and force-kill.
 // It is the concrete runtime that vmctl delegates to when managing
-// VM-backed sandbox workloads (VAL-VM-010, VAL-VM-011).
+// VM-backed autoputer workloads (VAL-VM-010, VAL-VM-011).
 //
 // Build: 2026-04-12-01 - Force rebuild after Nix cache issue
 //
@@ -98,7 +98,7 @@ type VMConfig struct {
 	// Empty means use the manager default.
 	KernelParams string
 
-	// GuestPort is the port the guest sandbox runtime listens on inside
+	// GuestPort is the port the guest autoputer runtime listens on inside
 	// the VM. The host-side vsock or tap networking maps this to a
 	// host-accessible URL.
 	GuestPort int
@@ -117,11 +117,11 @@ type VMConfig struct {
 	// the guest and survives stop/resume cycles (VAL-CROSS-116).
 	PersistentDir string
 
-	// GatewayToken is the sandbox credential token for authenticating to
+	// GatewayToken is the autoputer credential token for authenticating to
 	// the host-side gateway. Written to a file in the persistent directory
 	// so the guest init script can read and set RUNTIME_GATEWAY_TOKEN.
-	// This is NOT a provider credential — it's a sandbox identity token
-	// that allows the guest sandbox to call the gateway (VAL-VM-011
+	// This is NOT a provider credential — it's a autoputer identity token
+	// that allows the guest autoputer to call the gateway (VAL-VM-011
 	// still holds: no provider credentials in the guest).
 	GatewayToken string
 
@@ -153,7 +153,7 @@ type VMInstance struct {
 	// State is the current lifecycle state.
 	State VMState
 
-	// HostURL is the URL where this VM's sandbox runtime is reachable
+	// HostURL is the URL where this VM's autoputer runtime is reachable
 	// from the host. On the Firecracker tap path this is the guest IP on the
 	// per-VM /30 subnet (for example "http://10.200.X.2:8085").
 	HostURL string
@@ -212,7 +212,7 @@ type ManagerConfig struct {
 	// vmmanager appends its per-VM runtime parameters to this base cmdline.
 	KernelParams string
 
-	// GuestPort is the port the guest sandbox listens on.
+	// GuestPort is the port the guest autoputer listens on.
 	GuestPort int
 
 	// BaseVsockPort is the starting vsock port for VM assignment.
@@ -224,7 +224,7 @@ type ManagerConfig struct {
 	// MachineMemSizeMib is the default memory per VM.
 	MachineMemSizeMib int
 
-	// HostBasePort is the starting host port for VM sandbox listeners.
+	// HostBasePort is the starting host port for VM autoputer listeners.
 	// Each VM gets a unique port starting from this value.
 	HostBasePort int
 
@@ -458,7 +458,7 @@ func (m *Manager) StopHealthChecks() {
 }
 
 // ReadGatewayToken returns the host-side bootstrap token written for a VM.
-// This is a sandbox identity credential, not a provider credential. Callers use
+// This is a autoputer identity credential, not a provider credential. Callers use
 // it only to reconcile the gateway's token hash store after gateway restart.
 func (m *Manager) ReadGatewayToken(vmID string) (string, error) {
 	tokenPath := filepath.Join(m.cfg.StateDir, vmID, "persist", "gateway-token")
@@ -642,9 +642,9 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 
 	// Write the gateway token to the persistent directory if provided.
 	// The guest init script reads this file and sets RUNTIME_GATEWAY_TOKEN.
-	// This is a sandbox identity token (not a provider credential) so
+	// This is a autoputer identity token (not a provider credential) so
 	// VAL-VM-011 is not violated — the token only authenticates the
-	// sandbox to the host-side gateway, which holds the actual provider
+	// autoputer to the host-side gateway, which holds the actual provider
 	// credentials (VAL-GATEWAY-004).
 	if cfg.GatewayToken != "" {
 		tokenPath := filepath.Join(cfg.PersistentDir, "gateway-token")
@@ -1299,7 +1299,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 	// Build drives list.
 	// With the upstream microvm.nix approach:
 	//   - Shared nix-store disk (erofs) as a read-only virtio-blk drive
-	//   - Per-VM data volume for mutable sandbox state
+	//   - Per-VM data volume for mutable autoputer state
 	// With legacy rootfs (old approach):
 	//   - Rootfs ext4 as writable virtio-blk at /dev/vda
 	var drives []map[string]interface{}
@@ -1323,7 +1323,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		})
 	}
 
-	// Per-VM data volume for mutable sandbox state (always present).
+	// Per-VM data volume for mutable autoputer state (always present).
 	// vmmanager creates a data.img per-VM in the state directory.
 	dataImgPath := filepath.Join(m.cfg.StateDir, cfg.VMID, "data.img")
 	drives = append(drives, map[string]interface{}{
@@ -1346,7 +1346,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 	// Network config is passed via ip= kernel parameter so the guest
 	// can configure its network interface at boot time.
 	//
-	// The sandbox gateway token is a per-VM sandbox identity credential, not a
+	// The autoputer gateway token is a per-VM autoputer identity credential, not a
 	// provider secret. We pass it through kernel cmdline bootstrap because the
 	// guest's persistent data disk is not pre-seeded from the host-side
 	// PersistentDir before first boot.
@@ -1500,7 +1500,7 @@ func kernelParamValue(value string) string {
 
 // launchFirecracker starts a Firecracker process for the given VM.
 // hostPort is the host port assigned for this VM, used for setting up
-// networking. guestPort is the port the guest sandbox listens on.
+// networking. guestPort is the port the guest autoputer listens on.
 func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}, hostPort int, guestPort int) error {
 	bin := m.cfg.FirecrackerBinPath
 	if bin == "" {
@@ -1855,7 +1855,7 @@ func (m *Manager) probeGuestHealthDetailed(hostURL string) guestHealthProbeResul
 
 // probeGuestHealth attempts to reach the guest's /health endpoint.
 // On Linux/Node B with real Firecracker VMs, this uses HTTP to probe
-// the guest sandbox runtime. On macOS or environments without Firecracker,
+// the guest autoputer runtime. On macOS or environments without Firecracker,
 // this returns true by default (the VM isn't actually running).
 func (m *Manager) probeGuestHealth(hostURL string) bool {
 	return m.probeGuestHealthDetailed(hostURL).Healthy
@@ -2263,7 +2263,7 @@ func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, gues
 		"-m", "comment", "--comment", comment).Run()
 
 	// Set up DNAT: traffic to 127.0.0.1:hostPort → guestIP:guestPort.
-	// This lets vmctl and other host processes reach the guest sandbox
+	// This lets vmctl and other host processes reach the guest autoputer
 	// via localhost on the assigned host port.
 	_ = exec.Command(iptBin, "-t", "nat", "-A", "OUTPUT",
 		"-p", "tcp", "--dport", fmt.Sprintf("%d", hostPort),
@@ -2320,7 +2320,7 @@ func tapReachableHostServicePorts() []string {
 		"8082", // proxy / platform publish path
 		"8083", // vmctl
 		"8084", // gateway
-		"8085", // host sandbox runtime lifecycle evidence
+		"8085", // host autoputer runtime lifecycle evidence
 		"8086", // corpusd durable Texture verification
 		"8087", // maild draft persistence
 		"8787", // source service retrieval

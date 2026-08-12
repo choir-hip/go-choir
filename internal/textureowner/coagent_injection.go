@@ -26,7 +26,7 @@ func agentMutationComputerID(rec *types.RunRecord) string {
 	if rec == nil || strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) == "" {
 		return ""
 	}
-	return strings.TrimSpace(rec.SandboxID)
+	return strings.TrimSpace(rec.ComputerID)
 }
 
 func (h *Handler) createAgentMutationForRun(ctx context.Context, rec *types.RunRecord) {

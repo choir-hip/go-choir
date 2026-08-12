@@ -148,7 +148,7 @@ func (s *Store) FailLifecycleControlActivation(ctx context.Context, req types.Fa
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if run.OwnerID != ownerID || run.SandboxID != computerID || run.TrajectoryID != req.TrajectoryID || run.AgentID != req.AgentID || agentprofile.Canonical(run.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(run.AgentRole) != agentprofile.Researcher || !lifecycleRunOwnsActivation(run.State) || metadataStringValueStore(run.Metadata, "request_source") != "lifecycle_texture_control" || metadataStringValueStore(run.Metadata, "lifecycle_logical_activation_key") != req.LogicalActivationKey || metadataStringValueStore(run.Metadata, "lifecycle_failed_attempt_key") != req.FailedAttemptKey || !lifecycleControlBindingsEmpty(run.Metadata) {
+	if run.OwnerID != ownerID || run.ComputerID != computerID || run.TrajectoryID != req.TrajectoryID || run.AgentID != req.AgentID || agentprofile.Canonical(run.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(run.AgentRole) != agentprofile.Researcher || !lifecycleRunOwnsActivation(run.State) || metadataStringValueStore(run.Metadata, "request_source") != "lifecycle_texture_control" || metadataStringValueStore(run.Metadata, "lifecycle_logical_activation_key") != req.LogicalActivationKey || metadataStringValueStore(run.Metadata, "lifecycle_failed_attempt_key") != req.FailedAttemptKey || !lifecycleControlBindingsEmpty(run.Metadata) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	if strings.TrimSpace(run.Prompt) != req.ActivationRefresh.Prompt || metadataStringValueStore(run.Metadata, "lifecycle_activation_build_commit") != req.ActivationRefresh.BuildCommit {
@@ -233,7 +233,7 @@ func (s *Store) FailLifecycleControlActivation(ctx context.Context, req types.Fa
 	runMetadata := map[string]any{
 		"run_id": run.RunID, "agent_id": run.AgentID, "channel_id": run.ChannelID,
 		"requested_by_run_id": run.RequestedByRunID, "trajectory_id": run.TrajectoryID,
-		"agent_profile": run.AgentProfile, "agent_role": run.AgentRole, "sandbox_id": run.SandboxID,
+		"agent_profile": run.AgentProfile, "agent_role": run.AgentRole, "computer_id": run.ComputerID,
 		"state": string(run.State), "created_at": run.CreatedAt.UTC().Format(time.RFC3339Nano), "updated_at": now.Format(time.RFC3339Nano),
 	}
 	runMetadataJSON, err := objectgraph.NormalizeMetadata(runMetadata)
@@ -325,7 +325,7 @@ func (s *Store) lifecycleControlActivationFailureEvidence(ctx context.Context, r
 	if commandID == "" || digest == "" {
 		return false, nil
 	}
-	result, found, err := s.replayLifecycleCommand(ctx, run.OwnerID, run.SandboxID, commandID, digest)
+	result, found, err := s.replayLifecycleCommand(ctx, run.OwnerID, run.ComputerID, commandID, digest)
 	if err != nil || !found {
 		return false, err
 	}

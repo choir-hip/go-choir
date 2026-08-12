@@ -13,7 +13,7 @@ const (
 	// workspace for runtime state. Retired SQLite content is never imported.
 	DefaultStorePath = "/tmp/go-choir-m3/runtime.db"
 
-	// DefaultFilesRoot is the local-development root for sandbox-owned files.
+	// DefaultFilesRoot is the local-development root for autoputer-owned files.
 	DefaultFilesRoot = "/tmp/go-choir-files"
 
 	// DefaultProviderTimeout is how long the stub provider simulates work.
@@ -80,10 +80,10 @@ const (
 )
 
 // ResolveFilesRoot returns the effective files root. It prefers the explicit
-// argument, then SANDBOX_FILES_ROOT, then the local-development default.
+// argument, then AUTOPUTER_FILES_ROOT, then the local-development default.
 func ResolveFilesRoot(rootDir string) string {
 	if rootDir == "" {
-		rootDir = os.Getenv("SANDBOX_FILES_ROOT")
+		rootDir = os.Getenv("AUTOPUTER_FILES_ROOT")
 	}
 	if rootDir == "" {
 		rootDir = DefaultFilesRoot
@@ -104,7 +104,7 @@ func DefaultModelPolicyPath(filesRoot string) string {
 func LoadConfig() Config {
 	storePath := envOr("RUNTIME_STORE_PATH", DefaultStorePath)
 	return NormalizeConfig(Config{
-		SandboxID:           envOr("SANDBOX_ID", "sandbox-dev"),
+		ComputerID:          envOr("AUTOPUTER_ID", "autoputer-dev"),
 		StorePath:           storePath,
 		PromptRoot:          envOr("RUNTIME_PROMPT_ROOT", defaultPromptRoot(storePath)),
 		SkillsRoot:          envOr("RUNTIME_SKILLS_ROOT", defaultSkillsRoot()),

@@ -37,15 +37,15 @@ func toolExecutionContextForRun(rec *types.RunRecord) toolregistry.ExecutionCont
 		return toolregistry.ExecutionContext{}
 	}
 	execution := toolregistry.ExecutionContext{
-		RunID:     rec.RunID,
-		AgentID:   agentIDForRun(rec),
-		OwnerID:   rec.OwnerID,
-		Profile:   configuredAgentProfileForRun(rec),
-		Role:      agentRoleForRun(rec),
-		ChannelID: channelIDForRun(rec),
-		SandboxID: rec.SandboxID,
-		DesktopID: desktopIDForRun(rec),
-		RunRecord: rec,
+		RunID:      rec.RunID,
+		AgentID:    agentIDForRun(rec),
+		OwnerID:    rec.OwnerID,
+		Profile:    configuredAgentProfileForRun(rec),
+		Role:       agentRoleForRun(rec),
+		ChannelID:  channelIDForRun(rec),
+		ComputerID: rec.ComputerID,
+		DesktopID:  desktopIDForRun(rec),
+		RunRecord:  rec,
 	}
 	if rec.Metadata != nil {
 		execution.WorkingDir, _ = rec.Metadata[runMetadataToolCWD].(string)

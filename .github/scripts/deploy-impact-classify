@@ -165,7 +165,7 @@ for path in "${changed[@]}"; do
     internal/vmctl/*)
       add_host_service "gateway"
       add_host_service "proxy"
-      add_host_service "sandbox"
+      add_host_service "autoputer"
       add_host_service "vmctl"
       mark_guest_boot_contract
       add_explanation "$path -> vmctl users + canonical guest boot closure + active VM refresh"
@@ -192,21 +192,21 @@ for path in "${changed[@]}"; do
       ;;
     cmd/sourcecycled/*|internal/cycle/*|internal/sourceapi/*|internal/sources/*|configs/sources.json)
       add_host_service "sourcecycled"
-      add_host_service "sandbox"
-      add_explanation "$path -> source service API/ingestion + sandbox source_search runtime package"
+      add_host_service "autoputer"
+      add_explanation "$path -> source service API/ingestion + autoputer source_search runtime package"
       ;;
     internal/gateway/*|internal/provider/*)
       add_host_service "gateway"
       add_explanation "$path -> host gateway provider boundary"
       ;;
     internal/gatewayruntime/*)
-      add_host_service "sandbox"
-      add_explanation "$path -> sandbox runtime package"
+      add_host_service "autoputer"
+      add_explanation "$path -> autoputer runtime package"
       ;;
-    internal/modelcatalog/*|internal/sandbox/*|internal/store/*)
+    internal/modelcatalog/*|internal/autoputer/*|internal/store/*)
       add_host_service "gateway"
-      add_host_service "sandbox"
-      add_explanation "$path -> gateway/sandbox shared runtime dependency"
+      add_host_service "autoputer"
+      add_explanation "$path -> gateway/autoputer shared runtime dependency"
       ;;
     cmd/corpusd/*|internal/promotion/*)
       add_host_service "corpusd"
@@ -220,14 +220,14 @@ for path in "${changed[@]}"; do
     internal/wirepublish/*)
       add_host_service "corpusd"
       add_host_service "proxy"
-      add_host_service "sandbox"
-      add_explanation "$path -> wire autonomous publish: corpusd/proxy choke point + sandbox runtime"
+      add_host_service "autoputer"
+      add_explanation "$path -> wire autonomous publish: corpusd/proxy choke point + autoputer runtime"
       ;;
     internal/sourcecontract/*)
       add_host_service "gateway"
       add_host_service "corpusd"
       add_host_service "proxy"
-      add_host_service "sandbox"
+      add_host_service "autoputer"
       add_host_service "sourcecycled"
       mark_vmctl_restart
       mark_active_vm_refresh
@@ -235,7 +235,7 @@ for path in "${changed[@]}"; do
       ;;
     internal/sourcefetch/*)
       add_host_service "gateway"
-      add_host_service "sandbox"
+      add_host_service "autoputer"
       add_host_service "sourcecycled"
       mark_vmctl_restart
       mark_active_vm_refresh
@@ -245,42 +245,42 @@ for path in "${changed[@]}"; do
       add_host_service "gateway"
       add_host_service "corpusd"
       add_host_service "proxy"
-      add_host_service "sandbox"
+      add_host_service "autoputer"
       add_explanation "$path -> shared Markdown structure dependency for runtime/platform publication exports"
       ;;
     cmd/shipper/*|internal/shipper/*)
       mark_host_service
       add_explanation "$path -> host service closure (no deployed service pointer yet)"
       ;;
-    cmd/sandbox/*|internal/sandbox/*)
-      add_host_service "sandbox"
+    cmd/autoputer/*|internal/autoputer/*)
+      add_host_service "autoputer"
       mark_vmctl_restart
-      add_explanation "$path -> sandbox runtime package + vmctl runtime-package endpoint restart"
+      add_explanation "$path -> autoputer runtime package + vmctl runtime-package endpoint restart"
       ;;
     internal/agentcore/*|internal/textureowner/*)
       add_host_service "gateway"
-      add_host_service "sandbox"
+      add_host_service "autoputer"
       mark_vmctl_restart
-      add_explanation "$path -> gateway/sandbox service pointers + vmctl runtime-package endpoint restart"
+      add_explanation "$path -> gateway/autoputer service pointers + vmctl runtime-package endpoint restart"
       ;;
     internal/types/*)
       add_host_service "gateway"
       add_host_service "proxy"
-      add_host_service "sandbox"
-      add_explanation "$path -> shared API types: gateway/proxy/sandbox service pointers"
+      add_host_service "autoputer"
+      add_explanation "$path -> shared API types: gateway/proxy/autoputer service pointers"
       ;;
     internal/buildinfo/*)
       add_host_service "gateway"
       add_host_service "maild"
       add_host_service "corpusd"
       add_host_service "proxy"
-      add_host_service "sandbox"
-      add_explanation "$path -> build identity users: gateway/maild/corpusd/proxy/sandbox"
+      add_host_service "autoputer"
+      add_explanation "$path -> build identity users: gateway/maild/corpusd/proxy/autoputer"
       ;;
     internal/events/*)
       add_host_service "gateway"
-      add_host_service "sandbox"
-      add_explanation "$path -> event bus users: gateway/sandbox service pointers"
+      add_host_service "autoputer"
+      add_explanation "$path -> event bus users: gateway/autoputer service pointers"
       ;;
     internal/server/*)
       add_host_service "auth"
@@ -288,20 +288,20 @@ for path in "${changed[@]}"; do
       add_host_service "maild"
       add_host_service "corpusd"
       add_host_service "proxy"
-      add_host_service "sandbox"
+      add_host_service "autoputer"
       add_host_service "vmctl"
       mark_vmctl_restart
       add_explanation "$path -> shared HTTP server: all host service pointers + vmctl restart"
       ;;
     internal/search/*)
-      add_host_service "sandbox"
-      add_explanation "$path -> sandbox search runtime package"
+      add_host_service "autoputer"
+      add_explanation "$path -> autoputer search runtime package"
       ;;
     skills/*)
-      add_host_service "sandbox"
-      add_explanation "$path -> sandbox runtime skill package"
+      add_host_service "autoputer"
+      add_explanation "$path -> autoputer runtime skill package"
       ;;
-    nix/sandbox-vm.nix)
+    nix/autoputer-vm.nix)
       mark_guest_boot_contract
       add_explanation "$path -> canonical guest image"
       ;;
@@ -341,22 +341,22 @@ for path in "${changed[@]}"; do
   esac
 done
 
-# A canonical guest boot refresh executes the sandbox package fetched from the
+# A canonical guest boot refresh executes the autoputer package fetched from the
 # host pointer. Rebuild that package at the same deployment commit so refreshed
 # guests never combine a new boot closure with a stale executable.
 if [[ "$deploy_active_vm_refresh" == "true" ]]; then
-  add_host_service "sandbox"
-  add_explanation "canonical guest boot refresh -> sandbox runtime package at the same commit"
+  add_host_service "autoputer"
+  add_explanation "canonical guest boot refresh -> autoputer runtime package at the same commit"
 fi
 
-# A sandbox package is executable inside the guest, not a host-service-only
+# A autoputer package is executable inside the guest, not a host-service-only
 # artifact. Until a proved in-guest runtime replacement endpoint exists, every
-# sandbox selection must rebuild the canonical guest boot closure and refresh
+# autoputer selection must rebuild the canonical guest boot closure and refresh
 # mutable active computers from that closure.
 for service in "${host_services[@]}"; do
-  if [[ "$service" == "sandbox" ]]; then
+  if [[ "$service" == "autoputer" ]]; then
     mark_guest_boot_contract
-    add_explanation "sandbox runtime selected -> canonical guest boot closure + active VM refresh"
+    add_explanation "autoputer runtime selected -> canonical guest boot closure + active VM refresh"
     break
   fi
 done

@@ -46,7 +46,7 @@ func TestAssignedCoSuperToolOverlayIsExactRunOnly(t *testing.T) {
 	a := types.CoSuperAssignment{AssignmentID: id, Binding: b, Disposition: types.CoSuperAssignmentBound, CapsuleDisposition: types.CoSuperCapsuleActive, BoundRunID: r}
 	rt.assignmentLookup = fixedAssignmentLookup{a}
 	rt.assignmentHandleResolver = fixedAssignmentHandleResolver{r, cap, opaque}
-	run := &types.RunRecord{RunID: r, AgentID: b.AssignedAgentID, TrajectoryID: tr, AgentProfile: "co-super", AgentRole: "co-super", OwnerID: o, SandboxID: c, Metadata: map[string]any{"assignment_id": id, "assignment_attempt": 1, "assignment_kind": string(b.Kind), "assigned_work_item_id": b.AssignedWorkItemID, "capsule_id": cap, "capability_digest": b.CapabilityDigest, "execution_handle_digest": b.ExecutionHandleDigest, "request_digest": b.RequestDigest, "source_artifact_ref": b.SourceArtifactRef, "source_candidate_id": b.SourceCandidateID}}
+	run := &types.RunRecord{RunID: r, AgentID: b.AssignedAgentID, TrajectoryID: tr, AgentProfile: "co-super", AgentRole: "co-super", OwnerID: o, ComputerID: c, Metadata: map[string]any{"assignment_id": id, "assignment_attempt": 1, "assignment_kind": string(b.Kind), "assigned_work_item_id": b.AssignedWorkItemID, "capsule_id": cap, "capability_digest": b.CapabilityDigest, "execution_handle_digest": b.ExecutionHandleDigest, "request_digest": b.RequestDigest, "source_artifact_ref": b.SourceArtifactRef, "source_candidate_id": b.SourceCandidateID}}
 	overlay, resolved, err := rt.assignedCoSuperToolOverlay(ctx, run, base)
 	if err != nil {
 		t.Fatal(err)

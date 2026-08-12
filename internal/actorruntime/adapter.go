@@ -1,5 +1,5 @@
 // Package actorruntime adapts the durable actor runtime (internal/actor) to
-// the surface that cmd/sandbox/main.go expects from the old runtime
+// the surface that cmd/autoputer/main.go expects from the old runtime
 // (internal/runtime).
 
 // The Adapter retains a named runtime core for business logic (tool loops,
@@ -446,7 +446,7 @@ func (a *Adapter) migrateLegacyActorMailboxes(ctx context.Context) error {
 		if _, _, _, parseErr := parseScopedActorMailboxID(mailboxID); parseErr == nil {
 			continue
 		}
-		agent, resolveErr := a.store.ResolveLegacyAgentScope(ctx, a.cfg.SandboxID, mailboxID)
+		agent, resolveErr := a.store.ResolveLegacyAgentScope(ctx, a.cfg.ComputerID, mailboxID)
 		if resolveErr != nil {
 			return fmt.Errorf("resolve legacy durable mailbox %q: %w", mailboxID, resolveErr)
 		}
@@ -502,7 +502,7 @@ func (a *Adapter) recoverParkedLifecycleMailboxSnapshots(ctx context.Context) er
 			}
 			return fmt.Errorf("load lifecycle actor snapshot run %s: %w", resume.RunID, runErr)
 		}
-		if rec.OwnerID != ownerID || rec.SandboxID != computerID || rec.AgentID != agentID ||
+		if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID ||
 			agentprofile.Canonical(rec.AgentProfile) != agentprofile.Researcher ||
 			agentprofile.Canonical(rec.AgentRole) != agentprofile.Researcher ||
 			strings.TrimSpace(metadataString(rec.Metadata, "request_source")) != "lifecycle_texture_control" ||
@@ -536,7 +536,7 @@ func (a *Adapter) Start(ctx context.Context) error {
 		return fmt.Errorf("actorruntime: %w", err)
 	}
 	if a.textureOwner == nil {
-		subjects, err := a.Runtime.Store().ListLifecycleSubjects(ctx, a.Runtime.TextureSandboxID())
+		subjects, err := a.Runtime.Store().ListLifecycleSubjects(ctx, a.Runtime.TextureComputerID())
 		if err != nil {
 			return fmt.Errorf("actorruntime: inspect durable Texture subjects: %w", err)
 		}

@@ -380,7 +380,7 @@ func TestGatewayURLPreferredOverDirectResolution(t *testing.T) {
 	}
 
 	// Also verify that direct resolution would succeed (ZAI_API_KEY is set).
-	// The sandbox logic should prefer the gateway URL regardless.
+	// The autoputer logic should prefer the gateway URL regardless.
 	p, err := ResolveProvider(ProviderConfig{
 		ZAIModels:        []string{"glm-5.1"},
 		SelectedProvider: "zai",
@@ -395,7 +395,7 @@ func TestGatewayURLPreferredOverDirectResolution(t *testing.T) {
 		t.Fatalf("expected zai provider, got: %s", p.Name())
 	}
 
-	// The sandbox should prefer gateway when URL is set, even though direct
+	// The autoputer should prefer gateway when URL is set, even though direct
 	// resolution would also succeed. This test validates both paths work.
 }
 
@@ -406,7 +406,7 @@ func TestGatewayURLFallsBackToProxyVMCTLURL(t *testing.T) {
 	gatewayURL := os.Getenv("RUNTIME_GATEWAY_URL")
 	vmctlURL := os.Getenv("PROXY_VMCTL_URL")
 
-	// Sandbox logic: if RUNTIME_GATEWAY_URL is empty, use PROXY_VMCTL_URL.
+	// Autoputer logic: if RUNTIME_GATEWAY_URL is empty, use PROXY_VMCTL_URL.
 	effectiveURL := gatewayURL
 	if effectiveURL == "" {
 		effectiveURL = vmctlURL

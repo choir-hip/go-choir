@@ -818,7 +818,7 @@
           <iframe
             class="body-html-iframe"
             bind:this={emailIframe}
-            sandbox="allow-same-origin"
+            autoputer="allow-same-origin"
             title="Email body"
             on:load={handleIframeLoad}
           ></iframe>

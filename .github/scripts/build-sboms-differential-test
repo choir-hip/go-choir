@@ -7,7 +7,7 @@ tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
 mkdir -p "$tmpdir/bin" "$tmpdir/fake-outputs" "$tmpdir/fake-store" "$tmpdir/fake-tool/bin"
-packages=(auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend obscura zot)
+packages=(auth proxy gateway maild maildctl corpusd autoputer sourcecycled vmctl frontend obscura zot)
 for package in "${packages[@]}"; do
   mkdir -p "$tmpdir/fake-outputs/$package" "$tmpdir/fake-store"
   jq -n --arg package "$package" \
@@ -19,7 +19,7 @@ cat > "$tmpdir/bin/nix" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
-semantic_packages=" auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend "
+semantic_packages=" auth proxy gateway maild maildctl corpusd autoputer sourcecycled vmctl frontend "
 revision="${FAKE_REVISION:-one}"
 suffix=""
 command="$1"

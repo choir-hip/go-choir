@@ -203,11 +203,11 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "client_request_id, title, and initial_content are required"})
 		return
 	}
-	if h.Core == nil || strings.TrimSpace(h.Core.TextureSandboxID()) == "" {
+	if h.Core == nil || strings.TrimSpace(h.Core.TextureComputerID()) == "" {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "computer identity unavailable"})
 		return
 	}
-	computerID := strings.TrimSpace(h.Core.TextureSandboxID())
+	computerID := strings.TrimSpace(h.Core.TextureComputerID())
 	requestID, occurrenceID := textureOwnerOccurrenceIdentity(ownerID, computerID, "create", input.ClientRequestID)
 	key := strings.Join([]string{"choir:texture:owner-create", ownerID, computerID, occurrenceID}, ":")
 	docID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":document")).String()
@@ -223,7 +223,7 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 		InitialWork:     types.WorkItemRecord{WorkItemID: workID, Objective: input.InitialContent, AssignedAgentID: agentID, AuthorityProfile: agentprofile.Texture},
 		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: input.Title, CreatedAt: now, UpdatedAt: now},
 		InitialRevision: types.Revision{RevisionID: revisionID, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: input.InitialContent, CreatedAt: now},
-		Agent:           types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
+		Agent:           types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
 	}
 	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
 	result, err := h.Store.StartLifecycle(r.Context(), start)

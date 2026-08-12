@@ -144,7 +144,7 @@ now:
   reconciliation:
     observed_at: 2026-07-15T06:34:03Z
     source_ref: refs/remotes/origin/main@dbb46b1dbbeaff05f16c62e05cbbe6d29328f225
-    deploy_identity: "CI 29393856407 passed; deploy job 87283539331 published sandbox and gateway activation receipt dbb46b1dbbeaff05f16c62e05cbbe6d29328f225@2026-07-15T06:25:57Z."
+    deploy_identity: "CI 29393856407 passed; deploy job 87283539331 published autoputer and gateway activation receipt dbb46b1dbbeaff05f16c62e05cbbe6d29328f225@2026-07-15T06:25:57Z."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md

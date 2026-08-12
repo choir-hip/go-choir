@@ -55,7 +55,7 @@ func TestStageGrantedReleaseRefusesSecrets(t *testing.T) {
 				if err := os.MkdirAll(filepath.Join(root, "var/lib/artifact/release/bin"), 0o700); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.WriteFile(filepath.Join(root, "var/lib/artifact/release/bin/sandbox"), []byte("sandbox"), 0o755); err != nil {
+				if err := os.WriteFile(filepath.Join(root, "var/lib/artifact/release/bin/autoputer"), []byte("autoputer"), 0o755); err != nil {
 					t.Fatal(err)
 				}
 				path := filepath.Join(root, "var/lib/artifact/release", filepath.FromSlash(relative.path))
@@ -95,11 +95,11 @@ func TestStageGrantedReleaseStagesRelativeUpperdirPaths(t *testing.T) {
 	merged := t.TempDir()
 	upper := t.TempDir()
 	for _, root := range []string{merged, upper} {
-		path := filepath.Join(root, "var/lib/artifact/release/bin/sandbox")
+		path := filepath.Join(root, "var/lib/artifact/release/bin/autoputer")
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, []byte("sandbox"), 0o755); err != nil {
+		if err := os.WriteFile(path, []byte("autoputer"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -130,11 +130,11 @@ func TestStageGrantedReleaseStagesRelativeUpperdirPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 1 || files[0].Path != "bin/sandbox" || staged == "" {
+	if len(files) != 1 || files[0].Path != "bin/autoputer" || staged == "" {
 		t.Fatalf("staged release files=%+v path=%q", files, staged)
 	}
-	if content, err := os.ReadFile(filepath.Join(staged, "bin/sandbox")); err != nil || string(content) != "sandbox" {
-		t.Fatalf("staged sandbox = %q, %v", content, err)
+	if content, err := os.ReadFile(filepath.Join(staged, "bin/autoputer")); err != nil || string(content) != "autoputer" {
+		t.Fatalf("staged autoputer = %q, %v", content, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -181,13 +181,13 @@ func TestStageGrantedReleaseRefusesSymlinkComponents(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(upper, "var/lib/artifact/release/bin"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(upper, "var/lib/artifact/release/bin/sandbox"), []byte("sandbox"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(upper, "var/lib/artifact/release/bin/autoputer"), []byte("autoputer"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(merged, "var/lib/artifact/release"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(external, "sandbox"), []byte("outside"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(external, "autoputer"), []byte("outside"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(external, filepath.Join(merged, "var/lib/artifact/release/bin")); err != nil {

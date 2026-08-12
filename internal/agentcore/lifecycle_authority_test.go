@@ -218,7 +218,7 @@ func TestCancelLifecycleTrajectoryPersistsCancelledActivationProjection(t *testi
 	now := time.Now().UTC()
 	if err := s.CreateRun(ctx, types.RunRecord{
 		RunID: runID, AgentID: currentTextureAgentID(docID), OwnerID: ownerID,
-		SandboxID: "sandbox-test", TrajectoryID: trajectoryID,
+		ComputerID: "autoputer-test", TrajectoryID: trajectoryID,
 		State: types.RunRunning, Prompt: "durable cancellation projection",
 		AgentProfile: "texture", AgentRole: "texture",
 		CreatedAt: now, UpdatedAt: now,
@@ -235,13 +235,13 @@ func TestCancelLifecycleTrajectoryPersistsCancelledActivationProjection(t *testi
 	rt.runningMu.Unlock()
 	dispatchedCancel := false
 	rt.dispatchActor = func(_ context.Context, gotOwner, gotComputer, gotAgent, kind, content, gotTrajectory, _ string) error {
-		if gotOwner != ownerID || gotComputer != "sandbox-test" || gotAgent != currentTextureAgentID(docID) || kind != "cancel" || content != runID || gotTrajectory != trajectoryID {
+		if gotOwner != ownerID || gotComputer != "autoputer-test" || gotAgent != currentTextureAgentID(docID) || kind != "cancel" || content != runID || gotTrajectory != trajectoryID {
 			t.Fatalf("cancellation dispatch = %q %q %q %q %q %q", gotOwner, gotComputer, gotAgent, kind, content, gotTrajectory)
 		}
 		dispatchedCancel = true
 		return nil
 	}
-	before, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
+	before, err := s.GetLifecycleSnapshot(ctx, ownerID, "autoputer-test", trajectoryID)
 	if err != nil {
 		t.Fatalf("snapshot before cancellation: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestCancelLifecycleTrajectoryPersistsCancelledActivationProjection(t *testi
 	if result.Trajectory.Status != types.TrajectoryCancelled || len(cancelled) != 1 || cancelled[0] != runID {
 		t.Fatalf("cancellation result = %+v, runs %v", result.Trajectory, cancelled)
 	}
-	stored, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", runID)
+	stored, err := s.GetLifecycleRun(ctx, ownerID, "autoputer-test", runID)
 	if err != nil {
 		t.Fatalf("get cancelled activation: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestCancelLifecycleTrajectoryPersistsCancelledActivationProjection(t *testi
 	default:
 		t.Fatal("resident provider context remained live after durable cancellation")
 	}
-	after, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
+	after, err := s.GetLifecycleSnapshot(ctx, ownerID, "autoputer-test", trajectoryID)
 	if err != nil {
 		t.Fatalf("snapshot after cancellation: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestCancelLifecycleTrajectoryPersistsCancelledActivationProjection(t *testi
 	if err := s.UpdateRun(ctx, lateCompletion); err == nil {
 		t.Fatal("late provider completion overwrote cancelled lifecycle activation")
 	}
-	stillCancelled, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", runID)
+	stillCancelled, err := s.GetLifecycleRun(ctx, ownerID, "autoputer-test", runID)
 	if err != nil || stillCancelled.State != types.RunCancelled {
 		t.Fatalf("activation after late completion = %+v, %v", stillCancelled, err)
 	}
@@ -304,7 +304,7 @@ func TestLifecycleCancellationWinsActivationCompletionRace(t *testing.T) {
 		now := time.Now().UTC()
 		running := types.RunRecord{
 			RunID: runID, AgentID: currentTextureAgentID(docID), OwnerID: ownerID,
-			SandboxID: "sandbox-test", TrajectoryID: trajectoryID,
+			ComputerID: "autoputer-test", TrajectoryID: trajectoryID,
 			State: types.RunRunning, Prompt: "race cancellation with completion",
 			AgentProfile: "texture", AgentRole: "texture", CreatedAt: now, UpdatedAt: now,
 			Metadata: map[string]any{
@@ -315,7 +315,7 @@ func TestLifecycleCancellationWinsActivationCompletionRace(t *testing.T) {
 		if err := s.CreateRun(ctx, running); err != nil {
 			t.Fatalf("round %d create activation: %v", round, err)
 		}
-		snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "sandbox-test", trajectoryID)
+		snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, "autoputer-test", trajectoryID)
 		if err != nil {
 			t.Fatalf("round %d snapshot: %v", round, err)
 		}
@@ -345,7 +345,7 @@ func TestLifecycleCancellationWinsActivationCompletionRace(t *testing.T) {
 		if cancelErr != nil {
 			t.Fatalf("round %d cancellation: %v (completion=%v)", round, cancelErr, completionErr)
 		}
-		stored, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", runID)
+		stored, err := s.GetLifecycleRun(ctx, ownerID, "autoputer-test", runID)
 		if err != nil || stored.State != types.RunCancelled {
 			t.Fatalf("round %d terminal projection = %+v, %v (completion=%v)", round, stored, err, completionErr)
 		}
@@ -364,7 +364,7 @@ func TestRuntimeRunListsIncludeLifecycleProjectionWithinComputerScope(t *testing
 	now := time.Now().UTC()
 	if err := s.CreateRun(ctx, types.RunRecord{
 		RunID: runID, AgentID: currentTextureAgentID(docID), OwnerID: ownerID,
-		SandboxID: "sandbox-test", TrajectoryID: trajectoryID, ChannelID: docID,
+		ComputerID: "autoputer-test", TrajectoryID: trajectoryID, ChannelID: docID,
 		State: types.RunRunning, Prompt: "list canonical lifecycle activation",
 		AgentProfile: "texture", AgentRole: "texture", CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{
@@ -420,7 +420,7 @@ func TestCancelAgentDoesNotCrossComputerLifecycleScope(t *testing.T) {
 				AuthorLabel: ownerID, Content: "Scoped cancellation fixture",
 			},
 			Agent: types.AgentRecord{
-				AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+				AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
 				Profile: "texture", Role: "texture", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
 			},
 		}
@@ -430,7 +430,7 @@ func TestCancelAgentDoesNotCrossComputerLifecycleScope(t *testing.T) {
 		}
 		run := types.RunRecord{
 			RunID: "run-cancel-scope-" + suffix, AgentID: agentID, OwnerID: ownerID,
-			SandboxID: computerID, TrajectoryID: trajectoryID, ChannelID: docID,
+			ComputerID: computerID, TrajectoryID: trajectoryID, ChannelID: docID,
 			State: types.RunPending, Prompt: "scoped cancellation fixture",
 			AgentProfile: "texture", AgentRole: "texture", CreatedAt: now, UpdatedAt: now,
 			Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, "lifecycle_work_item_id": req.InitialWork.WorkItemID},
@@ -441,7 +441,7 @@ func TestCancelAgentDoesNotCrossComputerLifecycleScope(t *testing.T) {
 		return run
 	}
 
-	local := seed("sandbox-test", "local")
+	local := seed("autoputer-test", "local")
 	foreign := seed("computer-foreign", "foreign")
 	trajectories, err := rt.ListTrajectoriesByOwner(ctx, ownerID, 20)
 	if err != nil {
@@ -462,7 +462,7 @@ func TestCancelAgentDoesNotCrossComputerLifecycleScope(t *testing.T) {
 	if err := rt.CancelAgent(ctx, agentID, ownerID); err != nil {
 		t.Fatalf("cancel local lifecycle agent: %v", err)
 	}
-	localStored, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", local.RunID)
+	localStored, err := s.GetLifecycleRun(ctx, ownerID, "autoputer-test", local.RunID)
 	if err != nil || localStored.State != types.RunCancelled {
 		t.Fatalf("local cancellation = %+v, %v", localStored, err)
 	}

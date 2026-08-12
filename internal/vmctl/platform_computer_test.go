@@ -139,8 +139,8 @@ func TestHandleResolveEnsuresUniversalWirePlatformComputer(t *testing.T) {
 	if resp.UserID != UniversalWirePlatformOwnerID || resp.DesktopID != UniversalWirePlatformDesktopID {
 		t.Fatalf("resolve identity = (%q, %q), want platform computer", resp.UserID, resp.DesktopID)
 	}
-	if resp.SandboxURL != "http://10.203.141.2:8085" || resp.State != string(VMStateActive) {
-		t.Fatalf("resolve response = %+v, want active platform sandbox", resp)
+	if resp.ComputerURL != "http://10.203.141.2:8085" || resp.State != string(VMStateActive) {
+		t.Fatalf("resolve response = %+v, want active platform autoputer", resp)
 	}
 	if len(mgr.boots) != 1 || mgr.boots[0].VMID != UniversalWirePlatformVMID {
 		t.Fatalf("platform boot calls = %#v, want stable platform VM", mgr.boots)
@@ -172,7 +172,7 @@ func TestEnsureUniversalWirePlatformComputerRecoversPersistedBootingWithoutWaite
 		UserID:        UniversalWirePlatformOwnerID,
 		DesktopID:     UniversalWirePlatformDesktopID,
 		Kind:          VMKindInteractive,
-		WarmnessClass: WarmnessClassPublicPlatform, SandboxURL: "http://10.200.17.2:8085",
+		WarmnessClass: WarmnessClassPublicPlatform, ComputerURL: "http://10.200.17.2:8085",
 		State: VMStateBooting,
 		Epoch: 58}
 	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
@@ -191,8 +191,8 @@ func TestEnsureUniversalWirePlatformComputerRecoversPersistedBootingWithoutWaite
 	if own.State != VMStateActive {
 		t.Fatalf("state = %s, want active", own.State)
 	}
-	if own.SandboxURL != "http://10.200.99.2:8085" {
-		t.Fatalf("sandbox URL = %q, want recovered URL", own.SandboxURL)
+	if own.ComputerURL != "http://10.200.99.2:8085" {
+		t.Fatalf("autoputer URL = %q, want recovered URL", own.ComputerURL)
 	}
 	if own.Epoch != 59 {
 		t.Fatalf("epoch = %d, want 59", own.Epoch)
@@ -223,7 +223,7 @@ func TestEnsureUniversalWirePlatformComputerCoalescesPersistedBootingRecovery(t 
 		UserID:        UniversalWirePlatformOwnerID,
 		DesktopID:     UniversalWirePlatformDesktopID,
 		Kind:          VMKindInteractive,
-		WarmnessClass: WarmnessClassPublicPlatform, SandboxURL: "http://10.200.17.2:8085",
+		WarmnessClass: WarmnessClassPublicPlatform, ComputerURL: "http://10.200.17.2:8085",
 		State: VMStateBooting,
 		Epoch: 58}
 	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
@@ -254,12 +254,12 @@ func TestEnsureUniversalWirePlatformComputerCoalescesPersistedBootingRecovery(t 
 		t.Fatalf("recover calls = %d, want 1", calls)
 	}
 	own := reg.ownerships[key]
-	if own.State != VMStateActive || own.SandboxURL != "http://10.200.99.2:8085" {
-		t.Fatalf("ownership after coalesced recovery = state %s url %q", own.State, own.SandboxURL)
+	if own.State != VMStateActive || own.ComputerURL != "http://10.200.99.2:8085" {
+		t.Fatalf("ownership after coalesced recovery = state %s url %q", own.State, own.ComputerURL)
 	}
 }
 
-func TestSandboxProxyEnsuresUniversalWirePlatformBeforeProxying(t *testing.T) {
+func TestAutoputerProxyEnsuresUniversalWirePlatformBeforeProxying(t *testing.T) {
 	runtime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/internal/runtime/runs" {
 			t.Fatalf("proxied path = %q, want /internal/runtime/runs", r.URL.Path)
@@ -284,20 +284,20 @@ func TestSandboxProxyEnsuresUniversalWirePlatformBeforeProxying(t *testing.T) {
 		UserID:        UniversalWirePlatformOwnerID,
 		DesktopID:     UniversalWirePlatformDesktopID,
 		Kind:          VMKindInteractive,
-		WarmnessClass: WarmnessClassPublicPlatform, SandboxURL: "http://10.200.17.2:8085",
+		WarmnessClass: WarmnessClassPublicPlatform, ComputerURL: "http://10.200.17.2:8085",
 		State: VMStateBooting,
 		Epoch: 58}
 	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
 
 	req := httptest.NewRequest(
 		http.MethodPost,
-		"/internal/vmctl/sandbox-proxy/universal-wire-platform/internal/runtime/runs",
+		"/internal/vmctl/autoputer-proxy/universal-wire-platform/internal/runtime/runs",
 		strings.NewReader(`{"objective":"process source"}`),
 	)
 	req.Header.Set("X-Internal-Caller", "true")
 	rec := httptest.NewRecorder()
 
-	NewHandler(reg).HandleSandboxProxy(rec, req)
+	NewHandler(reg).HandleAutoputerProxy(rec, req)
 
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
@@ -306,12 +306,12 @@ func TestSandboxProxyEnsuresUniversalWirePlatformBeforeProxying(t *testing.T) {
 		t.Fatalf("expected fresh platform boot before proxy, got %#v", mgr.boots)
 	}
 	own := reg.ownerships[key]
-	if own.State != VMStateActive || own.SandboxURL != runtime.URL {
-		t.Fatalf("ownership after proxy = state %s url %q", own.State, own.SandboxURL)
+	if own.State != VMStateActive || own.ComputerURL != runtime.URL {
+		t.Fatalf("ownership after proxy = state %s url %q", own.State, own.ComputerURL)
 	}
 }
 
-func TestSandboxProxyForwardsInternalRuntimeStatusGET(t *testing.T) {
+func TestAutoputerProxyForwardsInternalRuntimeStatusGET(t *testing.T) {
 	runtime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Fatalf("proxied method = %s, want GET", r.Method)
@@ -332,52 +332,52 @@ func TestSandboxProxyForwardsInternalRuntimeStatusGET(t *testing.T) {
 	reg.ownerships[key] = &VMOwnership{VMID: UniversalWirePlatformVMID,
 		UserID:    UniversalWirePlatformOwnerID,
 		DesktopID: UniversalWirePlatformDesktopID,
-		Kind:      VMKindInteractive, SandboxURL: runtime.URL,
+		Kind:      VMKindInteractive, ComputerURL: runtime.URL,
 		State: VMStateActive,
 		Epoch: 60}
 	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
 
 	req := httptest.NewRequest(
 		http.MethodGet,
-		"/internal/vmctl/sandbox-proxy/universal-wire-platform/internal/runtime/runs/run-status?owner_id=universal-wire-platform",
+		"/internal/vmctl/autoputer-proxy/universal-wire-platform/internal/runtime/runs/run-status?owner_id=universal-wire-platform",
 		nil,
 	)
 	req.Header.Set("X-Internal-Caller", "true")
 	rec := httptest.NewRecorder()
 
-	NewHandler(reg).HandleSandboxProxy(rec, req)
+	NewHandler(reg).HandleAutoputerProxy(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 }
 
-func TestSandboxProxyPlatformEnsureFailureReturnsBoundedError(t *testing.T) {
+func TestAutoputerProxyPlatformEnsureFailureReturnsBoundedError(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
 	reg.ownerships[key] = &VMOwnership{VMID: UniversalWirePlatformVMID,
 		UserID:        UniversalWirePlatformOwnerID,
 		DesktopID:     UniversalWirePlatformDesktopID,
 		Kind:          VMKindInteractive,
-		WarmnessClass: WarmnessClassPublicPlatform, SandboxURL: "http://10.200.17.2:8085",
+		WarmnessClass: WarmnessClassPublicPlatform, ComputerURL: "http://10.200.17.2:8085",
 		State: VMStateBooting,
 		Epoch: 58}
 	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
 
 	req := httptest.NewRequest(
 		http.MethodPost,
-		"/internal/vmctl/sandbox-proxy/universal-wire-platform/internal/runtime/runs",
+		"/internal/vmctl/autoputer-proxy/universal-wire-platform/internal/runtime/runs",
 		strings.NewReader(`{"objective":"process source"}`),
 	)
 	req.Header.Set("X-Internal-Caller", "true")
 	rec := httptest.NewRecorder()
 
-	NewHandler(reg).HandleSandboxProxy(rec, req)
+	NewHandler(reg).HandleAutoputerProxy(rec, req)
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	if got := rec.Body.String(); !strings.Contains(got, "platform sandbox is not ready") {
+	if got := rec.Body.String(); !strings.Contains(got, "platform autoputer is not ready") {
 		t.Fatalf("response body = %s, want bounded platform-not-ready error", got)
 	}
 	if got := rec.Body.String(); strings.Contains(got, UniversalWirePlatformVMID) || strings.Contains(got, UniversalWirePlatformOwnerID) || strings.Contains(got, "10.200.17.2") {

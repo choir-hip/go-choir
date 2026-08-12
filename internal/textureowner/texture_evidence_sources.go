@@ -827,7 +827,7 @@ func (rt *Handler) evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx con
 	}
 	computerID := ""
 	if rt.Core != nil {
-		computerID = strings.TrimSpace(rt.Core.TextureSandboxID())
+		computerID = strings.TrimSpace(rt.Core.TextureComputerID())
 	}
 	subject, subjectErr := rt.Store.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
 	var updates []types.CoagentSourcePacket

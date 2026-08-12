@@ -1,4 +1,4 @@
-package sandbox
+package autoputer
 
 import (
 	"encoding/json"
@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-func TestHandleBootstrapReturnsSandboxIdentity(t *testing.T) {
-	cfg := Config{Port: "0", SandboxID: "sandbox-test-001"}
-	h := NewHandler(cfg.SandboxID)
+func TestHandleBootstrapReturnsAutoputerIdentity(t *testing.T) {
+	cfg := Config{Port: "0", ComputerID: "autoputer-test-001"}
+	h := NewHandler(cfg.ComputerID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
 	w := httptest.NewRecorder()
@@ -25,8 +25,8 @@ func TestHandleBootstrapReturnsSandboxIdentity(t *testing.T) {
 		t.Fatalf("failed to decode bootstrap response: %v", err)
 	}
 
-	if resp.SandboxID != "sandbox-test-001" {
-		t.Errorf("expected sandbox_id %q, got %q", "sandbox-test-001", resp.SandboxID)
+	if resp.ComputerID != "autoputer-test-001" {
+		t.Errorf("expected computer_id %q, got %q", "autoputer-test-001", resp.ComputerID)
 	}
 	if resp.Bootstrap != "placeholder-shell-v1" {
 		t.Errorf("expected bootstrap %q, got %q", "placeholder-shell-v1", resp.Bootstrap)
@@ -34,8 +34,8 @@ func TestHandleBootstrapReturnsSandboxIdentity(t *testing.T) {
 }
 
 func TestHandleBootstrapEchoesUserContext(t *testing.T) {
-	cfg := Config{Port: "0", SandboxID: "sandbox-test-001"}
-	h := NewHandler(cfg.SandboxID)
+	cfg := Config{Port: "0", ComputerID: "autoputer-test-001"}
+	h := NewHandler(cfg.ComputerID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
 	req.Header.Set("X-Authenticated-User", "user-alice@example.com")
@@ -53,8 +53,8 @@ func TestHandleBootstrapEchoesUserContext(t *testing.T) {
 }
 
 func TestHandleBootstrapEchoesRequestPath(t *testing.T) {
-	cfg := Config{Port: "0", SandboxID: "sandbox-test-001"}
-	h := NewHandler(cfg.SandboxID)
+	cfg := Config{Port: "0", ComputerID: "autoputer-test-001"}
+	h := NewHandler(cfg.ComputerID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap?detail=full", nil)
 	w := httptest.NewRecorder()
@@ -77,8 +77,8 @@ func TestHandleBootstrapEchoesRequestPath(t *testing.T) {
 }
 
 func TestHandleBootstrapRejectsNonGet(t *testing.T) {
-	cfg := Config{Port: "0", SandboxID: "sandbox-test-001"}
-	h := NewHandler(cfg.SandboxID)
+	cfg := Config{Port: "0", ComputerID: "autoputer-test-001"}
+	h := NewHandler(cfg.ComputerID)
 
 	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch} {
 		t.Run(method, func(t *testing.T) {
@@ -94,8 +94,8 @@ func TestHandleBootstrapRejectsNonGet(t *testing.T) {
 }
 
 func TestHandleBootstrapReturnsJSONContentType(t *testing.T) {
-	cfg := Config{Port: "0", SandboxID: "sandbox-test-001"}
-	h := NewHandler(cfg.SandboxID)
+	cfg := Config{Port: "0", ComputerID: "autoputer-test-001"}
+	h := NewHandler(cfg.ComputerID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
 	w := httptest.NewRecorder()
@@ -108,8 +108,8 @@ func TestHandleBootstrapReturnsJSONContentType(t *testing.T) {
 }
 
 func TestHandleErrorReturnsNon2xx(t *testing.T) {
-	cfg := Config{Port: "0", SandboxID: "sandbox-test-001"}
-	h := NewHandler(cfg.SandboxID)
+	cfg := Config{Port: "0", ComputerID: "autoputer-test-001"}
+	h := NewHandler(cfg.ComputerID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/error", nil)
 	w := httptest.NewRecorder()
@@ -124,8 +124,8 @@ func TestHandleErrorReturnsNon2xx(t *testing.T) {
 		t.Fatalf("failed to decode error response: %v", err)
 	}
 
-	if resp.SandboxID != "sandbox-test-001" {
-		t.Errorf("expected sandbox_id %q, got %q", "sandbox-test-001", resp.SandboxID)
+	if resp.ComputerID != "autoputer-test-001" {
+		t.Errorf("expected computer_id %q, got %q", "autoputer-test-001", resp.ComputerID)
 	}
 	if resp.StatusCode != 500 {
 		t.Errorf("expected status_code 500, got %d", resp.StatusCode)
@@ -136,8 +136,8 @@ func TestHandleErrorReturnsNon2xx(t *testing.T) {
 }
 
 func TestHandleErrorReturnsJSONContentType(t *testing.T) {
-	cfg := Config{Port: "0", SandboxID: "sandbox-test-001"}
-	h := NewHandler(cfg.SandboxID)
+	cfg := Config{Port: "0", ComputerID: "autoputer-test-001"}
+	h := NewHandler(cfg.ComputerID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/error", nil)
 	w := httptest.NewRecorder()
@@ -150,8 +150,8 @@ func TestHandleErrorReturnsJSONContentType(t *testing.T) {
 }
 
 func TestBootstrapNoUserContextWithoutHeader(t *testing.T) {
-	cfg := Config{Port: "0", SandboxID: "sandbox-test-001"}
-	h := NewHandler(cfg.SandboxID)
+	cfg := Config{Port: "0", ComputerID: "autoputer-test-001"}
+	h := NewHandler(cfg.ComputerID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
 	// No X-Authenticated-User header set.

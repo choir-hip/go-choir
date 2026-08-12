@@ -141,7 +141,7 @@ func (s *Store) ResolveLifecycleControlActivation(ctx context.Context, ownerID, 
 		if activeErr != nil {
 			return LifecycleControlActivationReplay{}, activeErr
 		}
-		if active.OwnerID != ownerID || active.SandboxID != computerID || active.TrajectoryID != trajectoryID || active.AgentID != agentID || !lifecycleRunOwnsActivation(active.State) {
+		if active.OwnerID != ownerID || active.ComputerID != computerID || active.TrajectoryID != trajectoryID || active.AgentID != agentID || !lifecycleRunOwnsActivation(active.State) {
 			return LifecycleControlActivationReplay{}, ErrLifecycleInvalidTransition
 		}
 		if metadataStringValueStore(active.Metadata, "request_source") == "lifecycle_texture_control" && metadataStringValueStore(active.Metadata, "lifecycle_logical_activation_key") == logicalKey {
@@ -232,7 +232,7 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if run.RunID != req.TargetRunID || run.OwnerID != ownerID || run.SandboxID != computerID || run.AgentID != req.TargetAgentID || agentprofile.Canonical(run.AgentProfile) != profile || !run.State.Active() {
+	if run.RunID != req.TargetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != req.TargetAgentID || agentprofile.Canonical(run.AgentProfile) != profile || !run.State.Active() {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	if profile == agentprofile.Super {
@@ -478,7 +478,7 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 	if err != nil {
 		return LifecycleDeliveredPacketPage{}, err
 	}
-	if run.RunID != targetRunID || run.OwnerID != ownerID || run.SandboxID != computerID || run.AgentID != targetAgentID || agentprofile.Canonical(run.AgentProfile) != profile {
+	if run.RunID != targetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != targetAgentID || agentprofile.Canonical(run.AgentProfile) != profile {
 		return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 	}
 	if profile == agentprofile.Super {
@@ -618,7 +618,7 @@ func (s *Store) ListHistoricalLifecycleControlsDeliveredToRun(ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-	if run.RunID != targetRunID || run.OwnerID != ownerID || run.SandboxID != computerID || run.AgentID != targetAgentID ||
+	if run.RunID != targetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != targetAgentID ||
 		run.AgentProfile != agentprofile.Super || run.AgentRole != agentprofile.Super || run.TrajectoryID != "" ||
 		metadataStringValueStore(run.Metadata, "assignment_trajectory_id") != trajectoryID ||
 		!persistentSuperHistoricalReportRunStateAllowed(run.State) {

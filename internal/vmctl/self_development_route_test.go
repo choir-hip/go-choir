@@ -134,7 +134,7 @@ func TestSelfDevelopmentRouteProjectionRequiresExactPlatformCertificate(t *testi
 		_ = json.NewEncoder(w).Encode(map[string]string{"signer_domain": "platform-control", "key_id": "platform-test", "public_key": base64.RawStdEncoding.EncodeToString(privateKey.Public().(ed25519.PublicKey))})
 	}))
 	defer corpusd.Close()
-	registry := NewOwnershipRegistry("http://sandbox")
+	registry := NewOwnershipRegistry("http://autoputer")
 	registry.SetCorpusdURL(corpusd.URL)
 	ownership := &VMOwnership{VMID: "vm-realization", ComputerID: checkpointRequest.ComputerID, UserID: "owner", DesktopID: "primary", State: VMStateActive}
 	registry.ownerships[ownershipKey("owner", "primary")] = ownership

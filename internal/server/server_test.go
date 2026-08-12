@@ -112,7 +112,7 @@ func TestHealthHandlerIncludesAddrAfterStart(t *testing.T) {
 }
 
 func TestHealthHandlerServiceName(t *testing.T) {
-	names := []string{"auth", "proxy", "vmctl", "gateway", "sandbox"}
+	names := []string{"auth", "proxy", "vmctl", "gateway", "autoputer"}
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
 			s := NewServer(name, "8099")

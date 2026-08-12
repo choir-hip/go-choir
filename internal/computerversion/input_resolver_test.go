@@ -17,7 +17,7 @@ func TestImmutableInputsPinAndResolve(t *testing.T) {
 	now := time.Date(2026, 7, 16, 4, 0, 0, 0, time.UTC)
 
 	closure, err := NewCodeClosure("d87bdc446ecc28585c3bc08d4d469b9f94d3c246", []CodeArtifact{
-		{Name: "sandbox", SHA256: hash64('a'), URI: contentAddressedURI("nix-store+sha256", hash64('a'), "nix/store/sandbox")},
+		{Name: "autoputer", SHA256: hash64('a'), URI: contentAddressedURI("nix-store+sha256", hash64('a'), "nix/store/autoputer")},
 		{Name: "rootfs", SHA256: hash64('b'), URI: contentAddressedURI("artifact+sha256", hash64('b'), "images/rootfs.ext4")},
 	}, now)
 	if err != nil {
@@ -65,7 +65,7 @@ func TestImmutableInputsPinAndResolve(t *testing.T) {
 func TestImmutableInputsSurviveStoreRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "runtime.db")
 	now := time.Date(2026, 7, 16, 4, 0, 0, 0, time.UTC)
-	closure, err := NewCodeClosure(hash64('f'), []CodeArtifact{{Name: "sandbox", SHA256: hash64('1'), URI: contentAddressedURI("nix-store+sha256", hash64('1'), "nix/store/sandbox")}}, now)
+	closure, err := NewCodeClosure(hash64('f'), []CodeArtifact{{Name: "autoputer", SHA256: hash64('1'), URI: contentAddressedURI("nix-store+sha256", hash64('1'), "nix/store/autoputer")}}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestImmutableInputsSurviveStoreRestart(t *testing.T) {
 func TestImmutableInputsRejectFloatingSourceAndUnboundLocators(t *testing.T) {
 	digest := hash64('a')
 	if _, err := NewCodeClosure("main", []CodeArtifact{{
-		Name: "sandbox", SHA256: digest, URI: contentAddressedURI("artifact+sha256", digest, "sandbox"),
+		Name: "autoputer", SHA256: digest, URI: contentAddressedURI("artifact+sha256", digest, "autoputer"),
 	}}, time.Date(2026, 7, 16, 4, 0, 0, 0, time.UTC)); err == nil {
 		t.Fatal("floating source ref became a CodeRef")
 	}

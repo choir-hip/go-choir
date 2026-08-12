@@ -5,13 +5,13 @@
 
 This document names the durable object that Choir operates on.
 
-Choir does not primarily give each user a sandbox. It gives each user a
+Choir does not primarily give each user a autoputer. It gives each user a
 persistent **computer**: a stateful private machine-world where apps, agents,
 files, package installs, source trees, local builds, Dolt state, prompts,
 runtime services, and user preferences can diverge from the platform baseline.
 
-"Sandbox" remains a code/service name where the implementation currently uses
-it. It should not be the product ontology. A sandbox sounds disposable. A Choir
+"Autoputer" remains a code/service name where the implementation currently uses
+it. It should not be the product ontology. A autoputer sounds disposable. A Choir
 computer is allowed to be durable, personal, divergent, useful, backed up,
 forked, merged, published from, and updated over time.
 
@@ -349,7 +349,7 @@ Ideal direction:
 - Do not use **background computer**, **candidate computer**, **worker VM**, or
   **candidate VM** for current product architecture; those forked-machine
   concepts are retired.
-- Use **sandbox** only for existing service/process names or legacy references.
+- Use **autoputer** only for existing service/process names or legacy references.
 - Use **VM** or **microVM** only for the implementation substrate.
 
 The user should not have to care which realization serves the computer. The

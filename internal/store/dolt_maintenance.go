@@ -246,7 +246,7 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 }
 
 // StartPeriodicDoltGC runs MaybeRunDoltGC on a timer to catch disk growth
-// between sandbox restarts. It is safe to call multiple times — the milestone
+// between autoputer restarts. It is safe to call multiple times — the milestone
 // marker prevents redundant GC runs at the same level. The function returns
 // immediately and runs in a background goroutine until the context is cancelled.
 func StartPeriodicDoltGC(ctx context.Context, persistentDir, storePath string, interval time.Duration) {

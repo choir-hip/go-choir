@@ -817,7 +817,7 @@ func TestIngestionRuntimeDispatcherSubmitsProcessorProfilesOnly(t *testing.T) {
 	}
 }
 
-func TestIngestionRuntimeDispatcherStatusUsesSandboxProxyOverUnixSocket(t *testing.T) {
+func TestIngestionRuntimeDispatcherStatusUsesAutoputerProxyOverUnixSocket(t *testing.T) {
 	var gotPath string
 	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
@@ -850,7 +850,7 @@ func TestIngestionRuntimeDispatcherStatusUsesSandboxProxyOverUnixSocket(t *testi
 	if status.RunID != "run-status-proxy" || status.State != "completed" {
 		t.Fatalf("status = %+v", status)
 	}
-	wantPath := "/internal/vmctl/sandbox-proxy/universal-wire-platform/internal/runtime/runs/run-status-proxy"
+	wantPath := "/internal/vmctl/autoputer-proxy/universal-wire-platform/internal/runtime/runs/run-status-proxy"
 	if gotPath != wantPath {
 		t.Fatalf("status path = %q, want %q", gotPath, wantPath)
 	}

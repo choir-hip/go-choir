@@ -144,7 +144,7 @@ func TestBindLifecycleControlDeliveryExactPersistentSuperRemainsNonLifecycle(t *
 	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
 	now := time.Now().UTC()
 	superID := "super:" + start.OwnerID
-	if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, SandboxID: start.ComputerID, Profile: "super", Role: "super", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
+	if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, Profile: "super", Role: "super", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	packet := textureTurnControlPacket("persistent-super")
@@ -158,7 +158,7 @@ func TestBindLifecycleControlDeliveryExactPersistentSuperRemainsNonLifecycle(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	run := types.RunRecord{RunID: "persistent-super-run", OwnerID: start.OwnerID, SandboxID: start.ComputerID, AgentID: superID, AgentProfile: "super", AgentRole: "super", ChannelID: start.InitialDocument.DocID, State: types.RunRunning, Metadata: map[string]any{"assignment_trajectory_id": start.TrajectoryID, "work_item_ids": []string{workID}, "lifecycle_work_item_id": workID}, CreatedAt: now, UpdatedAt: now}
+	run := types.RunRecord{RunID: "persistent-super-run", OwnerID: start.OwnerID, ComputerID: start.ComputerID, AgentID: superID, AgentProfile: "super", AgentRole: "super", ChannelID: start.InitialDocument.DocID, State: types.RunRunning, Metadata: map[string]any{"assignment_trajectory_id": start.TrajectoryID, "work_item_ids": []string{workID}, "lifecycle_work_item_id": workID}, CreatedAt: now, UpdatedAt: now}
 	if err := s.CreateRun(context.Background(), run); err != nil {
 		t.Fatal(err)
 	}

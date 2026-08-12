@@ -311,6 +311,14 @@ documents:
     witnesses: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, docs/supervision-protocol.md, docs/texture-agentic-invariants-2026-06-13.md]
     refresh_triggers: []
 
+  - path: docs/definitions/choir-sandbox-autoputer-rename-2026-08-11.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: subordinate_mission_contract, lifecycle: working, entrypoint: false}
+    witnesses: [docs/definitions/choir-supervised-self-development-effects-2026-08-11.md, docs/mission-graph.yaml, docs/computer-ontology.md, docs/choir-doctrine.md, docs/standing-questions.md, AGENTS.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, rename_manifest_change, deployed_acceptance, registry_closure]
+
   - path: docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
     claim_scope: current
     is_root: [authority, entry]

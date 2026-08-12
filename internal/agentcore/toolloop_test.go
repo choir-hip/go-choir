@@ -316,7 +316,7 @@ func testRuntimeWithProviderAndRegistry(t *testing.T, provider provideriface.Pro
 
 	bus := events.NewEventBus()
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     5 * time.Second,
 		SupervisionInterval: 1 * time.Hour,

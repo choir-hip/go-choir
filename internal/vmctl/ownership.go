@@ -1,5 +1,5 @@
 // Package vmctl implements the VM ownership registry and lifecycle control
-// for Mission 3. The registry maps authenticated users to VM-backed sandbox
+// for Mission 3. The registry maps authenticated users to VM-backed autoputer
 // workloads and ensures concurrent first requests for the same user collapse
 // onto a single VM assignment (VAL-VM-004).
 //
@@ -101,8 +101,8 @@ type VMOwnership struct {
 	// reclaim decisions. Public health exposes only aggregate counts.
 	WarmnessClass WarmnessClass `json:"warmness_class,omitempty"`
 
-	// SandboxURL is the URL where this VM's sandbox runtime is reachable.
-	SandboxURL string `json:"sandbox_url"`
+	// ComputerURL is the URL where this VM's autoputer runtime is reachable.
+	ComputerURL string `json:"computer_url"`
 
 	// State is the current lifecycle state of the VM.
 	State VMState `json:"state"`
@@ -113,9 +113,9 @@ type VMOwnership struct {
 	// LastActiveAt is when the VM was last used.
 	LastActiveAt time.Time `json:"last_active_at"`
 
-	// SandboxCredential is the credential issued by the gateway for this VM.
-	// It is used to authenticate sandbox-to-gateway provider requests.
-	SandboxCredential string `json:"-"`
+	// AutoputerCredential is the credential issued by the gateway for this VM.
+	// It is used to authenticate autoputer-to-gateway provider requests.
+	AutoputerCredential string `json:"-"`
 
 	// Epoch is the monotonically increasing boot counter for this VM.
 	// On fresh boot or recovery, the epoch increments. On resume from
@@ -199,7 +199,7 @@ type VMManagerConfig struct {
 	MachineCPUCount   int
 	MachineMemSizeMib int
 	PersistentDir     string
-	// GatewayToken is the credential token for the sandbox to authenticate
+	// GatewayToken is the credential token for the autoputer to authenticate
 	// to the host-side gateway. Written to the persistent directory so the
 	// guest init script can read it and set RUNTIME_GATEWAY_TOKEN.
 	GatewayToken               string
@@ -253,9 +253,9 @@ type OwnershipRegistry struct {
 	// failures.
 	gatewayCredentialNextCheck map[string]time.Time
 
-	// sandboxURLBase is the base URL pattern for sandbox runtimes.
+	// autoputerURLBase is the base URL pattern for autoputer runtimes.
 	// The VM ID is appended as a path component: base + "/" + vmID
-	sandboxURLBase string
+	autoputerURLBase string
 
 	// idleTimeout is the duration after which a VM with no activity
 	// is eligible for stop/hibernate. Zero means no idle timeout.
@@ -288,14 +288,14 @@ type OwnershipRegistry struct {
 	refreshing map[string]struct{}
 
 	// vmManager is the optional Firecracker VM lifecycle manager.
-	// When nil, the registry operates in host-process sandbox mode where
-	// all VMs share the same sandbox URL. When set, the registry delegates
+	// When nil, the registry operates in host-process autoputer mode where
+	// all VMs share the same autoputer URL. When set, the registry delegates
 	// VM lifecycle operations to this manager for real Firecracker VMs.
 	vmManager VMManager
 
 	// gatewayURL is the URL of the host-side gateway service. When set,
-	// the registry issues gateway tokens for VM sandboxes before booting
-	// so the guest sandbox can authenticate to the gateway.
+	// the registry issues gateway tokens for VM autoputeres before booting
+	// so the guest autoputer can authenticate to the gateway.
 	gatewayURL string
 	corpusdURL string
 
@@ -308,9 +308,9 @@ type OwnershipRegistry struct {
 // NewOwnershipRegistry creates a new ownership registry.
 // The idleTimeout parameter configures automatic VM stop after inactivity.
 // Zero means no idle timeout (VMs stay active indefinitely).
-func NewOwnershipRegistry(sandboxURLBase string) *OwnershipRegistry {
-	if sandboxURLBase == "" {
-		sandboxURLBase = "http://127.0.0.1:8085"
+func NewOwnershipRegistry(autoputerURLBase string) *OwnershipRegistry {
+	if autoputerURLBase == "" {
+		autoputerURLBase = "http://127.0.0.1:8085"
 	}
 	return &OwnershipRegistry{
 		ownerships:                 make(map[string]*VMOwnership),
@@ -318,7 +318,7 @@ func NewOwnershipRegistry(sandboxURLBase string) *OwnershipRegistry {
 		pendingWaiters:             make(map[string][]chan *VMOwnership),
 		gatewayCredentialNextCheck: make(map[string]time.Time),
 		refreshing:                 make(map[string]struct{}),
-		sandboxURLBase:             sandboxURLBase,
+		autoputerURLBase:           autoputerURLBase,
 		idleTimeout:                0, // no idle timeout by default
 		pressureReclaim:            DefaultPressureReclaimConfig(),
 		pressureSampler:            sampleHostPressure,
@@ -338,7 +338,7 @@ type persistedOwnershipState struct {
 // SetPersistencePath enables durable ownership metadata. Existing metadata is
 // loaded immediately. Running/booting states from a previous vmctl process are
 // loaded as stopped so the next resolve performs a controlled fresh boot of the
-// same VM ID and data disk instead of returning a stale sandbox URL.
+// same VM ID and data disk instead of returning a stale autoputer URL.
 func (r *OwnershipRegistry) SetPersistencePath(path string) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -459,7 +459,7 @@ func (r *OwnershipRegistry) writePersistenceLocked() error {
 
 // SetVMManager sets the Firecracker VM lifecycle manager. When set, the
 // registry delegates VM lifecycle operations to the manager instead of
-// running in host-process sandbox mode. This activates real Firecracker
+// running in host-process autoputer mode. This activates real Firecracker
 // VM lifecycle on Node B.
 func (r *OwnershipRegistry) SetVMManager(mgr VMManager) {
 	r.mu.Lock()
@@ -475,7 +475,7 @@ func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard Comput
 	candidates := make([]VMOwnership, 0)
 	if mgr != nil {
 		for _, own := range r.ownerships {
-			if own.State == VMStateStopped && own.StoppedBy == "vmctl-restart" && strings.TrimSpace(own.SandboxURL) != "" {
+			if own.State == VMStateStopped && own.StoppedBy == "vmctl-restart" && strings.TrimSpace(own.ComputerURL) != "" {
 				candidates = append(candidates, *own)
 			}
 		}
@@ -492,7 +492,7 @@ func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard Comput
 			log.Printf("vmctl: reattach refused for VM %s: %v", own.VMID, err)
 			continue
 		}
-		info, err := mgr.ReattachVM(own.VMID, own.SandboxURL, own.Epoch)
+		info, err := mgr.ReattachVM(own.VMID, own.ComputerURL, own.Epoch)
 		if err != nil {
 			log.Printf("vmctl: reattach skipped for VM %s: %v", own.VMID, err)
 			continue
@@ -500,7 +500,7 @@ func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard Comput
 		r.mu.Lock()
 		if cur, ok := r.vmByID[own.VMID]; ok {
 			cur.State = VMStateActive
-			cur.SandboxURL = info.HostURL
+			cur.ComputerURL = info.HostURL
 			cur.Epoch = info.Epoch
 			if cur.LastActiveAt.IsZero() {
 				cur.LastActiveAt = time.Now()
@@ -517,9 +517,9 @@ func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard Comput
 	return reattached
 }
 
-// SetGatewayURL configures the gateway URL for issuing sandbox tokens.
+// SetGatewayURL configures the gateway URL for issuing autoputer tokens.
 // When set, the registry will issue a gateway token for each VM before
-// booting so the guest sandbox can authenticate to the gateway.
+// booting so the guest autoputer can authenticate to the gateway.
 func (r *OwnershipRegistry) SetGatewayURL(url string) {
 	r.mu.Lock()
 	r.gatewayURL = url
@@ -770,7 +770,7 @@ func (r *OwnershipRegistry) ensureActiveVMReady(own *VMOwnership, mgr VMManager)
 	}
 	if mgr == nil {
 		return &VMInstanceInfo{
-			HostURL: own.SandboxURL,
+			HostURL: own.ComputerURL,
 			Epoch:   own.Epoch,
 			Healthy: true,
 			State:   "running",
@@ -912,15 +912,15 @@ func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManage
 }
 
 // issueGatewayToken requests a gateway credential token for the given
-// sandbox ID by calling the gateway's credential issuance endpoint.
+// autoputer ID by calling the gateway's credential issuance endpoint.
 // Returns the raw token string or an empty string on failure.
 // Failures are logged but not fatal — the VM will still boot but
 // won't be able to authenticate to the gateway until a token is provided.
-func (r *OwnershipRegistry) issueGatewayToken(sandboxID string) string {
+func (r *OwnershipRegistry) issueGatewayToken(computerID string) string {
 	r.mu.RLock()
 	gwURL := r.gatewayURL
 	r.mu.RUnlock()
-	return issueGatewayTokenAt(gwURL, sandboxID)
+	return issueGatewayTokenAt(gwURL, computerID)
 }
 
 func (r *OwnershipRegistry) platformControlPublicKey(ctx context.Context, signer computerevent.SignerRef) (ed25519.PublicKey, error) {
@@ -1003,21 +1003,21 @@ func issueComputerCredentialEnvelope(corpusdURL, computerID, realizationID strin
 	return base64.RawURLEncoding.EncodeToString(canonical)
 }
 
-func issueGatewayTokenAt(gwURL, sandboxID string) string {
+func issueGatewayTokenAt(gwURL, computerID string) string {
 	if gwURL == "" {
 		return ""
 	}
 
 	// Call the gateway's credential issuance endpoint.
-	// This is the same endpoint used by the host sandbox's ExecStartPre.
-	body := fmt.Sprintf(`{"sandbox_id":"%s"}`, sandboxID)
+	// This is the same endpoint used by the host autoputer's ExecStartPre.
+	body := fmt.Sprintf(`{"computer_id":"%s"}`, computerID)
 	url := strings.TrimRight(gwURL, "/") + "/provider/v1/credentials/issue"
 
 	ctx, cancel := context.WithTimeout(context.Background(), gatewayCredentialRequestTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
 	if err != nil {
-		log.Printf("vmctl: gateway token request creation failed for %s: %v", sandboxID, err)
+		log.Printf("vmctl: gateway token request creation failed for %s: %v", computerID, err)
 		return ""
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -1025,23 +1025,23 @@ func issueGatewayTokenAt(gwURL, sandboxID string) string {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Printf("vmctl: gateway token request failed for %s: %v", sandboxID, err)
+		log.Printf("vmctl: gateway token request failed for %s: %v", computerID, err)
 		return ""
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		log.Printf("vmctl: gateway token issue returned %d for %s", resp.StatusCode, sandboxID)
+		log.Printf("vmctl: gateway token issue returned %d for %s", resp.StatusCode, computerID)
 		return ""
 	}
 
 	var result struct {
-		SandboxID       string `json:"sandbox_id"`
-		SandboxIDCompat string `json:"SandboxID"`
-		RawToken        string `json:"raw_token"`
-		RawTokenCompat  string `json:"RawToken"`
-		ExpiresAt       string `json:"expires_at"`
-		ExpiresAtCompat string `json:"ExpiresAt"`
+		ComputerID       string `json:"computer_id"`
+		ComputerIDCompat string `json:"ComputerID"`
+		RawToken         string `json:"raw_token"`
+		RawTokenCompat   string `json:"RawToken"`
+		ExpiresAt        string `json:"expires_at"`
+		ExpiresAtCompat  string `json:"ExpiresAt"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		log.Printf("vmctl: gateway token response decode failed: %v", err)
@@ -1181,7 +1181,7 @@ func (r *OwnershipRegistry) ResolveOrAssign(userID string) (*VMOwnership, error)
 // ResolveOrAssignDesktop resolves the VM ownership for the given user/desktop
 // pair. If the desktop already has an active VM, it is returned. If the VM is
 // still booting, concurrent callers wait for that same boot to finish instead
-// of routing to a placeholder sandbox URL. If no VM exists, a new VM is
+// of routing to a placeholder autoputer URL. If no VM exists, a new VM is
 // assigned. Concurrent first requests for the same
 // user/desktop pair collapse onto one assignment.
 func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*VMOwnership, error) {
@@ -1236,7 +1236,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 					return r.resolveDesktopContext(ctx, userID, desktopID, allowAssignment, expectedVMID)
 				}
 				if info != nil {
-					current.SandboxURL = info.HostURL
+					current.ComputerURL = info.HostURL
 					current.Epoch = info.Epoch
 				}
 				current.State = VMStateActive
@@ -1309,7 +1309,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 				return r.resolveDesktopContext(ctx, userID, desktopID, allowAssignment, expectedVMID)
 			}
 			if info != nil {
-				current.SandboxURL = info.HostURL
+				current.ComputerURL = info.HostURL
 				current.Epoch = info.Epoch
 			} else if recovering {
 				current.Epoch = r.nextEpoch()
@@ -1339,7 +1339,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 	// Check if a VM assignment is already in progress for this user/desktop.
 	// The zero-waiter case still means a first caller is actively booting the VM,
 	// so later callers must join that in-flight boot rather than minting a second
-	// VM or routing to the placeholder sandbox URL.
+	// VM or routing to the placeholder autoputer URL.
 	if waiters, ok := r.pendingWaiters[key]; ok {
 		return r.waitForPendingAssignmentLocked(ctx, key, userID, desktopID, waiters)
 	}
@@ -1371,7 +1371,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			DesktopID: desktopID,
 			Kind:      VMKindInteractive,
 		}, r.warmnessPolicy),
-		SandboxURL:   r.sandboxURLForVM(vmID),
+		ComputerURL:  r.autoputerURLForVM(vmID),
 		State:        VMStateBooting,
 		CreatedAt:    time.Now(),
 		LastActiveAt: time.Now(),
@@ -1397,7 +1397,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 
 	// Boot the real Firecracker VM if a manager is configured.
 	if mgr != nil {
-		// Issue a gateway token for the VM sandbox before booting.
+		// Issue a gateway token for the VM autoputer before booting.
 		// The token is written to the persistent directory by the vmmanager
 		// and read by the guest init script to authenticate to the gateway.
 		gwToken := r.issueGatewayToken(vmID)
@@ -1438,7 +1438,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			return nil, fmt.Errorf("failed to boot VM %s: %w", vmID, err)
 		}
 		r.mu.Lock()
-		own.SandboxURL = info.HostURL
+		own.ComputerURL = info.HostURL
 		own.Epoch = info.Epoch
 		r.mu.Unlock()
 		log.Printf("vmctl: booted Firecracker VM %s for user %s at %s (epoch=%d)", vmID, userID, info.HostURL, info.Epoch)
@@ -1615,10 +1615,10 @@ func (r *OwnershipRegistry) reconcileLookupReadiness(own *VMOwnership) *VMOwners
 	return result
 }
 
-// LiveSandboxURL returns the live sandbox URL for the given user/desktop pair.
+// LiveComputerURL returns the live autoputer URL for the given user/desktop pair.
 // It prefers the VM manager's live HostURL over the cached ownership record.
 // Returns an error if the ownership does not exist and no live VM is found.
-func (r *OwnershipRegistry) LiveSandboxURL(userID, desktopID string) (string, error) {
+func (r *OwnershipRegistry) LiveComputerURL(userID, desktopID string) (string, error) {
 	r.mu.RLock()
 	own, ok := r.ownerships[ownershipKey(userID, desktopID)]
 	mgr := r.vmManager
@@ -1635,11 +1635,11 @@ func (r *OwnershipRegistry) LiveSandboxURL(userID, desktopID string) (string, er
 				return info.HostURL, nil
 			}
 		}
-		if strings.TrimSpace(snap.SandboxURL) != "" {
-			return snap.SandboxURL, nil
+		if strings.TrimSpace(snap.ComputerURL) != "" {
+			return snap.ComputerURL, nil
 		}
 	}
-	return "", fmt.Errorf("no live sandbox URL for %s/%s", userID, desktopID)
+	return "", fmt.Errorf("no live autoputer URL for %s/%s", userID, desktopID)
 }
 
 // GetOwnershipByVMID returns the ownership for a specific VM ID, or nil.
@@ -1921,7 +1921,7 @@ func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwn
 			return nil, fmt.Errorf("VM %s ownership changed during resume", vmID)
 		}
 		if info != nil {
-			own.SandboxURL = info.HostURL
+			own.ComputerURL = info.HostURL
 			own.Epoch = info.Epoch
 		}
 	}
@@ -1985,7 +1985,7 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 		if err != nil {
 			return nil, fmt.Errorf("failed to recover VM %s: %w", own.VMID, err)
 		}
-		own.SandboxURL = info.HostURL
+		own.ComputerURL = info.HostURL
 		own.Epoch = info.Epoch
 	} else {
 		// Increment epoch on recovery — this is a fresh boot, not a resume.
@@ -2096,7 +2096,7 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 		return nil, fmt.Errorf("VM %s lifecycle changed during refresh (epoch=%d state=%s, started epoch=%d state=%s)", snapshot.VMID, currentEpoch, currentState, snapshot.Epoch, snapshot.State)
 	}
 	if info != nil {
-		own.SandboxURL = info.HostURL
+		own.ComputerURL = info.HostURL
 		own.Epoch = info.Epoch
 	} else {
 		own.Epoch = r.nextEpoch()
@@ -2269,8 +2269,8 @@ func (r *OwnershipRegistry) WarmAlwaysOnDesktops(ctx context.Context, guard Comp
 	return warmed
 }
 
-// SetSandboxCredential stores the gateway credential for a VM's sandbox.
-func (r *OwnershipRegistry) SetSandboxCredential(vmID, credential string) error {
+// SetAutoputerCredential stores the gateway credential for a VM's autoputer.
+func (r *OwnershipRegistry) SetAutoputerCredential(vmID, credential string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -2279,7 +2279,7 @@ func (r *OwnershipRegistry) SetSandboxCredential(vmID, credential string) error 
 		return fmt.Errorf("no VM found with ID %s", vmID)
 	}
 
-	own.SandboxCredential = credential
+	own.AutoputerCredential = credential
 	return nil
 }
 
@@ -2309,15 +2309,15 @@ func (r *OwnershipRegistry) transitionVM(vmID string, state VMState) {
 	}
 }
 
-// sandboxURLForVM generates the sandbox URL for a given VM ID.
+// autoputerURLForVM generates the autoputer URL for a given VM ID.
 // In production, this would resolve to the actual VM's network address.
 // For host-process mode during development, all VMs route to the same
-// host sandbox at the configured base URL.
-func (r *OwnershipRegistry) sandboxURLForVM(vmID string) string {
-	// In the current host-process mode, all VMs share the same sandbox
+// host autoputer at the configured base URL.
+func (r *OwnershipRegistry) autoputerURLForVM(vmID string) string {
+	// In the current host-process mode, all VMs share the same autoputer
 	// URL. When Firecracker is integrated, this will return per-VM URLs
 	// based on the VM's assigned network address.
-	return r.sandboxURLBase
+	return r.autoputerURLBase
 }
 
 // generateVMID creates a unique VM identifier.

@@ -256,13 +256,6 @@ func (s *Store) UpsertAgentOG(ctx context.Context, rec types.AgentRecord) error 
 	rec.OwnerID = strings.TrimSpace(rec.OwnerID)
 	rec.AgentID = strings.TrimSpace(rec.AgentID)
 	rec.ComputerID = strings.TrimSpace(rec.ComputerID)
-	rec.SandboxID = strings.TrimSpace(rec.SandboxID)
-	if rec.ComputerID == "" {
-		rec.ComputerID = rec.SandboxID
-	}
-	if rec.SandboxID == "" {
-		rec.SandboxID = rec.ComputerID
-	}
 	if rec.OwnerID == "" || rec.ComputerID == "" || rec.AgentID == "" {
 		return fmt.Errorf("store: upsert agent requires owner_id, computer_id, and agent_id")
 	}
@@ -323,7 +316,7 @@ func (s *Store) UpsertAgentOG(ctx context.Context, rec types.AgentRecord) error 
 		}
 		metadata["agent_id"] = candidate.AgentID
 		metadata["computer_id"] = candidate.ComputerID
-		metadata["sandbox_id"] = candidate.SandboxID
+		metadata["computer_id"] = candidate.ComputerID
 		metadata["profile"] = candidate.Profile
 		metadata["role"] = candidate.Role
 		metadata["channel_id"] = candidate.ChannelID
@@ -450,7 +443,7 @@ func (s *Store) ResolveLegacyAgentScopeOG(ctx context.Context, computerID, agent
 			return types.AgentRecord{}, err
 		}
 		if strings.TrimSpace(run.AgentID) != agentID ||
-			strings.TrimSpace(run.SandboxID) != computerID ||
+			strings.TrimSpace(run.ComputerID) != computerID ||
 			strings.TrimSpace(run.OwnerID) == "" {
 			continue
 		}
@@ -467,7 +460,7 @@ func (s *Store) ResolveLegacyAgentScopeOG(ctx context.Context, computerID, agent
 		return types.AgentRecord{}, fmt.Errorf("store: legacy agent scope not found for computer %q agent %q: %w", computerID, agentID, ErrNotFound)
 	}
 	return types.AgentRecord{
-		AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+		AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
 	}, nil
 }
 
@@ -489,7 +482,7 @@ func (s *Store) CreateRunOG(ctx context.Context, rec types.RunRecord) error {
 		"trajectory_id":       rec.TrajectoryID,
 		"agent_profile":       rec.AgentProfile,
 		"agent_role":          rec.AgentRole,
-		"sandbox_id":          rec.SandboxID,
+		"computer_id":         rec.ComputerID,
 		"state":               string(rec.State),
 		"created_at":          rec.CreatedAt.UTC().Format(time.RFC3339Nano),
 		"updated_at":          rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
@@ -504,8 +497,8 @@ func (s *Store) CreateRunOG(ctx context.Context, rec types.RunRecord) error {
 	}
 
 	// Write structural edges.
-	if rec.AgentID != "" && rec.SandboxID != "" {
-		agentID, buildErr := scopedAgentCanonicalID(rec.OwnerID, rec.SandboxID, rec.AgentID)
+	if rec.AgentID != "" && rec.ComputerID != "" {
+		agentID, buildErr := scopedAgentCanonicalID(rec.OwnerID, rec.ComputerID, rec.AgentID)
 		if buildErr == nil {
 			_ = s.ogPutEdge(ctx, obj.CanonicalID, agentID, ogEdgeRunAgent, nil)
 		}
@@ -634,7 +627,7 @@ func (s *Store) UpdateRunOG(ctx context.Context, rec types.RunRecord) error {
 		"trajectory_id":       rec.TrajectoryID,
 		"agent_profile":       rec.AgentProfile,
 		"agent_role":          rec.AgentRole,
-		"sandbox_id":          rec.SandboxID,
+		"computer_id":         rec.ComputerID,
 		"state":               string(rec.State),
 		"created_at":          created.UTC().Format(time.RFC3339Nano),
 		"updated_at":          now.UTC().Format(time.RFC3339Nano),

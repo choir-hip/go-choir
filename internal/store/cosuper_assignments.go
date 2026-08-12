@@ -504,7 +504,7 @@ func (s *Store) requireCoSuperParentAuthority(ctx context.Context, binding types
 	if err != nil {
 		return coSuperAuthorityObjects{}, err
 	}
-	if parentRunObj.ComputerID != "" || parentRun.OwnerID != binding.OwnerID || parentRun.SandboxID != binding.ComputerID ||
+	if parentRunObj.ComputerID != "" || parentRun.OwnerID != binding.OwnerID || parentRun.ComputerID != binding.ComputerID ||
 		parentRun.RunID != binding.ParentRunID || parentRun.AgentID != binding.ParentAgentID || parentRun.TrajectoryID != "" ||
 		parentRun.AgentProfile != "super" || parentRun.AgentRole != "super" || !persistentSuperRunStateAllowed(parentRun.State) ||
 		metadataExactString(parentRun.Metadata, "assignment_trajectory_id") != binding.TrajectoryID ||
@@ -560,7 +560,7 @@ func (s *Store) requireCoSuperHistoricalParentAuthority(ctx context.Context, bin
 	if err != nil {
 		return coSuperAuthorityObjects{}, err
 	}
-	if parentRunObj.ComputerID != "" || parentRun.OwnerID != binding.OwnerID || parentRun.SandboxID != binding.ComputerID ||
+	if parentRunObj.ComputerID != "" || parentRun.OwnerID != binding.OwnerID || parentRun.ComputerID != binding.ComputerID ||
 		parentRun.RunID != binding.ParentRunID || parentRun.AgentID != binding.ParentAgentID || parentRun.TrajectoryID != "" ||
 		parentRun.AgentProfile != "super" || parentRun.AgentRole != "super" || !parentRun.State.Valid() ||
 		metadataExactString(parentRun.Metadata, "assignment_trajectory_id") != binding.TrajectoryID ||
@@ -819,7 +819,7 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 
 	assignedAgent := req.AssignedAgent
 	assignedAgent.AgentID, assignedAgent.OwnerID, assignedAgent.ComputerID = req.Binding.AssignedAgentID, req.Binding.OwnerID, req.Binding.ComputerID
-	assignedAgent.SandboxID, assignedAgent.Profile, assignedAgent.Role = req.Binding.ComputerID, "co-super", "co-super"
+	assignedAgent.ComputerID, assignedAgent.Profile, assignedAgent.Role = req.Binding.ComputerID, "co-super", "co-super"
 	assignedAgent.ChannelID, assignedAgent.ActiveRunID = req.Binding.AssignedAgentID, ""
 	assignedAgent.LifecycleVersion, assignedAgent.LastReducerSeq = 1, transition.seq
 	assignedAgent.CreatedAt, assignedAgent.UpdatedAt = now, now
@@ -976,7 +976,7 @@ func validateCoSuperAssignmentRun(assignment types.CoSuperAssignment, assignedAg
 	coordinationDigest := metadataExactString(run.Metadata, "coordination_contract_digest")
 	if bindingErr != nil || len(workIDs) != 1 || workIDs[0] != assignment.Binding.AssignedWorkItemID ||
 		metadataExactString(run.Metadata, "lifecycle_work_item_id") != assignment.Binding.AssignedWorkItemID ||
-		strings.TrimSpace(run.RunID) == "" || run.OwnerID != assignment.Binding.OwnerID || run.SandboxID != assignment.Binding.ComputerID ||
+		strings.TrimSpace(run.RunID) == "" || run.OwnerID != assignment.Binding.OwnerID || run.ComputerID != assignment.Binding.ComputerID ||
 		run.TrajectoryID != assignment.Binding.TrajectoryID || run.AgentID != assignment.Binding.AssignedAgentID ||
 		run.ChannelID != assignedAgent.ChannelID || run.AgentProfile != "co-super" || run.AgentRole != "co-super" || run.State != types.RunPending ||
 		run.RequestedByRunID != assignment.Binding.ParentRunID || !run.CreatedAt.IsZero() || !run.UpdatedAt.IsZero() ||

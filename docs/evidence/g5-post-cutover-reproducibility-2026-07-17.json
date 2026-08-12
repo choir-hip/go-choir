@@ -5563,7 +5563,7 @@
         "reachable": true,
         "researcher_count": 3,
         "runtime_health": "ready",
-        "service": "sandbox",
+        "service": "autoputer",
         "status": "ready"
       },
       "service": "compute-monitor",
@@ -5573,7 +5573,7 @@
       "bootstrap": "placeholder-shell-v1",
       "method": "GET",
       "path": "/api/shell/bootstrap",
-      "sandbox_id": "candidate-fleet-e15cb89f25d963c220319b7b",
+      "computer_id": "candidate-fleet-e15cb89f25d963c220319b7b",
       "status_code": 200,
       "user": "5bd6de97-3b58-408c-bf89-c42c81b083de"
     },

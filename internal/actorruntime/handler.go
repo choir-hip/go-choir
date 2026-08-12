@@ -435,7 +435,7 @@ func (h *actorHandler) scopedRunForUpdate(ctx context.Context, update actor.Upda
 	if err != nil {
 		return types.RunRecord{}, err
 	}
-	if strings.TrimSpace(rec.SandboxID) != computerID {
+	if strings.TrimSpace(rec.ComputerID) != computerID {
 		return types.RunRecord{}, fmt.Errorf("actorruntime: run computer identity mismatch")
 	}
 	return rec, nil

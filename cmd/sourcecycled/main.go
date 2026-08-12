@@ -75,7 +75,7 @@ type runtimeProcessorResolutionStatusResponse struct {
 
 type ingestionRuntimeDispatcher struct {
 	baseURL              string
-	socketPath           string // UDS socket path; if set, uses unix transport and proxy path for sandbox
+	socketPath           string // UDS socket path; if set, uses unix transport and proxy path for autoputer
 	ownerID              string
 	maxProcessorRequests int
 	inFlightWindow       time.Duration
@@ -361,7 +361,7 @@ func backfillSourceItemsToObjectGraphIfEmpty(ctx context.Context, store cycle.St
 }
 
 func ingestionRuntimeDispatcherFromEnv() *ingestionRuntimeDispatcher {
-	socketPath := strings.TrimSpace(firstEnv("SOURCECYCLED_VMCTL_PROXY_SOCK", "VMCTL_SANDBOX_PROXY_SOCK"))
+	socketPath := strings.TrimSpace(firstEnv("SOURCECYCLED_VMCTL_PROXY_SOCK", "VMCTL_AUTOPUTER_PROXY_SOCK"))
 	ownerID := strings.TrimSpace(firstEnv("SOURCE_SERVICE_RUNTIME_OWNER_ID", "SOURCECYCLED_RUNTIME_OWNER_ID"))
 	if ownerID == "" {
 		ownerID = "universal-wire-platform"
@@ -1160,7 +1160,7 @@ func (d *ingestionRuntimeDispatcher) submit(ctx context.Context, payload runtime
 
 func (d *ingestionRuntimeDispatcher) runtimeRunsEndpoint() string {
 	if d.socketPath != "" {
-		return d.baseURL + "/internal/vmctl/sandbox-proxy/" + d.ownerID + "/internal/runtime/runs"
+		return d.baseURL + "/internal/vmctl/autoputer-proxy/" + d.ownerID + "/internal/runtime/runs"
 	}
 	return d.baseURL + "/internal/runtime/runs"
 }

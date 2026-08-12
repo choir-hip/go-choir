@@ -146,7 +146,7 @@ definition: >-
   No product route resolves to a VM or desktop identity at the routing decision
   layer; routes must key off `ComputerVersion = (CodeRef, ArtifactProgramRef)`
   records. Translation from the resolved `ComputerVersion` to a materializer/
-  `vmctl` endpoint (SandboxURL) is an implementation seam, not a route target.
+  `vmctl` endpoint (ComputerURL) is an implementation seam, not a route target.
 observables:
   - `internal/proxy/route_resolver.go` returning hard-coded
     `UniversalWirePlatformOwnerID`/`DesktopID` constants as the route target
@@ -165,7 +165,7 @@ execution_effect:
     green.
 forbidden_collapses:
   - resolver reads route_profile -> route is over ComputerVersion
-  - ComputerVersion -> SandboxURL materialization seam treated as a route-over-VM
+  - ComputerVersion -> ComputerURL materialization seam treated as a route-over-VM
 ```
 
 ### I2. Invariant: spec claims match implementation reach
@@ -196,7 +196,7 @@ observables:
   - internal/vmctl/client.go:22 DefaultClientTimeout = 60s.
   - internal/proxy/config.go:83 DefaultVmctlTimeout = 60s.
   - internal/server/server.go:60-61 defaultReadTimeout / defaultWriteTimeout = 120s and http.Server wired with ReadTimeout/WriteTimeout.
-  - internal/proxy/handlers.go:46 sandboxResolveRetryWindow = 10s reconciled against the 60s bound.
+  - internal/proxy/handlers.go:46 autoputerResolveRetryWindow = 10s reconciled against the 60s bound.
   - nix/node-b.nix:350 PROXY_VMCTL_TIMEOUT=60s; start-services.sh:126 PROXY_VMCTL_TIMEOUT default 60s.
   - staging /api/universal-wire/stories under induced resolve failure returns 504 within 60s (max_duration_ms 60,001).
 execution_effect:

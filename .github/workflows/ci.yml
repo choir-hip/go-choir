@@ -562,8 +562,8 @@ jobs:
               echo "deploy_host_os=true"
               echo "deploy_vmctl_restart=true"
               echo "deploy_active_vm_refresh=true"
-              echo "host_services=sandbox"
-              echo "class_explanation=manual workflow_dispatch forced host/frontend staging deploy with same-commit sandbox package and active VM refresh"
+              echo "host_services=autoputer"
+              echo "class_explanation=manual workflow_dispatch forced host/frontend staging deploy with same-commit autoputer package and active VM refresh"
             } >> "$GITHUB_OUTPUT"
             echo "Staging deploy forced by manual workflow_dispatch."
             exit 0
@@ -773,8 +773,8 @@ jobs:
               fi
               printf '%s\n' "$commit"
             }
-            wait_for_sandbox_commit() {
-              local sandbox_url="$1"
+            wait_for_autoputer_commit() {
+              local computer_url="$1"
               local vm_id="$2"
               local expected_commit="$3"
               local commit=""
@@ -785,14 +785,14 @@ jobs:
                 # A bounded migration step can hold the embedded store for roughly
                 # three seconds. Give one health probe enough time to cross that
                 # contention window while keeping exact identity fail-closed.
-                commit=$(curl -fsS --max-time 5 "${sandbox_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
+                commit=$(curl -fsS --max-time 5 "${computer_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
                 if [ "$commit" = "$expected_commit" ]; then
-                  echo "    Verified ${vm_id} serves sandbox commit ${commit}"
+                  echo "    Verified ${vm_id} serves autoputer commit ${commit}"
                   return 0
                 fi
                 sleep 1
               done
-              echo "Timed out waiting for ${vm_id} to serve sandbox runtime ${expected_commit}; observed ${commit:-missing}" >&2
+              echo "Timed out waiting for ${vm_id} to serve autoputer runtime ${expected_commit}; observed ${commit:-missing}" >&2
               return 1
             }
             dump_deploy_service_diagnostics() {
@@ -819,20 +819,20 @@ jobs:
               ownerships_snapshot=$(curl -fsS --max-time 5 -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list 2>/dev/null || true)
               if [ -n "$ownerships_snapshot" ]; then
                 printf '%s\n' "$ownerships_snapshot" | jq . >&2 || printf '%s\n' "$ownerships_snapshot" >&2
-                mapfile -t diagnostic_sandbox_urls < <(printf '%s' "$ownerships_snapshot" | jq -r '
+                mapfile -t diagnostic_computer_urls < <(printf '%s' "$ownerships_snapshot" | jq -r '
                   .ownerships[]
                   | select(.state == "active")
                   | select((.kind == null) or (.kind == "") or (.kind == "interactive"))
-                  | [.vm_id, .sandbox_url]
+                  | [.vm_id, .computer_url]
                   | @tsv
                 ' 2>/dev/null || true)
-                for record in "${diagnostic_sandbox_urls[@]}"; do
-                  IFS=$'\t' read -r diagnostic_vm_id diagnostic_sandbox_url <<< "$record"
-                  if [ -z "$diagnostic_sandbox_url" ]; then
+                for record in "${diagnostic_computer_urls[@]}"; do
+                  IFS=$'\t' read -r diagnostic_vm_id diagnostic_computer_url <<< "$record"
+                  if [ -z "$diagnostic_computer_url" ]; then
                     continue
                   fi
-                  echo "-- active sandbox health ${diagnostic_vm_id} ${diagnostic_sandbox_url}" >&2
-                  curl -sS --max-time 5 -w '\nhttp_status=%{http_code} total_time=%{time_total}\n' "${diagnostic_sandbox_url}/health" >&2 || true
+                  echo "-- active autoputer health ${diagnostic_vm_id} ${diagnostic_computer_url}" >&2
+                  curl -sS --max-time 5 -w '\nhttp_status=%{http_code} total_time=%{time_total}\n' "${diagnostic_computer_url}/health" >&2 || true
                 done
               fi
             }
@@ -1047,11 +1047,11 @@ jobs:
               echo "==> Restarting selected host services"
               for service in "${service_roots[@]}"; do
                 [ -z "$service" ] && continue
-                # sandbox is a VM runtime package, not a host systemd service.
+                # autoputer is a VM runtime package, not a host systemd service.
                 # The service pointer is installed above; VMs pick it up on
-                # refresh/restart. Skip systemd restart for sandbox.
-                if [ "$service" = "sandbox" ]; then
-                  echo "    Skipped sandbox restart (VM runtime package, not a host service)"
+                # refresh/restart. Skip systemd restart for autoputer.
+                if [ "$service" = "autoputer" ]; then
+                  echo "    Skipped autoputer restart (VM runtime package, not a host service)"
                   continue
                 fi
                 systemctl restart "go-choir-${service}.service"
@@ -1124,29 +1124,29 @@ jobs:
             fi
             note_phase "vmctl restart"
 
-            sandbox_service_selected=false
+            autoputer_service_selected=false
             if [ -n "${HOST_SERVICES}" ]; then
               IFS=',' read -ra refresh_services <<< "${HOST_SERVICES}"
               for service in "${refresh_services[@]}"; do
-                if [ "$service" = "sandbox" ]; then
-                  sandbox_service_selected=true
+                if [ "$service" = "autoputer" ]; then
+                  autoputer_service_selected=true
                 fi
               done
             fi
-            if [ "$sandbox_service_selected" = "true" ]; then
-              sandbox_commit=$(verify_artifact_manifest /var/lib/go-choir/services/sandbox/share/go-choir/build.json sandbox)
-              record_receipt_artifact sandbox "$sandbox_commit" installed
+            if [ "$autoputer_service_selected" = "true" ]; then
+              autoputer_commit=$(verify_artifact_manifest /var/lib/go-choir/services/autoputer/share/go-choir/build.json autoputer)
+              record_receipt_artifact autoputer "$autoputer_commit" installed
             fi
-            if [ "$sandbox_service_selected" = "true" ] && [ "${DEPLOY_ACTIVE_VM_REFRESH}" != "true" ]; then
-              echo "Sandbox runtime selected without canonical guest boot refresh; refusing an undeployable service-pointer-only artifact" >&2
+            if [ "$autoputer_service_selected" = "true" ] && [ "${DEPLOY_ACTIVE_VM_REFRESH}" != "true" ]; then
+              echo "Autoputer runtime selected without canonical guest boot refresh; refusing an undeployable service-pointer-only artifact" >&2
               exit 1
             fi
-            if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ] && [ "$sandbox_service_selected" != "true" ]; then
-              echo "Canonical guest boot refresh selected without a same-commit sandbox runtime package" >&2
+            if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ] && [ "$autoputer_service_selected" != "true" ]; then
+              echo "Canonical guest boot refresh selected without a same-commit autoputer runtime package" >&2
               exit 1
             fi
             if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
-              sandbox_runtime_commit=$sandbox_commit
+              autoputer_runtime_commit=$autoputer_commit
               echo "==> Refreshing active interactive computers onto deployed VM boot contract"
               ownerships_json=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list)
               mapfile -t immutable_active_interactive < <(printf '%s' "$ownerships_json" | jq -r '
@@ -1154,19 +1154,19 @@ jobs:
                 | select(.state == "active")
                 | select((.kind == null) or (.kind == "") or (.kind == "interactive"))
                 | select((.snapshot_kind // "") == "constructed-computer-version")
-                | [.user_id, (.desktop_id // "primary"), .vm_id, .sandbox_url, .construction_version.code_ref, .construction_version.artifact_program_ref, .construction_disk_receipt_id]
+                | [.user_id, (.desktop_id // "primary"), .vm_id, .computer_url, .construction_version.code_ref, .construction_version.artifact_program_ref, .construction_disk_receipt_id]
                 | @tsv
               ')
               for record in "${immutable_active_interactive[@]}"; do
-                IFS=$'\t' read -r immutable_user_id immutable_desktop_id immutable_vm_id immutable_sandbox_url immutable_code_ref immutable_program_ref immutable_disk_receipt_id <<< "$record"
-                echo "    Preserving immutable constructed computer ${immutable_vm_id} for user ${immutable_user_id} desktop ${immutable_desktop_id}: code=${immutable_code_ref} artifact_program=${immutable_program_ref} disk_receipt=${immutable_disk_receipt_id} endpoint=${immutable_sandbox_url}"
+                IFS=$'\t' read -r immutable_user_id immutable_desktop_id immutable_vm_id immutable_computer_url immutable_code_ref immutable_program_ref immutable_disk_receipt_id <<< "$record"
+                echo "    Preserving immutable constructed computer ${immutable_vm_id} for user ${immutable_user_id} desktop ${immutable_desktop_id}: code=${immutable_code_ref} artifact_program=${immutable_program_ref} disk_receipt=${immutable_disk_receipt_id} endpoint=${immutable_computer_url}"
               done
               mapfile -t active_interactive < <(printf '%s' "$ownerships_json" | jq -r '
                 .ownerships[]
                 | select(.state == "active")
                 | select((.kind == null) or (.kind == "") or (.kind == "interactive"))
                 | select((.snapshot_kind // "") != "constructed-computer-version")
-                | [.user_id, (.desktop_id // "primary"), .vm_id, .sandbox_url]
+                | [.user_id, (.desktop_id // "primary"), .vm_id, .computer_url]
                 | @tsv
               ')
               if [ "${#active_interactive[@]}" -eq 0 ]; then
@@ -1176,7 +1176,7 @@ jobs:
                 refresh_status=0
                 max_parallel_refresh=1
                 for record in "${active_interactive[@]}"; do
-                  IFS=$'\t' read -r refresh_user_id refresh_desktop_id refresh_vm_id refresh_sandbox_url <<< "$record"
+                  IFS=$'\t' read -r refresh_user_id refresh_desktop_id refresh_vm_id refresh_computer_url <<< "$record"
                   (
                     echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
                     payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id, desktop_id:$desktop_id}')
@@ -1193,12 +1193,12 @@ jobs:
                       fi
                       exit 1
                     fi
-                    refreshed_sandbox_url=$(jq -r '.sandbox_url // empty' "$refresh_body" 2>/dev/null || true)
-                    if [ -n "$refreshed_sandbox_url" ]; then
-                      refresh_sandbox_url="$refreshed_sandbox_url"
+                    refreshed_computer_url=$(jq -r '.computer_url // empty' "$refresh_body" 2>/dev/null || true)
+                    if [ -n "$refreshed_computer_url" ]; then
+                      refresh_computer_url="$refreshed_computer_url"
                     fi
                     echo "    Refreshed ${refresh_vm_id}"
-                    wait_for_sandbox_commit "$refresh_sandbox_url" "$refresh_vm_id" "$sandbox_runtime_commit"
+                    wait_for_autoputer_commit "$refresh_computer_url" "$refresh_vm_id" "$autoputer_runtime_commit"
                   ) &
                   refresh_pids+=("$!")
                   if [ "${#refresh_pids[@]}" -ge "$max_parallel_refresh" ]; then
@@ -1217,14 +1217,14 @@ jobs:
                 fi
               fi
               if [ "${#active_interactive[@]}" -gt 0 ]; then
-                record_receipt_artifact sandbox "$DEPLOY_COMMIT" active
+                record_receipt_artifact autoputer "$DEPLOY_COMMIT" active
                 record_receipt_artifact active_computers "$DEPLOY_COMMIT" active
               else
                 echo "    No mutable active interactive computers were refreshed; immutable realizations remain untouched"
                 record_receipt_artifact active_computers "$DEPLOY_COMMIT" empty
               fi
             else
-              echo "==> Skipping active computer refresh; ordinary guest image and sandbox runtime package unchanged"
+              echo "==> Skipping active computer refresh; ordinary guest image and autoputer runtime package unchanged"
             fi
             note_phase "active computer refresh"
 
@@ -1253,9 +1253,9 @@ jobs:
             fi
             for service in "${identity_services[@]}"; do
               [ -z "$service" ] && continue
-              # sandbox is a VM runtime package. Active VM refresh verifies its
+              # autoputer is a VM runtime package. Active VM refresh verifies its
               # compiled identity through the guest /health body above.
-              [ "$service" = "sandbox" ] && continue
+              [ "$service" = "autoputer" ] && continue
               port=$(service_health_port "$service") || {
                 echo "No health identity probe is defined for selected host service ${service}" >&2
                 exit 1
@@ -1343,11 +1343,11 @@ jobs:
 
             for service in "${identity_services[@]}"; do
               [ -z "$service" ] && continue
-              [ "$service" = "sandbox" ] && continue
+              [ "$service" = "autoputer" ] && continue
               require_receipt_artifact "$service" active
             done
-            if [ "$sandbox_service_selected" = "true" ]; then
-              require_receipt_artifact sandbox verified
+            if [ "$autoputer_service_selected" = "true" ]; then
+              require_receipt_artifact autoputer verified
             fi
             if [ "${DEPLOY_FRONTEND}" = "true" ]; then
               require_receipt_artifact frontend active

@@ -24,7 +24,7 @@ func TestInternalRunEventAppendAcceptsOnlyEmailEvidenceEvents(t *testing.T) {
 		AgentProfile: "email_appagent",
 		AgentRole:    "email_appagent",
 		OwnerID:      "user-root",
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunCompleted,
 		Prompt:       "draft email evidence",
 		CreatedAt:    now,

@@ -25,7 +25,7 @@ func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	core := agentcore.New(provideriface.Config{SandboxID: "sandbox-test"}, s, events.NewEventBus(), provider.NewStubProvider(0))
+	core := agentcore.New(provideriface.Config{ComputerID: "autoputer-test"}, s, events.NewEventBus(), provider.NewStubProvider(0))
 	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	if err := core.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatal(err)
@@ -40,7 +40,7 @@ func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) 
 	doc := types.Document{DocID: "doc-reconciler-idempotent", OwnerID: "user-alice", Title: "Existing canonical article", CreatedAt: now, UpdatedAt: now}
 	agentID := "texture:" + doc.DocID
 	start := types.StartLifecycleRequest{
-		OwnerID: doc.OwnerID, ComputerID: "sandbox-test", CommandID: "start:" + doc.DocID, TrajectoryID: "trajectory:" + doc.DocID,
+		OwnerID: doc.OwnerID, ComputerID: "autoputer-test", CommandID: "start:" + doc.DocID, TrajectoryID: "trajectory:" + doc.DocID,
 		Kind:            types.TrajectoryKindDocument,
 		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + doc.DocID},
@@ -48,7 +48,7 @@ func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) 
 		InitialDocument: doc,
 		InitialRevision: types.Revision{RevisionID: "revision:" + doc.DocID, AuthorKind: types.AuthorUser, AuthorLabel: doc.OwnerID, Content: "Existing canonical article"},
 		Agent: types.AgentRecord{
-			AgentID: agentID, OwnerID: doc.OwnerID, ComputerID: "sandbox-test", SandboxID: "sandbox-test",
+			AgentID: agentID, OwnerID: doc.OwnerID, ComputerID: "autoputer-test",
 			Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: doc.DocID, CreatedAt: now, UpdatedAt: now,
 		},
 	}
@@ -59,7 +59,7 @@ func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) 
 	parent := &types.RunRecord{
 		RunID: "reconciler-idempotent-parent", AgentID: "reconciler:story-corpus", ChannelID: "reconciler:story-corpus",
 		AgentProfile: agentprofile.Reconciler, AgentRole: agentprofile.Reconciler, OwnerID: doc.OwnerID,
-		SandboxID: "sandbox-test", State: types.RunRunning, Prompt: "Reconcile the story corpus.", CreatedAt: now, UpdatedAt: now,
+		ComputerID: "autoputer-test", State: types.RunRunning, Prompt: "Reconcile the story corpus.", CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{"agent_profile": agentprofile.Reconciler, "agent_role": agentprofile.Reconciler, "reconciler_scope": "story-corpus"},
 	}
 	if err := s.CreateRun(ctx, *parent); err != nil {
@@ -90,7 +90,7 @@ func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) 
 	if first.LoopID == "" || second.LoopID != first.LoopID {
 		t.Fatalf("handoff loops first=%q second=%q, want one reused child", first.LoopID, second.LoopID)
 	}
-	child, err := s.GetLifecycleRun(ctx, doc.OwnerID, "sandbox-test", first.LoopID)
+	child, err := s.GetLifecycleRun(ctx, doc.OwnerID, "autoputer-test", first.LoopID)
 	if err != nil {
 		t.Fatal(err)
 	}

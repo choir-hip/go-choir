@@ -36,7 +36,7 @@ func (rt *Handler) scheduleTextureWorkerWake(ownerID, docID, instructionID strin
 // projected pending, preventing an already-used initial_dispatch from becoming
 // reactivation authority.
 func (rt *Handler) Start(ctx context.Context) error {
-	subjects, err := rt.Store.ListLifecycleSubjects(ctx, rt.Core.TextureSandboxID())
+	subjects, err := rt.Store.ListLifecycleSubjects(ctx, rt.Core.TextureComputerID())
 	if err != nil {
 		return fmt.Errorf("reconcile lifecycle Texture subjects: %w", err)
 	}
@@ -89,7 +89,7 @@ func (rt *Handler) Start(ctx context.Context) error {
 			}
 			for i := range runs {
 				candidate := runs[i]
-				if candidate.AgentID != subject.AgentID || candidate.OwnerID != subject.OwnerID || candidate.SandboxID != subject.ComputerID || candidate.ChannelID != docID || candidate.TrajectoryID != doc.TrajectoryID || candidate.State.Terminal() || !isTextureAgentRevisionTaskType(metadataStringValue(candidate.Metadata, "type")) {
+				if candidate.AgentID != subject.AgentID || candidate.OwnerID != subject.OwnerID || candidate.ComputerID != subject.ComputerID || candidate.ChannelID != docID || candidate.TrajectoryID != doc.TrajectoryID || candidate.State.Terminal() || !isTextureAgentRevisionTaskType(metadataStringValue(candidate.Metadata, "type")) {
 					continue
 				}
 				mutation, mutationErr := rt.Store.GetAgentMutationByRun(ctx, subject.OwnerID, subject.ComputerID, candidate.RunID)
@@ -110,7 +110,7 @@ func (rt *Handler) Start(ctx context.Context) error {
 			if runErr != nil {
 				return fmt.Errorf("load boot Texture run %s: %w", candidateRunID, runErr)
 			}
-			if run.AgentID != subject.AgentID || run.OwnerID != subject.OwnerID || run.SandboxID != subject.ComputerID || run.ChannelID != docID || run.TrajectoryID != doc.TrajectoryID || run.State.Terminal() || !isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
+			if run.AgentID != subject.AgentID || run.OwnerID != subject.OwnerID || run.ComputerID != subject.ComputerID || run.ChannelID != docID || run.TrajectoryID != doc.TrajectoryID || run.State.Terminal() || !isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
 				return fmt.Errorf("boot Texture run %s is not exact canonical authority", candidateRunID)
 			}
 			runID = run.RunID
@@ -354,7 +354,7 @@ func (rt *Handler) ValidateActivationAuthority(ctx context.Context, ownerID, com
 	if err != nil {
 		return fmt.Errorf("validate Texture activation run: %w", err)
 	}
-	if strings.TrimSpace(run.OwnerID) != ownerID || strings.TrimSpace(run.SandboxID) != computerID ||
+	if strings.TrimSpace(run.OwnerID) != ownerID || strings.TrimSpace(run.ComputerID) != computerID ||
 		strings.TrimSpace(run.TrajectoryID) != strings.TrimSpace(doc.TrajectoryID) ||
 		strings.TrimSpace(run.AgentID) != agentID ||
 		!isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) ||
@@ -399,7 +399,7 @@ func (rt *Handler) ValidateActivationAuthority(ctx context.Context, ownerID, com
 // run and mutation selected for synchronous execution. Independent validity of
 // two same-document objects is insufficient authority.
 func (rt *Handler) ValidateOccurrenceActivationAuthority(ctx context.Context, o agentcore.TextureActorOccurrence, rec *types.RunRecord) error {
-	if rec == nil || rec.RunID == "" || rec.OwnerID != o.OwnerID || rec.SandboxID != o.ComputerID || rec.TrajectoryID != o.TrajectoryID || rec.AgentID != o.TargetAgentID || rec.ChannelID != o.DocumentID {
+	if rec == nil || rec.RunID == "" || rec.OwnerID != o.OwnerID || rec.ComputerID != o.ComputerID || rec.TrajectoryID != o.TrajectoryID || rec.AgentID != o.TargetAgentID || rec.ChannelID != o.DocumentID {
 		return invalidTextureOccurrence("Texture occurrence/run scope mismatch")
 	}
 	runWorkID := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id"))
@@ -966,7 +966,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 		if producerProfile == agentprofile.Super {
 			trajectoryBound = producerRun.TrajectoryID == "" && metadataStringValue(producerRun.Metadata, "assignment_trajectory_id") == o.TrajectoryID
 		}
-		if producerRun.RunID != canonical.SourceRunID || producerRun.OwnerID != o.OwnerID || producerRun.SandboxID != o.ComputerID || producerRun.AgentID != o.ProducerAgentID || !trajectoryBound || producerRun.ChannelID != o.DocumentID || agentprofile.Canonical(producerRun.AgentProfile) != producerProfile || agentprofile.Canonical(producerRun.AgentRole) != producerProfile {
+		if producerRun.RunID != canonical.SourceRunID || producerRun.OwnerID != o.OwnerID || producerRun.ComputerID != o.ComputerID || producerRun.AgentID != o.ProducerAgentID || !trajectoryBound || producerRun.ChannelID != o.DocumentID || agentprofile.Canonical(producerRun.AgentProfile) != producerProfile || agentprofile.Canonical(producerRun.AgentRole) != producerProfile {
 			return zero, "", invalidTextureOccurrence("Texture producer source run authority mismatch")
 		}
 		if authorityErr := rt.Core.ValidateLifecycleProducerReportAuthority(ctx, canonical); authorityErr != nil {

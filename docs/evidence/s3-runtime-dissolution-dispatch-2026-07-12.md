@@ -10,7 +10,7 @@
 
 ## Entry Gate
 
-S2 completed at sandbox artifact `b7b1262e455a779ca00c8d968ef28b3fa6af9b50`. The current runtime ratchet passes with `148` Go files, `47` runtime routes, `1,199` exports, `604` export-caller edges, `39` initial unused exports, `15` compatibility markers, four production importers, and five wrappers. The S1 exception table names every S1-added runtime surface and the baseline includes the bounded exception.
+S2 completed at autoputer artifact `b7b1262e455a779ca00c8d968ef28b3fa6af9b50`. The current runtime ratchet passes with `148` Go files, `47` runtime routes, `1,199` exports, `604` export-caller edges, `39` initial unused exports, `15` compatibility markers, four production importers, and five wrappers. The S1 exception table names every S1-added runtime surface and the baseline includes the bounded exception.
 
 Five read-only S3 scouts were dispatched for dead-surface, execution-core, API/bootstrap, Browser, and S1-exception analysis; all failed before inspection with external `402 Insufficient account balance`. They contribute no findings. The first slice therefore uses the mechanically generated unused-export inventory plus gopls production/test reference evidence.
 
@@ -37,7 +37,7 @@ Acceptance:
 2. focused tests covering the rewritten completion helper and registered run/prompt routes pass;
 3. runtime ratchet decreases production exports and LOC with no increase in routes, wrappers, compatibility markers, production importers, or unused debt;
 4. independent verifier confirms no registered product route or test-only production API was removed;
-5. CI and sandbox deployment pass; deployed health and an existing owner-scoped CLI/product run observation remain green;
+5. CI and autoputer deployment pass; deployed health and an existing owner-scoped CLI/product run observation remain green;
 6. post-implementation consensus has no confirmed blocker.
 
 This is deletion-only S3 order item 1. It does not authorize Browser extraction, live execution-core movement, API/bootstrap ownership changes, `apihandler` removal, or any new package.
@@ -57,6 +57,6 @@ This is deletion-only S3 order item 1. It does not authorize Browser extraction,
 ## S3-I1 Deployment And Consensus Receipt
 
 - GitHub Actions run `29190541541`, attempt `2`, passed all selected normal and race gates and deployed successfully.
-- Activation receipt at `2026-07-12T11:37:30Z` identifies target `405a97bc1987d6f0434301c7cd2415d11f3c1c44`, run `29190541541`, attempt `2`, with sandbox and gateway artifacts active at that commit.
+- Activation receipt at `2026-07-12T11:37:30Z` identifies target `405a97bc1987d6f0434301c7cd2415d11f3c1c44`, run `29190541541`, attempt `2`, with autoputer and gateway artifacts active at that commit.
 - Authenticated staging probes returned the expected boundary: retired `/api/agent/spawn`, `/api/agent/status`, and `/api/agent/topology` returned `404`; registered `/api/agent/loops` returned `200`; invalid input to registered `/api/prompt-bar` returned `400`.
 - Four-reviewer consensus at `/tmp/choir-s3-i1-consensus-20260712` returned three PASS verdicts and one procedural BLOCKING verdict. The blocker did not dispute the deletion: current-head evidence citations had advanced beyond the `405a97bc` ratchet baseline, and `internal/runtime/api.go` retained one stale comment naming retired `GET /api/agent/status`. Both findings are repaired before final consensus. The same reviewer also required reconciliation of already-completed CI, deploy, and acceptance fields.

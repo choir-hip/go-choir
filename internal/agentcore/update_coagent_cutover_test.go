@@ -140,14 +140,14 @@ func TestStartPassivatesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	if err := s1.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   agentID,
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		Profile:   agentprofile.CoSuper,
-		Role:      agentprofile.CoSuper,
-		ChannelID: channelID,
-		CreatedAt: now,
-		UpdatedAt: now,
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		ComputerID: "autoputer-test",
+		Profile:    agentprofile.CoSuper,
+		Role:       agentprofile.CoSuper,
+		ChannelID:  channelID,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}); err != nil {
 		t.Fatalf("upsert agent: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestStartPassivatesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
 		AgentProfile: agentprofile.CoSuper,
 		AgentRole:    agentprofile.CoSuper,
 		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunRunning,
 		Prompt:       "interrupted assigned work",
 		CreatedAt:    now,
@@ -208,7 +208,7 @@ func TestStartPassivatesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
 		t.Fatalf("open store 2: %v", err)
 	}
 	rt := New(provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
@@ -268,14 +268,14 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 		t.Fatalf("create trajectory: %v", err)
 	}
 	if err := s1.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   agentID,
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		Profile:   agentprofile.Researcher,
-		Role:      agentprofile.Researcher,
-		ChannelID: channelID,
-		CreatedAt: now,
-		UpdatedAt: now,
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		ComputerID: "autoputer-test",
+		Profile:    agentprofile.Researcher,
+		Role:       agentprofile.Researcher,
+		ChannelID:  channelID,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}); err != nil {
 		t.Fatalf("upsert researcher agent: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 		AgentProfile: agentprofile.Texture,
 		AgentRole:    agentprofile.Texture,
 		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunCompleted,
 		Prompt:       "parent texture revision",
 		Result:       "parent complete",
@@ -320,7 +320,7 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 		AgentProfile:     agentprofile.Researcher,
 		AgentRole:        agentprofile.Researcher,
 		OwnerID:          ownerID,
-		SandboxID:        "sandbox-test",
+		ComputerID:       "autoputer-test",
 		State:            types.RunRunning,
 		Prompt:           objective,
 		CreatedAt:        now,
@@ -350,7 +350,7 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 		t.Fatalf("open store 2: %v", err)
 	}
 	rt := New(provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
@@ -457,14 +457,14 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 		t.Fatalf("create trajectory: %v", err)
 	}
 	if err := s1.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   agentID,
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		Profile:   agentprofile.Researcher,
-		Role:      agentprofile.Researcher,
-		ChannelID: channelID,
-		CreatedAt: now,
-		UpdatedAt: now,
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		ComputerID: "autoputer-test",
+		Profile:    agentprofile.Researcher,
+		Role:       agentprofile.Researcher,
+		ChannelID:  channelID,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}); err != nil {
 		t.Fatalf("upsert researcher agent: %v", err)
 	}
@@ -475,7 +475,7 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 		AgentProfile: agentprofile.Texture,
 		AgentRole:    agentprofile.Texture,
 		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunCompleted,
 		Prompt:       "parent texture revision",
 		Result:       "parent complete",
@@ -502,7 +502,7 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 		AgentProfile:     agentprofile.Researcher,
 		AgentRole:        agentprofile.Researcher,
 		OwnerID:          ownerID,
-		SandboxID:        "sandbox-test",
+		ComputerID:       "autoputer-test",
 		State:            types.RunPassivated,
 		Prompt:           objective,
 		CreatedAt:        now,
@@ -533,7 +533,7 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 		t.Fatalf("open store 2: %v", err)
 	}
 	rt := New(provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
@@ -612,14 +612,14 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		t.Fatalf("open store 1: %v", err)
 	}
 	if err := s1.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   agentID,
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		Profile:   agentprofile.CoSuper,
-		Role:      agentprofile.CoSuper,
-		ChannelID: channelID,
-		CreatedAt: now,
-		UpdatedAt: now,
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		ComputerID: "autoputer-test",
+		Profile:    agentprofile.CoSuper,
+		Role:       agentprofile.CoSuper,
+		ChannelID:  channelID,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}); err != nil {
 		t.Fatalf("upsert agent: %v", err)
 	}
@@ -649,7 +649,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		AgentProfile: agentprofile.CoSuper,
 		AgentRole:    agentprofile.CoSuper,
 		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunRunning,
 		Prompt:       "interrupted combined restart backlog",
 		CreatedAt:    now,
@@ -744,7 +744,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		t.Fatalf("open store 2: %v", err)
 	}
 	rt := New(provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
@@ -1082,7 +1082,7 @@ func runM3RestartStartProcess(t *testing.T) {
 		t.Fatalf("open start store: %v", err)
 	}
 	rt := New(provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     5 * time.Minute,
 		SupervisionInterval: time.Hour,
@@ -1099,7 +1099,7 @@ func runM3RestartStartProcess(t *testing.T) {
 		AgentProfile: agentprofile.Researcher,
 		AgentRole:    agentprofile.Researcher,
 		OwnerID:      m3RestartOwnerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunPending,
 		Prompt:       "running activation that will be killed by the parent process",
 		CreatedAt:    now,
@@ -1134,7 +1134,7 @@ func runM3SpawnRestartStartProcess(t *testing.T) {
 		t.Fatalf("open spawned start store: %v", err)
 	}
 	rt := New(provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     5 * time.Minute,
 		SupervisionInterval: time.Hour,
@@ -1187,7 +1187,7 @@ func runM3SpawnRestartRecoverProcess(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 	rt := New(provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     5 * time.Minute,
 		SupervisionInterval: time.Hour,
@@ -1249,7 +1249,7 @@ func seedSpawnedChildParent(t *testing.T, ctx context.Context, s spawnedChildPar
 		AgentProfile: agentprofile.Texture,
 		AgentRole:    agentprofile.Texture,
 		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunCompleted,
 		Prompt:       "parent texture revision loop",
 		Result:       "parent ready",
@@ -1281,7 +1281,7 @@ func runM3RestartRecoverProcess(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 	rt := New(provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     5 * time.Minute,
 		SupervisionInterval: time.Hour,
@@ -1316,14 +1316,14 @@ func seedM3RestartBacklog(t *testing.T, ctx context.Context, s storeWriter) {
 	t.Helper()
 	now := time.Now().UTC()
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   m3RestartAgentID,
-		OwnerID:   m3RestartOwnerID,
-		SandboxID: "sandbox-test",
-		Profile:   agentprofile.Researcher,
-		Role:      agentprofile.Researcher,
-		ChannelID: m3RestartChannelID,
-		CreatedAt: now,
-		UpdatedAt: now,
+		AgentID:    m3RestartAgentID,
+		OwnerID:    m3RestartOwnerID,
+		ComputerID: "autoputer-test",
+		Profile:    agentprofile.Researcher,
+		Role:       agentprofile.Researcher,
+		ChannelID:  m3RestartChannelID,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}); err != nil {
 		t.Fatalf("upsert process-restart agent: %v", err)
 	}
@@ -1558,14 +1558,14 @@ func TestCoagentRewarmIgnoresBlockedHistoricalActivation(t *testing.T) {
 	trajectoryID := "traj-blocked-history"
 	now := time.Now().UTC()
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   agentID,
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		Profile:   agentprofile.CoSuper,
-		Role:      agentprofile.CoSuper,
-		ChannelID: "chan-blocked-history",
-		CreatedAt: now,
-		UpdatedAt: now,
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		ComputerID: "autoputer-test",
+		Profile:    agentprofile.CoSuper,
+		Role:       agentprofile.CoSuper,
+		ChannelID:  "chan-blocked-history",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}); err != nil {
 		t.Fatalf("upsert agent: %v", err)
 	}
@@ -1577,7 +1577,7 @@ func TestCoagentRewarmIgnoresBlockedHistoricalActivation(t *testing.T) {
 		AgentProfile: agentprofile.CoSuper,
 		AgentRole:    agentprofile.CoSuper,
 		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunBlocked,
 		Prompt:       "historical blocked activation",
 		Error:        "historical provider failure",
@@ -1765,7 +1765,7 @@ func TestUpdateCoagentDeliveryRequiresSuccessfulActivation(t *testing.T) {
 				AgentProfile: agentprofile.CoSuper,
 				AgentRole:    agentprofile.CoSuper,
 				OwnerID:      ownerID,
-				SandboxID:    "sandbox-test",
+				ComputerID:   "autoputer-test",
 				State:        types.RunRunning,
 				Prompt:       "process update",
 				CreatedAt:    now,
@@ -1889,7 +1889,7 @@ func TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata(t *testing.T) {
 		AgentProfile: agentprofile.CoSuper,
 		AgentRole:    agentprofile.CoSuper,
 		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunRunning,
 		Prompt:       "unrelated completed run",
 		CreatedAt:    now,
@@ -1910,7 +1910,7 @@ func TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata(t *testing.T) {
 		AgentProfile: agentprofile.CoSuper,
 		AgentRole:    agentprofile.CoSuper,
 		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunRunning,
 		Prompt:       "wrong target completed run",
 		CreatedAt:    now,
@@ -1950,7 +1950,7 @@ func TestUpdateCoagentWarmActivationInjectsPendingTurn(t *testing.T) {
 		AgentProfile: agentprofile.CoSuper,
 		AgentRole:    agentprofile.CoSuper,
 		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
+		ComputerID:   "autoputer-test",
 		State:        types.RunRunning,
 		Prompt:       "continue current activation",
 		CreatedAt:    now,

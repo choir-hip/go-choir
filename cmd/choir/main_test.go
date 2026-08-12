@@ -276,7 +276,7 @@ func TestIdentityVerifiesJoinedGuestAndPlatformAttestations(t *testing.T) {
 				guestFields[key] = value
 			}
 		}
-		guestReceipt, signErr := computerevent.NewSignedReceipt("ExecutionIdentity", "choir-sandbox", guestFields, []computerevent.SigningKey{guestSigner}, issuedAt)
+		guestReceipt, signErr := computerevent.NewSignedReceipt("ExecutionIdentity", "choir-autoputer", guestFields, []computerevent.SigningKey{guestSigner}, issuedAt)
 		if signErr != nil {
 			t.Fatal(signErr)
 		}

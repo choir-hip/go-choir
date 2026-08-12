@@ -821,7 +821,7 @@
           on:load={handleIframeLoad}
           on:error={handleIframeError}
           title="Browser content"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+          autoputer="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-autoputer"
           allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone"
         ></iframe>
       </div>

@@ -1,4 +1,4 @@
-# Sandbox guest NixOS config for Firecracker microVMs on Node B.
+# Autoputer guest NixOS config for Firecracker microVMs on Node B.
 #
 # This module defines the guest VM configuration using the upstream
 # microvm.nix module (https://github.com/microvm-nix/microvm.nix).
@@ -12,7 +12,7 @@
 #   - systemd as init (proper NixOS boot instead of custom init script)
 #   - Go control plane (vmmanager/vmctl) manages VM lifecycle externally
 #
-# Guest contains ONLY the sandbox runtime binary — no provider credentials,
+# Guest contains ONLY the autoputer runtime binary — no provider credentials,
 # no auth signing keys, no gateway secrets (VAL-VM-011).
 #
 # The vmmanager package (internal/vmmanager) launches Firecracker with
@@ -39,7 +39,7 @@ let
   guestImageManifest = pkgs.writeText "choir-immutable-guest-image-manifest" ''
     contract=choir-guest-image-v1
     build_commit=${buildCommit}
-    sandbox=${goChoirPackages.sandbox}
+    autoputer=${goChoirPackages.autoputer}
     updater=${goChoirPackages.updater}
     capsule_broker=${goChoirPackages.capsuleBroker}
     kernel=${config.boot.kernelPackages.kernel}
@@ -90,20 +90,20 @@ let
 
 
 
-  sandboxRuntimeExec = pkgs.writeShellScript "go-choir-run-sandbox-runtime" ''
+  autoputerRuntimeExec = pkgs.writeShellScript "go-choir-run-autoputer-runtime" ''
     set -euo pipefail
 
-    if [ -f /run/go-choir-sandbox.env ]; then
+    if [ -f /run/go-choir-autoputer.env ]; then
       set -a
       # shellcheck disable=SC1091
-      . /run/go-choir-sandbox.env
+      . /run/go-choir-autoputer.env
       set +a
     fi
 
     # Reassert the immutable baseline after mutable kernel-derived environment
     # expansion. Pristine updater roots need this exact release to produce a
     # route-bound kernel capability receipt before genesis.
-    export CHOIR_BASELINE_RELEASE_ROOT="${goChoirPackages.sandbox}"
+    export CHOIR_BASELINE_RELEASE_ROOT="${goChoirPackages.autoputer}"
     # Genesis identity is immutable build authority. Reassert it after every
     # kernel-derived environment value; placeholders make the reviewed source
     # candidate non-deployable until the G1-authorized exact substitution.
@@ -128,25 +128,25 @@ let
     fi
 
     if [ -n "''${RUNTIME_WIRE_PUBLISH_URL:-}" ]; then
-      echo "go-choir-sandbox: wire publish URL configured"
+      echo "go-choir-autoputer: wire publish URL configured"
     else
-      echo "go-choir-sandbox: wire publish URL not configured" >&2
+      echo "go-choir-autoputer: wire publish URL not configured" >&2
     fi
 
     current="/mnt/persistent/choir-updater/current"
-    dynamic="$current/bin/sandbox"
+    dynamic="$current/bin/autoputer"
     if [ -x "$dynamic" ]; then
       export RUNTIME_SKILLS_ROOT="$current/share/go-choir/skills"
       export CHOIR_UPDATER_ROOT="/mnt/persistent/choir-updater"
       exec "$dynamic" "$@"
     fi
     export CHOIR_UPDATER_ROOT="/mnt/persistent/choir-updater"
-    export RUNTIME_SKILLS_ROOT="${goChoirPackages.sandbox}/share/go-choir/skills"
-    exec ${goChoirPackages.sandbox}/bin/sandbox "$@"
+    export RUNTIME_SKILLS_ROOT="${goChoirPackages.autoputer}/share/go-choir/skills"
+    exec ${goChoirPackages.autoputer}/bin/autoputer "$@"
   '';
 in
 {
-  networking.hostName = "go-choir-sandbox";
+  networking.hostName = "go-choir-autoputer";
 
   # Capsule overlays and the enforcing boot probe both require the module to
   # be loaded, not merely present in the immutable kernel closure.
@@ -169,7 +169,7 @@ in
     # kernel ip= parameter for network config.
     interfaces = [];
 
-    # Mutable sandbox state on a virtio-blk volume (/dev/vdb).
+    # Mutable autoputer state on a virtio-blk volume (/dev/vdb).
     # vmmanager creates the actual data.img per-VM at runtime from
     # the VM state directory. This declaration tells microvm.nix to
     # include virtio-blk support in the guest kernel/initrd.
@@ -260,13 +260,13 @@ EOF
     '';
   };
 
-  # Extract per-VM bootstrap settings into an env file before the sandbox
+  # Extract per-VM bootstrap settings into an env file before the autoputer
   # service starts. Runtime parameters come from kernel cmdline, while the
   # gateway token is read from the persistent data volume vmmanager owns.
   systemd.services.go-choir-extract-cmdline = {
     description = "Extract go-choir secrets from kernel cmdline";
     wantedBy = [ "multi-user.target" ];
-    before = [ "go-choir-updater.service" "go-choir-sandbox.service" ];
+    before = [ "go-choir-updater.service" "go-choir-autoputer.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -274,7 +274,7 @@ EOF
     path = [ pkgs.coreutils pkgs.jq ];
     script = ''
       set -euo pipefail
-      ENV_FILE="/run/go-choir-sandbox.env"
+      ENV_FILE="/run/go-choir-autoputer.env"
       : > "$ENV_FILE"
       UPDATER_ENV_FILE="/run/go-choir-updater.env"
       : > "$UPDATER_ENV_FILE"
@@ -283,7 +283,7 @@ EOF
       jq -n \
         --arg commit "${buildCommit}" \
         --arg activated_at "$activated_at" \
-        '{schema_version: 1, target_commit: $commit, activated_at: $activated_at, artifacts: {sandbox: {commit: $commit, status: "active"}}}' \
+        '{schema_version: 1, target_commit: $commit, activated_at: $activated_at, artifacts: {autoputer: {commit: $commit, status: "active"}}}' \
         > "$GUEST_DEPLOY_RECEIPT"
       chmod 0444 "$GUEST_DEPLOY_RECEIPT"
 
@@ -291,11 +291,11 @@ EOF
       for param in $(cat /proc/cmdline); do
         case "$param" in
           guest_port=*)
-            echo "SANDBOX_PORT=''${param#guest_port=}" >> "$ENV_FILE"
+            echo "AUTOPUTER_PORT=''${param#guest_port=}" >> "$ENV_FILE"
             ;;
           vm_id=*)
-            echo "SANDBOX_ID=''${param#vm_id=}" >> "$ENV_FILE"
-            echo "SANDBOX_ID=''${param#vm_id=}" >> "$UPDATER_ENV_FILE"
+            echo "AUTOPUTER_ID=''${param#vm_id=}" >> "$ENV_FILE"
+            echo "AUTOPUTER_ID=''${param#vm_id=}" >> "$UPDATER_ENV_FILE"
             ;;
           choir.computer_id=*)
             echo "CHOIR_COMPUTER_ID=''${param#choir.computer_id=}" >> "$ENV_FILE"
@@ -400,55 +400,55 @@ EOF
 
   # Fixed privileged restart bridge. The updater may create only the trigger;
   # it has no access to PID 1's control sockets or arbitrary unit names.
-  systemd.paths.go-choir-sandbox-restart = {
+  systemd.paths.go-choir-autoputer-restart = {
     description = "Watch for a verified Choir restart request";
     wantedBy = [ "multi-user.target" ];
     pathConfig.PathExists = "/run/choir-updater-control/restart";
   };
 
-  systemd.services.go-choir-sandbox-restart = {
-    description = "Restart only the Choir sandbox service";
+  systemd.services.go-choir-autoputer-restart = {
+    description = "Restart only the Choir autoputer service";
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = pkgs.writeShellScript "go-choir-sandbox-restart" ''
+      ExecStart = pkgs.writeShellScript "go-choir-autoputer-restart" ''
         set -euo pipefail
         rm -f /run/choir-updater-control/restart
         install -m 0400 /run/choir-runtime-handoff/restart-capability /run/choir-runtime-handoff/recovery-capability
-        exec ${pkgs.systemd}/bin/systemctl restart go-choir-sandbox.service
+        exec ${pkgs.systemd}/bin/systemctl restart go-choir-autoputer.service
       '';
     };
   };
 
-  systemd.paths.go-choir-sandbox-recovery = {
+  systemd.paths.go-choir-autoputer-recovery = {
     description = "Watch for a verified Choir recovery restart request";
     wantedBy = [ "multi-user.target" ];
     pathConfig.PathExists = "/run/choir-updater-control/recover";
   };
 
-  systemd.services.go-choir-sandbox-recovery = {
+  systemd.services.go-choir-autoputer-recovery = {
     description = "Restore the prior Choir release with reserved transient credentials";
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = pkgs.writeShellScript "go-choir-sandbox-recovery" ''
+      ExecStart = pkgs.writeShellScript "go-choir-autoputer-recovery" ''
         set -euo pipefail
         rm -f /run/choir-updater-control/recover
         install -m 0400 /run/choir-runtime-handoff/recovery-capability /run/choir-runtime-handoff/restart-capability
-        exec ${pkgs.systemd}/bin/systemctl restart go-choir-sandbox.service
+        exec ${pkgs.systemd}/bin/systemctl restart go-choir-autoputer.service
       '';
     };
   };
 
-  systemd.paths.go-choir-sandbox-recovery-cleanup = {
+  systemd.paths.go-choir-autoputer-recovery-cleanup = {
     description = "Watch for recovery credential cleanup";
     wantedBy = [ "multi-user.target" ];
     pathConfig.PathExists = "/run/choir-updater-control/cleanup";
   };
 
-  systemd.services.go-choir-sandbox-recovery-cleanup = {
+  systemd.services.go-choir-autoputer-recovery-cleanup = {
     description = "Delete the reserved credential after observed healthy startup";
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = pkgs.writeShellScript "go-choir-sandbox-recovery-cleanup" ''
+      ExecStart = pkgs.writeShellScript "go-choir-autoputer-recovery-cleanup" ''
         set -euo pipefail
         rm -f /run/choir-updater-control/cleanup /run/choir-runtime-handoff/recovery-capability
       '';
@@ -577,8 +577,8 @@ EOF
 
   systemd.services.go-choir-kernel-capability-probe = {
     description = "Probe mandatory guest kernel isolation capabilities";
-    before = [ "go-choir-updater.service" "go-choir-sandbox.service" ];
-    requiredBy = [ "go-choir-updater.service" "go-choir-sandbox.service" ];
+    before = [ "go-choir-updater.service" "go-choir-autoputer.service" ];
+    requiredBy = [ "go-choir-updater.service" "go-choir-autoputer.service" ];
     environment.CHOIR_KERNEL_CAPABILITY_PROBE_OUTPUT = "/run/choir/kernel-capabilities.json";
     serviceConfig = {
       Type = "oneshot";
@@ -615,7 +615,7 @@ EOF
     description = "Choir guest release updater";
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" "go-choir-extract-cmdline.service" "go-choir-guest-receipt-signer.service" ];
-    before = [ "go-choir-sandbox.service" ];
+    before = [ "go-choir-autoputer.service" ];
     wants = [ "network-online.target" ];
     requires = [ "go-choir-extract-cmdline.service" "go-choir-guest-receipt-signer.service" ];
     environment.CHOIR_UPDATER_ROOT = "/mnt/persistent/choir-updater";
@@ -644,19 +644,19 @@ EOF
       ProtectSystem = "strict";
       ProtectControlGroups = true;
       ReadWritePaths = [ "/mnt/persistent/choir-updater" "/run/choir" "/run/choir-updater-control" ];
-      InaccessiblePaths = [ "/mnt/persistent/choir-signers" "/run/choir-verifier" "/mnt/persistent/choir-credentials" "/run/choir-bootstrap" "/run/choir-runtime-handoff" "/run/go-choir-sandbox.env" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
+      InaccessiblePaths = [ "/mnt/persistent/choir-signers" "/run/choir-verifier" "/mnt/persistent/choir-credentials" "/run/choir-bootstrap" "/run/choir-runtime-handoff" "/run/go-choir-autoputer.env" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
       RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" ];
       LockPersonality = true;
       RestrictSUIDSGID = true;
     };
   };
 
-  # Sandbox runtime service.
-  # Runs the Go sandbox binary which listens for runtime API requests
+  # Autoputer runtime service.
+  # Runs the Go autoputer binary which listens for runtime API requests
   # inside the VM. Provider credentials are never in the guest (VAL-VM-011).
   # LLM calls route through the host-side gateway using the extracted token.
-  systemd.services.go-choir-sandbox = {
-    description = "go-choir Sandbox Runtime (VM guest)";
+  systemd.services.go-choir-autoputer = {
+    description = "go-choir Autoputer Runtime (VM guest)";
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-guest-receipt-signer.service" "go-choir-verifier-signer.service" ];
     wants = [ "network-online.target" ];
@@ -704,25 +704,25 @@ EOF
         goChoirPackages.zot
       ]));
       # VM health checks and host forwarding reach the guest via its tap IP,
-      # so the sandbox must listen on all guest interfaces, not loopback only.
+      # so the autoputer must listen on all guest interfaces, not loopback only.
       SERVER_HOST = "0.0.0.0";
       # Default port; overridden by guest_port= in kernel cmdline.
-      SANDBOX_PORT = "8085";
-      SANDBOX_ID = "sandbox-guest";
+      AUTOPUTER_PORT = "8085";
+      AUTOPUTER_ID = "autoputer-guest";
       # Persistent state directory on the virtio-blk data volume.
       RUNTIME_STORE_PATH = "/mnt/persistent/state";
       # Files app data must use the same persistent data volume. Without this
-      # the sandbox falls back to its process-local default, which can disappear
+      # the autoputer falls back to its process-local default, which can disappear
       # across guest reboot/recovery even when runtime DB state survives.
-      SANDBOX_FILES_ROOT = "/mnt/persistent/files";
+      AUTOPUTER_FILES_ROOT = "/mnt/persistent/files";
       # Guest-local capsule verification uses the standard Go toolchain; expose
       # the Nix ICU development closure through standard compiler variables.
       CGO_CFLAGS = "-I${pkgs.icu.dev}/include";
       CGO_CXXFLAGS = "-I${pkgs.icu.dev}/include";
       CGO_LDFLAGS = "-L${pkgs.icu}/lib";
       PKG_CONFIG_PATH = "${pkgs.icu.dev}/lib/pkgconfig";
-      RUNTIME_SKILLS_ROOT = "${goChoirPackages.sandbox}/share/go-choir/skills";
-      CHOIR_BASELINE_RELEASE_ROOT = "${goChoirPackages.sandbox}";
+      RUNTIME_SKILLS_ROOT = "${goChoirPackages.autoputer}/share/go-choir/skills";
+      CHOIR_BASELINE_RELEASE_ROOT = "${goChoirPackages.autoputer}";
       CHOIR_CAPSULE_BROKER_PATH = "${goChoirPackages.capsuleBroker}/bin/capsule-broker";
       CHOIR_CAPSULE_STATE_DIR = "/run/choir/capsules";
       CHOIR_CAPSULE_SOURCE_ROOT = "/mnt/persistent/files/Source/platform";
@@ -748,7 +748,7 @@ EOF
     };
     serviceConfig = {
       ExecStartPre = "";
-      ExecStart = "${sandboxRuntimeExec}";
+      ExecStart = "${autoputerRuntimeExec}";
       Restart = "on-failure";
       RestartSec = 1;
       # Updater and capsule-adjacent child work can approach the guest memory
@@ -756,13 +756,13 @@ EOF
       OOMPolicy = "continue";
       StandardOutput = "journal+console";
       StandardError = "journal+console";
-      EnvironmentFile = [ "-/run/go-choir-sandbox.env" ];
+      EnvironmentFile = [ "-/run/go-choir-autoputer.env" ];
       ReadWritePaths = [ "/mnt/persistent" "/run/choir" "/run/choir-runtime-handoff" ];
       InaccessiblePaths = [ "/mnt/persistent/choir-signers" "/run/choir-updater-control" ];
     };
   };
 
-  # Allow sandbox port through firewall
+  # Allow autoputer port through firewall
   networking.firewall.allowedTCPPorts = [ 8085 ];
 
   # ── Networking ───────────────────────────────────────────────────────

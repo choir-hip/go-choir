@@ -149,7 +149,7 @@ func (s *Store) LatestActorRunMemoryEntries(ctx context.Context, ownerID, comput
 		if err := ogDecode(obj, &rec); err != nil {
 			continue
 		}
-		if rec.OwnerID != ownerID || rec.SandboxID != computerID {
+		if rec.OwnerID != ownerID || rec.ComputerID != computerID {
 			continue
 		}
 		if rec.RunID == excludeRunID {

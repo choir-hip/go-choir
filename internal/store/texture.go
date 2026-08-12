@@ -1,10 +1,10 @@
-// Package store provides texture document persistence for the go-choir sandbox
+// Package store provides texture document persistence for the go-choir autoputer
 // runtime.
 //
 // The texture store persists documents, revisions, citations, and metadata
 // using an embedded Dolt workspace, enabling history-capable persistence with
 // first-class versioning semantics, history/snapshot/diff/blame APIs, and
-// per-user in-process storage inside the sandbox.
+// per-user in-process storage inside the autoputer.
 //
 // Design decisions:
 //   - Embedded Dolt (`github.com/dolthub/driver`) for version-native document

@@ -206,14 +206,14 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	sandboxURL, err := h.resolveSandboxURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
+	autoputerURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
-		log.Printf("proxy: platform proposal resolve sandbox: %v", err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user sandbox"})
+		log.Printf("proxy: platform proposal resolve autoputer: %v", err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user autoputer"})
 		return
 	}
-	var doc sandboxTextureDocument
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/documents/"+url.PathEscape(req.DocID), authResult.UserID, &doc); err != nil {
+	var doc autoputerTextureDocument
+	if err := h.fetchAutoputerJSON(r, autoputerURL, "/api/texture/documents/"+url.PathEscape(req.DocID), authResult.UserID, &doc); err != nil {
 		log.Printf("proxy: platform proposal fetch document: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private texture document"})
 		return
@@ -229,8 +229,8 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "document has no revision to propose"})
 		return
 	}
-	var rev sandboxTextureRevision
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/revisions/"+url.PathEscape(req.RevisionID), authResult.UserID, &rev); err != nil {
+	var rev autoputerTextureRevision
+	if err := h.fetchAutoputerJSON(r, autoputerURL, "/api/texture/revisions/"+url.PathEscape(req.RevisionID), authResult.UserID, &rev); err != nil {
 		log.Printf("proxy: platform proposal fetch revision: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private texture revision"})
 		return
@@ -328,12 +328,12 @@ func (h *Handler) deliverPublicationProposalToAuthor(r *http.Request, proposal p
 	if h == nil || r == nil || strings.TrimSpace(proposal.SourceOwnerID) == "" || strings.TrimSpace(proposal.ProposalID) == "" {
 		return ""
 	}
-	sandboxURL, err := h.resolveSandboxURL(r.Context(), proposal.SourceOwnerID, "")
+	autoputerURL, err := h.resolveComputerURL(r.Context(), proposal.SourceOwnerID, "")
 	if err != nil {
-		log.Printf("proxy: platform proposal author sandbox resolve failed: %v", err)
+		log.Printf("proxy: platform proposal author autoputer resolve failed: %v", err)
 		return "recorded_for_author"
 	}
-	target, err := joinBasePath(sandboxURL, "/internal/texture/proposals")
+	target, err := joinBasePath(autoputerURL, "/internal/texture/proposals")
 	if err != nil {
 		log.Printf("proxy: platform proposal author delivery target failed: %v", err)
 		return "recorded_for_author"

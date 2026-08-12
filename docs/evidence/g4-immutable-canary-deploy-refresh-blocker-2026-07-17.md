@@ -12,10 +12,10 @@ The deployment correctly refused to publish an activation receipt, but for a sec
 
 ```text
 Refreshed candidate-fleet-49ee3bd0ec6f366a164c02d2
-Timed out waiting for candidate-fleet-49ee3bd0ec6f366a164c02d2 to serve sandbox runtime 6f66f73e...; observed 7122f279...
+Timed out waiting for candidate-fleet-49ee3bd0ec6f366a164c02d2 to serve autoputer runtime 6f66f73e...; observed 7122f279...
 ```
 
-A constructed `ComputerVersion` is a function input/result boundary. A later global host or sandbox deployment must not rewrite its runtime in place. Doing so would destroy the exact CodeRef/ArtifactProgramRef-to-realization join and make reconstruction evidence false. The deployment refresh loop predates constructed ownerships and currently treats them as mutable ordinary primary computers.
+A constructed `ComputerVersion` is a function input/result boundary. A later global host or autoputer deployment must not rewrite its runtime in place. Doing so would destroy the exact CodeRef/ArtifactProgramRef-to-realization join and make reconstruction evidence false. The deployment refresh loop predates constructed ownerships and currently treats them as mutable ordinary primary computers.
 
 ## Current containment
 
@@ -23,7 +23,7 @@ The workflow emitted `/var/lib/go-choir/deploy-failures/29599054091-1.json` and 
 
 ## Required repair
 
-Deployment refresh selection must explicitly exclude `snapshot_kind: constructed-computer-version` ownerships from ordinary guest, VM boot-contract, and sandbox hot-refresh mutation. It must name those rows as preserved immutable realizations, leave their VM/disk/version/publication bindings unchanged, and still health-check the deployed host services. Mutable active interactive computers remain subject to the existing exact deployment-commit refresh check. If the mutable set is empty, the selected active-computer deployment class must still produce an honest receipt stating that the conforming mutable set was empty rather than pretending an immutable realization was updated.
+Deployment refresh selection must explicitly exclude `snapshot_kind: constructed-computer-version` ownerships from ordinary guest, VM boot-contract, and autoputer hot-refresh mutation. It must name those rows as preserved immutable realizations, leave their VM/disk/version/publication bindings unchanged, and still health-check the deployed host services. Mutable active interactive computers remain subject to the existing exact deployment-commit refresh check. If the mutable set is empty, the selected active-computer deployment class must still produce an honest receipt stating that the conforming mutable set was empty rather than pretending an immutable realization was updated.
 
 A deterministic workflow test must cover a mixed inventory: one mutable active primary is selected; one constructed active primary is excluded and retains its frozen identity.
 

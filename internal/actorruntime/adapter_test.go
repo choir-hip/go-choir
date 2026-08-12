@@ -110,7 +110,7 @@ func seedDurableTextureUpdate(t *testing.T, s *store.Store, ctx context.Context,
 			RevisionID: "revision:" + docID, AuthorKind: types.AuthorUser, AuthorLabel: "user", Content: "Initial durable content",
 		},
 		Agent: types.AgentRecord{
-			AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+			AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
 			Profile: "texture", Role: "texture", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
 		},
 	}
@@ -122,7 +122,7 @@ func seedDurableTextureUpdate(t *testing.T, s *store.Store, ctx context.Context,
 	producerWorkID := "producer-work:" + docID
 	producerRunID := "producer-run:" + docID
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID: producerAgentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+		AgentID: producerAgentID, OwnerID: ownerID, ComputerID: computerID,
 		Profile: "researcher", Role: "researcher", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("seed lifecycle producer: %v", err)
@@ -138,7 +138,7 @@ func seedDurableTextureUpdate(t *testing.T, s *store.Store, ctx context.Context,
 	}
 	producerRun := types.RunRecord{
 		RunID: producerRunID, AgentID: producerAgentID, ChannelID: docID, TrajectoryID: start.TrajectoryID,
-		AgentProfile: "researcher", AgentRole: "researcher", OwnerID: ownerID, SandboxID: computerID,
+		AgentProfile: "researcher", AgentRole: "researcher", OwnerID: ownerID, ComputerID: computerID,
 		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": producerWorkID},
 	}
 	projectProducer := types.ReplaceLifecycleActivationRequest{
@@ -174,7 +174,7 @@ type actorLifecycleControlFixture struct {
 func seedActorLifecycleControl(t *testing.T, s *store.Store, suffix string) actorLifecycleControlFixture {
 	t.Helper()
 	ctx := context.Background()
-	ownerID, computerID := "owner-actor-"+suffix, "sandbox-test"
+	ownerID, computerID := "owner-actor-"+suffix, "autoputer-test"
 	docID, trajectoryID := "doc-actor-"+suffix, "trajectory-actor-"+suffix
 	textureAgentID := agentprofile.Texture + ":" + docID
 	now := time.Now().UTC()
@@ -185,14 +185,14 @@ func seedActorLifecycleControl(t *testing.T, s *store.Store, suffix string) acto
 		InitialWork:     types.WorkItemRecord{WorkItemID: "texture-work-actor-" + suffix, Objective: "author direction", AssignedAgentID: textureAgentID, AuthorityProfile: agentprofile.Texture},
 		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: "Actor parked wake", CreatedAt: now, UpdatedAt: now},
 		InitialRevision: types.Revision{RevisionID: "revision-actor-" + suffix, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "initial", CreatedAt: now},
-		Agent:           types.AgentRecord{AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
+		Agent:           types.AgentRecord{AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
 	}
 	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start actor lifecycle: %v", err)
 	}
 	caller := types.RunRecord{
-		RunID: "texture-run-actor-" + suffix, OwnerID: ownerID, SandboxID: computerID, AgentID: textureAgentID,
+		RunID: "texture-run-actor-" + suffix, OwnerID: ownerID, ComputerID: computerID, AgentID: textureAgentID,
 		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, ChannelID: docID, TrajectoryID: trajectoryID,
 		State: types.RunRunning, Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID, "work_item_ids": []string{start.InitialWork.WorkItemID}}, CreatedAt: now, UpdatedAt: now,
 	}
@@ -272,7 +272,7 @@ func newAdapterTestEnv(t *testing.T) *adapterTestEnv {
 	t.Cleanup(func() { _ = s.Close() })
 
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-test",
+		ComputerID:          "autoputer-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     time.Second,
@@ -386,11 +386,11 @@ func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *te
 	t.Cleanup(func() { _ = s.Close() })
 
 	ownerID, docID := "owner-running-restart", "doc-running-restart"
-	queue := seedDurableTextureUpdate(t, s, ctx, "sandbox-test", ownerID, docID, "update-running-restart", "durable update")
+	queue := seedDurableTextureUpdate(t, s, ctx, "autoputer-test", ownerID, docID, "update-running-restart", "durable update")
 	now := time.Now().UTC()
 	run := types.RunRecord{
 		RunID: "run-running-restart", AgentID: queue.TargetAgentID, OwnerID: ownerID,
-		SandboxID: "sandbox-test", ChannelID: docID, TrajectoryID: queue.TrajectoryID,
+		ComputerID: "autoputer-test", ChannelID: docID, TrajectoryID: queue.TrajectoryID,
 		State: types.RunRunning, Prompt: "resume after process crash", AgentProfile: "texture", AgentRole: "texture",
 		CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{
@@ -403,7 +403,7 @@ func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *te
 		t.Fatalf("project running lifecycle activation: %v", err)
 	}
 	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
-		DocID: docID, RunID: run.RunID, OwnerID: ownerID, ComputerID: "sandbox-test",
+		DocID: docID, RunID: run.RunID, OwnerID: ownerID, ComputerID: "autoputer-test",
 		State: "pending", RevisionID: "revision:" + docID, CreatedAt: now.Add(-time.Hour),
 	}); err != nil {
 		t.Fatalf("create running Texture mutation: %v", err)
@@ -418,9 +418,9 @@ func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *te
 		_ = logDB.Close()
 		t.Fatalf("initialize actor log: %v", err)
 	}
-	mailboxID := scopedActorMailboxID(ownerID, "sandbox-test", run.AgentID)
+	mailboxID := scopedActorMailboxID(ownerID, "autoputer-test", run.AgentID)
 	dispatch := actor.Update{
-		UpdateID:  actorDispatchUpdateID(ownerID, "sandbox-test", run.AgentID, "initial_dispatch", run.RunID, "", ""),
+		UpdateID:  actorDispatchUpdateID(ownerID, "autoputer-test", run.AgentID, "initial_dispatch", run.RunID, "", ""),
 		ToAgentID: mailboxID, Kind: "initial_dispatch", Content: run.RunID,
 		TrajectoryID: run.TrajectoryID, CreatedAt: now,
 	}
@@ -433,7 +433,7 @@ func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *te
 	}
 
 	cfg := provideriface.Config{
-		SandboxID: "sandbox-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
+		ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
 		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
 	}
 	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
@@ -467,8 +467,8 @@ func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *te
 	if err != nil || seededDispatchPending {
 		t.Fatalf("durable initial dispatch %q remained pending in %+v, %v", dispatch.UpdateID, backlog, err)
 	}
-	stored, err := s.GetLifecycleRun(ctx, ownerID, "sandbox-test", run.RunID)
-	mutation, mutationErr := s.GetAgentMutationByRun(ctx, ownerID, "sandbox-test", run.RunID)
+	stored, err := s.GetLifecycleRun(ctx, ownerID, "autoputer-test", run.RunID)
+	mutation, mutationErr := s.GetAgentMutationByRun(ctx, ownerID, "autoputer-test", run.RunID)
 	reactivated, _ := stored.Metadata["actor_reactivated_from_passivated"].(bool)
 	if err != nil || stored.State != types.RunCompleted || !reactivated || mutationErr != nil || mutation == nil ||
 		mutation.State != "completed" || !mutation.CreatedAt.After(now.Add(-time.Minute)) {
@@ -497,7 +497,7 @@ func TestAdapterStartRecoversLifecycleActorSnapshotsBeforeRuntimeSweep(t *testin
 			}
 			t.Cleanup(func() { _ = s.Close() })
 			cfg := provideriface.Config{
-				SandboxID: "sandbox-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
+				ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
 				ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
 			}
 
@@ -606,7 +606,7 @@ func TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery(t *testin
 		release: make(chan struct{}),
 	}
 	cfg := provideriface.Config{
-		SandboxID:           "sandbox-startup",
+		ComputerID:          "autoputer-startup",
 		StorePath:           dbPath,
 		PromptRoot:          filepath.Join(dir, "prompts"),
 		ProviderTimeout:     10 * time.Second,
@@ -625,8 +625,8 @@ func TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery(t *testin
 		docID   = "doc-startup-recovery"
 		agentID = "texture:" + docID
 	)
-	seedDurableTextureUpdate(t, s, ctx, "sandbox-startup", ownerID, docID, "update-startup-recovery", "Durable startup finding")
-	if runs, err := s.ListLifecycleRunsByOwner(ctx, ownerID, "sandbox-startup", 20); err != nil {
+	seedDurableTextureUpdate(t, s, ctx, "autoputer-startup", ownerID, docID, "update-startup-recovery", "Durable startup finding")
+	if runs, err := s.ListLifecycleRunsByOwner(ctx, ownerID, "autoputer-startup", 20); err != nil {
 		t.Fatalf("list fixture runs before startup: %v", err)
 	} else {
 		for _, run := range runs {
@@ -649,14 +649,14 @@ func TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery(t *testin
 		t.Fatal("Texture activation did not start after owner recovery")
 	}
 
-	agent, err := s.GetAgentByScope(ctx, ownerID, "sandbox-startup", agentID)
+	agent, err := s.GetAgentByScope(ctx, ownerID, "autoputer-startup", agentID)
 	if err != nil {
 		t.Fatalf("load recovered Texture identity: %v", err)
 	}
 	if agent.OwnerID != ownerID || agent.ChannelID != docID {
 		t.Fatalf("recovered Texture identity = %+v", agent)
 	}
-	runs, err := s.ListLifecycleRunsByOwner(ctx, ownerID, "sandbox-startup", 20)
+	runs, err := s.ListLifecycleRunsByOwner(ctx, ownerID, "autoputer-startup", 20)
 	if err != nil {
 		t.Fatalf("list startup recovery runs: %v", err)
 	}
@@ -767,10 +767,10 @@ func TestHandlerColdStartCoagentResult(t *testing.T) {
 	agentID := "agent-test-cold-start"
 	ownerID := "user-cold-start"
 	err := env.store.UpsertAgent(env.ctx, types.AgentRecord{
-		AgentID:   agentID,
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		Profile:   "test-profile",
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		ComputerID: "autoputer-test",
+		Profile:    "test-profile",
 	})
 	if err != nil {
 		t.Fatalf("UpsertAgent: %v", err)
@@ -802,7 +802,7 @@ func TestHandlerParkedLifecycleControlReconcilesBeforeRetryAcknowledgement(t *te
 	}
 	provider := &countingLifecycleProvider{}
 	cfg := provideriface.Config{
-		SandboxID: "sandbox-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
+		ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
 		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
 	}
 	adapter := New(cfg, s, events.NewEventBus(), provider, nil)
@@ -909,7 +909,7 @@ func TestTextureWakeAcceptsExactResearcherReportWithImplicitTargetWorkBinding(t 
 	env := newAdapterTestEnv(t)
 	env.adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	const suffix = "exact-report-empty-target-work"
-	const ownerID, computerID = "owner-adapter-exact-report", "sandbox-test"
+	const ownerID, computerID = "owner-adapter-exact-report", "autoputer-test"
 	researcherRun := seedAdapterLifecycleResearcherControl(t, env.store, env.adapter.Runtime, ownerID, computerID, suffix, false)
 	docID := "doc-adapter-admission-" + suffix
 	textureAgentID := "texture:" + docID
@@ -948,17 +948,17 @@ func TestTextureColdWakeRejectsUnboundLegacyProducerReport(t *testing.T) {
 
 	const ownerID, docID = "user-texture-wake", "doc-texture-wake"
 	agentID := "texture:" + docID
-	update := seedDurableTextureUpdate(t, env.store, env.ctx, "sandbox-test", ownerID, docID, "update-texture-wake", "Durable Texture wake")
+	update := seedDurableTextureUpdate(t, env.store, env.ctx, "autoputer-test", ownerID, docID, "update-texture-wake", "Durable Texture wake")
 	handler := newActorHandler(env.adapter.Runtime, textureowner.NewHandler(env.adapter.Runtime))
 	memory, err := handler.HandleUpdate(env.ctx, agentID, actorUpdate(ownerID, "coagent_result", agentID, update.Content), nil)
 	if err != nil || memory != nil {
 		t.Fatalf("unbound legacy producer report outcome memory=%v err=%v, want typed zero-provider acknowledgement", memory, err)
 	}
-	pending, err := env.store.GetLifecycleUpdate(env.ctx, ownerID, "sandbox-test", update.TrajectoryID, agentID, update.ProducerAgentID, update.ProducerUpdateID)
+	pending, err := env.store.GetLifecycleUpdate(env.ctx, ownerID, "autoputer-test", update.TrajectoryID, agentID, update.ProducerAgentID, update.ProducerUpdateID)
 	if err != nil || pending.Disposition != types.UpdatePending {
 		t.Fatalf("malformed report canonical fate changed: update=%+v err=%v", pending, err)
 	}
-	runs, err := env.store.ListLifecycleRunsByOwner(env.ctx, ownerID, "sandbox-test", 20)
+	runs, err := env.store.ListLifecycleRunsByOwner(env.ctx, ownerID, "autoputer-test", 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -974,13 +974,13 @@ func TestTextureWakeDoesNotLetUnboundLegacyReportReactivatePassivatedRun(t *test
 	env.adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	const ownerID, docID = "user-texture-stale-memory", "doc-texture-stale-memory"
 	agentID := "texture:" + docID
-	update := seedDurableTextureUpdate(t, env.store, env.ctx, "sandbox-test", ownerID, docID, "update-texture-stale-memory", "Durable Texture wake")
+	update := seedDurableTextureUpdate(t, env.store, env.ctx, "autoputer-test", ownerID, docID, "update-texture-stale-memory", "Durable Texture wake")
 	now := time.Now().UTC()
-	canonical := types.RunRecord{RunID: "run-texture-canonical-passivated", AgentID: agentID, OwnerID: ownerID, SandboxID: "sandbox-test", ChannelID: docID, TrajectoryID: update.TrajectoryID, State: types.RunPassivated, Prompt: "canonical Texture revision memory", AgentProfile: "texture", AgentRole: "texture", CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"type": "texture_agent_revision", "doc_id": docID, "current_revision_id": "revision:" + docID, "agent_profile": "texture", "agent_role": "texture", "trajectory_id": update.TrajectoryID, "lifecycle_work_item_id": "work:" + docID}}
+	canonical := types.RunRecord{RunID: "run-texture-canonical-passivated", AgentID: agentID, OwnerID: ownerID, ComputerID: "autoputer-test", ChannelID: docID, TrajectoryID: update.TrajectoryID, State: types.RunPassivated, Prompt: "canonical Texture revision memory", AgentProfile: "texture", AgentRole: "texture", CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"type": "texture_agent_revision", "doc_id": docID, "current_revision_id": "revision:" + docID, "agent_profile": "texture", "agent_role": "texture", "trajectory_id": update.TrajectoryID, "lifecycle_work_item_id": "work:" + docID}}
 	if err := env.store.CreateRun(env.ctx, canonical); err != nil {
 		t.Fatal(err)
 	}
-	if err := env.store.CreateAgentMutation(env.ctx, store.AgentMutation{DocID: docID, RunID: canonical.RunID, OwnerID: ownerID, ComputerID: "sandbox-test", State: "pending", RevisionID: "revision:" + docID, CreatedAt: now}); err != nil {
+	if err := env.store.CreateAgentMutation(env.ctx, store.AgentMutation{DocID: docID, RunID: canonical.RunID, OwnerID: ownerID, ComputerID: "autoputer-test", State: "pending", RevisionID: "revision:" + docID, CreatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	handler := newActorHandler(env.adapter.Runtime, textureowner.NewHandler(env.adapter.Runtime))
@@ -988,7 +988,7 @@ func TestTextureWakeDoesNotLetUnboundLegacyReportReactivatePassivatedRun(t *test
 	if err != nil || memory != nil {
 		t.Fatalf("malformed wake outcome memory=%v err=%v", memory, err)
 	}
-	after, err := env.store.GetLifecycleRun(env.ctx, ownerID, "sandbox-test", canonical.RunID)
+	after, err := env.store.GetLifecycleRun(env.ctx, ownerID, "autoputer-test", canonical.RunID)
 	if err != nil || after.State != types.RunPassivated {
 		t.Fatalf("malformed wake reactivated run=%+v err=%v", after, err)
 	}
@@ -997,7 +997,7 @@ func TestTextureWakeDoesNotLetUnboundLegacyReportReactivatePassivatedRun(t *test
 func TestTextureColdWakeFailsClosedWithoutOwner(t *testing.T) {
 	env := newAdapterTestEnv(t)
 	_, err := newActorHandler(env.adapter.Runtime, nil).reconcileCoagentWake(
-		env.ctx, actor.Update{ToAgentID: scopedActorMailboxID("owner-texture", "sandbox-test", "texture:doc-texture-wake")},
+		env.ctx, actor.Update{ToAgentID: scopedActorMailboxID("owner-texture", "autoputer-test", "texture:doc-texture-wake")},
 	)
 	if err == nil || err.Error() != "Texture owner is not bound" {
 		t.Fatalf("Texture wake error = %v, want explicit unbound-owner failure", err)
@@ -1021,7 +1021,7 @@ func TestTextureColdWakeFailsClosedWithoutOwner(t *testing.T) {
 		!strings.Contains(err.Error(), "Texture owner is not bound") {
 		t.Fatalf("unbound Texture initial dispatch error = %v, want fail-closed owner requirement", err)
 	}
-	seedDurableTextureUpdate(t, env.store, env.ctx, "sandbox-test", "owner-start-unbound", "doc-start-unbound", "update-start-unbound", "durable update")
+	seedDurableTextureUpdate(t, env.store, env.ctx, "autoputer-test", "owner-start-unbound", "doc-start-unbound", "update-start-unbound", "durable update")
 	if err := env.adapter.Start(env.ctx); err == nil || !strings.Contains(err.Error(), "Texture owner is not bound for durable subject") {
 		t.Fatalf("unbound Texture startup error = %v, want fail-closed owner requirement", err)
 	}
@@ -1034,12 +1034,12 @@ func TestHandlerCancelPassivatedRun(t *testing.T) {
 
 	// Create a run and manually set it to RunPassivated.
 	rec := types.RunRecord{
-		RunID:     "run-cancel-test",
-		OwnerID:   "user-cancel",
-		AgentID:   "agent-cancel-test",
-		SandboxID: "sandbox-test",
-		Prompt:    "test cancel",
-		State:     types.RunPassivated,
+		RunID:      "run-cancel-test",
+		OwnerID:    "user-cancel",
+		AgentID:    "agent-cancel-test",
+		ComputerID: "autoputer-test",
+		Prompt:     "test cancel",
+		State:      types.RunPassivated,
 	}
 	if err := env.store.CreateRun(env.ctx, rec); err != nil {
 		t.Fatalf("CreateRun: %v", err)
@@ -1091,10 +1091,10 @@ func TestHandlerCoagentResultForCompletedRun(t *testing.T) {
 	agentID := "agent-completed-test"
 	ownerID := "user-completed"
 	err := env.store.UpsertAgent(env.ctx, types.AgentRecord{
-		AgentID:   agentID,
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		Profile:   "test-profile",
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		ComputerID: "autoputer-test",
+		Profile:    "test-profile",
 	})
 	if err != nil {
 		t.Fatalf("UpsertAgent: %v", err)
@@ -1102,13 +1102,13 @@ func TestHandlerCoagentResultForCompletedRun(t *testing.T) {
 
 	// Create a completed run.
 	rec := types.RunRecord{
-		RunID:     "run-completed-test",
-		OwnerID:   ownerID,
-		AgentID:   agentID,
-		SandboxID: "sandbox-test",
-		Prompt:    "test completed",
-		State:     types.RunCompleted,
-		Result:    "done",
+		RunID:      "run-completed-test",
+		OwnerID:    ownerID,
+		AgentID:    agentID,
+		ComputerID: "autoputer-test",
+		Prompt:     "test completed",
+		State:      types.RunCompleted,
+		Result:     "done",
 	}
 	now := time.Now().UTC()
 	rec.FinishedAt = &now
@@ -1141,10 +1141,10 @@ func TestHandlerCoagentResultForBlockedRun(t *testing.T) {
 	agentID := "agent-blocked-test"
 	ownerID := "user-blocked"
 	err := env.store.UpsertAgent(env.ctx, types.AgentRecord{
-		AgentID:   agentID,
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		Profile:   "test-profile",
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		ComputerID: "autoputer-test",
+		Profile:    "test-profile",
 	})
 	if err != nil {
 		t.Fatalf("UpsertAgent: %v", err)
@@ -1152,13 +1152,13 @@ func TestHandlerCoagentResultForBlockedRun(t *testing.T) {
 
 	// Create a blocked run.
 	rec := types.RunRecord{
-		RunID:     "run-blocked-test",
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		AgentID:   agentID,
-		Prompt:    "test blocked",
-		State:     types.RunBlocked,
-		Error:     "provider rate limit",
+		RunID:      "run-blocked-test",
+		OwnerID:    ownerID,
+		ComputerID: "autoputer-test",
+		AgentID:    agentID,
+		Prompt:     "test blocked",
+		State:      types.RunBlocked,
+		Error:      "provider rate limit",
 	}
 	if err := env.store.CreateRun(env.ctx, rec); err != nil {
 		t.Fatalf("CreateRun: %v", err)
@@ -1215,11 +1215,11 @@ func createLifecycleActorRun(t *testing.T, env *adapterTestEnv, suffix string, s
 	t.Helper()
 	ownerID := "owner-lifecycle-" + suffix
 	docID := "doc-lifecycle-" + suffix
-	queue := seedDurableTextureUpdate(t, env.store, env.ctx, "sandbox-test", ownerID, docID, "update-"+suffix, "durable update")
+	queue := seedDurableTextureUpdate(t, env.store, env.ctx, "autoputer-test", ownerID, docID, "update-"+suffix, "durable update")
 	now := time.Now().UTC()
 	rec := types.RunRecord{
 		RunID: "run-lifecycle-" + suffix, AgentID: queue.TargetAgentID, OwnerID: ownerID,
-		SandboxID: "sandbox-test", ChannelID: docID, TrajectoryID: queue.TrajectoryID,
+		ComputerID: "autoputer-test", ChannelID: docID, TrajectoryID: queue.TrajectoryID,
 		State: state, Prompt: "execute lifecycle activation", AgentProfile: "texture", AgentRole: "texture",
 		CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{
@@ -1243,7 +1243,7 @@ func TestProductionActorHandlerCancelsLifecycleRun(t *testing.T) {
 	if _, err := handler.HandleUpdate(env.ctx, update.ToAgentID, update, memory); err != nil {
 		t.Fatalf("cancel lifecycle activation: %v", err)
 	}
-	stored, err := env.store.GetLifecycleRun(env.ctx, cancelled.OwnerID, cancelled.SandboxID, cancelled.RunID)
+	stored, err := env.store.GetLifecycleRun(env.ctx, cancelled.OwnerID, cancelled.ComputerID, cancelled.RunID)
 	if err != nil || stored.State != types.RunCancelled {
 		t.Fatalf("cancelled lifecycle run = %+v, %v", stored, err)
 	}
@@ -1254,7 +1254,7 @@ func TestScopedActorMailboxDoesNotCrossOwner(t *testing.T) {
 	const agentID = "shared-agent-id"
 	for _, ownerID := range []string{"owner-scope-a", "owner-scope-b"} {
 		if err := env.store.UpsertAgent(env.ctx, types.AgentRecord{
-			AgentID: agentID, OwnerID: ownerID, ComputerID: "sandbox-test", SandboxID: "sandbox-test",
+			AgentID: agentID, OwnerID: ownerID, ComputerID: "autoputer-test",
 			Profile: "researcher", Role: "researcher", ChannelID: "channel-" + ownerID,
 		}); err != nil {
 			t.Fatalf("upsert scoped agent %s: %v", ownerID, err)
@@ -1264,7 +1264,7 @@ func TestScopedActorMailboxDoesNotCrossOwner(t *testing.T) {
 	update := actorUpdate("owner-scope-a", "coagent_result", agentID, "scoped wake")
 	now := time.Now().UTC()
 	packet := types.CoagentSourcePacket{
-		UpdateID: "scoped-update-a", OwnerID: "owner-scope-a", ComputerID: "sandbox-test",
+		UpdateID: "scoped-update-a", OwnerID: "owner-scope-a", ComputerID: "autoputer-test",
 		AgentID: "producer-a", TargetAgentID: agentID, ChannelID: "channel-owner-scope-a", Role: "researcher",
 		Packet:  types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "scoped update"},
 		Content: "scoped wake", CreatedAt: now,
@@ -1296,7 +1296,7 @@ func TestInitialDispatchCannotLoadAnotherOwnersRun(t *testing.T) {
 	env := newAdapterTestEnv(t)
 	now := time.Now().UTC()
 	rec := types.RunRecord{
-		RunID: "run-owner-b", OwnerID: "owner-scope-b", SandboxID: "sandbox-test",
+		RunID: "run-owner-b", OwnerID: "owner-scope-b", ComputerID: "autoputer-test",
 		AgentID: "agent-owner-b", State: types.RunPending, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := env.store.CreateRun(env.ctx, rec); err != nil {
@@ -1321,7 +1321,7 @@ func TestAdapterStartMigratesUniqueLegacyUnscopedMailbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	cfg := provideriface.Config{SandboxID: "sandbox-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
+	cfg := provideriface.Config{ComputerID: "autoputer-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
 	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
 	t.Cleanup(func() {
 		adapter.Stop()
@@ -1330,7 +1330,7 @@ func TestAdapterStartMigratesUniqueLegacyUnscopedMailbox(t *testing.T) {
 	})
 	now := time.Now().UTC()
 	agent := types.AgentRecord{
-		AgentID: "legacy-unscoped-agent", OwnerID: "legacy-owner", ComputerID: cfg.SandboxID, SandboxID: cfg.SandboxID,
+		AgentID: "legacy-unscoped-agent", OwnerID: "legacy-owner", ComputerID: cfg.ComputerID,
 		Profile: "processor", Role: "processor", ChannelID: "legacy-channel", CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.UpsertAgent(ctx, agent); err != nil {
@@ -1365,7 +1365,7 @@ func TestAdapterStartMigratesLegacyMailboxFromRunWitness(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	cfg := provideriface.Config{SandboxID: "sandbox-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
+	cfg := provideriface.Config{ComputerID: "autoputer-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
 	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
 	t.Cleanup(func() {
 		adapter.Stop()
@@ -1378,7 +1378,7 @@ func TestAdapterStartMigratesLegacyMailboxFromRunWitness(t *testing.T) {
 		ownerID = "legacy-owner"
 	)
 	if err := s.CreateRun(ctx, types.RunRecord{
-		RunID: "legacy-run-witness", AgentID: agentID, OwnerID: ownerID, SandboxID: cfg.SandboxID,
+		RunID: "legacy-run-witness", AgentID: agentID, OwnerID: ownerID, ComputerID: cfg.ComputerID,
 		State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("create legacy run witness: %v", err)
@@ -1389,7 +1389,7 @@ func TestAdapterStartMigratesLegacyMailboxFromRunWitness(t *testing.T) {
 	if err := adapter.Start(ctx); err != nil {
 		t.Fatalf("start with run-witness legacy mailbox: %v", err)
 	}
-	scopedID := scopedActorMailboxID(ownerID, cfg.SandboxID, agentID)
+	scopedID := scopedActorMailboxID(ownerID, cfg.ComputerID, agentID)
 	identities, err := adapter.log.MailboxIdentities(ctx)
 	if err != nil || len(identities) != 1 || identities[0] != scopedID {
 		t.Fatalf("mailbox identities after startup: %q, %v; want [%q]", identities, err, scopedID)
@@ -1435,7 +1435,7 @@ func TestAdapterStartMigratesLegacyMailboxWithoutPendingBacklog(t *testing.T) {
 			if err != nil {
 				t.Fatalf("open store: %v", err)
 			}
-			cfg := provideriface.Config{SandboxID: "sandbox-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
+			cfg := provideriface.Config{ComputerID: "autoputer-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
 			adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
 			t.Cleanup(func() {
 				adapter.Stop()
@@ -1444,7 +1444,7 @@ func TestAdapterStartMigratesLegacyMailboxWithoutPendingBacklog(t *testing.T) {
 			})
 			now := time.Now().UTC()
 			agent := types.AgentRecord{
-				AgentID: "legacy-unscoped-agent", OwnerID: "legacy-owner", ComputerID: cfg.SandboxID, SandboxID: cfg.SandboxID,
+				AgentID: "legacy-unscoped-agent", OwnerID: "legacy-owner", ComputerID: cfg.ComputerID,
 				Profile: "processor", Role: "processor", ChannelID: "legacy-channel", CreatedAt: now, UpdatedAt: now,
 			}
 			if err := s.UpsertAgent(ctx, agent); err != nil {
@@ -1471,7 +1471,7 @@ func TestAdapterStartRefusesAmbiguousLegacyUnscopedMailbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	cfg := provideriface.Config{SandboxID: "sandbox-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
+	cfg := provideriface.Config{ComputerID: "autoputer-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
 	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
 	t.Cleanup(func() {
 		adapter.Stop()
@@ -1481,7 +1481,7 @@ func TestAdapterStartRefusesAmbiguousLegacyUnscopedMailbox(t *testing.T) {
 	now := time.Now().UTC()
 	for _, ownerID := range []string{"owner-a", "owner-b"} {
 		if err := s.UpsertAgent(ctx, types.AgentRecord{
-			AgentID: "legacy-unscoped-agent", OwnerID: ownerID, ComputerID: cfg.SandboxID, SandboxID: cfg.SandboxID,
+			AgentID: "legacy-unscoped-agent", OwnerID: ownerID, ComputerID: cfg.ComputerID,
 			Profile: "processor", Role: "processor", ChannelID: ownerID, CreatedAt: now, UpdatedAt: now,
 		}); err != nil {
 			t.Fatalf("upsert legacy agent for %s: %v", ownerID, err)
@@ -1508,7 +1508,7 @@ func TestAdapterStartRefusesConflictingAgentAndRunWitnesses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	cfg := provideriface.Config{SandboxID: "sandbox-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
+	cfg := provideriface.Config{ComputerID: "autoputer-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
 	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
 	t.Cleanup(func() {
 		adapter.Stop()
@@ -1518,13 +1518,13 @@ func TestAdapterStartRefusesConflictingAgentAndRunWitnesses(t *testing.T) {
 	now := time.Now().UTC()
 	const agentID = "legacy-conflicting-agent"
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID: agentID, OwnerID: "owner-a", ComputerID: cfg.SandboxID, SandboxID: cfg.SandboxID,
+		AgentID: agentID, OwnerID: "owner-a", ComputerID: cfg.ComputerID,
 		Profile: "processor", Role: "processor", CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("upsert agent witness: %v", err)
 	}
 	if err := s.CreateRun(ctx, types.RunRecord{
-		RunID: "conflicting-run", AgentID: agentID, OwnerID: "owner-b", SandboxID: cfg.SandboxID,
+		RunID: "conflicting-run", AgentID: agentID, OwnerID: "owner-b", ComputerID: cfg.ComputerID,
 		State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("create conflicting run witness: %v", err)
@@ -1548,7 +1548,7 @@ func TestAdapterStartRefusesConflictingAgentAndRunWitnesses(t *testing.T) {
 		t.Fatalf("legacy snapshot changed after refusal: %q, %v", memory, err)
 	}
 	for _, ownerID := range []string{"owner-a", "owner-b"} {
-		scopedID := scopedActorMailboxID(ownerID, cfg.SandboxID, agentID)
+		scopedID := scopedActorMailboxID(ownerID, cfg.ComputerID, agentID)
 		if scopedMemory, err := adapter.log.LoadSnapshot(ctx, scopedID); err != nil || scopedMemory != nil {
 			t.Fatalf("scoped snapshot created for %s after refusal: %q, %v", ownerID, scopedMemory, err)
 		}
@@ -1563,7 +1563,7 @@ func TestAdapterLegacyMailboxMigrationConvergesMixedBatchAndRepeats(t *testing.T
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	cfg := provideriface.Config{SandboxID: "sandbox-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
+	cfg := provideriface.Config{ComputerID: "autoputer-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
 	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
 	t.Cleanup(func() {
 		adapter.Stop()
@@ -1572,11 +1572,11 @@ func TestAdapterLegacyMailboxMigrationConvergesMixedBatchAndRepeats(t *testing.T
 	})
 	now := time.Now().UTC()
 	first := types.AgentRecord{
-		AgentID: "legacy-a", OwnerID: "owner-a", ComputerID: cfg.SandboxID, SandboxID: cfg.SandboxID,
+		AgentID: "legacy-a", OwnerID: "owner-a", ComputerID: cfg.ComputerID,
 		Profile: "processor", Role: "processor", ChannelID: "channel-a", CreatedAt: now, UpdatedAt: now,
 	}
 	second := types.AgentRecord{
-		AgentID: "legacy-b", OwnerID: "owner-b", ComputerID: cfg.SandboxID, SandboxID: cfg.SandboxID,
+		AgentID: "legacy-b", OwnerID: "owner-b", ComputerID: cfg.ComputerID,
 		Profile: "processor", Role: "processor", ChannelID: "channel-b", CreatedAt: now, UpdatedAt: now,
 	}
 	for _, agent := range []types.AgentRecord{first, second} {
@@ -1616,7 +1616,7 @@ func TestAdapterLegacyMailboxMigrationConvergesMixedBatchAndRepeats(t *testing.T
 func actorUpdate(ownerID, kind, toAgentID, content string) actor.Update {
 	return actor.Update{
 		UpdateID:  "test-update-id",
-		ToAgentID: scopedActorMailboxID(ownerID, "sandbox-test", toAgentID),
+		ToAgentID: scopedActorMailboxID(ownerID, "autoputer-test", toAgentID),
 		Kind:      kind,
 		Content:   content,
 		CreatedAt: time.Now().UTC(),
@@ -1754,7 +1754,7 @@ func TestAdapterSQLitePersistsExactTextureReportAndOwnerInstructionOccurrencesBe
 		t.Fatal(err)
 	}
 
-	cfg := provideriface.Config{SandboxID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
 	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
 	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
 	owner := textureowner.NewHandler(adapter.Runtime)
@@ -1836,7 +1836,7 @@ func TestAdapterSQLiteBootRecoveryUsesJoinedOccurrenceNotDuplicateInitialDispatc
 	now := time.Now().UTC()
 	run := types.RunRecord{
 		RunID: "texture-run-recovery", AgentID: "texture:" + docID, ChannelID: docID, TrajectoryID: queued.TrajectoryID,
-		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, OwnerID: ownerID, SandboxID: computerID,
+		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, OwnerID: ownerID, ComputerID: computerID,
 		State: types.RunPassivated, CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{"type": "texture_agent_revision", "doc_id": docID, "current_revision_id": "revision:" + docID, "lifecycle_work_item_id": "work:" + docID, "trajectory_id": queued.TrajectoryID},
 	}
@@ -1852,7 +1852,7 @@ func TestAdapterSQLiteBootRecoveryUsesJoinedOccurrenceNotDuplicateInitialDispatc
 		t.Fatal(err)
 	}
 
-	cfg := provideriface.Config{SandboxID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
 	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
 	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
 	owner := textureowner.NewHandler(adapter.Runtime)
@@ -1973,19 +1973,19 @@ func seedAdapterLifecycleResearcherControl(t *testing.T, s *store.Store, rt *age
 		InitialWork:     types.WorkItemRecord{WorkItemID: "texture-work-" + suffix, Objective: "author exact control", AssignedAgentID: textureAgentID, AuthorityProfile: agentprofile.Texture},
 		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: "Adapter admission", CreatedAt: now, UpdatedAt: now},
 		InitialRevision: types.Revision{RevisionID: "revision-adapter-admission-" + suffix, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "initial", CreatedAt: now},
-		Agent:           types.AgentRecord{AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
+		Agent:           types.AgentRecord{AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
 	}
 	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	caller := types.RunRecord{RunID: "texture-run-adapter-admission-" + suffix, OwnerID: ownerID, SandboxID: computerID, AgentID: textureAgentID, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunRunning, Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID, "work_item_ids": []string{start.InitialWork.WorkItemID}}, CreatedAt: now, UpdatedAt: now}
+	caller := types.RunRecord{RunID: "texture-run-adapter-admission-" + suffix, OwnerID: ownerID, ComputerID: computerID, AgentID: textureAgentID, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunRunning, Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID, "work_item_ids": []string{start.InitialWork.WorkItemID}}, CreatedAt: now, UpdatedAt: now}
 	project := types.ReplaceLifecycleActivationRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "project-adapter-admission-" + suffix, TrajectoryID: trajectoryID, AgentID: textureAgentID, Run: caller}
 	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
 	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
 		t.Fatalf("project texture: %v", err)
 	}
-	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: researcherAgentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID, Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
+	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: researcherAgentID, OwnerID: ownerID, ComputerID: computerID, Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatalf("upsert researcher: %v", err)
 	}
 	workID := "researcher-work-adapter-admission-" + suffix
@@ -1994,7 +1994,7 @@ func seedAdapterLifecycleResearcherControl(t *testing.T, s *store.Store, rt *age
 	if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
 		t.Fatalf("open work: %v", err)
 	}
-	targetRun := types.RunRecord{RunID: "researcher-bootstrap-adapter-admission-" + suffix, OwnerID: ownerID, SandboxID: computerID, AgentID: researcherAgentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunRunning, Metadata: map[string]any{"lifecycle_work_item_id": workID, "work_item_ids": []string{workID}}, CreatedAt: now, UpdatedAt: now}
+	targetRun := types.RunRecord{RunID: "researcher-bootstrap-adapter-admission-" + suffix, OwnerID: ownerID, ComputerID: computerID, AgentID: researcherAgentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunRunning, Metadata: map[string]any{"lifecycle_work_item_id": workID, "work_item_ids": []string{workID}}, CreatedAt: now, UpdatedAt: now}
 	projectTarget := types.ReplaceLifecycleActivationRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "project-researcher-adapter-admission-" + suffix, TrajectoryID: trajectoryID, AgentID: researcherAgentID, Run: targetRun}
 	projectTarget.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(projectTarget)
 	if _, err := s.ReplaceLifecycleActivation(ctx, projectTarget); err != nil {
@@ -2068,7 +2068,7 @@ func TestAdapterSQLitePreBindResearcherRecoveryBindsAndExecutesWithoutSnapshot(t
 	t.Cleanup(func() { _ = s.Close() })
 	counting := &admissionRecoveryCountingProvider{stub: provider.NewStubProvider(0)}
 	const ownerID, computerID = "owner-adapter-prebind-recovery", "computer-adapter-prebind-recovery"
-	cfg := provideriface.Config{SandboxID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
 	adapter := New(cfg, s, events.NewEventBus(), counting, nil)
 	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
 	rec := seedAdapterLifecycleResearcherControl(t, s, adapter.Runtime, ownerID, computerID, "prebind-missing-snapshot", true)
@@ -2115,7 +2115,7 @@ func TestAdapterSQLiteResearcherAdmissionRecoveryExecutesWithoutSnapshot(t *test
 	t.Cleanup(func() { _ = s.Close() })
 	counting := &admissionRecoveryCountingProvider{stub: provider.NewStubProvider(0)}
 	const ownerID, computerID = "owner-adapter-admission-recovery", "computer-adapter-admission-recovery"
-	cfg := provideriface.Config{SandboxID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
 	adapter := New(cfg, s, events.NewEventBus(), counting, nil)
 	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
 	rec := seedAdapterLifecycleResearcherControl(t, s, adapter.Runtime, ownerID, computerID, "missing-snapshot", false)
@@ -2173,7 +2173,7 @@ func TestAdapterSQLiteInjectionAppendRecoveryExecutesWithoutSnapshot(t *testing.
 	t.Cleanup(func() { _ = s.Close() })
 	counting := &admissionRecoveryCountingProvider{stub: provider.NewStubProvider(0)}
 	const ownerID, computerID = "owner-adapter-injection-recovery", "computer-adapter-injection-recovery"
-	cfg := provideriface.Config{SandboxID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
 	adapter := New(cfg, s, events.NewEventBus(), counting, nil)
 	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
 	rec := seedAdapterLifecycleResearcherControl(t, s, adapter.Runtime, ownerID, computerID, "injection-missing-snapshot", false)
@@ -2260,7 +2260,7 @@ func TestAdapterSQLiteStartAcknowledgesCancelledTextureOwnerOccurrenceWithoutMut
 		InitialWork:     types.WorkItemRecord{WorkItemID: workID, Objective: "apply owner direction", AssignedAgentID: textureAgentID, AuthorityProfile: agentprofile.Texture},
 		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: "Terminal Texture boot", CreatedAt: now, UpdatedAt: now},
 		InitialRevision: types.Revision{RevisionID: "revision-terminal-texture-boot", DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "initial", CreatedAt: now},
-		Agent:           types.AgentRecord{AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
+		Agent:           types.AgentRecord{AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
 	}
 	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
 	started, err := s.StartLifecycle(ctx, start)
@@ -2272,7 +2272,7 @@ func TestAdapterSQLiteStartAcknowledgesCancelledTextureOwnerOccurrenceWithoutMut
 	producerWorkID := "producer-work-terminal-texture-boot"
 	producerRunID := "producer-run-terminal-texture-boot"
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID: producerAgentID, OwnerID: ownerID, ComputerID: computerID, SandboxID: computerID,
+		AgentID: producerAgentID, OwnerID: ownerID, ComputerID: computerID,
 		Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("seed producer subject: %v", err)
@@ -2286,7 +2286,7 @@ func TestAdapterSQLiteStartAcknowledgesCancelledTextureOwnerOccurrenceWithoutMut
 		t.Fatalf("open producer work: %v", err)
 	}
 	producerRun := types.RunRecord{
-		RunID: producerRunID, OwnerID: ownerID, SandboxID: computerID, AgentID: producerAgentID,
+		RunID: producerRunID, OwnerID: ownerID, ComputerID: computerID, AgentID: producerAgentID,
 		AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, ChannelID: docID, TrajectoryID: trajectoryID,
 		State: types.RunRunning, Metadata: map[string]any{"lifecycle_work_item_id": producerWorkID, "work_item_ids": []string{producerWorkID}}, CreatedAt: now, UpdatedAt: now,
 	}
@@ -2341,7 +2341,7 @@ func TestAdapterSQLiteStartAcknowledgesCancelledTextureOwnerOccurrenceWithoutMut
 	}
 
 	providerCalls := &countingLifecycleProvider{targetAgentID: textureAgentID}
-	cfg := provideriface.Config{SandboxID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
 	adapter := New(cfg, s, events.NewEventBus(), providerCalls, nil)
 	t.Cleanup(adapter.Stop)
 	if err := adapter.BindTextureOwner(textureowner.NewHandler(adapter.Runtime)); err != nil {
@@ -2361,7 +2361,7 @@ func TestAdapterSQLiteStartAcknowledgesCancelledTextureOwnerOccurrenceWithoutMut
 	candidateRunIDs := []string{"texture-candidate-a-terminal-boot", "texture-candidate-b-terminal-boot"}
 	for index, runID := range candidateRunIDs {
 		candidate := types.RunRecord{
-			RunID: runID, OwnerID: ownerID, SandboxID: computerID, AgentID: textureAgentID,
+			RunID: runID, OwnerID: ownerID, ComputerID: computerID, AgentID: textureAgentID,
 			AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, ChannelID: docID, TrajectoryID: trajectoryID,
 			State:     types.RunPassivated,
 			Metadata:  map[string]any{"type": "texture_agent_revision", "doc_id": docID, "current_revision_id": started.Revision.RevisionID, "lifecycle_work_item_id": workID, "work_item_ids": []string{workID}},

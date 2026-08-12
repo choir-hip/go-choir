@@ -536,7 +536,7 @@ func (h *Handler) HandleTextureAcceptMerge(w http.ResponseWriter, r *http.Reques
 	}
 	auditComputerID := strings.TrimSpace(doc.ComputerID)
 	if auditComputerID == "" && h.Core != nil {
-		auditComputerID = strings.TrimSpace(h.Core.TextureSandboxID())
+		auditComputerID = strings.TrimSpace(h.Core.TextureComputerID())
 	}
 	auditDigest := textureAuditDigest("revision_committed", ownerID, auditComputerID, docID, storedRev.RevisionID, storedRev.RevisionHash)
 	h.recordTextureAudit(r.Context(), "revision_committed", ownerID, auditComputerID, storedRev.TrajectoryID, docID, storedRev.RevisionID, "texture-revision:"+docID+":"+storedRev.RevisionID, auditDigest, 0)

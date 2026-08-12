@@ -153,7 +153,7 @@ func seedTextureDecisionRun(t *testing.T, s interface {
 		AgentID:      agentprofile.Texture + ":" + docID,
 		ChannelID:    docID,
 		OwnerID:      "user-1",
-		SandboxID:    "sandbox-texture-test",
+		ComputerID:   "autoputer-texture-test",
 		TrajectoryID: "run-texture-decision",
 		State:        types.RunRunning,
 		Prompt:       "revise with owner-provided evidence",

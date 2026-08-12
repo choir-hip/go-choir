@@ -19,9 +19,9 @@ func TestNotificationAPIForwardsToMaildWithTrustedUser(t *testing.T) {
 		})
 	}))
 	defer maild.Close()
-	sandbox := httptest.NewServer(http.NewServeMux())
-	defer sandbox.Close()
-	h, priv := newEmailTestHandler(t, maild.URL, sandbox.URL)
+	autoputer := httptest.NewServer(http.NewServeMux())
+	defer autoputer.Close()
+	h, priv := newEmailTestHandler(t, maild.URL, autoputer.URL)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/notifications/completion-email", strings.NewReader(`{"to_email":"owner@example.com","title":"Ready","status":"verified"}`))
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-real")})

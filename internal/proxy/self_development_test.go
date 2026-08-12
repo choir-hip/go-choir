@@ -125,8 +125,8 @@ func TestSelfDevelopmentModePathRequiresSingleEscapedComputerID(t *testing.T) {
 }
 
 func TestPublicDecisionRefusesEffectsOff(t *testing.T) {
-	handler, _, sandbox := testProxyEnv(t)
-	defer sandbox.Close()
+	handler, _, autoputer := testProxyEnv(t)
+	defer autoputer.Close()
 	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-decision/self-development/operations/operation-decision/decision", strings.NewReader(`{"decision":"reject"}`))
 	response := httptest.NewRecorder()
 	handler.HandleAPI(response, request)
@@ -136,8 +136,8 @@ func TestPublicDecisionRefusesEffectsOff(t *testing.T) {
 }
 
 func TestPublicProposalRefusesEffectsOff(t *testing.T) {
-	handler, _, sandbox := testProxyEnv(t)
-	defer sandbox.Close()
+	handler, _, autoputer := testProxyEnv(t)
+	defer autoputer.Close()
 	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-propose/self-development/operations", strings.NewReader(`{"idempotency_key":"proposal-mode","prompt":"change runtime"}`))
 	response := httptest.NewRecorder()
 	handler.HandleAPI(response, request)

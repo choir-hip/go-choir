@@ -52,7 +52,7 @@ type resolveResponse struct {
 	DesktopID     string `json:"desktop_id"`
 	Kind          VMKind `json:"kind,omitempty"`
 	WarmnessClass string `json:"warmness_class,omitempty"`
-	SandboxURL    string `json:"sandbox_url"`
+	ComputerURL   string `json:"computer_url"`
 	State         string `json:"state"`
 }
 
@@ -64,7 +64,7 @@ type ownershipResponse struct {
 	DesktopID                 string                           `json:"desktop_id"`
 	Kind                      VMKind                           `json:"kind,omitempty"`
 	WarmnessClass             string                           `json:"warmness_class,omitempty"`
-	SandboxURL                string                           `json:"sandbox_url"`
+	ComputerURL               string                           `json:"computer_url"`
 	State                     string                           `json:"state"`
 	CreatedAt                 string                           `json:"created_at"`
 	LastActiveAt              string                           `json:"last_active_at"`
@@ -92,11 +92,11 @@ type immutableArtifactOpener interface {
 }
 
 type Handler struct {
-	registry                 *OwnershipRegistry
-	sandboxRuntimePackageDir string
-	routeAuthority           *RouteAuthority
-	routeAuthorityRequired   bool
-	immutableArtifacts       immutableArtifactOpener
+	registry                   *OwnershipRegistry
+	autoputerRuntimePackageDir string
+	routeAuthority             *RouteAuthority
+	routeAuthorityRequired     bool
+	immutableArtifacts         immutableArtifactOpener
 }
 
 // NewHandler creates a vmctl Handler with the given ownership registry.
@@ -104,11 +104,11 @@ func NewHandler(registry *OwnershipRegistry) *Handler {
 	return &Handler{registry: registry}
 }
 
-// SetSandboxRuntimePackageDir configures the host-side package directory that
+// SetAutoputerRuntimePackageDir configures the host-side package directory that
 // VM guests fetch at boot. This lets ordinary guest images stay stable while
-// sandbox/runtime code moves through the fast host service pointer path.
-func (h *Handler) SetSandboxRuntimePackageDir(path string) {
-	h.sandboxRuntimePackageDir = strings.TrimSpace(path)
+// autoputer/runtime code moves through the fast host service pointer path.
+func (h *Handler) SetAutoputerRuntimePackageDir(path string) {
+	h.autoputerRuntimePackageDir = strings.TrimSpace(path)
 }
 
 func (h *Handler) SetImmutableArtifactOpener(opener immutableArtifactOpener) {
@@ -234,7 +234,7 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 			DesktopID:     own.DesktopID,
 			Kind:          own.Kind,
 			WarmnessClass: string(h.registry.WarmnessClassForOwnership(own)),
-			SandboxURL:    own.SandboxURL,
+			ComputerURL:   own.ComputerURL,
 			State:         string(own.State),
 		})
 		return
@@ -269,7 +269,7 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		DesktopID:     own.DesktopID,
 		Kind:          own.Kind,
 		WarmnessClass: string(h.registry.WarmnessClassForOwnership(own)),
-		SandboxURL:    own.SandboxURL,
+		ComputerURL:   own.ComputerURL,
 		State:         string(own.State),
 	})
 }
@@ -329,7 +329,7 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		DesktopID:     own.DesktopID,
 		Kind:          own.Kind,
 		WarmnessClass: string(h.registry.WarmnessClassForOwnership(own)),
-		SandboxURL:    own.SandboxURL,
+		ComputerURL:   own.ComputerURL,
 		State:         string(own.State),
 		CreatedAt:     own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 		LastActiveAt:  own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
@@ -499,13 +499,13 @@ func (h *Handler) HandleResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
-		VMID:       own.VMID,
-		ComputerID: stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
-		UserID:     own.UserID,
-		DesktopID:  own.DesktopID,
-		Kind:       own.Kind,
-		SandboxURL: own.SandboxURL,
-		State:      string(own.State),
+		VMID:        own.VMID,
+		ComputerID:  stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
+		UserID:      own.UserID,
+		DesktopID:   own.DesktopID,
+		Kind:        own.Kind,
+		ComputerURL: own.ComputerURL,
+		State:       string(own.State),
 	})
 }
 
@@ -548,13 +548,13 @@ func (h *Handler) HandleRecover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
-		VMID:       own.VMID,
-		ComputerID: stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
-		UserID:     own.UserID,
-		DesktopID:  own.DesktopID,
-		Kind:       own.Kind,
-		SandboxURL: own.SandboxURL,
-		State:      string(own.State),
+		VMID:        own.VMID,
+		ComputerID:  stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
+		UserID:      own.UserID,
+		DesktopID:   own.DesktopID,
+		Kind:        own.Kind,
+		ComputerURL: own.ComputerURL,
+		State:       string(own.State),
 	})
 }
 
@@ -597,13 +597,13 @@ func (h *Handler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
-		VMID:       own.VMID,
-		ComputerID: stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
-		UserID:     own.UserID,
-		DesktopID:  own.DesktopID,
-		Kind:       own.Kind,
-		SandboxURL: own.SandboxURL,
-		State:      string(own.State),
+		VMID:        own.VMID,
+		ComputerID:  stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
+		UserID:      own.UserID,
+		DesktopID:   own.DesktopID,
+		Kind:        own.Kind,
+		ComputerURL: own.ComputerURL,
+		State:       string(own.State),
 	})
 }
 
@@ -826,7 +826,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 			DesktopID:                 own.DesktopID,
 			Kind:                      own.Kind,
 			WarmnessClass:             string(h.registry.WarmnessClassForOwnership(own)),
-			SandboxURL:                own.SandboxURL,
+			ComputerURL:               own.ComputerURL,
 			State:                     string(own.State),
 			CreatedAt:                 own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 			LastActiveAt:              own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
@@ -844,7 +844,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleRuntimePackage streams the current sandbox runtime package as a tar
+// HandleRuntimePackage streams the current autoputer runtime package as a tar
 // archive. It is intended for guest VMs booting over the vmctl tap path; it
 // never exposes provider credentials and remains guarded by the same internal
 // caller contract as other vmctl control endpoints.
@@ -857,7 +857,7 @@ func (h *Handler) HandleRuntimePackage(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
 		return
 	}
-	if strings.Trim(r.URL.Path, "/") != "internal/vmctl/runtime-package/sandbox" {
+	if strings.Trim(r.URL.Path, "/") != "internal/vmctl/runtime-package/autoputer" {
 		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "runtime package not found"})
 		return
 	}
@@ -875,7 +875,7 @@ func (h *Handler) HandleRuntimePackage(w http.ResponseWriter, r *http.Request) {
 		}
 		var runtimeArtifact *computerversion.CodeArtifact
 		for i := range closure.Artifacts {
-			if closure.Artifacts[i].Name == "sandbox-runtime.tar" {
+			if closure.Artifacts[i].Name == "autoputer-runtime.tar" {
 				runtimeArtifact = &closure.Artifacts[i]
 				break
 			}
@@ -899,36 +899,36 @@ func (h *Handler) HandleRuntimePackage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/x-tar")
-		w.Header().Set("Content-Disposition", `attachment; filename="go-choir-sandbox-runtime.tar"`)
+		w.Header().Set("Content-Disposition", `attachment; filename="go-choir-autoputer-runtime.tar"`)
 		if _, err := io.Copy(w, artifact); err != nil {
 			log.Printf("vmctl: stream immutable runtime package %s: %v", codeRef, err)
 		}
 		return
 	}
 
-	root := h.sandboxRuntimePackageDir
+	root := h.autoputerRuntimePackageDir
 	if root == "" {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "sandbox runtime package directory is not configured"})
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "autoputer runtime package directory is not configured"})
 		return
 	}
 	info, err := os.Stat(root)
 	if err != nil {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "sandbox runtime package directory is not available"})
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "autoputer runtime package directory is not available"})
 		return
 	}
 	if !info.IsDir() {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "sandbox runtime package path is not a directory"})
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "autoputer runtime package path is not a directory"})
 		return
 	}
-	artifactBuild, err := sandboxRuntimeBuildInfo(root)
+	artifactBuild, err := autoputerRuntimeBuildInfo(root)
 	if err != nil {
-		log.Printf("vmctl: sandbox runtime build manifest: %v", err)
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "sandbox runtime package build manifest is invalid"})
+		log.Printf("vmctl: autoputer runtime build manifest: %v", err)
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "autoputer runtime package build manifest is invalid"})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/x-tar")
-	w.Header().Set("Content-Disposition", `attachment; filename="go-choir-sandbox-runtime.tar"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="go-choir-autoputer-runtime.tar"`)
 	tw := tar.NewWriter(w)
 	defer func() {
 		if err := tw.Close(); err != nil {
@@ -945,7 +945,7 @@ func (h *Handler) HandleRuntimePackage(w http.ResponseWriter, r *http.Request) {
 func validateRuntimePackageTar(reader io.Reader) error {
 	archive := tar.NewReader(reader)
 	seen := make(map[string]byte)
-	sawSandbox := false
+	sawAutoputer := false
 	const maxEntries = 100000
 	for entries := 0; ; entries++ {
 		if entries >= maxEntries {
@@ -953,8 +953,8 @@ func validateRuntimePackageTar(reader io.Reader) error {
 		}
 		header, err := archive.Next()
 		if err == io.EOF {
-			if entries == 0 || !sawSandbox {
-				return fmt.Errorf("runtime package: executable bin/sandbox is required")
+			if entries == 0 || !sawAutoputer {
+				return fmt.Errorf("runtime package: executable bin/autoputer is required")
 			}
 			return nil
 		}
@@ -976,8 +976,8 @@ func validateRuntimePackageTar(reader io.Reader) error {
 		seen[name] = header.Typeflag
 		switch header.Typeflag {
 		case tar.TypeReg, tar.TypeRegA:
-			if name == "bin/sandbox" && header.Mode&0o111 != 0 {
-				sawSandbox = true
+			if name == "bin/autoputer" && header.Mode&0o111 != 0 {
+				sawAutoputer = true
 			}
 		case tar.TypeDir:
 		case tar.TypeSymlink, tar.TypeLink:
@@ -1003,7 +1003,7 @@ type runtimePackageBuildManifest struct {
 	BuiltAt       string `json:"built_at"`
 }
 
-func sandboxRuntimeBuildInfo(root string) (buildinfo.Info, error) {
+func autoputerRuntimeBuildInfo(root string) (buildinfo.Info, error) {
 	path := filepath.Join(root, "share", "go-choir", "build.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -1017,31 +1017,31 @@ func sandboxRuntimeBuildInfo(root string) (buildinfo.Info, error) {
 	manifest.Version = strings.TrimSpace(manifest.Version)
 	manifest.Commit = strings.TrimSpace(manifest.Commit)
 	manifest.BuiltAt = strings.TrimSpace(manifest.BuiltAt)
-	if manifest.SchemaVersion != 1 || manifest.Artifact != "sandbox" || manifest.Commit == "" {
-		return buildinfo.Info{}, fmt.Errorf("manifest must identify a schema-v1 sandbox artifact with a commit")
+	if manifest.SchemaVersion != 1 || manifest.Artifact != "autoputer" || manifest.Commit == "" {
+		return buildinfo.Info{}, fmt.Errorf("manifest must identify a schema-v1 autoputer artifact with a commit")
 	}
 	return buildinfo.Info{
-		Service: "sandbox",
+		Service: "autoputer",
 		Version: manifest.Version,
 		Commit:  manifest.Commit,
 		BuiltAt: manifest.BuiltAt,
 	}, nil
 }
 
-// HandleSandboxProxy resolves the live sandbox URL and reverse-proxies the request.
-// Path format: /internal/vmctl/sandbox-proxy/{owner-id}/{...remaining-path}
-func (h *Handler) HandleSandboxProxy(w http.ResponseWriter, r *http.Request) {
+// HandleAutoputerProxy resolves the live autoputer URL and reverse-proxies the request.
+// Path format: /internal/vmctl/autoputer-proxy/{owner-id}/{...remaining-path}
+func (h *Handler) HandleAutoputerProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost && r.Method != http.MethodGet {
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
 		return
 	}
 	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "sandbox proxy is not publicly accessible"})
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "autoputer proxy is not publicly accessible"})
 		return
 	}
 
-	// Extract owner from path: /internal/vmctl/sandbox-proxy/{owner}/{...rest}
-	const prefix = "/internal/vmctl/sandbox-proxy/"
+	// Extract owner from path: /internal/vmctl/autoputer-proxy/{owner}/{...rest}
+	const prefix = "/internal/vmctl/autoputer-proxy/"
 	path := strings.TrimPrefix(r.URL.Path, prefix)
 	if path == "" || path == r.URL.Path {
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "missing owner in proxy path"})
@@ -1072,22 +1072,22 @@ func (h *Handler) HandleSandboxProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	if ownerID == UniversalWirePlatformOwnerID {
 		if err := h.registry.EnsureUniversalWirePlatformComputer(r.Context()); err != nil {
-			log.Printf("vmctl: ensure platform sandbox for %s: %v", ownerID, err)
-			writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "platform sandbox is not ready"})
+			log.Printf("vmctl: ensure platform autoputer for %s: %v", ownerID, err)
+			writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "platform autoputer is not ready"})
 			return
 		}
 	}
 
-	// Resolve live sandbox URL.
-	sandboxURL, err := h.registry.LiveSandboxURL(ownerID, desktopID)
+	// Resolve live autoputer URL.
+	autoputerURL, err := h.registry.LiveComputerURL(ownerID, desktopID)
 	if err != nil {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: fmt.Sprintf("resolve sandbox for %s: %v", ownerID, err)})
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: fmt.Sprintf("resolve autoputer for %s: %v", ownerID, err)})
 		return
 	}
 
-	target, err := url.Parse(sandboxURL)
+	target, err := url.Parse(autoputerURL)
 	if err != nil {
-		writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: fmt.Sprintf("invalid sandbox URL: %v", err)})
+		writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: fmt.Sprintf("invalid autoputer URL: %v", err)})
 		return
 	}
 
@@ -1264,8 +1264,8 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/retention-shadow-plan", h.HandleRetentionShadowPlan)
 	s.HandleFunc("/internal/vmctl/pulse", h.HandlePulse)
 	s.HandleFunc("/internal/vmctl/prune", h.HandlePrune)
-	s.HandleFunc("/internal/vmctl/runtime-package/sandbox", h.HandleRuntimePackage)
-	s.HandleFunc("/internal/vmctl/sandbox-proxy/", h.HandleSandboxProxy)
+	s.HandleFunc("/internal/vmctl/runtime-package/autoputer", h.HandleRuntimePackage)
+	s.HandleFunc("/internal/vmctl/autoputer-proxy/", h.HandleAutoputerProxy)
 }
 
 // ResolveEndpoint returns the full resolve endpoint URL for the vmctl

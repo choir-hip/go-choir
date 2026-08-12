@@ -1012,7 +1012,7 @@ reference the source computer and use a disjoint non-authority namespace.
 Another suggestion was to reuse current model-policy overlays for trial arms.
 That was rejected for counterfactual isolation because overlays are live
 trajectory configuration and may be inherited by spawned agents. The existing
-overlay mechanism remains useful live policy substrate, but not an eval sandbox.
+overlay mechanism remains useful live policy substrate, but not an eval autoputer.
 
 The panel's strongest lateral contribution was to treat closed-world replay as
 program virtualization: arbitrary pure reads resolve against frozen state,

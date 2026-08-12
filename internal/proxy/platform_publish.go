@@ -27,14 +27,14 @@ type publishTextureRequest struct {
 	ExportPolicy json.RawMessage `json:"export_policy,omitempty"`
 }
 
-type sandboxTextureDocument struct {
+type autoputerTextureDocument struct {
 	DocID             string `json:"doc_id"`
 	OwnerID           string `json:"owner_id"`
 	Title             string `json:"title"`
 	CurrentRevisionID string `json:"current_revision_id,omitempty"`
 }
 
-type sandboxTextureRevision struct {
+type autoputerTextureRevision struct {
 	RevisionID       string          `json:"revision_id"`
 	DocID            string          `json:"doc_id"`
 	OwnerID          string          `json:"owner_id"`
@@ -52,11 +52,11 @@ type sandboxTextureRevision struct {
 	CreatedAt        string          `json:"created_at,omitempty"`
 }
 
-type sandboxTextureRevisionList struct {
-	Revisions []sandboxTextureRevision `json:"revisions"`
+type autoputerTextureRevisionList struct {
+	Revisions []autoputerTextureRevision `json:"revisions"`
 }
 
-type sandboxContentItem struct {
+type autoputerContentItem struct {
 	ContentID    string          `json:"content_id"`
 	OwnerID      string          `json:"owner_id"`
 	SourceType   string          `json:"source_type"`
@@ -129,18 +129,18 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 	}
 
 	resolveStarted := time.Now()
-	sandboxURL, err := h.resolveSandboxURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
+	autoputerURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
-		log.Printf("proxy: platform publish failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user sandbox"})
+		log.Printf("proxy: platform publish failed to resolve autoputer for user %s desktop %s: %v", authResult.UserID, desktopID, err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user autoputer"})
 		h.lifecycle.record("platform_publish.resolve", "error", time.Since(resolveStarted))
 		h.lifecycle.record("platform_publish.total", "resolve_error", time.Since(started))
 		return
 	}
 	h.lifecycle.record("platform_publish.resolve", "ok", time.Since(resolveStarted))
 
-	var doc sandboxTextureDocument
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/documents/"+url.PathEscape(req.DocID), authResult.UserID, &doc); err != nil {
+	var doc autoputerTextureDocument
+	if err := h.fetchAutoputerJSON(r, autoputerURL, "/api/texture/documents/"+url.PathEscape(req.DocID), authResult.UserID, &doc); err != nil {
 		log.Printf("proxy: platform publish fetch document: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private texture document"})
 		h.lifecycle.record("platform_publish.private_read", "document_error", time.Since(started))
@@ -160,8 +160,8 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var rev sandboxTextureRevision
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/revisions/"+url.PathEscape(req.RevisionID), authResult.UserID, &rev); err != nil {
+	var rev autoputerTextureRevision
+	if err := h.fetchAutoputerJSON(r, autoputerURL, "/api/texture/revisions/"+url.PathEscape(req.RevisionID), authResult.UserID, &rev); err != nil {
 		log.Printf("proxy: platform publish fetch revision: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private texture revision"})
 		h.lifecycle.record("platform_publish.private_read", "revision_error", time.Since(started))
@@ -177,14 +177,14 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 		h.lifecycle.record("platform_publish.private_read", "detached_source_entities", time.Since(started))
 		return
 	}
-	enrichedSourceEntities, err := h.enrichTexturePublicationSourceEntities(r, sandboxURL, authResult.UserID, rev.SourceEntities)
+	enrichedSourceEntities, err := h.enrichTexturePublicationSourceEntities(r, autoputerURL, authResult.UserID, rev.SourceEntities)
 	if err != nil {
 		log.Printf("proxy: platform publish enrich source metadata: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to prepare publication source metadata"})
 		h.lifecycle.record("platform_publish.private_read", "source_metadata_error", time.Since(started))
 		return
 	}
-	history, err := h.gatherTextureRevisionHistory(r, sandboxURL, authResult.UserID, req.DocID)
+	history, err := h.gatherTextureRevisionHistory(r, autoputerURL, authResult.UserID, req.DocID)
 	if err != nil {
 		log.Printf("proxy: platform publish gather revision history: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private texture revision history"})
@@ -233,13 +233,13 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 
 // gatherTextureRevisionHistory loads the full revision chain for a document so
 // publish can persist the whole versioned history (a Texture is its history, not
-// only the head revision). The sandbox list endpoint returns newest-first; the
+// only the head revision). The autoputer list endpoint returns newest-first; the
 // chain is returned oldest-first so the persisted manifest's hash chain reads in
 // causal order. Returns an empty chain (not an error) when no revisions are
 // available so legacy/head-only behavior degrades gracefully.
-func (h *Handler) gatherTextureRevisionHistory(r *http.Request, sandboxURL, userID, docID string) ([]platform.PublishTextureRevision, error) {
-	var list sandboxTextureRevisionList
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/documents/"+url.PathEscape(docID)+"/revisions", userID, &list); err != nil {
+func (h *Handler) gatherTextureRevisionHistory(r *http.Request, autoputerURL, userID, docID string) ([]platform.PublishTextureRevision, error) {
+	var list autoputerTextureRevisionList
+	if err := h.fetchAutoputerJSON(r, autoputerURL, "/api/texture/documents/"+url.PathEscape(docID)+"/revisions", userID, &list); err != nil {
 		return nil, err
 	}
 	revs := list.Revisions
@@ -290,7 +290,7 @@ func validateOptionalJSONObject(raw json.RawMessage, label string) error {
 	return nil
 }
 
-func (h *Handler) enrichTexturePublicationSourceEntities(r *http.Request, sandboxURL, userID string, raw json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) enrichTexturePublicationSourceEntities(r *http.Request, autoputerURL, userID string, raw json.RawMessage) (json.RawMessage, error) {
 	if len(raw) == 0 {
 		return raw, nil
 	}
@@ -307,7 +307,7 @@ func (h *Handler) enrichTexturePublicationSourceEntities(r *http.Request, sandbo
 		if !ok || !sourceEntityAllowsPublishedSnapshot(entity) || mapValue(entity["reader_snapshot"]) != nil {
 			continue
 		}
-		item, status, ok, err := h.publicationSourceSnapshotItem(r, sandboxURL, userID, entity)
+		item, status, ok, err := h.publicationSourceSnapshotItem(r, autoputerURL, userID, entity)
 		if err != nil {
 			return nil, err
 		}
@@ -366,28 +366,28 @@ func (h *Handler) enrichTexturePublicationSourceEntities(r *http.Request, sandbo
 	return out, nil
 }
 
-func (h *Handler) publicationSourceSnapshotItem(r *http.Request, sandboxURL, userID string, entity map[string]any) (sandboxContentItem, map[string]any, bool, error) {
+func (h *Handler) publicationSourceSnapshotItem(r *http.Request, autoputerURL, userID string, entity map[string]any) (autoputerContentItem, map[string]any, bool, error) {
 	if contentID := sourceEntityContentID(entity); contentID != "" {
-		var item sandboxContentItem
-		if err := h.fetchSandboxJSON(r, sandboxURL, "/api/content/items/"+url.PathEscape(contentID), userID, &item); err != nil {
-			return sandboxContentItem{}, nil, false, fmt.Errorf("load content item %s: %w", contentID, err)
+		var item autoputerContentItem
+		if err := h.fetchAutoputerJSON(r, autoputerURL, "/api/content/items/"+url.PathEscape(contentID), userID, &item); err != nil {
+			return autoputerContentItem{}, nil, false, fmt.Errorf("load content item %s: %w", contentID, err)
 		}
 		if item.OwnerID != userID || item.ContentID != contentID {
-			return sandboxContentItem{}, nil, false, fmt.Errorf("content item %s does not belong to authenticated user", contentID)
+			return autoputerContentItem{}, nil, false, fmt.Errorf("content item %s does not belong to authenticated user", contentID)
 		}
 		return item, nil, true, nil
 	}
 	sourceURL := sourceEntityTargetURL(entity)
 	if sourceURL == "" {
-		return sandboxContentItem{}, sourceSnapshotStatus("source_target_missing", "source_target_missing", nil), false, nil
+		return autoputerContentItem{}, sourceSnapshotStatus("source_target_missing", "source_target_missing", nil), false, nil
 	}
-	item, err := h.importSandboxURLContent(r, sandboxURL, userID, sourceURL, sourceEntityImportQuery(entity))
+	item, err := h.importComputerURLContent(r, autoputerURL, userID, sourceURL, sourceEntityImportQuery(entity))
 	if err != nil {
 		log.Printf("proxy: platform publish source URL snapshot import failed for %s: %v", sourceURL, err)
-		return sandboxContentItem{}, sourceSnapshotStatus("import_failed", "source_import_failed", classifySourceImportError(err)), false, nil
+		return autoputerContentItem{}, sourceSnapshotStatus("import_failed", "source_import_failed", classifySourceImportError(err)), false, nil
 	}
 	if item.OwnerID != userID {
-		return sandboxContentItem{}, nil, false, fmt.Errorf("imported source URL item does not belong to authenticated user")
+		return autoputerContentItem{}, nil, false, fmt.Errorf("imported source URL item does not belong to authenticated user")
 	}
 	return item, nil, true, nil
 }
@@ -450,7 +450,7 @@ func sourceEntityAllowsPublishedSnapshot(entity map[string]any) bool {
 	return boolValue(policy["publish_source_snapshot"]) || boolValue(policy["reader_snapshot"])
 }
 
-func contentItemAllowsPublishedSnapshot(item sandboxContentItem) bool {
+func contentItemAllowsPublishedSnapshot(item autoputerContentItem) bool {
 	provenance := jsonObjectValue(item.Provenance)
 	rights := strings.ToLower(strings.TrimSpace(stringValue(provenance["rights_scope"])))
 	switch rights {
@@ -513,7 +513,7 @@ func jsonObjectValue(raw json.RawMessage) map[string]any {
 	return out
 }
 
-func publicationReaderSnapshotQuality(item sandboxContentItem) map[string]any {
+func publicationReaderSnapshotQuality(item autoputerContentItem) map[string]any {
 	out := map[string]any{}
 	if item.MediaType != "" {
 		out["original_media_type"] = item.MediaType
@@ -535,7 +535,7 @@ func publicationReaderSnapshotQuality(item sandboxContentItem) map[string]any {
 	return out
 }
 
-func contentItemExtractionWarnings(item sandboxContentItem) []string {
+func contentItemExtractionWarnings(item autoputerContentItem) []string {
 	provenance := jsonObjectValue(item.Provenance)
 	if provenance == nil {
 		return nil
@@ -610,40 +610,40 @@ func truncateRunes(value string, limit int) (string, bool) {
 	return string(runes[:limit]), true
 }
 
-func (h *Handler) fetchSandboxJSON(r *http.Request, sandboxBase, path, userID string, out any) error {
-	return h.fetchSandboxJSONWithContext(r.Context(), sandboxBase, path, userID, out)
+func (h *Handler) fetchAutoputerJSON(r *http.Request, autoputerBase, path, userID string, out any) error {
+	return h.fetchAutoputerJSONWithContext(r.Context(), autoputerBase, path, userID, out)
 }
 
-func (h *Handler) fetchSandboxJSONWithContext(ctx context.Context, sandboxBase, path, userID string, out any) error {
-	target, err := joinBasePath(sandboxBase, path)
+func (h *Handler) fetchAutoputerJSONWithContext(ctx context.Context, autoputerBase, path, userID string, out any) error {
+	target, err := joinBasePath(autoputerBase, path)
 	if err != nil {
 		return err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
-		return fmt.Errorf("build sandbox request: %w", err)
+		return fmt.Errorf("build autoputer request: %w", err)
 	}
 	req.Header.Set("X-Authenticated-User", userID)
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("call sandbox: %w", err)
+		return fmt.Errorf("call autoputer: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("sandbox status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("autoputer status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("decode sandbox response: %w", err)
+		return fmt.Errorf("decode autoputer response: %w", err)
 	}
 	return nil
 }
 
-func (h *Handler) importSandboxURLContent(r *http.Request, sandboxBase, userID, sourceURL, query string) (sandboxContentItem, error) {
-	target, err := joinBasePath(sandboxBase, "/api/content/import-url")
+func (h *Handler) importComputerURLContent(r *http.Request, autoputerBase, userID, sourceURL, query string) (autoputerContentItem, error) {
+	target, err := joinBasePath(autoputerBase, "/api/content/import-url")
 	if err != nil {
-		return sandboxContentItem{}, err
+		return autoputerContentItem{}, err
 	}
 	payload := map[string]string{"url": sourceURL}
 	if strings.TrimSpace(query) != "" {
@@ -651,27 +651,27 @@ func (h *Handler) importSandboxURLContent(r *http.Request, sandboxBase, userID, 
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return sandboxContentItem{}, fmt.Errorf("marshal content import request: %w", err)
+		return autoputerContentItem{}, fmt.Errorf("marshal content import request: %w", err)
 	}
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, bytes.NewReader(data))
 	if err != nil {
-		return sandboxContentItem{}, fmt.Errorf("build sandbox import request: %w", err)
+		return autoputerContentItem{}, fmt.Errorf("build autoputer import request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Authenticated-User", userID)
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return sandboxContentItem{}, fmt.Errorf("call sandbox import: %w", err)
+		return autoputerContentItem{}, fmt.Errorf("call autoputer import: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return sandboxContentItem{}, fmt.Errorf("sandbox import status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return autoputerContentItem{}, fmt.Errorf("autoputer import status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-	var item sandboxContentItem
+	var item autoputerContentItem
 	if err := json.NewDecoder(resp.Body).Decode(&item); err != nil {
-		return sandboxContentItem{}, fmt.Errorf("decode sandbox import response: %w", err)
+		return autoputerContentItem{}, fmt.Errorf("decode autoputer import response: %w", err)
 	}
 	return item, nil
 }

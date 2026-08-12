@@ -20,8 +20,8 @@ func TestOpenDoesNotReplayLegacyRelationalRows(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	if _, err := s.db.ExecContext(ctx, `
-		INSERT INTO agents (agent_id, owner_id, sandbox_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?)`, "legacy-agent", "owner-test", "sandbox-test", now, now); err != nil {
+		INSERT INTO agents (agent_id, owner_id, computer_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)`, "legacy-agent", "owner-test", "autoputer-test", now, now); err != nil {
 		_ = s.Close()
 		t.Fatalf("seed retired relational row: %v", err)
 	}

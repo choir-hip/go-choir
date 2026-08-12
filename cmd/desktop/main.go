@@ -33,10 +33,10 @@ var (
 
 // Service ports for local mode.
 const (
-	localProxyPort    = "8082"
-	localGatewayPort  = "8084"
-	localSandboxPort  = "8085"
-	localFrontendPort = "3000"
+	localProxyPort     = "8082"
+	localGatewayPort   = "8084"
+	localAutoputerPort = "8085"
+	localFrontendPort  = "3000"
 )
 
 // dataDir is the base directory for local service state.
@@ -89,7 +89,7 @@ type serviceProcess struct {
 	cmd  *exec.Cmd
 }
 
-// startLocalServices launches gateway, sandbox, and proxy as child
+// startLocalServices launches gateway, autoputer, and proxy as child
 // processes with environment configured for localhost operation.
 func startLocalServices(binDir string) ([]*serviceProcess, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
@@ -107,12 +107,12 @@ func startLocalServices(binDir string) ([]*serviceProcess, error) {
 		fmt.Sprintf("GATEWAY_IDENTITY_STORE_PATH=%s/gateway-identity.json", dataDir),
 	)
 
-	// Sandbox service env.
-	sandboxEnv := append(baseEnv,
-		fmt.Sprintf("SANDBOX_PORT=%s", localSandboxPort),
-		fmt.Sprintf("SANDBOX_ID=desktop-local"),
+	// Autoputer service env.
+	autoputerEnv := append(baseEnv,
+		fmt.Sprintf("AUTOPUTER_PORT=%s", localAutoputerPort),
+		fmt.Sprintf("AUTOPUTER_ID=desktop-local"),
 		fmt.Sprintf("RUNTIME_STORE_PATH=%s/runtime-store", dataDir),
-		fmt.Sprintf("SANDBOX_FILES_ROOT=%s/files", dataDir),
+		fmt.Sprintf("AUTOPUTER_FILES_ROOT=%s/files", dataDir),
 		fmt.Sprintf("RUNTIME_GATEWAY_URL=http://127.0.0.1:%s", localGatewayPort),
 		"RUNTIME_GATEWAY_TOKEN=desktop-local-token",
 	)
@@ -120,7 +120,7 @@ func startLocalServices(binDir string) ([]*serviceProcess, error) {
 	// Proxy service env.
 	proxyEnv := append(baseEnv,
 		fmt.Sprintf("PROXY_PORT=%s", localProxyPort),
-		fmt.Sprintf("PROXY_SANDBOX_URL=http://127.0.0.1:%s", localSandboxPort),
+		fmt.Sprintf("PROXY_AUTOPUTER_URL=http://127.0.0.1:%s", localAutoputerPort),
 	)
 
 	services := []struct {
@@ -129,7 +129,7 @@ func startLocalServices(binDir string) ([]*serviceProcess, error) {
 		env  []string
 	}{
 		{"gateway", "gateway", gatewayEnv},
-		{"sandbox", "sandbox", sandboxEnv},
+		{"autoputer", "autoputer", autoputerEnv},
 		{"proxy", "proxy", proxyEnv},
 	}
 
@@ -171,9 +171,9 @@ func startLocalServices(binDir string) ([]*serviceProcess, error) {
 func waitForServices(procs []*serviceProcess) error {
 	client := &http.Client{Timeout: 2 * time.Second}
 	ports := map[string]string{
-		"gateway": localGatewayPort,
-		"sandbox": localSandboxPort,
-		"proxy":   localProxyPort,
+		"gateway":   localGatewayPort,
+		"autoputer": localAutoputerPort,
+		"proxy":     localProxyPort,
 	}
 
 	for _, proc := range procs {

@@ -163,7 +163,7 @@ main() {
   local package
 
   for service in "$@"; do
-    # go-choir-sandbox was intentionally deleted in PR 5 of
+    # go-choir-autoputer was intentionally deleted in PR 5 of
     # store-consolidation. Its package pointer is installed by a NixOS
     # activation script; all service arguments accepted here require units.
     package="$(resolve_service_package_from_unit "$service")"

@@ -36,7 +36,7 @@ hardest thing and the thing everything else depends on.
 ## The Automatic Computer
 
 The product object is a persistent computer, not a conversational session, not
-a disposable sandbox, not a publishing surface:
+a disposable autoputer, not a publishing surface:
 
 - **Persistent** — it has a stable identity and a canonical event chain. It is
   still there tomorrow, and its history is its state.

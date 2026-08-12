@@ -65,14 +65,14 @@ func TestRunMemoryInitializeSeedsPriorActorSnapshot(t *testing.T) {
 	agentID := "coagent:memory-rewarm"
 
 	prior := types.RunRecord{
-		RunID:     "prior-memory-activation",
-		AgentID:   agentID,
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		State:     types.RunPassivated,
-		Prompt:    "remember durable actor context",
-		CreatedAt: now,
-		UpdatedAt: now,
+		RunID:      "prior-memory-activation",
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		ComputerID: "autoputer-test",
+		State:      types.RunPassivated,
+		Prompt:     "remember durable actor context",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 		Metadata: map[string]any{
 			runMetadataAgentID: agentID,
 		},
@@ -108,7 +108,7 @@ func TestRunMemoryInitializeSeedsPriorActorSnapshot(t *testing.T) {
 		RunID:      "older-completed-memory-activation",
 		AgentID:    agentID,
 		OwnerID:    ownerID,
-		SandboxID:  "sandbox-test",
+		ComputerID: "autoputer-test",
 		State:      types.RunCompleted,
 		Prompt:     "older completed context",
 		Result:     "done",
@@ -134,7 +134,7 @@ func TestRunMemoryInitializeSeedsPriorActorSnapshot(t *testing.T) {
 		RunID:      "other-computer-memory-activation",
 		AgentID:    agentID,
 		OwnerID:    ownerID,
-		SandboxID:  "sandbox-other",
+		ComputerID: "autoputer-other",
 		State:      types.RunCompleted,
 		Prompt:     "newer context from another computer",
 		Result:     "done elsewhere",
@@ -156,15 +156,15 @@ func TestRunMemoryInitializeSeedsPriorActorSnapshot(t *testing.T) {
 		t.Fatalf("append other-computer memory: %v", err)
 	}
 	blocked := types.RunRecord{
-		RunID:     "blocked-memory-activation",
-		AgentID:   agentID,
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		State:     types.RunBlocked,
-		Prompt:    "blocked unresolved context",
-		Error:     "still unresolved",
-		CreatedAt: now.Add(2 * time.Second),
-		UpdatedAt: now.Add(2 * time.Second),
+		RunID:      "blocked-memory-activation",
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		ComputerID: "autoputer-test",
+		State:      types.RunBlocked,
+		Prompt:     "blocked unresolved context",
+		Error:      "still unresolved",
+		CreatedAt:  now.Add(2 * time.Second),
+		UpdatedAt:  now.Add(2 * time.Second),
 	}
 	if err := s.CreateRun(ctx, blocked); err != nil {
 		t.Fatalf("create blocked run: %v", err)
@@ -181,14 +181,14 @@ func TestRunMemoryInitializeSeedsPriorActorSnapshot(t *testing.T) {
 	}
 
 	current := types.RunRecord{
-		RunID:     "rewarm-memory-activation",
-		AgentID:   agentID,
-		OwnerID:   ownerID,
-		SandboxID: "sandbox-test",
-		State:     types.RunPending,
-		Prompt:    "new wake update",
-		CreatedAt: now.Add(time.Second),
-		UpdatedAt: now.Add(time.Second),
+		RunID:      "rewarm-memory-activation",
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		ComputerID: "autoputer-test",
+		State:      types.RunPending,
+		Prompt:     "new wake update",
+		CreatedAt:  now.Add(time.Second),
+		UpdatedAt:  now.Add(time.Second),
 		Metadata: map[string]any{
 			runMetadataAgentID: agentID,
 		},

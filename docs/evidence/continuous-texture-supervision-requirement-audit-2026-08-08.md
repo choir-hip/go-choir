@@ -64,7 +64,7 @@ or no-effect evidence.
 
 A subsequent exact-`fbc7ff5a` source-only public-contract audit found that the
 required raw Trace inspection cannot currently be performed through an admitted
-product route. The canonical sandbox route table mounts no `/api/trace/*`
+product route. The canonical autoputer route table mounts no `/api/trace/*`
 handler; the dormant owner-query code is unregistered, emitted
 `/api/trace/trajectories...` evidence URLs resolve nowhere, and the CLI has no
 Trace command. Lifecycle/Texture events, source-open, runs, and RunAcceptance

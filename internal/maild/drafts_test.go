@@ -18,7 +18,7 @@ import (
 func writeMaildTestRouteResolution(w http.ResponseWriter, r *http.Request) {
 	createdAt := time.Date(2026, 7, 16, 1, 0, 0, 0, time.UTC)
 	closure, err := computerversion.NewCodeClosure(strings.Repeat("1", 40), []computerversion.CodeArtifact{{
-		Name: "sandbox", SHA256: strings.Repeat("a", 64), URI: "nix-store+sha256://" + strings.Repeat("a", 64) + "/nix/store/test-sandbox",
+		Name: "autoputer", SHA256: strings.Repeat("a", 64), URI: "nix-store+sha256://" + strings.Repeat("a", 64) + "/nix/store/test-autoputer",
 	}}, createdAt)
 	if err != nil {
 		panic(err)
@@ -292,7 +292,7 @@ func TestDraftSendEmitsBoundedEmailAppagentTraceEvents(t *testing.T) {
 				t.Fatalf("vmctl request = %s %s", r.Method, r.URL.Path)
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"sandbox_url":"` + runtime.URL + `","desktop_id":"primary"}`))
+			_, _ = w.Write([]byte(`{"computer_url":"` + runtime.URL + `","desktop_id":"primary"}`))
 		default:
 			t.Fatalf("vmctl request = %s %s", r.Method, r.URL.Path)
 		}
@@ -410,7 +410,7 @@ func TestDraftSendResolvesOwnerRuntimeThroughVmctlForTraceEvents(t *testing.T) {
 			t.Fatalf("vmctl request body = %+v", req)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"vm_id":"vm-1","user_id":"user-root","desktop_id":"primary","published":true,"sandbox_url":"` + runtime.URL + `","state":"active"}`))
+		_, _ = w.Write([]byte(`{"vm_id":"vm-1","user_id":"user-root","desktop_id":"primary","published":true,"computer_url":"` + runtime.URL + `","state":"active"}`))
 	}))
 	defer vmctlServer.Close()
 

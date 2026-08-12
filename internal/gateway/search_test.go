@@ -604,7 +604,7 @@ func TestHandleSearch_InvalidBody(t *testing.T) {
 	h := NewHandler(registry, nil)
 
 	// Issue a valid credential
-	cred, err := registry.IssueCredential("test-sandbox")
+	cred, err := registry.IssueCredential("test-autoputer")
 	if err != nil {
 		t.Fatalf("failed to issue credential: %v", err)
 	}
@@ -626,7 +626,7 @@ func TestHandleSearch_EmptyQuery(t *testing.T) {
 	h := NewHandler(registry, nil)
 
 	// Issue a valid credential
-	cred, err := registry.IssueCredential("test-sandbox")
+	cred, err := registry.IssueCredential("test-autoputer")
 	if err != nil {
 		t.Fatalf("failed to issue credential: %v", err)
 	}
@@ -649,7 +649,7 @@ func TestHandleSearch_NoProvidersConfigured(t *testing.T) {
 	h.searchClient = testSearchClient(nil, 1)
 
 	// Issue a valid credential
-	cred, err := registry.IssueCredential("test-sandbox")
+	cred, err := registry.IssueCredential("test-autoputer")
 	if err != nil {
 		t.Fatalf("failed to issue credential: %v", err)
 	}
@@ -687,7 +687,7 @@ func TestHandleSearch_Success(t *testing.T) {
 	}
 
 	// Issue a valid credential
-	cred, err := registry.IssueCredential("test-sandbox")
+	cred, err := registry.IssueCredential("test-autoputer")
 	if err != nil {
 		t.Fatalf("failed to issue credential: %v", err)
 	}
@@ -738,7 +738,7 @@ func TestHandleSearch_DeniesExternalPeerWithValidToken(t *testing.T) {
 		searchClient: testSearchClient([]SearchProvider{mock}, 1),
 	}
 
-	cred, err := registry.IssueCredential("test-sandbox")
+	cred, err := registry.IssueCredential("test-autoputer")
 	if err != nil {
 		t.Fatalf("failed to issue credential: %v", err)
 	}

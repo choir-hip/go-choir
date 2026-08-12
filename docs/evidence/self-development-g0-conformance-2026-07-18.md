@@ -228,7 +228,7 @@ before pin while the unmodified envelope completes append. A fresh frozen panel
 remains required.
 
 The next panel again found one decisive minority blocker: kernel-argv delivery
-copied the envelope into the shared sandbox/updater environment, and consumed
+copied the envelope into the shared autoputer/updater environment, and consumed
 exchange replay returned the same full append bearer. The repair replaces that
 path with a dedicated realization-local ext4 credential drive, removes the
 secret from kernel arguments and shared environment, masks the mount from the
@@ -250,7 +250,7 @@ The retry review found updater's general `systemctl` access could escape every
 namespace restriction through a transient root service. Updater no longer
 invokes or reaches PID 1: it may atomically create only a fixed restart trigger.
 A root-owned path/oneshot bridge from the immutable Nix store removes that
-trigger and restarts exactly `go-choir-sandbox.service`; systemd and dbus
+trigger and restarts exactly `go-choir-autoputer.service`; systemd and dbus
 control sockets are masked from updater. Fixed-trigger/arbitrary-target tests,
 updater compile, NixOS toplevel evaluation, and path-unit evaluation pass. A
 fresh frozen panel remains required.

@@ -470,7 +470,7 @@ func TestContentCreateSupportsDurableMediaReferences(t *testing.T) {
 func TestContentImportFileCreatesExtractedPPTXContentItem(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	filesRoot := t.TempDir()
-	t.Setenv("SANDBOX_FILES_ROOT", filesRoot)
+	t.Setenv("AUTOPUTER_FILES_ROOT", filesRoot)
 	importsDir := filepath.Join(filesRoot, "imports")
 	if err := os.MkdirAll(importsDir, 0o755); err != nil {
 		t.Fatalf("create imports dir: %v", err)

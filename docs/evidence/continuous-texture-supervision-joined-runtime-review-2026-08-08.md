@@ -93,7 +93,7 @@ Independent capsule/security follow-up review returned **ACCEPT** on the exact
 focused Race, and linux/amd64 capsule cross-compilation passed. Full selected CI
 run [`31257971088`](https://github.com/choir-hip/go-choir/actions/runs/31257971088)
 completed successfully. Node B's activation receipt at
-`2026-08-08T13:12:35Z` names exact commit `99fc3e6b` for sandbox, active
+`2026-08-08T13:12:35Z` names exact commit `99fc3e6b` for autoputer, active
 computers, host services, and the canonical checkout.
 
 Authenticated product acceptance did **not** pass at this intermediate landing point. The then-current owner-scoped
@@ -136,7 +136,7 @@ GitHub Actions run
 passed, including build, vet, Race, SBOM, and staging deployment jobs. A fresh
 nonce-bound execution-identity request joined the authorized computer scope
 `vm-bbdbbd01c4390b7036067aaa12afeb68`, guest identity
-`computer-42850e9734d9442386c5dd8bf3afbf19`, VM epoch 8247, sandbox and host
+`computer-42850e9734d9442386c5dd8bf3afbf19`, VM epoch 8247, autoputer and host
 builds, route digest, deployment receipt, executable/image/kernel digests, and
 platform attestation to exact `ac6dd16b`. Boot recovery then created Texture run
 `5ee276b3-d25c-41ac-afaa-5879a6ea5ecf` for the previously stranded initial

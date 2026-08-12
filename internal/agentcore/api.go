@@ -168,7 +168,7 @@ type runStatusResponse struct {
 	AgentProfile        string                                `json:"agent_profile,omitempty"`
 	AgentRole           string                                `json:"agent_role,omitempty"`
 	OwnerID             string                                `json:"owner_id"`
-	SandboxID           string                                `json:"sandbox_id"`
+	ComputerID          string                                `json:"computer_id"`
 	State               types.RunState                        `json:"state"`
 	Prompt              string                                `json:"prompt"`
 	Result              string                                `json:"result,omitempty"`
@@ -236,7 +236,7 @@ type internalRunEventAppendResponse struct {
 type runtimeHealthResponse struct {
 	Status                string                   `json:"status"`
 	Service               string                   `json:"service"`
-	SandboxID             string                   `json:"sandbox_id"`
+	ComputerID            string                   `json:"computer_id"`
 	RuntimeHealth         types.RuntimeHealthState `json:"runtime_health"`
 	RunningRuns           int                      `json:"running_runs"`
 	RunningProcessorRuns  int                      `json:"running_processor_runs"`
@@ -263,7 +263,7 @@ func NewAPIHandler(rt *Runtime) *APIHandler {
 // authenticateUser extracts the authenticated user identity from the
 // X-Authenticated-User header injected by the proxy. It returns an error if
 // the header is missing, which provides defense-in-depth auth gating at the
-// sandbox level (VAL-RUNTIME-002).
+// autoputer level (VAL-RUNTIME-002).
 func authenticateUser(r *http.Request) (string, error) {
 	user := r.Header.Get("X-Authenticated-User")
 	if user == "" {
@@ -317,7 +317,7 @@ func runStatusFromRecord(rec *types.RunRecord) runStatusResponse {
 		AgentProfile:     rec.AgentProfile,
 		AgentRole:        rec.AgentRole,
 		OwnerID:          rec.OwnerID,
-		SandboxID:        rec.SandboxID,
+		ComputerID:       rec.ComputerID,
 		State:            rec.State,
 		Prompt:           rec.Prompt,
 		Result:           rec.Result,
@@ -932,7 +932,7 @@ func (h *APIHandler) HandleRunList(w http.ResponseWriter, r *http.Request) {
 			AgentProfile:     rec.AgentProfile,
 			AgentRole:        rec.AgentRole,
 			OwnerID:          rec.OwnerID,
-			SandboxID:        rec.SandboxID,
+			ComputerID:       rec.ComputerID,
 			State:            rec.State,
 			Prompt:           rec.Prompt,
 			Result:           rec.Result,
@@ -1009,14 +1009,14 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	runningProcessorRuns := h.rt.RunningCountByProfile(r.Context(), agentprofile.Processor)
 	resp := runtimeHealthResponse{
 		Status:               string(health),
-		Service:              "sandbox",
-		SandboxID:            h.rt.cfg.SandboxID,
+		Service:              "autoputer",
+		ComputerID:           h.rt.cfg.ComputerID,
 		RuntimeHealth:        health,
 		RunningRuns:          h.rt.RunningCount(),
 		RunningProcessorRuns: runningProcessorRuns,
 		ResearcherCount:      h.rt.cfg.ResearcherCount,
 		ActiveProvider:       h.rt.provider.ProviderName(),
-		Build:                buildinfo.Snapshot("sandbox"),
+		Build:                buildinfo.Snapshot("autoputer"),
 	}
 	resp.SelfDevelopmentMarker = h.rt.selfdevStartupMarker
 	resp.EventSchemaVersion = h.rt.selfdevStartupEventSchema

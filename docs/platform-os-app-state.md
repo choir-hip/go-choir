@@ -323,7 +323,7 @@ Recent deployed platform proof for the primary-domain cutover:
   `a077efa` from the pruned primary-domain cutover mission;
 - CI/deploy run:
   `https://github.com/choir-hip/go-choir/actions/runs/26441752735`;
-- staging health reported proxy and sandbox commit/deployed_commit
+- staging health reported proxy and autoputer commit/deployed_commit
   `2b2243394ce86cc8a79d62e615fc6039c8c658a9`, deployed at
   `2026-05-26T08:40:19Z`;
 - deployed browser proof used real origin `https://choir.news`, registered a
@@ -346,7 +346,7 @@ Recent deployed platform proof for live multi-device computer sync:
   `8c0b941c36ce620d3f6cc5ed0b5fbcdb471cac65`;
 - CI/deploy run:
   `https://github.com/yusefmosiah/go-choir/actions/runs/26304651141`;
-- staging health reported proxy and sandbox commit
+- staging health reported proxy and autoputer commit
   `8c0b941c36ce620d3f6cc5ed0b5fbcdb471cac65`, built at
   `20260522181828`, deployed at `2026-05-22T18:20:17Z`;
 - deployed Playwright:
@@ -399,7 +399,7 @@ landed by separate authority. These receipts do not prove a current product path
   `https://github.com/yusefmosiah/go-choir/actions/runs/26200571636`, and
   `https://github.com/yusefmosiah/go-choir/actions/runs/26202379885`, and
   `https://github.com/yusefmosiah/go-choir/actions/runs/26204257440`;
-- staging health reported proxy and sandbox commit
+- staging health reported proxy and autoputer commit
   `22410dafff91cdc4edcddfa65ffa609c2973e928`;
 - deployed product proof artifacts:
   `test-results/apps-changes-texture-report-staging-2026-05-21T00-50-49-966Z/apps-changes-texture-report-proof.json`;
@@ -494,7 +494,7 @@ restore recovery baseline:
 Recent deployed platform proof for the media split and reader sweep:
 
 - commit: `c42108fc2b322e60b4d65c815ab3f8e2aee5dfa2`;
-- staging health: proxy and sandbox reported the same commit after deploy;
+- staging health: proxy and autoputer reported the same commit after deploy;
 - local and staging Playwright covered Files opening PDF/EPUB, content app
   prompt routing, launcher/shell smoke, Texture/Trace coexistence, and Podcast
   player/mobile episode scrolling;
@@ -532,7 +532,7 @@ Recent deployed platform proof for heavy-session Desktop Overview:
 - behavior commit: `b148461dafc6125fa321de9b10814cdc6af285b6`;
 - CI/deploy run:
   `https://github.com/yusefmosiah/go-choir/actions/runs/26131606449`;
-- staging health reported proxy and sandbox commit
+- staging health reported proxy and autoputer commit
   `b148461dafc6125fa321de9b10814cdc6af285b6`;
 - deployed heavy-session Playwright:
   historical desktop heavy-session proof command against the old staging hostname;
@@ -552,7 +552,7 @@ Recent deployed platform proof for live-spatial Desktop Overview previews:
 - behavior commit: `2f8ad7adc2697d6faff00dbc90991057c19781e9`;
 - CI/deploy run:
   `https://github.com/yusefmosiah/go-choir/actions/runs/26133712240`;
-- staging health reported proxy and sandbox commit
+- staging health reported proxy and autoputer commit
   `2f8ad7adc2697d6faff00dbc90991057c19781e9`, built at
   `20260520002859`, deployed at `2026-05-20T00:31:14Z`;
 - deployed ordinary-session Playwright:

@@ -17,8 +17,8 @@ func main() {
 
 	s := server.NewServer("gateway", cfg.Port)
 
-	// Initialize the identity registry for sandbox credential management.
-	registry := gateway.NewIdentityRegistry(cfg.SandboxTokenTTL)
+	// Initialize the identity registry for autoputer credential management.
+	registry := gateway.NewIdentityRegistry(cfg.AutoputerTokenTTL)
 	if cfg.IdentityStorePath != "" {
 		if err := registry.SetPersistencePath(cfg.IdentityStorePath); err != nil {
 			log.Fatalf("gateway: load identity store: %v", err)
@@ -31,7 +31,7 @@ func main() {
 	// routes requests to the correct provider based on the provider field
 	// or model parameter (VAL-LLM-001, VAL-LLM-005).
 	// Provider credentials remain host-side and are never exposed to
-	// sandbox callers or browsers (VAL-GATEWAY-004).
+	// autoputer callers or browsers (VAL-GATEWAY-004).
 	providerCfg := loadProviderConfig()
 	mp := provider.ResolveAll(providerCfg)
 	providerNames := mp.Names()
@@ -41,9 +41,9 @@ func main() {
 	// failing provider instead of retrying endlessly (production-readiness
 	// checklist: "LLM provider failures circuit-break").
 	breakerCfg := health.BreakerConfig{
-		FailureThreshold:   5,
-		OpenTimeout:        30 * time.Second,
-		HalfOpenMaxProbes:  1,
+		FailureThreshold:  5,
+		OpenTimeout:       30 * time.Second,
+		HalfOpenMaxProbes: 1,
 	}
 	breakers := gateway.NewBreakerRegistry()
 
@@ -61,9 +61,9 @@ func main() {
 		}
 		log.Printf("gateway: circuit breakers enabled for %d provider(s)", len(breakers.Names()))
 
-		// Initialize per-sandbox rate limiting (VAL-GATEWAY-005).
+		// Initialize per-autoputer rate limiting (VAL-GATEWAY-005).
 		rlCfg := gateway.LoadRateLimiterConfig()
-		rl := gateway.NewPerSandboxRateLimiter(rlCfg.MaxRequests, rlCfg.WindowSize)
+		rl := gateway.NewPerAutoputerRateLimiter(rlCfg.MaxRequests, rlCfg.WindowSize)
 		log.Printf("gateway: rate limiter enabled: %s", rl)
 
 		handler = gateway.NewMultiHandlerWithRateLimit(registry, wrapped, rl)
@@ -72,7 +72,7 @@ func main() {
 
 		// Fall back to single-provider mode with nil provider.
 		rlCfg := gateway.LoadRateLimiterConfig()
-		rl := gateway.NewPerSandboxRateLimiter(rlCfg.MaxRequests, rlCfg.WindowSize)
+		rl := gateway.NewPerAutoputerRateLimiter(rlCfg.MaxRequests, rlCfg.WindowSize)
 		handler = gateway.NewHandlerWithRateLimit(registry, nil, rl)
 	}
 

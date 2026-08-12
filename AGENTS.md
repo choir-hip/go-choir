@@ -70,8 +70,8 @@ reading to Source Viewer/reader artifacts and use Web Lens only for explicit
 live/original inspection.
 
 Read [docs/computer-ontology.md](docs/computer-ontology.md) before changing VM,
-sandbox, candidate-world, promotion, package, or persistent-state behavior. The
-product object is a persistent user computer; `sandbox` is an implementation
+autoputer, candidate-world, promotion, package, or persistent-state behavior. The
+product object is a persistent user computer; `autoputer` is an implementation
 service name, not the product ontology.
 
 ## Mutation Classes
