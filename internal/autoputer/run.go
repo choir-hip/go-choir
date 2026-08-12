@@ -381,14 +381,7 @@ func Run() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	log.Printf("autoputer: orchestration topology (super=1, researchers=%d)", rtCfg.ResearcherCount)
-	// The replay probe must be able to inspect retained state even when an
-	// unrelated durable actor/Texture reconciliation prevents normal runtime
-	// startup. This mode is temporary, read-only, and must be unset before
-	// any normal product acceptance.
-	probeOnly := strings.EqualFold(strings.TrimSpace(os.Getenv("RUNTIME_REPLAY_PROBE_ONLY")), "true")
-	if probeOnly {
-		log.Printf("autoputer: replay-probe-only mode; actor and Texture runtime start skipped")
-	} else if err := rt.Start(ctx); err != nil {
+	if err := rt.Start(ctx); err != nil {
 		log.Fatalf("autoputer: runtime startup refused: %v", err)
 	}
 
