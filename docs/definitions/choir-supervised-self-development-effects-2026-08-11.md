@@ -63,15 +63,14 @@ start:
     - id: replay-completeness-non-equivalence-2026-08-12
       problem: "The deployed pre-drop replay completeness probe reconstructed the retained event chain into a disposable projection but returned not_equivalent: 26 deterministic DoltStateExtractor differences, with both live_head and replay_head null. Five schema observations and five table observations were absent from replay; sixteen schema/content observations differed."
       evidence_ref: docs/evidence/choir-sandbox-autoputer-replay-completeness-2026-08-12.json
-      consequence: "Classified 2026-08-12: 1 aggregate content_root, 5 retired tables (schema+table absent from current DDL), 1 event_projection schema drift (live-only supervision_transaction_json), 14 empty_until_supported direct-SQL tables. None of the 14 is event-derived or pinned-receipt. Clean rematerialization and checkpoint creation remain unlicensed. See docs/evidence/choir-supervised-self-development-replay-difference-classes-2026-08-12.md."
+      consequence: "Classified 2026-08-12 (1 aggregate content_root, 5 retired tables as schema+table, 1 event_projection schema drift via live-only supervision_transaction_json, 14 empty_until_supported direct-SQL tables), then resolved 2026-08-12 by owner-scoped product-path workspace replacement: POST /api/computers/{id}/lifecycle/replace-workspace quarantined the retained workspace and opened current DDL (no event, no checkpoint), and a restart reopened the store. The post-cutover probe reports equivalent with 82 live and 82 replay observations and zero differences; heads remain null, so replay eligibility, checkpoint, restore, and effects stay fail-closed. See docs/evidence/choir-supervised-self-development-replay-difference-classes-2026-08-12.md and docs/evidence/choir-supervised-self-development-replay-completeness-post-cutover-2026-08-12.json."
     - id: replay-probe-credential-renewal-refused-2026-08-12
       problem: "After the replay gate repair deployed at d2ab2d2d, the owner-scoped product CLI reaches the retained active computer but fails during event-chain reconstruction: the guest capability renewal endpoint returns a non-201 response and the guest reports renewal refused. The required read-only replay diff is not recaptured; no state mutation or clean rematerialization is authorized."
       evidence_ref: "CHOIR_HOST=https://choir.news CHOIR_TIMEOUT=10m go run ./cmd/choir computer replay-completeness --computer computer-03335285269bdba4f94377e56879f9e6 at 2026-08-12T18:46Z returned HTTP 500: replay completeness: reconstruct event chain: computer event appender: fetch durable chain: computer event client: capability: guest credential: renewal refused; /health reported deployed_commit d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c; computer status reported the requested stable computer active at realization_epoch 203."
       consequence: "An owner-scoped lifecycle restart at 2026-08-12T18:47:50Z refreshed the retained guest credential through the product path without source or state repair. The replay probe then completed; recurrence across capability expiry remains a residual risk and is not masked."
 
   unknowns:
-    - "Owner-scoped product-path VM-local workspace replacement is wired as POST /api/computers/{id}/lifecycle/replace-workspace (quarantine + OpenFresh, no event, no checkpoint) plus a subsequent owner-scoped restart to reopen the store. It is not yet deployed or executed on the retained computer. POST self-development/genesis remains refused because it appends GenesisImported and publishes a checkpoint."
-    - "How a later non-null canonical chain is introduced without treating the existing genesis route or a cleaned null-head snapshot as restore authority."
+    - "How a later non-null canonical chain is introduced on the retained computer without treating the existing genesis route or a cleaned null-head snapshot as restore authority; the post-cutover workspace is diagnostically equivalent but ineligible."
     - "Whether rematerialization is product-ready. ProjectionMaterializer is non-runtime today; if the classification and subsequent build show it is not usable, restore falls back to a single-workspace pin checkout on an interim basis with the event head still the sole semantic authority."
     - "Which effect classes are outside the reversible envelope and must refuse to promote under a standing rule."
     - "Whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata and citations without a payload schema change."
@@ -248,8 +247,8 @@ measures:
 
 now:
   status: working
-  slice: "Product-path workspace replacement is wired (guest Runtime.ReplaceWorkspace, proxy owner-scoped forward, CLI choir computer replace-workspace). Next: land through CI, staging deploy, then execute replace-workspace plus restart on the retained computer and recapture replay-completeness. Expect equivalent, still-null heads, eligible=false. Do not append GenesisImported, do not publish a checkpoint, and do not add vertical reducers. A cleaned null-head computer stays ineligible."
-  question: "After the product-path cutover and restart, does the diagnostic probe report equivalent while remaining ineligible?"
+  slice: "Deployed 2026-08-12 at bf03286f and executed on the retained computer: replace-workspace quarantined the old workspace onto current DDL (no event, no checkpoint), a restart reopened the store, and the post-cutover probe reports equivalent with zero differences. Heads remain null, so eligibility, checkpoint, restore, and effects stay fail-closed. Next: a non-null canonical chain (successor slice) before any checkpoint work; direct-SQL refill of empty_until_supported tables after first product use is fail-closed by design."
+  question: "How is a non-null canonical chain introduced on the retained computer so replay eligibility can become true without blessing arbitrary live state?"
 
   reconciliation:
     observed_at: 2026-08-12T06:56:12Z
@@ -260,8 +259,8 @@ now:
     worktree_inventory_ref: 2026-08-12 read-only git status (clean)
     status: reconciled
 
-  blocker_or_risk: "The product path exists in this worktree but is not deployed. The retained workspace still has the 26 differences. Reusing self-development genesis would append an event and publish a checkpoint, which this gate still refuses. Direct-SQL writers will refill empty_until_supported tables after first use; that recurrence is fail-closed, not incomplete cleanup."
-  next_action: "Land the owner-scoped product-path VM-local workspace replacement through CI and staging, then run choir computer replace-workspace and choir computer restart on the retained computer, then recapture replay-completeness. Expect equivalent, still-null heads, eligible=false. Do not drop or mutate the retained 26-diff evidence artifacts."
+  blocker_or_risk: "Diagnostic equivalence is proven on a null-head workspace; it does not license restore. Any direct-SQL write to an empty_until_supported table makes the computer ineligible again until a registered reducer exists, and no non-null canonical chain exists yet on the retained computer. The quarantined pre-cutover workspace remains on the computer as inert evidence."
+  next_action: "Define the non-null canonical chain introduction (genesis alternative) as a successor slice; do not rerun the probe as if unanswered, do not reuse POST self-development/genesis, and do not drop or mutate the retained 26-diff evidence artifacts or the quarantined workspace."
 
   candidate:
     id: none
@@ -277,7 +276,7 @@ now:
     consequence: "Per-candidate owner approval is removed as a requirement and replaced by an owner-armed standing rule plus two-seat auto-approval. The decision-binding verifier and mode CAS are relaxed deliberately, which is the mission's heaviest evidence burden. Checkpoint and revert become deliverables rather than a rollback field. Effects leaving the reversible envelope gain an explicit refusal requirement. Freeze/propose authority must be wired onto CoSuper, which today has no production call site. Pre-mission haunted-authority cutover (roadmap demotion, doctrine/ontology transitional language, RLM Phase-1 re-derive note, restore-set boundary, AGENTS restore-vs-deploy note) landed green; finish.completion_cutover must still run after deployed acceptance or the goal is a false complete."
   evidence_refs: [docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
   blocker_or_risk: "Revert is the mission: nothing in production reads Dolt history back, checkpoints bind no state, and Dolt commits carry no head binding. Replay completeness is unresolved and is the deciding measurement; ProjectionMaterializer is explicitly non-runtime today, so the preferred rematerialization path has no runtime implementation yet and an interim single-workspace pin checkout may be needed. Relaxing the decision-binding verifier and mode CAS touches the surfaces that make the tape trustworthy and carries the heaviest evidence burden. RESOLVED 2026-08-11: staging deploy identity reconciled; owner-bearer residual disposed; capsule build capability confirmed; frontend serving location determined (UI out of scope)."
-  next_action: "Land and deploy the owner-scoped product-path VM-local workspace replacement after the 2026-08-12 classification receipt; do not rerun the probe as if unclassified."
+  next_action: "Define the non-null canonical chain introduction after the accepted 2026-08-12 post-cutover equivalence receipt; do not rerun the probe as if unanswered."
 
 receipts:
   - id: roadmap-consensus-2026-08-11
@@ -426,6 +425,22 @@ receipts:
       environment_identity: "staging https://choir.news deployed_commit d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c"
       deployed_acceptance: "classification only; 26 differences remain on the retained workspace"
     registry_conformance_ref: "effects Definition remains the active entrypoint; classification evidence is referenced here and in the authority manifest"
+  - id: workspace-replace-cutover-2026-08-12
+    boundary: execute
+    commit_or_artifact: docs/evidence/choir-supervised-self-development-replay-completeness-post-cutover-2026-08-12.json
+    proof_refs: ["choir computer replace-workspace --computer computer-03335285269bdba4f94377e56879f9e6 at 2026-08-12T21:59:35Z (quarantine /mnt/persistent/workspace-replaced-20260812T215935.028398691Z, appended_event false, published_checkpoint false, store_closed true)", "restart receipt 019ff7fc-a0e4-7b78-972b-78172447d9fb (boot new guest image, realization_epoch 205)", "restart receipt 019ff7fd-5992-75c4-badc-0562bd4e156b (reopen fresh store, realization_epoch 207)", "choir computer replay-completeness at 2026-08-12T22:00:27Z: status equivalent, 82 live and 82 replay observations, zero differences, live_head null, replay_head null, probe_digest 83d31d2e0be42a8e3f508471e22f100f9c0d02fcb59faa79730ec061b947d0bc", "https://choir.news/health deployed_commit bf03286f48c21971212db74c5b6d73a49d65a1d3", "CI run 31635577258 success after Node B disk reclaim"]
+    rollback_ref: "Quarantined pre-cutover workspace retained in-guest at /mnt/persistent/workspace-replaced-20260812T215935.028398691Z; platform rollback is git revert of bf03286f"
+    disposition: "accepted as diagnostic equivalence on a null-head workspace; replay eligibility, checkpoint, restore, and effects remain fail-closed because heads are null"
+    problem_ref: replay-completeness-non-equivalence-2026-08-12
+    authorization_ref: "owner direction 2026-08-12: pre-launch, no backwards compatibility; convergent panel .agentic-consensus/replay-resolve-20260812"
+    candidate_or_evidence_refs: [docs/evidence/choir-supervised-self-development-replay-completeness-post-cutover-2026-08-12.json, docs/evidence/choir-supervised-self-development-replay-difference-classes-2026-08-12.md]
+    landing:
+      source_commit: bf03286f
+      ci_ref: "31635577258 (success; SBOM rerun after transient network drop; deploy rerun after Node B disk reclaim)"
+      deploy_ref: "Deploy to Staging (Node B) success; deployed_at 2026-08-12T21:57:18Z"
+      environment_identity: "https://choir.news/health deployed_commit bf03286f48c21971212db74c5b6d73a49d65a1d3, vmctl_status ok"
+      deployed_acceptance: "replace-workspace + restart executed on the retained computer; post-cutover probe equivalent with zero differences and null heads"
+    registry_conformance_ref: "effects Definition remains the active entrypoint; post-cutover evidence artifact is referenced here and in the authority manifest"
 
 view:
   path: none
