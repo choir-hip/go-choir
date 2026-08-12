@@ -68,9 +68,11 @@ start:
       problem: "After the package-order repair, the pushed SBOM candidate reached the changed-package build and failed every required Go package whose module closure uses the shared flake vendorHash. Nix expected sha256-NQ3VEnZ8q5Lo1uat8z9lV7YCM4auEkQu6uiI1TcIEvs= but downloaded sha256-9dsR+XGLTVDZ49SYVzNBIEPOxPZNlNlpPplNVeAocSk=; the same fixed-output mismatch appeared for maild, maildctl, corpusd, autoputer, sourcecycled, and vmctl."
       evidence_ref: "CI run 31551955304, Build Differential SBOM Candidate job 93976443314, Reuse semantic inventories or build changed packages logs at 2026-08-12T01:00:21Z-01:02:52Z; flake.nix:103-104"
       consequence: "The landing remains incomplete until this independently documented build failure is repaired, the focused SBOM contract and package build path pass, and a new pushed CI run is green. No staging deployment or state drop is authorized."
+    - id: deploy-staging-schema-drift-2026-08-12
+      problem: "The first deployment of the renamed runtime reached the existing staging VM but could not start its runtime store: the retained database still had the pre-cutover sandbox_id schema while the new bootstrap attempted an index whose key column is computer_id. vmctl therefore stayed unavailable and the deploy health gate failed."
+      evidence_ref: "CI run 31552694600, Deploy to Staging job 93978717729, diagnostics at 2026-08-12T01:25:52Z-01:27:20Z: runtime Error 1072 key column computer_id does not exist in table; proxy health vmctl unavailable; incomplete receipt /var/lib/go-choir/deploy-failures/31552694600-1.json"
+      consequence: "The deploy failure is documented before repair. The replay probe must still run against the pre-drop state through the product path; only then may staging state be dropped and recreated so the renamed schema can boot. No direct Node B mutation is an admissible substitute."
   unknowns:
-    - "Whether any operator surface outside this repo — a deploy script, a runbook, or a Node B local file — references SANDBOX_* variables or go-choir-sandbox unit names, which would widen the coordinated deploy surface beyond what the repo shows."
-    - "Whether anything in current staging state is worth preserving before the drop, beyond the replay-probe diff this Definition requires."
 
 finish:
   deliver: "One clean cutover with no compatibility surface. The service that runs a Choir computer is named autoputer everywhere it is a service, package, process, unit, environment variable, or vocabulary term. The persistent user computer's identity is named computer everywhere it is a field, column, index, or public JSON name. The word sandbox survives only where it genuinely means something else. No shim, alias, dual-read, or legacy field is left behind."
