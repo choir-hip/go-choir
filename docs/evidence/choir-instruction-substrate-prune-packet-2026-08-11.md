@@ -19,10 +19,12 @@ names for the mandatory contract packet are:
 - `docs/semantic-registry.md`
 - `docs/standing-questions.md`
 
-The same `wc -w` measurement over those nine paths is now **16,570 words**.
+The same `wc -w` measurement over those nine paths is now **16,600 words**.
 The Definition's recorded baseline is approximate and its per-file arithmetic
-predates later packet edits; the receipt therefore records the exact current
-path set and command rather than claiming a fabricated historical recompute.
+predates later packet edits; the receipt records the exact current path set and
+command rather than claiming a fabricated historical recompute. The reduction
+is 2,579 words (13.4%) against the recorded 19,179-word baseline.
+The measurement command was `wc -w` over exactly the nine paths listed above.
 The explicit ten-document `docs/README.md` default view is also retained and
 still resolves to its source contracts.
 

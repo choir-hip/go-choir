@@ -139,16 +139,16 @@ measures:
     cannot_prove: that each invariant is well-placed
 
 now:
-  status: working
-  slice: "Beads triage is complete. All 106 open/in_progress records have a durable disposition; the delete gate passes because no still-real unowned work was found."
-  question: "Answered by triage: 12 records are already delivered, 94 are superseded by later decisions, and none require relocation or abandonment."
+  status: complete
+  slice: "The prep mission is complete. Beads was triaged before deletion; its store and doccheck integration are gone; doccheck now scans the non-ignored corpus and separates warnings from info; all actionable H findings are resolved; and the mandatory packet is smaller with invariant conservation recorded."
+  question: "Resolved: 106/106 open and in_progress records have durable dispositions; 0 warnings remain; the packet is 16,600 words versus the recorded 19,179-word baseline; and doctrine I1-I16 plus SEM-01-SEM-09 are equal before and after."
   reconciliation:
-    observed_at: 2026-08-11T21:30:00Z
-    source_ref: main@f1fdaf7c
-    deploy_identity: "staging 914f7a5d976a, deploy 2026-08-11T18:11:01Z; unchanged by this mission"
+    observed_at: 2026-08-11
+    source_ref: main@006e39c0
+    deploy_identity: "staging 914f7a5d976a; this prep mission does not change deployed product behavior"
     authority_identities: [docs/choir-doctrine.md, docs/agent-product-doctrine.md, docs/computer-ontology.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-11 read-only git status after f1fdaf7c (clean)
+    worktree_inventory_ref: "2026-08-11 final status: unrelated WIP preserved in docs/definitions/documentation-authority-reduction-2026-07-09.md and docs/definitions/choir-sandbox-autoputer-rename-2026-08-11.md"
     status: reconciled
   candidate:
     id: none
@@ -158,13 +158,19 @@ now:
     kind: architecture
     status: proposed
     source: orchestrator
-    evidence_ref: doccheck.json 2026-08-11; .beads/issues.jsonl; cmd/doccheck/main.go:340-352,541-546; docs/choir-doctrine.md I5
-    owner_ratification_ref: "owner direction 2026-08-11: 'either we go all in on beads or we delete it. and the docs-based codeflow needs a pruning and streamlining anyway'; drafting requested. Ratification pending owner review of this Definition."
-    recorded_at: 2026-08-11T21:30:00Z
-    consequence: "The effects mission does not start until this lands, so scope discipline is itself an acceptance condition. If triage shows substantial live work in beads, the delete decision returns to the owner rather than proceeding."
-  evidence_refs: [doccheck.json, .beads/issues.jsonl, docs/definitions/choir-supervised-self-development-effects-2026-08-11.md]
-  blocker_or_risk: "Step 5 is the risk: pruning doctrine is how invariants bought with failures get lost. The invariant-conservation gate is the fence, and it blocks the mission on mismatch. Secondary risk is scope growth delaying the effects mission."
-  next_action: "Commit the Definition plus the triage receipt as the problem-documentation checkpoint, then remove beads and its R8 integration."
+    evidence_ref: "docs/evidence/choir-instruction-substrate-prune-triage-2026-08-11.md; docs/evidence/choir-instruction-substrate-prune-doccheck-2026-08-11.md; docs/evidence/choir-instruction-substrate-prune-packet-2026-08-11.md"
+    owner_ratification_ref: "owner direction 2026-08-11: 'either we go all in on beads or we delete it. and the docs-based codeflow needs a pruning and streamlining anyway'; drafting requested. The implementation follows that direction without introducing a replacement tracker."
+    recorded_at: 2026-08-11
+    consequence: "The effects mission can start against one work owner, actionable doccheck output, and a reduced packet. The effects Definition and its route map were not altered by this prep mission."
+  evidence_refs:
+    - docs/evidence/choir-instruction-substrate-prune-triage-2026-08-11.md
+    - docs/evidence/choir-instruction-substrate-prune-doccheck-2026-08-11.md
+    - docs/evidence/choir-instruction-substrate-prune-packet-2026-08-11.md
+    - "go run ./cmd/doccheck --mode=full: 317 docs, 0 warnings, 37 info findings"
+    - "go run ./cmd/doccheck --mode=live: passed; 10 content documents plus router"
+    - "go test ./cmd/doccheck && go run ./cmd/doccheck --mode=full: passed in the source-bearing landing before final doc-only receipt correction"
+  blocker_or_risk: "The prep mission's remaining risk is ordinary maintenance: the effects mission still requires its own runtime and staging evidence. This mission did not touch product behavior or the effects Definition's design."
+  next_action: "Start the effects Definition; do not re-open the retired beads store or re-run this prep mission."
 
 receipts:
   - id: beads-triage-2026-08-11
@@ -172,10 +178,27 @@ receipts:
     coverage: "106/106 open and in_progress records"
     dispositions: "12 already delivered; 94 superseded; 0 relocated; 0 abandoned"
     delete_gate: passes
+  - id: beads-removal-2026-08-11
+    artifact: "commits 8697c0ab and 006e39c0"
+    coverage: ".beads/ removed; R8 reader/rule/tests and unused migration commands removed; no current beads references remain"
+    verification: "git status and scoped reference audit after landing"
+  - id: doccheck-signal-2026-08-11
+    artifact: docs/evidence/choir-instruction-substrate-prune-doccheck-2026-08-11.md
+    coverage: "baseline 143 findings (31 warning, 112 info) to corrected 315 tracked docs (0 warning, 38 info) in the same-run receipt"
+    verification: "current full run: 317 docs, 0 warnings, 37 info findings; current live run passed"
+  - id: packet-conservation-2026-08-11
+    artifact: docs/evidence/choir-instruction-substrate-prune-packet-2026-08-11.md
+    coverage: "16,600 words versus the recorded 19,179-word baseline; I1-I16 and SEM-01-SEM-09 equal before and after"
+    verification: "exact nine-path wc measurement and explicit before/after set comparison"
+  - id: source-landing-2026-08-11
+    artifact: "origin/main at 006e39c0"
+    coverage: "source-bearing commits 8697c0ab and 006e39c0 pushed; Docs Truth Check passed; full CI rerun is the final landing check"
+    verification: "GitHub Actions run 31546940207"
 
 view:
   path: none
   generator: none
+
 ---
 
 # Instruction Substrate Prune — Prep Definition
