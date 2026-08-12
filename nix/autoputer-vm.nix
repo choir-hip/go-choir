@@ -663,6 +663,7 @@ EOF
     requires = [ "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-guest-receipt-signer.service" "go-choir-verifier-signer.service" ];
     bindsTo = [ "go-choir-guest-receipt-signer.service" ];
     environment = {
+      CHOIR_RENAME_SCHEMA_RECOVERY = "true";
       CHOIR_COMPUTER_CREDENTIAL_FILE = "/run/choir-bootstrap/computer-event-envelope";
       CHOIR_REVOCATION_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/revocation-capability";
       CHOIR_RESTART_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/restart-capability";

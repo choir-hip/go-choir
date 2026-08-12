@@ -710,10 +710,16 @@ func Open(dbPath string) (*Store, error) {
 
 // bootstrap applies the schema DDL to the database.
 func (s *Store) bootstrap() error {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("CHOIR_RENAME_SCHEMA_RECOVERY")), "true") {
+		if err := s.recoverLegacySandboxColumns(); err != nil {
+			return fmt.Errorf("recover legacy rename schema: %w", err)
+		}
+	}
 	_, err := s.db.Exec(schemaDDL)
 	if err != nil {
 		return fmt.Errorf("apply schema: %w", err)
 	}
+
 	for _, migration := range []struct {
 		table string
 		name  string
@@ -783,6 +789,42 @@ func (s *Store) bootstrap() error {
 		return fmt.Errorf("create idx_coagent_mailboxes_channel: %w", err)
 	}
 	return s.backfillDerivedRuntimeState()
+}
+
+// recoverLegacySandboxColumns is a one-shot staging recovery for the
+// pre-cutover database. It is intentionally gated by an explicit environment
+// variable and is removed after the retained staging computer has been
+// observed by the replay probe. Normal startup has no compatibility path.
+func (s *Store) recoverLegacySandboxColumns() error {
+	for _, table := range []string{"agents", "runs"} {
+		var legacyCount, currentCount int
+		if err := s.db.QueryRow(`
+SELECT COUNT(*)
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = ?
+  AND column_name = ?`, table, "sandbox_id").Scan(&legacyCount); err != nil {
+			return fmt.Errorf("inspect %s.sandbox_id: %w", table, err)
+		}
+		if err := s.db.QueryRow(`
+SELECT COUNT(*)
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = ?
+  AND column_name = ?`, table, "computer_id").Scan(&currentCount); err != nil {
+			return fmt.Errorf("inspect %s.computer_id: %w", table, err)
+		}
+		if legacyCount == 0 {
+			continue
+		}
+		if currentCount != 0 {
+			return fmt.Errorf("%s contains both sandbox_id and computer_id", table)
+		}
+		if _, err := s.db.Exec(fmt.Sprintf("ALTER TABLE %s RENAME COLUMN sandbox_id TO computer_id", table)); err != nil {
+			return fmt.Errorf("rename %s.sandbox_id: %w", table, err)
+		}
+	}
+	return nil
 }
 
 func (s *Store) backfillDerivedRuntimeState() error {
