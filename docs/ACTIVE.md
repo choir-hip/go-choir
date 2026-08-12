@@ -21,17 +21,21 @@ is the separate docs/CI maintenance entrypoint that makes this substrate
 legible before the effects Definition proceeds. It does not own product effects
 or a second product schedule.
 
-The active Definition has one owner-ratified pre-effects subordinate contract:
+The active Definition had one owner-ratified pre-effects subordinate contract:
 [`definitions/choir-sandbox-autoputer-rename-2026-08-11.md`](definitions/choir-sandbox-autoputer-rename-2026-08-11.md).
-It owns the single clean naming cutover before effects work resumes: service
-surfaces become `autoputer`, persistent computer identity surfaces become
-`computer`, and no compatibility path is permitted. It is not a second
-entrypoint; its current state and blocker live only in that Definition.
+It owned the single clean naming cutover before effects work resumed: service
+surfaces became `autoputer`, persistent computer identity surfaces became
+`computer`, and no compatibility path was permitted. The cutover is complete:
+the retained pre-drop replay diff is evidence for the active Definition, staging
+state was recreated afterward, and the renamed product path passed deployed
+acceptance. It is settled evidence, not a second entrypoint or product schedule.
 
-The current host deployment is `914f7a5d976a` for frontend and proxy (proxy
-status OK, verified 2026-08-11). This is host/source identity only; retained
-guest proof and all effects remain OFF. The active Definition owns exact
-computer binding, bearer cleanup, and residual epoch `8253` obligations.
+The latest staging runtime/proxy deployment observed by the rename acceptance is
+`3cd12d1452ad1d06b5df57cf9183313568f60cb5`; `/health` reported proxy status
+OK and vmctl status OK on 2026-08-12. The earlier `914f7a5d976a` frontend/proxy
+capture is historical host/source identity only. Retained guest proof and all
+effects remain OFF. The active Definition owns exact computer binding, bearer
+cleanup, and residual epoch `8253` obligations.
 
 The disposed Mission 0 direct-key ceremony is retained at
 [`continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`](evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md).

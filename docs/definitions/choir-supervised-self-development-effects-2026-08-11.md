@@ -60,9 +60,15 @@ start:
       problem: "The original content axis (computer-scoped model policy) had no path to its target and is a system-owned surface already scheduled for replacement."
       evidence_ref: see supplement section 1
       consequence: "Content is source code. Model policy is excluded."
+    - id: replay-completeness-non-equivalence-2026-08-12
+      problem: "The deployed pre-drop replay completeness probe reconstructed the retained event chain into a disposable projection but returned not_equivalent: 26 deterministic DoltStateExtractor differences, with both live_head and replay_head null. Five schema observations and five table observations were absent from replay; sixteen schema/content observations differed."
+      evidence_ref: docs/evidence/choir-sandbox-autoputer-replay-completeness-2026-08-12.json
+      consequence: "A clean rematerialization is not licensed. Classify every difference as behavior-bearing event-derived state, pinned-receipt state, or retired/legacy residue; make behavior-bearing writes event-derived or fail checkpoint creation closed before designing restore."
+
   unknowns:
-    - "Replay completeness: is every behavior-bearing VM-local write a deterministic function of the event chain plus pinned receipts? Answered by step 2's probe. A clean match licenses rematerialization; a diff names the writes that must be event-derived or fail the checkpoint closed."
-    - "Whether rematerialization is product-ready. ProjectionMaterializer is non-runtime today; if step 2 or step 4 shows it is not usable, restore falls back to a single-workspace pin checkout on an interim basis with the event head still the sole semantic authority."
+    - "Which of the 26 pre-drop replay differences are behavior-bearing VM-local writes versus retired or legacy residue, and what event or pinned receipt derives each behavior-bearing write?"
+    - "How the replay projection obtains the required VM-local schema and baseline when the fresh projection lacks five schema and five table observations present in the live workspace."
+    - "Whether rematerialization is product-ready. ProjectionMaterializer is non-runtime today; if the classification and subsequent build show it is not usable, restore falls back to a single-workspace pin checkout on an interim basis with the event head still the sole semantic authority."
     - "Which effect classes are outside the reversible envelope and must refuse to promote under a standing rule."
     - "Whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata and citations without a payload schema change."
     - "Whether the CTS-observed registry gap (Texture production registry omitting update_coagent) is still present on the deployed staging build."
@@ -162,6 +168,8 @@ finish:
     - Only E1 evidence exists (single promotion without correction supersession) at registry close.
     - CTS remains active in all three registries without a successor pointer.
     - Deployed trajectory proof is claimed complete while completion_cutover obligations above remain undone (haunted doctrine/roadmap/tests/CLI still teach the pre-envelope world).
+    - "The retained pre-drop replay result is treated as a clean match, ignored as legacy noise, or used to authorize restore without classifying all 26 differences."
+
     - Product restore exists only as automation against staging with no owner-reachable arm/revoke/restore/refusal surface scheduled or shipped.
     - Ops still treat staging SHA alone as computer identity after the first successful product restore.
 
@@ -235,16 +243,21 @@ measures:
 
 now:
   status: working
-  slice: "Proof target is reversibility; revert build and verification are in scope. Next is the replay completeness probe (route map step 1). Its diff decides the restore mechanism, and checkpoint design (step 2) does not start until it is answered."
-  question: "Is every behavior-bearing VM-local write a deterministic function of the event chain plus pinned receipts? A clean rematerialization licenses replay as the restore path; a diff names the writes that must be event-derived or fail the checkpoint closed. Which effects are classified as leaving the reversible envelope?"
+  slice: "The deployed pre-drop replay completeness probe is complete: it returned not_equivalent with 26 deterministic DoltStateExtractor differences and both event heads null. Clean rematerialization is not licensed. Next classify each difference and make behavior-bearing writes event-derived or fail checkpoint creation closed before checkpoint design."
+  question: "Which differences are behavior-bearing VM-local writes versus retired or legacy residue, and what event or pinned receipt derives each one? The answer determines the restore mechanism and the checkpoint fail-closed boundary."
+
   reconciliation:
-    observed_at: 2026-08-11T18:18:38Z
-    source_ref: main@6ff6b7d0
-    deploy_identity: "staging https://choir.news reconciled 2026-08-11: frontend 914f7a5d976a, proxy 914f7a5d976a, proxy status ok, deploy time 2026-08-11T18:11:01Z; re-reconciliation completed, no longer a blocker"
+    observed_at: 2026-08-12T06:56:12Z
+    source_ref: main@24fb24de
+    deploy_identity: "staging https://choir.news reconciled 2026-08-12: health reports proxy status ok, deployed commit 3cd12d1452ad1d06b5df57cf9183313568f60cb5, vmctl status ok; this Definition remains effects-OFF until its own rehearsal and restore gates pass"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-11 read-only git status (clean)
+    worktree_inventory_ref: 2026-08-12 read-only git status (clean)
     status: reconciled
+
+  blocker_or_risk: "The deployed pre-drop probe found 26 deterministic differences, so rematerialization is not licensed. The effects mission must classify the five missing schema observations, five missing table observations, and sixteen differing observations, then either make behavior-bearing writes event/receipt-derived or refuse checkpoints that cannot restore them. ProjectionMaterializer is still non-runtime, so pin checkout remains only an implementation contingency."
+  next_action: "Document and classify the retained replay diff before any checkpoint or restore implementation. For each difference, identify its owning ledger and event/receipt derivation; retire or exclude legacy residue, repair event derivation for behavior-bearing state, and add a fail-closed checkpoint predicate for anything not reproducible. Do not rerun the probe as if unanswered, and do not drop or mutate the retained evidence."
+
   candidate:
     id: none
     state: none
@@ -343,6 +356,23 @@ receipts:
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
     registry_conformance_ref: "roadmap registered as historical migration receipt in docs/doc-authority-manifest.yaml; Definition remains sole entrypoint; SEM-03 transitional pending full cutover promote"
+
+  - id: replay-completeness-probe-2026-08-12
+    boundary: acceptance
+    commit_or_artifact: docs/evidence/choir-sandbox-autoputer-replay-completeness-2026-08-12.json
+    proof_refs: ["choir computer replay-completeness --computer computer-03335285269bdba4f94377e56879f9e6 --timeout 10m (exit 0)", "captured_at 2026-08-12T05:36:44.159743453Z", "result not_equivalent with 26 deterministic DoltStateExtractor differences", "live_head null and replay_head null", "probe_digest 67ec50ed1526659eb04e7d1be6cabc02d33e6b1f16559d1e2e0036f4f3785af1"]
+    rollback_ref: "Delete the evidence projection only if the effects mission is abandoned; the probe appended no event and mutated no live state."
+    disposition: "accepted as the required pre-drop observation; it blocks clean rematerialization and checkpoint design until every difference is classified"
+    problem_ref: replay-completeness-non-equivalence-2026-08-12
+    authorization_ref: "owner answer 2026-08-12: add read-only product API/CLI replay probe"
+    candidate_or_evidence_refs: [docs/evidence/choir-sandbox-autoputer-replay-completeness-2026-08-12.json]
+    landing:
+      source_commit: ba27a3e8
+      ci_ref: "31565423783 (success)"
+      deploy_ref: "Deploy to Staging (Node B) job 94018717399 (success)"
+      environment_identity: "https://choir.news/health deployed_commit ba27a3e8ed1815dff9853bf96741b4333cf7c1f4"
+      deployed_acceptance: "pre-drop replay route and stable identity proof passed; exact non-equivalence retained"
+    registry_conformance_ref: "effects Definition remains the active entrypoint; rename Definition accepted before effects resumes"
 
 view:
   path: none
@@ -461,10 +491,7 @@ at all.
 
 ## Route map
 
-1. **Replay completeness probe (green, do first).** Rematerialize VM-local state
-   from the event chain through the current head; diff against a live extractor
-   reading. This decides the restore mechanism — do not design further until it
-   is answered.
+1. **Replay completeness probe (green, do first — complete with non-equivalence).** The deployed pre-drop probe returned a deterministic `not_equivalent` result with 26 differences and both event heads null. Classify every difference before checkpoint design; clean rematerialization is not licensed until behavior-bearing writes are event- or receipt-derived, and checkpoint creation must fail closed for anything that is not reproducible.
 2. **Checkpoint completeness (red).** Bind target event head, CodeRef,
    ArtifactProgramRef, and a VM-local content witness, with the VM-local Dolt HEAD
    as an audit receipt. Refuse checkpoint creation when a behavior-bearing local
