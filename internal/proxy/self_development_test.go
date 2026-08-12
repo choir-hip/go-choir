@@ -123,6 +123,29 @@ func TestSelfDevelopmentModePathRequiresSingleEscapedComputerID(t *testing.T) {
 		}
 	}
 }
+func TestReplayCompletenessPathPassesEffectsOffGate(t *testing.T) {
+	handler, privateKey, autoputer := testProxyEnv(t)
+	defer autoputer.Close()
+
+	request := httptest.NewRequest(http.MethodGet, "/api/computers/computer-a/self-development/replay-completeness", nil)
+	request.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(privateKey, "owner-user")})
+	response := httptest.NewRecorder()
+	handler.HandleAPI(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("replay completeness should reach the autoputer while effects are off: status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	for path, want := range map[string]bool{
+		"/api/computers/computer-a/self-development/replay-completeness": true,
+		"/api/computers//self-development/replay-completeness":           false,
+		"/api/computers/a/b/self-development/replay-completeness":        false,
+		"/api/computers/a/self-development/replay-completeness/extra":    false,
+	} {
+		if _, got := selfDevelopmentReplayCompletenessComputerID(path); got != want {
+			t.Fatalf("path %q accepted=%v, want %v", path, got, want)
+		}
+	}
+}
 
 func TestPublicDecisionRefusesEffectsOff(t *testing.T) {
 	handler, _, autoputer := testProxyEnv(t)

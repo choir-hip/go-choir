@@ -29,6 +29,27 @@ func isSelfDevelopmentModePath(path string) bool {
 	_, ok := selfDevelopmentModeComputerID(path)
 	return ok
 }
+func selfDevelopmentReplayCompletenessComputerID(path string) (string, bool) {
+	const prefix = "/api/computers/"
+	const suffix = "/self-development/replay-completeness"
+	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
+		return "", false
+	}
+	raw := strings.TrimSuffix(strings.TrimPrefix(path, prefix), suffix)
+	if raw == "" || strings.Contains(raw, "/") {
+		return "", false
+	}
+	computerID, err := url.PathUnescape(raw)
+	if err != nil || strings.TrimSpace(computerID) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(computerID), true
+}
+
+func isSelfDevelopmentReplayCompletenessPath(path string) bool {
+	_, ok := selfDevelopmentReplayCompletenessComputerID(path)
+	return ok
+}
 
 func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Request) {
 	computerID, ok := selfDevelopmentModeComputerID(r.URL.Path)
