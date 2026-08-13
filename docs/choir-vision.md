@@ -61,22 +61,30 @@ the same typed transactions it runs on. Each change is a conjecture tested by
 execution; the computer learns what it should be by acting on what it
 believes, observing results, and revising.
 
-Self-development is **supervised** because the human is the root of intention:
+Self-development is **supervised** because the human is the constitutional root
+of intention, not because the human approves every consequential action:
 
-- The owner grants the rules the computer may change things under, and the
-  boundaries it may not cross.
+- The owner establishes and can revise the policies under which the computer
+  acts.
+- Effect-specific multiagent consensus evaluates proposals under those
+  policies. A human may be a required, optional, or absent participant.
+- Irreversible effects remain inside the autonomy window when their stronger
+  policy is satisfied. Their consequences cannot be erased by restore, so they
+  require stronger evidence, narrower subject binding, durable receipts, and
+  compensation or new forward action when correction is needed.
 - The owner does not need to be the continuous operator. Supervision of last
   resort is the honest claim: rarely exercised by design, never made to vanish.
-- The computer corrects itself within the granted rules — visible, legible,
-  reversible, on the tape.
+- The computer corrects itself within policy—visible, legible, and on the tape;
+  reversible state may additionally return to a prior checkpoint.
 
 The mechanism by which self-development becomes real and legible is
-**correction as an ordinary write**: a rival proposal is forked, a settlement
-selects one effective head under an explicit rule, and a correction supersedes
-a settlement when new admissible evidence falsifies it. The human holds the
-final settlement authority. This is the load-bearing spine of the vision — the
-thing to make real first — and it is deliberately stated as a consequence of
-the vision, not as the vision itself.
+**correction as an ordinary write**: a rival proposal is forked, a
+policy-governed consensus selects one effective head, and a correction
+supersedes a settlement when new admissible evidence falsifies it. The owner
+holds constitutional authority over policy; trusted reducers and actuators
+enforce each consensus decision. This is the load-bearing spine of the vision —
+the thing to make real first — and it is deliberately stated as a consequence
+of the vision, not as the vision itself.
 
 The proof target is a self-development candidate accepted on staging: the
 computer makes one real change to its own working state, under granted rules,
@@ -108,9 +116,9 @@ computer's; there is no wire before the computer.
   legible and honest. Confusing the machinery for the vision is how work
   drifts into implementation detail and loses the big picture.
 - **Not a supervised-by-default platform.** The human is the constitutional
-  authority and the root of intention — but the point of the machine is that
-  it works continuously under granted rules, not that it asks permission at
-  every step.
+  authority and root of intention, but not a universal per-effect approval gate.
+  The machine works continuously under effect-specific consensus policies;
+  human participation is one policy option.
 - **Not a publication product.** The newspaper is a downstream proof of the
   automatic computer, not the product the substrate is built for.
 ## How Missions Flow From Here

@@ -71,10 +71,10 @@ different merge laws.
 | Persistent user computer and VM lifecycle | **Live** | A long-lived computer is identified by stable ComputerID; a realization is replaceable machine state. Existing lifecycle/status remain projections and actuators. |
 | Worker/background and candidate VM mutation | **Retired authority; canonical residue unclaimed** | Generic delegated agents are durable runs/trajectories. The rejected candidate's deletion is not canonical-main state; no current Definition authorizes cleanup or effects. |
 | `internal/computerversion` constructor/verifier | **Live audited construction substrate** | `ComputerVersion = (CodeRef, ArtifactProgramRef)` is the **code/artifact identity** published at an event head — not by itself a complete restore address. Full restore completeness (event head + content witness + VM-local projection) is the active Definition's deliverable; do not treat the code tuple alone as "put the computer back." |
-| Computer event authority | **Live effects-OFF substrate until the active Definition's rehearsal/restore gates pass** | One guest appender, corpusd head CAS, embedded projection, immutable event artifacts, privacy, and recovery remain the separate semantic-event authority. The completed durable-work acceptance exercised no effects. The active Definition turns effects on only inside a proven reversible envelope — not as a global ON flip. |
-| Capsules | **Implemented source candidate; effect proof pending** | Guest-local namespaces, cgroup, seccomp, Landlock, capability broker, transaction tape, and fail-closed admission require a separately owner-ratified effect mission and deployed acceptance. |
+| Computer event authority | **Live effects-OFF substrate until the active Definition's rehearsal/decision-policy/restore gates pass** | One guest appender, corpusd head CAS, embedded projection, immutable event artifacts, privacy, and recovery remain the separate semantic-event authority. The completed durable-work acceptance exercised no effects. The active Definition turns effects on through effect-specific multiagent consensus and audited actuators—not as a global ON flip and not only for reversible effects. |
+| Capsules | **Implemented source candidate; effect proof pending** | Guest-local namespaces, cgroup, seccomp, Landlock, capability broker, transaction tape, and fail-closed admission require the active owner-ratified effect mission and deployed acceptance. |
 | Features adoption and activation | **Retired authority; canonical residue unclaimed** | AppChangePackage/AppAdoption/lineage records are not self-development authority or product fallback. Rejected-branch deletion is not a landed claim. |
-| Self-development acceptance/materialization | **Active Definition in flight** | Executable authority is `docs/definitions/choir-supervised-self-development-effects-2026-08-11.md` (reversibility, standing-rule auto-promotion, acceptance-fenced restore). Do not resume CTS or the historical self-dev roadmap as the schedule. |
+| Self-development acceptance/materialization | **Active Definition in flight** | Executable authority is `docs/definitions/choir-supervised-self-development-effects-2026-08-11.md` (effect-specific consensus, complete checkpointing, acceptance-fenced restore, and irreversible-consequence receipts). Do not resume CTS or the historical self-dev roadmap as the schedule. |
 
 Do not collapse a code-present substrate into a live product claim. A worker
 VM, forked desktop, AppChangePackage, capsule, frozen effect bundle,
@@ -114,6 +114,12 @@ either treat it as platform control-plane software, or fold it into a successor
 frontend-in-release mission; do not claim "the whole computer" was put back while
 the UI remains outside the envelope. External sends/publishes/payments are
 outside restore by nature.
+This restore-set boundary is not an autonomy boundary. External sends,
+publications, payments, and shared-ledger mutations may be autonomously
+authorized by their own stronger consensus policy and actuator. They cannot be
+made reversible by restoring one computer, so they require exact consequence
+receipts plus compensation or a new forward action when correction is needed.
+A human seat is optional unless the selected policy explicitly requires it.
 
 The normal computer is long-lived and reconstructible. A realization may be
 replaced without changing `ComputerID`; reconstruction verifies the immutable
@@ -330,8 +336,10 @@ Ideal direction:
 - users can evolve Choir inside Choir without host access or candidate VMs;
 - complete audit preserves learning from proposals, refusals, failures,
   rejections, applications, and rollbacks;
-- cross-computer publication or divergent-platform reconciliation requires a
-  separate owner-ratified protocol and is not inferred from self-development;
+- cross-computer publication or divergent-platform reconciliation requires an
+  authority policy for that shared surface and qualified multiagent consensus;
+  it is not inferred from self-development authority, and human participation
+  is policy-selected rather than universal;
 - the artifact graph records who changed what, what verified, what failed, what
   was reused, and what became public memory.
 

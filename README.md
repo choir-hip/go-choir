@@ -59,27 +59,28 @@ rollback, and Choir-in-Choir behavior cannot be claimed from a local checkout.
 ## How it works, in one breath
 
 Human intent enters through the prompt bar. The conductor routes it to an
-appagent — Texture for documents, which owns the canonical artifact. When the
-artifact needs execution, Texture calls super, the orchestrator, which runs
-CoSuper executors — the only actors with access to containerized bash in
-guest-local capsules. Risky or long-running effects freeze as proposed bundles;
-an explicit owner acceptance event authorizes materialization, checkpoint, and
-route projection. Everything can be reconstructed or rolled back from retained
-events and receipts.
+appagent—Texture for documents, which owns the canonical artifact. When the
+artifact needs execution, Texture calls Super, whose protocol can coordinate
+CoSuper executors inside guest-local capsules. Risky or long-running effects
+freeze as exact proposals. An effect-specific policy evaluates a qualified
+multiagent consensus, optionally including a human, before a trusted actuator
+executes the decision. Reversible state can be reconstructed or restored from
+retained events and receipts; irreversible consequences retain receipts and
+recover through compensation or a new forward action.
 
 ```text
-prompt bar -> conductor -> appagent (Texture) -> super -> CoSuper executor
--> durable run in a capsule
--> frozen proposal + verifier certificate
--> owner approval -> materialization -> checkpoint -> rollback-safe state
+prompt bar -> conductor -> appagent (Texture) -> Super protocol
+-> CoSuper execution in a capsule -> frozen proposal + verifier evidence
+-> policy-governed multiagent consensus -> audited actuator
+-> consequence receipt -> restore, correction, or compensation
 ```
 
 ## Concepts in five words
 
-- **Persistent computer** — a versioned, provable, rollbackable machine.
+- **Persistent computer** — a versioned, provable, evolving machine.
 - **Artifact** — durable owned state, like documents.
-- **Accepted event** — an owner-approved change advancing state.
-- **Rollback** — reconstruct state from retained events.
+- **Accepted event** — a policy-authorized change advancing state.
+- **Restore** — a forward transaction reconstructing prior reversible state.
 - **Capsule** — guest-local workspace for risky effects.
 
 ## Self-development
