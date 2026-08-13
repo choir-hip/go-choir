@@ -300,7 +300,7 @@ nodes:
     title: Tape-Based Recovery (Whole-Computer Restore)
     path: docs/definitions/choir-tape-recovery-2026-08-13.md
     ledger: ''
-    status: working
+    status: blocked
     kind: spine
     entrypoint: true
     execution_mode: mission_orchestrator

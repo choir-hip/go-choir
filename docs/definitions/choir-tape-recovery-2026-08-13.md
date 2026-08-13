@@ -118,34 +118,50 @@ measures:
     cannot_prove: that the witness is sufficient for a state excursion never exercised
 
 now:
-  status: working
-  slice: "Staging is on 8a172b84. Owner checkpoint bind on the retained computer returned HTTP 409 served SPA is underivable and did not publish. Replay remains ineligible at sequence 4: nine live-only texture tables. Authenticated guest surface is 503. Deployed restore still refuses platform and cycle. ReconstructThrough and restore-intent are now a staging runtime identity. Do not rematerialize this computer."
-  question: "Can deployed staging prove checkpoint witness, scope refusal, destructive rematerialization, serving-join, owner-reachable whole-computer restore, and capability renewal on the retained computer?"
+  status: blocked_incomplete
+  slice: "Owner product path cannot reach an eligible computer. Staging remains 8a172b84. Retained computer computer-03335285269bdba4f94377e56879f9e6 is the only interactive VM (desktop primary, epoch 252). choir computer create is unknown. vmctl resolve provisions only the primary desktop. Checkpoint bind still HTTP 409 served SPA is underivable. Four deployed receipts remain unpaid. Do not rematerialize this computer."
+  question: "What owner-reachable product path can provision a computer with event-derivable VM-local rows and staged frontend/ without destroying the retained computer's live-only rows?"
   reconciliation:
-    observed_at: 2026-08-13T20:50:25Z
-    source_ref: main@8a172b84f7285a83d3c502ad2e9e7c2ed4b65307
-    deploy_identity: "staging deployed 8a172b84f7285a83d3c502ad2e9e7c2ed4b65307 at 2026-08-13T20:45:20Z; retained computer computer-03335285269bdba4f94377e56879f9e6 active at realization epoch 252 sequence 4"
+    observed_at: 2026-08-13T20:57:42Z
+    source_ref: main@d839ec9d1eba02fd52471bcf6a1d86d91c384a03
+    deploy_identity: "staging deployed 8a172b84f7285a83d3c502ad2e9e7c2ed4b65307 at 2026-08-13T20:45:20Z; retained computer computer-03335285269bdba4f94377e56879f9e6 active at realization epoch 252 desktop primary"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13T20:50:25Z git status --short dirty with this Definition stamp plus docs/evidence/tape-recovery-checkpoint-bind-refusal-2026-08-13.json
+    worktree_inventory_ref: 2026-08-13T20:57:42Z git status --short dirty with this Definition stamp plus docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json
     status: reconciled
   candidate:
     id: none
     state: none
   decision:
-    selected: "Execute /goal through all five acceptance actions until complete, blocked_incomplete, or superseded. Reconstruction product path is Runtime.ReplayCompleteness (event-chain reconstruct into a disposable workspace, then a destructive restage), not ProjectionMaterializer. Pin checkout is evidence-only and cannot complete this Definition. Serving hop is guest-static. Capability renewal is a gate on the restore proof. Local tests are slice evidence; complete requires the deployed staging receipts."
+    selected: "Record blocked_incomplete. The owner product path cannot reach a computer whose VM-local rows are event-derivable and whose staged release includes frontend/. Local landings and fail-closed receipts are not the finish artifact."
     kind: operational
     status: settled
     source: orchestrator
-    evidence_ref: "docs/definitions/choir-tape-recovery-2026-08-13.md finish.acceptance; internal/agentcore/replay_completeness.go; .agentic-consensus/tape-recovery-20260813/"
-    owner_ratification_ref: "owner direction 2026-08-13 (tape-based recovery is the priority); panel approve-with-conditions adjudicated into this Definition"
-    recorded_at: 2026-08-13T17:14:50Z
-    consequence: "Do not stop after local product-path landings. Continue until the finish artifact exists or a named blocker (fail-closed live-only rows, capability-renewal substrate, unpaid deployed receipts) forces blocked_incomplete or a problem-documentation-first Define."
-  evidence_refs: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, .agentic-consensus/tape-recovery-20260813/, internal/agentcore/replay_completeness.go]
-  blocker_or_risk: "Retained computer cannot host a valid checkpoint: guest current/frontend is missing (HTTP 409/503 served SPA is underivable) and nine behavior-bearing texture tables are live-only without reducers. Destructive rematerialize would drop those rows. Serving-join with two divergent computers is unpaid (one computer, no SPA). Capability renewal across restore is unpaid; idle-past-grace still needs restart. Do not rematerialize this computer. Do not add table reducers before an eligible computer exists."
-  next_action: "Collect remaining receipts on a computer whose VM-local rows are event-derivable and whose staged release includes frontend/, or record blocked_incomplete if no such computer can be reached through the owner product path. Do not rematerialize the retained computer. Do not stamp complete."
+    evidence_ref: "docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json; docs/evidence/tape-recovery-checkpoint-bind-refusal-2026-08-13.json; internal/vmctl/handlers.go resolve can provision only the primary desktop"
+    owner_ratification_ref: "owner direction 2026-08-13 (tape-based recovery is the priority); this Definition's next_action authorized the blocked stop"
+    recorded_at: 2026-08-13T20:57:42Z
+    consequence: "Stop collecting unpaid receipts until the owner provisions an eligible computer through a product path. Keep this Definition as the unique entrypoint. Do not start effects. Do not rematerialize computer-03335285269bdba4f94377e56879f9e6. Do not add table reducers as a restore shortcut. Do not SSH. Do not stamp complete."
+  evidence_refs: [docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json, docs/evidence/tape-recovery-checkpoint-bind-refusal-2026-08-13.json, docs/evidence/tape-recovery-retained-computer-2026-08-13.json, docs/ACTIVE.md, docs/mission-graph.yaml]
+  blocker_or_risk: "No eligible computer is reachable through the owner product path. Retained computer lacks staged frontend/ (HTTP 409/503) and has nine live-only texture tables. One interactive VM per user/desktop; choir computer create does not exist; vmctl resolve refuses non-primary desktops. Remaining unpaid: destructive_rematerialization, serving_join, owner_reachable_whole_computer_restore, capability_renewal_pass."
+  next_action: "Owner must provision a product-path computer whose VM-local rows are event-derivable and whose staged release includes frontend/. Until then, do not rematerialize the retained computer, do not add table reducers as a restore shortcut, do not SSH, and do not stamp complete."
 
 receipts:
+  - id: tape-recovery-blocked-incomplete-no-eligible-computer-2026-08-13
+    boundary: define
+    commit_or_artifact: docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json
+    proof_refs: [docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json, docs/evidence/tape-recovery-checkpoint-bind-refusal-2026-08-13.json, cmd/choir/main.go, internal/vmctl/handlers.go]
+    rollback_ref: revert the docs-only blocked_incomplete stamp
+    disposition: "blocked_incomplete — owner product path cannot reach an eligible computer. choir computer create is unknown. vmctl resolve provisions only the primary desktop. Retained computer remains the only interactive VM; checkpoint bind still HTTP 409 served SPA is underivable and did not publish. Unpaid: destructive_rematerialization, serving_join, owner_reachable_whole_computer_restore, capability_renewal_pass. Do not rematerialize. Do not stamp complete."
+    problem_ref: tape-recovery-retained-computer-live-only-rows-2026-08-13
+    authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority); Definition next_action authorized this stop
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    landing:
+      source_commit: d839ec9d
+      ci_ref: "31740343847 success (product deploy 8a172b84)"
+      deploy_ref: 8a172b84f7285a83d3c502ad2e9e7c2ed4b65307
+      environment_identity: staging https://choir.news deployed 8a172b84 at 2026-08-13T20:45:20Z
+      deployed_acceptance: blocked_incomplete (scope_refusal paid; checkpoint_witness fail-closed 409; remaining four receipts unpaid)
+    registry_conformance_ref: "verified 2026-08-13: docs/mission-graph.yaml tape-recovery status blocked with entrypoint true; docs/ACTIVE.md records blocked_incomplete; docs/doc-authority-manifest.yaml remains is_root [authority, entry]"
   - id: tape-recovery-draft-consensus-2026-08-13
     boundary: define
     commit_or_artifact: .agentic-consensus/tape-recovery-20260813/

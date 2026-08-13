@@ -6,14 +6,16 @@ corpus and does not make an unverified graph status into a live work claim.
 ## Active Definition — Tape-Based Recovery
 
 [`definitions/choir-tape-recovery-2026-08-13.md`](definitions/choir-tape-recovery-2026-08-13.md)
-is the owner-priority executable `/goal` as of 2026-08-13. Proof target is
-**whole-computer restore from the tape**: a checkpoint that binds event head +
-CodeRef + ArtifactProgramRef + VM-local content witness + frontend identity,
-runtime rematerialization, a per-computer frontend serving hop, and an
-owner-reachable acceptance-fenced restore. It closes the gap that checkpoints
-bind no state and the frontend is host-global. Everything else — the effects
-decision-policy envelope, the private-Go actor RLM rewrite, and tabled World
-Wire — follows it.
+is the owner-priority executable `/goal` as of 2026-08-13. It is
+`blocked_incomplete`: the owner product path cannot reach a computer whose
+VM-local rows are event-derivable and whose staged release includes
+`frontend/`. Proof target remains **whole-computer restore from the tape**: a
+checkpoint that binds event head + CodeRef + ArtifactProgramRef + VM-local
+content witness + frontend identity, runtime rematerialization, a per-computer
+frontend serving hop, and an owner-reachable acceptance-fenced restore. Local
+landings and fail-closed receipts are not completion. Everything else — the
+effects decision-policy envelope, the private-Go actor RLM rewrite, and tabled
+World Wire — follows it.
 
 ## Effects Envelope — Sequenced After Tape Recovery
 
@@ -122,8 +124,9 @@ superseded, or historical as stated by their source Definitions, not entrypoints
 
 Invoke the owner-priority tape-recovery Definition through
 `/goal docs/definitions/choir-tape-recovery-2026-08-13.md`.
-Its `now.*` and `finish.*` own the current product schedule. After it reaches
-`complete`, invoke
+Its `now.*` and `finish.*` own the current product schedule. Current status is
+`blocked_incomplete` until an eligible computer is reachable through the owner
+product path. After it reaches `complete`, invoke
 `/goal docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`
 for the decision-policy envelope. After that reaches `complete` and the
 registries promote the successor, invoke
