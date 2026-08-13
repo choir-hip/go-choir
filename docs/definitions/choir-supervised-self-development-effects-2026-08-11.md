@@ -68,9 +68,13 @@ start:
       problem: "After the replay gate repair deployed at d2ab2d2d, the owner-scoped product CLI reaches the retained active computer but fails during event-chain reconstruction: the guest capability renewal endpoint returns a non-201 response and the guest reports renewal refused. The required read-only replay diff is not recaptured; no state mutation or clean rematerialization is authorized."
       evidence_ref: "CHOIR_HOST=https://choir.news CHOIR_TIMEOUT=10m go run ./cmd/choir computer replay-completeness --computer computer-03335285269bdba4f94377e56879f9e6 at 2026-08-12T18:46Z returned HTTP 500: replay completeness: reconstruct event chain: computer event appender: fetch durable chain: computer event client: capability: guest credential: renewal refused; /health reported deployed_commit d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c; computer status reported the requested stable computer active at realization_epoch 203."
       consequence: "An owner-scoped lifecycle restart at 2026-08-12T18:47:50Z refreshed the retained guest credential through the product path without source or state repair. The replay probe then completed; recurrence across capability expiry remains a residual risk and is not masked."
+    - id: chain-bootstrap-null-head-2026-08-12
+      problem: "After workspace replacement made the retained computer diagnostically equivalent (82 live == 82 replay, zero differences), it still cannot reach replay eligibility because the canonical event chain is empty: Store.Head is null and replayEligibility requires both event heads non-nil and equal. The only production genesis route (POST /self-development/genesis) is checkpoint-coupled and proxy-disabled, and the Definition forbids reusing it."
+      evidence_ref: docs/evidence/choir-supervised-self-development-chain-bootstrap-design-2026-08-12.md
+      consequence: "A plain-computer canonical-chain bootstrap (POST /api/computers/{id}/lifecycle/bootstrap-chain) establishes a non-null head by appending EventGenesisImported bound to the guest release identity (git commit + guest-image digest, empty EmbeddedDoltRefs). It publishes no checkpoint, writes no selfdev Operation/baseline, and performs no effect; it is a precondition for replay eligibility, not restore authority."
 
   unknowns:
-    - "How a later non-null canonical chain is introduced on the retained computer without treating the existing genesis route or a cleaned null-head snapshot as restore authority; the post-cutover workspace is diagnostically equivalent but ineligible."
+    - "Whether checkpoint design can be exercised against a plain-computer canonical head before the selfdev E2E rehearsal, and how checkpoint creation refuses while any behavior-bearing local row is not event- or receipt-derivable."
     - "Whether rematerialization is product-ready. ProjectionMaterializer is non-runtime today; if the classification and subsequent build show it is not usable, restore falls back to a single-workspace pin checkout on an interim basis with the event head still the sole semantic authority."
     - "Which effect classes are outside the reversible envelope and must refuse to promote under a standing rule."
     - "Whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata and citations without a payload schema change."
@@ -247,8 +251,8 @@ measures:
 
 now:
   status: working
-  slice: "Deployed 2026-08-12 at bf03286f and executed on the retained computer: replace-workspace quarantined the old workspace onto current DDL (no event, no checkpoint), a restart reopened the store, and the post-cutover probe reports equivalent with zero differences. Heads remain null, so eligibility, checkpoint, restore, and effects stay fail-closed. Next: a non-null canonical chain (successor slice) before any checkpoint work; direct-SQL refill of empty_until_supported tables after first product use is fail-closed by design."
-  question: "How is a non-null canonical chain introduced on the retained computer so replay eligibility can become true without blessing arbitrary live state?"
+  slice: "Implement and land the owner-scoped plain-computer canonical-chain bootstrap (POST /api/computers/{id}/lifecycle/bootstrap-chain, guest-core, consensus-approved): append EventGenesisImported bound to the guest release identity, idempotent, no checkpoint/baseline/effect. Deploy, bootstrap the retained computer, and re-run replay-completeness. Expect non-nil equal heads and eligible=true. Checkpoint design is the next axis."
+  question: "After bootstrap, does the deployed replay probe return equivalent with non-nil equal heads and eligible=true, with no checkpoint, selfdev Operation, or effect written?"
 
   reconciliation:
     observed_at: 2026-08-12T06:56:12Z
@@ -259,8 +263,8 @@ now:
     worktree_inventory_ref: 2026-08-12 read-only git status (clean)
     status: reconciled
 
-  blocker_or_risk: "Diagnostic equivalence is proven on a null-head workspace; it does not license restore. Any direct-SQL write to an empty_until_supported table makes the computer ineligible again until a registered reducer exists, and no non-null canonical chain exists yet on the retained computer. The quarantined pre-cutover workspace remains on the computer as inert evidence."
-  next_action: "Define the non-null canonical chain introduction (genesis alternative) as a successor slice; do not rerun the probe as if unanswered, do not reuse POST self-development/genesis, and do not drop or mutate the retained 26-diff evidence artifacts or the quarantined workspace."
+  blocker_or_risk: "Plain-genesis bootstrap is a red canonical-chain write. It establishes eligibility but certifies projection-reconstruction equivalence only, not causal provenance of the 82 live rows. Post-genesis direct writes to empty_until_supported tables flip eligibility false (correct fail-closed). replace-workspace after a successful bootstrap is forbidden (CAS/local projection split)."
+  next_action: "Land the chain-bootstrap slice through CI and staging, bootstrap the retained computer, and re-run replay-completeness expecting eligible=true. Do not rerun the probe as if unanswered, do not reuse POST self-development/genesis, and do not run replace-workspace after bootstrap."
 
   candidate:
     id: none
@@ -276,7 +280,7 @@ now:
     consequence: "Per-candidate owner approval is removed as a requirement and replaced by an owner-armed standing rule plus two-seat auto-approval. The decision-binding verifier and mode CAS are relaxed deliberately, which is the mission's heaviest evidence burden. Checkpoint and revert become deliverables rather than a rollback field. Effects leaving the reversible envelope gain an explicit refusal requirement. Freeze/propose authority must be wired onto CoSuper, which today has no production call site. Pre-mission haunted-authority cutover (roadmap demotion, doctrine/ontology transitional language, RLM Phase-1 re-derive note, restore-set boundary, AGENTS restore-vs-deploy note) landed green; finish.completion_cutover must still run after deployed acceptance or the goal is a false complete."
   evidence_refs: [docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
   blocker_or_risk: "Revert is the mission: nothing in production reads Dolt history back, checkpoints bind no state, and Dolt commits carry no head binding. Replay completeness is unresolved and is the deciding measurement; ProjectionMaterializer is explicitly non-runtime today, so the preferred rematerialization path has no runtime implementation yet and an interim single-workspace pin checkout may be needed. Relaxing the decision-binding verifier and mode CAS touches the surfaces that make the tape trustworthy and carries the heaviest evidence burden. RESOLVED 2026-08-11: staging deploy identity reconciled; owner-bearer residual disposed; capsule build capability confirmed; frontend serving location determined (UI out of scope)."
-  next_action: "Define the non-null canonical chain introduction after the accepted 2026-08-12 post-cutover equivalence receipt; do not rerun the probe as if unanswered."
+  next_action: "Land and deploy the owner-scoped chain-bootstrap verb after the accepted 2026-08-12 design receipt; do not rerun the probe as if unanswered."
 
 receipts:
   - id: roadmap-consensus-2026-08-11
