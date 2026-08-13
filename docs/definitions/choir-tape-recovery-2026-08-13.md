@@ -119,15 +119,15 @@ measures:
 
 now:
   status: working
-  slice: "Staging is on eb91808a (freeze, renewal grace, SPA restage, owner restore, guest-static hop). ReconstructThrough and restore-intent are pushed at a2a80630 and not yet deployed. Owner restart minted a fresh guest capability; replay-completeness then succeeded. The retained computer is sequence 3 and not checkpoint-eligible: nine behavior-bearing direct-write tables exist only in live Dolt. Deployed restore refuses platform and cycle operands."
+  slice: "Staging is on 8a172b84. Owner checkpoint bind on the retained computer returned HTTP 409 served SPA is underivable and did not publish. Replay remains ineligible at sequence 4: nine live-only texture tables. Authenticated guest surface is 503. Deployed restore still refuses platform and cycle. ReconstructThrough and restore-intent are now a staging runtime identity. Do not rematerialize this computer."
   question: "Can deployed staging prove checkpoint witness, scope refusal, destructive rematerialization, serving-join, owner-reachable whole-computer restore, and capability renewal on the retained computer?"
   reconciliation:
-    observed_at: 2026-08-13T19:58:52Z
-    source_ref: main@a2a80630
-    deploy_identity: "staging deployed eb91808a8b935ee8ea356fec2932b05a0a21f776 at 2026-08-13T19:51:44Z; retained computer computer-03335285269bdba4f94377e56879f9e6 active at realization epoch 251 sequence 3; a2a80630 reconstruct-through is not yet a staging runtime identity"
+    observed_at: 2026-08-13T20:50:25Z
+    source_ref: main@8a172b84f7285a83d3c502ad2e9e7c2ed4b65307
+    deploy_identity: "staging deployed 8a172b84f7285a83d3c502ad2e9e7c2ed4b65307 at 2026-08-13T20:45:20Z; retained computer computer-03335285269bdba4f94377e56879f9e6 active at realization epoch 252 sequence 4"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13T19:58:52Z git status --short dirty with this Definition stamp plus docs/evidence/tape-recovery-retained-computer-2026-08-13.json
+    worktree_inventory_ref: 2026-08-13T20:50:25Z git status --short dirty with this Definition stamp plus docs/evidence/tape-recovery-checkpoint-bind-refusal-2026-08-13.json
     status: reconciled
   candidate:
     id: none
@@ -142,8 +142,8 @@ now:
     recorded_at: 2026-08-13T17:14:50Z
     consequence: "Do not stop after local product-path landings. Continue until the finish artifact exists or a named blocker (fail-closed live-only rows, capability-renewal substrate, unpaid deployed receipts) forces blocked_incomplete or a problem-documentation-first Define."
   evidence_refs: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, .agentic-consensus/tape-recovery-20260813/, internal/agentcore/replay_completeness.go]
-  blocker_or_risk: "Retained computer replay is not eligible: desktop_app_instances, desktop_sessions, desktop_window_placements, desktop_workspaces, og_edges, og_objects, run_memory_entries, texture_agent_mutations, texture_document_aliases are live-only direct-write tables without reducers. Checkpoint creation must fail closed; destructive rematerialize would drop those rows. Idle-past-grace capability still requires restart (proven). ReconstructThrough is pushed but not deployed. Serving-join with two divergent computers and capability renewal across restore are still unpaid. Do not add table reducers before this problem is documented."
-  next_action: "Keep the live-only-row problem documented. Do not write reducers yet. After a2a80630 deploys, collect remaining receipts on a computer whose VM-local rows are event-derivable, or record blocked_incomplete if the retained computer cannot host a valid checkpoint. Do not stamp complete."
+  blocker_or_risk: "Retained computer cannot host a valid checkpoint: guest current/frontend is missing (HTTP 409/503 served SPA is underivable) and nine behavior-bearing texture tables are live-only without reducers. Destructive rematerialize would drop those rows. Serving-join with two divergent computers is unpaid (one computer, no SPA). Capability renewal across restore is unpaid; idle-past-grace still needs restart. Do not rematerialize this computer. Do not add table reducers before an eligible computer exists."
+  next_action: "Collect remaining receipts on a computer whose VM-local rows are event-derivable and whose staged release includes frontend/, or record blocked_incomplete if no such computer can be reached through the owner product path. Do not rematerialize the retained computer. Do not stamp complete."
 
 receipts:
   - id: tape-recovery-draft-consensus-2026-08-13
@@ -210,6 +210,22 @@ receipts:
       environment_identity: not_applicable
       deployed_acceptance: pending (destructive_rematerialization)
     registry_conformance_ref: not_applicable
+  - id: tape-recovery-deployed-checkpoint-bind-refusal-2026-08-13
+    boundary: implement
+    commit_or_artifact: docs/evidence/tape-recovery-checkpoint-bind-refusal-2026-08-13.json
+    proof_refs: [docs/evidence/tape-recovery-checkpoint-bind-refusal-2026-08-13.json, internal/agentcore/rematerialize.go]
+    rollback_ref: revert the evidence/docs stamp
+    disposition: "deployed fail-closed checkpoint — POST /lifecycle/checkpoint on computer-03335285269bdba4f94377e56879f9e6 at epoch 252 returned HTTP 409 served SPA is underivable and did not publish. Scope refusal still HTTP 400 for platform and cycle. Authenticated guest surface is 503. Replay probe digest 8d96ba02 remains ineligible. Destructive rematerialization, serving-join, owner restore, and capability-renewal-across-restore remain unpaid."
+    problem_ref: tape-recovery-retained-computer-live-only-rows-2026-08-13
+    authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    landing:
+      source_commit: 8a172b84
+      ci_ref: "31740343847 success"
+      deploy_ref: 8a172b84f7285a83d3c502ad2e9e7c2ed4b65307
+      environment_identity: staging https://choir.news deployed 8a172b84 at 2026-08-13T20:45:20Z
+      deployed_acceptance: partial (checkpoint_witness fail-closed 409; scope_refusal collected; serving_join unpaid; destructive_rematerialization not attempted)
+    registry_conformance_ref: not_applicable
   - id: tape-recovery-retained-computer-live-only-rows-2026-08-13
     boundary: define
     commit_or_artifact: docs/evidence/tape-recovery-retained-computer-2026-08-13.json
@@ -237,10 +253,10 @@ receipts:
     candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
     landing:
       source_commit: a2a80630
-      ci_ref: pending
-      deploy_ref: not_applicable
-      environment_identity: not_applicable
-      deployed_acceptance: pending
+      ci_ref: "31740343847 success"
+      deploy_ref: 8a172b84f7285a83d3c502ad2e9e7c2ed4b65307
+      environment_identity: staging https://choir.news deployed 8a172b84
+      deployed_acceptance: pending (through-target reconstruct is deployed; restore receipts still require an eligible computer)
     registry_conformance_ref: not_applicable
   - id: tape-recovery-freeze-frontend-capability-grace-2026-08-13
     boundary: implement
