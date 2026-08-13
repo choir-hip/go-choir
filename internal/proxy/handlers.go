@@ -716,6 +716,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case isComputerRematerializePath(path):
 		h.HandleComputerWorkspaceReplace(w, r)
 		return
+	case isComputerRestorePath(path):
+		h.HandleComputerWorkspaceReplace(w, r)
+		return
 	case isComputerBootstrapChainPath(path):
 		h.HandleComputerBootstrapChain(w, r)
 		return

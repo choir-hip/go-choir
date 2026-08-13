@@ -1102,6 +1102,38 @@ func TestComputerRematerializeFromTapeUsesProductPath(t *testing.T) {
 	}
 }
 
+func TestComputerRestoreUsesProductPath(t *testing.T) {
+	var method, path, body string
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method = r.Method
+		path = r.URL.Path
+		if r.Body != nil {
+			defer r.Body.Close()
+			raw, _ := io.ReadAll(r.Body)
+			body = string(raw)
+		}
+		_, _ = io.WriteString(w, `{"computer_id":"computer-1","witness_matched":true,"frontend_restaged":true}`)
+	}))
+	defer stub.Close()
+	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
+	if err := os.WriteFile(checkpointPath, []byte(`{"digest":"abc"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if code := run([]string{"computer", "restore", "--host=" + stub.URL, "--computer=computer-1", "--checkpoint-file=" + checkpointPath}, &out, &errOut); code != 0 {
+		t.Fatalf("computer restore code = %d, stderr=%s", code, errOut.String())
+	}
+	if method != http.MethodPost || path != "/api/computers/computer-1/lifecycle/restore" {
+		t.Fatalf("restore request method=%s path=%s", method, path)
+	}
+	if !strings.Contains(body, `"checkpoint"`) || !strings.Contains(body, `"vm_local"`) || !strings.Contains(body, `"computer_surface_frontend"`) {
+		t.Fatalf("restore omitted operand: %s", body)
+	}
+	if strings.Contains(path, "self-development/genesis") {
+		t.Fatal("restore used genesis")
+	}
+}
+
 func TestComputerBootstrapChainUsesProductPath(t *testing.T) {
 	var method, path string
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

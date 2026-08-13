@@ -198,7 +198,7 @@
       };
 
       # Build a single Go service binary
-      mkGoService = { pname, subPackage, includeSkills ? false }:
+      mkGoService = { pname, subPackage, includeSkills ? false, includeFrontend ? false }:
         pkgs.buildGoModule (commonGoArgs // {
           inherit pname;
           version = goModuleVersion;
@@ -212,6 +212,10 @@
             ${pkgs.lib.optionalString includeSkills ''
               mkdir -p $out/share/go-choir/skills
               cp -R skills/. $out/share/go-choir/skills/
+            ''}
+            ${pkgs.lib.optionalString includeFrontend ''
+              mkdir -p $out/frontend
+              cp -R ${frontendPkg}/. $out/frontend/
             ''}
           '';
         });
@@ -266,6 +270,7 @@
           pname = "autoputer";
           subPackage = "cmd/autoputer";
           includeSkills = true;
+          includeFrontend = true;
         };
         frontend = frontendPkg;
         obscura = obscuraPkg;

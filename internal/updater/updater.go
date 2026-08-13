@@ -471,6 +471,21 @@ func ReadPinnedManifest(root, releaseDigest string) (ReleaseManifest, string, er
 	return manifest, releaseDir, nil
 }
 
+// RestagePinnedRelease swaps `current` onto an already-pinned release without
+// Apply, restorePrior, or a service restart. Tape restore uses this to restage
+// SPA bytes after the Dolt witness matches.
+func RestagePinnedRelease(root, releaseDigest string) error {
+	root = filepath.Clean(root)
+	if root == "." || !filepath.IsAbs(root) {
+		return fmt.Errorf("updater: restage requires an absolute updater root")
+	}
+	_, releaseDir, err := ReadPinnedManifest(root, releaseDigest)
+	if err != nil {
+		return err
+	}
+	return swapCurrentPointer(root, releaseDir)
+}
+
 func ReadCurrentManifest(root string) (ReleaseManifest, error) {
 	root = filepath.Clean(root)
 	target, err := os.Readlink(filepath.Join(root, "current"))
@@ -536,19 +551,23 @@ func (u *Updater) currentRelease() (string, string, error) {
 }
 
 func (u *Updater) swapCurrent(releaseDir string) error {
+	return swapCurrentPointer(u.root, releaseDir)
+}
+
+func swapCurrentPointer(root, releaseDir string) error {
 	temporaryBytes := make([]byte, 8)
 	if _, err := rand.Read(temporaryBytes); err != nil {
 		return err
 	}
-	temporary := filepath.Join(u.root, ".current-"+hex.EncodeToString(temporaryBytes))
+	temporary := filepath.Join(root, ".current-"+hex.EncodeToString(temporaryBytes))
 	if err := os.Symlink(releaseDir, temporary); err != nil {
 		return err
 	}
 	defer os.Remove(temporary)
-	if err := os.Rename(temporary, filepath.Join(u.root, "current")); err != nil {
+	if err := os.Rename(temporary, filepath.Join(root, "current")); err != nil {
 		return err
 	}
-	return syncDir(u.root)
+	return syncDir(root)
 }
 
 func (u *Updater) restorePrior(ctx context.Context, request ApplyRequest, priorTarget, priorDigest, failedDigest string, cause error, completedAt time.Time) (*computerevent.Receipt, error) {

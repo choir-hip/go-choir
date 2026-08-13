@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
 var ErrRematerializeUnavailable = errors.New("tape rematerialize unavailable")
@@ -34,6 +35,11 @@ type RematerializeReport struct {
 
 type rematerializeAPIRequest struct {
 	Checkpoint selfdevprotocol.Checkpoint `json:"checkpoint"`
+}
+
+type restoreAPIRequest struct {
+	Checkpoint    selfdevprotocol.Checkpoint `json:"checkpoint"`
+	OperandScopes []string                   `json:"operand_scopes"`
 }
 
 func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string, checkpoint selfdevprotocol.Checkpoint) (RematerializeReport, error) {
@@ -73,6 +79,10 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		StagedWorkspacePath:   filepath.Join(stagingRoot, filepath.Base(originalWorkspace)+"-pending"),
 	}
 	if err := selfdevprotocol.RematerializeFromRequest(request); err != nil {
+		return report, err
+	}
+	priorReleaseDigest, err := rt.verifyPinnedFrontend(checkpoint)
+	if err != nil {
 		return report, err
 	}
 
@@ -119,6 +129,18 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		return report, fmt.Errorf("rematerialize: close staged realization: %w", err)
 	}
 
+	if err := updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, checkpoint.Request.ReleaseDigest); err != nil {
+		_ = os.RemoveAll(stagingRoot)
+		return report, fmt.Errorf("rematerialize: restage served SPA: %w", err)
+	}
+	keepRestaged := false
+	defer func() {
+		if keepRestaged || priorReleaseDigest == "" || priorReleaseDigest == checkpoint.Request.ReleaseDigest {
+			return
+		}
+		_ = updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, priorReleaseDigest)
+	}()
+
 	quarantineDir := filepath.Join(filepath.Dir(originalMarker), "rematerialize-quarantine-"+time.Now().UTC().Format("20060102T150405.000000000Z"))
 	if err := rt.store.Close(); err != nil {
 		_ = os.RemoveAll(stagingRoot)
@@ -162,9 +184,10 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	report.QuarantinedWorkspace = quarantinedWorkspace
 	report.WitnessMatched = true
 	report.OriginalDenied = true
-	report.FrontendRestaged = false
+	report.FrontendRestaged = true
 	report.StoreClosed = true
 	report.PinCheckoutUsed = false
+	keepRestaged = true
 	return report, nil
 }
 
@@ -195,4 +218,82 @@ func (h *APIHandler) rematerializeComputerFromTape(w http.ResponseWriter, r *htt
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, report)
+}
+
+func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, computerID string) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if h == nil || h.rt == nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "tape restore authority unavailable"})
+		return
+	}
+	var request restoreAPIRequest
+	if r.Body != nil {
+		defer r.Body.Close()
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&request); err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid restore request"})
+			return
+		}
+	}
+	scopes := request.OperandScopes
+	if len(scopes) == 0 {
+		scopes = []string{selfdevprotocol.RestoreScopeVMLocal, selfdevprotocol.RestoreScopeFrontend}
+	}
+	if err := selfdevprotocol.RestoreFromRequest(selfdevprotocol.RestoreRequest{
+		ComputerID:       computerID,
+		CheckpointDigest: request.Checkpoint.Digest,
+		OperandScopes:    scopes,
+	}, request.Checkpoint); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	report, err := h.rt.RematerializeFromTape(r.Context(), computerID, request.Checkpoint)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrRematerializeUnavailable) {
+			status = http.StatusServiceUnavailable
+		}
+		writeAPIJSON(w, status, apiError{Error: err.Error()})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, report)
+}
+
+func (rt *Runtime) verifyPinnedFrontend(checkpoint selfdevprotocol.Checkpoint) (string, error) {
+	if rt == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
+		return "", fmt.Errorf("rematerialize: served SPA is underivable")
+	}
+	identity, err := pinnedFrontendIdentity(rt.selfdevUpdaterRoot, checkpoint.Request.ReleaseDigest)
+	if err != nil {
+		return "", err
+	}
+	if identity != checkpoint.Request.FrontendIdentity {
+		return "", fmt.Errorf("rematerialize: restaged SPA does not match checkpoint")
+	}
+	current, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		return "", fmt.Errorf("rematerialize: served SPA is underivable")
+	}
+	return current.ContentDigest, nil
+}
+
+func pinnedFrontendIdentity(root, releaseDigest string) (selfdevprotocol.FrontendIdentity, error) {
+	manifest, _, err := updater.ReadPinnedManifest(root, releaseDigest)
+	if err != nil {
+		return selfdevprotocol.FrontendIdentity{}, fmt.Errorf("rematerialize: served SPA is underivable")
+	}
+	files := make([]selfdevprotocol.ReleaseFile, 0, len(manifest.Files))
+	for _, file := range manifest.Files {
+		files = append(files, selfdevprotocol.ReleaseFile{Path: file.Path, SHA256: file.SHA256})
+	}
+	identity, err := selfdevprotocol.FrontendIdentityFromReleaseFiles(releaseDigest, files)
+	if err != nil {
+		return selfdevprotocol.FrontendIdentity{}, err
+	}
+	return identity, nil
 }
