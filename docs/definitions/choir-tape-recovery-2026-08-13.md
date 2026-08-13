@@ -119,15 +119,15 @@ measures:
 
 now:
   status: blocked_incomplete
-  slice: "Owner product path cannot reach an eligible computer. Staging remains 8a172b84. Retained computer computer-03335285269bdba4f94377e56879f9e6 is the only interactive VM (desktop primary, epoch 252). choir computer create is unknown. vmctl resolve provisions only the primary desktop. Checkpoint bind still HTTP 409 served SPA is underivable. Four deployed receipts remain unpaid. Do not rematerialize this computer."
+  slice: "Owner product path cannot reach an eligible computer. Staging remains 8a172b84. Retained computer computer-03335285269bdba4f94377e56879f9e6 is the only interactive VM (desktop primary, epoch 252, active, self-dev mode off). choir computer create is unknown. vmctl resolve provisions only the primary desktop. Checkpoint bind reconfirmed HTTP 409 served SPA is underivable. Replay-completeness now HTTP 500 guest credential renewal refused. Four deployed receipts remain unpaid. Do not rematerialize this computer."
   question: "What owner-reachable product path can provision a computer with event-derivable VM-local rows and staged frontend/ without destroying the retained computer's live-only rows?"
   reconciliation:
-    observed_at: 2026-08-13T20:57:42Z
-    source_ref: main@d839ec9d1eba02fd52471bcf6a1d86d91c384a03
-    deploy_identity: "staging deployed 8a172b84f7285a83d3c502ad2e9e7c2ed4b65307 at 2026-08-13T20:45:20Z; retained computer computer-03335285269bdba4f94377e56879f9e6 active at realization epoch 252 desktop primary"
+    observed_at: 2026-08-13T21:06:30Z
+    source_ref: main@a1efef3a1cef0edc23a2a17ab6446d0cca66cbc0
+    deploy_identity: "staging deployed 8a172b84f7285a83d3c502ad2e9e7c2ed4b65307 at 2026-08-13T20:45:20Z; retained computer computer-03335285269bdba4f94377e56879f9e6 active at realization epoch 252 desktop primary; capability renewal refused; checkpoint bind still HTTP 409"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13T20:57:42Z git status --short dirty with this Definition stamp plus docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json
+    worktree_inventory_ref: 2026-08-13T21:06:30Z git status --short dirty with this now reconcile plus docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json
     status: reconciled
   candidate:
     id: none
@@ -142,7 +142,7 @@ now:
     recorded_at: 2026-08-13T20:57:42Z
     consequence: "Stop collecting unpaid receipts until the owner provisions an eligible computer through a product path. Keep this Definition as the unique entrypoint. Do not start effects. Do not rematerialize computer-03335285269bdba4f94377e56879f9e6. Do not add table reducers as a restore shortcut. Do not SSH. Do not stamp complete."
   evidence_refs: [docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json, docs/evidence/tape-recovery-checkpoint-bind-refusal-2026-08-13.json, docs/evidence/tape-recovery-retained-computer-2026-08-13.json, docs/ACTIVE.md, docs/mission-graph.yaml]
-  blocker_or_risk: "No eligible computer is reachable through the owner product path. Retained computer lacks staged frontend/ (HTTP 409/503) and has nine live-only texture tables. One interactive VM per user/desktop; choir computer create does not exist; vmctl resolve refuses non-primary desktops. Remaining unpaid: destructive_rematerialization, serving_join, owner_reachable_whole_computer_restore, capability_renewal_pass."
+  blocker_or_risk: "No eligible computer is reachable through the owner product path. Retained computer lacks staged frontend/ (HTTP 409/503) and has nine live-only texture tables. Guest capability renewal is currently refused (idle past grace; restart is not capability_renewal_pass). One interactive VM per user/desktop; choir computer create does not exist; vmctl resolve refuses non-primary desktops. Remaining unpaid: destructive_rematerialization, serving_join, owner_reachable_whole_computer_restore, capability_renewal_pass."
   next_action: "Owner must provision a product-path computer whose VM-local rows are event-derivable and whose staged release includes frontend/. Until then, do not rematerialize the retained computer, do not add table reducers as a restore shortcut, do not SSH, and do not stamp complete."
 
 receipts:
