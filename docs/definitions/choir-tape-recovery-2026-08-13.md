@@ -122,12 +122,12 @@ now:
   slice: "Serving hop is guest-static: guest serves CHOIR_UPDATER_ROOT/current/frontend; proxy reverse-proxies authenticated / and /assets/* after vmctl resolve; Caddy no longer file_servers host frontend-current as computer surface; unsigned callers get host platform-shell chrome (OUT of restore). Missing guest SPA is 503. FrontendRestaged remains false. Guest releases still omit frontend/ files, so authenticated surface is fail-closed until a release includes them."
   question: "Can owner-reachable restore restage VM-local state and SPA bytes together, with capability renewal, on the retained computer? Guest-static is picked."
   reconciliation:
-    observed_at: 2026-08-13T18:50:00Z
-    source_ref: main@e60321940c5a60986c598682da6ff4b6d1b62350
-    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; guest-static serving hop is local product-path code and is not yet a staging runtime identity"
+    observed_at: 2026-08-13T18:55:00Z
+    source_ref: main@490e779bd994644f9f3817ee24624d42feffadcc
+    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; 490e779b is the guest-static serving-hop commit and is not yet a staging runtime identity"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13T18:50:00Z git status --short dirty with guest-static serving hop on e6032194
+    worktree_inventory_ref: 2026-08-13T18:55:00Z git status --short empty at 490e779b
     status: reconciled
   candidate:
     id: none
@@ -143,7 +143,7 @@ now:
     consequence: "Do not stop after the first slice. Continue until the finish artifact exists or a named blocker (fail-closed live-only rows, capability-renewal substrate, unpicked hop at slice 3) forces blocked_incomplete or a problem-documentation-first Define."
   evidence_refs: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, .agentic-consensus/tape-recovery-20260813/, internal/agentcore/replay_completeness.go]
   blocker_or_risk: "Guest releases currently omit frontend/ files, so checkpoint SPA binding and authenticated guest-static serving fail closed until a release includes them. ReconstructThrough historical heads is not implemented; current rematerialize replays the full chain and FrontendRestaged is false. Guest capability renewal recurrence remains a restore-proof gate. Deployed checkpoint, scope-refusal, destructive rematerialization, serving-join, and owner-reachable restore receipts are still owed. Fail-closed checkpoint may discover live-only rows on the retained sequence-1 computer."
-  next_action: "Land the guest-static red commit through origin/main and CI. Then make rematerialize restage SPA bytes (FrontendRestaged) and exercise owner-reachable whole-computer restore. Staging still owes deployed checkpoint, scope-refusal, destructive rematerialization, and serving-join receipts."
+  next_action: "Make rematerialize restage SPA bytes (FrontendRestaged) and exercise owner-reachable whole-computer restore through the product API/CLI, including capability-renewal. Guest releases must include frontend/ files or checkpoint and authenticated serving stay fail-closed. Staging still owes deployed checkpoint, scope-refusal, destructive rematerialization, and serving-join receipts."
 
 receipts:
   - id: tape-recovery-draft-consensus-2026-08-13
@@ -220,7 +220,7 @@ receipts:
     authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
     candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md, docs/memo-per-computer-frontend-2026-08-13.md]
     landing:
-      source_commit: pending
+      source_commit: 490e779b
       ci_ref: pending
       deploy_ref: not_applicable
       environment_identity: not_applicable
