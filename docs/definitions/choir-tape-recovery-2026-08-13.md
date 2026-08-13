@@ -119,15 +119,15 @@ measures:
 
 now:
   status: working
-  slice: "Capsule freeze is fail-closed without frontend source (spawn requires frontend/index.html) and without frontend artifacts (StageGrantedRelease requires frontend/ files). Guest capability renewal accepts a 60s expiry grace for the 2026-08-12 recently-expired class; tokens expired longer still fail closed. SPA restage, guest-static hop, and owner restore remain landed locally."
+  slice: "Staging is on eb91808a (freeze, renewal grace, SPA restage, owner restore, guest-static hop). ReconstructThrough and restore-intent are pushed at a2a80630 and not yet deployed. Owner restart minted a fresh guest capability; replay-completeness then succeeded. The retained computer is sequence 3 and not checkpoint-eligible: nine behavior-bearing direct-write tables exist only in live Dolt. Deployed restore refuses platform and cycle operands."
   question: "Can deployed staging prove checkpoint witness, scope refusal, destructive rematerialization, serving-join, owner-reachable whole-computer restore, and capability renewal on the retained computer?"
   reconciliation:
-    observed_at: 2026-08-13T19:35:42Z
-    source_ref: main@8bbba401cb173bd2b151403a2eed39a57dd38860
-    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; 8bbba401 is freeze/renewal product-path code and is not yet a staging runtime identity"
+    observed_at: 2026-08-13T19:58:52Z
+    source_ref: main@a2a80630
+    deploy_identity: "staging deployed eb91808a8b935ee8ea356fec2932b05a0a21f776 at 2026-08-13T19:51:44Z; retained computer computer-03335285269bdba4f94377e56879f9e6 active at realization epoch 251 sequence 3; a2a80630 reconstruct-through is not yet a staging runtime identity"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13T19:35:42Z git status --short empty at 8bbba401
+    worktree_inventory_ref: 2026-08-13T19:58:52Z git status --short dirty with this Definition stamp plus docs/evidence/tape-recovery-retained-computer-2026-08-13.json
     status: reconciled
   candidate:
     id: none
@@ -142,8 +142,8 @@ now:
     recorded_at: 2026-08-13T17:14:50Z
     consequence: "Do not stop after local product-path landings. Continue until the finish artifact exists or a named blocker (fail-closed live-only rows, capability-renewal substrate, unpaid deployed receipts) forces blocked_incomplete or a problem-documentation-first Define."
   evidence_refs: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, .agentic-consensus/tape-recovery-20260813/, internal/agentcore/replay_completeness.go]
-  blocker_or_risk: "Local product path now fail-closes freeze without frontend and grace-renews recently expired capabilities, but staging is still on db265d1e. Idle guests past TTL+60s still cannot renew without restart. ReconstructThrough historical heads is not implemented; rematerialize replays the full chain. Deployed checkpoint, scope-refusal, destructive rematerialization, serving-join, owner-reachable restore, and capability-renewal receipts are still owed. Fail-closed checkpoint may discover live-only rows on the retained sequence-1 computer."
-  next_action: "Deploy the freeze/renewal/restage/restore path to staging and collect the required receipts: checkpoint_witness, scope_refusal, destructive_rematerialization, serving_join, owner_reachable_whole_computer_restore, capability_renewal_pass. Do not stamp complete on local tests. If sequence-1 still has live-only rows, document the problem before more restore code. Idle-beyond-grace renewal still requires a restart path."
+  blocker_or_risk: "Retained computer replay is not eligible: desktop_app_instances, desktop_sessions, desktop_window_placements, desktop_workspaces, og_edges, og_objects, run_memory_entries, texture_agent_mutations, texture_document_aliases are live-only direct-write tables without reducers. Checkpoint creation must fail closed; destructive rematerialize would drop those rows. Idle-past-grace capability still requires restart (proven). ReconstructThrough is pushed but not deployed. Serving-join with two divergent computers and capability renewal across restore are still unpaid. Do not add table reducers before this problem is documented."
+  next_action: "Keep the live-only-row problem documented. Do not write reducers yet. After a2a80630 deploys, collect remaining receipts on a computer whose VM-local rows are event-derivable, or record blocked_incomplete if the retained computer cannot host a valid checkpoint. Do not stamp complete."
 
 receipts:
   - id: tape-recovery-draft-consensus-2026-08-13
@@ -209,6 +209,38 @@ receipts:
       deploy_ref: not_applicable
       environment_identity: not_applicable
       deployed_acceptance: pending (destructive_rematerialization)
+    registry_conformance_ref: not_applicable
+  - id: tape-recovery-retained-computer-live-only-rows-2026-08-13
+    boundary: define
+    commit_or_artifact: docs/evidence/tape-recovery-retained-computer-2026-08-13.json
+    proof_refs: [docs/evidence/tape-recovery-retained-computer-2026-08-13.json]
+    rollback_ref: revert the evidence/docs stamp
+    disposition: "problem documented — replay probe digest 0b8354ce on retained computer computer-03335285269bdba4f94377e56879f9e6 at sequence 3 / epoch 251 is ineligible. Nine behavior-bearing texture tables are non-empty in live Dolt and empty after tape replay. Checkpoint must fail closed. Deployed restore refused platform and cycle operands (HTTP 400). Long-idle capability renewal refused; owner restart then replay succeeded. Do not add reducers until this record lands."
+    problem_ref: tape-recovery-retained-computer-live-only-rows-2026-08-13
+    authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority); problem-documentation-first
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    landing:
+      source_commit: a2a80630
+      ci_ref: pending
+      deploy_ref: eb91808a8b935ee8ea356fec2932b05a0a21f776
+      environment_identity: staging https://choir.news deployed eb91808a
+      deployed_acceptance: partial (scope_refusal collected; checkpoint_witness fail-closed by ineligibility; destructive rematerialization not attempted)
+    registry_conformance_ref: not_applicable
+  - id: tape-recovery-reconstruct-through-restore-intent-2026-08-13
+    boundary: implement
+    commit_or_artifact: internal/computerevent/appender.go
+    proof_refs: [internal/agentcore/rematerialize.go, internal/computerevent/computerevent_test.go, internal/agentcore/rematerialize_test.go]
+    rollback_ref: revert the reconstruct-through red commit
+    disposition: "accepted locally and pushed — ReconstructThroughTarget halts at checkpoint AcceptedEventHead; owner restore appends EventRestoreRequested first. Not yet a staging runtime identity. Deployed restore receipts remain required on an eligible computer."
+    problem_ref: not_applicable
+    authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    landing:
+      source_commit: a2a80630
+      ci_ref: pending
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: pending
     registry_conformance_ref: not_applicable
   - id: tape-recovery-freeze-frontend-capability-grace-2026-08-13
     boundary: implement

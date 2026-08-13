@@ -1,0 +1,143 @@
+{
+  "captured_at": "2026-08-13T19:55:42.205562651Z",
+  "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+  "schema_version": 2,
+  "probe_digest": "0b8354ce0f6c810c6f57ddfc815bb7b16af30709142e53cdcc331844c254ca9d",
+  "staging_deployed_commit": "eb91808a8b935ee8ea356fec2932b05a0a21f776",
+  "live_head": {
+    "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+    "sequence": 3,
+    "canonical_event_head": "385e8de871a4bc0023e2eeb90db6a285b1ae4a0ce7b4fda0c45771a5df8040b8",
+    "desired_event_head": "a3cf16d0d1dbb46e4ebd5841af5007575fb74184d54c2e6fa26f856769b92b44",
+    "effective_event_head": "a3cf16d0d1dbb46e4ebd5841af5007575fb74184d54c2e6fa26f856769b92b44",
+    "pending_transition_ref": "",
+    "desired_state_commitment": "40df35913994fab47d2dd2c450a7f9d3958ea639ec9fb2002b8b8073534fe091",
+    "effective_state_commitment": "40df35913994fab47d2dd2c450a7f9d3958ea639ec9fb2002b8b8073534fe091",
+    "reducer_version": 1,
+    "credential_revocation_epoch": 2
+  },
+  "replay_head": {
+    "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+    "sequence": 3,
+    "canonical_event_head": "385e8de871a4bc0023e2eeb90db6a285b1ae4a0ce7b4fda0c45771a5df8040b8",
+    "desired_event_head": "a3cf16d0d1dbb46e4ebd5841af5007575fb74184d54c2e6fa26f856769b92b44",
+    "effective_event_head": "a3cf16d0d1dbb46e4ebd5841af5007575fb74184d54c2e6fa26f856769b92b44",
+    "pending_transition_ref": "",
+    "desired_state_commitment": "40df35913994fab47d2dd2c450a7f9d3958ea639ec9fb2002b8b8073534fe091",
+    "effective_state_commitment": "40df35913994fab47d2dd2c450a7f9d3958ea639ec9fb2002b8b8073534fe091",
+    "reducer_version": 1,
+    "credential_revocation_epoch": 2
+  },
+  "eligibility": {
+    "manifest_version": 1,
+    "eligible": false,
+    "reason": "behavior-bearing direct-write tables are non-empty without reducers",
+    "unsupported_tables": [
+      "desktop_app_instances",
+      "desktop_sessions",
+      "desktop_window_placements",
+      "desktop_workspaces",
+      "og_edges",
+      "og_objects",
+      "run_memory_entries",
+      "texture_agent_mutations",
+      "texture_document_aliases"
+    ],
+    "requires_non_nil_heads": true
+  },
+  "result_status": "not_equivalent",
+  "differences": [
+    {
+      "kind": "dolt_head",
+      "key": "dolt:texture:content_root",
+      "left": "sha256:519d664f3ae1327bcb3060a914c276f51b3bf7f8de63173ea2c0104896c99bdf",
+      "right": "sha256:7012853f29b004d43a621416a607d5c53a8caf720a712fd28da2fb92a136ed30",
+      "reason": "observation values differ"
+    },
+    {
+      "kind": "dolt_head",
+      "key": "dolt:texture:table:desktop_app_instances",
+      "left": "sha256:42b62d4f8fe527452dbfc108f18e7cb9f41f6cdbe2b663a5516e95f9925e281e",
+      "right": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "observation values differ"
+    },
+    {
+      "kind": "dolt_head",
+      "key": "dolt:texture:table:desktop_sessions",
+      "left": "sha256:97985b5c9956272f443f0b69289fdf67fe9058b05edf557f737fd2ca02386676",
+      "right": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "observation values differ"
+    },
+    {
+      "kind": "dolt_head",
+      "key": "dolt:texture:table:desktop_window_placements",
+      "left": "sha256:0f9d81111b9fbecbd7a304c0818a9110563cec69facc4e51f3a06a15be1cad6b",
+      "right": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "observation values differ"
+    },
+    {
+      "kind": "dolt_head",
+      "key": "dolt:texture:table:desktop_workspaces",
+      "left": "sha256:005108c31879a058f2002bd487e387f9a8954662334447b43ca06c081cc517f3",
+      "right": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "observation values differ"
+    },
+    {
+      "kind": "dolt_head",
+      "key": "dolt:texture:table:og_edges",
+      "left": "sha256:bfa3c8514904eaf7f346ae67c9169f23bc1924e39c0a1bda1fed127a54268be4",
+      "right": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "observation values differ"
+    },
+    {
+      "kind": "dolt_head",
+      "key": "dolt:texture:table:og_objects",
+      "left": "sha256:2dd70f51e1854858a22350ef7d3c50039f753c2107885b28dd07e1a5b41df9c4",
+      "right": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "observation values differ"
+    },
+    {
+      "kind": "dolt_head",
+      "key": "dolt:texture:table:run_memory_entries",
+      "left": "sha256:12cec0a9a95ac825ec5bbc3b2f778fc32f199c5184242f5c48303db7052d7e8b",
+      "right": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "observation values differ"
+    },
+    {
+      "kind": "dolt_head",
+      "key": "dolt:texture:table:texture_agent_mutations",
+      "left": "sha256:2676f79a0f23d828c067dab05f3e0565df600469d0f8b979bfd07aebc7c888eb",
+      "right": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "observation values differ"
+    },
+    {
+      "kind": "dolt_head",
+      "key": "dolt:texture:table:texture_document_aliases",
+      "left": "sha256:f8fe17bbc08a049d442a3d381ddb3ec1ae7bb7126a53649dc5fa3d28ec1732b4",
+      "right": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "observation values differ"
+    }
+  ],
+  "owner_restart": {
+    "idempotency_key": "tape-recovery-capability-restart-2026-08-13T1953Z",
+    "prior_realization_epoch": 250,
+    "resulting_realization_epoch": 251,
+    "receipt_id": "019ffcb1-5e1f-7f19-9898-ca167e25d60a"
+  },
+  "deployed_scope_refusal": [
+    {
+      "operand": "platform",
+      "status": 400,
+      "error": "restore: platform store is out of restore scope"
+    },
+    {
+      "operand": "cycle",
+      "status": 400,
+      "error": "restore: cycle store is out of restore scope"
+    }
+  ],
+  "capability": {
+    "before_restart": "replay completeness refused: guest credential: renewal refused",
+    "after_restart": "replay completeness succeeded with fresh capability; idle-past-grace still requires restart"
+  }
+}
