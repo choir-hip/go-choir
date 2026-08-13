@@ -255,12 +255,12 @@ now:
   question: "Does checkpoint creation bind the canonical event head plus CodeRef, ArtifactProgramRef, and a VM-local content witness, and refuse while any behavior-bearing local row is not event- or receipt-derivable?"
 
   reconciliation:
-    observed_at: 2026-08-12T06:56:12Z
-    source_ref: main@24fb24de
-    deploy_identity: "staging https://choir.news reconciled 2026-08-12: health reports proxy status ok, deployed commit 3cd12d1452ad1d06b5df57cf9183313568f60cb5, vmctl status ok; this Definition remains effects-OFF until its own rehearsal and restore gates pass"
+    observed_at: 2026-08-13T02:15:00Z
+    source_ref: main@633131aa0521bd1a427f335e147610a314829886
+    deploy_identity: "staging https://choir.news reconciled 2026-08-13: deployed commit 633131aa0521bd1a427f335e147610a314829886; retained computer computer-03335285269bdba4f94377e56879f9e6 is replay-eligible at sequence 1 (head a3cf16d0d1dbb46e4ebd5841af5007575fb74184d54c2e6fa26f856769b92b44); this Definition remains effects-OFF until its own rehearsal and restore gates pass"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-12 read-only git status (clean)
+    worktree_inventory_ref: 2026-08-13 read-only git status (clean; texture researcher-binding fix 633131aa)
     status: reconciled
 
   blocker_or_risk: "Eligibility certifies projection-reconstruction equivalence, not causal provenance of the 82 live rows. Any direct-SQL write to an empty_until_supported table flips eligibility false (correct fail-closed). replace-workspace after a successful bootstrap is forbidden (CAS/local projection split)."
@@ -279,7 +279,7 @@ now:
     recorded_at: 2026-08-11T20:05:00Z
     consequence: "Per-candidate owner approval is removed as a requirement and replaced by an owner-armed standing rule plus two-seat auto-approval. The decision-binding verifier and mode CAS are relaxed deliberately, which is the mission's heaviest evidence burden. Checkpoint and revert become deliverables rather than a rollback field. Effects leaving the reversible envelope gain an explicit refusal requirement. Freeze/propose authority must be wired onto CoSuper, which today has no production call site. Pre-mission haunted-authority cutover (roadmap demotion, doctrine/ontology transitional language, RLM Phase-1 re-derive note, restore-set boundary, AGENTS restore-vs-deploy note) landed green; finish.completion_cutover must still run after deployed acceptance or the goal is a false complete."
   evidence_refs: [docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "Revert is the mission: nothing in production reads Dolt history back, checkpoints bind no state, and Dolt commits carry no head binding. Replay completeness is unresolved and is the deciding measurement; ProjectionMaterializer is explicitly non-runtime today, so the preferred rematerialization path has no runtime implementation yet and an interim single-workspace pin checkout may be needed. Relaxing the decision-binding verifier and mode CAS touches the surfaces that make the tape trustworthy and carries the heaviest evidence burden. RESOLVED 2026-08-11: staging deploy identity reconciled; owner-bearer residual disposed; capsule build capability confirmed; frontend serving location determined (UI out of scope)."
+  blocker_or_risk: "Revert is the mission: nothing in production reads Dolt history back, checkpoints bind no state, and Dolt commits carry no head binding. Replay completeness RESOLVED 2026-08-13 (retained computer replay-eligible at sequence 1; the 26 differences classified and resolved by workspace replacement plus chain bootstrap). ProjectionMaterializer is still non-runtime today, so rematerialization is the preferred restore path with a single-workspace pin checkout only as an evidence-driven contingency. Relaxing the decision-binding verifier and mode CAS touches the surfaces that make the tape trustworthy and carries the heaviest evidence burden."
   next_action: "Design checkpoint completeness after the accepted 2026-08-13 bootstrap receipt; do not rerun the probe as if unanswered."
 
 receipts:

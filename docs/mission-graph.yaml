@@ -312,9 +312,11 @@ nodes:
       Supervision. Proof target is reversibility under a standing-rule two-seat
       auto-promotion envelope (capsule-authored solitaire, API-only), then
       acceptance-fenced restore of VM-local state + release (platform/cycle/host
-      frontend OUT). The pre-drop replay probe is complete but not equivalent:
-      its 26-difference result must be classified before checkpoint design, and
-      checkpoint creation must fail closed for unreproducible behavior-bearing
+      frontend OUT). The 26 pre-drop replay differences were classified and
+      resolved (workspace replacement + chain bootstrap), and the retained
+      computer is replay-eligible at sequence 1. Next is checkpoint completeness:
+      bind the canonical head plus CodeRef, ArtifactProgramRef, and a VM-local
+      content witness, and refuse creation for unreproducible behavior-bearing
       writes. Effects remain OFF until the staging rehearsal gate that includes
       proven total restore. Post-acceptance finish.completion_cutover is required
       for goal.complete. choir-self-development-roadmap-2026-08-11.md is
