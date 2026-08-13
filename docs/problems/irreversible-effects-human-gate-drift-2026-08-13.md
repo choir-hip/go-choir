@@ -1,6 +1,6 @@
 # Irreversible Effects Were Mistaken for a Human-Approval Boundary
 
-**Status:** documented before repair
+**Status:** doctrine, active Definition, registries, and product summaries corrected; runtime policy/consensus cutover remains active-mission work
 
 **Observed:** 2026-08-13
 
