@@ -350,6 +350,14 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 		return err
 	}
 	verifierDigest := computerevent.DigestBytes(verifierJSON)
+	pinned, _, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, result.ReleaseDigest)
+	if err != nil {
+		return fmt.Errorf("materializer: checkpoint release unavailable: %w", err)
+	}
+	witness, frontend, err := rt.checkpointRestoreBindings(ctx, operation.ComputerID, result.ReleaseDigest, pinned.Files)
+	if err != nil {
+		return err
+	}
 	checkpoint, err := rt.selfdevControl.PublishCheckpoint(ctx, selfdevprotocol.CheckpointRequest{
 		ComputerID: operation.ComputerID, IdempotencyKey: "selfdev-checkpoint-" + operation.DecisionEvent,
 		ComputerVersion: version, AcceptedEventHead: appliedEventHead, EffectiveEventHead: head.EffectiveEventHead,
@@ -357,6 +365,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 		ReleaseDigest: result.ReleaseDigest, ReconstructionDigest: reconstructionDigest,
 		MaterializationReceiptDigest: receiptDigest, VerifierCertificateDigest: verifierDigest,
 		VerifierCertificate: verifierCertificate, ReducerVersion: head.ReducerVersion,
+		VMLocalContentWitness: witness, FrontendIdentity: frontend,
 	})
 	if err != nil {
 		return err

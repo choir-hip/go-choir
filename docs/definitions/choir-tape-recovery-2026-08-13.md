@@ -119,15 +119,15 @@ measures:
 
 now:
   status: working
-  slice: "Define reconcile after landing: registry is flipped and the effects carve-out leftovers are closed. /goal continues through all five acceptance actions; first implementation is checkpoint witness plus scope refusal."
+  slice: "Checkpoint witness and scope refusal are implemented in protocol and production publishers. Local tests refuse missing witness, underivable SPA, live-only rows, and platform/cycle operands. Deployed checkpoint and deployed refused attempt are still required."
   question: "Which of the three serving hops (guest-static, host-staging-keyed-by-computer, encapsulated-origin) does this Definition prove? Checkpoint witness and scope refusal do not require the pick."
   reconciliation:
     observed_at: 2026-08-13T17:14:50Z
-    source_ref: main@0c16d8f754691045ad605c2f595cf671f805159d
-    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; docs commits 1ecbf9e6 and 0c16d8f7 are docs-only and not a staging runtime identity"
+    source_ref: main@0c03a47929c32d289e5c689a87302c9b1e4821aa
+    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; docs commits 1ecbf9e6, 0c16d8f7, and 0c03a479 are docs-only and not a staging runtime identity"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13T17:14:50Z git status --short empty at 0c16d8f7
+    worktree_inventory_ref: 2026-08-13T18:20:00Z git status --short dirty with checkpoint-witness implementation on 0c03a479
     status: reconciled
   candidate:
     id: none
@@ -143,7 +143,7 @@ now:
     consequence: "Do not stop after the first slice. Continue until the finish artifact exists or a named blocker (fail-closed live-only rows, capability-renewal substrate, unpicked hop at slice 3) forces blocked_incomplete or a problem-documentation-first Define."
   evidence_refs: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, .agentic-consensus/tape-recovery-20260813/, internal/agentcore/replay_completeness.go]
   blocker_or_risk: "Rematerialization has no runtime restore path; ReplayCompleteness is a diagnostic probe, not a destructive restage. Guest capability renewal recurrence remains a restore-proof gate. The frontend serving hop is host-global Caddy with no pick among the three topologies. Fail-closed checkpoint may discover live-only rows on the retained sequence-1 computer."
-  next_action: "Implement checkpoint witness and scope refusal (tests first): bind event head + CodeRef + ArtifactProgramRef + VM-local Dolt content witness + frontend identity; refuse checkpoint while any behavior-bearing VM-local row is not event- or receipt-derivable or the served SPA is underivable; refuse a restore that would touch platform or cycle state. Continue through rematerialization, serving hop, and owner-reachable restore unless a named blocker stops the run."
+  next_action: "Land the checkpoint-witness red commit through origin/main and CI. Then implement destructive rematerialization as a product path promoted from Runtime.ReplayCompleteness (tests first): dispose or quarantine the original realization and reconstruct from the tape alone. Serving hop remains the slice-3 pick. Staging still owes a deployed checkpoint on the retained computer and a deployed platform/cycle refusal."
 
 receipts:
   - id: tape-recovery-draft-consensus-2026-08-13
@@ -172,12 +172,28 @@ receipts:
     authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
     candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
     landing:
-      source_commit: pending
+      source_commit: 0c03a479
       ci_ref: pending (Docs Truth Check)
       deploy_ref: not_applicable
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
     registry_conformance_ref: "verified 2026-08-13: docs/ACTIVE.md Invocation points at choir-tape-recovery-2026-08-13; docs/mission-graph.yaml unique product entrypoint true; docs/doc-authority-manifest.yaml tape-recovery is_root [authority, entry] and effects is_root []; effects restore leftovers closed in the same commit"
+  - id: tape-recovery-checkpoint-witness-2026-08-13
+    boundary: implement
+    commit_or_artifact: internal/selfdevprotocol/restore.go
+    proof_refs: [internal/selfdevprotocol/restore_test.go, internal/selfdevprotocol/control.go, internal/agentcore/checkpoint_restore_bindings.go]
+    rollback_ref: revert the checkpoint-witness red commit
+    disposition: "accepted locally — CheckpointFromRequest binds VM-local witness + frontend identity and refuses platform/cycle; RestoreFromRequest refuses those operands; genesis/materializer populate bindings from ReplayCompleteness. Deployed checkpoint and deployed refused attempt remain required."
+    problem_ref: not_applicable
+    authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    landing:
+      source_commit: pending
+      ci_ref: pending
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: pending (checkpoint_witness, scope_refusal)
+    registry_conformance_ref: not_applicable
 
 view:
   path: none

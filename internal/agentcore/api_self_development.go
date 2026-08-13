@@ -603,6 +603,10 @@ func (h *APIHandler) recordGenesisBaseline(ctx context.Context, request selfDeve
 	if err != nil {
 		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, err
 	}
+	witness, frontend, err := h.rt.checkpointRestoreBindings(ctx, event.ComputerID, manifest.ContentDigest, manifest.Files)
+	if err != nil {
+		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, err
+	}
 	checkpoint, err := h.rt.selfdevControl.PublishCheckpoint(ctx, selfdevprotocol.CheckpointRequest{
 		ComputerID: event.ComputerID, IdempotencyKey: "selfdev-genesis-checkpoint-" + eventDigest,
 		ComputerVersion: route.Slot.Current, AcceptedEventHead: eventDigest, EffectiveEventHead: eventDigest,
@@ -610,6 +614,7 @@ func (h *APIHandler) recordGenesisBaseline(ctx context.Context, request selfDeve
 		ReleaseDigest: manifest.ContentDigest, ReconstructionDigest: reconstructionDigest,
 		MaterializationReceiptDigest: materializationDigest, VerifierCertificateDigest: verifierDigest,
 		VerifierCertificate: verifierCertificate, VerifierTrustBootstrap: true, ReducerVersion: head.ReducerVersion,
+		VMLocalContentWitness: witness, FrontendIdentity: frontend,
 	})
 	if err != nil {
 		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, err

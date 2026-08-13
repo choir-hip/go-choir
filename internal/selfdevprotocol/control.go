@@ -86,6 +86,8 @@ type CheckpointRequest struct {
 	VerifierCertificate          VerifierCertificateResponse     `json:"verifier_certificate"`
 	VerifierTrustBootstrap       bool                            `json:"verifier_trust_bootstrap"`
 	ReducerVersion               int                             `json:"reducer_version"`
+	VMLocalContentWitness        VMLocalContentWitness           `json:"vm_local_content_witness"`
+	FrontendIdentity             FrontendIdentity                `json:"frontend_identity"`
 }
 
 type Checkpoint struct {
@@ -180,6 +182,12 @@ func CheckpointFromRequest(request CheckpointRequest) (Checkpoint, []byte, error
 		!computerevent.IsSHA256(request.ReleaseDigest) || !computerevent.IsSHA256(request.ReconstructionDigest) ||
 		!computerevent.IsSHA256(request.MaterializationReceiptDigest) || !computerevent.IsSHA256(request.VerifierCertificateDigest) || request.ReducerVersion == 0 {
 		return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: complete accepted/effective bindings are required")
+	}
+	if err := request.VMLocalContentWitness.Validate(); err != nil {
+		return Checkpoint{}, nil, err
+	}
+	if err := request.FrontendIdentity.Validate(request.ReleaseDigest); err != nil {
+		return Checkpoint{}, nil, err
 	}
 	if VerifyVerifierCertificate(request.VerifierCertificate) != nil {
 		return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: verifier certificate refused")

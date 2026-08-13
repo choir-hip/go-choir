@@ -288,6 +288,12 @@ func TestPrivatePayloadAppendCompletesDirectedCommitmentGraph(t *testing.T) {
 		ReleaseDigest: platformTestDigest('e'), ReconstructionDigest: platformTestDigest('f'),
 		MaterializationReceiptDigest: platformTestDigest('1'), VerifierCertificateDigest: computerevent.DigestBytes(verifierJSON),
 		VerifierCertificate: verifierResponse, VerifierTrustBootstrap: true, ReducerVersion: head.ReducerVersion,
+		VMLocalContentWitness: selfdevprotocol.VMLocalContentWitness{
+			Database: "choir", ContentRoot: platformTestDigest('7'), DoltHead: platformTestDigest('8'), DerivabilityDigest: platformTestDigest('9'),
+			Schema: map[string]string{"agents": platformTestDigest('a')},
+			Tables: map[string]string{"agents": platformTestDigest('b')},
+		},
+		FrontendIdentity: selfdevprotocol.FrontendIdentity{Digest: platformTestDigest('c'), Derivation: selfdevprotocol.FrontendDerivationExplicit},
 	}
 	checkpointBody, err := computerevent.CanonicalJSON(checkpointRequest)
 	if err != nil {
