@@ -17,9 +17,9 @@ retired approaches live in the Definition's
 receipt**, not a live schedule. CTS remains citable evidence, not an entrypoint.
 The scope-disjoint
 [`choir-instruction-substrate-prune-2026-08-11.md`](definitions/choir-instruction-substrate-prune-2026-08-11.md)
-is the separate docs/CI maintenance entrypoint that makes this substrate
-legible before the effects Definition proceeds. It does not own product effects
-or a second product schedule.
+completed 2026-08-12: 106/106 beads dispositioned, doccheck signal repaired,
+instruction packet pruned with invariant conservation. It is settled evidence,
+not an entrypoint; do not re-open the retired beads store.
 
 The active Definition had one owner-ratified pre-effects subordinate contract:
 [`definitions/choir-sandbox-autoputer-rename-2026-08-11.md`](definitions/choir-sandbox-autoputer-rename-2026-08-11.md).

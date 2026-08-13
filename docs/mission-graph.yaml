@@ -369,13 +369,18 @@ nodes:
     title: Instruction Substrate Prune
     path: docs/definitions/choir-instruction-substrate-prune-2026-08-11.md
     ledger: ''
-    status: working
+    status: settled
     kind: ci_maintenance
-    entrypoint: true
-    execution_mode: scope_disjoint_maintenance
+    entrypoint: false
+    execution_mode: completed_non_executable
     depends_on: []
     enables:
       - choir-supervised-self-development-effects-2026-08-11
+    note: >-
+      Completed 2026-08-12: 106/106 beads dispositioned, doccheck warning/info
+      separation landed, instruction packet pruned 19,179 to 16,600 words with
+      invariant conservation. Retired tracker must not be re-opened; historical
+      evidence only.
     sources:
       - docs/definitions/choir-instruction-substrate-prune-2026-08-11.md
       - docs/evidence/choir-instruction-substrate-prune-triage-2026-08-11.md

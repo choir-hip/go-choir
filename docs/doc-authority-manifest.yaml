@@ -336,10 +336,10 @@ documents:
     witnesses: [docs/memo-persistent-rlm-actors-2026-08-09.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, AGENTS.md]
     refresh_triggers: [mission_state_change, predecessor_completion, actor_kernel_change, capability_profile_change, capsule_effect_boundary_change, trace_evidence_change, Texture_transclusion_change, deployed_acceptance, registry_closure]
   - path: docs/definitions/choir-instruction-substrate-prune-2026-08-11.md
-    claim_scope: current
-    is_root: [entry]
+    claim_scope: historical
+    is_root: []
     is_evidence: false
-    annotations: {doc_role: definition, authority: scope_disjoint_ci_maintenance, lifecycle: active, entrypoint: true}
+    annotations: {doc_role: definition, authority: completed_scope_disjoint_maintenance, lifecycle: complete, entrypoint: false}
     witnesses: [docs/definitions/choir-instruction-substrate-prune-2026-08-11.md, docs/evidence/choir-instruction-substrate-prune-triage-2026-08-11.md, docs/evidence/choir-instruction-substrate-prune-doccheck-2026-08-11.md, docs/evidence/choir-instruction-substrate-prune-packet-2026-08-11.md, docs/mission-graph.yaml, docs/ACTIVE.md, cmd/doccheck/main.go, AGENTS.md]
     refresh_triggers: [mission_state_change, doccheck_change, packet_change]
 
