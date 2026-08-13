@@ -119,15 +119,15 @@ measures:
 
 now:
   status: working
-  slice: "Rematerialize restages SPA bytes: after the Dolt witness matches, current swaps onto the checkpoint-pinned release without Apply or restorePrior (FrontendRestaged true). Guest autoputer baseline now copies frontend/ into $out/frontend so genesis/baseline releases can bind and serve SPA. Owner restore is POST /lifecycle/restore plus choir computer restore, scoped to vm_local and computer_surface_frontend. Guest-static hop remains the serving join."
+  slice: "Capsule freeze is fail-closed without frontend source (spawn requires frontend/index.html) and without frontend artifacts (StageGrantedRelease requires frontend/ files). Guest capability renewal accepts a 60s expiry grace for the 2026-08-12 recently-expired class; tokens expired longer still fail closed. SPA restage, guest-static hop, and owner restore remain landed locally."
   question: "Can deployed staging prove checkpoint witness, scope refusal, destructive rematerialization, serving-join, owner-reachable whole-computer restore, and capability renewal on the retained computer?"
   reconciliation:
-    observed_at: 2026-08-13T19:14:51Z
-    source_ref: main@cd403f98d300cdf61143b6e4fc8a8f1474aad680
-    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; cd403f98 is the SPA-restage/owner-restore commit and is not yet a staging runtime identity"
+    observed_at: 2026-08-13T19:35:42Z
+    source_ref: main@8bbba401cb173bd2b151403a2eed39a57dd38860
+    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; 8bbba401 is freeze/renewal product-path code and is not yet a staging runtime identity"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13T19:14:51Z git status --short empty at cd403f98
+    worktree_inventory_ref: 2026-08-13T19:35:42Z git status --short empty at 8bbba401
     status: reconciled
   candidate:
     id: none
@@ -142,8 +142,8 @@ now:
     recorded_at: 2026-08-13T17:14:50Z
     consequence: "Do not stop after local product-path landings. Continue until the finish artifact exists or a named blocker (fail-closed live-only rows, capability-renewal substrate, unpaid deployed receipts) forces blocked_incomplete or a problem-documentation-first Define."
   evidence_refs: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, .agentic-consensus/tape-recovery-20260813/, internal/agentcore/replay_completeness.go]
-  blocker_or_risk: "Local product path now restages SPA and includes frontend/ in the autoputer baseline, but staging is still on db265d1e. Capsule freeze still may omit frontend/ files unless the frozen tree contains them. ReconstructThrough historical heads is not implemented; rematerialize replays the full chain. Guest capability renewal recurrence remains a restore-proof gate. Deployed checkpoint, scope-refusal, destructive rematerialization, serving-join, owner-reachable restore, and capability-renewal receipts are still owed. Fail-closed checkpoint may discover live-only rows on the retained sequence-1 computer."
-  next_action: "Deploy the restage/restore path to staging and collect the required receipts: checkpoint_witness, scope_refusal, destructive_rematerialization, serving_join, owner_reachable_whole_computer_restore, capability_renewal_pass. Do not stamp complete on local tests. If sequence-1 still has live-only rows, document the problem before more restore code."
+  blocker_or_risk: "Local product path now fail-closes freeze without frontend and grace-renews recently expired capabilities, but staging is still on db265d1e. Idle guests past TTL+60s still cannot renew without restart. ReconstructThrough historical heads is not implemented; rematerialize replays the full chain. Deployed checkpoint, scope-refusal, destructive rematerialization, serving-join, owner-reachable restore, and capability-renewal receipts are still owed. Fail-closed checkpoint may discover live-only rows on the retained sequence-1 computer."
+  next_action: "Deploy the freeze/renewal/restage/restore path to staging and collect the required receipts: checkpoint_witness, scope_refusal, destructive_rematerialization, serving_join, owner_reachable_whole_computer_restore, capability_renewal_pass. Do not stamp complete on local tests. If sequence-1 still has live-only rows, document the problem before more restore code. Idle-beyond-grace renewal still requires a restart path."
 
 receipts:
   - id: tape-recovery-draft-consensus-2026-08-13
@@ -209,6 +209,22 @@ receipts:
       deploy_ref: not_applicable
       environment_identity: not_applicable
       deployed_acceptance: pending (destructive_rematerialization)
+    registry_conformance_ref: not_applicable
+  - id: tape-recovery-freeze-frontend-capability-grace-2026-08-13
+    boundary: implement
+    commit_or_artifact: internal/capsule/executor.go
+    proof_refs: [internal/capsule/source_snapshot.go, internal/capsule/release_secret_test.go, internal/platform/event_capability.go, internal/platform/event_artifacts_test.go]
+    rollback_ref: revert the freeze/renewal red commit
+    disposition: "accepted locally — capsule spawn and StageGrantedRelease fail closed without frontend source/artifacts; credential renewal accepts 60s expiry grace. Deployed serving-join and capability_renewal_pass remain required. Idle past TTL+grace still fails closed."
+    problem_ref: replay-probe-credential-renewal-refused-2026-08-12
+    authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    landing:
+      source_commit: 8bbba401
+      ci_ref: pending
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: pending (serving_join, capability_renewal_pass)
     registry_conformance_ref: not_applicable
   - id: tape-recovery-spa-restage-owner-restore-2026-08-13
     boundary: implement
