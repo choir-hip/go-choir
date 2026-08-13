@@ -568,6 +568,34 @@ func TestCredentialEnvelopeExchangeAcceptsCurrentSignerAfterComputerGenesis(t *t
 	}
 }
 
+func TestBootstrapControlKeyResolverTrustsCurrentSignerAfterGenesis(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	service := NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "platform-signing.key"))
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	digest := platformTestDigest('a')
+	if _, err := store.db.ExecContext(t.Context(), `INSERT INTO computer_event_heads (
+		computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head,
+		desired_state_commitment, effective_state_commitment, pending_transition_ref,
+		reducer_version, credential_revocation_epoch, created_at, updated_at
+	) VALUES (?, 1, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?)`,
+		"computer-established", digest, digest, digest, digest, digest,
+		computerevent.ReducerVersionV1, now, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	resolver := bootstrapControlKeyResolver{store: store, domain: "platform-control", keyID: service.signingKey.KeyID, publicKey: service.signingKey.Public}
+	resolved, err := resolver.ResolveReceiptKey("platform-control", "computer-established", service.signingKey.KeyID, 1, now)
+	if err != nil {
+		t.Fatalf("post-genesis current-signer resolution refused: %v", err)
+	}
+	if !bytes.Equal(resolved, service.signingKey.Public) {
+		t.Fatalf("resolved key = %x, want current signer %x", resolved, service.signingKey.Public)
+	}
+	if _, err := resolver.ResolveReceiptKey("platform-control", "computer-established", "0000000000000000", 1, now); err == nil {
+		t.Fatal("resolution accepted a non-current keyID after genesis")
+	}
+}
+
 func TestCapabilityRenewalReturnsCurrentAndPostRevocationPair(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	service := NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "platform-signing.key"))

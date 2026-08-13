@@ -251,11 +251,11 @@ measures:
 
 now:
   status: working
-  slice: "Bootstrap and replay eligibility remain accepted at sequence 1. Retained-computer availability is blocked by an established-head credential receipt verifier defect: corpusd issues a valid envelope, then rejects its own issuance receipt because bootstrapControlKeyResolver refuses current-key fallback after genesis and control_key_history has no platform-signer row. The 180-second vmctl kill is the configured readiness consequence, not the cause. Checkpoint completeness remains paused behind the narrow credential repair and deployed acceptance."
-  question: "Does exact current-signer verification restore the retained candidate without weakening event-receipt control-key-history enforcement?"
+  slice: "Bootstrap and replay eligibility remain accepted at sequence 1. Retained-computer availability was blocked by one substrate defect on two receipt paths: bootstrapControlKeyResolver refused current-key fallback after genesis because control_key_history held no platform-signer row, so corpusd rejected its own issuance receipt and the guest rejected the canonical event-head receipt. The 180-second vmctl kill is the configured readiness consequence, not the cause. Credential receipts now verify against the exact current signer, and the bootstrap resolver trusts the current signer; both keep control-key history as the rotation-aware path. Checkpoint completeness remains paused behind deployed acceptance."
+  question: "Does trusting the current platform signer restore the retained candidate without expanding event-receipt authority?"
 
   reconciliation:
-    observed_at: 2026-08-13T03:20:00Z
+    observed_at: 2026-08-13T03:50:00Z
     source_ref: main@ca138dff3a434e6a60ab824afe65f327bb8b0ecb
     deploy_identity: "staging commit 633131aa0521bd1a427f335e147610a314829886; retained computer computer-03335285269bdba4f94377e56879f9e6 unreachable because corpusd rejects its established-head credential issuance receipt with bootstrap key absent after genesis; vmctl enforces the configured 180-second readiness deadline; separate platform candidate d03dacaa fails orphan legacy-mailbox migration"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, AGENTS.md]
@@ -263,8 +263,8 @@ now:
     worktree_inventory_ref: 2026-08-13 read-only git status before incident documentation (clean at ca138dff)
     status: divergent
 
-  blocker_or_risk: "Retained-computer credential bootstrap is unavailable after genesis because lifecycle receipt verification has no exact current-signer path when control_key_history is empty. Repair must remain local to credential lifecycle receipts; weakening event-receipt key-history enforcement would expand authority. The platform candidate's orphan mailbox failure is separate. Primaries remain on prior realizations and must not be upgraded until retained-candidate acceptance survives beyond two prior kill windows. Problem receipt: docs/problems/candidate-realization-readiness-kill-loop-2026-08-13.md."
-  next_action: "Add the established-head credential regression, replace only lifecycle-receipt verification with exact current-platform-signer verification, deploy, and prove the retained candidate survives beyond 360 seconds with guest API and product-path acceptance. Keep the platform candidate recovery separate. Resume checkpoint completeness only after that durable boundary."
+  blocker_or_risk: "Retained-computer bootstrap is unavailable after genesis because the bootstrap resolver refused current-key fallback when control_key_history is empty; the same guard blocked credential and event-head receipts. The fix trusts the current signer for this slice and keeps control-key history as the rotation-aware path. The platform candidate's orphan mailbox failure is separate. Primaries remain on prior realizations and must not be upgraded until retained-candidate acceptance survives beyond two prior kill windows. Problem receipt: docs/problems/candidate-realization-readiness-kill-loop-2026-08-13.md."
+  next_action: "Deploy the current-signer fix for both receipt paths, prove the retained candidate survives beyond 360 seconds with guest API and product-path acceptance, then resume checkpoint completeness. Keep the platform candidate recovery separate."
 
   candidate:
     id: none

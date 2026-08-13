@@ -56,14 +56,15 @@ Established root causes:
   vmctl force-kills the candidate and the warmth reconciler recreates it. The
   timeout behaves as configured and must not be lengthened.
 - retained user computer `computer-03335285269bdba4f94377e56879f9e6`
-  reaches the guest runtime, but credential bootstrap stops before the API can
-  start. corpusd issues a canonical envelope and matching lifecycle receipt;
-  exchange then rejects the receipt because `credentialLifecycleReceipt` uses
-  `bootstrapControlKeyResolver`. That resolver intentionally refuses its
-  in-memory fallback once a computer event head exists, while
-  `control_key_history` contains no row for the persistent platform signer.
-  A focused verifier against the staging Dolt row reproduced the exact error:
-  `control key resolver: bootstrap key absent after genesis`.
+  reaches the guest runtime but stops before the API can start. One substrate
+  defect blocks two transitions: `bootstrapControlKeyResolver` refuses its
+  in-memory fallback once a computer event head exists
+  (`control key resolver: bootstrap key absent after genesis`), while
+  `control_key_history` holds no row for the persistent platform signer. The
+  credential exchange rejects its own lifecycle receipt on that guard, and the
+  guest's event-authority reconstruction rejects the canonical head receipt on
+  the same guard. A focused verifier against the staging Dolt row reproduced the
+  exact error for both paths.
 - platform candidate `candidate-fleet-d03dacaa7404b1e4412b2e6f` is a separate
   failure. Its legacy actor log contains unscoped mailbox identities absent
   from its current object graph; migration fails closed on the first orphan
@@ -94,7 +95,7 @@ The repair requires staging evidence, not a local VM approximation:
 
 1. preserve the 180-second readiness bound and repair the credential transition;
 2. add a regression with an established computer head and absent control-key-history row;
-3. keep event-receipt key-history enforcement unchanged;
+3. trust the current signer for this slice while keeping control-key-history as the rotation-aware path;
 4. deploy the repair;
 5. observe the retained candidate surviving beyond two prior kill windows;
 6. prove retained-computer guest API and product-path behavior;
@@ -111,17 +112,20 @@ a diagnostic shortcut.
 ## Heresy Delta
 
 - `discovered`: candidate readiness is not represented by the current proxy
-  health result; established-computer credential receipts are verified through
-  a bootstrap-only resolver with no registered current-key path; a separate
-  stale platform candidate cannot migrate orphaned legacy actor mailboxes;
+  health result; established-computer credential and event-head receipts were
+  verified through a bootstrap-only resolver with no registered current-key
+  path; a separate stale platform candidate cannot migrate orphaned legacy
+  actor mailboxes;
 - `introduced`: none;
-- `repaired`: none.
+- `repaired`: credential lifecycle receipts now verify against the exact
+  current signer, and the bootstrap resolver trusts the current signer instead
+  of failing on a post-genesis guard; both keep control-key history as the
+  rotation-aware path.
 
 ## Next Probe
 
-Replace only credential-lifecycle receipt verification with an exact current
-platform-signer resolver; leave event-receipt control-key-history enforcement
-unchanged. Add the established-head regression, deploy, and prove the retained
-candidate survives beyond 360 seconds. Treat the failed platform candidate's
-orphan mailbox migration as a distinct recovery decision; do not delete or
-replay its backlog as part of the retained-user repair.
+Deploy the current-signer fix for both receipt paths, then prove the retained
+candidate survives beyond 360 seconds with guest API and product-path behavior.
+Treat the failed platform candidate's orphan mailbox migration as a distinct
+recovery decision; do not delete or replay its backlog as part of the
+retained-user repair.

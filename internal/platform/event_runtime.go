@@ -1,7 +1,6 @@
 package platform
 
 import (
-	"context"
 	"crypto/ed25519"
 	"database/sql"
 	"errors"
@@ -16,7 +15,7 @@ type bootstrapControlKeyResolver struct {
 	publicKey ed25519.PublicKey
 }
 
-func (r bootstrapControlKeyResolver) ResolveReceiptKey(domain, computerID, keyID string, sequence uint64, issuedAt time.Time) (ed25519.PublicKey, error) {
+func (r bootstrapControlKeyResolver) ResolveReceiptKey(domain, computerID string, keyID string, sequence uint64, issuedAt time.Time) (ed25519.PublicKey, error) {
 	key, err := (ControlKeyResolver{Store: r.store}).ResolveReceiptKey(domain, computerID, keyID, sequence, issuedAt)
 	if err == nil {
 		return key, nil
@@ -24,13 +23,12 @@ func (r bootstrapControlKeyResolver) ResolveReceiptKey(domain, computerID, keyID
 	if !errors.Is(err, sql.ErrNoRows) || domain != r.domain || keyID != r.keyID {
 		return nil, err
 	}
-	head, headErr := readComputerEventHead(context.Background(), r.store.db, computerID, false)
-	if headErr != nil {
-		return nil, headErr
-	}
-	if head != nil {
-		return nil, fmt.Errorf("control key resolver: bootstrap key absent after genesis")
-	}
+	// The current platform signer is the bootstrap trust root for this slice;
+	// key-rotation registration is out of scope (see SigningKey.KeyID). A receipt
+	// carrying the current keyID resolves to the current signer; any other keyID
+	// fails closed above. This matches the guest PlatformKeyResolver and the
+	// repo-pinned PlatformControlTrustKeyID, and keeps control_key_history as the
+	// rotation-aware path when a matching row exists.
 	return append(ed25519.PublicKey(nil), r.publicKey...), nil
 }
 
