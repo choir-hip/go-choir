@@ -53,6 +53,22 @@ type CredentialConsumptionRequest struct {
 	RequestCommitment string `json:"request_commitment"`
 }
 
+// credentialLifecycleKeyResolver verifies short-lived lifecycle receipts against
+// the exact signer held by this service. Event receipts continue to use
+// bootstrapControlKeyResolver and control-key history; this resolver must not be
+// used for event-chain authority.
+type credentialLifecycleKeyResolver struct {
+	keyID     string
+	publicKey ed25519.PublicKey
+}
+
+func (r credentialLifecycleKeyResolver) ResolveReceiptKey(domain, computerID, keyID string, _ uint64, _ time.Time) (ed25519.PublicKey, error) {
+	if domain != "platform-control" || computerID == "" || keyID == "" || keyID != r.keyID || len(r.publicKey) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("credential envelope: lifecycle receipt signer mismatch")
+	}
+	return append(ed25519.PublicKey(nil), r.publicKey...), nil
+}
+
 func (e ComputerCredentialEnvelope) VerifyBootstrap(computerID, realizationID string, now time.Time) (ed25519.PublicKey, error) {
 	publicKey, err := base64.RawStdEncoding.DecodeString(e.SigningPublicKey)
 	if err != nil || len(publicKey) != ed25519.PublicKeySize || e.Version != 1 || e.ComputerID != computerID || e.RealizationID != realizationID || e.Bearer == "" || e.Nonce == "" || e.RequestCommitment == "" || e.SigningKeyID == "" {
@@ -391,7 +407,7 @@ func (s *Service) credentialLifecycleReceipt(ctx context.Context, computerID, id
 	if receipt.KindFields["computer_id"] != computerID || receipt.KindFields["action"] != action || receipt.KindFields["prior_lifecycle_state"] != storedPrior || receipt.KindFields["resulting_lifecycle_state"] != storedResult || receipt.KindFields["idempotency_key"] != idempotencyKey || receipt.KindFields["request_commitment"] != requestCommitment || fmt.Sprint(receipt.KindFields["generation"]) != strconv.FormatUint(storedGeneration, 10) || receipt.KindFields["completed_at"] != completedAt.UTC().Format(time.RFC3339Nano) {
 		return computerevent.Receipt{}, time.Time{}, true, fmt.Errorf("credential envelope: lifecycle receipt binding mismatch")
 	}
-	resolver := bootstrapControlKeyResolver{store: s.store, domain: "platform-control", keyID: s.signingKey.KeyID, publicKey: s.signingKey.Public}
+	resolver := credentialLifecycleKeyResolver{keyID: s.signingKey.KeyID, publicKey: s.signingKey.Public}
 	if err := receipt.Verify(resolver); err != nil {
 		return computerevent.Receipt{}, time.Time{}, true, err
 	}

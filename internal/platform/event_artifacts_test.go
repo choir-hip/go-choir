@@ -534,6 +534,40 @@ func TestCredentialEnvelopeExchangeSupportsPrepareRetryThenRefusesConsumedReplay
 	}
 }
 
+func TestCredentialEnvelopeExchangeAcceptsCurrentSignerAfterComputerGenesis(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	service := NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "platform-signing.key"))
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	digest := platformTestDigest('a')
+	if _, err := store.db.ExecContext(t.Context(), `INSERT INTO computer_event_heads (
+		computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head,
+		desired_state_commitment, effective_state_commitment, pending_transition_ref,
+		reducer_version, credential_revocation_epoch, created_at, updated_at
+	) VALUES (?, 1, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?)`,
+		"computer-established", digest, digest, digest, digest, digest,
+		computerevent.ReducerVersionV1, now, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	envelope, _, err := service.MintComputerCredentialEnvelope(
+		t.Context(), "computer-established", "realization-established", "issue-established", now.Add(4*time.Minute),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := computerevent.CanonicalJSON(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.exchangeComputerCredentialEnvelope(t.Context(), raw)
+	if err != nil {
+		t.Fatalf("established-computer exchange refused: %v", err)
+	}
+	if result.Capability == "" || result.PostRevocationCapability == "" {
+		t.Fatalf("established-computer capability pair = %#v", result)
+	}
+}
+
 func TestCapabilityRenewalReturnsCurrentAndPostRevocationPair(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	service := NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "platform-signing.key"))
