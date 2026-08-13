@@ -194,9 +194,9 @@ func (h *Handler) lifecycleControl(r *http.Request, userID string, control platf
 	return result, nil
 }
 
-func computerWorkspaceReplaceComputerID(path string) (string, bool) {
+func computerLifecycleGuestComputerID(path, action string) (string, bool) {
 	const prefix = "/api/computers/"
-	const suffix = "/lifecycle/replace-workspace"
+	suffix := "/lifecycle/" + action
 	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
 		return "", false
 	}
@@ -211,13 +211,29 @@ func computerWorkspaceReplaceComputerID(path string) (string, bool) {
 	return strings.TrimSpace(computerID), true
 }
 
+func computerWorkspaceReplaceComputerID(path string) (string, bool) {
+	return computerLifecycleGuestComputerID(path, "replace-workspace")
+}
+
+func computerRematerializeComputerID(path string) (string, bool) {
+	return computerLifecycleGuestComputerID(path, "rematerialize-from-tape")
+}
+
 func isComputerWorkspaceReplacePath(path string) bool {
 	_, ok := computerWorkspaceReplaceComputerID(path)
 	return ok
 }
 
+func isComputerRematerializePath(path string) bool {
+	_, ok := computerRematerializeComputerID(path)
+	return ok
+}
+
 func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.Request) {
 	computerID, ok := computerWorkspaceReplaceComputerID(r.URL.Path)
+	if !ok {
+		computerID, ok = computerRematerializeComputerID(r.URL.Path)
+	}
 	if !ok {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
@@ -277,7 +293,11 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 		return
 	}
 	u.RawQuery = r.URL.RawQuery
-	upstream, err := http.NewRequestWithContext(r.Context(), http.MethodPost, u.String(), http.MaxBytesReader(w, r.Body, 64<<10))
+	maxBody := int64(64 << 10)
+	if isComputerRematerializePath(r.URL.Path) {
+		maxBody = 1 << 20
+	}
+	upstream, err := http.NewRequestWithContext(r.Context(), http.MethodPost, u.String(), http.MaxBytesReader(w, r.Body, maxBody))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid workspace replace request"})
 		return

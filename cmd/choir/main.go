@@ -125,6 +125,7 @@ Commands:
   run cancel <id>     Cancel an owner-scoped pending or running run
   computer replay-completeness  Capture live-versus-event-replay state evidence
   computer replace-workspace  Quarantine the VM-local workspace onto current DDL
+  computer rematerialize-from-tape  Rebuild VM-local state from the event tape
   computer bootstrap-chain    Establish a canonical event chain on a pre-genesis computer
   computer stop        Stop the current computer through owner-scoped vmctl
   computer start       Start or resume the current computer
@@ -1201,7 +1202,7 @@ func runSelfDevelopmentModeSet(args []string, stdout, stderr io.Writer) int {
 
 func runComputer(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir computer: subcommand required (status|replay-completeness|replace-workspace|bootstrap-chain|stop|start|restart)")
+		fmt.Fprintln(stderr, "choir computer: subcommand required (status|replay-completeness|replace-workspace|rematerialize-from-tape|bootstrap-chain|stop|start|restart)")
 		return 2
 	}
 	switch args[0] {
@@ -1211,6 +1212,8 @@ func runComputer(args []string, stdout, stderr io.Writer) int {
 		return runComputerReplayCompleteness(args[1:], stdout, stderr)
 	case "replace-workspace":
 		return runComputerReplaceWorkspace(args[1:], stdout, stderr)
+	case "rematerialize-from-tape":
+		return runComputerRematerializeFromTape(args[1:], stdout, stderr)
 	case "bootstrap-chain":
 		return runComputerBootstrapChain(args[1:], stdout, stderr)
 	case "stop", "start", "restart":
@@ -1260,6 +1263,39 @@ func runComputerReplayCompleteness(args []string, stdout, stderr io.Writer) int 
 	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/replay-completeness"
 	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
 		fmt.Fprintf(stderr, "choir computer replay-completeness: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, response)
+}
+
+func runComputerRematerializeFromTape(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir computer rematerialize-from-tape", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	checkpointFile := fs.String("checkpoint-file", "", "JSON checkpoint artifact")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir computer rematerialize-from-tape: %v\n", err)
+		return 2
+	}
+	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*checkpointFile) == "" || len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir computer rematerialize-from-tape: --computer and --checkpoint-file are required")
+		return 2
+	}
+	raw, err := os.ReadFile(*checkpointFile)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir computer rematerialize-from-tape: %v\n", err)
+		return 2
+	}
+	var checkpoint json.RawMessage
+	if err := json.Unmarshal(raw, &checkpoint); err != nil {
+		fmt.Fprintf(stderr, "choir computer rematerialize-from-tape: invalid checkpoint: %v\n", err)
+		return 2
+	}
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/rematerialize-from-tape"
+	if err := c.do(http.MethodPost, path, map[string]json.RawMessage{"checkpoint": checkpoint}, &response); err != nil {
+		fmt.Fprintf(stderr, "choir computer rematerialize-from-tape: %v\n", err)
 		return 1
 	}
 	return writeJSON(stdout, response)

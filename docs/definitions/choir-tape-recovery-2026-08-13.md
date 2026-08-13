@@ -119,15 +119,15 @@ measures:
 
 now:
   status: working
-  slice: "Checkpoint witness and scope refusal are implemented in protocol and production publishers. Local tests refuse missing witness, underivable SPA, live-only rows, and platform/cycle operands. Deployed checkpoint and deployed refused attempt are still required."
-  question: "Which of the three serving hops (guest-static, host-staging-keyed-by-computer, encapsulated-origin) does this Definition prove? Checkpoint witness and scope refusal do not require the pick."
+  slice: "Destructive rematerialization is a tape-only product path: guest POST /lifecycle/rematerialize-from-tape, owner CLI choir computer rematerialize-from-tape, ReconstructInto into a sibling workspace, witness match, then quarantine original and flip. Pin checkout is refused. FrontendRestaged remains false. ReconstructInto replays the full chain, which equals through-target at sequence 1. Deployed rematerialization, checkpoint, and scope-refusal receipts remain required."
+  question: "Which of the three serving hops (guest-static, host-staging-keyed-by-computer, encapsulated-origin) does this Definition prove? Checkpoint witness, scope refusal, and rematerialization do not require the pick."
   reconciliation:
-    observed_at: 2026-08-13T17:14:50Z
-    source_ref: main@6b28999e26c7d329a701f49bb06e168039667508
-    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; 6b28999e is the checkpoint-witness protocol commit and is not yet a staging runtime identity"
+    observed_at: 2026-08-13T18:30:00Z
+    source_ref: main@b4cda1fd22bc1d9d017e865c66970b981b96f0f0
+    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; rematerialize is local product-path code and is not yet a staging runtime identity"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13T18:25:00Z git status --short empty at 6b28999e
+    worktree_inventory_ref: 2026-08-13T18:30:00Z git status --short dirty with rematerialize implementation on b4cda1fd
     status: reconciled
   candidate:
     id: none
@@ -142,8 +142,8 @@ now:
     recorded_at: 2026-08-13T17:14:50Z
     consequence: "Do not stop after the first slice. Continue until the finish artifact exists or a named blocker (fail-closed live-only rows, capability-renewal substrate, unpicked hop at slice 3) forces blocked_incomplete or a problem-documentation-first Define."
   evidence_refs: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, .agentic-consensus/tape-recovery-20260813/, internal/agentcore/replay_completeness.go]
-  blocker_or_risk: "Rematerialization has no runtime restore path; ReplayCompleteness is a diagnostic probe, not a destructive restage. Guest capability renewal recurrence remains a restore-proof gate. The frontend serving hop is host-global Caddy with no pick among the three topologies. Fail-closed checkpoint may discover live-only rows on the retained sequence-1 computer."
-  next_action: "Implement destructive rematerialization as a product path promoted from Runtime.ReplayCompleteness (tests first): dispose or quarantine the original realization, deny restore access to its data.img/workspace, reconstruct from the tape and checkpoint-pinned inputs, verify the extractor match, flip visibility. Pin checkout remains evidence-only. Serving hop remains the slice-3 pick. Staging still owes a deployed checkpoint and a deployed platform/cycle refusal."
+  blocker_or_risk: "Serving hop is unpicked (host-global Caddy). ReconstructThrough historical heads is not implemented; current rematerialize replays the full chain. Guest capability renewal recurrence remains a restore-proof gate. Deployed checkpoint, scope-refusal, and destructive rematerialization receipts are still owed. Fail-closed checkpoint may discover live-only rows on the retained sequence-1 computer."
+  next_action: "Land the rematerialize red commit through origin/main and CI. Then pick and prove one per-computer serving hop (guest-static, host-staging-keyed-by-computer, or encapsulated-origin). Staging still owes deployed checkpoint, scope-refusal, and destructive rematerialization receipts."
 
 receipts:
   - id: tape-recovery-draft-consensus-2026-08-13
@@ -193,6 +193,22 @@ receipts:
       deploy_ref: not_applicable
       environment_identity: not_applicable
       deployed_acceptance: pending (checkpoint_witness, scope_refusal)
+    registry_conformance_ref: not_applicable
+  - id: tape-recovery-rematerialize-2026-08-13
+    boundary: implement
+    commit_or_artifact: internal/agentcore/rematerialize.go
+    proof_refs: [internal/agentcore/rematerialize_test.go, internal/selfdevprotocol/rematerialize.go, cmd/choir/main.go, internal/proxy/computer_lifecycle.go]
+    rollback_ref: revert the rematerialize red commit
+    disposition: "accepted locally — RematerializeFromTape reconstructs via ReconstructInto into a sibling workspace, verifies the extractor witness, quarantines the original realization, and flips only on match. Pin checkout is refused. FrontendRestaged is false. Full-chain reconstruct equals through-target at sequence 1. Deployed destructive rematerialization remains required."
+    problem_ref: not_applicable
+    authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    landing:
+      source_commit: pending
+      ci_ref: pending
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: pending (destructive_rematerialization)
     registry_conformance_ref: not_applicable
 
 view:

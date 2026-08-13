@@ -1070,6 +1070,38 @@ func TestComputerReplaceWorkspaceUsesProductPath(t *testing.T) {
 	}
 }
 
+func TestComputerRematerializeFromTapeUsesProductPath(t *testing.T) {
+	var method, path, body string
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method = r.Method
+		path = r.URL.Path
+		if r.Body != nil {
+			defer r.Body.Close()
+			raw, _ := io.ReadAll(r.Body)
+			body = string(raw)
+		}
+		_, _ = io.WriteString(w, `{"computer_id":"computer-1","witness_matched":true,"original_denied":true,"store_closed":true}`)
+	}))
+	defer stub.Close()
+	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
+	if err := os.WriteFile(checkpointPath, []byte(`{"digest":"abc"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if code := run([]string{"computer", "rematerialize-from-tape", "--host=" + stub.URL, "--computer=computer-1", "--checkpoint-file=" + checkpointPath}, &out, &errOut); code != 0 {
+		t.Fatalf("computer rematerialize-from-tape code = %d, stderr=%s", code, errOut.String())
+	}
+	if method != http.MethodPost || path != "/api/computers/computer-1/lifecycle/rematerialize-from-tape" {
+		t.Fatalf("rematerialize request method=%s path=%s", method, path)
+	}
+	if !strings.Contains(body, `"checkpoint"`) {
+		t.Fatalf("rematerialize omitted checkpoint body: %s", body)
+	}
+	if strings.Contains(path, "self-development/genesis") {
+		t.Fatal("rematerialize used genesis")
+	}
+}
+
 func TestComputerBootstrapChainUsesProductPath(t *testing.T) {
 	var method, path string
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -1,6 +1,7 @@
 package selfdevprotocol
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -58,7 +59,7 @@ func (w VMLocalContentWitness) Validate() error {
 	if _, banned := restoreOutOfScopeDatabases[database]; banned {
 		return fmt.Errorf("self-development checkpoint: %s store is out of restore scope", database)
 	}
-	if !computerevent.IsSHA256(w.ContentRoot) || !computerevent.IsSHA256(w.DoltHead) || !computerevent.IsSHA256(w.DerivabilityDigest) {
+	if strings.TrimSpace(w.DoltHead) == "" || !computerevent.IsSHA256(w.ContentRoot) || !computerevent.IsSHA256(w.DerivabilityDigest) {
 		return fmt.Errorf("self-development checkpoint: VM-local content witness digests are required")
 	}
 	if len(w.Schema) == 0 || len(w.Tables) == 0 || len(w.Schema) != len(w.Tables) {
@@ -174,6 +175,22 @@ func WitnessFromObservationSets(live, replay computerversion.ObservationSet, res
 	return liveWitness, nil
 }
 
+func WitnessFromObservationSet(set computerversion.ObservationSet) (VMLocalContentWitness, error) {
+	witness, err := witnessFromObservations(set)
+	if err != nil {
+		return VMLocalContentWitness{}, err
+	}
+	digest, err := witnessDerivabilityDigest(witness)
+	if err != nil {
+		return VMLocalContentWitness{}, err
+	}
+	witness.DerivabilityDigest = digest
+	if err := witness.Validate(); err != nil {
+		return VMLocalContentWitness{}, err
+	}
+	return witness, nil
+}
+
 type ReleaseFile struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`
@@ -223,16 +240,15 @@ func witnessFromObservations(set computerversion.ObservationSet) (VMLocalContent
 		} else if witness.Database != database {
 			return VMLocalContentWitness{}, fmt.Errorf("self-development checkpoint: VM-local content witness spans multiple databases")
 		}
-		digest := stripDigestPrefix(observation.Value)
 		switch kind {
 		case "head":
-			witness.DoltHead = digest
+			witness.DoltHead = doltHeadAuditReceipt(observation.Value)
 		case "content_root":
-			witness.ContentRoot = digest
+			witness.ContentRoot = observationDigest(observation.Value)
 		case "schema":
-			witness.Schema[table] = digest
+			witness.Schema[table] = observationDigest(observation.Value)
 		case "table":
-			witness.Tables[table] = digest
+			witness.Tables[table] = observationDigest(observation.Value)
 		}
 	}
 	if witness.Database == "" {
@@ -274,4 +290,25 @@ func parseDoltObservationKey(key string) (database, kind, table string, ok bool)
 func stripDigestPrefix(value string) string {
 	value = strings.TrimSpace(value)
 	return strings.TrimPrefix(value, "sha256:")
+}
+
+func doltHeadAuditReceipt(value string) string {
+	var payload struct {
+		CommitHash string `json:"commit_hash"`
+	}
+	if json.Unmarshal([]byte(strings.TrimSpace(value)), &payload) == nil && strings.TrimSpace(payload.CommitHash) != "" {
+		return strings.TrimSpace(payload.CommitHash)
+	}
+	if receipt := strings.TrimSpace(value); receipt != "" {
+		return receipt
+	}
+	return stripDigestPrefix(value)
+}
+
+func observationDigest(value string) string {
+	stripped := stripDigestPrefix(value)
+	if computerevent.IsSHA256(stripped) {
+		return stripped
+	}
+	return computerevent.DigestBytes([]byte(strings.TrimSpace(value)))
 }
