@@ -94,6 +94,10 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		h.replaceComputerWorkspace(w, r, computerID)
 		return
 	}
+	if len(parts) == 3 && parts[1] == "lifecycle" && parts[2] == "bootstrap-chain" {
+		h.bootstrapComputerChain(w, r, ownerID, computerID)
+		return
+	}
 	if h == nil || h.rt == nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "self-development authority unavailable"})
 		return
