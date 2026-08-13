@@ -119,31 +119,31 @@ measures:
 
 now:
   status: working
-  slice: "Serving hop is guest-static: guest serves CHOIR_UPDATER_ROOT/current/frontend; proxy reverse-proxies authenticated / and /assets/* after vmctl resolve; Caddy no longer file_servers host frontend-current as computer surface; unsigned callers get host platform-shell chrome (OUT of restore). Missing guest SPA is 503. FrontendRestaged remains false. Guest releases still omit frontend/ files, so authenticated surface is fail-closed until a release includes them."
-  question: "Can owner-reachable restore restage VM-local state and SPA bytes together, with capability renewal, on the retained computer? Guest-static is picked."
+  slice: "Rematerialize restages SPA bytes: after the Dolt witness matches, current swaps onto the checkpoint-pinned release without Apply or restorePrior (FrontendRestaged true). Guest autoputer baseline now copies frontend/ into $out/frontend so genesis/baseline releases can bind and serve SPA. Owner restore is POST /lifecycle/restore plus choir computer restore, scoped to vm_local and computer_surface_frontend. Guest-static hop remains the serving join."
+  question: "Can deployed staging prove checkpoint witness, scope refusal, destructive rematerialization, serving-join, owner-reachable whole-computer restore, and capability renewal on the retained computer?"
   reconciliation:
-    observed_at: 2026-08-13T18:55:00Z
-    source_ref: main@490e779bd994644f9f3817ee24624d42feffadcc
-    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; 490e779b is the guest-static serving-hop commit and is not yet a staging runtime identity"
+    observed_at: 2026-08-13T19:14:51Z
+    source_ref: main@cd403f98d300cdf61143b6e4fc8a8f1474aad680
+    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; cd403f98 is the SPA-restage/owner-restore commit and is not yet a staging runtime identity"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13T18:55:00Z git status --short empty at 490e779b
+    worktree_inventory_ref: 2026-08-13T19:14:51Z git status --short empty at cd403f98
     status: reconciled
   candidate:
     id: none
     state: none
   decision:
-    selected: "Execute /goal through all five acceptance actions until complete, blocked_incomplete, or superseded. Reconstruction product path is Runtime.ReplayCompleteness (event-chain reconstruct into a disposable workspace, then a destructive restage), not ProjectionMaterializer. Pin checkout is evidence-only and cannot complete this Definition. Serving hop remains the slice-3 pick among the three named topologies; checkpoint witness and scope refusal do not require it. Capability renewal is a gate on the restore proof, not a reason to delay checkpoint work. Local tests are slice evidence; complete requires the deployed staging receipts."
+    selected: "Execute /goal through all five acceptance actions until complete, blocked_incomplete, or superseded. Reconstruction product path is Runtime.ReplayCompleteness (event-chain reconstruct into a disposable workspace, then a destructive restage), not ProjectionMaterializer. Pin checkout is evidence-only and cannot complete this Definition. Serving hop is guest-static. Capability renewal is a gate on the restore proof. Local tests are slice evidence; complete requires the deployed staging receipts."
     kind: operational
     status: settled
     source: orchestrator
     evidence_ref: "docs/definitions/choir-tape-recovery-2026-08-13.md finish.acceptance; internal/agentcore/replay_completeness.go; .agentic-consensus/tape-recovery-20260813/"
     owner_ratification_ref: "owner direction 2026-08-13 (tape-based recovery is the priority); panel approve-with-conditions adjudicated into this Definition"
     recorded_at: 2026-08-13T17:14:50Z
-    consequence: "Do not stop after the first slice. Continue until the finish artifact exists or a named blocker (fail-closed live-only rows, capability-renewal substrate, unpicked hop at slice 3) forces blocked_incomplete or a problem-documentation-first Define."
+    consequence: "Do not stop after local product-path landings. Continue until the finish artifact exists or a named blocker (fail-closed live-only rows, capability-renewal substrate, unpaid deployed receipts) forces blocked_incomplete or a problem-documentation-first Define."
   evidence_refs: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, .agentic-consensus/tape-recovery-20260813/, internal/agentcore/replay_completeness.go]
-  blocker_or_risk: "Guest releases currently omit frontend/ files, so checkpoint SPA binding and authenticated guest-static serving fail closed until a release includes them. ReconstructThrough historical heads is not implemented; current rematerialize replays the full chain and FrontendRestaged is false. Guest capability renewal recurrence remains a restore-proof gate. Deployed checkpoint, scope-refusal, destructive rematerialization, serving-join, and owner-reachable restore receipts are still owed. Fail-closed checkpoint may discover live-only rows on the retained sequence-1 computer."
-  next_action: "Make rematerialize restage SPA bytes (FrontendRestaged) and exercise owner-reachable whole-computer restore through the product API/CLI, including capability-renewal. Guest releases must include frontend/ files or checkpoint and authenticated serving stay fail-closed. Staging still owes deployed checkpoint, scope-refusal, destructive rematerialization, and serving-join receipts."
+  blocker_or_risk: "Local product path now restages SPA and includes frontend/ in the autoputer baseline, but staging is still on db265d1e. Capsule freeze still may omit frontend/ files unless the frozen tree contains them. ReconstructThrough historical heads is not implemented; rematerialize replays the full chain. Guest capability renewal recurrence remains a restore-proof gate. Deployed checkpoint, scope-refusal, destructive rematerialization, serving-join, owner-reachable restore, and capability-renewal receipts are still owed. Fail-closed checkpoint may discover live-only rows on the retained sequence-1 computer."
+  next_action: "Deploy the restage/restore path to staging and collect the required receipts: checkpoint_witness, scope_refusal, destructive_rematerialization, serving_join, owner_reachable_whole_computer_restore, capability_renewal_pass. Do not stamp complete on local tests. If sequence-1 still has live-only rows, document the problem before more restore code."
 
 receipts:
   - id: tape-recovery-draft-consensus-2026-08-13
@@ -209,6 +209,22 @@ receipts:
       deploy_ref: not_applicable
       environment_identity: not_applicable
       deployed_acceptance: pending (destructive_rematerialization)
+    registry_conformance_ref: not_applicable
+  - id: tape-recovery-spa-restage-owner-restore-2026-08-13
+    boundary: implement
+    commit_or_artifact: internal/agentcore/rematerialize.go
+    proof_refs: [internal/agentcore/rematerialize_test.go, internal/updater/updater.go, cmd/choir/main.go, internal/proxy/computer_lifecycle.go, flake.nix]
+    rollback_ref: revert the SPA-restage/owner-restore red commit
+    disposition: "accepted locally — RematerializeFromTape restages current onto the checkpoint-pinned release after witness match (FrontendRestaged true); mismatch keeps prior realization and UI; guest autoputer baseline includes frontend/; choir computer restore posts vm_local plus computer_surface_frontend. Capability renewal and deployed restore receipts remain required."
+    problem_ref: not_applicable
+    authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    landing:
+      source_commit: cd403f98
+      ci_ref: pending
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: pending (owner_reachable_whole_computer_restore, capability_renewal_pass)
     registry_conformance_ref: not_applicable
   - id: tape-recovery-serving-hop-guest-static-2026-08-13
     boundary: implement
