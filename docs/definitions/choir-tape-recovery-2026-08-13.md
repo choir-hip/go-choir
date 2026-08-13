@@ -123,11 +123,11 @@ now:
   question: "Which of the three serving hops (guest-static, host-staging-keyed-by-computer, encapsulated-origin) does this Definition prove? Checkpoint witness and scope refusal do not require the pick."
   reconciliation:
     observed_at: 2026-08-13T17:14:50Z
-    source_ref: main@0c03a47929c32d289e5c689a87302c9b1e4821aa
-    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; docs commits 1ecbf9e6, 0c16d8f7, and 0c03a479 are docs-only and not a staging runtime identity"
+    source_ref: main@6b28999e26c7d329a701f49bb06e168039667508
+    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; 6b28999e is the checkpoint-witness protocol commit and is not yet a staging runtime identity"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13T18:20:00Z git status --short dirty with checkpoint-witness implementation on 0c03a479
+    worktree_inventory_ref: 2026-08-13T18:25:00Z git status --short empty at 6b28999e
     status: reconciled
   candidate:
     id: none
@@ -143,7 +143,7 @@ now:
     consequence: "Do not stop after the first slice. Continue until the finish artifact exists or a named blocker (fail-closed live-only rows, capability-renewal substrate, unpicked hop at slice 3) forces blocked_incomplete or a problem-documentation-first Define."
   evidence_refs: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, .agentic-consensus/tape-recovery-20260813/, internal/agentcore/replay_completeness.go]
   blocker_or_risk: "Rematerialization has no runtime restore path; ReplayCompleteness is a diagnostic probe, not a destructive restage. Guest capability renewal recurrence remains a restore-proof gate. The frontend serving hop is host-global Caddy with no pick among the three topologies. Fail-closed checkpoint may discover live-only rows on the retained sequence-1 computer."
-  next_action: "Land the checkpoint-witness red commit through origin/main and CI. Then implement destructive rematerialization as a product path promoted from Runtime.ReplayCompleteness (tests first): dispose or quarantine the original realization and reconstruct from the tape alone. Serving hop remains the slice-3 pick. Staging still owes a deployed checkpoint on the retained computer and a deployed platform/cycle refusal."
+  next_action: "Implement destructive rematerialization as a product path promoted from Runtime.ReplayCompleteness (tests first): dispose or quarantine the original realization, deny restore access to its data.img/workspace, reconstruct from the tape and checkpoint-pinned inputs, verify the extractor match, flip visibility. Pin checkout remains evidence-only. Serving hop remains the slice-3 pick. Staging still owes a deployed checkpoint and a deployed platform/cycle refusal."
 
 receipts:
   - id: tape-recovery-draft-consensus-2026-08-13
@@ -188,7 +188,7 @@ receipts:
     authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
     candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
     landing:
-      source_commit: pending
+      source_commit: 6b28999e
       ci_ref: pending
       deploy_ref: not_applicable
       environment_identity: not_applicable
