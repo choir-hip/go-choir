@@ -1,7 +1,7 @@
 # Candidate Realizations Never Reach Readiness and Are Killed Every 180 Seconds
 
 **Date:** 2026-08-13  
-**Status:** open; investigation in progress  
+**Status:** root causes isolated; repair pending
 **Classification:** VM lifecycle, guest readiness, and staging operability  
 **Mutation class of a repair:** red
 
@@ -49,14 +49,33 @@ Established:
   retained computer API before the kill;
 - primaries were not upgraded or restarted by this deployment.
 
-Unresolved:
+Established root causes:
 
-- which host component sends SIGKILL;
-- which readiness predicate remains false;
-- whether the missing predicate is guest runtime readiness, execution-identity
-  renewal, network attachment, route registration, or another lifecycle join;
-- whether `633131aa` caused the failure or merely forced reconstruction through
-  a previously broken candidate startup path.
+- vmctl owns the SIGKILL. `VM_BOOT_READY_TIMEOUT=180s` bounds
+  `waitForGuestReady`; after the guest fails its health probe for 180 seconds,
+  vmctl force-kills the candidate and the warmth reconciler recreates it. The
+  timeout behaves as configured and must not be lengthened.
+- retained user computer `computer-03335285269bdba4f94377e56879f9e6`
+  reaches the guest runtime, but credential bootstrap stops before the API can
+  start. corpusd issues a canonical envelope and matching lifecycle receipt;
+  exchange then rejects the receipt because `credentialLifecycleReceipt` uses
+  `bootstrapControlKeyResolver`. That resolver intentionally refuses its
+  in-memory fallback once a computer event head exists, while
+  `control_key_history` contains no row for the persistent platform signer.
+  A focused verifier against the staging Dolt row reproduced the exact error:
+  `control key resolver: bootstrap key absent after genesis`.
+- platform candidate `candidate-fleet-d03dacaa7404b1e4412b2e6f` is a separate
+  failure. Its legacy actor log contains unscoped mailbox identities absent
+  from its current object graph; migration fails closed on the first orphan
+  (`00dba6bf-6c03-4fce-853d-087e3f08a72d`). Its prior primary remains running.
+  This failure must not be conflated with the retained user's credential
+  bootstrap failure.
+
+Conjecture:
+
+- `633131aa` did not create either substrate defect. The deploy restarted vmctl
+  and reconstructed candidates through startup paths that had not been tested
+  against an established event head or an orphaned legacy actor log.
 
 ## Protected Surfaces
 
@@ -73,13 +92,13 @@ reconstructed onto the new release.
 
 The repair requires staging evidence, not a local VM approximation:
 
-1. identify the SIGKILL caller and its configured deadline;
-2. identify the exact readiness state that failed to advance;
-3. reproduce the failure on a candidate realization;
+1. preserve the 180-second readiness bound and repair the credential transition;
+2. add a regression with an established computer head and absent control-key-history row;
+3. keep event-receipt key-history enforcement unchanged;
 4. deploy the repair;
-5. observe a candidate surviving beyond two prior kill windows;
+5. observe the retained candidate surviving beyond two prior kill windows;
 6. prove retained-computer guest API and product-path behavior;
-7. only then assess a primary upgrade.
+7. separately disposition the failed platform candidate before assessing any primary upgrade.
 
 ## Rollback
 
@@ -92,13 +111,17 @@ a diagnostic shortcut.
 ## Heresy Delta
 
 - `discovered`: candidate readiness is not represented by the current proxy
-  health result, allowing `status=ok` while both candidate realizations loop;
+  health result; established-computer credential receipts are verified through
+  a bootstrap-only resolver with no registered current-key path; a separate
+  stale platform candidate cannot migrate orphaned legacy actor mailboxes;
 - `introduced`: none;
 - `repaired`: none.
 
 ## Next Probe
 
-Trace the host process that enforces the approximately 180-second deadline, then
-follow its readiness input back to the guest/runtime transition. Fix the missing
-state transition or invalid deadline contract at the substrate; do not lengthen
-the timeout without proving boot progress is otherwise correct.
+Replace only credential-lifecycle receipt verification with an exact current
+platform-signer resolver; leave event-receipt control-key-history enforcement
+unchanged. Add the established-head regression, deploy, and prove the retained
+candidate survives beyond 360 seconds. Treat the failed platform candidate's
+orphan mailbox migration as a distinct recovery decision; do not delete or
+replay its backlog as part of the retained-user repair.

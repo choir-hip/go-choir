@@ -251,20 +251,20 @@ measures:
 
 now:
   status: working
-  slice: "Bootstrap and replay eligibility remain accepted at sequence 1, but the retained candidate realization is unavailable after deployment 633131aa: both candidate-fleet VMs boot, start the guest runtime, then exit by signal: killed on an approximately 180-second cadence. Checkpoint completeness is paused behind restoration of candidate readiness."
-  question: "Which host component kills candidate firecracker processes after approximately 180 seconds, and which guest/runtime readiness predicate failed to advance before that deadline?"
+  slice: "Bootstrap and replay eligibility remain accepted at sequence 1. Retained-computer availability is blocked by an established-head credential receipt verifier defect: corpusd issues a valid envelope, then rejects its own issuance receipt because bootstrapControlKeyResolver refuses current-key fallback after genesis and control_key_history has no platform-signer row. The 180-second vmctl kill is the configured readiness consequence, not the cause. Checkpoint completeness remains paused behind the narrow credential repair and deployed acceptance."
+  question: "Does exact current-signer verification restore the retained candidate without weakening event-receipt control-key-history enforcement?"
 
   reconciliation:
-    observed_at: 2026-08-13T02:57:38Z
+    observed_at: 2026-08-13T03:20:00Z
     source_ref: main@ca138dff3a434e6a60ab824afe65f327bb8b0ecb
-    deploy_identity: "staging https://choir.news reports deployed commit 633131aa0521bd1a427f335e147610a314829886 and vmctl_status=ok, while both candidate-fleet realizations are killed approximately every 180 seconds and retained computer computer-03335285269bdba4f94377e56879f9e6 is unreachable; proxy health is not candidate-readiness proof"
+    deploy_identity: "staging commit 633131aa0521bd1a427f335e147610a314829886; retained computer computer-03335285269bdba4f94377e56879f9e6 unreachable because corpusd rejects its established-head credential issuance receipt with bootstrap key absent after genesis; vmctl enforces the configured 180-second readiness deadline; separate platform candidate d03dacaa fails orphan legacy-mailbox migration"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: 2026-08-13 read-only git status before incident documentation (clean at ca138dff)
     status: divergent
 
-  blocker_or_risk: "Candidate readiness is unavailable: both candidate firecracker processes exit with signal: killed approximately every 180 seconds after the guest runtime starts, while proxy health still reports vmctl_status=ok. Root cause and SIGKILL owner are unresolved. Primaries remain on their prior realizations and must not be upgraded until candidate acceptance survives beyond two prior kill windows. Problem receipt: docs/problems/candidate-realization-readiness-kill-loop-2026-08-13.md."
-  next_action: "Trace the SIGKILL owner and exact readiness predicate, reproduce the failed transition, repair the substrate, and prove the retained candidate survives beyond two prior kill windows with guest API and product-path acceptance. Resume checkpoint completeness only after that durable boundary."
+  blocker_or_risk: "Retained-computer credential bootstrap is unavailable after genesis because lifecycle receipt verification has no exact current-signer path when control_key_history is empty. Repair must remain local to credential lifecycle receipts; weakening event-receipt key-history enforcement would expand authority. The platform candidate's orphan mailbox failure is separate. Primaries remain on prior realizations and must not be upgraded until retained-candidate acceptance survives beyond two prior kill windows. Problem receipt: docs/problems/candidate-realization-readiness-kill-loop-2026-08-13.md."
+  next_action: "Add the established-head credential regression, replace only lifecycle-receipt verification with exact current-platform-signer verification, deploy, and prove the retained candidate survives beyond 360 seconds with guest API and product-path acceptance. Keep the platform candidate recovery separate. Resume checkpoint completeness only after that durable boundary."
 
   candidate:
     id: none
