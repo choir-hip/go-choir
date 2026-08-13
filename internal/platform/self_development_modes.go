@@ -223,6 +223,9 @@ func validateSelfDevelopmentModeTransition(current SelfDevelopmentMode, request 
 			}
 		}
 		return next, nil, nil
+	// accept_once is the legacy fail-closed owner-gated mode. The active effects
+	// Definition replaces it atomically with policy-bound consensus modes; these
+	// exact bindings remain required until that replacement is complete.
 	case SelfDevelopmentModeAcceptOnce:
 		if request.ExpectedPendingTransitionRef == nil || strings.TrimSpace(request.OperationID) == "" || !computerevent.IsSHA256(request.BundleDigest) || !computerevent.IsSHA256(request.ExpectedDesiredEventHead) || !computerevent.IsSHA256(request.ExpectedEffectiveEventHead) || !computerevent.IsSHA256(request.ExpectedDesiredStateCommitment) || !computerevent.IsSHA256(request.ExpectedEffectiveStateCommitment) {
 			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: accept_once requires exact operation, bundle, heads, pending transition, and commitments")

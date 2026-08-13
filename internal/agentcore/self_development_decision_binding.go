@@ -15,6 +15,10 @@ type verifiedSelfDevelopmentDecision struct {
 	ModeReceiptDigest string
 }
 
+// This verifier implements the fail-closed pre-consensus owner gate. The active
+// effects Definition requires an atomic cutover to policy-bound multiagent
+// consensus receipts before autonomous effects; do not weaken this check alone.
+
 func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transition computerevent.DurableEvent) (verifiedSelfDevelopmentDecision, error) {
 	event := transition.Request.Event
 	eventDigest, err := event.Digest()

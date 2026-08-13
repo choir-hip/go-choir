@@ -309,18 +309,20 @@ nodes:
     enables: []
     note: >-
       Owner-ratified executable Definition superseding Continuous Texture
-      Supervision. Proof target is reversibility under a standing-rule two-seat
-      auto-promotion envelope (capsule-authored solitaire, API-only), then
-      acceptance-fenced restore of VM-local state + release (platform/cycle/host
-      frontend OUT). The 26 pre-drop replay differences were classified and
-      resolved (workspace replacement + chain bootstrap), and the retained
-      computer is replay-eligible at sequence 1. Next is checkpoint completeness:
-      bind the canonical head plus CodeRef, ArtifactProgramRef, and a VM-local
-      content witness, and refuse creation for unreproducible behavior-bearing
-      writes. Effects remain OFF until the staging rehearsal gate that includes
-      proven total restore. Post-acceptance finish.completion_cutover is required
-      for goal.complete. choir-self-development-roadmap-2026-08-11.md is
-      historical migration evidence only — not schedule authority.
+      Supervision, corrected by owner direction on 2026-08-13. Proof target is
+      effect-specific qualified consensus across reversible and irreversible
+      effects: capsule-authored solitaire promotion and acceptance-fenced
+      restore, plus one exact external email under a stronger policy with no
+      human seat required for that acceptance and durable consequence receipts.
+      The 26 pre-drop replay differences were classified and resolved (workspace
+      replacement + chain bootstrap), and the retained computer is
+      replay-eligible at sequence 1. Next is checkpoint completeness: bind the
+      canonical head plus CodeRef, ArtifactProgramRef, and a VM-local content
+      witness, and refuse creation for unreproducible behavior-bearing writes.
+      Effects remain OFF until the staging rehearsal and decision-policy gates
+      pass. Post-acceptance finish.completion_cutover is required for
+      goal.complete. choir-self-development-roadmap-2026-08-11.md is historical
+      migration evidence only — not schedule authority.
     sources:
       - docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
       - docs/definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md
@@ -345,11 +347,13 @@ nodes:
       - choir-supervised-self-development-effects-2026-08-11
     enables: []
     note: >-
-      Owner-ratified successor, not a concurrent schedule. After the reversible
-      self-development envelope completes, converge Researcher and CoSuper on
-      one durable-actor kernel with disposable private model-authored Go
-      activations. Restricted profiles receive Go only; an effects-capable
-      implementation assignment may additionally receive direct Bash through
+      Owner-ratified successor, not a concurrent schedule. After the active
+      Definition proves effect-policy autonomy, reversible restore,
+      irreversible consequence receipts, and completion cutover, converge
+      Researcher and CoSuper on one durable-actor kernel with disposable private
+      model-authored Go activations.
+      Restricted profiles receive Go only; an effects-capable implementation
+      assignment may additionally receive direct Bash through
       the same guest-local capsule execution broker. First proof requires
       dynamic delegation, typed durable messaging, citable consequential
       receipts, forced activation death, cross-model recovery from durable

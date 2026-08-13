@@ -54,32 +54,36 @@ safety loop that a configuration file exercises not at all.
 
 ---
 
-## 2. Retired: per-candidate human approval
+## 2. Corrected: authority is effect-specific consensus, not reversibility
 
 Per-candidate owner approval is encoded across the substrate — the decision
 binding strips an `external-owner:` prefix from the decision event and fails
-without it, and `accept_once` binds exact owner presence. It was never the
-intended safety property. The intent is an automatic computer: one input,
-autonomous work for weeks, and arbitrary rollback to any point in history; or
-continuous input driving a continuously updated object graph and versioned
-Texture documents.
+without it, and `accept_once` binds exact owner presence. It is a fail-closed
+pre-consensus gate, not the intended product authority. The intent is an
+automatic computer: one input, autonomous work for weeks, durable consequence
+receipts, and correction without continuous human operation.
 
-Approval guards the reversible side of the system, where reversibility is the
-better guard, and does not guard the irreversible side at all. The property that
-makes autonomy safe is that work can be undone: if the computer can return to a
-point in its history, it can run a long time without asking, because nothing it
-does inside that envelope is permanent.
+The first 2026-08-11 correction removed universal owner approval but made a
+second category error: it treated reversibility as the boundary of autonomy and
+routed irreversible effects to a separate human decision. The owner's
+2026-08-13 correction supersedes that inference. Reversibility governs recovery;
+effect-specific multiagent consensus governs authority. Send, publish, pay, and
+third-party writes remain inside the autonomy window when a stronger policy
+authorizes their exact subject. A human is a policy-selected participant, not a
+universal gate.
 
-Most of the machinery survives the shift. The mode CAS binding a candidate to
-exact heads and state commitments, the decision binding's joins across
-operation, verifier, bundle, and both heads, the expiry and idempotency
-handling — all of that is *transaction* machinery that auto-promotion needs too.
-What was built on the retired premise is narrower: the `external-owner:`
-requirement and the exact-owner-presence ceremony. Change who signs, keep the
-binding.
+Most existing machinery still survives: exact head and state commitments,
+joins across operation, verifier, bundle, and heads, expiry, and idempotency are
+transaction invariants. The replacement must add a versioned policy reference,
+frozen eligible-seat and independence manifests, quorum, dissent,
+abstention/timeout/recusal/replacement semantics, actuator constraints, and
+consequence receipts. Preserve the fail-closed current gate until that complete
+policy-bound replacement passes deployed acceptance.
 
 *Evidence:* `internal/agentcore/self_development_decision_binding.go:30-33`;
-`internal/platform/self_development_modes.go:226-242`; `docs/choir-vision.md`.
+`internal/platform/self_development_modes.go:226-242`;
+`docs/problems/irreversible-effects-human-gate-drift-2026-08-13.md`;
+`docs/choir-vision.md`.
 
 ---
 
@@ -302,10 +306,11 @@ Recorded so the reasoning trail is inspectable rather than tidied away.
 3. **"Revert every Dolt database together" was a scope error** — it would have
    swept in the shared platform store and rewound other computers. Corrected by
    the panel in section 4.
-4. **The independence caveat on two seats was overstated** — Texture and Super
-   hold different contexts (owner document and intent versus execution state and
-   worker reports), so joint sign-off has value even on one model. Model
-   diversity is a further, different kind of independence, not a precondition.
+4. **The fixed two-seat conclusion was under-specified and is now superseded** —
+   Texture and Super do hold meaningfully different contexts, but role labels do
+   not by themselves prove independence and no one pair is the universal
+   authority. Each effect policy must predeclare eligible seats, independence
+   domains, quorum, dissent, failure, recusal, and replacement semantics.
 
 ---
 
@@ -317,21 +322,22 @@ until after success to demote competing constitutions would regenerate the
 pre-envelope world mid-mission. Pre-mission (green) changes landed:
 
 - Roadmap demoted to historical migration receipt; ACTIVE points at this
-  Definition's reversibility proof, not D1/`accept_once` sequencing; Mission 0
-  and Invocation demoted so ACTIVE owns no second schedule.
+  Definition's restore and effect-policy proof, not D1/`accept_once` sequencing;
+  Mission 0 and Invocation demoted so ACTIVE owns no second schedule.
 - `docs/mission-graph.yaml` active-node note rewritten to replay probe + disposed
   Mission 0 (no longer schedules headed-browser then E2 as the live path).
 - Ontology restore-set boundary named (VM-local + release IN; platform/cycle/
   host frontend OUT); ComputerVersion clarified as code identity not full restore.
 - Agent-product doctrine: model policy is config, not self-dev content axis;
   effects OFF is pre-gate, not destination.
-- Doctrine Product Path: envelope-relative permission after gates; restore
-  vocabulary preferred over rollback for product undo.
-- RLM memo Phase 1: re-derive against envelope after this Definition closes.
+- Doctrine Product Path: policy-relative permission after gates; restore
+  vocabulary preferred for reversible product undo. The 2026-08-13 correction
+  further replaces the envelope-as-authority model with effect-specific
+  consensus across reversible and irreversible effects.
 - AGENTS Landing Loop: product restore ≠ failed deploy / git revert; runtime-
   bearing `completion_cutover` items re-enter Landing Loop before `goal.complete`.
-- `SEM-03` transitional wording (standing-rule / restore); full promote stays in
-  cutover.
+- `SEM-03` transitional wording is superseded by decision-policy / qualified
+  consensus / restore; full runtime cutover stays in completion obligations.
 - Definition YAML made subset-parser safe (`skills/definition` dashboard).
 
 Post-success obligations remain in `finish.completion_cutover` (doctrine

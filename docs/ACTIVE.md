@@ -7,11 +7,13 @@ corpus and does not make an unverified graph status into a live work claim.
 
 [`definitions/choir-supervised-self-development-effects-2026-08-11.md`](definitions/choir-supervised-self-development-effects-2026-08-11.md)
 is the owner-ratified executable `/goal`, superseding Continuous Texture
-Supervision (CTS) as of 2026-08-11. Proof target is **reversibility**: capsule-
-authored source change (solitaire, API-only) under a standing-rule two-seat
-auto-promotion envelope, E2 correction spine, then acceptance-fenced restore of
-VM-local state + release (platform/cycle/host frontend OUT). Reasoning and
-retired approaches live in the Definition's
+Supervision (CTS) as of 2026-08-11 and corrected by owner direction on
+2026-08-13. Proof target is **policy-governed autonomy**: capsule-authored
+source change under effect-specific qualified consensus, E2 correction and
+acceptance-fenced restore of VM-local state + release, plus one exact
+irreversible email send under a stronger no-human-seat acceptance policy with
+durable delivery and consequence receipts (platform/cycle/host frontend OUT).
+Reasoning and retired approaches live in the Definition's
 [supplement](definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md).
 `choir-self-development-roadmap-2026-08-11.md` is a **historical migration
 receipt**, not a live schedule. CTS remains citable evidence, not an entrypoint.
@@ -45,9 +47,9 @@ recovery bypass, SSH, or weaker authorization is admissible.
 Historical handoff, guest-prefix, mailbox, and terminal-boot receipts remain in
 [the joined runtime review](evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md)
 and [its requirement audit](evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md).
-They are historical evidence, not rollback or live schedule; effects remain OFF.
-The current slice and `next_action` live only in the active reversibility
-Definition below.
+They are historical evidence, not rollback or live schedule; effects remain OFF
+until the active Definition's decision-policy rehearsal gates pass. The current
+slice and `next_action` live only in that Definition.
 
 Completed Definitions are historical evidence, not executable entrypoints; full
 claims and receipts remain in their source files and `mission-graph.yaml`:
@@ -64,9 +66,10 @@ None is executable unless explicitly promoted in the current registry.
 [`definitions/choir-private-go-actor-kernel-2026-08-12.md`](definitions/choir-private-go-actor-kernel-2026-08-12.md)
 is the owner-ratified successor for the RLM authoring upgrade. It is sequenced
 after the active supervised-self-development-effects Definition proves the
-reversible envelope and completes its cutover. It does not create a concurrent
-product schedule and must not begin effect-bearing implementation while its
-predecessor is working.
+effect-policy autonomy window, reversible restore, irreversible consequence
+receipts, and completion cutover. It does not create a concurrent product
+schedule and must not begin effect-bearing implementation while its predecessor
+is working.
 
 The successor converges Researcher and CoSuper on one durable-actor kernel with
 private disposable model-authored Go activations. Restricted profiles receive

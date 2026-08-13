@@ -196,16 +196,17 @@ supervision scope + decision class
   -> concurrent or staged supervisor activations
   -> typed proposals, objections, abstentions, and evidence
   -> quorum/adjudication reducer
-  -> supervision decision receipt
-  -> trusted authority reducer may commit, refuse, or request human approval
+  -> policy-evaluated consensus receipt
+  -> trusted authority reducer may commit or refuse
 ```
 
-Multiple active seats are the normal mode. A one-seat round is an explicit
-degraded or low-risk continuity mode, not the definition of Super, and cannot
-satisfy an irreversible-decision policy. High-consequence decisions require a
-stronger threshold. An irreversible decision requires all designated
-independent seats to approve, no unresolved safety dissent, and any separately
-required human approval. The policy is selected before outputs are visible.
+Multiple active seats are the normal mode. A one-seat round may be an explicit
+degraded or low-risk continuity mode only when the selected policy allows it;
+seat count alone neither grants nor denies an effect class. High-consequence
+and irreversible effects require the stronger threshold, independence domains,
+evidence, dissent disposition, and consequence receipts their predeclared
+policy names. A human may be a required, optional, or absent participant. The
+policy is selected before outputs are visible.
 Failures and abstentions remain visible and cannot silently shrink the quorum.
 A coordinator may schedule calls and synthesize evidence, but its synthesis is
 another typed proposal, not a privileged final answer.
@@ -494,18 +495,19 @@ mounted. There should be no generic `http.Do` escape hatch.
 Email illustrates the distinction between actor and connector well.
 
 The Email actor may be durable because it owns conversations, inbound wakeups,
-draft lineage, approval state, delivery receipts, and retries. The provider
-adapter and delivery executor are trusted connector services, not model agents.
+draft lineage, policy-evaluated consensus state, delivery receipts, and retries.
+The provider adapter and delivery executor are trusted connector services, not
+model agents.
 
 ```text
 provider adapter receives email
   -> durable EmailReceived envelope
   -> email actor wakes
   -> email RLM reads, reasons, drafts, or delegates
-  -> EmailSendProposal
-  -> policy and owner approval
+  -> EmailSendProposal bound to exact recipient and payload
+  -> irreversible-effect policy evaluates qualified consensus
   -> trusted outbox executor
-  -> Delivered or Failed receipt wakes the actor
+  -> Delivered or Failed consequence receipt wakes the actor
 ```
 
 The Email RLM never sends raw SMTP or provider requests. Outbound communication
@@ -738,9 +740,10 @@ The following claims were promoted into Choir Doctrine on 2026-08-12:
     authority.
 19. Super is a scoped, versioned protocol, never a singleton actor or ambient
     authority-bearing role name.
-20. High-consequence and irreversible decisions require their predeclared
-    supervision quorum; missing seats, failures, abstentions, and dissent cannot
-    be erased by dynamically redefining the panel.
+20. Every effect, including an irreversible effect, requires its predeclared
+    qualified consensus policy; eligibility, independence, quorum, failures,
+    abstentions, recusal, replacement, and dissent cannot be erased or redefined
+    after outputs are visible. Human participation is policy-selected.
 
 Exact APIs, schemas, module lists, safe-package allowlists, resource limits, and
 migration sequence remain Definition-owned implementation questions rather than

@@ -126,8 +126,8 @@ boundaries:
     - making every local operation durable or recording every instruction/syscall
     - full connector and Email convergence, Texture migration to the kernel, or Super quorum redesign beyond interfaces needed by the first slice
     - promoting adaptive source automatically into trusted compiled libraries
-    - production rollout before staging acceptance and owner decision
-    - weakening the active reversible-effects Definition or executing effect-bearing acceptance before its deployed completion
+    - production rollout before staging acceptance and repository-maintainer landing approval
+    - weakening the active effect-policy Definition or executing effect-bearing acceptance before its deployed completion
   protected_surfaces:
     - capsule execution, transaction tape, effect-bundle construction, and resource containment
     - actor activation, passivation, cancellation, restart, and model-policy resolution

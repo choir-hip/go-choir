@@ -18,14 +18,14 @@ start:
       class: goal_candidate
       owner: owner-and-session
       touch: goal_owned
-      paths_or_digest: [docs/definitions/choir-supervised-self-development-effects-2026-08-11.md, docs/definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
+      paths_or_digest: [docs/definitions/choir-supervised-self-development-effects-2026-08-11.md, docs/definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md, docs/problems/irreversible-effects-human-gate-drift-2026-08-13.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
       recovery: revert the docs-only commit
   candidates:
     - id: none
   observed_artifact:
     - claim: "Checkpoints bind no state. ComputerVersion is CodeRef plus ArtifactProgramRef only; the Dolt state extractor is read-only and ProjectionMaterializer is non-runtime; rollback re-applies a prior release while rows written under it remain. Three stores call DOLT_COMMIT; nothing in production calls checkout, branch, or reset, and those commits carry no event-head binding."
       evidence_ref: internal/computerversion/types.go:40-48; internal/computerversion/dolt_state_extractor.go:27-83; internal/computerversion/projection_materializer.go:9-22; internal/agentcore/self_development_materializer.go:224-273; internal/platform/store.go:481-499; internal/store/store.go:119; internal/cycle/storage.go:56
-    - claim: "Per-candidate owner approval is enforced in code: the decision binding requires an external-owner: authority prefix, and accept_once requires exact operation/bundle/heads/pending-transition/commitments plus a future canonical UTC expiry. Relaxing these is in scope."
+    - claim: "The pre-consensus substrate enforces per-candidate owner approval: the decision binding requires an external-owner: authority prefix, and accept_once requires exact operation/bundle/heads/pending-transition/commitments plus a future canonical UTC expiry. This is fail-closed implementation residue, not target ontology; replacement requires a policy-bound multiagent consensus receipt and reducer, not deletion of the gate."
       evidence_ref: internal/agentcore/self_development_decision_binding.go:30-33,45,53; internal/platform/self_development_modes.go:226-242
     - claim: "The frozen CapsuleEffectBundle refuses any bundle lacking SourceTreeRef, a capsule-exec BuildRecipeRef, RuntimeArtifactRef, TestReceipts, and DependencyToolchainRefs, so every required ref must bind a real capsule execution receipt."
       evidence_ref: internal/capsule/transaction/builder.go:95-111
@@ -49,9 +49,9 @@ start:
       evidence_ref: see supplement section 3
       consequence: "Reversibility is the proof target; building and verifying revert is in scope."
     - id: approval-was-the-wrong-safety-property-2026-08-11
-      problem: "Per-candidate owner approval is encoded in the decision binding and accept_once, but it guards the reversible side where reversibility is the better guard, and does not guard the irreversible side at all."
-      evidence_ref: see supplement section 2
-      consequence: "Auto-promotion inside a reversible envelope replaces per-candidate approval; decisions are reserved for effects leaving that envelope."
+      problem: "Per-candidate owner approval is encoded in the decision binding and accept_once. It was correctly identified as the wrong universal gate, but the first repair then incorrectly inferred that reversibility defines the autonomy boundary and irreversible effects require a separate human decision."
+      evidence_ref: "see supplement section 2; docs/problems/irreversible-effects-human-gate-drift-2026-08-13.md"
+      consequence: "Effect-specific multiagent consensus replaces universal per-candidate owner approval across reversible and irreversible effects. Reversibility changes recovery and policy strength; a human is a policy-selected seat, not a universal gate."
     - id: actor-isolation-stopgap-2026-08-11
       problem: "CoSuper has no upward actor channel because Super derives executability from the model-written packet.kind, so holding update_coagent would let a worker open privileged execution on its supervisor."
       evidence_ref: see supplement section 5
@@ -76,15 +76,15 @@ start:
   unknowns:
     - "Whether checkpoint creation binds the sequence-1 canonical head plus a VM-local content witness and refuses while any behavior-bearing local row is not event- or receipt-derivable; the retained computer is now eligible and is the checkpoint-design substrate."
     - "Whether rematerialization is product-ready. ProjectionMaterializer is non-runtime today; if the classification and subsequent build show it is not usable, restore falls back to a single-workspace pin checkout on an interim basis with the event head still the sole semantic authority."
-    - "Which effect classes are outside the reversible envelope and must refuse to promote under a standing rule."
+    - "Which concrete decision-policy schema, independence domains, quorum, dissent, abstention, timeout, recusal, replacement, and consequence-receipt contracts satisfy the first reversible and irreversible acceptance cases without hard-coding one universal panel."
     - "Whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata and citations without a payload schema change."
     - "Whether the CTS-observed registry gap (Texture production registry omitting update_coagent) is still present on the deployed staging build."
     - "Whether guest capability renewal refusal recurs after the five-minute capability lifetime, and which server-side refusal class caused the 2026-08-12 incident; the current acceptance proves only that an owner-scoped lifecycle restart restored a fresh capability."
     - "Retained computer epoch 8253 disposition; ak_45ce1796 row and root-only auth rollback cleanup."
 
 finish:
-  deliver: "The computer works autonomously inside a reversible envelope and can be put back. A CoSuper capsule authors, builds, tests, freezes, and proposes its own source change (solitaire: headless play API, durable persistence, play history); Super and Texture jointly auto-approve it inside a standing rule the owner armed, with no per-candidate owner decision; it promotes, runs, and writes real state; and then the computer is returned to a point in its history — code and state together — with the restored state verified equal to what was recorded there. Texture revises an owner-readable document throughout so the work is supervisable while it happens. The correction spine runs inside the envelope: defective A promotes, admissible evidence falsifies it, B supersedes A, restart proves B, and a full revert proves the whole excursion was undoable."
-  artifact: "An authenticated staging computer trajectory carrying: the armed standing rule and its bounds; a frozen bundle A with real SourceTreeRef, capsule-exec BuildRecipeRef, DependencyToolchainRefs, TestReceipts, RuntimeArtifactRef, and an independent verifier receipt; a CoSuper-authored proposal; two seat approvals bound to the exact bundle digest and head; a promotion receipt with checkpoint and route TransitionPromote; a checkpoint binding the target event head, code, artifact program, and a VM-local content witness, with the VM-local Dolt HEAD joined as an audit receipt rather than as restore authority; solitaire game rows written under the promoted release; a headless play transcript falsifying A; superseding candidate B and a post-restart proof that B is effective; and a total revert to a pre-promotion checkpoint — a forward restore intent naming the prior event head, VM-local state rebuilt and the release restaged — whose post-revert re-extraction reproduces the recorded schema and content hashes exactly, with the solitaire capability and its rows both absent. Joined to that chain, a Texture document with a revision at each consequential transition, carrying identity in revision metadata and typed citations while its prose stays human."
+  deliver: "The computer works autonomously under effect-specific multiagent consensus and can restore reversible state. A CoSuper capsule authors, builds, tests, freezes, and proposes its own source change (solitaire: headless play API, durable persistence, play history); a policy-selected qualified panel approves the exact subject with no per-candidate human decision; it promotes, runs, and writes real state; then the computer returns to a prior point with code and VM-local state verified equal to the recorded checkpoint. The correction spine runs: defective A promotes, admissible evidence falsifies it, B supersedes A, and restart proves B. A separate stronger irreversible policy, selected before outputs and requiring no human seat for this acceptance, authorizes one exact external send to an owner-controlled acceptance inbox; delivery and a follow-up correction are durably receipted. Texture revises an owner-readable document throughout."
+  artifact: "An authenticated staging computer trajectory carrying: versioned reversible and irreversible decision policies; frozen eligible-seat and independence manifests; proposals, objections, abstentions, dissents, adjudication, and consensus receipts bound to exact subjects and heads; a frozen bundle A with real SourceTreeRef, capsule-exec BuildRecipeRef, DependencyToolchainRefs, TestReceipts, RuntimeArtifactRef, and independent verifier receipt; a policy-authorized promotion, checkpoint, and route transition; solitaire rows, falsification evidence, superseding B, restart proof, and exact acceptance-fenced restore to a pre-A checkpoint; plus an exact external-send proposal to an owner-controlled acceptance inbox, a no-human-seat qualified consensus decision, trusted outbox/provider delivery receipt, and follow-up correction receipt. Texture revisions cite every consequential transition while keeping machine identity in metadata and typed citations."
   acceptance:
     - action: "Replay completeness probe (do this first): rematerialize VM-local state from the event chain through the current head and compare the result against a live DoltStateExtractor reading. Report the exact diff."
       proves: "Whether every behavior-bearing VM-local write is a deterministic function of the event chain plus pinned receipts. A clean match licenses rematerialization as the restore path; a diff names precisely which writes are not event-derived and must be fixed or fail the checkpoint closed."
@@ -98,8 +98,8 @@ finish:
     - action: "Scope refusal: show that a user-computer revert does not touch the shared platform store or cycle state, and that an attempt to include them is refused."
       proves: "One computer's restore cannot rewind another computer or shared service state."
       evidence_class: deployed proof
-    - action: "Autonomous promotion: a CoSuper capsule authors, builds, tests, freezes, and proposes; Super and Texture both sign bound to the exact bundle digest and head; the candidate promotes with no per-candidate owner decision. Prove promotion refuses when the standing rule is absent, expired, or revoked, and when either seat is missing, failed, or withheld."
-      proves: "The computer promotes its own work inside a rule the owner granted, and the envelope's edges hold."
+    - action: "Policy-governed reversible promotion: a CoSuper capsule authors, builds, tests, freezes, and proposes; the decision policy freezes eligible seats and independence domains before outputs, the qualified panel decides on the exact bundle digest and heads, and the candidate promotes with no per-candidate human decision. Prove refusal when policy is absent, expired, revoked, stale, missing a required seat, below quorum, or carrying unresolved policy-blocking dissent."
+      proves: "The computer can authorize reversible self-development through policy-evaluated multiagent consensus without turning a human into the universal gate or allowing the panel to shrink itself."
       evidence_class: deployed proof
     - action: "Capsule authorship proof: every required bundle ref binds a real execution receipt from the authoring capsule."
       proves: "The candidate is authored by the computer, not hand-authored and pushed through the pipeline."
@@ -107,11 +107,11 @@ finish:
     - action: "Live E2 inside the envelope: A promotes -> solitaire is played through the headless API and writes rows -> evidence falsifies A -> B supersedes A -> restart proves B effective."
       proves: "The correction spine runs autonomously and survives restart."
       evidence_class: deployed proof
-    - action: "Total revert of the excursion: return to a checkpoint taken before A promoted. Show the solitaire API absent, the solitaire rows absent, state hashes equal to the recorded checkpoint, and the event chain still carrying the full history of what was undone."
-      proves: "Autonomy is safe because it is reversible: weeks of work can be wound back to a chosen point without erasing the record that it happened."
+    - action: "Total restore of the reversible excursion: return to a checkpoint taken before A promoted. Show the solitaire API absent, the solitaire rows absent, state hashes equal to the recorded checkpoint, and the event chain still carrying the full history of what was undone."
+      proves: "Reversible computer-local state has a complete acceptance-fenced recovery path; this is an additional safety property, not the boundary of autonomy."
       evidence_class: deployed proof
-    - action: "Irreversible-boundary refusal: attempt an effect that leaves the reversible envelope (external send/publish) under the same standing rule and show it is refused without a decision, while internal promotion proceeds."
-      proves: "Reversibility substitutes for approval exactly where effects are reversible, and not at all where they are not."
+    - action: "Irreversible consensus and execution: propose one exact external email to an owner-controlled acceptance inbox. Show the reversible-effect policy refuses it. Select a stronger irreversible-effect policy before participant outputs, bind recipient and payload exactly, obtain its qualified independent consensus with no unresolved safety dissent and no human seat required for this acceptance, execute through the trusted outbox, and retain provider delivery plus consequence receipts. Then show a different policy that explicitly requires a human seat refuses when that seat is absent."
+      proves: "Irreversible effects remain inside the autonomy window; stronger policy and durable accountability replace a categorical human gate, while a policy may still choose to require a human."
       evidence_class: deployed proof
     - action: "Supervision legibility: at each consequential transition a Texture revision is readable through the public API and CLI, its prose human and its metadata and typed citations carrying operation, bundle digest, receipt, and head. At least one revision is committed while capsule work is still open."
       proves: "The owner can watch and intervene during autonomous work rather than reading a post-hoc report."
@@ -120,7 +120,7 @@ finish:
       proves: "Single semantic authority reconstruction; no second state authority was introduced."
       evidence_class: deployed proof
 
-  rollback: "Revoke the standing rule (no further promotion without a new grant); total revert to a prior checkpoint restoring the release pointer and VM-local state only, platform and cycle stores explicitly out of scope; revert the behavior commits through origin/main and CI to the last accepted runtime. Direct file edits on the deployed node are not the proof and are not a rollback path. Effects that already left the reversible envelope are not recoverable by revert and must be reported as such."
+  rollback: "Revoke the active effect policies and capabilities; total restore to a prior checkpoint restores the release pointer and VM-local state only, with platform and cycle stores explicitly out of scope; revert behavior commits through origin/main and CI to the last accepted runtime. Direct deployed-node edits are neither proof nor rollback. Irreversible consequences such as the acceptance email are not recoverable by restore: preserve their receipts and use compensation or a new forward action."
   landing:
     required: true
     environment: staging
@@ -130,19 +130,19 @@ finish:
     purpose: "Staging trajectory proof alone is a false complete if haunted teaching remains live authority. These obligations are part of goal.complete, not post-hoc cleanup."
     upon_deployed_acceptance:
       - id: doctrine-promote
-        action: "Promote earned invariants into choir-doctrine / computer-ontology / agent-product-doctrine: checkpoint = event head + CodeRef + ArtifactProgramRef + VM-local content witness; restore acceptance-fenced and scoped; standing-rule + seats replace per-candidate approval for reversible effects; irreversible refusal lane; effects OFF is pre-gate not destination. Preserve platform/cycle/frontend OUT exclusions unless a successor changes them."
+        action: "Promote earned invariants into choir-doctrine / computer-ontology / agent-product-doctrine: effect-specific consensus policy is the autonomy boundary; checkpoint = event head + CodeRef + ArtifactProgramRef + VM-local content witness; restore is acceptance-fenced and scoped; irreversible effects require stronger policy and consequence receipts, not a categorical human gate; effects OFF is pre-gate not destination. Preserve platform/cycle/frontend OUT exclusions unless a successor changes them."
         class: promote-to-doctrine
       - id: lexicon-cutover
-        action: "Cut product and API vocabulary from rollback/accept_once/approval-as-safety to restore/standing_rule/seats/irreversible decision where those names teach the old world (selfdev states, CLI, Settings copy, Definition skill templates). Keep accept_once only as the irreversible/decision lane if retained."
+        action: "Cut product and API vocabulary from rollback/accept_once/approval-as-safety to restore/decision_policy/qualified_consensus/consequence_receipt where those names teach the old world (selfdev states, CLI, Settings copy, Definition skill templates)."
         class: rewrite-in-place
       - id: roadmap-registry-archive
         action: "Confirm choir-self-development-roadmap is historical-only in registries; stamp SUCCESS on this Definition; ensure CTS cannot be read as an entrypoint; remove live authority edges that still schedule D1/Mission-0/accept_once rehearsal."
         class: delete-live-authority
       - id: survivor-detector-replace
-        action: "Replace (do not merely green) survivor/detector pins of CoSuper-without-update_coagent and packet.kind executability; add detectors against standing-rule authorizing send/publish/pay and against treating ComputerVersion code tuple alone as full restore."
+        action: "Replace (do not merely green) survivor/detector pins of CoSuper-without-update_coagent and packet.kind executability; add detectors requiring every reversible and irreversible effect to bind its declared policy, subject, eligible seats, independence domains, quorum, dissent disposition, expiry, and consequence receipts; reject both universal-human-gate and ungoverned-effect paths; reject treating ComputerVersion code tuple alone as full restore."
         class: test/detector update
       - id: owner-product-surface
-        action: "Ship or open a successor Definition for owner-reachable standing-rule arm/revoke, checkpoint list, restore invoke, and irreversible refusal receipts via CLI/API/Settings — restore must not remain a lab-only ceremony."
+        action: "Ship or open a successor Definition for owner-reachable policy arm/revoke, checkpoint list, restore invoke, consensus and consequence receipts via CLI/API/Settings — restore and effect-policy control must not remain lab-only ceremonies."
         class: successor-mission
       - id: ops-identity
         action: "Land restore-aware health/identity reporting (event head + CodeRef + witness + route; distinguish product restore from failed deploy / git revert). Retain release artifacts needed for advertised checkpoints."
@@ -163,9 +163,9 @@ finish:
     - A revert was reported as successful without re-extracting state and comparing it to the hashes recorded at the target checkpoint.
     - Checkpoints do not bind a target event head and content witness, so no point in history is addressable and "arbitrary rollback" is aspirational.
     - The VM-local Dolt HEAD was treated as restore authority rather than as an audit receipt joined to the event head.
-    - Promotion required a per-candidate owner decision, or promoted with no standing rule armed, or under an expired or revoked one.
-    - A candidate promoted on one seat, or the pair was quietly reduced to one when a seat failed, timed out, or withheld.
-    - An irreversible effect promoted under the standing rule without a decision.
+    - An effect executed without a predeclared, active policy bound to its exact subject, eligible seats, independence domains, quorum, abstention/timeout/recusal/replacement rules, dissent disposition, and expiry.
+    - A policy-required seat was quietly removed after seeing outputs, independence was fabricated, quorum shrank on failure, or policy-blocking dissent remained unresolved.
+    - An irreversible effect executed under a reversible-effect policy, without a durable consequence receipt, or was categorically refused solely because no human approved it.
     - "Revert erased history: the event chain no longer shows the excursion that was undone."
     - The candidate diff was hand-authored while the report implies capsule authorship.
     - A's defect was caught by A's own verification (that proves the gate, not the correction spine).
@@ -186,9 +186,9 @@ boundaries:
   authority_sources: [owner-ratified decisions, docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/standing-questions.md, AGENTS.md]
   must_preserve:
     - Canonical computer event chain is the single semantic state authority.
-    - Effects stay OFF until the staging rehearsal gate passes, and the rehearsal gate now includes a proven total revert.
-    - Revert never erases history. Returning to a prior point is a forward transaction that restores state; the event chain retains the full record of what was done and undone.
-    - Reversibility substitutes for approval only within the reversible envelope. Effects that cross an external boundary — send, publish, pay, third-party write — are outside it and are not promotable under a standing rule.
+    - Effects stay OFF until the staging rehearsal and decision-policy gates pass; afterward each effect class is authorized only through its active policy and audited actuator.
+    - Restore never erases history. Returning to a prior point is a forward transaction that restores reversible state; the event chain retains the full record of what was done and undone. Irreversible consequences remain on the tape and are corrected by compensation or new forward action.
+    - Reversibility changes recovery cost and required safeguards, not the boundary of autonomy. Both reversible and irreversible effects require predeclared, effect-specific multiagent consensus; a human is a policy-selected seat, never a universal gate.
     - Checkpoints bind the target event head, code, artifact program, and a VM-local content witness. A checkpoint that cannot restore state is not a checkpoint, and one that cannot be rebuilt from the tape must fail closed rather than be recorded.
     - The event chain is the address and the authority. VM-local Dolt is a projection and an audit witness, never an alternate head.
     - "Restore is scoped to the user computer: VM-local state and the release pointer. The shared platform store and cycle state are out of scope, because restoring them would rewind other computers."
@@ -196,11 +196,11 @@ boundaries:
     - The candidate is authored inside a CoSuper capsule; every required bundle ref binds a real execution receipt from that capsule.
     - CoSuper holds update_coagent and reports upward as an actor, while a CoSuper packet can never open privileged execution on Super. Executability derives from the sender's authorization, not from the model-written packet.kind. The pinned survivor contract is replaced by a stronger test, never deleted.
     - CoSuper freezes and proposes its own candidate. Proposal is worker authority, not a supervisory gate.
-    - "Approval is joint and automatic: the Super seat and the Texture seat both sign, each bound to the exact bundle digest and the head under decision, and the candidate promotes without a per-candidate owner decision. Missing, failed, or withheld approval blocks promotion; the pair cannot be shrunk to one."
-    - Auto-promotion runs only inside a standing rule the owner armed. The owner grants the rule; the seats approve instances within it. An expired, revoked, or absent rule means no promotion, and the rule names its own bounds and expiry.
-    - The owner retains revocation and rollback at all times, and revocation does not require agent cooperation.
+    - "Decision authority is policy-relative: every effect binds an exact subject, policy version, eligible-seat and independence manifest, quorum, dissent and failure rules, expiry, evidence, and consequence-receipt contract. Participants cannot redefine the policy after seeing outputs."
+    - "The owner establishes and can revoke the constitutional policy envelope. Qualified multiagent consensus authorizes instances within it. Human participation is required only when the selected policy says so; revocation never requires agent cooperation."
+    - Irreversible effects require stronger policy, narrower subject binding, larger or more diverse independent consensus where declared, durable provider and consequence receipts, and compensation or new forward action when correction is needed.
     - The historical self-development roadmap is migration evidence only — not live schedule authority; execute this Definition, not Mission 0–5 from that table.
-    - "Reconnection stays minimal on purpose: the smallest change that restores the channel and holds the privilege property. The RLM/Yaegi rebase is expected to rewrite this layer, so no general authorization or quorum framework is built here."
+    - "Reconnection stays minimal on purpose: restore the channel and hold the privilege property. Decision-policy and consensus work is built only to satisfy the exact reversible and irreversible acceptance cases; the RLM/Yaegi successor may rewrite actor activation without weakening these authority contracts."
     - A's defect is pre-declared in a Define receipt before A is proposed, so the falsification cannot later be reported as discovered.
     - "Self-development schema changes remain additive (CREATE TABLE IF NOT EXISTS, never in-place ALTER/DROP as a migration framework) because there is no migration framework and rollback does not reverse schema. One owner-authorized pre-launch exception: a product-path VM-local workspace replacement onto current DDL may discard retired schema residue and unsupported direct-SQL rows. That replacement is a cutover, not a migration, appends no event, publishes no checkpoint, and does not license restore or effects."
     - "The solitaire candidate itself touches no protected surface: no auth/session, no event/decision path, no provider routing, and no Texture write from solitaire code. This is distinct from the mission's Texture writes, which are required — Texture supervises the self-development through its own owner and atomic reducer, and the candidate is its subject, never its author."
@@ -209,7 +209,7 @@ boundaries:
     - No headless/CDP/virtual-authenticator substitute for exact owner presence; no SSH-shaped operations; product path only.
     - "Problem-documentation-first: a discovered platform problem is documented in a code-free Define receipt before any repair-code commit."
   excluded:
-    - RLM/Yaegi actor authoring (successor capability mission; Phase 1 of the RLM memo preserves effects-OFF).
+    - RLM/Yaegi actor authoring (successor capability mission; it inherits the deployed effect-policy envelope and does not gain ambient effect authority).
     - Model-policy content as a self-development effect (see problems_documented; the surface is system-owned and slated for replacement).
     - Production environment.
     - "CTS's full downward-control choreography — Texture-originated Researcher follow-ups, Texture-to-persistent-Super execution requests, parallel multi-CoSuper assignment, and the generic transcluded-source contract. What is NOT excluded, and is now required, is CTS's supervision core: Texture revising a canonical owner-readable document at each transition while work remains open. Finishing CTS still cannot deliver the vision proof, but supervision was never the severable part."
@@ -270,14 +270,14 @@ now:
     id: none
     state: none
   decision:
-    selected: "Reversibility is the proof target, not acceptance. Revert is built and verified in this mission. Restore is scoped to VM-local state plus the release pointer, addressed by event head, and acceptance-fenced: rematerialize through the target head, verify against recorded content hashes, flip visibility only on exact match. The shared platform store and cycle state are out. Checkpoints bind the target event head, CodeRef, ArtifactProgramRef, and a VM-local content witness, with the VM-local Dolt HEAD as an audit receipt rather than restore authority. CoSuper authors and proposes; Super and Texture jointly auto-approve inside an owner-armed standing rule; no per-candidate owner decision. Decisions are reserved for effects leaving the reversible envelope. CoSuper regains update_coagent with executability relocated from packet.kind to sender authorization. Content remains capsule-authored solitaire, API-only. RLM strictly after."
+    selected: "Effect-specific multiagent consensus is the autonomy boundary; reversibility is a recovery property. Restore remains scoped to VM-local state plus the release pointer, addressed by event head, and acceptance-fenced. Checkpoints bind event head, CodeRef, ArtifactProgramRef, and VM-local content witness; VM-local Dolt HEAD is an audit receipt. CoSuper authors and proposes. A policy-selected qualified panel authorizes each exact effect subject under frozen eligibility, independence, quorum, dissent, expiry, and consequence rules; human participation is optional unless that policy requires it. Reversible and irreversible effects are both admissible, with stronger policy and durable consequence receipts for irreversible effects. The mission proves this with reversible self-development plus restore and one exact no-human-seat email send to an owner-controlled acceptance inbox."
     kind: architecture
-    status: ratified
-    source: orchestrator
-    evidence_ref: "docs/choir-self-development-roadmap-2026-08-11.md; .agentic-consensus/self-dev-roadmap/{divergent,lateral,convergent}/; .agentic-consensus/readiness-key-2026-08-11/"
-    owner_ratification_ref: "owner direction 2026-08-11, in sequence: model policy rejected as content axis ('we should be changing source code'); capsule authorship required ('definitely written by a cosuper in a capsule'); Texture supervision required ('just writing solitaire isnt getting at the essence of the point'); metadata out of prose ('that kind of information should live at the super level, and/or in citations or metadata, not in texture version prose'); CoSuper reconnection required ('cosuper absolutely needs update_coagent - thats essential'); two seats are auto-approval not a proposal gate ('because users have rollback, we can do auto-promotion'); and the reversibility reframe ('ive never once thought i was building something that requires human approval for changes ... rollback arbitrarily to any point in its history'), with Dolt revert explicitly in scope."
-    recorded_at: 2026-08-11T20:05:00Z
-    consequence: "Per-candidate owner approval is removed as a requirement and replaced by an owner-armed standing rule plus two-seat auto-approval. The decision-binding verifier and mode CAS are relaxed deliberately, which is the mission's heaviest evidence burden. Checkpoint and revert become deliverables rather than a rollback field. Effects leaving the reversible envelope gain an explicit refusal requirement. Freeze/propose authority must be wired onto CoSuper, which today has no production call site. Pre-mission haunted-authority cutover (roadmap demotion, doctrine/ontology transitional language, RLM Phase-1 re-derive note, restore-set boundary, AGENTS restore-vs-deploy note) landed green; finish.completion_cutover must still run after deployed acceptance or the goal is a false complete."
+    status: owner-ratified-correction
+    source: owner
+    evidence_ref: "docs/problems/irreversible-effects-human-gate-drift-2026-08-13.md; docs/choir-vision.md; docs/choir-doctrine.md"
+    owner_ratification_ref: "owner correction 2026-08-13: irreversible effects are not outside the autonomy window; effect-specific multiagent consensus is the governing boundary, and human approval is optional as one possible consensus participant."
+    recorded_at: 2026-08-13T14:18:16Z
+    consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
   evidence_refs: [docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
   blocker_or_risk: "Revert is the mission: nothing in production reads Dolt history back, checkpoints bind no state, and Dolt commits carry no head binding. Replay completeness RESOLVED 2026-08-13 (retained computer replay-eligible at sequence 1; the 26 differences classified and resolved by workspace replacement plus chain bootstrap). ProjectionMaterializer is still non-runtime today, so rematerialization is the preferred restore path with a single-workspace pin checkout only as an evidence-driven contingency. Relaxing the decision-binding verifier and mode CAS touches the surfaces that make the tape trustworthy and carries the heaviest evidence burden."
   next_action: "Design checkpoint completeness after the accepted 2026-08-13 bootstrap receipt; do not rerun the probe as if unanswered."
@@ -476,27 +476,31 @@ Read that only if you need the why; everything needed to execute is here.
 
 ## What is being proved
 
-That the computer can work autonomously and be put back. It promotes its own
-source change without a per-candidate owner decision, runs it, writes real
-state — and is then returned to a chosen point in its history, code and state
-together, with the restored state verified equal to what was recorded there.
+That the computer can authorize its own reversible and irreversible effects
+through effect-specific multiagent consensus, retain complete consequence
+receipts, and restore reversible state. The proof includes its own source change
+and one exact external send; neither requires a per-candidate human decision
+under the selected acceptance policies.
 
-## Rules of the envelope
+## Rules of the autonomy window
 
-**Inside the envelope, the computer promotes its own work.** CoSuper freezes and
-proposes. Super and Texture both sign, each approval bound to the exact bundle
-digest and head. The candidate promotes with no per-candidate owner decision.
+**Policy-governed consensus authorizes effects.** CoSuper freezes and proposes.
+Before outputs exist, the selected policy binds the exact subject, eligible
+seats and independence domains, quorum, dissent and failure semantics, evidence
+requirements, expiry, actuator, and consequence receipts. Participants cannot
+shrink or rewrite that policy after seeing results.
 
-**The owner arms a standing rule, not each candidate.** The rule carries explicit
-bounds and expiry. Absent, expired, or revoked means no promotion. Both seats are
-required; a pair never shrinks to one because a seat failed, timed out, or
-withheld.
+**The owner governs the constitutional envelope, not every candidate.** The
+owner can establish and revoke policies. A human may be a required, optional,
+or absent consensus participant. Missing a policy-required seat, quorum, or
+dissent disposition fails closed.
 
-**The envelope has an edge.** Reversibility substitutes for approval exactly to
-the degree an effect is reversible. Internal state, code, documents, and the
-object graph are recoverable. Anything crossing an external boundary — send,
-publish, pay, third-party write — is not, and is not promotable under a standing
-rule. That boundary is where a decision belongs.
+**Reversibility is recovery, not authority.** Reversible effects gain
+acceptance-fenced restore. Irreversible effects such as send, publish, pay, or a
+third-party write remain admissible under a stronger policy with exact subject
+binding, qualified independent consensus, durable provider and consequence
+receipts, and compensation or new forward action for correction. They are not
+categorically routed to a human.
 
 **Restore is scoped to the user computer.** VM-local state and the release
 pointer. The shared platform store and cycle state are out; restoring them would
@@ -598,20 +602,26 @@ at all.
    Wire them onto the assigned CoSuper under its capsule binding, preserving the
    capsule-local authority boundary for everything else. Without this step the
    live proof cannot start.
-6. **Auto-promotion authority (red).** A seat-signed decision authority the
-   decision-binding verifier accepts alongside `external-owner:`, requiring both
-   seats bound to the exact bundle digest and head; a standing-rule mode beside
-   `accept_once` with owner-set bounds and expiry; refusal proofs for absent,
-   expired, and revoked rules and for a missing seat.
-7. **Irreversible boundary (red).** Classify effects leaving the envelope; prove
-   they refuse to promote under a standing rule.
+6. **Decision-policy authority (red).** Replace `external-owner:` as the only
+   accepted decision authority with versioned effect policies and typed
+   consensus receipts. Bind exact subject, policy version, frozen eligible seats
+   and independence domains, quorum, abstention/timeout/recusal/replacement,
+   dissent disposition, evidence, expiry, actuator, and consequence-receipt
+   contract. Prove fail-closed behavior for every missing or stale binding.
+7. **Irreversible effect path (red).** Add a stronger policy and trusted outbox
+   for one exact email to an owner-controlled acceptance inbox. Prove that the
+   reversible policy refuses it; the irreversible policy can authorize it
+   without a human seat; delivery and later correction remain durably receipted;
+   and a separate human-required policy refuses when that seat is absent.
 8. **Supervision wiring (green).** Confirm the upward packet carries joinable
    identities and that Texture's production registry has `update_coagent`.
-9. **Rehearsal (orange→red).** Trivial change: propose → auto-approve → promote →
-   write state → total revert → verify. The live run is gated on this passing,
-   revert included.
-10. **Live proof (red).** Capsule authors A → promotes → played → falsified → B
-   supersedes → restart proves B → total revert of the excursion.
+9. **Rehearsal (orange→red).** Reversible change: propose → qualified consensus
+   → promote → write state → total restore → verify. Irreversible send: propose
+   → stronger qualified consensus → outbox/provider delivery → consequence
+   receipt → correction receipt. The live run is gated on both paths passing.
+10. **Live proof (red).** Capsule authors A → consensus authorizes → promotes →
+   played → falsified → B supersedes → restart proves B → total restore; then
+   execute and receipt the exact acceptance email under its separate policy.
 
 Out of scope: RLM/Yaegi authoring, model-policy content, the web UI, production,
 and the shared platform store.
