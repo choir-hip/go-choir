@@ -257,6 +257,9 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if err != nil || sourceDigest != source.SubjectDigest {
 		return nil, fmt.Errorf("capsule source changed after durable preflight")
 	}
+	if err := requireFrozenComputerSurfaceSource(sourceTarget); err != nil {
+		return nil, err
+	}
 	if err := makeSubjectTreeReadOnly(filepath.Join(sourceLower, "workspace", "platform")); err != nil {
 		return nil, err
 	}
@@ -1200,14 +1203,20 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 	if len(files) == 0 || files[0].Path == "" {
 		return nil, "", fmt.Errorf("capsule release contains no frozen runtime artifacts")
 	}
-	hasAutoputer := false
+	hasAutoputer, hasFrontend := false, false
 	for _, file := range files {
 		if file.Path == "bin/autoputer" && file.Mode&0o111 != 0 {
 			hasAutoputer = true
 		}
+		if file.Path == "frontend/index.html" || strings.HasPrefix(file.Path, "frontend/") {
+			hasFrontend = true
+		}
 	}
 	if !hasAutoputer {
 		return nil, "", fmt.Errorf("capsule release must contain executable bin/autoputer")
+	}
+	if !hasFrontend {
+		return nil, "", fmt.Errorf("capsule freeze: computer-surface frontend artifacts are underivable")
 	}
 	cleanup = false
 	return files, temporary, nil

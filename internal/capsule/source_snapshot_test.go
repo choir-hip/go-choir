@@ -233,3 +233,20 @@ func TestCanonicalSubjectDigestLargeFileHonorsCancellation(t *testing.T) {
 		t.Fatalf("large subject cancellation error=%v", err)
 	}
 }
+
+func TestRequireFrozenComputerSurfaceSource(t *testing.T) {
+	missing := t.TempDir()
+	if err := requireFrozenComputerSurfaceSource(missing); err == nil {
+		t.Fatal("freeze accepted a tree with no computer-surface frontend source")
+	}
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "frontend"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "frontend", "index.html"), []byte("<html>computer</html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := requireFrozenComputerSurfaceSource(root); err != nil {
+		t.Fatal(err)
+	}
+}

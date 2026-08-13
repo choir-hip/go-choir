@@ -14,6 +14,7 @@ import (
 )
 
 const defaultComputerCapabilityTTL = 5 * time.Minute
+const capabilityRenewalGrace = 60 * time.Second
 
 var capabilityDomain = []byte("choir-computer-capability-v1\x00")
 
@@ -53,6 +54,14 @@ func MintComputerCapability(capability ComputerCapability, privateKey ed25519.Pr
 }
 
 func (v SignedCapabilityVerifier) Authorize(r *http.Request, computerID, requiredScope string) error {
+	return v.authorize(r, computerID, requiredScope, 0)
+}
+
+func (v SignedCapabilityVerifier) AuthorizeRenewal(r *http.Request, computerID string) error {
+	return v.authorize(r, computerID, "event:append", capabilityRenewalGrace)
+}
+
+func (v SignedCapabilityVerifier) authorize(r *http.Request, computerID, requiredScope string, expiryGrace time.Duration) error {
 	if v.Store == nil || len(v.PublicKey) != ed25519.PublicKeySize {
 		return fmt.Errorf("computer capability: verifier unavailable")
 	}
@@ -99,14 +108,17 @@ func (v SignedCapabilityVerifier) Authorize(r *http.Request, computerID, require
 	if v.Now != nil {
 		now = v.Now().UTC()
 	}
-	if !now.Before(expiresAt) {
+	if expiryGrace < 0 {
+		expiryGrace = 0
+	}
+	if !now.Before(expiresAt.Add(expiryGrace)) {
 		return fmt.Errorf("computer capability: expired")
 	}
 	maxTTL := v.MaxTTL
 	if maxTTL <= 0 {
 		maxTTL = defaultComputerCapabilityTTL
 	}
-	if expiresAt.Sub(now) > maxTTL {
+	if expiresAt.After(now) && expiresAt.Sub(now) > maxTTL {
 		return fmt.Errorf("computer capability: expiry exceeds maximum lifetime")
 	}
 	if !validCapabilityScopes(capability.Scopes) {

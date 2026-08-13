@@ -38,6 +38,7 @@ func NewHandler(service *Service) *Handler {
 
 type EventCapabilityAuthorizer interface {
 	Authorize(r *http.Request, computerID, requiredScope string) error
+	AuthorizeRenewal(r *http.Request, computerID string) error
 }
 
 func (h *Handler) ConfigureComputerEvents(cas *ComputerEventCAS, artifacts *EventArtifactService, auth EventCapabilityAuthorizer) error {

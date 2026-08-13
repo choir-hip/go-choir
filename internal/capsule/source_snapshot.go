@@ -386,3 +386,12 @@ func copyImmutableCommitTree(ctx context.Context, source, commit, target string)
 	}
 	return digest, nil
 }
+
+func requireFrozenComputerSurfaceSource(root string) error {
+	index := filepath.Join(filepath.Clean(root), "frontend", "index.html")
+	info, err := os.Stat(index)
+	if err != nil || info.IsDir() {
+		return fmt.Errorf("capsule freeze: computer-surface frontend source is underivable")
+	}
+	return nil
+}

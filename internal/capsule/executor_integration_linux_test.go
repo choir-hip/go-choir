@@ -29,11 +29,17 @@ func TestExecutorInheritedBrokerListenerEndToEnd(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(sourceDir, "README"), []byte("capsule integration source\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(sourceDir, "frontend"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "frontend", "index.html"), []byte("<html>computer</html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	for _, args := range [][]string{
 		{"init", "-q"},
 		{"config", "user.email", "capsule-integration@choir.invalid"},
 		{"config", "user.name", "Capsule Integration"},
-		{"add", "README"},
+		{"add", "README", "frontend/index.html"},
 		{"commit", "-q", "-m", "freeze integration source"},
 	} {
 		command := exec.Command("git", args...)

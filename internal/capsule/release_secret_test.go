@@ -102,6 +102,13 @@ func TestStageGrantedReleaseStagesRelativeUpperdirPaths(t *testing.T) {
 		if err := os.WriteFile(path, []byte("autoputer"), 0o755); err != nil {
 			t.Fatal(err)
 		}
+		frontend := filepath.Join(root, "var/lib/artifact/release/frontend/index.html")
+		if err := os.MkdirAll(filepath.Dir(frontend), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(frontend, []byte("<html>computer</html>"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -130,7 +137,7 @@ func TestStageGrantedReleaseStagesRelativeUpperdirPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 1 || files[0].Path != "bin/autoputer" || staged == "" {
+	if len(files) != 2 || files[0].Path != "bin/autoputer" || files[1].Path != "frontend/index.html" || staged == "" {
 		t.Fatalf("staged release files=%+v path=%q", files, staged)
 	}
 	if content, err := os.ReadFile(filepath.Join(staged, "bin/autoputer")); err != nil || string(content) != "autoputer" {
@@ -140,6 +147,46 @@ func TestStageGrantedReleaseStagesRelativeUpperdirPaths(t *testing.T) {
 	cancel()
 	if _, _, err := executor.StageGrantedRelease(ctx, "cosuper-success", "grant-success", incoming); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled release staging error = %v", err)
+	}
+}
+
+func TestStageGrantedReleaseRefusesMissingFrontend(t *testing.T) {
+	merged := t.TempDir()
+	upper := t.TempDir()
+	for _, root := range []string{merged, upper} {
+		path := filepath.Join(root, "var/lib/artifact/release/bin/autoputer")
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("autoputer"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := &Capability{
+		CapabilityID: "cap-missing-spa", Handle: "grant-missing-spa", CapsuleID: "capsule-missing-spa",
+		TargetCapsule: "capsule-missing-spa", AgentRunID: "cosuper-missing-spa", AgentRole: RoleCoSuper,
+		Verbs: RoleVerbSets[RoleCoSuper], ExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
+		t.Fatal(err)
+	}
+	executor := &Executor{
+		capsules: map[string]*Capsule{"capsule-missing-spa": {
+			ID: "capsule-missing-spa", State: StateFrozen, UpperDir: upper, MergedDir: merged, MemoryMax: 16 << 20,
+		}},
+		capabilities: map[capKey]*Capability{{AgentRunID: "cosuper-missing-spa", Handle: "grant-missing-spa"}: capability},
+		revokedCaps:  map[string]bool{}, publicKey: publicKey,
+	}
+	incoming := t.TempDir()
+	if err := os.Chmod(incoming, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := executor.StageGrantedRelease(context.Background(), "cosuper-missing-spa", "grant-missing-spa", incoming); err == nil || !strings.Contains(err.Error(), "frontend") {
+		t.Fatalf("missing frontend freeze error = %v", err)
 	}
 }
 
