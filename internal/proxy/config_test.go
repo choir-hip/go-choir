@@ -11,13 +11,20 @@ func TestLoadConfigDefaults(t *testing.T) {
 	origAuthKey := os.Getenv("AUTH_JWT_PRIVATE_KEY_PATH")
 	origCorpusdURL := os.Getenv("PROXY_CORPUSD_URL")
 	origMaildURL := os.Getenv("PROXY_MAILD_URL")
+	origShellRoot := os.Getenv("PROXY_PLATFORM_SHELL_ROOT")
 	_ = os.Unsetenv("PROXY_PORT")
 	_ = os.Unsetenv("PROXY_AUTOPUTER_URL")
 	_ = os.Unsetenv("PROXY_AUTH_PUBLIC_KEY_PATH")
 	_ = os.Unsetenv("PROXY_CORPUSD_URL")
 	_ = os.Unsetenv("PROXY_MAILD_URL")
+	_ = os.Unsetenv("PROXY_PLATFORM_SHELL_ROOT")
 	_ = os.Unsetenv("AUTH_JWT_PRIVATE_KEY_PATH")
 	t.Cleanup(func() {
+		if origShellRoot == "" {
+			_ = os.Unsetenv("PROXY_PLATFORM_SHELL_ROOT")
+		} else {
+			_ = os.Setenv("PROXY_PLATFORM_SHELL_ROOT", origShellRoot)
+		}
 		if origMaildURL == "" {
 			_ = os.Unsetenv("PROXY_MAILD_URL")
 		} else {
@@ -55,22 +62,32 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if cfg.MaildURL != DefaultMaildURL {
 		t.Errorf("MaildURL: got %q, want %q", cfg.MaildURL, DefaultMaildURL)
 	}
+	if cfg.PlatformShellRoot != "/var/www/go-choir/frontend-current" {
+		t.Errorf("PlatformShellRoot: got %q, want host platform shell", cfg.PlatformShellRoot)
+	}
 }
 
 func TestLoadConfigFromEnv(t *testing.T) {
 	origAuthKey := os.Getenv("AUTH_JWT_PRIVATE_KEY_PATH")
 	origCorpusdURL := os.Getenv("PROXY_CORPUSD_URL")
 	origMaildURL := os.Getenv("PROXY_MAILD_URL")
+	origShellRoot := os.Getenv("PROXY_PLATFORM_SHELL_ROOT")
 	_ = os.Setenv("PROXY_PORT", "9999")
 	_ = os.Setenv("PROXY_AUTOPUTER_URL", "http://example.com:8085")
 	_ = os.Setenv("PROXY_AUTH_PUBLIC_KEY_PATH", "/tmp/test-pub.key")
 	_ = os.Setenv("PROXY_CORPUSD_URL", "http://example.com:8086")
 	_ = os.Setenv("PROXY_MAILD_URL", "http://example.com:8087")
+	_ = os.Setenv("PROXY_PLATFORM_SHELL_ROOT", "/tmp/platform-shell")
 	_ = os.Unsetenv("AUTH_JWT_PRIVATE_KEY_PATH")
 	defer func() {
 		_ = os.Unsetenv("PROXY_PORT")
 		_ = os.Unsetenv("PROXY_AUTOPUTER_URL")
 		_ = os.Unsetenv("PROXY_AUTH_PUBLIC_KEY_PATH")
+		if origShellRoot == "" {
+			_ = os.Unsetenv("PROXY_PLATFORM_SHELL_ROOT")
+		} else {
+			_ = os.Setenv("PROXY_PLATFORM_SHELL_ROOT", origShellRoot)
+		}
 		if origMaildURL == "" {
 			_ = os.Unsetenv("PROXY_MAILD_URL")
 		} else {
@@ -107,6 +124,9 @@ func TestLoadConfigFromEnv(t *testing.T) {
 	}
 	if cfg.MaildURL != "http://example.com:8087" {
 		t.Errorf("MaildURL: got %q, want %q", cfg.MaildURL, "http://example.com:8087")
+	}
+	if cfg.PlatformShellRoot != "/tmp/platform-shell" {
+		t.Errorf("PlatformShellRoot: got %q, want %q", cfg.PlatformShellRoot, "/tmp/platform-shell")
 	}
 }
 

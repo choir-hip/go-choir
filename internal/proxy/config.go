@@ -52,6 +52,11 @@ type Config struct {
 	// auth is disabled and only cookie auth is used.
 	AuthDBPath string
 
+	// PlatformShellRoot is the host control-plane SPA (auth/picker chrome).
+	// It is OUT of restore and is served only to unauthenticated surface
+	// requests. Authenticated computer surface comes from the guest.
+	PlatformShellRoot string
+
 	// AllowDirectAutoputerForTests permits package tests to exercise proxying
 	// without constructing a vmctl service. Production configuration never sets
 	// this field; served routes otherwise fail closed without D-ROUTE authority.
@@ -98,6 +103,7 @@ func LoadConfig() (*Config, error) {
 		CorpusdURL:        envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL),
 		MaildURL:          envOr("PROXY_MAILD_URL", DefaultMaildURL),
 		AuthDBPath:        os.Getenv("PROXY_AUTH_DB_PATH"),
+		PlatformShellRoot: envOr("PROXY_PLATFORM_SHELL_ROOT", "/var/www/go-choir/frontend-current"),
 	}
 
 	if err := cfg.validate(); err != nil {

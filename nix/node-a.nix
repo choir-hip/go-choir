@@ -36,15 +36,10 @@
           respond "internal routes are not available from the public edge" 403
         }
         handle /assets/* {
-          root * /var/www/go-choir/frontend-current
-          header Cache-Control "public, max-age=31536000, immutable"
-          file_server
+          reverse_proxy 127.0.0.1:8082
         }
         handle {
-          root * /var/www/go-choir/frontend-current
-          header Cache-Control "no-store"
-          try_files {path} /index.html
-          file_server
+          reverse_proxy 127.0.0.1:8082
         }
       '';
     };

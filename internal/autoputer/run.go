@@ -376,6 +376,7 @@ func Run() {
 		health.HTTPChecker{NameStr: "ollama", URL: strings.TrimRight(rtCfg.OllamaURL, "/") + "/api/tags", Timeout: 2 * time.Second},
 	)
 	s.HandleFunc("/health/ready", health.ReadinessHandler("autoputer", readyAgg))
+	RegisterComputerSurface(s, NewComputerSurfaceFromEnv())
 
 	// Start the runtime engine and supervisor.
 	ctx, cancel := context.WithCancel(context.Background())

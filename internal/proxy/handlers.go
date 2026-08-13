@@ -1569,4 +1569,6 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/objects", h.HandlePlatformObjectGraph)
 	s.HandleFunc("/internal/platform/objects/", h.HandlePlatformObjectGraph)
 	s.HandleFunc("/internal/platform/edges", h.HandlePlatformObjectGraph)
+	s.HandleFunc("/assets/", h.HandleComputerSurface)
+	s.HandleFunc("/", h.HandleComputerSurface)
 }

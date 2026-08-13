@@ -119,15 +119,15 @@ measures:
 
 now:
   status: working
-  slice: "Destructive rematerialization is a tape-only product path: guest POST /lifecycle/rematerialize-from-tape, owner CLI choir computer rematerialize-from-tape, ReconstructInto into a sibling workspace, witness match, then quarantine original and flip. Pin checkout is refused. FrontendRestaged remains false. ReconstructInto replays the full chain, which equals through-target at sequence 1. Deployed rematerialization, checkpoint, and scope-refusal receipts remain required."
-  question: "Which of the three serving hops (guest-static, host-staging-keyed-by-computer, encapsulated-origin) does this Definition prove? Checkpoint witness, scope refusal, and rematerialization do not require the pick."
+  slice: "Serving hop is guest-static: guest serves CHOIR_UPDATER_ROOT/current/frontend; proxy reverse-proxies authenticated / and /assets/* after vmctl resolve; Caddy no longer file_servers host frontend-current as computer surface; unsigned callers get host platform-shell chrome (OUT of restore). Missing guest SPA is 503. FrontendRestaged remains false. Guest releases still omit frontend/ files, so authenticated surface is fail-closed until a release includes them."
+  question: "Can owner-reachable restore restage VM-local state and SPA bytes together, with capability renewal, on the retained computer? Guest-static is picked."
   reconciliation:
-    observed_at: 2026-08-13T18:35:00Z
-    source_ref: main@d2558168f4c51b3b0689cbb8c69e78b9e945adf8
-    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; d2558168 is the rematerialize product-path commit and is not yet a staging runtime identity"
+    observed_at: 2026-08-13T18:50:00Z
+    source_ref: main@e60321940c5a60986c598682da6ff4b6d1b62350
+    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; guest-static serving hop is local product-path code and is not yet a staging runtime identity"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13T18:35:00Z git status --short empty at d2558168
+    worktree_inventory_ref: 2026-08-13T18:50:00Z git status --short dirty with guest-static serving hop on e6032194
     status: reconciled
   candidate:
     id: none
@@ -142,8 +142,8 @@ now:
     recorded_at: 2026-08-13T17:14:50Z
     consequence: "Do not stop after the first slice. Continue until the finish artifact exists or a named blocker (fail-closed live-only rows, capability-renewal substrate, unpicked hop at slice 3) forces blocked_incomplete or a problem-documentation-first Define."
   evidence_refs: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, .agentic-consensus/tape-recovery-20260813/, internal/agentcore/replay_completeness.go]
-  blocker_or_risk: "Serving hop is unpicked (host-global Caddy). ReconstructThrough historical heads is not implemented; current rematerialize replays the full chain. Guest capability renewal recurrence remains a restore-proof gate. Deployed checkpoint, scope-refusal, and destructive rematerialization receipts are still owed. Fail-closed checkpoint may discover live-only rows on the retained sequence-1 computer."
-  next_action: "Pick and prove one per-computer serving hop for the computer-surface frontend (guest-static, host-staging-keyed-by-computer, or encapsulated-origin): split control-plane OUT from computer surface IN, freeze frontend source/artifacts through the capsule pipeline, select the computer's bytes only after vmctl route resolve. Staging still owes deployed checkpoint, scope-refusal, and destructive rematerialization receipts."
+  blocker_or_risk: "Guest releases currently omit frontend/ files, so checkpoint SPA binding and authenticated guest-static serving fail closed until a release includes them. ReconstructThrough historical heads is not implemented; current rematerialize replays the full chain and FrontendRestaged is false. Guest capability renewal recurrence remains a restore-proof gate. Deployed checkpoint, scope-refusal, destructive rematerialization, serving-join, and owner-reachable restore receipts are still owed. Fail-closed checkpoint may discover live-only rows on the retained sequence-1 computer."
+  next_action: "Land the guest-static red commit through origin/main and CI. Then make rematerialize restage SPA bytes (FrontendRestaged) and exercise owner-reachable whole-computer restore. Staging still owes deployed checkpoint, scope-refusal, destructive rematerialization, and serving-join receipts."
 
 receipts:
   - id: tape-recovery-draft-consensus-2026-08-13
@@ -209,6 +209,22 @@ receipts:
       deploy_ref: not_applicable
       environment_identity: not_applicable
       deployed_acceptance: pending (destructive_rematerialization)
+    registry_conformance_ref: not_applicable
+  - id: tape-recovery-serving-hop-guest-static-2026-08-13
+    boundary: implement
+    commit_or_artifact: internal/autoputer/computer_surface.go
+    proof_refs: [internal/autoputer/computer_surface_test.go, internal/proxy/computer_surface.go, internal/proxy/computer_surface_test.go, nix/node-b.nix]
+    rollback_ref: revert the guest-static serving-hop red commit
+    disposition: "accepted locally — hop is guest-static. Guest serves staged current/frontend; proxy selects bytes after vmctl resolve; two computers serve two UIs in tests; unsigned callers get host platform shell; Caddy no longer file_servers frontend-current as computer surface. Missing SPA is 503. Deployed serving-join with two divergent computers remains required. Guest releases still omit frontend/ files."
+    problem_ref: not_applicable
+    authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md, docs/memo-per-computer-frontend-2026-08-13.md]
+    landing:
+      source_commit: pending
+      ci_ref: pending
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: pending (serving_join)
     registry_conformance_ref: not_applicable
 
 view:

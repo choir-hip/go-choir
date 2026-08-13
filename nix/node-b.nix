@@ -192,18 +192,12 @@ in
           respond "internal routes are not available from the public edge" 403
         }
         handle /assets/* {
-          root * ${frontendRoot}
-          try_files /frontend-current{uri} /frontend-previous{uri}
-          header Cache-Control "public, max-age=31536000, immutable"
-          file_server
+          reverse_proxy 127.0.0.1:8082
         }
         handle {
-          root * ${frontendCurrent}
-          # The SPA shell must not be browser-cached. Vite content-hashes built
-          # assets, but index.html is the pointer to the current asset graph.
-          header Cache-Control "no-store"
-          try_files {path} /index.html
-          file_server
+          # Computer-surface HTML/assets are selected after vmctl resolve.
+          # Host frontend-current is platform-shell chrome only (unsigned).
+          reverse_proxy 127.0.0.1:8082
         }
       '';
     };
@@ -358,6 +352,9 @@ in
         "PROXY_VMCTL_TIMEOUT=60s"
         "PROXY_CORPUSD_URL=http://127.0.0.1:8086"
         "PROXY_MAILD_URL=http://127.0.0.1:8087"
+        # Unsigned / and /assets/* serve this host tree (picker/auth chrome).
+        # Authenticated computer surface is selected after vmctl resolve.
+        "PROXY_PLATFORM_SHELL_ROOT=${frontendCurrent}"
       ];
     };
   };
