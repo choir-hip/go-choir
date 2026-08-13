@@ -2263,15 +2263,17 @@ func TestAdapterSQLiteInjectionAppendRecoveryExecutesWithoutSnapshot(t *testing.
 	if got := counting.calls.Load(); got != 1 {
 		t.Fatalf("provider calls=%d", got)
 	}
+	var backlog []actor.Update
+	var unprocessedErr error
 	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		backlog, _ := adapter.log.Unprocessed(ctx, mailboxID)
-		if len(backlog) == 0 {
+		backlog, unprocessedErr = adapter.log.Unprocessed(ctx, mailboxID)
+		if unprocessedErr == nil && len(backlog) == 0 {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if backlog, err := adapter.log.Unprocessed(ctx, mailboxID); err != nil || len(backlog) != 0 {
-		t.Fatalf("malformed recovery poisoned FIFO backlog=%+v err=%v", backlog, err)
+	if unprocessedErr != nil || len(backlog) != 0 {
+		t.Fatalf("malformed recovery poisoned FIFO backlog=%+v err=%v", backlog, unprocessedErr)
 	}
 }
 
