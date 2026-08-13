@@ -1,7 +1,7 @@
 # Candidate Realizations Never Reach Readiness and Are Killed Every 180 Seconds
 
 **Date:** 2026-08-13  
-**Status:** root causes isolated; repair pending
+**Status:** repaired
 **Classification:** VM lifecycle, guest readiness, and staging operability  
 **Mutation class of a repair:** red
 
@@ -117,10 +117,10 @@ a diagnostic shortcut.
   path; a separate stale platform candidate cannot migrate orphaned legacy
   actor mailboxes;
 - `introduced`: none;
-- `repaired`: credential lifecycle receipts now verify against the exact
-  current signer, and the bootstrap resolver trusts the current signer instead
-  of failing on a post-genesis guard; both keep control-key history as the
-  rotation-aware path.
+- `repaired`: credential receipts verify against the exact current signer;
+  bootstrap resolver trusts the current signer instead of failing on a
+  post-genesis guard; mailbox migration prunes orphaned legacy mailboxes;
+  both candidate realizations are active/ready on db265d1e.
 
 ## Next Probe
 

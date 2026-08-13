@@ -251,20 +251,20 @@ measures:
 
 now:
   status: working
-  slice: "Bootstrap and replay eligibility remain accepted at sequence 1. Retained-computer availability was blocked by one substrate defect on two receipt paths: bootstrapControlKeyResolver refused current-key fallback after genesis because control_key_history held no platform-signer row, so corpusd rejected its own issuance receipt and the guest rejected the canonical event-head receipt. The 180-second vmctl kill is the configured readiness consequence, not the cause. Credential receipts now verify against the exact current signer, and the bootstrap resolver trusts the current signer; both keep control-key history as the rotation-aware path. Checkpoint completeness remains paused behind deployed acceptance."
-  question: "Does trusting the current platform signer restore the retained candidate without expanding event-receipt authority?"
+  slice: "The staging readiness incident is resolved. Both candidate realizations are active/ready on db265d1e after three substrate fixes: credential receipts verify against the exact current signer, the bootstrap resolver trusts the current signer (control-key history kept as the rotation-aware path), and mailbox migration prunes orphaned legacy mailboxes. Checkpoint completeness is the next slice: bind the canonical head plus CodeRef, ArtifactProgramRef, and a VM-local content witness, refusing unreproducible behavior-bearing writes."
+  question: "Does checkpoint creation bind the retained computer's event head plus CodeRef, ArtifactProgramRef, and VM-local witness, and refuse unreproducible behavior-bearing state?"
 
   reconciliation:
-    observed_at: 2026-08-13T03:50:00Z
-    source_ref: main@ca138dff3a434e6a60ab824afe65f327bb8b0ecb
-    deploy_identity: "staging commit 633131aa0521bd1a427f335e147610a314829886; retained computer computer-03335285269bdba4f94377e56879f9e6 unreachable because corpusd rejects its established-head credential issuance receipt with bootstrap key absent after genesis; vmctl enforces the configured 180-second readiness deadline; separate platform candidate d03dacaa fails orphan legacy-mailbox migration"
+    observed_at: 2026-08-13T14:10:00Z
+    source_ref: main@db265d1e32e73ab4c51914332eaf6fb55f62a09c
+    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 and platform computer computer-4c20ff4a21a021c4306d8c783be0037d both active/ready; legacy platform primary vm-universal-wire-platform discarded"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: 2026-08-13 read-only git status before incident documentation (clean at ca138dff)
-    status: divergent
+    status: reconciled
 
-  blocker_or_risk: "Retained-computer bootstrap is unavailable after genesis because the bootstrap resolver refused current-key fallback when control_key_history is empty; the same guard blocked credential and event-head receipts. The fix trusts the current signer for this slice and keeps control-key history as the rotation-aware path. The platform candidate's orphan mailbox failure is separate. Primaries remain on prior realizations and must not be upgraded until retained-candidate acceptance survives beyond two prior kill windows. Problem receipt: docs/problems/candidate-realization-readiness-kill-loop-2026-08-13.md."
-  next_action: "Deploy the current-signer fix for both receipt paths, prove the retained candidate survives beyond 360 seconds with guest API and product-path acceptance, then resume checkpoint completeness. Keep the platform candidate recovery separate."
+  blocker_or_risk: "The kill-loop slice is closed. Residual risks: key rotation (control_key_history still has no platform-signer row) and the legacy owner primary vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19 (28-day-old code, superseded by the retained candidate, not yet retired). Neither blocks checkpoint design. Problem receipt: docs/problems/candidate-realization-readiness-kill-loop-2026-08-13.md."
+  next_action: "Design checkpoint completeness against the retained computer's accepted canonical head and replay-equivalent projection; retire the legacy owner primary as adjacent VM-lifecycle cleanup with a recorded data-loss acceptance."
 
   candidate:
     id: none
