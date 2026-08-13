@@ -1555,6 +1555,43 @@ func TestAdapterStartRefusesConflictingAgentAndRunWitnesses(t *testing.T) {
 	}
 }
 
+func TestAdapterStartPrunesOrphanedLegacyMailbox(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "orphan-legacy-mailbox.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	cfg := provideriface.Config{ComputerID: "autoputer-legacy", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts")}
+	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
+	t.Cleanup(func() {
+		adapter.Stop()
+		adapter.cleanupLog()
+		_ = s.Close()
+	})
+	now := time.Now().UTC()
+	const orphanID = "00dba6bf-6c03-4fce-853d-087e3f08a72d"
+	if appended, err := adapter.log.Append(ctx, actor.Update{
+		UpdateID: "orphan-update", ToAgentID: orphanID, Kind: "coagent_result", CreatedAt: now,
+	}); err != nil || !appended {
+		t.Fatalf("append orphan mailbox: appended=%v err=%v", appended, err)
+	}
+	if err := adapter.log.SaveSnapshot(ctx, orphanID, []byte(`{"phase":"parked"}`)); err != nil {
+		t.Fatalf("save orphan snapshot: %v", err)
+	}
+	if err := adapter.Start(ctx); err != nil {
+		t.Fatalf("start with orphaned legacy mailbox: %v", err)
+	}
+	identities, err := adapter.log.MailboxIdentities(ctx)
+	if err != nil || len(identities) != 0 {
+		t.Fatalf("mailbox identities after orphan prune: %q, %v; want empty", identities, err)
+	}
+	if memory, err := adapter.log.LoadSnapshot(ctx, orphanID); err != nil || memory != nil {
+		t.Fatalf("orphan snapshot survived prune: %q, %v", memory, err)
+	}
+}
+
 func TestAdapterLegacyMailboxMigrationConvergesMixedBatchAndRepeats(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

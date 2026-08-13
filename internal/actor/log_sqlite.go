@@ -247,3 +247,53 @@ func (l *SQLiteLog) RebindMailboxes(ctx context.Context, plan []MailboxRebind) (
 	}
 	return changed, nil
 }
+
+// PruneMailboxes atomically removes orphaned legacy mailbox identities that
+// have no surviving agent or run witness. It must only be called for mailboxes
+// the store cannot resolve to an owner; ambiguity and other resolution errors
+// fail closed before this method runs.
+func (l *SQLiteLog) PruneMailboxes(ctx context.Context, mailboxIDs []string) (bool, error) {
+	if len(mailboxIDs) == 0 {
+		return false, nil
+	}
+	seen := make(map[string]struct{}, len(mailboxIDs))
+	for _, id := range mailboxIDs {
+		if id == "" {
+			return false, fmt.Errorf("actor log prune requires non-empty mailbox identity")
+		}
+		if _, duplicate := seen[id]; duplicate {
+			return false, fmt.Errorf("actor log prune duplicates identity %q", id)
+		}
+		seen[id] = struct{}{}
+	}
+	tx, err := l.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("actor log prune begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	changed := false
+	for _, id := range mailboxIDs {
+		updateResult, err := tx.ExecContext(ctx, `DELETE FROM actor_updates WHERE to_agent_id = ?`, id)
+		if err != nil {
+			return false, fmt.Errorf("actor log prune updates: %w", err)
+		}
+		snapshotResult, err := tx.ExecContext(ctx, `DELETE FROM actor_snapshots WHERE agent_id = ?`, id)
+		if err != nil {
+			return false, fmt.Errorf("actor log prune snapshot: %w", err)
+		}
+		updateCount, err := updateResult.RowsAffected()
+		if err != nil {
+			return false, fmt.Errorf("actor log prune update count: %w", err)
+		}
+		snapshotCount, err := snapshotResult.RowsAffected()
+		if err != nil {
+			return false, fmt.Errorf("actor log prune snapshot count: %w", err)
+		}
+		changed = changed || updateCount > 0 || snapshotCount > 0
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("actor log prune commit: %w", err)
+	}
+	return changed, nil
+}

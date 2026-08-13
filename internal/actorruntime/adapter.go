@@ -442,18 +442,32 @@ func (a *Adapter) migrateLegacyActorMailboxes(ctx context.Context) error {
 		return fmt.Errorf("inspect durable mailbox identities: %w", err)
 	}
 	plan := make([]actor.MailboxRebind, 0)
+	var orphans []string
 	for _, mailboxID := range mailboxIDs {
 		if _, _, _, parseErr := parseScopedActorMailboxID(mailboxID); parseErr == nil {
 			continue
 		}
 		agent, resolveErr := a.store.ResolveLegacyAgentScope(ctx, a.cfg.ComputerID, mailboxID)
 		if resolveErr != nil {
+			if errors.Is(resolveErr, store.ErrNotFound) {
+				orphans = append(orphans, mailboxID)
+				continue
+			}
 			return fmt.Errorf("resolve legacy durable mailbox %q: %w", mailboxID, resolveErr)
 		}
 		plan = append(plan, actor.MailboxRebind{
 			LegacyID: mailboxID,
 			ScopedID: scopedActorMailboxID(agent.OwnerID, agent.ComputerID, agent.AgentID),
 		})
+	}
+	if len(orphans) > 0 {
+		pruned, pruneErr := a.log.PruneMailboxes(ctx, orphans)
+		if pruneErr != nil {
+			return fmt.Errorf("prune orphaned legacy durable mailboxes: %w", pruneErr)
+		}
+		if pruned {
+			log.Printf("actorruntime: pruned %d orphaned legacy durable mailboxes", len(orphans))
+		}
 	}
 	migrated, err := a.log.RebindMailboxes(ctx, plan)
 	if err != nil {
