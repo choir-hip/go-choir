@@ -263,6 +263,10 @@ func TestLifecycleTextureResearcherOpenerDerivesIdentitiesAndCommitsBeforeWake(t
 	if err != nil || len(controls) != 1 || controls[0].OpenAgent == nil || controls[0].OpenWork == nil || !strings.HasPrefix(controls[0].TargetAgentID, "researcher:") || controls[0].OpenAgent.AgentID != controls[0].TargetAgentID || controls[0].OpenWork.WorkItemID != controls[0].TargetWorkItemID {
 		t.Fatalf("runtime-derived Researcher opener=%+v err=%v", controls, err)
 	}
+	openWork := controls[0].OpenWork
+	if openWork.CreatedByRunID != run.RunID || openWork.Details["requested_by_profile"] != "texture" || openWork.Details["requested_by_agent_id"] != run.AgentID || openWork.Details["requested_by_run_id"] != run.RunID {
+		t.Fatalf("Researcher work item lacks requester Texture binding: %+v", openWork)
+	}
 	if _, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, controls[0].TargetAgentID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("Researcher agent existed before atomic turn: %v", err)
 	}

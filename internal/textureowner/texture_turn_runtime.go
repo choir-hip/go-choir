@@ -131,6 +131,12 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 				WorkItemID: targetWorkItemID, Objective: strings.TrimSpace(raw.Objective),
 				AuthorityProfile: agentprofile.Researcher, Status: types.WorkItemOpen,
 				AssignedAgentID: targetAgentID,
+				CreatedByRunID:  rec.RunID,
+				Details: map[string]any{
+					"requested_by_profile":  agentprofile.Texture,
+					"requested_by_agent_id": rec.AgentID,
+					"requested_by_run_id":   rec.RunID,
+				},
 			}
 			openAgent, openWork = &agent, &work
 		} else {
