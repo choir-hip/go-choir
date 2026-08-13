@@ -119,15 +119,15 @@ measures:
 
 now:
   status: blocked_incomplete
-  slice: "Owner product path cannot reach an eligible computer. Staging remains 8a172b84. Retained computer computer-03335285269bdba4f94377e56879f9e6 is the only interactive VM (desktop primary, epoch 252, active, self-dev mode off). choir computer create is unknown. vmctl resolve provisions only the primary desktop. Checkpoint bind reconfirmed HTTP 409 served SPA is underivable. Replay-completeness now HTTP 500 guest credential renewal refused. Four deployed receipts remain unpaid. Do not rematerialize this computer."
+  slice: "Owner product path cannot reach an eligible computer. Staging remains 8a172b84. GET /api/compute/status enumerates exactly one interactive computer: computer-03335285269bdba4f94377e56879f9e6 (desktop primary, epoch 252, active). Checkpoint bind reconfirmed HTTP 409 served SPA is underivable. Replay-completeness remains HTTP 500 guest credential renewal refused. Four deployed receipts remain unpaid. Do not rematerialize this computer."
   question: "What owner-reachable product path can provision a computer with event-derivable VM-local rows and staged frontend/ without destroying the retained computer's live-only rows?"
   reconciliation:
-    observed_at: 2026-08-13T21:06:30Z
-    source_ref: main@a1efef3a1cef0edc23a2a17ab6446d0cca66cbc0
-    deploy_identity: "staging deployed 8a172b84f7285a83d3c502ad2e9e7c2ed4b65307 at 2026-08-13T20:45:20Z; retained computer computer-03335285269bdba4f94377e56879f9e6 active at realization epoch 252 desktop primary; capability renewal refused; checkpoint bind still HTTP 409"
+    observed_at: 2026-08-13T21:12:19Z
+    source_ref: main@9183c04c
+    deploy_identity: "staging deployed 8a172b84f7285a83d3c502ad2e9e7c2ed4b65307 at 2026-08-13T20:45:20Z; compute-status lists one interactive computer computer-03335285269bdba4f94377e56879f9e6 epoch 252; checkpoint bind still HTTP 409; capability renewal refused"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13T21:06:30Z git status --short dirty with this now reconcile plus docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json
+    worktree_inventory_ref: 2026-08-13T21:12:19Z git status --short dirty with this now reconcile plus docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json
     status: reconciled
   candidate:
     id: none

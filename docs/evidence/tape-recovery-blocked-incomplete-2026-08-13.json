@@ -1,14 +1,14 @@
 {
-  "captured_at": "2026-08-13T21:06:30Z",
+  "captured_at": "2026-08-13T21:12:19Z",
   "staging_deployed_commit": "8a172b84f7285a83d3c502ad2e9e7c2ed4b65307",
   "staging_deployed_at": "2026-08-13T20:45:20Z",
-  "source_head": "a1efef3a1cef0edc23a2a17ab6446d0cca66cbc0",
+  "source_head": "9183c04c",
   "health": {
     "status": "ok",
     "deployed_commit": "8a172b84f7285a83d3c502ad2e9e7c2ed4b65307",
     "surface_total_by_status": {
       "http_503": 1,
-      "platform_shell": 2
+      "platform_shell": 5
     }
   },
   "computer": {
@@ -44,7 +44,7 @@
       "error": "self-development checkpoint: served SPA is underivable"
     },
     "published": false,
-    "reconfirmed_at": "2026-08-13T21:06:30Z"
+    "reconfirmed_at": "2026-08-13T21:12:19Z"
   },
   "prior_receipts": {
     "scope_refusal": "paid HTTP 400 platform and cycle",
@@ -79,7 +79,7 @@
     "Do not SSH staging",
     "Do not stamp complete"
   ],
-  "reconfirmed_at": "2026-08-13T21:06:30Z",
+  "reconfirmed_at": "2026-08-13T21:12:19Z",
   "capability": {
     "replay_completeness": {
       "status": 500,
@@ -91,5 +91,22 @@
     "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
     "mode": "off",
     "generation": 0
+  },
+  "compute_status": {
+    "path": "/api/compute/status",
+    "status": 200,
+    "computers": [
+      {
+        "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+        "desktop_id": "primary",
+        "role": "primary",
+        "kind": "interactive",
+        "state": "active",
+        "epoch": 252
+      }
+    ],
+    "computer_count": 1,
+    "guest_route_code_commit": "7122f2799be4458f4b925be11990321c7e70ffc4",
+    "note": "Owner-wide GET /api/compute/status enumerates exactly one interactive computer. Guest ComputerVersion remains bootstrap identity 7122f279; platform proxy is 8a172b84. Divergence is expected until restore; it does not mint a second computer or staged frontend/."
   }
 }
