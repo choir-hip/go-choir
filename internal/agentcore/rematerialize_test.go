@@ -497,3 +497,87 @@ func TestRestoreFromTapeAppendsIntentAndStopsAtTarget(t *testing.T) {
 		t.Fatalf("restored projection %+v replayed past the checkpoint head", head)
 	}
 }
+
+func TestCheckpointBindRefusesWhenAuthorityUnavailable(t *testing.T) {
+	computerID := "computer-checkpoint-unavailable"
+	rt := &Runtime{cfg: provideriface.Config{ComputerID: computerID}}
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/checkpoint", nil)
+	request.Header.Set("X-Authenticated-User", "owner-checkpoint")
+	request.Header.Set("X-Authenticated-Computer", computerID)
+	response := httptest.NewRecorder()
+	NewAPIHandler(rt).HandleComputersRouter(response, request)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("checkpoint status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestCheckpointBindRefusesLiveOnlyRowsAndMissingSPA(t *testing.T) {
+	computerID := "computer-checkpoint-ineligible"
+	storePath := filepath.Join(t.TempDir(), "runtime.db")
+	live, err := choirstore.Open(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	rt, _, _ := rematerializeTapeRuntime(t, computerID, storePath, live)
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/checkpoint", nil)
+	request.Header.Set("X-Authenticated-User", "owner-checkpoint")
+	request.Header.Set("X-Authenticated-Computer", computerID)
+	response := httptest.NewRecorder()
+	NewAPIHandler(rt).HandleComputersRouter(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "served SPA is underivable") {
+		t.Fatalf("missing SPA checkpoint status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	updaterRoot := filepath.Join(t.TempDir(), "updater")
+	digest, _ := pinFrontendRelease(t, updaterRoot, computerID, "<html>checkpoint</html>")
+	pointCurrent(t, updaterRoot, digest)
+	rt.selfdevUpdaterRoot = updaterRoot
+	if _, err := live.DB().ExecContext(context.Background(), "CREATE TABLE rematerialize_live_only (id VARCHAR(64) PRIMARY KEY, value VARCHAR(64) NOT NULL)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := live.DB().ExecContext(context.Background(), "INSERT INTO rematerialize_live_only (id, value) VALUES ('live', 'only')"); err != nil {
+		t.Fatal(err)
+	}
+	request = httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/checkpoint", nil)
+	request.Header.Set("X-Authenticated-User", "owner-checkpoint")
+	request.Header.Set("X-Authenticated-Computer", computerID)
+	response = httptest.NewRecorder()
+	NewAPIHandler(rt).HandleComputersRouter(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "replay is ineligible") {
+		t.Fatalf("live-only checkpoint status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestCheckpointBindAcceptsEligibleRestoreSet(t *testing.T) {
+	computerID := "computer-checkpoint-eligible"
+	storePath := filepath.Join(t.TempDir(), "runtime.db")
+	live, err := choirstore.Open(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	rt, _, _ := rematerializeTapeRuntime(t, computerID, storePath, live)
+	updaterRoot := filepath.Join(t.TempDir(), "updater")
+	digest, identity := pinFrontendRelease(t, updaterRoot, computerID, "<html>checkpoint</html>")
+	pointCurrent(t, updaterRoot, digest)
+	rt.selfdevUpdaterRoot = updaterRoot
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/checkpoint", nil)
+	request.Header.Set("X-Authenticated-User", "owner-checkpoint")
+	request.Header.Set("X-Authenticated-Computer", computerID)
+	response := httptest.NewRecorder()
+	NewAPIHandler(rt).HandleComputersRouter(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("eligible checkpoint status=%d body=%s", response.Code, response.Body.String())
+	}
+	var report CheckpointBindReport
+	if err := json.Unmarshal(response.Body.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if !report.CheckpointEligible || report.ReleaseDigest != digest || report.FrontendIdentity != identity {
+		t.Fatalf("unexpected checkpoint bind %#v", report)
+	}
+	if err := report.VMLocalContentWitness.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

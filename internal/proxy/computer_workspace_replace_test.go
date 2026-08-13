@@ -30,6 +30,12 @@ func TestParseComputerLifecyclePathRejectsWorkspaceReplace(t *testing.T) {
 	if _, ok := computerRestoreComputerID("/api/computers/computer-a/lifecycle/restore"); !ok {
 		t.Fatal("tape restore path should parse")
 	}
+	if _, _, ok := parseComputerLifecyclePath("/api/computers/computer-a/lifecycle/checkpoint"); ok {
+		t.Fatal("checkpoint bind must not use VM lifecycle control")
+	}
+	if _, ok := computerCheckpointComputerID("/api/computers/computer-a/lifecycle/checkpoint"); !ok {
+		t.Fatal("checkpoint bind path should parse")
+	}
 	for path, want := range map[string]bool{
 		"/api/computers/computer-a/lifecycle/replace-workspace":        true,
 		"/api/computers//lifecycle/replace-workspace":                  false,

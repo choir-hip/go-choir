@@ -306,6 +306,66 @@ func (rt *Runtime) appendRestoreIntent(ctx context.Context, computerID string, c
 	return nil
 }
 
+func (h *APIHandler) bindComputerCheckpoint(w http.ResponseWriter, r *http.Request, computerID string) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if h == nil || h.rt == nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "tape checkpoint authority unavailable"})
+		return
+	}
+	if r.Body != nil {
+		defer r.Body.Close()
+	}
+	report, err := h.rt.BindCheckpointRestoreSet(r.Context(), computerID)
+	if err != nil {
+		status := http.StatusConflict
+		if errors.Is(err, ErrRematerializeUnavailable) || errors.Is(err, ErrReplayCompletenessUnavailable) {
+			status = http.StatusServiceUnavailable
+		}
+		writeAPIJSON(w, status, apiError{Error: err.Error()})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, report)
+}
+
+type CheckpointBindReport struct {
+	ComputerID            string                                `json:"computer_id"`
+	CheckpointEligible    bool                                  `json:"checkpoint_eligible"`
+	ReleaseDigest         string                                `json:"release_digest"`
+	VMLocalContentWitness selfdevprotocol.VMLocalContentWitness `json:"vm_local_content_witness"`
+	FrontendIdentity      selfdevprotocol.FrontendIdentity      `json:"frontend_identity"`
+}
+
+func (rt *Runtime) BindCheckpointRestoreSet(ctx context.Context, computerID string) (CheckpointBindReport, error) {
+	var report CheckpointBindReport
+	if rt == nil || rt.store == nil || rt.eventAppender == nil {
+		return report, fmt.Errorf("%w: event projection authority is not configured", ErrRematerializeUnavailable)
+	}
+	computerID = strings.TrimSpace(computerID)
+	if computerID == "" || computerID != strings.TrimSpace(rt.cfg.ComputerID) {
+		return report, fmt.Errorf("%w: computer binding does not match runtime", ErrRematerializeUnavailable)
+	}
+	if strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
+		return report, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+	}
+	manifest, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot)
+	if err != nil {
+		return report, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+	}
+	witness, frontend, err := rt.checkpointRestoreBindings(ctx, computerID, manifest.ContentDigest, manifest.Files)
+	if err != nil {
+		return report, err
+	}
+	report.ComputerID = computerID
+	report.CheckpointEligible = true
+	report.ReleaseDigest = manifest.ContentDigest
+	report.VMLocalContentWitness = witness
+	report.FrontendIdentity = frontend
+	return report, nil
+}
+
 func (rt *Runtime) verifyPinnedFrontend(checkpoint selfdevprotocol.Checkpoint) (string, error) {
 	if rt == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
 		return "", fmt.Errorf("rematerialize: served SPA is underivable")

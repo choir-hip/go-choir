@@ -1102,6 +1102,30 @@ func TestComputerRematerializeFromTapeUsesProductPath(t *testing.T) {
 	}
 }
 
+func TestComputerCheckpointUsesProductPath(t *testing.T) {
+	var method, path string
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method = r.Method
+		path = r.URL.Path
+		if r.Body != nil {
+			defer r.Body.Close()
+			_, _ = io.ReadAll(r.Body)
+		}
+		_, _ = io.WriteString(w, `{"computer_id":"computer-1","checkpoint_eligible":false}`)
+	}))
+	defer stub.Close()
+	var out, errOut bytes.Buffer
+	if code := run([]string{"computer", "checkpoint", "--host=" + stub.URL, "--computer=computer-1"}, &out, &errOut); code != 0 {
+		t.Fatalf("computer checkpoint code = %d, stderr=%s", code, errOut.String())
+	}
+	if method != http.MethodPost || path != "/api/computers/computer-1/lifecycle/checkpoint" {
+		t.Fatalf("checkpoint request method=%s path=%s", method, path)
+	}
+	if strings.Contains(path, "self-development/genesis") {
+		t.Fatal("checkpoint used genesis")
+	}
+}
+
 func TestComputerRestoreUsesProductPath(t *testing.T) {
 	var method, path, body string
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

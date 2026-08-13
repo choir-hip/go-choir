@@ -223,6 +223,10 @@ func computerRestoreComputerID(path string) (string, bool) {
 	return computerLifecycleGuestComputerID(path, "restore")
 }
 
+func computerCheckpointComputerID(path string) (string, bool) {
+	return computerLifecycleGuestComputerID(path, "checkpoint")
+}
+
 func isComputerWorkspaceReplacePath(path string) bool {
 	_, ok := computerWorkspaceReplaceComputerID(path)
 	return ok
@@ -238,6 +242,11 @@ func isComputerRestorePath(path string) bool {
 	return ok
 }
 
+func isComputerCheckpointPath(path string) bool {
+	_, ok := computerCheckpointComputerID(path)
+	return ok
+}
+
 func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.Request) {
 	computerID, ok := computerWorkspaceReplaceComputerID(r.URL.Path)
 	if !ok {
@@ -245,6 +254,9 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 	}
 	if !ok {
 		computerID, ok = computerRestoreComputerID(r.URL.Path)
+	}
+	if !ok {
+		computerID, ok = computerCheckpointComputerID(r.URL.Path)
 	}
 	if !ok {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
