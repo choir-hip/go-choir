@@ -21,12 +21,13 @@ Wire — follows it.
 is owner-ratified and supersedes Continuous Texture
 Supervision (CTS) as of 2026-08-11 and corrected by owner direction on
 2026-08-13. Proof target is **policy-governed autonomy**: capsule-authored
-source change under effect-specific qualified consensus, E2 correction and
-acceptance-fenced restore of VM-local state + release, plus one exact
+source change under effect-specific qualified consensus, E2 correction, and
+acceptance-fenced restore through the tape-recovery substrate (VM-local
+projection plus computer-surface frontend), plus one exact
 irreversible email send under a stronger no-human-seat acceptance policy with
 durable delivery and consequence receipts (platform/cycle OUT of restore;
 computer-surface frontend is per-computer by invariant and currently
-host-global, so not yet restorable).
+host-global until tape-recovery proves the serving join).
 Reasoning and retired approaches live in the Definition's
 [supplement](definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md).
 Its restore legs — checkpoint completeness, revert build, scope refusal,
@@ -66,8 +67,9 @@ Historical handoff, guest-prefix, mailbox, and terminal-boot receipts remain in
 [the joined runtime review](evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md)
 and [its requirement audit](evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md).
 They are historical evidence, not rollback or live schedule; effects remain OFF
-until the active Definition's decision-policy rehearsal gates pass. The current
-slice and `next_action` live only in that Definition.
+until the tape-recovery restore proof and the effects Definition's
+decision-policy rehearsal gates pass. The current executable slice and
+`next_action` live only in the tape-recovery Definition.
 
 Completed Definitions are historical evidence, not executable entrypoints; full
 claims and receipts remain in their source files and `mission-graph.yaml`:
@@ -118,10 +120,13 @@ superseded, or historical as stated by their source Definitions, not entrypoints
 
 ## Invocation
 
-Invoke the active supervised self-development Definition through
-`/goal docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`.
+Invoke the owner-priority tape-recovery Definition through
+`/goal docs/definitions/choir-tape-recovery-2026-08-13.md`.
 Its `now.*` and `finish.*` own the current product schedule. After it reaches
-`complete` and the registries promote the successor, invoke
+`complete`, invoke
+`/goal docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`
+for the decision-policy envelope. After that reaches `complete` and the
+registries promote the successor, invoke
 `/goal docs/definitions/choir-private-go-actor-kernel-2026-08-12.md`.
 The successor is owner-ratified architecture authority but is not concurrently
 executable. Historical CTS, convergence, performance, Choir-in-Choir, and

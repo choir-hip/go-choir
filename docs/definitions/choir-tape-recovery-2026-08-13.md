@@ -119,18 +119,31 @@ measures:
 
 now:
   status: working
-  slice: "Draft reviewed by an agentic-consensus panel (approve-with-conditions); adjudicating the conditions into the Definition before implementation: effects carve-out, destructive tape-only rematerialization, pin-checkout as evidence-only, owner-reachable restore, capability-renewal gate, forward-restore head/witness identities, narrowed restore-set claim, owned serving hop, scope refusal, memo-sequencing supersession."
-  question: "Does the revised acceptance floor prove destructive tape-only whole-computer restore (state and surface) through the product path, and is the effects carve-out clean?"
+  slice: "Define reconcile after landing: registry is flipped and the effects carve-out leftovers are closed. /goal continues through all five acceptance actions; first implementation is checkpoint witness plus scope refusal."
+  question: "Which of the three serving hops (guest-static, host-staging-keyed-by-computer, encapsulated-origin) does this Definition prove? Checkpoint witness and scope refusal do not require the pick."
   reconciliation:
-    observed_at: 2026-08-13T16:30:00Z
-    source_ref: main@f4a72d8b
-    deploy_identity: "staging deployed db265d1e; retained computer active/ready; legacy primaries retired"
+    observed_at: 2026-08-13T17:14:50Z
+    source_ref: main@0c16d8f754691045ad605c2f595cf671f805159d
+    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; docs commits 1ecbf9e6 and 0c16d8f7 are docs-only and not a staging runtime identity"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13 read-only git status before drafting
+    worktree_inventory_ref: 2026-08-13T17:14:50Z git status --short empty at 0c16d8f7
     status: reconciled
-  blocker_or_risk: "Rematerialization has no runtime path; ProjectionMaterializer is non-runtime. Guest capability renewal recurrence is a residual on the tape-replay path and is now a gate. The frontend serving hop is host-global Caddy with no proven topology. The effects Definition must be carved so restore is single-writer."
-  next_action: "Land the revised Definition and registry carve-out; then implement in order: checkpoint witness and scope refusal, destructive rematerialization, owned serving hop, owner-reachable whole-computer restore with capability-renewal proof."
+  candidate:
+    id: none
+    state: none
+  decision:
+    selected: "Execute /goal through all five acceptance actions until complete, blocked_incomplete, or superseded. Reconstruction product path is Runtime.ReplayCompleteness (event-chain reconstruct into a disposable workspace, then a destructive restage), not ProjectionMaterializer. Pin checkout is evidence-only and cannot complete this Definition. Serving hop remains the slice-3 pick among the three named topologies; checkpoint witness and scope refusal do not require it. Capability renewal is a gate on the restore proof, not a reason to delay checkpoint work. Local tests are slice evidence; complete requires the deployed staging receipts."
+    kind: operational
+    status: settled
+    source: orchestrator
+    evidence_ref: "docs/definitions/choir-tape-recovery-2026-08-13.md finish.acceptance; internal/agentcore/replay_completeness.go; .agentic-consensus/tape-recovery-20260813/"
+    owner_ratification_ref: "owner direction 2026-08-13 (tape-based recovery is the priority); panel approve-with-conditions adjudicated into this Definition"
+    recorded_at: 2026-08-13T17:14:50Z
+    consequence: "Do not stop after the first slice. Continue until the finish artifact exists or a named blocker (fail-closed live-only rows, capability-renewal substrate, unpicked hop at slice 3) forces blocked_incomplete or a problem-documentation-first Define."
+  evidence_refs: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, .agentic-consensus/tape-recovery-20260813/, internal/agentcore/replay_completeness.go]
+  blocker_or_risk: "Rematerialization has no runtime restore path; ReplayCompleteness is a diagnostic probe, not a destructive restage. Guest capability renewal recurrence remains a restore-proof gate. The frontend serving hop is host-global Caddy with no pick among the three topologies. Fail-closed checkpoint may discover live-only rows on the retained sequence-1 computer."
+  next_action: "Implement checkpoint witness and scope refusal (tests first): bind event head + CodeRef + ArtifactProgramRef + VM-local Dolt content witness + frontend identity; refuse checkpoint while any behavior-bearing VM-local row is not event- or receipt-derivable or the served SPA is underivable; refuse a restore that would touch platform or cycle state. Continue through rematerialization, serving hop, and owner-reachable restore unless a named blocker stops the run."
 
 receipts:
   - id: tape-recovery-draft-consensus-2026-08-13
@@ -138,17 +151,33 @@ receipts:
     commit_or_artifact: .agentic-consensus/tape-recovery-20260813/
     proof_refs: [".agentic-consensus/tape-recovery-20260813/manifest.tsv (6 succeeded, 1 failed devin, 1 timed-out deepseek)"]
     rollback_ref: not_applicable (draft review)
-    disposition: "approved with conditions; ten conditions adjudicated into this revision"
+    disposition: "approved with conditions; ten conditions adjudicated into this revision; landed 1ecbf9e6 (Definition + registry) and 0c16d8f7 (effects restore-leg carve-out)"
     problem_ref: not_applicable
     authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
     candidate_or_evidence_refs: [docs/memo-per-computer-frontend-2026-08-13.md]
     landing:
-      source_commit: not_applicable until committed
+      source_commit: 1ecbf9e6
       ci_ref: local doccheck pass
       deploy_ref: not_applicable
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
-    registry_conformance_ref: "pending atomic registration across docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml"
+    registry_conformance_ref: "registered 2026-08-13 in 1ecbf9e6 across docs/ACTIVE.md Active Definition, docs/mission-graph.yaml entrypoint true, docs/doc-authority-manifest.yaml authority/entry; effects restore-leg carve-out in 0c16d8f7; ACTIVE Invocation and residual effects restore claims closed in the 2026-08-13 Define reconcile"
+  - id: tape-recovery-define-reconcile-2026-08-13
+    boundary: define
+    commit_or_artifact: docs/definitions/choir-tape-recovery-2026-08-13.md
+    proof_refs: [docs/ACTIVE.md, docs/definitions/choir-supervised-self-development-effects-2026-08-11.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
+    rollback_ref: revert the docs-only Define reconcile commit
+    disposition: "accepted — now reconciled to 0c16d8f7; reconstruction named as ReplayCompleteness; effects duplicate now keys and leftover restore-scope claims closed; /goal continues through all five acceptance actions"
+    problem_ref: not_applicable
+    authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    landing:
+      source_commit: pending
+      ci_ref: pending (Docs Truth Check)
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "verified 2026-08-13: docs/ACTIVE.md Invocation points at choir-tape-recovery-2026-08-13; docs/mission-graph.yaml unique product entrypoint true; docs/doc-authority-manifest.yaml tape-recovery is_root [authority, entry] and effects is_root []; effects restore leftovers closed in the same commit"
 
 view:
   path: none
@@ -175,10 +204,13 @@ Three things must become true:
    cannot serve the UI it claims, is refused.
 
 2. **Rematerialization is a destructive tape-only runtime path.**
-   `ProjectionMaterializer` must become a product path that rebuilds the
-   projection from the tape alone — the original realization is disposed or
-   quarantined and denied to the restore implementation. Pin checkout is
-   evidence-only, never a completion route.
+   Event-chain reconstruction already lives in `Runtime.ReplayCompleteness`
+   (`internal/agentcore/replay_completeness.go`); promote that into the restore
+   procedure — stage a new realization from the tape, verify the extractor
+   match, flip visibility. `ProjectionMaterializer` turns an already-extracted
+   `ObservationSet` into a `Realization` and is not the restore path. The
+   original realization is disposed or quarantined and denied to the restore
+   implementation. Pin checkout is evidence-only, never a completion route.
 
 3. **The frontend is part of the computer.** One host-global SPA is a shared
    platform accident, not a computer's surface. The computer-surface UI is

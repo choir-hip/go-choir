@@ -111,7 +111,7 @@ finish:
       proves: "Single semantic authority reconstruction; no second state authority was introduced."
       evidence_class: deployed proof
 
-  rollback: "Revoke the active effect policies and capabilities; total restore to a prior checkpoint restores the release pointer and VM-local state only, with platform and cycle stores explicitly out of scope; revert behavior commits through origin/main and CI to the last accepted runtime. Direct deployed-node edits are neither proof nor rollback. Irreversible consequences such as the acceptance email are not recoverable by restore: preserve their receipts and use compensation or a new forward action."
+  rollback: "Revoke the active effect policies and capabilities; total restore to a prior checkpoint uses the choir-tape-recovery-2026-08-13 substrate (VM-local projection plus computer-surface frontend; platform and cycle stores out of scope); revert behavior commits through origin/main and CI to the last accepted runtime. Direct deployed-node edits are neither proof nor rollback. Irreversible consequences such as the acceptance email are not recoverable by restore: preserve their receipts and use compensation or a new forward action."
   landing:
     required: true
     environment: staging
@@ -121,7 +121,7 @@ finish:
     purpose: "Staging trajectory proof alone is a false complete if haunted teaching remains live authority. These obligations are part of goal.complete, not post-hoc cleanup."
     upon_deployed_acceptance:
       - id: doctrine-promote
-        action: "Promote earned invariants into choir-doctrine / computer-ontology / agent-product-doctrine: effect-specific consensus policy is the autonomy boundary; checkpoint = event head + CodeRef + ArtifactProgramRef + VM-local content witness; restore is acceptance-fenced and scoped; irreversible effects require stronger policy and consequence receipts, not a categorical human gate; effects OFF is pre-gate not destination. Platform/cycle remain OUT of restore. Computer-surface frontend is IN by C15/I25; the host-global SPA is current non-conformance, closed by a successor serving envelope, not by treating UI as platform software."
+        action: "Promote earned invariants into choir-doctrine / computer-ontology / agent-product-doctrine: effect-specific consensus policy is the autonomy boundary; checkpoint = event head + CodeRef + ArtifactProgramRef + VM-local content witness + frontend identity; restore is acceptance-fenced and scoped; irreversible effects require stronger policy and consequence receipts, not a categorical human gate; effects OFF is pre-gate not destination. Platform/cycle remain OUT of restore. Computer-surface frontend is IN by C15/I25; the host-global SPA is current non-conformance, closed by choir-tape-recovery-2026-08-13, not by treating UI as platform software."
         class: promote-to-doctrine
       - id: lexicon-cutover
         action: "Cut product and API vocabulary from rollback/accept_once/approval-as-safety to restore/decision_policy/qualified_consensus/consequence_receipt where those names teach the old world (selfdev states, CLI, Settings copy, Definition skill templates)."
@@ -133,14 +133,14 @@ finish:
         action: "Replace (do not merely green) survivor/detector pins of CoSuper-without-update_coagent and packet.kind executability; add detectors requiring every reversible and irreversible effect to bind its declared policy, subject, eligible seats, independence domains, quorum, dissent disposition, expiry, and consequence receipts; reject both universal-human-gate and ungoverned-effect paths; reject treating ComputerVersion code tuple alone as full restore."
         class: test/detector update
       - id: owner-product-surface
-        action: "Ship or open a successor Definition for owner-reachable policy arm/revoke, checkpoint list, restore invoke, consensus and consequence receipts via CLI/API/Settings — restore and effect-policy control must not remain lab-only ceremonies."
+        action: "Ship or open a successor Definition for owner-reachable policy arm/revoke, consensus and consequence receipts via CLI/API/Settings. Owner-reachable restore invoke, checkpoint list, and whole-computer restore CLI are owned by choir-tape-recovery-2026-08-13 and satisfied-by its owner_reachable_whole_computer_restore receipt."
         class: successor-mission
       - id: ops-identity
         action: "Land restore-aware health/identity reporting (event head + CodeRef + witness + route; distinguish product restore from failed deploy / git revert). Retain release artifacts needed for advertised checkpoints."
         class: successor-mission
       - id: frontend-ownership
-        action: "Decided 2026-08-13: computer-surface frontend is per-computer, not platform control-plane (docs/memo-per-computer-frontend-2026-08-13.md; doctrine C15/I25). Open a successor Definition for the serving envelope. Do not ship UI in this candidate; Caddy still serves host frontend-current. Thin platform shell (TLS, auth, picker chrome) remains OUT of restore."
-        class: "promote-to-doctrine | successor-mission"
+        action: "Decided 2026-08-13: computer-surface frontend is per-computer, not platform control-plane (docs/memo-per-computer-frontend-2026-08-13.md; doctrine C15/I25). The serving envelope is owned by choir-tape-recovery-2026-08-13 and satisfied-by its serving-join receipt. This Definition does not ship UI in the solitaire candidate; Caddy still serves host frontend-current until that receipt. Thin platform shell (TLS, auth, picker chrome) remains OUT of restore."
+        class: promote-to-doctrine
       - id: successor-preconditions
         action: "Rewrite RLM / World Wire / in-choir drafts to inherit the envelope (not effects-OFF Phase 1; WW requires irreversible-decision path)."
         class: rewrite-in-place
@@ -182,7 +182,7 @@ boundaries:
     - Reversibility changes recovery cost and required safeguards, not the boundary of autonomy. Both reversible and irreversible effects require predeclared, effect-specific multiagent consensus; a human is a policy-selected seat, never a universal gate.
     - Checkpoints bind the target event head, code, artifact program, and a VM-local content witness. A checkpoint that cannot restore state is not a checkpoint, and one that cannot be rebuilt from the tape must fail closed rather than be recorded.
     - The event chain is the address and the authority. VM-local Dolt is a projection and an audit witness, never an alternate head.
-    - "Restore is scoped to the user computer: VM-local state and the release pointer. The shared platform store and cycle state are out of scope, because restoring them would rewind other computers."
+    - "Restore is scoped to the user computer: event-derived VM-local projection and computer-surface frontend (owned by choir-tape-recovery-2026-08-13). The shared platform store and cycle state are out of scope, because restoring them would rewind other computers."
     - "Restore is acceptance-fenced, not a distributed transaction: stage, verify against recorded content hashes, and flip visibility only on exact match. Partial never greens."
     - The candidate is authored inside a CoSuper capsule; every required bundle ref binds a real execution receipt from that capsule.
     - CoSuper holds update_coagent and reports upward as an actor, while a CoSuper packet can never open privileged execution on Super. Executability derives from the sender's authorization, not from the model-written packet.kind. The pinned survivor contract is replaced by a stronger test, never deleted.
@@ -254,14 +254,11 @@ now:
     worktree_inventory_ref: 2026-08-13 read-only git status before incident documentation (clean at ca138dff)
     status: reconciled
 
-  blocker_or_risk: "The kill-loop slice is closed. Checkpoint completeness and restore are owned by choir-tape-recovery-2026-08-13; this Definition must not independently green its restore legs. Decision-policy and effect promotion await the tape-recovery restore proof. Problem receipt: docs/problems/candidate-realization-readiness-kill-loop-2026-08-13.md."
-  next_action: "Await the tape-recovery Definition's whole-computer restore proof, then design decision-policy and effect promotion on that substrate."
-
   candidate:
     id: none
     state: none
   decision:
-    selected: "Effect-specific multiagent consensus is the autonomy boundary; reversibility is a recovery property. Restore remains scoped to VM-local state plus the release pointer, addressed by event head, and acceptance-fenced. Checkpoints bind event head, CodeRef, ArtifactProgramRef, and VM-local content witness; VM-local Dolt HEAD is an audit receipt. CoSuper authors and proposes. A policy-selected qualified panel authorizes each exact effect subject under frozen eligibility, independence, quorum, dissent, expiry, and consequence rules; human participation is optional unless that policy requires it. Reversible and irreversible effects are both admissible, with stronger policy and durable consequence receipts for irreversible effects. The mission proves this with reversible self-development plus restore and one exact no-human-seat email send to an owner-controlled acceptance inbox."
+    selected: "Effect-specific multiagent consensus is the autonomy boundary; reversibility is a recovery property. Restore of an effect excursion consumes the choir-tape-recovery-2026-08-13 substrate (event-derived VM-local projection plus computer-surface frontend; platform/cycle OUT) and is addressed by event head and acceptance-fenced. This Definition does not independently green checkpoint, rematerialization, scope refusal, or total restore. Checkpoints bind event head, CodeRef, ArtifactProgramRef, VM-local content witness, and frontend identity; VM-local Dolt HEAD is an audit receipt. CoSuper authors and proposes. A policy-selected qualified panel authorizes each exact effect subject under frozen eligibility, independence, quorum, dissent, expiry, and consequence rules; human participation is optional unless that policy requires it. Reversible and irreversible effects are both admissible, with stronger policy and durable consequence receipts for irreversible effects. The mission proves this with reversible self-development plus restore and one exact no-human-seat email send to an owner-controlled acceptance inbox."
     kind: architecture
     status: owner-ratified-correction
     source: owner
@@ -270,8 +267,8 @@ now:
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
   evidence_refs: [docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "Revert is the mission: nothing in production reads Dolt history back, checkpoints bind no state, and Dolt commits carry no head binding. Replay completeness RESOLVED 2026-08-13 (retained computer replay-eligible at sequence 1; the 26 differences classified and resolved by workspace replacement plus chain bootstrap). ProjectionMaterializer is still non-runtime today, so rematerialization is the preferred restore path with a single-workspace pin checkout only as an evidence-driven contingency. Relaxing the decision-binding verifier and mode CAS touches the surfaces that make the tape trustworthy and carries the heaviest evidence burden."
-  next_action: "Checkpoint completeness and restore are owned by choir-tape-recovery-2026-08-13; this decision's next action is decision-policy design after that restore substrate lands."
+  blocker_or_risk: "The kill-loop slice is closed. Checkpoint completeness and restore are owned by choir-tape-recovery-2026-08-13; this Definition must not independently green its restore legs. Decision-policy and effect promotion await the tape-recovery restore proof. Problem receipt: docs/problems/candidate-realization-readiness-kill-loop-2026-08-13.md."
+  next_action: "Await the tape-recovery Definition's whole-computer restore proof, then design decision-policy and effect promotion on that substrate."
 
 receipts:
   - id: roadmap-consensus-2026-08-11
@@ -528,8 +525,8 @@ own execution receipts.
 API-only for this candidate. Staging still serves the web frontend from the
 host, outside the release the updater controls, so a UI change would land where
 the browser never reads. That is serving-topology constraint, not product
-ontology: computer-surface frontend is per-computer (`C15`/`I25`); a successor
-owns the serving join.
+ontology: computer-surface frontend is per-computer (`C15`/`I25`);
+choir-tape-recovery-2026-08-13 owns the serving join.
 
 Schema changes are additive only — new tables via `CREATE TABLE IF NOT EXISTS`,
 never `ALTER` or `DROP` of existing tables.
@@ -578,14 +575,12 @@ at all.
 ## Route map
 
 1. **Replay completeness probe (green, do first — complete with non-equivalence).** The deployed pre-drop probe returned a deterministic `not_equivalent` result with 26 differences and both event heads null. Classify every difference before checkpoint design; clean rematerialization is not licensed until behavior-bearing writes are event- or receipt-derived, and checkpoint creation must fail closed for anything that is not reproducible.
-2. **Checkpoint completeness (red).** Bind target event head, CodeRef,
-   ArtifactProgramRef, and a VM-local content witness, with the VM-local Dolt HEAD
-   as an audit receipt. Refuse checkpoint creation when a behavior-bearing local
-   row is not event- or receipt-derivable.
-3. **Revert build and verification (red, heaviest).** Implement the restore
-   procedure above. Prove partial and mismatched restores keep the prior
-   realization and never green. Prove the platform store and cycle state are
-   refused.
+2. **Checkpoint completeness (red, owned by choir-tape-recovery-2026-08-13).**
+   Consumed here; do not implement or independently green. Bind target event head,
+   CodeRef, ArtifactProgramRef, VM-local content witness, and frontend identity.
+3. **Revert build and verification (red, owned by choir-tape-recovery-2026-08-13).**
+   Consumed here; do not implement or independently green. Tape-recovery proves
+   destructive rematerialization, scope refusal, and whole-computer restore.
 4. **Reconnection (red).** Give CoSuper `update_coagent`; move Super's
    executability decision from `packet.kind` to sender authorization; replace the
    survivor contract with the stronger assertion. Keep minimal — the RLM rebase
@@ -625,7 +620,8 @@ and the shared platform store.
 The trajectory proof is not enough. Before `goal.complete`, run every item under
 `finish.completion_cutover` in the frontmatter: promote earned doctrine, cut
 lexicon, archive haunted roadmap/registry edges, replace survivor/detector pins,
-schedule or ship owner restore/standing-rule surfaces, land restore-aware ops
-identity, decide frontend ownership, rewrite successor preconditions (RLM / Wire /
+schedule or ship owner policy arm/revoke surfaces, consume tape-recovery
+owner-restore and serving-join receipts, land restore-aware ops
+identity, rewrite successor preconditions (RLM / Wire /
 in-choir), and name residual realism axes (schema, backups/copies, tape vs
 erasure, owner verbs). Skipping that packet is a false complete.
