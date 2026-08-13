@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -489,6 +490,21 @@ func (a *ComputerEventAppender) RecoverPrepared(ctx context.Context) error {
 }
 
 func (a *ComputerEventAppender) Reconstruct(ctx context.Context, source EventSource) error {
+	return a.reconstruct(ctx, source, "")
+}
+
+// ReconstructThrough replays the durable chain until the canonical event head
+// matches targetHead, then halts. Later events stay on the tape and are not
+// applied to the projection. Missing the target is a hard failure.
+func (a *ComputerEventAppender) ReconstructThrough(ctx context.Context, source EventSource, targetHead string) error {
+	targetHead = strings.TrimSpace(targetHead)
+	if !IsSHA256(targetHead) {
+		return fmt.Errorf("computer event appender: restore target head is required")
+	}
+	return a.reconstruct(ctx, source, targetHead)
+}
+
+func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSource, targetHead string) error {
 	if source == nil {
 		return fmt.Errorf("computer event appender: event source is required")
 	}
@@ -498,6 +514,9 @@ func (a *ComputerEventAppender) Reconstruct(ctx context.Context, source EventSou
 	localHead, err := a.projection.Head(ctx, a.computerID)
 	if err != nil {
 		return fmt.Errorf("computer event appender: reconstruction local head: %w", err)
+	}
+	if targetHead != "" && localHead != nil && localHead.CanonicalEventHead == targetHead {
+		return nil
 	}
 	var after uint64
 	if localHead != nil {
@@ -526,6 +545,12 @@ func (a *ComputerEventAppender) Reconstruct(ctx context.Context, source EventSou
 			return fmt.Errorf("computer event appender: replay finalize sequence %d: %w", record.Request.Event.Sequence, err)
 		}
 		current = &next
+		if targetHead != "" && current.CanonicalEventHead == targetHead {
+			return nil
+		}
+	}
+	if targetHead != "" {
+		return fmt.Errorf("computer event appender: restore target head was not reached")
 	}
 	platformHead, err := a.cas.Head(ctx, a.computerID)
 	if err != nil {
@@ -546,6 +571,22 @@ func (a *ComputerEventAppender) Reconstruct(ctx context.Context, source EventSou
 // probes: the appender's live projection is never touched. The CAS dependency
 // must also expose EventSource, as the production HTTP client does.
 func (a *ComputerEventAppender) ReconstructInto(ctx context.Context, projection ProjectionStore) error {
+	return a.replayInto(ctx, projection, "")
+}
+
+// ReconstructThroughTarget replays the durable chain into a separate
+// projection and halts at targetHead. Restore uses this so later canonical
+// events, including the restore intent, are not applied to the realized
+// witness.
+func (a *ComputerEventAppender) ReconstructThroughTarget(ctx context.Context, projection ProjectionStore, targetHead string) error {
+	targetHead = strings.TrimSpace(targetHead)
+	if !IsSHA256(targetHead) {
+		return fmt.Errorf("computer event appender: restore target head is required")
+	}
+	return a.replayInto(ctx, projection, targetHead)
+}
+
+func (a *ComputerEventAppender) replayInto(ctx context.Context, projection ProjectionStore, targetHead string) error {
 	if a == nil || projection == nil {
 		return fmt.Errorf("computer event appender: replay projection is required")
 	}
@@ -560,7 +601,10 @@ func (a *ComputerEventAppender) ReconstructInto(ctx context.Context, projection 
 		cas:        a.cas,
 		verifier:   a.verifier,
 	}
-	return dryRun.Reconstruct(ctx, source)
+	if targetHead == "" {
+		return dryRun.Reconstruct(ctx, source)
+	}
+	return dryRun.ReconstructThrough(ctx, source, targetHead)
 }
 
 const (

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -384,6 +385,59 @@ func TestAppenderReconstructsEmbeddedProjectionFromDurableChain(t *testing.T) {
 	}
 	if !reflect.DeepEqual(cas.head, reconstructedProjection.head) {
 		t.Fatalf("reconstructed head = %+v, canonical = %+v", reconstructedProjection.head, cas.head)
+	}
+}
+
+func TestAppenderReconstructThroughStopsAtTarget(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := SigningKey{SignerRef: SignerRef{SignerDomain: "platform-control", KeyID: "platform-1"}, PrivateKey: privateKey}
+	cas := &memoryCAS{signer: signer}
+	pinner := memoryPinner{signer: signer}
+	verifier := EventHeadReceiptVerifier{Keys: staticKeyResolver{key: publicKey}}
+	originalProjection := &memoryProjection{}
+	original, err := NewComputerEventAppender(testComputerID, pinner, originalProjection, cas, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesis := testEvent(t, nil, EventGenesisImported)
+	genesis.ResultingEffectiveCommitment = testDigestA
+	genesisInput := TransitionInput{TargetStateCommitment: testDigestA}
+	bindTestRequest(t, &genesis, genesisInput, nil)
+	if _, err := original.Append(context.Background(), genesis, genesisInput, nil); err != nil {
+		t.Fatal(err)
+	}
+	target := originalProjection.head.CanonicalEventHead
+	causal := testEvent(t, originalProjection.head, EventArtifactProduced)
+	bindTestRequest(t, &causal, TransitionInput{}, nil)
+	if _, err := original.Append(context.Background(), causal, TransitionInput{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if cas.head.Sequence != 2 {
+		t.Fatalf("canonical sequence=%d, want 2", cas.head.Sequence)
+	}
+
+	throughProjection := &memoryProjection{}
+	through, err := NewComputerEventAppender(testComputerID, pinner, throughProjection, cas, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := through.ReconstructThrough(context.Background(), cas, target); err != nil {
+		t.Fatal(err)
+	}
+	if throughProjection.head == nil || throughProjection.head.CanonicalEventHead != target || throughProjection.head.Sequence != 1 {
+		t.Fatalf("through-target head = %+v, want sequence 1 digest %s", throughProjection.head, target)
+	}
+
+	missing := &memoryProjection{}
+	missingAppender, err := NewComputerEventAppender(testComputerID, pinner, missing, cas, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := missingAppender.ReconstructThrough(context.Background(), cas, testDigestB); err == nil || !strings.Contains(err.Error(), "was not reached") {
+		t.Fatalf("missing target error = %v", err)
 	}
 }
 

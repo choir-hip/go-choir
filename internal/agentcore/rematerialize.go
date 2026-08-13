@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
@@ -96,10 +97,11 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		_ = os.RemoveAll(stagingRoot)
 		return report, err
 	}
-	if err := rt.eventAppender.ReconstructInto(ctx, staged); err != nil {
+	targetHead := strings.TrimSpace(checkpoint.Request.AcceptedEventHead)
+	if err := rt.eventAppender.ReconstructThroughTarget(ctx, staged, targetHead); err != nil {
 		_ = staged.Close()
 		_ = os.RemoveAll(stagingRoot)
-		return report, fmt.Errorf("rematerialize: reconstruct from tape: %w", err)
+		return report, fmt.Errorf("rematerialize: reconstruct through target: %w", err)
 	}
 	version := replayCompletenessVersion(rt, nil)
 	if head, err := staged.Head(ctx, computerID); err == nil {
@@ -249,6 +251,14 @@ func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, com
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
+	if err := h.rt.appendRestoreIntent(r.Context(), computerID, request.Checkpoint); err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrRematerializeUnavailable) {
+			status = http.StatusServiceUnavailable
+		}
+		writeAPIJSON(w, status, apiError{Error: err.Error()})
+		return
+	}
 	report, err := h.rt.RematerializeFromTape(r.Context(), computerID, request.Checkpoint)
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -259,6 +269,41 @@ func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, com
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, report)
+}
+
+func (rt *Runtime) appendRestoreIntent(ctx context.Context, computerID string, checkpoint selfdevprotocol.Checkpoint) error {
+	if rt == nil || rt.eventAppender == nil {
+		return fmt.Errorf("%w: event projection authority is not configured", ErrRematerializeUnavailable)
+	}
+	computerID = strings.TrimSpace(computerID)
+	if computerID == "" || computerID != strings.TrimSpace(rt.cfg.ComputerID) {
+		return fmt.Errorf("%w: computer binding does not match runtime", ErrRematerializeUnavailable)
+	}
+	idempotency := "restore-intent-" + strings.TrimSpace(checkpoint.Digest)
+	if rt.store != nil {
+		if _, found, err := rt.store.EventByIdempotency(ctx, computerID, idempotency); err != nil {
+			return fmt.Errorf("restore: lookup restore intent: %w", err)
+		} else if found {
+			return nil
+		}
+	}
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		return err
+	}
+	event := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
+		EventKind: computerevent.EventRestoreRequested, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: idempotency, RequestCommitment: computerevent.ZeroHead,
+		ActorProfile: "owner", AuthorityRef: "platform-control:restore",
+		PayloadCommitment: computerevent.ZeroHead, PrivacyClass: "owner",
+		ProposedEffectRef: checkpoint.Digest, DecisionRef: checkpoint.Request.AcceptedEventHead,
+		ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	if _, err := rt.eventAppender.AppendNew(ctx, event, computerevent.TransitionInput{}, nil); err != nil {
+		return fmt.Errorf("restore: append restore intent: %w", err)
+	}
+	return nil
 }
 
 func (rt *Runtime) verifyPinnedFrontend(checkpoint selfdevprotocol.Checkpoint) (string, error) {

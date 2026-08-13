@@ -36,21 +36,12 @@ func TestRematerializeFromTapeQuarantinesOriginalAndDropsLiveOnlyRows(t *testing
 		}
 	}()
 
-	authority := emptyReplayAuthority{}
-	appender, err := computerevent.NewComputerEventAppender(computerID, authority, live, authority, authority)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt, _, acceptedHead := rematerializeTapeRuntime(t, computerID, storePath, live)
 	updaterRoot := filepath.Join(t.TempDir(), "updater")
 	priorDigest, _ := pinFrontendRelease(t, updaterRoot, computerID, "<html>live</html>")
 	targetDigest, targetIdentity := pinFrontendRelease(t, updaterRoot, computerID, "<html>checkpoint</html>")
 	pointCurrent(t, updaterRoot, priorDigest)
-	rt := &Runtime{
-		cfg:                provideriface.Config{ComputerID: computerID, StorePath: storePath},
-		store:              live,
-		eventAppender:      appender,
-		selfdevUpdaterRoot: updaterRoot,
-	}
+	rt.selfdevUpdaterRoot = updaterRoot
 	ctx := context.Background()
 	report, err := rt.ReplayCompleteness(ctx, computerID)
 	if err != nil {
@@ -63,7 +54,7 @@ func TestRematerializeFromTapeQuarantinesOriginalAndDropsLiveOnlyRows(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, targetDigest, targetIdentity)
+	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, targetDigest, targetIdentity, acceptedHead)
 
 	if _, err := live.DB().ExecContext(ctx, "CREATE TABLE rematerialize_live_only (id VARCHAR(64) PRIMARY KEY, value VARCHAR(64) NOT NULL)"); err != nil {
 		t.Fatal(err)
@@ -130,21 +121,12 @@ func TestRematerializeFromTapeKeepsOriginalOnWitnessMismatch(t *testing.T) {
 	}
 	defer live.Close()
 
-	authority := emptyReplayAuthority{}
-	appender, err := computerevent.NewComputerEventAppender(computerID, authority, live, authority, authority)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt, _, acceptedHead := rematerializeTapeRuntime(t, computerID, storePath, live)
 	updaterRoot := filepath.Join(t.TempDir(), "updater")
 	liveDigest, _ := pinFrontendRelease(t, updaterRoot, computerID, "<html>live</html>")
 	targetDigest, targetIdentity := pinFrontendRelease(t, updaterRoot, computerID, "<html>checkpoint</html>")
 	pointCurrent(t, updaterRoot, liveDigest)
-	rt := &Runtime{
-		cfg:                provideriface.Config{ComputerID: computerID, StorePath: storePath},
-		store:              live,
-		eventAppender:      appender,
-		selfdevUpdaterRoot: updaterRoot,
-	}
+	rt.selfdevUpdaterRoot = updaterRoot
 	ctx := context.Background()
 	report, err := rt.ReplayCompleteness(ctx, computerID)
 	if err != nil {
@@ -155,7 +137,7 @@ func TestRematerializeFromTapeKeepsOriginalOnWitnessMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	witness.ContentRoot = strings.Repeat("0", 64)
-	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, targetDigest, targetIdentity)
+	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, targetDigest, targetIdentity, acceptedHead)
 	if _, err := rt.RematerializeFromTape(ctx, computerID, checkpoint); err == nil {
 		t.Fatal("mismatched checkpoint witness was accepted")
 	}
@@ -191,9 +173,58 @@ func TestRematerializeFromTapeProductPath(t *testing.T) {
 	}
 }
 
-func rematerializeTestCheckpoint(t *testing.T, computerID string, witness selfdevprotocol.VMLocalContentWitness, releaseDigest string, frontend selfdevprotocol.FrontendIdentity) selfdevprotocol.Checkpoint {
+func rematerializeTapeRuntime(t *testing.T, computerID, storePath string, live *choirstore.Store) (*Runtime, *replayEventCAS, string) {
+	t.Helper()
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signingKey := computerevent.SigningKey{
+		SignerRef:  computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "rematerialize-test"},
+		PrivateKey: privateKey,
+	}
+	cas := &replayEventCAS{key: signingKey, projection: live}
+	appender, err := computerevent.NewComputerEventAppender(
+		computerID,
+		rollbackTestPinner{signingKey},
+		live,
+		cas,
+		rollbackTestReceiptVerifier{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitment := strings.Repeat("a", 64)
+	genesis := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
+		EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: "genesis", ActorProfile: "super", AuthorityRef: "owner", PrivacyClass: "owner",
+		PayloadCommitment: commitment, ProposedEffectRef: strings.Repeat("b", 64),
+		ResultingEffectiveCommitment: commitment, ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	if _, err := appender.AppendNew(context.Background(), genesis, computerevent.TransitionInput{TargetStateCommitment: commitment}, nil); err != nil {
+		t.Fatal(err)
+	}
+	head, err := live.Head(context.Background(), computerID)
+	if err != nil || head == nil {
+		t.Fatalf("genesis head: %v %#v", err, head)
+	}
+	return &Runtime{
+		cfg:           provideriface.Config{ComputerID: computerID, StorePath: storePath},
+		store:         live,
+		eventAppender: appender,
+	}, cas, head.CanonicalEventHead
+}
+func rematerializeTestCheckpoint(t *testing.T, computerID string, witness selfdevprotocol.VMLocalContentWitness, releaseDigest string, frontend selfdevprotocol.FrontendIdentity, acceptedHead string) selfdevprotocol.Checkpoint {
 	t.Helper()
 	digest := func(value byte) string { return strings.Repeat(string(value), 64) }
+	if strings.TrimSpace(acceptedHead) == "" {
+		acceptedHead = digest('1')
+	}
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -218,7 +249,7 @@ func rematerializeTestCheckpoint(t *testing.T, computerID string, witness selfde
 		ComputerVersion: computerversion.ComputerVersion{
 			CodeRef: computerversion.CodeRef(verifierRequest.CodeRef), ArtifactProgramRef: computerversion.ArtifactProgramRef(verifierRequest.ArtifactProgramRef),
 		},
-		AcceptedEventHead: digest('1'), EffectiveEventHead: digest('1'), EffectiveStateCommitment: digest('2'), EventHeadReceiptID: "receipt-test",
+		AcceptedEventHead: acceptedHead, EffectiveEventHead: acceptedHead, EffectiveStateCommitment: digest('2'), EventHeadReceiptID: "receipt-test",
 		ReleaseDigest: verifierRequest.ReleaseDigest, ReconstructionDigest: digest('3'), MaterializationReceiptDigest: digest('4'),
 		VerifierCertificateDigest: computerevent.DigestBytes(certificateJSON), VerifierCertificate: response, ReducerVersion: 1,
 		VMLocalContentWitness: witness,
@@ -265,7 +296,7 @@ func TestRematerializeFromTapeRefusesMissingFrontend(t *testing.T) {
 	missingDigest := strings.Repeat("a", 64)
 	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, missingDigest, selfdevprotocol.FrontendIdentity{
 		Digest: liveIdentity.Digest, Derivation: selfdevprotocol.FrontendDerivationRelease, ReleaseDigest: missingDigest,
-	})
+	}, "")
 	if _, err := rt.RematerializeFromTape(ctx, computerID, checkpoint); err == nil {
 		t.Fatal("missing pinned frontend was accepted")
 	}
@@ -381,5 +412,88 @@ func pointCurrent(t *testing.T, updaterRoot, digest string) {
 	_ = os.Remove(current)
 	if err := os.Symlink(filepath.Join(updaterRoot, "releases", digest), current); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRestoreFromTapeAppendsIntentAndStopsAtTarget(t *testing.T) {
+	computerID := "computer-restore-intent"
+	storePath := filepath.Join(t.TempDir(), "runtime.db")
+	live, err := choirstore.Open(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if live != nil {
+			_ = live.Close()
+		}
+	}()
+	rt, cas, acceptedHead := rematerializeTapeRuntime(t, computerID, storePath, live)
+	updaterRoot := filepath.Join(t.TempDir(), "updater")
+	priorDigest, _ := pinFrontendRelease(t, updaterRoot, computerID, "<html>live</html>")
+	targetDigest, targetIdentity := pinFrontendRelease(t, updaterRoot, computerID, "<html>checkpoint</html>")
+	pointCurrent(t, updaterRoot, priorDigest)
+	rt.selfdevUpdaterRoot = updaterRoot
+	ctx := context.Background()
+	report, err := rt.ReplayCompleteness(ctx, computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, targetDigest, targetIdentity, acceptedHead)
+	laterID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	later := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: laterID, ComputerID: computerID,
+		EventKind: computerevent.EventArtifactProduced, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: "later-artifact", ActorProfile: "super", AuthorityRef: "owner", PrivacyClass: "owner",
+		PayloadCommitment: strings.Repeat("c", 64), ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	if _, err := rt.eventAppender.AppendNew(ctx, later, computerevent.TransitionInput{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(restoreAPIRequest{
+		Checkpoint:    checkpoint,
+		OperandScopes: []string{selfdevprotocol.RestoreScopeVMLocal, selfdevprotocol.RestoreScopeFrontend},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/restore", bytes.NewReader(body))
+	request.Header.Set("X-Authenticated-User", "owner-restore")
+	request.Header.Set("X-Authenticated-Computer", computerID)
+	response := httptest.NewRecorder()
+	NewAPIHandler(rt).HandleComputersRouter(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("restore status=%d body=%s", response.Code, response.Body.String())
+	}
+	live = nil
+	foundIntent := false
+	for _, record := range cas.events {
+		if record.Request.Event.EventKind == computerevent.EventRestoreRequested {
+			foundIntent = true
+			if record.Request.Event.DecisionRef != acceptedHead || record.Request.Event.ProposedEffectRef != checkpoint.Digest {
+				t.Fatalf("restore intent bindings=%+v", record.Request.Event)
+			}
+		}
+	}
+	if !foundIntent {
+		t.Fatal("restore did not append a restore-intent event")
+	}
+	restored, err := choirstore.Open(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = restored.Close() })
+	head, err := restored.Head(ctx, computerID)
+	if err != nil || head == nil {
+		t.Fatalf("restored head: %v %#v", err, head)
+	}
+	if head.CanonicalEventHead != acceptedHead || head.Sequence != 1 {
+		t.Fatalf("restored projection %+v replayed past the checkpoint head", head)
 	}
 }
