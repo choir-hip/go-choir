@@ -122,12 +122,12 @@ now:
   slice: "Destructive rematerialization is a tape-only product path: guest POST /lifecycle/rematerialize-from-tape, owner CLI choir computer rematerialize-from-tape, ReconstructInto into a sibling workspace, witness match, then quarantine original and flip. Pin checkout is refused. FrontendRestaged remains false. ReconstructInto replays the full chain, which equals through-target at sequence 1. Deployed rematerialization, checkpoint, and scope-refusal receipts remain required."
   question: "Which of the three serving hops (guest-static, host-staging-keyed-by-computer, encapsulated-origin) does this Definition prove? Checkpoint witness, scope refusal, and rematerialization do not require the pick."
   reconciliation:
-    observed_at: 2026-08-13T18:30:00Z
-    source_ref: main@b4cda1fd22bc1d9d017e865c66970b981b96f0f0
-    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; rematerialize is local product-path code and is not yet a staging runtime identity"
+    observed_at: 2026-08-13T18:35:00Z
+    source_ref: main@d2558168f4c51b3b0689cbb8c69e78b9e945adf8
+    deploy_identity: "staging deployed db265d1e32e73ab4c51914332eaf6fb55f62a09c; retained computer computer-03335285269bdba4f94377e56879f9e6 active/ready at sequence 1; d2558168 is the rematerialize product-path commit and is not yet a staging runtime identity"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13T18:30:00Z git status --short dirty with rematerialize implementation on b4cda1fd
+    worktree_inventory_ref: 2026-08-13T18:35:00Z git status --short empty at d2558168
     status: reconciled
   candidate:
     id: none
@@ -143,7 +143,7 @@ now:
     consequence: "Do not stop after the first slice. Continue until the finish artifact exists or a named blocker (fail-closed live-only rows, capability-renewal substrate, unpicked hop at slice 3) forces blocked_incomplete or a problem-documentation-first Define."
   evidence_refs: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, .agentic-consensus/tape-recovery-20260813/, internal/agentcore/replay_completeness.go]
   blocker_or_risk: "Serving hop is unpicked (host-global Caddy). ReconstructThrough historical heads is not implemented; current rematerialize replays the full chain. Guest capability renewal recurrence remains a restore-proof gate. Deployed checkpoint, scope-refusal, and destructive rematerialization receipts are still owed. Fail-closed checkpoint may discover live-only rows on the retained sequence-1 computer."
-  next_action: "Land the rematerialize red commit through origin/main and CI. Then pick and prove one per-computer serving hop (guest-static, host-staging-keyed-by-computer, or encapsulated-origin). Staging still owes deployed checkpoint, scope-refusal, and destructive rematerialization receipts."
+  next_action: "Pick and prove one per-computer serving hop for the computer-surface frontend (guest-static, host-staging-keyed-by-computer, or encapsulated-origin): split control-plane OUT from computer surface IN, freeze frontend source/artifacts through the capsule pipeline, select the computer's bytes only after vmctl route resolve. Staging still owes deployed checkpoint, scope-refusal, and destructive rematerialization receipts."
 
 receipts:
   - id: tape-recovery-draft-consensus-2026-08-13
@@ -204,7 +204,7 @@ receipts:
     authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
     candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
     landing:
-      source_commit: pending
+      source_commit: d2558168
       ci_ref: pending
       deploy_ref: not_applicable
       environment_identity: not_applicable
