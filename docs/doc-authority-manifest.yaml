@@ -327,6 +327,14 @@ documents:
     supersedes: [docs/definitions/choir-continuous-texture-supervision-2026-08-07.md]
     witnesses: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md, docs/evidence/choir-supervised-self-development-replay-completeness-2026-08-12.json, docs/evidence/choir-supervised-self-development-replay-difference-classes-2026-08-12.md, docs/evidence/choir-supervised-self-development-replay-completeness-post-cutover-2026-08-12.json, docs/evidence/choir-supervised-self-development-chain-bootstrap-design-2026-08-12.md, docs/evidence/choir-supervised-self-development-replay-completeness-post-bootstrap-2026-08-13.json, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, trajectory_settlement_change, capsule_effect_boundary_change, deployed_acceptance, registry_closure]
+  - path: docs/definitions/choir-private-go-actor-kernel-2026-08-12.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: owner_ratified_sequenced_successor, lifecycle: blocked_on_predecessor, entrypoint: false}
+    depends_on: [docs/definitions/choir-supervised-self-development-effects-2026-08-11.md]
+    witnesses: [docs/memo-persistent-rlm-actors-2026-08-09.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, AGENTS.md]
+    refresh_triggers: [mission_state_change, predecessor_completion, actor_kernel_change, capability_profile_change, capsule_effect_boundary_change, trace_evidence_change, Texture_transclusion_change, deployed_acceptance, registry_closure]
   - path: docs/definitions/choir-instruction-substrate-prune-2026-08-11.md
     claim_scope: current
     is_root: [entry]

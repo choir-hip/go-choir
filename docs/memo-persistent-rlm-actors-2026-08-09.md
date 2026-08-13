@@ -1,8 +1,9 @@
 # Memo: Persistent RLM Actors and Capsule-Isolated Go Orchestration
 
-**Date:** 2026-08-09  
-**Status:** architecture proposal and synthesis; not promoted doctrine  
-**Mutation class:** green (documentation only)  
+**Status:** architecture synthesis; kernel and authority claims promoted to
+Choir Doctrine and Agent Product Doctrine on 2026-08-12; implementation detail
+remains proposal material
+**Mutation class:** green (documentation only)
 **Scope:** agent execution, multi-model orchestration, durable communication,
 connector access, and integration with the audited computer
 
@@ -39,6 +40,14 @@ This framing coheres several existing Choir ideas:
 
 The proposal is therefore not a second multiagent system. It is a new execution
 substrate for actors in the existing multiagent system.
+
+The promoted doctrine sharpens the model-facing contract. A restricted actor
+activation has one actuator: evaluate a Go cell. Search, fetch, transforms,
+artifacts, assignments, messaging, evidence, and outcomes are imported Go
+modules rather than parallel ambient tools. An effects-capable implementation
+assignment may additionally receive direct Bash, backed by the same capsule
+execution broker and receipts as Go execution calls. This is assignment
+authority, never privilege inherited from the `CoSuper` name.
 
 The complete architectural unit is not the actor or activation alone:
 
@@ -89,7 +98,7 @@ The harness owns identity and time:
 mailbox update
   -> wake persistent actor
   -> reconstruct durable context
-  -> provision activation capsule and capability lease
+  -> provision activation capsule and scoped capabilities
   -> run RLM activation
   -> validate typed outcome
   -> commit, park, or complete
@@ -132,7 +141,7 @@ goroutines and channels. It does not durably retain:
 - half-completed model or connector calls;
 - scratch filesystem state that has not been frozen into an artifact or effect
   bundle;
-- a capability lease issued against an earlier computer or work head.
+- an activation capability issued against an earlier computer or work head.
 
 Long work parks by emitting a typed continuation containing artifact refs,
 completed step receipts, pending assignments, open questions, and remaining
@@ -152,14 +161,16 @@ These concepts should be kept separate:
 | Model policy | System-owned rules for selecting, cycling, and falling back among models |
 | RLM activation | Disposable model-authored Go computation for one actor wake |
 
-The common harness should not fork by persona. A Researcher, CoSuper, Texture,
-or actor occupying a Super protocol seat can use the same RLM machinery. Their
-differences are expressed through organizational bindings, prompts, imported
-modules, and host-validated capability leases.
+The common harness does not fork by persona. A Researcher, CoSuper, Texture, or
+actor occupying a Super protocol seat uses the same RLM machinery. Differences
+are expressed through organizational bindings, prompts, imported modules,
+host-validated activation capabilities, and typed outcomes.
 
 Importing a module is not itself authority. A call succeeds only when the
-activation also holds a matching unforgeable lease. This makes the same Go
-program harmless when evaluated under a weaker assignment.
+activation also holds matching unforgeable capabilities and the broker validates
+current actor, computer, trajectory, work, operation, budget, and state heads.
+This makes the same Go program harmless when evaluated under a weaker
+assignment. Persisted source never preserves authority.
 
 Some names remain semantically meaningful even on a uniform substrate:
 
@@ -333,6 +344,14 @@ may still use interpreted goroutines and channels for novel workflows.
 All calls remain bounded by activation context, fan-out limits, semaphores,
 budgets, and capsule resource controls. Destroying the capsule terminates leaked
 or deadlocked activation-local computation.
+
+An effects-capable implementation activation may also receive direct Bash for a
+one-off command before deciding its next move. Direct Bash and
+`execution.Run`/`execution.Shell` from Go are ergonomic views of the same
+capsule execution broker, transaction tape, process-tree cancellation, and
+receipt schema. Subprocesses receive no Choir capability, broker/provider
+credential, canonical-state access, or control socket. Restricted profiles
+such as Researcher have no Bash or equivalent general execution module.
 
 ### Durable multiagent concurrency
 
@@ -557,9 +576,10 @@ and immutable execution refs.
 Rollback is a new forward transaction that selects a prior applied event and
 rematerializes it. It does not erase or rewind the event tape.
 
-At rollback, the runtime revokes leases bound to the displaced head, cancels or
-stale-marks active capsules, rejects late outcomes through head checks, and
-wakes affected actors in fresh activations against the new effective state.
+At rollback, the runtime revokes activation capabilities bound to the displaced
+head, cancels or stale-marks active capsules, rejects late outcomes through head
+checks, and wakes affected actors in fresh activations against the new effective
+state.
 
 ## Connection to Choir as It Exists
 
@@ -570,7 +590,7 @@ This proposal connects to live or code-present Choir substrate as follows:
 | `internal/actor` and `internal/actorruntime` | Durable actor loop, wake/passivate/restart | Replace the current model/tool activation body incrementally, not the mailbox substrate |
 | `coagent_source_packet.v1`, `update_coagent`, store-backed channel log, and inbox delivery | Typed update seed plus separate audit and wake projections | Derive log, delivery, wake, supervision, and settlement consequences from one typed authoritative write; delete rather than preserve a dual path |
 | Lifecycle trajectories and work items | Durable responsibility graph | Make RLM continuation, channel, and assignment relationships first-class in the existing graph |
-| Role-specific tool registries | Prototype capability profiles | Replace persona-shaped registration with typed module manifests plus per-activation leases |
+| Role-specific tool registries | Prototype capability profiles | Replace persona-shaped registration with typed module manifests plus per-activation capabilities |
 | `internal/modelpolicy` | Per-computer model policy and fallback seed | Generalize from one model per activation role to programmatic multi-call selection and consensus receipts |
 | CoSuper capsule assignments | Initial effects-capable RLM target | Generalize implementation/verification scripts into capability-bound Go orchestration without weakening frozen-subject verification |
 | Researcher typed updates | Research capability profile and typed outcome | Move research orchestration into the same RLM substrate while retaining its narrow canonical write boundary |
@@ -672,60 +692,85 @@ Because every inference and connector call is causally bound to work, Choir can
 budget, attribute, compare, and optimize whole orchestration strategies rather
 than isolated prompts.
 
-## Invariants
+## Promoted Invariants
 
-1. Yaegi is an orchestration runtime, not the security boundary; the capsule,
-   import policy, and host capability checks are the boundary.
-2. Persistent identity and accountability belong to the actor, never the
-   interpreter process; settlement-critical continuity belongs to the
-   trajectory/workstream.
-3. Activation-local goroutines and channels never substitute for durable actor
-   communication.
-4. Every model and connector call crosses a trusted broker.
-5. Credentials and provider tokens never enter model-authored code.
-6. Module import does not grant authority without a matching activation lease.
-7. Free text cannot grant authority.
-8. Receiving a message cannot expand the recipient's capabilities.
-9. Every consequential agent-to-agent update produces one authenticated typed
-   obligation mutation; message log, delivery, wake, and supervision views are
-   causally joined projections.
-10. Supervisory visibility is scoped by authoritative work relationships, not
+The following claims were promoted into Choir Doctrine on 2026-08-12:
+
+1. The complete execution unit is durable trajectory/workstream plus
+   accountable actor plus disposable private activation.
+2. Yaegi is an orchestration runtime, not the security boundary; the capsule,
+   import policy, activation capabilities, and host capability checks are the
+   layered boundary.
+3. Persistent identity and accountability belong to the actor; settlement-
+   critical continuity belongs to the trajectory/workstream, never the
+   interpreter process.
+4. Restricted profiles use the Go activation only. General process execution
+   is absent by default and may be mounted for an effects-capable assignment.
+5. Direct Bash and Go execution calls share one capsule broker and receipt path.
+   Spawned processes never inherit Choir authority.
+6. Activation-local goroutines and channels never substitute for durable actor
+   communication, waiting, or recovery.
+7. Every model and connector call crosses a trusted broker; credentials and
+   provider tokens never enter model-authored code.
+8. Module import does not grant authority without matching current activation
+   capabilities and per-operation host validation.
+9. Persisted model-authored source is inert and carries no activation
+   capability, live handle, heap, credential, or prior authority into a later
+   activation.
+10. Free text cannot grant authority, and receiving a message cannot expand the
+    recipient's capabilities.
+11. Every consequential agent-to-agent update produces one authenticated typed
+    mutation whose log, delivery, wake, supervision, and settlement
+    consequences are causally joined projections.
+12. Supervisory visibility is scoped by authoritative work relationships, not
     by a global omniscient role name.
-11. Network reads produce tainted provenance-bearing artifacts.
-12. External writes use typed, idempotent effect transactions.
-13. RLM traces are evidence, not canonical computer-event authority.
-14. Model consensus is evidence, not acceptance or promotion authority.
-15. A frozen capsule effect bundle is the only self-development candidate.
-16. Reconstruction restores actors and accepted state, never executions.
-17. Rollback is an append-only forward transaction and revokes stale
-    activation authority.
-18. Super is a scoped, versioned protocol, never a singleton actor or ambient
+13. Network reads produce tainted provenance-bearing artifacts; external writes
+    use typed, idempotent effect transactions.
+14. Every Go cell and consequential capability crossing produces immutable,
+    citable causal evidence. The host derives the complete salient excerpt set;
+    actors cannot omit inconvenient actions or dissent from supervision.
+15. RLM traces, reports, Texture transclusions, and model consensus are
+    evidence, not canonical computer-event, Texture, acceptance, or promotion
+    authority.
+16. A frozen capsule effect bundle is the only self-development candidate.
+17. Reconstruction restores actors and accepted state, never executions.
+18. Restore is an append-only forward transaction and revokes stale activation
+    authority.
+19. Super is a scoped, versioned protocol, never a singleton actor or ambient
     authority-bearing role name.
-19. High-consequence and irreversible decisions require their predeclared
+20. High-consequence and irreversible decisions require their predeclared
     supervision quorum; missing seats, failures, abstentions, and dissent cannot
     be erased by dynamically redefining the panel.
 
+Exact APIs, schemas, module lists, safe-package allowlists, resource limits, and
+migration sequence remain Definition-owned implementation questions rather than
+doctrine.
+
 ## Adoption Sequence
 
-### Phase 1: CoSuper RLM
+### Phase 1: common kernel, first CoSuper profile
 
-- Embed a capability-scoped Yaegi interpreter in disposable CoSuper capsules.
-- Expose artifact, model, execution, evidence, and assignment modules.
-- Add host-owned `models.Call`, `Parallel`, `Map`, and consensus primitives.
+- Embed one private Yaegi interpreter per bounded activation in disposable
+  CoSuper capsules.
+- Make Go-cell evaluation the only model-facing path for artifacts, assignments,
+  messaging, evidence, work, and outcomes; do not preserve duplicate ambient
+  tools.
+- Expose direct Bash only for an effects-capable implementation assignment and
+  route it through the same broker as Go execution calls.
+- Expose artifact, execution, evidence, assignment, message, trace, and outcome
+  modules with activation-scoped capabilities.
 - Return typed implementation, verification, evidence, and continuation
   outcomes.
-- Preserve current capsule-only effects. **Do not inherit a blanket effects-OFF
-  Phase 1 posture after the supervised-self-development-effects Definition
-  closes.** Re-derive Phase 1 against the proven reversible envelope:
-  standing-rule auto-promotion for reversible computer-local effects;
-  irreversible refusal for send/publish/pay; no Accept/Materialize inside the
-  interpreter. Until that Definition's deployed proof exists, keep effects-OFF
-  as the interim product resting state.
-- Prove context virtualization inside one sealed assignment before depending
-  on a new shared-channel design.
+- Preserve current capsule-only effects and the reversible envelope proven by
+  the supervised-self-development-effects Definition; expose no
+  Accept/Materialize operation inside the interpreter.
+- Prove context virtualization and dynamic multiagent orchestration inside one
+  sealed assignment before depending on a new shared-channel design.
 - Kill an activation mid-work, resume with a different permitted model, and
   complete from durable artifacts and obligations without restoring Yaegi or
   relying on hidden conversation state.
+- Produce supervision excerpts and a Texture version transcluding exact command,
+  message, and recovery or verification receipts.
 
 ### Phase 2: Research capability profile
 
@@ -764,37 +809,37 @@ than isolated prompts.
 - Delete superseded persona-specific activation loops only after product-path,
   restart, supervision, and refusal evidence proves the replacement.
 
-## Decisions Still Required
+## Implementation Questions For The Definition
 
-- Is one Yaegi interpreter created per activation, per Go cell, or reused only
-  within a bounded activation?
-- Which standard-library packages are available, and how is the allowlist
-  tested against indirect authority leaks?
-- Are arbitrary interpreted goroutines permitted initially, or introduced
-  after compiled concurrency combinators prove the broker path?
+- What is the smallest safe computational standard-library allowlist, and how
+  are source imports and rich returned host types checked for indirect authority
+  leaks?
+- What exact module API prevents artifact refs, actor addresses, and generic
+  clients from becoming confused-deputy or cross-workstream capability paths?
+- Which compiled combinators should handle common concurrency while arbitrary
+  interpreted goroutines remain bounded by capsule limits?
 - What is the exact typed continuation schema and compaction policy?
-- Does the RLM trace record source for every Go cell, a normalized program, or
-  both?
-- Is a normalized orchestration/dataflow graph merely trace output, or a
-  first-class intermediate representation that Yaegi incrementally constructs?
-- What constitutes deterministic-enough replay evidence when model calls are
-  intentionally not rerun?
+- Does the RLM trace retain exact source plus a normalized orchestration graph,
+  and what minimum graph edges are required for supervision?
+- What constitutes deterministic-enough replay evidence when model calls and
+  connector observations are intentionally not rerun?
 - How do message schema evolution and old-actor replay interact?
 - Which supervision events wake one seat, all seats, or open a stronger quorum
-  round synchronously, asynchronously, or only on threshold?
-- Which decision classes require one seat, threshold agreement, unanimity,
-  independent model/provider domains, or explicit human approval?
-- How are artifact references authorized so they cannot become a covert
-  cross-workstream communication channel?
+  round?
 - How are connector manifests reviewed, versioned, revoked, and reconstructed?
-- When does a successful adaptive RLM program become a reviewed orchestration
-  recipe or typed artifact-program component, and when must it remain fluid?
-- Which Email actions remain appagent-specific rather than becoming generic
-  external-effect transactions?
-- What is the minimum first acceptance proof that demonstrates context
-  virtualization rather than merely replacing JSON tool calls with Go syntax?
-  The proposed bar is cross-model recovery after forced activation death using
-  only durable workstream and artifact state.
+- When does repeatedly successful source become a reviewed recipe, and what
+  evidence prevents premature promotion?
+- What resource and output limits preserve useful arbitrary capsule-local
+  execution while reliably killing fork, leak, deadlock, disk, and output
+  exhaustion?
+- Which command, message, refusal, and recovery receipts are host-selected as
+  salient, and how are privacy/redaction and exact Texture transclusion ranges
+  represented?
+- What is the minimum first acceptance proof that demonstrates the common
+  kernel rather than replacing JSON tools with Go syntax? The bar is a sealed
+  CoSuper assignment with dynamic delegation, citable consequential receipts,
+  forced activation death, cross-model recovery from durable state, and an exact
+  capsule effect bundle whose acceptance remains external.
 
 ## Lateral Agentic Consensus
 
@@ -895,24 +940,22 @@ successful reviewer identified a reason to collapse those authorities.
 This memo does not claim that:
 
 - Yaegi or the RLM kernel is implemented in Choir;
+- doctrine promotion is deployed product evidence;
 - self-development effects are enabled or accepted on staging;
 - current role registries are already safe general-purpose module systems;
 - the current string channel record is the proposed typed supervision plane;
 - model consensus can authorize promotion;
-- an interpreter can replace capsule isolation;
+- an interpreter or import allowlist can replace capsule isolation and
+  per-operation capability validation;
 - arbitrary network access is safe inside a capsule;
-- a ComputerVersion, route, checkpoint, trace, or verifier statement is
-  semantic event authority.
+- a ComputerVersion, route, checkpoint, trace, report, transclusion, or verifier
+  statement is semantic event authority.
 
 ## Relationship to Current Doctrine
 
-This memo is intended as a candidate convergence direction beneath, not a
-replacement for, current doctrine. It preserves the authority boundaries in
-[Choir Agent Product Doctrine](agent-product-doctrine.md), the persistent
-computer and event-derived effect path in [Choir Computer
-Ontology](computer-ontology.md), and the durable actor/mailbox direction in
-[Choir Doctrine](choir-doctrine.md).
-
-If adopted, its durable claims should be promoted into those sources through a
-separately reviewed architecture change. This memo should not silently become a
-competing doctrine source.
+The kernel, capability, execution-profile, learned-source, and citable-evidence
+claims in this memo were promoted into [Choir Doctrine](choir-doctrine.md) and
+[Choir Agent Product Doctrine](agent-product-doctrine.md) on 2026-08-12. Those
+documents now govern. This memo remains the architecture synthesis and design
+rationale; its implementation questions and adoption sequence are proposal
+material for the successor executable Definition and cannot overrule doctrine.

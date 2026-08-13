@@ -59,6 +59,24 @@ D-ROUTE); `choir-autoputer-completion-2026-07-14.md` and
 `og-dolt-heresy-completion-2026-07-08.md` (settled storage/D-ROUTE/H031).
 None is executable unless explicitly promoted in the current registry.
 
+## Ratified Successor Definition — Sequenced, Not Yet Executable
+
+[`definitions/choir-private-go-actor-kernel-2026-08-12.md`](definitions/choir-private-go-actor-kernel-2026-08-12.md)
+is the owner-ratified successor for the RLM authoring upgrade. It is sequenced
+after the active supervised-self-development-effects Definition proves the
+reversible envelope and completes its cutover. It does not create a concurrent
+product schedule and must not begin effect-bearing implementation while its
+predecessor is working.
+
+The successor converges Researcher and CoSuper on one durable-actor kernel with
+private disposable model-authored Go activations. Restricted profiles receive
+Go only; an effects-capable implementation assignment additionally receives
+direct Bash through the existing capsule broker. The first acceptance target is
+a CoSuper vertical slice with dynamic delegation, citable command/message
+receipts, forced activation death, cross-model durable recovery, Texture
+transclusions, and an exact externally governed effect bundle. The same kernel
+must then refuse Bash and general execution under a Researcher profile.
+
 ## Draft Successor Definitions — Not Executable
 
 Draft successors are blocked hypotheses, not schedules or implementation
@@ -79,11 +97,13 @@ superseded, or historical as stated by their source Definitions, not entrypoints
 
 ## Invocation
 
-Invoke only the active supervised self-development Definition through
+Invoke the active supervised self-development Definition through
 `/goal docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`.
-Its `now.*` and `finish.*` own schedule, resumption, completion, mutation,
-rollback, escalation, and completion-cutover authority; this index owns no
-second schedule. Historical CTS, convergence, performance, Choir-in-Choir, and
+Its `now.*` and `finish.*` own the current product schedule. After it reaches
+`complete` and the registries promote the successor, invoke
+`/goal docs/definitions/choir-private-go-actor-kernel-2026-08-12.md`.
+The successor is owner-ratified architecture authority but is not concurrently
+executable. Historical CTS, convergence, performance, Choir-in-Choir, and
 Autopaper material is evidence or blocked hypothesis, never an entrypoint.
 The OG/Dolt/heresy and computer contracts retain D-ROUTE, H031, lifecycle,
 route-projection, and single-event-chain authority; this Definition adds no
@@ -91,9 +111,11 @@ third semantic store.
 
 ## Unowned External Work
 
-No Definition owns runtime dissolution, actor extraction, broader Wire work,
-external capsules, or ComputerVersion optimization. New work requires current
-evidence, owner ratification, and registry promotion.
+No Definition owns runtime dissolution, broader Wire work, external capsules,
+or ComputerVersion optimization. The sequenced private-Go actor-kernel
+Definition owns actor activation extraction only after its predecessor closes.
+Other new work requires current evidence, owner ratification, and registry
+promotion.
 
 ## Graph Rule
 

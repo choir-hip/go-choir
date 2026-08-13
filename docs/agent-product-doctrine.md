@@ -6,8 +6,9 @@ Texture, runtime configuration, product-path verification, or run acceptance.
 Long-running missions execute as Definition documents (`/goal <doc>.md`); see
 [skills/definition/SKILL.md](../skills/definition/SKILL.md). The
 [durable-computer convergence Definition](definitions/choir-coherent-computer-convergence-2026-07-21.md)
-completed on 2026-07-24 and is historical product-evidence authority. No
-top-level product Definition is currently executable.
+completed on 2026-07-24 and is historical product-evidence authority. The
+current executable product mission is named only by `docs/ACTIVE.md`; this file
+does not create a second schedule.
 It inherits [Choir Doctrine](choir-doctrine.md) and must not become a competing
 doctrine source.
 
@@ -19,9 +20,23 @@ unless `AGENTS.md` is carrying a newer explicitly promoted operating update.
 
 - `conductor` routes exogenous user/app/connector input into Texture/artifact state. It has no self-development mutation authority.
 - Appagents own durable app artifacts. `texture` owns canonical document versions.
-- `researcher` reads/researches and may submit only the typed `update_coagent` source-packet mutation through the canonical event appender. It has no bash, raw Dolt, writable files, capsule commit, acceptance, route, or host authority.
-- `super` is the foreground orchestration root. It may orchestrate capsules, delegation, inspection, verification requests, and decision proposals; it has no bash, writable/coding, shipper, worker-VM, route, or host tools.
-- `co-super` remains an agent loop, but every shell, filesystem, and build effect is a capability-bound guest-local capsule broker verb.
+- `researcher` currently reads/researches and may submit only the typed
+  `update_coagent` source-packet mutation through the canonical event appender.
+  It has no Bash, raw Dolt, writable files, capsule commit, acceptance, route,
+  or host authority. The ratified successor profile preserves those boundaries
+  while replacing its model/tool loop with a private Go activation and narrow
+  source, transform, artifact, evidence, work, assignment, messaging, and
+  outcome modules.
+- `super` is the foreground orchestration root. It may orchestrate capsules,
+  delegation, inspection, verification requests, and decision proposals; it has
+  no Bash, writable/coding, shipper, worker-VM, route, or host tools. Migration
+  of Super onto the common private-Go kernel remains a later profile cutover,
+  not a completion claim of the first CoSuper/Researcher Definition.
+- `co-super` currently remains an agent loop whose shell, filesystem, and build
+  effects are capability-bound guest-local capsule broker operations. The
+  ratified successor replaces that loop with the common private-Go kernel; only
+  an effects-capable implementation assignment mounts direct Bash and Go
+  execution modules. The `co-super` name grants no ambient execution authority.
 - `vsuper`, candidate-super, and aliases are retired from production profiles for self-development and fail closed.
 - Verification is a read-only contract over evidence. It cannot append, accept, materialize, checkpoint, or route an event.
 
@@ -91,6 +106,77 @@ Verifier agents are read-only with respect to canonical product state. They may
 execute only in an independently provisioned read-only capsule whose
 capabilities cannot commit, accept, materialize, checkpoint, or route effects.
 
+## Private Go Activation And Capability Profiles
+
+The ratified successor architecture converges Researcher, Super, CoSuper,
+Texture, and bounded appagents on one durable-actor activation kernel. It is not
+current deployed behavior. On each wake the target kernel gives the actor a
+private, disposable Yaegi interpreter, an assignment-scoped module manifest,
+current activation capabilities, bounded observations, and a typed outcome
+contract. The model incrementally authors and executes Go. Differences among
+actors belong in organizational bindings, module profiles, policy, and outcomes
+rather than persona-specific model loops.
+
+Restricted activations expose only the Go-cell operation to the model. Search,
+source fetch, document and file-format transforms, artifact operations,
+delegation, messaging, evidence, and work state are narrow imported modules;
+there is no duplicate ambient JSON-tool path. Backends may use compiled
+services or isolated converters internally without exposing shell, raw HTTP, or
+general filesystem authority to the actor.
+
+Until each profile passes its named product-path cutover, legacy ambient tool
+profiles are frozen against new capabilities and new call sites. The first
+kernel Definition owns CoSuper and Researcher cutover; Super, Texture, and
+bounded appagent profiles require explicit successor acceptance and deletion
+authority. No successful first profile makes an unmigrated profile complete.
+
+An effects-capable implementation assignment may additionally expose direct
+Bash for ergonomic computer interaction. Direct Bash and the Go
+`execution.Run`/`execution.Shell` surface are two front ends to one capsule
+execution broker, transaction tape, cancellation path, and receipt schema.
+Commands run inside the existing guest-local effect capsule. Child processes
+receive only capsule-local inputs and an explicit ordinary environment; they
+must not inherit activation capabilities, broker or provider credentials,
+canonical database access, sensitive descriptors, guest-control sockets, or
+host authority.
+
+Yaegi is an orchestration runtime, not a sandbox or authority source. An import
+only makes an operation nameable. Every consequential module call must validate
+the current activation, actor, computer, trajectory, work item, operation,
+resource budget, capability grant, and relevant state head in trusted compiled
+code. The capsule supplies process, filesystem, network, resource, and effect
+containment. Trusted reducers alone own durable shared state and external or
+canonical effects.
+
+Model-authored functions may be frozen as immutable source artifacts and reused
+or revised. Source is inert: reuse never preserves a live handle, interpreter
+heap, credential, activation capability, or prior authority. A later activation
+resolves its module requirements and receives fresh capabilities. Repeatedly
+successful source may become a reviewed orchestration recipe, but neither
+origin nor reuse is promotion.
+
+Local goroutines and channels are ephemeral activation dataflow. Durable
+responsibility and communication use assignments, work items, authenticated
+typed messages, and obligations. Actors park with typed continuations rather
+than retaining an activation while another actor works.
+
+## Citable Orchestration Evidence
+
+The runtime records exact Go-cell source and result identity plus every
+consequential capability boundary crossing. Shell/process runs, source and
+artifact access, assignments, agent messages, blockers, disagreements,
+capability requests, verification, effect-bundle freezing, continuations, and
+outcomes produce host-authored causal receipts. This is a normalized
+orchestration graph, not an instruction or syscall recording.
+
+The host derives the complete salient excerpt population for supervision so an
+actor cannot conceal an inconvenient command, refusal, failure, or dissent by
+leaving it out of prose. Supervisory actors select, disposition, and explain
+those receipts. Texture may cite and transclude exact immutable excerpts in
+canonical versions. Reports and transclusions remain evidence projections:
+they cannot append computer events, accept effects, or replace Texture's
+canonical ownership.
+
 ## Harness Minimalism
 
 Keep the agent loop programmatically uniform where authority permits: provider
@@ -110,6 +196,10 @@ and obtain explicit human approval before landing it. Divergence is acceptable
 only when it protects correctness, security, authority boundaries, or
 resource isolation in a way that cannot be represented cleanly as policy or
 prompt contract.
+This is a repository-maintainer exception for changing the shared harness
+implementation. It is not a product rule that a human must approve
+irreversible effects; product effect authority follows the policy-governed
+multiagent consensus contract below.
 
 ## Prompt Control-Flow Antipattern
 
@@ -233,8 +323,11 @@ rejected Round 72 candidate, AppChangePackage/AppAdoption, RunAcceptance,
 worker/candidate VM, local tests, a verifier statement, checkpoint publication,
 or route transition. The owner-ratified path is
 `docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`:
-effects turn on only inside a proven reversible envelope (standing-rule
-auto-promotion; irreversible effects refuse), not as a global ON boolean.
+effects turn on only through effect-specific multiagent consensus policies and
+audited actuators, not as a global ON boolean. Reversible effects gain a restore
+path; irreversible effects require stronger policy, evidence, and consequence
+receipts but do not categorically require a human decision. Human participation
+is a policy-selected seat.
 
 `continuation-level` is transitional H008/H014 residue: the durable-actor contract re-points this
 acceptance level at trajectory/work-item settlement evidence. No deleted

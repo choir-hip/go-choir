@@ -183,16 +183,24 @@ ontologies.
 ### Meta-Level Conjectures
 
 `C5 asserted` Roles are authority envelopes, not identities. Actors should be
-given obligations, evidence, scope, and settlement criteria, not persona-heavy
-workflow scripts.
+given obligations, evidence, scope, settlement criteria, an assignment-scoped
+module manifest, and revocable activation capabilities—not persona-heavy
+workflow scripts or ambient privilege derived from a role name.
 
-`C6 active` The runtime should converge on durable actors: the database
-remembers, Go delivers, actors passivate and rewarm, and polling, parent/child
-control, and continuation synthesis disappear.
+`C6 active` The runtime should converge on durable actors whose accountable
+identity and organizational relationships survive passivation while each wake
+runs in a disposable private activation. The database and trajectory remember,
+Go delivers, and the activation model incrementally authors and executes Go
+against assignment-scoped modules. Interpreter heaps, goroutines, channels, and
+subprocesses are activation-local and are never restored across rewarm.
 
-`C7 active` Trajectories and work items are the intended causality model.
-Settlement is rule-as-data over durable obligations and subject refs, not root
-run completion.
+`C7 active` Trajectories and work items are the intended causality and
+settlement model. Settlement is rule-as-data over durable obligations and
+subject refs, not root run completion. Consequential activation operations form
+a causally joined evidence graph; any assignment, blocker, question,
+disagreement, verification result, continuation, or disposition needed for
+settlement or rewarm becomes durable workstream state rather than remaining
+only in code, a transcript, or Trace.
 
 `C8 active` Promotion is an authorized semantic event with explicit proposal,
 verification, freshness, privacy, acceptance, materialization, checkpoint,
@@ -215,6 +223,24 @@ gates.
 `C12 hyperthesis` Conjecture machinery can become decorative unless it changes
 route choice, deletion pressure, evidence semantics, and stopping conditions in
 practice.
+
+`C13 active` Model-authored Go should become Choir's adaptive actor activation
+language: a private executable medium for composition, multiagent
+orchestration, and reusable organizational learning. Reused source carries no
+authority; each activation resolves imports and receives fresh scoped
+capabilities. This conjecture remains active until product-path evidence shows
+that the common kernel can replace persona-specific loops without reducing
+correctness, containment, restart continuity, or supervision legibility.
+
+`C14 asserted` Reversibility is a recovery property, not the boundary of
+autonomy. Reversible and irreversible effects may both be authorized by a
+predeclared, effect-specific multiagent consensus policy. The policy binds the
+exact subject, eligible seats and independence domains, quorum, dissent,
+evidence, capabilities, consequence receipts, and recovery or compensation
+plan before participant outputs are visible. A human may be a required,
+optional, or absent seat; human approval is not a universal effect gate.
+Trusted reducers and actuators enforce the resulting decision—model consensus
+does not become canonical state authority.
 
 ### Open Hyperthesis Edges
 
@@ -305,6 +331,57 @@ singleton Super Console/zot as an exceptional repair surface. Manual Browser is
 replaced in the source path by Source Viewer/reader artifacts plus explicit Web
 Lens live/original inspection.
 
+`I17` The complete actor execution unit is durable trajectory/workstream plus
+accountable actor plus disposable private activation. No interpreter process,
+heap, goroutine, channel, or subprocess is durable actor identity or
+settlement-critical memory.
+
+`I18` Yaegi imports present an attenuated capability vocabulary; they do not
+grant authority. Every consequential operation is independently authorized by
+current activation capabilities and a trusted broker. Arbitrary model-authored
+code runs only in a disposable guest-local capsule with resource and effect
+containment; Yaegi is not the security boundary.
+
+`I19` General process execution is absent by default. It may be mounted for an
+effects-capable assignment, not inherited from a role name. Direct Bash and Go
+execution calls must use one capsule execution broker and one receipt and
+transaction-tape path. Spawned processes never inherit Choir capabilities,
+credentials, canonical-state access, or control sockets.
+
+`I20` Persisted model-authored source is inert. Loading or reusing it never
+restores an activation capability, live handle, interpreter heap, or prior
+authority; imports, handles, heads, policy, and operations are resolved and
+authorized anew.
+
+`I21` Activation-local goroutines and channels express ephemeral computation.
+Independent responsibility, communication, waiting, recovery, and supervision
+use durable assignments, authenticated typed messages, work items, and
+obligations. An activation parks rather than remaining alive to wait for
+another actor.
+
+`I22` Every model-authored Go cell and every consequential capability boundary
+crossing produces immutable causal evidence. Shell/process execution,
+assignment, agent-to-agent messaging, source and artifact access, capability
+requests, verification, effect-bundle freezing, continuation, and outcome
+receipts are citable. This requires a normalized orchestration graph, not
+instruction- or syscall-level surveillance.
+
+`I23` The host derives the complete salient receipt set for supervision; an
+actor cannot hide a consequential action or dissent by omitting it from a
+report. Host-owned privacy policy removes credentials and unauthorized private
+content without allowing actor-controlled redaction to erase the receipt
+identity, event class, disposition, or existence of inconvenient evidence.
+Supervisors disposition and explain the admissible evidence. Texture may
+transclude exact immutable excerpts into canonical versions, but Trace,
+receipts, reports, and transclusions remain evidence inputs and never acquire
+Texture or canonical computer-event authority.
+
+`I24` A capability available through an actor's Go modules must not remain
+available through a parallel ambient model-tool path. Restricted profiles use
+the private Go activation only; an effects-capable implementation assignment
+may additionally receive direct Bash as an ergonomic view of the same capsule
+execution broker.
+
 `I14` Source evidence remains object identity, not link-shaped prose. Texture
 and successor artifact surfaces represent sources as durable source entities and
 transclusions. Ordinary clickable URLs, markdown web links, footnote prose,
@@ -344,8 +421,13 @@ Mutation classes:
   canonical event acceptance, capsule effects, materialization/checkpoint/route
   projection, rollback, auth/session renewal, vmctl, gateway/provider calls, run
   acceptance, and deployment routing.
-- `black`: irreversible or production-destructive operations. These require
-  explicit human authority and rollback/restore evidence before execution.
+- `black`: irreversible or production-destructive operations. These require the
+  strongest predeclared authority policy, qualified independent consensus,
+  exact subject binding, durable consequence evidence, and a recovery or
+  compensation plan before execution. A human seat is required only when that
+  policy says so. Repository-agent safety rules may separately require human
+  authorization for destructive maintenance; do not generalize that operator
+  boundary into product ontology.
 
 Protected-surface conjecture detour: before an orange or red change lands, the
 mission must name the conjecture delta, affected protected surfaces, admissible
@@ -371,7 +453,8 @@ Claim classes:
 - `staging-smoke-level`: narrow product-path proof that a surface still opens or
   a minimal path still executes.
 - `export-level`: transferable candidate/source evidence exists.
-- `promotion-level`: owner-gated promotion and rollback evidence exists.
+- `promotion-level`: policy-authorized promotion, materialization, and recovery
+  evidence exists, including the exact consensus decision receipt.
 - `settlement-level`: trajectory/work-item settlement evidence exists for the
   relevant mission. (Doctrine class; `settlement` is synthesized from trajectory
   and work-item state, not a separate Go constant.)
@@ -615,14 +698,19 @@ that convergence and by this product path.
 
 The active effects Definition
 (`choir-supervised-self-development-effects-2026-08-11`) does **not** flip a
-global effects-ON boolean. After its rehearsal and restore gates pass, the
-invariant is envelope-relative: reversible computer-local effects may
-auto-promote under an owner-armed standing rule with Super+Texture seats;
-irreversible external effects refuse without a separate decision; restore is
+global effects-ON boolean. After its rehearsal, decision-policy, and restore
+gates pass, authority is effect-relative: every effect class runs only through
+its predeclared multiagent consensus policy and audited actuator. Reversible
+computer-local effects may use a lighter qualified quorum because restore can
+bound the excursion. Irreversible external or shared effects remain inside the
+autonomy window but require stronger ex ante evidence, narrower subject
+binding, durable consequence receipts, and recovery by compensation or a new
+forward action rather than fictional rewind. A human is one possible
+policy-selected seat, never a universal approval gate. Restore remains
 acceptance-fenced and scoped (VM-local + release; platform/cycle/host frontend
-OUT unless a successor changes that). Until that Definition closes with deployed
-proof, do not teach "effects remain OFF forever" as the destination — teach it
-as the gate before the envelope.
+OUT unless a successor changes that). Until that Definition closes with
+deployed proof, do not teach "effects remain OFF forever" as the destination —
+teach it as the gate before policy-governed effects.
 
 Product order follows the vision (choir-vision.md):
 
