@@ -71,10 +71,10 @@ start:
     - id: chain-bootstrap-null-head-2026-08-12
       problem: "After workspace replacement made the retained computer diagnostically equivalent (82 live == 82 replay, zero differences), it still cannot reach replay eligibility because the canonical event chain is empty: Store.Head is null and replayEligibility requires both event heads non-nil and equal. The only production genesis route (POST /self-development/genesis) is checkpoint-coupled and proxy-disabled, and the Definition forbids reusing it."
       evidence_ref: docs/evidence/choir-supervised-self-development-chain-bootstrap-design-2026-08-12.md
-      consequence: "A plain-computer canonical-chain bootstrap (POST /api/computers/{id}/lifecycle/bootstrap-chain) establishes a non-null head by appending EventGenesisImported bound to the guest release identity (git commit + guest-image digest, empty EmbeddedDoltRefs). It publishes no checkpoint, writes no selfdev Operation/baseline, and performs no effect; it is a precondition for replay eligibility, not restore authority."
+      consequence: "Resolved 2026-08-13 by POST /api/computers/{id}/lifecycle/bootstrap-chain on the retained computer: one EventGenesisImported bound to the guest release identity (git 5d132f66360899d634befd69ba537ab918005c24, guest-image sha256:f777ceea59d6628838076fdeb70719653fd61822c1fce5e0e319cb2af14911c7, empty EmbeddedDoltRefs) established a sequence-1 canonical head with no checkpoint and no selfdev Operation. The post-bootstrap probe reports equivalent (82==82, zero differences) with live_head==replay_head and eligible=true. See docs/evidence/choir-supervised-self-development-replay-completeness-post-bootstrap-2026-08-13.json."
 
   unknowns:
-    - "Whether checkpoint design can be exercised against a plain-computer canonical head before the selfdev E2E rehearsal, and how checkpoint creation refuses while any behavior-bearing local row is not event- or receipt-derivable."
+    - "Whether checkpoint creation binds the sequence-1 canonical head plus a VM-local content witness and refuses while any behavior-bearing local row is not event- or receipt-derivable; the retained computer is now eligible and is the checkpoint-design substrate."
     - "Whether rematerialization is product-ready. ProjectionMaterializer is non-runtime today; if the classification and subsequent build show it is not usable, restore falls back to a single-workspace pin checkout on an interim basis with the event head still the sole semantic authority."
     - "Which effect classes are outside the reversible envelope and must refuse to promote under a standing rule."
     - "Whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata and citations without a payload schema change."
@@ -251,8 +251,8 @@ measures:
 
 now:
   status: working
-  slice: "Implement and land the owner-scoped plain-computer canonical-chain bootstrap (POST /api/computers/{id}/lifecycle/bootstrap-chain, guest-core, consensus-approved): append EventGenesisImported bound to the guest release identity, idempotent, no checkpoint/baseline/effect. Deploy, bootstrap the retained computer, and re-run replay-completeness. Expect non-nil equal heads and eligible=true. Checkpoint design is the next axis."
-  question: "After bootstrap, does the deployed replay probe return equivalent with non-nil equal heads and eligible=true, with no checkpoint, selfdev Operation, or effect written?"
+  slice: "Deployed at 5d132f66 and executed: bootstrap-chain appended EventGenesisImported (sequence 1, head a3cf16d0d1dbb46e4ebd5841af5007575fb74184d54c2e6fa26f856769b92b44, no checkpoint, no selfdev Operation), and the post-bootstrap probe reports equivalent with eligible=true. Next: checkpoint completeness — bind the canonical head plus a VM-local content witness and prove refusal on non-derivable rows."
+  question: "Does checkpoint creation bind the canonical event head plus CodeRef, ArtifactProgramRef, and a VM-local content witness, and refuse while any behavior-bearing local row is not event- or receipt-derivable?"
 
   reconciliation:
     observed_at: 2026-08-12T06:56:12Z
@@ -263,8 +263,8 @@ now:
     worktree_inventory_ref: 2026-08-12 read-only git status (clean)
     status: reconciled
 
-  blocker_or_risk: "Plain-genesis bootstrap is a red canonical-chain write. It establishes eligibility but certifies projection-reconstruction equivalence only, not causal provenance of the 82 live rows. Post-genesis direct writes to empty_until_supported tables flip eligibility false (correct fail-closed). replace-workspace after a successful bootstrap is forbidden (CAS/local projection split)."
-  next_action: "Land the chain-bootstrap slice through CI and staging, bootstrap the retained computer, and re-run replay-completeness expecting eligible=true. Do not rerun the probe as if unanswered, do not reuse POST self-development/genesis, and do not run replace-workspace after bootstrap."
+  blocker_or_risk: "Eligibility certifies projection-reconstruction equivalence, not causal provenance of the 82 live rows. Any direct-SQL write to an empty_until_supported table flips eligibility false (correct fail-closed). replace-workspace after a successful bootstrap is forbidden (CAS/local projection split)."
+  next_action: "Design checkpoint completeness on the now-eligible retained computer: bind the canonical event head plus CodeRef, ArtifactProgramRef, and a VM-local content witness; prove checkpoint creation refuses while any behavior-bearing local row is not event- or receipt-derivable. Do not treat eligible=true as restore license."
 
   candidate:
     id: none
@@ -280,7 +280,7 @@ now:
     consequence: "Per-candidate owner approval is removed as a requirement and replaced by an owner-armed standing rule plus two-seat auto-approval. The decision-binding verifier and mode CAS are relaxed deliberately, which is the mission's heaviest evidence burden. Checkpoint and revert become deliverables rather than a rollback field. Effects leaving the reversible envelope gain an explicit refusal requirement. Freeze/propose authority must be wired onto CoSuper, which today has no production call site. Pre-mission haunted-authority cutover (roadmap demotion, doctrine/ontology transitional language, RLM Phase-1 re-derive note, restore-set boundary, AGENTS restore-vs-deploy note) landed green; finish.completion_cutover must still run after deployed acceptance or the goal is a false complete."
   evidence_refs: [docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
   blocker_or_risk: "Revert is the mission: nothing in production reads Dolt history back, checkpoints bind no state, and Dolt commits carry no head binding. Replay completeness is unresolved and is the deciding measurement; ProjectionMaterializer is explicitly non-runtime today, so the preferred rematerialization path has no runtime implementation yet and an interim single-workspace pin checkout may be needed. Relaxing the decision-binding verifier and mode CAS touches the surfaces that make the tape trustworthy and carries the heaviest evidence burden. RESOLVED 2026-08-11: staging deploy identity reconciled; owner-bearer residual disposed; capsule build capability confirmed; frontend serving location determined (UI out of scope)."
-  next_action: "Land and deploy the owner-scoped chain-bootstrap verb after the accepted 2026-08-12 design receipt; do not rerun the probe as if unanswered."
+  next_action: "Design checkpoint completeness after the accepted 2026-08-13 bootstrap receipt; do not rerun the probe as if unanswered."
 
 receipts:
   - id: roadmap-consensus-2026-08-11
@@ -429,6 +429,22 @@ receipts:
       environment_identity: "staging https://choir.news deployed_commit d2ab2d2d2184a7918f1a6ff73b6bd29638f85b5c"
       deployed_acceptance: "classification only; 26 differences remain on the retained workspace"
     registry_conformance_ref: "effects Definition remains the active entrypoint; classification evidence is referenced here and in the authority manifest"
+  - id: chain-bootstrap-eligible-2026-08-13
+    boundary: execute
+    commit_or_artifact: docs/evidence/choir-supervised-self-development-replay-completeness-post-bootstrap-2026-08-13.json
+    proof_refs: ["choir computer bootstrap-chain --computer computer-03335285269bdba4f94377e56879f9e6 at 2026-08-13T00:59Z (sequence 1, canonical_event_head a3cf16d0d1dbb46e4ebd5841af5007575fb74184d54c2e6fa26f856769b92b44, code_ref git:5d132f66360899d634befd69ba537ab918005c24, appended_event true, published_checkpoint false, wrote_selfdev_operation false)", "restart receipt 019ff8a1-4894-747b-ae86-020a87824416 (boot new guest image, realization_epoch 208)", "choir computer replay-completeness at 2026-08-13T01:00Z: equivalent, zero differences, live_head==replay_head (a3cf16d0), eligible=true, probe_digest 977b68106ed79d19fa7ef4c011f6aa57a79a80ec4fb74f51789baa98e8069f90", "https://choir.news/health deployed_commit 5d132f66360899d634befd69ba537ab918005c24", "CI run 31654611696 success"]
+    rollback_ref: "git revert 5d132f66; quarantined pre-cutover workspace retained in-guest; bootstrap append is a forward event, not an in-place mutation"
+    disposition: "accepted as replay eligibility (projection-reconstruction equivalence) on a sequence-1 canonical head; not restore license"
+    problem_ref: chain-bootstrap-null-head-2026-08-12
+    authorization_ref: "owner direction pre-launch no-backcompat; convergent panel .agentic-consensus/replay-chain-bootstrap-20260812 (6/6 APPROVE WITH CONDITIONS)"
+    candidate_or_evidence_refs: [docs/evidence/choir-supervised-self-development-replay-completeness-post-bootstrap-2026-08-13.json, docs/evidence/choir-supervised-self-development-chain-bootstrap-design-2026-08-12.md]
+    landing:
+      source_commit: 5d132f66
+      ci_ref: "31654611696 (success)"
+      deploy_ref: "Deploy to Staging (Node B) success; deployed_at 2026-08-13T00:58:00Z"
+      environment_identity: "https://choir.news/health deployed_commit 5d132f66360899d634befd69ba537ab918005c24, vmctl_status ok"
+      deployed_acceptance: "bootstrap-chain + restart + replay-completeness; equivalent, non-nil equal heads, eligible=true, no checkpoint/Operation/effect"
+    registry_conformance_ref: "effects Definition remains the active entrypoint; post-bootstrap evidence artifact is referenced here and in the authority manifest"
   - id: workspace-replace-cutover-2026-08-12
     boundary: execute
     commit_or_artifact: docs/evidence/choir-supervised-self-development-replay-completeness-post-cutover-2026-08-12.json
