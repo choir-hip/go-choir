@@ -25,6 +25,8 @@ Primary support docs:
   for supervised self-development first, the World Wire downstream.
 - [current-architecture.md](current-architecture.md)
 - [computer-ontology.md](computer-ontology.md)
+- [memo-per-computer-frontend-2026-08-13.md](memo-per-computer-frontend-2026-08-13.md)
+  — computer-surface frontend is per-computer; host SPA is non-conformance.
 - [conjecture-assertion-ledger-2026-06.md](conjecture-assertion-ledger-2026-06.md)
 - [why-texture-2026-06-15.md](why-texture-2026-06-15.md)
 - [texture-agentic-invariants-2026-06-13.md](texture-agentic-invariants-2026-06-13.md)
@@ -144,7 +146,10 @@ Preferred vocabulary:
 - capsule (ephemeral effect chamber);
 - materializer, acceptance, projection, and **event-derived restore** (forward
   rematerialization / acceptance-fenced return; prefer "restore" over "rollback"
-  when meaning product undo — git revert remains a separate repo operation).
+  when meaning product undo — git revert remains a separate repo operation);
+- per-computer **computer surface** (Desktop, Texture, apps, Settings panes,
+  asset graph) versus thin **platform shell**; a **serving join** is required
+  before route CAS when UI is in the restore set.
 
 Avoid making these the root frame unless the sentence is explicitly about a
 surface: personal workspace, AI workspace, publishing system, autoputer, workflow,
@@ -241,6 +246,16 @@ plan before participant outputs are visible. A human may be a required,
 optional, or absent seat; human approval is not a universal effect gate.
 Trusted reducers and actuators enforce the resulting decision—model consensus
 does not become canonical state authority.
+
+`C15 asserted` A user's computer includes the UI that renders that computer.
+User-authored frontend is computer surface, scoped by `ComputerID`, and takes
+the same capsule-accept-materialize path as any other self-development change.
+A host-global SPA is not a computer. Thin platform shell (TLS, Caddy bootstrap,
+`/auth/*`, picker chrome, proxy/vmctl/corpusd, NixOS) may remain host software.
+Desktop, Texture, apps, Settings computer panes, and the served asset graph
+may not. Recording a frontend digest without a serving join does not satisfy
+this conjecture. Architecture synthesis:
+[memo-per-computer-frontend-2026-08-13.md](memo-per-computer-frontend-2026-08-13.md).
 
 ### Open Hyperthesis Edges
 
@@ -381,6 +396,14 @@ available through a parallel ambient model-tool path. Restricted profiles use
 the private Go activation only; an effects-capable implementation assignment
 may additionally receive direct Bash as an ergonomic view of the same capsule
 execution broker.
+
+`I25` The UI that renders a user computer is that computer's surface. Restore
+of a computer restages that surface. Platform control plane may version
+independently. Checkpoint creation fails closed unless served UI identity is
+derivable from the bound release or an explicit frontend join. vmctl route CAS
+greens only after that serving join. CI pointer rotation and a host
+`frontend-current` tree are not computer changes. The current host-global SPA
+is non-conformance, not product ontology.
 
 `I14` Source evidence remains object identity, not link-shaped prose. Texture
 and successor artifact surfaces represent sources as durable source entities and
@@ -654,6 +677,15 @@ identity repaired** by the audited-construction Definition phases B/D/F. The
 detector remains active. The only self-development candidate is a frozen capsule
 effect bundle; no route resolves to a VM/desktop identity.
 
+`H032` **Host-global computer surface** — Caddy `frontend-current` (or any one
+host SPA) presented as the UI of a user computer, so a capsule UI change is
+either a platform deploy or a no-op, and restore cannot return the surface the
+user operates. Successor: per-computer computer surface under `C15`/`I25`;
+thin platform shell only; serving join before route CAS. Current staging is
+the heresy; do not add a zero-count CI detector that fails the live hop
+before the successor lands. Architecture synthesis:
+[memo-per-computer-frontend-2026-08-13.md](memo-per-computer-frontend-2026-08-13.md).
+
 ## Banned Patterns
 
 Agents must not introduce:
@@ -685,7 +717,12 @@ Agents must not introduce:
     treat a VM, desktop, mutable branch, package, lineage record, or
     `ComputerVersion` route as self-development candidate authority. The only
     self-development candidate is a frozen capsule effect bundle; vmctl routes
-    only accepted checkpoints after an authorizing event.
+    only accepted checkpoints after an authorizing event;
+17. new host-global product UI taught as the computer's surface, or a frontend
+    digest recorded as restore completeness without a serving join that makes
+    that computer's browser read those bytes. Thin platform shell may remain
+    host-global; Desktop, Texture, apps, Settings computer panes, and the
+    asset graph may not.
 
 ## Product Path
 
@@ -707,8 +744,10 @@ autonomy window but require stronger ex ante evidence, narrower subject
 binding, durable consequence receipts, and recovery by compensation or a new
 forward action rather than fictional rewind. A human is one possible
 policy-selected seat, never a universal approval gate. Restore remains
-acceptance-fenced and scoped (VM-local + release; platform/cycle/host frontend
-OUT unless a successor changes that). Until that Definition closes with
+acceptance-fenced and scoped (VM-local + release IN; platform/cycle OUT).
+Computer-surface frontend is IN by `C15`/`I25`; the host-global SPA is current
+non-conformance, closed by a successor serving envelope, not by treating the UI
+as platform software. Until that Definition closes with
 deployed proof, do not teach "effects remain OFF forever" as the destination —
 teach it as the gate before policy-governed effects.
 

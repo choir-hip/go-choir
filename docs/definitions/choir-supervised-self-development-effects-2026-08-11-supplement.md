@@ -255,11 +255,13 @@ exactly this.
 `internal/autoputer/capsule_executor_linux.go:14-56`;
 `internal/capsule/executor.go:113-136,224-266`.
 
-**The UI cannot ship in the effect.** Caddy on Node B serves `/` and `/assets/*`
-from `/var/www/go-choir/frontend-current` — a host directory, outside the guest
-and outside the updater-controlled release. A UI change inside a bundle would
-land where the browser never reads. Solitaire is API-only until frontend serving
-moves inside the computer's own release, which is a separate mission.
+**The UI cannot ship in this candidate's effect.** Caddy on Node B serves `/`
+and `/assets/*` from `/var/www/go-choir/frontend-current` — a host directory,
+outside the guest and outside the updater-controlled release. A UI change inside
+a bundle would land where the browser never reads. Solitaire stays API-only
+until a successor proves the serving join. That is current non-conformance
+against `C15`/`I25`, not a classification of Desktop/Texture/apps as platform
+software (`docs/memo-per-computer-frontend-2026-08-13.md`).
 *Evidence:* `nix/node-b.nix:23-24,161,193-207`.
 
 **Freeze and propose are wired to nothing.** An assigned CoSuper's registry is
@@ -326,8 +328,12 @@ pre-envelope world mid-mission. Pre-mission (green) changes landed:
   Mission 0 and Invocation demoted so ACTIVE owns no second schedule.
 - `docs/mission-graph.yaml` active-node note rewritten to replay probe + disposed
   Mission 0 (no longer schedules headed-browser then E2 as the live path).
-- Ontology restore-set boundary named (VM-local + release IN; platform/cycle/
-  host frontend OUT); ComputerVersion clarified as code identity not full restore.
+- Ontology restore-set boundary named (VM-local + release IN; platform/cycle
+  OUT). Host frontend was recorded as currently OUT; owner direction 2026-08-13
+  asserts computer-surface frontend is per-computer (`C15`/`I25`), so the host
+  SPA is non-conformance pending a serving-envelope successor
+  (`docs/memo-per-computer-frontend-2026-08-13.md`). ComputerVersion remains
+  code identity, not a full restore address.
 - Agent-product doctrine: model policy is config, not self-dev content axis;
   effects OFF is pre-gate, not destination.
 - Doctrine Product Path: policy-relative permission after gates; restore

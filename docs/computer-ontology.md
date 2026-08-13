@@ -1,14 +1,15 @@
 # Choir Computer Ontology
 
 **Status:** canonical architecture vocabulary
-**Last updated:** 2026-07-10
+**Last updated:** 2026-08-13
 
 This document names the durable object that Choir operates on.
 
 Choir does not primarily give each user a autoputer. It gives each user a
 persistent **computer**: a stateful private machine-world where apps, agents,
 files, package installs, source trees, local builds, Dolt state, prompts,
-runtime services, and user preferences can diverge from the platform baseline.
+runtime services, user preferences, and the UI that renders that computer can
+diverge from the platform baseline.
 
 "Autoputer" remains a code/service name where the implementation currently uses
 it. It should not be the product ontology. A autoputer sounds disposable. A Choir
@@ -106,14 +107,19 @@ authority.
 
 **Restore-set boundary (normative during and after the active effects Definition):**
 a user-computer restore addresses an event head and restores the release pointer
-plus VM-local embedded state only. Shared platform/world-wire Dolt and cycle/
+plus VM-local embedded state. Shared platform/world-wire Dolt and cycle/
 sourcecycled state are OUT (restoring them would rewind other computers or
-shared services). The host-served web frontend (`nix/node-b.nix` →
-`/var/www/go-choir/frontend-current`) is currently OUT of the restore set —
-either treat it as platform control-plane software, or fold it into a successor
-frontend-in-release mission; do not claim "the whole computer" was put back while
-the UI remains outside the envelope. External sends/publishes/payments are
-outside restore by nature.
+shared services). Computer-surface frontend (Desktop, Texture, apps, Settings
+computer panes, served asset graph) is IN by doctrine `C15`/`I25`. The
+host-served SPA (`nix/node-b.nix` → `/var/www/go-choir/frontend-current`) is
+current non-conformance, not an acceptable product classification as platform
+control-plane software. Thin platform shell (TLS, Caddy bootstrap, `/auth/*`,
+picker chrome, proxy/vmctl/corpusd, NixOS) remains OUT. Do not claim "the whole
+computer" was put back while the UI remains `frontend-current`. A successor
+serving envelope is required; recording a frontend digest without that join
+fails the invariant. See
+[memo-per-computer-frontend-2026-08-13.md](memo-per-computer-frontend-2026-08-13.md).
+External sends/publishes/payments are outside restore by nature.
 This restore-set boundary is not an autonomy boundary. External sends,
 publications, payments, and shared-ledger mutations may be autonomously
 authorized by their own stronger consensus policy and actuator. They cannot be

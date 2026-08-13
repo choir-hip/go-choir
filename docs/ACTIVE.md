@@ -3,18 +3,36 @@
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
 
-## Active Definition
+## Active Definition — Tape-Based Recovery
+
+[`definitions/choir-tape-recovery-2026-08-13.md`](definitions/choir-tape-recovery-2026-08-13.md)
+is the owner-priority executable `/goal` as of 2026-08-13. Proof target is
+**whole-computer restore from the tape**: a checkpoint that binds event head +
+CodeRef + ArtifactProgramRef + VM-local content witness + frontend identity,
+runtime rematerialization, a per-computer frontend serving hop, and an
+owner-reachable acceptance-fenced restore. It closes the gap that checkpoints
+bind no state and the frontend is host-global. Everything else — the effects
+decision-policy envelope, the private-Go actor RLM rewrite, and tabled World
+Wire — follows it.
+
+## Effects Envelope — Sequenced After Tape Recovery
 
 [`definitions/choir-supervised-self-development-effects-2026-08-11.md`](definitions/choir-supervised-self-development-effects-2026-08-11.md)
-is the owner-ratified executable `/goal`, superseding Continuous Texture
+is owner-ratified and supersedes Continuous Texture
 Supervision (CTS) as of 2026-08-11 and corrected by owner direction on
 2026-08-13. Proof target is **policy-governed autonomy**: capsule-authored
 source change under effect-specific qualified consensus, E2 correction and
 acceptance-fenced restore of VM-local state + release, plus one exact
 irreversible email send under a stronger no-human-seat acceptance policy with
-durable delivery and consequence receipts (platform/cycle/host frontend OUT).
+durable delivery and consequence receipts (platform/cycle OUT of restore;
+computer-surface frontend is per-computer by invariant and currently
+host-global, so not yet restorable).
 Reasoning and retired approaches live in the Definition's
 [supplement](definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md).
+Its restore legs — checkpoint completeness, revert build, scope refusal,
+and total restore — are owned by and satisfied-by the tape-recovery
+Definition; this Definition owns decision-policy and effect promotion on
+top of that substrate.
 `choir-self-development-roadmap-2026-08-11.md` is a **historical migration
 receipt**, not a live schedule. CTS remains citable evidence, not an entrypoint.
 The scope-disjoint

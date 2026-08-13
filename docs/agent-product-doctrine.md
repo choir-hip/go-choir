@@ -66,6 +66,14 @@ changes only after verified guest materialization.
   effects Definition adds event-head addressing plus a VM-local content witness
   for restore completeness; promote that fuller checkpoint binding to settled
   doctrine only after deployed restore proof.
+- **Per-computer frontend:** the UI that renders a computer is that computer's
+  surface (`C15`/`I25`). User-authored frontend changes are scoped by
+  `ComputerID` and take the same capsule-accept-materialize path as other
+  self-development. A host-global SPA (`frontend-current`) is current
+  non-conformance, not the product. Thin platform shell (TLS, auth, picker
+  chrome) may remain host software. Do not ship UI in the current effects
+  candidate; the browser would not read it. See
+  `docs/memo-per-computer-frontend-2026-08-13.md`.
 - **vmctl projection:** vmctl remains the sole route-slot CAS actuator and
   verifies exact accepted-event, checkpoint, materialization, verifier, and
   route-certificate joins. Post-genesis legacy route authority refuses.

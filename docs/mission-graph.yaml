@@ -296,9 +296,9 @@ nodes:
       - docs/choir-doctrine.md
       - docs/standing-questions.md
       - AGENTS.md
-  - id: choir-supervised-self-development-effects-2026-08-11
-    title: Supervised Self-Development with Effects
-    path: docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
+  - id: choir-tape-recovery-2026-08-13
+    title: Tape-Based Recovery (Whole-Computer Restore)
+    path: docs/definitions/choir-tape-recovery-2026-08-13.md
     ledger: ''
     status: working
     kind: spine
@@ -306,6 +306,37 @@ nodes:
     execution_mode: mission_orchestrator
     depends_on:
       - choir-coherent-computer-convergence-2026-07-21
+    enables:
+      - choir-supervised-self-development-effects-2026-08-11
+    note: >-
+      Owner priority 2026-08-13: the computer's recoverability is the foundation.
+      Restore the whole computer - event-derived VM-local projection AND the
+      computer-surface frontend - from the tape, verified by content hash, with an
+      acceptance-fenced serving join. Closes the gap that checkpoints bind no
+      content witness, ProjectionMaterializer is non-runtime, and the frontend is
+      host-global. The effects Definition's restore legs (checkpoint completeness,
+      revert, scope refusal, total restore) are satisfied-by this Definition.
+      World Wire is tabled until after the actor RLM rewrite.
+    sources:
+      - docs/definitions/choir-tape-recovery-2026-08-13.md
+      - docs/memo-per-computer-frontend-2026-08-13.md
+      - docs/choir-doctrine.md
+      - docs/computer-ontology.md
+      - docs/agent-product-doctrine.md
+      - docs/standing-questions.md
+      - docs/ACTIVE.md
+      - AGENTS.md
+  - id: choir-supervised-self-development-effects-2026-08-11
+    title: Supervised Self-Development with Effects
+    path: docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-coherent-computer-convergence-2026-07-21
+      - choir-tape-recovery-2026-08-13
     enables: []
     note: >-
       Owner-ratified executable Definition superseding Continuous Texture
@@ -316,13 +347,14 @@ nodes:
       human seat required for that acceptance and durable consequence receipts.
       The 26 pre-drop replay differences were classified and resolved (workspace
       replacement + chain bootstrap), and the retained computer is
-      replay-eligible at sequence 1. Next is checkpoint completeness: bind the
-      canonical head plus CodeRef, ArtifactProgramRef, and a VM-local content
-      witness, and refuse creation for unreproducible behavior-bearing writes.
-      Effects remain OFF until the staging rehearsal and decision-policy gates
-      pass. Post-acceptance finish.completion_cutover is required for
-      goal.complete. choir-self-development-roadmap-2026-08-11.md is historical
-      migration evidence only — not schedule authority.
+      replay-eligible at sequence 1. Checkpoint completeness, revert build,
+      scope refusal, and total restore are owned by choir-tape-recovery-2026-08-13
+      and satisfied-by its receipts. This Definition owns decision-policy and
+      effect promotion on top of that restore substrate. Effects remain OFF
+      until both this Definition's decision-policy gates and the tape-recovery
+      restore proof pass. Post-acceptance finish.completion_cutover is required
+      for goal.complete. choir-self-development-roadmap-2026-08-11.md is
+      historical migration evidence only — not schedule authority.
     sources:
       - docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
       - docs/definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md
@@ -333,6 +365,7 @@ nodes:
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
       - docs/choir-doctrine.md
+      - docs/memo-per-computer-frontend-2026-08-13.md
       - docs/ACTIVE.md
       - AGENTS.md
   - id: choir-private-go-actor-kernel-2026-08-12
@@ -483,6 +516,12 @@ nodes:
     entrypoint: false
     depends_on: []
     enables: []
+    note: >-
+      End-to-end World Wire article/lineage production is tabled until after the
+      actor RLM rewrite, so the processor pipeline inherits code-based
+      orchestration instead of the old workflow structure. The authority-cutover
+      and legacy-migration receipts remain settled; the source-to-article product
+      path is explicitly deferred, not a live capability claim.
   - id: choir-autoputer-cli-operability-2026-07-11
     title: Autoputer External-CLI Operability Before Choir-in-Choir
     path: docs/definitions/choir-autoputer-cli-operability-2026-07-11.md

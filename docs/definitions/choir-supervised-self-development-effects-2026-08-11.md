@@ -33,7 +33,7 @@ start:
       evidence_ref: internal/agentcore/tool_profiles.go:309-315,386; internal/agentcore/tools_capsule.go:61-102; internal/agentcore/super_controller.go:784-796; internal/agentcore/update_coagent_survivor_contract_test.go:193-199
     - claim: "The capsule can build: lower layer is the guest root, platform source is snapshotted by git commit, and go/gcc/git/make/nodejs/pkg-config/icu are on PATH with persistent Go caches and Dolt ICU CGO flags set."
       evidence_ref: nix/autoputer-vm.nix:675-700,717-745,777-798; internal/autoputer/capsule_executor_linux.go:14-56
-    - claim: "Staging serves the web frontend from the host (Caddy on Node B, /var/www/go-choir/frontend-current), outside the updater-controlled release. The candidate is API-only."
+    - claim: "Staging serves the web frontend from the host (Caddy on Node B, /var/www/go-choir/frontend-current), outside the updater-controlled release. This candidate is API-only because the browser would not read a capsule UI; computer-surface frontend remains per-computer by C15."
       evidence_ref: nix/node-b.nix:23-24,161,193-207
     - claim: "Supersession cannot be an operation state — the selfdev machine is linear and terminal — and the decision verifier admits exactly one input artifact ref and one verifier ref, so a supersession citation must ride B's proposal event."
       evidence_ref: internal/selfdev/operations.go:423-446; internal/agentcore/self_development_decision_binding.go:45,53
@@ -130,7 +130,7 @@ finish:
     purpose: "Staging trajectory proof alone is a false complete if haunted teaching remains live authority. These obligations are part of goal.complete, not post-hoc cleanup."
     upon_deployed_acceptance:
       - id: doctrine-promote
-        action: "Promote earned invariants into choir-doctrine / computer-ontology / agent-product-doctrine: effect-specific consensus policy is the autonomy boundary; checkpoint = event head + CodeRef + ArtifactProgramRef + VM-local content witness; restore is acceptance-fenced and scoped; irreversible effects require stronger policy and consequence receipts, not a categorical human gate; effects OFF is pre-gate not destination. Preserve platform/cycle/frontend OUT exclusions unless a successor changes them."
+        action: "Promote earned invariants into choir-doctrine / computer-ontology / agent-product-doctrine: effect-specific consensus policy is the autonomy boundary; checkpoint = event head + CodeRef + ArtifactProgramRef + VM-local content witness; restore is acceptance-fenced and scoped; irreversible effects require stronger policy and consequence receipts, not a categorical human gate; effects OFF is pre-gate not destination. Platform/cycle remain OUT of restore. Computer-surface frontend is IN by C15/I25; the host-global SPA is current non-conformance, closed by a successor serving envelope, not by treating UI as platform software."
         class: promote-to-doctrine
       - id: lexicon-cutover
         action: "Cut product and API vocabulary from rollback/accept_once/approval-as-safety to restore/decision_policy/qualified_consensus/consequence_receipt where those names teach the old world (selfdev states, CLI, Settings copy, Definition skill templates)."
@@ -148,7 +148,7 @@ finish:
         action: "Land restore-aware health/identity reporting (event head + CodeRef + witness + route; distinguish product restore from failed deploy / git revert). Retain release artifacts needed for advertised checkpoints."
         class: successor-mission
       - id: frontend-ownership
-        action: "Decide and document: host frontend is platform control-plane OR fold into frontend-in-release successor; do not leave 'total revert of the computer' ambiguous."
+        action: "Decided 2026-08-13: computer-surface frontend is per-computer, not platform control-plane (docs/memo-per-computer-frontend-2026-08-13.md; doctrine C15/I25). Open a successor Definition for the serving envelope. Do not ship UI in this candidate; Caddy still serves host frontend-current. Thin platform shell (TLS, auth, picker chrome) remains OUT of restore."
         class: "promote-to-doctrine | successor-mission"
       - id: successor-preconditions
         action: "Rewrite RLM / World Wire / in-choir drafts to inherit the envelope (not effects-OFF Phase 1; WW requires irreversible-decision path)."
@@ -251,8 +251,8 @@ measures:
 
 now:
   status: working
-  slice: "The staging readiness incident is resolved. Both candidate realizations are active/ready on db265d1e after three substrate fixes: credential receipts verify against the exact current signer, the bootstrap resolver trusts the current signer (control-key history kept as the rotation-aware path), and mailbox migration prunes orphaned legacy mailboxes. Checkpoint completeness is the next slice: bind the canonical head plus CodeRef, ArtifactProgramRef, and a VM-local content witness, refusing unreproducible behavior-bearing writes."
-  question: "Does checkpoint creation bind the retained computer's event head plus CodeRef, ArtifactProgramRef, and VM-local witness, and refuse unreproducible behavior-bearing state?"
+  slice: "The staging readiness incident is resolved. Both candidate realizations are active/ready on db265d1e after three substrate fixes. Checkpoint completeness, rematerialization, and whole-computer restore are now owned by choir-tape-recovery-2026-08-13 and satisfied-by its receipts. This Definition owns decision-policy and effect promotion on top of that restore substrate."
+  question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
     observed_at: 2026-08-13T14:10:00Z
@@ -263,8 +263,8 @@ now:
     worktree_inventory_ref: 2026-08-13 read-only git status before incident documentation (clean at ca138dff)
     status: reconciled
 
-  blocker_or_risk: "The kill-loop slice is closed. Residual risks: key rotation (control_key_history still has no platform-signer row) and the legacy owner primary vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19 (28-day-old code, superseded by the retained candidate, not yet retired). Neither blocks checkpoint design. Problem receipt: docs/problems/candidate-realization-readiness-kill-loop-2026-08-13.md."
-  next_action: "Design checkpoint completeness against the retained computer's accepted canonical head and replay-equivalent projection; retire the legacy owner primary as adjacent VM-lifecycle cleanup with a recorded data-loss acceptance."
+  blocker_or_risk: "The kill-loop slice is closed. Checkpoint completeness and restore are owned by choir-tape-recovery-2026-08-13; this Definition must not independently green its restore legs. Decision-policy and effect promotion await the tape-recovery restore proof. Problem receipt: docs/problems/candidate-realization-readiness-kill-loop-2026-08-13.md."
+  next_action: "Await the tape-recovery Definition's whole-computer restore proof, then design decision-policy and effect promotion on that substrate."
 
   candidate:
     id: none
@@ -280,7 +280,7 @@ now:
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
   evidence_refs: [docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
   blocker_or_risk: "Revert is the mission: nothing in production reads Dolt history back, checkpoints bind no state, and Dolt commits carry no head binding. Replay completeness RESOLVED 2026-08-13 (retained computer replay-eligible at sequence 1; the 26 differences classified and resolved by workspace replacement plus chain bootstrap). ProjectionMaterializer is still non-runtime today, so rematerialization is the preferred restore path with a single-workspace pin checkout only as an evidence-driven contingency. Relaxing the decision-binding verifier and mode CAS touches the surfaces that make the tape trustworthy and carries the heaviest evidence burden."
-  next_action: "Design checkpoint completeness after the accepted 2026-08-13 bootstrap receipt; do not rerun the probe as if unanswered."
+  next_action: "Checkpoint completeness and restore are owned by choir-tape-recovery-2026-08-13; this decision's next action is decision-policy design after that restore substrate lands."
 
 receipts:
   - id: roadmap-consensus-2026-08-11
@@ -534,8 +534,11 @@ writes the source, runs build and tests through `capsule_exec`, and freezes the
 classified diff into a bundle whose five required refs all bind that capsule's
 own execution receipts.
 
-API-only. Staging serves the web frontend from the host, outside the release the
-updater controls, so a UI change would land where the browser never reads.
+API-only for this candidate. Staging still serves the web frontend from the
+host, outside the release the updater controls, so a UI change would land where
+the browser never reads. That is serving-topology constraint, not product
+ontology: computer-surface frontend is per-computer (`C15`/`I25`); a successor
+owns the serving join.
 
 Schema changes are additive only — new tables via `CREATE TABLE IF NOT EXISTS`,
 never `ALTER` or `DROP` of existing tables.

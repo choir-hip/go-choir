@@ -5,7 +5,7 @@ documents:
     is_root: [authority, entry]
     is_evidence: false
     annotations: {doc_role: doctrine, authority: apex, lifecycle: living}
-    witnesses: [docs/choir-doctrine.md, docs/heresy-detectors.md]
+    witnesses: [docs/choir-doctrine.md, docs/heresy-detectors.md, docs/memo-per-computer-frontend-2026-08-13.md]
     refresh_triggers: [doctrine_change, protected_surface_change]
 
   - path: docs/choir-vision.md
@@ -93,7 +93,7 @@ documents:
     is_root: []
     is_evidence: false
     annotations: {doc_role: doctrine, authority: domain_doctrine, lifecycle: living}
-    witnesses: [docs/computer-ontology.md, docs/choir-doctrine.md, internal]
+    witnesses: [docs/computer-ontology.md, docs/choir-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, internal]
     refresh_triggers: [computer_ontology_change, vm_or_promotion_change]
 
   - path: docs/runtime-invariants.md
@@ -175,6 +175,14 @@ documents:
     annotations: {doc_role: operating_rationale, authority: support, lifecycle: living}
     witnesses: [docs/memo-problem-documentation-first.md, AGENTS.md]
     refresh_triggers: [problem_documentation_policy_change]
+
+  - path: docs/memo-per-computer-frontend-2026-08-13.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: architecture_synthesis, authority: support, lifecycle: living}
+    witnesses: [docs/memo-per-computer-frontend-2026-08-13.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/definitions/choir-supervised-self-development-effects-2026-08-11.md]
+    refresh_triggers: [doctrine_change, computer_ontology_change, frontend_app_change, capsule_effect_boundary_change]
 
   - path: docs/legal/privacy-policy.md
     claim_scope: current
@@ -319,13 +327,22 @@ documents:
     witnesses: [docs/definitions/choir-supervised-self-development-effects-2026-08-11.md, docs/evidence/choir-sandbox-autoputer-replay-completeness-2026-08-12.json, docs/evidence/choir-sandbox-autoputer-rename-staging-2026-08-12.json, docs/mission-graph.yaml, docs/computer-ontology.md, docs/choir-doctrine.md, docs/standing-questions.md, AGENTS.md]
     refresh_triggers: [mission_state_change, owner_ratification_change, rename_manifest_change, deployed_acceptance, registry_closure]
 
-  - path: docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
+  - path: docs/definitions/choir-tape-recovery-2026-08-13.md
     claim_scope: current
     is_root: [authority, entry]
     is_evidence: false
     annotations: {doc_role: definition, authority: active_product_mission, lifecycle: active, entrypoint: true}
+    witnesses: [docs/memo-per-computer-frontend-2026-08-13.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/definitions/choir-supervised-self-development-effects-2026-08-11.md, docs/standing-questions.md, docs/mission-graph.yaml, docs/ACTIVE.md, AGENTS.md]
+    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, checkpoint_witness_change, rematerialization_change, serving_join_change, deployed_acceptance, registry_closure]
+
+  - path: docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
+    claim_scope: current
+    is_root: [authority]
+    is_evidence: false
+    annotations: {doc_role: definition, authority: active_product_mission, lifecycle: active, entrypoint: false}
     supersedes: [docs/definitions/choir-continuous-texture-supervision-2026-08-07.md]
-    witnesses: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/problems/irreversible-effects-human-gate-drift-2026-08-13.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md, docs/evidence/choir-supervised-self-development-replay-completeness-2026-08-12.json, docs/evidence/choir-supervised-self-development-replay-difference-classes-2026-08-12.md, docs/evidence/choir-supervised-self-development-replay-completeness-post-cutover-2026-08-12.json, docs/evidence/choir-supervised-self-development-chain-bootstrap-design-2026-08-12.md, docs/evidence/choir-supervised-self-development-replay-completeness-post-bootstrap-2026-08-13.json, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md]
+    depends_on: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    witnesses: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/problems/irreversible-effects-human-gate-drift-2026-08-13.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md, docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md, docs/evidence/choir-supervised-self-development-replay-completeness-2026-08-12.json, docs/evidence/choir-supervised-self-development-replay-difference-classes-2026-08-12.md, docs/evidence/choir-supervised-self-development-replay-completeness-post-cutover-2026-08-12.json, docs/evidence/choir-supervised-self-development-chain-bootstrap-design-2026-08-12.md, docs/evidence/choir-supervised-self-development-replay-completeness-post-bootstrap-2026-08-13.json, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, autonomy_policy_change, trajectory_settlement_change, capsule_effect_boundary_change, deployed_acceptance, registry_closure]
   - path: docs/definitions/choir-private-go-actor-kernel-2026-08-12.md
     claim_scope: current
