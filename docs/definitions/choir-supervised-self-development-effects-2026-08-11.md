@@ -251,20 +251,20 @@ measures:
 
 now:
   status: working
-  slice: "Deployed at 5d132f66 and executed: bootstrap-chain appended EventGenesisImported (sequence 1, head a3cf16d0d1dbb46e4ebd5841af5007575fb74184d54c2e6fa26f856769b92b44, no checkpoint, no selfdev Operation), and the post-bootstrap probe reports equivalent with eligible=true. Next: checkpoint completeness — bind the canonical head plus a VM-local content witness and prove refusal on non-derivable rows."
-  question: "Does checkpoint creation bind the canonical event head plus CodeRef, ArtifactProgramRef, and a VM-local content witness, and refuse while any behavior-bearing local row is not event- or receipt-derivable?"
+  slice: "Bootstrap and replay eligibility remain accepted at sequence 1, but the retained candidate realization is unavailable after deployment 633131aa: both candidate-fleet VMs boot, start the guest runtime, then exit by signal: killed on an approximately 180-second cadence. Checkpoint completeness is paused behind restoration of candidate readiness."
+  question: "Which host component kills candidate firecracker processes after approximately 180 seconds, and which guest/runtime readiness predicate failed to advance before that deadline?"
 
   reconciliation:
-    observed_at: 2026-08-13T02:15:00Z
-    source_ref: main@633131aa0521bd1a427f335e147610a314829886
-    deploy_identity: "staging https://choir.news reconciled 2026-08-13: deployed commit 633131aa0521bd1a427f335e147610a314829886; retained computer computer-03335285269bdba4f94377e56879f9e6 is replay-eligible at sequence 1 (head a3cf16d0d1dbb46e4ebd5841af5007575fb74184d54c2e6fa26f856769b92b44); this Definition remains effects-OFF until its own rehearsal and restore gates pass"
+    observed_at: 2026-08-13T02:57:38Z
+    source_ref: main@ca138dff3a434e6a60ab824afe65f327bb8b0ecb
+    deploy_identity: "staging https://choir.news reports deployed commit 633131aa0521bd1a427f335e147610a314829886 and vmctl_status=ok, while both candidate-fleet realizations are killed approximately every 180 seconds and retained computer computer-03335285269bdba4f94377e56879f9e6 is unreachable; proxy health is not candidate-readiness proof"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-13 read-only git status (clean; texture researcher-binding fix 633131aa)
-    status: reconciled
+    worktree_inventory_ref: 2026-08-13 read-only git status before incident documentation (clean at ca138dff)
+    status: divergent
 
-  blocker_or_risk: "Eligibility certifies projection-reconstruction equivalence, not causal provenance of the 82 live rows. Any direct-SQL write to an empty_until_supported table flips eligibility false (correct fail-closed). replace-workspace after a successful bootstrap is forbidden (CAS/local projection split)."
-  next_action: "Design checkpoint completeness on the now-eligible retained computer: bind the canonical event head plus CodeRef, ArtifactProgramRef, and a VM-local content witness; prove checkpoint creation refuses while any behavior-bearing local row is not event- or receipt-derivable. Do not treat eligible=true as restore license."
+  blocker_or_risk: "Candidate readiness is unavailable: both candidate firecracker processes exit with signal: killed approximately every 180 seconds after the guest runtime starts, while proxy health still reports vmctl_status=ok. Root cause and SIGKILL owner are unresolved. Primaries remain on their prior realizations and must not be upgraded until candidate acceptance survives beyond two prior kill windows. Problem receipt: docs/problems/candidate-realization-readiness-kill-loop-2026-08-13.md."
+  next_action: "Trace the SIGKILL owner and exact readiness predicate, reproduce the failed transition, repair the substrate, and prove the retained candidate survives beyond two prior kill windows with guest API and product-path acceptance. Resume checkpoint completeness only after that durable boundary."
 
   candidate:
     id: none
