@@ -120,31 +120,31 @@ measures:
 
 now:
   status: working
-  slice: "Consensus panel + code verification adjudicated replace-workspace as the owner-ratified cutover (effects-Definition exception). Executed: quarantine 20260814T084541Z, restart epoch 259. REPLAY ELIGIBILITY FLIPPED true (nine live-only tables empty both sides, live_seq==replay_seq at 11). Checkpoint bind now checkpoint_eligible=true with full 40-table witness and release-bound frontend identity. New named problem: owner checkpoint binds but cannot PUBLISH — CheckpointAuthority.Publish needs verifier evidence only the effects pipeline (sequenced after this mission) or a head-at-genesis bootstrap (head is seq 12) can produce. Sequencing circularity between tape-recovery and effects."
-  question: "What legitimate owner-reachable path publishes a checkpoint for an accumulated (non-genesis) computer when the effects verifier pipeline is OFF and sequenced after tape recovery — without forging verifier evidence or weakening the verifier contract?"
+  slice: "Owner ratified the owner-evidence publication path (option A) with a security review to follow mission completion. Executed so far: workspace-replace cutover (quarantine 20260814T084541Z), replay eligibility true, checkpoint bind eligible=true. Implementing: owner-recovery checkpoint publication — protocol OwnerRecovery flag with empty verifier fields, platform-side head/receipt/witness-shape verification (guest attests VM-local witness; restore reconstruction gate enforces truth), guest PublishCheckpoint wiring, CLI artifact output, tests pinning effects/route rejection of owner-recovery checkpoints."
+  question: "None open — owner ratified the path. Implementation question: keep the publish request surface minimal (OwnerRecovery flag + existing bindings) and refuse any verifier evidence on that route."
   reconciliation:
-    observed_at: 2026-08-14T09:00:00Z
-    source_ref: main@c1a1a132
-    deploy_identity: "staging deployed 10dfa594a625de03c0693cecae53ee0c7ac43ea0; computer epoch 259 (second restart gen 22 for credential refresh); replay eligible=true; checkpoint bind checkpoint_eligible=true"
+    observed_at: 2026-08-14T09:15:00Z
+    source_ref: main@9422bff8
+    deploy_identity: "staging deployed 10dfa594; computer epoch 259; replay eligible=true; bind eligible=true"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-14T09:00:00Z git status --short dirty with this now update plus docs/evidence/tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14.json
+    worktree_inventory_ref: 2026-08-14T09:15:00Z git status --short clean after 9422bff8
     status: reconciled
   candidate:
-    id: none
-    state: none
+    id: owner-recovery-checkpoint-publication
+    state: designing
   decision:
-    selected: "Execute the panel-adjudicated cutover (replace-workspace per owner-ratified exception) to clear live-only rows; record that eligibility and bind now pass; name the owner-publication sequencing problem before any repair code."
-    kind: operational
+    selected: "Owner-evidence publication path (option A): CheckpointRequest gains OwnerRecovery; on that route verifier fields must be empty, platform verifies head/receipt/witness-shape server-side, guest attests the VM-local witness, and the restore reconstruction gate remains the enforcement that the witness is true. Distinct decision provenance recorded in the checkpoint receipt kind fields. Effects sequencing intact: route-projection and effects paths reject owner-recovery checkpoints (pinned by test)."
+    kind: owner
     status: settled
-    source: orchestrator
-    evidence_ref: "docs/evidence/tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14.json; .agentic-consensus/tape-recovery-resolve-20260814"
-    owner_ratification_ref: "owner direction 2026-08-14 (review, run agentic consensus, debug and resolve); effects-Definition owner-ratified exception authorizing product-path workspace replacement"
-    recorded_at: 2026-08-14T09:00:00Z
-    consequence: "Live-only rows quarantined (reversible, preserved as evidence); replay eligible; checkpoint bind eligible. A published checkpoint remains impossible without either the effects verifier pipeline or a bootstrap path structurally closed at head seq 12. Do not forge verifier evidence. Do not rematerialize without a published checkpoint. serving_join still needs a second computer."
-  evidence_refs: [docs/evidence/tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14.json, docs/evidence/tape-recovery-checkpoint-bind-live-only-after-updater-wire-2026-08-14.json, docs/evidence/tape-recovery-checkpoint-updater-root-unwired-2026-08-14.json, docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json, docs/ACTIVE.md, docs/mission-graph.yaml]
-  blocker_or_risk: "Checkpoint publication is the remaining substrate gap: CheckpointAuthority.Publish requires verifier evidence produced only by the effects verifier pipeline (mode off, sequenced after this mission) or the genesis bootstrap (requires head==genesis; this head is seq 12). Guest-side restore validates the verifier certificate only against the embedded public key, so a self-signed certificate would mechanically pass — refused as forged evidence. serving_join still needs two divergent computers; this owner can have only one."
-  next_action: "Owner fork: (a) ratify a tape-recovery checkpoint publication path for accumulated computers (e.g. owner-signed verifier evidence binding the current bind report's witness), or (b) authorize enabling the effects pipeline for a single checkpoint publication, or (c) accept blocked_incomplete with the sequencing circularity documented. Until ratified: do not forge verifier evidence, do not rematerialize, do not stamp complete."
+    source: owner
+    evidence_ref: "docs/evidence/tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14.json; .agentic-consensus/tape-recovery-resolve-20260814; this conversation 2026-08-14 (owner ratified option A; security review deferred to post-mission)"
+    owner_ratification_ref: "owner direction 2026-08-14: do the owner-evidence path, document it well, security review once missions complete"
+    recorded_at: 2026-08-14T09:15:00Z
+    consequence: "Red mutation on checkpoint authority (protected surface): full ceremony — conjecture delta, protected surfaces, admissible evidence class, rollback path, heresy delta (discovered: none new; introduced: none; repaired: publication-path sequencing circularity) recorded here. Rollback: git revert of the mission commits restores bind-only checkpoint. Security review obligation recorded for post-mission. serving_join still owner-blocked (needs second computer); owner declined to pick a serving-join resolution this session."
+  evidence_refs: [docs/evidence/tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14.json, docs/ACTIVE.md, docs/mission-graph.yaml]
+  blocker_or_risk: "Owner-recovery publication extends the checkpoint authority. Guest-attested witness is accepted on this route; the enforcement that it is TRUE is the restore-time reconstruction match (WitnessContentMatches), not publish-time verification. This trust split must be honestly documented in the security review. Effects/route paths must reject owner-recovery checkpoints (test-pinned)."
+  next_action: "Implement owner-recovery publication: selfdevprotocol (OwnerRecovery flag + validation), platform Publish branch (head/receipt/witness-shape checks), agentcore bind->publish flow with WithSelfDevelopmentControl, autoputer run.go wiring, CLI artifact output, focused tests. Then landing loop: push, CI, deploy, deployed receipts (checkpoint_witness, destructive_rematerialization, owner_reachable_whole_computer_restore, capability_renewal_pass)."
 
 receipts:
   - id: tape-recovery-eligible-bind-no-owner-publication-2026-08-14
