@@ -1,0 +1,63 @@
+{
+  "captured_at": "2026-08-14T22:16:59Z",
+  "schema_version": 1,
+  "receipt_id": "owner_reachable_whole_computer_restore",
+  "staging_deployed_commit": "57e2992de16e4114c079912c473a0d20aee2aff7",
+  "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+  "pre_restore_divergence": {
+    "texture_doc_id": "0ea703d0-a178-5ae2-87e4-62700387ef62",
+    "texture_create_http": 201,
+    "spa_mutated_bytes": 110,
+    "spa_mutated_marker": "tape-recovery frontend divergence",
+    "replay_eligible_before_restore": false,
+    "unsupported_tables": [
+      "og_edges",
+      "og_objects",
+      "run_memory_entries",
+      "texture_agent_mutations"
+    ],
+    "sequence_before": 15
+  },
+  "command": "choir computer restore --computer computer-03335285269bdba4f94377e56879f9e6 --checkpoint-file <bind-report>",
+  "report": {
+    "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+    "checkpoint_digest": "70f9ce2bcc8139d821cb54e3bba027c8033ecb1f0f8fe9d2b3a95aeb8da1f036",
+    "method": "tape_reconstruct",
+    "quarantine_dir": "/mnt/persistent/rematerialize-quarantine-20260814T221659.842773134Z",
+    "quarantined_marker": "/mnt/persistent/rematerialize-quarantine-20260814T221659.842773134Z/state",
+    "quarantined_workspace": "/mnt/persistent/rematerialize-quarantine-20260814T221659.842773134Z/state.texture",
+    "witness_matched": true,
+    "original_denied": true,
+    "frontend_restaged": true,
+    "store_closed": true,
+    "pin_checkout_used": false
+  },
+  "post_restore_before_restart": {
+    "spa_http": 502,
+    "error": "failed to resolve user autoputer",
+    "compute_state": "degraded",
+    "store_closed": true,
+    "replay_http": 502,
+    "note": "restore itself succeeded through owner CLI; guest process became unreachable because rematerialize closed the store"
+  },
+  "owner_start_after_restore": {
+    "command": "choir computer start --computer computer-03335285269bdba4f94377e56879f9e6",
+    "idempotency_key": "tape-recovery-start-after-restore-20260814T2217Z",
+    "prior_state": "degraded",
+    "resulting_epoch": 264
+  },
+  "post_start_verification": {
+    "spa_http": 200,
+    "spa_len": 523,
+    "spa_sha256_matches_pre_mutation": "2c74a7b062d196b050dfd251b4f9d77e03668bbeb6baa0db9d4ea095d26c5694",
+    "mutated_marker_absent": true,
+    "texture_doc_http": 404,
+    "replay_eligible": true,
+    "sequence_after": 17,
+    "probe_digest": "a93b47eb8ee6c461ecbd2b6cf345f7c423e105ee5f8e6043be8f65bc392c648f"
+  },
+  "capability_renewal_pass": {
+    "paid": false,
+    "reason": "guest required owner start after restore; that is credential re-exchange, not in-process renewal across restore"
+  }
+}

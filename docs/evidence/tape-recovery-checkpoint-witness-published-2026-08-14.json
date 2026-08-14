@@ -1,0 +1,47 @@
+{
+  "captured_at": "2026-08-14T22:10:30Z",
+  "schema_version": 1,
+  "receipt_id": "checkpoint_witness",
+  "staging_deployed_commit": "57e2992de16e4114c079912c473a0d20aee2aff7",
+  "staging_deployed_at": "2026-08-14T21:51:10Z",
+  "ci_ref": "31842366975 success (Deploy to Staging Node B)",
+  "source_head": "57e2992d",
+  "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+  "refresh_before_bind": {
+    "method": "POST /internal/vmctl/refresh from node-b loopback after deploy (preserves data.img, not rematerialize)",
+    "prior_guest_build": "10dfa594a625de03c0693cecae53ee0c7ac43ea0",
+    "resulting_epoch": 261,
+    "guest_url": "http://10.200.118.2:8085",
+    "guest_build_commit": "57e2992de16e4114c079912c473a0d20aee2aff7",
+    "guest_index_http": 200
+  },
+  "checkpoint": {
+    "command": "choir computer checkpoint --computer computer-03335285269bdba4f94377e56879f9e6",
+    "checkpoint_eligible": true,
+    "published": true,
+    "checkpoint_digest": "70f9ce2bcc8139d821cb54e3bba027c8033ecb1f0f8fe9d2b3a95aeb8da1f036",
+    "owner_recovery": true,
+    "accepted_event_head": "3bbad0441da75fa27ead1693a9fea6780f7310fcbd85b39f488b27ecd2b13d65",
+    "effective_event_head": "a3cf16d0d1dbb46e4ebd5841af5007575fb74184d54c2e6fa26f856769b92b44",
+    "verifier_certificate_digest": "",
+    "receipt_kind": "checkpoint",
+    "release_digest": "39a8fbcd6ca18780e5c91be81fa987b10a766b59956bce5554c8aeca67bc200a",
+    "frontend_identity": {
+      "digest": "b95889abf6f1f4a5e2108d7b0dd4516a0df4793b8f6e30f7307b4f3d994cf168",
+      "derivation": "release",
+      "release_digest": "39a8fbcd6ca18780e5c91be81fa987b10a766b59956bce5554c8aeca67bc200a"
+    },
+    "vm_local_tables": 40,
+    "content_root": "8701bed38e7f23dadfae86df0670e8a64ddfbd2760d449dd920e528702ece117",
+    "dolt_head": "bmit95s9489hv2dm5a7lgjs2utashpb2"
+  },
+  "not_done": [
+    "serving_join",
+    "capability_renewal_pass across restore without restart"
+  ],
+  "constraints_held": [
+    "did not enable effects",
+    "did not forge verifier certificate",
+    "did not invent choir computer create"
+  ]
+}

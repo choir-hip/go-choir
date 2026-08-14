@@ -98,6 +98,7 @@ boundaries:
       - rematerialization has no runtime path; restore is release-pointer-only
       - the frontend is host-global and outside the restore set
       - production never wires CHOIR_UPDATER_ROOT into Runtime, so checkpoint bind cannot see a staged guest SPA
+      - rematerialize closes the guest store, so restore is not owner-reachable without restart
     introduced: []
     repaired_when_complete:
       - restore that repaints restored state with today's CI SPA
@@ -120,19 +121,19 @@ measures:
 
 now:
   status: working
-  slice: "Owner ratified the owner-evidence publication path (option A) with a security review to follow mission completion. Executed so far: workspace-replace cutover (quarantine 20260814T084541Z), replay eligibility true, checkpoint bind eligible=true. Implementing: owner-recovery checkpoint publication — protocol OwnerRecovery flag with empty verifier fields, platform-side head/receipt/witness-shape verification (guest attests VM-local witness; restore reconstruction gate enforces truth), Owner-recovery publication is implemented and consensus-approved (round 2: 4/4 ACCEPT after CLI unwrap). Guest bind publishes via WithOwnerRecoveryControl; effects mode CAS stays unwired; restore/rematerialize CLIs unwrap bind-report envelopes."
-  question: "None open — owner ratified option A; panel accepted the implementation."
+  slice: "Staging 57e2992d paid published checkpoint_witness, destructive_rematerialization, and owner restore (SPA bytes and Texture doc matched after choir computer restore). New problem: rematerialize closes the guest store (store_closed=true, guest 502 until owner start), so capability_renewal_pass across restore is unpaid. serving_join remains owner-blocked."
+  question: "None open on publication. Remaining: reopen the rematerialized store in-process so capability renewal can be probed without restart; serving_join needs a second computer."
   reconciliation:
     observed_at: 2026-08-14T09:15:00Z
-    source_ref: main@9422bff8
-    deploy_identity: "staging deployed 10dfa594; computer epoch 259; replay eligible=true; bind eligible=true"
+    source_ref: main@57e2992d
+    deploy_identity: "staging deployed 57e2992d at 2026-08-14T21:51:10Z; computer epoch 264; published checkpoint 70f9ce2b; rematerialize and restore receipts collected; capability_renewal unpaid"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: 2026-08-14T09:15:00Z git status --short clean after 9422bff8
     status: reconciled
   candidate:
     id: owner-recovery-checkpoint-publication
-    state: landing
+    state: working
   decision:
     selected: "Owner-evidence publication path (option A): CheckpointRequest gains OwnerRecovery; on that route verifier fields must be empty, platform verifies head/receipt/witness-shape server-side, guest attests the VM-local witness, and the restore reconstruction gate remains the enforcement that the witness is true. Distinct decision provenance recorded in the checkpoint receipt kind fields. Effects sequencing intact: route-projection and effects paths reject owner-recovery checkpoints (pinned by test)."
     kind: owner
@@ -144,9 +145,57 @@ now:
     consequence: "Red mutation on checkpoint authority (protected surface): full ceremony — conjecture delta, protected surfaces, admissible evidence class, rollback path, heresy delta (discovered: none new; introduced: none; repaired: publication-path sequencing circularity) recorded here. Rollback: git revert of the mission commits restores bind-only checkpoint. Security review obligation recorded for post-mission. serving_join still owner-blocked (needs second computer); owner declined to pick a serving-join resolution this session."
   evidence_refs: [docs/evidence/tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14.json, docs/ACTIVE.md, docs/mission-graph.yaml]
   blocker_or_risk: "Owner-recovery publication extends the checkpoint authority. Guest-attested witness is accepted on this route; the enforcement that it is TRUE is the restore-time reconstruction match (WitnessContentMatches), not publish-time verification. This trust split must be honestly documented in the security review. Effects/route paths must reject owner-recovery checkpoints (test-pinned)."
-  next_action: "Land the consensus-approved owner-recovery publication commit, wait for staging deploy, RefreshVM the retained computer, then collect deployed receipts: checkpoint_witness (published), destructive_rematerialization, owner_reachable_whole_computer_restore, capability_renewal_pass. serving_join remains owner-blocked."
+  next_action: "Documented store_closed after rematerialize. Next is the red reopen (choirstore.Open + appender.RebindProjection), then deploy, RefreshVM, and collect capability_renewal_pass without a subsequent start. serving_join remains owner-blocked."
 
 receipts:
+  - id: tape-recovery-checkpoint-witness-published-2026-08-14
+    boundary: implement
+    commit_or_artifact: docs/evidence/tape-recovery-checkpoint-witness-published-2026-08-14.json
+    proof_refs: [docs/evidence/tape-recovery-checkpoint-witness-published-2026-08-14.json, internal/selfdevprotocol/control.go, internal/platform/checkpoints.go, internal/agentcore/rematerialize.go]
+    rollback_ref: revert 57e2992d
+    disposition: "deployed — choir computer checkpoint published owner-recovery checkpoint 70f9ce2b on computer-03335285269bdba4f94377e56879f9e6 after RefreshVM to 57e2992d epoch 261. 40-table witness, release-bound frontend identity, empty verifier fields. Unpaid: capability_renewal_pass across restore, serving_join."
+    problem_ref: tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14
+    authorization_ref: owner direction 2026-08-14 (owner-evidence publication path)
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    landing:
+      source_commit: 57e2992d
+      ci_ref: "31842366975 success (Deploy to Staging Node B)"
+      deploy_ref: 57e2992de16e4114c079912c473a0d20aee2aff7
+      environment_identity: staging https://choir.news deployed 57e2992d at 2026-08-14T21:51:10Z; retained computer epoch 261
+      deployed_acceptance: checkpoint_witness published
+    registry_conformance_ref: not_applicable
+  - id: tape-recovery-destructive-rematerialization-2026-08-14
+    boundary: implement
+    commit_or_artifact: docs/evidence/tape-recovery-destructive-rematerialization-2026-08-14.json
+    proof_refs: [docs/evidence/tape-recovery-destructive-rematerialization-2026-08-14.json, internal/agentcore/rematerialize.go]
+    rollback_ref: quarantine /mnt/persistent/rematerialize-quarantine-20260814T221120.832064307Z
+    disposition: "deployed — choir computer rematerialize-from-tape reconstructed through checkpoint 70f9ce2b, witness_matched, original_denied, frontend_restaged, pin_checkout unused. store_closed=true left the guest degraded until RefreshVM epoch 262. Named problem: rematerialize is not owner-reachable without restart. Unpaid: capability_renewal_pass, serving_join."
+    problem_ref: tape-recovery-rematerialize-closes-store-2026-08-14
+    authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    landing:
+      source_commit: 57e2992d
+      ci_ref: "31842366975 success"
+      deploy_ref: 57e2992de16e4114c079912c473a0d20aee2aff7
+      environment_identity: staging https://choir.news deployed 57e2992d; rematerialize epoch 262
+      deployed_acceptance: destructive_rematerialization paid; store_closed problem named
+    registry_conformance_ref: not_applicable
+  - id: tape-recovery-owner-restore-2026-08-14
+    boundary: implement
+    commit_or_artifact: docs/evidence/tape-recovery-owner-restore-2026-08-14.json
+    proof_refs: [docs/evidence/tape-recovery-owner-restore-2026-08-14.json, cmd/choir/main.go, internal/agentcore/rematerialize.go]
+    rollback_ref: quarantine /mnt/persistent/rematerialize-quarantine-20260814T221659.842773134Z
+    disposition: "deployed — choir computer restore after Texture+SPA mutation matched checkpoint SPA bytes and dropped the live-only Texture doc. Restore itself is owner CLI. Guest was 502/degraded until choir computer start epoch 264 because rematerialize closed the store. capability_renewal_pass unpaid (start is credential re-exchange, not in-process renewal). serving_join owner-blocked."
+    problem_ref: tape-recovery-rematerialize-closes-store-2026-08-14
+    authorization_ref: owner direction 2026-08-13 (tape-based recovery is the priority)
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    landing:
+      source_commit: 57e2992d
+      ci_ref: "31842366975 success"
+      deploy_ref: 57e2992de16e4114c079912c473a0d20aee2aff7
+      environment_identity: staging https://choir.news deployed 57e2992d; restore then start epoch 264
+      deployed_acceptance: owner_reachable_whole_computer_restore paid through owner CLI; post-restore reachability unpaid until store reopen
+    registry_conformance_ref: not_applicable
   - id: tape-recovery-eligible-bind-no-owner-publication-2026-08-14
     boundary: define
     commit_or_artifact: docs/evidence/tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14.json

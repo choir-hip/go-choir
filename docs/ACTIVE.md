@@ -10,8 +10,10 @@ is the owner-priority executable `/goal` as of 2026-08-13. It is
 `working`: the owner-ratified workspace-replace cutover cleared the nine
 live-only tables (quarantined, reversible) and replay eligibility is now
 `true`; checkpoint bind returns `checkpoint_eligible: true` with a full
-40-table witness. Owner-recovery checkpoint **publication** is implemented
-(consensus-approved; effects mode CAS stays unwired). Proof target remains
+40-table witness. Owner-recovery checkpoint **publication** is deployed on
+staging `57e2992d` (published checkpoint_witness, destructive rematerialize,
+owner restore). Remaining: capability renewal across restore without restart
+(rematerialize currently closes the guest store) and `serving_join` (owner-blocked). Proof target remains
 **whole-computer restore from the tape**: a
 checkpoint that binds event head + CodeRef + ArtifactProgramRef + VM-local
 content witness + frontend identity, runtime rematerialization, a per-computer

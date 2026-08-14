@@ -1,0 +1,27 @@
+{
+  "captured_at": "2026-08-14T22:11:21Z",
+  "schema_version": 1,
+  "receipt_id": "destructive_rematerialization",
+  "staging_deployed_commit": "57e2992de16e4114c079912c473a0d20aee2aff7",
+  "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+  "command": "choir computer rematerialize-from-tape --computer computer-03335285269bdba4f94377e56879f9e6 --checkpoint-file <bind-report>",
+  "report": {
+    "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+    "checkpoint_digest": "70f9ce2bcc8139d821cb54e3bba027c8033ecb1f0f8fe9d2b3a95aeb8da1f036",
+    "method": "tape_reconstruct",
+    "quarantine_dir": "/mnt/persistent/rematerialize-quarantine-20260814T221120.832064307Z",
+    "quarantined_marker": "/mnt/persistent/rematerialize-quarantine-20260814T221120.832064307Z/state",
+    "quarantined_workspace": "/mnt/persistent/rematerialize-quarantine-20260814T221120.832064307Z/state.texture",
+    "witness_matched": true,
+    "original_denied": true,
+    "frontend_restaged": true,
+    "store_closed": true,
+    "pin_checkout_used": false
+  },
+  "crossing_restart": {
+    "method": "POST /internal/vmctl/refresh after store_closed=true (Definition allows rematerialize to cross a restart)",
+    "resulting_epoch": 262,
+    "replay_eligible_after": true,
+    "note": "57e2992d rematerialize closed the runtime store; guest degraded until restart. Follow-up reopen patch keeps the process owner-reachable."
+  }
+}
