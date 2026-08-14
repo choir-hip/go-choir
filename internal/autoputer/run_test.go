@@ -106,3 +106,50 @@ func TestRunZotSessionUsesProcessConfiguration(t *testing.T) {
 		t.Fatalf("session log: %v", err)
 	}
 }
+
+func TestSelfDevelopmentUpdaterOptionWiresEnvRoot(t *testing.T) {
+	t.Setenv("CHOIR_UPDATER_ROOT", t.TempDir())
+	t.Setenv("CHOIR_UPDATER_SOCKET", "/tmp/choir-updater-test.sock")
+	t.Setenv("CHOIR_COMPUTER_ID", "computer-test")
+	t.Setenv("CHOIR_REALIZATION_ID", "realization-test")
+	opt, ok, err := selfDevelopmentUpdaterOption()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || opt == nil {
+		t.Fatal("expected updater option when CHOIR_UPDATER_ROOT is set")
+	}
+}
+
+func TestSelfDevelopmentUpdaterOptionDefaultsSocket(t *testing.T) {
+	t.Setenv("CHOIR_UPDATER_ROOT", t.TempDir())
+	t.Setenv("CHOIR_UPDATER_SOCKET", "")
+	opt, ok, err := selfDevelopmentUpdaterOption()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || opt == nil {
+		t.Fatal("expected updater option with default socket")
+	}
+}
+
+func TestSelfDevelopmentUpdaterOptionSkipsEmptyRoot(t *testing.T) {
+	t.Setenv("CHOIR_UPDATER_ROOT", "")
+	t.Setenv("CHOIR_UPDATER_SOCKET", "/tmp/choir-updater-test.sock")
+	opt, ok, err := selfDevelopmentUpdaterOption()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok || opt != nil {
+		t.Fatal("expected no updater option without CHOIR_UPDATER_ROOT")
+	}
+}
+
+func TestSelfDevelopmentUpdaterOptionRejectsRelativeSocket(t *testing.T) {
+	t.Setenv("CHOIR_UPDATER_ROOT", t.TempDir())
+	t.Setenv("CHOIR_UPDATER_SOCKET", "relative.sock")
+	_, _, err := selfDevelopmentUpdaterOption()
+	if err == nil {
+		t.Fatal("expected relative socket to fail")
+	}
+}

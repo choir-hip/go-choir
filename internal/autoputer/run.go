@@ -34,6 +34,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/zot"
 )
 
@@ -265,6 +266,12 @@ func Run() {
 		}
 		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher))
 		log.Printf("autoputer: computer event authority reconstructed; self-development effects disabled")
+	}
+	if opt, ok, err := selfDevelopmentUpdaterOption(); err != nil {
+		log.Fatalf("autoputer: configure self-development updater: %v", err)
+	} else if ok {
+		coreOpts = append(coreOpts, opt)
+		log.Printf("autoputer: self-development updater root wired")
 	}
 	var rtOpts []actorruntime.RuntimeOption
 
@@ -503,4 +510,31 @@ func sizeOfRegistry(registry *toolregistry.ToolRegistry) int {
 		return 0
 	}
 	return registry.Size()
+}
+
+const defaultSelfDevelopmentUpdaterSocket = "/run/choir/updater.sock"
+
+// selfDevelopmentUpdaterOption wires BindCheckpointRestoreSet to the same
+// CHOIR_UPDATER_ROOT that ComputerSurface serves. Production previously left
+// rt.selfdevUpdaterRoot empty, so a staged current/frontend still failed
+// checkpoint bind as underivable SPA.
+func selfDevelopmentUpdaterOption() (agentcore.RuntimeOption, bool, error) {
+	root := strings.TrimSpace(os.Getenv("CHOIR_UPDATER_ROOT"))
+	if root == "" {
+		return nil, false, nil
+	}
+	socket := strings.TrimSpace(os.Getenv("CHOIR_UPDATER_SOCKET"))
+	if socket == "" {
+		socket = defaultSelfDevelopmentUpdaterSocket
+	}
+	client, err := updater.NewClient(socket)
+	if err != nil {
+		return nil, false, err
+	}
+	return agentcore.WithSelfDevelopmentUpdater(
+		client,
+		root,
+		strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID")),
+		strings.TrimSpace(os.Getenv("CHOIR_REALIZATION_ID")),
+	), true, nil
 }
