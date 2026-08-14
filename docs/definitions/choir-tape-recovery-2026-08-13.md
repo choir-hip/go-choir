@@ -120,8 +120,8 @@ measures:
 
 now:
   status: working
-  slice: "Owner ratified the owner-evidence publication path (option A) with a security review to follow mission completion. Executed so far: workspace-replace cutover (quarantine 20260814T084541Z), replay eligibility true, checkpoint bind eligible=true. Implementing: owner-recovery checkpoint publication — protocol OwnerRecovery flag with empty verifier fields, platform-side head/receipt/witness-shape verification (guest attests VM-local witness; restore reconstruction gate enforces truth), guest PublishCheckpoint wiring, CLI artifact output, tests pinning effects/route rejection of owner-recovery checkpoints."
-  question: "None open — owner ratified the path. Implementation question: keep the publish request surface minimal (OwnerRecovery flag + existing bindings) and refuse any verifier evidence on that route."
+  slice: "Owner ratified the owner-evidence publication path (option A) with a security review to follow mission completion. Executed so far: workspace-replace cutover (quarantine 20260814T084541Z), replay eligibility true, checkpoint bind eligible=true. Implementing: owner-recovery checkpoint publication — protocol OwnerRecovery flag with empty verifier fields, platform-side head/receipt/witness-shape verification (guest attests VM-local witness; restore reconstruction gate enforces truth), Owner-recovery publication is implemented and consensus-approved (round 2: 4/4 ACCEPT after CLI unwrap). Guest bind publishes via WithOwnerRecoveryControl; effects mode CAS stays unwired; restore/rematerialize CLIs unwrap bind-report envelopes."
+  question: "None open — owner ratified option A; panel accepted the implementation."
   reconciliation:
     observed_at: 2026-08-14T09:15:00Z
     source_ref: main@9422bff8
@@ -132,7 +132,7 @@ now:
     status: reconciled
   candidate:
     id: owner-recovery-checkpoint-publication
-    state: designing
+    state: landing
   decision:
     selected: "Owner-evidence publication path (option A): CheckpointRequest gains OwnerRecovery; on that route verifier fields must be empty, platform verifies head/receipt/witness-shape server-side, guest attests the VM-local witness, and the restore reconstruction gate remains the enforcement that the witness is true. Distinct decision provenance recorded in the checkpoint receipt kind fields. Effects sequencing intact: route-projection and effects paths reject owner-recovery checkpoints (pinned by test)."
     kind: owner
@@ -144,7 +144,7 @@ now:
     consequence: "Red mutation on checkpoint authority (protected surface): full ceremony — conjecture delta, protected surfaces, admissible evidence class, rollback path, heresy delta (discovered: none new; introduced: none; repaired: publication-path sequencing circularity) recorded here. Rollback: git revert of the mission commits restores bind-only checkpoint. Security review obligation recorded for post-mission. serving_join still owner-blocked (needs second computer); owner declined to pick a serving-join resolution this session."
   evidence_refs: [docs/evidence/tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14.json, docs/ACTIVE.md, docs/mission-graph.yaml]
   blocker_or_risk: "Owner-recovery publication extends the checkpoint authority. Guest-attested witness is accepted on this route; the enforcement that it is TRUE is the restore-time reconstruction match (WitnessContentMatches), not publish-time verification. This trust split must be honestly documented in the security review. Effects/route paths must reject owner-recovery checkpoints (test-pinned)."
-  next_action: "Implement owner-recovery publication: selfdevprotocol (OwnerRecovery flag + validation), platform Publish branch (head/receipt/witness-shape checks), agentcore bind->publish flow with WithSelfDevelopmentControl, autoputer run.go wiring, CLI artifact output, focused tests. Then landing loop: push, CI, deploy, deployed receipts (checkpoint_witness, destructive_rematerialization, owner_reachable_whole_computer_restore, capability_renewal_pass)."
+  next_action: "Land the consensus-approved owner-recovery publication commit, wait for staging deploy, RefreshVM the retained computer, then collect deployed receipts: checkpoint_witness (published), destructive_rematerialization, owner_reachable_whole_computer_restore, capability_renewal_pass. serving_join remains owner-blocked."
 
 receipts:
   - id: tape-recovery-eligible-bind-no-owner-publication-2026-08-14

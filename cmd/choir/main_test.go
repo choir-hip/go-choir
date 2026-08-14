@@ -1158,6 +1158,34 @@ func TestComputerRestoreUsesProductPath(t *testing.T) {
 	}
 }
 
+func TestComputerRestoreUnwrapsCheckpointBindReport(t *testing.T) {
+	var body string
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body != nil {
+			defer r.Body.Close()
+			raw, _ := io.ReadAll(r.Body)
+			body = string(raw)
+		}
+		_, _ = io.WriteString(w, `{"computer_id":"computer-1","witness_matched":true}`)
+	}))
+	defer stub.Close()
+	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
+	raw := `{"computer_id":"computer-1","checkpoint_eligible":true,"published_checkpoint":{"checkpoint":{"checkpoint_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","request":{"computer_id":"computer-1"}},"receipt":{"kind":"checkpoint"}}}`
+	if err := os.WriteFile(checkpointPath, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if code := run([]string{"computer", "restore", "--host=" + stub.URL, "--computer=computer-1", "--checkpoint-file=" + checkpointPath}, &out, &errOut); code != 0 {
+		t.Fatalf("restore unwrap code = %d, stderr=%s", code, errOut.String())
+	}
+	if strings.Contains(body, "checkpoint_eligible") || strings.Contains(body, "published_checkpoint") {
+		t.Fatalf("restore sent bind report instead of checkpoint: %s", body)
+	}
+	if !strings.Contains(body, `"checkpoint_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`) {
+		t.Fatalf("restore lost nested checkpoint: %s", body)
+	}
+}
+
 func TestComputerBootstrapChainUsesProductPath(t *testing.T) {
 	var method, path string
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

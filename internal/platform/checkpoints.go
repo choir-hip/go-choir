@@ -67,30 +67,53 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 	if json.Unmarshal([]byte(storedReceipt), &eventReceipt) != nil || eventReceipt.ReceiptID != request.EventHeadReceiptID {
 		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: accepted event receipt binding failed")
 	}
-	if err := a.verifyVerifierEvidence(ctx, request); err != nil {
+	if request.OwnerRecovery {
+		// Owner-recovery evidence class: no verifier run exists for this
+		// checkpoint. The platform still verifies server-side what it owns: the
+		// head row, the head receipt binding, and the accepted event digest the
+		// receipt names. The VM-local witness is attested by the guest; restore
+		// enforces its truth by reconstructing from the tape and comparing
+		// content before any visibility flip.
+		if request.VerifierTrustBootstrap || request.VerifierCertificateDigest != "" || request.MaterializationReceiptDigest != "" {
+			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: owner-recovery checkpoint must not present verifier evidence")
+		}
+		var headEventDigest string
+		if err := a.cas.store.db.QueryRowContext(ctx, `SELECT event_digest FROM computer_event_append_receipts WHERE computer_id=? AND event_head_receipt_id=?`, request.ComputerID, request.EventHeadReceiptID).Scan(&headEventDigest); err != nil || headEventDigest != request.AcceptedEventHead {
+			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: owner-recovery head receipt does not bind the accepted head")
+		}
+	} else if err := a.verifyVerifierEvidence(ctx, request); err != nil {
 		return selfdevprotocol.CheckpointResponse{}, err
 	}
-	verifierKey, keyErr := base64.RawStdEncoding.DecodeString(request.VerifierCertificate.PublicKey)
-	verifierKeyID := request.VerifierCertificate.Certificate.RequiredSigners[0].KeyID
-	if keyErr != nil || len(verifierKey) != ed25519.PublicKeySize {
-		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: verifier key is invalid")
-	}
+	var verifierKey []byte
+	var verifierKeyID string
 	var storedVerifierKeyID string
 	var storedVerifierKey []byte
-	keyLookupErr := a.cas.store.db.QueryRowContext(ctx, `SELECT key_id,public_key FROM control_key_history WHERE signer_domain='verifier-control' AND computer_id=? AND status='active'`, request.ComputerID).Scan(&storedVerifierKeyID, &storedVerifierKey)
-	if request.VerifierTrustBootstrap {
-		var eventKind string
-		if eventErr := a.cas.store.db.QueryRowContext(ctx, `SELECT event_kind FROM computer_event_append_receipts WHERE computer_id=? AND event_digest=?`, request.ComputerID, request.AcceptedEventHead).Scan(&eventKind); eventErr != nil || eventKind != string(computerevent.EventGenesisImported) {
-			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: verifier trust bootstrap requires GenesisImported")
+	var keyLookupErr error
+	if !request.OwnerRecovery {
+		var keyErr error
+		verifierKey, keyErr = base64.RawStdEncoding.DecodeString(request.VerifierCertificate.PublicKey)
+		if len(request.VerifierCertificate.Certificate.RequiredSigners) != 1 {
+			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: verifier key is invalid")
 		}
-		if keyLookupErr != nil && !errors.Is(keyLookupErr, sql.ErrNoRows) {
-			return selfdevprotocol.CheckpointResponse{}, keyLookupErr
+		verifierKeyID = request.VerifierCertificate.Certificate.RequiredSigners[0].KeyID
+		if keyErr != nil || len(verifierKey) != ed25519.PublicKeySize {
+			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: verifier key is invalid")
 		}
-	} else if keyLookupErr != nil || storedVerifierKeyID != verifierKeyID || !ed25519.PublicKey(storedVerifierKey).Equal(ed25519.PublicKey(verifierKey)) {
-		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: verifier key is not the pinned computer key")
-	}
-	if keyLookupErr == nil && (storedVerifierKeyID != verifierKeyID || !ed25519.PublicKey(storedVerifierKey).Equal(ed25519.PublicKey(verifierKey))) {
-		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: verifier trust substitution refused")
+		keyLookupErr = a.cas.store.db.QueryRowContext(ctx, `SELECT key_id,public_key FROM control_key_history WHERE signer_domain='verifier-control' AND computer_id=? AND status='active'`, request.ComputerID).Scan(&storedVerifierKeyID, &storedVerifierKey)
+		if request.VerifierTrustBootstrap {
+			var eventKind string
+			if eventErr := a.cas.store.db.QueryRowContext(ctx, `SELECT event_kind FROM computer_event_append_receipts WHERE computer_id=? AND event_digest=?`, request.ComputerID, request.AcceptedEventHead).Scan(&eventKind); eventErr != nil || eventKind != string(computerevent.EventGenesisImported) {
+				return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: verifier trust bootstrap requires GenesisImported")
+			}
+			if keyLookupErr != nil && !errors.Is(keyLookupErr, sql.ErrNoRows) {
+				return selfdevprotocol.CheckpointResponse{}, keyLookupErr
+			}
+		} else if keyLookupErr != nil || storedVerifierKeyID != verifierKeyID || !ed25519.PublicKey(storedVerifierKey).Equal(ed25519.PublicKey(verifierKey)) {
+			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: verifier key is not the pinned computer key")
+		}
+		if keyLookupErr == nil && (storedVerifierKeyID != verifierKeyID || !ed25519.PublicKey(storedVerifierKey).Equal(ed25519.PublicKey(verifierKey))) {
+			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: verifier trust substitution refused")
+		}
 	}
 	receipt, err := selfdevprotocol.NewAuthorityReceipt(selfdevprotocol.ReceiptKindCheckpoint, request.ComputerID, requestCommitment, checkpoint.Digest, a.cas.issuer, a.cas.signingKey, a.now())
 	if err != nil {
@@ -397,7 +420,7 @@ func (h *Handler) HandleExecutionIdentityAttestation(w http.ResponseWriter, r *h
 	fields := map[string]any{
 		"schema": request.Schema, "nonce": request.Nonce, "audience": request.Audience,
 		"deployed_commit": request.DeployedCommit,
-		"computer_id": request.ComputerID, "realization_id": request.RealizationID, "vm_epoch": request.VMEpoch,
+		"computer_id":     request.ComputerID, "realization_id": request.RealizationID, "vm_epoch": request.VMEpoch,
 		"guest_receipt_digest": request.GuestReceiptDigest, "guest_signer_key_digest": request.GuestSignerKeyDigest,
 		"vmctl": request.VMCTL, "route_digest": request.RouteDigest, "host_build_digest": request.HostBuildDigest,
 		"deployment_receipt_digest": request.DeploymentReceiptDigest,

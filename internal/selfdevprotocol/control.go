@@ -85,6 +85,7 @@ type CheckpointRequest struct {
 	VerifierCertificateDigest    string                          `json:"verifier_certificate_digest"`
 	VerifierCertificate          VerifierCertificateResponse     `json:"verifier_certificate"`
 	VerifierTrustBootstrap       bool                            `json:"verifier_trust_bootstrap"`
+	OwnerRecovery                bool                            `json:"owner_recovery,omitempty"`
 	ReducerVersion               int                             `json:"reducer_version"`
 	VMLocalContentWitness        VMLocalContentWitness           `json:"vm_local_content_witness"`
 	FrontendIdentity             FrontendIdentity                `json:"frontend_identity"`
@@ -177,29 +178,49 @@ type CheckpointResponse struct {
 
 func CheckpointFromRequest(request CheckpointRequest) (Checkpoint, []byte, error) {
 	if strings.TrimSpace(request.ComputerID) == "" || strings.TrimSpace(request.IdempotencyKey) == "" || !request.ComputerVersion.Valid() ||
-		!computerevent.IsSHA256(request.AcceptedEventHead) || request.AcceptedEventHead != request.EffectiveEventHead ||
+		!computerevent.IsSHA256(request.AcceptedEventHead) ||
 		!computerevent.IsSHA256(request.EffectiveStateCommitment) || strings.TrimSpace(request.EventHeadReceiptID) == "" ||
 		!computerevent.IsSHA256(request.ReleaseDigest) || !computerevent.IsSHA256(request.ReconstructionDigest) ||
-		!computerevent.IsSHA256(request.MaterializationReceiptDigest) || !computerevent.IsSHA256(request.VerifierCertificateDigest) || request.ReducerVersion == 0 {
+		request.ReducerVersion == 0 {
 		return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: complete accepted/effective bindings are required")
+	}
+	if request.OwnerRecovery {
+		// Owner-recovery checkpoints are a distinct evidence class. They bind the
+		// canonical head as the restore target and the effective head as the
+		// projection head; the tape-only reconstruction gate at restore time, not
+		// a verifier run, is the enforcement that the attested witness is true.
+		// Verifier-evidence fields must be absent: presenting verifier evidence on
+		// this route is refused so the two evidence classes cannot be blended.
+		emptyCertificate, emptyErr := computerevent.CanonicalJSON(VerifierCertificateResponse{})
+		gotCertificate, certErr := computerevent.CanonicalJSON(request.VerifierCertificate)
+		if !computerevent.IsSHA256(request.EffectiveEventHead) || request.VerifierTrustBootstrap ||
+			request.VerifierCertificateDigest != "" || request.MaterializationReceiptDigest != "" ||
+			emptyErr != nil || certErr != nil || !bytes.Equal(emptyCertificate, gotCertificate) {
+			return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: owner-recovery checkpoint must not present verifier evidence")
+		}
+	} else {
+		if request.AcceptedEventHead != request.EffectiveEventHead ||
+			!computerevent.IsSHA256(request.MaterializationReceiptDigest) || !computerevent.IsSHA256(request.VerifierCertificateDigest) {
+			return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: complete accepted/effective bindings are required")
+		}
+		if VerifyVerifierCertificate(request.VerifierCertificate) != nil {
+			return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: verifier certificate refused")
+		}
+		certificateJSON, err := computerevent.CanonicalJSON(request.VerifierCertificate.Certificate)
+		if err != nil || computerevent.DigestBytes(certificateJSON) != request.VerifierCertificateDigest {
+			return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: verifier certificate digest mismatch")
+		}
+		verifierRequest := request.VerifierCertificate.Request
+		if verifierRequest.ComputerID != request.ComputerID || verifierRequest.CodeRef != string(request.ComputerVersion.CodeRef) ||
+			verifierRequest.ArtifactProgramRef != string(request.ComputerVersion.ArtifactProgramRef) || verifierRequest.ReleaseDigest != request.ReleaseDigest {
+			return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: verifier certificate join mismatch")
+		}
 	}
 	if err := request.VMLocalContentWitness.Validate(); err != nil {
 		return Checkpoint{}, nil, err
 	}
 	if err := request.FrontendIdentity.Validate(request.ReleaseDigest); err != nil {
 		return Checkpoint{}, nil, err
-	}
-	if VerifyVerifierCertificate(request.VerifierCertificate) != nil {
-		return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: verifier certificate refused")
-	}
-	certificateJSON, err := computerevent.CanonicalJSON(request.VerifierCertificate.Certificate)
-	if err != nil || computerevent.DigestBytes(certificateJSON) != request.VerifierCertificateDigest {
-		return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: verifier certificate digest mismatch")
-	}
-	verifierRequest := request.VerifierCertificate.Request
-	if verifierRequest.ComputerID != request.ComputerID || verifierRequest.CodeRef != string(request.ComputerVersion.CodeRef) ||
-		verifierRequest.ArtifactProgramRef != string(request.ComputerVersion.ArtifactProgramRef) || verifierRequest.ReleaseDigest != request.ReleaseDigest {
-		return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: verifier certificate join mismatch")
 	}
 	canonical, err := computerevent.CanonicalJSON(request)
 	if err != nil {
@@ -212,6 +233,9 @@ func CheckpointFromRequest(request CheckpointRequest) (Checkpoint, []byte, error
 }
 
 func RouteProjectionFromRequest(request RouteProjectionRequest, now time.Time) (RouteProjectionCertificate, []byte, error) {
+	if request.Checkpoint.Checkpoint.Request.OwnerRecovery {
+		return RouteProjectionCertificate{}, nil, fmt.Errorf("self-development route projection: owner-recovery checkpoints cannot authorize route projection")
+	}
 	if strings.TrimSpace(request.ComputerID) == "" || strings.TrimSpace(request.IdempotencyKey) == "" || request.Checkpoint.Checkpoint.Request.ComputerID != request.ComputerID ||
 		request.Checkpoint.Receipt.Kind != ReceiptKindCheckpoint || request.Checkpoint.Receipt.ComputerID != request.ComputerID ||
 		request.Checkpoint.Receipt.ArtifactDigest != request.Checkpoint.Checkpoint.Digest || request.CodeClosure.Verify() != nil || request.ArtifactProgram.Verify() != nil ||

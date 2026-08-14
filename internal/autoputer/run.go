@@ -265,6 +265,10 @@ func Run() {
 			log.Fatalf("autoputer: reconstruct computer event authority: %v", err)
 		}
 		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher))
+		if credentials != nil {
+			coreOpts = append(coreOpts, agentcore.WithOwnerRecoveryControl(credentials))
+			log.Printf("autoputer: owner-recovery checkpoint publication credential wired")
+		}
 		log.Printf("autoputer: computer event authority reconstructed; self-development effects disabled")
 	}
 	if opt, ok, err := selfDevelopmentUpdaterOption(); err != nil {

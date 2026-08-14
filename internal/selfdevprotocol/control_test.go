@@ -56,3 +56,83 @@ func TestVerifierCertificateBindsIndependentDecisionAndCheckpoint(t *testing.T) 
 		t.Fatal("checkpoint accepted a substituted verifier certificate request")
 	}
 }
+
+func ownerRecoveryTestRequest() CheckpointRequest {
+	digest := func(value byte) string { return strings.Repeat(string(value), 64) }
+	return CheckpointRequest{
+		ComputerID: "computer-owner-recovery", IdempotencyKey: "owner-recovery-test",
+		ComputerVersion: computerversion.ComputerVersion{
+			CodeRef:            computerversion.CodeRef("code:sha256:" + digest('d')),
+			ArtifactProgramRef: computerversion.ArtifactProgramRef("artifact-program:sha256:" + digest('e')),
+		},
+		AcceptedEventHead: digest('1'), EffectiveEventHead: digest('2'), EffectiveStateCommitment: digest('2'),
+		EventHeadReceiptID: "receipt-test", ReleaseDigest: digest('f'), ReconstructionDigest: digest('3'),
+		ReducerVersion: 1, OwnerRecovery: true,
+		VMLocalContentWitness: VMLocalContentWitness{
+			Database: "texture", ContentRoot: digest('7'), DoltHead: digest('8'), DerivabilityDigest: digest('9'),
+			Schema: map[string]string{"agents": digest('a')},
+			Tables: map[string]string{"agents": digest('b')},
+		},
+		FrontendIdentity: FrontendIdentity{Digest: digest('c'), Derivation: FrontendDerivationRelease, ReleaseDigest: digest('f')},
+	}
+}
+
+func TestOwnerRecoveryCheckpointAcceptsDistinctEvidenceClass(t *testing.T) {
+	request := ownerRecoveryTestRequest()
+	if _, _, err := CheckpointFromRequest(request); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOwnerRecoveryCheckpointAllowsCanonicalEffectiveDivergence(t *testing.T) {
+	request := ownerRecoveryTestRequest()
+	request.AcceptedEventHead = strings.Repeat("a", 64)
+	request.EffectiveEventHead = strings.Repeat("b", 64)
+	if _, _, err := CheckpointFromRequest(request); err != nil {
+		t.Fatalf("owner-recovery must bind canonical and effective heads separately: %v", err)
+	}
+}
+
+func TestOwnerRecoveryCheckpointRefusesVerifierEvidenceBlending(t *testing.T) {
+	request := ownerRecoveryTestRequest()
+	request.MaterializationReceiptDigest = strings.Repeat("c", 64)
+	if _, _, err := CheckpointFromRequest(request); err == nil {
+		t.Fatal("owner-recovery accepted a materialization receipt digest")
+	}
+	blend := ownerRecoveryTestRequest()
+	blend.VerifierCertificateDigest = strings.Repeat("d", 64)
+	if _, _, err := CheckpointFromRequest(blend); err == nil {
+		t.Fatal("owner-recovery accepted a verifier certificate digest")
+	}
+	bootstrap := ownerRecoveryTestRequest()
+	bootstrap.VerifierTrustBootstrap = true
+	if _, _, err := CheckpointFromRequest(bootstrap); err == nil {
+		t.Fatal("owner-recovery accepted verifier trust bootstrap")
+	}
+	certificate := ownerRecoveryTestRequest()
+	certificate.VerifierCertificate.PublicKey = "not-empty"
+	if _, _, err := CheckpointFromRequest(certificate); err == nil {
+		t.Fatal("owner-recovery accepted a verifier public key")
+	}
+	sneak := ownerRecoveryTestRequest()
+	sneak.VerifierCertificate.Request.ComputerID = "computer-sneak"
+	if _, _, err := CheckpointFromRequest(sneak); err == nil {
+		t.Fatal("owner-recovery accepted a non-empty verifier certificate request")
+	}
+}
+
+func TestOwnerRecoveryCheckpointCannotAuthorizeRouteProjection(t *testing.T) {
+	checkpoint, _, err := CheckpointFromRequest(ownerRecoveryTestRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = RouteProjectionFromRequest(RouteProjectionRequest{
+		Checkpoint: CheckpointResponse{Checkpoint: checkpoint},
+	}, time.Now().UTC())
+	if err == nil {
+		t.Fatal("owner-recovery checkpoint authorized route projection")
+	}
+	if !strings.Contains(err.Error(), "owner-recovery") {
+		t.Fatalf("route projection refusal = %v", err)
+	}
+}

@@ -580,4 +580,71 @@ func TestCheckpointBindAcceptsEligibleRestoreSet(t *testing.T) {
 	if err := report.VMLocalContentWitness.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	if report.PublishedCheckpoint != nil {
+		t.Fatal("bind without platform control published a checkpoint")
+	}
+}
+
+func rematerializeOwnerRecoveryCheckpoint(t *testing.T, computerID string, witness selfdevprotocol.VMLocalContentWitness, releaseDigest string, frontend selfdevprotocol.FrontendIdentity, acceptedHead, effectiveHead string) selfdevprotocol.Checkpoint {
+	t.Helper()
+	digest := func(value byte) string { return strings.Repeat(string(value), 64) }
+	if strings.TrimSpace(acceptedHead) == "" {
+		acceptedHead = digest('1')
+	}
+	if strings.TrimSpace(effectiveHead) == "" {
+		effectiveHead = acceptedHead
+	}
+	request := selfdevprotocol.CheckpointRequest{
+		ComputerID: computerID, IdempotencyKey: "owner-recovery-test",
+		ComputerVersion: computerversion.ComputerVersion{
+			CodeRef: computerversion.CodeRef("code:sha256:" + digest('d')), ArtifactProgramRef: computerversion.ArtifactProgramRef("artifact-program:sha256:" + digest('e')),
+		},
+		AcceptedEventHead: acceptedHead, EffectiveEventHead: effectiveHead, EffectiveStateCommitment: digest('2'), EventHeadReceiptID: "receipt-test",
+		ReleaseDigest: releaseDigest, ReconstructionDigest: digest('3'), ReducerVersion: 1, OwnerRecovery: true,
+		VMLocalContentWitness: witness,
+		FrontendIdentity:      frontend,
+	}
+	checkpoint, _, err := selfdevprotocol.CheckpointFromRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return checkpoint
+}
+
+func TestRematerializeFromTapeAcceptsOwnerRecoveryCheckpoint(t *testing.T) {
+	computerID := "computer-owner-recovery-rematerialize"
+	storePath := filepath.Join(t.TempDir(), "runtime.db")
+	live, err := choirstore.Open(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if live != nil {
+			_ = live.Close()
+		}
+	}()
+	rt, _, acceptedHead := rematerializeTapeRuntime(t, computerID, storePath, live)
+	updaterRoot := filepath.Join(t.TempDir(), "updater")
+	priorDigest, _ := pinFrontendRelease(t, updaterRoot, computerID, "<html>live</html>")
+	targetDigest, targetIdentity := pinFrontendRelease(t, updaterRoot, computerID, "<html>checkpoint</html>")
+	pointCurrent(t, updaterRoot, priorDigest)
+	rt.selfdevUpdaterRoot = updaterRoot
+	ctx := context.Background()
+	report, err := rt.ReplayCompleteness(ctx, computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := rematerializeOwnerRecoveryCheckpoint(t, computerID, witness, targetDigest, targetIdentity, acceptedHead, acceptedHead)
+	result, err := rt.RematerializeFromTape(ctx, computerID, checkpoint)
+	if err != nil {
+		t.Fatalf("owner-recovery rematerialize refused: %v", err)
+	}
+	live = nil
+	if !result.WitnessMatched || !result.OriginalDenied || result.PinCheckoutUsed {
+		t.Fatalf("unexpected owner-recovery rematerialize %#v", result)
+	}
 }

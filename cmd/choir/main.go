@@ -1274,6 +1274,37 @@ func runComputerReplayCompleteness(args []string, stdout, stderr io.Writer) int 
 	return writeJSON(stdout, response)
 }
 
+// extractCheckpointArtifact accepts the restore operand in any of the product
+// envelopes: a Checkpoint, a CheckpointResponse, or a checkpoint bind report
+// with published_checkpoint.checkpoint. choir computer checkpoint writes the
+// bind report; restore/rematerialize consume the nested Checkpoint without jq.
+func extractCheckpointArtifact(raw []byte) (json.RawMessage, error) {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
+		return nil, err
+	}
+	if published, ok := top["published_checkpoint"]; ok {
+		var response struct {
+			Checkpoint json.RawMessage `json:"checkpoint"`
+		}
+		if json.Unmarshal(published, &response) != nil || len(response.Checkpoint) == 0 {
+			return nil, fmt.Errorf("bind report did not publish a checkpoint")
+		}
+		return response.Checkpoint, nil
+	}
+	if checkpoint, ok := top["checkpoint"]; ok {
+		if _, hasDigest := top["checkpoint_digest"]; !hasDigest {
+			if _, hasReceipt := top["receipt"]; hasReceipt {
+				if len(checkpoint) == 0 {
+					return nil, fmt.Errorf("checkpoint response is empty")
+				}
+				return checkpoint, nil
+			}
+		}
+	}
+	return json.RawMessage(raw), nil
+}
+
 func runComputerCheckpoint(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("choir computer checkpoint", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -1315,8 +1346,8 @@ func runComputerRestore(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "choir computer restore: %v\n", err)
 		return 2
 	}
-	var checkpoint json.RawMessage
-	if err := json.Unmarshal(raw, &checkpoint); err != nil {
+	checkpoint, err := extractCheckpointArtifact(raw)
+	if err != nil {
 		fmt.Fprintf(stderr, "choir computer restore: invalid checkpoint: %v\n", err)
 		return 2
 	}
@@ -1352,8 +1383,8 @@ func runComputerRematerializeFromTape(args []string, stdout, stderr io.Writer) i
 		fmt.Fprintf(stderr, "choir computer rematerialize-from-tape: %v\n", err)
 		return 2
 	}
-	var checkpoint json.RawMessage
-	if err := json.Unmarshal(raw, &checkpoint); err != nil {
+	checkpoint, err := extractCheckpointArtifact(raw)
+	if err != nil {
 		fmt.Fprintf(stderr, "choir computer rematerialize-from-tape: invalid checkpoint: %v\n", err)
 		return 2
 	}

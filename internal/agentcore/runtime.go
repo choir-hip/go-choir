@@ -124,6 +124,7 @@ type Runtime struct {
 	selfdevUpdater              *updater.Client
 	selfdevVerifier             *receiptsigner.Client
 	selfdevControl              *selfdev.GuestCredentials
+	ownerRecoveryControl        *selfdev.GuestCredentials
 	selfdevRoute                *vmctl.Client
 	selfdevRouteOwnerID         string
 	selfdevRouteDesktopID       string
@@ -526,6 +527,15 @@ func WithSelfDevelopmentVerifier(client *receiptsigner.Client) RuntimeOption {
 func WithSelfDevelopmentControl(credentials *selfdev.GuestCredentials) RuntimeOption {
 	return func(rt *Runtime) {
 		rt.selfdevControl = credentials
+	}
+}
+
+// WithOwnerRecoveryControl wires platform-control credentials for owner-recovery
+// checkpoint publication only. It does not enable the effects mode/materializer
+// surface that WithSelfDevelopmentControl gates.
+func WithOwnerRecoveryControl(credentials *selfdev.GuestCredentials) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.ownerRecoveryControl = credentials
 	}
 }
 

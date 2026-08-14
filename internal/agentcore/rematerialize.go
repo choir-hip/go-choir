@@ -336,6 +336,7 @@ type CheckpointBindReport struct {
 	ReleaseDigest         string                                `json:"release_digest"`
 	VMLocalContentWitness selfdevprotocol.VMLocalContentWitness `json:"vm_local_content_witness"`
 	FrontendIdentity      selfdevprotocol.FrontendIdentity      `json:"frontend_identity"`
+	PublishedCheckpoint   *selfdevprotocol.CheckpointResponse   `json:"published_checkpoint,omitempty"`
 }
 
 func (rt *Runtime) BindCheckpointRestoreSet(ctx context.Context, computerID string) (CheckpointBindReport, error) {
@@ -363,7 +364,63 @@ func (rt *Runtime) BindCheckpointRestoreSet(ctx context.Context, computerID stri
 	report.ReleaseDigest = manifest.ContentDigest
 	report.VMLocalContentWitness = witness
 	report.FrontendIdentity = frontend
+	if rt.ownerRecoveryControl == nil {
+		// No platform control credential is wired: this remains a bind report.
+		return report, nil
+	}
+	published, err := rt.publishOwnerRecoveryCheckpoint(ctx, computerID, manifest, witness, frontend)
+	if err != nil {
+		return report, err
+	}
+	report.PublishedCheckpoint = &published
 	return report, nil
+}
+
+// publishOwnerRecoveryCheckpoint publishes the owner-recovery evidence class
+// checkpoint for an accumulated computer: verifier fields absent, canonical
+// head bound as the restore target, effective head as the projection head.
+// The VM-local witness is attested here; restore-time tape reconstruction
+// enforces that it is true. Idempotency is head-scoped so the same head can be
+// re-published (lookup replays the stored response) but a moved head cannot
+// overwrite the record.
+func (rt *Runtime) publishOwnerRecoveryCheckpoint(ctx context.Context, computerID string, manifest updater.ReleaseManifest, witness selfdevprotocol.VMLocalContentWitness, frontend selfdevprotocol.FrontendIdentity) (selfdevprotocol.CheckpointResponse, error) {
+	head, err := rt.store.Head(ctx, computerID)
+	if err != nil || head == nil {
+		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("self-development checkpoint: live projection head unavailable")
+	}
+	headEvent, found, err := rt.store.EventByDigest(ctx, computerID, head.CanonicalEventHead)
+	if err != nil || !found {
+		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("self-development checkpoint: head event unavailable")
+	}
+	headReceipt, found, err := rt.store.EventReceiptByIdempotency(ctx, computerID, headEvent.IdempotencyKey)
+	if err != nil || !found {
+		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("self-development checkpoint: head event receipt unavailable")
+	}
+	reconstruction, err := selfdevprotocol.Digest(struct {
+		ReleaseDigest string `json:"release_digest"`
+		EffectiveHead string `json:"effective_event_head"`
+	}{
+		manifest.ContentDigest, head.EffectiveEventHead,
+	})
+	if err != nil {
+		return selfdevprotocol.CheckpointResponse{}, err
+	}
+	return rt.ownerRecoveryControl.PublishCheckpoint(ctx, selfdevprotocol.CheckpointRequest{
+		ComputerID: computerID, IdempotencyKey: "owner-recovery-" + head.CanonicalEventHead,
+		ComputerVersion: computerversion.ComputerVersion{
+			CodeRef:            computerversion.CodeRef("code:sha256:" + manifest.CodeRef),
+			ArtifactProgramRef: computerversion.ArtifactProgramRef("artifact-program:sha256:" + manifest.ArtifactProgramRef),
+		},
+		AcceptedEventHead: head.CanonicalEventHead, EffectiveEventHead: head.EffectiveEventHead,
+		EffectiveStateCommitment: head.EffectiveStateCommitment,
+		EventHeadReceiptID:       headReceipt.ReceiptID,
+		ReleaseDigest:            manifest.ContentDigest,
+		ReconstructionDigest:     reconstruction,
+		ReducerVersion:           head.ReducerVersion,
+		OwnerRecovery:            true,
+		VMLocalContentWitness:    witness,
+		FrontendIdentity:         frontend,
+	})
 }
 
 func (rt *Runtime) verifyPinnedFrontend(checkpoint selfdevprotocol.Checkpoint) (string, error) {
