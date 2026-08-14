@@ -7,9 +7,10 @@ corpus and does not make an unverified graph status into a live work claim.
 
 [`definitions/choir-tape-recovery-2026-08-13.md`](definitions/choir-tape-recovery-2026-08-13.md)
 is the owner-priority executable `/goal` as of 2026-08-13. It is
-`blocked_incomplete`: the owner product path cannot reach a computer whose
-VM-local rows are event-derivable and whose staged release includes
-`frontend/`. Proof target remains **whole-computer restore from the tape**: a
+`blocked_incomplete`: the retained computer now serves a host-staged
+`current/frontend` SPA, but checkpoint bind still reports underivable SPA
+because production never wires `CHOIR_UPDATER_ROOT` into Runtime, and the
+VM-local rows remain non-event-derivable. Proof target remains **whole-computer restore from the tape**: a
 checkpoint that binds event head + CodeRef + ArtifactProgramRef + VM-local
 content witness + frontend identity, runtime rematerialization, a per-computer
 frontend serving hop, and an owner-reachable acceptance-fenced restore. Local
