@@ -7,9 +7,13 @@ corpus and does not make an unverified graph status into a live work claim.
 
 [`definitions/choir-tape-recovery-2026-08-13.md`](definitions/choir-tape-recovery-2026-08-13.md)
 is the owner-priority executable `/goal` as of 2026-08-13. It is
-`blocked_incomplete`: updater-root wiring is verified on staging `10dfa594`
-(checkpoint bind now fail-closes on live-only rows, not missing SPA), and the
-VM-local rows remain non-event-derivable. Proof target remains **whole-computer restore from the tape**: a
+`working`: the owner-ratified workspace-replace cutover cleared the nine
+live-only tables (quarantined, reversible) and replay eligibility is now
+`true`; checkpoint bind returns `checkpoint_eligible: true` with a full
+40-table witness. Remaining substrate gap: no owner-reachable checkpoint
+*publication* path exists for an accumulated computer — `CheckpointAuthority.Publish` requires verifier evidence only the effects
+pipeline (sequenced after this mission) or a genesis-head bootstrap (closed at
+head seq 12) can produce. Proof target remains **whole-computer restore from the tape**: a
 checkpoint that binds event head + CodeRef + ArtifactProgramRef + VM-local
 content witness + frontend identity, runtime rematerialization, a per-computer
 frontend serving hop, and an owner-reachable acceptance-fenced restore. Local

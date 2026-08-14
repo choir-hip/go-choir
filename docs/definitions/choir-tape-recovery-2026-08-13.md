@@ -119,34 +119,50 @@ measures:
     cannot_prove: that the witness is sufficient for a state excursion never exercised
 
 now:
-  status: blocked_incomplete
-  slice: "Staging deployed 10dfa594. RefreshVM of the retained computer to epoch 258 preserved host-staged current/frontend (guest / HTTP 200). Checkpoint bind now fails closed HTTP 409 on live-only rows, not underivable SPA. Replay-completeness HTTP 200 ineligible (nine tables, sequence 10). Wiring repair verified. Remaining unpaid receipts still have no legal path on this computer. Do not rematerialize."
-  question: "What owner-reachable product path yields a computer whose VM-local rows are event-derivable so a restore-set checkpoint can publish, without destroying the retained computer's live-only rows?"
+  status: working
+  slice: "Consensus panel + code verification adjudicated replace-workspace as the owner-ratified cutover (effects-Definition exception). Executed: quarantine 20260814T084541Z, restart epoch 259. REPLAY ELIGIBILITY FLIPPED true (nine live-only tables empty both sides, live_seq==replay_seq at 11). Checkpoint bind now checkpoint_eligible=true with full 40-table witness and release-bound frontend identity. New named problem: owner checkpoint binds but cannot PUBLISH — CheckpointAuthority.Publish needs verifier evidence only the effects pipeline (sequenced after this mission) or a head-at-genesis bootstrap (head is seq 12) can produce. Sequencing circularity between tape-recovery and effects."
+  question: "What legitimate owner-reachable path publishes a checkpoint for an accumulated (non-genesis) computer when the effects verifier pipeline is OFF and sequenced after tape recovery — without forging verifier evidence or weakening the verifier contract?"
   reconciliation:
-    observed_at: 2026-08-14T06:50:42Z
-    source_ref: main@10dfa594
-    deploy_identity: "staging deployed 10dfa594a625de03c0693cecae53ee0c7ac43ea0 at 2026-08-14T06:47:48Z; retained computer computer-03335285269bdba4f94377e56879f9e6 epoch 258 active; guest index HTTP 200; checkpoint HTTP 409 replay is ineligible live-only rows"
+    observed_at: 2026-08-14T09:00:00Z
+    source_ref: main@c1a1a132
+    deploy_identity: "staging deployed 10dfa594a625de03c0693cecae53ee0c7ac43ea0; computer epoch 259 (second restart gen 22 for credential refresh); replay eligible=true; checkpoint bind checkpoint_eligible=true"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-14T06:50:42Z git status --short dirty with this now reconcile plus docs/evidence/tape-recovery-checkpoint-bind-live-only-after-updater-wire-2026-08-14.json
+    worktree_inventory_ref: 2026-08-14T09:00:00Z git status --short dirty with this now update plus docs/evidence/tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14.json
     status: reconciled
   candidate:
     id: none
     state: none
   decision:
-    selected: "Record the updater-root wiring as verified on staging. Checkpoint bind now sees staged current/frontend and fail-closes on nine live-only tables. Do not rematerialize the retained computer. Do not add table reducers. Do not stamp complete."
+    selected: "Execute the panel-adjudicated cutover (replace-workspace per owner-ratified exception) to clear live-only rows; record that eligibility and bind now pass; name the owner-publication sequencing problem before any repair code."
     kind: operational
     status: settled
     source: orchestrator
-    evidence_ref: "docs/evidence/tape-recovery-checkpoint-bind-live-only-after-updater-wire-2026-08-14.json; docs/evidence/tape-recovery-checkpoint-updater-root-unwired-2026-08-14.json"
-    owner_ratification_ref: "owner direction 2026-08-14 (SSH to node-b authorized to continue tape recovery); owner direction 2026-08-13 (tape-based recovery is the priority)"
-    recorded_at: 2026-08-14T06:50:42Z
-    consequence: "The SPA-underivable false-negative is repaired. A published restore-set checkpoint still cannot exist on computer-03335285269bdba4f94377e56879f9e6 while nine live-only tables are non-empty. Keep this Definition as the unique entrypoint. Do not start effects. Do not rematerialize. SSH remains host inspect, not the restore path. Do not stamp complete."
-  evidence_refs: [docs/evidence/tape-recovery-checkpoint-bind-live-only-after-updater-wire-2026-08-14.json, docs/evidence/tape-recovery-checkpoint-updater-root-unwired-2026-08-14.json, docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json, docs/evidence/tape-recovery-checkpoint-bind-refusal-2026-08-13.json, docs/evidence/tape-recovery-retained-computer-2026-08-13.json, docs/ACTIVE.md, docs/mission-graph.yaml]
-  blocker_or_risk: "Nine live-only texture tables block a published checkpoint. Rematerializing this computer would drop those rows. One interactive VM per owner/desktop; serving_join still needs two divergent computers. Remaining unpaid: checkpoint_witness (published), destructive_rematerialization, serving_join, owner_reachable_whole_computer_restore, capability_renewal_pass."
-  next_action: "Owner must provision or identify a product-path computer whose VM-local rows are event-derivable without destroying the retained computer's live-only rows. Until then, do not rematerialize computer-03335285269bdba4f94377e56879f9e6, do not add table reducers as a restore shortcut, and do not stamp complete."
+    evidence_ref: "docs/evidence/tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14.json; .agentic-consensus/tape-recovery-resolve-20260814"
+    owner_ratification_ref: "owner direction 2026-08-14 (review, run agentic consensus, debug and resolve); effects-Definition owner-ratified exception authorizing product-path workspace replacement"
+    recorded_at: 2026-08-14T09:00:00Z
+    consequence: "Live-only rows quarantined (reversible, preserved as evidence); replay eligible; checkpoint bind eligible. A published checkpoint remains impossible without either the effects verifier pipeline or a bootstrap path structurally closed at head seq 12. Do not forge verifier evidence. Do not rematerialize without a published checkpoint. serving_join still needs a second computer."
+  evidence_refs: [docs/evidence/tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14.json, docs/evidence/tape-recovery-checkpoint-bind-live-only-after-updater-wire-2026-08-14.json, docs/evidence/tape-recovery-checkpoint-updater-root-unwired-2026-08-14.json, docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json, docs/ACTIVE.md, docs/mission-graph.yaml]
+  blocker_or_risk: "Checkpoint publication is the remaining substrate gap: CheckpointAuthority.Publish requires verifier evidence produced only by the effects verifier pipeline (mode off, sequenced after this mission) or the genesis bootstrap (requires head==genesis; this head is seq 12). Guest-side restore validates the verifier certificate only against the embedded public key, so a self-signed certificate would mechanically pass — refused as forged evidence. serving_join still needs two divergent computers; this owner can have only one."
+  next_action: "Owner fork: (a) ratify a tape-recovery checkpoint publication path for accumulated computers (e.g. owner-signed verifier evidence binding the current bind report's witness), or (b) authorize enabling the effects pipeline for a single checkpoint publication, or (c) accept blocked_incomplete with the sequencing circularity documented. Until ratified: do not forge verifier evidence, do not rematerialize, do not stamp complete."
 
 receipts:
+  - id: tape-recovery-eligible-bind-no-owner-publication-2026-08-14
+    boundary: define
+    commit_or_artifact: docs/evidence/tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14.json
+    proof_refs: [docs/evidence/tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14.json, internal/agentcore/rematerialize.go, internal/platform/checkpoints.go, internal/agentcore/self_development_materializer.go]
+    rollback_ref: "workspace quarantine dir /mnt/persistent/workspace-replaced-20260814T084541.510816938Z (host rename-back); revert docs commits"
+    disposition: "working — eligibility flipped true after owner-ratified workspace-replace cutover; checkpoint bind eligible=true; named new problem: no owner-reachable checkpoint PUBLICATION path for an accumulated computer (verifier evidence sequencing circularity). Unpaid: published checkpoint_witness, destructive_rematerialization, serving_join, owner_reachable_whole_computer_restore, capability_renewal_pass."
+    problem_ref: tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14
+    authorization_ref: owner direction 2026-08-14 (review, consensus, debug, resolve); effects-Definition owner-ratified workspace-replace exception
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    landing:
+      source_commit: c1a1a132
+      ci_ref: "31776629641 success (deploy 10dfa594)"
+      deploy_ref: 10dfa594a625de03c0693cecae53ee0c7ac43ea0
+      environment_identity: "staging choir.news 10dfa594; computer epoch 259; replay eligible=true; bind eligible=true"
+      deployed_acceptance: "working — major progress (eligibility + bind); publication gap named and documented"
+    registry_conformance_ref: "verified 2026-08-14: mission-graph tape-recovery entrypoint true; ACTIVE.md updated this commit"
   - id: tape-recovery-checkpoint-bind-live-only-after-updater-wire-2026-08-14
     boundary: define
     commit_or_artifact: docs/evidence/tape-recovery-checkpoint-bind-live-only-after-updater-wire-2026-08-14.json

@@ -1,0 +1,60 @@
+{
+  "captured_at": "2026-08-14T08:58:00Z",
+  "schema_version": 1,
+  "problem_id": "tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14",
+  "staging_deployed_commit": "10dfa594a625de03c0693cecae53ee0c7ac43ea0",
+  "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+  "consensus_ref": ".agentic-consensus/tape-recovery-resolve-20260814 (6/8 panel: codex,cursor,devin,omp-cursor-grok45,omp-gemini36,opencode ok; omp-gpt56-sol,omp-deepseek failed auth)",
+  "progress_this_session": {
+    "workspace_replace_cutover": {
+      "authority": "owner-ratified exception in docs/definitions/choir-supervised-self-development-effects-2026-08-11.md (product-path VM-local workspace replacement may discard retired schema residue and unsupported direct-SQL rows; appends no event, publishes no checkpoint)",
+      "receipt": "quarantine_dir /mnt/persistent/workspace-replaced-20260814T084541.510816938Z; appended_event=false; published_checkpoint=false; store_closed=true",
+      "restart": "epoch 258->259 receipt 019fff73-2552-7d4b-8901-5977c834f8a7; second restart for credential refresh generation 22"
+    },
+    "replay_eligibility_flipped": {
+      "before": "eligible=false, reason='behavior-bearing direct-write tables are non-empty without reducers' (nine tables), sequence 10",
+      "after": "eligible=true, reason='canonical event replay is eligible for the declared manifest', live_seq=11..12, replay_seq equal, unsupported_tables empty; probe 6c02856618c600af6a8bd6928a88b2a3aa0406279db6842bac8a0c2aa320673d",
+      "mechanism": "fresh workspace has empty ReplayEmptyUntilSupported tables; tape is head-only lifecycle events so replay projection is also empty; equivalence holds"
+    },
+    "checkpoint_bind_now_eligible": {
+      "endpoint": "POST /api/computers/{id}/lifecycle/checkpoint (choir computer checkpoint)",
+      "result": "checkpoint_eligible=true; release_digest 39a8fbcd...; vm_local_content_witness 40 tables, content_root 59bc91fa..., dolt_head 6hcl7nqr2ss2tdknde0573j6ui9r3i3r, derivability_digest 6893696a...; frontend_identity digest b95889ab... derivation release",
+      "artifact": "/tmp session capture; prior SPA-underivable 409 and live-only 409 both superseded"
+    }
+  },
+  "new_problem": {
+    "statement": "Owner checkpoint bind is eligible, but no owner-reachable path can PUBLISH a checkpoint artifact that choir computer restore --checkpoint-file consumes.",
+    "evidence": [
+      "internal/agentcore/rematerialize.go bindComputerCheckpoint returns CheckpointBindReport only; it never calls Publish",
+      "CheckpointAuthority.Publish (internal/platform/checkpoints.go) is the only publisher; product callers are the effects materializer (self_development_materializer.go recordMaterializationApplied, requires a completed selfdev Operation) and the genesis flow (VerifierTrustBootstrap)",
+      "Publish.verifyVerifierEvidence for non-genesis decision requires an EventVerificationRecorded append receipt with actor co-super and authority guest-core:self-development-verifier, plus payload decision pass matching OperationID/BundleDigest; that event kind is produced only by the effects verifier pipeline, whose mode is off (generation 0) and whose Definition is sequenced AFTER tape recovery",
+      "VerifierTrustBootstrap publish additionally requires the CURRENT canonical head event to be EventGenesisImported; this computer's head is sequence 12, so the bootstrap route is structurally closed",
+      "platform dolt (read-only via node-b): platform.computer_event_append_receipts for this computer = 1 genesis_imported + 11 key_revoked; no verification_recorded; platform.control_key_history empty (no pinned verifier key); platform.computer_checkpoints empty (no published checkpoint ever)",
+      "selfdevprotocol.CheckpointFromRequest requires VerifierCertificate + MaterializationReceiptDigest + EventHeadReceiptID; the bind report provides none of these; guest-side restore validates the certificate signature only against the public key embedded in the request, so a self-signed certificate would mechanically pass — that is forged verifier evidence and is refused (heresy, violates the verifier contract)"
+    ],
+    "structural_reading": "Tape-recovery receipts checkpoint_witness (published), destructive_rematerialization, owner_reachable_whole_computer_restore, and capability_renewal_pass require a published checkpoint; the only legitimate publishers require either the effects verifier pipeline (sequenced after this mission) or a head-at-genesis state that no accumulated computer can return to. Sequencing circularity between tape-recovery and effects.",
+    "temptations_refused": [
+      "self-signed verifier certificate through guest-side-only validation",
+      "table reducers as restore shortcut",
+      "genesis re-run on the retained chain (requires disposable header; tests forbid genesis for checkpoint/restore)",
+      "SSH-as-restore (restore remains owner product API/CLI)"
+    ]
+  },
+  "consensus_adjudication": {
+    "H1_replace_workspace": "legal cutover per owner-ratified effects-Definition exception (codex,cursor,devin,omp-cursor-grok45,omp-gemini36; opencode dissent on vacuous-witness answered by the same exception plus the 2026-08-12 replay-difference dispositions 'discard; fail-closed while nonempty'); executed with eligibility now true",
+    "H2_capability_renewal": "computer+revocation-epoch bound, not realization bound; idle-past-grace 409 re-observed between probes (expected fail-closed); receipt still unpaid because no restore has run",
+    "H3_serving_join": "same-owner second interactive VM permanently blocked (one per user/desktop; no create verb); needs pre-existing second-user computer, product change, or owner amendment",
+    "codex_unique_finding_verified": "choir computer checkpoint binds but never publishes — confirmed in source"
+  },
+  "not_done": [
+    "published checkpoint_witness",
+    "destructive_rematerialization",
+    "serving_join",
+    "owner_reachable_whole_computer_restore",
+    "capability_renewal_pass"
+  ],
+  "constraints_held": [
+    "did not rematerialize; did not add reducers; did not forge verifier evidence; did not use genesis; restore remains product-path",
+    "quarantined live-only rows preserved at /mnt/persistent/workspace-replaced-20260814T084541.510816938Z as evidence and rollback ref"
+  ]
+}
