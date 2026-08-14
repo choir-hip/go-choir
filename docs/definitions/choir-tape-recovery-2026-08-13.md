@@ -120,33 +120,49 @@ measures:
 
 now:
   status: blocked_incomplete
-  slice: "Owner authorized SSH to node-b. Host-staged current/frontend on the retained computer (release 39a8fbcd, 51 files) without touching Dolt. Guest / is HTTP 200 SPA at epoch 257. Checkpoint bind remains HTTP 409 served SPA is underivable because production never calls WithSelfDevelopmentUpdater — ComputerSurface reads CHOIR_UPDATER_ROOT, BindCheckpointRestoreSet reads empty rt.selfdevUpdaterRoot. Replay-completeness is HTTP 500 idle-past-grace; after restart it is HTTP 200 ineligible (nine live-only tables, sequence 8). Staging remains 8a172b84. Do not rematerialize."
-  question: "After wiring guest Runtime to CHOIR_UPDATER_ROOT, what owner-reachable product path yields a computer whose VM-local rows are event-derivable so a restore-set checkpoint can publish?"
+  slice: "Staging deployed 10dfa594. RefreshVM of the retained computer to epoch 258 preserved host-staged current/frontend (guest / HTTP 200). Checkpoint bind now fails closed HTTP 409 on live-only rows, not underivable SPA. Replay-completeness HTTP 200 ineligible (nine tables, sequence 10). Wiring repair verified. Remaining unpaid receipts still have no legal path on this computer. Do not rematerialize."
+  question: "What owner-reachable product path yields a computer whose VM-local rows are event-derivable so a restore-set checkpoint can publish, without destroying the retained computer's live-only rows?"
   reconciliation:
-    observed_at: 2026-08-14T06:27:49Z
-    source_ref: main@fdb8f413
-    deploy_identity: "staging deployed 8a172b84f7285a83d3c502ad2e9e7c2ed4b65307 at 2026-08-13T20:45:20Z; retained computer computer-03335285269bdba4f94377e56879f9e6 epoch 257 active; guest index HTTP 200 after host-staged SPA; checkpoint still HTTP 409 SPA underivable; replay-completeness HTTP 500 idle-past-grace"
+    observed_at: 2026-08-14T06:50:42Z
+    source_ref: main@10dfa594
+    deploy_identity: "staging deployed 10dfa594a625de03c0693cecae53ee0c7ac43ea0 at 2026-08-14T06:47:48Z; retained computer computer-03335285269bdba4f94377e56879f9e6 epoch 258 active; guest index HTTP 200; checkpoint HTTP 409 replay is ineligible live-only rows"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-14T06:27:49Z git status --short dirty with this now reconcile plus docs/evidence/tape-recovery-checkpoint-updater-root-unwired-2026-08-14.json
+    worktree_inventory_ref: 2026-08-14T06:50:42Z git status --short dirty with this now reconcile plus docs/evidence/tape-recovery-checkpoint-bind-live-only-after-updater-wire-2026-08-14.json
     status: reconciled
   candidate:
     id: none
     state: none
   decision:
-    selected: "Document the unwired checkpoint updater root before repair. Host-staged SPA proves ComputerSurface can serve guest current/frontend. Checkpoint bind still cannot see that tree. Live-only rows still block a published checkpoint. Do not rematerialize. Do not stamp complete."
+    selected: "Record the updater-root wiring as verified on staging. Checkpoint bind now sees staged current/frontend and fail-closes on nine live-only tables. Do not rematerialize the retained computer. Do not add table reducers. Do not stamp complete."
     kind: operational
     status: settled
     source: orchestrator
-    evidence_ref: "docs/evidence/tape-recovery-checkpoint-updater-root-unwired-2026-08-14.json; internal/agentcore/runtime.go WithSelfDevelopmentUpdater; internal/autoputer/computer_surface.go; internal/agentcore/rematerialize.go BindCheckpointRestoreSet"
+    evidence_ref: "docs/evidence/tape-recovery-checkpoint-bind-live-only-after-updater-wire-2026-08-14.json; docs/evidence/tape-recovery-checkpoint-updater-root-unwired-2026-08-14.json"
     owner_ratification_ref: "owner direction 2026-08-14 (SSH to node-b authorized to continue tape recovery); owner direction 2026-08-13 (tape-based recovery is the priority)"
-    recorded_at: 2026-08-14T06:27:49Z
-    consequence: "Repair is wiring guest Runtime to CHOIR_UPDATER_ROOT, then deploy and restart so checkpoint bind can observe the staged SPA. Expect the next fail-closed to be live-only rows, not missing SPA. Keep this Definition as the unique entrypoint. Do not start effects. Do not rematerialize computer-03335285269bdba4f94377e56879f9e6. Do not add table reducers as a restore shortcut. SSH remains host inspect, not the restore path. Do not stamp complete."
-  evidence_refs: [docs/evidence/tape-recovery-checkpoint-updater-root-unwired-2026-08-14.json, docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json, docs/evidence/tape-recovery-checkpoint-bind-refusal-2026-08-13.json, docs/evidence/tape-recovery-retained-computer-2026-08-13.json, docs/ACTIVE.md, docs/mission-graph.yaml]
-  blocker_or_risk: "Checkpoint runtime is not wired to CHOIR_UPDATER_ROOT. After that repair, the retained computer still has nine live-only texture tables so a restore-set checkpoint cannot publish. One interactive VM per owner/desktop; serving_join still needs two divergent computers. Remaining unpaid: checkpoint_witness (published), destructive_rematerialization, serving_join, owner_reachable_whole_computer_restore, capability_renewal_pass."
-  next_action: "Wire guest Runtime to CHOIR_UPDATER_ROOT so BindCheckpointRestoreSet can read current/frontend. Deploy, restart the retained computer (persistent SPA already staged), and expect checkpoint to fail closed on live-only rows. Do not rematerialize. Do not stamp complete."
+    recorded_at: 2026-08-14T06:50:42Z
+    consequence: "The SPA-underivable false-negative is repaired. A published restore-set checkpoint still cannot exist on computer-03335285269bdba4f94377e56879f9e6 while nine live-only tables are non-empty. Keep this Definition as the unique entrypoint. Do not start effects. Do not rematerialize. SSH remains host inspect, not the restore path. Do not stamp complete."
+  evidence_refs: [docs/evidence/tape-recovery-checkpoint-bind-live-only-after-updater-wire-2026-08-14.json, docs/evidence/tape-recovery-checkpoint-updater-root-unwired-2026-08-14.json, docs/evidence/tape-recovery-blocked-incomplete-2026-08-13.json, docs/evidence/tape-recovery-checkpoint-bind-refusal-2026-08-13.json, docs/evidence/tape-recovery-retained-computer-2026-08-13.json, docs/ACTIVE.md, docs/mission-graph.yaml]
+  blocker_or_risk: "Nine live-only texture tables block a published checkpoint. Rematerializing this computer would drop those rows. One interactive VM per owner/desktop; serving_join still needs two divergent computers. Remaining unpaid: checkpoint_witness (published), destructive_rematerialization, serving_join, owner_reachable_whole_computer_restore, capability_renewal_pass."
+  next_action: "Owner must provision or identify a product-path computer whose VM-local rows are event-derivable without destroying the retained computer's live-only rows. Until then, do not rematerialize computer-03335285269bdba4f94377e56879f9e6, do not add table reducers as a restore shortcut, and do not stamp complete."
 
 receipts:
+  - id: tape-recovery-checkpoint-bind-live-only-after-updater-wire-2026-08-14
+    boundary: define
+    commit_or_artifact: docs/evidence/tape-recovery-checkpoint-bind-live-only-after-updater-wire-2026-08-14.json
+    proof_refs: [docs/evidence/tape-recovery-checkpoint-bind-live-only-after-updater-wire-2026-08-14.json, internal/autoputer/run.go, internal/agentcore/rematerialize.go]
+    rollback_ref: revert the docs-only live-only-after-wire stamp
+    disposition: "blocked_incomplete — updater-root wiring verified on staging 10dfa594 epoch 258. Checkpoint bind HTTP 409 replay is ineligible (nine live-only tables), no longer SPA underivable. Unpaid: published checkpoint_witness, destructive_rematerialization, serving_join, owner_reachable_whole_computer_restore, capability_renewal_pass. Do not rematerialize. Do not stamp complete."
+    problem_ref: tape-recovery-retained-computer-live-only-rows-2026-08-13
+    authorization_ref: owner direction 2026-08-14 (SSH to node-b authorized to continue); owner direction 2026-08-13 (tape-based recovery is the priority)
+    candidate_or_evidence_refs: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    landing:
+      source_commit: 10dfa594
+      ci_ref: "31776629641 success (product deploy 10dfa594)"
+      deploy_ref: 10dfa594a625de03c0693cecae53ee0c7ac43ea0
+      environment_identity: staging https://choir.news deployed 10dfa594 at 2026-08-14T06:47:48Z; retained computer epoch 258
+      deployed_acceptance: blocked_incomplete (scope_refusal paid; checkpoint_witness fail-closed 409 live-only rows after updater wire; remaining four receipts unpaid)
+    registry_conformance_ref: "verified 2026-08-14: docs/mission-graph.yaml tape-recovery status blocked with entrypoint true; docs/ACTIVE.md records blocked_incomplete; docs/doc-authority-manifest.yaml remains is_root [authority, entry]"
   - id: tape-recovery-checkpoint-updater-root-unwired-2026-08-14
     boundary: define
     commit_or_artifact: docs/evidence/tape-recovery-checkpoint-updater-root-unwired-2026-08-14.json
