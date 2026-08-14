@@ -13,7 +13,7 @@ live-only tables (quarantined, reversible) and replay eligibility is now
 40-table witness. Owner-recovery checkpoint **publication** is deployed on
 staging `57e2992d` (published checkpoint_witness, destructive rematerialize,
 owner restore). Remaining: capability renewal across restore without restart
-(rematerialize currently closes the guest store) and `serving_join` (owner-blocked). Proof target remains
+(in-place store reopen awaiting deploy) and `serving_join` (owner-blocked). Proof target remains
 **whole-computer restore from the tape**: a
 checkpoint that binds event head + CodeRef + ArtifactProgramRef + VM-local
 content witness + frontend identity, runtime rematerialization, a per-computer

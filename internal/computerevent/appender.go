@@ -88,6 +88,19 @@ func NewComputerEventAppender(computerID string, pins ArtifactPinner, projection
 	return &ComputerEventAppender{computerID: computerID, pins: pins, projection: projection, cas: cas, verifier: verifier}, nil
 }
 
+// RebindProjection replaces the local projection store after a tape rematerialize
+// flips the VM-local realization in place. CAS and pin clients stay bound to the
+// platform event authority; only the local Dolt/SQLite projection moves.
+func (a *ComputerEventAppender) RebindProjection(projection ProjectionStore) error {
+	if a == nil || projection == nil {
+		return fmt.Errorf("computer event appender: projection rebind requires complete dependencies")
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.projection = projection
+	return nil
+}
+
 func (a *ComputerEventAppender) Append(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string) (Receipt, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

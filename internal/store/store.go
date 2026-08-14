@@ -961,6 +961,31 @@ func validateIdentifier(name string) error {
 	return nil
 }
 
+// Reopen opens path and adopts its handles into s. The caller must Close s
+// first so the workspace files can be replaced. Process-start copies of the
+// same *Store keep working because the pointer does not change.
+func (s *Store) Reopen(path string) error {
+	if s == nil {
+		return fmt.Errorf("runtime store: reopen requires a store")
+	}
+	live, err := Open(path)
+	if err != nil {
+		return err
+	}
+	s.db = live.db
+	s.readDB = live.readDB
+	s.path = live.path
+	s.textureDB = live.textureDB
+	s.texturePath = live.texturePath
+	s.doltConnector = live.doltConnector
+	s.doltHistoryDirty = live.doltHistoryDirty
+	s.og = live.og
+	s.ogStore = live.ogStore
+	s.ogReadStore = live.ogReadStore
+	*live = Store{}
+	return nil
+}
+
 // Close closes the underlying database connection.
 func (s *Store) Close() error {
 	var err error

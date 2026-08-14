@@ -121,7 +121,7 @@ measures:
 
 now:
   status: working
-  slice: "Staging 57e2992d paid published checkpoint_witness, destructive_rematerialization, and owner restore (SPA bytes and Texture doc matched after choir computer restore). New problem: rematerialize closes the guest store (store_closed=true, guest 502 until owner start), so capability_renewal_pass across restore is unpaid. serving_join remains owner-blocked."
+  slice: "Staging 57e2992d paid published checkpoint_witness, destructive_rematerialization, and owner restore. Store-reopen is implemented in-place (Store.Reopen preserves captured *Store pointers; consensus round 2 3/3 ACCEPT). Next: deploy, RefreshVM, collect capability_renewal_pass without a subsequent start. serving_join remains owner-blocked."
   question: "None open on publication. Remaining: reopen the rematerialized store in-process so capability renewal can be probed without restart; serving_join needs a second computer."
   reconciliation:
     observed_at: 2026-08-14T09:15:00Z
@@ -145,7 +145,7 @@ now:
     consequence: "Red mutation on checkpoint authority (protected surface): full ceremony — conjecture delta, protected surfaces, admissible evidence class, rollback path, heresy delta (discovered: none new; introduced: none; repaired: publication-path sequencing circularity) recorded here. Rollback: git revert of the mission commits restores bind-only checkpoint. Security review obligation recorded for post-mission. serving_join still owner-blocked (needs second computer); owner declined to pick a serving-join resolution this session."
   evidence_refs: [docs/evidence/tape-recovery-eligible-bind-no-owner-publication-path-2026-08-14.json, docs/ACTIVE.md, docs/mission-graph.yaml]
   blocker_or_risk: "Owner-recovery publication extends the checkpoint authority. Guest-attested witness is accepted on this route; the enforcement that it is TRUE is the restore-time reconstruction match (WitnessContentMatches), not publish-time verification. This trust split must be honestly documented in the security review. Effects/route paths must reject owner-recovery checkpoints (test-pinned)."
-  next_action: "Documented store_closed after rematerialize. Next is the red reopen (choirstore.Open + appender.RebindProjection), then deploy, RefreshVM, and collect capability_renewal_pass without a subsequent start. serving_join remains owner-blocked."
+  next_action: "Landed in-place store reopen. Wait for staging deploy, RefreshVM the retained computer, then collect capability_renewal_pass by mutating and restoring without a subsequent start. serving_join remains owner-blocked."
 
 receipts:
   - id: tape-recovery-checkpoint-witness-published-2026-08-14

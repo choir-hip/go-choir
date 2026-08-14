@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/updater"
@@ -148,7 +149,6 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		_ = os.RemoveAll(stagingRoot)
 		return report, fmt.Errorf("rematerialize: close original realization: %w", err)
 	}
-	rt.store = nil
 	if err := os.Mkdir(quarantineDir, 0o755); err != nil {
 		_ = os.RemoveAll(stagingRoot)
 		return report, fmt.Errorf("rematerialize: create quarantine: %w", err)
@@ -179,6 +179,16 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	}
 	_ = os.RemoveAll(stagingRoot)
 
+	if err := rt.store.Reopen(originalMarker); err != nil {
+		return report, fmt.Errorf("rematerialize: reopen flipped realization: %w", err)
+	}
+	if err := rt.eventAppender.RebindProjection(rt.store); err != nil {
+		return report, fmt.Errorf("rematerialize: rebind event projection: %w", err)
+	}
+	if operations, err := selfdev.NewStore(rt.store, rt.store); err == nil {
+		rt.selfdevOperations = operations
+	}
+
 	report.ComputerID = computerID
 	report.CheckpointDigest = checkpoint.Digest
 	report.QuarantineDir = quarantineDir
@@ -187,7 +197,7 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	report.WitnessMatched = true
 	report.OriginalDenied = true
 	report.FrontendRestaged = true
-	report.StoreClosed = true
+	report.StoreClosed = false
 	report.PinCheckoutUsed = false
 	keepRestaged = true
 	return report, nil

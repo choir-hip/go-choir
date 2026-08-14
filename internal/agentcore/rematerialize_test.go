@@ -63,16 +63,31 @@ func TestRematerializeFromTapeQuarantinesOriginalAndDropsLiveOnlyRows(t *testing
 		t.Fatal(err)
 	}
 
+	originalStore := rt.store
 	result, err := rt.RematerializeFromTape(ctx, computerID, checkpoint)
 	if err != nil {
 		t.Fatalf("tape rematerialize refused: %v", err)
 	}
 	live = nil
-	if rt.store != nil {
-		t.Fatal("runtime kept the original store handle")
+	if rt.store == nil {
+		t.Fatal("runtime did not reopen the rematerialized store")
 	}
-	if !result.WitnessMatched || !result.OriginalDenied || !result.StoreClosed || result.PinCheckoutUsed || !result.FrontendRestaged {
+	if rt.store != originalStore {
+		t.Fatal("runtime replaced the captured store pointer")
+	}
+	if !result.WitnessMatched || !result.OriginalDenied || result.StoreClosed || result.PinCheckoutUsed || !result.FrontendRestaged {
 		t.Fatalf("unexpected rematerialize report %#v", result)
+	}
+	if head, err := originalStore.Head(ctx, computerID); err != nil || head == nil {
+		t.Fatalf("captured store handle has no head: %v %#v", err, head)
+	}
+	t.Cleanup(func() { _ = rt.store.Close() })
+	replayAfter, err := rt.ReplayCompleteness(ctx, computerID)
+	if err != nil {
+		t.Fatalf("reopened store refused replay completeness: %v", err)
+	}
+	if !replayAfter.Result.Equivalent() {
+		t.Fatalf("reopened store was not replay-equivalent: %#v", replayAfter.Result)
 	}
 	served, err := os.ReadFile(filepath.Join(updaterRoot, "current", "frontend", "index.html"))
 	if err != nil {
@@ -98,11 +113,7 @@ func TestRematerializeFromTapeQuarantinesOriginalAndDropsLiveOnlyRows(t *testing
 		t.Fatal("original live-only rows were not preserved in quarantine")
 	}
 
-	restored, err := choirstore.Open(storePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = restored.Close() })
+	restored := rt.store
 	var surviving int
 	if err := restored.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'rematerialize_live_only'`).Scan(&surviving); err != nil {
 		t.Fatal(err)
@@ -484,12 +495,11 @@ func TestRestoreFromTapeAppendsIntentAndStopsAtTarget(t *testing.T) {
 	if !foundIntent {
 		t.Fatal("restore did not append a restore-intent event")
 	}
-	restored, err := choirstore.Open(storePath)
-	if err != nil {
-		t.Fatal(err)
+	if rt.store == nil {
+		t.Fatal("restore closed the captured store pointer")
 	}
-	t.Cleanup(func() { _ = restored.Close() })
-	head, err := restored.Head(ctx, computerID)
+	t.Cleanup(func() { _ = rt.store.Close() })
+	head, err := rt.store.Head(ctx, computerID)
 	if err != nil || head == nil {
 		t.Fatalf("restored head: %v %#v", err, head)
 	}
@@ -644,7 +654,11 @@ func TestRematerializeFromTapeAcceptsOwnerRecoveryCheckpoint(t *testing.T) {
 		t.Fatalf("owner-recovery rematerialize refused: %v", err)
 	}
 	live = nil
-	if !result.WitnessMatched || !result.OriginalDenied || result.PinCheckoutUsed {
+	if !result.WitnessMatched || !result.OriginalDenied || result.PinCheckoutUsed || result.StoreClosed {
 		t.Fatalf("unexpected owner-recovery rematerialize %#v", result)
 	}
+	if rt.store == nil {
+		t.Fatal("owner-recovery rematerialize left the store closed")
+	}
+	t.Cleanup(func() { _ = rt.store.Close() })
 }
