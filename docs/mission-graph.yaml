@@ -300,23 +300,23 @@ nodes:
     title: Tape-Based Recovery (Whole-Computer Restore)
     path: docs/definitions/choir-tape-recovery-2026-08-13.md
     ledger: ''
-    status: blocked
+    status: settled
     kind: spine
-    entrypoint: true
-    execution_mode: mission_orchestrator
+    entrypoint: false
+    execution_mode: completed_non_executable
     depends_on:
       - choir-coherent-computer-convergence-2026-07-21
     enables:
       - choir-supervised-self-development-effects-2026-08-11
     note: >-
-      Owner priority 2026-08-13: the computer's recoverability is the foundation.
-      Staging 4ac90583 paid checkpoint_witness, scope_refusal, destructive
-      rematerialization, owner restore, and capability_renewal_pass (restore on
-      epoch 268 without a subsequent start; store_closed=false). Remaining unpaid
-      receipt: serving_join (owner-blocked; one interactive VM; do not invent
-      choir computer create). Do not stamp complete. The effects Definition's
-      restore legs are satisfied-by this Definition. World Wire is tabled until
-      after the actor RLM rewrite.
+      Completed 2026-08-15. Staging 4ac90583 paid all six required receipts
+      including serving_join (two divergent computers plus unsigned platform
+      shell) and capability_renewal_pass (epoch 268 restore without a
+      subsequent start; store_closed=false). Independent review ACCEPT.
+      Settled restore substrate, not an executable entrypoint. Do not invent
+      choir computer create. The effects Definition's restore legs are
+      satisfied-by this Definition. World Wire is tabled until after the
+      actor RLM rewrite.
     sources:
       - docs/definitions/choir-tape-recovery-2026-08-13.md
       - docs/memo-per-computer-frontend-2026-08-13.md
@@ -332,7 +332,7 @@ nodes:
     ledger: ''
     status: working
     kind: spine
-    entrypoint: false
+    entrypoint: true
     execution_mode: mission_orchestrator
     depends_on:
       - choir-coherent-computer-convergence-2026-07-21
@@ -351,8 +351,9 @@ nodes:
       scope refusal, and total restore are owned by choir-tape-recovery-2026-08-13
       and satisfied-by its receipts. This Definition owns decision-policy and
       effect promotion on top of that restore substrate. Effects remain OFF
-      until both this Definition's decision-policy gates and the tape-recovery
-      restore proof pass. Post-acceptance finish.completion_cutover is required
+      until this Definition's decision-policy gates pass. Tape-recovery
+      completed 2026-08-15; restore legs are satisfied-by its receipts.
+      Post-acceptance finish.completion_cutover is required
       for goal.complete. choir-self-development-roadmap-2026-08-11.md is
       historical migration evidence only — not schedule authority.
     sources:

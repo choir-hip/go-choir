@@ -1,0 +1,135 @@
+{
+  "captured_at": "2026-08-15T16:55:42Z",
+  "schema_version": 1,
+  "receipt_id": "serving_join",
+  "paid": true,
+  "mutation_class": "green",
+  "environment": "staging",
+  "staging_deployed_commit": "4ac90583e389e3334efa57ce204d6df3235a68f1",
+  "staging_deployed_at": "2026-08-14T23:24:20Z",
+  "source_head": "4ac90583",
+  "hop": "guest-static ComputerSurface after vmctl resolve",
+  "code_refs": [
+    "internal/autoputer/computer_surface.go",
+    "internal/proxy/computer_surface.go",
+    "internal/proxy/computer_surface_test.go",
+    "internal/autoputer/computer_surface_test.go"
+  ],
+  "proves": "Two computers serve two UIs; unsigned callers receive the host platform shell; authenticated surface bytes are selected only after vmctl resolve; a missing SPA is fail-closed 503.",
+  "surfaces": {
+    "platform_shell_unsigned": {
+      "url": "https://choir.news/",
+      "http_status": 200,
+      "bytes": 523,
+      "sha256": "4e2d1954066dc88acc018f30267797d38bafb2f76731821d2337ab1d1e8c8ca2",
+      "title": "Choir",
+      "script": "/assets/index-YTmyLpSn.js",
+      "x_choir_build_service": [
+        "proxy"
+      ],
+      "cache_control": "no-store",
+      "matches_host_frontend_current": true
+    },
+    "retained_computer": {
+      "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+      "user_id": "5bd6de97-3b58-408c-bf89-c42c81b083de",
+      "desktop_id": "primary",
+      "vm_id": "candidate-fleet-e15cb89f25d963c220319b7b",
+      "epoch": 268,
+      "guest_url": "http://10.200.126.2:8085",
+      "health": "ready",
+      "index_http": 200,
+      "bytes": 523,
+      "sha256": "2c74a7b062d196b050dfd251b4f9d77e03668bbeb6baa0db9d4ea095d26c5694",
+      "title": "Choir",
+      "script": "/assets/index-BH09hKq-.js",
+      "bootstrap_field": "computer_id",
+      "matches_restore_spa_sha256": true
+    },
+    "secondary_computer": {
+      "computer_id": "computer-bb0f4fa583c0cde14334818d946e6378",
+      "user_id": "0e5c45ab-44de-49cd-b07d-e58973b21ad5",
+      "desktop_id": "primary",
+      "vm_id": "candidate-fleet-49ee3bd0ec6f366a164c02d2",
+      "epoch": 12,
+      "guest_url": "http://10.200.134.2:8085",
+      "health": "ready",
+      "release_digest": "5c73143fa69db136e6f9a79403888b5b3cb77b589056924e399b2c3fa41ca037",
+      "self_development_marker": "genesis-baseline",
+      "index_http": 200,
+      "bytes": 523,
+      "sha256": "1e62d8b97049e3eb779a24822b9d20ad26b596b78507deddc98aeaa113478635",
+      "title": "Choir",
+      "script": "/assets/index-BgRdleu6.js",
+      "bootstrap_field": "computer_id",
+      "bootstrap": {
+        "http_status": 200,
+        "computer_id": "computer-bb0f4fa583c0cde14334818d946e6378",
+        "payload_bytes": 204
+      }
+    }
+  },
+  "divergence": {
+    "retained_ne_secondary": true,
+    "retained_ne_platform_shell": true,
+    "secondary_ne_platform_shell": true
+  },
+  "authenticated_public_join": {
+    "owner_report": "Desktop loaded after hard reload",
+    "caddy_root": {
+      "ua": "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Mobile Safari/537.36",
+      "uri": "/",
+      "status": 200,
+      "size": 523,
+      "service": [
+        "proxy",
+        "autoputer"
+      ]
+    },
+    "caddy_asset": {
+      "uri": "/assets/index-BgRdleu6.js",
+      "status": 200,
+      "size": 247058,
+      "service": [
+        "proxy",
+        "autoputer"
+      ]
+    }
+  },
+  "control_plane_out": {
+    "auth_session_http": 200,
+    "health": {
+      "status": "ok",
+      "service": "proxy",
+      "vmctl_routing": "enabled",
+      "vmctl_status": "ok",
+      "deployed_commit": "4ac90583e389e3334efa57ce204d6df3235a68f1"
+    },
+    "proxy_split": "isComputerSurfacePath excludes /api, /auth, /health, /provider, /internal"
+  },
+  "capsule_freeze": {
+    "note": "StageGrantedRelease already fails closed without frontend/index.html (8bbba401); not re-proved here."
+  },
+  "secondary_bootstrap_incident": {
+    "problem_ref": "tape-recovery-secondary-bootstrap-incident-2026-08-15",
+    "root_cause": "Guest current/frontend was a pre-rename SPA (title Choir Secondary, index-C_MJakLv.js) that read bootstrapData.sandbox_id while GET /api/shell/bootstrap returns computer_id. BIOS therefore looped on Waiting for computer identity despite HTTP 200/204-byte identity payloads.",
+    "repair": "Owner-authorized SSH host restage: stop, loop-mount data.img, /tmp/stage-frontend of /var/lib/go-choir/services/autoputer/frontend onto choir-updater as genesis-baseline 5c73143f, rewrite absolute current symlink to relative releases/5c73143f..., start. Prior divergent release retained on disk as releases/secondary-divergent-20260815T030500Z. Not RestagePinnedRelease / ImportBaseline. Dolt not touched.",
+    "not_claimed": "host restage is not the serving hop and is not owner-reachable restore"
+  },
+  "constraints_held": [
+    "did not invent choir computer create",
+    "did not rematerialize the retained computer",
+    "did not treat the platform desktop as a serving-join computer",
+    "did not enable effects",
+    "second interactive computer already existed for a@b.com / user 0e5c45ab-44de-49cd-b07d-e58973b21ad5"
+  ],
+  "not_done": [
+    "post-mission security review of owner-recovery publication"
+  ],
+  "independent_review": {
+    "verdict": "ACCEPT",
+    "ref": "docs/evidence/tape-recovery-serving-join-independent-review-2026-08-15.md",
+    "stamp_complete": true,
+    "landed": true
+  }
+}

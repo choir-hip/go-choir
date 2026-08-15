@@ -139,7 +139,7 @@ finish:
         action: "Land restore-aware health/identity reporting (event head + CodeRef + witness + route; distinguish product restore from failed deploy / git revert). Retain release artifacts needed for advertised checkpoints."
         class: successor-mission
       - id: frontend-ownership
-        action: "Decided 2026-08-13: computer-surface frontend is per-computer, not platform control-plane (docs/memo-per-computer-frontend-2026-08-13.md; doctrine C15/I25). The serving envelope is owned by choir-tape-recovery-2026-08-13 and satisfied-by its serving-join receipt. This Definition does not ship UI in the solitaire candidate; Caddy still serves host frontend-current until that receipt. Thin platform shell (TLS, auth, picker chrome) remains OUT of restore."
+        action: "Decided 2026-08-13: computer-surface frontend is per-computer, not platform control-plane (docs/memo-per-computer-frontend-2026-08-13.md; doctrine C15/I25). The serving envelope is owned by choir-tape-recovery-2026-08-13 and satisfied-by its serving-join receipt. This Definition does not ship UI in the solitaire candidate; tape-recovery serving_join is paid (guest-static hop after vmctl resolve). Thin platform shell (TLS, auth, picker chrome) remains OUT of restore."
         class: promote-to-doctrine
       - id: successor-preconditions
         action: "Rewrite RLM / World Wire / in-choir drafts to inherit the envelope (not effects-OFF Phase 1; WW requires irreversible-decision path)."
@@ -242,7 +242,7 @@ measures:
 
 now:
   status: working
-  slice: "The staging readiness incident is resolved. Both candidate realizations are active/ready on db265d1e after three substrate fixes. Checkpoint completeness, rematerialization, and whole-computer restore are now owned by choir-tape-recovery-2026-08-13 and satisfied-by its receipts. This Definition owns decision-policy and effect promotion on top of that restore substrate."
+  slice: "Tape-recovery completed 2026-08-15 on staging 4ac90583 (six receipts plus independent review ACCEPT). Checkpoint completeness, rematerialization, serving join, and whole-computer restore are owned by choir-tape-recovery-2026-08-13 and satisfied-by its receipts. This Definition owns decision-policy and effect promotion on top of that paid restore substrate. Effects remain OFF."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
@@ -267,8 +267,8 @@ now:
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
   evidence_refs: [docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "The kill-loop slice is closed. Checkpoint completeness and restore are owned by choir-tape-recovery-2026-08-13; this Definition must not independently green its restore legs. Decision-policy and effect promotion await the tape-recovery restore proof. Problem receipt: docs/problems/candidate-realization-readiness-kill-loop-2026-08-13.md."
-  next_action: "Await the tape-recovery Definition's whole-computer restore proof, then design decision-policy and effect promotion on that substrate."
+  blocker_or_risk: "The kill-loop slice is closed. Checkpoint completeness and restore are owned by choir-tape-recovery-2026-08-13 and paid; this Definition must not independently green its restore legs. Remaining work is decision-policy and effect promotion on that substrate. Problem receipt: docs/problems/candidate-realization-readiness-kill-loop-2026-08-13.md."
+  next_action: "Design decision-policy and effect promotion on the paid tape-recovery restore substrate. Effects remain OFF. Do not rematerialize. Do not invent choir computer create."
 
 receipts:
   - id: roadmap-consensus-2026-08-11

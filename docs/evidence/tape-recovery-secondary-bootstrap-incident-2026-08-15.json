@@ -1,0 +1,72 @@
+{
+  "captured_at": "2026-08-15T03:27:38Z",
+  "updated_at": "2026-08-15T16:55:42Z",
+  "schema_version": 1,
+  "problem_id": "tape-recovery-secondary-bootstrap-incident-2026-08-15",
+  "mutation_class": "red",
+  "environment": "staging",
+  "deployed_commit_observed": "4ac90583e389e3334efa57ce204d6df3235a68f1",
+  "computer_id": "computer-bb0f4fa583c0cde14334818d946e6378",
+  "vm_id": "candidate-fleet-49ee3bd0ec6f366a164c02d2",
+  "owner_id": "0e5c45ab-44de-49cd-b07d-e58973b21ad5",
+  "reported_symptom": "After authenticating as a@b.com, opening the Universal Wire app, observing its error state, clicking its reload button, and returning to the desktop bootstrap, the browser remained on CHOIR BIOS with repeated Waiting for computer identity lines.",
+  "first_priority": "Problem documented before any runtime repair or lifecycle mutation.",
+  "observations_at_capture": {
+    "owner_report": "CHOIR BIOS displayed VM bootstrap, Powering user computer, Resolving active computer, Waiting for computer identity, and then remained waiting.",
+    "vmctl_inventory_at_capture": {
+      "state": "active",
+      "epoch": 9,
+      "computer_url": "http://10.200.131.2:8085",
+      "warmness_class": "primary"
+    },
+    "guest_health_probe": {
+      "http_status": 200,
+      "status": "ready",
+      "computer_id": "computer-bb0f4fa583c0cde14334818d946e6378",
+      "build_commit": "4ac90583e389e3334efa57ce204d6df3235a68f1"
+    },
+    "guest_bootstrap_probe": {
+      "http_status": 200,
+      "computer_id": "computer-bb0f4fa583c0cde14334818d946e6378",
+      "user_id": "0e5c45ab-44de-49cd-b07d-e58973b21ad5",
+      "payload_bytes": 204
+    },
+    "owner_console_fetch": "BOOT 200 with computer_id computer-bb0f4fa583c0cde14334818d946e6378",
+    "owner_boot_lines": "only repeated Waiting for computer identity; no Computer route found"
+  },
+  "root_cause": {
+    "served_index": {
+      "title": "Choir Secondary",
+      "script": "/assets/index-C_MJakLv.js",
+      "bytes": 533
+    },
+    "bundle_read": "bootstrapData.sandbox_id",
+    "api_field": "computer_id",
+    "note": "Pre-rename SPA on a post-rename guest. Console fetch of the same URL returned computer_id; BIOS never saw it."
+  },
+  "repair": {
+    "method": "vmctl stop, loop-mount data.img, /tmp/stage-frontend of host autoputer frontend onto /mnt/persistent/choir-updater, relative current symlink, vmctl resolve/start",
+    "release_digest": "5c73143fa69db136e6f9a79403888b5b3cb77b589056924e399b2c3fa41ca037",
+    "prior_release_retained": "releases/secondary-divergent-20260815T030500Z",
+    "absolute_symlink_bug": "stage-frontend wrote an absolute current pointer through the host mount; rewritten to relative releases/5c73143f... before the lasting start",
+    "resulting_epoch": 12,
+    "resulting_guest_url": "http://10.200.134.2:8085",
+    "resulting_script": "/assets/index-BgRdleu6.js",
+    "resulting_index_sha256": "1e62d8b97049e3eb779a24822b9d20ad26b596b78507deddc98aeaa113478635",
+    "owner_report_after_hard_reload": "Desktop loaded",
+    "dolt_touched": false,
+    "rematerialize": false,
+    "note": "host-script restage, not RestagePinnedRelease / ImportBaseline. Not owner-reachable restore."
+  },
+  "belief_state": {
+    "confirmed": [
+      "BIOS looped because the served SPA read sandbox_id.",
+      "Guest runtime and bootstrap identity were healthy throughout the loop.",
+      "Restaging a computer_id SPA cleared the BIOS loop; owner desktop loaded.",
+      "Secondary SPA bytes remain divergent from the retained computer and from host frontend-current."
+    ],
+    "remaining_error": "None for serving_join. Tape-recovery Definition complete 2026-08-15. Post-mission: owner-recovery publication security review."
+  },
+  "repair_status": "repaired",
+  "serving_join_ref": "docs/evidence/tape-recovery-serving-join-2026-08-15.json"
+}

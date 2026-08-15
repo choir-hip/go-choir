@@ -3,37 +3,44 @@
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
 
-## Active Definition — Tape-Based Recovery
-
-[`definitions/choir-tape-recovery-2026-08-13.md`](definitions/choir-tape-recovery-2026-08-13.md)
-is the owner-priority executable `/goal` as of 2026-08-13. It is
-`blocked` on `serving_join` (one interactive VM; do not invent
-`choir computer create`). Staging `4ac90583` paid
-`capability_renewal_pass` across restore without a subsequent start
-(epoch 268, `store_closed: false`). Already paid: published
-checkpoint_witness, scope_refusal, destructive rematerialization, and
-owner-reachable whole-computer restore. Proof target remains
-**whole-computer restore from the tape**: a
-checkpoint that binds event head + CodeRef + ArtifactProgramRef + VM-local
-content witness + frontend identity, runtime rematerialization, a per-computer
-frontend serving hop, and an owner-reachable acceptance-fenced restore. Local
-landings and fail-closed receipts are not completion. Everything else — the
-effects decision-policy envelope, the private-Go actor RLM rewrite, and tabled
-World Wire — follows it.
-
-## Effects Envelope — Sequenced After Tape Recovery
+## Active Definition — Supervised Self-Development with Effects
 
 [`definitions/choir-supervised-self-development-effects-2026-08-11.md`](definitions/choir-supervised-self-development-effects-2026-08-11.md)
-is owner-ratified and supersedes Continuous Texture
-Supervision (CTS) as of 2026-08-11 and corrected by owner direction on
-2026-08-13. Proof target is **policy-governed autonomy**: capsule-authored
-source change under effect-specific qualified consensus, E2 correction, and
-acceptance-fenced restore through the tape-recovery substrate (VM-local
-projection plus computer-surface frontend), plus one exact
-irreversible email send under a stronger no-human-seat acceptance policy with
-durable delivery and consequence receipts (platform/cycle OUT of restore;
-computer-surface frontend is per-computer by invariant and currently
-host-global until tape-recovery proves the serving join).
+is the owner-priority executable `/goal` as of 2026-08-15. It is
+owner-ratified and supersedes Continuous Texture Supervision (CTS)
+as of 2026-08-11, corrected by owner direction on 2026-08-13. Proof
+target is **policy-governed autonomy**: capsule-authored source change
+under effect-specific qualified consensus, E2 correction, and
+acceptance-fenced restore through the completed tape-recovery
+substrate (VM-local projection plus computer-surface frontend), plus
+one exact irreversible email send under a stronger no-human-seat
+acceptance policy with durable delivery and consequence receipts
+(platform/cycle OUT of restore; computer-surface frontend is
+per-computer by invariant). Effects remain OFF until this
+Definition's decision-policy rehearsal gates pass. Do not
+independently green restore.
+
+## Completed Substrate — Tape-Based Recovery
+
+[`definitions/choir-tape-recovery-2026-08-13.md`](definitions/choir-tape-recovery-2026-08-13.md)
+completed 2026-08-15. Staging `4ac90583` paid all six required
+receipts, including `serving_join` (unsigned host shell ≠ retained
+SPA ≠ secondary SPA after vmctl resolve) and
+`capability_renewal_pass` across restore without a subsequent start
+(epoch 268, `store_closed: false`). Independent review of checkpoint
++ rematerialization + serving join returned ACCEPT 2026-08-15. It is
+settled evidence and the restore substrate, not an executable
+entrypoint. Do not rematerialize or invent `choir computer create`
+to reopen it.
+
+## Effects Envelope — On The Paid Restore Substrate
+
+[`definitions/choir-supervised-self-development-effects-2026-08-11.md`](definitions/choir-supervised-self-development-effects-2026-08-11.md)
+owns decision-policy and effect promotion on top of the completed
+tape-recovery substrate. Proof target is **policy-governed autonomy**
+as stated in the active Definition above (platform/cycle OUT of
+restore; computer-surface frontend is per-computer by invariant;
+tape-recovery paid serving_join 2026-08-15).
 Reasoning and retired approaches live in the Definition's
 [supplement](definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md).
 Its restore legs — checkpoint completeness, revert build, scope refusal,
@@ -61,8 +68,8 @@ The latest staging runtime/proxy deployment observed by the rename acceptance is
 `3cd12d1452ad1d06b5df57cf9183313568f60cb5`; `/health` reported proxy status
 OK and vmctl status OK on 2026-08-12. The earlier `914f7a5d976a` frontend/proxy
 capture is historical host/source identity only. Retained guest proof and all
-effects remain OFF. The active Definition owns exact computer binding, bearer
-cleanup, and residual epoch `8253` obligations.
+effects remain OFF. Residual epoch `8253` obligations remain named unknowns on the effects
+Definition; they are not a tape-recovery reopen.
 
 The disposed Mission 0 direct-key ceremony is retained at
 [`continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`](evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md).
@@ -73,12 +80,13 @@ Historical handoff, guest-prefix, mailbox, and terminal-boot receipts remain in
 [the joined runtime review](evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md)
 and [its requirement audit](evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md).
 They are historical evidence, not rollback or live schedule; effects remain OFF
-until the tape-recovery restore proof and the effects Definition's
-decision-policy rehearsal gates pass. The current executable slice and
-`next_action` live only in the tape-recovery Definition.
+until the effects Definition's decision-policy rehearsal gates pass. The
+current executable slice and `next_action` live only in the effects
+Definition. The tape-recovery restore proof is paid (complete 2026-08-15).
 
 Completed Definitions are historical evidence, not executable entrypoints; full
 claims and receipts remain in their source files and `mission-graph.yaml`:
+`choir-tape-recovery-2026-08-13.md` (whole-computer restore substrate);
 `choir-coherent-computer-convergence-2026-07-21.md` (durable-work kernel);
 `choir-cli-self-development-2026-07-16.md` (incomplete construction);
 `choir-audited-autoputer-construction-2026-07-15.md` (audited construction and
@@ -126,14 +134,11 @@ superseded, or historical as stated by their source Definitions, not entrypoints
 
 ## Invocation
 
-Invoke the owner-priority tape-recovery Definition through
-`/goal docs/definitions/choir-tape-recovery-2026-08-13.md`.
-Its `now.*` and `finish.*` own the current product schedule. Current status is
-`blocked` on `serving_join` (one interactive VM; do not invent
-`choir computer create`). After it reaches `complete`, invoke
-`/goal docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`
-for the decision-policy envelope. After that reaches `complete` and the
-registries promote the successor, invoke
+Invoke the owner-priority effects Definition through
+`/goal docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`.
+Its `now.*` and `finish.*` own the current product schedule. Tape-recovery
+completed 2026-08-15 and is settled evidence, not an entrypoint. After
+effects reaches `complete` and the registries promote the successor, invoke
 `/goal docs/definitions/choir-private-go-actor-kernel-2026-08-12.md`.
 The successor is owner-ratified architecture authority but is not concurrently
 executable. Historical CTS, convergence, performance, Choir-in-Choir, and
