@@ -94,7 +94,7 @@ start:
       - "concrete decision-policy schema, independence domains, quorum, dissent, abstention, timeout, recusal, replacement, and consequence-receipt contracts"
       - "whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata without a payload schema change"
       - "whether Texture production registry still omits update_coagent on the deployed staging build"
-      - "retained computer epoch 8253 disposition; ak_45ce1796 row and root-only auth rollback cleanup (named residual; classify before red mutation; paid restore proof is epoch 268; do not reopen tape-recovery)"
+      - "retained computer epoch 8253 / ak_45ce1796 classified 2026-08-15 as historical CTS residual, not current identity (paid restore epoch 268; key returns 401). Residual hygiene only; do not reopen tape-recovery"
 
 finish:
   deliver: "The computer works autonomously under effect-specific multiagent consensus on top of the tape-recovery restore substrate owned by choir-tape-recovery-2026-08-13. A CoSuper capsule authors, builds, tests, freezes, and proposes its own source change (solitaire: headless play API, durable persistence, play history); a policy-selected qualified panel approves the exact subject with no per-candidate human decision; it promotes, runs, and writes real state, then reverts through that restore substrate. The correction spine runs: defective A promotes, admissible evidence falsifies it, B supersedes A, and restart proves B. A separate stronger irreversible policy, selected before outputs and requiring no human seat for this acceptance, authorizes one exact external send to an owner-controlled acceptance inbox; delivery and a follow-up correction are durably receipted. Texture revises an owner-readable document throughout."
@@ -256,7 +256,7 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Tape-recovery restore substrate is paid on staging 4ac90583 and consumed here. Invoke-readiness panel GO_WITH_CAVEATS; this docs-only reconciliation is the first slice so start.unknowns cannot be read as unpaid restore work. Remaining work is decision-policy and effect promotion. Effects remain OFF."
+  slice: "Invoked 2026-08-15. Tape-recovery restore substrate consumed. First slice (docs-only reconcile) landed a8f75a4a. Decision-policy schema is a frozen define candidate at docs/evidence/effects-decision-policy-schema-2026-08-15.md. Epoch 8253 / ak_45ce1796 classified as historical CTS residual, not current identity (paid restore is epoch 268). Next: independent review of the schema, then atomic implement with reducer. Effects remain OFF."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
@@ -280,9 +280,9 @@ now:
     owner_ratification_ref: "owner correction 2026-08-13: irreversible effects are not outside the autonomy window; effect-specific multiagent consensus is the governing boundary, and human approval is optional as one possible consensus participant."
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
-  evidence_refs: [docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
+  evidence_refs: [docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
   blocker_or_risk: "None for invoke. Stale start.unknowns and now.reconciliation were the first-session trap; this card supersedes them. Remaining risk: deleting fail-closed owner gates before a consensus reducer exists; using OwnerRecovery checkpoints for promotion (route projection already refuses); treating epoch 8253 as the current retained epoch (paid restore is epoch 268). Kill-loop problem repaired at db265d1e is not current readiness proof."
-  next_action: "Define the decision-policy schema and typed consensus receipt as a define candidate before any red mutation. Do not delete external-owner:/accept_once/awaiting_approval until that schema, receipt, and reducer exist together. Reconnection and freeze/propose remain later red slices. Irreversible email is the same Definition, not this slice. Classify epoch 8253 residual before any red mutation that depends on retained-computer identity. Effects remain OFF. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
+  next_action: "Independent review of frozen docs/evidence/effects-decision-policy-schema-2026-08-15.md (ACCEPT/REPAIR/REJECT). Do not implement and do not delete external-owner:/accept_once/awaiting_approval until review ACCEPT and the schema, receipt, and reducer can land together. Reconnection and freeze/propose remain later red slices. Irreversible email is the same Definition, not this slice. Effects remain OFF. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -301,6 +301,22 @@ receipts:
       environment_identity: staging https://choir.news deployed 4ac90583; retained epoch 268; secondary epoch 12
       deployed_acceptance: not_applicable
     registry_conformance_ref: "effects remains entrypoint in docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml; tape-recovery remains settled non-entrypoint"
+  - id: effects-decision-policy-schema-2026-08-15
+    boundary: define
+    commit_or_artifact: docs/evidence/effects-decision-policy-schema-2026-08-15.md
+    proof_refs: [docs/evidence/effects-decision-policy-schema-2026-08-15.md, internal/agentcore/self_development_decision_binding.go, internal/platform/self_development_modes.go, docs/problems/irreversible-effects-human-gate-drift-2026-08-13.md]
+    rollback_ref: revert this docs-only schema candidate
+    disposition: "define candidate — DecisionPolicy, EffectSubject, SeatManifest, QualifiedConsensusReceipt, ConsequenceReceipt, atomic cutover, refuse matrix. Not implementation. Independent review is the next action. Epoch 8253/ak_45ce1796 classified historical CTS residual."
+    problem_ref: irreversible-effects-human-gate-drift-2026-08-13
+    authorization_ref: owner correction 2026-08-13; this Definition now.next_action after invoke-readiness reconcile
+    candidate_or_evidence_refs: [docs/definitions/choir-supervised-self-development-effects-2026-08-11.md]
+    landing:
+      source_commit: a8f75a4a
+      ci_ref: pending (Docs Truth Check)
+      deploy_ref: 4ac90583e389e3334efa57ce204d6df3235a68f1
+      environment_identity: staging https://choir.news deployed 4ac90583; retained epoch 268
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: not_applicable
   - id: roadmap-consensus-2026-08-11
     boundary: define
     commit_or_artifact: 2379616d
