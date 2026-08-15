@@ -256,16 +256,16 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Tape-recovery consumed (a8f75a4a). Schema define candidate ee408100 reviewed: 3 ACCEPT / 1 REPAIR; adjudicated REPAIR. Repair addendum now in the schema file (blast-radius fields, named-not-frozen first policies, BallotAttestation, PolicySelectionReceipt, two reducer stages, digest encoding, irreversible dispatch contract). Next: review the repaired freeze. Do not implement. Effects remain OFF."
+  slice: "Invoked 2026-08-15. Tape-recovery consumed. Decision-policy schema repaired freeze ACCEPT (4/4). Schema is one document at docs/evidence/effects-decision-policy-schema-2026-08-15.md. Next define sub-slice: freeze complete reversible-selfdev-v1 policy bytes (quorum, roster, independence, typed bounds) before any red mutation. Effects remain OFF."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-15T23:23:00Z
-    source_ref: main@3c12a9bb
+    observed_at: 2026-08-16T00:10:00Z
+    source_ref: main@8fb8b16d
     deploy_identity: "staging deployed 4ac90583 at 2026-08-14T23:24:20Z; retained computer-03335285269bdba4f94377e56879f9e6 epoch 268; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-15T23:23:00Z git status clean at 3c12a9bb before this docs-only reconciliation
+    worktree_inventory_ref: 2026-08-16T00:10:00Z git status clean at 8fb8b16d before repaired-freeze ACCEPT land
     status: reconciled
 
   candidate:
@@ -280,9 +280,9 @@ now:
     owner_ratification_ref: "owner correction 2026-08-13: irreversible effects are not outside the autonomy window; effect-specific multiagent consensus is the governing boundary, and human approval is optional as one possible consensus participant."
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
-  evidence_refs: [docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
+  evidence_refs: [docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
   blocker_or_risk: "None for invoke. Stale start.unknowns and now.reconciliation were the first-session trap; this card supersedes them. Remaining risk: deleting fail-closed owner gates before a consensus reducer exists; using OwnerRecovery checkpoints for promotion (route projection already refuses); treating epoch 8253 as the current retained epoch (paid restore is epoch 268). Kill-loop problem repaired at db265d1e is not current readiness proof."
-  next_action: "Independent review of the repaired schema freeze (docs/evidence/effects-decision-policy-schema-2026-08-15.md including the 2026-08-15 addendum). Do not implement. Do not delete external-owner:/accept_once/awaiting_approval. Reconnection and freeze/propose remain later red slices. Irreversible email is the same Definition, not this slice. Effects remain OFF. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
+  next_action: "Define sub-slice: freeze complete reversible-selfdev-v1 policy bytes (exact quorum integers, seat roster, independence domains, capabilities, scope, budget, privacy, blast_radius) as a content-addressed document before any participant output. Independent review that freeze. Do not implement. Do not delete external-owner:/accept_once/awaiting_approval. Reconnection and freeze/propose remain later red slices. Irreversible email is the same Definition, not this slice. Effects remain OFF. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -306,7 +306,7 @@ receipts:
     commit_or_artifact: docs/evidence/effects-decision-policy-schema-2026-08-15.md
     proof_refs: [docs/evidence/effects-decision-policy-schema-2026-08-15.md, internal/agentcore/self_development_decision_binding.go, internal/platform/self_development_modes.go, docs/problems/irreversible-effects-human-gate-drift-2026-08-13.md]
     rollback_ref: revert this docs-only schema candidate
-    disposition: "define candidate — reviewed 2026-08-15: 3 ACCEPT / 1 REPAIR; adjudicated REPAIR. Addendum now in the same file. Not implementation."
+    disposition: "define freeze ACCEPT 2026-08-15 after repair. One-document schema. Not implementation. Policy-bytes sub-slice still unpaid."
     problem_ref: irreversible-effects-human-gate-drift-2026-08-13
     authorization_ref: owner correction 2026-08-13; this Definition now.next_action after invoke-readiness reconcile
     candidate_or_evidence_refs: [docs/definitions/choir-supervised-self-development-effects-2026-08-11.md]
@@ -328,6 +328,22 @@ receipts:
     candidate_or_evidence_refs: [docs/evidence/effects-decision-policy-schema-2026-08-15.md]
     landing:
       source_commit: ee408100
+      ci_ref: pending (Docs Truth Check)
+      deploy_ref: 4ac90583e389e3334efa57ce204d6df3235a68f1
+      environment_identity: staging https://choir.news deployed 4ac90583
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: not_applicable
+  - id: effects-decision-policy-schema-repair-review-2026-08-15
+    boundary: define
+    commit_or_artifact: docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md
+    proof_refs: [docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md]
+    rollback_ref: revert this docs-only review stamp
+    disposition: "ACCEPT 4/4 — Sol's seven REPAIR items satisfied; six rejection bars closed. Schema folded into one body. Next is reversible-selfdev-v1 policy-bytes define sub-slice, not implement."
+    problem_ref: irreversible-effects-human-gate-drift-2026-08-13
+    authorization_ref: this Definition now.next_action after schema REPAIR
+    candidate_or_evidence_refs: [docs/evidence/effects-decision-policy-schema-2026-08-15.md]
+    landing:
+      source_commit: 8fb8b16d
       ci_ref: pending (Docs Truth Check)
       deploy_ref: 4ac90583e389e3334efa57ce204d6df3235a68f1
       environment_identity: staging https://choir.news deployed 4ac90583
