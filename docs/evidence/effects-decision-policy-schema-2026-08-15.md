@@ -1,5 +1,7 @@
 # Effects decision-policy schema — define candidate (2026-08-15)
 
+**Review:** convergent panel 2026-08-15: Devin/Gemini/Grok **ACCEPT**; GPT-5.6 Sol **REPAIR**. Adjudication: **REPAIR then freeze**. The addendum below is now part of the candidate. Do not implement until this repaired text is the freeze.
+
 **Boundary:** define. Not implementation. Effects remain OFF.
 **Does not:** rematerialize, invent `choir computer create`, delete `external-owner:` / `accept_once` / `awaiting_approval`, enable actuators, or use `OwnerRecovery` for promotion.
 **Consumes:** choir-tape-recovery-2026-08-13 restore substrate (paid). Promotion of an effect excursion uses that restore path; this schema does not re-prove it.
@@ -192,3 +194,103 @@ Red mutation that binds retained-computer identity must use the current epoch fr
 Independent review of this frozen candidate: ACCEPT / REPAIR / REJECT.
 
 REPAIR if the schema would let a first implement slice delete `external-owner:` before the reducer exists, authorize promotion with OwnerRecovery, or treat a model panel as canonical decision authority.
+
+---
+
+## Independent review (2026-08-15)
+
+Panel: `.agentic-consensus/effects-decision-policy-schema-20260815/` (gitignored). Include: Devin, OMP Gemini 3.6, OMP Cursor Grok 4.5, OMP GPT-5.6 Sol.
+
+| Reviewer | Verdict |
+|---|---|
+| Devin | ACCEPT |
+| OMP Gemini 3.6 | ACCEPT |
+| OMP Cursor Grok 4.5 | ACCEPT |
+| OMP GPT-5.6 Sol | REPAIR |
+
+Six explicit rejection bars all passed (owner gate kept; OwnerRecovery refused; panel ≠ authority; one constitutional regime; tape-recovery not reopened; effects off). Sol's REPAIR is that the document was architecture, not a decision-complete schema: missing blast-radius fields, unfrozen first-policy numbers, unrepresentable ballot authenticity, no pre-output selection proof, ambiguous reducer stages, self-referential `receipt_digest`, and underspecified irreversible dispatch. Those are repaired below. They are not permission to implement.
+
+## Repair addendum (now part of the freeze)
+
+### DecisionPolicy additional required fields
+
+The 2026-08-13 correction requires these bindings. They are typed fields, not prose:
+
+| Field | Fail-closed rule |
+|---|---|
+| `capabilities` | Exact capability ids the actuator may use. Missing or extra → refuse |
+| `scope` | Computer-local vs external; platform/cycle OUT. Scope widening after selection → refuse |
+| `budget` | Max spend / token / send count. Exceeded → refuse |
+| `privacy` | Privacy class of subject and receipts. Downgrade after selection → refuse |
+| `blast_radius` | Named surfaces the effect may touch. Touch outside → refuse |
+
+### First policies are named, not frozen-complete
+
+`reversible-selfdev-v1`, `irreversible-email-v1`, and `human-required-v1` are **policy ids reserved by this Definition**. They are not yet content-addressed policy documents. No `policy_digest` exists until a later define sub-slice freezes complete policy bytes (including exact quorum integers, seat roster, independence domains, capabilities, scope, budget, privacy, blast radius) **before any participant output**. Implement must not invent those values. Constitutional authorization values are not implementer discretion.
+
+### BallotAttestation (typed)
+
+Each ballot is a typed object, not a seat label plus a vote.
+
+| Field | Meaning |
+|---|---|
+| `ballot_id` | Unique in the decision window |
+| `seat_id` | Joins frozen SeatManifest |
+| `eligibility_proof_digest` | Digest of the eligibility artifact used at freeze |
+| `independence_domain` | Exactly one; reducer refuses if the same signer appears in two domains |
+| `policy_digest` | Must equal the selected policy |
+| `seat_manifest_digest` | Must equal the frozen manifest |
+| `subject_digest` | Must equal the EffectSubject |
+| `policy_selection_digest` | Must equal the PolicySelectionReceipt below |
+| `vote` | accept / reject / abstain |
+| `window_id` | Decision window / nonce; replay outside window → refuse |
+| `signer_provenance` | Credential or verifier identity; seat labels alone are insufficient |
+| `attestation` | Signature or equally explicit trusted attestation contract |
+| `ballot_digest` | SHA-256 of canonical ballot bytes **excluding** `ballot_digest` |
+
+### PolicySelectionReceipt (ordering proof)
+
+"Selected before outputs" requires a canonical artifact, not a participant timestamp.
+
+| Field | Meaning |
+|---|---|
+| `receipt_kind` | `PolicySelectionReceipt` |
+| `policy_digest`, `seat_manifest_digest`, `subject_digest` | Frozen together |
+| `selected_at_head` | Canonical event head at selection |
+| `selected_sequence` | Must precede every admissible ballot for this subject |
+| `selection_digest` | SHA-256 of canonical bytes excluding `selection_digest` |
+
+Ballots and the QualifiedConsensusReceipt must join `selection_digest`. A ballot whose `policy_selection_digest` is missing or later than the ballot is invalid.
+
+### Two reducer stages (not circular)
+
+1. **Consensus reduction** (non-event): consumes BallotAttestations + PolicySelectionReceipt + frozen policy/manifest/subject; **produces** `QualifiedConsensusReceipt`. This stage is not `effect_accepted`.
+2. **Canonical event reduction**: consumes a verified `QualifiedConsensusReceipt` as an input artifact on `effect_accepted` / `effect_rejected`. This is the only stage that moves the operation out of the pre-consensus gate.
+
+Panel output may feed stage 1 as evidence. It never enters stage 2 directly. Stage 1 does not write canonical computer events.
+
+### `receipt_digest` encoding
+
+`QualifiedConsensusReceipt.receipt_digest` is SHA-256 of the canonical encoding of all receipt fields **except** `receipt_digest`. Same rule for `ballot_digest` and `selection_digest`. Do not hash a structure that already contains its own digest.
+
+### Irreversible dispatch contract (email, later slice, same schema)
+
+Restore cannot unsend. The schema therefore requires, before any irreversible actuator is wired:
+
+| Field | Meaning |
+|---|---|
+| `revocation_check_point` | Revocation is checked immediately before dispatch, not only at proposal |
+| `dispatch_idempotency_key` | Exact-subject dispatch; retries do not double-send |
+| `dispatch_intent_receipt` | Recorded before provider call |
+| `provider_outcome` | accepted / rejected / unknown |
+| `uncertain_outcome_reconciliation` | Required when provider outcome is unknown; partial success never greens |
+| `crash_window` | If process dies after provider acceptance and before consequence persistence, reconciliation must find or compensate the send |
+
+These fields belong on the irreversible policy and its ConsequenceReceipt. They are not required to implement reversible-selfdev first, but they must exist in the schema before the email slice starts.
+
+### Implement still forbidden until
+
+- This repaired candidate is the freeze (this addendum included).
+- Independent review of the **repaired** freeze, or owner ratification that Sol's REPAIR is satisfied.
+- Schema + receipt + reducer can land together.
+- `external-owner:` / `accept_once` / `awaiting_approval` remain until that deployed acceptance.
