@@ -310,13 +310,13 @@ nodes:
       - choir-supervised-self-development-effects-2026-08-11
     note: >-
       Owner priority 2026-08-13: the computer's recoverability is the foundation.
-      Restore the whole computer - event-derived VM-local projection AND the
-      computer-surface frontend - from the tape, verified by content hash, with an
-      acceptance-fenced serving join. Closes the gap that checkpoints bind no
-      content witness, ProjectionMaterializer is non-runtime, and the frontend is
-      host-global. The effects Definition's restore legs (checkpoint completeness,
-      revert, scope refusal, total restore) are satisfied-by this Definition.
-      World Wire is tabled until after the actor RLM rewrite.
+      Staging 4ac90583 paid checkpoint_witness, scope_refusal, destructive
+      rematerialization, owner restore, and capability_renewal_pass (restore on
+      epoch 268 without a subsequent start; store_closed=false). Remaining unpaid
+      receipt: serving_join (owner-blocked; one interactive VM; do not invent
+      choir computer create). Do not stamp complete. The effects Definition's
+      restore legs are satisfied-by this Definition. World Wire is tabled until
+      after the actor RLM rewrite.
     sources:
       - docs/definitions/choir-tape-recovery-2026-08-13.md
       - docs/memo-per-computer-frontend-2026-08-13.md

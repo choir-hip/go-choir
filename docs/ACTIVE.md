@@ -7,13 +7,12 @@ corpus and does not make an unverified graph status into a live work claim.
 
 [`definitions/choir-tape-recovery-2026-08-13.md`](definitions/choir-tape-recovery-2026-08-13.md)
 is the owner-priority executable `/goal` as of 2026-08-13. It is
-`working`: the owner-ratified workspace-replace cutover cleared the nine
-live-only tables (quarantined, reversible) and replay eligibility is now
-`true`; checkpoint bind returns `checkpoint_eligible: true` with a full
-40-table witness. Owner-recovery checkpoint **publication** is deployed on
-staging `57e2992d` (published checkpoint_witness, destructive rematerialize,
-owner restore). Remaining: capability renewal across restore without restart
-(in-place store reopen awaiting deploy) and `serving_join` (owner-blocked). Proof target remains
+`blocked` on `serving_join` (one interactive VM; do not invent
+`choir computer create`). Staging `4ac90583` paid
+`capability_renewal_pass` across restore without a subsequent start
+(epoch 268, `store_closed: false`). Already paid: published
+checkpoint_witness, scope_refusal, destructive rematerialization, and
+owner-reachable whole-computer restore. Proof target remains
 **whole-computer restore from the tape**: a
 checkpoint that binds event head + CodeRef + ArtifactProgramRef + VM-local
 content witness + frontend identity, runtime rematerialization, a per-computer
@@ -130,8 +129,8 @@ superseded, or historical as stated by their source Definitions, not entrypoints
 Invoke the owner-priority tape-recovery Definition through
 `/goal docs/definitions/choir-tape-recovery-2026-08-13.md`.
 Its `now.*` and `finish.*` own the current product schedule. Current status is
-`blocked_incomplete` until an eligible computer is reachable through the owner
-product path. After it reaches `complete`, invoke
+`blocked` on `serving_join` (one interactive VM; do not invent
+`choir computer create`). After it reaches `complete`, invoke
 `/goal docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`
 for the decision-policy envelope. After that reaches `complete` and the
 registries promote the successor, invoke

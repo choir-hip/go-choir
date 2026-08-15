@@ -1,0 +1,129 @@
+{
+  "captured_at": "2026-08-15T00:45:06Z",
+  "schema_version": 1,
+  "receipt_id": "capability_renewal_pass",
+  "staging_deployed_commit": "4ac90583e389e3334efa57ce204d6df3235a68f1",
+  "staging_deployed_at": "2026-08-14T23:24:20Z",
+  "ci_ref": "31848671245 success (CI / Deploy to Staging Node B)",
+  "source_head": "4ac90583",
+  "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+  "vm_id": "candidate-fleet-e15cb89f25d963c220319b7b",
+  "realization_epoch": 268,
+  "guest_url": "http://10.200.126.2:8085",
+  "paid": true,
+  "proof": "choir computer replay-completeness succeeded after owner restore without a subsequent start/restart/RefreshVM, including after the original 5-minute capability TTL. Guest process identity held: epoch 268 from 2026-08-15T00:39:10Z through 2026-08-15T00:47:22Z. Store.Reopen left store_closed=false so Capability() could renew in-process.",
+  "ttl": {
+    "default_computer_capability_ttl": "5m",
+    "guest_renew_when_remaining": "90s",
+    "platform_renewal_grace": "60s",
+    "epoch_268_start": "2026-08-15T00:39:10Z",
+    "original_expiry_estimated": "2026-08-15T00:44:10Z",
+    "renewal_window_start_estimated": "2026-08-15T00:42:40Z"
+  },
+  "pre_restore": {
+    "checkpoint_command": "choir computer checkpoint --computer computer-03335285269bdba4f94377e56879f9e6",
+    "checkpoint_digest": "67ab01f6a89cb33f7c0d8eb619daeabc135d52beea3f6ec061bf551c3cda228f",
+    "owner_recovery": true,
+    "published_at": "2026-08-15T00:36:39.886316789Z",
+    "accepted_event_head": "51d64dd09112d34d9858648aac16da9d348cb3dc4ba766ab96e9eed890b73b09",
+    "effective_event_head": "a3cf16d0d1dbb46e4ebd5841af5007575fb74184d54c2e6fa26f856769b92b44",
+    "vm_local_tables": 40,
+    "content_root": "9017bf72893998e184d7e15d2208f26a227830ebe28eec4ee9e99373a2f422a4",
+    "frontend_identity": {
+      "digest": "b95889abf6f1f4a5e2108d7b0dd4516a0df4793b8f6e30f7307b4f3d994cf168",
+      "derivation": "release",
+      "release_digest": "39a8fbcd6ca18780e5c91be81fa987b10a766b59956bce5554c8aeca67bc200a"
+    },
+    "pin_release_left_intact": "39a8fbcd6ca18780e5c91be81fa987b10a766b59956bce5554c8aeca67bc200a",
+    "texture_doc_id": "412cbbca-3c5a-52db-8cfc-9b8914938f29",
+    "texture_create_http": 201,
+    "texture_get_http_before_restore": 200,
+    "spa_mutated_sha256": "c6b249d3e77ab1d9e2c59c20300bba740fcf94199e60e72672f546572517d1e3",
+    "spa_mutated_bytes": 109,
+    "spa_mutated_marker": "tape-recovery frontend divergence",
+    "spa_original_sha256": "2c74a7b062d196b050dfd251b4f9d77e03668bbeb6baa0db9d4ea095d26c5694"
+  },
+  "restore": {
+    "command": "choir computer restore --computer computer-03335285269bdba4f94377e56879f9e6 --checkpoint-file /tmp/tape-recovery-r3/checkpoint.json",
+    "started_at": "2026-08-15T00:39:22Z",
+    "ended_at": "2026-08-15T00:39:23Z",
+    "report": {
+      "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+      "checkpoint_digest": "67ab01f6a89cb33f7c0d8eb619daeabc135d52beea3f6ec061bf551c3cda228f",
+      "method": "tape_reconstruct",
+      "quarantine_dir": "/mnt/persistent/rematerialize-quarantine-20260815T003923.233034401Z",
+      "witness_matched": true,
+      "original_denied": true,
+      "frontend_restaged": true,
+      "store_closed": false,
+      "pin_checkout_used": false
+    }
+  },
+  "post_restore_no_start": {
+    "epoch": 268,
+    "state": "active",
+    "runtime_status": "ready",
+    "reachable": true,
+    "guest_health": "ready",
+    "guest_build_commit": "4ac90583e389e3334efa57ce204d6df3235a68f1",
+    "spa_http": 200,
+    "spa_len": 523,
+    "spa_sha256": "2c74a7b062d196b050dfd251b4f9d77e03668bbeb6baa0db9d4ea095d26c5694",
+    "mutated_marker_absent": true,
+    "texture_doc_http": 404,
+    "last_boot_log": "2026-08-15T00:39:10Z vmmanager: booted VM candidate-fleet-e15cb89f25d963c220319b7b (host=http://10.200.126.2:8085 epoch=268)",
+    "no_subsequent_start": true
+  },
+  "capability_probes": [
+    {
+      "at": "2026-08-15T00:39:38.489001186Z",
+      "command": "choir computer replay-completeness",
+      "exit": 0,
+      "renewal_refused": false,
+      "note": "28s after epoch-268 start; remaining TTL > 90s so this uses the original capability"
+    },
+    {
+      "at": "2026-08-15T00:42:51.274340792Z",
+      "command": "choir computer replay-completeness",
+      "exit": 0,
+      "renewal_refused": false,
+      "probe_digest": "c93c75aa96e79551dd4fc1d292166f7fc19855fe31e9f2b8d588efb25cd86a3d",
+      "note": "inside the 90s remaining window; GuestCredentials.Capability must POST /internal/computers/credentials/renew"
+    },
+    {
+      "at": "2026-08-15T00:45:06.284199908Z",
+      "command": "choir computer replay-completeness",
+      "exit": 0,
+      "renewal_refused": false,
+      "probe_digest": "f1fcfafb17733c10d5ae6d2d74fb2ec89c57bf9fd3a80477afdad7e0bea174ff",
+      "live_sequence": 19,
+      "replay_sequence": 22,
+      "note": "after original 5m TTL (~00:44:10Z). Regular capability authorize has no expiry grace; success requires an in-process renew. Epoch still 268."
+    }
+  ],
+  "three_identity_note": "Live projection is at restore_target_head (seq 19 / accepted 51d64dd0). Canonical tape includes the restore intent (replay seq 22). ReplayCompleteness therefore reports eligible=false reason 'replay terminal head does not match canonical head'. That is the restore three-identity model, not a capability refusal.",
+  "scope_refusal_reconfirmed": [
+    {
+      "at": "2026-08-15T00:47:22Z",
+      "operand": "platform",
+      "status": 400,
+      "error": "restore: platform store is out of restore scope"
+    },
+    {
+      "at": "2026-08-15T00:47:22Z",
+      "operand": "cycle",
+      "status": 400,
+      "error": "restore: cycle store is out of restore scope"
+    }
+  ],
+  "not_done": [
+    "serving_join"
+  ],
+  "constraints_held": [
+    "did not start/restart/RefreshVM after restore",
+    "did not enable effects",
+    "did not forge verifier certificate",
+    "did not invent choir computer create",
+    "did not overwrite pin release 39a8fbcd"
+  ]
+}
