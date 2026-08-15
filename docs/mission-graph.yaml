@@ -353,6 +353,9 @@ nodes:
       effect promotion on top of that restore substrate. Effects remain OFF
       until this Definition's decision-policy gates pass. Tape-recovery
       completed 2026-08-15; restore legs are satisfied-by its receipts.
+      Invoked 2026-08-15 with panel GO_WITH_CAVEATS; first slice is docs-only
+      reconciliation so start.unknowns cannot reopen restore. Do not rematerialize
+      or invent choir computer create. Effects remain OFF.
       Post-acceptance finish.completion_cutover is required
       for goal.complete. choir-self-development-roadmap-2026-08-11.md is
       historical migration evidence only — not schedule authority.

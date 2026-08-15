@@ -18,7 +18,10 @@ acceptance policy with durable delivery and consequence receipts
 (platform/cycle OUT of restore; computer-surface frontend is
 per-computer by invariant). Effects remain OFF until this
 Definition's decision-policy rehearsal gates pass. Do not
-independently green restore.
+independently green restore. First `/goal` slice is docs-only
+reconciliation of stale `start.unknowns` / `now.reconciliation`
+against the paid tape-recovery substrate; do not rematerialize or
+invent `choir computer create`.
 
 ## Completed Substrate — Tape-Based Recovery
 
