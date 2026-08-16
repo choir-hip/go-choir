@@ -266,10 +266,10 @@ func Run() {
 		}
 		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher))
 		if credentials != nil {
-			coreOpts = append(coreOpts, agentcore.WithOwnerRecoveryControl(credentials))
-			log.Printf("autoputer: owner-recovery checkpoint publication credential wired")
+			coreOpts = append(coreOpts, guestControlOptions(credentials)...)
+			log.Printf("autoputer: owner-recovery and self-development mode credentials wired; proposal still requires signed propose_only")
 		}
-		log.Printf("autoputer: computer event authority reconstructed; self-development effects disabled")
+		log.Printf("autoputer: computer event authority reconstructed")
 	}
 	if opt, ok, err := selfDevelopmentUpdaterOption(); err != nil {
 		log.Fatalf("autoputer: configure self-development updater: %v", err)
@@ -517,6 +517,19 @@ func sizeOfRegistry(registry *toolregistry.ToolRegistry) int {
 }
 
 const defaultSelfDevelopmentUpdaterSocket = "/run/choir/updater.sock"
+
+// guestControlOptions mounts owner-recovery publication and signed mode reads
+// on the same guest credential. Mode remains platform-controlled; this does
+// not set mode, arm the outbox, or start the materializer.
+func guestControlOptions(credentials *selfdev.GuestCredentials) []agentcore.RuntimeOption {
+	if credentials == nil {
+		return nil
+	}
+	return []agentcore.RuntimeOption{
+		agentcore.WithOwnerRecoveryControl(credentials),
+		agentcore.WithSelfDevelopmentControl(credentials),
+	}
+}
 
 // selfDevelopmentUpdaterOption wires BindCheckpointRestoreSet to the same
 // CHOIR_UPDATER_ROOT that ComputerSurface serves. Production previously left

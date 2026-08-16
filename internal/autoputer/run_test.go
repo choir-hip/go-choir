@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 )
 
 func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
@@ -151,5 +152,16 @@ func TestSelfDevelopmentUpdaterOptionRejectsRelativeSocket(t *testing.T) {
 	_, _, err := selfDevelopmentUpdaterOption()
 	if err == nil {
 		t.Fatal("expected relative socket to fail")
+	}
+}
+
+func TestGuestControlOptionsWiresOwnerRecoveryAndModeAuthority(t *testing.T) {
+	if guestControlOptions(nil) != nil {
+		t.Fatal("nil credentials must not mount control options")
+	}
+	credentials := selfdev.GuestCredentialsWithCapability("http://127.0.0.1:1", "computer-test", "token", time.Now().UTC().Add(time.Hour))
+	opts := guestControlOptions(credentials)
+	if len(opts) != 2 {
+		t.Fatalf("guestControlOptions len=%d, want 2 (owner-recovery + mode authority)", len(opts))
 	}
 }

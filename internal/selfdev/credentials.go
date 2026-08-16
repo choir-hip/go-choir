@@ -182,6 +182,18 @@ func (g *GuestCredentials) Capability(ctx context.Context) (string, error) {
 	return g.token, nil
 }
 
+// GuestCredentialsWithCapability holds an already-exchanged platform capability
+// for mode and checkpoint calls. Production boot still uses ExchangeGuestCredential.
+func GuestCredentialsWithCapability(baseURL, computerID, token string, expiresAt time.Time) *GuestCredentials {
+	return &GuestCredentials{
+		baseURL:    strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		computerID: strings.TrimSpace(computerID),
+		http:       &http.Client{Timeout: 15 * time.Second},
+		token:      token,
+		expiresAt:  expiresAt,
+	}
+}
+
 func (g *GuestCredentials) SelfDevelopmentMode(ctx context.Context) (platform.SelfDevelopmentMode, error) {
 	if g == nil {
 		return platform.SelfDevelopmentMode{}, fmt.Errorf("guest credential: mode authority unavailable")

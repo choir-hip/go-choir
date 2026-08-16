@@ -524,6 +524,8 @@ func WithSelfDevelopmentVerifier(client *receiptsigner.Client) RuntimeOption {
 	}
 }
 
+// WithSelfDevelopmentControl wires platform-control credentials for signed mode
+// reads. It does not set mode, arm the outbox, or start materialization by itself.
 func WithSelfDevelopmentControl(credentials *selfdev.GuestCredentials) RuntimeOption {
 	return func(rt *Runtime) {
 		rt.selfdevControl = credentials

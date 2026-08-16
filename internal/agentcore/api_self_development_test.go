@@ -399,6 +399,79 @@ func TestGuestStartRefusesAbsentModeBeforeAnyEffect(t *testing.T) {
 	}
 }
 
+func TestOwnerRecoveryControlDoesNotAuthorizeProposal(t *testing.T) {
+	computerID := "computer-owner-recovery-only"
+	productStore, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer productStore.Close()
+	operations, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials := selfdev.GuestCredentialsWithCapability("http://127.0.0.1:1", computerID, "unused", time.Now().UTC().Add(time.Hour))
+	rt := &Runtime{cfg: provideriface.Config{ComputerID: computerID}, store: productStore, selfdevOperations: operations}
+	WithOwnerRecoveryControl(credentials)(rt)
+	handler := &APIHandler{rt: rt}
+	body, err := json.Marshal(selfDevelopmentStartRequest{IdempotencyKey: "owner-recovery-start", Prompt: "change runtime"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/self-development/operations", strings.NewReader(string(body)))
+	request.Header.Set("X-Authenticated-User", "owner")
+	request.Header.Set("X-Authenticated-Computer", computerID)
+	response := httptest.NewRecorder()
+	handler.HandleComputersRouter(response, request)
+	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), "self-development mode authority unavailable") {
+		t.Fatalf("owner-recovery-only start status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestGuestStartRefusesModeOffBeforeAnyEffect(t *testing.T) {
+	computerID := "computer-mode-off-mounted"
+	platformServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/internal/computers/self-development/mode" || r.URL.Query().Get("computer_id") != computerID {
+			http.Error(w, "unexpected mode probe", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"computer_id":"` + computerID + `","mode":"off","generation":0}`))
+	}))
+	defer platformServer.Close()
+	productStore, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer productStore.Close()
+	operations, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials := selfdev.GuestCredentialsWithCapability(platformServer.URL, computerID, "test-capability", time.Now().UTC().Add(time.Hour))
+	rt := &Runtime{cfg: provideriface.Config{ComputerID: computerID}, store: productStore, selfdevOperations: operations}
+	WithSelfDevelopmentControl(credentials)(rt)
+	handler := &APIHandler{rt: rt}
+	body, err := json.Marshal(selfDevelopmentStartRequest{IdempotencyKey: "mode-off-mounted-start", Prompt: "change runtime"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/self-development/operations", strings.NewReader(string(body)))
+	request.Header.Set("X-Authenticated-User", "owner")
+	request.Header.Set("X-Authenticated-Computer", computerID)
+	response := httptest.NewRecorder()
+	handler.HandleComputersRouter(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "does not authorize proposal") {
+		t.Fatalf("mode-off start status=%d body=%s", response.Code, response.Body.String())
+	}
+	if _, found, err := operations.GetByIdempotency(context.Background(), computerID, "mode-off-mounted-start"); err != nil || found {
+		t.Fatalf("mode-off start created operation: found=%v err=%v", found, err)
+	}
+	if event, found, err := productStore.EventByIdempotency(context.Background(), computerID, "selfdev-start-"+computerevent.DigestBytes([]byte(computerID+"\x00mode-off-mounted-start"))); err != nil || found {
+		t.Fatalf("mode-off start appended event: event=%+v found=%v err=%v", event, found, err)
+	}
+}
+
 func TestRecoveredStartEventRequiresExactCausalBinding(t *testing.T) {
 	event := computerevent.Event{
 		SchemaVersion: computerevent.SchemaVersionV1, ComputerID: "computer-crash",
