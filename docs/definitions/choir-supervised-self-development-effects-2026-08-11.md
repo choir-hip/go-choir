@@ -94,7 +94,7 @@ start:
       - "concrete decision-policy schema, independence domains, quorum, dissent, abstention, timeout, recusal, replacement, and consequence-receipt contracts"
       - "whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata without a payload schema change — answered 2026-08-16: yes, via existing packet.sources typed URIs (operation:/capsule_bundle:/receipt:/event_head:) with no payload schema change; identities persist in revision metadata and typed citations, never prose"
       - "whether Texture production registry still omits update_coagent on the deployed staging build — source confirmation 2026-08-16: current main omits generic update_coagent on Texture (AllowCoAgentTools=false). Staging health 2026-08-16T02:05Z is 4543624b (product-path forward). CTS-safe: do not register the generic resolver. Deployed Texture-registry re-check of 466c0504 remains unpaid"
-      - "whether in-process rehearsal can walk reversible propose→consensus→promote→restore and irreversible propose→consensus→outbox without a live send — answered 2026-08-16 orange: yes, TestEffectsRehearsal. Live 2026-08-16T05:52Z: propose_only generation 1 at epoch 272 after credential-renewal refresh. Named solitaire prompt is not presented. Pre-A checkpoint 409: desktop_* and og_objects are non-empty EmptyUntilSupported tables. Super not started. Promote/restore red unpaid"
+      - "whether in-process rehearsal can walk reversible propose→consensus→promote→restore and irreversible propose→consensus→outbox without a live send — answered 2026-08-16 orange: yes, TestEffectsRehearsal. Live 2026-08-16: propose_only generation 1 at epoch 272; pre-A checkpoint 409 on nonempty desktop/og EmptyUntilSupported tables. Owner-requested report plus convergent panel 5/5: majority OPTION_2 (workspace-replace then bootstrap then checkpoint, 3/5 medium); dissent OPTION_1 reducers and OPTION_4 wait. Cutover not executed. Super not started. Promote/restore red unpaid"
       - "retained computer epoch 8253 / ak_45ce1796 classified 2026-08-15 as historical CTS residual, not current identity (paid restore epoch 268; key returns 401). Residual hygiene only; do not reopen tape-recovery"
 
 finish:
@@ -257,12 +257,12 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer/outbox/supervision/orange-rehearsal/product-path-forward/guest-mode-authority/owner-scoped-refresh/guest-kernel-route/guest-verifier landed. Staging deployed 5557840c. Named start mode propose_only is live generation 1 at epoch 272. Named solitaire prompt is not presented. Pre-A checkpoint is ineligible while desktop/og_objects rows are non-empty. Super not started. Owner gates present. Armed=false. Next: restore-eligible pre-A fence, then start Super. Do not send live mail."
+  slice: "Invoked 2026-08-15. Wiring landed; staging 5557840c; propose_only generation 1 at epoch 272. Pre-A checkpoint ineligible. Owner-requested eligibility report and convergent panel landed. Majority OPTION_2 not executed pending owner ratification of a second workspace-replace. Super not started. Armed=false. Do not send live mail."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-16T05:53:00Z
-    source_ref: live refresh then ineligible pre-A checkpoint; docs/evidence/effects-red-pre-a-checkpoint-ineligible-2026-08-16.md
+    observed_at: 2026-08-16T16:52:00Z
+    source_ref: owner-requested eligibility report and convergent panel; docs/choir-effects-pre-a-checkpoint-eligibility-2026-08-16.md; docs/evidence/effects-pre-a-checkpoint-eligibility-review-2026-08-16.md
     deploy_identity: "staging https://choir.news/health deployed_commit 5557840cab6565ecebb015c4f60b627810b7c1fd deployed_at 2026-08-16T05:32:15Z built_at 20260816051712. Retained computer-03335285269bdba4f94377e56879f9e6 epoch 272 mode propose_only generation 1 receipt 01a0091b-bf12-771e-97e7-9a42752ad036, constructed freeze 7122f279 still joined; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
@@ -281,9 +281,9 @@ now:
     owner_ratification_ref: "owner correction 2026-08-13: irreversible effects are not outside the autonomy window; effect-specific multiagent consensus is the governing boundary, and human approval is optional as one possible consensus participant."
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
-  evidence_refs: [docs/evidence/effects-red-pre-a-checkpoint-ineligible-2026-08-16.md, docs/evidence/effects-red-named-mode-2026-08-16.md, docs/evidence/effects-red-verifier-refresh-2026-08-16.md, docs/evidence/effects-guest-verifier-2026-08-16.md, docs/evidence/effects-red-kernel-route-live-2026-08-16.md, docs/evidence/effects-guest-kernel-route-2026-08-16.md, docs/evidence/effects-red-mode-off-refuse-2026-08-16.md, docs/evidence/effects-owner-guest-boot-refresh-2026-08-16.md, docs/evidence/effects-guest-mode-authority-2026-08-16.md, docs/evidence/effects-red-product-path-smoke-2026-08-16.md, docs/evidence/effects-product-path-forward-2026-08-16.md, docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "Pre-A checkpoint is ineligible: desktop_app_instances, desktop_sessions, desktop_window_placements, desktop_workspaces, and og_objects are non-empty EmptyUntilSupported tables. Weakening that gate would create an unrestorable checkpoint. Presenting ModeReceipt would launch Super without a restore fence. Remaining risk: emptying desktop rows by hand; using OwnerRecovery checkpoint 70f9ce2b for promotion; rematerializing; deleting owner gates; arming a live send. ComputerVersion freeze remains 7122f279. Red promote/restore and live proof remain unpaid."
-  next_action: "Start mode is propose_only generation 1 on computer-03335285269bdba4f94377e56879f9e6 epoch 272. Named solitaire prompt is ready and not presented. Next: a restore-eligible pre-A checkpoint without weakening EmptyUntilSupported, emptying desktop tables by hand, rematerializing, or using OwnerRecovery for promotion. Then present the ModeReceipt. Keep genesis 409. Keep Armed=false. Do not send live mail. Owner gates remain. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore."
+  evidence_refs: [docs/choir-effects-pre-a-checkpoint-eligibility-2026-08-16.md, docs/evidence/effects-pre-a-checkpoint-eligibility-review-2026-08-16.md, docs/evidence/effects-red-pre-a-checkpoint-ineligible-2026-08-16.md, docs/evidence/effects-red-named-mode-2026-08-16.md, docs/evidence/effects-red-verifier-refresh-2026-08-16.md, docs/evidence/effects-guest-verifier-2026-08-16.md, docs/evidence/effects-red-kernel-route-live-2026-08-16.md, docs/evidence/effects-guest-kernel-route-2026-08-16.md, docs/evidence/effects-red-mode-off-refuse-2026-08-16.md, docs/evidence/effects-owner-guest-boot-refresh-2026-08-16.md, docs/evidence/effects-guest-mode-authority-2026-08-16.md, docs/evidence/effects-red-product-path-smoke-2026-08-16.md, docs/evidence/effects-product-path-forward-2026-08-16.md, docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
+  blocker_or_risk: "Pre-A checkpoint is ineligible on nonempty desktop/og EmptyUntilSupported tables. Panel majority OPTION_2 is a second workspace-replace over sequence 26; the pre-launch exception may already be exhausted. Executing it without owner ratification would discard VM-local residue and rebuild the chain. Remaining risk: treating majority as authority; emptying tables by hand; weakening the gate; OwnerRecovery promotion; rematerializing; live send. ComputerVersion freeze remains 7122f279."
+  next_action: "Owner decision on the eligibility panel: ratify OPTION_2 (replace-workspace then bootstrap then eligible checkpoint), OPTION_1 (reducers as restore-completeness work), or OPTION_4 (wait). Do not execute cutover from the 3/5 medium majority alone. Do not present the ModeReceipt. Keep genesis 409. Keep Armed=false. Do not send live mail. Owner gates remain. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery for promotion."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -366,6 +366,22 @@ receipts:
       environment_identity: staging https://choir.news deployed 4ac90583
       deployed_acceptance: not_applicable
     registry_conformance_ref: not_applicable
+  - id: effects-pre-a-checkpoint-eligibility-review-2026-08-16
+    boundary: define
+    commit_or_artifact: docs/choir-effects-pre-a-checkpoint-eligibility-2026-08-16.md
+    proof_refs: [docs/choir-effects-pre-a-checkpoint-eligibility-2026-08-16.md, docs/evidence/effects-pre-a-checkpoint-eligibility-review-2026-08-16.md]
+    rollback_ref: revert this docs-only stamp
+    disposition: "accepted as owner-requested report plus convergent panel — 3/5 OPTION_2 medium, dissent OPTION_1 and OPTION_4. Cutover not executed. Super not started. No live send. Owner ratification required before any workspace-replace."
+    problem_ref: not_applicable
+    authorization_ref: owner request for report, PDF, and agentic consensus
+    candidate_or_evidence_refs: [docs/choir-effects-pre-a-checkpoint-eligibility-2026-08-16.md, docs/evidence/effects-pre-a-checkpoint-eligibility-review-2026-08-16.md]
+    landing:
+      source_commit: 90734517
+      ci_ref: pending
+      deploy_ref: 5557840cab6565ecebb015c4f60b627810b7c1fd
+      environment_identity: staging https://choir.news deployed 5557840c; retained epoch 272 mode propose_only generation 1; constructed freeze 7122f279
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "effects remains entrypoint; panel is not live proof and is not permission to cut over"
   - id: effects-red-pre-a-checkpoint-ineligible-2026-08-16
     boundary: execute
     commit_or_artifact: docs/evidence/effects-red-pre-a-checkpoint-ineligible-2026-08-16.md
@@ -1031,9 +1047,9 @@ at all.
    reversible propose → qualified consensus → promote → consume tape-recovery
    restore → verify; irreversible propose → stronger qualified consensus →
    RecordingProvider dispatch → consequence receipt → crash-window correction.
-   No live send. Live 2026-08-16T05:52Z: propose_only generation 1 at epoch 272.
-   Named solitaire prompt is not presented. Pre-A checkpoint ineligible (desktop/og
-   EmptyUntilSupported rows). Super not started. Promote/restore red unpaid.
+   No live send. Live 2026-08-16: propose_only generation 1 at epoch 272. Pre-A
+   checkpoint ineligible. Owner report plus panel: majority OPTION_2 not executed.
+   Super not started. Promote/restore red unpaid. Owner ratification required.
 10. **Live proof (red).** Capsule authors A → consensus authorizes → promotes →
    played → falsified → B supersedes → restart proves B → total restore; then
    execute and receipt the exact acceptance email under its separate policy.
