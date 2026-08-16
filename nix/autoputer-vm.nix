@@ -133,7 +133,20 @@ let
       echo "go-choir-autoputer: wire publish URL not configured" >&2
     fi
 
+    refresh_runtime=0
+    for param in $(cat /proc/cmdline); do
+      case "$param" in
+        choir.refresh_runtime=1)
+          refresh_runtime=1
+          ;;
+      esac
+    done
+
     current="/mnt/persistent/choir-updater/current"
+    if [ "$refresh_runtime" = "1" ] && [ -L "$current" ]; then
+      echo "go-choir-autoputer: refresh runtime dropping stale updater current"
+      rm -f "$current"
+    fi
     dynamic="$current/bin/autoputer"
     if [ -x "$dynamic" ]; then
       export RUNTIME_SKILLS_ROOT="$current/share/go-choir/skills"

@@ -143,6 +143,11 @@ type VMConfig struct {
 	// the epoch stays the same. Callers can use epoch to detect whether
 	// a VM went through a fresh boot vs. a resume (VAL-CROSS-117).
 	Epoch int64
+
+	// RefreshRuntime asks the guest to drop a stale updater-current pointer
+	// and exec the current deploy image. Restart/recover must leave this
+	// false so a promoted release survives ordinary stop+resolve.
+	RefreshRuntime bool
 }
 
 // VMInstance represents a running or stopped Firecracker VM.
@@ -1203,6 +1208,7 @@ func (m *Manager) RefreshVMWithConfig(vmID string, overrides VMConfig) (*VMInsta
 		cfg.Epoch = 0
 	}
 	cfg.VMID = vmID
+	cfg.RefreshRuntime = true
 	m.mu.Unlock()
 
 	return m.bootVM(cfg)
@@ -1391,6 +1397,9 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		if cfg.GatewayToken != "" {
 			runtimeArgs = append(runtimeArgs, fmt.Sprintf("choir.gateway_token=%s", kernelParamValue(cfg.GatewayToken)))
 		}
+		if cfg.RefreshRuntime {
+			runtimeArgs = append(runtimeArgs, "choir.refresh_runtime=1")
+		}
 		bootArgs = strings.Join(append([]string{kernelParams}, runtimeArgs...), " ")
 	} else {
 		// Legacy approach with custom init script. Keep the same runtime service
@@ -1420,6 +1429,9 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		}
 		if cfg.GatewayToken != "" {
 			bootArgs += fmt.Sprintf(" choir.gateway_token=%s", kernelParamValue(cfg.GatewayToken))
+		}
+		if cfg.RefreshRuntime {
+			bootArgs += " choir.refresh_runtime=1"
 		}
 	}
 

@@ -257,13 +257,13 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Staging probed 1a17a035; propose_only generation 1 at epoch 272. Residue import product path proxied, not executed live. Super not started. Armed=false. Do not send live mail."
+  slice: "Invoked 2026-08-15. Staging probed c6dda135; propose_only generation 1 at epoch 273. Owner refresh did not pick up import route; updater current still masks the image. Super not started. Armed=false. Do not send live mail."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-16T18:25:00Z
-    source_ref: residue import proxy path; docs/evidence/effects-residue-import-proxy-2026-08-16.md; docs/evidence/effects-residue-import-command-2026-08-16.md
-    deploy_identity: "staging https://choir.news/health deployed_commit 5557840cab6565ecebb015c4f60b627810b7c1fd deployed_at 2026-08-16T05:32:15Z built_at 20260816051712. Retained computer-03335285269bdba4f94377e56879f9e6 epoch 272 mode propose_only generation 1 receipt 01a0091b-bf12-771e-97e7-9a42752ad036, constructed freeze 7122f279 still joined; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
+    observed_at: 2026-08-16T18:35:00Z
+    source_ref: owner refresh 273 then import 404; docs/evidence/effects-refresh-stale-updater-current-2026-08-16.md; docs/evidence/effects-refresh-runtime-image-2026-08-16.md
+    deploy_identity: "staging https://choir.news/health deployed_commit c6dda13592c5e21ed17355fa5939a600c9534514 deployed_at 2026-08-16T18:22:32Z built_at 20260816181405. Retained computer-03335285269bdba4f94377e56879f9e6 epoch 273 mode propose_only generation 1 refresh receipt 01a00bd8-51a0-7443-9ff8-5ea5473b25c8, constructed freeze 7122f279 still joined; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: 2026-08-16T00:25:00Z reconnection product + tests + receipt; parent dfcb8ad8
@@ -282,8 +282,8 @@ now:
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
   evidence_refs: [docs/evidence/effects-residue-import-proxy-2026-08-16.md, docs/evidence/effects-residue-import-command-2026-08-16.md, docs/evidence/effects-residue-import-2026-08-16.md, docs/evidence/effects-live-desktop-og-tape-2026-08-16.md, docs/evidence/effects-sql-only-project-2026-08-16.md, docs/evidence/effects-unified-tape-contracts-2026-08-16.md, docs/evidence/effects-recovery-domain-complete-from-head-2026-08-16.md, docs/choir-unified-event-tape-design-2026-08-16.md, docs/evidence/effects-unified-event-tape-design-review-2026-08-16.md, docs/choir-effects-pre-a-checkpoint-eligibility-2026-08-16.md, docs/evidence/effects-pre-a-checkpoint-eligibility-review-2026-08-16.md, docs/evidence/effects-red-pre-a-checkpoint-ineligible-2026-08-16.md, docs/evidence/effects-red-named-mode-2026-08-16.md, docs/evidence/effects-red-verifier-refresh-2026-08-16.md, docs/evidence/effects-guest-verifier-2026-08-16.md, docs/evidence/effects-red-kernel-route-live-2026-08-16.md, docs/evidence/effects-guest-kernel-route-2026-08-16.md, docs/evidence/effects-red-mode-off-refuse-2026-08-16.md, docs/evidence/effects-owner-guest-boot-refresh-2026-08-16.md, docs/evidence/effects-guest-mode-authority-2026-08-16.md, docs/evidence/effects-red-product-path-smoke-2026-08-16.md, docs/evidence/effects-product-path-forward-2026-08-16.md, docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "Residue import product path is complete in source. Must not run until staging has this commit and the retained constructed computer is owner-refreshed (global deploy preserves constructed-computer-version). Checkpoint still 409. EmptyUntilSupported unchanged. Remaining risk: live import on an old guest; treating import as time-travel; emptying tables; live send. ComputerVersion freeze remains 7122f279."
-  next_action: "Wait for staging deploy of current main. Global deploy preserves constructed-computer-version; then owner-scoped choir computer refresh of the retained computer; then choir computer import-residue-snapshot. Do not reclassify EmptyUntilSupported until that live import exists. Do not present the ModeReceipt. Keep genesis 409. Keep Armed=false. Do not send live mail. Owner gates remain. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery for promotion. Do not declare new_epoch."
+  blocker_or_risk: "Staging is c6dda135 and epoch 273. Import still 404 because guest init prefers stale updater current over the image. Refresh-runtime image land must deploy, then another owner-scoped refresh, then import. Checkpoint still ineligible. EmptyUntilSupported unchanged. Remaining risk: live import on an old guest; treating import as time-travel; emptying tables; live send. ComputerVersion freeze remains 7122f279."
+  next_action: "Wait for staging deploy of the refresh-runtime image land. Global deploy preserves constructed-computer-version. Then owner-scoped choir computer refresh of the retained computer so updater current is dropped; then choir computer import-residue-snapshot. Do not reclassify EmptyUntilSupported until that live import exists. Do not present the ModeReceipt. Keep genesis 409. Keep Armed=false. Do not send live mail. Owner gates remain. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery for promotion. Do not declare new_epoch."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -366,6 +366,38 @@ receipts:
       environment_identity: staging https://choir.news deployed 4ac90583
       deployed_acceptance: not_applicable
     registry_conformance_ref: not_applicable
+  - id: effects-refresh-runtime-image-2026-08-16
+    boundary: execute
+    commit_or_artifact: docs/evidence/effects-refresh-runtime-image-2026-08-16.md
+    proof_refs: [docs/evidence/effects-refresh-runtime-image-2026-08-16.md, docs/evidence/effects-refresh-stale-updater-current-2026-08-16.md, internal/vmmanager/manager.go, nix/autoputer-vm.nix]
+    rollback_ref: revert this commit
+    disposition: "accepted as refresh-runtime image contract — owner/deploy refresh drops stale updater current and execs the current deploy image; restart/recover keep the pointer. Not live import. Super not started. No live send."
+    problem_ref: not_applicable
+    authorization_ref: this Definition now.next_action after import 404 on epoch 273
+    candidate_or_evidence_refs: [docs/evidence/effects-refresh-runtime-image-2026-08-16.md]
+    landing:
+      source_commit: c6dda135
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/31963987149
+      deploy_ref: c6dda13592c5e21ed17355fa5939a600c9534514
+      environment_identity: staging https://choir.news deployed c6dda135; retained epoch 273 mode propose_only generation 1; constructed freeze 7122f279; import 404
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "effects remains entrypoint; image-runtime refresh is not live proof and is not permission to start Super"
+  - id: effects-refresh-stale-updater-current-2026-08-16
+    boundary: execute
+    commit_or_artifact: docs/evidence/effects-refresh-stale-updater-current-2026-08-16.md
+    proof_refs: [docs/evidence/effects-refresh-stale-updater-current-2026-08-16.md]
+    rollback_ref: not_applicable
+    disposition: "accepted as live observation — host c6dda135, owner refresh 272→273, import still 404 because updater current masked the image. Super not started. No live send."
+    problem_ref: not_applicable
+    authorization_ref: this Definition now.next_action after residue import proxy
+    candidate_or_evidence_refs: [docs/evidence/effects-refresh-stale-updater-current-2026-08-16.md]
+    landing:
+      source_commit: c6dda135
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/31963987149
+      deploy_ref: c6dda13592c5e21ed17355fa5939a600c9534514
+      environment_identity: staging https://choir.news deployed c6dda135; retained epoch 273; import 404 computer route not found
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "effects remains entrypoint; 404 is not live proof"
   - id: effects-residue-import-proxy-2026-08-16
     boundary: execute
     commit_or_artifact: docs/evidence/effects-residue-import-proxy-2026-08-16.md
@@ -1175,8 +1207,8 @@ at all.
    reversible propose → qualified consensus → promote → consume tape-recovery
    restore → verify; irreversible propose → stronger qualified consensus →
    RecordingProvider dispatch → consequence receipt → crash-window correction.
-   No live send. Residue import product path is proxied and not
-   executed live. Super not started.
+   No live send. Residue import product path is proxied. Live import
+   still 404 until refresh drops stale updater current. Super not started.
 10. **Live proof (red).** Capsule authors A → consensus authorizes → promotes →
    played → falsified → B supersedes → restart proves B → total restore; then
    execute and receipt the exact acceptance email under its separate policy.

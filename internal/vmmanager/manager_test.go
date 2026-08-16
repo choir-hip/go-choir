@@ -1490,6 +1490,53 @@ func TestBuildFirecrackerConfig_IPConfigInBootArgs(t *testing.T) {
 	}
 }
 
+func TestBuildFirecrackerConfig_RefreshRuntimeDropsStaleUpdaterCurrent(t *testing.T) {
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = t.TempDir()
+	cfg.KernelImagePath = "/opt/go-choir/guest/vmlinux"
+	cfg.InitrdPath = "/opt/go-choir/guest/initrd"
+	cfg.StoreDiskPath = "/opt/go-choir/guest/storedisk.erofs"
+	cfg.KernelParams = "root=fstab init=/nix/store/example-init regInfo=/nix/store/example-reginfo"
+
+	mgr := NewManager(cfg)
+	ordinary := VMConfig{
+		VMID:              "vm-refresh-runtime",
+		KernelImagePath:   cfg.KernelImagePath,
+		InitrdPath:        cfg.InitrdPath,
+		StoreDiskPath:     cfg.StoreDiskPath,
+		GuestPort:         8085,
+		MachineCPUCount:   2,
+		MachineMemSizeMib: 512,
+		Epoch:             1,
+	}
+	ordinaryArgs := mgr.buildFirecrackerConfig(ordinary, 9000)["boot-source"].(map[string]interface{})["boot_args"].(string)
+	if containsStr(ordinaryArgs, "choir.refresh_runtime=1") {
+		t.Fatalf("ordinary boot must not drop updater current: %q", ordinaryArgs)
+	}
+
+	refresh := ordinary
+	refresh.RefreshRuntime = true
+	refreshArgs := mgr.buildFirecrackerConfig(refresh, 9000)["boot-source"].(map[string]interface{})["boot_args"].(string)
+	if !containsStr(refreshArgs, "choir.refresh_runtime=1") {
+		t.Fatalf("refresh boot must drop stale updater current: %q", refreshArgs)
+	}
+}
+
+func TestRefreshConfigForCurrentDeployDoesNotSetRefreshRuntime(t *testing.T) {
+	old := VMConfig{
+		VMID:          "vm-stale",
+		PersistentDir: "/state/vm-stale/persist",
+		GuestPort:     8085,
+		Epoch:         7,
+	}
+	defaults := DefaultManagerConfig()
+	defaults.StoreDiskPath = "/current/store"
+	got := refreshConfigForCurrentDeploy(old, defaults)
+	if got.RefreshRuntime {
+		t.Fatal("artifact rewrite must not imply refresh runtime")
+	}
+}
+
 func TestBuildFirecrackerConfig_IncludesGatewayTokenBootstrapParam(t *testing.T) {
 	cfg := DefaultManagerConfig()
 	cfg.StateDir = t.TempDir()
