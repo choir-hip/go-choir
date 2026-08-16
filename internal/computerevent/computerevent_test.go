@@ -348,6 +348,37 @@ func TestAppenderRecoversCrashAfterCanonicalCAS(t *testing.T) {
 	}
 }
 
+func TestAppenderPoisonFinalizeDoesNotSilentlyRetryTheSameCrash(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := SigningKey{SignerRef: SignerRef{SignerDomain: "platform-control", KeyID: "platform-1"}, PrivateKey: privateKey}
+	projection := &memoryProjection{failFinalizeAlways: errors.New("constraint failed")}
+	cas := &memoryCAS{signer: signer}
+	pinner := memoryPinner{signer: signer}
+	verifier := EventHeadReceiptVerifier{Keys: staticKeyResolver{key: publicKey}}
+	appender, err := NewComputerEventAppender(testComputerID, pinner, projection, cas, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := testEvent(t, nil, EventGenesisImported)
+	event.ResultingEffectiveCommitment = testDigestA
+	genesisInput := TransitionInput{TargetStateCommitment: testDigestA}
+	bindTestRequest(t, &event, genesisInput, nil)
+	_, err = appender.Append(context.Background(), event, genesisInput, nil)
+	if !errors.Is(err, ErrNeedsProjectionRepair) {
+		t.Fatalf("append error = %v, want projection repair", err)
+	}
+	err = appender.RecoverPrepared(context.Background())
+	if !errors.Is(err, ErrNeedsProjectionRepair) || !errors.Is(err, ErrProjectionPoison) {
+		t.Fatalf("poison recovery error = %v", err)
+	}
+	if cas.head == nil || projection.head != nil {
+		t.Fatalf("poison recovery mutated heads: cas=%+v projection=%+v", cas.head, projection.head)
+	}
+}
+
 func TestAppenderReconstructsEmbeddedProjectionFromDurableChain(t *testing.T) {
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -543,9 +574,10 @@ func (p memoryPinner) PinPrivatePayload(ctx context.Context, cipher *PrivateArti
 }
 
 type memoryProjection struct {
-	head             *Head
-	prepared         []CASRequest
-	failFinalizeOnce bool
+	head               *Head
+	prepared           []CASRequest
+	failFinalizeOnce   bool
+	failFinalizeAlways error
 }
 
 func (p *memoryProjection) Head(context.Context, string) (*Head, error) {
@@ -559,6 +591,9 @@ func (p *memoryProjection) Prepared(context.Context, string) ([]CASRequest, erro
 	return append([]CASRequest(nil), p.prepared...), nil
 }
 func (p *memoryProjection) Finalize(_ context.Context, _ string, digest string, _ Receipt) error {
+	if p.failFinalizeAlways != nil {
+		return p.failFinalizeAlways
+	}
 	if p.failFinalizeOnce {
 		p.failFinalizeOnce = false
 		return errors.New("injected finalize crash")

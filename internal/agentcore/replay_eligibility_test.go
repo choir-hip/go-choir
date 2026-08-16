@@ -143,3 +143,20 @@ func TestCurrentReplayAirworthinessManifestReturnsCopy(t *testing.T) {
 		t.Fatal("manifest policy was mutable through returned entries")
 	}
 }
+
+func TestDesktopSessionsRemainEmptyUntilSupportedNotPresenceVolatile(t *testing.T) {
+	manifest := CurrentReplayAirworthinessManifest()
+	if got := manifest.Entries["desktop_sessions"]; got != ReplayEmptyUntilSupported {
+		t.Fatalf("desktop_sessions class=%q, want empty_until_supported", got)
+	}
+	for _, table := range []string{"desktop_workspaces", "desktop_app_instances", "desktop_window_placements", "og_objects", "og_edges"} {
+		if got := manifest.Entries[table]; got != ReplayEmptyUntilSupported {
+			t.Fatalf("%s class=%q, want empty_until_supported until Project is live", table, got)
+		}
+	}
+	invalid := manifest
+	invalid.Entries = map[string]ReplayObservationClass{"desktop_sessions": ReplayObservationClass("presence_volatile")}
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("presence_volatile class was admitted — that would weaken the nonempty gate")
+	}
+}

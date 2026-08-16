@@ -486,7 +486,7 @@ func (a *ComputerEventAppender) RecoverPrepared(ctx context.Context) error {
 				return fmt.Errorf("computer event appender: verify recovery receipt: %w", err)
 			}
 			if err := a.projection.Finalize(ctx, a.computerID, request.EventDigest, receipt); err != nil {
-				return fmt.Errorf("computer event appender: finalize recovery: %w", err)
+				return fmt.Errorf("%w: finalize recovery: %w", ErrNeedsProjectionRepair, ClassifyProjectionFailure(err))
 			}
 			continue
 		}

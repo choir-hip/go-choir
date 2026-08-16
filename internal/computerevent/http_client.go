@@ -129,6 +129,39 @@ func (c *HTTPClient) CompareAndSwap(ctx context.Context, request CASRequest) (Re
 	return receipt, err
 }
 
+func (c *HTTPClient) FetchPayload(ctx context.Context, computerID, artifactDigest string) ([]byte, error) {
+	if c == nil {
+		return nil, ErrPayloadResolverRequired
+	}
+	computerID = strings.TrimSpace(computerID)
+	artifactDigest = strings.TrimSpace(artifactDigest)
+	if computerID == "" || !IsSHA256(artifactDigest) {
+		return nil, fmt.Errorf("computer event client: computer and payload digest are required")
+	}
+	query := url.Values{
+		"computer_id":     []string{computerID},
+		"artifact_digest": []string{artifactDigest},
+	}
+	var response struct {
+		PayloadBase64 string `json:"payload_base64"`
+	}
+	_, err := c.do(ctx, http.MethodGet, "/internal/computers/events/payload?"+query.Encode(), nil, &response)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := base64.RawStdEncoding.DecodeString(response.PayloadBase64)
+	if err != nil {
+		raw, err = base64.StdEncoding.DecodeString(response.PayloadBase64)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("computer event client: payload encoding: %w", err)
+	}
+	if DigestBytes(raw) != artifactDigest {
+		return nil, fmt.Errorf("%w: %s", ErrPayloadDigestMismatch, artifactDigest)
+	}
+	return raw, nil
+}
+
 func (c *HTTPClient) Events(ctx context.Context, computerID string, afterSequence uint64) ([]DurableEvent, error) {
 	query := url.Values{
 		"computer_id":    []string{computerID},
