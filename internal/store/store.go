@@ -1762,6 +1762,34 @@ func (s *Store) CountActiveCoSuperSlots(ctx context.Context, ownerID, trajectory
 }
 
 // GetLatestActiveRunByAgent returns the most recent non-terminal run for an agent.
+func (s *Store) GetLatestRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
+	objs, err := s.ogListAllByMetadata(ctx, ogKindRun, "agent_id", agentID)
+	if err != nil {
+		return types.RunRecord{}, err
+	}
+	var latest *types.RunRecord
+	for i := range objs {
+		var rec types.RunRecord
+		if err := ogDecode(objs[i], &rec); err != nil {
+			return types.RunRecord{}, err
+		}
+		if lifecycleRunProjection(objs[i], rec) {
+			continue
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		if latest == nil || rec.UpdatedAt.After(latest.UpdatedAt) {
+			recCopy := rec
+			latest = &recCopy
+		}
+	}
+	if latest == nil {
+		return types.RunRecord{}, ErrNotFound
+	}
+	return *latest, nil
+}
+
 func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
 	objs, err := s.ogListAllByMetadata(ctx, ogKindRun, "agent_id", agentID)
 	if err != nil {

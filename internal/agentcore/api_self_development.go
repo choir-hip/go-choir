@@ -1146,7 +1146,11 @@ func (h *APIHandler) ensureSelfDevelopmentRun(r *http.Request, operation selfdev
 		if strings.TrimSpace(operation.BundleDigest) != "" {
 			return operation, nil
 		}
-		if len(runs) == 1 && selfDevelopmentSuperRunTerminal(runs[0].State) {
+		if len(runs) == 0 {
+			if err := h.rt.startSelfDevelopmentPersistentSuper(r.Context(), operation, ownerID, prompt); err != nil {
+				return operation, err
+			}
+		} else if len(runs) == 1 && selfDevelopmentSuperRunTerminal(runs[0].State) {
 			rec := runs[0]
 			if err := h.rt.unbindSelfDevelopmentSuper(r.Context(), &rec); err != nil {
 				return operation, err

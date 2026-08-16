@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -143,22 +144,49 @@ func (rt *Runtime) ensureSelfDevelopmentTextureJoin(ctx context.Context, operati
 	if err != nil {
 		return err
 	}
+	wakeToken := ""
+	if latest, latestErr := rt.store.GetLatestRunByAgent(ctx, ownerID, superAgentID); latestErr == nil {
+		if isPersistentSuperAgentRun(&latest) && selfDevelopmentSuperRunTerminal(latest.State) {
+			wakeToken = strings.TrimSpace(latest.RunID)
+		}
+	} else if !errors.Is(latestErr, store.ErrNotFound) {
+		return fmt.Errorf("load latest persistent Super: %w", latestErr)
+	}
 	pending, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, superAgentID)
 	if err != nil {
 		return fmt.Errorf("load pending Super controls: %w", err)
 	}
-	for _, update := range pending {
-		if update.Direction == types.LifecyclePacketDirectionControl &&
-			selfDevelopmentOperationIDFromPacketSources(update.Packet.Sources) == operation.OperationID &&
-			persistentSuperExecutableUpdate(update) {
-			return nil
+	if wakeToken == "" {
+		for _, update := range pending {
+			if update.Direction == types.LifecyclePacketDirectionControl &&
+				selfDevelopmentOperationIDFromPacketSources(update.Packet.Sources) == operation.OperationID &&
+				persistentSuperExecutableUpdate(update) {
+				return nil
+			}
 		}
 	}
 	controlID := openerControlID
 	commandID := "turn:selfdev-texture:" + operation.OperationID
 	var openWork *types.WorkItemRecord
 	targetWorkID := superWorkID
-	if existing := selfDevelopmentOpenSuperWork(snapshot, superAgentID); existing != nil {
+	if wakeToken != "" {
+		controlID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
+			"choir:texture:self-development", ownerID, computerID, operation.OperationID, "rewake", wakeToken,
+		}, ":"))).String()
+		commandID = "turn:selfdev-texture-rewake:" + operation.OperationID + ":" + wakeToken
+		if existing := selfDevelopmentOpenSuperWork(snapshot, superAgentID); existing != nil {
+			targetWorkID = existing.WorkItemID
+		} else {
+			rewakeWorkID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
+				"choir:texture:self-development", ownerID, computerID, operation.OperationID, "work:super:rewake", wakeToken,
+			}, ":"))).String()
+			targetWorkID = rewakeWorkID
+			openWork = &types.WorkItemRecord{
+				WorkItemID: rewakeWorkID, Objective: strings.TrimSpace(prompt),
+				AuthorityProfile: agentprofile.Super, Status: types.WorkItemOpen, AssignedAgentID: superAgentID,
+			}
+		}
+	} else if existing := selfDevelopmentOpenSuperWork(snapshot, superAgentID); existing != nil {
 		targetWorkID = existing.WorkItemID
 		controlID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
 			"choir:texture:self-development", ownerID, computerID, operation.OperationID, "continue", existing.WorkItemID, fmt.Sprint(existing.LastReducerSeq),
