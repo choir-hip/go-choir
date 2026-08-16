@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
@@ -358,12 +359,9 @@ func (rt *Runtime) BindCheckpointRestoreSet(ctx context.Context, computerID stri
 	if computerID == "" || computerID != strings.TrimSpace(rt.cfg.ComputerID) {
 		return report, fmt.Errorf("%w: computer binding does not match runtime", ErrRematerializeUnavailable)
 	}
-	if strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
-		return report, fmt.Errorf("self-development checkpoint: served SPA is underivable")
-	}
-	manifest, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot)
+	manifest, err := rt.ensureCheckpointReleaseManifest(ctx, computerID)
 	if err != nil {
-		return report, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+		return report, err
 	}
 	witness, frontend, err := rt.checkpointRestoreBindings(ctx, computerID, manifest.ContentDigest, manifest.Files)
 	if err != nil {
@@ -417,10 +415,7 @@ func (rt *Runtime) publishOwnerRecoveryCheckpoint(ctx context.Context, computerI
 	}
 	return rt.ownerRecoveryControl.PublishCheckpoint(ctx, selfdevprotocol.CheckpointRequest{
 		ComputerID: computerID, IdempotencyKey: "owner-recovery-" + head.CanonicalEventHead,
-		ComputerVersion: computerversion.ComputerVersion{
-			CodeRef:            computerversion.CodeRef("code:sha256:" + manifest.CodeRef),
-			ArtifactProgramRef: computerversion.ArtifactProgramRef("artifact-program:sha256:" + manifest.ArtifactProgramRef),
-		},
+		ComputerVersion:   checkpointComputerVersion(manifest),
 		AcceptedEventHead: head.CanonicalEventHead, EffectiveEventHead: head.EffectiveEventHead,
 		EffectiveStateCommitment: head.EffectiveStateCommitment,
 		EventHeadReceiptID:       headReceipt.ReceiptID,
@@ -433,6 +428,68 @@ func (rt *Runtime) publishOwnerRecoveryCheckpoint(ctx context.Context, computerI
 	})
 }
 
+func trustedBaselineReleaseRoot() string {
+	root := filepath.Clean(strings.TrimSpace(os.Getenv("CHOIR_BASELINE_RELEASE_ROOT")))
+	if strings.HasPrefix(root, "/nix/store/") {
+		return root
+	}
+	return ""
+}
+
+func checkpointComputerVersion(manifest updater.ReleaseManifest) computerversion.ComputerVersion {
+	codeRef := strings.TrimSpace(manifest.CodeRef)
+	artifact := strings.TrimSpace(manifest.ArtifactProgramRef)
+	if codeRef != "" && !strings.HasPrefix(codeRef, "code:") {
+		codeRef = "code:sha256:" + codeRef
+	}
+	if artifact != "" && !strings.HasPrefix(artifact, "artifact-program:") {
+		artifact = "artifact-program:sha256:" + artifact
+	}
+	return computerversion.ComputerVersion{
+		CodeRef:            computerversion.CodeRef(codeRef),
+		ArtifactProgramRef: computerversion.ArtifactProgramRef(artifact),
+	}
+}
+
+func (rt *Runtime) ensureCheckpointReleaseManifest(ctx context.Context, computerID string) (updater.ReleaseManifest, error) {
+	var empty updater.ReleaseManifest
+	if rt == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
+		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+	}
+	manifest, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot)
+	if err == nil {
+		return manifest, nil
+	}
+	baselineRoot := trustedBaselineReleaseRoot()
+	if baselineRoot == "" || rt.selfdevUpdater == nil || strings.TrimSpace(rt.selfdevRealizationID) == "" || rt.selfdevRoute == nil {
+		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+	}
+	slotID, err := routeledger.RouteSlotID(rt.selfdevRouteOwnerID, rt.selfdevRouteDesktopID)
+	if err != nil {
+		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+	}
+	resolution, err := rt.selfdevRoute.ResolveComputerVersionRoute(ctx, slotID)
+	if err != nil {
+		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+	}
+	manifest, err = updater.BuildBaselineManifest(baselineRoot, computerID, string(resolution.Slot.Current.CodeRef), string(resolution.Slot.Current.ArtifactProgramRef))
+	if err != nil {
+		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+	}
+	importRequest := updater.BaselineImportRequest{
+		ComputerID: computerID, RealizationID: rt.selfdevRealizationID,
+		IdempotencyKey: "checkpoint-baseline-" + computerID, SourceDir: baselineRoot, Manifest: manifest,
+	}
+	importRequest.RequestCommitment, err = updater.ComputeBaselineImportCommitment(importRequest)
+	if err != nil {
+		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+	}
+	manifest, err = rt.selfdevUpdater.ImportBaseline(ctx, importRequest)
+	if err != nil {
+		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+	}
+	return manifest, nil
+}
 func (rt *Runtime) verifyPinnedFrontend(checkpoint selfdevprotocol.Checkpoint) (string, error) {
 	if rt == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
 		return "", fmt.Errorf("rematerialize: served SPA is underivable")

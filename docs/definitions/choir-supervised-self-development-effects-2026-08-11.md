@@ -257,13 +257,13 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Staging probed bc379902; propose_only generation 1 at epoch 274. Live residue import appended at sequence 29. Super not started. Armed=false. Do not send live mail."
+  slice: "Invoked 2026-08-15. Staging probed 06204346; propose_only generation 1 at epoch 275. Replay eligible at sequence 31; checkpoint 409 served SPA underivable. Super not started. Armed=false. Do not send live mail."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-16T19:06:00Z
-    source_ref: live residue import then desktop+OG event_projection; docs/evidence/effects-live-residue-import-2026-08-16.md; docs/evidence/effects-desktop-og-event-projection-2026-08-16.md
-    deploy_identity: "staging https://choir.news/health deployed_commit bc3799022704307cb8adf7d2e7bd1eab31df6878 deployed_at 2026-08-16T19:03:49Z. Retained computer-03335285269bdba4f94377e56879f9e6 epoch 274 mode propose_only generation 1 refresh receipt 01a00bf6-2ee0-7d0b-a4c0-d23ca672e725; residue import appended sequence 29, constructed freeze 7122f279 still joined; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
+    observed_at: 2026-08-16T19:36:00Z
+    source_ref: replay eligible sequence 31 then SPA underivable; docs/evidence/effects-replay-eligible-spa-underivable-2026-08-16.md; docs/evidence/effects-checkpoint-baseline-spa-2026-08-16.md
+    deploy_identity: "staging https://choir.news/health deployed_commit 06204346a431f52347586b7f68d39a4d2b9c282a deployed_at 2026-08-16T19:33:03Z. Retained computer-03335285269bdba4f94377e56879f9e6 epoch 275 mode propose_only generation 1 refresh receipt 01a00c10-b658-7e65-a4aa-0567defdf74c; replay eligible sequence 31; checkpoint 409 SPA underivable, constructed freeze 7122f279 still joined; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: 2026-08-16T00:25:00Z reconnection product + tests + receipt; parent dfcb8ad8
@@ -282,8 +282,8 @@ now:
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
   evidence_refs: [docs/evidence/effects-residue-import-proxy-2026-08-16.md, docs/evidence/effects-residue-import-command-2026-08-16.md, docs/evidence/effects-residue-import-2026-08-16.md, docs/evidence/effects-live-desktop-og-tape-2026-08-16.md, docs/evidence/effects-sql-only-project-2026-08-16.md, docs/evidence/effects-unified-tape-contracts-2026-08-16.md, docs/evidence/effects-recovery-domain-complete-from-head-2026-08-16.md, docs/choir-unified-event-tape-design-2026-08-16.md, docs/evidence/effects-unified-event-tape-design-review-2026-08-16.md, docs/choir-effects-pre-a-checkpoint-eligibility-2026-08-16.md, docs/evidence/effects-pre-a-checkpoint-eligibility-review-2026-08-16.md, docs/evidence/effects-red-pre-a-checkpoint-ineligible-2026-08-16.md, docs/evidence/effects-red-named-mode-2026-08-16.md, docs/evidence/effects-red-verifier-refresh-2026-08-16.md, docs/evidence/effects-guest-verifier-2026-08-16.md, docs/evidence/effects-red-kernel-route-live-2026-08-16.md, docs/evidence/effects-guest-kernel-route-2026-08-16.md, docs/evidence/effects-red-mode-off-refuse-2026-08-16.md, docs/evidence/effects-owner-guest-boot-refresh-2026-08-16.md, docs/evidence/effects-guest-mode-authority-2026-08-16.md, docs/evidence/effects-red-product-path-smoke-2026-08-16.md, docs/evidence/effects-product-path-forward-2026-08-16.md, docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "Live residue import exists at sequence 29. desktop_sessions live≠replay until projector replace is on the guest and a later projection replaces leftover session rows. Checkpoint still unpaid. Remaining risk: treating import as time-travel; emptying tables; live send; starting Super. ComputerVersion freeze remains 7122f279."
-  next_action: "Wait for staging deploy of the desktop+OG event_projection land. Global deploy preserves constructed-computer-version. Then owner-scoped choir computer refresh of the retained computer, then choir computer import-residue-snapshot so leftover session rows are replaced. Then restore-eligible pre-A checkpoint without weakening other EmptyUntilSupported tables. Do not present the ModeReceipt. Keep genesis 409. Keep Armed=false. Do not send live mail. Owner gates remain. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery for promotion. Do not declare new_epoch."
+  blocker_or_risk: "Replay is eligible at sequence 31. Checkpoint 409 because refresh dropped updater current, so served SPA is underivable. Checkpoint must import the trusted image baseline, then another owner-scoped refresh. Remaining risk: treating OwnerRecovery checkpoint as promotion; live send; starting Super. ComputerVersion freeze remains 7122f279."
+  next_action: "Wait for staging deploy of the checkpoint baseline-SPA land. Global deploy preserves constructed-computer-version. Then owner-scoped choir computer refresh of the retained computer, then choir computer checkpoint. Do not present the ModeReceipt. Keep genesis 409. Keep Armed=false. Do not send live mail. Owner gates remain. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery for promotion. Do not declare new_epoch."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -366,6 +366,38 @@ receipts:
       environment_identity: staging https://choir.news deployed 4ac90583
       deployed_acceptance: not_applicable
     registry_conformance_ref: not_applicable
+  - id: effects-checkpoint-baseline-spa-2026-08-16
+    boundary: execute
+    commit_or_artifact: docs/evidence/effects-checkpoint-baseline-spa-2026-08-16.md
+    proof_refs: [docs/evidence/effects-checkpoint-baseline-spa-2026-08-16.md, docs/evidence/effects-replay-eligible-spa-underivable-2026-08-16.md, internal/agentcore/rematerialize.go]
+    rollback_ref: revert this commit
+    disposition: "accepted as checkpoint trusted-baseline SPA import when updater current is missing — same /nix/store genesis/kernel root; not rematerialize; not genesis. Super not started. No live send."
+    problem_ref: not_applicable
+    authorization_ref: this Definition now.next_action after replay-eligible SPA 409
+    candidate_or_evidence_refs: [docs/evidence/effects-checkpoint-baseline-spa-2026-08-16.md]
+    landing:
+      source_commit: 06204346
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/31966792512
+      deploy_ref: 06204346a431f52347586b7f68d39a4d2b9c282a
+      environment_identity: staging https://choir.news deployed 06204346; retained epoch 275 mode propose_only generation 1; sequence 31 eligible; checkpoint 409 SPA underivable; constructed freeze 7122f279
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "effects remains entrypoint; baseline SPA import is not live proof and is not permission to start Super"
+  - id: effects-replay-eligible-spa-underivable-2026-08-16
+    boundary: execute
+    commit_or_artifact: docs/evidence/effects-replay-eligible-spa-underivable-2026-08-16.md
+    proof_refs: [docs/evidence/effects-replay-eligible-spa-underivable-2026-08-16.md]
+    rollback_ref: not_applicable
+    disposition: "accepted as live observation — replay eligible at sequence 31 after second residue import; checkpoint 409 served SPA underivable because refresh dropped updater current. Super not started. No live send."
+    problem_ref: not_applicable
+    authorization_ref: this Definition now.next_action after event_projection deploy
+    candidate_or_evidence_refs: [docs/evidence/effects-replay-eligible-spa-underivable-2026-08-16.md]
+    landing:
+      source_commit: 06204346
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/31966792512
+      deploy_ref: 06204346a431f52347586b7f68d39a4d2b9c282a
+      environment_identity: staging https://choir.news deployed 06204346; retained epoch 275; sequence 31 eligible; checkpoint 409
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "effects remains entrypoint; eligible replay is not live proof and is not permission to start Super"
   - id: effects-desktop-og-event-projection-2026-08-16
     boundary: execute
     commit_or_artifact: docs/evidence/effects-desktop-og-event-projection-2026-08-16.md
@@ -1239,7 +1271,8 @@ at all.
    reversible propose → qualified consensus → promote → consume tape-recovery
    restore → verify; irreversible propose → stronger qualified consensus →
    RecordingProvider dispatch → consequence receipt → crash-window correction.
-   No live send. Residue import appended at sequence 29. Super not started.
+   No live send. Replay eligible at sequence 31. Checkpoint still 409
+   served SPA underivable. Super not started.
 10. **Live proof (red).** Capsule authors A → consensus authorizes → promotes →
    played → falsified → B supersedes → restart proves B → total restore; then
    execute and receipt the exact acceptance email under its separate policy.

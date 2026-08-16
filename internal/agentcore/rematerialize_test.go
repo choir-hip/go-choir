@@ -559,6 +559,44 @@ func TestCheckpointBindRefusesLiveOnlyRowsAndMissingSPA(t *testing.T) {
 	}
 }
 
+func TestCheckpointComputerVersionPreservesPrefixedRefs(t *testing.T) {
+	got := checkpointComputerVersion(updater.ReleaseManifest{
+		CodeRef:            "code:sha256:" + strings.Repeat("d", 64),
+		ArtifactProgramRef: "artifact-program:sha256:" + strings.Repeat("e", 64),
+	})
+	if string(got.CodeRef) != "code:sha256:"+strings.Repeat("d", 64) {
+		t.Fatalf("prefixed code ref was rewritten: %q", got.CodeRef)
+	}
+	got = checkpointComputerVersion(updater.ReleaseManifest{
+		CodeRef:            strings.Repeat("d", 64),
+		ArtifactProgramRef: strings.Repeat("e", 64),
+	})
+	if string(got.CodeRef) != "code:sha256:"+strings.Repeat("d", 64) || string(got.ArtifactProgramRef) != "artifact-program:sha256:"+strings.Repeat("e", 64) {
+		t.Fatalf("bare hashes were not prefixed: %#v", got)
+	}
+}
+
+func TestCheckpointBindRefusesUntrustedBaselineWhenCurrentMissing(t *testing.T) {
+	computerID := "computer-checkpoint-untrusted-baseline"
+	storePath := filepath.Join(t.TempDir(), "runtime.db")
+	live, err := choirstore.Open(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	rt, _, _ := rematerializeTapeRuntime(t, computerID, storePath, live)
+	rt.selfdevUpdaterRoot = filepath.Join(t.TempDir(), "updater-empty")
+	t.Setenv("CHOIR_BASELINE_RELEASE_ROOT", t.TempDir())
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/checkpoint", nil)
+	request.Header.Set("X-Authenticated-User", "owner-checkpoint")
+	request.Header.Set("X-Authenticated-Computer", computerID)
+	response := httptest.NewRecorder()
+	NewAPIHandler(rt).HandleComputersRouter(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "served SPA is underivable") {
+		t.Fatalf("untrusted baseline checkpoint status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestCheckpointBindAcceptsEligibleRestoreSet(t *testing.T) {
 	computerID := "computer-checkpoint-eligible"
 	storePath := filepath.Join(t.TempDir(), "runtime.db")
