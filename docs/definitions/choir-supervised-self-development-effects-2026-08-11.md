@@ -94,7 +94,7 @@ start:
       - "concrete decision-policy schema, independence domains, quorum, dissent, abstention, timeout, recusal, replacement, and consequence-receipt contracts"
       - "whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata without a payload schema change — answered 2026-08-16: yes, via existing packet.sources typed URIs (operation:/capsule_bundle:/receipt:/event_head:) with no payload schema change; identities persist in revision metadata and typed citations, never prose"
       - "whether Texture production registry still omits update_coagent on the deployed staging build — source confirmation 2026-08-16: current main omits generic update_coagent on Texture (AllowCoAgentTools=false). Staging health 2026-08-16T02:05Z is 4543624b (product-path forward). CTS-safe: do not register the generic resolver. Deployed Texture-registry re-check of 466c0504 remains unpaid"
-      - "whether in-process rehearsal can walk reversible propose→consensus→promote→restore and irreversible propose→consensus→outbox without a live send — answered 2026-08-16 orange: yes, TestEffectsRehearsal. Red product-path smoke 2026-08-16 on 4543624b: genesis 409; start 503. Guest mode authority wired, then owner-scoped refresh on 21b79872. Live 409 2026-08-16T04:30Z: start returns current signed mode does not authorize proposal at mode off epoch 269. Guest kernel/route wiring landed 2026-08-16 (updater already mounted; WithSelfDevelopmentRoute now mounts; verifier remains unmounted). Live kernel still 503 until this commit deploys and owner-scoped refresh. Promote/restore red unpaid"
+      - "whether in-process rehearsal can walk reversible propose→consensus→promote→restore and irreversible propose→consensus→outbox without a live send — answered 2026-08-16 orange: yes, TestEffectsRehearsal. Red product-path smoke 2026-08-16 on 4543624b: genesis 409; start 503. Guest mode authority wired, then owner-scoped refresh on 21b79872. Live 409 2026-08-16T04:30Z: start returns current signed mode does not authorize proposal at mode off epoch 269. Guest kernel/route wiring landed 2026-08-16 (updater already mounted; WithSelfDevelopmentRoute now mounts; verifier remains unmounted). Live kernel 2026-08-16T05:08Z after 7eee9f10 deploy plus refresh 269→270: GET kernel-capabilities returns 200 signed KernelCapabilityReceipt (issuer choir-updater, lifecycle_generation 270). Start stays 409 at mode off. Promote/restore red unpaid"
       - "retained computer epoch 8253 / ak_45ce1796 classified 2026-08-15 as historical CTS residual, not current identity (paid restore epoch 268; key returns 401). Residual hygiene only; do not reopen tape-recovery"
 
 finish:
@@ -257,13 +257,13 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer/outbox/supervision/orange-rehearsal/product-path-forward/guest-mode-authority/owner-scoped-refresh/guest-kernel-route landed. Staging still 21b79872 until this commit deploys. Live start is 409 mode-off refuse at epoch 269. Kernel capabilities still 503 live. Mode off. Owner gates present. Effects remain OFF. Armed=false. Next: staging deploy, owner-scoped refresh, live kernel fail-closed probe, then red promote+restore without a live send."
+  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer/outbox/supervision/orange-rehearsal/product-path-forward/guest-mode-authority/owner-scoped-refresh/guest-kernel-route landed. Staging deployed 7eee9f10. Live start is 409 mode-off refuse at epoch 270. Live kernel-capabilities is 200 signed KernelCapabilityReceipt after owner-scoped refresh 269→270. Mode off. Owner gates present. Effects remain OFF. Armed=false. Verifier unmounted. Next: guest verifier wiring, then red promote+restore without a live send."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-16T04:40:00Z
-    source_ref: guest kernel/route wiring on parent main@d61fcd91; tests TestGuestKernelCapabilitiesRefuseUnmountedAuthority and TestGuestKernelCapabilitiesRefuseMissingComputerVersionRoute
-    deploy_identity: "staging https://choir.news/health still deployed_commit 21b79872 until this commit deploys. Retained computer-03335285269bdba4f94377e56879f9e6 epoch 269 mode off, constructed freeze 7122f279 still joined; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
+    observed_at: 2026-08-16T05:08:00Z
+    source_ref: live kernel capability receipt after staging 7eee9f10 plus owner-scoped refresh; docs/evidence/effects-red-kernel-route-live-2026-08-16.md
+    deploy_identity: "staging https://choir.news/health deployed_commit 7eee9f106cdb987b6a1c5846ae3bf2bdd94f0525 deployed_at 2026-08-16T05:04:03Z built_at 20260816043836. Retained computer-03335285269bdba4f94377e56879f9e6 epoch 270 mode off, constructed freeze 7122f279 still joined; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: 2026-08-16T00:25:00Z reconnection product + tests + receipt; parent dfcb8ad8
@@ -281,9 +281,9 @@ now:
     owner_ratification_ref: "owner correction 2026-08-13: irreversible effects are not outside the autonomy window; effect-specific multiagent consensus is the governing boundary, and human approval is optional as one possible consensus participant."
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
-  evidence_refs: [docs/evidence/effects-guest-kernel-route-2026-08-16.md, docs/evidence/effects-red-mode-off-refuse-2026-08-16.md, docs/evidence/effects-owner-guest-boot-refresh-2026-08-16.md, docs/evidence/effects-guest-mode-authority-2026-08-16.md, docs/evidence/effects-red-product-path-smoke-2026-08-16.md, docs/evidence/effects-product-path-forward-2026-08-16.md, docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "Live 409 is paid after owner-scoped refresh to epoch 269. Guest kernel/route is wired in source; staging 21b79872 still returns kernel capability authority unavailable until this commit deploys and the constructed guest is refreshed. Verifier remains unmounted, so the materializer stays inert. Remaining risk: treating unit kernel tests as live kernel proof; setting mode before live kernel fail-closed; rematerializing; deleting owner gates; arming a live send; using OwnerRecovery checkpoints for promotion; treating epoch 8253 as current (paid restore is 268). ComputerVersion freeze remains 7122f279. Red promote/restore and live proof remain unpaid."
-  next_action: "Guest kernel/route wiring is landed. Next: staging deploy of this commit, then choir computer refresh on computer-03335285269bdba4f94377e56879f9e6, then probe kernel-capabilities past kernel capability authority unavailable. Do not set mode yet. A later 503 (computer route identity unavailable / kernel capability receipt unavailable) is still fail-closed. Then red promote+restore without a live send. Do not send live mail. Owner gates remain. Effects remain OFF. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
+  evidence_refs: [docs/evidence/effects-red-kernel-route-live-2026-08-16.md, docs/evidence/effects-guest-kernel-route-2026-08-16.md, docs/evidence/effects-red-mode-off-refuse-2026-08-16.md, docs/evidence/effects-owner-guest-boot-refresh-2026-08-16.md, docs/evidence/effects-guest-mode-authority-2026-08-16.md, docs/evidence/effects-red-product-path-smoke-2026-08-16.md, docs/evidence/effects-product-path-forward-2026-08-16.md, docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
+  blocker_or_risk: "Live 409 and live kernel GET 200 are paid after owner-scoped refresh to epoch 270 on staging 7eee9f10. Verifier remains unmounted, so the materializer stays inert. Remaining risk: treating kernel GET 200 as live proof or as permission to set mode; rematerializing; deleting owner gates; arming a live send; using OwnerRecovery checkpoints for promotion; treating epoch 8253 as current (paid restore is 268). ComputerVersion freeze remains 7122f279. Red promote/restore and live proof remain unpaid."
+  next_action: "Live kernel-capabilities is 200 on computer-03335285269bdba4f94377e56879f9e6 epoch 270. Do not set mode yet. Next: wire guest WithSelfDevelopmentVerifier so the materializer can fail closed instead of remaining inert, then red promote+restore without a live send. Do not send live mail. Owner gates remain. Effects remain OFF. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -366,6 +366,22 @@ receipts:
       environment_identity: staging https://choir.news deployed 4ac90583
       deployed_acceptance: not_applicable
     registry_conformance_ref: not_applicable
+  - id: effects-red-kernel-route-live-2026-08-16
+    boundary: execute
+    commit_or_artifact: docs/evidence/effects-red-kernel-route-live-2026-08-16.md
+    proof_refs: [docs/evidence/effects-red-kernel-route-live-2026-08-16.md, docs/evidence/effects-guest-kernel-route-2026-08-16.md]
+    rollback_ref: revert this docs-only stamp
+    disposition: "accepted as live kernel capability receipt — staging 7eee9f10; choir computer refresh 269→270; GET kernel-capabilities 200 signed KernelCapabilityReceipt issuer choir-updater lifecycle_generation 270; start 409 current signed mode does not authorize proposal; genesis 409; mode off; no operation created. Verifier unmounted. No live send. Promote/restore red unpaid."
+    problem_ref: not_applicable
+    authorization_ref: this Definition now.next_action after guest kernel/route wiring
+    candidate_or_evidence_refs: [docs/evidence/effects-red-kernel-route-live-2026-08-16.md]
+    landing:
+      source_commit: 7eee9f10
+      ci_ref: "https://github.com/choir-hip/go-choir/actions/runs/31927114217"
+      deploy_ref: 7eee9f106cdb987b6a1c5846ae3bf2bdd94f0525
+      environment_identity: staging https://choir.news deployed 7eee9f10 at 2026-08-16T05:04:03Z; retained epoch 270 mode off; constructed freeze 7122f279
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "effects remains entrypoint; live kernel GET 200 is not live proof"
   - id: effects-guest-kernel-route-2026-08-16
     boundary: execute
     commit_or_artifact: docs/evidence/effects-guest-kernel-route-2026-08-16.md
@@ -951,9 +967,9 @@ at all.
    reversible propose → qualified consensus → promote → consume tape-recovery
    restore → verify; irreversible propose → stronger qualified consensus →
    RecordingProvider dispatch → consequence receipt → crash-window correction.
-   No live send. Owner-scoped refresh on 21b79872 advanced epoch 268→269.
-   Live start is 409 mode-off refuse. Guest kernel/route wired in source; live
-   kernel still 503 until deploy plus refresh. Promote/restore red unpaid.
+   No live send. Owner-scoped refresh on 7eee9f10 advanced epoch 269→270.
+   Live start is 409 mode-off refuse. Live kernel-capabilities is 200 signed
+   KernelCapabilityReceipt. Verifier remains unmounted. Promote/restore red unpaid.
 10. **Live proof (red).** Capsule authors A → consensus authorizes → promotes →
    played → falsified → B supersedes → restart proves B → total restore; then
    execute and receipt the exact acceptance email under its separate policy.
