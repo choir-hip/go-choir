@@ -14,12 +14,22 @@ import (
 )
 
 type projectedDesktopState struct {
-	OwnerID            string              `json:"owner_id"`
-	DesktopID          string              `json:"desktop_id"`
-	Windows            []types.WindowState `json:"windows"`
-	ActiveWindowID     string              `json:"active_window_id"`
-	UpdatedAt          time.Time           `json:"updated_at"`
-	CreatedBySessionID string              `json:"created_by_session_id,omitempty"`
+	OwnerID            string                     `json:"owner_id"`
+	DesktopID          string                     `json:"desktop_id"`
+	Windows            []types.WindowState        `json:"windows"`
+	ActiveWindowID     string                     `json:"active_window_id"`
+	UpdatedAt          time.Time                  `json:"updated_at"`
+	CreatedBySessionID string                     `json:"created_by_session_id,omitempty"`
+	Sessions           []projectedSessionIdentity `json:"sessions,omitempty"`
+}
+
+// projectedSessionIdentity is the witnessed session row. Presence fields
+// (last_input_at, driver_until, visibility_state, is_driver) are not tape
+// payloads and must not appear here.
+type projectedSessionIdentity struct {
+	SessionID       string `json:"session_id"`
+	DeviceID        string `json:"device_id,omitempty"`
+	ViewportProfile string `json:"viewport_profile,omitempty"`
 }
 
 func projectBatch(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch) error {
@@ -140,6 +150,29 @@ func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage) 
 			restoredGeometryJSON, stamp,
 		); err != nil {
 			return fmt.Errorf("insert projected placement: %w", err)
+		}
+	}
+	for _, session := range state.Sessions {
+		sessionID := strings.TrimSpace(session.SessionID)
+		if sessionID == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO desktop_sessions (
+				owner_id, desktop_id, session_id, device_id, viewport_profile,
+				visibility_state, last_input_at, driver_until, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, '', NULL, NULL, ?, ?)
+			ON DUPLICATE KEY UPDATE
+				device_id = VALUES(device_id),
+				viewport_profile = VALUES(viewport_profile),
+				visibility_state = '',
+				last_input_at = NULL,
+				driver_until = NULL,
+				updated_at = VALUES(updated_at)`,
+			ownerID, desktopID, sessionID, strings.TrimSpace(session.DeviceID),
+			strings.TrimSpace(session.ViewportProfile), stamp, stamp,
+		); err != nil {
+			return fmt.Errorf("project session identity: %w", err)
 		}
 	}
 	return nil

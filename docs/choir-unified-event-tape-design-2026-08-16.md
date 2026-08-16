@@ -263,10 +263,13 @@ These are now part of the design, not leftover review nits.
 
 Live writers are bound in autoputer: desktop driver saves and OG mutations append+project. Platform GET `/internal/computers/events/payload` is registered. Presence stays off Dolt.
 
+Residue import is implemented (`Store.ImportResidueSnapshot`) and tested. It is not executed live. Autoputer does not auto-import.
+
 Still unpaid:
 
-- co-import residue, then reclassify wired tables to `event_projection`
-- staging deploy of this guest+platform pair before treating reconstruct of projection batches as live proof
+- staging deploy of current main
+- live `ImportResidueSnapshot` on the retained computer
+- then reclassify wired tables to `event_projection`
 
 Then eligible pre-A checkpoint. Super still waits.
 
