@@ -722,6 +722,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case isComputerCheckpointPath(path):
 		h.HandleComputerWorkspaceReplace(w, r)
 		return
+	case isComputerImportResidueSnapshotPath(path):
+		h.HandleComputerWorkspaceReplace(w, r)
+		return
 	case isComputerBootstrapChainPath(path):
 		h.HandleComputerBootstrapChain(w, r)
 		return

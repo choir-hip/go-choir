@@ -229,6 +229,10 @@ func computerCheckpointComputerID(path string) (string, bool) {
 	return computerLifecycleGuestComputerID(path, "checkpoint")
 }
 
+func computerImportResidueSnapshotComputerID(path string) (string, bool) {
+	return computerLifecycleGuestComputerID(path, "import-residue-snapshot")
+}
+
 func isComputerWorkspaceReplacePath(path string) bool {
 	_, ok := computerWorkspaceReplaceComputerID(path)
 	return ok
@@ -249,6 +253,11 @@ func isComputerCheckpointPath(path string) bool {
 	return ok
 }
 
+func isComputerImportResidueSnapshotPath(path string) bool {
+	_, ok := computerImportResidueSnapshotComputerID(path)
+	return ok
+}
+
 func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.Request) {
 	computerID, ok := computerWorkspaceReplaceComputerID(r.URL.Path)
 	if !ok {
@@ -259,6 +268,9 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 	}
 	if !ok {
 		computerID, ok = computerCheckpointComputerID(r.URL.Path)
+	}
+	if !ok {
+		computerID, ok = computerImportResidueSnapshotComputerID(r.URL.Path)
 	}
 	if !ok {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})

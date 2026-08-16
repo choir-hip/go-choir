@@ -36,6 +36,12 @@ func TestParseComputerLifecyclePathRejectsWorkspaceReplace(t *testing.T) {
 	if _, ok := computerCheckpointComputerID("/api/computers/computer-a/lifecycle/checkpoint"); !ok {
 		t.Fatal("checkpoint bind path should parse")
 	}
+	if _, _, ok := parseComputerLifecyclePath("/api/computers/computer-a/lifecycle/import-residue-snapshot"); ok {
+		t.Fatal("residue import must not use VM lifecycle control")
+	}
+	if _, ok := computerImportResidueSnapshotComputerID("/api/computers/computer-a/lifecycle/import-residue-snapshot"); !ok {
+		t.Fatal("residue import path should parse")
+	}
 	for path, want := range map[string]bool{
 		"/api/computers/computer-a/lifecycle/replace-workspace":        true,
 		"/api/computers//lifecycle/replace-workspace":                  false,
@@ -256,6 +262,73 @@ func TestRestoreForwardsOwnedComputerAndTrustedBinding(t *testing.T) {
 	}
 	if corpusdCalls != 0 || stops != 0 || resolves != 0 {
 		t.Fatalf("tape restore used corpusd=%d stops=%d resolves=%d", corpusdCalls, stops, resolves)
+	}
+}
+
+func TestImportResidueSnapshotForwardsOwnedComputerAndTrustedBinding(t *testing.T) {
+	var gotUser, gotComputer, gotPath, gotMethod string
+	var corpusdCalls, stops, resolves int
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUser = r.Header.Get("X-Authenticated-User")
+		gotComputer = r.Header.Get("X-Authenticated-Computer")
+		gotPath = r.URL.Path
+		gotMethod = r.Method
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"computer_id": "computer-a", "appended": false,
+		})
+	}))
+	defer autoputer.Close()
+
+	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/internal/vmctl/lookup":
+			if r.URL.Query().Get("computer_id") != "computer-a" || r.URL.Query().Get("user_id") != "owner-user" {
+				http.NotFound(w, r)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"computer_id": "computer-a", "desktop_id": "primary", "user_id": "owner-user",
+				"state": "active", "computer_url": autoputer.URL,
+			})
+		case "/internal/vmctl/stop":
+			stops++
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		case "/internal/vmctl/resolve":
+			resolves++
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"computer_id": "computer-a", "desktop_id": "primary", "user_id": "owner-user",
+				"state": "active", "computer_url": autoputer.URL,
+			})
+		default:
+			t.Fatalf("unexpected vmctl path %s", r.URL.Path)
+		}
+	}))
+	defer ownership.Close()
+
+	corpusd := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		corpusdCalls++
+		t.Fatal("residue import must not call lifecycle control")
+	}))
+	defer corpusd.Close()
+
+	handler, privateKey, _, _ := testProxyEnvWithAuthStore(t)
+	handler.cfg.CorpusdURL = corpusd.URL
+	handler.corpusd = corpusd.Client()
+	handler.vmctlClient = vmctl.NewClient(ownership.URL)
+
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/lifecycle/import-residue-snapshot", nil)
+	request.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(privateKey, "owner-user")})
+	response := httptest.NewRecorder()
+	handler.HandleAPI(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("residue import status=%d body=%s", response.Code, response.Body.String())
+	}
+	if gotUser != "owner-user" || gotComputer != "computer-a" || gotPath != request.URL.Path || gotMethod != http.MethodPost {
+		t.Fatalf("upstream binding user=%q computer=%q path=%q method=%q", gotUser, gotComputer, gotPath, gotMethod)
+	}
+	if corpusdCalls != 0 || stops != 0 || resolves != 0 {
+		t.Fatalf("residue import used corpusd=%d stops=%d resolves=%d", corpusdCalls, stops, resolves)
 	}
 }
 
