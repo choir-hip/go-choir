@@ -1270,3 +1270,49 @@ func TestLifecycleResearcherAdmissionErrorPassivationRecoversOnce(t *testing.T) 
 		t.Fatalf("recovery silently settled open responsibility: %s", work.Status)
 	}
 }
+
+func TestUpdateCoagentAcceptsJoinableIdentitySourcesWithoutSchemaChange(t *testing.T) {
+	rt, s := testRuntime(t)
+	d9InstallTools(t, rt)
+	ownerID := "user-joinable-packet"
+	docID := "doc-joinable-packet"
+	researcherRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "joinable-packet", agentprofile.Researcher)
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolContextForTestCall(researcherRun, "call-joinable-packet"), "update_coagent", json.RawMessage(`{
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"evidence_update",
+		"summary":"freeze identities for supervision",
+		"agent_id":"texture:doc-joinable-packet",
+		"sources":[
+			{"source_id":"src-operation","kind":"capsule_bundle","target":{"uri":"operation:operation-joinable-1"}},
+			{"source_id":"src-bundle","kind":"capsule_bundle","target":{"uri":"capsule_bundle:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}},
+			{"source_id":"src-receipt","kind":"capsule_bundle","target":{"uri":"receipt:1111111111111111111111111111111111111111111111111111111111111111"}},
+			{"source_id":"src-head","kind":"capsule_bundle","target":{"uri":"event_head:2222222222222222222222222222222222222222222222222222222222222222"}}
+		],
+		"claims":[{"text":"The frozen bundle is ready to cite.","source_ids":["src-bundle"],"stance":"supports"}]
+	}`))
+	if err != nil {
+		t.Fatalf("joinable identity packet rejected: %v", err)
+	}
+	stored := lifecycleUpdateFromToolOutput(t, s, researcherRun, raw)
+	if len(stored.Packet.Sources) != 4 {
+		t.Fatalf("sources = %#v", stored.Packet.Sources)
+	}
+}
+
+func TestUpdateCoagentRejectsUnknownJoinableSourceKind(t *testing.T) {
+	rt, s := testRuntime(t)
+	d9InstallTools(t, rt)
+	ownerID := "user-joinable-kind"
+	docID := "doc-joinable-kind"
+	researcherRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "joinable-kind", agentprofile.Researcher)
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolContextForTestCall(researcherRun, "call-joinable-kind"), "update_coagent", json.RawMessage(`{
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"evidence_update",
+		"summary":"unknown source kind must remain refused",
+		"agent_id":"texture:doc-joinable-kind",
+		"sources":[{"source_id":"src-operation","kind":"operation","target":{"uri":"operation:operation-joinable-1"}}],
+		"claims":[{"text":"Should not land.","source_ids":["src-operation"]}]
+	}`)); err == nil {
+		t.Fatal("update_coagent accepted unknown source kind operation")
+	}
+}

@@ -74,9 +74,19 @@ func (rt *Handler) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 	for key, value := range workerUpdateMeta {
 		meta[key] = value
 	}
+	join := selfDevelopmentJoinFromSourceEntities(decodeAvailableTextureSourceEntities(rec.Metadata))
+	if pending := rt.evidenceSourceEntitiesFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12); len(pending) > 0 {
+		for key, value := range selfDevelopmentJoinFromSourceEntities(pending) {
+			if strings.TrimSpace(join[key]) == "" {
+				join[key] = value
+			}
+		}
+	}
+	mergeSelfDevelopmentJoinIntoMetadata(meta, join)
 	// Available source entities are run-time prompt context, not durable revision metadata.
 	// Keep them out of the persisted revision so they do not leak into the next run's parent
 	// revision projection and are recomputed from the actual revision's source_entities.
+	// Joinable self-development identities stay in dedicated durable keys, never in prose.
 	delete(meta, textureAvailableSourceEntitiesKey)
 
 	data, err := json.Marshal(meta)

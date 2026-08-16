@@ -92,8 +92,8 @@ start:
       - "serving_join: two computers plus unsigned platform shell serve three distinct index.html hashes"
     still_open:
       - "concrete decision-policy schema, independence domains, quorum, dissent, abstention, timeout, recusal, replacement, and consequence-receipt contracts"
-      - "whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata without a payload schema change"
-      - "whether Texture production registry still omits update_coagent on the deployed staging build"
+      - "whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata without a payload schema change — answered 2026-08-16: yes, via existing packet.sources typed URIs (operation:/capsule_bundle:/receipt:/event_head:) with no payload schema change; identities persist in revision metadata and typed citations, never prose"
+      - "whether Texture production registry still omits update_coagent on the deployed staging build — source confirmation 2026-08-16: current main omits generic update_coagent on Texture (AllowCoAgentTools=false; production registry is get_run_memory_entry plus patch/rewrite/record_decision/request_email_draft). Staging 4ac90583 is older and also omits it. CTS-safe: do not register the generic resolver. Upward path is assigned CoSuper update_coagent then Super report_to_texture. Deployed re-check remains unpaid until a later deploy"
       - "retained computer epoch 8253 / ak_45ce1796 classified 2026-08-15 as historical CTS residual, not current identity (paid restore epoch 268; key returns 401). Residual hygiene only; do not reopen tape-recovery"
 
 finish:
@@ -256,12 +256,12 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer landed. irreversible-email-v1 + human-required-v1 ACCEPT. Trusted-outbox dispatch implemented with Armed=false (no live send). Owner gates still present. Effects remain OFF. Next: supervision wiring then rehearsal."
+  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer/outbox landed. Supervision wiring confirmed: joinable identities ride packet.sources with no payload schema change; Texture omits generic update_coagent by design. Owner gates still present. Effects remain OFF. Next: rehearsal."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-16T01:50:00Z
-    source_ref: trusted-outbox dispatch on parent main@ede00140; staging product still 4ac90583
+    observed_at: 2026-08-16T02:20:00Z
+    source_ref: supervision wiring on parent main@3141b90b; staging product still 4ac90583
     deploy_identity: "staging deployed 4ac90583 at 2026-08-14T23:24:20Z; retained computer-03335285269bdba4f94377e56879f9e6 epoch 268; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
@@ -280,9 +280,9 @@ now:
     owner_ratification_ref: "owner correction 2026-08-13: irreversible effects are not outside the autonomy window; effect-specific multiagent consensus is the governing boundary, and human approval is optional as one possible consensus participant."
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
-  evidence_refs: [docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "None for trusted-outbox land. Remaining risk: deleting fail-closed owner gates before deployed acceptance of the consensus path; arming a live send before rehearsal; using OwnerRecovery checkpoints for promotion (route projection already refuses); treating epoch 8253 as the current retained epoch (paid restore is epoch 268). Kill-loop problem repaired at db265d1e is not current readiness proof. Supervision and rehearsal remain unpaid."
-  next_action: "Route map 7 dispatch is implemented with Armed=false. Next: supervision wiring (route map 8), then rehearsal (route map 9). Do not send live mail. Owner gates remain until deployed acceptance of the consensus path. Effects remain OFF. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
+  evidence_refs: [docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
+  blocker_or_risk: "None for supervision-wiring land. Remaining risk: deleting fail-closed owner gates before deployed acceptance of the consensus path; arming a live send before rehearsal; using OwnerRecovery checkpoints for promotion (route projection already refuses); treating epoch 8253 as the current retained epoch (paid restore is epoch 268). Kill-loop problem repaired at db265d1e is not current readiness proof. Rehearsal remains unpaid."
+  next_action: "Route map 8 supervision wiring is source-confirmed. Next: rehearsal (route map 9). Do not send live mail. Owner gates remain until deployed acceptance of the consensus path. Effects remain OFF. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -365,6 +365,22 @@ receipts:
       environment_identity: staging https://choir.news deployed 4ac90583
       deployed_acceptance: not_applicable
     registry_conformance_ref: not_applicable
+  - id: effects-supervision-wiring-2026-08-16
+    boundary: execute
+    commit_or_artifact: docs/evidence/effects-supervision-wiring-2026-08-16.md
+    proof_refs: [docs/evidence/effects-supervision-wiring-2026-08-16.md, internal/textureowner/texture_evidence_sources.go, internal/textureowner/texture_revision_metadata.go, internal/textureowner/texture_task_types.go, internal/agentcore/tool_profiles.go, internal/agentcore/self_development_decision_binding.go, internal/platform/self_development_modes.go]
+    rollback_ref: revert this supervision-wiring commit
+    disposition: "accepted as route-map-8 source confirmation — joinable identities without payload schema change; Texture omits generic update_coagent by design. Owner gates unchanged. Effects remain OFF. Rehearsal unpaid."
+    problem_ref: not_applicable
+    authorization_ref: this Definition now.next_action after trusted-outbox land
+    candidate_or_evidence_refs: [docs/evidence/effects-supervision-wiring-2026-08-16.md]
+    landing:
+      source_commit: 3141b90b
+      ci_ref: pending
+      deploy_ref: 4ac90583e389e3334efa57ce204d6df3235a68f1
+      environment_identity: staging https://choir.news deployed 4ac90583; retained epoch 268
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "effects remains entrypoint; supervision wiring is an execute slice, not completion"
   - id: effects-trusted-outbox-2026-08-16
     boundary: execute
     commit_or_artifact: docs/evidence/effects-trusted-outbox-2026-08-16.md
@@ -812,8 +828,12 @@ at all.
    policy refuses the subject; irreversible-email-v1 authorizes without a human
    seat; human-required-v1 refuses when that seat is absent. `Armed=false`.
    Rehearsal still unpaid.
-8. **Supervision wiring (green).** Confirm the upward packet carries joinable
-   identities and that Texture's production registry has `update_coagent`.
+8. **Supervision wiring (green, implemented 2026-08-16, source confirmation).**
+   Joinable identities ride existing `packet.sources` typed URIs into Texture
+   revision metadata and typed citations with no payload schema change. Texture's
+   production registry omits generic `update_coagent` by design (CTS-safe);
+   Super holds `update_coagent` plus `report_to_texture`; assigned CoSuper holds
+   `update_coagent`. Rehearsal unpaid.
 9. **Rehearsal (orange→red).** Reversible change: propose → qualified consensus
    → promote → write state → total restore → verify. Irreversible send: propose
    → stronger qualified consensus → outbox/provider delivery → consequence

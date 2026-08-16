@@ -150,7 +150,7 @@ func sourceEntityFromWorkerUpdateRef(ctx context.Context, rt *Handler, ownerID, 
 			return textureSourceEntity{}
 		}
 		return evidenceRecordToSourceEntity(rec)
-	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "capsule_bundle", "screenshot", "video_artifact", "benchmark_log", "file_artifact":
+	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "capsule_bundle", "screenshot", "video_artifact", "benchmark_log", "file_artifact", "operation", "receipt", "event_head":
 		return executionEvidenceSourceEntity(key, value, value, "coagent")
 	default:
 		return textureSourceEntity{}
@@ -679,6 +679,12 @@ func normalizeWorkerUpdateRefKey(key string) string {
 		return "benchmark_log"
 	case "file", "file_artifact", "artifact":
 		return "file_artifact"
+	case "operation", "operation_id", "self_development_operation":
+		return "operation"
+	case "receipt", "receipt_id", "consensus_receipt":
+		return "receipt"
+	case "event_head", "head", "canonical_event_head":
+		return "event_head"
 	default:
 		return ""
 	}
@@ -704,7 +710,7 @@ func executionEvidenceTarget(rec types.EvidenceRecord) (string, string) {
 
 func executionTargetKind(kind string) bool {
 	switch strings.TrimSpace(kind) {
-	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "capsule_bundle", "screenshot", "video_artifact", "benchmark_log", "file_artifact":
+	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "capsule_bundle", "screenshot", "video_artifact", "benchmark_log", "file_artifact", "operation", "receipt", "event_head":
 		return true
 	default:
 		return false
@@ -785,6 +791,12 @@ func executionSourceDefaultLabel(kind string) string {
 		return "Benchmark log"
 	case "file_artifact":
 		return "File artifact"
+	case "operation":
+		return "Self-development operation"
+	case "receipt":
+		return "Consensus receipt"
+	case "event_head":
+		return "Event head"
 	default:
 		return "Coagent source"
 	}
@@ -850,4 +862,69 @@ func (rt *Handler) evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx con
 		return nil, nil
 	}
 	return rt.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, updates)
+}
+
+func selfDevelopmentJoinFromPacketSources(sources []types.CoagentPacketSource) map[string]string {
+	out := map[string]string{}
+	for _, source := range sources {
+		key, value := splitTypedWorkerUpdateRef(strings.TrimSpace(source.Target.URI))
+		if value == "" {
+			continue
+		}
+		switch key {
+		case "operation":
+			out[textureJoinOperationID] = value
+		case "capsule_bundle":
+			out[textureJoinBundleDigest] = value
+		case "receipt":
+			out[textureJoinReceiptID] = value
+		case "event_head":
+			out[textureJoinEventHead] = value
+		}
+	}
+	return out
+}
+
+func selfDevelopmentJoinFromSourceEntities(entities []textureSourceEntity) map[string]string {
+	out := map[string]string{}
+	for _, entity := range entities {
+		identity := firstNonEmpty(strings.TrimSpace(entity.Target.PublicRecordID), strings.TrimSpace(entity.Target.FilePath))
+		if identity == "" {
+			continue
+		}
+		switch strings.TrimSpace(entity.Kind) {
+		case "operation":
+			out[textureJoinOperationID] = identity
+		case "capsule_bundle":
+			out[textureJoinBundleDigest] = identity
+		case "receipt":
+			out[textureJoinReceiptID] = identity
+		case "event_head":
+			out[textureJoinEventHead] = identity
+		}
+	}
+	return out
+}
+
+func selfDevelopmentJoinFromWorkerUpdates(updates []types.CoagentSourcePacket) map[string]string {
+	out := map[string]string{}
+	for _, update := range updates {
+		for key, value := range selfDevelopmentJoinFromPacketSources(update.Packet.Sources) {
+			if strings.TrimSpace(out[key]) == "" {
+				out[key] = value
+			}
+		}
+	}
+	return out
+}
+
+func mergeSelfDevelopmentJoinIntoMetadata(meta map[string]any, join map[string]string) {
+	if meta == nil {
+		return
+	}
+	for _, key := range []string{textureJoinOperationID, textureJoinBundleDigest, textureJoinReceiptID, textureJoinEventHead} {
+		if value := strings.TrimSpace(join[key]); value != "" {
+			meta[key] = value
+		}
+	}
 }

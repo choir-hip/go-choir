@@ -784,3 +784,116 @@ func assertExecutionEntity(t *testing.T, entities []textureSourceEntity, kind, i
 	}
 	t.Fatalf("missing execution source kind=%s identity=%s label~%q in %#v", kind, identity, labelNeedle, entities)
 }
+
+func TestSelfDevelopmentJoinableIdentitiesRideExistingPacketSources(t *testing.T) {
+	operationID := "operation-join-1"
+	bundleDigest := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	receiptID := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	eventHead := "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	sources := []types.CoagentPacketSource{
+		coagentSourceFromURI("src-operation", sourcecontract.SourceKindCapsuleBundle, "operation:"+operationID, ""),
+		coagentSourceFromURI("src-bundle", sourcecontract.SourceKindCapsuleBundle, "capsule_bundle:"+bundleDigest, ""),
+		coagentSourceFromURI("src-receipt", sourcecontract.SourceKindCapsuleBundle, "receipt:"+receiptID, ""),
+		coagentSourceFromURI("src-head", sourcecontract.SourceKindCapsuleBundle, "event_head:"+eventHead, ""),
+	}
+	update := types.CoagentSourcePacket{
+		OwnerID: "owner-joinable",
+		AgentID: "super:joinable",
+		Role:    agentprofile.Super,
+		Packet: types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "evidence_update",
+			Summary:       "capsule freeze is ready",
+			Notes:         []string{"do not scrape operation-join-1 from this prose"},
+			Sources:       sources,
+		},
+	}
+	entities := (*Handler)(nil).evidenceSourceEntitiesFromWorkerUpdates(context.Background(), update.OwnerID, []types.CoagentSourcePacket{update})
+	assertExecutionEntity(t, entities, "operation", operationID, "")
+	assertExecutionEntity(t, entities, "capsule_bundle", bundleDigest, "")
+	assertExecutionEntity(t, entities, "receipt", receiptID, "")
+	assertExecutionEntity(t, entities, "event_head", eventHead, "")
+	join := selfDevelopmentJoinFromWorkerUpdates([]types.CoagentSourcePacket{update})
+	if join[textureJoinOperationID] != operationID || join[textureJoinBundleDigest] != bundleDigest ||
+		join[textureJoinReceiptID] != receiptID || join[textureJoinEventHead] != eventHead {
+		t.Fatalf("join = %#v", join)
+	}
+}
+
+func TestSelfDevelopmentJoinIgnoresProseAndPersistsInRevisionMetadata(t *testing.T) {
+	t.Parallel()
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := "user-joinable-metadata"
+	docID := "doc-joinable-metadata"
+	operationID := "operation-meta-1"
+	bundleDigest := "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+	doc := types.Document{DocID: docID, OwnerID: ownerID, Title: "Joinable identities"}
+	if err := handler.Store.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	parent := types.Revision{
+		RevisionID: "rev-joinable-parent", DocID: docID, OwnerID: ownerID,
+		AuthorKind: types.AuthorUser, Content: "Human prose without machine identifiers.",
+		Citations: json.RawMessage("[]"), CreatedAt: now, Metadata: json.RawMessage("{}"),
+	}
+	if err := handler.Store.CreateRevision(ctx, parent); err != nil {
+		t.Fatalf("CreateRevision: %v", err)
+	}
+	doc.CurrentRevisionID = parent.RevisionID
+	entities := []textureSourceEntity{
+		executionEvidenceSourceEntity("operation", operationID, operationID, "super"),
+		executionEvidenceSourceEntity("capsule_bundle", bundleDigest, bundleDigest, "super"),
+		executionEvidenceSourceEntity("receipt", "receipt-meta-1", "receipt-meta-1", "super"),
+		executionEvidenceSourceEntity("event_head", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "super"),
+	}
+	rec := &types.RunRecord{
+		RunID: "run-joinable-metadata", OwnerID: ownerID, AgentID: currentTextureAgentID(docID),
+		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, ChannelID: docID,
+		Metadata: map[string]any{
+			"type": textureAgentRevisionTaskType, "request_source": "update_coagent", "doc_id": docID,
+		},
+	}
+	mergeTextureSourceEntitiesIntoRunMetadata(rec, entities)
+	result := handler.buildAppagentRevisionMetadata(ctx, rec, doc, ownerID, nil, 0)
+	meta := decodeRevisionMetadata(result)
+	if meta[textureJoinOperationID] != operationID || meta[textureJoinBundleDigest] != bundleDigest {
+		t.Fatalf("joinable metadata missing: %#v", meta)
+	}
+	if meta[textureJoinReceiptID] != "receipt-meta-1" || meta[textureJoinEventHead] != "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" {
+		t.Fatalf("joinable receipt/head missing: %#v", meta)
+	}
+	if _, ok := meta[textureAvailableSourceEntitiesKey]; ok {
+		t.Fatalf("available source entities leaked into revision metadata: %#v", meta[textureAvailableSourceEntitiesKey])
+	}
+	if strings.Contains(parent.Content, operationID) || strings.Contains(parent.Content, bundleDigest) {
+		t.Fatal("prose unexpectedly contained machine identifiers")
+	}
+}
+
+func TestTextureProductionRegistryOmitsGenericUpdateCoagent(t *testing.T) {
+	t.Parallel()
+	core, handler := testAPISetup(t)
+	if err := core.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatalf("InstallDefaultAgentTools: %v", err)
+	}
+	registry := core.ToolRegistryForProfile(agentprofile.Texture)
+	if err := RegisterTools(registry, handler); err != nil {
+		t.Fatalf("RegisterTools: %v", err)
+	}
+	if _, ok := registry.Lookup("update_coagent"); ok {
+		t.Fatal("Texture production registry exposed generic update_coagent")
+	}
+	for _, name := range []string{"patch_texture", "rewrite_texture", "record_texture_decision"} {
+		if _, ok := registry.Lookup(name); !ok {
+			t.Fatalf("Texture production registry missing %s", name)
+		}
+	}
+	if _, ok := core.ToolRegistryForProfile(agentprofile.Super).Lookup("update_coagent"); !ok {
+		t.Fatal("Super registry omitted update_coagent")
+	}
+	if _, ok := core.ToolRegistryForProfile(agentprofile.Super).Lookup("report_to_texture"); !ok {
+		t.Fatal("Super registry omitted report_to_texture")
+	}
+}

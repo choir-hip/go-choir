@@ -19,6 +19,10 @@ const (
 	textureMetadataPromptUnixTS           = "prompt_unix_ts"
 	canonicalTextureSourcePathMetadataKey = "canonical_texture_source_path"
 	textureAvailableSourceEntitiesKey     = "texture_available_source_entities"
+	textureJoinOperationID                = "self_development_operation_id"
+	textureJoinBundleDigest               = "self_development_bundle_digest"
+	textureJoinReceiptID                  = "self_development_receipt_id"
+	textureJoinEventHead                  = "self_development_event_head"
 	runMetadataExplicitResearcher         = "explicit_researcher_request"
 	runMetadataProcessorKey               = "processor_key"
 	runMetadataReconcilerScope            = "reconciler_scope"
@@ -62,6 +66,10 @@ var durableMetadataKeys = []string{
 	"owner_email",
 	"llm_policy_overlay_id",
 	textureAvailableSourceEntitiesKey,
+	textureJoinOperationID,
+	textureJoinBundleDigest,
+	textureJoinReceiptID,
+	textureJoinEventHead,
 }
 
 func isTextureAgentRevisionTaskType(value string) bool {
