@@ -171,24 +171,123 @@ func TestReplayCompletenessPathUsesOwnedComputerAndTrustedBinding(t *testing.T) 
 	}
 }
 
-func TestPublicDecisionRefusesEffectsOff(t *testing.T) {
+func TestPublicGenesisRemainsEffectsDisabled(t *testing.T) {
 	handler, _, autoputer := testProxyEnv(t)
 	defer autoputer.Close()
-	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-decision/self-development/operations/operation-decision/decision", strings.NewReader(`{"decision":"reject"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/self-development/genesis", strings.NewReader(`{}`))
 	response := httptest.NewRecorder()
 	handler.HandleAPI(response, request)
-	if response.Code != http.StatusConflict {
-		t.Fatalf("effects-OFF decision status=%d body=%s", response.Code, response.Body.String())
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "self-development effects are disabled") {
+		t.Fatalf("genesis status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
-func TestPublicProposalRefusesEffectsOff(t *testing.T) {
+func TestPublicProposalAndDecisionRequireAuthThenForwardGuestRefuse(t *testing.T) {
 	handler, _, autoputer := testProxyEnv(t)
 	defer autoputer.Close()
-	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-propose/self-development/operations", strings.NewReader(`{"idempotency_key":"proposal-mode","prompt":"change runtime"}`))
+	proposal := httptest.NewRequest(http.MethodPost, "/api/computers/computer-propose/self-development/operations", strings.NewReader(`{"idempotency_key":"proposal-mode","prompt":"change runtime"}`))
+	proposalResponse := httptest.NewRecorder()
+	handler.HandleAPI(proposalResponse, proposal)
+	if proposalResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated proposal status=%d body=%s", proposalResponse.Code, proposalResponse.Body.String())
+	}
+	decision := httptest.NewRequest(http.MethodPost, "/api/computers/computer-decision/self-development/operations/operation-decision/decision", strings.NewReader(`{"decision":"reject"}`))
+	decisionResponse := httptest.NewRecorder()
+	handler.HandleAPI(decisionResponse, decision)
+	if decisionResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated decision status=%d body=%s", decisionResponse.Code, decisionResponse.Body.String())
+	}
+}
+
+func TestSelfDevelopmentGuestForwardsProposeAndPassesModeOffRefuse(t *testing.T) {
+	var gotUser, gotComputer, gotPath, gotMethod string
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUser = r.Header.Get("X-Authenticated-User")
+		gotComputer = r.Header.Get("X-Authenticated-Computer")
+		gotPath = r.URL.Path
+		gotMethod = r.Method
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error":"current signed mode does not authorize proposal"}`))
+	}))
+	defer autoputer.Close()
+	handler, _, _, store := testProxyEnvWithAuthStore(t)
+	user, err := store.CreateUser("selfdev-propose-user", "selfdev-propose@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, secret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, "propose", []string{"computer:self_development:propose"}, "computer-a", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"computer_id": "computer-a", "desktop_id": "primary", "user_id": user.ID,
+			"state": "active", "computer_url": autoputer.URL,
+		})
+	}))
+	defer ownership.Close()
+	handler.vmctlClient = vmctl.NewClient(ownership.URL)
+
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/self-development/operations", strings.NewReader(`{"idempotency_key":"proposal-mode","prompt":"change runtime"}`))
+	request.Header.Set("Authorization", "Bearer "+secret)
+	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	handler.HandleAPI(response, request)
 	if response.Code != http.StatusConflict {
-		t.Fatalf("effects-OFF proposal status=%d body=%s", response.Code, response.Body.String())
+		t.Fatalf("mode-off proposal status=%d body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "does not authorize proposal") {
+		t.Fatalf("guest refuse not forwarded: %s", response.Body.String())
+	}
+	if gotUser != user.ID || gotComputer != "computer-a" || gotPath != "/api/computers/computer-a/self-development/operations" || gotMethod != http.MethodPost {
+		t.Fatalf("upstream binding user=%q computer=%q path=%q method=%q", gotUser, gotComputer, gotPath, gotMethod)
+	}
+
+	denied := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/self-development/operations", strings.NewReader(`{"idempotency_key":"proposal-mode","prompt":"change runtime"}`))
+	_, readSecret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, "read2", []string{"computer:self_development:read"}, "computer-a", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	denied.Header.Set("Authorization", "Bearer "+readSecret)
+	deniedResponse := httptest.NewRecorder()
+	handler.HandleAPI(deniedResponse, denied)
+	if deniedResponse.Code != http.StatusForbidden {
+		t.Fatalf("read-scope propose status=%d body=%s", deniedResponse.Code, deniedResponse.Body.String())
+	}
+}
+
+func TestSelfDevelopmentGuestForwardsDecisionWithApproveScope(t *testing.T) {
+	var gotPath string
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error":"current signed mode does not authorize proposal"}`))
+	}))
+	defer autoputer.Close()
+	handler, _, _, store := testProxyEnvWithAuthStore(t)
+	user, err := store.CreateUser("selfdev-approve-user", "selfdev-approve@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, secret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, "approve", []string{"computer:self_development:approve"}, "computer-a", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"computer_id": "computer-a", "desktop_id": "primary", "user_id": user.ID,
+			"state": "active", "computer_url": autoputer.URL,
+		})
+	}))
+	defer ownership.Close()
+	handler.vmctlClient = vmctl.NewClient(ownership.URL)
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/self-development/operations/operation-a/decision", strings.NewReader(`{"decision":"reject"}`))
+	request.Header.Set("Authorization", "Bearer "+secret)
+	response := httptest.NewRecorder()
+	handler.HandleAPI(response, request)
+	if response.Code != http.StatusConflict || gotPath != "/api/computers/computer-a/self-development/operations/operation-a/decision" {
+		t.Fatalf("decision status=%d path=%q body=%s", response.Code, gotPath, response.Body.String())
 	}
 }

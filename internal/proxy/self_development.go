@@ -8,6 +8,59 @@ import (
 	"strings"
 )
 
+func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool) {
+	const prefix = "/api/computers/"
+	if !strings.HasPrefix(path, prefix) {
+		return "", "", false
+	}
+	rest := strings.TrimPrefix(path, prefix)
+	rawID, after, found := strings.Cut(rest, "/self-development/")
+	if !found || strings.TrimSpace(rawID) == "" || strings.Contains(rawID, "/") || strings.TrimSpace(after) == "" {
+		return "", "", false
+	}
+	decoded, err := url.PathUnescape(rawID)
+	if err != nil || strings.TrimSpace(decoded) == "" {
+		return "", "", false
+	}
+	switch strings.TrimSpace(after) {
+	case "mode", "replay-completeness", "genesis":
+		return "", "", false
+	case "operations":
+		return strings.TrimSpace(decoded), "propose", true
+	case "rollbacks":
+		return strings.TrimSpace(decoded), "rollback", true
+	case "kernel-capabilities":
+		return strings.TrimSpace(decoded), "read", true
+	}
+	parts := strings.Split(strings.Trim(after, "/"), "/")
+	if len(parts) == 2 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" {
+		return strings.TrimSpace(decoded), "read", true
+	}
+	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && parts[2] == "decision" {
+		return strings.TrimSpace(decoded), "approve", true
+	}
+	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && parts[2] == "receipts" {
+		return strings.TrimSpace(decoded), "read", true
+	}
+	return "", "", false
+}
+
+func isSelfDevelopmentGuestPath(path string) bool {
+	_, _, ok := selfDevelopmentGuestRoute(path)
+	return ok
+}
+
+func selfDevelopmentGuestMethodAllowed(method, action string) bool {
+	switch action {
+	case "propose", "approve", "rollback":
+		return method == http.MethodPost
+	case "read":
+		return method == http.MethodGet
+	default:
+		return false
+	}
+}
+
 func selfDevelopmentModeComputerID(path string) (string, bool) {
 
 	const prefix = "/api/computers/"
@@ -222,6 +275,109 @@ func (h *Handler) HandleSelfDevelopmentReplayCompleteness(w http.ResponseWriter,
 	body, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "invalid replay completeness response"})
+		return
+	}
+	if contentType := response.Header.Get("Content-Type"); contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+	w.WriteHeader(response.StatusCode)
+	_, _ = w.Write(body)
+}
+
+func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Request) {
+	computerID, action, ok := selfDevelopmentGuestRoute(r.URL.Path)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
+		return
+	}
+	if !selfDevelopmentGuestMethodAllowed(r.Method, action) {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+	authResult, err := h.authenticate(r)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		return
+	}
+	requiredScope := "computer:self_development:" + action
+	if authResult.AuthMethod == "api_key" {
+		if !hasAPIKeyScope(authResult.Scopes, "admin") && !hasAPIKeyScope(authResult.Scopes, requiredScope) {
+			writeJSON(w, http.StatusForbidden, errorResponse{Error: "missing required scope: " + requiredScope})
+			return
+		}
+	}
+
+	var target *resolvedComputerTarget
+	if authResult.AuthMethod == "api_key" {
+		target, ok = h.requireAPIKeyComputerTarget(w, r, authResult, computerID, "")
+		if !ok {
+			return
+		}
+	} else {
+		target, err = h.resolveAuthorizedComputer(r.Context(), authResult, computerID)
+		if err != nil || target == nil || target.ComputerID != computerID || target.UserID != authResult.UserID {
+			writeJSON(w, http.StatusForbidden, errorResponse{Error: "computer ownership required"})
+			return
+		}
+	}
+
+	var autoputerURL string
+	if authResult.AuthMethod == "api_key" {
+		autoputerURL, err = h.resolveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
+	} else if target.State == "active" && strings.TrimSpace(target.ComputerURL) != "" {
+		autoputerURL = target.ComputerURL
+	} else {
+		err = fmt.Errorf("computer realization is not active")
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "computer authority unavailable"})
+		return
+	}
+
+	targetURL, err := joinBasePath(autoputerURL, r.URL.Path)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build self-development request"})
+		return
+	}
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build self-development request"})
+		return
+	}
+	u.RawQuery = r.URL.RawQuery
+	maxBody := int64(64 << 10)
+	if action == "propose" || action == "approve" {
+		maxBody = 1 << 20
+	}
+	upstream, err := http.NewRequestWithContext(r.Context(), r.Method, u.String(), http.MaxBytesReader(w, r.Body, maxBody))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development request"})
+		return
+	}
+	if contentType := r.Header.Get("Content-Type"); contentType != "" {
+		upstream.Header.Set("Content-Type", contentType)
+	}
+	upstream.Header.Set("X-Authenticated-User", authResult.UserID)
+	upstream.Header.Set("X-Authenticated-Computer", computerID)
+	if authResult.Email != "" {
+		upstream.Header.Set("X-Authenticated-Email", authResult.Email)
+	}
+	if len(authResult.Scopes) > 0 {
+		upstream.Header.Set("X-Authenticated-Scopes", strings.Join(authResult.Scopes, ","))
+	}
+	client := h.autoputerHTTP
+	if client == nil {
+		client = http.DefaultClient
+	}
+	response, err := client.Do(upstream)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "self-development authority unavailable"})
+		return
+	}
+	defer func() { _ = response.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "invalid self-development response"})
 		return
 	}
 	if contentType := response.Header.Get("Content-Type"); contentType != "" {

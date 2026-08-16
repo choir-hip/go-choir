@@ -257,12 +257,12 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer/outbox/supervision landed. Orange rehearsal passed in-process (reversible promote+restore consumption; irreversible RecordingProvider dispatch). Staging health 2026-08-16T01:34Z is 3141b90b (trusted-outbox), not current main 30d619a0. Owner gates still present. Effects remain OFF. Armed=false. Next: live proof after staging deploy of current main."
+  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer/outbox/supervision/orange-rehearsal landed. Product-path forward: start/decision reach the guest; genesis stays 409; mode off still refuses proposal. Owner gates still present. Effects remain OFF. Armed=false. Next: staging deploy of this commit, then red rehearsal without a live send."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-16T01:34:00Z
-    source_ref: orange rehearsal on origin/main@30d619a0; staging health deployed_commit 3141b90b at 2026-08-16T01:21:52Z
+    observed_at: 2026-08-16T01:45:00Z
+    source_ref: product-path forward on parent main@387fbfaa; staging health still 3141b90b until this commit deploys
     deploy_identity: "staging https://choir.news/health 2026-08-16T01:34Z deployed_commit 3141b90b (trusted-outbox; built_at 20260816005635); origin/main 30d619a0 is two commits ahead (466c0504 supervision + 30d619a0 orange rehearsal). Retained computer-03335285269bdba4f94377e56879f9e6 epoch 268; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
@@ -281,9 +281,9 @@ now:
     owner_ratification_ref: "owner correction 2026-08-13: irreversible effects are not outside the autonomy window; effect-specific multiagent consensus is the governing boundary, and human approval is optional as one possible consensus participant."
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
-  evidence_refs: [docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
+  evidence_refs: [docs/evidence/effects-product-path-forward-2026-08-16.md, docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
   blocker_or_risk: "None for orange rehearsal land. Remaining risk: treating orange rehearsal or staging 3141b90b as deployed proof of current main; deleting fail-closed owner gates before deployed acceptance of the consensus path; arming a live send before a staging deploy of current main 30d619a0; using OwnerRecovery checkpoints for promotion (route projection already refuses); treating epoch 8253 as the current retained epoch (paid restore is epoch 268). Kill-loop problem repaired at db265d1e is not current readiness proof. Red/live rehearsal and live proof remain unpaid."
-  next_action: "Route map 9 orange rehearsal passed in-process on origin/main@30d619a0. Staging is 3141b90b, not current main. Next: live proof (route map 10) after staging deploy of current main. Do not send live mail. Owner gates remain until deployed acceptance of the consensus path. Effects remain OFF. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
+  next_action: "Product-path start/decision now forward to the guest. Next: staging deploy of this commit, then red rehearsal on computer-03335285269bdba4f94377e56879f9e6 without a live send. Do not send live mail. Owner gates remain until deployed acceptance of the consensus path. Effects remain OFF. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -366,6 +366,22 @@ receipts:
       environment_identity: staging https://choir.news deployed 4ac90583
       deployed_acceptance: not_applicable
     registry_conformance_ref: not_applicable
+  - id: effects-product-path-forward-2026-08-16
+    boundary: execute
+    commit_or_artifact: docs/evidence/effects-product-path-forward-2026-08-16.md
+    proof_refs: [docs/evidence/effects-product-path-forward-2026-08-16.md, internal/proxy/self_development.go, internal/proxy/handlers.go, internal/agentcore/api_self_development.go]
+    rollback_ref: revert this product-path-forward commit
+    disposition: "accepted as route-map-10 product-path prep — start/decision forward to guest; genesis remains disabled; mode off still refuses. No live send. Owner gates unchanged. Effects remain OFF. Live proof unpaid until deploy."
+    problem_ref: not_applicable
+    authorization_ref: this Definition now.next_action after orange rehearsal
+    candidate_or_evidence_refs: [docs/evidence/effects-product-path-forward-2026-08-16.md]
+    landing:
+      source_commit: 387fbfaa
+      ci_ref: pending
+      deploy_ref: 3141b90b596cb87f53551a696ec408fd22193898
+      environment_identity: staging https://choir.news deployed 3141b90b; retained epoch 268
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "effects remains entrypoint; product-path forward is not live proof"
   - id: effects-rehearsal-2026-08-16
     boundary: execute
     commit_or_artifact: docs/evidence/effects-rehearsal-2026-08-16.md

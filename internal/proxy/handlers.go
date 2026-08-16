@@ -731,6 +731,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case isSelfDevelopmentReplayCompletenessPath(path):
 		h.HandleSelfDevelopmentReplayCompleteness(w, r)
 		return
+	case isSelfDevelopmentGuestPath(path):
+		h.HandleSelfDevelopmentGuest(w, r)
+		return
 	case strings.HasPrefix(path, "/api/computers/") && strings.Contains(path, "/self-development/"):
 		writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development effects are disabled"})
 		return
