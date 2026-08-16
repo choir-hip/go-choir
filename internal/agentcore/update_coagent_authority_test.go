@@ -269,8 +269,81 @@ func TestResolveCoagentUpdateAuthorityRefusesLegacySuperCoSuperMessaging(t *test
 	}
 	rt, f, ctx, target := legacyRequesterFixture(agentprofile.CoSuper, agentprofile.Super)
 	if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, ""); err == nil {
-		t.Fatal("CoSuper retained legacy update_coagent path to Super")
+		t.Fatal("unassigned CoSuper retained legacy update_coagent path to Super")
 	}
+}
+
+func assignedCoSuperSuperReportFixture() (*Runtime, *coagentAuthorityFakeStore, context.Context, string) {
+	const owner, computer, trajectory = "owner-a", "computer-a", "trajectory-a"
+	superID, callerID, callerRunID, parentRunID := "super:"+owner, "co-super:assigned-a", "run-cosuper-a", "run-super-a"
+	target := types.AgentRecord{AgentID: superID, OwnerID: owner, ComputerID: computer, Profile: agentprofile.Super, Role: agentprofile.Super, ChannelID: superID}
+	callerAgent := types.AgentRecord{AgentID: callerID, OwnerID: owner, ComputerID: computer, Profile: agentprofile.CoSuper, Role: agentprofile.CoSuper, ChannelID: callerID}
+	parent := types.RunRecord{RunID: parentRunID, AgentID: superID, OwnerID: owner, ComputerID: computer, AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, ChannelID: superID, Metadata: map[string]any{"assignment_trajectory_id": trajectory}}
+	caller := types.RunRecord{RunID: callerRunID, AgentID: callerID, OwnerID: owner, ComputerID: computer, AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, ChannelID: callerID, TrajectoryID: trajectory, RequestedByRunID: parentRunID, Metadata: map[string]any{
+		"requested_by_run_id": parentRunID, "requested_by_agent_id": superID, "requested_by_profile": agentprofile.Super,
+		"assignment_id": "assignment-a", "assignment_attempt": 1, "trajectory_id": trajectory,
+	}}
+	f := &coagentAuthorityFakeStore{
+		agents:        map[string]types.AgentRecord{superID: target, callerID: callerAgent},
+		lifecycleRuns: map[string]types.RunRecord{callerRunID: caller},
+		legacyRuns:    map[string]types.RunRecord{parentRunID: parent},
+		lifecycleTraj: map[string]types.TrajectoryRecord{trajectory: {TrajectoryID: trajectory, OwnerID: owner, ComputerID: computer, SubjectRefs: map[string]string{"doc_id": "doc-a"}}},
+		legacyTraj:    map[string]types.TrajectoryRecord{},
+		lifecycleWork: map[string]types.WorkItemRecord{},
+		legacyWork:    map[string]types.WorkItemRecord{},
+		slots:         map[string]store.CoSuperSlotRecord{},
+		errors:        map[string]error{},
+	}
+	rt := &Runtime{cfg: provideriface.Config{ComputerID: computer}}
+	return rt, f, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&caller)), superID
+}
+
+func TestResolveCoagentUpdateAuthorityAssignedCoSuperReportsToPersistentSuper(t *testing.T) {
+	rt, f, ctx, target := assignedCoSuperSuperReportFixture()
+	a, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, "")
+	if err != nil || a.lifecycle || a.target.AgentID != target || a.callerProfile != agentprofile.CoSuper {
+		t.Fatalf("assigned CoSuper Super report authority=%+v err=%v", a, err)
+	}
+}
+
+func TestResolveCoagentUpdateAuthorityAssignedCoSuperReportRefusals(t *testing.T) {
+	t.Run("missing assignment", func(t *testing.T) {
+		rt, f, ctx, target := assignedCoSuperSuperReportFixture()
+		caller := f.lifecycleRuns["run-cosuper-a"]
+		delete(caller.Metadata, "assignment_id")
+		f.lifecycleRuns[caller.RunID] = caller
+		ctx = toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&caller))
+		if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, ""); err == nil {
+			t.Fatal("unassigned CoSuper Super report accepted")
+		}
+	})
+	t.Run("lifecycle Super", func(t *testing.T) {
+		rt, f, ctx, target := assignedCoSuperSuperReportFixture()
+		v := f.agents[target]
+		v.LifecycleVersion = 2
+		f.agents[target] = v
+		if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, ""); err == nil {
+			t.Fatal("lifecycle Super target accepted")
+		}
+	})
+	t.Run("requester drift", func(t *testing.T) {
+		rt, f, ctx, target := assignedCoSuperSuperReportFixture()
+		caller := f.lifecycleRuns["run-cosuper-a"]
+		caller.Metadata["requested_by_agent_id"] = "super:other"
+		f.lifecycleRuns[caller.RunID] = caller
+		ctx = toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&caller))
+		if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, ""); err == nil {
+			t.Fatal("requester drift accepted")
+		}
+	})
+	t.Run("texture target", func(t *testing.T) {
+		rt, f, ctx, _ := assignedCoSuperSuperReportFixture()
+		textureID := "texture:doc-a"
+		f.agents[textureID] = types.AgentRecord{AgentID: textureID, OwnerID: "owner-a", ComputerID: "computer-a", Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: "doc-a", LifecycleVersion: 1}
+		if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, textureID, ""); err == nil {
+			t.Fatal("assigned CoSuper Texture target accepted")
+		}
+	})
 }
 
 func TestResolveCoagentUpdateAuthorityPreCutoverCompatibilityAndRefusals(t *testing.T) {

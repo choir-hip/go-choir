@@ -471,7 +471,7 @@ func (rt *Runtime) settlePersistentSuperNonExecutionUpdates(ctx context.Context,
 		if u.DeliveredAt != nil || strings.TrimSpace(u.DeliveredToRunID) != "" {
 			continue
 		}
-		if !persistentSuperExecutableUpdate(u) {
+		if !persistentSuperExecutableUpdate(u) && !persistentSuperAdmissibleReport(u) {
 			if id := strings.TrimSpace(u.UpdateID); id != "" {
 				nonExecIDs = append(nonExecIDs, id)
 			}
@@ -781,7 +781,29 @@ func (rt *Runtime) validateTargetBoundLifecycleControls(ctx context.Context, own
 	return out, nil
 }
 
+func persistentSuperSenderAuthorized(update types.CoagentSourcePacket) bool {
+	return agentprofile.Canonical(update.Role) == agentprofile.Texture &&
+		update.Direction == types.LifecyclePacketDirectionControl
+}
+
+func persistentSuperAdmissibleReport(update types.CoagentSourcePacket) bool {
+	if agentprofile.Canonical(update.Role) != agentprofile.CoSuper ||
+		update.Direction != types.LifecyclePacketDirectionProducerReport {
+		return false
+	}
+	packet := normalizeCoagentSourcePacketPayload(update.Packet)
+	switch packet.Kind {
+	case "evidence_update", "execution_result", "blocker", "question", "proposal", "decision_request":
+		return validateCoagentSourcePacketPayload(packet) == nil
+	default:
+		return false
+	}
+}
+
 func persistentSuperExecutablePacket(update types.CoagentSourcePacket) bool {
+	if !persistentSuperSenderAuthorized(update) {
+		return false
+	}
 	packet := normalizeCoagentSourcePacketPayload(update.Packet)
 	if packet.Kind != "execution_request" {
 		return false
@@ -796,22 +818,36 @@ func persistentSuperExecutableUpdate(update types.CoagentSourcePacket) bool {
 	return persistentSuperExecutablePacket(update)
 }
 
+func persistentSuperMailboxInjectable(rec *types.RunRecord, update types.CoagentSourcePacket) bool {
+	if rec == nil {
+		return false
+	}
+	if update.DeliveredAt != nil {
+		delivered := strings.TrimSpace(update.DeliveredToRunID)
+		if delivered != "" && delivered != strings.TrimSpace(rec.RunID) {
+			return false
+		}
+	}
+	if metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
+		return update.DeliveredAt != nil && strings.TrimSpace(update.DeliveredToRunID) == strings.TrimSpace(rec.RunID)
+	}
+	return update.DeliveredAt == nil || strings.TrimSpace(update.DeliveredToRunID) == strings.TrimSpace(rec.RunID)
+}
+
 func coagentUpdateDeliverableForRun(rec *types.RunRecord, update types.CoagentSourcePacket) bool {
 	if rec == nil {
+		return false
+	}
+	if isPersistentSuperAgentRun(rec) {
+		if persistentSuperAdmissibleReport(update) || persistentSuperExecutablePacket(update) {
+			return persistentSuperMailboxInjectable(rec, update)
+		}
 		return false
 	}
 	if update.Direction == types.LifecyclePacketDirectionControl || metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
 		if strings.TrimSpace(update.DeliveredToRunID) != strings.TrimSpace(rec.RunID) || update.DeliveredAt == nil {
 			return false
 		}
-	}
-	if isPersistentSuperAgentRun(rec) {
-		if update.Direction == types.LifecyclePacketDirectionProducerReport {
-			packet := normalizeCoagentSourcePacketPayload(update.Packet)
-			return update.DeliveredAt != nil && strings.TrimSpace(update.DeliveredToRunID) == strings.TrimSpace(rec.RunID) &&
-				(packet.Kind == "execution_result" || packet.Kind == "blocker" || packet.Kind == "evidence_update") && validateCoagentSourcePacketPayload(packet) == nil
-		}
-		return persistentSuperExecutablePacket(update)
 	}
 	return true
 }

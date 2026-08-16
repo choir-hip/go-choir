@@ -54,12 +54,12 @@ func TestAssignedCoSuperToolOverlayIsExactRunOnly(t *testing.T) {
 	if resolved != opaque {
 		t.Fatal("handle mismatch")
 	}
-	for _, n := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir", "record_assignment_result"} {
+	for _, n := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir", "record_assignment_result", "update_coagent"} {
 		if _, ok := overlay.Lookup(n); !ok {
 			t.Errorf("missing %s", n)
 		}
 	}
-	for _, n := range []string{"read_file", "glob", "grep", "save_evidence", "verify_model_capability", "update_coagent", "commit_transaction", "append_computer_event", "materialize_self_development", "create_checkpoint"} {
+	for _, n := range []string{"read_file", "glob", "grep", "save_evidence", "verify_model_capability", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "append_computer_event", "materialize_self_development", "create_checkpoint"} {
 		if _, ok := overlay.Lookup(n); ok {
 			t.Errorf("host tool %s", n)
 		}

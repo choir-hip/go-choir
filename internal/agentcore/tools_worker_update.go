@@ -174,7 +174,7 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 	properties["work_disposition"] = map[string]any{"type": "string", "enum": []string{"open", "completed"}, "description": "Optional native producer work consequence for lifecycle updates; omission preserves assigned work as open. Use completed only when this update fully satisfies that work."}
 	return toolregistry.Tool{
 		Name:        "update_coagent",
-		Description: "Send one source packet to the explicit agent_id durably bound to this run. The target must be an allowed exact requester, owning parent, or assigned child in the same owner, computer, trajectory, and document scope; channel or metadata hints never select a target. Lifecycle Researcher, Processor, and Reconciler reports use the lifecycle backlog and require runtime call identity plus assigned work. Pre-cutover Super and CoSuper result/assignment paths use the legacy backlog only when durable run and assignment rows prove the relationship. Wake occurs only after commit.",
+		Description: "Send one source packet to the explicit agent_id durably bound to this run. The target must be an allowed exact requester, owning parent, or assigned child in the same owner, computer, trajectory, and document scope; channel or metadata hints never select a target. Lifecycle Researcher, Processor, and Reconciler reports use the lifecycle backlog and require runtime call identity plus assigned work. Assigned CoSuper reports to the requesting persistent Super use the worker mailbox; packet.kind describes content and does not open Super execution. Pre-cutover Super and CoSuper result/assignment paths use the legacy backlog only when durable run and assignment rows prove the relationship. Wake occurs only after commit.",
 		Parameters:  toolregistry.JSONSchemaObject(properties, []string{"schema_version", "kind", "summary", "agent_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			if err := rejectLegacyUpdateCoagentFields(raw); err != nil {
@@ -209,6 +209,9 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 				Packet:          packet,
 				CreatedAt:       time.Now().UTC(),
 				WorkDisposition: types.WorkItemStatus(workDisposition),
+			}
+			if authority.callerProfile == agentprofile.CoSuper && authority.targetProfile == agentprofile.Super {
+				update.Direction = types.LifecyclePacketDirectionProducerReport
 			}
 			if authority.lifecycle {
 				producerUpdateID, deriveErr := deriveLifecycleProducerUpdateID(toolregistry.ExecutionContextFrom(ctx), authority.callerRun)
@@ -390,6 +393,13 @@ func resolveCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 	authority.trajectoryID = strings.TrimSpace(trajectoryIDForRun(&authority.callerRun))
 
 	if authority.lifecycle {
+		if authority.callerProfile == agentprofile.CoSuper && authority.targetProfile == agentprofile.Super {
+			if err := validateAssignedCoSuperPersistentSuperReport(ctx, authorityStore, &authority); err != nil {
+				return authority, err
+			}
+			authority.lifecycle = false
+			return authority, nil
+		}
 		if err := validateLifecycleCoagentUpdateAuthority(ctx, authorityStore, &authority, requestedWorkItemID); err != nil {
 			return authority, err
 		}
@@ -696,6 +706,50 @@ func validateLegacyOwnedChild(ctx context.Context, authorityStore coagentUpdateA
 		}
 	}
 	return fmt.Errorf("update_coagent assigned child lacks exact open work provenance")
+}
+
+func validateAssignedCoSuperPersistentSuperReport(ctx context.Context, authorityStore coagentUpdateAuthorityStore, authority *coagentUpdateAuthority) error {
+	if authority == nil {
+		return fmt.Errorf("update_coagent assigned CoSuper Super report authority is missing")
+	}
+	if authority.callerProfile != agentprofile.CoSuper || authority.targetProfile != agentprofile.Super {
+		return fmt.Errorf("update_coagent assigned CoSuper report requires a persistent Super target")
+	}
+	if authority.target.LifecycleVersion > 0 {
+		return fmt.Errorf("update_coagent assigned CoSuper cannot address a lifecycle Super")
+	}
+	if authority.target.AgentID != persistentSuperAgentID(authority.callerRun.OwnerID) {
+		return fmt.Errorf("update_coagent assigned CoSuper target is not the owning persistent Super")
+	}
+	if metadataStringValue(authority.callerRun.Metadata, "assignment_id") == "" || metadataIntValue(authority.callerRun.Metadata, "assignment_attempt") <= 0 {
+		return fmt.Errorf("update_coagent calling CoSuper lacks exact assignment")
+	}
+	if metadataStringValue(authority.callerRun.Metadata, "requested_by_agent_id") != authority.target.AgentID ||
+		agentprofile.Canonical(metadataStringValue(authority.callerRun.Metadata, "requested_by_profile")) != agentprofile.Super {
+		return fmt.Errorf("update_coagent calling CoSuper was not requested by the target Super")
+	}
+	requesterRunID, err := exactRequesterRunID(authority.callerRun)
+	if err != nil {
+		return err
+	}
+	parent, err := loadScopedLegacyRun(ctx, authorityStore, authority.callerRun.OwnerID, authority.callerRun.ComputerID, requesterRunID)
+	if err != nil {
+		return fmt.Errorf("resolve owning persistent Super run: %w", err)
+	}
+	if parent.AgentID != authority.target.AgentID ||
+		agentprofile.Canonical(configuredAgentProfileForRun(&parent)) != agentprofile.Super ||
+		agentprofile.Canonical(agentRoleForRun(&parent)) != agentprofile.Super ||
+		parent.TrajectoryID != "" {
+		return fmt.Errorf("update_coagent owning Super run binding mismatch")
+	}
+	callerTrajectory := strings.TrimSpace(authority.trajectoryID)
+	if callerTrajectory == "" {
+		return fmt.Errorf("update_coagent assigned CoSuper trajectory is required")
+	}
+	if parentTrajectory := metadataStringValue(parent.Metadata, "assignment_trajectory_id"); parentTrajectory != "" && parentTrajectory != callerTrajectory {
+		return fmt.Errorf("update_coagent assigned CoSuper trajectory does not match owning Super assignment trajectory")
+	}
+	return nil
 }
 
 func validateCoSuperOwningSuper(ctx context.Context, authorityStore coagentUpdateAuthorityStore, authority coagentUpdateAuthority, owningSuper types.RunRecord) error {

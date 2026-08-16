@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -2650,11 +2651,23 @@ func (s *Store) refreshCoagentMailboxCursorOG(ctx context.Context, ownerID, agen
 // addressed channel audit message. The worker_updates row is the durable wake
 // backlog; the update_id is idempotent per owner, so retries can return the
 // existing update without duplicating delivery.
+func workerMailboxAllowsAssignedCoSuperSuperReport(update types.CoagentSourcePacket) bool {
+	ownerID := strings.TrimSpace(update.OwnerID)
+	if ownerID == "" {
+		return false
+	}
+	return update.Direction == types.LifecyclePacketDirectionProducerReport &&
+		agentprofile.Canonical(update.Role) == agentprofile.CoSuper &&
+		strings.TrimSpace(update.TargetAgentID) == "super:"+ownerID
+}
+
 func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.CoagentSourcePacket, message *types.ChannelMessage) (types.CoagentSourcePacket, bool, error) {
 	// Serialize the entire dispatch path to preserve idempotency:
 	if strings.TrimSpace(update.ComputerID) != "" && strings.TrimSpace(update.TrajectoryID) != "" {
 		if _, err := s.GetLifecycleTrajectory(ctx, update.OwnerID, update.ComputerID, update.TrajectoryID); err == nil {
-			return types.CoagentSourcePacket{}, false, ErrLifecycleAuthorityRequired
+			if !workerMailboxAllowsAssignedCoSuperSuperReport(update) {
+				return types.CoagentSourcePacket{}, false, ErrLifecycleAuthorityRequired
+			}
 		} else if !errors.Is(err, ErrNotFound) {
 			return types.CoagentSourcePacket{}, false, err
 		}

@@ -90,9 +90,11 @@ func PolicyFor(profile string) Policy {
 	case Email:
 		return Policy{Profile: Email}
 	case CoSuper:
-		// CoSuper has no static authority. The assignment runtime constructs a
-		// fresh per-run registry from the exact capsule-local closed set.
-		return Policy{Profile: CoSuper}
+		// CoSuper has no static tool authority. The assignment runtime constructs a
+		// fresh per-run registry from the exact capsule-local closed set plus
+		// update_coagent. Message policy allows reports to Super; executability of
+		// those packets is sender-authorized at Super, not granted by packet.kind.
+		return Policy{Profile: CoSuper, AllowedMessageTargets: []string{Super}}
 	case Super:
 		return Policy{
 			Profile:                   Super,

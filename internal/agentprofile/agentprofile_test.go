@@ -75,7 +75,7 @@ func TestPolicyFor(t *testing.T) {
 			AllowedSpawnTargets: []string{Texture}, AllowedMessageTargets: []string{Texture},
 		},
 		Email:   {Profile: Email},
-		CoSuper: {Profile: CoSuper},
+		CoSuper: {Profile: CoSuper, AllowedMessageTargets: []string{Super}},
 		Super: {
 			Profile: Super, AllowReadOnlyFiles: true, AllowResearchTools: true,
 			AllowEvidenceTools: true, AllowMemoryTools: true,
@@ -112,6 +112,7 @@ func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
 	}
 	message := map[string]map[string]bool{
 		Super:      {Texture: true, Researcher: true},
+		CoSuper:    {Super: true},
 		Researcher: {Texture: true},
 		Texture:    {Researcher: true, Super: true},
 		Processor:  {Texture: true},

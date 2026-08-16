@@ -55,8 +55,9 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 		return nil, "", fmt.Errorf("assigned CoSuper runtime capability unavailable: %w", err)
 	}
 	// Never clone the static profile registry. Assignment authority is a fresh
-	// exact closed set so no read_file/glob/grep/evidence/model/update callback
+	// exact closed set so no read_file/glob/grep/evidence/model host callback
 	// can cross the durable assignment boundary by registry inheritance.
+	// update_coagent is registered here on purpose as the Super report channel.
 	registry, err := buildAssignedCoSuperRegistry(rt)
 	if err != nil {
 		return nil, "", err

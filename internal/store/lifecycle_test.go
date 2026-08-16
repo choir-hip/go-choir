@@ -3425,3 +3425,51 @@ func TestLifecycleWorkAndUpdatesDoNotCrossComputerScope(t *testing.T) {
 		}
 	}
 }
+
+func TestDispatchWorkerUpdateAllowsAssignedCoSuperPersistentSuperReport(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	now := time.Now().UTC()
+	update := types.CoagentSourcePacket{
+		UpdateID:      "update-cosuper-super-report",
+		OwnerID:       start.OwnerID,
+		ComputerID:    start.ComputerID,
+		AgentID:       "co-super:assigned-a",
+		TargetAgentID: "super:" + start.OwnerID,
+		ChannelID:     "super:" + start.OwnerID,
+		TrajectoryID:  start.TrajectoryID,
+		Role:          "co-super",
+		Direction:     types.LifecyclePacketDirectionProducerReport,
+		Packet: types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "evidence_update",
+			Summary:       "assigned CoSuper report through worker mailbox",
+		},
+		Content:   "assigned CoSuper report through worker mailbox",
+		CreatedAt: now,
+	}
+	msg := &types.ChannelMessage{
+		ChannelID: update.ChannelID, From: update.AgentID, FromAgentID: update.AgentID,
+		ToAgentID: update.TargetAgentID, Role: update.Role, Content: update.Content, Timestamp: now,
+	}
+	stored, created, err := s.DispatchWorkerUpdate(ctx, update, msg)
+	if err != nil || !created {
+		t.Fatalf("assigned CoSuper Super report dispatch: created=%v err=%v", created, err)
+	}
+	if stored.Direction != types.LifecyclePacketDirectionProducerReport || stored.TargetAgentID != "super:"+start.OwnerID {
+		t.Fatalf("stored report = %+v", stored)
+	}
+
+	blocked := update
+	blocked.UpdateID = "update-cosuper-unsigned"
+	blocked.Direction = ""
+	blocked.Content = "unsigned CoSuper packet"
+	msg.Content = blocked.Content
+	if _, _, err := s.DispatchWorkerUpdate(ctx, blocked, msg); !errors.Is(err, ErrLifecycleAuthorityRequired) {
+		t.Fatalf("unsigned CoSuper mailbox dispatch error = %v, want ErrLifecycleAuthorityRequired", err)
+	}
+}

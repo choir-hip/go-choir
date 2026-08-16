@@ -1376,7 +1376,9 @@ func (s *Store) CreateWorkerUpdateOG(ctx context.Context, rec types.CoagentSourc
 	}
 	if strings.TrimSpace(rec.ComputerID) != "" && strings.TrimSpace(rec.TrajectoryID) != "" {
 		if _, err := s.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID); err == nil {
-			return ErrLifecycleAuthorityRequired
+			if !workerMailboxAllowsAssignedCoSuperSuperReport(rec) {
+				return ErrLifecycleAuthorityRequired
+			}
 		} else if !errors.Is(err, ErrNotFound) {
 			return err
 		}

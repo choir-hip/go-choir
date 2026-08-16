@@ -256,16 +256,16 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Schema freeze ACCEPT. reversible-selfdev-v1 policy bytes ACCEPT (digest c34ddf07; 3/3 completed panelists, Devin no-verdict). Quorum 2-of-2 verification, author recused. Owner-gate replacement is still unpaid and must land atomically. Next red slices: reconnection then freeze/propose wiring; do not delete external-owner first. Effects remain OFF."
+  slice: "Invoked 2026-08-15. Schema freeze ACCEPT. reversible-selfdev-v1 policy bytes ACCEPT. Reconnection (route map 4) implemented: assigned CoSuper holds update_coagent; Super executability is Texture Direction=control sender authorization; survivor contract replaced not deleted. Owner gates still present. Effects remain OFF. Next: freeze/propose production call sites."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-16T00:10:00Z
-    source_ref: main@8fb8b16d
+    observed_at: 2026-08-16T00:25:00Z
+    source_ref: reconnection red slice on parent main@dfcb8ad8; staging product still 4ac90583
     deploy_identity: "staging deployed 4ac90583 at 2026-08-14T23:24:20Z; retained computer-03335285269bdba4f94377e56879f9e6 epoch 268; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-16T00:10:00Z git status clean at 8fb8b16d before repaired-freeze ACCEPT land
+    worktree_inventory_ref: 2026-08-16T00:25:00Z reconnection product + tests + receipt; parent dfcb8ad8
     status: reconciled
 
   candidate:
@@ -280,9 +280,9 @@ now:
     owner_ratification_ref: "owner correction 2026-08-13: irreversible effects are not outside the autonomy window; effect-specific multiagent consensus is the governing boundary, and human approval is optional as one possible consensus participant."
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
-  evidence_refs: [docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "None for invoke. Stale start.unknowns and now.reconciliation were the first-session trap; this card supersedes them. Remaining risk: deleting fail-closed owner gates before a consensus reducer exists; using OwnerRecovery checkpoints for promotion (route projection already refuses); treating epoch 8253 as the current retained epoch (paid restore is epoch 268). Kill-loop problem repaired at db265d1e is not current readiness proof."
-  next_action: "Red slices in order: (4) reconnection — CoSuper update_coagent with sender-authorization executability; (5) freeze/propose production call sites; then (6) decision-policy reducer atomically with QualifiedConsensusReceipt, never by deleting external-owner:/accept_once/awaiting_approval first. Irreversible email is the same Definition, not this slice. Effects remain OFF. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
+  evidence_refs: [docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
+  blocker_or_risk: "None for reconnection. Remaining risk: deleting fail-closed owner gates before a consensus reducer exists; using OwnerRecovery checkpoints for promotion (route projection already refuses); treating epoch 8253 as the current retained epoch (paid restore is epoch 268). Freeze/propose still have no assigned-CoSuper call site. Kill-loop problem repaired at db265d1e is not current readiness proof."
+  next_action: "Red slices in order: (5) freeze/propose production call sites on assigned CoSuper under capsule binding; then (6) decision-policy reducer atomically with QualifiedConsensusReceipt, never by deleting external-owner:/accept_once/awaiting_approval first. Irreversible email is the same Definition, not this slice. Effects remain OFF. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -365,6 +365,22 @@ receipts:
       environment_identity: staging https://choir.news deployed 4ac90583
       deployed_acceptance: not_applicable
     registry_conformance_ref: not_applicable
+  - id: effects-reconnection-2026-08-16
+    boundary: execute
+    commit_or_artifact: docs/evidence/effects-reconnection-2026-08-16.md
+    proof_refs: [docs/evidence/effects-reconnection-2026-08-16.md, internal/agentcore/super_controller.go, internal/agentcore/tools_worker_update.go, internal/agentcore/tool_profiles.go, internal/agentcore/update_coagent_survivor_contract_test.go, internal/store/store.go, internal/agentcore/self_development_decision_binding.go, internal/platform/self_development_modes.go]
+    rollback_ref: revert this reconnection commit
+    disposition: "accepted as route-map-4 reconnection — assigned CoSuper holds update_coagent; Super executability is sender authorization; survivor contract replaced not deleted. Owner gates unchanged. Effects remain OFF. Freeze/propose unpaid."
+    problem_ref: actor-isolation-stopgap-2026-08-11
+    authorization_ref: this Definition now.next_action after policy-bytes ACCEPT
+    candidate_or_evidence_refs: [docs/evidence/effects-reconnection-2026-08-16.md]
+    landing:
+      source_commit: dfcb8ad8
+      ci_ref: pending
+      deploy_ref: 4ac90583e389e3334efa57ce204d6df3235a68f1
+      environment_identity: staging https://choir.news deployed 4ac90583; retained epoch 268
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "effects remains entrypoint; reconnection is an execute slice, not completion"
   - id: effects-reversible-selfdev-v1-policy-review-2026-08-15
     boundary: define
     commit_or_artifact: docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md
@@ -696,10 +712,10 @@ at all.
 3. **Revert build and verification (red, owned by choir-tape-recovery-2026-08-13).**
    Consumed here; do not implement or independently green. Tape-recovery proves
    destructive rematerialization, scope refusal, and whole-computer restore.
-4. **Reconnection (red).** Give CoSuper `update_coagent`; move Super's
-   executability decision from `packet.kind` to sender authorization; replace the
-   survivor contract with the stronger assertion. Keep minimal — the RLM rebase
-   rewrites this layer.
+4. **Reconnection (red, implemented 2026-08-16).** Assigned CoSuper holds
+   `update_coagent`; Super executability is Texture `Direction=control` sender
+   authorization; survivor contract replaced, not deleted. Keep the privilege
+   property — the RLM rebase may rewrite this layer without weakening it.
 5. **Freeze/propose wiring (red).** `commit_transaction`,
    `inspect_self_development_bundle`, and `record_self_development_verification`
    exist but have no production call site, so no live actor can freeze or propose.
