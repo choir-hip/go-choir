@@ -94,7 +94,7 @@ start:
       - "concrete decision-policy schema, independence domains, quorum, dissent, abstention, timeout, recusal, replacement, and consequence-receipt contracts"
       - "whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata without a payload schema change — answered 2026-08-16: yes, via existing packet.sources typed URIs (operation:/capsule_bundle:/receipt:/event_head:) with no payload schema change; identities persist in revision metadata and typed citations, never prose"
       - "whether Texture production registry still omits update_coagent on the deployed staging build — source confirmation 2026-08-16: current main omits generic update_coagent on Texture (AllowCoAgentTools=false). Staging health 2026-08-16T02:05Z is 4543624b (product-path forward). CTS-safe: do not register the generic resolver. Deployed Texture-registry re-check of 466c0504 remains unpaid"
-      - "whether in-process rehearsal can walk reversible propose→consensus→promote→restore and irreversible propose→consensus→outbox without a live send — answered 2026-08-16 orange: yes, TestEffectsRehearsal. Live 2026-08-16T05:46Z: named start mode propose_only CAS generation 0→1 on computer-03335285269bdba4f94377e56879f9e6 epoch 271. Genesis 409. Start without mode_receipt still 409. Kernel 200. No Super started. Decision mode named qualified_consensus bound to reversible-selfdev-v1 digest c34ddf07…. Promote/restore red unpaid"
+      - "whether in-process rehearsal can walk reversible propose→consensus→promote→restore and irreversible propose→consensus→outbox without a live send — answered 2026-08-16 orange: yes, TestEffectsRehearsal. Live 2026-08-16T05:52Z: propose_only generation 1 at epoch 272 after credential-renewal refresh. Named solitaire prompt is not presented. Pre-A checkpoint 409: desktop_* and og_objects are non-empty EmptyUntilSupported tables. Super not started. Promote/restore red unpaid"
       - "retained computer epoch 8253 / ak_45ce1796 classified 2026-08-15 as historical CTS residual, not current identity (paid restore epoch 268; key returns 401). Residual hygiene only; do not reopen tape-recovery"
 
 finish:
@@ -257,13 +257,13 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer/outbox/supervision/orange-rehearsal/product-path-forward/guest-mode-authority/owner-scoped-refresh/guest-kernel-route/guest-verifier landed. Staging deployed 5557840c. Named start mode propose_only is live generation 1 at epoch 271. Start without mode_receipt still 409. Genesis 409. Kernel 200. Owner gates present. Armed=false. Next: freeze a reversible bundle, CAS qualified_consensus, promote, consume tape-recovery restore. Do not start Super in this stamp. Do not send live mail."
+  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer/outbox/supervision/orange-rehearsal/product-path-forward/guest-mode-authority/owner-scoped-refresh/guest-kernel-route/guest-verifier landed. Staging deployed 5557840c. Named start mode propose_only is live generation 1 at epoch 272. Named solitaire prompt is not presented. Pre-A checkpoint is ineligible while desktop/og_objects rows are non-empty. Super not started. Owner gates present. Armed=false. Next: restore-eligible pre-A fence, then start Super. Do not send live mail."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-16T05:47:00Z
-    source_ref: live propose_only CAS after naming; docs/evidence/effects-red-named-mode-2026-08-16.md
-    deploy_identity: "staging https://choir.news/health deployed_commit 5557840cab6565ecebb015c4f60b627810b7c1fd deployed_at 2026-08-16T05:32:15Z built_at 20260816051712. Retained computer-03335285269bdba4f94377e56879f9e6 epoch 271 mode propose_only generation 1 receipt 01a0091b-bf12-771e-97e7-9a42752ad036, constructed freeze 7122f279 still joined; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
+    observed_at: 2026-08-16T05:53:00Z
+    source_ref: live refresh then ineligible pre-A checkpoint; docs/evidence/effects-red-pre-a-checkpoint-ineligible-2026-08-16.md
+    deploy_identity: "staging https://choir.news/health deployed_commit 5557840cab6565ecebb015c4f60b627810b7c1fd deployed_at 2026-08-16T05:32:15Z built_at 20260816051712. Retained computer-03335285269bdba4f94377e56879f9e6 epoch 272 mode propose_only generation 1 receipt 01a0091b-bf12-771e-97e7-9a42752ad036, constructed freeze 7122f279 still joined; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: 2026-08-16T00:25:00Z reconnection product + tests + receipt; parent dfcb8ad8
@@ -281,9 +281,9 @@ now:
     owner_ratification_ref: "owner correction 2026-08-13: irreversible effects are not outside the autonomy window; effect-specific multiagent consensus is the governing boundary, and human approval is optional as one possible consensus participant."
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
-  evidence_refs: [docs/evidence/effects-red-named-mode-2026-08-16.md, docs/evidence/effects-red-verifier-refresh-2026-08-16.md, docs/evidence/effects-guest-verifier-2026-08-16.md, docs/evidence/effects-red-kernel-route-live-2026-08-16.md, docs/evidence/effects-guest-kernel-route-2026-08-16.md, docs/evidence/effects-red-mode-off-refuse-2026-08-16.md, docs/evidence/effects-owner-guest-boot-refresh-2026-08-16.md, docs/evidence/effects-guest-mode-authority-2026-08-16.md, docs/evidence/effects-red-product-path-smoke-2026-08-16.md, docs/evidence/effects-product-path-forward-2026-08-16.md, docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "propose_only is live generation 1. Presenting the signed ModeReceipt on start would launch Super. Remaining risk: starting Super without a named solitaire prompt; treating propose_only as promote proof; rematerializing; deleting owner gates; arming a live send; using OwnerRecovery checkpoints for promotion; treating epoch 8253 as current (paid restore is 268). ComputerVersion freeze remains 7122f279. Red promote/restore and live proof remain unpaid."
-  next_action: "Start mode is propose_only generation 1 on computer-03335285269bdba4f94377e56879f9e6 epoch 271. Decision mode is qualified_consensus bound to reversible-selfdev-v1 digest c34ddf073aecaacc307f375d6f2e398798350d7a48c8d3c2e7c6d10248b394d7. Next: freeze a reversible bundle, then qualified_consensus promote, then consume tape-recovery restore. Do not present the ModeReceipt on start until that prompt is named. Keep genesis 409. Keep Armed=false. Do not send live mail. Owner gates remain. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
+  evidence_refs: [docs/evidence/effects-red-pre-a-checkpoint-ineligible-2026-08-16.md, docs/evidence/effects-red-named-mode-2026-08-16.md, docs/evidence/effects-red-verifier-refresh-2026-08-16.md, docs/evidence/effects-guest-verifier-2026-08-16.md, docs/evidence/effects-red-kernel-route-live-2026-08-16.md, docs/evidence/effects-guest-kernel-route-2026-08-16.md, docs/evidence/effects-red-mode-off-refuse-2026-08-16.md, docs/evidence/effects-owner-guest-boot-refresh-2026-08-16.md, docs/evidence/effects-guest-mode-authority-2026-08-16.md, docs/evidence/effects-red-product-path-smoke-2026-08-16.md, docs/evidence/effects-product-path-forward-2026-08-16.md, docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
+  blocker_or_risk: "Pre-A checkpoint is ineligible: desktop_app_instances, desktop_sessions, desktop_window_placements, desktop_workspaces, and og_objects are non-empty EmptyUntilSupported tables. Weakening that gate would create an unrestorable checkpoint. Presenting ModeReceipt would launch Super without a restore fence. Remaining risk: emptying desktop rows by hand; using OwnerRecovery checkpoint 70f9ce2b for promotion; rematerializing; deleting owner gates; arming a live send. ComputerVersion freeze remains 7122f279. Red promote/restore and live proof remain unpaid."
+  next_action: "Start mode is propose_only generation 1 on computer-03335285269bdba4f94377e56879f9e6 epoch 272. Named solitaire prompt is ready and not presented. Next: a restore-eligible pre-A checkpoint without weakening EmptyUntilSupported, emptying desktop tables by hand, rematerializing, or using OwnerRecovery for promotion. Then present the ModeReceipt. Keep genesis 409. Keep Armed=false. Do not send live mail. Owner gates remain. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -366,6 +366,22 @@ receipts:
       environment_identity: staging https://choir.news deployed 4ac90583
       deployed_acceptance: not_applicable
     registry_conformance_ref: not_applicable
+  - id: effects-red-pre-a-checkpoint-ineligible-2026-08-16
+    boundary: execute
+    commit_or_artifact: docs/evidence/effects-red-pre-a-checkpoint-ineligible-2026-08-16.md
+    proof_refs: [docs/evidence/effects-red-pre-a-checkpoint-ineligible-2026-08-16.md, docs/evidence/effects-red-named-mode-2026-08-16.md]
+    rollback_ref: revert this docs-only stamp
+    disposition: "accepted as named solitaire prompt plus ineligible pre-A checkpoint — refresh 271→272 re-exchanged guest credentials; checkpoint 409 because desktop_* and og_objects are non-empty EmptyUntilSupported tables. Super not started. No live send. Do not weaken the gate. Promote/restore unpaid."
+    problem_ref: not_applicable
+    authorization_ref: this Definition now.next_action after named propose_only
+    candidate_or_evidence_refs: [docs/evidence/effects-red-pre-a-checkpoint-ineligible-2026-08-16.md]
+    landing:
+      source_commit: 81952e13
+      ci_ref: pending
+      deploy_ref: 5557840cab6565ecebb015c4f60b627810b7c1fd
+      environment_identity: staging https://choir.news deployed 5557840c; retained epoch 272 mode propose_only generation 1; constructed freeze 7122f279
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "effects remains entrypoint; ineligible checkpoint is not live proof"
   - id: effects-red-named-mode-2026-08-16
     boundary: execute
     commit_or_artifact: docs/evidence/effects-red-named-mode-2026-08-16.md
@@ -1015,9 +1031,9 @@ at all.
    reversible propose → qualified consensus → promote → consume tape-recovery
    restore → verify; irreversible propose → stronger qualified consensus →
    RecordingProvider dispatch → consequence receipt → crash-window correction.
-   No live send. Live 2026-08-16T05:46Z: propose_only generation 1 at epoch 271.
-   Start without mode_receipt still 409. Genesis 409. Kernel 200. Decision mode
-   named qualified_consensus / reversible-selfdev-v1. Promote/restore red unpaid.
+   No live send. Live 2026-08-16T05:52Z: propose_only generation 1 at epoch 272.
+   Named solitaire prompt is not presented. Pre-A checkpoint ineligible (desktop/og
+   EmptyUntilSupported rows). Super not started. Promote/restore red unpaid.
 10. **Live proof (red).** Capsule authors A → consensus authorizes → promotes →
    played → falsified → B supersedes → restart proves B → total restore; then
    execute and receipt the exact acceptance email under its separate policy.
