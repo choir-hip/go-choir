@@ -152,6 +152,9 @@ func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage) 
 			return fmt.Errorf("insert projected placement: %w", err)
 		}
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM desktop_sessions WHERE owner_id = ? AND desktop_id = ?`, ownerID, desktopID); err != nil {
+		return fmt.Errorf("replace projected session identities: %w", err)
+	}
 	for _, session := range state.Sessions {
 		sessionID := strings.TrimSpace(session.SessionID)
 		if sessionID == "" {
@@ -161,14 +164,7 @@ func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage) 
 			`INSERT INTO desktop_sessions (
 				owner_id, desktop_id, session_id, device_id, viewport_profile,
 				visibility_state, last_input_at, driver_until, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, '', NULL, NULL, ?, ?)
-			ON DUPLICATE KEY UPDATE
-				device_id = VALUES(device_id),
-				viewport_profile = VALUES(viewport_profile),
-				visibility_state = '',
-				last_input_at = NULL,
-				driver_until = NULL,
-				updated_at = VALUES(updated_at)`,
+			) VALUES (?, ?, ?, ?, ?, '', NULL, NULL, ?, ?)`,
 			ownerID, desktopID, sessionID, strings.TrimSpace(session.DeviceID),
 			strings.TrimSpace(session.ViewportProfile), stamp, stamp,
 		); err != nil {

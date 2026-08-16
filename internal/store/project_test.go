@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -117,6 +119,65 @@ func TestProjectBatchReplacesDesktopAndOGOnLaterHead(t *testing.T) {
 		t.Fatalf("later snapshot not folded: %+v", state)
 	}
 	assertCount(t, productStore, `SELECT COUNT(*) FROM og_objects`, 2)
+}
+
+func TestProjectDesktopStateReplacesLeftoverSessions(t *testing.T) {
+	ctx := context.Background()
+	productStore := openProjectStore(t)
+	computerID := "computer-project-sessions"
+	prepareGenesis(t, productStore, computerID, "genesis-sessions")
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO desktop_sessions (
+			owner_id, desktop_id, session_id, device_id, viewport_profile,
+			visibility_state, last_input_at, driver_until, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"owner-1", types.PrimaryDesktopID, "leftover-tab", "old-device", "narrow",
+		"hidden", "2026-08-01T00:00:00Z", "2026-08-01T00:01:00Z",
+		"2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z",
+	); err != nil {
+		t.Fatal(err)
+	}
+	head, err := productStore.Head(ctx, computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 16, 19, 6, 0, 0, time.UTC)
+	desktop, err := json.Marshal(projectedDesktopState{
+		OwnerID: "owner-1", DesktopID: types.PrimaryDesktopID, UpdatedAt: now,
+		Sessions: []projectedSessionIdentity{{SessionID: "browser-now", DeviceID: "device-now", ViewportProfile: "wide"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, digest := prepareProjectionEvent(t, productStore, *head, eventID, "project-sessions")
+	batch := computerevent.ProjectionBatch{
+		Version: computerevent.ProjectionBatchV1, ProjectorVersion: computerevent.ProjectorVersionV1,
+		ComputerID: computerID, EventID: event.EventID, EventDigest: digest,
+		Ops: []computerevent.ProjectionOp{{Kind: computerevent.ProjectionOpDesktopState, Body: desktop}},
+	}
+	if err := productStore.FinalizeBatch(ctx, computerID, digest, signedReceipt(t, computerID, digest, event.Sequence), &batch); err != nil {
+		t.Fatal(err)
+	}
+	assertCount(t, productStore, `SELECT COUNT(*) FROM desktop_sessions`, 1)
+	var sessionID, deviceID, visibility, createdAt string
+	var lastInput, driverUntil sql.NullString
+	row := productStore.db.QueryRowContext(ctx,
+		`SELECT session_id, device_id, visibility_state, last_input_at, driver_until, created_at
+		   FROM desktop_sessions WHERE owner_id=? AND desktop_id=?`,
+		"owner-1", types.PrimaryDesktopID)
+	if err := row.Scan(&sessionID, &deviceID, &visibility, &lastInput, &driverUntil, &createdAt); err != nil {
+		t.Fatal(err)
+	}
+	if sessionID != "browser-now" || deviceID != "device-now" || visibility != "" || lastInput.Valid || driverUntil.Valid {
+		t.Fatalf("projected session session=%q device=%q visibility=%q last=%v driver=%v", sessionID, deviceID, visibility, lastInput, driverUntil)
+	}
+	if strings.HasPrefix(createdAt, "2026-08-01") {
+		t.Fatalf("leftover created_at survived: %q", createdAt)
+	}
 }
 
 func TestProjectBatchRefusesSessionPresence(t *testing.T) {

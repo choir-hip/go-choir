@@ -144,15 +144,18 @@ func TestCurrentReplayAirworthinessManifestReturnsCopy(t *testing.T) {
 	}
 }
 
-func TestDesktopSessionsRemainEmptyUntilSupportedNotPresenceVolatile(t *testing.T) {
+func TestDesktopAndOGAreEventProjectionAfterLiveResidueImport(t *testing.T) {
 	manifest := CurrentReplayAirworthinessManifest()
-	if got := manifest.Entries["desktop_sessions"]; got != ReplayEmptyUntilSupported {
-		t.Fatalf("desktop_sessions class=%q, want empty_until_supported", got)
-	}
-	for _, table := range []string{"desktop_workspaces", "desktop_app_instances", "desktop_window_placements", "og_objects", "og_edges"} {
-		if got := manifest.Entries[table]; got != ReplayEmptyUntilSupported {
-			t.Fatalf("%s class=%q, want empty_until_supported until Project is live", table, got)
+	for _, table := range []string{
+		"desktop_workspaces", "desktop_sessions", "desktop_app_instances",
+		"desktop_window_placements", "og_objects", "og_edges",
+	} {
+		if got := manifest.Entries[table]; got != ReplayEventProjection {
+			t.Fatalf("%s class=%q, want event_projection after live residue import", table, got)
 		}
+	}
+	if got := manifest.Entries["desktop_state"]; got != ReplayEmptyUntilSupported {
+		t.Fatalf("desktop_state class=%q, want empty_until_supported leftover", got)
 	}
 	invalid := manifest
 	invalid.Entries = map[string]ReplayObservationClass{"desktop_sessions": ReplayObservationClass("presence_volatile")}

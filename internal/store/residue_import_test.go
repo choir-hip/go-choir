@@ -133,6 +133,13 @@ func TestImportResidueSnapshotCoMovesDesktopAndOG(t *testing.T) {
 	if visibility != "" || lastInput.Valid || driverUntil.Valid {
 		t.Fatalf("presence leaked onto projected session visibility=%q last=%v driver=%v", visibility, lastInput, driverUntil)
 	}
+	var sessionCount int
+	if err := productStore.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM desktop_sessions`).Scan(&sessionCount); err != nil {
+		t.Fatal(err)
+	}
+	if sessionCount != 1 {
+		t.Fatalf("imported sessions=%d, want 1 replaced identity", sessionCount)
+	}
 
 }
 
