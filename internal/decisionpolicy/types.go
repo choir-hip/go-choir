@@ -7,6 +7,10 @@ const (
 	AuthorityPrefix                 = "qualified-consensus:"
 	PolicyIDReversibleSelfDevV1     = "reversible-selfdev-v1"
 	PolicyDigestReversibleSelfDevV1 = "c34ddf073aecaacc307f375d6f2e398798350d7a48c8d3c2e7c6d10248b394d7"
+	PolicyIDIrreversibleEmailV1     = "irreversible-email-v1"
+	PolicyDigestIrreversibleEmailV1 = "d83c215443638ad0cfd95eb174de61e1f203414d8ce0631cb68f0dca106c6bbc"
+	PolicyIDHumanRequiredV1         = "human-required-v1"
+	PolicyDigestHumanRequiredV1     = "33f5dc442d7fd0d028b76a6792954add090dafcaff87cc2ff1a1829a08df9b96"
 	EffectClassReversible           = "reversible_computer_local"
 	EffectClassIrreversible         = "irreversible_external"
 	HumanSeatAbsent                 = "absent"
@@ -22,37 +26,48 @@ const (
 )
 
 type Policy struct {
-	PolicyID              string            `json:"policy_id"`
-	Actuator              string            `json:"actuator"`
-	AdmissibleEvidence    []string          `json:"admissible_evidence"`
-	BlastRadius           []string          `json:"blast_radius"`
-	BlastRadiusOut        []string          `json:"blast_radius_out"`
-	Budget                PolicyBudget      `json:"budget"`
-	Capabilities          []string          `json:"capabilities"`
-	ConsequenceReceipt    []string          `json:"consequence_receipt"`
-	Dissent               PolicyDissent     `json:"dissent"`
-	EffectClass           string            `json:"effect_class"`
-	EligibleSeats         []PolicySeat      `json:"eligible_seats"`
-	Expiry                string            `json:"expiry"`
-	ForbiddenCapabilities []string          `json:"forbidden_capabilities"`
-	HumanSeat             string            `json:"human_seat"`
-	InadmissibleEvidence  []string          `json:"inadmissible_evidence"`
-	IndependenceDomains   []string          `json:"independence_domains"`
-	OwnerRevocation       bool              `json:"owner_revocation"`
-	Privacy               string            `json:"privacy"`
-	Quorum                PolicyQuorum      `json:"quorum"`
-	Recovery              string            `json:"recovery"`
-	Recusal               string            `json:"recusal"`
-	Replacement           PolicyReplacement `json:"replacement"`
-	Scope                 string            `json:"scope"`
-	SubjectBinding        []string          `json:"subject_binding"`
-	Timeout               PolicyTimeout     `json:"timeout"`
+	PolicyID              string                 `json:"policy_id"`
+	Actuator              string                 `json:"actuator"`
+	AdmissibleEvidence    []string               `json:"admissible_evidence"`
+	BlastRadius           []string               `json:"blast_radius"`
+	BlastRadiusOut        []string               `json:"blast_radius_out"`
+	Budget                PolicyBudget           `json:"budget"`
+	Capabilities          []string               `json:"capabilities"`
+	ConsequenceReceipt    []string               `json:"consequence_receipt"`
+	DispatchContract      PolicyDispatchContract `json:"dispatch_contract,omitempty"`
+	Dissent               PolicyDissent          `json:"dissent"`
+	EffectClass           string                 `json:"effect_class"`
+	EligibleSeats         []PolicySeat           `json:"eligible_seats"`
+	Expiry                string                 `json:"expiry"`
+	ForbiddenCapabilities []string               `json:"forbidden_capabilities"`
+	HumanSeat             string                 `json:"human_seat"`
+	InadmissibleEvidence  []string               `json:"inadmissible_evidence"`
+	IndependenceDomains   []string               `json:"independence_domains"`
+	OwnerRevocation       bool                   `json:"owner_revocation"`
+	Privacy               string                 `json:"privacy"`
+	Quorum                PolicyQuorum           `json:"quorum"`
+	Recovery              string                 `json:"recovery"`
+	Recusal               string                 `json:"recusal"`
+	Replacement           PolicyReplacement      `json:"replacement"`
+	Scope                 string                 `json:"scope"`
+	SubjectBinding        []string               `json:"subject_binding"`
+	Timeout               PolicyTimeout          `json:"timeout"`
 }
 
 type PolicyBudget struct {
 	Currency                int `json:"currency"`
 	ExternalSends           int `json:"external_sends"`
 	PromotionsOfThisSubject int `json:"promotions_of_this_subject"`
+	SendsOfThisSubject      int `json:"sends_of_this_subject,omitempty"`
+}
+
+type PolicyDispatchContract struct {
+	CrashWindow                    string   `json:"crash_window,omitempty"`
+	DispatchIdempotencyKey         string   `json:"dispatch_idempotency_key,omitempty"`
+	DispatchIntentReceipt          string   `json:"dispatch_intent_receipt,omitempty"`
+	ProviderOutcome                []string `json:"provider_outcome,omitempty"`
+	RevocationCheckPoint           string   `json:"revocation_check_point,omitempty"`
+	UncertainOutcomeReconciliation string   `json:"uncertain_outcome_reconciliation,omitempty"`
 }
 
 type PolicyDissent struct {

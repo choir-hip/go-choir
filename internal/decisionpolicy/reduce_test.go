@@ -212,3 +212,176 @@ func TestReduceHumanRequiredSeatAbsent(t *testing.T) {
 		t.Fatalf("error = %v, want %v", err, ErrHumanSeatAbsent)
 	}
 }
+
+func emailSubject() EffectSubject {
+	s := validSubject()
+	s.EffectClass = EffectClassIrreversible
+	s.Recipient = "owner@example.com"
+	s.PayloadDigest = testDigest("payload")
+	s.Actuator = ActuatorTrustedOutbox
+	s.AcceptanceInbox = "accept@example.com"
+	s.ExternalSends = 1
+	return s
+}
+
+func emailManifest() SeatManifest {
+	m := validManifest()
+	m.Seats = append(m.Seats, Seat{
+		SeatID: "external-effects-reviewer", IndependenceDomain: "external_effects",
+		Kind: "independent_verifier", EligibilityProof: "not-authoring-not-verification-signer",
+	})
+	return m
+}
+
+func emailInput(t *testing.T, policyDigest string, extra ...BallotAttestation) (*Store, ConsensusInput) {
+	t.Helper()
+	store := MustEffectsPolicyStore()
+	policy, _, err := store.Get(policyDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subject := emailSubject()
+	manifest := emailManifest()
+	if policyDigest == PolicyDigestHumanRequiredV1 {
+		manifest.Seats = append(manifest.Seats, Seat{
+			SeatID: "owner-human", IndependenceDomain: "owner_human", Kind: "owner_human", EligibilityProof: "owner-present",
+		})
+	}
+	subjectDigest, err := subject.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestDigest, err := manifest.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection := PolicySelectionReceipt{
+		ReceiptKind: ReceiptKindPolicySelection, PolicyDigest: policyDigest,
+		SeatManifestDigest: manifestDigest, SubjectDigest: subjectDigest,
+		SelectedAtHead: testDigest("head"), SelectedSequence: 4,
+	}
+	selectionDigest, err := selection.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection.SelectionDigest = selectionDigest
+	sign := func(id, seat, domain, signer, vote string) BallotAttestation {
+		return mustSign(t, BallotAttestation{
+			BallotID: id, SeatID: seat, EligibilityProofDigest: testDigest(seat + "-elig"),
+			IndependenceDomain: domain, PolicyDigest: policyDigest,
+			SeatManifestDigest: manifestDigest, SubjectDigest: subjectDigest,
+			PolicySelectionDigest: selectionDigest, Vote: vote, WindowID: selectionDigest,
+			SignerProvenance: signer,
+		})
+	}
+	ballots := []BallotAttestation{
+		sign("b-author", "cosuper-author", "authoring", "signer-author", VoteAccept),
+		sign("b-verifier", "capsule-verifier", "verification", "signer-verifier", VoteAccept),
+		sign("b-reviewer", "independent-reviewer", "verification", "signer-reviewer", VoteAccept),
+		sign("b-external", "external-effects-reviewer", "external_effects", "signer-external", VoteAccept),
+	}
+	ballots = append(ballots, extra...)
+	now := time.Date(2026, 8, 16, 1, 30, 0, 0, time.UTC).Format(time.RFC3339Nano)
+	return store, ConsensusInput{
+		Policy: policy, Manifest: manifest, Subject: subject, Selection: selection, Now: now, Ballots: ballots,
+	}
+}
+
+func TestEmbeddedIrreversiblePolicyDigests(t *testing.T) {
+	store := MustEffectsPolicyStore()
+	if got := computerevent.DigestBytes([]byte(strings.TrimSpace(string(IrreversibleEmailV1Bytes())))); got != PolicyDigestIrreversibleEmailV1 {
+		t.Fatalf("irreversible-email-v1 digest %s, want %s", got, PolicyDigestIrreversibleEmailV1)
+	}
+	if got := computerevent.DigestBytes([]byte(strings.TrimSpace(string(HumanRequiredV1Bytes())))); got != PolicyDigestHumanRequiredV1 {
+		t.Fatalf("human-required-v1 digest %s, want %s", got, PolicyDigestHumanRequiredV1)
+	}
+	if !store.Known(PolicyDigestIrreversibleEmailV1) || !store.Known(PolicyDigestHumanRequiredV1) {
+		t.Fatal("email policies not registered")
+	}
+}
+
+func TestReduceQualifiedConsensusReceiptForIrreversibleEmailV1(t *testing.T) {
+	store, input := emailInput(t, PolicyDigestIrreversibleEmailV1)
+	receipt, err := Reduce(store, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt.PolicyID != PolicyIDIrreversibleEmailV1 || receipt.HumanSeatState != HumanSeatAbsent {
+		t.Fatalf("receipt = %+v", receipt)
+	}
+	if !receipt.QuorumEvaluation.Met || receipt.QuorumEvaluation.GlobalAccepts != 3 {
+		t.Fatalf("quorum = %+v", receipt.QuorumEvaluation)
+	}
+	if err := Verify(store, input, receipt); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReversibleSelfDevV1RefusesIrreversibleEmailSubject(t *testing.T) {
+	store, input := validInput(t)
+	input.Subject = emailSubject()
+	_, err := Reduce(store, input)
+	if !errors.Is(err, ErrReversiblePolicyIrreversibleSubject) {
+		t.Fatalf("error = %v, want %v", err, ErrReversiblePolicyIrreversibleSubject)
+	}
+}
+
+func TestHumanRequiredV1RefusesAbsentHumanSeat(t *testing.T) {
+	store, input := emailInput(t, PolicyDigestHumanRequiredV1)
+	// drop the human ballot and seat
+	input.Manifest.Seats = input.Manifest.Seats[:4]
+	input.Ballots = input.Ballots[:4]
+	manifestDigest, err := input.Manifest.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.Selection.SeatManifestDigest = manifestDigest
+	sel, err := input.Selection.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.Selection.SelectionDigest = sel
+	for i := range input.Ballots {
+		input.Ballots[i].SeatManifestDigest = manifestDigest
+		input.Ballots[i].PolicySelectionDigest = sel
+		input.Ballots[i].WindowID = sel
+		if err := input.Ballots[i].Sign(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err = Reduce(store, input)
+	if !errors.Is(err, ErrMissingRequiredSeat) && !errors.Is(err, ErrHumanSeatAbsent) {
+		t.Fatalf("error = %v, want missing required seat or human absent", err)
+	}
+}
+
+func TestHumanRequiredV1AcceptsPresentHumanSeat(t *testing.T) {
+	store, input := emailInput(t, PolicyDigestHumanRequiredV1)
+	human := mustSign(t, BallotAttestation{
+		BallotID: "b-human", SeatID: "owner-human", EligibilityProofDigest: testDigest("owner-human-elig"),
+		IndependenceDomain: "owner_human", PolicyDigest: PolicyDigestHumanRequiredV1,
+		SeatManifestDigest: input.Selection.SeatManifestDigest, SubjectDigest: input.Selection.SubjectDigest,
+		PolicySelectionDigest: input.Selection.SelectionDigest, Vote: VoteAccept,
+		WindowID: input.Selection.SelectionDigest, SignerProvenance: "signer-owner",
+	})
+	input.Ballots = append(input.Ballots, human)
+	receipt, err := Reduce(store, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt.HumanSeatState != HumanSeatPresent || receipt.QuorumEvaluation.GlobalAccepts != 4 {
+		t.Fatalf("receipt = %+v quorum=%+v", receipt, receipt.QuorumEvaluation)
+	}
+}
+
+func TestIrreversibleEmailRefusesAuthorSignerInExternalEffects(t *testing.T) {
+	store, input := emailInput(t, PolicyDigestIrreversibleEmailV1)
+	input.Ballots[3].SignerProvenance = input.Ballots[0].SignerProvenance
+	if err := input.Ballots[3].Sign(); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Reduce(store, input)
+	if !errors.Is(err, ErrIndependenceFabricated) {
+		t.Fatalf("error = %v, want %v", err, ErrIndependenceFabricated)
+	}
+}

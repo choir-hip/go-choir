@@ -61,7 +61,7 @@ type selfDevelopmentGenesisRequest struct {
 	DeployedReleaseRef string `json:"deployed_release_ref"`
 }
 
-var selfDevelopmentDecisionPolicies = decisionpolicy.MustReversibleSelfDevV1Store()
+var selfDevelopmentDecisionPolicies = decisionpolicy.MustEffectsPolicyStore()
 
 type selfDevelopmentRollbackRequest struct {
 	ExpectedDesiredHead     string `json:"expected_desired_head"`

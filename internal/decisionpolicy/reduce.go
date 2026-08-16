@@ -126,7 +126,7 @@ func Reduce(store *Store, input ConsensusInput) (QualifiedConsensusReceipt, erro
 	domainAccepts := map[string]int{}
 	blockingDissent := false
 	humanPresent := false
-	requiredVerificationPresent := map[string]bool{}
+	requiredPresent := map[string]bool{}
 
 	for _, ballot := range input.Ballots {
 		if seenBallot[ballot.BallotID] {
@@ -165,14 +165,16 @@ func Reduce(store *Store, input ConsensusInput) (QualifiedConsensusReceipt, erro
 		if containsString(policySeat.RecusedFrom, ballot.IndependenceDomain) {
 			return QualifiedConsensusReceipt{}, ErrIndependenceFabricated
 		}
-		if policySeat.IndependenceDomain == "verification" && authorSigners[ballot.SignerProvenance] {
-			return QualifiedConsensusReceipt{}, ErrIndependenceFabricated
+		if authorSigners[ballot.SignerProvenance] {
+			if author, ok := policySeatByID["cosuper-author"]; ok && containsString(author.RecusedFrom, ballot.IndependenceDomain) {
+				return QualifiedConsensusReceipt{}, ErrIndependenceFabricated
+			}
 		}
 		if seat.Kind == "owner_human" || policySeat.Kind == "owner_human" {
 			humanPresent = true
 		}
-		if policySeat.IndependenceDomain == "verification" && policySeat.CountsTowardQuorum {
-			requiredVerificationPresent[ballot.SeatID] = true
+		if policySeat.CountsTowardQuorum {
+			requiredPresent[ballot.SeatID] = true
 		}
 		switch ballot.Vote {
 		case VoteAccept:
@@ -192,7 +194,7 @@ func Reduce(store *Store, input ConsensusInput) (QualifiedConsensusReceipt, erro
 	}
 	for _, policySeat := range policy.EligibleSeats {
 		domainRule := policy.Quorum.PerDomain[policySeat.IndependenceDomain]
-		if domainRule.RequiredPresent && policySeat.CountsTowardQuorum && !requiredVerificationPresent[policySeat.SeatID] {
+		if domainRule.RequiredPresent && policySeat.CountsTowardQuorum && !requiredPresent[policySeat.SeatID] {
 			return QualifiedConsensusReceipt{}, ErrMissingRequiredSeat
 		}
 	}
@@ -313,11 +315,20 @@ func refuseBounds(policy Policy, subject EffectSubject) error {
 	if policy.Budget.ExternalSends == 0 && subject.ExternalSends > 0 {
 		return ErrBounds
 	}
+	if policy.Budget.ExternalSends > 0 && subject.ExternalSends > policy.Budget.ExternalSends {
+		return ErrBounds
+	}
 	if containsString(policy.ForbiddenCapabilities, "outbox.send") && subject.Actuator == ActuatorTrustedOutbox {
 		return ErrBounds
 	}
 	if containsString(policy.InadmissibleEvidence, "owner_recovery_checkpoint") && subject.OwnerRecovery {
 		return ErrOwnerRecovery
+	}
+	if policy.EffectClass == EffectClassIrreversible {
+		if strings.TrimSpace(subject.Recipient) == "" || !computerevent.IsSHA256(subject.PayloadDigest) ||
+			subject.Actuator != ActuatorTrustedOutbox || strings.TrimSpace(subject.AcceptanceInbox) == "" {
+			return ErrBounds
+		}
 	}
 	return nil
 }

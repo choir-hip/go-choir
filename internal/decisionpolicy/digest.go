@@ -244,3 +244,22 @@ func MustReversibleSelfDevV1Store() *Store {
 	}
 	return s
 }
+
+func MustEffectsPolicyStore() *Store {
+	s := MustReversibleSelfDevV1Store()
+	emailDigest, err := s.Put(irreversibleEmailV1JSON)
+	if err != nil {
+		panic(err)
+	}
+	if emailDigest != PolicyDigestIrreversibleEmailV1 {
+		panic("irreversible-email-v1 digest mismatch")
+	}
+	humanDigest, err := s.Put(humanRequiredV1JSON)
+	if err != nil {
+		panic(err)
+	}
+	if humanDigest != PolicyDigestHumanRequiredV1 {
+		panic("human-required-v1 digest mismatch")
+	}
+	return s
+}
