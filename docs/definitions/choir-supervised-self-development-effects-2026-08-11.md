@@ -256,12 +256,12 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer landed. irreversible-email-v1 + human-required-v1 policy bytes frozen as define candidate (digests d83c2154 / 33f5dc44); independent review unpaid. Owner gates still present. Effects remain OFF. No outbox wired."
+  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer landed. irreversible-email-v1 + human-required-v1 policy bytes ACCEPT (digests d83c2154 / 33f5dc44; 3/3 completed panelists, Devin no-verdict). Owner gates still present. Effects remain OFF. Next: trusted-outbox dispatch. No live send."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-16T01:05:00Z
-    source_ref: irreversible-email-v1 define candidate on parent main@a5f8bdcc; staging product still 4ac90583
+    observed_at: 2026-08-16T01:20:00Z
+    source_ref: irreversible-email-v1 policy-bytes ACCEPT on parent main@20d2ac4c; staging product still 4ac90583
     deploy_identity: "staging deployed 4ac90583 at 2026-08-14T23:24:20Z; retained computer-03335285269bdba4f94377e56879f9e6 epoch 268; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
@@ -280,9 +280,9 @@ now:
     owner_ratification_ref: "owner correction 2026-08-13: irreversible effects are not outside the autonomy window; effect-specific multiagent consensus is the governing boundary, and human approval is optional as one possible consensus participant."
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
-  evidence_refs: [docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "None for the reducer land. Remaining risk: deleting fail-closed owner gates before deployed acceptance of the consensus path; using OwnerRecovery checkpoints for promotion (route projection already refuses); treating epoch 8253 as the current retained epoch (paid restore is epoch 268). Kill-loop problem repaired at db265d1e is not current readiness proof. Rehearsal and irreversible email are unpaid."
-  next_action: "Independent review of irreversible-email-v1 / human-required-v1 policy bytes, then trusted-outbox dispatch (route map 7). Do not wire an outbox or send mail before that review ACCEPT. Owner gates remain until deployed acceptance of the consensus path. Supervision wiring and rehearsal remain unpaid. Effects remain OFF. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
+  evidence_refs: [docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
+  blocker_or_risk: "None for the email-policy ACCEPT. Remaining risk: deleting fail-closed owner gates before deployed acceptance of the consensus path; wiring a live send before rehearsal; using OwnerRecovery checkpoints for promotion (route projection already refuses); treating epoch 8253 as the current retained epoch (paid restore is epoch 268). Kill-loop problem repaired at db265d1e is not current readiness proof. Trusted-outbox dispatch, supervision, and rehearsal remain unpaid."
+  next_action: "Red slice (7): trusted-outbox dispatch for one exact email under irreversible-email-v1. Prove reversible-selfdev-v1 refuses the subject; irreversible-email-v1 can authorize without a human seat; human-required-v1 refuses when that seat is absent; intent/consequence receipts cover delivery and correction. Do not send live mail until rehearsal. Owner gates remain until deployed acceptance of the consensus path. Supervision wiring and rehearsal remain unpaid. Effects remain OFF. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -365,12 +365,28 @@ receipts:
       environment_identity: staging https://choir.news deployed 4ac90583
       deployed_acceptance: not_applicable
     registry_conformance_ref: not_applicable
+  - id: effects-irreversible-email-v1-policy-review-2026-08-16
+    boundary: define
+    commit_or_artifact: docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md
+    proof_refs: [docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md]
+    rollback_ref: revert this docs-only review stamp
+    disposition: "ACCEPT 3/3 completed panelists (Devin no-verdict). Digests verified. Completeness and rejection bars closed. Next is trusted-outbox dispatch, not a live send."
+    problem_ref: irreversible-effects-human-gate-drift-2026-08-13
+    authorization_ref: this Definition now.next_action after email policy freeze
+    candidate_or_evidence_refs: [docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md]
+    landing:
+      source_commit: 20d2ac4c
+      ci_ref: pending (Docs Truth Check)
+      deploy_ref: 4ac90583e389e3334efa57ce204d6df3235a68f1
+      environment_identity: staging https://choir.news deployed 4ac90583
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: not_applicable
   - id: effects-irreversible-email-v1-policy-2026-08-16
     boundary: define
     commit_or_artifact: docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md
     proof_refs: [docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md]
     rollback_ref: revert this docs-only policy freeze
-    disposition: "define candidate — irreversible-email-v1 digest d83c2154, human-required-v1 digest 33f5dc44. Not implementation. Independent review unpaid. No outbox wired. Effects remain OFF."
+    disposition: "define sub-slice ACCEPT 2026-08-16 (3/3 completed). Digests d83c2154 and 33f5dc44. Not implementation. No outbox wired. Effects remain OFF."
     problem_ref: irreversible-effects-human-gate-drift-2026-08-13
     authorization_ref: this Definition now.next_action after reducer land
     candidate_or_evidence_refs: [docs/evidence/effects-decision-policy-schema-2026-08-15.md]
@@ -774,11 +790,13 @@ at all.
    binds operation/bundle/heads/commitments plus `policy_digest` and
    `consensus_receipt_digest`. Owner gates remain until deployed acceptance.
    Fail-closed refuse matrix is unit-tested. Effects remain OFF.
-7. **Irreversible effect path (red).** Add a stronger policy and trusted outbox
-   for one exact email to an owner-controlled acceptance inbox. Prove that the
-   reversible policy refuses it; the irreversible policy can authorize it
-   without a human seat; delivery and later correction remain durably receipted;
-   and a separate human-required policy refuses when that seat is absent.
+7. **Irreversible effect path (red).** Policy bytes ACCEPT 2026-08-16
+   (`irreversible-email-v1` `d83c2154…`, `human-required-v1` `33f5dc44…`).
+   Remaining: trusted outbox for one exact email to an owner-controlled
+   acceptance inbox. Prove that the reversible policy refuses it; the
+   irreversible policy can authorize it without a human seat; delivery and
+   later correction remain durably receipted; and a separate human-required
+   policy refuses when that seat is absent. Do not send live mail until rehearsal.
 8. **Supervision wiring (green).** Confirm the upward packet carries joinable
    identities and that Texture's production registry has `update_coagent`.
 9. **Rehearsal (orange→red).** Reversible change: propose → qualified consensus
