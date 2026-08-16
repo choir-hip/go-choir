@@ -15,10 +15,11 @@ import (
 )
 
 const (
-	SelfDevelopmentModeOff         = "off"
-	SelfDevelopmentModeAuditOnly   = "audit_only"
-	SelfDevelopmentModeProposeOnly = "propose_only"
-	SelfDevelopmentModeAcceptOnce  = "accept_once"
+	SelfDevelopmentModeOff                = "off"
+	SelfDevelopmentModeAuditOnly          = "audit_only"
+	SelfDevelopmentModeProposeOnly        = "propose_only"
+	SelfDevelopmentModeAcceptOnce         = "accept_once"
+	SelfDevelopmentModeQualifiedConsensus = "qualified_consensus"
 )
 
 var ErrSelfDevelopmentModeConflict = errors.New("self-development mode CAS conflict")
@@ -35,6 +36,8 @@ type SelfDevelopmentMode struct {
 	ExpectedDesiredStateCommitment   string                 `json:"expected_desired_state_commitment,omitempty"`
 	ExpectedEffectiveStateCommitment string                 `json:"expected_effective_state_commitment,omitempty"`
 	ExpiresAt                        string                 `json:"expires_at,omitempty"`
+	PolicyDigest                     string                 `json:"policy_digest,omitempty"`
+	ConsensusReceiptDigest           string                 `json:"consensus_receipt_digest,omitempty"`
 	Receipt                          *computerevent.Receipt `json:"receipt,omitempty"`
 }
 
@@ -49,6 +52,8 @@ type SetSelfDevelopmentModeRequest struct {
 	ExpectedDesiredStateCommitment   string  `json:"expected_desired_state_commitment,omitempty"`
 	ExpectedEffectiveStateCommitment string  `json:"expected_effective_state_commitment,omitempty"`
 	ExpiresAt                        string  `json:"expires_at,omitempty"`
+	PolicyDigest                     string  `json:"policy_digest,omitempty"`
+	ConsensusReceiptDigest           string  `json:"consensus_receipt_digest,omitempty"`
 	IdempotencyKey                   string  `json:"idempotency_key"`
 }
 
@@ -78,7 +83,8 @@ func (c *SelfDevelopmentModeCAS) Get(ctx context.Context, computerID string) (Se
 	if !found {
 		return SelfDevelopmentMode{ComputerID: computerID, Mode: SelfDevelopmentModeOff}, nil
 	}
-	if mode.Mode != SelfDevelopmentModeAcceptOnce {
+	hydrateSelfDevelopmentModeBindings(&mode)
+	if mode.Mode != SelfDevelopmentModeAcceptOnce && mode.Mode != SelfDevelopmentModeQualifiedConsensus {
 		return mode, nil
 	}
 	expiresAt, err := time.Parse(time.RFC3339Nano, mode.ExpiresAt)
@@ -105,10 +111,10 @@ func (c *SelfDevelopmentModeCAS) Get(ctx context.Context, computerID string) (Se
 	if !found {
 		return SelfDevelopmentMode{ComputerID: computerID, Mode: SelfDevelopmentModeOff}, nil
 	}
-	if current.Mode == SelfDevelopmentModeAcceptOnce {
+	if current.Mode == SelfDevelopmentModeAcceptOnce || current.Mode == SelfDevelopmentModeQualifiedConsensus {
 		currentExpiry, parseErr := time.Parse(time.RFC3339Nano, current.ExpiresAt)
 		if parseErr != nil || !c.now().Before(currentExpiry) {
-			return SelfDevelopmentMode{}, fmt.Errorf("self-development mode: expired accept_once reconciliation conflicted")
+			return SelfDevelopmentMode{}, fmt.Errorf("self-development mode: expired one-shot mode reconciliation conflicted")
 		}
 	}
 	return current, nil
@@ -166,6 +172,8 @@ func (c *SelfDevelopmentModeCAS) Set(ctx context.Context, computerID string, req
 		"expected_desired_state_commitment":   next.ExpectedDesiredStateCommitment,
 		"expected_effective_state_commitment": next.ExpectedEffectiveStateCommitment,
 		"bundle_digest":                       next.BundleDigest, "expires_at": next.ExpiresAt,
+		"policy_digest":                       next.PolicyDigest,
+		"consensus_receipt_digest":            next.ConsensusReceiptDigest,
 		"consumed_operation_id":               current.OperationID,
 		"consumed_bundle_digest":              current.BundleDigest,
 		"consumed_desired_event_head":         current.ExpectedDesiredEventHead,
@@ -174,6 +182,8 @@ func (c *SelfDevelopmentModeCAS) Set(ctx context.Context, computerID string, req
 		"consumed_expires_at":                 current.ExpiresAt,
 		"consumed_desired_state_commitment":   current.ExpectedDesiredStateCommitment,
 		"consumed_effective_state_commitment": current.ExpectedEffectiveStateCommitment,
+		"consumed_policy_digest":              current.PolicyDigest,
+		"consumed_consensus_receipt_digest":   current.ConsensusReceiptDigest,
 		"idempotency_key":                     request.IdempotencyKey, "request_commitment": requestCommitment,
 	}
 	receipt, err := computerevent.NewSignedReceipt("ModeReceipt", "corpusd", fields, []computerevent.SigningKey{c.signingKey}, now)
@@ -222,11 +232,17 @@ func validateSelfDevelopmentModeTransition(current SelfDevelopmentMode, request 
 				return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: bindings are forbidden for %s", request.Mode)
 			}
 		}
+		if strings.TrimSpace(request.PolicyDigest) != "" || strings.TrimSpace(request.ConsensusReceiptDigest) != "" {
+			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: bindings are forbidden for %s", request.Mode)
+		}
 		return next, nil, nil
 	// accept_once is the legacy fail-closed owner-gated mode. The active effects
 	// Definition replaces it atomically with policy-bound consensus modes; these
 	// exact bindings remain required until that replacement is complete.
 	case SelfDevelopmentModeAcceptOnce:
+		if strings.TrimSpace(request.PolicyDigest) != "" || strings.TrimSpace(request.ConsensusReceiptDigest) != "" {
+			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: accept_once does not bind consensus receipts")
+		}
 		if request.ExpectedPendingTransitionRef == nil || strings.TrimSpace(request.OperationID) == "" || !computerevent.IsSHA256(request.BundleDigest) || !computerevent.IsSHA256(request.ExpectedDesiredEventHead) || !computerevent.IsSHA256(request.ExpectedEffectiveEventHead) || !computerevent.IsSHA256(request.ExpectedDesiredStateCommitment) || !computerevent.IsSHA256(request.ExpectedEffectiveStateCommitment) {
 			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: accept_once requires exact operation, bundle, heads, pending transition, and commitments")
 		}
@@ -242,6 +258,25 @@ func validateSelfDevelopmentModeTransition(current SelfDevelopmentMode, request 
 		next.ExpectedDesiredStateCommitment = request.ExpectedDesiredStateCommitment
 		next.ExpectedEffectiveStateCommitment = request.ExpectedEffectiveStateCommitment
 		next.ExpiresAt = request.ExpiresAt
+		return next, expiresAt.UTC(), nil
+	case SelfDevelopmentModeQualifiedConsensus:
+		if request.ExpectedPendingTransitionRef == nil || strings.TrimSpace(request.OperationID) == "" || !computerevent.IsSHA256(request.BundleDigest) || !computerevent.IsSHA256(request.ExpectedDesiredEventHead) || !computerevent.IsSHA256(request.ExpectedEffectiveEventHead) || !computerevent.IsSHA256(request.ExpectedDesiredStateCommitment) || !computerevent.IsSHA256(request.ExpectedEffectiveStateCommitment) || !computerevent.IsSHA256(request.PolicyDigest) || !computerevent.IsSHA256(request.ConsensusReceiptDigest) {
+			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: qualified_consensus requires exact operation, bundle, heads, pending transition, commitments, policy_digest, and consensus_receipt_digest")
+		}
+		expiresAt, err := time.Parse(time.RFC3339Nano, request.ExpiresAt)
+		if err != nil || expiresAt.Location() != time.UTC || expiresAt.Format(time.RFC3339Nano) != request.ExpiresAt || !expiresAt.After(now.UTC()) {
+			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: qualified_consensus requires a future canonical UTC expiry")
+		}
+		next.OperationID = request.OperationID
+		next.BundleDigest = request.BundleDigest
+		next.ExpectedDesiredEventHead = request.ExpectedDesiredEventHead
+		next.ExpectedEffectiveEventHead = request.ExpectedEffectiveEventHead
+		next.ExpectedPendingTransitionRef = strings.TrimSpace(*request.ExpectedPendingTransitionRef)
+		next.ExpectedDesiredStateCommitment = request.ExpectedDesiredStateCommitment
+		next.ExpectedEffectiveStateCommitment = request.ExpectedEffectiveStateCommitment
+		next.ExpiresAt = request.ExpiresAt
+		next.PolicyDigest = request.PolicyDigest
+		next.ConsensusReceiptDigest = request.ConsensusReceiptDigest
 		return next, expiresAt.UTC(), nil
 	default:
 		return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: unknown mode %q", request.Mode)
@@ -284,7 +319,24 @@ func readSelfDevelopmentMode(ctx context.Context, db queryRower, computerID stri
 		return SelfDevelopmentMode{}, false, fmt.Errorf("self-development mode: decode receipt: %w", err)
 	}
 	mode.Receipt = &receipt
+	hydrateSelfDevelopmentModeBindings(&mode)
 	return mode, true, nil
+}
+
+func hydrateSelfDevelopmentModeBindings(mode *SelfDevelopmentMode) {
+	if mode == nil || mode.Receipt == nil {
+		return
+	}
+	field := func(name string) string {
+		value, _ := mode.Receipt.KindFields[name].(string)
+		return value
+	}
+	if mode.PolicyDigest == "" {
+		mode.PolicyDigest = field("policy_digest")
+	}
+	if mode.ConsensusReceiptDigest == "" {
+		mode.ConsensusReceiptDigest = field("consensus_receipt_digest")
+	}
 }
 
 func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Request) {

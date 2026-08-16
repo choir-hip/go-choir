@@ -16,6 +16,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
@@ -660,5 +661,130 @@ func TestKernelCapabilityUnavailableResponseIsTypedAndNonSecret(t *testing.T) {
 	}
 	if response.Error != "kernel capability receipt unavailable" || response.Reason != "probe_unavailable" {
 		t.Fatalf("response = %#v, want stable typed refusal", response)
+	}
+}
+
+func TestFinalizedDecisionBindingAcceptsQualifiedConsensusReceipt(t *testing.T) {
+	store, input := decisionpolicyValidInput(t)
+	receipt, err := decisionpolicy.Reduce(store, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored := receipt
+	stored.ReceiptDigest = ""
+	receiptJSON, err := computerevent.CanonicalJSON(stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiptArtifact := computerevent.DigestBytes(receiptJSON)
+	if receiptArtifact != receipt.ReceiptDigest {
+		t.Fatalf("artifact digest %s != receipt digest %s", receiptArtifact, receipt.ReceiptDigest)
+	}
+	modeArtifact := strings.Repeat("d", 64)
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: "computer-binding",
+		Sequence: 1, PreviousHead: computerevent.ZeroHead, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		EventKind: computerevent.EventEffectAccepted, IdempotencyKey: "decision-binding-consensus", RequestCommitment: strings.Repeat("1", 64),
+		TrajectoryID: "trajectory-binding", CapsuleID: "capsule-binding", ParentEventID: "operation-binding",
+		ActorProfile: "super", AuthorityRef: decisionpolicy.AuthorityRef(receipt), PrivacyClass: "owner",
+		ExpectedDesiredEventHead: strings.Repeat("9", 64), ExpectedEffectiveEventHead: strings.Repeat("a", 64),
+		ExpectedDesiredStateCommitment: strings.Repeat("b", 64), ExpectedEffectiveStateCommitment: strings.Repeat("c", 64),
+		RequireExpectedHead: true,
+		PayloadCommitment:   computerevent.ZeroHead, ProposedEffectRef: strings.Repeat("2", 64), DecisionRef: strings.Repeat("3", 64),
+		InputArtifactRefs: []string{"artifact:sha256:" + modeArtifact, "artifact:sha256:" + receiptArtifact},
+		VerifierRefs:      []string{strings.Repeat("4", 64)}, ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	eventDigest, err := event.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	transition := computerevent.DurableEvent{
+		Request: computerevent.CASRequest{
+			Event: event, EventDigest: eventDigest,
+			Next: computerevent.Head{DesiredEventHead: strings.Repeat("5", 64), EffectiveEventHead: strings.Repeat("6", 64)},
+		},
+		Receipt: computerevent.Receipt{ReceiptKind: "EventHeadReceipt", ReceiptID: "receipt-binding", KindFields: map[string]any{"event_digest": eventDigest}},
+	}
+	operation := selfdev.Operation{
+		OperationID: event.ParentEventID, ComputerID: event.ComputerID, TrajectoryID: event.TrajectoryID,
+		CapsuleID: event.CapsuleID, BundleDigest: event.ProposedEffectRef, VerifierRefs: append([]string(nil), event.VerifierRefs...),
+		State: selfdev.StateAwaitingApproval,
+	}
+	got, err := verifyFinalizedSelfDevelopmentDecision(operation, transition)
+	if err != nil {
+		t.Fatalf("qualified consensus decision refused: %v", err)
+	}
+	if got.AuthorityKind != "qualified-consensus" || got.ConsensusReceiptDigest != receipt.ReceiptDigest || got.Actor != receipt.ReceiptDigest {
+		t.Fatalf("verified decision = %+v", got)
+	}
+	unowned := transition
+	unowned.Request.Event.AuthorityRef = "nobody:" + receipt.ReceiptDigest
+	if _, err := verifyFinalizedSelfDevelopmentDecision(operation, unowned); err == nil {
+		t.Fatal("decision with neither owner nor consensus authority was accepted")
+	}
+}
+
+func decisionpolicyValidInput(t *testing.T) (*decisionpolicy.Store, decisionpolicy.ConsensusInput) {
+	t.Helper()
+	store := decisionpolicy.MustReversibleSelfDevV1Store()
+	policy, _, err := store.Get(decisionpolicy.PolicyDigestReversibleSelfDevV1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := func(seed string) string { return computerevent.DigestBytes([]byte(seed)) }
+	subject := decisionpolicy.EffectSubject{
+		ComputerID: "computer-test", OperationID: "operation-test", BundleDigest: digest("bundle"),
+		DesiredEventHead: digest("desired"), EffectiveEventHead: digest("effective"),
+		DesiredStateCommitment: digest("desired-state"), EffectiveStateCommitment: digest("effective-state"),
+		EffectClass: decisionpolicy.EffectClassReversible,
+	}
+	manifest := decisionpolicy.SeatManifest{Seats: []decisionpolicy.Seat{
+		{SeatID: "cosuper-author", IndependenceDomain: "authoring", Kind: "agent_profile", EligibilityProof: "assigned-cosuper"},
+		{SeatID: "capsule-verifier", IndependenceDomain: "verification", Kind: "independent_verifier", EligibilityProof: "capsule-exec-receipts"},
+		{SeatID: "independent-reviewer", IndependenceDomain: "verification", Kind: "agent_profile", EligibilityProof: "not-authoring-cosuper"},
+	}}
+	subjectDigest, err := subject.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestDigest, err := manifest.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection := decisionpolicy.PolicySelectionReceipt{
+		ReceiptKind: decisionpolicy.ReceiptKindPolicySelection, PolicyDigest: decisionpolicy.PolicyDigestReversibleSelfDevV1,
+		SeatManifestDigest: manifestDigest, SubjectDigest: subjectDigest,
+		SelectedAtHead: digest("head"), SelectedSequence: 4,
+	}
+	selectionDigest, err := selection.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection.SelectionDigest = selectionDigest
+	sign := func(id, seat, domain, signer string) decisionpolicy.BallotAttestation {
+		b := decisionpolicy.BallotAttestation{
+			BallotID: id, SeatID: seat, EligibilityProofDigest: digest(seat + "-elig"),
+			IndependenceDomain: domain, PolicyDigest: decisionpolicy.PolicyDigestReversibleSelfDevV1,
+			SeatManifestDigest: manifestDigest, SubjectDigest: subjectDigest,
+			PolicySelectionDigest: selectionDigest, Vote: decisionpolicy.VoteAccept, WindowID: selectionDigest,
+			SignerProvenance: signer,
+		}
+		if err := b.Sign(); err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	return store, decisionpolicy.ConsensusInput{
+		Policy: policy, Manifest: manifest, Subject: subject, Selection: selection,
+		Now: time.Date(2026, 8, 16, 0, 50, 0, 0, time.UTC).Format(time.RFC3339Nano),
+		Ballots: []decisionpolicy.BallotAttestation{
+			sign("b-author", "cosuper-author", "authoring", "signer-author"),
+			sign("b-verifier", "capsule-verifier", "verification", "signer-verifier"),
+			sign("b-reviewer", "independent-reviewer", "verification", "signer-reviewer"),
+		},
 	}
 }

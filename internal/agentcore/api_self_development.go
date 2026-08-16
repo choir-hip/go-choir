@@ -18,6 +18,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
@@ -35,17 +36,18 @@ type selfDevelopmentStartRequest struct {
 }
 
 type selfDevelopmentDecisionRequest struct {
-	Decision                         string                 `json:"decision"`
-	IdempotencyKey                   string                 `json:"idempotency_key"`
-	BundleDigest                     string                 `json:"bundle_digest"`
-	VerifierRef                      string                 `json:"verifier_ref"`
-	Reason                           string                 `json:"reason,omitempty"`
-	ExpectedDesiredEventHead         string                 `json:"expected_desired_event_head"`
-	ExpectedEffectiveEventHead       string                 `json:"expected_effective_event_head"`
-	ExpectedPendingTransitionRef     *string                `json:"expected_pending_transition_ref"`
-	ExpectedDesiredStateCommitment   string                 `json:"expected_desired_state_commitment"`
-	ExpectedEffectiveStateCommitment string                 `json:"expected_effective_state_commitment"`
-	ModeReceipt                      *computerevent.Receipt `json:"mode_receipt,omitempty"`
+	Decision                         string                          `json:"decision"`
+	IdempotencyKey                   string                          `json:"idempotency_key"`
+	BundleDigest                     string                          `json:"bundle_digest"`
+	VerifierRef                      string                          `json:"verifier_ref"`
+	Reason                           string                          `json:"reason,omitempty"`
+	ExpectedDesiredEventHead         string                          `json:"expected_desired_event_head"`
+	ExpectedEffectiveEventHead       string                          `json:"expected_effective_event_head"`
+	ExpectedPendingTransitionRef     *string                         `json:"expected_pending_transition_ref"`
+	ExpectedDesiredStateCommitment   string                          `json:"expected_desired_state_commitment"`
+	ExpectedEffectiveStateCommitment string                          `json:"expected_effective_state_commitment"`
+	ModeReceipt                      *computerevent.Receipt          `json:"mode_receipt,omitempty"`
+	QualifiedConsensus               *decisionpolicy.ConsensusBundle `json:"qualified_consensus,omitempty"`
 }
 
 type selfDevelopmentGenesisRequest struct {
@@ -58,6 +60,8 @@ type selfDevelopmentGenesisRequest struct {
 	CandidateRef       string `json:"candidate_ref"`
 	DeployedReleaseRef string `json:"deployed_release_ref"`
 }
+
+var selfDevelopmentDecisionPolicies = decisionpolicy.MustReversibleSelfDevV1Store()
 
 type selfDevelopmentRollbackRequest struct {
 	ExpectedDesiredHead     string `json:"expected_desired_head"`
@@ -759,6 +763,8 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "current mode receipt is invalid"})
 		return
 	}
+	var consensusReceiptBytes []byte
+	consensusAuthority := ""
 	if request.Decision == "approve" {
 		switch currentMode.Mode {
 		case platform.SelfDevelopmentModeProposeOnly:
@@ -786,6 +792,64 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 			currentMode, modeErr = h.rt.selfdevControl.SetSelfDevelopmentMode(r.Context(), platform.SetSelfDevelopmentModeRequest{
 				Mode: platform.SelfDevelopmentModeProposeOnly, ExpectedGeneration: currentMode.Generation,
 				IdempotencyKey: "accept-once-consumed:" + operationID + ":" + consumptionDigest,
+			})
+		case platform.SelfDevelopmentModeQualifiedConsensus:
+			expectedPending := strings.TrimSpace(*request.ExpectedPendingTransitionRef)
+			if currentMode.OperationID != operationID || currentMode.BundleDigest != request.BundleDigest ||
+				currentMode.ExpectedDesiredEventHead != request.ExpectedDesiredEventHead ||
+				currentMode.ExpectedEffectiveEventHead != request.ExpectedEffectiveEventHead ||
+				currentMode.ExpectedPendingTransitionRef != expectedPending ||
+				currentMode.ExpectedDesiredStateCommitment != request.ExpectedDesiredStateCommitment ||
+				currentMode.ExpectedEffectiveStateCommitment != request.ExpectedEffectiveStateCommitment {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: "current qualified_consensus mode does not bind this decision"})
+				return
+			}
+			if request.QualifiedConsensus == nil {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: "qualified consensus bundle is required"})
+				return
+			}
+			if request.QualifiedConsensus.Now == "" {
+				request.QualifiedConsensus.Now = time.Now().UTC().Format(time.RFC3339Nano)
+			}
+			receipt, reduceErr := selfDevelopmentDecisionPolicies.ReduceBundle(*request.QualifiedConsensus)
+			if reduceErr != nil {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: reduceErr.Error()})
+				return
+			}
+			if receipt.ReceiptDigest != currentMode.ConsensusReceiptDigest || receipt.PolicyDigest != currentMode.PolicyDigest {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: "qualified consensus receipt does not match armed mode"})
+				return
+			}
+			stored := receipt
+			stored.ReceiptDigest = ""
+			receiptJSON, receiptErr := computerevent.CanonicalJSON(stored)
+			if receiptErr != nil || computerevent.DigestBytes(receiptJSON) != receipt.ReceiptDigest {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: "qualified consensus receipt encoding failed"})
+				return
+			}
+			consensusReceiptBytes = receiptJSON
+			consensusAuthority = decisionpolicy.AuthorityRef(receipt)
+			subjectDigest, subjectErr := request.QualifiedConsensus.Subject.Digest()
+			wantSubject := decisionpolicy.EffectSubject{
+				ComputerID: computerID, OperationID: operationID, BundleDigest: request.BundleDigest,
+				DesiredEventHead: request.ExpectedDesiredEventHead, EffectiveEventHead: request.ExpectedEffectiveEventHead,
+				PendingTransitionRef: expectedPending, DesiredStateCommitment: request.ExpectedDesiredStateCommitment,
+				EffectiveStateCommitment: request.ExpectedEffectiveStateCommitment,
+				EffectClass:              request.QualifiedConsensus.Subject.EffectClass,
+			}
+			wantDigest, wantErr := wantSubject.Digest()
+			if subjectErr != nil || wantErr != nil || subjectDigest != wantDigest || receipt.SubjectDigest != wantDigest {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: "qualified consensus subject does not bind this operation"})
+				return
+			}
+			consumptionDigest, digestErr := selfdevprotocol.DecisionBindingDigest(selfDevelopmentDecisionBinding(operationID, request))
+			if digestErr != nil {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: "decision mode binding is invalid"})
+				return
+			}
+			currentMode, modeErr = h.rt.selfdevControl.SetSelfDevelopmentMode(r.Context(), platform.SetSelfDevelopmentModeRequest{
+				Mode: platform.SelfDevelopmentModeProposeOnly, ExpectedGeneration: currentMode.Generation,
+				IdempotencyKey: "qualified-consensus-consumed:" + operationID + ":" + consumptionDigest,
 			})
 		default:
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "current mode does not authorize approval"})
@@ -832,7 +896,7 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 			RequestCommitment: computerevent.ZeroHead, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
 			ParentEventID: operation.OperationID,
 			PreviousHead:  expectedCanonicalHead,
-			ActorProfile:  agentprofile.Super, AuthorityRef: "external-owner:" + ownerID, PrivacyClass: "owner",
+			ActorProfile:  agentprofile.Super, AuthorityRef: selfDevelopmentDecisionAuthority(ownerID, consensusAuthority), PrivacyClass: "owner",
 			ExpectedDesiredEventHead: request.ExpectedDesiredEventHead, ExpectedEffectiveEventHead: request.ExpectedEffectiveEventHead,
 			ExpectedPendingTransitionRef:     expectedPendingTransitionRef,
 			ExpectedDesiredStateCommitment:   request.ExpectedDesiredStateCommitment,
@@ -854,6 +918,12 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 			Content: modeBytes, MediaType: "application/vnd.choir.mode-receipt+json",
 			PrivacyClass: "owner", Direction: computerevent.EventPayloadInput,
 		}}
+		if len(consensusReceiptBytes) > 0 {
+			payloads = append(payloads, computerevent.EventPayload{
+				Content: consensusReceiptBytes, MediaType: "application/vnd.choir.qualified-consensus-receipt+json",
+				PrivacyClass: "owner", Direction: computerevent.EventPayloadInput,
+			})
+		}
 		if request.Decision == "reject" {
 			payloads = append(payloads, computerevent.EventPayload{
 				Content: []byte(request.Reason), MediaType: "text/plain; charset=utf-8",
@@ -863,6 +933,12 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		_, artifactDigests, appendErr := h.rt.eventAppender.AppendNewPayloadSet(r.Context(), event, input, payloads, h.rt.privateArtifactCipher)
 		if appendErr == nil && (len(artifactDigests) == 0 || artifactDigests[0] != modeReceiptDigest) {
 			appendErr = fmt.Errorf("mode receipt artifact binding mismatch")
+		}
+		if appendErr == nil && len(consensusReceiptBytes) > 0 {
+			want := computerevent.DigestBytes(consensusReceiptBytes)
+			if len(artifactDigests) < 2 || artifactDigests[1] != want {
+				appendErr = fmt.Errorf("consensus receipt artifact binding mismatch")
+			}
 		}
 		if appendErr != nil {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: appendErr.Error()})
@@ -907,6 +983,13 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 	writeAPIJSON(w, http.StatusOK, operation)
 }
 
+func selfDevelopmentDecisionAuthority(ownerID, consensusAuthority string) string {
+	if strings.TrimSpace(consensusAuthority) != "" {
+		return consensusAuthority
+	}
+	return "external-owner:" + ownerID
+}
+
 func selfDevelopmentDecisionRef(request selfDevelopmentDecisionRequest) (string, error) {
 	request.ModeReceipt = nil
 	requestBytes, err := computerevent.CanonicalJSON(request)
@@ -921,8 +1004,16 @@ func exactSelfDevelopmentDecisionRequestMatches(event computerevent.Event, compu
 	if request.ExpectedPendingTransitionRef != nil {
 		expectedPending = strings.TrimSpace(*request.ExpectedPendingTransitionRef)
 	}
+	wantAuthority := "external-owner:" + ownerID
+	if request.QualifiedConsensus != nil {
+		if request.QualifiedConsensus.Selection.PolicyDigest != "" {
+			if receipt, err := selfDevelopmentDecisionPolicies.ReduceBundle(*request.QualifiedConsensus); err == nil {
+				wantAuthority = decisionpolicy.AuthorityRef(receipt)
+			}
+		}
+	}
 	return event.ComputerID == computerID && event.ParentEventID == operationID &&
-		event.EventKind == expectedKind && event.AuthorityRef == "external-owner:"+ownerID &&
+		event.EventKind == expectedKind && event.AuthorityRef == wantAuthority &&
 		event.ProposedEffectRef == request.BundleDigest && event.DecisionRef == decisionRef &&
 		len(event.VerifierRefs) == 1 && event.VerifierRefs[0] == request.VerifierRef &&
 		event.ExpectedDesiredEventHead == request.ExpectedDesiredEventHead &&
@@ -966,7 +1057,7 @@ func (h *APIHandler) verifyDecisionModeReceipt(computerID, operationID, mode str
 	if request.Decision == "approve" {
 		return h.verifyConsumedModeReceipt(request.ModeReceipt, operationID, request)
 	}
-	if request.Decision != "reject" || field("old_mode") == "accept_once" || field("consumed_operation_id") != "" {
+	if request.Decision != "reject" || field("old_mode") == "accept_once" || field("old_mode") == platform.SelfDevelopmentModeQualifiedConsensus || field("consumed_operation_id") != "" {
 		return fmt.Errorf("current mode does not authorize rejection")
 	}
 	return nil
@@ -987,8 +1078,12 @@ func (h *APIHandler) verifyConsumedModeReceipt(receipt *computerevent.Receipt, o
 		return value
 	}
 	expectedConsumptionDigest, digestErr := selfdevprotocol.DecisionBindingDigest(selfDevelopmentDecisionBinding(operationID, request))
+	oldMode := field("old_mode")
 	expectedConsumptionKey := "accept-once-consumed:" + strings.TrimSpace(operationID) + ":" + expectedConsumptionDigest
-	if digestErr != nil || field("old_mode") != "accept_once" || field("new_mode") != "propose_only" ||
+	if oldMode == platform.SelfDevelopmentModeQualifiedConsensus {
+		expectedConsumptionKey = "qualified-consensus-consumed:" + strings.TrimSpace(operationID) + ":" + expectedConsumptionDigest
+	}
+	if digestErr != nil || (oldMode != platform.SelfDevelopmentModeAcceptOnce && oldMode != platform.SelfDevelopmentModeQualifiedConsensus) || field("new_mode") != "propose_only" ||
 		field("consumed_operation_id") != operationID || field("consumed_bundle_digest") != request.BundleDigest ||
 		field("consumed_desired_event_head") != request.ExpectedDesiredEventHead ||
 		field("consumed_effective_event_head") != request.ExpectedEffectiveEventHead ||

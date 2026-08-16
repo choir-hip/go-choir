@@ -136,3 +136,44 @@ func TestBootstrapMigratesExistingSelfDevelopmentModeTable(t *testing.T) {
 		t.Fatal("expected_pending_transition_ref migration was not applied")
 	}
 }
+
+func TestValidateSelfDevelopmentModeTransitionRequiresQualifiedConsensusBindings(t *testing.T) {
+	now := time.Date(2026, 8, 16, 0, 50, 0, 0, time.UTC)
+	current := SelfDevelopmentMode{ComputerID: "computer-test", Mode: SelfDevelopmentModeProposeOnly, Generation: 4}
+	pending := ""
+	valid := SetSelfDevelopmentModeRequest{
+		Mode: SelfDevelopmentModeQualifiedConsensus, OperationID: "operation-1",
+		BundleDigest: strings.Repeat("a", 64), ExpectedDesiredEventHead: strings.Repeat("b", 64),
+		ExpectedEffectiveEventHead: strings.Repeat("c", 64), ExpectedDesiredStateCommitment: strings.Repeat("d", 64),
+		ExpectedPendingTransitionRef:     &pending,
+		ExpectedEffectiveStateCommitment: strings.Repeat("e", 64), ExpiresAt: now.Add(time.Minute).Format(time.RFC3339Nano),
+		PolicyDigest: strings.Repeat("f", 64), ConsensusReceiptDigest: strings.Repeat("1", 64),
+	}
+	next, expiry, err := validateSelfDevelopmentModeTransition(current, valid, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Mode != SelfDevelopmentModeQualifiedConsensus || next.PolicyDigest != valid.PolicyDigest ||
+		next.ConsensusReceiptDigest != valid.ConsensusReceiptDigest || expiry == nil {
+		t.Fatalf("qualified_consensus transition = %+v expiry=%v", next, expiry)
+	}
+	for name, mutate := range map[string]func(*SetSelfDevelopmentModeRequest){
+		"operation":         func(r *SetSelfDevelopmentModeRequest) { r.OperationID = "" },
+		"policy digest":     func(r *SetSelfDevelopmentModeRequest) { r.PolicyDigest = "bad" },
+		"consensus receipt": func(r *SetSelfDevelopmentModeRequest) { r.ConsensusReceiptDigest = "" },
+		"expiry":            func(r *SetSelfDevelopmentModeRequest) { r.ExpiresAt = now.Format(time.RFC3339Nano) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			invalid := valid
+			mutate(&invalid)
+			if _, _, err := validateSelfDevelopmentModeTransition(current, invalid, now); err == nil {
+				t.Fatalf("invalid qualified_consensus request accepted: %+v", invalid)
+			}
+		})
+	}
+	acceptOnce := valid
+	acceptOnce.Mode = SelfDevelopmentModeAcceptOnce
+	if _, _, err := validateSelfDevelopmentModeTransition(current, acceptOnce, now); err == nil {
+		t.Fatal("accept_once accepted consensus receipt bindings")
+	}
+}

@@ -6,18 +6,22 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 )
 
 type verifiedSelfDevelopmentDecision struct {
-	NextState         string
-	Actor             string
-	ModeReceiptDigest string
+	NextState              string
+	Actor                  string
+	ModeReceiptDigest      string
+	ConsensusReceiptDigest string
+	AuthorityKind          string
 }
 
-// This verifier implements the fail-closed pre-consensus owner gate. The active
-// effects Definition requires an atomic cutover to policy-bound multiagent
-// consensus receipts before autonomous effects; do not weaken this check alone.
+// This verifier keeps the fail-closed owner gate and additionally accepts a
+// QualifiedConsensusReceipt join. Production must not accept an effect with
+// neither owner authority nor a consensus receipt. Do not delete the owner
+// check until the consensus path is the one production path.
 
 func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transition computerevent.DurableEvent) (verifiedSelfDevelopmentDecision, error) {
 	event := transition.Request.Event
@@ -31,8 +35,14 @@ func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transit
 	} else if event.EventKind != computerevent.EventEffectRejected {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: event kind mismatch")
 	}
-	actor := strings.TrimPrefix(event.AuthorityRef, "external-owner:")
-	if actor == "" || actor == event.AuthorityRef {
+	ownerActor := strings.TrimPrefix(event.AuthorityRef, "external-owner:")
+	consensusDigest, consensusAuth := decisionpolicy.ReceiptDigestFromAuthority(event.AuthorityRef)
+	authorityKind := "external-owner"
+	actor := ownerActor
+	if consensusAuth {
+		authorityKind = "qualified-consensus"
+		actor = consensusDigest
+	} else if actor == "" || actor == event.AuthorityRef {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: owner authority mismatch")
 	}
 	if operation.ComputerID != event.ComputerID || operation.OperationID != event.ParentEventID ||
@@ -54,7 +64,7 @@ func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transit
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: receipt join mismatch")
 	}
 	modeReceiptDigest := ""
-	if len(event.InputArtifactRefs) != 1 {
+	if len(event.InputArtifactRefs) == 0 {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: mode receipt cardinality mismatch")
 	}
 	{
@@ -63,6 +73,29 @@ func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transit
 			return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: mode receipt artifact reference mismatch")
 		}
 		modeReceiptDigest = modeReceiptRef.Digest().String()
+	}
+	if authorityKind == "external-owner" {
+		if len(event.InputArtifactRefs) != 1 {
+			return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: mode receipt cardinality mismatch")
+		}
+	} else {
+		if len(event.InputArtifactRefs) < 2 {
+			return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: consensus receipt artifact missing")
+		}
+		joined := false
+		for _, ref := range event.InputArtifactRefs[1:] {
+			parsed, err := computerevent.ParseArtifactRef(ref)
+			if err != nil {
+				return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: consensus receipt artifact reference mismatch")
+			}
+			if parsed.Digest().String() == consensusDigest {
+				joined = true
+				break
+			}
+		}
+		if !joined {
+			return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: consensus receipt join mismatch")
+		}
 	}
 	if operation.State != selfdev.StateAwaitingApproval && !selfDevelopmentDecisionStateDescends(operation.State, nextState) {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: operation state is not a legal decision descendant")
@@ -80,7 +113,11 @@ func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transit
 		(operation.DesiredHead != transition.Request.Next.DesiredEventHead || operation.EffectiveHead != transition.Request.Next.EffectiveEventHead) {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: operation head projection mismatch")
 	}
-	return verifiedSelfDevelopmentDecision{NextState: nextState, Actor: actor, ModeReceiptDigest: modeReceiptDigest}, nil
+	out := verifiedSelfDevelopmentDecision{NextState: nextState, Actor: actor, ModeReceiptDigest: modeReceiptDigest, AuthorityKind: authorityKind}
+	if authorityKind == "qualified-consensus" {
+		out.ConsensusReceiptDigest = consensusDigest
+	}
+	return out, nil
 }
 
 func selfDevelopmentDecisionStateDescends(state, decisionState string) bool {
