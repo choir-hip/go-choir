@@ -57,8 +57,11 @@ func (b ProjectionBatch) Validate() error {
 	if b.Version != ProjectionBatchV1 || b.ProjectorVersion != ProjectorVersionV1 {
 		return fmt.Errorf("%w: unsupported version", ErrProjectionBatchInvalid)
 	}
-	if strings.TrimSpace(b.ComputerID) == "" || strings.TrimSpace(b.EventID) == "" || !IsSHA256(b.EventDigest) {
+	if strings.TrimSpace(b.ComputerID) == "" || strings.TrimSpace(b.EventID) == "" {
 		return fmt.Errorf("%w: computer/event identity required", ErrProjectionBatchInvalid)
+	}
+	if digest := strings.TrimSpace(b.EventDigest); digest != "" && !IsSHA256(digest) {
+		return fmt.Errorf("%w: event digest", ErrProjectionBatchInvalid)
 	}
 	if len(b.Ops) == 0 {
 		return fmt.Errorf("%w: empty batch", ErrProjectionBatchInvalid)

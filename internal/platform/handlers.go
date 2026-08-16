@@ -379,6 +379,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/computers/events/head", h.HandleComputerEventHead)
 	s.HandleFunc("/internal/computers/events/pin", h.HandleComputerEventPin)
 	s.HandleFunc("/internal/computers/events/append", h.HandleComputerEventAppend)
+	s.HandleFunc("/internal/computers/events/payload", h.HandleComputerEventPayload)
 	s.HandleFunc("/internal/computers/events/replay", h.HandleComputerEventReplay)
 	s.HandleFunc("/internal/computers/checkpoints", h.HandleComputerCheckpoint)
 	s.HandleFunc("/internal/computers/route-projection-certificates", h.HandleRouteProjectionCertificate)

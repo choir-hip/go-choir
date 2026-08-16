@@ -261,11 +261,12 @@ These are now part of the design, not leftover review nits.
 
 `complete_from_head` is wired. Payload resolver and projection-batch schema are frozen. SQL-only Project now applies atomic desktop+OG batches inside `FinalizeBatch`. `desktop_sessions` presence is in-memory, not Dolt. `EmptyUntilSupported` is unchanged. No live residue import.
 
+Live writers are bound in autoputer: desktop driver saves and OG mutations append+project. Platform GET `/internal/computers/events/payload` is registered. Presence stays off Dolt.
+
 Still unpaid:
 
-- live `SaveDesktopStateForSession` / `PutObject` cutover to append+project (desktop and OG together)
-- platform GET `/internal/computers/events/payload`
 - co-import residue, then reclassify wired tables to `event_projection`
+- staging deploy of this guest+platform pair before treating reconstruct of projection batches as live proof
 
 Then eligible pre-A checkpoint. Super still waits.
 

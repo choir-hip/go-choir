@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -188,6 +189,35 @@ func (s *Service) computerEventSigningKey() computerevent.SigningKey {
 		SignerRef:  computerevent.SignerRef{SignerDomain: "platform-control", KeyID: s.signingKey.KeyID},
 		PrivateKey: s.signingKey.Private,
 	}
+}
+
+func (s *EventArtifactService) FetchPayload(computerID, artifactDigest string) ([]byte, error) {
+	if s == nil || s.platform == nil {
+		return nil, fmt.Errorf("event artifact service: payload fetch unavailable")
+	}
+	computerID = strings.TrimSpace(computerID)
+	artifactDigest = strings.TrimSpace(artifactDigest)
+	if computerID == "" || !computerevent.IsSHA256(artifactDigest) {
+		return nil, fmt.Errorf("event artifact service: computer and payload digest are required")
+	}
+	for _, namespace := range []string{"computer-event-payload", "computer-event"} {
+		path, err := s.platform.artifactPath(filepath.Join("sha256", namespace, artifactDigest))
+		if err != nil {
+			return nil, err
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return nil, fmt.Errorf("event artifact service: read payload: %w", err)
+		}
+		if computerevent.DigestBytes(raw) != artifactDigest {
+			return nil, fmt.Errorf("event artifact service: payload digest mismatch")
+		}
+		return raw, nil
+	}
+	return nil, fmt.Errorf("event artifact service: payload not found")
 }
 
 func (s *EventArtifactService) writeImmutable(storageRef string, payload []byte) error {

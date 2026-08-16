@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -54,7 +55,20 @@ CREATE INDEX IF NOT EXISTS idx_og_edges_to ON og_edges(to_id);
 // or explicit dolt commit calls from the store layer. Callers that
 // need transactional batch writes should use PutBatch.
 type DoltStore struct {
-	db *sql.DB
+	db        *sql.DB
+	intercept MutationInterceptor
+}
+
+// MutationInterceptor receives durable object/edge mutations before SQL.
+// When set, PutObject/PutEdge/PutBatch/DeleteObject do not write SQL;
+// the interceptor must append+project instead. Projector SQL bypasses this.
+type MutationInterceptor func(ctx context.Context, objects []Object, edges []Edge) error
+
+func (s *DoltStore) SetMutationInterceptor(fn MutationInterceptor) {
+	if s == nil {
+		return
+	}
+	s.intercept = fn
 }
 
 // JSONFieldMatch is one JSON field predicate for a Dolt object lookup.
@@ -89,6 +103,9 @@ func (s *DoltStore) EnsureSchema(ctx context.Context) error {
 func (s *DoltStore) PutObject(ctx context.Context, obj Object) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
+	}
+	if s.intercept != nil {
+		return s.intercept(ctx, []Object{obj}, nil)
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO og_objects
 		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
@@ -208,6 +225,9 @@ func (s *DoltStore) PutEdge(ctx context.Context, edge Edge) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
+	if s.intercept != nil {
+		return s.intercept(ctx, nil, []Edge{edge})
+	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO og_edges
 		(edge_id, from_id, to_id, kind, metadata, created_at, tombstone)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -284,6 +304,12 @@ func (s *DoltStore) PutBatchConditional(ctx context.Context, conditions []Object
 func (s *DoltStore) putBatch(ctx context.Context, conditions []ObjectCondition, batch Batch) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
+	}
+	if s.intercept != nil {
+		if err := s.evaluateConditions(ctx, conditions); err != nil {
+			return err
+		}
+		return s.intercept(ctx, batch.Objects, batch.Edges)
 	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
@@ -582,9 +608,66 @@ func (s *DoltStore) ListEdgesByKind(ctx context.Context, fromID string, kind Edg
 	return out, rows.Err()
 }
 
+func (s *DoltStore) evaluateConditions(ctx context.Context, conditions []ObjectCondition) error {
+	if len(conditions) == 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable, ReadOnly: true})
+	if err != nil {
+		return fmt.Errorf("objectgraph dolt: begin condition tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	orderedConditions := append([]ObjectCondition(nil), conditions...)
+	sort.Slice(orderedConditions, func(i, j int) bool {
+		return strings.TrimSpace(orderedConditions[i].CanonicalID) < strings.TrimSpace(orderedConditions[j].CanonicalID)
+	})
+	seen := make(map[string]struct{}, len(orderedConditions))
+	for _, condition := range orderedConditions {
+		id := strings.TrimSpace(condition.CanonicalID)
+		if id == "" {
+			return fmt.Errorf("objectgraph dolt: empty conditional canonical_id")
+		}
+		if _, duplicate := seen[id]; duplicate {
+			return fmt.Errorf("objectgraph dolt: duplicate condition %s", id)
+		}
+		seen[id] = struct{}{}
+		var versionID, contentHash string
+		err := tx.QueryRowContext(ctx,
+			`SELECT version_id, content_hash FROM og_objects WHERE canonical_id = ?`,
+			id,
+		).Scan(&versionID, &contentHash)
+		switch {
+		case err == sql.ErrNoRows && !condition.Exists:
+			continue
+		case err == sql.ErrNoRows:
+			return fmt.Errorf("%w: object %s does not exist", ErrConflict, id)
+		case err != nil:
+			return fmt.Errorf("objectgraph dolt: compare object %s: %w", id, err)
+		case !condition.Exists:
+			return fmt.Errorf("%w: object %s already exists", ErrConflict, id)
+		case condition.ExpectedVersionID != "" && versionID != condition.ExpectedVersionID:
+			return fmt.Errorf("%w: object %s version is %q, expected %q", ErrConflict, id, versionID, condition.ExpectedVersionID)
+		case condition.ExpectedContentHash != "" && contentHash != condition.ExpectedContentHash:
+			return fmt.Errorf("%w: object %s content is %q, expected %q", ErrConflict, id, contentHash, condition.ExpectedContentHash)
+		}
+	}
+	return nil
+}
+
 func (s *DoltStore) DeleteObject(ctx context.Context, id string) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
+	}
+	if s.intercept != nil {
+		obj, err := s.GetObject(ctx, id)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return nil
+			}
+			return err
+		}
+		obj.Tombstone = true
+		return s.intercept(ctx, []Object{obj}, nil)
 	}
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM og_objects WHERE canonical_id = ?`, id)

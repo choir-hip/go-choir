@@ -79,14 +79,15 @@ type ReceiptVerifier interface {
 // operations; agents, capsules, reducers, vmctl, and route projections never
 // receive this object or its append capability.
 type ComputerEventAppender struct {
-	computerID string
-	pins       ArtifactPinner
-	projection ProjectionStore
-	cas        HeadCAS
-	verifier   ReceiptVerifier
-	reader     ArtifactReader
-	cipher     *PrivateArtifactCipher
-	mu         sync.Mutex
+	computerID   string
+	pins         ArtifactPinner
+	projection   ProjectionStore
+	cas          HeadCAS
+	verifier     ReceiptVerifier
+	reader       ArtifactReader
+	cipher       *PrivateArtifactCipher
+	livePayloads map[string][]byte
+	mu           sync.Mutex
 }
 
 func NewComputerEventAppender(computerID string, pins ArtifactPinner, projection ProjectionStore, cas HeadCAS, verifier ReceiptVerifier) (*ComputerEventAppender, error) {
@@ -194,6 +195,10 @@ func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Even
 	if err != nil {
 		return Receipt{}, "", fmt.Errorf("computer event appender: compute payload request commitment: %w", err)
 	}
+	if a.livePayloads == nil {
+		a.livePayloads = map[string][]byte{}
+	}
+	a.livePayloads[payloadDigest] = append([]byte(nil), payload...)
 	receipt, err := a.appendLocked(ctx, event, input, []string{payloadReceiptDigest})
 	return receipt, payloadDigest, err
 }
@@ -600,7 +605,7 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 }
 
 func (a *ComputerEventAppender) finalizeProjection(ctx context.Context, event Event, digest string, receipt Receipt) error {
-	batch, err := a.resolveProjectionBatch(ctx, event)
+	batch, err := a.resolveProjectionBatch(ctx, event, digest)
 	if err != nil {
 		return err
 	}
@@ -613,40 +618,46 @@ func (a *ComputerEventAppender) finalizeProjection(ctx context.Context, event Ev
 	return a.projection.Finalize(ctx, a.computerID, digest, receipt)
 }
 
-func (a *ComputerEventAppender) resolveProjectionBatch(ctx context.Context, event Event) (*ProjectionBatch, error) {
+func (a *ComputerEventAppender) resolveProjectionBatch(ctx context.Context, event Event, digest string) (*ProjectionBatch, error) {
 	if event.EventKind != EventProjectionBatchRecorded {
 		return nil, nil
 	}
-	if a.reader == nil {
-		return nil, ErrPayloadResolverRequired
+	plaintext, ok := a.livePayloads[event.PayloadCommitment]
+	if !ok {
+		if a.reader == nil {
+			return nil, ErrPayloadResolverRequired
+		}
+		privacy := strings.TrimSpace(event.PrivacyClass)
+		if privacy == "" || privacy == "owner" {
+			privacy = "public"
+		}
+		refs := []PayloadRef{{
+			ArtifactDigest: event.PayloadCommitment,
+			MediaType:      ProjectionBatchMediaType,
+			PrivacyClass:   privacy,
+			Role:           "projection_batch",
+			SchemaVersion:  1,
+		}}
+		resolved, err := ResolvePayloads(ctx, a.reader, a.cipher, event.ComputerID, event.EventID, refs)
+		if err != nil {
+			return nil, err
+		}
+		if len(resolved) != 1 {
+			return nil, fmt.Errorf("computer event projection: one projection batch payload is required")
+		}
+		plaintext = resolved[0].Plaintext
 	}
-	privacy := strings.TrimSpace(event.PrivacyClass)
-	if privacy == "" {
-		privacy = "public"
-	}
-	if privacy == "owner" {
-		privacy = "public"
-	}
-	refs := []PayloadRef{{
-		ArtifactDigest: event.PayloadCommitment,
-		MediaType:      ProjectionBatchMediaType,
-		PrivacyClass:   privacy,
-		Role:           "projection_batch",
-		SchemaVersion:  1,
-	}}
-	resolved, err := ResolvePayloads(ctx, a.reader, a.cipher, event.ComputerID, event.EventID, refs)
-	if err != nil {
-		return nil, err
-	}
-	if len(resolved) != 1 {
-		return nil, fmt.Errorf("computer event projection: one projection batch payload is required")
-	}
-	batch, err := DecodeProjectionBatch(resolved[0].Plaintext)
+	batch, err := DecodeProjectionBatch(plaintext)
 	if err != nil {
 		return nil, err
 	}
 	if batch.ComputerID != event.ComputerID || batch.EventID != event.EventID {
 		return nil, fmt.Errorf("%w: batch identity", ErrProjectionBatchInvalid)
+	}
+	if batch.EventDigest == "" {
+		batch.EventDigest = digest
+	} else if batch.EventDigest != digest {
+		return nil, fmt.Errorf("%w: batch event digest", ErrProjectionBatchInvalid)
 	}
 	return &batch, nil
 }

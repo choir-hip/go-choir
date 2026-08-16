@@ -92,6 +92,7 @@ type Store struct {
 	eventMu          sync.Mutex
 	presenceMu       sync.Mutex
 	sessionPresence  map[string]types.DesktopSessionContext
+	projectionTape   *projectionTape
 	og               *objectgraph.Service
 	ogStore          *objectgraph.DoltStore
 	ogReadStore      *objectgraph.DoltStore
@@ -1920,7 +1921,13 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 	// goroutines from reading the same max and assigning duplicate Seq
 	// or StreamSeq values. The old SQL path relied on UNIQUE(loop_id, seq).
 	s.eventMu.Lock()
-	defer s.eventMu.Unlock()
+	unlocked := false
+	defer func() {
+		if !unlocked {
+			s.eventMu.Unlock()
+		}
+	}()
+	tapeBound := s.projectionTape != nil
 
 	// OG requires a non-empty owner_id. Synthesize a system owner for
 	// ownerless runtime events (e.g. health/degraded events from
@@ -1969,6 +1976,10 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 	}
 	rec.StreamSeq = maxStreamSeq + 1
 
+	if tapeBound {
+		s.eventMu.Unlock()
+		unlocked = true
+	}
 	return s.AppendEventOG(ctx, rec)
 }
 

@@ -260,6 +260,26 @@ func (h *Handler) HandleComputerEventAppend(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusCreated, receipt)
 }
 
+func (h *Handler) HandleComputerEventPayload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	computerID := strings.TrimSpace(r.URL.Query().Get("computer_id"))
+	artifactDigest := strings.TrimSpace(r.URL.Query().Get("artifact_digest"))
+	if !h.authorizeComputerEvent(w, r, computerID, "event:read") {
+		return
+	}
+	payload, err := h.eventArtifacts.FetchPayload(computerID, artifactDigest)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, apiError{Error: "computer event payload unavailable"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"payload_base64": base64.RawStdEncoding.EncodeToString(payload),
+	})
+}
+
 func (h *Handler) HandleComputerEventReplay(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})

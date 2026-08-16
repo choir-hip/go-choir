@@ -69,6 +69,9 @@ func (s *Store) SaveDesktopStateForSession(ctx context.Context, state types.Desk
 	if !session.IsDriver {
 		return nil
 	}
+	if s.projectionTape != nil {
+		return s.projectionTape.appendDesktop(ctx, desktopStateProjection(state, desktopID, sessionID, now))
+	}
 
 	windowsJSON, err := json.Marshal(state.Windows)
 	if err != nil {

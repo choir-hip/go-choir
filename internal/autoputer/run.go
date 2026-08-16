@@ -217,6 +217,10 @@ func Run() {
 			computerevent.EventHeadReceiptVerifier{Keys: credentials.KeyResolver()},
 		)
 		if err == nil {
+			appender.SetPayloadResolver(eventClient, privateCipher)
+			err = db.BindProjectionTape(computerID, appender)
+		}
+		if err == nil {
 			err = appender.Reconstruct(bootstrapCtx, eventClient)
 		}
 		if err == nil {

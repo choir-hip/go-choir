@@ -336,3 +336,117 @@ func assertCount(t *testing.T, productStore *Store, query string, want int) {
 		t.Fatalf("%s = %d, want %d", query, got, want)
 	}
 }
+
+func TestLiveDesktopAndOGWritersAppendProjectTogether(t *testing.T) {
+	ctx := context.Background()
+	productStore := openProjectStore(t)
+	computerID := "computer-live-tape"
+	prepareGenesis(t, productStore, computerID, "genesis-live-tape")
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "test"}, PrivateKey: privateKey}
+	appender, err := computerevent.NewComputerEventAppender(
+		computerID,
+		liveTapePinner{signer: signer},
+		productStore,
+		liveTapeCAS{signer: signer, projection: productStore},
+		liveTapeVerifier{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := productStore.BindProjectionTape(computerID, appender); err != nil {
+		t.Fatal(err)
+	}
+
+	state := types.DesktopState{
+		OwnerID: "owner-1",
+		Windows: []types.WindowState{{
+			WindowID: "win-live", AppID: "texture", Title: "Live",
+			Geometry: types.WindowGeometry{X: 4, Y: 5, Width: 6, Height: 7},
+			Mode:     types.WindowNormal, ZIndex: 1,
+		}},
+		ActiveWindowID: "win-live",
+		UpdatedAt:      time.Date(2026, 8, 16, 18, 0, 0, 0, time.UTC),
+	}
+	if err := productStore.SaveDesktopStateForSession(ctx, state, types.DesktopSessionContext{
+		SessionID: "browser-live", IsDriver: true, DriverUntil: time.Now().UTC().Add(time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	obj := objectgraph.Object{
+		CanonicalID: "obj:choir.texture_revision:owner-1:live",
+		ObjectKind:  "choir.texture_revision", OwnerID: "owner-1", ComputerID: computerID,
+		VersionID: "v1", ContentHash: storeTestDigest('9'),
+		Body: []byte(`{"text":"live"}`), Metadata: json.RawMessage(`{}`),
+		CreatedAt: time.Date(2026, 8, 16, 18, 1, 0, 0, time.UTC),
+		UpdatedAt: time.Date(2026, 8, 16, 18, 1, 0, 0, time.UTC),
+	}
+	if err := productStore.ogStore.PutObject(ctx, obj); err != nil {
+		t.Fatal(err)
+	}
+
+	assertCount(t, productStore, `SELECT COUNT(*) FROM desktop_workspaces`, 1)
+	assertCount(t, productStore, `SELECT COUNT(*) FROM desktop_app_instances`, 1)
+	assertCount(t, productStore, `SELECT COUNT(*) FROM desktop_window_placements`, 1)
+	assertCount(t, productStore, `SELECT COUNT(*) FROM og_objects`, 1)
+	assertCount(t, productStore, `SELECT COUNT(*) FROM desktop_sessions`, 0)
+
+	got, err := productStore.GetDesktopStateForSession(ctx, "owner-1", types.PrimaryDesktopID, "browser-live")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Windows) != 1 || got.Windows[0].WindowID != "win-live" {
+		t.Fatalf("live desktop=%+v", got)
+	}
+	stored, err := productStore.ogStore.GetObject(ctx, obj.CanonicalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.CanonicalID != obj.CanonicalID {
+		t.Fatalf("live object=%+v", stored)
+	}
+}
+
+type liveTapePinner struct{ signer computerevent.SigningKey }
+
+func (p liveTapePinner) PinEvent(_ context.Context, computerID string, canonicalEvent []byte, requestCommitment string) (computerevent.PinResult, error) {
+	digest := computerevent.DigestBytes(canonicalEvent)
+	receipt, err := computerevent.NewSignedReceipt("PinReceipt", "corpusd", map[string]any{
+		"computer_id": computerID, "artifact_digest": digest, "request_commitment": requestCommitment,
+	}, []computerevent.SigningKey{p.signer}, time.Date(2026, 8, 16, 18, 2, 0, 0, time.UTC))
+	return computerevent.PinResult{ArtifactDigest: digest, Receipt: receipt}, err
+}
+
+func (p liveTapePinner) PinNonPrivatePayload(_ context.Context, computerID string, payload []byte, mediaType, privacyClass, pinIntentCommitment string) (computerevent.PinResult, error) {
+	digest := computerevent.DigestBytes(payload)
+	receipt, err := computerevent.NewSignedReceipt("PinReceipt", "corpusd", map[string]any{
+		"computer_id": computerID, "artifact_digest": digest, "media_type": mediaType,
+		"privacy_class": privacyClass, "pin_intent_commitment": pinIntentCommitment,
+	}, []computerevent.SigningKey{p.signer}, time.Date(2026, 8, 16, 18, 2, 0, 0, time.UTC))
+	return computerevent.PinResult{ArtifactDigest: digest, Receipt: receipt}, err
+}
+
+type liveTapeCAS struct {
+	signer     computerevent.SigningKey
+	projection computerevent.ProjectionStore
+}
+
+func (c liveTapeCAS) Head(ctx context.Context, computerID string) (*computerevent.Head, error) {
+	return c.projection.Head(ctx, computerID)
+}
+
+func (c liveTapeCAS) CompareAndSwap(_ context.Context, request computerevent.CASRequest) (computerevent.Receipt, error) {
+	return computerevent.NewSignedReceipt("EventHeadReceipt", "corpusd", map[string]any{
+		"computer_id": request.Event.ComputerID, "event_digest": request.EventDigest, "sequence": request.Event.Sequence,
+	}, []computerevent.SigningKey{c.signer}, time.Date(2026, 8, 16, 18, 3, 0, 0, time.UTC))
+}
+
+type liveTapeVerifier struct{}
+
+func (liveTapeVerifier) VerifyEventHeadReceipt(context.Context, computerevent.Receipt, computerevent.CASRequest) error {
+	return nil
+}
