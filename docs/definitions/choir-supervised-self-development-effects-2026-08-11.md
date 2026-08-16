@@ -93,8 +93,8 @@ start:
     still_open:
       - "concrete decision-policy schema, independence domains, quorum, dissent, abstention, timeout, recusal, replacement, and consequence-receipt contracts"
       - "whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata without a payload schema change — answered 2026-08-16: yes, via existing packet.sources typed URIs (operation:/capsule_bundle:/receipt:/event_head:) with no payload schema change; identities persist in revision metadata and typed citations, never prose"
-      - "whether Texture production registry still omits update_coagent on the deployed staging build — source confirmation 2026-08-16: current main omits generic update_coagent on Texture (AllowCoAgentTools=false; production registry is get_run_memory_entry plus patch/rewrite/record_decision/request_email_draft). Staging health 2026-08-16T01:34Z reports deployed_commit 3141b90b (trusted-outbox; not yet 466c0504 supervision or 30d619a0 orange rehearsal). CTS-safe: do not register the generic resolver. Upward path is assigned CoSuper update_coagent then Super report_to_texture. Deployed re-check of the supervision commit remains unpaid"
-      - "whether in-process rehearsal can walk reversible propose→consensus→promote→restore and irreversible propose→consensus→outbox without a live send — answered 2026-08-16 orange: yes, TestEffectsRehearsal. Red/live rehearsal unpaid until staging deploy of current main"
+      - "whether Texture production registry still omits update_coagent on the deployed staging build — source confirmation 2026-08-16: current main omits generic update_coagent on Texture (AllowCoAgentTools=false). Staging health 2026-08-16T02:05Z is 4543624b (product-path forward). CTS-safe: do not register the generic resolver. Deployed Texture-registry re-check of 466c0504 remains unpaid"
+      - "whether in-process rehearsal can walk reversible propose→consensus→promote→restore and irreversible propose→consensus→outbox without a live send — answered 2026-08-16 orange: yes, TestEffectsRehearsal. Red product-path smoke 2026-08-16 on 4543624b: genesis stays 409; decision reaches guest (404 no operation); start 503 because WithSelfDevelopmentControl is unmounted. Promote/restore red unpaid"
       - "retained computer epoch 8253 / ak_45ce1796 classified 2026-08-15 as historical CTS residual, not current identity (paid restore epoch 268; key returns 401). Residual hygiene only; do not reopen tape-recovery"
 
 finish:
@@ -257,13 +257,13 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer/outbox/supervision/orange-rehearsal landed. Product-path forward: start/decision reach the guest; genesis stays 409; mode off still refuses proposal. Owner gates still present. Effects remain OFF. Armed=false. Next: staging deploy of this commit, then red rehearsal without a live send."
+  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer/outbox/supervision/orange-rehearsal/product-path-forward landed. Staging 4543624b: genesis 409; decision reaches guest; start 503 because guest control is unmounted. Mode off. Epoch 268. Owner gates present. Effects remain OFF. Armed=false. Next: wire WithSelfDevelopmentControl so mode-off can refuse, without a live send."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-16T01:45:00Z
-    source_ref: product-path forward on parent main@387fbfaa; staging health still 3141b90b until this commit deploys
-    deploy_identity: "staging https://choir.news/health 2026-08-16T01:34Z deployed_commit 3141b90b (trusted-outbox; built_at 20260816005635); origin/main 30d619a0 is two commits ahead (466c0504 supervision + 30d619a0 orange rehearsal). Retained computer-03335285269bdba4f94377e56879f9e6 epoch 268; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
+    observed_at: 2026-08-16T02:06:00Z
+    source_ref: origin/main@4543624b product-path forward; CI 31920331644; red smoke against choir.news
+    deploy_identity: "staging https://choir.news/health 2026-08-16T02:05Z deployed_commit 4543624b (built_at 20260816014626, deployed_at 2026-08-16T02:02:51Z). Retained computer-03335285269bdba4f94377e56879f9e6 epoch 268 mode off; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: 2026-08-16T00:25:00Z reconnection product + tests + receipt; parent dfcb8ad8
@@ -281,9 +281,9 @@ now:
     owner_ratification_ref: "owner correction 2026-08-13: irreversible effects are not outside the autonomy window; effect-specific multiagent consensus is the governing boundary, and human approval is optional as one possible consensus participant."
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
-  evidence_refs: [docs/evidence/effects-product-path-forward-2026-08-16.md, docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "None for orange rehearsal land. Remaining risk: treating orange rehearsal or staging 3141b90b as deployed proof of current main; deleting fail-closed owner gates before deployed acceptance of the consensus path; arming a live send before a staging deploy of current main 30d619a0; using OwnerRecovery checkpoints for promotion (route projection already refuses); treating epoch 8253 as the current retained epoch (paid restore is epoch 268). Kill-loop problem repaired at db265d1e is not current readiness proof. Red/live rehearsal and live proof remain unpaid."
-  next_action: "Product-path start/decision now forward to the guest. Next: staging deploy of this commit, then red rehearsal on computer-03335285269bdba4f94377e56879f9e6 without a live send. Do not send live mail. Owner gates remain until deployed acceptance of the consensus path. Effects remain OFF. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
+  evidence_refs: [docs/evidence/effects-red-product-path-smoke-2026-08-16.md, docs/evidence/effects-product-path-forward-2026-08-16.md, docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
+  blocker_or_risk: "Guest WithSelfDevelopmentControl is unmounted, so start cannot yet refuse at mode off. Remaining risk: treating 4543624b smoke or orange rehearsal as promote/restore proof; deleting owner gates; arming a live send; using OwnerRecovery checkpoints for promotion; treating epoch 8253 as current (paid restore is 268); guest-boot refresh of the retained computer without calling it rematerialize. Red promote/restore and live proof remain unpaid."
+  next_action: "Staging is 4543624b. Next: wire guest WithSelfDevelopmentControl so mode off refuses proposal on the retained computer, then red promote+restore without a live send. Do not set mode yet. Do not send live mail. Owner gates remain. Effects remain OFF. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -366,20 +366,36 @@ receipts:
       environment_identity: staging https://choir.news deployed 4ac90583
       deployed_acceptance: not_applicable
     registry_conformance_ref: not_applicable
+  - id: effects-red-product-path-smoke-2026-08-16
+    boundary: execute
+    commit_or_artifact: docs/evidence/effects-red-product-path-smoke-2026-08-16.md
+    proof_refs: [docs/evidence/effects-red-product-path-smoke-2026-08-16.md, docs/evidence/effects-product-path-forward-2026-08-16.md]
+    rollback_ref: revert this docs-only stamp
+    disposition: "accepted as red product-path smoke — staging 4543624b forwards decision to the guest (404 no operation) and keeps genesis 409. Start 503 because WithSelfDevelopmentControl is unmounted. Mode off. Epoch 268. No live send. Promote/restore red unpaid."
+    problem_ref: not_applicable
+    authorization_ref: this Definition now.next_action after product-path forward deploy
+    candidate_or_evidence_refs: [docs/evidence/effects-red-product-path-smoke-2026-08-16.md]
+    landing:
+      source_commit: 4543624b
+      ci_ref: "https://github.com/choir-hip/go-choir/actions/runs/31920331644"
+      deploy_ref: 4543624b0f1f4f5bb472e4e4bafc7536f279a440
+      environment_identity: staging https://choir.news deployed 4543624b at 2026-08-16T02:02:51Z; retained epoch 268 mode off
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "effects remains entrypoint; product-path smoke is not live proof"
   - id: effects-product-path-forward-2026-08-16
     boundary: execute
     commit_or_artifact: docs/evidence/effects-product-path-forward-2026-08-16.md
     proof_refs: [docs/evidence/effects-product-path-forward-2026-08-16.md, internal/proxy/self_development.go, internal/proxy/handlers.go, internal/agentcore/api_self_development.go]
     rollback_ref: revert this product-path-forward commit
-    disposition: "accepted as route-map-10 product-path prep — start/decision forward to guest; genesis remains disabled; mode off still refuses. No live send. Owner gates unchanged. Effects remain OFF. Live proof unpaid until deploy."
+    disposition: "accepted as route-map-10 product-path prep — start/decision forward to guest; genesis remains disabled. Live smoke is effects-red-product-path-smoke-2026-08-16. No live send. Owner gates unchanged. Effects remain OFF."
     problem_ref: not_applicable
     authorization_ref: this Definition now.next_action after orange rehearsal
     candidate_or_evidence_refs: [docs/evidence/effects-product-path-forward-2026-08-16.md]
     landing:
-      source_commit: 387fbfaa
-      ci_ref: pending
-      deploy_ref: 3141b90b596cb87f53551a696ec408fd22193898
-      environment_identity: staging https://choir.news deployed 3141b90b; retained epoch 268
+      source_commit: 4543624b
+      ci_ref: "https://github.com/choir-hip/go-choir/actions/runs/31920331644"
+      deploy_ref: 4543624b0f1f4f5bb472e4e4bafc7536f279a440
+      environment_identity: staging https://choir.news deployed 4543624b at 2026-08-16T02:02:51Z; retained epoch 268 mode off
       deployed_acceptance: not_applicable
     registry_conformance_ref: "effects remains entrypoint; product-path forward is not live proof"
   - id: effects-rehearsal-2026-08-16
@@ -871,8 +887,8 @@ at all.
    reversible propose → qualified consensus → promote → consume tape-recovery
    restore → verify; irreversible propose → stronger qualified consensus →
    RecordingProvider dispatch → consequence receipt → crash-window correction.
-   No live send. Staging health 2026-08-16T01:34Z is 3141b90b, not current
-   main 30d619a0. Live run remains gated on a deploy of current main.
+   No live send. Staging 4543624b product-path smoke: genesis 409; decision
+   reaches guest; start 503 (control unmounted). Promote/restore red unpaid.
 10. **Live proof (red).** Capsule authors A → consensus authorizes → promotes →
    played → falsified → B supersedes → restart proves B → total restore; then
    execute and receipt the exact acceptance email under its separate policy.
