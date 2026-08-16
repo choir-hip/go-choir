@@ -21,6 +21,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
@@ -469,6 +470,61 @@ func TestGuestStartRefusesModeOffBeforeAnyEffect(t *testing.T) {
 	}
 	if event, found, err := productStore.EventByIdempotency(context.Background(), computerID, "selfdev-start-"+computerevent.DigestBytes([]byte(computerID+"\x00mode-off-mounted-start"))); err != nil || found {
 		t.Fatalf("mode-off start appended event: event=%+v found=%v err=%v", event, found, err)
+	}
+}
+
+func TestGuestKernelCapabilitiesRefuseUnmountedAuthority(t *testing.T) {
+	computerID := "computer-kernel-unmounted"
+	productStore, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer productStore.Close()
+	operations, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := &APIHandler{rt: &Runtime{cfg: provideriface.Config{ComputerID: computerID}, store: productStore, selfdevOperations: operations}}
+	request := httptest.NewRequest(http.MethodGet, "/api/computers/"+computerID+"/self-development/kernel-capabilities", nil)
+	request.Header.Set("X-Authenticated-User", "owner")
+	request.Header.Set("X-Authenticated-Computer", computerID)
+	response := httptest.NewRecorder()
+	handler.HandleComputersRouter(response, request)
+	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), "kernel capability authority unavailable") {
+		t.Fatalf("unmounted kernel status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestGuestKernelCapabilitiesRefuseMissingComputerVersionRoute(t *testing.T) {
+	computerID := "computer-kernel-route"
+	routeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "no route", http.StatusNotFound)
+	}))
+	defer routeServer.Close()
+	productStore, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer productStore.Close()
+	updaterClient, err := updater.NewClient(filepath.Join(t.TempDir(), "updater.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	operations, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := &Runtime{cfg: provideriface.Config{ComputerID: computerID}, store: productStore, selfdevOperations: operations}
+	WithSelfDevelopmentUpdater(updaterClient, t.TempDir(), computerID, "realization-test")(rt)
+	WithSelfDevelopmentRoute(vmctl.NewClient(routeServer.URL), "owner", "primary")(rt)
+	handler := &APIHandler{rt: rt}
+	request := httptest.NewRequest(http.MethodGet, "/api/computers/"+computerID+"/self-development/kernel-capabilities", nil)
+	request.Header.Set("X-Authenticated-User", "owner")
+	request.Header.Set("X-Authenticated-Computer", computerID)
+	response := httptest.NewRecorder()
+	handler.HandleComputersRouter(response, request)
+	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), "computer route identity unavailable") {
+		t.Fatalf("missing-route kernel status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 

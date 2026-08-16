@@ -35,6 +35,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"github.com/yusefmosiah/go-choir/internal/zot"
 )
 
@@ -276,6 +277,12 @@ func Run() {
 	} else if ok {
 		coreOpts = append(coreOpts, opt)
 		log.Printf("autoputer: self-development updater root wired")
+	}
+	if opt, ok, err := selfDevelopmentRouteOption(); err != nil {
+		log.Fatalf("autoputer: configure self-development route: %v", err)
+	} else if ok {
+		coreOpts = append(coreOpts, opt)
+		log.Printf("autoputer: self-development computer-version route wired; verifier remains unmounted")
 	}
 	var rtOpts []actorruntime.RuntimeOption
 
@@ -554,4 +561,26 @@ func selfDevelopmentUpdaterOption() (agentcore.RuntimeOption, bool, error) {
 		strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID")),
 		strings.TrimSpace(os.Getenv("CHOIR_REALIZATION_ID")),
 	), true, nil
+}
+
+// selfDevelopmentRouteOption mounts signed computer-version route reads for
+// kernel-capability probes. It does not mount the verifier, so the
+// materializer stays inert. Mode is not set.
+func selfDevelopmentRouteOption() (agentcore.RuntimeOption, bool, error) {
+	baseURL := strings.TrimSpace(os.Getenv("RUNTIME_VMCTL_URL"))
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(os.Getenv("PROXY_VMCTL_URL"))
+	}
+	ownerID := strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))
+	if baseURL == "" || ownerID == "" {
+		return nil, false, nil
+	}
+	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+		return nil, false, fmt.Errorf("self-development route: absolute http(s) vmctl URL is required")
+	}
+	desktopID := strings.TrimSpace(os.Getenv("CHOIR_DESKTOP_ID"))
+	if desktopID == "" {
+		desktopID = "primary"
+	}
+	return agentcore.WithSelfDevelopmentRoute(vmctl.NewClient(baseURL), ownerID, desktopID), true, nil
 }

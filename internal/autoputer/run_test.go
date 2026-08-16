@@ -165,3 +165,64 @@ func TestGuestControlOptionsWiresOwnerRecoveryAndModeAuthority(t *testing.T) {
 		t.Fatalf("guestControlOptions len=%d, want 2 (owner-recovery + mode authority)", len(opts))
 	}
 }
+
+func TestSelfDevelopmentRouteOptionWiresOwnerAndVmctl(t *testing.T) {
+	t.Setenv("RUNTIME_VMCTL_URL", "http://10.200.60.1:8083")
+	t.Setenv("PROXY_VMCTL_URL", "")
+	t.Setenv("CHOIR_OWNER_ID", "owner-test")
+	t.Setenv("CHOIR_DESKTOP_ID", "")
+	opt, ok, err := selfDevelopmentRouteOption()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || opt == nil {
+		t.Fatal("expected route option when vmctl URL and owner are set")
+	}
+}
+
+func TestSelfDevelopmentRouteOptionSkipsMissingOwner(t *testing.T) {
+	t.Setenv("RUNTIME_VMCTL_URL", "http://10.200.60.1:8083")
+	t.Setenv("CHOIR_OWNER_ID", "")
+	opt, ok, err := selfDevelopmentRouteOption()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok || opt != nil {
+		t.Fatal("expected no route option without CHOIR_OWNER_ID")
+	}
+}
+
+func TestSelfDevelopmentRouteOptionSkipsMissingURL(t *testing.T) {
+	t.Setenv("RUNTIME_VMCTL_URL", "")
+	t.Setenv("PROXY_VMCTL_URL", "")
+	t.Setenv("CHOIR_OWNER_ID", "owner-test")
+	opt, ok, err := selfDevelopmentRouteOption()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok || opt != nil {
+		t.Fatal("expected no route option without a vmctl URL")
+	}
+}
+
+func TestSelfDevelopmentRouteOptionFallsBackToProxyURL(t *testing.T) {
+	t.Setenv("RUNTIME_VMCTL_URL", "")
+	t.Setenv("PROXY_VMCTL_URL", "http://10.200.60.1:8083")
+	t.Setenv("CHOIR_OWNER_ID", "owner-test")
+	opt, ok, err := selfDevelopmentRouteOption()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || opt == nil {
+		t.Fatal("expected route option from PROXY_VMCTL_URL")
+	}
+}
+
+func TestSelfDevelopmentRouteOptionRejectsNonHTTPURL(t *testing.T) {
+	t.Setenv("RUNTIME_VMCTL_URL", "/var/run/vmctl.sock")
+	t.Setenv("CHOIR_OWNER_ID", "owner-test")
+	_, _, err := selfDevelopmentRouteOption()
+	if err == nil {
+		t.Fatal("expected non-http vmctl URL to fail")
+	}
+}
