@@ -90,6 +90,8 @@ type Store struct {
 	workerUpdateMu   sync.Mutex
 	channelMsgMu     sync.Mutex
 	eventMu          sync.Mutex
+	presenceMu       sync.Mutex
+	sessionPresence  map[string]types.DesktopSessionContext
 	og               *objectgraph.Service
 	ogStore          *objectgraph.DoltStore
 	ogReadStore      *objectgraph.DoltStore

@@ -20,30 +20,31 @@ const (
 type EventKind string
 
 const (
-	EventGenesisImported        EventKind = "genesis_imported"
-	EventTrajectoryStarted      EventKind = "trajectory_started"
-	EventModelResolved          EventKind = "model_resolved"
-	EventMessageRecorded        EventKind = "message_recorded"
-	EventToolInvoked            EventKind = "tool_invoked"
-	EventToolReturned           EventKind = "tool_returned"
-	EventArtifactProduced       EventKind = "artifact_produced"
-	EventEffectProposed         EventKind = "effect_proposed"
-	EventVerificationRecorded   EventKind = "verification_recorded"
-	EventEffectAccepted         EventKind = "effect_accepted"
-	EventEffectRejected         EventKind = "effect_rejected"
-	EventMaterializationStarted EventKind = "materialization_started"
-	EventMaterializationApplied EventKind = "materialization_applied"
-	EventMaterializationFailed  EventKind = "materialization_failed"
-	EventRollbackRequested      EventKind = "rollback_requested"
-	EventRollbackApplied        EventKind = "rollback_applied"
-	EventResearcherUpdate       EventKind = "researcher_update"
-	EventCheckpointPublished    EventKind = "checkpoint_published"
-	EventRouteProjectionUpdated EventKind = "route_projection_updated"
-	EventLifecycleObserved      EventKind = "lifecycle_observed"
-	EventKeyRotated             EventKind = "key_rotated"
-	EventKeyRevoked             EventKind = "key_revoked"
-	EventRecoveryRecorded       EventKind = "recovery_recorded"
-	EventRestoreRequested       EventKind = "restore_requested"
+	EventGenesisImported         EventKind = "genesis_imported"
+	EventTrajectoryStarted       EventKind = "trajectory_started"
+	EventModelResolved           EventKind = "model_resolved"
+	EventMessageRecorded         EventKind = "message_recorded"
+	EventToolInvoked             EventKind = "tool_invoked"
+	EventToolReturned            EventKind = "tool_returned"
+	EventArtifactProduced        EventKind = "artifact_produced"
+	EventEffectProposed          EventKind = "effect_proposed"
+	EventVerificationRecorded    EventKind = "verification_recorded"
+	EventEffectAccepted          EventKind = "effect_accepted"
+	EventEffectRejected          EventKind = "effect_rejected"
+	EventMaterializationStarted  EventKind = "materialization_started"
+	EventMaterializationApplied  EventKind = "materialization_applied"
+	EventMaterializationFailed   EventKind = "materialization_failed"
+	EventRollbackRequested       EventKind = "rollback_requested"
+	EventRollbackApplied         EventKind = "rollback_applied"
+	EventResearcherUpdate        EventKind = "researcher_update"
+	EventCheckpointPublished     EventKind = "checkpoint_published"
+	EventRouteProjectionUpdated  EventKind = "route_projection_updated"
+	EventLifecycleObserved       EventKind = "lifecycle_observed"
+	EventKeyRotated              EventKind = "key_rotated"
+	EventKeyRevoked              EventKind = "key_revoked"
+	EventRecoveryRecorded        EventKind = "recovery_recorded"
+	EventRestoreRequested        EventKind = "restore_requested"
+	EventProjectionBatchRecorded EventKind = "projection_batch_recorded"
 )
 
 var validEventKinds = map[EventKind]struct{}{
@@ -54,7 +55,7 @@ var validEventKinds = map[EventKind]struct{}{
 	EventMaterializationApplied: {}, EventMaterializationFailed: {}, EventRollbackRequested: {},
 	EventRollbackApplied: {}, EventResearcherUpdate: {}, EventCheckpointPublished: {},
 	EventRouteProjectionUpdated: {}, EventLifecycleObserved: {}, EventKeyRotated: {},
-	EventKeyRevoked: {}, EventRecoveryRecorded: {}, EventRestoreRequested: {},
+	EventKeyRevoked: {}, EventRecoveryRecorded: {}, EventRestoreRequested: {}, EventProjectionBatchRecorded: {},
 }
 
 // Event is the complete V1 semantic event envelope. Event bodies contain no

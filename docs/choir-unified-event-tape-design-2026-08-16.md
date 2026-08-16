@@ -259,17 +259,15 @@ These are now part of the design, not leftover review nits.
 
 ### First slice (recovery domain recorded)
 
-`complete_from_head` is wired in `internal/selfdevprotocol` (`ValidateTapeCompleteness`, `AdmitRestoreSequence`). `new_epoch` is refused. Existing incomplete-tape checkpoint digests stay stable (`omitempty`).
+`complete_from_head` is wired. Payload resolver and projection-batch schema are frozen. SQL-only Project now applies atomic desktop+OG batches inside `FinalizeBatch`. `desktop_sessions` presence is in-memory, not Dolt. `EmptyUntilSupported` is unchanged. No live residue import.
 
-Still unpaid before Project:
+Still unpaid:
 
-- artifact-read + private decrypt on replay
-- projection-batch schema and SQL-only Project in Finalize
-- projector-failure / non-wedge test
-- `desktop_sessions` split or project
-- no live residue import in that slice
+- live `SaveDesktopStateForSession` / `PutObject` cutover to append+project (desktop and OG together)
+- platform GET `/internal/computers/events/payload`
+- co-import residue, then reclassify wired tables to `event_projection`
 
-Then co-import desktop+OG, then eligible pre-A checkpoint. Super still waits.
+Then eligible pre-A checkpoint. Super still waits.
 
 ### Unanimous forbids (still)
 

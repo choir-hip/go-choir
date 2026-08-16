@@ -39,6 +39,12 @@ type ProjectionStore interface {
 	DiscardPrepared(ctx context.Context, computerID, eventDigest string) error
 }
 
+// BatchProjectionStore applies a payload already resolved before BeginTx.
+// Head-only events pass a nil batch.
+type BatchProjectionStore interface {
+	FinalizeBatch(ctx context.Context, computerID, eventDigest string, receipt Receipt, batch *ProjectionBatch) error
+}
+
 type CASRequest struct {
 	Event                    Event           `json:"event"`
 	EventDigest              string          `json:"event_digest"`
@@ -78,6 +84,8 @@ type ComputerEventAppender struct {
 	projection ProjectionStore
 	cas        HeadCAS
 	verifier   ReceiptVerifier
+	reader     ArtifactReader
+	cipher     *PrivateArtifactCipher
 	mu         sync.Mutex
 }
 
@@ -91,6 +99,18 @@ func NewComputerEventAppender(computerID string, pins ArtifactPinner, projection
 // RebindProjection replaces the local projection store after a tape rematerialize
 // flips the VM-local realization in place. CAS and pin clients stay bound to the
 // platform event authority; only the local Dolt/SQLite projection moves.
+// SetPayloadResolver installs the pre-SQL artifact fetch/decrypt seam used
+// for projection_batch_recorded replay. Live pin still happens before CAS.
+func (a *ComputerEventAppender) SetPayloadResolver(reader ArtifactReader, cipher *PrivateArtifactCipher) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.reader = reader
+	a.cipher = cipher
+}
+
 func (a *ComputerEventAppender) RebindProjection(projection ProjectionStore) error {
 	if a == nil || projection == nil {
 		return fmt.Errorf("computer event appender: projection rebind requires complete dependencies")
@@ -461,8 +481,8 @@ func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, i
 	if err := a.verifier.VerifyEventHeadReceipt(ctx, receipt, request); err != nil {
 		return Receipt{}, fmt.Errorf("computer event appender: verify head receipt: %w", err)
 	}
-	if err := a.projection.Finalize(ctx, a.computerID, digest, receipt); err != nil {
-		return Receipt{}, fmt.Errorf("%w: finalize embedded projection: %v", ErrNeedsProjectionRepair, err)
+	if err := a.finalizeProjection(ctx, event, digest, receipt); err != nil {
+		return Receipt{}, fmt.Errorf("%w: finalize embedded projection: %w", ErrNeedsProjectionRepair, ClassifyProjectionFailure(err))
 	}
 	return receipt, nil
 }
@@ -485,7 +505,7 @@ func (a *ComputerEventAppender) RecoverPrepared(ctx context.Context) error {
 			if err := a.verifier.VerifyEventHeadReceipt(ctx, receipt, request); err != nil {
 				return fmt.Errorf("computer event appender: verify recovery receipt: %w", err)
 			}
-			if err := a.projection.Finalize(ctx, a.computerID, request.EventDigest, receipt); err != nil {
+			if err := a.finalizeProjection(ctx, request.Event, request.EventDigest, receipt); err != nil {
 				return fmt.Errorf("%w: finalize recovery: %w", ErrNeedsProjectionRepair, ClassifyProjectionFailure(err))
 			}
 			continue
@@ -554,7 +574,7 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		if err := a.projection.Prepare(ctx, record.Request); err != nil {
 			return fmt.Errorf("computer event appender: replay prepare sequence %d: %w", record.Request.Event.Sequence, err)
 		}
-		if err := a.projection.Finalize(ctx, a.computerID, record.Request.EventDigest, record.Receipt); err != nil {
+		if err := a.finalizeProjection(ctx, record.Request.Event, record.Request.EventDigest, record.Receipt); err != nil {
 			return fmt.Errorf("computer event appender: replay finalize sequence %d: %w", record.Request.Event.Sequence, err)
 		}
 		current = &next
@@ -577,6 +597,58 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		return ErrNeedsProjectionRepair
 	}
 	return nil
+}
+
+func (a *ComputerEventAppender) finalizeProjection(ctx context.Context, event Event, digest string, receipt Receipt) error {
+	batch, err := a.resolveProjectionBatch(ctx, event)
+	if err != nil {
+		return err
+	}
+	if applier, ok := a.projection.(BatchProjectionStore); ok {
+		return applier.FinalizeBatch(ctx, a.computerID, digest, receipt, batch)
+	}
+	if batch != nil {
+		return fmt.Errorf("computer event appender: projection store cannot apply batches")
+	}
+	return a.projection.Finalize(ctx, a.computerID, digest, receipt)
+}
+
+func (a *ComputerEventAppender) resolveProjectionBatch(ctx context.Context, event Event) (*ProjectionBatch, error) {
+	if event.EventKind != EventProjectionBatchRecorded {
+		return nil, nil
+	}
+	if a.reader == nil {
+		return nil, ErrPayloadResolverRequired
+	}
+	privacy := strings.TrimSpace(event.PrivacyClass)
+	if privacy == "" {
+		privacy = "public"
+	}
+	if privacy == "owner" {
+		privacy = "public"
+	}
+	refs := []PayloadRef{{
+		ArtifactDigest: event.PayloadCommitment,
+		MediaType:      ProjectionBatchMediaType,
+		PrivacyClass:   privacy,
+		Role:           "projection_batch",
+		SchemaVersion:  1,
+	}}
+	resolved, err := ResolvePayloads(ctx, a.reader, a.cipher, event.ComputerID, event.EventID, refs)
+	if err != nil {
+		return nil, err
+	}
+	if len(resolved) != 1 {
+		return nil, fmt.Errorf("computer event projection: one projection batch payload is required")
+	}
+	batch, err := DecodeProjectionBatch(resolved[0].Plaintext)
+	if err != nil {
+		return nil, err
+	}
+	if batch.ComputerID != event.ComputerID || batch.EventID != event.EventID {
+		return nil, fmt.Errorf("%w: batch identity", ErrProjectionBatchInvalid)
+	}
+	return &batch, nil
 }
 
 // ReconstructInto replays the canonical event source into a separate
@@ -613,6 +685,8 @@ func (a *ComputerEventAppender) replayInto(ctx context.Context, projection Proje
 		projection: projection,
 		cas:        a.cas,
 		verifier:   a.verifier,
+		reader:     a.reader,
+		cipher:     a.cipher,
 	}
 	if targetHead == "" {
 		return dryRun.Reconstruct(ctx, source)

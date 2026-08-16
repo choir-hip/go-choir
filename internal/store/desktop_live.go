@@ -202,43 +202,34 @@ func (s *Store) SaveDesktopStateForSession(ctx context.Context, state types.Desk
 	return nil
 }
 
-func (s *Store) upsertDesktopSession(ctx context.Context, ownerID, desktopID, sessionID string, session types.DesktopSessionContext) error {
+func (s *Store) upsertDesktopSession(_ context.Context, ownerID, desktopID, sessionID string, session types.DesktopSessionContext) error {
 	now := session.UpdatedAt
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	var lastInput, driverUntil any
-	if session.IsDriver {
-		lastInput = now.UTC().Format(time.RFC3339Nano)
-		driverUntil = session.DriverUntil.UTC().Format(time.RFC3339Nano)
+	session.UpdatedAt = now.UTC()
+	key := desktopPresenceKey(ownerID, desktopID, sessionID)
+	s.presenceMu.Lock()
+	defer s.presenceMu.Unlock()
+	if s.sessionPresence == nil {
+		s.sessionPresence = map[string]types.DesktopSessionContext{}
 	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO desktop_sessions (
-			owner_id, desktop_id, session_id, device_id, viewport_profile,
-			visibility_state, last_input_at, driver_until, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			device_id = VALUES(device_id),
-			viewport_profile = VALUES(viewport_profile),
-			visibility_state = VALUES(visibility_state),
-			last_input_at = COALESCE(VALUES(last_input_at), last_input_at),
-			driver_until = COALESCE(VALUES(driver_until), driver_until),
-			updated_at = VALUES(updated_at)`,
-		ownerID,
-		desktopID,
-		sessionID,
-		strings.TrimSpace(session.DeviceID),
-		strings.TrimSpace(session.ViewportProfile),
-		"",
-		lastInput,
-		driverUntil,
-		now.UTC().Format(time.RFC3339Nano),
-		now.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return fmt.Errorf("upsert desktop session: %w", err)
-	}
+	s.sessionPresence[key] = session
 	return nil
+}
+
+func desktopPresenceKey(ownerID, desktopID, sessionID string) string {
+	return ownerID + "\x00" + desktopID + "\x00" + sessionID
+}
+
+func (s *Store) desktopSessionPresence(ownerID, desktopID, sessionID string) (types.DesktopSessionContext, bool) {
+	if s == nil {
+		return types.DesktopSessionContext{}, false
+	}
+	s.presenceMu.Lock()
+	defer s.presenceMu.Unlock()
+	got, ok := s.sessionPresence[desktopPresenceKey(ownerID, desktopID, sessionID)]
+	return got, ok
 }
 
 func deleteDesktopPlacementsNotIn(ctx context.Context, tx *sql.Tx, ownerID, desktopID string, presentIDs []string) error {

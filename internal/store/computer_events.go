@@ -69,6 +69,10 @@ func (s *Store) Prepare(ctx context.Context, request computerevent.CASRequest) e
 }
 
 func (s *Store) Finalize(ctx context.Context, computerID, eventDigest string, receipt computerevent.Receipt) error {
+	return s.FinalizeBatch(ctx, computerID, eventDigest, receipt, nil)
+}
+
+func (s *Store) FinalizeBatch(ctx context.Context, computerID, eventDigest string, receipt computerevent.Receipt, batch *computerevent.ProjectionBatch) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("computer event projection: nil store")
 	}
@@ -91,7 +95,8 @@ func (s *Store) Finalize(ctx context.Context, computerID, eventDigest string, re
 	var sequence, nextReducerVersion, nextCredentialRevocationEpoch uint64
 	var previousHead, status, desiredHead, effectiveHead, desiredCommitment, effectiveCommitment string
 	var pending sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT sequence, previous_head, status, next_desired_event_head, next_effective_event_head, next_pending_transition_ref, next_desired_state_commitment, next_effective_state_commitment, next_reducer_version, next_credential_revocation_epoch FROM computer_event_index WHERE computer_id=? AND event_digest=? FOR UPDATE`, computerID, eventDigest).Scan(&sequence, &previousHead, &status, &desiredHead, &effectiveHead, &pending, &desiredCommitment, &effectiveCommitment, &nextReducerVersion, &nextCredentialRevocationEpoch)
+	var eventKind string
+	err = tx.QueryRowContext(ctx, `SELECT sequence, previous_head, status, event_kind, next_desired_event_head, next_effective_event_head, next_pending_transition_ref, next_desired_state_commitment, next_effective_state_commitment, next_reducer_version, next_credential_revocation_epoch FROM computer_event_index WHERE computer_id=? AND event_digest=? FOR UPDATE`, computerID, eventDigest).Scan(&sequence, &previousHead, &status, &eventKind, &desiredHead, &effectiveHead, &pending, &desiredCommitment, &effectiveCommitment, &nextReducerVersion, &nextCredentialRevocationEpoch)
 	if err != nil {
 		return fmt.Errorf("computer event projection: load prepared event: %w", err)
 	}
@@ -100,6 +105,21 @@ func (s *Store) Finalize(ctx context.Context, computerID, eventDigest string, re
 	}
 	if status != "prepared" {
 		return fmt.Errorf("computer event projection: cannot finalize status %q", status)
+	}
+	if eventKind == string(computerevent.EventProjectionBatchRecorded) {
+		if batch == nil {
+			return fmt.Errorf("computer event projection: projection_batch_recorded requires a resolved batch")
+		}
+	} else if batch != nil {
+		return fmt.Errorf("computer event projection: batch requires projection_batch_recorded")
+	}
+	if batch != nil {
+		if err := batch.Validate(); err != nil {
+			return err
+		}
+		if batch.ComputerID != computerID || batch.EventDigest != eventDigest {
+			return fmt.Errorf("%w: batch identity", computerevent.ErrProjectionBatchInvalid)
+		}
 	}
 	var currentSequence uint64
 	var currentHead string
@@ -124,6 +144,11 @@ func (s *Store) Finalize(ctx context.Context, computerID, eventDigest string, re
 	}
 	if rows, rowsErr := result.RowsAffected(); rowsErr != nil || rows != 1 {
 		return fmt.Errorf("computer event projection: finalize CAS lost")
+	}
+	if batch != nil {
+		if err := projectBatch(ctx, tx, *batch); err != nil {
+			return err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return err

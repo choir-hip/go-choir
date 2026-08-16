@@ -13,13 +13,25 @@ const (
 	// restored rows do not depend on whichever binary happens to run.
 	ProjectorVersionV1 = 1
 	ProjectionBatchV1  = 1
+
+	ProjectionOpDesktopState = "desktop_state_recorded"
+	ProjectionOpObject       = "object_recorded"
+	ProjectionOpObjectEdge   = "object_edge_recorded"
+	ProjectionBatchMediaType = "application/vnd.choir.projection-batch+json"
 )
 
 var (
 	ErrProjectionBatchInvalid = errors.New("computer event projection batch: invalid")
 	ErrProjectionPoison       = errors.New("computer event projection: poison event cannot wedge the computer")
 	ErrSQLDuringResolve       = errors.New("computer event projection: SQL executor used during payload resolve")
+	ErrProjectionPresence     = errors.New("computer event projection: session presence is not a tape payload")
 )
+
+var projectionOpKinds = map[string]struct{}{
+	ProjectionOpDesktopState: {},
+	ProjectionOpObject:       {},
+	ProjectionOpObjectEdge:   {},
+}
 
 // ProjectionOp is one mutation inside an atomic batch. Intermediate heads
 // between ops in the same batch are not restore targets; the whole batch is.
@@ -52,8 +64,48 @@ func (b ProjectionBatch) Validate() error {
 		return fmt.Errorf("%w: empty batch", ErrProjectionBatchInvalid)
 	}
 	for i, op := range b.Ops {
-		if strings.TrimSpace(op.Kind) == "" {
+		kind := strings.TrimSpace(op.Kind)
+		if kind == "" {
 			return fmt.Errorf("%w: op %d missing kind", ErrProjectionBatchInvalid, i)
+		}
+		if _, ok := projectionOpKinds[kind]; !ok {
+			return fmt.Errorf("%w: op %d unknown kind %q", ErrProjectionBatchInvalid, i, kind)
+		}
+		table := strings.TrimSpace(op.Table)
+		if table == "desktop_sessions" || table == "desktop_session_presence" {
+			return fmt.Errorf("%w: %s", ErrProjectionPresence, table)
+		}
+		if err := rejectProjectionPresence(op.Body); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DecodeProjectionBatch parses already-resolved plaintext. Callers must
+// ResolvePayloads before this and before BeginTx.
+func DecodeProjectionBatch(plaintext []byte) (ProjectionBatch, error) {
+	var batch ProjectionBatch
+	if err := json.Unmarshal(plaintext, &batch); err != nil {
+		return ProjectionBatch{}, fmt.Errorf("%w: decode: %v", ErrProjectionBatchInvalid, err)
+	}
+	if err := batch.Validate(); err != nil {
+		return ProjectionBatch{}, err
+	}
+	return batch, nil
+}
+
+func rejectProjectionPresence(body json.RawMessage) error {
+	if len(body) == 0 {
+		return nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return nil
+	}
+	for _, key := range []string{"last_input_at", "driver_until", "visibility_state", "is_driver"} {
+		if _, ok := obj[key]; ok {
+			return fmt.Errorf("%w: field %s", ErrProjectionPresence, key)
 		}
 	}
 	return nil
