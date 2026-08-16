@@ -22,6 +22,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -733,8 +734,39 @@ func TestSelfDevelopmentStartRevivesTerminalPersistentSuper(t *testing.T) {
 	if err != nil || len(revived) != 1 {
 		t.Fatalf("revived Super runs=%d err=%v", len(revived), err)
 	}
-	if revived[0].RunID != rec.RunID || revived[0].TrajectoryID != "" || metadataStringValue(revived[0].Metadata, runMetadataTrajectoryID) != "" {
-		t.Fatalf("revived Super kept a trajectory: %+v", revived[0])
+	if revived[0].RunID == rec.RunID || revived[0].TrajectoryID != "" || metadataStringValue(revived[0].Metadata, runMetadataTrajectoryID) != "" {
+		t.Fatalf("fresh Super was not started after unbinding terminal Super: old=%s new=%+v", rec.RunID, revived[0])
+	}
+	if _, err := requirePersistentSuperExecution(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&revived[0]))); err != nil {
+		t.Fatalf("fresh Super failed persistent Super gate: %v rec=%+v", err, revived[0])
+	}
+	old, err := productStore.GetRunByOwner(ctx, "owner", rec.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadataStringValue(old.Metadata, "self_development_operation_id") != "" {
+		t.Fatalf("terminal Super stayed bound to the operation: %+v", old.Metadata)
+	}
+}
+
+func TestSelfDevelopmentPersistentSuperPassesAssignCoSuperGate(t *testing.T) {
+	ctx := context.Background()
+	runtime, productStore := testRuntime(t)
+	operation := selfdev.Operation{
+		OperationID:       "selfdev-gate",
+		ComputerID:        "computer-selfdev-gate",
+		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("b", 64),
+	}
+	runtime.cfg.ComputerID = operation.ComputerID
+	if err := runtime.startSelfDevelopmentPersistentSuper(ctx, operation, "owner", "gate"); err != nil {
+		t.Fatal(err)
+	}
+	runs, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operation.OperationID, 2)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("started Super runs=%d err=%v", len(runs), err)
+	}
+	if _, err := requirePersistentSuperExecution(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&runs[0]))); err != nil {
+		t.Fatalf("self-development Super failed persistent Super gate: %v rec=%+v", err, runs[0])
 	}
 }
 

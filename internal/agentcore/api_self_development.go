@@ -1148,7 +1148,10 @@ func (h *APIHandler) ensureSelfDevelopmentRun(r *http.Request, operation selfdev
 		}
 		if len(runs) == 1 && selfDevelopmentSuperRunTerminal(runs[0].State) {
 			rec := runs[0]
-			if err := h.rt.reviveSelfDevelopmentPersistentSuper(r.Context(), &rec); err != nil {
+			if err := h.rt.unbindSelfDevelopmentSuper(r.Context(), &rec); err != nil {
+				return operation, err
+			}
+			if err := h.rt.startSelfDevelopmentPersistentSuper(r.Context(), operation, ownerID, prompt); err != nil {
 				return operation, err
 			}
 		}
@@ -1211,24 +1214,22 @@ func (rt *Runtime) preserveSelfDevelopmentPersistentSuper(ctx context.Context, r
 	return nil
 }
 
-func (rt *Runtime) reviveSelfDevelopmentPersistentSuper(ctx context.Context, rec *types.RunRecord) error {
-	if rec == nil {
-		return fmt.Errorf("revive self-development Super: run unavailable")
-	}
-	if err := rt.preserveSelfDevelopmentPersistentSuper(ctx, rec); err != nil {
-		return err
+func (rt *Runtime) unbindSelfDevelopmentSuper(ctx context.Context, rec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || rec == nil {
+		return fmt.Errorf("unbind self-development Super: run unavailable")
 	}
 	rec.Metadata = cloneMetadata(rec.Metadata)
-	rec.Metadata["actor_reactivate_existing_memory"] = true
-	rec.State = types.RunPending
-	rec.Error = ""
-	rec.Result = ""
-	rec.FinishedAt = nil
-	rec.UpdatedAt = time.Now().UTC()
-	if err := rt.store.UpdateRun(ctx, *rec); err != nil {
-		return fmt.Errorf("revive self-development Super: %w", err)
+	if rec.Metadata == nil {
+		rec.Metadata = map[string]any{}
 	}
-	rt.activate(rec)
+	operationID := metadataStringValue(rec.Metadata, "self_development_operation_id")
+	if operationID != "" {
+		rec.Metadata["self_development_unbound_operation_id"] = operationID
+	}
+	delete(rec.Metadata, "self_development_operation_id")
+	if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+		return fmt.Errorf("unbind terminal self-development Super: %w", err)
+	}
 	return nil
 }
 
