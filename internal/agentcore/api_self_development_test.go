@@ -784,6 +784,21 @@ func TestSelfDevelopmentPersistentSuperPassesAssignCoSuperGate(t *testing.T) {
 		metadataStringValue(runs[0].Metadata, "requested_by_run_id") != "" {
 		t.Fatalf("self-development Super lacked Texture control join: %+v requested_by_run_id=%q", runs[0].Metadata, runs[0].RequestedByRunID)
 	}
+	pending, err := runtime.listPendingLifecyclePacketsDeliveredToRun(ctx, &runs[0])
+	if err != nil || len(pending) == 0 {
+		t.Fatalf("Texture Super delivered controls=%d err=%v", len(pending), err)
+	}
+	injected, err := runtime.coagentUpdateTurnInjectorWithInitialPhase(&runs[0], coagentPacketDeliveryThread)(false)
+	if err != nil || len(injected) == 0 {
+		t.Fatalf("Texture Super inject turns=%d err=%v", len(injected), err)
+	}
+	runs[0].UpdatedAt = time.Now().UTC()
+	if err := productStore.UpdateRun(ctx, runs[0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.coagentUpdateTurnInjectorWithInitialPhase(&runs[0], coagentPacketDeliveryThread)(false); err != nil {
+		t.Fatalf("Texture Super inject after UpdateRun: %v", err)
+	}
 	_, _, _, trajectoryID, _, _ := selfDevelopmentTextureJoinIDs("owner", operation.ComputerID, operation.OperationID)
 	snapshot, err := productStore.GetLifecycleSnapshot(ctx, "owner", operation.ComputerID, trajectoryID)
 	if err != nil {

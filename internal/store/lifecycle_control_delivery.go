@@ -472,6 +472,9 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 	var run types.RunRecord
 	if profile == agentprofile.Super {
 		run, err = s.GetRunByOwner(ctx, ownerID, targetRunID)
+		if err == ErrNotFound {
+			run, err = s.GetRun(ctx, targetRunID)
+		}
 	} else {
 		run, err = s.GetLifecycleRun(ctx, ownerID, computerID, targetRunID)
 	}

@@ -1358,7 +1358,14 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 	computerID := strings.TrimSpace(rec.ComputerID)
 	if isPersistentSuperAgentRun(rec) {
 		if metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
-			return rt.listPendingLifecyclePacketsDeliveredToRun(ctx, rec)
+			if _, err := rt.EnsurePersistentSuperAgent(ctx, rec.OwnerID); err != nil {
+				return nil, fmt.Errorf("restore persistent Super agent: %w", err)
+			}
+			packets, err := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, rec)
+			if err != nil && errors.Is(err, store.ErrNotFound) {
+				return nil, nil
+			}
+			return packets, err
 		}
 		return rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
 	}
