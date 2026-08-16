@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"net/http"
 	"net/http/httptest"
@@ -740,6 +741,11 @@ func TestSelfDevelopmentStartRevivesTerminalPersistentSuper(t *testing.T) {
 	if _, err := requirePersistentSuperExecution(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&revived[0]))); err != nil {
 		t.Fatalf("fresh Super failed persistent Super gate: %v rec=%+v", err, revived[0])
 	}
+	if metadataStringValue(revived[0].Metadata, "assignment_trajectory_id") == "" ||
+		metadataStringValue(revived[0].Metadata, "request_source") != "lifecycle_texture_control" ||
+		strings.TrimSpace(revived[0].RequestedByRunID) != "" {
+		t.Fatalf("fresh Super lacked Texture control join: %+v requested_by_run_id=%q", revived[0].Metadata, revived[0].RequestedByRunID)
+	}
 	old, err := productStore.GetRunByOwner(ctx, "owner", rec.RunID)
 	if err != nil {
 		t.Fatal(err)
@@ -767,6 +773,44 @@ func TestSelfDevelopmentPersistentSuperPassesAssignCoSuperGate(t *testing.T) {
 	}
 	if _, err := requirePersistentSuperExecution(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&runs[0]))); err != nil {
 		t.Fatalf("self-development Super failed persistent Super gate: %v rec=%+v", err, runs[0])
+	}
+	if metadataStringValue(runs[0].Metadata, "assignment_trajectory_id") == "" ||
+		metadataStringValue(runs[0].Metadata, "request_source") != "lifecycle_texture_control" ||
+		strings.TrimSpace(runs[0].RequestedByRunID) != "" ||
+		metadataStringValue(runs[0].Metadata, "requested_by_run_id") != "" {
+		t.Fatalf("self-development Super lacked Texture control join: %+v requested_by_run_id=%q", runs[0].Metadata, runs[0].RequestedByRunID)
+	}
+	_, _, _, trajectoryID, _, _ := selfDevelopmentTextureJoinIDs("owner", operation.ComputerID, operation.OperationID)
+	snapshot, err := productStore.GetLifecycleSnapshot(ctx, "owner", operation.ComputerID, trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundOperationSource := false
+	for _, update := range snapshot.Updates {
+		if update.Direction == types.LifecyclePacketDirectionControl &&
+			selfDevelopmentOperationIDFromPacketSources(update.Packet.Sources) == operation.OperationID {
+			foundOperationSource = true
+			break
+		}
+	}
+	if !foundOperationSource {
+		t.Fatalf("Texture Super control did not cite operation in packet.sources: %+v", snapshot.Updates)
+	}
+	head := snapshot.HeadRevision
+	meta := map[string]any{}
+	if len(head.Metadata) > 0 {
+		if err := json.Unmarshal(head.Metadata, &meta); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if fmt.Sprint(meta["self_development_operation_id"]) != operation.OperationID {
+		t.Fatalf("revision metadata missing compact operation join: %#v", meta)
+	}
+	if _, ok := meta["texture_available_source_entities"]; ok {
+		t.Fatalf("source entities leaked into revision metadata: %#v", meta)
+	}
+	if strings.Contains(head.Content, operation.OperationID) {
+		t.Fatalf("operation identity leaked into revision prose: %q", head.Content)
 	}
 }
 

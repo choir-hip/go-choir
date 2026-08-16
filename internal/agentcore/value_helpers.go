@@ -238,6 +238,12 @@ func normalizeWorkerUpdateRefKey(key string) string {
 		return "benchmark_log"
 	case "file", "file_artifact", "artifact":
 		return "file_artifact"
+	case "operation", "operation_id", "self_development_operation":
+		return "operation"
+	case "receipt", "receipt_id", "consensus_receipt":
+		return "receipt"
+	case "event_head", "head", "canonical_event_head":
+		return "event_head"
 	default:
 		return ""
 	}

@@ -178,6 +178,9 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	if first.TrajectoryID != "" {
 		metadata["assignment_trajectory_id"] = first.TrajectoryID
 	}
+	if operationID := selfDevelopmentOperationIDFromPacketSources(first.Packet.Sources); operationID != "" {
+		metadata["self_development_operation_id"] = operationID
+	}
 	targetWorkItemID := firstNonEmpty(first.TargetWorkItemID, first.WorkItemID)
 	if targetWorkItemID != "" {
 		metadata["lifecycle_work_item_id"] = targetWorkItemID
@@ -199,7 +202,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	if len(updateIDs) > 0 && !lifecycleControls {
 		metadata["worker_update_ids"] = updateIDs
 	}
-	if first.AgentID != "" {
+	if first.AgentID != "" && !lifecycleControls {
 		if requester, err := rt.latestActiveRunByAgent(ctx, ownerID, first.AgentID); err == nil {
 			metadata["requested_by_run_id"] = requester.RunID
 			if metadataStringValue(requester.Metadata, "agent_profile") != "" && metadata["requested_by_profile"] == "" {

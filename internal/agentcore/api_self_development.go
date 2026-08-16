@@ -1170,30 +1170,6 @@ func selfDevelopmentSuperNeedsPersistentIdentity(rec types.RunRecord) bool {
 		metadataStringValue(rec.Metadata, runMetadataTrajectoryID) != ""
 }
 
-func (rt *Runtime) startSelfDevelopmentPersistentSuper(ctx context.Context, operation selfdev.Operation, ownerID, prompt string) error {
-	if _, err := rt.EnsurePersistentSuperAgent(ctx, ownerID); err != nil {
-		return fmt.Errorf("start self-development run: %w", err)
-	}
-	boundPrompt := fmt.Sprintf("Self-development operation %s on computer %s. Preserve this exact operation identity in all implementation and verifier work.\n\n%s", operation.OperationID, operation.ComputerID, prompt)
-	rec, err := rt.createRunWithMetadata(ctx, boundPrompt, ownerID, map[string]any{
-		runMetadataAgentProfile:                agentprofile.Super,
-		runMetadataAgentRole:                   agentprofile.Super,
-		runMetadataAgentID:                     persistentSuperAgentID(ownerID),
-		"request_source":                       "self_development_operation",
-		"self_development_operation_id":        operation.OperationID,
-		"self_development_computer_id":         operation.ComputerID,
-		"self_development_prompt_artifact_ref": operation.PromptArtifactRef,
-	})
-	if err != nil {
-		return fmt.Errorf("start self-development run: %w", err)
-	}
-	if err := rt.preserveSelfDevelopmentPersistentSuper(ctx, rec); err != nil {
-		return err
-	}
-	rt.activate(rec)
-	return nil
-}
-
 func (rt *Runtime) preserveSelfDevelopmentPersistentSuper(ctx context.Context, rec *types.RunRecord) error {
 	if rt == nil || rt.store == nil || rec == nil {
 		return fmt.Errorf("start self-development run: persistent Super authority unavailable")
