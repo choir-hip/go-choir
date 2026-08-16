@@ -93,7 +93,7 @@ start:
     still_open:
       - "concrete decision-policy schema, independence domains, quorum, dissent, abstention, timeout, recusal, replacement, and consequence-receipt contracts"
       - "whether the upward coagent packet payload can carry operation id, bundle digest, receipt id, and head into Texture revision metadata without a payload schema change — answered 2026-08-16: yes, via existing packet.sources typed URIs (operation:/capsule_bundle:/receipt:/event_head:) with no payload schema change; identities persist in revision metadata and typed citations, never prose"
-      - "whether Texture production registry still omits update_coagent on the deployed staging build — source confirmation 2026-08-16: current main omits generic update_coagent on Texture (AllowCoAgentTools=false; production registry is get_run_memory_entry plus patch/rewrite/record_decision/request_email_draft). Staging 4ac90583 is older and also omits it. CTS-safe: do not register the generic resolver. Upward path is assigned CoSuper update_coagent then Super report_to_texture. Deployed re-check remains unpaid until a later deploy"
+      - "whether Texture production registry still omits update_coagent on the deployed staging build — source confirmation 2026-08-16: current main omits generic update_coagent on Texture (AllowCoAgentTools=false; production registry is get_run_memory_entry plus patch/rewrite/record_decision/request_email_draft). Staging health 2026-08-16T01:34Z reports deployed_commit 3141b90b (trusted-outbox; not yet 466c0504 supervision or 30d619a0 orange rehearsal). CTS-safe: do not register the generic resolver. Upward path is assigned CoSuper update_coagent then Super report_to_texture. Deployed re-check of the supervision commit remains unpaid"
       - "whether in-process rehearsal can walk reversible propose→consensus→promote→restore and irreversible propose→consensus→outbox without a live send — answered 2026-08-16 orange: yes, TestEffectsRehearsal. Red/live rehearsal unpaid until staging deploy of current main"
       - "retained computer epoch 8253 / ak_45ce1796 classified 2026-08-15 as historical CTS residual, not current identity (paid restore epoch 268; key returns 401). Residual hygiene only; do not reopen tape-recovery"
 
@@ -257,13 +257,13 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer/outbox/supervision landed. Orange rehearsal passed in-process (reversible promote+restore consumption; irreversible RecordingProvider dispatch). Owner gates still present. Effects remain OFF. Armed=false. Next: live proof after staging deploy of current main."
+  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer/outbox/supervision landed. Orange rehearsal passed in-process (reversible promote+restore consumption; irreversible RecordingProvider dispatch). Staging health 2026-08-16T01:34Z is 3141b90b (trusted-outbox), not current main 30d619a0. Owner gates still present. Effects remain OFF. Armed=false. Next: live proof after staging deploy of current main."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-16T02:40:00Z
-    source_ref: orange rehearsal on parent main@466c0504; staging product still 4ac90583
-    deploy_identity: "staging deployed 4ac90583 at 2026-08-14T23:24:20Z; retained computer-03335285269bdba4f94377e56879f9e6 epoch 268; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9"
+    observed_at: 2026-08-16T01:34:00Z
+    source_ref: orange rehearsal on origin/main@30d619a0; staging health deployed_commit 3141b90b at 2026-08-16T01:21:52Z
+    deploy_identity: "staging https://choir.news/health 2026-08-16T01:34Z deployed_commit 3141b90b (trusted-outbox; built_at 20260816005635); origin/main 30d619a0 is two commits ahead (466c0504 supervision + 30d619a0 orange rehearsal). Retained computer-03335285269bdba4f94377e56879f9e6 epoch 268; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: 2026-08-16T00:25:00Z reconnection product + tests + receipt; parent dfcb8ad8
@@ -282,8 +282,8 @@ now:
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
   evidence_refs: [docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "None for orange rehearsal land. Remaining risk: treating orange rehearsal as deployed proof; deleting fail-closed owner gates before deployed acceptance of the consensus path; arming a live send before a staging deploy of current main; using OwnerRecovery checkpoints for promotion (route projection already refuses); treating epoch 8253 as the current retained epoch (paid restore is epoch 268). Kill-loop problem repaired at db265d1e is not current readiness proof. Red/live rehearsal and live proof remain unpaid."
-  next_action: "Route map 9 orange rehearsal passed in-process. Next: live proof (route map 10) after staging deploy of current main. Do not send live mail. Owner gates remain until deployed acceptance of the consensus path. Effects remain OFF. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
+  blocker_or_risk: "None for orange rehearsal land. Remaining risk: treating orange rehearsal or staging 3141b90b as deployed proof of current main; deleting fail-closed owner gates before deployed acceptance of the consensus path; arming a live send before a staging deploy of current main 30d619a0; using OwnerRecovery checkpoints for promotion (route projection already refuses); treating epoch 8253 as the current retained epoch (paid restore is epoch 268). Kill-loop problem repaired at db265d1e is not current readiness proof. Red/live rehearsal and live proof remain unpaid."
+  next_action: "Route map 9 orange rehearsal passed in-process on origin/main@30d619a0. Staging is 3141b90b, not current main. Next: live proof (route map 10) after staging deploy of current main. Do not send live mail. Owner gates remain until deployed acceptance of the consensus path. Effects remain OFF. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -855,8 +855,8 @@ at all.
    reversible propose → qualified consensus → promote → consume tape-recovery
    restore → verify; irreversible propose → stronger qualified consensus →
    RecordingProvider dispatch → consequence receipt → crash-window correction.
-   No live send. Staging is still 4ac90583. Live run remains gated on a deploy
-   of current main.
+   No live send. Staging health 2026-08-16T01:34Z is 3141b90b, not current
+   main 30d619a0. Live run remains gated on a deploy of current main.
 10. **Live proof (red).** Capsule authors A → consensus authorizes → promotes →
    played → falsified → B supersedes → restart proves B → total restore; then
    execute and receipt the exact acceptance email under its separate policy.
