@@ -757,7 +757,7 @@ EOF
       StandardOutput = "journal+console";
       StandardError = "journal+console";
       EnvironmentFile = [ "-/run/go-choir-autoputer.env" ];
-      ReadWritePaths = [ "/mnt/persistent" "/run/choir" "/run/choir-runtime-handoff" ];
+      ReadWritePaths = [ "/mnt/persistent" "/run/choir" "/run/choir-runtime-handoff" "/run/choir-verifier" ];
       InaccessiblePaths = [ "/mnt/persistent/choir-signers" "/run/choir-updater-control" ];
     };
   };

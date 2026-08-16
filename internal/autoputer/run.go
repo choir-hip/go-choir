@@ -27,6 +27,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -282,7 +283,13 @@ func Run() {
 		log.Fatalf("autoputer: configure self-development route: %v", err)
 	} else if ok {
 		coreOpts = append(coreOpts, opt)
-		log.Printf("autoputer: self-development computer-version route wired; verifier remains unmounted")
+		log.Printf("autoputer: self-development computer-version route wired")
+	}
+	if opt, ok, err := selfDevelopmentVerifierOption(); err != nil {
+		log.Fatalf("autoputer: configure self-development verifier: %v", err)
+	} else if ok {
+		coreOpts = append(coreOpts, opt)
+		log.Printf("autoputer: self-development verifier authority wired; mode remains off")
 	}
 	var rtOpts []actorruntime.RuntimeOption
 
@@ -564,8 +571,7 @@ func selfDevelopmentUpdaterOption() (agentcore.RuntimeOption, bool, error) {
 }
 
 // selfDevelopmentRouteOption mounts signed computer-version route reads for
-// kernel-capability probes. It does not mount the verifier, so the
-// materializer stays inert. Mode is not set.
+// kernel-capability probes. Mode is not set.
 func selfDevelopmentRouteOption() (agentcore.RuntimeOption, bool, error) {
 	baseURL := strings.TrimSpace(os.Getenv("RUNTIME_VMCTL_URL"))
 	if baseURL == "" {
@@ -583,4 +589,19 @@ func selfDevelopmentRouteOption() (agentcore.RuntimeOption, bool, error) {
 		desktopID = "primary"
 	}
 	return agentcore.WithSelfDevelopmentRoute(vmctl.NewClient(baseURL), ownerID, desktopID), true, nil
+}
+
+// selfDevelopmentVerifierOption mounts verifier-control certificate signing.
+// The materializer still no-ops unless updater, verifier, control, and route
+// are all present and an authorized operation exists. Mode is not set.
+func selfDevelopmentVerifierOption() (agentcore.RuntimeOption, bool, error) {
+	socket := strings.TrimSpace(os.Getenv("CHOIR_VERIFIER_AUTHORITY_SOCKET"))
+	if socket == "" {
+		return nil, false, nil
+	}
+	client, err := receiptsigner.NewClient(socket, receiptsigner.ModeVerifier)
+	if err != nil {
+		return nil, false, fmt.Errorf("self-development verifier: %w", err)
+	}
+	return agentcore.WithSelfDevelopmentVerifier(client), true, nil
 }

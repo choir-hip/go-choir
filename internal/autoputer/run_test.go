@@ -226,3 +226,33 @@ func TestSelfDevelopmentRouteOptionRejectsNonHTTPURL(t *testing.T) {
 		t.Fatal("expected non-http vmctl URL to fail")
 	}
 }
+
+func TestSelfDevelopmentVerifierOptionWiresAbsoluteSocket(t *testing.T) {
+	t.Setenv("CHOIR_VERIFIER_AUTHORITY_SOCKET", "/run/choir-verifier/authority.sock")
+	opt, ok, err := selfDevelopmentVerifierOption()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || opt == nil {
+		t.Fatal("expected verifier option when CHOIR_VERIFIER_AUTHORITY_SOCKET is absolute")
+	}
+}
+
+func TestSelfDevelopmentVerifierOptionSkipsMissingSocket(t *testing.T) {
+	t.Setenv("CHOIR_VERIFIER_AUTHORITY_SOCKET", "")
+	opt, ok, err := selfDevelopmentVerifierOption()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok || opt != nil {
+		t.Fatal("expected no verifier option without CHOIR_VERIFIER_AUTHORITY_SOCKET")
+	}
+}
+
+func TestSelfDevelopmentVerifierOptionRejectsRelativeSocket(t *testing.T) {
+	t.Setenv("CHOIR_VERIFIER_AUTHORITY_SOCKET", "authority.sock")
+	_, _, err := selfDevelopmentVerifierOption()
+	if err == nil {
+		t.Fatal("expected relative verifier socket to fail")
+	}
+}
