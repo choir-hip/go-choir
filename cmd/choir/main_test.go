@@ -1017,7 +1017,7 @@ func TestComputerLifecycleCommandsUseTargetedProductAPI(t *testing.T) {
 	}))
 	defer stub.Close()
 
-	for _, command := range []string{"status", "stop", "start", "restart"} {
+	for _, command := range []string{"status", "stop", "start", "restart", "refresh"} {
 		args := []string{"computer", command, "--host=" + stub.URL, "--computer=computer-1"}
 		if command != "status" {
 			args = append(args, "--idempotency-key="+command+"-1")
@@ -1036,6 +1036,7 @@ func TestComputerLifecycleCommandsUseTargetedProductAPI(t *testing.T) {
 		{method: http.MethodPost, path: "/api/computers/computer-1/lifecycle/stop", idempotencyKey: "stop-1"},
 		{method: http.MethodPost, path: "/api/computers/computer-1/lifecycle/start", idempotencyKey: "start-1"},
 		{method: http.MethodPost, path: "/api/computers/computer-1/lifecycle/restart", idempotencyKey: "restart-1"},
+		{method: http.MethodPost, path: "/api/computers/computer-1/lifecycle/refresh", idempotencyKey: "refresh-1"},
 	}
 	if !reflect.DeepEqual(requests, want) {
 		t.Fatalf("lifecycle requests = %+v, want %+v", requests, want)

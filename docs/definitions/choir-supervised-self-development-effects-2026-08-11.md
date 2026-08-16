@@ -257,13 +257,13 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer/outbox/supervision/orange-rehearsal/product-path-forward/guest-mode-authority landed. Staging still 4543624b until this commit deploys. Mode off. Epoch 268. Owner gates present. Effects remain OFF. Armed=false. Next: staging deploy, then live 409 mode-off refuse on the retained computer without a live send."
+  slice: "Invoked 2026-08-15. Schema/v1/reconnection/freeze-propose/reducer/outbox/supervision/orange-rehearsal/product-path-forward/guest-mode-authority landed. Staging host is 0ee3a61e; retained guest still 503 (constructed freeze 7122f279). Owner-scoped refresh product path landed, unpaid until this commit deploys. Mode off. Epoch 268. Owner gates present. Effects remain OFF. Armed=false. Next: deploy, then choir computer refresh (not rematerialize), then live 409 without a live send."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-16T02:30:00Z
-    source_ref: guest mode authority on parent main@1a2c8ee6; tests TestGuestStartRefusesModeOffBeforeAnyEffect and TestOwnerRecoveryControlDoesNotAuthorizeProposal
-    deploy_identity: "staging https://choir.news/health still deployed_commit 4543624b until this commit deploys. Retained computer-03335285269bdba4f94377e56879f9e6 epoch 268 mode off; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
+    observed_at: 2026-08-16T03:53:44Z
+    source_ref: live 503 after host 0ee3a61e; GET /api/compute/status immutable_identity code_commit 7122f279 joined; owner-scoped refresh product path
+    deploy_identity: "staging https://choir.news/health deployed_commit 0ee3a61e at 2026-08-16T02:56:05Z. Retained computer-03335285269bdba4f94377e56879f9e6 epoch 268 mode off, constructed freeze 7122f279; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: 2026-08-16T00:25:00Z reconnection product + tests + receipt; parent dfcb8ad8
@@ -281,9 +281,9 @@ now:
     owner_ratification_ref: "owner correction 2026-08-13: irreversible effects are not outside the autonomy window; effect-specific multiagent consensus is the governing boundary, and human approval is optional as one possible consensus participant."
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
-  evidence_refs: [docs/evidence/effects-guest-mode-authority-2026-08-16.md, docs/evidence/effects-red-product-path-smoke-2026-08-16.md, docs/evidence/effects-product-path-forward-2026-08-16.md, docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "Guest mode authority is wired in source; staging 4543624b still has it unmounted until this commit deploys onto the retained guest. Constructed-computer-version realizations are preserved by active VM refresh, so the retained computer may keep the old binary. Remaining risk: treating unit 409 as live 409; rematerializing to pick up the binary; deleting owner gates; arming a live send; using OwnerRecovery checkpoints for promotion; treating epoch 8253 as current (paid restore is 268). Red promote/restore and live proof remain unpaid."
-  next_action: "Guest mode authority is wired. Next: staging deploy of this commit, then confirm start on computer-03335285269bdba4f94377e56879f9e6 returns 409 does not authorize proposal without setting mode. If the constructed retained guest kept the old binary, guest-boot refresh without rematerialize. Then red promote+restore. Do not send live mail. Owner gates remain. Effects remain OFF. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
+  evidence_refs: [docs/evidence/effects-owner-guest-boot-refresh-2026-08-16.md, docs/evidence/effects-guest-mode-authority-2026-08-16.md, docs/evidence/effects-red-product-path-smoke-2026-08-16.md, docs/evidence/effects-product-path-forward-2026-08-16.md, docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
+  blocker_or_risk: "Host 0ee3a61e is deployed; start is still 503 because the retained computer is a constructed freeze (code_commit 7122f279). Global deploy correctly preserved it. choir computer restart is RecoverVM on old artifacts. Owner-scoped refresh is now a product verb but unpaid until this commit deploys; persistent choir-updater/current may still win after refresh. Remaining risk: treating unit 409 as live 409; rematerializing; calling refresh before this commit deploys; deleting owner gates; arming a live send; using OwnerRecovery checkpoints for promotion; treating epoch 8253 as current (paid restore is 268). Red promote/restore and live proof remain unpaid."
+  next_action: "Owner-scoped guest-boot refresh is wired. Next: staging deploy of this commit, then choir computer refresh on computer-03335285269bdba4f94377e56879f9e6 (not rematerialize, not restart). Confirm start returns 409 does not authorize proposal without setting mode. If still 503, the persistent updater current is the remaining guest binary. Then red promote+restore. Do not send live mail. Owner gates remain. Effects remain OFF. Do not delete external-owner:/accept_once/awaiting_approval. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -366,6 +366,22 @@ receipts:
       environment_identity: staging https://choir.news deployed 4ac90583
       deployed_acceptance: not_applicable
     registry_conformance_ref: not_applicable
+  - id: effects-owner-guest-boot-refresh-2026-08-16
+    boundary: execute
+    commit_or_artifact: docs/evidence/effects-owner-guest-boot-refresh-2026-08-16.md
+    proof_refs: [docs/evidence/effects-owner-guest-boot-refresh-2026-08-16.md, internal/proxy/computer_lifecycle.go, internal/platform/lifecycle_control.go, cmd/choir/main.go]
+    rollback_ref: revert this owner-scoped refresh commit
+    disposition: "accepted as owner-scoped guest-boot refresh product path — not rematerialize, not global deploy rewrite. Host 0ee3a61e; live start still 503 on constructed freeze 7122f279. Refresh unpaid until this commit deploys. Mode not set. No live send."
+    problem_ref: not_applicable
+    authorization_ref: this Definition now.next_action after guest mode authority deploy
+    candidate_or_evidence_refs: [docs/evidence/effects-owner-guest-boot-refresh-2026-08-16.md]
+    landing:
+      source_commit: 0ee3a61e
+      ci_ref: pending
+      deploy_ref: 0ee3a61ed7e5abd6e319fe02bd65d478b7a0ffb6
+      environment_identity: staging https://choir.news deployed 0ee3a61e at 2026-08-16T02:56:05Z; retained epoch 268 mode off; constructed freeze 7122f279
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "effects remains entrypoint; owner-scoped refresh is not live proof"
   - id: effects-guest-mode-authority-2026-08-16
     boundary: execute
     commit_or_artifact: docs/evidence/effects-guest-mode-authority-2026-08-16.md
@@ -904,7 +920,7 @@ at all.
    restore → verify; irreversible propose → stronger qualified consensus →
    RecordingProvider dispatch → consequence receipt → crash-window correction.
    No live send. Guest mode authority wired in source (mode-off 409 in-process).
-   Staging 4543624b still unmounted until deploy. Promote/restore red unpaid.
+   Staging host 0ee3a61e; live start still 503 on constructed freeze 7122f279. Owner-scoped refresh unpaid until this commit deploys. Promote/restore red unpaid.
 10. **Live proof (red).** Capsule authors A → consensus authorizes → promotes →
    played → falsified → B supersedes → restart proves B → total restore; then
    execute and receipt the exact acceptance email under its separate policy.

@@ -42,12 +42,30 @@ func lifecycleControlCommitment(request LifecycleControlRequest) (string, error)
 	return computerevent.DigestBytes(canonical), nil
 }
 
+func isOwnerVMLifecycleAction(action string) bool {
+	switch strings.TrimSpace(action) {
+	case "start", "stop", "restart", "refresh":
+		return true
+	default:
+		return false
+	}
+}
+
+func OwnerVMLifecycleAdvancesEpoch(action string) bool {
+	switch strings.TrimSpace(action) {
+	case "restart", "refresh":
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Service) PrepareLifecycleControl(ctx context.Context, request LifecycleControlRequest) (LifecycleControlResult, error) {
 	request.ComputerID, request.IdempotencyKey = strings.TrimSpace(request.ComputerID), strings.TrimSpace(request.IdempotencyKey)
 	request.RequestCommitment, request.Action, request.PriorState = strings.TrimSpace(request.RequestCommitment), strings.TrimSpace(request.Action), strings.TrimSpace(request.PriorState)
 	expectedCommitment, err := lifecycleControlCommitment(request)
 	if s == nil || s.store == nil || request.Phase != "prepare" || request.ComputerID == "" || request.IdempotencyKey == "" ||
-		expectedCommitment != request.RequestCommitment || (request.Action != "start" && request.Action != "stop" && request.Action != "restart") || request.PriorState == "" {
+		expectedCommitment != request.RequestCommitment || !isOwnerVMLifecycleAction(request.Action) || request.PriorState == "" {
 		return LifecycleControlResult{}, fmt.Errorf("lifecycle control: complete durable intent is required")
 	}
 	s.writeMu.Lock()
@@ -90,8 +108,8 @@ func (s *Service) RecordLifecycleControl(ctx context.Context, request LifecycleC
 	request.ResultingState = strings.TrimSpace(request.ResultingState)
 	expectedCommitment, commitmentErr := lifecycleControlCommitment(request)
 	if s == nil || s.store == nil || s.signingKey == nil || request.Phase != "complete" || request.ComputerID == "" || request.IdempotencyKey == "" ||
-		commitmentErr != nil || expectedCommitment != request.RequestCommitment || (request.Action != "start" && request.Action != "stop" && request.Action != "restart") ||
-		request.PriorState == "" || request.ResultingState == "" || (request.Action == "restart" && request.ResultingEpoch <= request.PriorEpoch) {
+		commitmentErr != nil || expectedCommitment != request.RequestCommitment || !isOwnerVMLifecycleAction(request.Action) ||
+		request.PriorState == "" || request.ResultingState == "" || (OwnerVMLifecycleAdvancesEpoch(request.Action) && request.ResultingEpoch <= request.PriorEpoch) {
 		return computerevent.Receipt{}, fmt.Errorf("lifecycle control: complete signed actuator result is required")
 	}
 
@@ -136,7 +154,7 @@ func (s *Service) RecordLifecycleControl(ctx context.Context, request LifecycleC
 }
 
 func (s *Service) PendingLifecycleControls(ctx context.Context, computerID string) ([]computerevent.Receipt, error) {
-	rows, err := s.store.db.QueryContext(ctx, `SELECT receipt_json FROM computer_lifecycle_receipts WHERE computer_id=? AND action IN ('start','stop','restart') AND joined_event_digest IS NULL ORDER BY generation`, strings.TrimSpace(computerID))
+	rows, err := s.store.db.QueryContext(ctx, `SELECT receipt_json FROM computer_lifecycle_receipts WHERE computer_id=? AND action IN ('start','stop','restart','refresh') AND joined_event_digest IS NULL ORDER BY generation`, strings.TrimSpace(computerID))
 	if err != nil {
 		return nil, err
 	}

@@ -20,7 +20,7 @@ func parseComputerLifecyclePath(path string) (computerID, action string, ok bool
 		return "", "", false
 	}
 	parts := strings.Split(strings.TrimPrefix(path, prefix), "/")
-	if len(parts) != 3 || parts[1] != "lifecycle" || (parts[2] != "status" && parts[2] != "start" && parts[2] != "stop" && parts[2] != "restart") {
+	if len(parts) != 3 || parts[1] != "lifecycle" || (parts[2] != "status" && parts[2] != "start" && parts[2] != "stop" && parts[2] != "restart" && parts[2] != "refresh") {
 		return "", "", false
 	}
 	computerID, err := url.PathUnescape(parts[0])
@@ -143,6 +143,8 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 				_, err = h.vmctlClient.ResolveDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
 			}
 		}
+	case "refresh":
+		_, err = h.vmctlClient.RefreshDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
 	}
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "lifecycle actuation failed"})
@@ -150,7 +152,7 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 	}
 	result, err := h.resolveAuthorizedComputer(r.Context(), authResult, computerID)
 	if err != nil || result == nil || (action == "stop" && result.State != "stopped") ||
-		(action != "stop" && result.State != "active") || (action == "restart" && result.Epoch <= control.PriorEpoch) {
+		(action != "stop" && result.State != "active") || (platform.OwnerVMLifecycleAdvancesEpoch(action) && result.Epoch <= control.PriorEpoch) {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "lifecycle resulting state was not observed"})
 		return
 	}

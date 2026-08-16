@@ -131,6 +131,8 @@ Commands:
   computer bootstrap-chain    Establish a canonical event chain on a pre-genesis computer
   computer stop        Stop the current computer through owner-scoped vmctl
   computer start       Start or resume the current computer
+  computer restart     Stop then resolve the current computer (same boot artifacts)
+  computer refresh     Reboot onto current guest image, preserving persistent data
   api-key list        List your API keys
   api-key create      Create a delegated API key (requires manage:keys or admin)
   api-key revoke <id> Revoke this key, or a delegated key with manage:keys/admin
@@ -1204,7 +1206,7 @@ func runSelfDevelopmentModeSet(args []string, stdout, stderr io.Writer) int {
 
 func runComputer(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir computer: subcommand required (status|replay-completeness|checkpoint|replace-workspace|rematerialize-from-tape|restore|bootstrap-chain|stop|start|restart)")
+		fmt.Fprintln(stderr, "choir computer: subcommand required (status|replay-completeness|checkpoint|replace-workspace|rematerialize-from-tape|restore|bootstrap-chain|stop|start|restart|refresh)")
 		return 2
 	}
 	switch args[0] {
@@ -1222,7 +1224,7 @@ func runComputer(args []string, stdout, stderr io.Writer) int {
 		return runComputerRestore(args[1:], stdout, stderr)
 	case "bootstrap-chain":
 		return runComputerBootstrapChain(args[1:], stdout, stderr)
-	case "stop", "start", "restart":
+	case "stop", "start", "restart", "refresh":
 		return runComputerAction(args[1:], args[0], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "choir computer: unknown subcommand %q\n", args[0])

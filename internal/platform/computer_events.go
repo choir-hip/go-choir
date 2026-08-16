@@ -261,7 +261,7 @@ func (c *ComputerEventCAS) CompareAndSwap(ctx context.Context, request computere
 		return computerevent.Receipt{}, fmt.Errorf("computer event CAS: insert receipt: %w", err)
 	}
 	if request.Event.EventKind == computerevent.EventLifecycleObserved || request.Event.EventKind == computerevent.EventKeyRevoked {
-		allowedActions := "('start','stop','restart')"
+		allowedActions := "('start','stop','restart','refresh')"
 		if request.Event.EventKind == computerevent.EventKeyRevoked {
 			allowedActions = "('credential_envelope_consumed')"
 		}

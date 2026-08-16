@@ -560,7 +560,10 @@ func (h *Handler) HandleRecover(w http.ResponseWriter, r *http.Request) {
 
 // HandleRefresh handles POST /internal/vmctl/refresh.
 // It force-reboots an active computer onto the current guest image while
-// preserving persistent state. This endpoint is internal deploy machinery.
+// preserving persistent state. This endpoint is internal deploy machinery
+// and the actuator behind owner-scoped guest-boot refresh. Global deploy
+// still excludes constructed-computer-version realizations; owner-scoped
+// refresh of a named computer is a distinct authority.
 func (h *Handler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
