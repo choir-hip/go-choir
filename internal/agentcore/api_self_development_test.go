@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
@@ -21,6 +22,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -672,6 +674,67 @@ func TestConcurrentExactRetriesRepairOneRequestedOperationRun(t *testing.T) {
 	runs, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operationID, 2)
 	if err != nil || len(runs) != 1 {
 		t.Fatalf("operation-bound runs=%d err=%v", len(runs), err)
+	}
+	if runs[0].AgentID != persistentSuperAgentID("owner") || runs[0].TrajectoryID != "" ||
+		metadataStringValue(runs[0].Metadata, runMetadataTrajectoryID) != "" {
+		t.Fatalf("self-development Super was not the non-lifecycle persistent Super: %+v", runs[0])
+	}
+}
+
+func TestSelfDevelopmentStartRevivesTerminalPersistentSuper(t *testing.T) {
+	ctx := context.Background()
+	runtime, productStore := testRuntime(t)
+	computerID := "computer-selfdev-revive"
+	idempotencyKey := "selfdev-revive"
+	prompt := "revive persistent Super"
+	runtime.cfg.ComputerID = computerID
+	operations, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime.selfdevOperations = operations
+	requestCommitment := computerevent.DigestBytes([]byte(computerID + "\x00" + idempotencyKey + "\x00" + computerevent.DigestBytes([]byte(prompt))))
+	identityDigest := computerevent.DigestBytes([]byte(computerID + "\x00" + idempotencyKey))
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	operationID := "selfdev-" + identityDigest[:32]
+	if _, err := productStore.DB().ExecContext(ctx, `INSERT INTO self_development_operations (operation_id,computer_id,idempotency_key,request_commitment,trajectory_id,base_head,prompt_artifact_ref,verifier_refs_json,desired_head,effective_head,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'[]',?,?,?, ?,?)`,
+		operationID, computerID, idempotencyKey, requestCommitment, "trajectory-"+identityDigest[32:], strings.Repeat("a", 64),
+		"artifact:sha256:"+strings.Repeat("b", 64), strings.Repeat("c", 64), strings.Repeat("c", 64), selfdev.StateExecuting, now, now); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := runtime.createRunWithMetadata(ctx, prompt, "owner", map[string]any{
+		runMetadataAgentProfile:         agentprofile.Super,
+		runMetadataAgentRole:            agentprofile.Super,
+		"request_source":                "self_development_operation",
+		"self_development_operation_id": operationID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec.State = types.RunCompleted
+	rec.Result = "blocked"
+	rec.TrajectoryID = "trajectory-" + identityDigest[32:]
+	rec.Metadata = cloneMetadata(rec.Metadata)
+	rec.Metadata[runMetadataTrajectoryID] = rec.TrajectoryID
+	if err := productStore.UpdateRun(ctx, *rec); err != nil {
+		t.Fatal(err)
+	}
+	handler := &APIHandler{rt: runtime}
+	body, _ := json.Marshal(selfDevelopmentStartRequest{IdempotencyKey: idempotencyKey, Prompt: prompt})
+	retry := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/self-development/operations", strings.NewReader(string(body)))
+	retry.Header.Set("X-Authenticated-User", "owner")
+	retry.Header.Set("X-Authenticated-Computer", computerID)
+	retryResponse := httptest.NewRecorder()
+	handler.HandleComputersRouter(retryResponse, retry)
+	if retryResponse.Code != http.StatusOK {
+		t.Fatalf("revive retry status=%d body=%s", retryResponse.Code, retryResponse.Body.String())
+	}
+	revived, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operationID, 2)
+	if err != nil || len(revived) != 1 {
+		t.Fatalf("revived Super runs=%d err=%v", len(revived), err)
+	}
+	if revived[0].RunID != rec.RunID || revived[0].TrajectoryID != "" || metadataStringValue(revived[0].Metadata, runMetadataTrajectoryID) != "" {
+		t.Fatalf("revived Super kept a trajectory: %+v", revived[0])
 	}
 }
 

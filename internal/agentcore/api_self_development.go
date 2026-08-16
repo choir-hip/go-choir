@@ -23,6 +23,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -1122,9 +1123,6 @@ func (h *APIHandler) ensureSelfDevelopmentRun(r *http.Request, operation selfdev
 		return operation, fmt.Errorf("self-development operation commitment changed")
 	}
 	operation = current
-	if operation.State != selfdev.StateRequested {
-		return operation, nil
-	}
 	runs, err := h.rt.store.ListRunsBySelfDevelopmentOperation(r.Context(), ownerID, operation.OperationID, 2)
 	if err != nil {
 		return operation, fmt.Errorf("resolve self-development run: %w", err)
@@ -1132,22 +1130,106 @@ func (h *APIHandler) ensureSelfDevelopmentRun(r *http.Request, operation selfdev
 	if len(runs) > 1 {
 		return operation, fmt.Errorf("self-development operation resolves to multiple runs")
 	}
-	if len(runs) == 0 {
-		boundPrompt := fmt.Sprintf("Self-development operation %s on computer %s. Preserve this exact operation identity in all implementation and verifier work.\n\n%s", operation.OperationID, operation.ComputerID, prompt)
-		_, err = h.rt.StartRunWithMetadata(r.Context(), boundPrompt, ownerID, map[string]any{
-			runMetadataAgentProfile:                agentprofile.Super,
-			runMetadataAgentRole:                   agentprofile.Super,
-			runMetadataTrajectoryID:                operation.TrajectoryID,
-			"request_source":                       "self_development_operation",
-			"self_development_operation_id":        operation.OperationID,
-			"self_development_computer_id":         operation.ComputerID,
-			"self_development_prompt_artifact_ref": operation.PromptArtifactRef,
-		})
-		if err != nil {
-			return operation, fmt.Errorf("start self-development run: %w", err)
+	switch operation.State {
+	case selfdev.StateRequested:
+		if len(runs) == 0 {
+			if err := h.rt.startSelfDevelopmentPersistentSuper(r.Context(), operation, ownerID, prompt); err != nil {
+				return operation, err
+			}
+		} else if rec := runs[0]; selfDevelopmentSuperNeedsPersistentIdentity(rec) {
+			if err := h.rt.preserveSelfDevelopmentPersistentSuper(r.Context(), &rec); err != nil {
+				return operation, err
+			}
 		}
+		return h.rt.selfdevOperations.Transition(r.Context(), operation.ComputerID, operation.OperationID, selfdev.StateRequested, selfdev.StateExecuting, nil)
+	case selfdev.StateExecuting:
+		if strings.TrimSpace(operation.BundleDigest) != "" {
+			return operation, nil
+		}
+		if len(runs) == 1 && selfDevelopmentSuperRunTerminal(runs[0].State) {
+			rec := runs[0]
+			if err := h.rt.reviveSelfDevelopmentPersistentSuper(r.Context(), &rec); err != nil {
+				return operation, err
+			}
+		}
+		return operation, nil
+	default:
+		return operation, nil
 	}
-	return h.rt.selfdevOperations.Transition(r.Context(), operation.ComputerID, operation.OperationID, selfdev.StateRequested, selfdev.StateExecuting, nil)
+}
+
+func selfDevelopmentSuperRunTerminal(state types.RunState) bool {
+	return state == types.RunCompleted || state == types.RunFailed || state == types.RunCancelled
+}
+
+func selfDevelopmentSuperNeedsPersistentIdentity(rec types.RunRecord) bool {
+	return rec.AgentID != persistentSuperAgentID(rec.OwnerID) || rec.TrajectoryID != "" ||
+		metadataStringValue(rec.Metadata, runMetadataTrajectoryID) != ""
+}
+
+func (rt *Runtime) startSelfDevelopmentPersistentSuper(ctx context.Context, operation selfdev.Operation, ownerID, prompt string) error {
+	if _, err := rt.EnsurePersistentSuperAgent(ctx, ownerID); err != nil {
+		return fmt.Errorf("start self-development run: %w", err)
+	}
+	boundPrompt := fmt.Sprintf("Self-development operation %s on computer %s. Preserve this exact operation identity in all implementation and verifier work.\n\n%s", operation.OperationID, operation.ComputerID, prompt)
+	rec, err := rt.createRunWithMetadata(ctx, boundPrompt, ownerID, map[string]any{
+		runMetadataAgentProfile:                agentprofile.Super,
+		runMetadataAgentRole:                   agentprofile.Super,
+		runMetadataAgentID:                     persistentSuperAgentID(ownerID),
+		"request_source":                       "self_development_operation",
+		"self_development_operation_id":        operation.OperationID,
+		"self_development_computer_id":         operation.ComputerID,
+		"self_development_prompt_artifact_ref": operation.PromptArtifactRef,
+	})
+	if err != nil {
+		return fmt.Errorf("start self-development run: %w", err)
+	}
+	if err := rt.preserveSelfDevelopmentPersistentSuper(ctx, rec); err != nil {
+		return err
+	}
+	rt.activate(rec)
+	return nil
+}
+
+func (rt *Runtime) preserveSelfDevelopmentPersistentSuper(ctx context.Context, rec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || rec == nil {
+		return fmt.Errorf("start self-development run: persistent Super authority unavailable")
+	}
+	rec.TrajectoryID = ""
+	if rec.Metadata == nil {
+		rec.Metadata = map[string]any{}
+	} else {
+		rec.Metadata = cloneMetadata(rec.Metadata)
+	}
+	delete(rec.Metadata, runMetadataTrajectoryID)
+	rec.Metadata[runMetadataAgentProfile] = agentprofile.Super
+	rec.Metadata[runMetadataAgentRole] = agentprofile.Super
+	rec.Metadata["request_source"] = "self_development_operation"
+	if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+		return fmt.Errorf("preserve non-lifecycle persistent Super for self-development: %w", err)
+	}
+	return nil
+}
+
+func (rt *Runtime) reviveSelfDevelopmentPersistentSuper(ctx context.Context, rec *types.RunRecord) error {
+	if rec == nil {
+		return fmt.Errorf("revive self-development Super: run unavailable")
+	}
+	if err := rt.preserveSelfDevelopmentPersistentSuper(ctx, rec); err != nil {
+		return err
+	}
+	rec.Metadata = cloneMetadata(rec.Metadata)
+	rec.Metadata["actor_reactivate_existing_memory"] = true
+	rec.State = types.RunPending
+	rec.Error = ""
+	rec.Result = ""
+	rec.FinishedAt = nil
+	rec.UpdatedAt = time.Now().UTC()
+	if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+		return fmt.Errorf("revive self-development Super: %w", err)
+	}
+	rt.activate(rec)
+	return nil
 }
 
 func selfDevelopmentContainsString(values []string, wanted string) bool {

@@ -257,13 +257,13 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Staging probed a9e4af41; propose_only generation 1 at epoch 276. Pre-A OwnerRecovery checkpoint 663540be at sequence 32. Super operation selfdev-b090bcd7 executing. Armed=false. Do not send live mail."
+  slice: "Invoked 2026-08-15. Staging probed a9e4af41; propose_only generation 1 at epoch 276. Pre-A OwnerRecovery checkpoint 663540be at sequence 32. Super run cdf0af4c completed blocked: not persistent Super. Operation selfdev-b090bcd7 still executing. Armed=false. Do not send live mail."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-16T20:08:00Z
-    source_ref: Super start executing; docs/evidence/effects-red-super-start-2026-08-16.md; docs/evidence/effects-red-pre-a-checkpoint-2026-08-16.md
-    deploy_identity: "staging https://choir.news/health deployed_commit a9e4af419aa96018410cb13840cc0ee94afe39cb deployed_at 2026-08-16T20:03:42Z. Retained computer-03335285269bdba4f94377e56879f9e6 epoch 276 mode propose_only generation 1 refresh receipt 01a00c2c-efdb-7d1c-b98d-3a13ded2bcd0; restore-eligible pre-A OwnerRecovery checkpoint 663540be sequence 32; Super operation selfdev-b090bcd7 executing, constructed freeze 7122f279 still joined; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
+    observed_at: 2026-08-16T20:12:00Z
+    source_ref: Super completed blocked then persistent Super start fix; docs/evidence/effects-red-super-persistent-identity-2026-08-16.md; docs/evidence/effects-red-super-start-2026-08-16.md
+    deploy_identity: "staging https://choir.news/health deployed_commit a9e4af419aa96018410cb13840cc0ee94afe39cb deployed_at 2026-08-16T20:03:42Z. Retained computer-03335285269bdba4f94377e56879f9e6 epoch 276 mode propose_only generation 1 refresh receipt 01a00c2c-efdb-7d1c-b98d-3a13ded2bcd0; restore-eligible pre-A OwnerRecovery checkpoint 663540be sequence 32; Super run cdf0af4c completed blocked; operation selfdev-b090bcd7 still executing, constructed freeze 7122f279 still joined; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9 remain the last paid serving-join probe"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: 2026-08-16T00:25:00Z reconnection product + tests + receipt; parent dfcb8ad8
@@ -282,8 +282,8 @@ now:
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
   evidence_refs: [docs/evidence/effects-residue-import-proxy-2026-08-16.md, docs/evidence/effects-residue-import-command-2026-08-16.md, docs/evidence/effects-residue-import-2026-08-16.md, docs/evidence/effects-live-desktop-og-tape-2026-08-16.md, docs/evidence/effects-sql-only-project-2026-08-16.md, docs/evidence/effects-unified-tape-contracts-2026-08-16.md, docs/evidence/effects-recovery-domain-complete-from-head-2026-08-16.md, docs/choir-unified-event-tape-design-2026-08-16.md, docs/evidence/effects-unified-event-tape-design-review-2026-08-16.md, docs/choir-effects-pre-a-checkpoint-eligibility-2026-08-16.md, docs/evidence/effects-pre-a-checkpoint-eligibility-review-2026-08-16.md, docs/evidence/effects-red-pre-a-checkpoint-ineligible-2026-08-16.md, docs/evidence/effects-red-named-mode-2026-08-16.md, docs/evidence/effects-red-verifier-refresh-2026-08-16.md, docs/evidence/effects-guest-verifier-2026-08-16.md, docs/evidence/effects-red-kernel-route-live-2026-08-16.md, docs/evidence/effects-guest-kernel-route-2026-08-16.md, docs/evidence/effects-red-mode-off-refuse-2026-08-16.md, docs/evidence/effects-owner-guest-boot-refresh-2026-08-16.md, docs/evidence/effects-guest-mode-authority-2026-08-16.md, docs/evidence/effects-red-product-path-smoke-2026-08-16.md, docs/evidence/effects-product-path-forward-2026-08-16.md, docs/evidence/effects-rehearsal-2026-08-16.md, docs/evidence/effects-supervision-wiring-2026-08-16.md, docs/evidence/effects-trusted-outbox-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-review-2026-08-16.md, docs/evidence/effects-irreversible-email-v1-policy-2026-08-16.md, docs/evidence/effects-decision-policy-reducer-2026-08-16.md, docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "Super is executing selfdev-b090bcd7. No freeze yet. Remaining risk: self-promote; treating OwnerRecovery 663540be as promotion; CAS qualified_consensus before a freeze; live send. ComputerVersion freeze remains 7122f279."
-  next_action: "Wait for executing Super operation selfdev-b090bcd72d300fed17cb3f5a142f8595 to freeze and propose the solitaire bundle. Do not self-promote. Do not CAS qualified_consensus until a freeze exists. Keep genesis 409. Keep Armed=false. Do not send live mail. Do not use OwnerRecovery checkpoint 663540be for promotion. Owner gates remain. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not declare new_epoch."
+  blocker_or_risk: "Super run cdf0af4c completed blocked because TrajectoryID made it not the persistent Super. Operation selfdev-b090bcd7 is still executing with no freeze. Remaining risk: treating revive as freeze; Texture-control join still unpaid for assign_co_super; self-promote; live send. ComputerVersion freeze remains 7122f279."
+  next_action: "Wait for staging deploy of the persistent-Super self-development start land. Global deploy preserves constructed-computer-version. Then owner-scoped choir computer refresh, then retry the same operations POST so Super run cdf0af4c is revived as the non-lifecycle persistent Super. Do not treat that revive as a freeze. Do not self-promote. Do not CAS qualified_consensus until a freeze exists. Keep genesis 409. Keep Armed=false. Do not send live mail. Do not use OwnerRecovery checkpoint 663540be for promotion. Owner gates remain. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not declare new_epoch."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -366,6 +366,22 @@ receipts:
       environment_identity: staging https://choir.news deployed 4ac90583
       deployed_acceptance: not_applicable
     registry_conformance_ref: not_applicable
+  - id: effects-red-super-persistent-identity-2026-08-16
+    boundary: execute
+    commit_or_artifact: docs/evidence/effects-red-super-persistent-identity-2026-08-16.md
+    proof_refs: [docs/evidence/effects-red-super-persistent-identity-2026-08-16.md, internal/agentcore/api_self_development.go]
+    rollback_ref: revert this commit
+    disposition: "accepted as live observation plus start-path fix — Super cdf0af4c completed blocked because TrajectoryID was set; self-development Super start now strips trajectory like persistent Super; revive of terminal Super with no bundle; not a freeze; Texture control join still unpaid."
+    problem_ref: not_applicable
+    authorization_ref: this Definition now.next_action after Super start
+    candidate_or_evidence_refs: [docs/evidence/effects-red-super-persistent-identity-2026-08-16.md]
+    landing:
+      source_commit: af08767e
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/31968160935
+      deploy_ref: a9e4af419aa96018410cb13840cc0ee94afe39cb
+      environment_identity: staging https://choir.news deployed a9e4af41; retained epoch 276 mode propose_only generation 1; Super cdf0af4c completed blocked; operation selfdev-b090bcd7 executing; OwnerRecovery 663540be not for promotion; constructed freeze 7122f279
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "effects remains entrypoint; persistent Super identity is not freeze and is not permission to promote or send mail"
   - id: effects-red-super-start-2026-08-16
     boundary: execute
     commit_or_artifact: docs/evidence/effects-red-super-start-2026-08-16.md
@@ -1304,7 +1320,7 @@ at all.
    restore → verify; irreversible propose → stronger qualified consensus →
    RecordingProvider dispatch → consequence receipt → crash-window correction.
    No live send. Restore-eligible pre-A OwnerRecovery checkpoint 663540be
-   at sequence 32. Super operation selfdev-b090bcd7 executing.
+   at sequence 32. Super run cdf0af4c completed blocked; operation still executing.
 10. **Live proof (red).** Capsule authors A → consensus authorizes → promotes →
    played → falsified → B supersedes → restart proves B → total restore; then
    execute and receipt the exact acceptance email under its separate policy.
