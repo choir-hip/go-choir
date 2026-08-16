@@ -256,12 +256,12 @@ measures:
 
 now:
   status: working
-  slice: "Invoked 2026-08-15. Schema freeze ACCEPT. reversible-selfdev-v1 policy bytes ACCEPT. Reconnection (route map 4) implemented: assigned CoSuper holds update_coagent; Super executability is Texture Direction=control sender authorization; survivor contract replaced not deleted. Owner gates still present. Effects remain OFF. Next: freeze/propose production call sites."
+  slice: "Invoked 2026-08-15. Schema freeze ACCEPT. reversible-selfdev-v1 policy bytes ACCEPT. Reconnection implemented. Freeze/propose (route map 5) wired onto assigned CoSuper under capsule binding. Owner gates still present. Effects remain OFF. Next: decision-policy reducer atomically with QualifiedConsensusReceipt."
   question: "Does the decision-policy envelope authorize reversible and irreversible effects on top of a proven whole-computer restore substrate?"
 
   reconciliation:
-    observed_at: 2026-08-16T00:25:00Z
-    source_ref: reconnection red slice on parent main@dfcb8ad8; staging product still 4ac90583
+    observed_at: 2026-08-16T00:40:00Z
+    source_ref: freeze/propose wiring on parent main@b7b9f0b1; staging product still 4ac90583
     deploy_identity: "staging deployed 4ac90583 at 2026-08-14T23:24:20Z; retained computer-03335285269bdba4f94377e56879f9e6 epoch 268; secondary computer-bb0f4fa583c0cde14334818d946e6378 epoch 12; tape-recovery complete; serving_join hashes unsigned 4e2d1954 / retained 2c74a7b0 / secondary 1e62d8b9"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
@@ -280,9 +280,9 @@ now:
     owner_ratification_ref: "owner correction 2026-08-13: irreversible effects are not outside the autonomy window; effect-specific multiagent consensus is the governing boundary, and human approval is optional as one possible consensus participant."
     recorded_at: 2026-08-13T14:18:16Z
     consequence: "The 2026-08-11 inference that reversibility substitutes for approval is superseded. Replace owner-armed standing-rule plus fixed Super/Texture pair and irreversible refusal with policy-bound qualified consensus across both reversible and irreversible effects. Preserve fail-closed current gates until their policy-based replacement passes deployed acceptance."
-  evidence_refs: [docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
-  blocker_or_risk: "None for reconnection. Remaining risk: deleting fail-closed owner gates before a consensus reducer exists; using OwnerRecovery checkpoints for promotion (route projection already refuses); treating epoch 8253 as the current retained epoch (paid restore is epoch 268). Freeze/propose still have no assigned-CoSuper call site. Kill-loop problem repaired at db265d1e is not current readiness proof."
-  next_action: "Red slices in order: (5) freeze/propose production call sites on assigned CoSuper under capsule binding; then (6) decision-policy reducer atomically with QualifiedConsensusReceipt, never by deleting external-owner:/accept_once/awaiting_approval first. Irreversible email is the same Definition, not this slice. Effects remain OFF. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
+  evidence_refs: [docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, docs/evidence/effects-reconnection-2026-08-16.md, docs/evidence/effects-reversible-selfdev-v1-policy-review-2026-08-15.md, docs/evidence/effects-reversible-selfdev-v1-policy-2026-08-15.md, docs/evidence/effects-decision-policy-schema-repair-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-review-2026-08-15.md, docs/evidence/effects-decision-policy-schema-2026-08-15.md, docs/evidence/effects-invoke-readiness-2026-08-15.md, docs/definitions/choir-tape-recovery-2026-08-13.md, docs/choir-self-development-roadmap-2026-08-11.md, docs/choir-crashed-prime-session-review-2026-08-09.md, docs/memo-persistent-rlm-actors-2026-08-09.md, docs/memo-live-retrospective-evals-2026-08-09.md]
+  blocker_or_risk: "None for freeze/propose wiring. Remaining risk: deleting fail-closed owner gates before a consensus reducer exists; using OwnerRecovery checkpoints for promotion (route projection already refuses); treating epoch 8253 as the current retained epoch (paid restore is epoch 268). Kill-loop problem repaired at db265d1e is not current readiness proof."
+  next_action: "Red slice (6): decision-policy reducer atomically with QualifiedConsensusReceipt, never by deleting external-owner:/accept_once/awaiting_approval first. Irreversible email is the same Definition, not this slice. Effects remain OFF. Do not rematerialize. Do not invent choir computer create. Do not independently green restore. Do not use OwnerRecovery checkpoints for promotion."
 
 receipts:
   - id: effects-invoke-readiness-2026-08-15
@@ -365,6 +365,22 @@ receipts:
       environment_identity: staging https://choir.news deployed 4ac90583
       deployed_acceptance: not_applicable
     registry_conformance_ref: not_applicable
+  - id: effects-freeze-propose-wiring-2026-08-16
+    boundary: execute
+    commit_or_artifact: docs/evidence/effects-freeze-propose-wiring-2026-08-16.md
+    proof_refs: [docs/evidence/effects-freeze-propose-wiring-2026-08-16.md, internal/agentcore/tool_profiles.go, internal/agentcore/tools_capsule.go, internal/agentcore/cosuper_assignment_tools_overlay.go, internal/agentcore/runtime.go]
+    rollback_ref: revert this freeze/propose wiring commit
+    disposition: "accepted as route-map-5 wiring — assigned CoSuper can freeze/inspect/verify under capsule binding. Owner gates unchanged. Effects remain OFF. Reducer unpaid."
+    problem_ref: not_applicable
+    authorization_ref: this Definition now.next_action after reconnection
+    candidate_or_evidence_refs: [docs/evidence/effects-freeze-propose-wiring-2026-08-16.md]
+    landing:
+      source_commit: b7b9f0b1
+      ci_ref: pending
+      deploy_ref: 4ac90583e389e3334efa57ce204d6df3235a68f1
+      environment_identity: staging https://choir.news deployed 4ac90583; retained epoch 268
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "effects remains entrypoint; freeze/propose wiring is an execute slice, not completion"
   - id: effects-reconnection-2026-08-16
     boundary: execute
     commit_or_artifact: docs/evidence/effects-reconnection-2026-08-16.md
@@ -716,12 +732,10 @@ at all.
    `update_coagent`; Super executability is Texture `Direction=control` sender
    authorization; survivor contract replaced, not deleted. Keep the privilege
    property — the RLM rebase may rewrite this layer without weakening it.
-5. **Freeze/propose wiring (red).** `commit_transaction`,
-   `inspect_self_development_bundle`, and `record_self_development_verification`
-   exist but have no production call site, so no live actor can freeze or propose.
-   Wire them onto the assigned CoSuper under its capsule binding, preserving the
-   capsule-local authority boundary for everything else. Without this step the
-   live proof cannot start.
+5. **Freeze/propose wiring (red, implemented 2026-08-16).** Assigned CoSuper
+   holds `commit_transaction`, `inspect_self_development_bundle`, and
+   `record_self_development_verification` under its capsule binding. Host mutation,
+   materialize, checkpoint, route, and owner-decision tools remain absent.
 6. **Decision-policy authority (red).** Replace `external-owner:` as the only
    accepted decision authority with versioned effect policies and typed
    consensus receipts. Bind exact subject, policy version, frozen eligible seats

@@ -314,6 +314,9 @@ func buildAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, erro
 	if err := RegisterCoagentUpdateTools(registry, rt); err != nil {
 		return nil, fmt.Errorf("build assigned co-super registry: %w", err)
 	}
+	if err := registerCapsuleBoundSelfDevelopmentTools(registry); err != nil {
+		return nil, fmt.Errorf("build assigned co-super registry: %w", err)
+	}
 	return registry, nil
 }
 
@@ -357,8 +360,8 @@ func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, se
 // InstallDefaultAgentTools installs role-bound registries. Super receives only
 // the persistent assignment/cancel authority; capsule effects are runtime-owned.
 // CoSuper has an empty static registry. An exact assigned run receives a fresh
-// closed capsule-local registry plus update_coagent after its durable binding
-// is authenticated.
+// closed capsule-local registry plus update_coagent and capsule-bound
+// freeze/inspect/verify after its durable binding is authenticated.
 func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if strings.TrimSpace(cwd) == "" {
 		wd, err := os.Getwd()

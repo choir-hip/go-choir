@@ -54,14 +54,24 @@ func TestAssignedCoSuperToolOverlayIsExactRunOnly(t *testing.T) {
 	if resolved != opaque {
 		t.Fatal("handle mismatch")
 	}
-	for _, n := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir", "record_assignment_result", "update_coagent"} {
+	for _, n := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir", "record_assignment_result", "update_coagent", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification"} {
 		if _, ok := overlay.Lookup(n); !ok {
 			t.Errorf("missing %s", n)
 		}
 	}
-	for _, n := range []string{"read_file", "glob", "grep", "save_evidence", "verify_model_capability", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "append_computer_event", "materialize_self_development", "create_checkpoint"} {
+	for _, n := range []string{"read_file", "glob", "grep", "save_evidence", "verify_model_capability", "append_computer_event", "materialize_self_development", "create_checkpoint", "propose_effect", "finalize_effect"} {
 		if _, ok := overlay.Lookup(n); ok {
 			t.Errorf("host tool %s", n)
 		}
+	}
+}
+
+func TestAssignedCoSuperCapsuleToolCtxCarriesFreezeAuthority(t *testing.T) {
+	rt := &Runtime{selfdevUpdaterRoot: "/tmp/updater"}
+	rec := &types.RunRecord{RunID: "run-a", ComputerID: "computer-a"}
+	got := rt.assignedCoSuperCapsuleToolCtx(rec, "handle-a")
+	if got.AgentRunID != rec.RunID || got.ComputerID != rec.ComputerID || got.CapsuleHandle != "handle-a" ||
+		got.Role != capsule.RoleCoSuper || got.UpdaterRoot != "/tmp/updater" || got.ValidateCurrentObligation == nil {
+		t.Fatalf("assigned CoSuper freeze context = %+v", got)
 	}
 }

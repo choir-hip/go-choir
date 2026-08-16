@@ -112,11 +112,11 @@ func TestAssignedCoSuperBuilderIsExactClosedSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build assigned registry: %v", err)
 	}
-	want := []string{"capsule_exec", "capsule_list_dir", "capsule_read_file", "capsule_write_file", "record_assignment_result", "update_coagent"}
+	want := []string{"capsule_exec", "capsule_list_dir", "capsule_read_file", "capsule_write_file", "commit_transaction", "inspect_self_development_bundle", "record_assignment_result", "record_self_development_verification", "update_coagent"}
 	if got := registryToolNames(registry); !slices.Equal(got, want) {
 		t.Fatalf("assigned registry tools = %v, want exact %v", got, want)
 	}
-	for _, absent := range []string{"read_file", "glob", "grep", "save_evidence", "verify_model_capability", "spawn_agent", "spawn_capsule", "destroy_capsule", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification"} {
+	for _, absent := range []string{"read_file", "glob", "grep", "save_evidence", "verify_model_capability", "spawn_agent", "spawn_capsule", "destroy_capsule", "propose_effect", "finalize_effect", "materialize_self_development", "create_checkpoint"} {
 		if _, ok := registry.Lookup(absent); ok {
 			t.Fatalf("assigned registry inherited forbidden callback %q", absent)
 		}
@@ -135,7 +135,7 @@ func TestCapsuleLocalAndHostSelfDevelopmentInstallersAreDisjoint(t *testing.T) {
 	}
 
 	hostSelfDevelopment := toolregistry.MustNewToolRegistry()
-	if err := registerHostSelfDevelopmentTools(hostSelfDevelopment); err != nil {
+	if err := registerCapsuleBoundSelfDevelopmentTools(hostSelfDevelopment); err != nil {
 		t.Fatalf("register host self-development tools: %v", err)
 	}
 	if got, want := registryToolNames(hostSelfDevelopment), []string{
@@ -240,6 +240,11 @@ func TestAssignedCoSuperPromptNamesExactKindWithoutFutureToolLie(t *testing.T) {
 		}
 		if !strings.Contains(prompt, "update_coagent") {
 			t.Fatalf("assigned CoSuper prompt omits update_coagent Super report channel: %s", prompt)
+		}
+		for _, name := range []string{"commit_transaction", "inspect_self_development_bundle", "record_self_development_verification"} {
+			if !strings.Contains(prompt, name) {
+				t.Fatalf("assigned CoSuper prompt omits %s: %s", name, prompt)
+			}
 		}
 		if strings.Contains(prompt, "may be added later") || strings.Contains(prompt, "report one precise result through update_coagent") {
 			t.Fatalf("prompt retains future/static tool lie: %s", prompt)

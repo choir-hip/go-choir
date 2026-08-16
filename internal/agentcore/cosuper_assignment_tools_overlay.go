@@ -57,12 +57,29 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 	// Never clone the static profile registry. Assignment authority is a fresh
 	// exact closed set so no read_file/glob/grep/evidence/model host callback
 	// can cross the durable assignment boundary by registry inheritance.
-	// update_coagent is registered here on purpose as the Super report channel.
+	// update_coagent is the Super report channel. Freeze/inspect/verify are
+	// capsule-bound worker authority, not host mutation or owner decision.
 	registry, err := buildAssignedCoSuperRegistry(rt)
 	if err != nil {
 		return nil, "", err
 	}
 	return registry, handle, nil
+}
+
+func (rt *Runtime) assignedCoSuperCapsuleToolCtx(rec *types.RunRecord, handle string) *CapsuleToolCtx {
+	toolCtx := &CapsuleToolCtx{
+		Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rec.ComputerID,
+		Role: capsule.RoleCoSuper, CapsuleHandle: handle,
+		EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
+		OperationStore: rt.selfdevOperations, UpdaterRoot: rt.selfdevUpdaterRoot,
+		ValidateCurrentObligation: func(callCtx context.Context) error {
+			return rt.validateAssignedCoSuperExecution(callCtx, rec)
+		},
+	}
+	if rt != nil && rt.store != nil {
+		toolCtx.EventProjection = rt.store
+	}
+	return toolCtx
 }
 
 func (rt *Runtime) validateAssignedCoSuperExecution(ctx context.Context, rec *types.RunRecord) error {

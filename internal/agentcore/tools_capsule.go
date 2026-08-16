@@ -72,10 +72,9 @@ func RegisterCapsuleTools(registry *toolregistry.ToolRegistry) error {
 	return nil
 }
 
-// RegisterCapsuleLocalTools installs only effects scoped to an already-bound
-// capsule. It deliberately excludes host self-development proposal,
-// verification, event, updater-root, and finalization authority. No host profile
-// registry wires this future surface today.
+// RegisterCapsuleLocalTools installs only execution and report effects scoped
+// to an already-bound capsule. Freeze/inspect/verify are a separate installer
+// composed by the assigned CoSuper registry, not inherited from any host profile.
 func RegisterCapsuleLocalTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
 	for _, tool := range []toolregistry.Tool{
 		newCapsuleExecTool(), newCapsuleReadFileTool(), newCapsuleWriteFileTool(), newCapsuleListDirTool(), newRecordAssignedCoSuperReportTool(rt),
@@ -87,10 +86,10 @@ func RegisterCapsuleLocalTools(registry *toolregistry.ToolRegistry, rt *Runtime)
 	return nil
 }
 
-// registerHostSelfDevelopmentTools groups the legacy host-backed effect tools
-// separately from capsule-local execution. These tools are intentionally not
-// an input to the delegated CoSuper registry builder.
-func registerHostSelfDevelopmentTools(registry *toolregistry.ToolRegistry) error {
+// registerCapsuleBoundSelfDevelopmentTools installs freeze/inspect/verify tools
+// that require an assigned CoSuper capsule binding. They are not host-file,
+// spawn, materialize, checkpoint, route, VM, or owner-decision authority.
+func registerCapsuleBoundSelfDevelopmentTools(registry *toolregistry.ToolRegistry) error {
 	for _, tool := range []toolregistry.Tool{
 		newCommitTransactionTool(), newInspectSelfDevelopmentBundleTool(), newRecordSelfDevelopmentVerificationTool(),
 	} {
