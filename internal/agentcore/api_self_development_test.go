@@ -774,6 +774,10 @@ func TestSelfDevelopmentPersistentSuperPassesAssignCoSuperGate(t *testing.T) {
 	if _, err := requirePersistentSuperExecution(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&runs[0]))); err != nil {
 		t.Fatalf("self-development Super failed persistent Super gate: %v rec=%+v", err, runs[0])
 	}
+	superAgent, err := productStore.GetAgentByScope(ctx, "owner", operation.ComputerID, persistentSuperAgentID("owner"))
+	if err != nil || superAgent.ChannelID != superAgent.AgentID || superAgent.LifecycleVersion != 0 {
+		t.Fatalf("persistent Super agent lost non-lifecycle identity: %+v err=%v", superAgent, err)
+	}
 	if metadataStringValue(runs[0].Metadata, "assignment_trajectory_id") == "" ||
 		metadataStringValue(runs[0].Metadata, "request_source") != "lifecycle_texture_control" ||
 		strings.TrimSpace(runs[0].RequestedByRunID) != "" ||

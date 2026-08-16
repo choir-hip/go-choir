@@ -54,12 +54,25 @@ func (rt *Runtime) startSelfDevelopmentPersistentSuper(ctx context.Context, oper
 	if err := rt.ensureSelfDevelopmentTextureJoin(ctx, operation, ownerID, prompt); err != nil {
 		return err
 	}
-	rec, err := rt.reconcilePersistentSuperActor(ctx, ownerID, persistentSuperAgentID(ownerID))
+	superAgentID := persistentSuperAgentID(ownerID)
+	rec, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgentID)
 	if err != nil {
 		return fmt.Errorf("start self-development run: %w", err)
 	}
 	if rec == nil {
-		return fmt.Errorf("start self-development run: Texture control did not wake persistent Super")
+		if existing, found, lookupErr := rt.activeRunByAgent(ctx, ownerID, superAgentID); lookupErr != nil {
+			return fmt.Errorf("start self-development run: %w", lookupErr)
+		} else if found {
+			rec = &existing
+		} else if existing, lookupErr := rt.latestActiveRunByAgent(ctx, ownerID, superAgentID); lookupErr == nil {
+			copy := existing
+			rec = &copy
+		} else {
+			return fmt.Errorf("start self-development run: Texture control did not wake persistent Super")
+		}
+	}
+	if _, err := rt.EnsurePersistentSuperAgent(ctx, ownerID); err != nil {
+		return fmt.Errorf("start self-development run: restore persistent Super agent: %w", err)
 	}
 	if err := rt.bindSelfDevelopmentOperationToPersistentSuper(ctx, rec, operation); err != nil {
 		return err
@@ -137,7 +150,7 @@ func (rt *Runtime) ensureSelfDevelopmentTextureJoin(ctx context.Context, operati
 	for _, update := range pending {
 		if update.Direction == types.LifecyclePacketDirectionControl &&
 			selfDevelopmentOperationIDFromPacketSources(update.Packet.Sources) == operation.OperationID &&
-			persistentSuperExecutablePacket(update) {
+			persistentSuperExecutableUpdate(update) {
 			return nil
 		}
 	}
