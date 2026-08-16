@@ -1160,17 +1160,19 @@ func runSelfDevelopmentModeSet(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("choir self-dev mode set", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	computerID := fs.String("computer", "", "Stable ComputerID")
-	mode := fs.String("mode", "", "off, audit_only, propose_only, or accept_once")
+	mode := fs.String("mode", "", "off, audit_only, propose_only, accept_once, or qualified_consensus")
 	expectedGeneration := fs.Uint64("expected-generation", 0, "Expected mode generation")
 	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
-	expiresAt := fs.String("expires-at", "", "Canonical UTC expiry for accept_once")
-	operationID := fs.String("operation", "", "Exact operation ID for accept_once")
-	desiredHead := fs.String("expected-desired-head", "", "Expected desired event head for accept_once")
-	effectiveHead := fs.String("expected-effective-head", "", "Expected effective event head for accept_once")
+	expiresAt := fs.String("expires-at", "", "Canonical UTC expiry for accept_once or qualified_consensus")
+	operationID := fs.String("operation", "", "Exact operation ID for accept_once or qualified_consensus")
+	desiredHead := fs.String("expected-desired-head", "", "Expected desired event head for accept_once or qualified_consensus")
+	effectiveHead := fs.String("expected-effective-head", "", "Expected effective event head for accept_once or qualified_consensus")
 	pendingRef := fs.String("expected-pending-ref", "", "Expected pending transition reference (empty when absent)")
-	desiredCommitment := fs.String("expected-desired-commitment", "", "Expected desired state commitment for accept_once")
-	effectiveCommitment := fs.String("expected-effective-commitment", "", "Expected effective state commitment for accept_once")
-	bundle := fs.String("bundle", "", "Exact bundle digest for accept_once")
+	desiredCommitment := fs.String("expected-desired-commitment", "", "Expected desired state commitment for accept_once or qualified_consensus")
+	effectiveCommitment := fs.String("expected-effective-commitment", "", "Expected effective state commitment for accept_once or qualified_consensus")
+	bundle := fs.String("bundle", "", "Exact bundle digest for accept_once or qualified_consensus")
+	policyDigest := fs.String("policy-digest", "", "Frozen policy digest for qualified_consensus")
+	consensusReceipt := fs.String("consensus-receipt-digest", "", "QualifiedConsensusReceipt digest for qualified_consensus")
 	c, err := newClient(fs, args, stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "choir self-dev mode set: %v\n", err)
@@ -1183,7 +1185,7 @@ func runSelfDevelopmentModeSet(args []string, stdout, stderr io.Writer) int {
 	body := map[string]any{
 		"mode": *mode, "expected_generation": *expectedGeneration, "idempotency_key": *idempotencyKey,
 	}
-	if *mode == "accept_once" {
+	if *mode == "accept_once" || *mode == "qualified_consensus" {
 		body["expires_at"] = *expiresAt
 		body["operation_id"] = *operationID
 		body["expected_desired_event_head"] = *desiredHead
@@ -1192,6 +1194,10 @@ func runSelfDevelopmentModeSet(args []string, stdout, stderr io.Writer) int {
 		body["expected_desired_state_commitment"] = *desiredCommitment
 		body["expected_effective_state_commitment"] = *effectiveCommitment
 		body["bundle_digest"] = *bundle
+	}
+	if *mode == "qualified_consensus" {
+		body["policy_digest"] = strings.TrimSpace(*policyDigest)
+		body["consensus_receipt_digest"] = strings.TrimSpace(*consensusReceipt)
 	}
 	var response json.RawMessage
 	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/mode"

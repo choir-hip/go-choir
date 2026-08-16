@@ -1389,6 +1389,57 @@ func TestAPIKeyRevokeDeletesKey(t *testing.T) {
 	}
 }
 
+func TestSelfDevelopmentModeCLIQualifiedConsensusCASBody(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut || r.URL.Path != "/api/computers/computer-exact/self-development/mode" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body["mode"] != "qualified_consensus" || body["idempotency_key"] != "mode-qc-1" || body["expected_generation"] != float64(6) {
+			t.Fatalf("mode body = %#v", body)
+		}
+		if body["operation_id"] != "operation-exact" || body["bundle_digest"] != strings.Repeat("2", 64) {
+			t.Fatalf("binding body = %#v", body)
+		}
+		if body["policy_digest"] != strings.Repeat("c", 64) || body["consensus_receipt_digest"] != strings.Repeat("d", 64) {
+			t.Fatalf("consensus body = %#v", body)
+		}
+		if _, ok := body["expected_pending_transition_ref"]; !ok {
+			t.Fatal("qualified_consensus body omitted expected_pending_transition_ref")
+		}
+		_, _ = io.WriteString(w, `{"computer_id":"computer-exact","mode":"qualified_consensus","generation":7}`)
+	}))
+	defer stub.Close()
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"self-dev", "mode", "set",
+		"--computer=computer-exact",
+		"--mode=qualified_consensus",
+		"--expected-generation=6",
+		"--idempotency-key=mode-qc-1",
+		"--expires-at=2026-08-16T06:00:00.000000000Z",
+		"--operation=operation-exact",
+		"--bundle=" + strings.Repeat("2", 64),
+		"--expected-desired-head=" + strings.Repeat("a", 64),
+		"--expected-effective-head=" + strings.Repeat("b", 64),
+		"--expected-pending-ref=",
+		"--expected-desired-commitment=" + strings.Repeat("e", 64),
+		"--expected-effective-commitment=" + strings.Repeat("f", 64),
+		"--policy-digest=" + strings.Repeat("c", 64),
+		"--consensus-receipt-digest=" + strings.Repeat("d", 64),
+		"--host=" + stub.URL,
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"generation": 7`) {
+		t.Fatalf("stdout=%s", stdout.String())
+	}
+}
+
 func TestSelfDevelopmentModeCLIUsesExplicitComputerAndCASBody(t *testing.T) {
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPut || r.URL.Path != "/api/computers/computer-exact/self-development/mode" {
