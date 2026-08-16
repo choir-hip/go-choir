@@ -237,7 +237,7 @@ Five of six panelists answered. Codex failed (`--autoputer` removed from current
 
 These are now part of the design, not leftover review nits.
 
-1. **Recovery domain.** Importing current residue at sequence 27 does **not** reconstruct desktop/OG at heads 1–26. Restore of a head before an explicit `complete_from_head` must **fail closed**, not return empty tables and call that success. The owner still owes which contract: (a) operational restore only at/after `complete_from_head`, old chain is audit preface; or (b) new genesis/epoch. Literal time-travel through 1–26 is impossible; those payloads were never recorded.
+1. **Recovery domain — recorded `complete_from_head`.** New epoch is refused on this computer: `Reduce` rejects duplicate genesis, `choir computer create` is forbidden, rematerialize is forbidden. Keep the sequence-26 chain. Tape-recovery restore of eligible incomplete-tape checkpoints (empty `EmptyUntilSupported` tables) remains valid. Full projected computer restore (desktop/OG payloads) is admitted only at/after an explicit `complete_from_head`. Restore of a later complete-tape checkpoint to a pre-completeness sequence fails closed (`ErrIncompleteTapeRestore`). Literal time-travel through 1–26 is impossible; those payloads were never recorded. Import snapshot events are “state observed now,” not fabricated history.
 
 2. **Payload resolver before SQL.** `Finalize(computerID, digest, receipt)` has no payload bytes. Replay has pin, not fetch. Fetch, hash-verify, and decrypt **before** the serializable Dolt transaction; pass a typed batch in. No network/decrypt inside `BeginTx`.
 
@@ -257,11 +257,12 @@ These are now part of the design, not leftover review nits.
 
 10. **Notifications.** Idempotent Finalize cannot be the sole bus publish. Transactional outbox or tape-derived index; restore must not spam live clients.
 
-### First slice (after owner picks the recovery domain)
+### First slice (recovery domain recorded)
 
-Not “implement desktop Project and call it done.” Freeze and test:
+`complete_from_head` is wired in `internal/selfdevprotocol` (`ValidateTapeCompleteness`, `AdmitRestoreSequence`). `new_epoch` is refused. Existing incomplete-tape checkpoint digests stay stable (`omitempty`).
 
-- `complete_from_head` (or new-epoch) contract in restore/checkpoint APIs
+Still unpaid before Project:
+
 - artifact-read + private decrypt on replay
 - projection-batch schema and SQL-only Project in Finalize
 - projector-failure / non-wedge test
@@ -273,3 +274,20 @@ Then co-import desktop+OG, then eligible pre-A checkpoint. Super still waits.
 ### Unanimous forbids (still)
 
 No Super. No ModeReceipt. No live mail. No rematerialize. No SQL-empty. No weakening `EmptyUntilSupported`. No `goal.complete`.
+
+---
+
+## Recovery domain decision (2026-08-16)
+
+**Chosen: `complete_from_head`.** `new_epoch` is refused.
+
+Reason: this is the same retained computer. A second `genesis_imported` is `ErrInvalidTransition`. Inventing a computer is forbidden. Rematerialize is forbidden. No-backwards-compatibility means do not pretend heads 1–26 recorded desktop/OG, not “throw away the paid tape.”
+
+Contract, implemented in `internal/selfdevprotocol/tape_completeness.go`:
+
+- Incomplete-tape checkpoints (`tape_completeness` empty) restore what the tape recorded. That is the choir-tape-recovery substrate.
+- Complete-tape checkpoints must carry `tape_completeness=complete_from_head` and a SHA-256 `complete_from_head`.
+- `AdmitRestoreSequence(target < completeFrom)` returns `ErrIncompleteTapeRestore` once completeness is declared.
+- `new_epoch` on a checkpoint or restore is `ErrNewEpochRefused`.
+
+This is not Super start, not an import event, and not a live checkpoint.

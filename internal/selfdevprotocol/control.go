@@ -89,6 +89,8 @@ type CheckpointRequest struct {
 	ReducerVersion               int                             `json:"reducer_version"`
 	VMLocalContentWitness        VMLocalContentWitness           `json:"vm_local_content_witness"`
 	FrontendIdentity             FrontendIdentity                `json:"frontend_identity"`
+	TapeCompleteness             string                          `json:"tape_completeness,omitempty"`
+	CompleteFromHead             string                          `json:"complete_from_head,omitempty"`
 }
 
 type Checkpoint struct {
@@ -220,6 +222,9 @@ func CheckpointFromRequest(request CheckpointRequest) (Checkpoint, []byte, error
 		return Checkpoint{}, nil, err
 	}
 	if err := request.FrontendIdentity.Validate(request.ReleaseDigest); err != nil {
+		return Checkpoint{}, nil, err
+	}
+	if err := ValidateTapeCompleteness(request.TapeCompleteness, request.CompleteFromHead); err != nil {
 		return Checkpoint{}, nil, err
 	}
 	canonical, err := computerevent.CanonicalJSON(request)

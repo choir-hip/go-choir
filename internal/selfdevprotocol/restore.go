@@ -133,6 +133,9 @@ func RestoreFromRequest(request RestoreRequest, checkpoint Checkpoint) error {
 	if !haveVMLocal || !haveFrontend {
 		return fmt.Errorf("restore: operand must include vm-local projection and computer-surface frontend")
 	}
+	if err := ValidateTapeCompleteness(checkpoint.Request.TapeCompleteness, checkpoint.Request.CompleteFromHead); err != nil {
+		return err
+	}
 	return nil
 }
 
