@@ -215,10 +215,17 @@ func capsuleCgroupResidueExists(capsuleID string) (bool, error) {
 // The lower layer is the shared EROFS base; the upper layer is the
 // capsule's writable directory.
 func MountOverlayFS(mergedDir, upperDir, workDir, lowerDir string) error {
-	// Ensure directories exist.
+	// Ensure directories exist. The writable upper/work dirs must be owned by
+	// the capsule namespace host UID, otherwise the broker (mapped to that host
+	// UID) cannot write into the overlay.
 	for _, dir := range []string{mergedDir, upperDir, workDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("failed to create overlay dir %s: %w", dir, err)
+		}
+	}
+	for _, dir := range []string{upperDir, workDir} {
+		if err := os.Chown(dir, capsuleNamespaceHostID, capsuleNamespaceHostID); err != nil {
+			return fmt.Errorf("failed to make overlay dir writable %s: %w", dir, err)
 		}
 	}
 

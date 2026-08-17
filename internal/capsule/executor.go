@@ -314,7 +314,11 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 	args := []string{"--socket", "/run/capsule/broker.sock", "--listener-fd", "3", "--isolation-stage", "launcher", "--capsule-id", caps.ID, "--pubkey", hex.EncodeToString(e.publicKey), "--merged", "/", "--authorized-peer-uid", fmt.Sprint(capsuleNamespaceHostID)}
 	cmd := exec.Command("/run/capsule/broker", args...)
 	cmd.ExtraFiles = []*os.File{inheritedListener}
-	cmd.Env = []string{"PATH=/bin:/usr/bin:/run/current-system/sw/bin", "HOME=/root", "TMPDIR=/tmp"}
+	brokerPath := os.Getenv("PATH")
+	if strings.TrimSpace(brokerPath) == "" {
+		brokerPath = "/bin:/usr/bin"
+	}
+	cmd.Env = []string{"PATH=" + brokerPath + ":/bin:/usr/bin", "HOME=/root", "TMPDIR=/tmp"}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{
