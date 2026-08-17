@@ -230,7 +230,9 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		}
 		return cause
 	}
-	created, err := rt.capsuleExecutor.Spawn(ctx, capsule.SpawnSpec{CapsuleID: capsuleID, OwnerRunID: runID,
+	spawnCtx, cancelSpawn := context.WithTimeout(ctx, 90*time.Second)
+	defer cancelSpawn()
+	created, err := rt.capsuleExecutor.Spawn(spawnCtx, capsule.SpawnSpec{CapsuleID: capsuleID, OwnerRunID: runID,
 		MemoryMax: coSuperAssignmentMemoryMax, CpuQuota: coSuperAssignmentCPUQuota, CpuPeriod: 100000, PidsMax: coSuperAssignmentPidsMax,
 		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
 		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest})

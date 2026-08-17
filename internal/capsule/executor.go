@@ -272,7 +272,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if err := prepareCapsuleRoot(caps.MergedDir, caps.UpperDir); err != nil {
 		return nil, err
 	}
-	if err := installBrokerMount(e.brokerPath, caps.MergedDir); err != nil {
+	if err := installBrokerMount(ctx, e.brokerPath, caps.MergedDir); err != nil {
 		return nil, err
 	}
 	cgroup, err := CreateCgroup(spec.CapsuleID, spec)
@@ -329,7 +329,7 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 		CgroupFD:                   int(cgroupFile.Fd()),
 		Pdeathsig:                  syscall.SIGKILL,
 	}
-	if err := cmd.Start(); err != nil {
+	if err := waitForCommandStart(ctx, capsuleBrokerStartTimeout, cmd.Start); err != nil {
 		_ = inheritedListener.Close()
 		_ = cgroupFile.Close()
 		return fmt.Errorf("capsule start broker launcher: %w", err)
@@ -1430,7 +1430,7 @@ func validateSpawnSpec(spec SpawnSpec) error {
 	return nil
 }
 
-func installBrokerMount(source, root string) error {
+func installBrokerMount(ctx context.Context, source, root string) error {
 	dir := filepath.Join(root, "run", "capsule")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("capsule create broker directory: %w", err)
@@ -1441,10 +1441,14 @@ func installBrokerMount(source, root string) error {
 		return fmt.Errorf("capsule create broker mountpoint: %w", err)
 	}
 	_ = file.Close()
-	if err := unix.Mount(source, target, "", unix.MS_BIND, ""); err != nil {
+	if err := waitForCommandStart(ctx, capsuleBrokerStartTimeout, func() error {
+		return unix.Mount(source, target, "", unix.MS_BIND, "")
+	}); err != nil {
 		return fmt.Errorf("capsule bind broker: %w", err)
 	}
-	if err := unix.Mount("", target, "", unix.MS_BIND|unix.MS_REMOUNT|unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV, ""); err != nil {
+	if err := waitForCommandStart(ctx, capsuleBrokerStartTimeout, func() error {
+		return unix.Mount("", target, "", unix.MS_BIND|unix.MS_REMOUNT|unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV, "")
+	}); err != nil {
 		return fmt.Errorf("capsule harden broker mount: %w", err)
 	}
 	return nil
