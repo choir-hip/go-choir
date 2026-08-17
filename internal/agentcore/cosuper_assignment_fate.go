@@ -328,7 +328,11 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 	}
 	for _, assignment := range assignments {
 		if assignment.Disposition.Terminal() {
-			if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+			// Unbound means the capsule was never bound (spawn failed before
+			// bind), so there is nothing to revoke. Attempting to revoke it
+			// fails the SetCoSuperCapsuleDisposition guard (BoundRunID empty
+			// on a non-open assignment) and aborts the whole trajectory.
+			if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked && assignment.CapsuleDisposition != types.CoSuperCapsuleUnbound {
 				if _, fateErr := rt.revokeAssignedCapsule(ctx, assignment, "restart terminal assignment fate reconciliation"); fateErr != nil {
 					return fateErr
 				}
