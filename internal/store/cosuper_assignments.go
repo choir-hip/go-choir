@@ -1304,7 +1304,10 @@ func (s *Store) projectCoSuperTerminal(ctx context.Context, assignment types.CoS
 	// projection as authenticated system cancellation rather than requiring a
 	// now-live parent or attempting to reopen/overwrite it.
 	if work.Status == types.WorkItemOpen {
-		if (assignment.BoundRunID == "" && agent.ActiveRunID != "") || (assignment.BoundRunID != "" && agent.ActiveRunID != assignment.BoundRunID) {
+		// The agent may already have released ActiveRunID because the bound run
+		// completed without terminalizing the assignment. Refuse only when a
+		// different live run occupies the slot.
+		if agent.ActiveRunID != "" && agent.ActiveRunID != assignment.BoundRunID {
 			return nil, nil, ErrCoSuperAssignmentInvalid
 		}
 		agent.ActiveRunID = ""
@@ -1354,10 +1357,13 @@ func (s *Store) projectCoSuperTerminal(ctx context.Context, assignment types.CoS
 		return nil, nil, ErrCoSuperAssignmentInvalid
 	}
 	if run.State.Terminal() {
-		if run.State != types.RunCancelled || assignment.Disposition != types.CoSuperAssignmentCancelled {
-			return nil, nil, ErrCoSuperAssignmentInvalid
+		if run.State == coSuperTerminalRunState(assignment.Disposition) {
+			return objects, conditions, nil
 		}
-		return objects, conditions, nil
+		// The run already terminated with a different disposition (e.g. the
+		// CoSuper finished without terminalizing the assignment). Re-project the
+		// run to match the assignment fate below rather than failing the
+		// cancellation.
 	}
 	run.State = coSuperTerminalRunState(assignment.Disposition)
 	run.UpdatedAt, run.FinishedAt = now, &now

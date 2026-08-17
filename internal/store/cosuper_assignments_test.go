@@ -1133,6 +1133,72 @@ func TestLifecycleCancellationIntentSurvivesAssignmentFateAndPreservesCallerCASI
 	}
 }
 
+func TestCancelAssignmentWithAlreadyCompletedRun(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-completed-run", 1, types.CoSuperAssignmentImplementation, true, "cap-completed-run", "capsule-completed-run")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-completed-run")); err != nil {
+		t.Fatal(err)
+	}
+
+	revoke := types.SetCoSuperCapsuleDispositionRequest{
+		CommandID: "completed-run-revoke-intent", OwnerID: f.ownerID, ComputerID: f.computerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 2,
+		Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: "capsule-revoke-intent:completed-run",
+	}
+	revoke.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(revoke)
+	requested, err := s.SetCoSuperCapsuleDisposition(ctx, revoke)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ack := revoke
+	ack.CommandID, ack.ExpectedLifecycleVersion, ack.Disposition, ack.AckRef =
+		"completed-run-revoke-ack", requested.Assignment.LifecycleVersion, types.CoSuperCapsuleRevoked, "capsule-revoke:sha256:"+strings.Repeat("a", 64)
+	ack.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(ack)
+	revoked, err := s.SetCoSuperCapsuleDisposition(ctx, ack)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The CoSuper run finished without terminalizing the assignment. Completing
+	// the run through UpdateRun also releases the agent ActiveRunID, matching
+	// the live restart shape.
+	run, err := s.GetLifecycleRun(ctx, f.ownerID, f.computerID, f.assignedRunIDs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.State = types.RunCompleted
+	run.UpdatedAt = time.Now().UTC()
+	finished := time.Now().UTC()
+	run.FinishedAt = &finished
+	if err := s.UpdateRun(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	agent, err := s.GetAgentByScope(ctx, f.ownerID, f.computerID, f.assignedAgentIDs[0])
+	if err != nil || agent.ActiveRunID != "" {
+		t.Fatalf("agent after completed run: %+v %v", agent, err)
+	}
+
+	cancel := types.CancelCoSuperAssignmentRequest{
+		CommandID: "completed-run-cancel", OwnerID: f.ownerID, ComputerID: f.computerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: revoked.Assignment.LifecycleVersion,
+		Reason: "reconcile completed-run assignment",
+	}
+	cancel.CommandDigest, _ = ComputeCancelCoSuperAssignmentDigest(cancel)
+	cancelled, err := s.CancelCoSuperAssignment(ctx, cancel)
+	if err != nil || cancelled.Assignment.Disposition != types.CoSuperAssignmentCancelled {
+		t.Fatalf("cancel completed-run assignment: %+v %v", cancelled, err)
+	}
+	got, err := s.GetLifecycleRun(ctx, f.ownerID, f.computerID, f.assignedRunIDs[0])
+	if err != nil || got.State != types.RunCancelled {
+		t.Fatalf("run after cancel: %+v %v", got, err)
+	}
+}
+
 func TestSystemAssignmentCancellationAfterTrajectoryProjectionUsesHistoricalAuthority(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
