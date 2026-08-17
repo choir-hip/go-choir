@@ -36,6 +36,8 @@ type assignmentCapsuleRuntime interface {
 	AssignmentHandle(string, string) (string, error)
 	InspectCapsuleRaw(string) (*capsule.CapsuleDiagnostics, error)
 	HasCapsule(string) bool
+	CleanupOrphanedCapsule(context.Context, string) error
+	PersistRevocationReceipt(string, string, string, string) (capsule.CapsuleRevocationReceipt, error)
 }
 
 type StartAssignedCoSuperRequest struct {

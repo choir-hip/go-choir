@@ -22,75 +22,17 @@ type coSuperAssignmentStoreFixture struct {
 
 func installCoSuperAssignmentAuthority(t *testing.T, s *Store, count int) coSuperAssignmentStoreFixture {
 	t.Helper()
-	ctx := context.Background()
-	now := time.Now().UTC()
-	f := coSuperAssignmentStoreFixture{
-		ownerID: "owner-assignment", computerID: "computer-assignment", trajectoryID: "trajectory-assignment",
-		parentAgentID: "super:owner-assignment", parentRunID: "run-super-assignment", parentWorkID: "work-super-assignment",
-		parentDecisionID: "decision:" + objectgraph.SHA256([]byte("decision-assignment")), parentControlID: "control-assignment",
+	seed, err := SeedCoSuperAssignmentAuthority(s, "owner-assignment", "computer-assignment", count)
+	if err != nil {
+		t.Fatal(err)
 	}
-	trajectory := types.TrajectoryRecord{
-		TrajectoryID: f.trajectoryID, OwnerID: f.ownerID, ComputerID: f.computerID,
-		Kind: types.TrajectoryKindTask, Status: types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"subject"}},
-		SubjectRefs:    map[string]string{"subject": "artifact:subject", "doc_id": "document-assignment"}, LifecycleVersion: 1, ReducerSeq: 1, CreatedAt: now, UpdatedAt: now,
+	return coSuperAssignmentStoreFixture{
+		ownerID: seed.OwnerID, computerID: seed.ComputerID, trajectoryID: seed.TrajectoryID,
+		parentAgentID: seed.ParentAgentID, parentRunID: seed.ParentRunID, parentWorkID: seed.ParentWorkID,
+		parentDecisionID: seed.ParentDecisionID, parentControlID: seed.ParentControlID,
+		assignedAgentIDs: seed.AssignedAgentIDs, assignedWorkIDs: seed.AssignedWorkIDs, assignedRunIDs: seed.AssignedRunIDs,
 	}
-	document := types.Document{DocID: "document-assignment", OwnerID: f.ownerID, ComputerID: f.computerID, Title: "Assignment authority", CurrentRevisionID: "revision-assignment", CreatedAt: now, UpdatedAt: now}
-	revision := types.Revision{RevisionID: "revision-assignment", DocID: document.DocID, OwnerID: f.ownerID, ComputerID: f.computerID, AuthorKind: types.AuthorAppAgent, AuthorLabel: "Choir", Content: "assignment authority", CreatedAt: now}
-	parentAgent := types.AgentRecord{
-		AgentID: f.parentAgentID, OwnerID: f.ownerID, ComputerID: f.computerID,
-		Profile: "super", Role: "super", ChannelID: f.parentAgentID, ActiveRunID: f.parentRunID,
-		LifecycleVersion: 0, CreatedAt: now, UpdatedAt: now,
-	}
-	parentWork := types.WorkItemRecord{
-		WorkItemID: f.parentWorkID, TrajectoryID: f.trajectoryID, OwnerID: f.ownerID, ComputerID: f.computerID,
-		Objective: "coordinate delegated assignments", AuthorityProfile: "super", Status: types.WorkItemOpen,
-		AssignedAgentID: f.parentAgentID, LifecycleVersion: 1, CreatedAt: now, UpdatedAt: now,
-	}
-	parentRun := types.RunRecord{
-		RunID: f.parentRunID, AgentID: f.parentAgentID, ChannelID: f.parentAgentID,
-		AgentProfile: "super", AgentRole: "super", OwnerID: f.ownerID, ComputerID: f.computerID,
-		State: types.RunRunning, Prompt: "coordinate", CreatedAt: now, UpdatedAt: now,
-		Metadata: map[string]any{
-			"assignment_trajectory_id": f.trajectoryID, "work_item_ids": []string{f.parentWorkID},
-			"lifecycle_control_bindings": []any{map[string]any{"trajectory_id": f.trajectoryID,
-				"target_work_item_id": f.parentWorkID, "update_id": f.parentControlID, "producer_agent_id": "texture:document-assignment"}},
-		},
-	}
-	mustLifecycleObject := func(kind objectgraph.ObjectKind, key string, body any, metadata map[string]any) objectgraph.Object {
-		t.Helper()
-		obj, err := lifecycleObject(kind, f.ownerID, f.computerID, key, body, metadata, now, now)
-		if err != nil {
-			t.Fatalf("build %s %s: %v", kind, key, err)
-		}
-		return obj
-	}
-	objects := []objectgraph.Object{
-		mustLifecycleObject(ogKindTrajectory, f.trajectoryID, trajectory, lifecycleMetadata("trajectory_id", f.trajectoryID, f.computerID, f.trajectoryID, 1)),
-		mustLifecycleObject(ogKindAgent, f.parentAgentID, parentAgent, map[string]any{"agent_id": f.parentAgentID, "computer_id": f.computerID}),
-		mustLifecycleObject(ogKindWorkItem, f.parentWorkID, parentWork, lifecycleMetadata("work_item_id", f.parentWorkID, f.computerID, f.trajectoryID, 1)),
-		mustLifecycleObject(ogKindTexDoc, document.DocID, document, map[string]any{"doc_id": document.DocID, "computer_id": f.computerID}),
-		mustLifecycleObject(ogKindTexRev, revision.RevisionID, revision, map[string]any{"revision_id": revision.RevisionID, "doc_id": document.DocID, "computer_id": f.computerID}),
-	}
-	for i := 0; i < count; i++ {
-		agentID := fmt.Sprintf("co-super:assignment-%02d", i)
-		workID := fmt.Sprintf("work-cosuper-assignment-%02d", i)
-		runID := fmt.Sprintf("run-cosuper-assignment-%02d", i)
-		f.assignedAgentIDs = append(f.assignedAgentIDs, agentID)
-		f.assignedWorkIDs = append(f.assignedWorkIDs, workID)
-		f.assignedRunIDs = append(f.assignedRunIDs, runID)
-		// The standard assignment opener creates the lifecycle CoSuper subject
-		// and its work atomically. Fixtures reserve only their deterministic IDs.
-	}
-	if err := s.ogStore.PutBatch(ctx, objectgraph.Batch{Objects: objects}); err != nil {
-		t.Fatalf("install assignment authority: %v", err)
-	}
-	if err := s.CreateRunOG(ctx, parentRun); err != nil {
-		t.Fatalf("install non-lifecycle persistent Super run: %v", err)
-	}
-	return f
 }
-
 func coSuperOpenRequest(f coSuperAssignmentStoreFixture, index int, assignmentID string, attempt uint64, kind types.CoSuperAssignmentKind, writable bool, capability, capsuleID string) types.OpenCoSuperAssignmentRequest {
 	binding := types.CoSuperAssignmentBinding{
 		OwnerID: f.ownerID, ComputerID: f.computerID, TrajectoryID: f.trajectoryID,

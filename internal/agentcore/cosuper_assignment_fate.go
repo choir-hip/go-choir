@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -62,7 +63,38 @@ func coSuperFateAckRequest(assignment types.CoSuperAssignment, disposition types
 	return req, nil
 }
 
+func (rt *Runtime) assignedCapsule() assignmentCapsuleRuntime {
+	if rt == nil {
+		return nil
+	}
+	if rt.assignmentRuntime != nil {
+		return rt.assignmentRuntime
+	}
+	return rt.capsuleExecutor
+}
+
+func assignedCoSuperRun(rec *types.RunRecord) bool {
+	return rec != nil &&
+		agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.CoSuper &&
+		metadataStringValue(rec.Metadata, "assignment_id") != ""
+}
+
+func (rt *Runtime) assignedCoSuperCapsuleUsable(assignment types.CoSuperAssignment) bool {
+	exec := rt.assignedCapsule()
+	if exec == nil || strings.TrimSpace(assignment.BoundRunID) == "" || strings.TrimSpace(assignment.Binding.CapsuleID) == "" {
+		return false
+	}
+	handle, handleErr := exec.AssignmentHandle(assignment.BoundRunID, assignment.Binding.CapsuleID)
+	diagnostics, inspectErr := exec.InspectCapsuleRaw(assignment.Binding.CapsuleID)
+	return handleErr == nil && strings.TrimSpace(handle) != "" && inspectErr == nil &&
+		diagnostics != nil && diagnostics.ID == assignment.Binding.CapsuleID && diagnostics.State == capsule.StateActive
+}
+
 func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.CoSuperAssignment, reason string) (types.CoSuperAssignment, error) {
+	exec := rt.assignedCapsule()
+	if exec == nil {
+		return assignment, fmt.Errorf("assigned capsule executor unavailable")
+	}
 	intentRef := assignment.CapsuleIntentRef
 	if assignment.CapsuleDisposition != types.CoSuperCapsuleRevokeRequested && assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
 		intentRef = "capsule-revoke-intent:" + objectgraph.SHA256([]byte(strings.Join([]string{
@@ -80,23 +112,23 @@ func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.C
 	ackRunID := assignment.BoundRunID
 	if ackRunID == "" {
 		ackRunID = "unbound:" + assignment.AssignmentID
-	} else if handle, err := rt.capsuleExecutor.AssignmentHandle(assignment.BoundRunID, assignment.Binding.CapsuleID); err == nil {
-		if err := rt.capsuleExecutor.RevokeCapability(assignment.BoundRunID, handle); err != nil {
+	} else if handle, err := exec.AssignmentHandle(assignment.BoundRunID, assignment.Binding.CapsuleID); err == nil {
+		if err := exec.RevokeCapability(assignment.BoundRunID, handle); err != nil {
 			return assignment, fmt.Errorf("revoke assignment capability: %w", err)
 		}
 	}
-	if rt.capsuleExecutor.HasCapsule(assignment.Binding.CapsuleID) {
-		if err := rt.capsuleExecutor.ForceDestroy(ctx, assignment.Binding.CapsuleID); err != nil {
+	if exec.HasCapsule(assignment.Binding.CapsuleID) {
+		if err := exec.ForceDestroy(ctx, assignment.Binding.CapsuleID); err != nil {
 			return assignment, fmt.Errorf("destroy assignment capsule after durable revoke intent: %w", err)
 		}
 	}
-	if rt.capsuleExecutor.HasCapsule(assignment.Binding.CapsuleID) {
+	if exec.HasCapsule(assignment.Binding.CapsuleID) {
 		return assignment, fmt.Errorf("assignment capsule continued after executor acknowledgement")
 	}
-	if err := rt.capsuleExecutor.CleanupOrphanedCapsule(ctx, assignment.Binding.CapsuleID); err != nil {
+	if err := exec.CleanupOrphanedCapsule(ctx, assignment.Binding.CapsuleID); err != nil {
 		return assignment, fmt.Errorf("clean exact orphaned capsule residue before acknowledgement: %w", err)
 	}
-	revocationReceipt, receiptErr := rt.capsuleExecutor.PersistRevocationReceipt(ackRunID, assignment.Binding.CapabilityDigest, assignment.Binding.CapsuleID, intentRef)
+	revocationReceipt, receiptErr := exec.PersistRevocationReceipt(ackRunID, assignment.Binding.CapabilityDigest, assignment.Binding.CapsuleID, intentRef)
 	if receiptErr != nil || !revocationReceipt.CapsuleAbsent || revocationReceipt.AgentRunID != ackRunID ||
 		revocationReceipt.CapsuleID != assignment.Binding.CapsuleID || revocationReceipt.IntentRef != intentRef ||
 		revocationReceipt.AssignmentCapabilityDigest != assignment.Binding.CapabilityDigest {
@@ -188,7 +220,7 @@ func (rt *Runtime) persistSystemCoSuperCancellation(ctx context.Context, assignm
 }
 
 func (rt *Runtime) prepareCoSuperTrajectoryCancellation(ctx context.Context, ownerID, computerID, trajectoryID, reason string) ([]types.CoSuperAssignment, error) {
-	if rt == nil || rt.store == nil || rt.capsuleExecutor == nil || strings.TrimSpace(computerID) == "" {
+	if rt == nil || rt.store == nil || rt.assignedCapsule() == nil || strings.TrimSpace(computerID) == "" {
 		return nil, nil
 	}
 	assignments, err := rt.store.ListCoSuperAssignments(ctx, ownerID, computerID, trajectoryID)
@@ -265,9 +297,10 @@ func (rt *Runtime) cancelBoundCoSuperRun(ctx context.Context, rec types.RunRecor
 // durable revoke intent, then acknowledged absent, then cancelled. No wake or
 // attempt reopen follows.
 func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context, ownerID, computerID, trajectoryID string) error {
-	if rt == nil || rt.store == nil || rt.capsuleExecutor == nil {
+	if rt == nil || rt.store == nil || rt.assignedCapsule() == nil {
 		return nil
 	}
+	exec := rt.assignedCapsule()
 	assignments, err := rt.store.ListCoSuperAssignments(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {
 		return err
@@ -326,16 +359,16 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 				if assignment.CapsuleIntentRef != intent {
 					return store.ErrCoSuperAssignmentCommandConflict
 				}
-				if rt.capsuleExecutor.HasCapsule(assignment.Binding.CapsuleID) {
-					if destroyErr := rt.capsuleExecutor.ForceDestroy(ctx, assignment.Binding.CapsuleID); destroyErr != nil {
+				if exec.HasCapsule(assignment.Binding.CapsuleID) {
+					if destroyErr := exec.ForceDestroy(ctx, assignment.Binding.CapsuleID); destroyErr != nil {
 						return destroyErr
 					}
 				}
-				if rt.capsuleExecutor.HasCapsule(assignment.Binding.CapsuleID) {
+				if exec.HasCapsule(assignment.Binding.CapsuleID) {
 					return fmt.Errorf("restart pre-bind capsule remained after revoke effect")
 				}
 				ackRunID := "unbound:" + assignment.AssignmentID
-				receipt, receiptErr := rt.capsuleExecutor.PersistRevocationReceipt(ackRunID, assignment.Binding.CapabilityDigest, assignment.Binding.CapsuleID, intent)
+				receipt, receiptErr := exec.PersistRevocationReceipt(ackRunID, assignment.Binding.CapabilityDigest, assignment.Binding.CapsuleID, intent)
 				if receiptErr != nil {
 					return receiptErr
 				}
@@ -367,10 +400,7 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 			}
 			continue
 		}
-		handle, handleErr := rt.capsuleExecutor.AssignmentHandle(assignment.BoundRunID, assignment.Binding.CapsuleID)
-		diagnostics, inspectErr := rt.capsuleExecutor.InspectCapsuleRaw(assignment.Binding.CapsuleID)
-		usable := handleErr == nil && strings.TrimSpace(handle) != "" && inspectErr == nil &&
-			diagnostics.ID == assignment.Binding.CapsuleID && diagnostics.State == capsule.StateActive
+		usable := rt.assignedCoSuperCapsuleUsable(assignment)
 		if usable {
 			continue
 		}

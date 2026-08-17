@@ -185,22 +185,19 @@ func cleanupOrphanedCapsuleCgroup(capsuleID string) error {
 		return fmt.Errorf("inspect orphan capsule cgroup: %w", err)
 	}
 	manager, err := cgroup2.Load(filepath.Join("/capsule", capsuleID))
-	if err != nil {
-		return fmt.Errorf("load orphan capsule cgroup: %w", err)
+	if err == nil {
+		_ = manager.Kill()
+		_ = manager.Delete()
+	} else {
+		_ = os.WriteFile(filepath.Join(path, "cgroup.kill"), []byte("1"), 0o644)
+		_ = os.RemoveAll(path)
 	}
-	if err := manager.Kill(); err != nil {
-		return fmt.Errorf("kill orphan capsule cgroup: %w", err)
-	}
-	if err := manager.Delete(); err != nil {
-		return fmt.Errorf("delete orphan capsule cgroup: %w", err)
-	}
-	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
-		if err == nil {
-			return fmt.Errorf("orphan capsule cgroup remained after delete")
-		}
+	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
 		return fmt.Errorf("verify orphan capsule cgroup absence: %w", err)
 	}
-	return nil
+	return fmt.Errorf("orphan capsule cgroup remained after delete")
 }
 
 func capsuleCgroupResidueExists(capsuleID string) (bool, error) {

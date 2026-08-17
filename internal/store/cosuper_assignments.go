@@ -1004,6 +1004,21 @@ func validateCoSuperAssignmentRun(assignment types.CoSuperAssignment, assignedAg
 	return nil
 }
 
+func coSuperRunMetadata(run types.RunRecord, seq int64) map[string]any {
+	meta := lifecycleMetadata("run_id", run.RunID, run.ComputerID, run.TrajectoryID, seq)
+	meta["state"] = string(run.State)
+	meta["agent_id"] = run.AgentID
+	meta["agent_profile"] = run.AgentProfile
+	meta["agent_role"] = run.AgentRole
+	if !run.CreatedAt.IsZero() {
+		meta["created_at"] = run.CreatedAt.UTC().Format(time.RFC3339Nano)
+	}
+	if !run.UpdatedAt.IsZero() {
+		meta["updated_at"] = run.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	}
+	return meta
+}
+
 func (s *Store) BindCoSuperAssignment(ctx context.Context, req types.BindCoSuperAssignmentRequest) (types.CoSuperAssignmentCommandResult, error) {
 	req.CommandID, req.CommandDigest = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest)
 	req.OwnerID, req.ComputerID, req.AssignmentID = strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID), strings.TrimSpace(req.AssignmentID)
@@ -1054,7 +1069,7 @@ func (s *Store) BindCoSuperAssignment(ctx context.Context, req types.BindCoSuper
 	run.RunID, run.CreatedAt, run.UpdatedAt, run.FinishedAt = req.RunID, now, now, nil
 	run.Result, run.Error = "", ""
 	runObj, err := lifecycleObject(ogKindRun, req.OwnerID, req.ComputerID, run.RunID, run,
-		lifecycleMetadata("run_id", run.RunID, req.ComputerID, assignment.Binding.TrajectoryID, transition.seq), now, now)
+		coSuperRunMetadata(run, transition.seq), now, now)
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
@@ -1313,7 +1328,7 @@ func (s *Store) projectCoSuperTerminal(ctx context.Context, assignment types.CoS
 		run.Result, run.Error = "", reason
 	}
 	runUpdated, err := lifecycleObject(ogKindRun, assignment.Binding.OwnerID, assignment.Binding.ComputerID, run.RunID, run,
-		lifecycleMetadata("run_id", run.RunID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID, seq), runObj.CreatedAt, now)
+		coSuperRunMetadata(run, seq), runObj.CreatedAt, now)
 	if err != nil {
 		return nil, nil, err
 	}

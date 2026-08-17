@@ -117,6 +117,7 @@ type Runtime struct {
 	assignmentLookup interface {
 		GetCoSuperAssignment(context.Context, string, string, string, uint64) (types.CoSuperAssignment, error)
 	}
+	assignmentRuntime           assignmentCapsuleRuntime
 	capsuleBuilder              *transaction.TransactionBuilder
 	eventAppender               *computerevent.ComputerEventAppender
 	selfdevOperations           *selfdev.Store
@@ -2036,6 +2037,33 @@ func (rt *Runtime) rewarmInterruptedLifecycleActivations(ctx context.Context) {
 				}
 				log.Printf("runtime: passivated stale lifecycle run %s before restart dispatch", rec.RunID)
 				continue
+			}
+			if assignedCoSuperRun(rec) {
+				if err := rt.ReconcileCoSuperAssignmentsForTrajectory(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID); err != nil {
+					log.Printf("runtime: boot assigned CoSuper reconcile run %s: %v", rec.RunID, err)
+					continue
+				}
+				stored, loadErr := rt.getRunForComputer(ctx, rec.OwnerID, rec.RunID)
+				if loadErr != nil {
+					log.Printf("runtime: boot assigned CoSuper reload run %s: %v", rec.RunID, loadErr)
+					continue
+				}
+				*rec = stored
+				if !rec.State.Active() {
+					log.Printf("runtime: boot assigned CoSuper run %s already terminal after reconcile", rec.RunID)
+					continue
+				}
+				assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
+				attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
+				assignment, assignErr := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
+				if assignErr != nil || assignment.Disposition.Terminal() || !rt.assignedCoSuperCapsuleUsable(assignment) {
+					if assignErr != nil {
+						log.Printf("runtime: boot assigned CoSuper lookup run %s: %v", rec.RunID, assignErr)
+					} else {
+						log.Printf("runtime: boot assigned CoSuper run %s skipped wake; capsule is not restartable", rec.RunID)
+					}
+					continue
+				}
 			}
 			lifecycleResearcher, admitted, refusal, admissionErr := rt.admitLifecycleResearcherProviderEntry(ctx, rec)
 			if admissionErr != nil {
@@ -4104,6 +4132,17 @@ var durableMetadataKeys = []string{
 func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecord, err error) {
 	if retryableLifecycleRuntimeInjectionFailure(rec, err) {
 		rt.passivateRuntimeInjectionAppendFailure(rec, err)
+		return
+	}
+	if assignedCoSuperRun(rec) {
+		termErr := rt.terminalizeRun(context.Background(), rec.RunID, rec.OwnerID, err.Error())
+		if termErr == nil {
+			if stored, loadErr := rt.getRunForComputer(context.Background(), rec.OwnerID, rec.RunID); loadErr == nil {
+				*rec = stored
+			}
+			return
+		}
+		log.Printf("runtime: assigned CoSuper execution error could not join assignment fate for run %s: %v (%v)", rec.RunID, err, termErr)
 		return
 	}
 	now := time.Now().UTC()
