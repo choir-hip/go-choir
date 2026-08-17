@@ -571,6 +571,7 @@ func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWa
 func (rt *Runtime) Start(ctx context.Context) {
 	rt.passivateInterruptedActivations(ctx)
 	rt.rewarmInterruptedLifecycleActivations(ctx)
+	rt.reconcileCoSuperAssignmentCapsulesAfterRestart(ctx)
 	rt.recoverOpenWirePublicationClaims(ctx)
 	terminalOutcomeTargets := rt.reconcileTerminalRunOutcomes(ctx)
 	rt.sweepPassivatedSpawnedCoagentWork(ctx)

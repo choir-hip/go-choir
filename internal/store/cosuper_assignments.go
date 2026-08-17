@@ -917,6 +917,45 @@ func (s *Store) GetCoSuperAssignment(ctx context.Context, ownerID, computerID, a
 	return assignment, err
 }
 
+// ListCoSuperAssignmentsForComputer returns every non-tombstoned CoSuper
+// assignment object in one computer, independent of the run-state metadata
+// index or the open work-item projection. Boot recovery uses it to reconcile
+// capsules for assignments bound before the run-state index existed.
+func (s *Store) ListCoSuperAssignmentsForComputer(ctx context.Context, computerID string) ([]types.CoSuperAssignment, error) {
+	computerID = strings.TrimSpace(computerID)
+	if computerID == "" {
+		return nil, fmt.Errorf("list CoSuper assignments for computer: computer_id is required")
+	}
+	objs, err := s.ogListAllObjectsByKind(ctx, ogKindCoSuperAssignment)
+	if err != nil {
+		return nil, fmt.Errorf("list CoSuper assignments for computer: %w", err)
+	}
+	out := make([]types.CoSuperAssignment, 0, len(objs))
+	for _, obj := range objs {
+		if obj.ComputerID != computerID || obj.Tombstone {
+			continue
+		}
+		assignment, decodeErr := decodeLifecycleObject[types.CoSuperAssignment](obj)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if assignment.Binding.ComputerID != computerID {
+			continue
+		}
+		out = append(out, assignment)
+	}
+	slices.SortFunc(out, func(left, right types.CoSuperAssignment) int {
+		if cmp := strings.Compare(left.Binding.TrajectoryID, right.Binding.TrajectoryID); cmp != 0 {
+			return cmp
+		}
+		if cmp := strings.Compare(left.AssignmentID, right.AssignmentID); cmp != 0 {
+			return cmp
+		}
+		return int(left.Binding.Attempt) - int(right.Binding.Attempt)
+	})
+	return out, nil
+}
+
 func (s *Store) ListCoSuperAssignments(ctx context.Context, ownerID, computerID, trajectoryID string) ([]types.CoSuperAssignment, error) {
 	objects, err := s.ogListAllByMetadata(ctx, ogKindCoSuperAssignment, "trajectory_id", strings.TrimSpace(trajectoryID))
 	if err != nil {

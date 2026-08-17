@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -89,6 +90,108 @@ func bindCoSuperRequest(open types.OpenCoSuperAssignmentRequest, runID, capabili
 	}
 	req.CommandDigest, _ = ComputeBindCoSuperAssignmentDigest(req)
 	return req
+}
+
+func TestListCoSuperAssignmentsForComputerFindsBoundAssignment(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 2)
+	open := coSuperOpenRequest(f, 0, "assignment-computer-list", 1, types.CoSuperAssignmentImplementation, true, "cap-computer-list", "capsule-computer-list")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-computer-list")); err != nil {
+		t.Fatal(err)
+	}
+	listed, err := s.ListCoSuperAssignmentsForComputer(ctx, f.computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, assignment := range listed {
+		if assignment.AssignmentID == "assignment-computer-list" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("bound assignment missing from computer listing: %+v", listed)
+	}
+	for _, assignment := range listed {
+		if assignment.Binding.ComputerID != f.computerID {
+			t.Fatalf("listing leaked other-computer assignment: %+v", assignment)
+		}
+	}
+}
+
+func TestListCoSuperAssignmentsForComputerIndependentOfRunStateIndex(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-legacy-index", 1, types.CoSuperAssignmentImplementation, true, "cap-legacy-index", "capsule-legacy-index")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-legacy-index")); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a pre-index bind: strip the run-state metadata key the legacy
+	// BindCoSuperAssignment omitted.
+	objs, err := s.ogStore.ReadObjectSnapshot(ctx, f.ownerID, f.computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stripped := false
+	for i := range objs {
+		obj := &objs[i]
+		if obj.ObjectKind != ogKindRun {
+			continue
+		}
+		rec, decodeErr := decodeLifecycleObject[types.RunRecord](*obj)
+		if decodeErr != nil || rec.RunID != f.assignedRunIDs[0] {
+			continue
+		}
+		var meta map[string]any
+		if err := json.Unmarshal(obj.Metadata, &meta); err != nil {
+			t.Fatal(err)
+		}
+		delete(meta, "state")
+		obj.Metadata, err = json.Marshal(meta)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.ogStore.PutObject(ctx, *obj); err != nil {
+			t.Fatal(err)
+		}
+		stripped = true
+		break
+	}
+	if !stripped {
+		t.Fatal("bound run object not found for legacy index simulation")
+	}
+	pending, err := s.ListLifecycleRunsByState(ctx, "", f.computerID, types.RunPending)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rec := range pending {
+		if rec.RunID == f.assignedRunIDs[0] {
+			t.Fatalf("legacy run unexpectedly visible to state index: %+v", rec)
+		}
+	}
+	listed, err := s.ListCoSuperAssignmentsForComputer(ctx, f.computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, assignment := range listed {
+		if assignment.AssignmentID == "assignment-legacy-index" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("legacy-bound assignment missing from computer listing: %+v", listed)
+	}
 }
 
 func TestCoSuperAssignmentCommandsReplayAndDigestConflict(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -423,6 +424,40 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 		}
 	}
 	return nil
+}
+
+// reconcileCoSuperAssignmentCapsulesAfterRestart closes restart gaps for every
+// durable CoSuper assignment in the computer, independent of the run-state
+// metadata index that assignments bound before it was introduced may lack. It
+// delegates to the per-trajectory reconciler so revoke, cancel, and run
+// terminalization share one authority path.
+func (rt *Runtime) reconcileCoSuperAssignmentCapsulesAfterRestart(ctx context.Context) {
+	if rt == nil || rt.store == nil || rt.assignedCapsule() == nil {
+		return
+	}
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	if computerID == "" {
+		return
+	}
+	assignments, err := rt.store.ListCoSuperAssignmentsForComputer(ctx, computerID)
+	if err != nil {
+		log.Printf("runtime: boot CoSuper assignment capsule sweep: %v", err)
+		return
+	}
+	seen := make(map[string]struct{})
+	for _, assignment := range assignments {
+		if assignment.Disposition.Terminal() {
+			continue
+		}
+		key := assignment.Binding.OwnerID + "\x00" + assignment.Binding.TrajectoryID
+		if _, done := seen[key]; done {
+			continue
+		}
+		seen[key] = struct{}{}
+		if err := rt.ReconcileCoSuperAssignmentsForTrajectory(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID); err != nil {
+			log.Printf("runtime: boot CoSuper assignment capsule sweep trajectory %s: %v", assignment.Binding.TrajectoryID, err)
+		}
+	}
 }
 
 func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.RunRecord, toolCallID string, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentCommandResult, error) {
