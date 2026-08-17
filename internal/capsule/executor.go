@@ -356,17 +356,20 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 		return fmt.Errorf("capsule sign broker readiness capability: %w", err)
 	}
 	deadline := time.Now().Add(10 * time.Second)
+	var lastErr error
 	for {
 		client := NewBrokerClient(hostSocket, e.publicKey)
-		if err := client.Connect(ctx); err == nil {
-			if _, probeErr := client.Stat(ctx, readinessCapability, "."); probeErr == nil {
-				caps.broker = client
-				return nil
-			}
+		if err := client.Connect(ctx); err != nil {
+			lastErr = err
+		} else if _, probeErr := client.Stat(ctx, readinessCapability, "."); probeErr != nil {
+			lastErr = probeErr
 			_ = client.Close()
+		} else {
+			caps.broker = client
+			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("capsule broker readiness timed out")
+			return brokerReadinessTimeoutError(lastErr)
 		}
 		select {
 		case <-caps.processDone:
@@ -376,6 +379,13 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 		case <-time.After(25 * time.Millisecond):
 		}
 	}
+}
+
+func brokerReadinessTimeoutError(lastErr error) error {
+	if lastErr == nil {
+		return fmt.Errorf("capsule broker readiness timed out")
+	}
+	return fmt.Errorf("capsule broker readiness timed out: %w", lastErr)
 }
 
 // Destroy terminates the namespace leader, unmounts the overlay, deletes the
@@ -1483,7 +1493,7 @@ func prepareCapsuleRoot(root, upperDir string) error {
 			return fmt.Errorf("capsule prepare root: %w", err)
 		}
 	}
-	for _, path := range []string{"run", "tmp", "mnt"} {
+	for _, path := range []string{"run", "tmp", "mnt", "proc", "sys"} {
 		target := filepath.Join(root, path)
 		if err := unix.Mount("tmpfs", target, "tmpfs", unix.MS_NOSUID|unix.MS_NODEV, "mode=0755,size=64m"); err != nil {
 			return fmt.Errorf("capsule mask %s: %w", path, err)
@@ -1506,6 +1516,13 @@ func prepareCapsuleRoot(root, upperDir string) error {
 		if err := unix.Mount(filepath.Join("/dev", device), target, "", unix.MS_BIND, ""); err != nil {
 			return fmt.Errorf("capsule bind device %s: %w", device, err)
 		}
+	}
+	pts := filepath.Join(root, "dev", "pts")
+	if err := os.MkdirAll(pts, 0o755); err != nil {
+		return fmt.Errorf("capsule prepare dev/pts: %w", err)
+	}
+	if err := unix.Mount("/dev/pts", pts, "", unix.MS_BIND, ""); err != nil {
+		return fmt.Errorf("capsule bind dev/pts: %w", err)
 	}
 	if err := writeCapsuleIdentityEtc(upperDir); err != nil {
 		return err
