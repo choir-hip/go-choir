@@ -1029,6 +1029,36 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+// guestObservabilityResponse is the product-API surface for the running
+// guest's build identity and recent boot/reconcile log. It intentionally
+// exposes no provider secrets, capability handles, or raw capsule material.
+type guestObservabilityResponse struct {
+	Service    string         `json:"service"`
+	ComputerID string         `json:"computer_id"`
+	Build      buildinfo.Info `json:"build"`
+	RecentLog  []string       `json:"recent_log"`
+}
+
+// HandleGuestObservability handles GET /api/runtime/observability: the guest's
+// build commit and a bounded recent boot log. This closes the deploy-to-guest
+// verification gap that otherwise requires shell access.
+func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if _, err := authenticateUser(r); err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, guestObservabilityResponse{
+		Service:    "autoputer",
+		ComputerID: h.rt.cfg.ComputerID,
+		Build:      buildinfo.Snapshot("autoputer"),
+		RecentLog:  h.rt.RecentBootLog(),
+	})
+}
+
 // HandleInternalRuntimeRunRouter dispatches internal service-to-service run
 // status and event requests. It is intentionally separate from /api/*.
 func (h *APIHandler) HandleInternalRuntimeRunRouter(w http.ResponseWriter, r *http.Request) {

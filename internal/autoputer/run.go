@@ -407,6 +407,10 @@ func Run() {
 	s.HandleFunc("/health/ready", health.ReadinessHandler("autoputer", readyAgg))
 	RegisterComputerSurface(s, NewComputerSurfaceFromEnv())
 
+	// Capture boot/reconcile log into a bounded ring before Start so guest
+	// observability is servable through the product API, not only shell access.
+	rt.Runtime.CaptureBootLog(512)
+
 	// Start the runtime engine and supervisor.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

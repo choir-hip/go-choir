@@ -118,6 +118,7 @@ type Runtime struct {
 		GetCoSuperAssignment(context.Context, string, string, string, uint64) (types.CoSuperAssignment, error)
 	}
 	assignmentRuntime           assignmentCapsuleRuntime
+	bootLog                     *bootLogRing
 	capsuleBuilder              *transaction.TransactionBuilder
 	eventAppender               *computerevent.ComputerEventAppender
 	selfdevOperations           *selfdev.Store

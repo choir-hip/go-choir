@@ -46,6 +46,7 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 		"/api/media/recents",
 		"/api/preferences/theme",
 		"/api/computers/computer-1",
+		"/api/runtime/observability",
 		"/api/trajectories",
 		"/api/trajectories/trajectory-1",
 		"/api/run-acceptances",
