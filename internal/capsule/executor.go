@@ -413,18 +413,19 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 		_ = caps.listener.Close()
 		caps.listener = nil
 	}
+	var cleanupErr error
 	if caps.Process != nil {
 		_ = caps.Process.Signal(signal)
-		done := make(chan error, 1)
-		go func() { done <- caps.wait() }()
-		select {
-		case <-done:
-		case <-ctx.Done():
-			_ = caps.Process.Kill()
-			<-done
+		kill := func() error {
+			if caps.Process == nil {
+				return nil
+			}
+			return caps.Process.Kill()
+		}
+		if waitErr := waitCapsuleProcess(ctx, caps.wait, kill, capsuleProcessWaitTimeout); waitErr != nil {
+			cleanupErr = errors.Join(cleanupErr, waitErr)
 		}
 	}
-	var cleanupErr error
 	if err := unmountCapsuleRoot(caps.MergedDir); err != nil {
 		cleanupErr = errors.Join(cleanupErr, err)
 	}
