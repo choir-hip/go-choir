@@ -269,7 +269,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		return nil, err
 	}
 	mounted = true
-	if err := prepareCapsuleRoot(caps.MergedDir); err != nil {
+	if err := prepareCapsuleRoot(caps.MergedDir, caps.UpperDir); err != nil {
 		return nil, err
 	}
 	if err := installBrokerMount(e.brokerPath, caps.MergedDir); err != nil {
@@ -1450,7 +1450,30 @@ func installBrokerMount(source, root string) error {
 	return nil
 }
 
-func prepareCapsuleRoot(root string) error {
+func writeCapsuleIdentityEtc(upperDir string) error {
+	etc := filepath.Join(upperDir, "etc")
+	if err := os.MkdirAll(etc, 0o755); err != nil {
+		return fmt.Errorf("capsule prepare etc: %w", err)
+	}
+	for name, content := range capsuleIdentityEtcFiles() {
+		path := filepath.Join(etc, name)
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			return fmt.Errorf("capsule write %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func capsuleIdentityEtcFiles() map[string]string {
+	return map[string]string{
+		"passwd":        "root:x:0:0:Capsule:/root:/bin/sh\n",
+		"group":         "root:x:0:\n",
+		"hosts":         "127.0.0.1 localhost\n::1 localhost\n",
+		"nsswitch.conf": "hosts: files\n",
+	}
+}
+
+func prepareCapsuleRoot(root, upperDir string) error {
 	for _, path := range []string{"run", "tmp", "home", "root", "etc", "mnt", "var", "dev", "proc", "sys", "nix/store"} {
 		if err := os.MkdirAll(filepath.Join(root, path), 0o755); err != nil {
 			return fmt.Errorf("capsule prepare root: %w", err)
@@ -1480,16 +1503,8 @@ func prepareCapsuleRoot(root string) error {
 			return fmt.Errorf("capsule bind device %s: %w", device, err)
 		}
 	}
-	etc := filepath.Join(root, "etc")
-	for name, content := range map[string]string{
-		"passwd":        "root:x:0:0:Capsule:/root:/bin/sh\n",
-		"group":         "root:x:0:\n",
-		"hosts":         "127.0.0.1 localhost\n::1 localhost\n",
-		"nsswitch.conf": "hosts: files\n",
-	} {
-		if err := os.WriteFile(filepath.Join(etc, name), []byte(content), 0o644); err != nil {
-			return fmt.Errorf("capsule write %s: %w", name, err)
-		}
+	if err := writeCapsuleIdentityEtc(upperDir); err != nil {
+		return err
 	}
 	return nil
 }
