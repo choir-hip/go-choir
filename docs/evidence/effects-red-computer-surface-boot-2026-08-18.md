@@ -84,3 +84,14 @@ This receipt does not claim replay eligibility, checkpointability, restore compl
 
 **Replay EOF heresy delta:** discovered — post-refresh durable-chain reconstruction can fail with an unexpected EOF even while lifecycle status and the authenticated guest surface are healthy; introduced — none; repaired — none at this receipt.
 **Replay EOF conjecture delta:** the boot serving-join repair is accepted for the named surface, while replay completeness remains unproven and is now a separate blocking substrate problem.
+
+
+## Replay EOF diagnosis
+
+The EOF is source-reproducible as a bounded transport failure, not evidence of a malformed event chain. `internal/computerevent/HTTPClient.do` wraps every corpusd response in `io.LimitReader(result.Body, 1<<20)` before decoding JSON. A valid `[]DurableEvent` response whose encoded body exceeds one mebibyte is therefore cut at the limit and `json.Decoder.Decode` returns `unexpected EOF`; a local `httptest` probe reproduced that exact error with a single valid durable-event record carrying a 1 MiB field. The staging error is the same decode site on a 200 response, after corpusd's replay handler has constructed the chain.
+
+The current interface fetches all events after a sequence in one response, so merely raising the cap would defer the failure as the durable chain grows. The safe repair boundary is a bounded, sequence-progressing replay read: corpusd must honor an explicit page size, the guest client must reject a non-progressing or overlong page rather than silently truncate it, and reconstruction must consume pages until the chain is exhausted. Preserve the existing fail-closed behavior for malformed, truncated, or incomplete pages. No checkpoint, restore, event append, or effect is authorized by this diagnosis.
+
+**Replay EOF diagnosis delta:** discovered — the guest replay client imposes a 1 MiB response cap on an unpaged durable-chain endpoint, and the cap converts a valid oversized response into `unexpected EOF`; introduced — none; repaired — none at this docs-first receipt.
+**Replay EOF conjecture delta:** the staging failure is consistent with the bounded transport defect; the chain's durable records remain unverified until a paginated repair is deployed and replay eligibility succeeds.
+**Evidence:** `internal/computerevent/http_client.go:178-225`, `internal/platform/event_replay.go:13-86`, `internal/platform/event_handlers.go:283-307`, and the local large-response probe run on 2026-08-18.
