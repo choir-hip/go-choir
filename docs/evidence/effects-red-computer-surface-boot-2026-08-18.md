@@ -95,3 +95,21 @@ The current interface fetches all events after a sequence in one response, so me
 **Replay EOF diagnosis delta:** discovered — the guest replay client imposes a 1 MiB response cap on an unpaged durable-chain endpoint, and the cap converts a valid oversized response into `unexpected EOF`; introduced — none; repaired — none at this docs-first receipt.
 **Replay EOF conjecture delta:** the staging failure is consistent with the bounded transport defect; the chain's durable records remain unverified until a paginated repair is deployed and replay eligibility succeeds.
 **Evidence:** `internal/computerevent/http_client.go:178-225`, `internal/platform/event_replay.go:13-86`, `internal/platform/event_handlers.go:283-307`, and the local large-response probe run on 2026-08-18.
+
+
+## Replay EOF repair implementation
+
+The source repair is committed as `c38324f4` (`fix: page computer event replay responses`) after the diagnosis receipt above. Corpusd now accepts a bounded `limit` query (default 32, maximum 128) and applies it to the durable-chain query. The guest `HTTPClient.Events` requests pages, requires exactly contiguous sequence progress, and stops only on an empty or short page. Replay pages use an explicit 8 MiB read bound; a page over that bound is rejected with an explicit size error before JSON decoding rather than being truncated into `unexpected EOF`. Non-progressing pages, gaps, oversized pages, malformed JSON, and corpusd failures remain fail-closed.
+
+Local regression evidence passed:
+
+```text
+go test ./internal/computerevent ./internal/platform -run 'TestHTTPClientEvents|TestEventArtifactServiceEventsPage|TestHandleComputerEventReplay' -count=1
+go test ./internal/agentcore -run '^TestSelfDevelopmentTextureJoinRewakesTerminalPersistentSuper$' -count=1 -v
+```
+
+The first command passed the paged oversized-response, non-progress, response-bound, SQL-page, and handler-limit tests. The second command re-passed the unrelated full-package failure identified during a broad run; no replay code is exercised by that test. The repair is not yet staging evidence: no deploy, retained-computer refresh, replay-eligibility result, checkpoint, restore, or self-development retry is claimed here. Effects remain OFF.
+
+**Replay repair heresy delta:** discovered — none beyond the documented transport defect; introduced — none claimed pending landing; repaired — source-level unpaged replay truncation path.
+**Replay repair conjecture delta:** the bounded page contract is locally supported; staging replay eligibility remains unproven until the normal red landing loop and a fresh owner-authorized replay read complete.
+**Rollback:** revert `c38324f4`; retain the prior staging guest untouched until deployment identity and replay acceptance are independently verified.
