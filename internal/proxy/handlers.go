@@ -125,22 +125,23 @@ func requestDesktopID(r *http.Request) string {
 
 // Handler provides HTTP and WebSocket handlers for the proxy routes.
 type Handler struct {
-	cfg                  *Config
-	pubKey               ed25519.PublicKey
-	reverseProxy         *httputil.ReverseProxy
-	upgrader             websocket.Upgrader
-	dialer               *websocket.Dialer
-	corpusd              *http.Client
-	maild                *http.Client
-	autoputerHTTP        *http.Client
-	replayAutoputerHTTP  *http.Client  // dedicated long-budget client for replay completeness
-	autoputerURL         *url.URL      // parsed autoputer URL for WS dial derivation
-	vmctlClient          *vmctl.Client // optional vmctl client for VM-backed routing
-	lifecycle            *lifecycleRecorder
-	recoveries           *computeRecoveryTracker
-	apiKeyValidator      APIKeyValidator // optional: enables Bearer token (API key) auth
-	authStore            *auth.Store     // optional: owned auth store for API key validation
-	platformSignerDigest string
+	cfg                        *Config
+	pubKey                     ed25519.PublicKey
+	reverseProxy               *httputil.ReverseProxy
+	upgrader                   websocket.Upgrader
+	dialer                     *websocket.Dialer
+	corpusd                    *http.Client
+	maild                      *http.Client
+	autoputerHTTP              *http.Client
+	replayAutoputerHTTP        *http.Client  // dedicated long-budget client for replay completeness
+	residueImportAutoputerHTTP *http.Client  // dedicated long-budget client for residue import
+	autoputerURL               *url.URL      // parsed autoputer URL for WS dial derivation
+	vmctlClient                *vmctl.Client // optional vmctl client for VM-backed routing
+	lifecycle                  *lifecycleRecorder
+	recoveries                 *computeRecoveryTracker
+	apiKeyValidator            APIKeyValidator // optional: enables Bearer token (API key) auth
+	authStore                  *auth.Store     // optional: owned auth store for API key validation
+	platformSignerDigest       string
 }
 
 // NewHandler creates a proxy Handler with the given config and auth public key.
@@ -293,8 +294,13 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 	if replayTimeout <= 0 {
 		replayTimeout = DefaultReplayCompletenessTimeout
 	}
+	residueImportTimeout := cfg.ResidueImportTimeout
+	if residueImportTimeout <= 0 {
+		residueImportTimeout = DefaultResidueImportTimeout
+	}
 	autoputerHTTP := &http.Client{Timeout: 30 * time.Second}
 	replayAutoputerHTTP := &http.Client{Timeout: replayTimeout, Transport: autoputerHTTP.Transport}
+	residueImportAutoputerHTTP := &http.Client{Timeout: residueImportTimeout, Transport: autoputerHTTP.Transport}
 
 	h := &Handler{
 		cfg:          cfg,
@@ -308,17 +314,18 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 				return true
 			},
 		},
-		dialer:               websocket.DefaultDialer,
-		corpusd:              &http.Client{Timeout: 30 * time.Second},
-		maild:                &http.Client{Timeout: 30 * time.Second},
-		autoputerHTTP:        autoputerHTTP,
-		replayAutoputerHTTP:  replayAutoputerHTTP,
-		autoputerURL:         autoputerURL,
-		vmctlClient:          vmctlCli,
-		lifecycle:            newLifecycleRecorder(),
-		recoveries:           newComputeRecoveryTracker(),
-		authStore:            authStore,
-		platformSignerDigest: platformSignerDigest,
+		dialer:                     websocket.DefaultDialer,
+		corpusd:                    &http.Client{Timeout: 30 * time.Second},
+		maild:                      &http.Client{Timeout: 30 * time.Second},
+		autoputerHTTP:              autoputerHTTP,
+		replayAutoputerHTTP:        replayAutoputerHTTP,
+		residueImportAutoputerHTTP: residueImportAutoputerHTTP,
+		autoputerURL:               autoputerURL,
+		vmctlClient:                vmctlCli,
+		lifecycle:                  newLifecycleRecorder(),
+		recoveries:                 newComputeRecoveryTracker(),
+		authStore:                  authStore,
+		platformSignerDigest:       platformSignerDigest,
 	}
 	if authStore != nil {
 		h.apiKeyValidator = authStore

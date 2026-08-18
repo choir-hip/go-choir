@@ -43,6 +43,11 @@ type Config struct {
 	// projection and may legitimately outlive ordinary interactive routes.
 	ReplayCompletenessTimeout time.Duration
 
+	// ResidueImportTimeout is the dedicated proxy -> autoputer budget for the
+	// owner-only residue snapshot import. The import may serialize a large
+	// reducer batch and legitimately outlive ordinary workspace routes.
+	ResidueImportTimeout time.Duration
+
 	// CorpusdURL is the internal platform service URL. The proxy uses it
 	// for controlled private-computer to platform-publication transitions.
 	CorpusdURL string
@@ -93,6 +98,11 @@ const (
 	// remaining below the proxy server write deadline.
 	DefaultReplayCompletenessTimeout = 110 * time.Second
 
+	// DefaultResidueImportTimeout leaves the owner-only residue import enough
+	// time to serialize a bounded projection batch while remaining below the
+	// proxy server write deadline.
+	DefaultResidueImportTimeout = 110 * time.Second
+
 	// DefaultCorpusdURL is the localhost-only platform service endpoint.
 	DefaultCorpusdURL = "http://127.0.0.1:8086"
 
@@ -111,6 +121,7 @@ func LoadConfig() (*Config, error) {
 		VmctlURL:                  os.Getenv("PROXY_VMCTL_URL"),
 		VmctlTimeout:              durationEnvOr("PROXY_VMCTL_TIMEOUT", DefaultVmctlTimeout),
 		ReplayCompletenessTimeout: durationEnvOr("PROXY_REPLAY_COMPLETENESS_TIMEOUT", DefaultReplayCompletenessTimeout),
+		ResidueImportTimeout:      durationEnvOr("PROXY_RESIDUE_IMPORT_TIMEOUT", DefaultResidueImportTimeout),
 		CorpusdURL:                envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL),
 		MaildURL:                  envOr("PROXY_MAILD_URL", DefaultMaildURL),
 		AuthDBPath:                os.Getenv("PROXY_AUTH_DB_PATH"),
@@ -140,6 +151,9 @@ func (c *Config) validate() error {
 	}
 	if c.ReplayCompletenessTimeout <= 0 {
 		return fmt.Errorf("proxy config: PROXY_REPLAY_COMPLETENESS_TIMEOUT must be positive")
+	}
+	if c.ResidueImportTimeout <= 0 {
+		return fmt.Errorf("proxy config: PROXY_RESIDUE_IMPORT_TIMEOUT must be positive")
 	}
 	if c.CorpusdURL == "" {
 		return fmt.Errorf("proxy config: PROXY_CORPUSD_URL must not be empty")

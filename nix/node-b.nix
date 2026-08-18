@@ -355,6 +355,9 @@ in
         # Keep this below the proxy server write deadline so failures remain a
         # legible 502 rather than a connection-level EOF.
         "PROXY_REPLAY_COMPLETENESS_TIMEOUT=110s"
+        # Residue import serializes a bounded reducer snapshot and uses its own
+        # 110s budget for the same fail-closed route-boundary reason.
+        "PROXY_RESIDUE_IMPORT_TIMEOUT=110s"
         "PROXY_CORPUSD_URL=http://127.0.0.1:8086"
         "PROXY_MAILD_URL=http://127.0.0.1:8087"
         # Unsigned / and /assets/* serve this host tree (picker/auth chrome).

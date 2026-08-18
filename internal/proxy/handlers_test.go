@@ -4074,6 +4074,30 @@ func TestLoadConfig_ReplayCompletenessTimeoutFallsBackOnInvalidValue(t *testing.
 	}
 }
 
+func TestLoadConfig_ResidueImportTimeout(t *testing.T) {
+	t.Setenv("PROXY_RESIDUE_IMPORT_TIMEOUT", "7m")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.ResidueImportTimeout != 7*time.Minute {
+		t.Fatalf("ResidueImportTimeout = %s, want 7m", cfg.ResidueImportTimeout)
+	}
+}
+
+func TestLoadConfig_ResidueImportTimeoutFallsBackOnInvalidValue(t *testing.T) {
+	t.Setenv("PROXY_RESIDUE_IMPORT_TIMEOUT", "not-a-duration")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.ResidueImportTimeout != DefaultResidueImportTimeout {
+		t.Fatalf("ResidueImportTimeout = %s, want default %s", cfg.ResidueImportTimeout, DefaultResidueImportTimeout)
+	}
+}
+
 // --- Bearer Token (API Key) Auth Tests ---
 
 // testProxyEnvWithAuthStore sets up a proxy Handler with a real backend autoputer

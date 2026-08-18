@@ -352,6 +352,9 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 		upstream.Header.Set("X-Authenticated-Scopes", strings.Join(authResult.Scopes, ","))
 	}
 	client := h.autoputerHTTP
+	if isComputerImportResidueSnapshotPath(r.URL.Path) && h.residueImportAutoputerHTTP != nil {
+		client = h.residueImportAutoputerHTTP
+	}
 	if client == nil {
 		client = http.DefaultClient
 	}
