@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -62,7 +63,7 @@ func (s *Store) ImportResidueSnapshotForOwner(ctx context.Context, ownerID strin
 	if err != nil {
 		return ResidueImportResult{}, err
 	}
-	runtimeOps, counts, err := s.snapshotResidueRuntime(ctx, ownerID, computerID)
+	runtimeOps, counts, err := s.snapshotResidueRuntime(ctx, ownerID, computerID, objects)
 	if err != nil {
 		return ResidueImportResult{}, err
 	}
@@ -271,47 +272,134 @@ func (s *Store) snapshotResidueEdges(ctx context.Context, ownerID, computerID st
 	return out, nil
 }
 
-func (s *Store) snapshotResidueRuntime(ctx context.Context, ownerID, computerID string) ([]computerevent.ProjectionOp, residueRuntimeCounts, error) {
-	var counts residueRuntimeCounts
-	ops := make([]computerevent.ProjectionOp, 0)
+type residueRunScope struct {
+	ownerID string
+	runID   string
+}
 
-	runMemoryQuery := `SELECT e.entry_id, e.loop_id, e.owner_id, e.agent_id, e.parent_entry_id, e.seq,
-		e.kind, e.role, e.message_json, e.summary, e.first_kept_entry_id, e.tokens_before,
-		e.reason, e.model, e.details_json, e.created_at
-		FROM run_memory_entries e JOIN runs r ON r.loop_id = e.loop_id
-		WHERE e.owner_id = r.owner_id AND r.computer_id=?`
-	runMemoryArgs := []any{strings.TrimSpace(computerID)}
-	if strings.TrimSpace(ownerID) != "" {
-		runMemoryQuery += ` AND e.owner_id=? AND r.owner_id=?`
-		runMemoryArgs = append(runMemoryArgs, strings.TrimSpace(ownerID), strings.TrimSpace(ownerID))
+// residueRunScopes joins legacy SQL memory rows to the current canonical run
+// authority. Production runs are object-graph records; the SQL runs table is
+// retained only as a compatibility source for rows created before that cutover.
+func (s *Store) residueRunScopes(ctx context.Context, ownerID, computerID string, objects []objectgraph.Object) ([]residueRunScope, error) {
+	scopes := make(map[residueRunScope]struct{})
+	add := func(candidateOwnerID, runID string) {
+		candidateOwnerID, runID = strings.TrimSpace(candidateOwnerID), strings.TrimSpace(runID)
+		if candidateOwnerID == "" || runID == "" {
+			return
+		}
+		if ownerID != "" && candidateOwnerID != strings.TrimSpace(ownerID) {
+			return
+		}
+		scopes[residueRunScope{ownerID: candidateOwnerID, runID: runID}] = struct{}{}
 	}
-	runMemoryQuery += ` ORDER BY e.loop_id, e.seq`
-	rows, err := s.db.QueryContext(ctx, runMemoryQuery, runMemoryArgs...)
+
+	for _, obj := range objects {
+		if obj.ObjectKind != ogKindRun || strings.TrimSpace(obj.ComputerID) != strings.TrimSpace(computerID) {
+			continue
+		}
+		var metadata struct {
+			RunID string `json:"run_id"`
+		}
+		if err := json.Unmarshal(obj.Metadata, &metadata); err != nil {
+			return nil, fmt.Errorf("store: decode residue run metadata: %w", err)
+		}
+		runID := strings.TrimSpace(metadata.RunID)
+		if runID == "" {
+			var body struct {
+				RunID string `json:"loop_id"`
+			}
+			if err := json.Unmarshal(obj.Body, &body); err != nil {
+				return nil, fmt.Errorf("store: decode residue run body: %w", err)
+			}
+			runID = strings.TrimSpace(body.RunID)
+		}
+		add(obj.OwnerID, runID)
+	}
+
+	legacyQuery := `SELECT loop_id, owner_id FROM runs WHERE computer_id=?`
+	legacyArgs := []any{strings.TrimSpace(computerID)}
+	if strings.TrimSpace(ownerID) != "" {
+		legacyQuery += ` AND owner_id=?`
+		legacyArgs = append(legacyArgs, strings.TrimSpace(ownerID))
+	}
+	rows, err := s.db.QueryContext(ctx, legacyQuery, legacyArgs...)
 	if err != nil {
-		return nil, counts, fmt.Errorf("store: list residue run memory: %w", err)
+		return nil, fmt.Errorf("store: list legacy residue runs: %w", err)
 	}
 	for rows.Next() {
-		var entry computerevent.RunMemoryEntryProjection
-		if err := rows.Scan(&entry.EntryID, &entry.RunID, &entry.OwnerID, &entry.AgentID, &entry.ParentEntryID,
-			&entry.Seq, &entry.Kind, &entry.Role, &entry.MessageJSON, &entry.Summary, &entry.FirstKeptEntryID,
-			&entry.TokensBefore, &entry.Reason, &entry.Model, &entry.DetailsJSON, &entry.CreatedAt); err != nil {
+		var runID, runOwnerID string
+		if err := rows.Scan(&runID, &runOwnerID); err != nil {
 			_ = rows.Close()
-			return nil, counts, fmt.Errorf("store: scan residue run memory: %w", err)
+			return nil, fmt.Errorf("store: scan legacy residue run: %w", err)
 		}
-		body, err := json.Marshal(entry)
-		if err != nil {
-			_ = rows.Close()
-			return nil, counts, fmt.Errorf("store: marshal residue run memory: %w", err)
-		}
-		ops = append(ops, computerevent.ProjectionOp{Kind: computerevent.ProjectionOpRunMemoryEntry, CanonicalID: entry.EntryID, Body: body})
-		counts.runMemory++
+		add(runOwnerID, runID)
 	}
 	if err := rows.Err(); err != nil {
 		_ = rows.Close()
-		return nil, counts, fmt.Errorf("store: iterate residue run memory: %w", err)
+		return nil, fmt.Errorf("store: iterate legacy residue runs: %w", err)
 	}
 	_ = rows.Close()
 
+	out := make([]residueRunScope, 0, len(scopes))
+	for scope := range scopes {
+		out = append(out, scope)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].ownerID != out[j].ownerID {
+			return out[i].ownerID < out[j].ownerID
+		}
+		return out[i].runID < out[j].runID
+	})
+	return out, nil
+}
+
+func (s *Store) snapshotResidueRuntime(ctx context.Context, ownerID, computerID string, objects []objectgraph.Object) ([]computerevent.ProjectionOp, residueRuntimeCounts, error) {
+	var counts residueRuntimeCounts
+	ops := make([]computerevent.ProjectionOp, 0)
+
+	runScopes, err := s.residueRunScopes(ctx, ownerID, computerID, objects)
+	if err != nil {
+		return nil, counts, err
+	}
+	var rows *sql.Rows
+	if len(runScopes) > 0 {
+		clauses := make([]string, len(runScopes))
+		runMemoryArgs := make([]any, 0, len(runScopes)*2)
+		for i, scope := range runScopes {
+			clauses[i] = `(e.owner_id=? AND e.loop_id=?)`
+			runMemoryArgs = append(runMemoryArgs, scope.ownerID, scope.runID)
+		}
+		runMemoryQuery := `SELECT e.entry_id, e.loop_id, e.owner_id, e.agent_id, e.parent_entry_id, e.seq,
+			e.kind, e.role, e.message_json, e.summary, e.first_kept_entry_id, e.tokens_before,
+			e.reason, e.model, e.details_json, e.created_at
+			FROM run_memory_entries e WHERE ` + strings.Join(clauses, ` OR `) + `
+			ORDER BY e.owner_id, e.loop_id, e.seq`
+		rows, err = s.db.QueryContext(ctx, runMemoryQuery, runMemoryArgs...)
+		if err != nil {
+			return nil, counts, fmt.Errorf("store: list residue run memory: %w", err)
+		}
+		for rows.Next() {
+			var entry computerevent.RunMemoryEntryProjection
+			if err := rows.Scan(&entry.EntryID, &entry.RunID, &entry.OwnerID, &entry.AgentID, &entry.ParentEntryID,
+				&entry.Seq, &entry.Kind, &entry.Role, &entry.MessageJSON, &entry.Summary, &entry.FirstKeptEntryID,
+				&entry.TokensBefore, &entry.Reason, &entry.Model, &entry.DetailsJSON, &entry.CreatedAt); err != nil {
+				_ = rows.Close()
+				return nil, counts, fmt.Errorf("store: scan residue run memory: %w", err)
+			}
+			body, err := json.Marshal(entry)
+			if err != nil {
+				_ = rows.Close()
+				return nil, counts, fmt.Errorf("store: marshal residue run memory: %w", err)
+			}
+			ops = append(ops, computerevent.ProjectionOp{Kind: computerevent.ProjectionOpRunMemoryEntry, CanonicalID: entry.EntryID, Body: body})
+			counts.runMemory++
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return nil, counts, fmt.Errorf("store: iterate residue run memory: %w", err)
+		}
+		_ = rows.Close()
+	}
 	startQuery := `SELECT computer_id, idempotency_key, request_commitment, created_at FROM self_development_start_intents WHERE computer_id=?`
 	rows, err = s.db.QueryContext(ctx, startQuery, strings.TrimSpace(computerID))
 	if err != nil {

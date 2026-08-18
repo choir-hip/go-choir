@@ -243,6 +243,90 @@ func TestImportResidueSnapshotCoMovesRuntimeResidueForOwner(t *testing.T) {
 	assertCount(t, productStore, `SELECT COUNT(*) FROM texture_agent_mutations WHERE loop_id='run-texture-other'`, 1)
 }
 
+func TestSnapshotResidueRuntimeIncludesCanonicalRunMemory(t *testing.T) {
+	ctx := context.Background()
+	productStore := openProjectStore(t)
+	computerID := "computer-residue-canonical-run"
+	now := time.Date(2026, 8, 18, 8, 0, 0, 0, time.UTC)
+
+	canonicalRun := types.RunRecord{
+		RunID: "run-residue-canonical", AgentID: "agent-canonical", OwnerID: "owner-runtime",
+		ComputerID: computerID, State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
+	}
+	canonicalObject, err := lifecycleObject(ogKindRun, canonicalRun.OwnerID, computerID, canonicalRun.RunID, canonicalRun, lifecycleMetadata("run_id", canonicalRun.RunID, computerID, "", 1), now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := productStore.ogStore.PutObject(ctx, canonicalObject); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO run_memory_entries (entry_id, loop_id, owner_id, agent_id, seq, kind, message_json, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		"memory-residue-canonical", canonicalRun.RunID, canonicalRun.OwnerID, canonicalRun.AgentID, 1, "message", `{"role":"user"}`, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO runs (loop_id, owner_id, computer_id, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		"run-residue-legacy", "owner-runtime", computerID, string(types.RunCompleted), now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO run_memory_entries (entry_id, loop_id, owner_id, agent_id, seq, kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"memory-residue-legacy", "run-residue-legacy", "owner-runtime", "agent-legacy", 1, "message", now); err != nil {
+		t.Fatal(err)
+	}
+
+	otherComputerRun := canonicalRun
+	otherComputerRun.RunID = "run-residue-other-computer"
+	otherComputerRun.ComputerID = "computer-other"
+	otherComputerObject, err := lifecycleObject(ogKindRun, otherComputerRun.OwnerID, otherComputerRun.ComputerID, otherComputerRun.RunID, otherComputerRun, lifecycleMetadata("run_id", otherComputerRun.RunID, otherComputerRun.ComputerID, "", 1), now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := productStore.ogStore.PutObject(ctx, otherComputerObject); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO run_memory_entries (entry_id, loop_id, owner_id, agent_id, seq, kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"memory-residue-other-computer", otherComputerRun.RunID, otherComputerRun.OwnerID, otherComputerRun.AgentID, 1, "message", now); err != nil {
+		t.Fatal(err)
+	}
+
+	objects, err := productStore.snapshotResidueObjects(ctx, canonicalRun.OwnerID, computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ops, counts, err := productStore.snapshotResidueRuntime(ctx, canonicalRun.OwnerID, computerID, objects)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts.runMemory != 2 || len(ops) != 2 {
+		t.Fatalf("runtime residue counts=%+v ops=%d, want two canonical/legacy entries", counts, len(ops))
+	}
+	seen := map[string]computerevent.RunMemoryEntryProjection{}
+	for _, op := range ops {
+		if op.Kind != computerevent.ProjectionOpRunMemoryEntry {
+			t.Fatalf("unexpected residue op kind=%q", op.Kind)
+		}
+		var entry computerevent.RunMemoryEntryProjection
+		if err := json.Unmarshal(op.Body, &entry); err != nil {
+			t.Fatal(err)
+		}
+		seen[entry.EntryID] = entry
+	}
+	if got := seen["memory-residue-canonical"]; got.RunID != canonicalRun.RunID || got.OwnerID != canonicalRun.OwnerID || got.Seq != 1 {
+		t.Fatalf("canonical residue projection=%+v", got)
+	}
+	if got := seen["memory-residue-legacy"]; got.RunID != "run-residue-legacy" || got.OwnerID != canonicalRun.OwnerID {
+		t.Fatalf("legacy residue projection=%+v", got)
+	}
+	if _, ok := seen["memory-residue-other-computer"]; ok {
+		t.Fatalf("foreign computer residue was selected: %+v", seen["memory-residue-other-computer"])
+	}
+}
+
 func TestImportResidueSnapshotIncludesOwnerLegacyTextureMutation(t *testing.T) {
 	ctx := context.Background()
 	productStore := openProjectStore(t)
