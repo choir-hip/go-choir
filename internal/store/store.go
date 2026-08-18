@@ -76,26 +76,28 @@ type doltConnector interface {
 }
 
 type Store struct {
-	db               *sql.DB
-	readDB           *sql.DB
-	path             string
-	textureDB        *sql.DB
-	texturePath      string
-	doltConnector    doltConnector
-	jsonPatchMu      sync.Mutex
-	trajectoryMu     sync.Mutex
-	textureRevMu     sync.Mutex
-	doltCommitMu     sync.Mutex
-	doltHistoryDirty bool
-	workerUpdateMu   sync.Mutex
-	channelMsgMu     sync.Mutex
-	eventMu          sync.Mutex
-	presenceMu       sync.Mutex
-	sessionPresence  map[string]types.DesktopSessionContext
-	projectionTape   *projectionTape
-	og               *objectgraph.Service
-	ogStore          *objectgraph.DoltStore
-	ogReadStore      *objectgraph.DoltStore
+	db                *sql.DB
+	readDB            *sql.DB
+	path              string
+	textureDB         *sql.DB
+	texturePath       string
+	doltConnector     doltConnector
+	jsonPatchMu       sync.Mutex
+	trajectoryMu      sync.Mutex
+	textureRevMu      sync.Mutex
+	doltCommitMu      sync.Mutex
+	doltHistoryDirty  bool
+	workerUpdateMu    sync.Mutex
+	runMemoryMu       sync.Mutex
+	textureMutationMu sync.Mutex
+	channelMsgMu      sync.Mutex
+	eventMu           sync.Mutex
+	presenceMu        sync.Mutex
+	sessionPresence   map[string]types.DesktopSessionContext
+	projectionTape    *projectionTape
+	og                *objectgraph.Service
+	ogStore           *objectgraph.DoltStore
+	ogReadStore       *objectgraph.DoltStore
 }
 
 // DB returns the primary embedded Dolt *sql.DB connection used by this store.

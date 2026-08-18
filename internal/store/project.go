@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -55,6 +57,14 @@ func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp) e
 		return projectObject(ctx, tx, op.Body)
 	case computerevent.ProjectionOpObjectEdge:
 		return projectObjectEdge(ctx, tx, op.Body)
+	case computerevent.ProjectionOpRunMemoryEntry:
+		return projectRunMemoryEntry(ctx, tx, op.Body)
+	case computerevent.ProjectionOpSelfDevelopmentStartIntent:
+		return projectSelfDevelopmentStartIntent(ctx, tx, op.Body)
+	case computerevent.ProjectionOpSelfDevelopmentOperation:
+		return projectSelfDevelopmentOperation(ctx, tx, op.Body)
+	case computerevent.ProjectionOpTextureAgentMutation:
+		return projectTextureAgentMutation(ctx, tx, op.Body)
 	default:
 		return fmt.Errorf("%w: kind %q", computerevent.ErrProjectionBatchInvalid, op.Kind)
 	}
@@ -245,4 +255,263 @@ func projectObjectEdge(ctx context.Context, tx *sql.Tx, body json.RawMessage) er
 		return fmt.Errorf("project object edge: %w", err)
 	}
 	return nil
+}
+
+func projectRunMemoryEntry(ctx context.Context, tx *sql.Tx, body json.RawMessage) error {
+	var entry computerevent.RunMemoryEntryProjection
+	if err := json.Unmarshal(body, &entry); err != nil {
+		return fmt.Errorf("decode run memory entry: %w", err)
+	}
+	if strings.TrimSpace(entry.EntryID) == "" || strings.TrimSpace(entry.RunID) == "" || entry.Seq <= 0 || strings.TrimSpace(entry.Kind) == "" {
+		return fmt.Errorf("run memory entry identity is required")
+	}
+	if strings.TrimSpace(entry.DetailsJSON) == "" {
+		entry.DetailsJSON = "{}"
+	}
+	var existing computerevent.RunMemoryEntryProjection
+	err := tx.QueryRowContext(ctx, `SELECT
+		entry_id, loop_id, owner_id, agent_id, parent_entry_id, seq, kind,
+		role, message_json, summary, first_kept_entry_id, tokens_before,
+		reason, model, details_json, created_at
+		FROM run_memory_entries WHERE entry_id=? FOR UPDATE`, entry.EntryID).Scan(
+		&existing.EntryID, &existing.RunID, &existing.OwnerID, &existing.AgentID, &existing.ParentEntryID,
+		&existing.Seq, &existing.Kind, &existing.Role, &existing.MessageJSON, &existing.Summary,
+		&existing.FirstKeptEntryID, &existing.TokensBefore, &existing.Reason, &existing.Model,
+		&existing.DetailsJSON, &existing.CreatedAt)
+	if err == nil {
+		if strings.TrimSpace(existing.DetailsJSON) == "" {
+			existing.DetailsJSON = "{}"
+		}
+		if existing != entry {
+			return fmt.Errorf("%w: run memory entry %s changed", computerevent.ErrProjectionMismatch, entry.EntryID)
+		}
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("read run memory entry: %w", err)
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO run_memory_entries (
+		entry_id, loop_id, owner_id, agent_id, parent_entry_id, seq, kind,
+		role, message_json, summary, first_kept_entry_id, tokens_before,
+		reason, model, details_json, created_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		entry.EntryID, entry.RunID, entry.OwnerID, entry.AgentID, entry.ParentEntryID, entry.Seq,
+		entry.Kind, entry.Role, entry.MessageJSON, entry.Summary, entry.FirstKeptEntryID,
+		entry.TokensBefore, entry.Reason, entry.Model, entry.DetailsJSON, entry.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("project run memory entry: %w", err)
+	}
+	return nil
+}
+
+func projectSelfDevelopmentStartIntent(ctx context.Context, tx *sql.Tx, body json.RawMessage) error {
+	var intent computerevent.SelfDevelopmentStartIntentProjection
+	if err := json.Unmarshal(body, &intent); err != nil {
+		return fmt.Errorf("decode self-development start intent: %w", err)
+	}
+	if strings.TrimSpace(intent.ComputerID) == "" || strings.TrimSpace(intent.IdempotencyKey) == "" || !computerevent.IsSHA256(intent.RequestCommitment) {
+		return fmt.Errorf("self-development start intent identity is required")
+	}
+	var storedCommitment, storedCreatedAt string
+	err := tx.QueryRowContext(ctx, `SELECT request_commitment, created_at FROM self_development_start_intents WHERE computer_id=? AND idempotency_key=? FOR UPDATE`, intent.ComputerID, intent.IdempotencyKey).Scan(&storedCommitment, &storedCreatedAt)
+	if err == nil {
+		if storedCommitment != intent.RequestCommitment || storedCreatedAt != intent.CreatedAt {
+			return fmt.Errorf("%w: start intent %s changed", computerevent.ErrProjectionMismatch, intent.IdempotencyKey)
+		}
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("read self-development start intent: %w", err)
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO self_development_start_intents (computer_id, idempotency_key, request_commitment, created_at)
+		VALUES (?, ?, ?, ?)`, intent.ComputerID, intent.IdempotencyKey, intent.RequestCommitment, intent.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("project self-development start intent: %w", err)
+	}
+	return nil
+}
+
+func projectSelfDevelopmentOperation(ctx context.Context, tx *sql.Tx, body json.RawMessage) error {
+	var operation computerevent.SelfDevelopmentOperationProjection
+	if err := json.Unmarshal(body, &operation); err != nil {
+		return fmt.Errorf("decode self-development operation: %w", err)
+	}
+	if strings.TrimSpace(operation.OperationID) == "" || strings.TrimSpace(operation.ComputerID) == "" || strings.TrimSpace(operation.IdempotencyKey) == "" || strings.TrimSpace(operation.State) == "" {
+		return fmt.Errorf("self-development operation identity is required")
+	}
+	if strings.TrimSpace(operation.VerifierRefsJSON) == "" {
+		operation.VerifierRefsJSON = "[]"
+	}
+	var existing computerevent.SelfDevelopmentOperationProjection
+	var routeGeneration sql.NullInt64
+	err := tx.QueryRowContext(ctx, `SELECT
+		operation_id, idempotency_key, request_commitment, computer_id, trajectory_id, capsule_id,
+		base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref,
+		verifier_refs_json, decision_actor, decision_event, decision_receipt, desired_head, effective_head,
+		materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt,
+		mode_receipt, lifecycle_receipt, state, terminal_error, created_at, updated_at
+		FROM self_development_operations WHERE operation_id=? FOR UPDATE`, operation.OperationID).Scan(
+		&existing.OperationID, &existing.IdempotencyKey, &existing.RequestCommitment, &existing.ComputerID,
+		&existing.TrajectoryID, &existing.CapsuleID, &existing.BaseHead, &existing.PromptArtifactRef,
+		&existing.BundleDigest, &existing.ReleaseDigest, &existing.CodeRef, &existing.ArtifactProgramRef,
+		&existing.VerifierRefsJSON, &existing.DecisionActor, &existing.DecisionEvent, &existing.DecisionReceipt,
+		&existing.DesiredHead, &existing.EffectiveHead, &existing.MaterializationReceipt, &existing.CheckpointRef,
+		&existing.RouteCertificate, &routeGeneration, &existing.RouteReceipt, &existing.ModeReceipt,
+		&existing.LifecycleReceipt, &existing.State, &existing.TerminalError, &existing.CreatedAt, &existing.UpdatedAt)
+	if err == nil {
+		if routeGeneration.Valid {
+			value := uint64(routeGeneration.Int64)
+			existing.RouteGeneration = &value
+		}
+		if strings.TrimSpace(existing.VerifierRefsJSON) == "" {
+			existing.VerifierRefsJSON = "[]"
+		}
+		if existing.ComputerID != operation.ComputerID || existing.IdempotencyKey != operation.IdempotencyKey || existing.RequestCommitment != operation.RequestCommitment {
+			return fmt.Errorf("%w: operation %s identity changed", computerevent.ErrProjectionMismatch, operation.OperationID)
+		}
+		if strings.TrimSpace(operation.ExpectedState) != "" {
+			if existing.State != operation.ExpectedState {
+				return fmt.Errorf("%w: operation %s state is %s, expected %s", computerevent.ErrProjectionMismatch, operation.OperationID, existing.State, operation.ExpectedState)
+			}
+		} else {
+			if existing.State != operation.State || !sameSelfDevelopmentOperationProjection(existing, operation) {
+				return fmt.Errorf("%w: operation %s create snapshot changed", computerevent.ErrProjectionMismatch, operation.OperationID)
+			}
+			return nil
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("read self-development operation: %w", err)
+	} else if strings.TrimSpace(operation.ExpectedState) != "" {
+		return fmt.Errorf("%w: operation %s disappeared", computerevent.ErrProjectionMismatch, operation.OperationID)
+	}
+	var idempotentOperationID, idempotentCommitment string
+	idempotencyErr := tx.QueryRowContext(ctx, `SELECT operation_id, request_commitment FROM self_development_operations WHERE computer_id=? AND idempotency_key=? FOR UPDATE`, operation.ComputerID, operation.IdempotencyKey).Scan(&idempotentOperationID, &idempotentCommitment)
+	if idempotencyErr == nil && (idempotentOperationID != operation.OperationID || idempotentCommitment != operation.RequestCommitment) {
+		return fmt.Errorf("%w: operation idempotency binding changed", computerevent.ErrProjectionMismatch)
+	}
+	if idempotencyErr != nil && !errors.Is(idempotencyErr, sql.ErrNoRows) {
+		return fmt.Errorf("read self-development operation idempotency: %w", idempotencyErr)
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO self_development_operations (
+		operation_id, computer_id, idempotency_key, request_commitment, trajectory_id, capsule_id,
+		base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref,
+		verifier_refs_json, decision_actor, decision_event, decision_receipt, desired_head, effective_head,
+		materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt,
+		mode_receipt, lifecycle_receipt, state, terminal_error, created_at, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	ON DUPLICATE KEY UPDATE
+		computer_id=VALUES(computer_id), idempotency_key=VALUES(idempotency_key), request_commitment=VALUES(request_commitment),
+		trajectory_id=VALUES(trajectory_id), capsule_id=VALUES(capsule_id), base_head=VALUES(base_head),
+		prompt_artifact_ref=VALUES(prompt_artifact_ref), bundle_digest=VALUES(bundle_digest), release_digest=VALUES(release_digest),
+		code_ref=VALUES(code_ref), artifact_program_ref=VALUES(artifact_program_ref), verifier_refs_json=VALUES(verifier_refs_json),
+		decision_actor=VALUES(decision_actor), decision_event=VALUES(decision_event), decision_receipt=VALUES(decision_receipt),
+		desired_head=VALUES(desired_head), effective_head=VALUES(effective_head), materialization_receipt=VALUES(materialization_receipt),
+		checkpoint_ref=VALUES(checkpoint_ref), route_certificate=VALUES(route_certificate), route_generation=VALUES(route_generation),
+		route_receipt=VALUES(route_receipt), mode_receipt=VALUES(mode_receipt), lifecycle_receipt=VALUES(lifecycle_receipt),
+		state=VALUES(state), terminal_error=VALUES(terminal_error), created_at=VALUES(created_at), updated_at=VALUES(updated_at)`,
+		operation.OperationID, operation.ComputerID, operation.IdempotencyKey, operation.RequestCommitment,
+		operation.TrajectoryID, operation.CapsuleID, operation.BaseHead, operation.PromptArtifactRef,
+		operation.BundleDigest, operation.ReleaseDigest, operation.CodeRef, operation.ArtifactProgramRef,
+		operation.VerifierRefsJSON, operation.DecisionActor, operation.DecisionEvent, operation.DecisionReceipt,
+		operation.DesiredHead, operation.EffectiveHead, operation.MaterializationReceipt, operation.CheckpointRef,
+		operation.RouteCertificate, operation.RouteGeneration, operation.RouteReceipt, operation.ModeReceipt,
+		operation.LifecycleReceipt, operation.State, operation.TerminalError, operation.CreatedAt, operation.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("project self-development operation: %w", err)
+	}
+	return nil
+}
+
+func sameSelfDevelopmentOperationProjection(left, right computerevent.SelfDevelopmentOperationProjection) bool {
+	if (left.RouteGeneration == nil) != (right.RouteGeneration == nil) {
+		return false
+	}
+	if left.RouteGeneration != nil && *left.RouteGeneration != *right.RouteGeneration {
+		return false
+	}
+	left.RouteGeneration = nil
+	right.RouteGeneration = nil
+	left.ExpectedState = ""
+	right.ExpectedState = ""
+	return reflect.DeepEqual(left, right)
+}
+
+func projectTextureAgentMutation(ctx context.Context, tx *sql.Tx, body json.RawMessage) error {
+	var mutation computerevent.TextureAgentMutationProjection
+	if err := json.Unmarshal(body, &mutation); err != nil {
+		return fmt.Errorf("decode Texture agent mutation: %w", err)
+	}
+	if strings.TrimSpace(mutation.DocID) == "" || strings.TrimSpace(mutation.RunID) == "" || strings.TrimSpace(mutation.OwnerID) == "" {
+		return fmt.Errorf("Texture agent mutation identity is required")
+	}
+	var existing computerevent.TextureAgentMutationProjection
+	var completedAt sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT doc_id, loop_id, owner_id, computer_id, state, scheduled_message_seq, revision_id, created_at, completed_at
+		FROM texture_agent_mutations WHERE owner_id=? AND computer_id=? AND doc_id=? AND loop_id=? FOR UPDATE`,
+		mutation.OwnerID, mutation.ComputerID, mutation.DocID, mutation.RunID).Scan(
+		&existing.DocID, &existing.RunID, &existing.OwnerID, &existing.ComputerID, &existing.State,
+		&existing.ScheduledMessageSeq, &existing.RevisionID, &existing.CreatedAt, &completedAt)
+	if err == nil {
+		if completedAt.Valid {
+			existing.CompletedAt = &completedAt.String
+		}
+		if mutation.CreateOnly || (len(mutation.ExpectedStates) == 0 && mutation.RequireRevision == nil) {
+			if !sameTextureAgentMutationProjection(existing, mutation) {
+				return fmt.Errorf("%w: Texture mutation %s/%s snapshot changed", computerevent.ErrProjectionMismatch, mutation.DocID, mutation.RunID)
+			}
+			return nil
+		}
+		if len(mutation.ExpectedStates) > 0 {
+			matched := false
+			for _, expected := range mutation.ExpectedStates {
+				if existing.State == expected {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return fmt.Errorf("%w: Texture mutation state is %s", computerevent.ErrProjectionMismatch, existing.State)
+			}
+		}
+		if mutation.RequireRevision != nil {
+			hasRevision := strings.TrimSpace(existing.RevisionID) != ""
+			if *mutation.RequireRevision != hasRevision {
+				return fmt.Errorf("%w: Texture mutation revision presence changed", computerevent.ErrProjectionMismatch)
+			}
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("read Texture agent mutation: %w", err)
+	} else if len(mutation.ExpectedStates) > 0 || mutation.RequireRevision != nil {
+		return fmt.Errorf("%w: Texture mutation disappeared", computerevent.ErrProjectionMismatch)
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO texture_agent_mutations (
+		doc_id, loop_id, owner_id, computer_id, state, scheduled_message_seq, revision_id, created_at, completed_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	ON DUPLICATE KEY UPDATE
+		state=VALUES(state), scheduled_message_seq=VALUES(scheduled_message_seq), revision_id=VALUES(revision_id),
+		created_at=VALUES(created_at), completed_at=VALUES(completed_at)`,
+		mutation.DocID, mutation.RunID, mutation.OwnerID, mutation.ComputerID, mutation.State,
+		mutation.ScheduledMessageSeq, mutation.RevisionID, mutation.CreatedAt, mutation.CompletedAt)
+	if err != nil {
+		return fmt.Errorf("project Texture agent mutation: %w", err)
+	}
+	return nil
+}
+
+func sameTextureAgentMutationProjection(left, right computerevent.TextureAgentMutationProjection) bool {
+	if (left.CompletedAt == nil) != (right.CompletedAt == nil) {
+		return false
+	}
+	if left.CompletedAt != nil && *left.CompletedAt != *right.CompletedAt {
+		return false
+	}
+	left.CompletedAt = nil
+	right.CompletedAt = nil
+	left.ExpectedStates = nil
+	right.ExpectedStates = nil
+	left.RequireRevision = nil
+	right.RequireRevision = nil
+	left.CreateOnly = false
+	right.CreateOnly = false
+	return reflect.DeepEqual(left, right)
 }

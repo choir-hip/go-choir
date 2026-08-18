@@ -149,6 +149,8 @@ func TestDesktopAndOGAreEventProjectionAfterLiveResidueImport(t *testing.T) {
 	for _, table := range []string{
 		"desktop_workspaces", "desktop_sessions", "desktop_app_instances",
 		"desktop_window_placements", "og_objects", "og_edges",
+		"run_memory_entries", "self_development_start_intents",
+		"self_development_operations", "texture_agent_mutations",
 	} {
 		if got := manifest.Entries[table]; got != ReplayEventProjection {
 			t.Fatalf("%s class=%q, want event_projection after live residue import", table, got)

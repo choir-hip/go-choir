@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -169,6 +170,77 @@ func TestImportResidueSnapshotNoopWhenEmpty(t *testing.T) {
 	if after.Sequence != before.Sequence {
 		t.Fatalf("empty import moved head %d -> %d", before.Sequence, after.Sequence)
 	}
+}
+
+func TestImportResidueSnapshotCoMovesRuntimeResidueForOwner(t *testing.T) {
+	ctx := context.Background()
+	productStore := openProjectStore(t)
+	computerID := "computer-residue-runtime"
+	prepareGenesis(t, productStore, computerID, "genesis-residue-runtime")
+	now := time.Date(2026, 8, 18, 7, 0, 0, 0, time.UTC)
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO runs (loop_id, owner_id, computer_id, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		"run-residue-runtime", "owner-runtime", computerID, "completed", now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO run_memory_entries (entry_id, loop_id, owner_id, agent_id, seq, kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"memory-residue-runtime", "run-residue-runtime", "owner-runtime", "agent-runtime", 1, "message", now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO runs (loop_id, owner_id, computer_id, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		"run-residue-other", "owner-other", "computer-other", "completed", now, now); err != nil {
+		t.Fatal(err)
+	}
+	commitment := storeTestDigest('8')
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO self_development_start_intents (computer_id, idempotency_key, request_commitment, created_at) VALUES (?, ?, ?, ?)`,
+		computerID, "intent-residue-runtime", commitment, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO self_development_operations (operation_id, computer_id, idempotency_key, request_commitment, trajectory_id, base_head, prompt_artifact_ref, desired_head, effective_head, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"operation-residue-runtime", computerID, "operation-idem", commitment, "trajectory-residue", commitment,
+		"artifact:sha256:"+strings.Repeat("a", 64), commitment, commitment, "requested", now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO texture_agent_mutations (doc_id, loop_id, owner_id, computer_id, state, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		"doc-residue-runtime", "run-texture-residue", "owner-runtime", computerID, "pending", now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO texture_agent_mutations (doc_id, loop_id, owner_id, computer_id, state, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		"doc-residue-other", "run-texture-other", "owner-other", computerID, "pending", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := bindResidueTape(t, productStore, computerID); err != nil {
+		t.Fatal(err)
+	}
+	before, err := productStore.Head(ctx, computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := productStore.ImportResidueSnapshotForOwner(ctx, "owner-runtime")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Appended || result.RunMemoryEntries != 1 || result.StartIntents != 1 || result.Operations != 1 || result.TextureMutations != 1 {
+		t.Fatalf("runtime residue result=%+v", result)
+	}
+	after, err := productStore.Head(ctx, computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before == nil || after == nil || after.Sequence != before.Sequence+1 {
+		t.Fatalf("residue head before=%+v after=%+v", before, after)
+	}
+	assertCount(t, productStore, `SELECT COUNT(*) FROM run_memory_entries WHERE entry_id='memory-residue-runtime'`, 1)
+	assertCount(t, productStore, `SELECT COUNT(*) FROM self_development_start_intents WHERE idempotency_key='intent-residue-runtime'`, 1)
+	assertCount(t, productStore, `SELECT COUNT(*) FROM self_development_operations WHERE operation_id='operation-residue-runtime'`, 1)
+	assertCount(t, productStore, `SELECT COUNT(*) FROM texture_agent_mutations WHERE loop_id='run-texture-residue'`, 1)
+	assertCount(t, productStore, `SELECT COUNT(*) FROM texture_agent_mutations WHERE loop_id='run-texture-other'`, 1)
 }
 
 func residueDesktopState(windowID string) types.DesktopState {

@@ -188,6 +188,9 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	}
 	if operations, err := selfdev.NewStore(rt.store, rt.store); err == nil {
 		rt.selfdevOperations = operations
+		if rt.store.ProjectionTapeBound() {
+			operations.BindProjectionSink(rt.store)
+		}
 	}
 
 	report.ComputerID = computerID

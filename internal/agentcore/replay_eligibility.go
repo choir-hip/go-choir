@@ -16,7 +16,7 @@ import (
 // observable but cannot make a reversibility claim.
 var ErrReplayIneligible = errors.New("replay is ineligible")
 
-const replayEligibilityManifestVersion = 1
+const replayEligibilityManifestVersion = 2
 
 const emptyDoltTableHash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
@@ -50,7 +50,7 @@ var replayAirworthinessEntries = map[string]ReplayObservationClass{
 	"events":                          ReplayEmptyUntilSupported,
 	"channel_messages":                ReplayEmptyUntilSupported,
 	"inbox_deliveries":                ReplayEmptyUntilSupported,
-	"run_memory_entries":              ReplayEmptyUntilSupported,
+	"run_memory_entries":              ReplayEventProjection,
 	"run_acceptances":                 ReplayEmptyUntilSupported,
 	"run_continuations":               ReplayEmptyUntilSupported,
 	"trajectories":                    ReplayEmptyUntilSupported,
@@ -67,14 +67,14 @@ var replayAirworthinessEntries = map[string]ReplayObservationClass{
 	"desktop_sessions":                ReplayEventProjection,
 	"desktop_app_instances":           ReplayEventProjection,
 	"desktop_window_placements":       ReplayEventProjection,
-	"self_development_start_intents":  ReplayEmptyUntilSupported,
-	"self_development_operations":     ReplayEmptyUntilSupported,
+	"self_development_start_intents":  ReplayEventProjection,
+	"self_development_operations":     ReplayEventProjection,
 	"texture_documents":               ReplayEmptyUntilSupported,
 	"texture_revisions":               ReplayEmptyUntilSupported,
 	"texture_source_entities":         ReplayEmptyUntilSupported,
 	"texture_source_refs":             ReplayEmptyUntilSupported,
 	"texture_document_aliases":        ReplayEmptyUntilSupported,
-	"texture_agent_mutations":         ReplayEmptyUntilSupported,
+	"texture_agent_mutations":         ReplayEventProjection,
 	"texture_controller_checkpoints":  ReplayEmptyUntilSupported,
 	"texture_decisions":               ReplayEmptyUntilSupported,
 	"agent_evidence":                  ReplayEmptyUntilSupported,

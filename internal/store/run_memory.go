@@ -11,12 +11,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // AppendRunMemoryEntry appends a durable context entry to a run's ordered
 // memory log. Sequence numbers and parent links are assigned transactionally.
 func (s *Store) AppendRunMemoryEntry(ctx context.Context, entry types.RunMemoryEntry) (types.RunMemoryEntry, error) {
+	s.runMemoryMu.Lock()
+	defer s.runMemoryMu.Unlock()
 	if entry.RunID == "" {
 		return types.RunMemoryEntry{}, fmt.Errorf("append run memory: loop_id is required")
 	}
@@ -45,6 +48,46 @@ func (s *Store) AppendRunMemoryEntry(ctx context.Context, entry types.RunMemoryE
 	entry.FirstKeptEntryID = sanitizeStoreText(entry.FirstKeptEntryID)
 	entry.Reason = sanitizeStoreText(entry.Reason)
 	entry.Model = sanitizeStoreText(entry.Model)
+
+	if s.projectionTape != nil {
+		if entry.Seq <= 0 {
+			if err := s.db.QueryRowContext(ctx,
+				`SELECT COALESCE(MAX(seq), 0) + 1 FROM run_memory_entries WHERE loop_id = ?`,
+				entry.RunID,
+			).Scan(&entry.Seq); err != nil {
+				return types.RunMemoryEntry{}, fmt.Errorf("allocate projected run memory seq: %w", err)
+			}
+		}
+		if entry.ParentEntryID == "" {
+			var parentID string
+			err := s.db.QueryRowContext(ctx,
+				`SELECT entry_id FROM run_memory_entries WHERE loop_id = ? ORDER BY seq DESC LIMIT 1`,
+				entry.RunID,
+			).Scan(&parentID)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return types.RunMemoryEntry{}, fmt.Errorf("load projected run memory parent: %w", err)
+			}
+			if err == nil {
+				entry.ParentEntryID = parentID
+			}
+		}
+		body, err := json.Marshal(computerevent.RunMemoryEntryProjection{
+			EntryID: entry.EntryID, RunID: entry.RunID, OwnerID: entry.OwnerID, AgentID: entry.AgentID,
+			ParentEntryID: entry.ParentEntryID, Seq: entry.Seq, Kind: string(entry.Kind), Role: entry.Role,
+			MessageJSON: messageJSON, Summary: entry.Summary, FirstKeptEntryID: entry.FirstKeptEntryID,
+			TokensBefore: entry.TokensBefore, Reason: entry.Reason, Model: entry.Model,
+			DetailsJSON: sanitizeStoreText(string(detailsJSON)), CreatedAt: entry.CreatedAt.UTC().Format(time.RFC3339Nano),
+		})
+		if err != nil {
+			return types.RunMemoryEntry{}, fmt.Errorf("marshal projected run memory entry: %w", err)
+		}
+		if err := s.projectionTape.appendOps(ctx, []computerevent.ProjectionOp{{
+			Kind: computerevent.ProjectionOpRunMemoryEntry, CanonicalID: entry.EntryID, Body: body,
+		}}); err != nil {
+			return types.RunMemoryEntry{}, fmt.Errorf("append projected run memory entry: %w", err)
+		}
+		return entry, nil
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

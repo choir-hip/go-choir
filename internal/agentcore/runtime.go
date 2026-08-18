@@ -171,6 +171,9 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	}
 	if operations, err := selfdev.NewStore(s, s); err == nil {
 		rt.selfdevOperations = operations
+		if s != nil && s.ProjectionTapeBound() {
+			operations.BindProjectionSink(s)
+		}
 	}
 	return rt
 }

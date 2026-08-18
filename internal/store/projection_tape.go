@@ -36,6 +36,23 @@ func (s *Store) BindProjectionTape(computerID string, appender *computerevent.Co
 	return nil
 }
 
+// ProjectionTapeBound reports whether production mutation routing is active.
+// It lets dependent stores retain their direct-SQL test seam when no event
+// authority is configured.
+func (s *Store) ProjectionTapeBound() bool {
+	return s != nil && s.projectionTape != nil
+}
+
+// AppendProjectionOps is the only production escape hatch for non-OG
+// projection writers. It is intentionally unavailable until the event tape is
+// bound; unbound stores remain a test-only direct-SQL seam.
+func (s *Store) AppendProjectionOps(ctx context.Context, ops []computerevent.ProjectionOp) error {
+	if s == nil || s.projectionTape == nil {
+		return fmt.Errorf("store: projection tape is not bound")
+	}
+	return s.projectionTape.appendOps(ctx, ops)
+}
+
 func (t *projectionTape) interceptOG(ctx context.Context, objects []objectgraph.Object, edges []objectgraph.Edge) error {
 	if t == nil {
 		return fmt.Errorf("store: projection tape is not bound")
@@ -89,8 +106,8 @@ func (t *projectionTape) appendOps(ctx context.Context, ops []computerevent.Proj
 		return err
 	}
 	payload, err := json.Marshal(computerevent.ProjectionBatch{
-		Version:          computerevent.ProjectionBatchV1,
-		ProjectorVersion: computerevent.ProjectorVersionV1,
+		Version:          computerevent.ProjectionBatchV2,
+		ProjectorVersion: computerevent.ProjectorVersionV2,
 		ComputerID:       t.computerID,
 		EventID:          eventID,
 		Ops:              ops,

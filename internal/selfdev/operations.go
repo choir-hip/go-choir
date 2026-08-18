@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,7 +43,15 @@ type HeadReader interface {
 	Head(context.Context, string) (*computerevent.Head, error)
 }
 
+// ProjectionSink is the trusted event-tape seam for self-development state.
+// Production binds it to the VM Store; unbound stores remain a direct-SQL test
+// seam only.
+type ProjectionSink interface {
+	AppendProjectionOps(context.Context, []computerevent.ProjectionOp) error
+}
+
 type Operation struct {
+	IdempotencyKey         string   `json:"-"`
 	OperationID            string   `json:"operation_id"`
 	RequestCommitment      string   `json:"request_commitment"`
 	ComputerID             string   `json:"computer_id"`
@@ -111,9 +120,11 @@ type BaselineRequest struct {
 }
 
 type Store struct {
-	db    *sql.DB
-	heads HeadReader
-	now   func() time.Time
+	db         *sql.DB
+	heads      HeadReader
+	now        func() time.Time
+	projection ProjectionSink
+	writeMu    sync.Mutex
 }
 
 func NewStore(db DBProvider, heads HeadReader) (*Store, error) {
@@ -123,7 +134,18 @@ func NewStore(db DBProvider, heads HeadReader) (*Store, error) {
 	return &Store{db: db.DB(), heads: heads, now: func() time.Time { return time.Now().UTC() }}, nil
 }
 
+// BindProjectionSink routes all production operation/start-intent mutations to
+// event projection. It is intentionally separate from NewStore so tests can
+// exercise the store without constructing a computer event authority.
+func (s *Store) BindProjectionSink(sink ProjectionSink) {
+	if s != nil {
+		s.projection = sink
+	}
+}
+
 func (s *Store) BindStartIntent(ctx context.Context, computerID, idempotencyKey, requestCommitment string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	computerID = strings.TrimSpace(computerID)
 	idempotencyKey = strings.TrimSpace(idempotencyKey)
 	requestCommitment = strings.TrimSpace(requestCommitment)
@@ -131,21 +153,32 @@ func (s *Store) BindStartIntent(ctx context.Context, computerID, idempotencyKey,
 		return fmt.Errorf("self-development start intent: complete canonical binding is required")
 	}
 	now := s.now().UTC().Truncate(time.Microsecond)
-	_, insertErr := s.db.ExecContext(ctx, `INSERT INTO self_development_start_intents (computer_id, idempotency_key, request_commitment, created_at) VALUES (?, ?, ?, ?)`, computerID, idempotencyKey, requestCommitment, now)
 	var stored string
-	if err := s.db.QueryRowContext(ctx, `SELECT request_commitment FROM self_development_start_intents WHERE computer_id=? AND idempotency_key=?`, computerID, idempotencyKey).Scan(&stored); err != nil {
-		if insertErr != nil {
-			return fmt.Errorf("self-development start intent: persist: %w", insertErr)
+	err := s.db.QueryRowContext(ctx, `SELECT request_commitment FROM self_development_start_intents WHERE computer_id=? AND idempotency_key=?`, computerID, idempotencyKey).Scan(&stored)
+	if err == nil {
+		if stored != requestCommitment {
+			return fmt.Errorf("%w: start request commitment changed", ErrConflict)
 		}
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("self-development start intent: read: %w", err)
 	}
-	if stored != requestCommitment {
-		return fmt.Errorf("%w: start request commitment changed", ErrConflict)
+	if s.projection != nil {
+		return s.appendStartIntentProjection(ctx, computerevent.SelfDevelopmentStartIntentProjection{
+			ComputerID: computerID, IdempotencyKey: idempotencyKey,
+			RequestCommitment: requestCommitment, CreatedAt: now.Format(time.RFC3339Nano),
+		})
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO self_development_start_intents (computer_id, idempotency_key, request_commitment, created_at) VALUES (?, ?, ?, ?)`, computerID, idempotencyKey, requestCommitment, now); err != nil {
+		return fmt.Errorf("self-development start intent: persist: %w", err)
 	}
 	return nil
 }
 
 func (s *Store) Start(ctx context.Context, request StartRequest) (Operation, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	request.ComputerID = strings.TrimSpace(request.ComputerID)
 	request.IdempotencyKey = strings.TrimSpace(request.IdempotencyKey)
 	request.PromptArtifactRef = strings.TrimSpace(request.PromptArtifactRef)
@@ -187,10 +220,17 @@ func (s *Store) Start(ctx context.Context, request StartRequest) (Operation, err
 	}
 	now := s.now().UTC().Truncate(time.Microsecond)
 	operation := Operation{
-		OperationID: operationID, RequestCommitment: commitment, ComputerID: request.ComputerID,
+		IdempotencyKey: request.IdempotencyKey,
+		OperationID:    operationID, RequestCommitment: commitment, ComputerID: request.ComputerID,
 		TrajectoryID: trajectoryID, BaseHead: baseHead, PromptArtifactRef: request.PromptArtifactRef,
 		VerifierRefs: []string{}, DesiredHead: head.DesiredEventHead, EffectiveHead: head.EffectiveEventHead,
 		State: StateRequested, CreatedAt: now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
+	}
+	if s.projection != nil {
+		if err := s.appendOperationProjection(ctx, operation, ""); err != nil {
+			return Operation{}, fmt.Errorf("self-development operation: project: %w", err)
+		}
+		return operation, nil
 	}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO self_development_operations (operation_id, computer_id, idempotency_key, request_commitment, trajectory_id, base_head, prompt_artifact_ref, verifier_refs_json, desired_head, effective_head, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?)`, operation.OperationID, operation.ComputerID, request.IdempotencyKey, operation.RequestCommitment, operation.TrajectoryID, operation.BaseHead, operation.PromptArtifactRef, operation.DesiredHead, operation.EffectiveHead, operation.State, now, now)
 	if err != nil {
@@ -249,6 +289,8 @@ func (s *Store) ListByStates(ctx context.Context, computerID string, states ...s
 }
 
 func (s *Store) RecordAppliedBaseline(ctx context.Context, request BaselineRequest) (Operation, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	if request.ComputerID == "" || request.IdempotencyKey == "" || !computerevent.IsSHA256(request.EventHead) ||
 		!computerevent.IsSHA256(request.StateCommitment) || !computerevent.IsSHA256(request.ReleaseDigest) ||
 		request.CodeRef == "" || request.ArtifactProgramRef == "" || len(request.VerifierRefs) == 0 ||
@@ -270,7 +312,8 @@ func (s *Store) RecordAppliedBaseline(ctx context.Context, request BaselineReque
 	}
 	now := s.now().UTC().Truncate(time.Microsecond)
 	operation := Operation{
-		OperationID: "genesis-" + uuid.NewString(), RequestCommitment: request.StateCommitment, ComputerID: request.ComputerID,
+		IdempotencyKey: request.IdempotencyKey,
+		OperationID:    "genesis-" + uuid.NewString(), RequestCommitment: request.StateCommitment, ComputerID: request.ComputerID,
 		TrajectoryID: "trajectory-genesis-" + uuid.NewString(), BaseHead: request.EventHead,
 		PromptArtifactRef: request.CheckpointRef, BundleDigest: request.ReleaseDigest, ReleaseDigest: request.ReleaseDigest,
 		CodeRef: request.CodeRef, ArtifactProgramRef: request.ArtifactProgramRef, VerifierRefs: append([]string(nil), request.VerifierRefs...),
@@ -280,6 +323,12 @@ func (s *Store) RecordAppliedBaseline(ctx context.Context, request BaselineReque
 		State: StateApplied, CreatedAt: now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
 	}
 	verifiers, _ := json.Marshal(operation.VerifierRefs)
+	if s.projection != nil {
+		if err := s.appendOperationProjection(ctx, operation, ""); err != nil {
+			return Operation{}, err
+		}
+		return operation, nil
+	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO self_development_operations (operation_id, computer_id, idempotency_key, request_commitment, trajectory_id, base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref, verifier_refs_json, decision_actor, decision_event, desired_head, effective_head, materialization_receipt, checkpoint_ref, route_receipt, route_generation, state, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		operation.OperationID, operation.ComputerID, request.IdempotencyKey, operation.RequestCommitment, operation.TrajectoryID, operation.BaseHead, operation.PromptArtifactRef, operation.BundleDigest, operation.ReleaseDigest, operation.CodeRef, operation.ArtifactProgramRef, string(verifiers), operation.DecisionActor, operation.DecisionEvent, operation.DesiredHead, operation.EffectiveHead, operation.MaterializationReceipt, operation.CheckpointRef, operation.RouteReceipt, request.RouteGeneration, operation.State, now, now)
 	if err != nil {
@@ -289,6 +338,8 @@ func (s *Store) RecordAppliedBaseline(ctx context.Context, request BaselineReque
 }
 
 func (s *Store) StartRollback(ctx context.Context, request RollbackStartRequest) (Operation, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	request.ComputerID, request.IdempotencyKey = strings.TrimSpace(request.ComputerID), strings.TrimSpace(request.IdempotencyKey)
 	if request.ComputerID == "" || request.IdempotencyKey == "" || !computerevent.IsSHA256(request.RequestCommitment) || !computerevent.IsSHA256(request.RollbackEvent) ||
 		!computerevent.IsSHA256(request.CurrentDesired) || !computerevent.IsSHA256(request.CurrentEffective) || request.RouteGeneration == 0 ||
@@ -306,7 +357,8 @@ func (s *Store) StartRollback(ctx context.Context, request RollbackStartRequest)
 	}
 	now := s.now().UTC().Truncate(time.Microsecond)
 	operation := Operation{
-		OperationID: "rollback-" + uuid.NewString(), RequestCommitment: request.RequestCommitment, ComputerID: request.ComputerID,
+		IdempotencyKey: request.IdempotencyKey,
+		OperationID:    "rollback-" + uuid.NewString(), RequestCommitment: request.RequestCommitment, ComputerID: request.ComputerID,
 		TrajectoryID: "trajectory-rollback-" + uuid.NewString(), BaseHead: request.Target.EffectiveHead, PromptArtifactRef: request.Target.CheckpointRef,
 		BundleDigest: request.Target.BundleDigest, ReleaseDigest: request.Target.ReleaseDigest,
 		CodeRef: request.Target.CodeRef, ArtifactProgramRef: request.Target.ArtifactProgramRef,
@@ -318,6 +370,12 @@ func (s *Store) StartRollback(ctx context.Context, request RollbackStartRequest)
 		CreatedAt: now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
 	}
 	verifiers, _ := json.Marshal(operation.VerifierRefs)
+	if s.projection != nil {
+		if err := s.appendOperationProjection(ctx, operation, ""); err != nil {
+			return Operation{}, err
+		}
+		return operation, nil
+	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO self_development_operations (operation_id, computer_id, idempotency_key, request_commitment, trajectory_id, base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref, verifier_refs_json, decision_actor, decision_event, desired_head, effective_head, materialization_receipt, checkpoint_ref, route_receipt, route_generation, state, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		operation.OperationID, operation.ComputerID, request.IdempotencyKey, operation.RequestCommitment, operation.TrajectoryID, operation.BaseHead, operation.PromptArtifactRef, operation.BundleDigest, operation.ReleaseDigest, operation.CodeRef, operation.ArtifactProgramRef, string(verifiers), operation.DecisionActor, operation.DecisionEvent, operation.DesiredHead, operation.EffectiveHead, operation.MaterializationReceipt, operation.CheckpointRef, operation.RouteReceipt, request.RouteGeneration, operation.State, now, now)
 	if err != nil {
@@ -330,8 +388,31 @@ func (s *Store) StartRollback(ctx context.Context, request RollbackStartRequest)
 }
 
 func (s *Store) Transition(ctx context.Context, computerID, operationID, expectedState, nextState string, mutate func(*Operation) error) (Operation, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	if !allowedTransition(expectedState, nextState) {
 		return Operation{}, fmt.Errorf("%w: %s -> %s", ErrInvalidTransition, expectedState, nextState)
+	}
+
+	if s.projection != nil {
+		operation, err := s.Get(ctx, strings.TrimSpace(computerID), strings.TrimSpace(operationID))
+		if err != nil {
+			return Operation{}, err
+		}
+		if operation.State != expectedState {
+			return Operation{}, fmt.Errorf("%w: state is %s, expected %s", ErrConflict, operation.State, expectedState)
+		}
+		if mutate != nil {
+			if err := mutate(&operation); err != nil {
+				return Operation{}, err
+			}
+		}
+		operation.State = nextState
+		operation.UpdatedAt = s.now().UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano)
+		if err := s.appendOperationProjection(ctx, operation, expectedState); err != nil {
+			return Operation{}, err
+		}
+		return operation, nil
 	}
 
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
@@ -379,7 +460,60 @@ func (s *Store) byIdempotency(ctx context.Context, computerID, idempotencyKey st
 	return operation, err == nil, err
 }
 
-const operationSelect = `SELECT operation_id, request_commitment, computer_id, trajectory_id, capsule_id, base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref, verifier_refs_json, decision_actor, decision_event, decision_receipt, desired_head, effective_head, materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt, mode_receipt, lifecycle_receipt, state, terminal_error, created_at, updated_at FROM self_development_operations`
+func (s *Store) appendStartIntentProjection(ctx context.Context, intent computerevent.SelfDevelopmentStartIntentProjection) error {
+	body, err := json.Marshal(intent)
+	if err != nil {
+		return fmt.Errorf("marshal start intent projection: %w", err)
+	}
+	if err := s.projection.AppendProjectionOps(ctx, []computerevent.ProjectionOp{{
+		Kind:        computerevent.ProjectionOpSelfDevelopmentStartIntent,
+		CanonicalID: intent.ComputerID + "\x00" + intent.IdempotencyKey,
+		Body:        body,
+	}}); err != nil {
+		return fmt.Errorf("append start intent projection: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) appendOperationProjection(ctx context.Context, operation Operation, expectedState string) error {
+	verifiers := operation.VerifierRefs
+	if verifiers == nil {
+		verifiers = []string{}
+	}
+	verifiersJSON, err := json.Marshal(verifiers)
+	if err != nil {
+		return fmt.Errorf("marshal operation verifier refs: %w", err)
+	}
+	body, err := json.Marshal(computerevent.SelfDevelopmentOperationProjection{
+		OperationID: operation.OperationID, IdempotencyKey: operation.IdempotencyKey,
+		RequestCommitment: operation.RequestCommitment, ComputerID: operation.ComputerID,
+		TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID, BaseHead: operation.BaseHead,
+		PromptArtifactRef: operation.PromptArtifactRef, BundleDigest: operation.BundleDigest,
+		ReleaseDigest: operation.ReleaseDigest, CodeRef: operation.CodeRef,
+		ArtifactProgramRef: operation.ArtifactProgramRef, VerifierRefsJSON: string(verifiersJSON),
+		DecisionActor: operation.DecisionActor, DecisionEvent: operation.DecisionEvent,
+		DecisionReceipt: operation.DecisionReceipt, DesiredHead: operation.DesiredHead,
+		EffectiveHead: operation.EffectiveHead, MaterializationReceipt: operation.MaterializationReceipt,
+		CheckpointRef: operation.CheckpointRef, RouteCertificate: operation.RouteCertificate,
+		RouteGeneration: operation.RouteGeneration, RouteReceipt: operation.RouteReceipt,
+		ModeReceipt: operation.ModeReceipt, LifecycleReceipt: operation.LifecycleReceipt,
+		State: operation.State, TerminalError: operation.TerminalError,
+		CreatedAt: operation.CreatedAt, UpdatedAt: operation.UpdatedAt, ExpectedState: expectedState,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal operation projection: %w", err)
+	}
+	if err := s.projection.AppendProjectionOps(ctx, []computerevent.ProjectionOp{{
+		Kind:        computerevent.ProjectionOpSelfDevelopmentOperation,
+		CanonicalID: operation.OperationID,
+		Body:        body,
+	}}); err != nil {
+		return fmt.Errorf("append operation projection: %w", err)
+	}
+	return nil
+}
+
+const operationSelect = `SELECT operation_id, idempotency_key, request_commitment, computer_id, trajectory_id, capsule_id, base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref, verifier_refs_json, decision_actor, decision_event, decision_receipt, desired_head, effective_head, materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt, mode_receipt, lifecycle_receipt, state, terminal_error, created_at, updated_at FROM self_development_operations`
 
 type rowScanner interface{ Scan(...any) error }
 
@@ -388,7 +522,7 @@ func scanOperation(row rowScanner) (Operation, error) {
 	var verifiers string
 	var routeGeneration sql.NullInt64
 	var createdAt, updatedAt time.Time
-	err := row.Scan(&operation.OperationID, &operation.RequestCommitment, &operation.ComputerID, &operation.TrajectoryID, &operation.CapsuleID, &operation.BaseHead, &operation.PromptArtifactRef, &operation.BundleDigest, &operation.ReleaseDigest, &operation.CodeRef, &operation.ArtifactProgramRef, &verifiers, &operation.DecisionActor, &operation.DecisionEvent, &operation.DecisionReceipt, &operation.DesiredHead, &operation.EffectiveHead, &operation.MaterializationReceipt, &operation.CheckpointRef, &operation.RouteCertificate, &routeGeneration, &operation.RouteReceipt, &operation.ModeReceipt, &operation.LifecycleReceipt, &operation.State, &operation.TerminalError, &createdAt, &updatedAt)
+	err := row.Scan(&operation.OperationID, &operation.IdempotencyKey, &operation.RequestCommitment, &operation.ComputerID, &operation.TrajectoryID, &operation.CapsuleID, &operation.BaseHead, &operation.PromptArtifactRef, &operation.BundleDigest, &operation.ReleaseDigest, &operation.CodeRef, &operation.ArtifactProgramRef, &verifiers, &operation.DecisionActor, &operation.DecisionEvent, &operation.DecisionReceipt, &operation.DesiredHead, &operation.EffectiveHead, &operation.MaterializationReceipt, &operation.CheckpointRef, &operation.RouteCertificate, &routeGeneration, &operation.RouteReceipt, &operation.ModeReceipt, &operation.LifecycleReceipt, &operation.State, &operation.TerminalError, &createdAt, &updatedAt)
 	if err != nil {
 		return Operation{}, err
 	}
