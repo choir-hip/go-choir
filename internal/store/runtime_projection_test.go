@@ -128,6 +128,67 @@ func TestProjectBatchAppliesRuntimeControlRowsAndCASGuards(t *testing.T) {
 	}
 }
 
+func TestFinalizeBatchRejectsMissingLegacyTextureTransition(t *testing.T) {
+	ctx := context.Background()
+	productStore := openProjectStore(t)
+	computerID := "computer-missing-legacy-texture"
+	prepareGenesis(t, productStore, computerID, "genesis-missing-legacy-texture")
+	head, err := productStore.Head(ctx, computerID)
+	if err != nil || head == nil {
+		t.Fatalf("head: %v %#v", err, head)
+	}
+	mutation := computerevent.TextureAgentMutationProjection{
+		DocID: "doc-missing-legacy", RunID: "run-missing-legacy", OwnerID: "owner-legacy",
+		State: "completed", ExpectedStates: []string{"sleeping"}, CreatedAt: "2026-08-18T07:20:00Z",
+	}
+	batch := computerevent.ProjectionBatch{
+		Version: computerevent.ProjectionBatchV2, ProjectorVersion: computerevent.ProjectorVersionV2,
+		ComputerID: computerID, Ops: []computerevent.ProjectionOp{{
+			Kind: computerevent.ProjectionOpTextureAgentMutation, CanonicalID: mutation.RunID, Body: mustJSON(t, mutation),
+		}},
+	}
+	event, digest := prepareProjectionEvent(t, productStore, *head, mustEventID(t), "missing-legacy-texture-transition")
+	batch.EventID, batch.EventDigest = event.EventID, digest
+	if err := productStore.FinalizeBatch(ctx, computerID, digest, signedReceipt(t, computerID, digest, event.Sequence), &batch); !errors.Is(err, computerevent.ErrProjectionMismatch) {
+		t.Fatalf("missing legacy Texture transition error=%v, want projection mismatch", err)
+	}
+}
+
+func TestFinalizeReplayBatchSeedsMissingLegacyTextureTransition(t *testing.T) {
+	ctx := context.Background()
+	productStore := openProjectStore(t)
+	computerID := "computer-replay-legacy-texture"
+	prepareGenesis(t, productStore, computerID, "genesis-replay-legacy-texture")
+	head, err := productStore.Head(ctx, computerID)
+	if err != nil || head == nil {
+		t.Fatalf("head: %v %#v", err, head)
+	}
+	mutation := computerevent.TextureAgentMutationProjection{
+		DocID: "doc-replay-legacy", RunID: "run-replay-legacy", OwnerID: "owner-legacy",
+		State: "completed", ExpectedStates: []string{"sleeping"}, CreatedAt: "2026-08-18T07:21:00Z",
+	}
+	batch := computerevent.ProjectionBatch{
+		Version: computerevent.ProjectionBatchV2, ProjectorVersion: computerevent.ProjectorVersionV2,
+		ComputerID: computerID, Ops: []computerevent.ProjectionOp{{
+			Kind: computerevent.ProjectionOpTextureAgentMutation, CanonicalID: mutation.RunID, Body: mustJSON(t, mutation),
+		}},
+	}
+	event, digest := prepareProjectionEvent(t, productStore, *head, mustEventID(t), "replay-legacy-texture-transition")
+	batch.EventID, batch.EventDigest = event.EventID, digest
+	if err := productStore.FinalizeReplayBatch(ctx, computerID, digest, signedReceipt(t, computerID, digest, event.Sequence), &batch); err != nil {
+		t.Fatal(err)
+	}
+	var state, storedComputerID string
+	if err := productStore.db.QueryRowContext(ctx,
+		`SELECT state, computer_id FROM texture_agent_mutations WHERE owner_id=? AND computer_id=? AND doc_id=? AND loop_id=?`,
+		mutation.OwnerID, mutation.ComputerID, mutation.DocID, mutation.RunID).Scan(&state, &storedComputerID); err != nil {
+		t.Fatal(err)
+	}
+	if state != mutation.State || storedComputerID != "" {
+		t.Fatalf("seeded legacy Texture mutation state=%q computer_id=%q", state, storedComputerID)
+	}
+}
+
 func TestProjectBatchRejectsMissingSelfDevelopmentTransition(t *testing.T) {
 	ctx := context.Background()
 	productStore := openProjectStore(t)

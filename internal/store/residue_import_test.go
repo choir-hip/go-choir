@@ -243,6 +243,29 @@ func TestImportResidueSnapshotCoMovesRuntimeResidueForOwner(t *testing.T) {
 	assertCount(t, productStore, `SELECT COUNT(*) FROM texture_agent_mutations WHERE loop_id='run-texture-other'`, 1)
 }
 
+func TestImportResidueSnapshotIncludesOwnerLegacyTextureMutation(t *testing.T) {
+	ctx := context.Background()
+	productStore := openProjectStore(t)
+	computerID := "computer-residue-legacy-texture"
+	prepareGenesis(t, productStore, computerID, "genesis-residue-legacy-texture")
+	now := time.Date(2026, 8, 18, 7, 15, 0, 0, time.UTC)
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO texture_agent_mutations (doc_id, loop_id, owner_id, computer_id, state, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		"doc-residue-legacy", "run-texture-legacy", "owner-legacy", "", "sleeping", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := bindResidueTape(t, productStore, computerID); err != nil {
+		t.Fatal(err)
+	}
+	result, err := productStore.ImportResidueSnapshotForOwner(ctx, "owner-legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Appended || result.TextureMutations != 1 {
+		t.Fatalf("legacy Texture residue result=%+v", result)
+	}
+}
+
 func residueDesktopState(windowID string) types.DesktopState {
 	return types.DesktopState{
 		OwnerID: "owner-1",

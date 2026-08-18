@@ -472,6 +472,54 @@ func TestAppenderReconstructThroughStopsAtTarget(t *testing.T) {
 	}
 }
 
+func TestAppenderReplayUsesReplayBatchFinalizer(t *testing.T) {
+	probe := &replayBatchProjectionProbe{}
+	appender := &ComputerEventAppender{
+		computerID:       testComputerID,
+		projection:       probe,
+		replayProjection: true,
+	}
+	receipt := Receipt{
+		ReceiptKind: "EventHeadReceipt",
+		KindFields:  map[string]any{"event_digest": testDigestA},
+	}
+	if err := appender.finalizeProjection(context.Background(), Event{EventKind: EventArtifactProduced}, testDigestA, receipt); err != nil {
+		t.Fatal(err)
+	}
+	if !probe.replayFinalized || probe.liveFinalized {
+		t.Fatalf("replay finalizer usage replay=%v live=%v", probe.replayFinalized, probe.liveFinalized)
+	}
+}
+
+type replayBatchProjectionProbe struct {
+	replayFinalized bool
+	liveFinalized   bool
+}
+
+func (p *replayBatchProjectionProbe) Head(context.Context, string) (*Head, error) {
+	return nil, nil
+}
+func (p *replayBatchProjectionProbe) Prepare(context.Context, CASRequest) error {
+	return nil
+}
+func (p *replayBatchProjectionProbe) Prepared(context.Context, string) ([]CASRequest, error) {
+	return nil, nil
+}
+func (p *replayBatchProjectionProbe) Finalize(context.Context, string, string, Receipt) error {
+	return nil
+}
+func (p *replayBatchProjectionProbe) DiscardPrepared(context.Context, string, string) error {
+	return nil
+}
+func (p *replayBatchProjectionProbe) FinalizeBatch(context.Context, string, string, Receipt, *ProjectionBatch) error {
+	p.liveFinalized = true
+	return nil
+}
+func (p *replayBatchProjectionProbe) FinalizeReplayBatch(context.Context, string, string, Receipt, *ProjectionBatch) error {
+	p.replayFinalized = true
+	return nil
+}
+
 func TestEventRejectsNonCanonicalArtifactReferences(t *testing.T) {
 	event := testEvent(t, nil, EventArtifactProduced)
 	event.InputArtifactRefs = []string{testDigestA}

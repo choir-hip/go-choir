@@ -379,7 +379,7 @@ func (s *Store) snapshotResidueRuntime(ctx context.Context, ownerID, computerID 
 	_ = rows.Close()
 
 	mutationQuery := `SELECT doc_id, loop_id, owner_id, computer_id, state, scheduled_message_seq, revision_id, created_at, completed_at
-		FROM texture_agent_mutations WHERE computer_id=?`
+		FROM texture_agent_mutations WHERE (computer_id=? OR computer_id='')`
 	mutationArgs := []any{strings.TrimSpace(computerID)}
 	if strings.TrimSpace(ownerID) != "" {
 		mutationQuery += ` AND owner_id=?`

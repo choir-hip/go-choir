@@ -73,6 +73,17 @@ func (s *Store) Finalize(ctx context.Context, computerID, eventDigest string, re
 }
 
 func (s *Store) FinalizeBatch(ctx context.Context, computerID, eventDigest string, receipt computerevent.Receipt, batch *computerevent.ProjectionBatch) error {
+	return s.finalizeBatch(ctx, computerID, eventDigest, receipt, batch, false)
+}
+
+// FinalizeReplayBatch applies a resolved projection while reconstructing a
+// canonical tape into a disposable store. It is the only path allowed to use
+// legacy-row compatibility; live finalization remains strict.
+func (s *Store) FinalizeReplayBatch(ctx context.Context, computerID, eventDigest string, receipt computerevent.Receipt, batch *computerevent.ProjectionBatch) error {
+	return s.finalizeBatch(ctx, computerID, eventDigest, receipt, batch, true)
+}
+
+func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest string, receipt computerevent.Receipt, batch *computerevent.ProjectionBatch, allowLegacyTextureBootstrap bool) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("computer event projection: nil store")
 	}
@@ -146,8 +157,14 @@ func (s *Store) FinalizeBatch(ctx context.Context, computerID, eventDigest strin
 		return fmt.Errorf("computer event projection: finalize CAS lost")
 	}
 	if batch != nil {
-		if err := projectBatch(ctx, tx, *batch); err != nil {
-			return err
+		var projectErr error
+		if allowLegacyTextureBootstrap {
+			projectErr = projectBatchForReplay(ctx, tx, *batch)
+		} else {
+			projectErr = projectBatch(ctx, tx, *batch)
+		}
+		if projectErr != nil {
+			return projectErr
 		}
 	}
 	if err := tx.Commit(); err != nil {

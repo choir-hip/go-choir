@@ -45,6 +45,13 @@ type BatchProjectionStore interface {
 	FinalizeBatch(ctx context.Context, computerID, eventDigest string, receipt Receipt, batch *ProjectionBatch) error
 }
 
+// ReplayBatchProjectionStore is the explicit dry-run seam for projection
+// compatibility that is safe only while reconstructing a canonical tape.
+// Live finalization must continue through BatchProjectionStore.
+type ReplayBatchProjectionStore interface {
+	FinalizeReplayBatch(ctx context.Context, computerID, eventDigest string, receipt Receipt, batch *ProjectionBatch) error
+}
+
 type CASRequest struct {
 	Event                    Event           `json:"event"`
 	EventDigest              string          `json:"event_digest"`
@@ -79,15 +86,16 @@ type ReceiptVerifier interface {
 // operations; agents, capsules, reducers, vmctl, and route projections never
 // receive this object or its append capability.
 type ComputerEventAppender struct {
-	computerID   string
-	pins         ArtifactPinner
-	projection   ProjectionStore
-	cas          HeadCAS
-	verifier     ReceiptVerifier
-	reader       ArtifactReader
-	cipher       *PrivateArtifactCipher
-	livePayloads map[string][]byte
-	mu           sync.Mutex
+	computerID       string
+	pins             ArtifactPinner
+	projection       ProjectionStore
+	cas              HeadCAS
+	verifier         ReceiptVerifier
+	reader           ArtifactReader
+	cipher           *PrivateArtifactCipher
+	livePayloads     map[string][]byte
+	replayProjection bool
+	mu               sync.Mutex
 }
 
 func NewComputerEventAppender(computerID string, pins ArtifactPinner, projection ProjectionStore, cas HeadCAS, verifier ReceiptVerifier) (*ComputerEventAppender, error) {
@@ -609,6 +617,11 @@ func (a *ComputerEventAppender) finalizeProjection(ctx context.Context, event Ev
 	if err != nil {
 		return err
 	}
+	if a.replayProjection {
+		if applier, ok := a.projection.(ReplayBatchProjectionStore); ok {
+			return applier.FinalizeReplayBatch(ctx, a.computerID, digest, receipt, batch)
+		}
+	}
 	if applier, ok := a.projection.(BatchProjectionStore); ok {
 		return applier.FinalizeBatch(ctx, a.computerID, digest, receipt, batch)
 	}
@@ -691,13 +704,14 @@ func (a *ComputerEventAppender) replayInto(ctx context.Context, projection Proje
 		return fmt.Errorf("computer event appender: CAS does not expose event replay")
 	}
 	dryRun := &ComputerEventAppender{
-		computerID: a.computerID,
-		pins:       a.pins,
-		projection: projection,
-		cas:        a.cas,
-		verifier:   a.verifier,
-		reader:     a.reader,
-		cipher:     a.cipher,
+		computerID:       a.computerID,
+		pins:             a.pins,
+		projection:       projection,
+		cas:              a.cas,
+		verifier:         a.verifier,
+		reader:           a.reader,
+		cipher:           a.cipher,
+		replayProjection: true,
 	}
 	if targetHead == "" {
 		return dryRun.Reconstruct(ctx, source)
