@@ -24,6 +24,10 @@ const (
 	// EventReplayMaxResponseBytes rejects a single oversized replay page instead
 	// of allowing a transport cap to turn it into a misleading EOF.
 	EventReplayMaxResponseBytes = 8 << 20
+	// EventPayloadMaxResponseBytes bounds one content-addressed artifact envelope.
+	// Projection batches can be larger than a replay page, but the client must
+	// still fail closed instead of accepting an unbounded response.
+	EventPayloadMaxResponseBytes = 64 << 20
 )
 
 type EventKind string

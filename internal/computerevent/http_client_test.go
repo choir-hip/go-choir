@@ -41,6 +41,25 @@ func TestHTTPClientFetchPayloadReadsOversizedPayloadEnvelope(t *testing.T) {
 	}
 }
 
+func TestHTTPClientFetchPayloadRejectsOversizedEnvelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Length", strconv.Itoa(EventPayloadMaxResponseBytes+1))
+	}))
+	defer server.Close()
+
+	client, err := NewHTTPClient(server.URL, server.Client(), func(context.Context) (string, error) {
+		return "test-token", nil
+	}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.FetchPayload(context.Background(), "computer-payload", strings.Repeat("a", 64))
+	if err == nil || !strings.Contains(err.Error(), "response exceeds 67108864 bytes") {
+		t.Fatalf("oversized payload response error = %v", err)
+	}
+}
+
 func TestHTTPClientEventsReadsOversizedPagesAndProgresses(t *testing.T) {
 	records := make([]DurableEvent, EventReplayPageSize+1)
 	for index := range records {

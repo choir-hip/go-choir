@@ -145,7 +145,7 @@ func (c *HTTPClient) FetchPayload(ctx context.Context, computerID, artifactDiges
 	var response struct {
 		PayloadBase64 string `json:"payload_base64"`
 	}
-	_, err := c.doWithResponseLimit(ctx, http.MethodGet, "/internal/computers/events/payload?"+query.Encode(), nil, &response, EventReplayMaxResponseBytes)
+	_, err := c.doWithResponseLimit(ctx, http.MethodGet, "/internal/computers/events/payload?"+query.Encode(), nil, &response, EventPayloadMaxResponseBytes)
 	if err != nil {
 		return nil, err
 	}
