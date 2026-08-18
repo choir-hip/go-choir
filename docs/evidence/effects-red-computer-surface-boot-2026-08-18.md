@@ -334,3 +334,21 @@ The new regression covers explicit rejection above the payload-specific limit; t
 **Payload-bound repair heresy delta:** discovered — the first 8 MiB shared bound was too small for the admitted residue envelope; introduced — a separate finite 64 MiB payload budget; repaired — the 8 MiB payload/page coupling that blocked the refreshed guest before JSON decode. **Payload-bound repair conjecture delta:** the payload transport is locally bounded and tested; staging replay eligibility remains unproven until deployment identity, guest refresh, and a fresh replay read complete.
 
 **Rollback:** revert `8754884d`; no product-state rollback has been performed, and the retained computer remains at epoch 306 with effects OFF.
+
+## Post-refresh payload repair timeout observation
+
+The payload-bound source repair landed in workflow `32146221851`; all required CI gates and the Node B deploy completed successfully. Staging `/health` at `2026-08-18T14:25:29Z` reports commit `7ae01fa151e9a6a34c3ef1395026724762f4c8f4`, which contains source repair `8754884d`, deployed at `2026-08-18T14:21:08Z`.
+
+The retained computer was owner-refreshed once with idempotency key `replay-payload-budget-refresh-20260818`. Lifecycle receipt `01a01541-586e-71f3-b4f8-050ad5899f65` advanced the same active computer from realization epoch `306` to `307` and left it active. The owner-authorized replay-completeness read then ran for approximately 112 seconds and returned HTTP 502:
+
+```text
+replay completeness authority unavailable
+```
+
+The prior `response exceeds 8388608 bytes` failure did not recur, so the refreshed guest passed the 8 MiB payload/page coupling and entered the replay path. The read instead crossed the dedicated `PROXY_REPLAY_COMPLETENESS_TIMEOUT=110s` route budget. This is a new route-budget observation, not replay acceptance; the exact backend phase remains unmeasured at the owner surface. Do not blind-retry, bind a checkpoint, rematerialize, restore, retry self-development, self-promote, qualified-consensus, or send mail.
+
+**Replay payload-route timeout heresy delta:** discovered — after the payload-specific bound repair, the owner replay route exceeds its 110-second proxy budget; introduced — none claimed; repaired — the prior 8 MiB payload rejection. **Replay payload-route timeout conjecture delta:** payload transport now passes the previous bound, while replay eligibility remains blocked by a route budget whose backend phase is not yet observed.
+
+**Evidence:** workflow `https://github.com/choir-hip/go-choir/actions/runs/32146221851`, staging `/health`, refresh receipt `01a01541-586e-71f3-b4f8-050ad5899f65`, retained epoch `307`, and the replay HTTP 502 above.
+
+**Rollback:** no product-state rollback; retain epoch `307` and effects OFF while the route budget is diagnosed through a separate problem-first landing loop.
