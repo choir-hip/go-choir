@@ -87,7 +87,7 @@ Until then, no runtime alias work is authorized.
 
 - `./scripts/doccheck --mode full --json /tmp/choir-doccheck-alias-2.json --report /tmp/choir-doccheck-alias-2.md` completed with `0 warnings` and `41 info findings` across `407 docs`.
 - `git diff --check -- docs/definitions/choir-supervised-self-development-effects-2026-08-11.md docs/problems/effects-red-replay-texture-alias-authority-2026-08-18.md docs/mission-graph.yaml docs/doc-authority-manifest.yaml` passed with no output.
-- Independent final consensus review: five agents completed; all accepting, with no blocking correction. The review verified receipt placement, `now` state, graph R5 overlay, manifest witness, and source claims.
+- Post-correction review: four substantive agents accepted with no blocker; a fifth runner produced no verdict because read-only approval was unavailable. The substantive reviews verified receipt placement, `now` state, graph R5 overlay, manifest witness, and source claims.
 - Worktree classification: five intentional documentation paths only - three modified tracked docs, the new problem receipt, and this local report. No Go/runtime/generated scratch path is present.
 - Docs-only landing: commit `fb4bcb0378a17a07f8831011b2722aee22d68ea6` is on `origin/main`; CI run `32194076180` and Docs Truth Check job `95894423488` succeeded. Staging deploy was skipped because no runtime path changed.
 
@@ -101,4 +101,4 @@ Rollback is a documentation revert. No product state, VM-local projection, or ev
 
 **Conjecture delta:** the narrow run-memory provenance repair is confirmed at sequence `3342`; the whole-computer restore conjecture remains unproven until alias authority is settled and a reconstructible implementation is independently verified.
 
-**Next realism axis:** owner-ratified alias identity and scope, then restart-durable projection/import fidelity. Do not treat a read-only alias diagnostic as implementation authorization.
+**Next realism axis:** owner-ratified alias identity and scope, then restart-durable projection/import fidelity. Read-only diagnostics do not authorize implementation.
