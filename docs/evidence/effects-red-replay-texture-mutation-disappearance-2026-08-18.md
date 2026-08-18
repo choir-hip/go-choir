@@ -52,3 +52,25 @@ repaired — none by this receipt.
 **Rollback:** docs-only problem receipt; no product-state rollback. If the
 source repair must be reverted later, use `revert 750a145fcdd9663517b776fde1ce9c83e5bd7f5b` only through a separately authorized
 problem-first repair decision.
+
+
+## Follow-up diagnosis: the repair prerequisite was not exercised
+
+Source inspection after the failed proof confirms the deployed repair's
+compatibility branch is reachable only during replay and the empty-scope legacy
+row is supplied by the owner-scoped `ImportResidueSnapshotForOwner` path. The
+retained computer was refreshed and replayed directly; no owner-authorized
+`computer import-residue-snapshot` receipt was produced after commit `750a145f`.
+Therefore the failed read does not yet distinguish an incomplete repair from an
+unexercised residue prerequisite.
+
+The next safe probe is the existing product path, not SQL mutation: append one
+owner- and computer-scoped residue snapshot, capture its durable receipt, then
+rerun replay completeness. The snapshot is current state as of now, not
+fabricated history; it does not reclassify unsupported tables or authorize
+checkpoint, restore, retry, promotion, qualified consensus, or effects. If the
+snapshot itself fails, document that failure before changing source.
+
+**Follow-up heresy delta:** discovered — the source repair acceptance probe
+skipped its required owner-authorized residue import; introduced — none;
+repaired — none yet.
