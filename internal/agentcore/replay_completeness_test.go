@@ -80,12 +80,12 @@ func (emptyReplayAuthority) VerifyEventHeadReceipt(context.Context, computereven
 
 func TestCompareReplayRunMemoryClassifiesProjectionDrift(t *testing.T) {
 	live := []choirstore.RunMemoryEntryFingerprint{
-		{EntryID: "entry-a", RowDigest: "row-a-live", FieldDigests: map[string]string{"summary": "summary-a-live"}},
-		{EntryID: "entry-b", RowDigest: "row-b-live", FieldDigests: map[string]string{"summary": "summary-b-live"}},
+		{EntryID: "entry-a", RunID: "run-a", OwnerID: "owner-a", AgentID: "agent-a", Seq: 4, CreatedAt: "2026-08-18T00:00:00Z", RowDigest: "row-a-live", FieldDigests: map[string]string{"summary": "summary-a-live"}},
+		{EntryID: "entry-b", RunID: "run-b", OwnerID: "owner-b", AgentID: "agent-b", Seq: 7, CreatedAt: "2026-08-19T00:00:00Z", RowDigest: "row-b-live", FieldDigests: map[string]string{"summary": "summary-b-live"}},
 	}
 	replay := []choirstore.RunMemoryEntryFingerprint{
-		{EntryID: "entry-a", RowDigest: "row-a-replay", FieldDigests: map[string]string{"summary": "summary-a-replay"}},
-		{EntryID: "entry-c", RowDigest: "row-c-replay", FieldDigests: map[string]string{"summary": "summary-c-replay"}},
+		{EntryID: "entry-a", RunID: "run-a", OwnerID: "owner-a", AgentID: "agent-a", Seq: 4, CreatedAt: "2026-08-18T00:00:00Z", RowDigest: "row-a-replay", FieldDigests: map[string]string{"summary": "summary-a-replay"}},
+		{EntryID: "entry-c", RunID: "run-c", OwnerID: "owner-c", AgentID: "agent-c", Seq: 9, CreatedAt: "2026-08-20T00:00:00Z", RowDigest: "row-c-replay", FieldDigests: map[string]string{"summary": "summary-c-replay"}},
 	}
 	got := compareReplayRunMemory(live, replay)
 	if got.LiveCount != 2 || got.ReplayCount != 2 || got.LiveOnlyCount != 1 || got.ReplayOnlyCount != 1 || got.DifferentCount != 1 {
@@ -97,8 +97,11 @@ func TestCompareReplayRunMemoryClassifiesProjectionDrift(t *testing.T) {
 	if got.Samples[0].EntryID != "entry-a" || got.Samples[0].Kind != "different" || len(got.Samples[0].DifferentFields) != 1 || got.Samples[0].DifferentFields[0] != "summary" {
 		t.Fatalf("different sample = %#v", got.Samples[0])
 	}
-	if got.Samples[1].EntryID != "entry-b" || got.Samples[1].Kind != "live_only" || got.Samples[2].EntryID != "entry-c" || got.Samples[2].Kind != "replay_only" {
+	if got.Samples[1].EntryID != "entry-b" || got.Samples[1].Kind != "live_only" || got.Samples[1].RunID != "run-b" || got.Samples[1].Seq != 7 || got.Samples[2].EntryID != "entry-c" || got.Samples[2].Kind != "replay_only" {
 		t.Fatalf("presence samples = %#v", got.Samples)
+	}
+	if got.LiveOnlyByRun["run-b"] != 1 || got.LiveOnlyByOwner["owner-b"] != 1 || got.LiveOnlyByAgent["agent-b"] != 1 || got.LiveOnlySeqMin != 7 || got.LiveOnlySeqMax != 7 || got.LiveOnlyCreatedMin != "2026-08-19T00:00:00Z" || got.LiveOnlyCreatedMax != "2026-08-19T00:00:00Z" {
+		t.Fatalf("live-only lineage summary = %#v", got)
 	}
 }
 

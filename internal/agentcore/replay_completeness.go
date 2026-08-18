@@ -43,17 +43,34 @@ type ReplayCompletenessReport struct {
 // without returning provider-facing content. Samples are bounded because the
 // full equivalence report already carries table-level hashes.
 type ReplayRunMemoryComparison struct {
-	LiveCount       int                         `json:"live_count"`
-	ReplayCount     int                         `json:"replay_count"`
-	LiveOnlyCount   int                         `json:"live_only_count"`
-	ReplayOnlyCount int                         `json:"replay_only_count"`
-	DifferentCount  int                         `json:"different_count"`
-	Samples         []ReplayRunMemoryDifference `json:"samples,omitempty"`
+	LiveCount          int                         `json:"live_count"`
+	ReplayCount        int                         `json:"replay_count"`
+	LiveOnlyCount      int                         `json:"live_only_count"`
+	ReplayOnlyCount    int                         `json:"replay_only_count"`
+	DifferentCount     int                         `json:"different_count"`
+	LiveOnlyByRun      map[string]int              `json:"live_only_by_run,omitempty"`
+	LiveOnlyByOwner    map[string]int              `json:"live_only_by_owner,omitempty"`
+	LiveOnlyByAgent    map[string]int              `json:"live_only_by_agent,omitempty"`
+	LiveOnlySeqMin     int64                       `json:"live_only_seq_min,omitempty"`
+	LiveOnlySeqMax     int64                       `json:"live_only_seq_max,omitempty"`
+	LiveOnlyCreatedMin string                      `json:"live_only_created_min,omitempty"`
+	LiveOnlyCreatedMax string                      `json:"live_only_created_max,omitempty"`
+	Samples            []ReplayRunMemoryDifference `json:"samples,omitempty"`
 }
 
 type ReplayRunMemoryDifference struct {
 	Kind            string   `json:"kind"`
 	EntryID         string   `json:"entry_id"`
+	RunID           string   `json:"loop_id,omitempty"`
+	OwnerID         string   `json:"owner_id,omitempty"`
+	AgentID         string   `json:"agent_id,omitempty"`
+	Seq             int64    `json:"seq,omitempty"`
+	CreatedAt       string   `json:"created_at,omitempty"`
+	ReplayRunID     string   `json:"replay_loop_id,omitempty"`
+	ReplayOwnerID   string   `json:"replay_owner_id,omitempty"`
+	ReplayAgentID   string   `json:"replay_agent_id,omitempty"`
+	ReplaySeq       int64    `json:"replay_seq,omitempty"`
+	ReplayCreatedAt string   `json:"replay_created_at,omitempty"`
 	LiveRowDigest   string   `json:"live_row_digest,omitempty"`
 	ReplayRowDigest string   `json:"replay_row_digest,omitempty"`
 	DifferentFields []string `json:"different_fields,omitempty"`
@@ -93,13 +110,18 @@ func compareReplayRunMemory(live, replay []choirstore.RunMemoryEntryFingerprint)
 		switch {
 		case liveOK && !replayOK:
 			comparison.LiveOnlyCount++
+			comparison.recordLiveOnly(liveEntry)
 			comparison.addSample(ReplayRunMemoryDifference{
-				Kind: "live_only", EntryID: id, LiveRowDigest: liveEntry.RowDigest,
+				Kind: "live_only", EntryID: id, RunID: liveEntry.RunID, OwnerID: liveEntry.OwnerID,
+				AgentID: liveEntry.AgentID, Seq: liveEntry.Seq, CreatedAt: liveEntry.CreatedAt,
+				LiveRowDigest: liveEntry.RowDigest,
 			})
 		case !liveOK && replayOK:
 			comparison.ReplayOnlyCount++
 			comparison.addSample(ReplayRunMemoryDifference{
-				Kind: "replay_only", EntryID: id, ReplayRowDigest: replayEntry.RowDigest,
+				Kind: "replay_only", EntryID: id, RunID: replayEntry.RunID, OwnerID: replayEntry.OwnerID,
+				AgentID: replayEntry.AgentID, Seq: replayEntry.Seq, CreatedAt: replayEntry.CreatedAt,
+				ReplayRowDigest: replayEntry.RowDigest,
 			})
 		case liveOK && replayOK:
 			differentFields := differingReplayRunMemoryFields(liveEntry.FieldDigests, replayEntry.FieldDigests)
@@ -112,12 +134,43 @@ func compareReplayRunMemory(live, replay []choirstore.RunMemoryEntryFingerprint)
 			comparison.DifferentCount++
 			comparison.addSample(ReplayRunMemoryDifference{
 				Kind: "different", EntryID: id,
+				RunID: liveEntry.RunID, OwnerID: liveEntry.OwnerID, AgentID: liveEntry.AgentID,
+				Seq: liveEntry.Seq, CreatedAt: liveEntry.CreatedAt,
+				ReplayRunID: replayEntry.RunID, ReplayOwnerID: replayEntry.OwnerID, ReplayAgentID: replayEntry.AgentID,
+				ReplaySeq: replayEntry.Seq, ReplayCreatedAt: replayEntry.CreatedAt,
 				LiveRowDigest: liveEntry.RowDigest, ReplayRowDigest: replayEntry.RowDigest,
 				DifferentFields: differentFields,
 			})
 		}
 	}
 	return comparison
+}
+
+func (c *ReplayRunMemoryComparison) recordLiveOnly(entry choirstore.RunMemoryEntryFingerprint) {
+	if c.LiveOnlyByRun == nil {
+		c.LiveOnlyByRun = make(map[string]int)
+	}
+	if c.LiveOnlyByOwner == nil {
+		c.LiveOnlyByOwner = make(map[string]int)
+	}
+	if c.LiveOnlyByAgent == nil {
+		c.LiveOnlyByAgent = make(map[string]int)
+	}
+	c.LiveOnlyByRun[entry.RunID]++
+	c.LiveOnlyByOwner[entry.OwnerID]++
+	c.LiveOnlyByAgent[entry.AgentID]++
+	if c.LiveOnlySeqMin == 0 || entry.Seq < c.LiveOnlySeqMin {
+		c.LiveOnlySeqMin = entry.Seq
+	}
+	if entry.Seq > c.LiveOnlySeqMax {
+		c.LiveOnlySeqMax = entry.Seq
+	}
+	if c.LiveOnlyCreatedMin == "" || entry.CreatedAt < c.LiveOnlyCreatedMin {
+		c.LiveOnlyCreatedMin = entry.CreatedAt
+	}
+	if entry.CreatedAt > c.LiveOnlyCreatedMax {
+		c.LiveOnlyCreatedMax = entry.CreatedAt
+	}
 }
 
 func (c *ReplayRunMemoryComparison) addSample(sample ReplayRunMemoryDifference) {

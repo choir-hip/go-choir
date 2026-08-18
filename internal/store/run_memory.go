@@ -287,6 +287,7 @@ type RunMemoryEntryFingerprint struct {
 	OwnerID      string            `json:"owner_id"`
 	AgentID      string            `json:"agent_id,omitempty"`
 	Seq          int64             `json:"seq"`
+	CreatedAt    string            `json:"created_at"`
 	RowDigest    string            `json:"row_digest"`
 	FieldDigests map[string]string `json:"field_digests"`
 }
@@ -355,7 +356,7 @@ func (s *Store) ListRunMemoryEntryFingerprints(ctx context.Context) ([]RunMemory
 		}
 		fingerprints = append(fingerprints, RunMemoryEntryFingerprint{
 			EntryID: entryID, RunID: runID, OwnerID: ownerID, AgentID: agentID,
-			Seq: seq, RowDigest: computerevent.DigestBytes(rowJSON), FieldDigests: fieldDigests,
+			Seq: seq, CreatedAt: createdAt, RowDigest: computerevent.DigestBytes(rowJSON), FieldDigests: fieldDigests,
 		})
 	}
 	if err := rows.Err(); err != nil {
