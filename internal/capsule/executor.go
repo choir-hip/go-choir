@@ -434,7 +434,10 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 			return caps.Process.Kill()
 		}
 		if waitErr := waitCapsuleProcess(ctx, caps.wait, kill, capsuleProcessWaitTimeout); waitErr != nil {
-			cleanupErr = errors.Join(cleanupErr, waitErr)
+			var exitErr *exec.ExitError
+			if !errors.As(waitErr, &exitErr) && !strings.Contains(waitErr.Error(), "signal:") {
+				cleanupErr = errors.Join(cleanupErr, waitErr)
+			}
 		}
 	}
 	if err := unmountCapsuleRoot(caps.MergedDir); err != nil {
