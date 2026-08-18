@@ -207,3 +207,25 @@ This accepts the route-budget repair as deployed and proves the timeout boundary
 **Replay non-equivalence conjecture delta:** transport and route-budget defects are repaired on the refreshed computer; replay eligibility remains fail-closed until those table authorities are represented by the event/reducer path.
 **Evidence:** CI `32118922263`, staging `/health` commit `7976ec15`, refresh receipt `01a01424-8553-74a2-8547-2373871f4e78`, epoch 305 guest observability, replay result captured at `2026-08-18T09:14:04.567717037Z`.
 **Rollback:** no product-state rollback; retain the same computer at epoch 305 with effects OFF while the unsupported-table authority is diagnosed.
+
+## Replay non-equivalence source diagnosis
+
+The four residue tables are not merely stale schema names; each has a live behavior-bearing writer outside the existing event projector:
+
+- `internal/store/run_memory.go:AppendRunMemoryEntry` allocates `seq` and inserts `run_memory_entries` directly. An object-graph adapter (`AppendRunMemoryEntryOG`) exists, but serving reads and writes still use the SQL table, and `BindProjectionTape` does not intercept this method.
+- `internal/selfdev/operations.go:BindStartIntent`, `Start`, `RecordAppliedBaseline`, `StartRollback`, and `Transition` write `self_development_start_intents` and `self_development_operations` directly through `DBProvider.DB()`. The operation store has no projection-tape dependency.
+- `internal/store/texture.go:CreateAgentMutation` and the state-transition methods (`RecordAgentMutationRevision`, `CompleteAgentMutation`, `DeferAgentMutation`, `FailAgentMutation`, `CancelAgentMutation`, `MarkAgentMutationStale`, `SleepAgentMutation`, `SleepAgentMutationAfterTextureTurn`, and `ReactivateAgentMutation`) update `texture_agent_mutations` directly through the unified embedded Dolt handle.
+- `internal/store/projection_tape.go` currently intercepts only object-graph mutations and desktop snapshots. `internal/computerevent/projection_batch.go` and `internal/store/project.go` therefore have no operation that can reconstruct any of those four tables.
+
+The existing graph-backed run-memory adapter is an unwired replacement, not a serving authority: production `ListRunMemoryEntries` still queries `run_memory_entries`, while self-development operations and Texture mutation rows have no corresponding graph kind or read path. Merely changing the replay manifest from `empty_until_supported` to `event_projection` would therefore weaken the gate; it would authorize a nonempty live table that a fresh event replay cannot produce.
+
+### Safe reducer-backed replacement
+
+Use the existing `computerevent.EventProjectionBatchRecorded` → `FinalizeBatch` projector seam as the single replacement. Add typed, versioned projection operations for complete row snapshots of the four tables, and route every production writer through the already-bound `projectionTape` before any direct SQL fallback. The operation store receives an optional batch-builder interface so idempotency/state checks and the append occur under the same tape serialization boundary; unbound unit-test stores retain the current SQL path only as a test seam. `FinalizeBatch` performs the row upsert in the same transaction as the event head, so no save-then-emit path remains.
+
+The retained computer requires one co-moving, owner-authorized residue import batch for all four table families (alongside the already implemented desktop/OG import). The import is a state-as-of-now event, not fabricated history for earlier heads. Only after source repair, deployed refresh, import receipt, a fresh replay-completeness result, and matching table hashes may the manifest reclassify these tables as `event_projection`. Do not SQL-empty rows or copy live SQL into the disposable replay workspace outside the event projector.
+
+**Source diagnosis heresy delta:** discovered — an existing graph adapter for run memory is not wired and the other three tables have no reducer-backed replacement; introduced — none; repaired — none at this docs-first diagnosis.
+**Source diagnosis conjecture delta:** the non-equivalence is explained by four direct-write authorities absent from the projection batch; a typed row-snapshot projector plus co-moving residue import is the smallest existing-seam repair. The live authority and replay equivalence remain unverified.
+**Evidence:** `internal/store/run_memory.go`, `internal/selfdev/operations.go`, `internal/store/texture.go`, `internal/store/projection_tape.go`, `internal/computerevent/projection_batch.go`, `internal/store/project.go`, and `docs/choir-unified-event-tape-design-2026-08-16.md`.
+**Rollback:** this diagnosis is docs-only; revert the documentation commit. No product-state mutation, eligibility change, or effect authorization occurred.
