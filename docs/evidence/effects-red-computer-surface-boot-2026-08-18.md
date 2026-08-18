@@ -403,3 +403,19 @@ After CI `32150927162` completed successfully and staging `/health` reported `af
 Source inspection identifies the remaining boundary: `nix/autoputer-vm.nix` does not set `SERVER_WRITE_TIMEOUT` for `go-choir-autoputer.service`, so the guest uses `internal/server`'s 120-second default. The next repair must extend the response deadline only when the guest handles the owner-only replay-completeness route; globally widening the guest server write deadline would weaken ordinary guest-route fail-fast behavior. No state mutation, candidate, bundle, replay-equivalence result, eligibility, checkpoint, restore, retry, promotion, or effect is authorized.
 
 **Problem-first receipt:** discovered `2026-08-18T15:11:33Z`; environment `staging af34ac68c6c6e8f882b315cc17397359b6cc70d4`, retained computer `computer-03335285269bdba4f94377e56879f9e6`, epoch `309`; evidence `CI 32150927162`, staging `/health`, refresh receipt `01a0156a-56f6-7ea1-aca7-28094b033545`, owner replay command result `HTTP 502 after 138.77s`, source `internal/agentcore/api_self_development.go`, `internal/server/server.go`, `nix/autoputer-vm.nix`; remaining error `guest replay route cannot complete before the guest's 120s default write deadline`; rollback `revert 34c68283` only if the prior proxy route configuration must be restored, with no product-state rollback.
+
+## Guest replay route-local deadline repair implementation
+
+The guest outer-deadline problem receipt above is followed by source commit `44c02a07` (`fix: extend guest replay route deadline`). The guest API now uses `http.NewResponseController(w).SetWriteDeadline(...)` only for the owner-only replay-completeness handler, with a bounded 10-minute route budget plus one second of response-write grace. Ordinary guest routes retain the global 120-second `internal/server` write deadline; no guest-wide `SERVER_WRITE_TIMEOUT` override was added.
+
+Local proof passed:
+
+```text
+go test ./internal/agentcore -run 'TestReplayCompletenessExtendsGuestWriteDeadline|TestReplayCompletenessUsesDisposableProjectionWithoutMutatingLiveStore' -count=1
+```
+
+This source repair is not deployed proof. Effects remain OFF; the same retained computer remains at epoch `309` until the normal landing loop deploys `44c02a07`, staging and the guest report it, the guest is refreshed if required, and a fresh owner-authorized replay-completeness read yields a result.
+
+**Guest replay outer-deadline repair heresy delta:** discovered — the guest's global 120-second write deadline cut the owner-only replay route after the proxy route was extended; introduced — a guest route-local response deadline with a bounded 10-minute budget; repaired — the guest outer deadline without widening ordinary guest routes. **Conjecture delta:** both proxy and guest replay hops now have aligned bounded owner-only budgets; staging replay eligibility remains unproven.
+
+**Rollback:** revert `44c02a07`; no product-state rollback has been performed, and epoch `309` remains retained with effects OFF.
