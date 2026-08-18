@@ -163,3 +163,20 @@ This is a new gateway/runtime timeout problem, not replay acceptance. Do not bli
 **Replay timeout heresy delta:** discovered — the pagination-aware guest reaches replay reconstruction but the proxy cuts the owner read at 30 seconds; introduced — none claimed; repaired — none. **Replay timeout conjecture delta:** client/server contract skew is repaired on the refreshed computer, while replay eligibility remains blocked by the fixed proxy budget and the backend duration is unmeasured.
 **Evidence:** refresh receipt `01a01408-586e-7252-b90e-7987653d9899`, guest observability bdbf7b7e at epoch `304`, named surface probe above, two replay-completeness 502 reads, `internal/proxy/handlers.go`, and `internal/proxy/self_development.go`.
 **Rollback:** no additional product-state mutation; retain epoch `304` and effects OFF while the timeout is diagnosed.
+
+## Replay proxy timeout repair implementation
+
+The docs-first timeout diagnosis is now implemented in source commit `cf950de7` (`fix: give replay completeness a bounded route budget`). The proxy keeps the ordinary autoputer client at its existing 30-second timeout and adds a separate `replayAutoputerHTTP` client for the owner-only replay-completeness route. `PROXY_REPLAY_COMPLETENESS_TIMEOUT` configures that client; the default and Node B value are 110 seconds, below the proxy server's default 120-second write deadline, so a slow or unavailable guest remains a legible 502 rather than a connection-level EOF. The route still returns the upstream status/body on a completed response and remains fail-closed on client timeout.
+
+Focused proof passed:
+
+```text
+go test ./internal/proxy -run 'TestLoadConfig_ReplayCompletenessTimeout|TestReplayCompletenessUsesDedicatedUpstreamTimeout|TestReplayCompletenessPathUsesOwnedComputerAndTrustedBinding' -count=1 -v
+go test ./internal/proxy -count=1
+```
+
+The timing regression holds the guest response for 80ms, proves the 5ms ordinary client is not used, proves a 5ms replay budget returns HTTP 502, and proves a 500ms replay budget reaches HTTP 200. Nix service configuration now supplies `PROXY_REPLAY_COMPLETENESS_TIMEOUT=110s`. This is local source/test evidence only; the retained computer has not been refreshed and replay eligibility, checkpointability, restore completeness, and self-development retry remain unverified and forbidden until the normal landing loop and owner-authorized staging read complete.
+
+**Replay timeout repair heresy delta:** discovered — none beyond the documented proxy budget; introduced — a dedicated bounded replay-route client and config surface; repaired — the fixed 30-second budget no longer governs replay completeness in source.
+**Replay timeout repair conjecture delta:** the route-level budget repair is locally supported and preserves fail-closed timeout behavior; staging replay eligibility remains unproven until deployment identity, retained-guest state, and a fresh owner-authorized read are verified.
+**Rollback:** revert `cf950de7`; no product-state rollback has been performed.
