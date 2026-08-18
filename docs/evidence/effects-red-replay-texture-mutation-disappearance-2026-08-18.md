@@ -121,3 +121,55 @@ from this receipt until that fixture is understood.
 make the legacy Texture mutation available at its earlier canonical sequence,
 and its response does not expose a durable event identity; introduced — none;
 repaired — none.
+
+## Scoped replay repair candidate after the focused fixture
+
+The focused local replay fixture now models the observed ordering boundary: a
+full guarded Texture mutation snapshot is applied at sequence N while its
+predecessor is absent, and the owner residue snapshot is appended at sequence
+N+1. Before the repair, the fixture failed at sequence N with the same
+`Texture mutation disappeared` projection mismatch. The fixture does not claim
+to expose the staging event payload; it isolates the reducer ordering failure.
+
+Source commit `e58a0aab` changes only the replay compatibility branch:
+
+- replay may seed a missing guarded Texture mutation when its scope is empty
+  (the documented pre-lifecycle legacy scope), or when its non-empty scope
+  equals the replay batch's computer ID;
+- a foreign non-empty scope still fails closed;
+- live `FinalizeBatch` still rejects every missing guarded predecessor and
+  retains expected-state and revision checks;
+- the later residue snapshot remains an idempotent witness rather than a
+  retroactive predecessor.
+
+Local proof after the repair:
+
+```text
+go test ./internal/store -run 'TestFinalize(BatchRejectsMissingLegacyTextureTransition|ReplayBatchSeedsMissingLegacyTextureTransition|ReplayBatchSeedsMissingScopedTextureTransitionBeforeResidueSnapshot)$' -count=1
+ok
+
+go test ./internal/store -count=1
+ok
+```
+
+This is a red source repair with admissible evidence class **focused local
+replay fixture plus complete `internal/store` regression**. It does not prove
+staging replay equivalence or eligibility. Rollback is `revert e58a0aab`; no
+product-state rollback is authorized. The existing residue snapshot event is
+retained; do not append another duplicate snapshot solely to test this repair.
+The next action is the normal landing loop, then an owner-authorized refresh of
+the same retained computer and a fresh replay-completeness read. No checkpoint,
+restore, retry, promotion, qualified-consensus transition, or effect is
+authorized until that deployed read returns an eligible equivalent result.
+
+**Repair heresy delta:** discovered — the missing predecessor can have the
+current computer scope, so empty-scope-only compatibility was insufficient;
+introduced — replay-only scoped bootstrap bounded to the replay computer, with
+live strictness unchanged; repaired — local replay ordering fixture and reducer
+path, pending staging proof.
+
+**Conjecture delta:** the replay reducer may use a full guarded snapshot as a
+compatibility seed for a missing predecessor only when the snapshot is empty
+legacy scope or the current replay computer scope; this preserves event-chain
+scope while allowing direct-write residue omitted before the event cutover to
+be reconstructed.
