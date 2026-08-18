@@ -498,6 +498,22 @@ receipts:
       environment_identity: source diagnosis against staging replay evidence; retained computer epoch 305 remains propose_only generation 1
       deployed_acceptance: not_applicable — diagnosis is not a runtime repair or replay acceptance
     registry_conformance_ref: "effects remains entrypoint; this diagnosis is not checkpoint, restore, promotion authority, or permission to retry"
+  - id: effects-red-replay-reducer-repair-2026-08-18
+    boundary: implement
+    commit_or_artifact: docs/evidence/effects-red-replay-reducer-repair-2026-08-18.md
+    proof_refs: [docs/evidence/effects-red-replay-reducer-repair-2026-08-18.md, docs/evidence/effects-red-computer-surface-boot-2026-08-18.md]
+    rollback_ref: revert the forthcoming source repair commit; no retained-computer mutation before owner-authorized residue import
+    disposition: "accepted as a docs-first repair checkpoint — the approved reducer-backed replacement is authorized after the source diagnosis, but source implementation, deployment, residue import, replay equivalence, and eligibility remain pending. Effects remain OFF and all checkpoint, restore, retry, self-promote, qualified-consensus, and send paths remain forbidden."
+    problem_ref: replay-non-equivalent-direct-write-authority-2026-08-18
+    authorization_ref: Definition next_action after effects-red-replay-source-diagnosis-2026-08-18
+    candidate_or_evidence_refs: [docs/evidence/effects-red-replay-reducer-repair-2026-08-18.md]
+    landing:
+      source_commit: pending (docs-first repair checkpoint)
+      ci_ref: pending (Docs Truth Check)
+      deploy_ref: not_applicable
+      environment_identity: retained computer epoch 305 remains propose_only generation 1; no residue import performed
+      deployed_acceptance: not_applicable — checkpoint authorizes source work and is not runtime or replay acceptance
+    registry_conformance_ref: "effects remains entrypoint; reducer repair is not replay eligibility, checkpoint, restore, promotion authority, or permission to retry"
   - id: effects-invoke-readiness-2026-08-15
     boundary: define
     commit_or_artifact: docs/evidence/effects-invoke-readiness-2026-08-15.md
