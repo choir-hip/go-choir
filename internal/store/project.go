@@ -35,14 +35,14 @@ type projectedSessionIdentity struct {
 }
 
 func projectBatch(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch) error {
-	return projectBatchWithLegacyTextureBootstrap(ctx, tx, batch, false)
+	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, false, "")
 }
 
 func projectBatchForReplay(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch) error {
-	return projectBatchWithLegacyTextureBootstrap(ctx, tx, batch, true)
+	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, true, strings.TrimSpace(batch.ComputerID))
 }
 
-func projectBatchWithLegacyTextureBootstrap(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, allowLegacyTextureBootstrap bool) error {
+func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, allowReplayTextureBootstrap bool, replayComputerID string) error {
 	if tx == nil {
 		return fmt.Errorf("computer event projection: missing transaction")
 	}
@@ -50,14 +50,14 @@ func projectBatchWithLegacyTextureBootstrap(ctx context.Context, tx *sql.Tx, bat
 		return err
 	}
 	for i, op := range batch.Ops {
-		if err := projectOp(ctx, tx, op, allowLegacyTextureBootstrap); err != nil {
+		if err := projectOp(ctx, tx, op, allowReplayTextureBootstrap, replayComputerID); err != nil {
 			return fmt.Errorf("computer event projection: op %d: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, allowLegacyTextureBootstrap bool) error {
+func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, allowReplayTextureBootstrap bool, replayComputerID string) error {
 	switch strings.TrimSpace(op.Kind) {
 	case computerevent.ProjectionOpDesktopState:
 		return projectDesktopState(ctx, tx, op.Body)
@@ -72,7 +72,7 @@ func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, a
 	case computerevent.ProjectionOpSelfDevelopmentOperation:
 		return projectSelfDevelopmentOperation(ctx, tx, op.Body)
 	case computerevent.ProjectionOpTextureAgentMutation:
-		return projectTextureAgentMutation(ctx, tx, op.Body, allowLegacyTextureBootstrap)
+		return projectTextureAgentMutation(ctx, tx, op.Body, allowReplayTextureBootstrap, replayComputerID)
 	default:
 		return fmt.Errorf("%w: kind %q", computerevent.ErrProjectionBatchInvalid, op.Kind)
 	}
@@ -444,7 +444,7 @@ func sameSelfDevelopmentOperationProjection(left, right computerevent.SelfDevelo
 	return reflect.DeepEqual(left, right)
 }
 
-func projectTextureAgentMutation(ctx context.Context, tx *sql.Tx, body json.RawMessage, allowLegacyTextureBootstrap bool) error {
+func projectTextureAgentMutation(ctx context.Context, tx *sql.Tx, body json.RawMessage, allowReplayTextureBootstrap bool, replayComputerID string) error {
 	var mutation computerevent.TextureAgentMutationProjection
 	if err := json.Unmarshal(body, &mutation); err != nil {
 		return fmt.Errorf("decode Texture agent mutation: %w", err)
@@ -490,14 +490,17 @@ func projectTextureAgentMutation(ctx context.Context, tx *sql.Tx, body json.RawM
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("read Texture agent mutation: %w", err)
 	} else if len(mutation.ExpectedStates) > 0 || mutation.RequireRevision != nil {
-		legacyReplaySeed := allowLegacyTextureBootstrap && strings.TrimSpace(mutation.ComputerID) == ""
-		if !legacyReplaySeed {
+		mutationComputerID := strings.TrimSpace(mutation.ComputerID)
+		replayCompatibleSeed := allowReplayTextureBootstrap &&
+			(mutationComputerID == "" || mutationComputerID == strings.TrimSpace(replayComputerID))
+		if !replayCompatibleSeed {
 			return fmt.Errorf("%w: Texture mutation disappeared", computerevent.ErrProjectionMismatch)
 		}
-		// Empty computer scope is reserved for legacy rows. A pre-cutover
-		// residue import could omit that row, leaving this full snapshot as the
-		// only durable state witness during replay. Live finalization never
-		// enables this branch, so a missing live predecessor still fails closed.
+		// A pre-cutover residue import can omit a row that was already
+		// referenced by a later guarded transition. The full snapshot is the
+		// only durable state witness available at this point in replay. Accept
+		// only the empty legacy scope or this replay's computer scope; live
+		// finalization never enables the branch and still fails closed.
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO texture_agent_mutations (
 		doc_id, loop_id, owner_id, computer_id, state, scheduled_message_seq, revision_id, created_at, completed_at

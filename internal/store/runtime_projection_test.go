@@ -189,6 +189,61 @@ func TestFinalizeReplayBatchSeedsMissingLegacyTextureTransition(t *testing.T) {
 	}
 }
 
+func TestFinalizeReplayBatchSeedsMissingScopedTextureTransitionBeforeResidueSnapshot(t *testing.T) {
+	ctx := context.Background()
+	productStore := openProjectStore(t)
+	computerID := "computer-replay-scoped-texture"
+	prepareGenesis(t, productStore, computerID, "genesis-replay-scoped-texture")
+	head, err := productStore.Head(ctx, computerID)
+	if err != nil || head == nil {
+		t.Fatalf("head: %v %#v", err, head)
+	}
+	mutation := computerevent.TextureAgentMutationProjection{
+		DocID: "doc-replay-scoped", RunID: "run-replay-scoped", OwnerID: "owner-scoped",
+		ComputerID: computerID, State: "completed", CreatedAt: "2026-08-18T07:22:00Z",
+		ExpectedStates: []string{"sleeping"},
+	}
+	first := computerevent.ProjectionBatch{
+		Version: computerevent.ProjectionBatchV2, ProjectorVersion: computerevent.ProjectorVersionV2,
+		ComputerID: computerID, Ops: []computerevent.ProjectionOp{{
+			Kind: computerevent.ProjectionOpTextureAgentMutation, CanonicalID: mutation.RunID, Body: mustJSON(t, mutation),
+		}},
+	}
+	event, digest := prepareProjectionEvent(t, productStore, *head, mustEventID(t), "replay-scoped-texture-transition")
+	first.EventID, first.EventDigest = event.EventID, digest
+	if err := productStore.FinalizeReplayBatch(ctx, computerID, digest, signedReceipt(t, computerID, digest, event.Sequence), &first); err != nil {
+		t.Fatalf("seed scoped transition: %v", err)
+	}
+
+	// A residue snapshot is appended after the transition. It must be an
+	// idempotent witness, not the predecessor that makes the earlier event replayable.
+	head, err = productStore.Head(ctx, computerID)
+	if err != nil || head == nil {
+		t.Fatalf("post-transition head: %v %#v", err, head)
+	}
+	mutation.ExpectedStates = nil
+	second := computerevent.ProjectionBatch{
+		Version: computerevent.ProjectionBatchV2, ProjectorVersion: computerevent.ProjectorVersionV2,
+		ComputerID: computerID, Ops: []computerevent.ProjectionOp{{
+			Kind: computerevent.ProjectionOpTextureAgentMutation, CanonicalID: mutation.RunID, Body: mustJSON(t, mutation),
+		}},
+	}
+	event2, digest2 := prepareProjectionEvent(t, productStore, *head, mustEventID(t), "replay-scoped-texture-residue")
+	second.EventID, second.EventDigest = event2.EventID, digest2
+	if err := productStore.FinalizeReplayBatch(ctx, computerID, digest2, signedReceipt(t, computerID, digest2, event2.Sequence), &second); err != nil {
+		t.Fatalf("apply residue witness: %v", err)
+	}
+	var state, storedComputerID string
+	if err := productStore.db.QueryRowContext(ctx,
+		`SELECT state, computer_id FROM texture_agent_mutations WHERE owner_id=? AND computer_id=? AND doc_id=? AND loop_id=?`,
+		mutation.OwnerID, computerID, mutation.DocID, mutation.RunID).Scan(&state, &storedComputerID); err != nil {
+		t.Fatal(err)
+	}
+	if state != mutation.State || storedComputerID != computerID {
+		t.Fatalf("replayed scoped Texture mutation state=%q computer_id=%q", state, storedComputerID)
+	}
+}
+
 func TestProjectBatchRejectsMissingSelfDevelopmentTransition(t *testing.T) {
 	ctx := context.Background()
 	productStore := openProjectStore(t)
