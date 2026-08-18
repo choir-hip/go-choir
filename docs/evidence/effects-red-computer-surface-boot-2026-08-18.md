@@ -299,3 +299,21 @@ Source inspection shows `internal/computerevent.HTTPClient.FetchPayload` still u
 **Payload EOF conjecture delta:** the new EOF is caused by an unwidened payload response reader, not by a new replay projection mismatch; the smallest repair is to use the existing explicit bounded replay response limit for payload fetches and add an oversized-payload regression test.
 **Evidence:** commit `c6301b07f162e0688c860c8fc57722d3a0d09516`; CI `https://github.com/choir-hip/go-choir/actions/runs/32137064213`; staging `/health` above; import response above; replay HTTP 500 above; `internal/computerevent/http_client.go:FetchPayload`.
 **Rollback:** revert `c6301b07f162e0688c860c8fc57722d3a0d09516` for the route-budget source repair; do not delete or rewrite the appended residue event. Keep effects OFF and retain the computer event head while the payload transport repair is evaluated.
+
+## Post-refresh payload response bound observation
+
+The payload-response repair was committed as `c6d0b34a79f63e4ca4350b8a8b9aa9fe9363e66f` (`fix: bound large computer event payload reads`), passed CI run `32139497055`, and deployed to Node B. Staging `/health` at `2026-08-18T13:59:16Z` reports proxy commit `c6d0b34a79f63e4ca4350b8a8b9aa9fe9363e66f` and deployed time `2026-08-18T13:34:38Z`.
+
+The retained computer was owner-refreshed once with idempotency key `replay-payload-refresh-20260818`. Lifecycle receipt `01a01529-baa3-7b42-89df-5b53632ffa0e` advanced the same active computer from realization epoch `305` to `306`. The first replay read before refresh still reached the old guest's `unexpected EOF`; after refresh installed the payload-bound client, the owner-authorized replay read failed closed with the more specific response-size error:
+
+```text
+replay finalize sequence 3218: computer event payload: fetch 39c8f6192dbd5d932ddb3e13634505961c517771d2df0ff8ad3e10ba4c25e5d3: computer event client: response exceeds 8388608 bytes
+```
+
+This confirms the prior one-mebibyte truncation path is no longer active on the refreshed guest, but the shared `EventReplayMaxResponseBytes` bound is smaller than the base64 JSON envelope for the retained residue projection payload. The explicit rejection is fail-closed; it does not prove payload corruption or replay equivalence. No checkpoint, restore, self-development retry, self-promote, qualified-consensus, or mail send is authorized.
+
+**Payload-bound heresy delta:** discovered — the first bounded payload repair is below the size of an admitted residue projection envelope; introduced — the explicit bound correctly rejects oversized input instead of decoding truncated JSON; repaired — the prior one-mebibyte payload EOF path on the refreshed guest. **Payload-bound conjecture delta:** the remaining blocker is a payload transport-size contract, not the earlier stale-guest client or a newly observed projection mismatch.
+
+**Evidence:** commit `c6d0b34a79f63e4ca4350b8a8b9aa9fe9363e66f`, CI `https://github.com/choir-hip/go-choir/actions/runs/32139497055`, staging `/health`, lifecycle receipt `01a01529-baa3-7b42-89df-5b53632ffa0e`, retained epoch `306`, and the post-refresh replay read above.
+
+**Rollback:** no product-state rollback; retain epoch `306` and effects OFF while the payload-size contract is repaired through a separate problem-first landing loop.
