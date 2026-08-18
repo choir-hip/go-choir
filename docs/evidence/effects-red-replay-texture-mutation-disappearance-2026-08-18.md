@@ -64,8 +64,11 @@ retained computer was refreshed and replayed directly; no owner-authorized
 Therefore the failed read does not yet distinguish an incomplete repair from an
 unexercised residue prerequisite.
 
-The next safe probe is the existing product path, not SQL mutation: append one
-owner- and computer-scoped residue snapshot, capture its durable receipt, then
+The first attempted CLI invocation included an unsupported `--idempotency-key`
+flag and exited before making an HTTP request; no product state changed. The
+route generates its projection-batch idempotency key internally. The next safe
+probe is the existing product path, not SQL mutation: append one owner- and
+computer-scoped residue snapshot, capture its durable response/receipt, then
 rerun replay completeness. The snapshot is current state as of now, not
 fabricated history; it does not reclassify unsupported tables or authorize
 checkpoint, restore, retry, promotion, qualified consensus, or effects. If the
