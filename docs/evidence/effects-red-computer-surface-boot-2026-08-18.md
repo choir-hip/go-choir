@@ -128,6 +128,19 @@ This is a changed failure surface: the prior `unexpected EOF` transport failure 
 
 This receipt accepts the bounded transport repair as landed, but does not accept replay completeness, restore eligibility, checkpointability, rematerialization, or self-development readiness. Do not bind a checkpoint, rematerialize, restore, retry self-development, or send mail. The next safe probe is to identify the canonical-head/replay-page mismatch under the authorized event-read path, then document that problem before any repair.
 
-**Post-repair replay heresy delta:** discovered — the unpaged EOF was repaired, exposing a separate canonical-head/replay-projection mismatch; introduced — none claimed; repaired — bounded replay transport. **Post-repair replay conjecture delta:** the transport repair is staging-verified, while event-chain reconstruction remains unproven and blocked by projection repair required.
+**Post-repair replay heresy delta:** discovered — the unpaged EOF path was replaced on the deployed host, exposing a guest/server pagination contract skew; introduced — none claimed beyond the intentional contract change; repaired — host-side bounded replay transport. **Post-repair replay conjecture delta:** server pagination is staging-verified, while the retained guest client and end-to-end event-chain reconstruction remain unverified and blocked by projection repair required.
 **Evidence:** CI `https://github.com/choir-hip/go-choir/actions/runs/32114070641` (attempt 2), staging `/health` at `bdbf7b7e`, retained epoch `303`, and the two owner-authorized replay-completeness reads above.
 **Rollback:** revert `c38324f4`; no product-state rollback was performed.
+
+
+## Replay client/server contract-skew diagnosis
+
+Source inspection after the post-repair probe identifies a deployment-version boundary in the changed failure. The deployed corpusd replay handler in the `bdbf7b7e` tree defaults an omitted `limit` to `EventReplayPageSize` (`32`) and reads only that page. The retained guest still reports autoputer `13a0ae7c`; the guest-era `internal/computerevent/http_client.go` at that commit sends only `computer_id` and `after_sequence`, then treats one response as the complete chain. The paged client in `c38324f4` is the code that sends `limit`, follows sequence progress, and reads to the explicit replay bound.
+
+The retained guest therefore has an old client talking to a newly paged server. If the current durable chain is longer than the server default page, the old guest reconstructs only the first page and then returns the appender's final `projection repair required` sentinel when its local replay head does not equal the canonical platform head. This explains the changed error without claiming event-data corruption; the exact current chain cardinality and page sequence remain unobserved through the owner product surface.
+
+The safe next probe is an owner-authorized refresh of the same retained computer so the guest crosses to the deployed replay client, followed by guest build identity and replay-completeness verification. Do not create a computer, rematerialize, bind a checkpoint, restore, retry self-development, or send mail.
+
+**Contract-skew heresy delta:** discovered — host replay pagination can be deployed while a retained immutable guest still runs the pre-pagination client; introduced — the c38324f4 source repair intentionally changes the replay contract and requires guest refresh; repaired — none until the retained guest is refreshed. **Contract-skew conjecture delta:** client/server version skew is the leading explanation for the projection-repair sentinel; exact chain/page evidence remains required.
+**Evidence:** `git show 13a0ae7c:internal/computerevent/http_client.go`, deployed `internal/platform/event_handlers.go`, deployed `internal/platform/event_replay.go`, staging `/health` bdbf7b7e, and guest observability 13a0ae7c.
+**Rollback:** no product-state mutation; if the refresh probe fails, leave the retained computer untouched and record the failure before any further action.
