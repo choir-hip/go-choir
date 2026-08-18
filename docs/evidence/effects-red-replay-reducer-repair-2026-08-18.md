@@ -60,6 +60,41 @@ excluded from the reducer residue import, which can strand a later canonical
 transition; introduced — none claimed; repaired — none. Effects remain OFF; no
 checkpoint, restore, retry, promotion, or live send is authorized.
 
+## Replay-only legacy Texture repair implementation
+
+The source repair was committed as `750a145fcdd9663517b776fde1ce9c83e5bd7f5b`
+(`fix: repair legacy texture replay projection`) after the problem receipt above.
+It makes the narrow migration boundary executable:
+
+- owner-scoped residue import now includes the named computer and empty
+  `computer_id` legacy Texture rows;
+- `ComputerEventAppender` uses an explicit `ReplayBatchProjectionStore` seam
+  only for disposable canonical reconstruction;
+- replay projection may seed a missing empty-scope guarded Texture row from its
+  full snapshot, while live `FinalizeBatch` still rejects every missing guarded
+  predecessor and retains state/revision checks.
+
+Regression coverage proves the residue query includes an owner-scoped legacy row,
+strict live finalization rejects a missing legacy transition, replay finalization
+seeds it, and the appender dispatches the replay-only finalizer. Local proof:
+
+```text
+go test ./internal/store -run 'TestImportResidueSnapshotIncludesOwnerLegacyTextureMutation|TestFinalizeBatchRejectsMissingLegacyTextureTransition|TestFinalizeReplayBatchSeedsMissingLegacyTextureTransition' -count=1
+go test ./internal/store -count=1
+go test ./internal/computerevent -count=1
+go test ./internal/agentcore -run 'TestReplayCompleteness' -count=1
+```
+
+The source repair is pushed and awaits CI/deployment, same-computer refresh, and
+fresh owner-authorized replay-completeness evidence. Effects remain OFF; no
+checkpoint, restore, retry, promotion, or live send is authorized.
+
+**Repair heresy delta:** discovered — legacy Texture rows were omitted from the
+residue import and stranded a guarded transition; introduced — an explicit
+replay-only compatibility seam and empty-scope seed, with strict live behavior
+unchanged; repaired — source-level replay reconstruction for this documented
+legacy lineage, pending staging proof.
+
 ## Decision and conjecture delta
 
 The approved next action is a reducer-backed replacement through the existing
