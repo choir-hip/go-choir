@@ -53,3 +53,19 @@ Do not call checkpoint, genesis, rematerialize, restore, or an operations POST t
 **Heresy delta:** discovered — refresh can leave a healthy guest with no served computer surface; introduced — none claimed until repair landing; repaired — none at this receipt.
 **Conjecture delta:** the refresh/image identity repair remains supported; the new boot serving-join invariant is currently unproven.
 **Rollback:** this receipt makes no runtime mutation; supersede or correct it in the Definition if a later product-path receipt disproves the source convergence.
+
+## Post-landing observation
+
+The boot bootstrap repair landed in workflow `32108952503` at `13a0ae7cebc7081753d0a93b92310b00ff41a6d0`. Staging host health and the activation receipt report commit `13a0ae7cebc7081753d0a93b92310b00ff41a6d0`; the autoputer package is installed at that commit. The deploy job intentionally did not refresh the retained computer because vmctl classified it as an immutable `constructed-computer-version` realization:
+
+```text
+active_computers: status=empty
+computer-03335285269bdba4f94377e56879f9e6: epoch 302, immutable constructed realization
+```
+
+The retained guest therefore still reports the pre-repair autoputer build `eb67848c740fbf3e3e8ef21bf2d78de7dedd9010`, and the authenticated named surface still returns HTTP 503 with `self-development checkpoint: served SPA is underivable`. This is not deployed-identity proof for the repair; it is evidence that the normal landing loop preserved the immutable computer rather than exercising the new boot path.
+
+The next safe probe is the Definition-authorized owner refresh of this same retained computer, not a second computer, checkpoint, rematerialization, restore, or self-development retry. The refresh must preserve the VM-local persistent state and then prove guest commit `13a0ae7cebc7081753d0a93b92310b00ff41a6d0` plus the named surface baseline before any further operation.
+
+**Post-landing heresy delta:** discovered — successful host deployment can leave the retained immutable computer on the prior guest commit and therefore cannot prove a guest boot repair; introduced — none; repaired — none at this receipt.
+**Post-landing conjecture delta:** the boot bootstrap implementation remains locally supported and deployed, but its behavior on the retained computer is unproven until the owner refresh crosses the immutable-realization boundary.
