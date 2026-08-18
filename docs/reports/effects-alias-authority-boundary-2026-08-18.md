@@ -89,6 +89,7 @@ Until then, no runtime alias work is authorized.
 - `git diff --check -- docs/definitions/choir-supervised-self-development-effects-2026-08-11.md docs/problems/effects-red-replay-texture-alias-authority-2026-08-18.md docs/mission-graph.yaml docs/doc-authority-manifest.yaml` passed with no output.
 - Independent final consensus review: five agents completed; all accepting, with no blocking correction. The review verified receipt placement, `now` state, graph R5 overlay, manifest witness, and source claims.
 - Worktree classification: five intentional documentation paths only - three modified tracked docs, the new problem receipt, and this local report. No Go/runtime/generated scratch path is present.
+- Docs-only landing: commit `fb4bcb0378a17a07f8831011b2722aee22d68ea6` is on `origin/main`; CI run `32194076180` and Docs Truth Check job `95894423488` succeeded. Staging deploy was skipped because no runtime path changed.
 
 This is documentation proof only. It does not prove whole-computer replay, checkpointability, restore, self-development retry, qualified consensus, or any external effect.
 

@@ -333,9 +333,9 @@ receipts:
     authorization_ref: Definition next_action after the deployed-probe limitation receipt
     candidate_or_evidence_refs: [docs/evidence/effects-red-replay-run-memory-import-mismatch-2026-08-18.md]
     landing:
-      source_commit: docs-only problem documentation
-      ci_ref: pending (Docs Truth Check)
-      deploy_ref: not_applicable
+      source_commit: fb4bcb0378a17a07f8831011b2722aee22d68ea6
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/32194076180 (Docs Truth Check succeeded)
+      deploy_ref: not_applicable (docs-only path; staging deploy skipped)
       environment_identity: retained computer active, propose_only generation 1; residue import sequence 3326; eligibility false; no candidate or bundle
       deployed_acceptance: not_applicable — this receipt records a non-equivalent replay result, not acceptance
     registry_conformance_ref: "effects remains entrypoint; run-memory import mismatch is not replay eligibility, checkpoint, restore, promotion authority, or permission to retry"
