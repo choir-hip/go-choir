@@ -229,3 +229,40 @@ The retained computer requires one co-moving, owner-authorized residue import ba
 **Source diagnosis conjecture delta:** the non-equivalence is explained by four direct-write authorities absent from the projection batch; a typed row-snapshot projector plus co-moving residue import is the smallest existing-seam repair. The live authority and replay equivalence remain unverified.
 **Evidence:** `internal/store/run_memory.go`, `internal/selfdev/operations.go`, `internal/store/texture.go`, `internal/store/projection_tape.go`, `internal/computerevent/projection_batch.go`, `internal/store/project.go`, and `docs/choir-unified-event-tape-design-2026-08-16.md`.
 **Rollback:** this diagnosis is docs-only; revert the documentation commit. No product-state mutation, eligibility change, or effect authorization occurred.
+
+
+## Reducer residue import proxy timeout observation
+
+After source commit `f551d835866c2fc361d3a14b8ca5307eadb53151` passed CI run
+`32130418644`, Node B deployed it and staging `/health` reported proxy commit
+`f551d835866c2fc361d3a14b8ca5307eadb53151` (`deployed_at`
+`2026-08-18T11:36:43Z`). The retained computer remained the same active
+computer at realization epoch 305. The owner-authorized command
+`CHOIR_TIMEOUT=600s go run ./cmd/choir computer import-residue-snapshot
+--computer computer-03335285269bdba4f94377e56879f9e6` returned after about 32
+seconds with HTTP 502:
+
+```text
+{"error":"workspace replace authority unavailable"}
+```
+
+The command did not return a residue-import receipt, so no appended event or
+imported-row claim is made. The computer remains active and effects remain OFF.
+The source path currently forwards residue import through the ordinary
+30-second `autoputerHTTP` client, while the reducer snapshot can include the
+four runtime tables and must serialize a potentially large projection batch.
+This is a new bounded-route-budget problem, not permission to retry the import.
+
+**Residue-import timeout heresy delta:** discovered — the deployed reducer
+implementation is unreachable through the owner product path when its snapshot
+request exceeds the ordinary 30-second workspace-replace proxy budget;
+introduced — none claimed; repaired — none.
+**Residue-import timeout conjecture delta:** the reducer and owner scoping are
+locally tested and deployed, but the retained computer has no import receipt;
+the next safe action is a docs-first, route-specific timeout diagnosis and
+repair. Do not retry import, replay completeness, checkpoint, rematerialize,
+restore, self-development, self-promote, qualified-consensus, or send mail.
+**Evidence:** CI `32130418644`, staging `/health` at `2026-08-18T12:21:19Z`,
+owner command above, retained computer status epoch 305, and the HTTP 502 body.
+**Rollback:** no product-state rollback; retain epoch 305 and effects OFF while
+the route budget is diagnosed.
