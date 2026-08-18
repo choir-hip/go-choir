@@ -133,6 +133,7 @@ type Handler struct {
 	corpusd              *http.Client
 	maild                *http.Client
 	autoputerHTTP        *http.Client
+	replayAutoputerHTTP  *http.Client  // dedicated long-budget client for replay completeness
 	autoputerURL         *url.URL      // parsed autoputer URL for WS dial derivation
 	vmctlClient          *vmctl.Client // optional vmctl client for VM-backed routing
 	lifecycle            *lifecycleRecorder
@@ -288,6 +289,13 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 	// Build the handler. When authStore is nil, apiKeyValidator must be a
 	// nil interface (not a typed-nil *auth.Store) so the nil check in
 	// validateAPIKey works correctly.
+	replayTimeout := cfg.ReplayCompletenessTimeout
+	if replayTimeout <= 0 {
+		replayTimeout = DefaultReplayCompletenessTimeout
+	}
+	autoputerHTTP := &http.Client{Timeout: 30 * time.Second}
+	replayAutoputerHTTP := &http.Client{Timeout: replayTimeout, Transport: autoputerHTTP.Transport}
+
 	h := &Handler{
 		cfg:          cfg,
 		pubKey:       pubKey,
@@ -303,7 +311,8 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		dialer:               websocket.DefaultDialer,
 		corpusd:              &http.Client{Timeout: 30 * time.Second},
 		maild:                &http.Client{Timeout: 30 * time.Second},
-		autoputerHTTP:        &http.Client{Timeout: 30 * time.Second},
+		autoputerHTTP:        autoputerHTTP,
+		replayAutoputerHTTP:  replayAutoputerHTTP,
 		autoputerURL:         autoputerURL,
 		vmctlClient:          vmctlCli,
 		lifecycle:            newLifecycleRecorder(),

@@ -4050,6 +4050,30 @@ func TestLoadConfig_VMctlTimeoutFallsBackOnInvalidValue(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_ReplayCompletenessTimeout(t *testing.T) {
+	t.Setenv("PROXY_REPLAY_COMPLETENESS_TIMEOUT", "7m")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.ReplayCompletenessTimeout != 7*time.Minute {
+		t.Fatalf("ReplayCompletenessTimeout = %s, want 7m", cfg.ReplayCompletenessTimeout)
+	}
+}
+
+func TestLoadConfig_ReplayCompletenessTimeoutFallsBackOnInvalidValue(t *testing.T) {
+	t.Setenv("PROXY_REPLAY_COMPLETENESS_TIMEOUT", "not-a-duration")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.ReplayCompletenessTimeout != DefaultReplayCompletenessTimeout {
+		t.Fatalf("ReplayCompletenessTimeout = %s, want default %s", cfg.ReplayCompletenessTimeout, DefaultReplayCompletenessTimeout)
+	}
+}
+
 // --- Bearer Token (API Key) Auth Tests ---
 
 // testProxyEnvWithAuthStore sets up a proxy Handler with a real backend autoputer

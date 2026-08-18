@@ -262,9 +262,9 @@ func (h *Handler) HandleSelfDevelopmentReplayCompleteness(w http.ResponseWriter,
 	if len(authResult.Scopes) > 0 {
 		upstream.Header.Set("X-Authenticated-Scopes", strings.Join(authResult.Scopes, ","))
 	}
-	client := h.autoputerHTTP
+	client := h.replayAutoputerHTTP
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: DefaultReplayCompletenessTimeout}
 	}
 	response, err := client.Do(upstream)
 	if err != nil {

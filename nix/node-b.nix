@@ -350,6 +350,11 @@ in
         # Cold computer boot completion is handled by vmctl's
         # VM_BOOT_READY_TIMEOUT and the retry/replay path (Phase D).
         "PROXY_VMCTL_TIMEOUT=60s"
+        # Replay completeness reconstructs a disposable projection and uses a
+        # dedicated 110s budget; ordinary interactive proxy routes stay at 30s.
+        # Keep this below the proxy server write deadline so failures remain a
+        # legible 502 rather than a connection-level EOF.
+        "PROXY_REPLAY_COMPLETENESS_TIMEOUT=110s"
         "PROXY_CORPUSD_URL=http://127.0.0.1:8086"
         "PROXY_MAILD_URL=http://127.0.0.1:8087"
         # Unsigned / and /assets/* serve this host tree (picker/auth chrome).

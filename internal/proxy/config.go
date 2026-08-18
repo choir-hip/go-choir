@@ -38,6 +38,11 @@ type Config struct {
 	// the request path below the server WriteTimeout.
 	VmctlTimeout time.Duration
 
+	// ReplayCompletenessTimeout is the dedicated proxy -> autoputer budget for
+	// the owner-only replay completeness probe. Replay reconstructs a disposable
+	// projection and may legitimately outlive ordinary interactive routes.
+	ReplayCompletenessTimeout time.Duration
+
 	// CorpusdURL is the internal platform service URL. The proxy uses it
 	// for controlled private-computer to platform-publication transitions.
 	CorpusdURL string
@@ -83,6 +88,11 @@ const (
 	// legible 504 instead of the server cutting the connection.
 	DefaultVmctlTimeout = 60 * time.Second
 
+	// DefaultReplayCompletenessTimeout leaves the replay route enough time for
+	// provider-sized event pages and disposable projection reconstruction while
+	// remaining below the proxy server write deadline.
+	DefaultReplayCompletenessTimeout = 110 * time.Second
+
 	// DefaultCorpusdURL is the localhost-only platform service endpoint.
 	DefaultCorpusdURL = "http://127.0.0.1:8086"
 
@@ -95,15 +105,16 @@ const (
 // under /tmp/go-choir-m2.
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
-		Port:              envOr("PROXY_PORT", DefaultProxyPort),
-		ComputerURL:       envOr("PROXY_AUTOPUTER_URL", DefaultComputerURL),
-		AuthPublicKeyPath: defaultAuthPublicKeyPath(),
-		VmctlURL:          os.Getenv("PROXY_VMCTL_URL"),
-		VmctlTimeout:      durationEnvOr("PROXY_VMCTL_TIMEOUT", DefaultVmctlTimeout),
-		CorpusdURL:        envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL),
-		MaildURL:          envOr("PROXY_MAILD_URL", DefaultMaildURL),
-		AuthDBPath:        os.Getenv("PROXY_AUTH_DB_PATH"),
-		PlatformShellRoot: envOr("PROXY_PLATFORM_SHELL_ROOT", "/var/www/go-choir/frontend-current"),
+		Port:                      envOr("PROXY_PORT", DefaultProxyPort),
+		ComputerURL:               envOr("PROXY_AUTOPUTER_URL", DefaultComputerURL),
+		AuthPublicKeyPath:         defaultAuthPublicKeyPath(),
+		VmctlURL:                  os.Getenv("PROXY_VMCTL_URL"),
+		VmctlTimeout:              durationEnvOr("PROXY_VMCTL_TIMEOUT", DefaultVmctlTimeout),
+		ReplayCompletenessTimeout: durationEnvOr("PROXY_REPLAY_COMPLETENESS_TIMEOUT", DefaultReplayCompletenessTimeout),
+		CorpusdURL:                envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL),
+		MaildURL:                  envOr("PROXY_MAILD_URL", DefaultMaildURL),
+		AuthDBPath:                os.Getenv("PROXY_AUTH_DB_PATH"),
+		PlatformShellRoot:         envOr("PROXY_PLATFORM_SHELL_ROOT", "/var/www/go-choir/frontend-current"),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -126,6 +137,9 @@ func (c *Config) validate() error {
 	}
 	if c.VmctlTimeout <= 0 {
 		return fmt.Errorf("proxy config: PROXY_VMCTL_TIMEOUT must be positive")
+	}
+	if c.ReplayCompletenessTimeout <= 0 {
+		return fmt.Errorf("proxy config: PROXY_REPLAY_COMPLETENESS_TIMEOUT must be positive")
 	}
 	if c.CorpusdURL == "" {
 		return fmt.Errorf("proxy config: PROXY_CORPUSD_URL must not be empty")

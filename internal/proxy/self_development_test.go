@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -168,6 +169,56 @@ func TestReplayCompletenessPathUsesOwnedComputerAndTrustedBinding(t *testing.T) 
 		if _, got := selfDevelopmentReplayCompletenessComputerID(path); got != want {
 			t.Errorf("path %q accepted=%v, want %v", path, got, want)
 		}
+	}
+}
+
+func TestReplayCompletenessUsesDedicatedUpstreamTimeout(t *testing.T) {
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/computers/computer-a/self-development/replay-completeness" {
+			t.Fatalf("upstream path = %s", r.URL.Path)
+		}
+		select {
+		case <-time.After(80 * time.Millisecond):
+		case <-r.Context().Done():
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}))
+	defer autoputer.Close()
+
+	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("computer_id") != "computer-a" || r.URL.Query().Get("user_id") != "owner-user" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"computer_id": "computer-a", "desktop_id": "primary", "user_id": "owner-user",
+			"state": "active", "computer_url": autoputer.URL,
+		})
+	}))
+	defer ownership.Close()
+
+	handler, privateKey, _ := testProxyEnv(t)
+	handler.vmctlClient = vmctl.NewClient(ownership.URL)
+	handler.autoputerHTTP = &http.Client{Timeout: 5 * time.Millisecond}
+
+	handler.replayAutoputerHTTP = &http.Client{Timeout: 5 * time.Millisecond}
+	timedOutRequest := httptest.NewRequest(http.MethodGet, "/api/computers/computer-a/self-development/replay-completeness", nil)
+	timedOutRequest.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(privateKey, "owner-user")})
+	timedOutResponse := httptest.NewRecorder()
+	handler.HandleAPI(timedOutResponse, timedOutRequest)
+	if timedOutResponse.Code != http.StatusBadGateway {
+		t.Fatalf("timed-out replay completeness status=%d body=%s", timedOutResponse.Code, timedOutResponse.Body.String())
+	}
+
+	handler.replayAutoputerHTTP = &http.Client{Timeout: 500 * time.Millisecond}
+	request := httptest.NewRequest(http.MethodGet, "/api/computers/computer-a/self-development/replay-completeness", nil)
+	request.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(privateKey, "owner-user")})
+	response := httptest.NewRecorder()
+	handler.HandleAPI(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("replay completeness status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
