@@ -253,11 +253,9 @@ func TestSnapshotResidueRuntimeIncludesCanonicalRunMemory(t *testing.T) {
 		RunID: "run-residue-canonical", AgentID: "agent-canonical", OwnerID: "owner-runtime",
 		ComputerID: computerID, State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
 	}
-	canonicalObject, err := lifecycleObject(ogKindRun, canonicalRun.OwnerID, computerID, canonicalRun.RunID, canonicalRun, lifecycleMetadata("run_id", canonicalRun.RunID, computerID, "", 1), now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := productStore.ogStore.PutObject(ctx, canonicalObject); err != nil {
+	// CreateRunOG is the production writer: computer_id lives in the
+	// canonical run body/metadata, not the object-graph storage column.
+	if err := productStore.CreateRunOG(ctx, canonicalRun); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := productStore.db.ExecContext(ctx,
@@ -281,11 +279,7 @@ func TestSnapshotResidueRuntimeIncludesCanonicalRunMemory(t *testing.T) {
 	otherComputerRun := canonicalRun
 	otherComputerRun.RunID = "run-residue-other-computer"
 	otherComputerRun.ComputerID = "computer-other"
-	otherComputerObject, err := lifecycleObject(ogKindRun, otherComputerRun.OwnerID, otherComputerRun.ComputerID, otherComputerRun.RunID, otherComputerRun, lifecycleMetadata("run_id", otherComputerRun.RunID, otherComputerRun.ComputerID, "", 1), now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := productStore.ogStore.PutObject(ctx, otherComputerObject); err != nil {
+	if err := productStore.CreateRunOG(ctx, otherComputerRun); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := productStore.db.ExecContext(ctx,

@@ -11,6 +11,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 var (
@@ -281,39 +282,79 @@ type residueRunScope struct {
 // authority. Production runs are object-graph records; the SQL runs table is
 // retained only as a compatibility source for rows created before that cutover.
 func (s *Store) residueRunScopes(ctx context.Context, ownerID, computerID string, objects []objectgraph.Object) ([]residueRunScope, error) {
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
 	scopes := make(map[residueRunScope]struct{})
 	add := func(candidateOwnerID, runID string) {
 		candidateOwnerID, runID = strings.TrimSpace(candidateOwnerID), strings.TrimSpace(runID)
 		if candidateOwnerID == "" || runID == "" {
 			return
 		}
-		if ownerID != "" && candidateOwnerID != strings.TrimSpace(ownerID) {
+		if ownerID != "" && candidateOwnerID != ownerID {
 			return
 		}
 		scopes[residueRunScope{ownerID: candidateOwnerID, runID: runID}] = struct{}{}
 	}
-
-	for _, obj := range objects {
-		if obj.ObjectKind != ogKindRun || strings.TrimSpace(obj.ComputerID) != strings.TrimSpace(computerID) {
-			continue
+	addRunObject := func(obj objectgraph.Object) error {
+		if obj.Tombstone || obj.ObjectKind != ogKindRun {
+			return nil
+		}
+		var rec types.RunRecord
+		if err := json.Unmarshal(obj.Body, &rec); err != nil {
+			return fmt.Errorf("store: decode residue run body: %w", err)
 		}
 		var metadata struct {
-			RunID string `json:"run_id"`
+			RunID      string `json:"run_id"`
+			ComputerID string `json:"computer_id"`
 		}
 		if err := json.Unmarshal(obj.Metadata, &metadata); err != nil {
-			return nil, fmt.Errorf("store: decode residue run metadata: %w", err)
+			return fmt.Errorf("store: decode residue run metadata: %w", err)
 		}
-		runID := strings.TrimSpace(metadata.RunID)
-		if runID == "" {
-			var body struct {
-				RunID string `json:"loop_id"`
-			}
-			if err := json.Unmarshal(obj.Body, &body); err != nil {
-				return nil, fmt.Errorf("store: decode residue run body: %w", err)
-			}
-			runID = strings.TrimSpace(body.RunID)
+		if strings.TrimSpace(rec.RunID) == "" {
+			rec.RunID = metadata.RunID
 		}
-		add(obj.OwnerID, runID)
+		if strings.TrimSpace(rec.ComputerID) == "" {
+			rec.ComputerID = metadata.ComputerID
+		}
+		if strings.TrimSpace(rec.ComputerID) == "" {
+			rec.ComputerID = obj.ComputerID
+		}
+		if strings.TrimSpace(rec.ComputerID) != computerID {
+			return nil
+		}
+		objectOwnerID, bodyOwnerID := strings.TrimSpace(obj.OwnerID), strings.TrimSpace(rec.OwnerID)
+		if objectOwnerID != "" && bodyOwnerID != "" && objectOwnerID != bodyOwnerID {
+			return fmt.Errorf("store: residue run owner mismatch: object=%q body=%q", objectOwnerID, bodyOwnerID)
+		}
+		if bodyOwnerID == "" {
+			bodyOwnerID = objectOwnerID
+		}
+		add(bodyOwnerID, rec.RunID)
+		return nil
+	}
+
+	// Lifecycle objects are already scoped by snapshotResidueObjects. Their
+	// storage computer_id is authoritative when present.
+	for _, obj := range objects {
+		if strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
+		if err := addRunObject(obj); err != nil {
+			return nil, err
+		}
+	}
+
+	// CreateRunOG stores the run's computer identity in the canonical body and
+	// metadata, while the object-graph computer_id column remains empty. Query
+	// the canonical metadata index instead of treating that storage column as
+	// the run's scope; otherwise its durable run_memory_entries are omitted.
+	canonicalRuns, err := s.ogListAllByMetadata(ctx, ogKindRun, "computer_id", computerID)
+	if err != nil {
+		return nil, fmt.Errorf("store: list canonical residue runs: %w", err)
+	}
+	for _, obj := range canonicalRuns {
+		if err := addRunObject(obj); err != nil {
+			return nil, err
+		}
 	}
 
 	legacyQuery := `SELECT loop_id, owner_id FROM runs WHERE computer_id=?`
