@@ -689,11 +689,11 @@ func TestCredentialRenewalAcceptsRecentlyExpiredCapability(t *testing.T) {
 		handler.HandleComputerCredentialRenew(response, request)
 		return response
 	}
-	recent := now.Add(-30 * time.Second)
+	recent := now.Add(-5 * time.Minute)
 	if response := call(mint(recent)); response.Code != http.StatusCreated {
 		t.Fatalf("recently expired renewal status=%d body=%s", response.Code, response.Body.String())
 	}
-	stale := now.Add(-2 * time.Minute)
+	stale := now.Add(-20 * time.Minute)
 	if response := call(mint(stale)); response.Code != http.StatusForbidden {
 		t.Fatalf("stale expired renewal status=%d body=%s", response.Code, response.Body.String())
 	}

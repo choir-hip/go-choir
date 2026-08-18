@@ -13,8 +13,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
-const defaultComputerCapabilityTTL = 5 * time.Minute
-const capabilityRenewalGrace = 60 * time.Second
+const defaultComputerCapabilityTTL = 30 * time.Minute
+const capabilityRenewalGrace = 15 * time.Minute
 
 var capabilityDomain = []byte("choir-computer-capability-v1\x00")
 

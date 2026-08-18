@@ -272,6 +272,7 @@ func Run() {
 		}
 		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher))
 		if credentials != nil {
+			credentials.StartBackgroundRenewal(context.Background())
 			coreOpts = append(coreOpts, guestControlOptions(credentials)...)
 			log.Printf("autoputer: owner-recovery and self-development mode credentials wired; proposal still requires signed propose_only")
 		}

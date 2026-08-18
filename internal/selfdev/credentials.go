@@ -182,6 +182,27 @@ func (g *GuestCredentials) Capability(ctx context.Context) (string, error) {
 	return g.token, nil
 }
 
+// StartBackgroundRenewal runs a proactive ticker that keeps the in-memory
+// capability fresh across long tool and LLM execution loops without waiting
+// for an explicit event append to trigger renewal.
+func (g *GuestCredentials) StartBackgroundRenewal(ctx context.Context) {
+	if g == nil {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_, _ = g.Capability(ctx)
+			}
+		}
+	}()
+}
+
 // GuestCredentialsWithCapability holds an already-exchanged platform capability
 // for mode and checkpoint calls. Production boot still uses ExchangeGuestCredential.
 func GuestCredentialsWithCapability(baseURL, computerID, token string, expiresAt time.Time) *GuestCredentials {
