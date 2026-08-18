@@ -352,3 +352,20 @@ The prior `response exceeds 8388608 bytes` failure did not recur, so the refresh
 **Evidence:** workflow `https://github.com/choir-hip/go-choir/actions/runs/32146221851`, staging `/health`, refresh receipt `01a01541-586e-71f3-b4f8-050ad5899f65`, retained epoch `307`, and the replay HTTP 502 above.
 
 **Rollback:** no product-state rollback; retain epoch `307` and effects OFF while the route budget is diagnosed through a separate problem-first landing loop.
+
+## Replay route timeout repair implementation
+
+The docs-first timeout receipt above is followed by source commit `f86d6ed7` (`fix: extend replay completeness route budget`). Node B now assigns the owner-only replay-completeness route a bounded `PROXY_REPLAY_COMPLETENESS_TIMEOUT=119s`, up from 110s, while ordinary interactive proxy routes remain at 30s. The value remains one second below the proxy service's 120-second server write deadline, preserving a legible 502 on timeout rather than a connection-level EOF. The default/local route budget remains 110s.
+
+Local proof passed:
+
+```text
+go test ./internal/proxy -count=1
+nix-instantiate --parse nix/node-b.nix
+```
+
+This is source/config evidence only until the normal landing loop deploys `f86d6ed7`, staging health reports the new identity, the same retained computer is refreshed if needed, and a fresh owner-authorized replay-completeness read completes. Effects remain OFF; no checkpoint, restore, self-development retry, self-promote, qualified-consensus, or mail send is authorized.
+
+**Replay route-timeout repair heresy delta:** discovered — none beyond the documented 110-second route budget; introduced — a Node B-only 119-second bounded budget below the existing server write deadline; repaired — the 110-second staging route budget that expired after the payload-bound repair. **Replay route-timeout repair conjecture delta:** the staging route now has measured headroom without globally widening ordinary proxy routes; deployed replay eligibility remains unproven.
+
+**Rollback:** revert `f86d6ed7`; no product-state rollback has been performed, and the retained computer remains at epoch 307 with effects OFF.
