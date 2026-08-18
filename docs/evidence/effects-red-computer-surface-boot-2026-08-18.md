@@ -317,3 +317,20 @@ This confirms the prior one-mebibyte truncation path is no longer active on the 
 **Evidence:** commit `c6d0b34a79f63e4ca4350b8a8b9aa9fe9363e66f`, CI `https://github.com/choir-hip/go-choir/actions/runs/32139497055`, staging `/health`, lifecycle receipt `01a01529-baa3-7b42-89df-5b53632ffa0e`, retained epoch `306`, and the post-refresh replay read above.
 
 **Rollback:** no product-state rollback; retain epoch `306` and effects OFF while the payload-size contract is repaired through a separate problem-first landing loop.
+
+## Payload response bound repair implementation
+
+The docs-first payload-bound problem receipt above is followed by source commit `8754884d` (`fix: give replay payloads a dedicated response bound`). `FetchPayload` now uses a payload-specific `EventPayloadMaxResponseBytes` bound of 64 MiB instead of sharing the 8 MiB replay-page bound. Replay pages remain bounded at 8 MiB; payload reads remain finite and reject an overlong response before JSON decoding. This preserves fail-closed behavior while admitting the large residue projection envelope observed at sequence 3218.
+
+Local proof passed:
+
+```text
+go test ./internal/computerevent -run 'TestHTTPClientFetchPayload|TestHTTPClientEvents' -count=1
+go test ./internal/computerevent -count=1
+```
+
+The new regression covers explicit rejection above the payload-specific limit; the existing payload test covers an envelope beyond the legacy one-mebibyte reader. This is source-only evidence until the normal landing loop deploys `8754884d`, the retained computer is owner-refreshed onto that guest, and an owner-authorized replay-completeness read completes. Effects remain OFF; no checkpoint, restore, self-development retry, self-promote, qualified-consensus, or mail send is authorized.
+
+**Payload-bound repair heresy delta:** discovered — the first 8 MiB shared bound was too small for the admitted residue envelope; introduced — a separate finite 64 MiB payload budget; repaired — the 8 MiB payload/page coupling that blocked the refreshed guest before JSON decode. **Payload-bound repair conjecture delta:** the payload transport is locally bounded and tested; staging replay eligibility remains unproven until deployment identity, guest refresh, and a fresh replay read complete.
+
+**Rollback:** revert `8754884d`; no product-state rollback has been performed, and the retained computer remains at epoch 306 with effects OFF.
