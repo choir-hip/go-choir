@@ -113,3 +113,21 @@ The first command passed the paged oversized-response, non-progress, response-bo
 **Replay repair heresy delta:** discovered — none beyond the documented transport defect; introduced — none claimed pending landing; repaired — source-level unpaged replay truncation path.
 **Replay repair conjecture delta:** the bounded page contract is locally supported; staging replay eligibility remains unproven until the normal red landing loop and a fresh owner-authorized replay read complete.
 **Rollback:** revert `c38324f4`; retain the prior staging guest untouched until deployment identity and replay acceptance are independently verified.
+
+## Post-repair replay observation
+
+The replay transport repair landed in commit `c38324f4` and was carried through the normal landing loop in CI run `32114070641`, attempt 2. The run completed successfully, including the Node B deployment. Staging `/health` reports proxy/deployed commit `bdbf7b7eea30bc425e95145040cd9ca55d0a473e`, which contains the repair. The retained computer was not refreshed by this follow-on landing: it remains active at epoch `303` with guest/autoputer `13a0ae7c`.
+
+A fresh owner-authorized replay-completeness read at `2026-08-18T08:32Z` and a second read at `2026-08-18T08:34Z` both returned HTTP 500:
+
+```text
+replay completeness: reconstruct event chain: computer event appender: projection repair required
+```
+
+This is a changed failure surface: the prior `unexpected EOF` transport failure is no longer reported after the paged replay repair. The deployed code now reaches the appender's fail-closed projection-repair sentinel, which is returned when reconstruction finishes without a local projection head matching the canonical platform head. The receipt does not yet establish whether the durable replay page is empty, incomplete, or otherwise unable to advance; that distinction requires an owner-authorized page-level observation or source-side staging evidence.
+
+This receipt accepts the bounded transport repair as landed, but does not accept replay completeness, restore eligibility, checkpointability, rematerialization, or self-development readiness. Do not bind a checkpoint, rematerialize, restore, retry self-development, or send mail. The next safe probe is to identify the canonical-head/replay-page mismatch under the authorized event-read path, then document that problem before any repair.
+
+**Post-repair replay heresy delta:** discovered — the unpaged EOF was repaired, exposing a separate canonical-head/replay-projection mismatch; introduced — none claimed; repaired — bounded replay transport. **Post-repair replay conjecture delta:** the transport repair is staging-verified, while event-chain reconstruction remains unproven and blocked by projection repair required.
+**Evidence:** CI `https://github.com/choir-hip/go-choir/actions/runs/32114070641` (attempt 2), staging `/health` at `bdbf7b7e`, retained epoch `303`, and the two owner-authorized replay-completeness reads above.
+**Rollback:** revert `c38324f4`; no product-state rollback was performed.
