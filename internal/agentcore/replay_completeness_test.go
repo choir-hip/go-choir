@@ -78,6 +78,30 @@ func (emptyReplayAuthority) VerifyEventHeadReceipt(context.Context, computereven
 	return nil
 }
 
+func TestCompareReplayRunMemoryClassifiesProjectionDrift(t *testing.T) {
+	live := []choirstore.RunMemoryEntryFingerprint{
+		{EntryID: "entry-a", RowDigest: "row-a-live", FieldDigests: map[string]string{"summary": "summary-a-live"}},
+		{EntryID: "entry-b", RowDigest: "row-b-live", FieldDigests: map[string]string{"summary": "summary-b-live"}},
+	}
+	replay := []choirstore.RunMemoryEntryFingerprint{
+		{EntryID: "entry-a", RowDigest: "row-a-replay", FieldDigests: map[string]string{"summary": "summary-a-replay"}},
+		{EntryID: "entry-c", RowDigest: "row-c-replay", FieldDigests: map[string]string{"summary": "summary-c-replay"}},
+	}
+	got := compareReplayRunMemory(live, replay)
+	if got.LiveCount != 2 || got.ReplayCount != 2 || got.LiveOnlyCount != 1 || got.ReplayOnlyCount != 1 || got.DifferentCount != 1 {
+		t.Fatalf("comparison counts = %#v", got)
+	}
+	if len(got.Samples) != 3 {
+		t.Fatalf("comparison samples = %#v", got.Samples)
+	}
+	if got.Samples[0].EntryID != "entry-a" || got.Samples[0].Kind != "different" || len(got.Samples[0].DifferentFields) != 1 || got.Samples[0].DifferentFields[0] != "summary" {
+		t.Fatalf("different sample = %#v", got.Samples[0])
+	}
+	if got.Samples[1].EntryID != "entry-b" || got.Samples[1].Kind != "live_only" || got.Samples[2].EntryID != "entry-c" || got.Samples[2].Kind != "replay_only" {
+		t.Fatalf("presence samples = %#v", got.Samples)
+	}
+}
+
 func TestReplayCompletenessUsesDisposableProjectionWithoutMutatingLiveStore(t *testing.T) {
 	computerID := "computer-replay-probe"
 	storePath := filepath.Join(t.TempDir(), "runtime.db")

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 // failure, not a clean replay result.
 var ErrReplayCompletenessUnavailable = errors.New("replay completeness probe unavailable")
 
-const replayCompletenessSchemaVersion = 2
+const replayCompletenessSchemaVersion = 3
 
 // ReplayCompletenessReport is the read-only evidence returned by the product
 // replay probe. Replay state is built in a disposable Dolt workspace; the live
@@ -35,6 +36,116 @@ type ReplayCompletenessReport struct {
 	Result        computerversion.EquivalenceResult `json:"result"`
 	Eligibility   ReplayEligibility                 `json:"eligibility"`
 	ProbeDigest   string                            `json:"probe_digest"`
+	RunMemory     ReplayRunMemoryComparison         `json:"run_memory"`
+}
+
+// ReplayRunMemoryComparison summarizes row-level run-memory projection drift
+// without returning provider-facing content. Samples are bounded because the
+// full equivalence report already carries table-level hashes.
+type ReplayRunMemoryComparison struct {
+	LiveCount       int                         `json:"live_count"`
+	ReplayCount     int                         `json:"replay_count"`
+	LiveOnlyCount   int                         `json:"live_only_count"`
+	ReplayOnlyCount int                         `json:"replay_only_count"`
+	DifferentCount  int                         `json:"different_count"`
+	Samples         []ReplayRunMemoryDifference `json:"samples,omitempty"`
+}
+
+type ReplayRunMemoryDifference struct {
+	Kind            string   `json:"kind"`
+	EntryID         string   `json:"entry_id"`
+	LiveRowDigest   string   `json:"live_row_digest,omitempty"`
+	ReplayRowDigest string   `json:"replay_row_digest,omitempty"`
+	DifferentFields []string `json:"different_fields,omitempty"`
+}
+
+const replayRunMemorySampleLimit = 32
+
+func compareReplayRunMemory(live, replay []choirstore.RunMemoryEntryFingerprint) ReplayRunMemoryComparison {
+	comparison := ReplayRunMemoryComparison{
+		LiveCount:   len(live),
+		ReplayCount: len(replay),
+	}
+	liveByID := make(map[string]choirstore.RunMemoryEntryFingerprint, len(live))
+	for _, entry := range live {
+		liveByID[entry.EntryID] = entry
+	}
+	replayByID := make(map[string]choirstore.RunMemoryEntryFingerprint, len(replay))
+	for _, entry := range replay {
+		replayByID[entry.EntryID] = entry
+	}
+	ids := make([]string, 0, len(liveByID)+len(replayByID))
+	seen := make(map[string]struct{}, len(liveByID)+len(replayByID))
+	for id := range liveByID {
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	for id := range replayByID {
+		if _, ok := seen[id]; !ok {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+
+	for _, id := range ids {
+		liveEntry, liveOK := liveByID[id]
+		replayEntry, replayOK := replayByID[id]
+		switch {
+		case liveOK && !replayOK:
+			comparison.LiveOnlyCount++
+			comparison.addSample(ReplayRunMemoryDifference{
+				Kind: "live_only", EntryID: id, LiveRowDigest: liveEntry.RowDigest,
+			})
+		case !liveOK && replayOK:
+			comparison.ReplayOnlyCount++
+			comparison.addSample(ReplayRunMemoryDifference{
+				Kind: "replay_only", EntryID: id, ReplayRowDigest: replayEntry.RowDigest,
+			})
+		case liveOK && replayOK:
+			differentFields := differingReplayRunMemoryFields(liveEntry.FieldDigests, replayEntry.FieldDigests)
+			if liveEntry.RowDigest == replayEntry.RowDigest && len(differentFields) == 0 {
+				continue
+			}
+			if len(differentFields) == 0 {
+				differentFields = []string{"row"}
+			}
+			comparison.DifferentCount++
+			comparison.addSample(ReplayRunMemoryDifference{
+				Kind: "different", EntryID: id,
+				LiveRowDigest: liveEntry.RowDigest, ReplayRowDigest: replayEntry.RowDigest,
+				DifferentFields: differentFields,
+			})
+		}
+	}
+	return comparison
+}
+
+func (c *ReplayRunMemoryComparison) addSample(sample ReplayRunMemoryDifference) {
+	if len(c.Samples) < replayRunMemorySampleLimit {
+		c.Samples = append(c.Samples, sample)
+	}
+}
+
+func differingReplayRunMemoryFields(live, replay map[string]string) []string {
+	keys := make([]string, 0, len(live)+len(replay))
+	seen := make(map[string]struct{}, len(live)+len(replay))
+	for key := range live {
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	for key := range replay {
+		if _, ok := seen[key]; !ok {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	different := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if live[key] != replay[key] {
+			different = append(different, key)
+		}
+	}
+	return different
 }
 
 // ReplayCompleteness performs the effects Definition's pre-drop measurement.
@@ -107,6 +218,16 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: live Dolt state changed during probe: %v", stable.Differences)
 	}
 
+	liveRunMemory, err := rt.store.ListRunMemoryEntryFingerprints(ctx)
+	if err != nil {
+		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: fingerprint live run memory: %w", err)
+	}
+	replayRunMemory, err := replayStore.ListRunMemoryEntryFingerprints(ctx)
+	if err != nil {
+		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: fingerprint replay run memory: %w", err)
+	}
+	runMemory := compareReplayRunMemory(liveRunMemory, replayRunMemory)
+
 	result := (computerversion.EquivalenceChecker{}).CheckObservationSets(
 		filterReplayHeadObservation(live), filterReplayHeadObservation(replay),
 	)
@@ -120,6 +241,7 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 		Replay:        replay,
 		Result:        result,
 		Eligibility:   replayEligibility(liveHead, replayHead, live, replay, result),
+		RunMemory:     runMemory,
 	}
 	raw, err := computerevent.CanonicalJSON(report)
 	if err != nil {

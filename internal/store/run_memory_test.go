@@ -86,6 +86,50 @@ func TestRunMemoryAppendListAndLatest(t *testing.T) {
 	}
 }
 
+func TestRunMemoryEntryFingerprintsHashRowsWithoutContent(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	entry, err := s.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
+		RunID:   "run-memory-fingerprint",
+		OwnerID: "owner-1",
+		AgentID: "agent-1",
+		Kind:    types.RunMemoryEntryMessage,
+		Role:    "user",
+		Message: json.RawMessage(`{"role":"user","content":"secret provider content"}`),
+		Summary: "secret summary",
+	})
+	if err != nil {
+		t.Fatalf("append entry: %v", err)
+	}
+	before, err := s.ListRunMemoryEntryFingerprints(ctx)
+	if err != nil {
+		t.Fatalf("fingerprints before update: %v", err)
+	}
+	if len(before) != 1 || before[0].EntryID != entry.EntryID {
+		t.Fatalf("fingerprints before update = %#v", before)
+	}
+	if before[0].RowDigest == "" || before[0].FieldDigests["message_json"] == "" {
+		t.Fatalf("fingerprint omitted digest: %#v", before[0])
+	}
+	encoded, err := json.Marshal(before)
+	if err != nil {
+		t.Fatalf("marshal fingerprints: %v", err)
+	}
+	if strings.Contains(string(encoded), "secret provider content") || strings.Contains(string(encoded), "secret summary") {
+		t.Fatalf("fingerprint leaked content: %s", encoded)
+	}
+	if _, err := s.DB().ExecContext(ctx, `UPDATE run_memory_entries SET summary=? WHERE entry_id=?`, "changed summary", entry.EntryID); err != nil {
+		t.Fatalf("update entry: %v", err)
+	}
+	after, err := s.ListRunMemoryEntryFingerprints(ctx)
+	if err != nil {
+		t.Fatalf("fingerprints after update: %v", err)
+	}
+	if len(after) != 1 || after[0].RowDigest == before[0].RowDigest || after[0].FieldDigests["summary"] == before[0].FieldDigests["summary"] {
+		t.Fatalf("fingerprint did not detect row change: before=%#v after=%#v", before[0], after[0])
+	}
+}
+
 func TestRunMemoryAppendNormalizesUnicodeText(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

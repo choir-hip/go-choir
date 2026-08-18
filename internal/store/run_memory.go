@@ -277,6 +277,93 @@ func (s *Store) ListRunMemoryEntries(ctx context.Context, ownerID, runID string)
 	return entries, nil
 }
 
+// RunMemoryEntryFingerprint is a content-safe identity and digest view of a
+// run-memory row. It deliberately exposes hashes instead of provider-facing
+// message, summary, or details text so replay diagnostics cannot become a
+// second content-read API.
+type RunMemoryEntryFingerprint struct {
+	EntryID      string            `json:"entry_id"`
+	RunID        string            `json:"loop_id"`
+	OwnerID      string            `json:"owner_id"`
+	AgentID      string            `json:"agent_id,omitempty"`
+	Seq          int64             `json:"seq"`
+	RowDigest    string            `json:"row_digest"`
+	FieldDigests map[string]string `json:"field_digests"`
+}
+
+// ListRunMemoryEntryFingerprints returns a deterministic, content-safe digest
+// for every run-memory row. It is used only by owner-authorized replay
+// diagnostics to distinguish omitted rows from projection normalization.
+func (s *Store) ListRunMemoryEntryFingerprints(ctx context.Context) ([]RunMemoryEntryFingerprint, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT entry_id, loop_id, owner_id, agent_id, parent_entry_id, seq,
+		       kind, role, message_json, summary, first_kept_entry_id,
+		       tokens_before, reason, model, details_json, created_at
+		  FROM run_memory_entries
+		 ORDER BY entry_id ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("query run memory fingerprints: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var fingerprints []RunMemoryEntryFingerprint
+	for rows.Next() {
+		var (
+			entryID, runID, ownerID, agentID, parentEntryID string
+			seq                                             int64
+			kind, role, messageJSON, summary                string
+			firstKeptEntryID                                string
+			tokensBefore                                    int64
+			reason, model, detailsJSON, createdAt           string
+		)
+		if err := rows.Scan(
+			&entryID, &runID, &ownerID, &agentID, &parentEntryID, &seq,
+			&kind, &role, &messageJSON, &summary, &firstKeptEntryID,
+			&tokensBefore, &reason, &model, &detailsJSON, &createdAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan run memory fingerprint: %w", err)
+		}
+		fields := map[string]any{
+			"entry_id":            entryID,
+			"loop_id":             runID,
+			"owner_id":            ownerID,
+			"agent_id":            agentID,
+			"parent_entry_id":     parentEntryID,
+			"seq":                 seq,
+			"kind":                kind,
+			"role":                role,
+			"message_json":        messageJSON,
+			"summary":             summary,
+			"first_kept_entry_id": firstKeptEntryID,
+			"tokens_before":       tokensBefore,
+			"reason":              reason,
+			"model":               model,
+			"details_json":        detailsJSON,
+			"created_at":          createdAt,
+		}
+		rowJSON, err := computerevent.CanonicalJSON(fields)
+		if err != nil {
+			return nil, fmt.Errorf("encode run memory fingerprint: %w", err)
+		}
+		fieldDigests := make(map[string]string, len(fields))
+		for name, value := range fields {
+			fieldJSON, err := computerevent.CanonicalJSON(value)
+			if err != nil {
+				return nil, fmt.Errorf("encode run memory field fingerprint %s: %w", name, err)
+			}
+			fieldDigests[name] = computerevent.DigestBytes(fieldJSON)
+		}
+		fingerprints = append(fingerprints, RunMemoryEntryFingerprint{
+			EntryID: entryID, RunID: runID, OwnerID: ownerID, AgentID: agentID,
+			Seq: seq, RowDigest: computerevent.DigestBytes(rowJSON), FieldDigests: fieldDigests,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate run memory fingerprints: %w", err)
+	}
+	return fingerprints, nil
+}
+
 // LatestRunMemoryEntry returns the most recent memory entry for a run.
 func (s *Store) LatestRunMemoryEntry(ctx context.Context, runID string) (types.RunMemoryEntry, error) {
 	row := s.db.QueryRowContext(ctx,
