@@ -89,24 +89,56 @@ func (c *GatewayClient) Call(ctx context.Context, req provider.LLMRequest) (*pro
 		return nil, err
 	}
 
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("gateway client: http call: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("gateway client: read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		// Sanitize the error response.
-		var errResp ErrorResponse
-		if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != "" {
-			return nil, fmt.Errorf("gateway client: %s", errResp.Error)
+	var body []byte
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(attempt) * 500 * time.Millisecond):
+			}
 		}
-		return nil, fmt.Errorf("gateway client: status %s (sanitized)", resp.Status)
+
+		httpReq, err = http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
+		if err != nil {
+			return nil, fmt.Errorf("gateway client: create request: %w", err)
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		if err := c.setAuthorization(httpReq); err != nil {
+			return nil, err
+		}
+
+		resp, err := c.httpClient.Do(httpReq)
+		if err != nil {
+			lastErr = fmt.Errorf("gateway client: http call: %w", err)
+			continue
+		}
+
+		body, err = io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			lastErr = fmt.Errorf("gateway client: read response: %w", err)
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			if resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable || resp.StatusCode == http.StatusGatewayTimeout {
+				lastErr = fmt.Errorf("gateway client: status %s (sanitized)", resp.Status)
+				continue
+			}
+			// Sanitize the error response.
+			var errResp ErrorResponse
+			if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != "" {
+				return nil, fmt.Errorf("gateway client: %s", errResp.Error)
+			}
+			return nil, fmt.Errorf("gateway client: status %s (sanitized)", resp.Status)
+		}
+		lastErr = nil
+		break
+	}
+	if lastErr != nil {
+		return nil, lastErr
 	}
 
 	var gwResp ProviderResponse
