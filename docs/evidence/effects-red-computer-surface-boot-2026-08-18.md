@@ -377,3 +377,21 @@ After CI `32148760924` completed successfully and staging `/health` reported `ae
 This is a new substrate problem, not evidence that the payload repair or the bounded 119-second source repair was incorrect: the route requires a longer owner-only deadline, but broadening `SERVER_WRITE_TIMEOUT` for every proxy route would weaken the ordinary-route fail-fast boundary. The next source repair must extend the response deadline for this route only and give its upstream client a longer bounded budget. No state mutation, candidate, bundle, replay-equivalence result, eligibility, checkpoint, restore, retry, promotion, or effect is authorized.
 
 **Problem-first receipt:** discovered `2026-08-18T14:44:18Z`; environment `staging ae8060035195be3d862cac325244491e85befb7f`, retained computer `computer-03335285269bdba4f94377e56879f9e6`, epoch `308`; evidence `CI 32148760924`, staging `/health`, refresh receipt `01a01551-9aa3-7ef6-aaee-bde3cfa10a46`, owner replay command result `HTTP 502 after 120.54s`; remaining error `replay route cannot complete through the public proxy before the 119s upstream/120s server deadline`; rollback `revert f86d6ed7` only if the prior route configuration must be restored, with no product-state rollback.
+
+## Replay route-local deadline repair implementation
+
+The outer-deadline problem receipt above is followed by source commit `34c68283` (`fix: extend replay completeness route deadline`). The proxy now uses `http.NewResponseController(w).SetWriteDeadline(...)` for the owner-only replay-completeness route, deriving the deadline from its dedicated upstream client budget plus a one-second write grace. This extends only that response writer; ordinary proxy routes retain the global 120-second server write deadline. Node B raises only the replay route budget to `10m`; local/fallback deployments retain the 110-second default.
+
+Local proof passed:
+
+```text
+go test ./internal/proxy -run 'TestReplayCompleteness' -count=1
+go test ./internal/server -run 'Test(NewServerUsesWriteTimeoutFromEnv|WriteTimeoutFromEnv)' -count=1
+nix-instantiate --parse nix/node-b.nix
+```
+
+This source/config repair is not deployed proof. Effects remain OFF; the same retained computer remains at epoch `308` until the normal landing loop deploys `34c68283`, staging health reports it, the guest is refreshed if required, and a fresh owner-authorized replay-completeness read yields a result.
+
+**Replay outer-deadline repair heresy delta:** discovered — the deployed 119-second route budget was still bounded by the 120-second global proxy write deadline; introduced — a route-local write-deadline extension and a Node B-only 10-minute upstream budget; repaired — the outer deadline without widening ordinary proxy routes. **Conjecture delta:** replay can now run within a bounded owner-only route budget while ordinary proxy fail-fast behavior remains unchanged; staging replay eligibility is unproven.
+
+**Rollback:** revert `34c68283`; no product-state rollback has been performed, and epoch `308` remains retained with effects OFF.
