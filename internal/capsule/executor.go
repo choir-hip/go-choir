@@ -316,7 +316,9 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 	cmd.ExtraFiles = []*os.File{inheritedListener}
 	brokerPath := os.Getenv("PATH")
 	if strings.TrimSpace(brokerPath) == "" {
-		brokerPath = "/bin:/usr/bin"
+		brokerPath = "/run/current-system/sw/bin:/bin:/usr/bin"
+	} else if !strings.Contains(brokerPath, "/run/current-system/sw/bin") {
+		brokerPath = "/run/current-system/sw/bin:" + brokerPath
 	}
 	cmd.Env = []string{"PATH=" + brokerPath + ":/bin:/usr/bin", "HOME=/root", "TMPDIR=/tmp"}
 	cmd.Stdout = os.Stdout
@@ -1500,8 +1502,24 @@ func prepareCapsuleRoot(root, upperDir string) error {
 	}
 	for _, path := range []string{"run", "tmp", "mnt", "proc", "sys"} {
 		target := filepath.Join(root, path)
-		if err := unix.Mount("tmpfs", target, "tmpfs", unix.MS_NOSUID|unix.MS_NODEV, "mode=0755,size=64m"); err != nil {
+		mode := "mode=0755,size=64m"
+		if path == "tmp" || path == "mnt" || path == "run" {
+			mode = "mode=1777,size=256m"
+		}
+		if err := unix.Mount("tmpfs", target, "tmpfs", unix.MS_NOSUID|unix.MS_NODEV, mode); err != nil {
 			return fmt.Errorf("capsule mask %s: %w", path, err)
+		}
+		if path == "tmp" || path == "mnt" || path == "run" {
+			_ = os.Chmod(target, 0o1777)
+		}
+	}
+	currentSystem := "/run/current-system"
+	if _, err := os.Stat(currentSystem); err == nil {
+		currentSystemTarget := filepath.Join(root, "run", "current-system")
+		if err := os.MkdirAll(currentSystemTarget, 0o755); err == nil {
+			if err := unix.Mount(currentSystem, currentSystemTarget, "", unix.MS_BIND|unix.MS_REC, ""); err == nil {
+				_ = unix.Mount("", currentSystemTarget, "", unix.MS_BIND|unix.MS_REMOUNT|unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV, "")
+			}
 		}
 	}
 	storeTarget := filepath.Join(root, "nix", "store")
@@ -1536,6 +1554,8 @@ func prepareCapsuleRoot(root, upperDir string) error {
 }
 
 func unmountCapsuleRoot(root string) error {
+	currentSystemMount := filepath.Join(root, "run", "current-system")
+	_ = unix.Unmount(currentSystemMount, unix.MNT_DETACH)
 	brokerMount := filepath.Join(root, "run", "capsule", "broker")
 	_ = unix.Unmount(brokerMount, unix.MNT_DETACH)
 	if err := unix.Unmount(root, unix.MNT_DETACH); err != nil && err != unix.EINVAL {

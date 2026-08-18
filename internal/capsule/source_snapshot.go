@@ -187,7 +187,7 @@ func makeSubjectTreeReadOnly(root string) error {
 	}
 	sort.Slice(dirs, func(i, j int) bool { return len(dirs[i]) > len(dirs[j]) })
 	for _, dir := range dirs {
-		if err := os.Chmod(dir, 0o555); err != nil {
+		if err := os.Chmod(dir, 0o755); err != nil {
 			return err
 		}
 	}

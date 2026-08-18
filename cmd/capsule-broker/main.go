@@ -348,9 +348,28 @@ func (b *Broker) handleExec(ctx context.Context, cap *capsule.Capability, params
 		return BrokerRPCResponse{Error: fmt.Sprintf("invalid cwd: %v", err)}
 	}
 
-	cmd := exec.CommandContext(ctx, "bash", "-c", p.Command)
+	shell := "bash"
+	if _, err := exec.LookPath("bash"); err != nil {
+		if _, err := os.Stat("/run/current-system/sw/bin/bash"); err == nil {
+			shell = "/run/current-system/sw/bin/bash"
+		} else {
+			shell = "sh"
+		}
+	}
+	cmd := exec.CommandContext(ctx, shell, "-c", p.Command)
 	cmd.Dir = cwdPath
-	cmd.Env = append(os.Environ(), p.Env...)
+	brokerEnv := os.Environ()
+	hasPath := false
+	for _, env := range brokerEnv {
+		if strings.HasPrefix(env, "PATH=") {
+			hasPath = true
+			break
+		}
+	}
+	if !hasPath {
+		brokerEnv = append(brokerEnv, "PATH=/run/current-system/sw/bin:/bin:/usr/bin")
+	}
+	cmd.Env = append(brokerEnv, p.Env...)
 
 	var stdout, stderr []byte
 	var execErr error
