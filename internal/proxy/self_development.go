@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool) {
@@ -188,6 +189,27 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 	_, _ = w.Write(body)
 }
 
+const replayCompletenessWriteGrace = time.Second
+
+// extendReplayCompletenessWriteDeadline gives the owner-only replay probe a
+// route-local response budget. The proxy server's default write deadline must
+// remain short for ordinary interactive routes; ResponseController lets this
+// one long-running route extend its connection deadline without weakening that
+// global fail-fast boundary. Test response writers may not support deadlines,
+// so an unsupported writer is left at its existing deadline.
+func (h *Handler) extendReplayCompletenessWriteDeadline(w http.ResponseWriter) {
+	timeout := DefaultReplayCompletenessTimeout
+	if h != nil && h.replayAutoputerHTTP != nil && h.replayAutoputerHTTP.Timeout > 0 {
+		timeout = h.replayAutoputerHTTP.Timeout
+	} else if h != nil && h.cfg != nil && h.cfg.ReplayCompletenessTimeout > 0 {
+		timeout = h.cfg.ReplayCompletenessTimeout
+	}
+	if timeout <= 0 {
+		return
+	}
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(timeout + replayCompletenessWriteGrace))
+}
+
 func (h *Handler) HandleSelfDevelopmentReplayCompleteness(w http.ResponseWriter, r *http.Request) {
 	computerID, ok := selfDevelopmentReplayCompletenessComputerID(r.URL.Path)
 	if !ok {
@@ -266,6 +288,7 @@ func (h *Handler) HandleSelfDevelopmentReplayCompleteness(w http.ResponseWriter,
 	if client == nil {
 		client = &http.Client{Timeout: DefaultReplayCompletenessTimeout}
 	}
+	h.extendReplayCompletenessWriteDeadline(w)
 	response, err := client.Do(upstream)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "replay completeness authority unavailable"})

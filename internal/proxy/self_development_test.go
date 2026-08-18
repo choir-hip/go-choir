@@ -172,6 +172,53 @@ func TestReplayCompletenessPathUsesOwnedComputerAndTrustedBinding(t *testing.T) 
 	}
 }
 
+type replayDeadlineResponseWriter struct {
+	*httptest.ResponseRecorder
+	deadline time.Time
+}
+
+func (w *replayDeadlineResponseWriter) SetWriteDeadline(deadline time.Time) error {
+	w.deadline = deadline
+	return nil
+}
+
+func TestReplayCompletenessExtendsOnlyRouteWriteDeadline(t *testing.T) {
+	const routeTimeout = 2 * time.Second
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}))
+	defer autoputer.Close()
+
+	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"computer_id": "computer-a", "desktop_id": "primary", "user_id": "owner-user",
+			"state": "active", "computer_url": autoputer.URL,
+		})
+	}))
+	defer ownership.Close()
+
+	handler, privateKey, _ := testProxyEnv(t)
+	handler.vmctlClient = vmctl.NewClient(ownership.URL)
+	handler.replayAutoputerHTTP = &http.Client{Timeout: routeTimeout}
+	request := httptest.NewRequest(http.MethodGet, "/api/computers/computer-a/self-development/replay-completeness", nil)
+	request.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(privateKey, "owner-user")})
+	response := &replayDeadlineResponseWriter{ResponseRecorder: httptest.NewRecorder()}
+	started := time.Now()
+
+	handler.HandleAPI(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("replay completeness status=%d body=%s", response.Code, response.Body.String())
+	}
+	if response.deadline.Before(started.Add(routeTimeout)) {
+		t.Fatalf("route deadline=%s, want at least %s after start", response.deadline, routeTimeout)
+	}
+	if response.deadline.After(started.Add(routeTimeout + 2*replayCompletenessWriteGrace)) {
+		t.Fatalf("route deadline=%s, unexpectedly beyond route budget plus grace", response.deadline)
+	}
+}
+
 func TestReplayCompletenessUsesDedicatedUpstreamTimeout(t *testing.T) {
 	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/computers/computer-a/self-development/replay-completeness" {

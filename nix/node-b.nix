@@ -350,11 +350,11 @@ in
         # Cold computer boot completion is handled by vmctl's
         # VM_BOOT_READY_TIMEOUT and the retry/replay path (Phase D).
         "PROXY_VMCTL_TIMEOUT=60s"
-        # Replay completeness reconstructs a disposable projection and uses a
-        # dedicated 119s budget; ordinary interactive proxy routes stay at 30s.
-        # Keep this below the proxy's 120s server write deadline so failures
-        # remain a legible 502 rather than a connection-level EOF.
-        "PROXY_REPLAY_COMPLETENESS_TIMEOUT=119s"
+        # Replay completeness reconstructs a disposable projection and is an
+        # owner-only route with a dedicated 10m budget; ordinary interactive
+        # proxy routes stay at 30s. The handler extends the response deadline
+        # for this route only; it does not widen the global proxy write budget.
+        "PROXY_REPLAY_COMPLETENESS_TIMEOUT=10m"
         # Residue import serializes a bounded reducer snapshot and uses its own
         # 110s budget for the same fail-closed route-boundary reason.
         "PROXY_RESIDUE_IMPORT_TIMEOUT=110s"

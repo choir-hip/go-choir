@@ -93,9 +93,9 @@ const (
 	// legible 504 instead of the server cutting the connection.
 	DefaultVmctlTimeout = 60 * time.Second
 
-	// DefaultReplayCompletenessTimeout leaves the replay route enough time for
-	// provider-sized event pages and disposable projection reconstruction while
-	// remaining below the proxy server write deadline.
+	// DefaultReplayCompletenessTimeout bounds the owner-only replay probe for
+	// local and fallback deployments. The handler extends the response deadline
+	// for this route only; ordinary proxy routes retain the server write budget.
 	DefaultReplayCompletenessTimeout = 110 * time.Second
 
 	// DefaultResidueImportTimeout leaves the owner-only residue import enough
