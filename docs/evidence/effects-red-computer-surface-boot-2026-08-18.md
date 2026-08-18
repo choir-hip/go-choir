@@ -144,3 +144,22 @@ The safe next probe is an owner-authorized refresh of the same retained computer
 **Contract-skew heresy delta:** discovered — host replay pagination can be deployed while a retained immutable guest still runs the pre-pagination client; introduced — the c38324f4 source repair intentionally changes the replay contract and requires guest refresh; repaired — none until the retained guest is refreshed. **Contract-skew conjecture delta:** client/server version skew is the leading explanation for the projection-repair sentinel; exact chain/page evidence remains required.
 **Evidence:** `git show 13a0ae7c:internal/computerevent/http_client.go`, deployed `internal/platform/event_handlers.go`, deployed `internal/platform/event_replay.go`, staging `/health` bdbf7b7e, and guest observability 13a0ae7c.
 **Rollback:** no product-state mutation; if the refresh probe fails, leave the retained computer untouched and record the failure before any further action.
+
+
+## Post-refresh replay authority timeout
+
+The same-computer owner refresh was executed with idempotency key `replay-client-refresh-20260818`. Lifecycle receipt `01a01408-586e-7252-b90e-7987653d9899` advanced realization epoch `303` to `304` and left the computer active. Guest observability now reports autoputer commit `bdbf7b7eea30bc425e95145040cd9ca55d0a473e`, so the pagination-aware guest client is installed. The authenticated named surface remains healthy: HTTP 200, guest HTML, 523 bytes, body SHA-256 `f78218ff55222a3e0b781188ad57e46cec6477fb6b9ab8c90ba133ce86232`, asset reference present, no underivable-SPA error.
+
+Two owner-authorized replay-completeness reads after the refresh each took about 31 seconds and returned HTTP 502:
+
+```text
+replay completeness authority unavailable
+```
+
+Source inspection identifies the new boundary: `internal/proxy/handlers.go` constructs `autoputerHTTP` with a 30-second client timeout, while `internal/proxy/self_development.go` forwards replay completeness through that client and converts any upstream request error to the generic 502. The guest replay probe now gets past the old client/server contract skew, but its full disposable reconstruction and paged event read exceed the proxy's fixed 30-second budget. The exact guest/server phase that crosses the deadline is not exposed by this owner surface.
+
+This is a new gateway/runtime timeout problem, not replay acceptance. Do not blind-retry, bind a checkpoint, rematerialize, restore, retry self-development, or send mail. The next safe work is a docs-first timing diagnosis and a narrowly scoped replay-route timeout repair that preserves fail-closed behavior; do not globally weaken proxy timeouts or mask an unavailable guest.
+
+**Replay timeout heresy delta:** discovered — the pagination-aware guest reaches replay reconstruction but the proxy cuts the owner read at 30 seconds; introduced — none claimed; repaired — none. **Replay timeout conjecture delta:** client/server contract skew is repaired on the refreshed computer, while replay eligibility remains blocked by the fixed proxy budget and the backend duration is unmeasured.
+**Evidence:** refresh receipt `01a01408-586e-7252-b90e-7987653d9899`, guest observability bdbf7b7e at epoch `304`, named surface probe above, two replay-completeness 502 reads, `internal/proxy/handlers.go`, and `internal/proxy/self_development.go`.
+**Rollback:** no additional product-state mutation; retain epoch `304` and effects OFF while the timeout is diagnosed.
