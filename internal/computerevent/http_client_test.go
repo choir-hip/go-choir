@@ -2,6 +2,7 @@ package computerevent
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,35 @@ import (
 	"sync"
 	"testing"
 )
+
+func TestHTTPClientFetchPayloadReadsOversizedPayloadEnvelope(t *testing.T) {
+	payload := []byte(strings.Repeat("p", 900_000))
+	digest := DigestBytes(payload)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("computer_id") != "computer-payload" || r.URL.Query().Get("artifact_digest") != digest {
+			t.Errorf("query = %s", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"payload_base64": base64.RawStdEncoding.EncodeToString(payload),
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewHTTPClient(server.URL, server.Client(), func(context.Context) (string, error) {
+		return "test-token", nil
+	}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := client.FetchPayload(context.Background(), "computer-payload", digest)
+	if err != nil {
+		t.Fatalf("FetchPayload() error = %v", err)
+	}
+	if string(got) != string(payload) {
+		t.Fatalf("payload length = %d, want %d", len(got), len(payload))
+	}
+}
 
 func TestHTTPClientEventsReadsOversizedPagesAndProgresses(t *testing.T) {
 	records := make([]DurableEvent, EventReplayPageSize+1)

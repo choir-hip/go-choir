@@ -145,7 +145,7 @@ func (c *HTTPClient) FetchPayload(ctx context.Context, computerID, artifactDiges
 	var response struct {
 		PayloadBase64 string `json:"payload_base64"`
 	}
-	_, err := c.do(ctx, http.MethodGet, "/internal/computers/events/payload?"+query.Encode(), nil, &response)
+	_, err := c.doWithResponseLimit(ctx, http.MethodGet, "/internal/computers/events/payload?"+query.Encode(), nil, &response, EventReplayMaxResponseBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -208,9 +208,9 @@ func (c *HTTPClient) do(ctx context.Context, method, path string, body any, resp
 }
 
 // doWithResponseLimit keeps ordinary protocol responses on the historical
-// streaming limit while allowing replay pages to be read to a larger, explicit
-// bound. A page that crosses that bound is rejected before JSON decoding, so a
-// truncated page cannot masquerade as a valid chain.
+// streaming limit while allowing explicitly bounded large replay pages and
+// payload envelopes to be read in full. A response that crosses that bound is
+// rejected before JSON decoding, so truncation cannot masquerade as valid data.
 func (c *HTTPClient) doWithResponseLimit(ctx context.Context, method, path string, body any, response any, maxResponseBytes int) (int, error) {
 	var reader io.Reader
 	if body != nil {
