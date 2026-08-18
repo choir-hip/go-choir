@@ -266,3 +266,36 @@ restore, self-development, self-promote, qualified-consensus, or send mail.
 owner command above, retained computer status epoch 305, and the HTTP 502 body.
 **Rollback:** no product-state rollback; retain epoch 305 and effects OFF while
 the route budget is diagnosed.
+
+
+## Reducer residue import deployed and payload EOF observation
+
+The route-budget repair was committed as `c6301b07f162e0688c860c8fc57722d3a0d09516`, passed CI run `32137064213` (attempt 2; the first attempt's unrelated `internal/actorruntime` shard failure was a transient `SQLITE_BUSY` test failure and the failed shard passed on rerun), and deployed to Node B. Staging `/health` at `2026-08-18T12:54:01Z` reported proxy commit `c6301b07f162e0688c860c8fc57722d3a0d09516`, deployed at `2026-08-18T12:49:13Z`, with status `ok`, upstream `vmctl`, and `vmctl_status` `ok`.
+
+With the owner-authorized, computer-bound lifecycle key, the retained computer import was then exercised once:
+
+```text
+CHOIR_TIMEOUT=600s go run ./cmd/choir computer import-residue-snapshot --computer computer-03335285269bdba4f94377e56879f9e6
+{
+  "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+  "desktops": 1,
+  "sessions": 0,
+  "objects": 3068,
+  "edges": 132,
+  "appended": true
+}
+```
+
+The dedicated route budget repaired the prior HTTP 502: the import completed in about 40 seconds and appended the co-moving residue event. A subsequent owner-authorized `computer replay-completeness` read failed HTTP 500 while reconstructing the event chain:
+
+```text
+replay finalize sequence 3218: computer event payload: fetch 39c8f6192dbd5d932ddb3e13634505961c517771d2df0ff8ad3e10ba4c25e5d3: computer event client: decode response: unexpected EOF
+```
+
+Source inspection shows `internal/computerevent.HTTPClient.FetchPayload` still uses the ordinary `do` response reader capped at 1 MiB, while the payload endpoint returns a base64 JSON envelope for the newly appended large residue payload. The replay-page repair's explicit 8 MiB limit does not cover payload fetches. This is a new transport-bound payload-size problem; replay eligibility remains unproven and effects remain OFF. No checkpoint, restore, self-development retry, self-promote, qualified-consensus, or mail send is authorized. The temporary computer-bound key used for the probe was revoked after the read.
+
+**Residue-import route repair heresy delta:** discovered — the ordinary 30-second proxy budget blocked the deployed reducer path; introduced — a dedicated bounded 110-second residue-import client and `PROXY_RESIDUE_IMPORT_TIMEOUT` Node B setting; repaired — the 502 route-budget failure, verified by the successful 40-second import and appended residue event.
+**Payload EOF heresy delta:** discovered — payload fetches remain on the ordinary 1 MiB response cap and truncate the large residue payload envelope; introduced — none; repaired — none at this docs-first observation.
+**Payload EOF conjecture delta:** the new EOF is caused by an unwidened payload response reader, not by a new replay projection mismatch; the smallest repair is to use the existing explicit bounded replay response limit for payload fetches and add an oversized-payload regression test.
+**Evidence:** commit `c6301b07f162e0688c860c8fc57722d3a0d09516`; CI `https://github.com/choir-hip/go-choir/actions/runs/32137064213`; staging `/health` above; import response above; replay HTTP 500 above; `internal/computerevent/http_client.go:FetchPayload`.
+**Rollback:** revert `c6301b07f162e0688c860c8fc57722d3a0d09516` for the route-budget source repair; do not delete or rewrite the appended residue event. Keep effects OFF and retain the computer event head while the payload transport repair is evaluated.
