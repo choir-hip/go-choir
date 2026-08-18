@@ -27,6 +27,39 @@ remained a second state authority. Evidence: the parent Definition's
 `effects-red-replay-source-diagnosis-2026-08-18` receipt and
 `docs/evidence/effects-red-computer-surface-boot-2026-08-18.md`.
 
+## Follow-up problem: legacy Texture residue omitted before sequence 3222
+
+The deployed replay transport and route-deadline repairs exposed a semantic failure at
+sequence `3222`: `Texture mutation disappeared`. Source inspection narrows the
+causal path without mutating the retained computer:
+
+- `internal/textureowner/coagent_injection.go` and `internal/agentcore/runtime_persistence.go`
+  reserve an empty `computer_id` for pre-lifecycle-work-item Texture mutation rows;
+  `internal/store/texture.go` documents that empty scope as legacy-only.
+- `internal/store/residue_import.go:snapshotResidueRuntime` currently selects
+  `texture_agent_mutations WHERE computer_id=?`, so an owner-authorized residue
+  import for the named computer omits those legacy rows even when they remain in
+  the live projection.
+- A later guarded Texture transition can therefore be present on the canonical
+  tape while its predecessor is absent in a fresh event replay. The reducer then
+  correctly fails closed at the first guarded transition rather than inventing a
+  prior state.
+
+The public owner path exposes the sequence-3222 error but not the internal event
+payload, so the event's empty scope is an evidence-backed causal inference rather
+than a directly fetched payload claim. The focused repair must prove this lineage
+with a replay fixture and then with a fresh same-computer staging read. The repair
+boundary is narrow: include current-computer and empty legacy rows in future
+owner-scoped residue imports, and add an explicit **replay-only** compatibility
+seed for a missing empty-scope guarded mutation from its full snapshot. Live
+finalization must retain the missing-row rejection and all expected-state/revision
+guards.
+
+**Follow-up problem delta:** discovered — the legacy Texture mutation scope is
+excluded from the reducer residue import, which can strand a later canonical
+transition; introduced — none claimed; repaired — none. Effects remain OFF; no
+checkpoint, restore, retry, promotion, or live send is authorized.
+
 ## Decision and conjecture delta
 
 The approved next action is a reducer-backed replacement through the existing
