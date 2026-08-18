@@ -351,10 +351,10 @@ in
         # VM_BOOT_READY_TIMEOUT and the retry/replay path (Phase D).
         "PROXY_VMCTL_TIMEOUT=60s"
         # Replay completeness reconstructs a disposable projection and uses a
-        # dedicated 110s budget; ordinary interactive proxy routes stay at 30s.
-        # Keep this below the proxy server write deadline so failures remain a
-        # legible 502 rather than a connection-level EOF.
-        "PROXY_REPLAY_COMPLETENESS_TIMEOUT=110s"
+        # dedicated 119s budget; ordinary interactive proxy routes stay at 30s.
+        # Keep this below the proxy's 120s server write deadline so failures
+        # remain a legible 502 rather than a connection-level EOF.
+        "PROXY_REPLAY_COMPLETENESS_TIMEOUT=119s"
         # Residue import serializes a bounded reducer snapshot and uses its own
         # 110s budget for the same fail-closed route-boundary reason.
         "PROXY_RESIDUE_IMPORT_TIMEOUT=110s"
