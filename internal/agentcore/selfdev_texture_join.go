@@ -198,6 +198,10 @@ func (rt *Runtime) ensureSelfDevelopmentTextureJoin(ctx context.Context, operati
 			AuthorityProfile: agentprofile.Super, Status: types.WorkItemOpen, AssignedAgentID: superAgentID,
 		}
 	}
+	var notes []string
+	if wakeToken != "" {
+		notes = []string{"Prior implementation attempts for operation " + operation.OperationID + " are terminal. Open a fresh implementation CoSuper assignment with assign_co_super."}
+	}
 	packet, err := PrepareTextureControlPacket(types.CoagentSourcePacketPayload{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
 		Kind:          "execution_request",
@@ -216,6 +220,7 @@ func (rt *Runtime) ensureSelfDevelopmentTextureJoin(ctx context.Context, operati
 				FileMutation:  "forbidden",
 			},
 		}},
+		Notes: notes,
 	})
 	if err != nil {
 		return fmt.Errorf("prepare self-development Super execution_request: %w", err)

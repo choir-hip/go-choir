@@ -757,7 +757,13 @@ func (rt *Runtime) listPendingPersistentSuperLifecycleControls(ctx context.Conte
 	if err != nil {
 		return nil, fmt.Errorf("list persistent-Super lifecycle controls: %w", err)
 	}
-	return rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, updates, true)
+	controls := make([]types.CoagentSourcePacket, 0, len(updates))
+	for _, update := range updates {
+		if update.Direction == types.LifecyclePacketDirectionControl {
+			controls = append(controls, update)
+		}
+	}
+	return rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, controls, true)
 }
 
 func (rt *Runtime) validateTargetBoundLifecycleControls(ctx context.Context, ownerID, computerID, agentID string, updates []types.CoagentSourcePacket, executionOnly bool) ([]types.CoagentSourcePacket, error) {
@@ -832,7 +838,9 @@ func persistentSuperMailboxInjectable(rec *types.RunRecord, update types.Coagent
 		}
 	}
 	if metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
-		return update.DeliveredAt != nil && strings.TrimSpace(update.DeliveredToRunID) == strings.TrimSpace(rec.RunID)
+		if update.Direction == types.LifecyclePacketDirectionControl {
+			return update.DeliveredAt != nil && strings.TrimSpace(update.DeliveredToRunID) == strings.TrimSpace(rec.RunID)
+		}
 	}
 	return update.DeliveredAt == nil || strings.TrimSpace(update.DeliveredToRunID) == strings.TrimSpace(rec.RunID)
 }
@@ -1364,6 +1372,17 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 			packets, err := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, rec)
 			if err != nil && errors.Is(err, store.ErrNotFound) {
 				return nil, nil
+			}
+			trajectoryID := lifecycleControlTrajectoryForRun(rec)
+			if trajectoryID != "" {
+				pending, listErr := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
+				if listErr == nil {
+					for _, p := range pending {
+						if p.TrajectoryID == trajectoryID && persistentSuperAdmissibleReport(p) {
+							packets = append(packets, p)
+						}
+					}
+				}
 			}
 			return packets, err
 		}

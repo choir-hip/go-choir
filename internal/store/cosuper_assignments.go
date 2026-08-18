@@ -1227,24 +1227,30 @@ func coSuperReportPacketPayload(report types.CoSuperAssignmentReport, cancellati
 	return packet, report.Summary
 }
 
-func buildCoSuperReturnPacket(now time.Time, seq int64, assignment types.CoSuperAssignment, report types.CoSuperAssignmentReport, targetChannelID string, cancellation bool) (types.CoagentSourcePacket, objectgraph.Object, error) {
+func buildCoSuperReturnPacket(now time.Time, seq int64, assignment types.CoSuperAssignment, report types.CoSuperAssignmentReport, parentRun types.RunRecord, cancellation bool) (types.CoagentSourcePacket, objectgraph.Object, error) {
 	packetPayload, content := coSuperReportPacketPayload(report, cancellation)
 	payloadDigest, err := ComputeLifecycleUpdatePayloadDigest(packetPayload, content)
 	if err != nil {
 		return types.CoagentSourcePacket{}, objectgraph.Object{}, err
 	}
 	updateID := "assignment-report:" + report.ReportID
+	deliveredRunID := ""
+	var deliveredAt *time.Time
+	if !parentRun.State.Terminal() {
+		deliveredRunID = assignment.Binding.ParentRunID
+		deliveredAt = &now
+	}
 	update := types.CoagentSourcePacket{
 		UpdateID: updateID, ProducerUpdateID: report.ReportID,
 		OwnerID: assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
 		AgentID: assignment.Binding.AssignedAgentID, TargetAgentID: assignment.Binding.ParentAgentID,
-		ChannelID: strings.TrimSpace(targetChannelID), MessageSeq: seq, TrajectoryID: assignment.Binding.TrajectoryID,
+		ChannelID: strings.TrimSpace(parentRun.ChannelID), MessageSeq: seq, TrajectoryID: assignment.Binding.TrajectoryID,
 		Direction: types.LifecyclePacketDirectionProducerReport, ControlBindingID: assignment.Binding.ParentControlID,
 		ProducerWorkItemID: assignment.Binding.AssignedWorkItemID, TargetWorkItemID: assignment.Binding.ParentWorkItemID,
 		WorkItemID: assignment.Binding.AssignedWorkItemID, Role: "co-super", SourceRunID: assignment.BoundRunID,
 		PayloadDigest: payloadDigest, Disposition: types.UpdatePending, LifecycleVersion: 1, ReducerSeq: seq,
 		Packet: packetPayload, Content: content, CreatedAt: now,
-		DeliveredToRunID: assignment.Binding.ParentRunID, DeliveredAt: &now,
+		DeliveredToRunID: deliveredRunID, DeliveredAt: deliveredAt,
 	}
 	key := update.TrajectoryID + "\x00" + update.TargetAgentID + "\x00" + update.AgentID + "\x00" + update.ProducerUpdateID
 	meta := lifecycleMetadata("update_id", update.UpdateID, update.ComputerID, update.TrajectoryID, seq)
@@ -1560,7 +1566,7 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 		if decodeErr != nil {
 			return types.CoSuperAssignmentCommandResult{}, decodeErr
 		}
-		created, updateObj, updateErr := buildCoSuperReturnPacket(now, transition.seq, assignment, report, parentRun.ChannelID, false)
+		created, updateObj, updateErr := buildCoSuperReturnPacket(now, transition.seq, assignment, report, parentRun, false)
 		if updateErr != nil {
 			return types.CoSuperAssignmentCommandResult{}, updateErr
 		}
@@ -1682,7 +1688,7 @@ func (s *Store) CancelCoSuperAssignment(ctx context.Context, req types.CancelCoS
 	if decodeErr != nil {
 		return types.CoSuperAssignmentCommandResult{}, decodeErr
 	}
-	update, updateObj, err := buildCoSuperReturnPacket(now, transition.seq, assignment, report, parentRun.ChannelID, true)
+	update, updateObj, err := buildCoSuperReturnPacket(now, transition.seq, assignment, report, parentRun, true)
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
