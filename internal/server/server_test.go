@@ -428,3 +428,11 @@ func TestShutdownTimeoutFromEnvInvalidFallsBack(t *testing.T) {
 		t.Fatalf("timeout = %s, want %s", got, defaultShutdownTimeout)
 	}
 }
+
+func TestNewServerUsesWriteTimeoutFromEnv(t *testing.T) {
+	t.Setenv("SERVER_WRITE_TIMEOUT", "10m30s")
+	s := NewServer("test-write-timeout", "0")
+	if got := s.httpServer.WriteTimeout; got != 10*time.Minute+30*time.Second {
+		t.Fatalf("write timeout = %s, want 10m30s", got)
+	}
+}

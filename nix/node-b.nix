@@ -655,6 +655,10 @@ in
         # traffic on tap addresses.
         "SERVER_HOST=0.0.0.0"
         "SERVER_SHUTDOWN_TIMEOUT=10m30s"
+        # Inference and upstream provider calls may run for up to 10m; keep the
+        # HTTP response open long enough for the handler to return a sanitized
+        # result instead of dropping the guest connection with EOF.
+        "SERVER_WRITE_TIMEOUT=10m30s"
         "GATEWAY_PORT=8084"
         "GATEWAY_IDENTITY_STORE_PATH=/var/lib/go-choir/gateway-identities.json"
         "GATEWAY_CHATGPT_MODELS=gpt-5.5,gpt-5.4,gpt-5.4-mini"

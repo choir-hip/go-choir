@@ -73,6 +73,16 @@ not include request-start timing or gateway logs, so this remains a hypothesis,
 not a claimed root-cause proof. It is sufficient to block blind retries and to
 authorize a Define/Implement review of the gateway timeout contract.
 
+## Candidate repair boundary
+
+The prepared narrow repair sets `SERVER_WRITE_TIMEOUT=10m30s` for the Node B
+`go-choir-gateway` service, matching the 10-minute inference/provider budgets
+plus the 30-second client margin. The focused test
+`TestNewServerUsesWriteTimeoutFromEnv` passes, and `nix-instantiate --parse
+nix/node-b.nix` passes. These are local source checks only; the repair is not
+deployed and does not authorize another operations POST, promotion, provider
+credential change, route change, or live effect.
+
 ## Remaining error and safe next probe
 
 Do not retry the operation blindly. First inspect the exact deployed gateway
