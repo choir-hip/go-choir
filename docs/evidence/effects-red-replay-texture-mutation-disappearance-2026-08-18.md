@@ -77,3 +77,47 @@ snapshot itself fails, document that failure before changing source.
 **Follow-up heresy delta:** discovered — the source repair acceptance probe
 skipped its required owner-authorized residue import; introduced — none;
 repaired — none yet.
+
+## Follow-up probe: residue import exercised, mismatch persists
+
+At `2026-08-18T17:05:41Z`, the existing owner-authorized product path was
+executed on the same retained computer after correcting the CLI invocation:
+
+```text
+go run ./cmd/choir computer import-residue-snapshot \
+  --computer computer-03335285269bdba4f94377e56879f9e6
+
+{"computer_id":"computer-03335285269bdba4f94377e56879f9e6","desktops":1,
+"sessions":0,"objects":413,"edges":111,"run_memory_entries":0,
+"start_intents":1,"operations":1,"texture_mutations":1,
+"appended":true}
+```
+
+The route generated its projection-batch idempotency key internally; the
+unsupported first invocation with `--idempotency-key` had already exited before
+HTTP and changed no state. The corrected invocation appended one current-state
+residue snapshot (`appended: true`). The response exposes counts but no event
+sequence, event digest, or signed append receipt.
+
+The authorized replay read was then rerun against the same computer:
+
+```text
+go run ./cmd/choir computer replay-completeness \
+  --computer computer-03335285269bdba4f94377e56879f9e6 --timeout 10m
+
+http 500: replay completeness: reconstruct event chain: computer event appender:
+replay finalize sequence 3222: computer event projection: op 0: computer event
+projection mismatch: Texture mutation disappeared
+```
+
+The import prerequisite is therefore exercised and does not close the semantic
+mismatch. Replay eligibility remains false; no checkpoint, restore, retry,
+promotion, qualified-consensus transition, or effect is authorized. The next
+probe is a source/local replay fixture that identifies the exact sequence-3222
+mutation scope and ordering; no further live mutation or source repair follows
+from this receipt until that fixture is understood.
+
+**Follow-up heresy delta:** discovered — the existing residue import does not
+make the legacy Texture mutation available at its earlier canonical sequence,
+and its response does not expose a durable event identity; introduced — none;
+repaired — none.
