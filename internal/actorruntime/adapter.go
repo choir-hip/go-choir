@@ -565,6 +565,12 @@ func (a *Adapter) Start(ctx context.Context) error {
 	if err := a.recoverParkedLifecycleMailboxSnapshots(ctx); err != nil {
 		return fmt.Errorf("actorruntime: recover lifecycle actor snapshots: %w", err)
 	}
+	// Refresh-runtime may intentionally remove the persistent updater current
+	// pointer. Rejoin the immutable baseline before the service is considered
+	// started; failures remain observable as a fail-closed 503 at the surface.
+	if err := a.Runtime.EnsureComputerSurface(ctx); err != nil {
+		log.Printf("actorruntime: computer surface baseline bootstrap deferred: %v", err)
+	}
 	a.Runtime.Start(ctx)
 	if a.textureOwner != nil {
 		if err := a.textureOwner.Start(ctx); err != nil {

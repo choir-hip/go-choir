@@ -554,10 +554,10 @@ func guestControlOptions(credentials *selfdev.GuestCredentials) []agentcore.Runt
 	}
 }
 
-// selfDevelopmentUpdaterOption wires BindCheckpointRestoreSet to the same
-// CHOIR_UPDATER_ROOT that ComputerSurface serves. Production previously left
-// rt.selfdevUpdaterRoot empty, so a staged current/frontend still failed
-// checkpoint bind as underivable SPA.
+// selfDevelopmentUpdaterOption wires the boot and checkpoint serving-join
+// repair to the same CHOIR_UPDATER_ROOT that ComputerSurface serves. A missing
+// current/frontend remains fail-closed until the trusted immutable baseline is
+// imported through the permissioned updater contract.
 func selfDevelopmentUpdaterOption() (agentcore.RuntimeOption, bool, error) {
 	root := strings.TrimSpace(os.Getenv("CHOIR_UPDATER_ROOT"))
 	if root == "" {

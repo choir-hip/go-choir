@@ -451,17 +451,43 @@ func checkpointComputerVersion(manifest updater.ReleaseManifest) computerversion
 	}
 }
 
+// EnsureComputerSurface restores only a missing immutable baseline serving
+// join. It never appends an event, records a self-development operation,
+// publishes a checkpoint, changes mode, or arms an effect.
+func (rt *Runtime) EnsureComputerSurface(ctx context.Context) error {
+	if rt == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
+		return nil
+	}
+	_, err := rt.ensureServingBaseline(ctx, strings.TrimSpace(rt.cfg.ComputerID), trustedBaselineReleaseRoot())
+	return err
+}
+
 func (rt *Runtime) ensureCheckpointReleaseManifest(ctx context.Context, computerID string) (updater.ReleaseManifest, error) {
+	return rt.ensureServingBaseline(ctx, computerID, trustedBaselineReleaseRoot())
+}
+
+// ensureServingBaseline is the common read-and-repair path for boot and
+// checkpoint binding. baselineRoot is passed separately so the production
+// caller can enforce the immutable /nix/store trust boundary before any
+// updater mutation is attempted.
+func (rt *Runtime) ensureServingBaseline(ctx context.Context, computerID, baselineRoot string) (updater.ReleaseManifest, error) {
 	var empty updater.ReleaseManifest
 	if rt == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
 		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
 	}
+	computerID = strings.TrimSpace(computerID)
+	if computerID == "" || computerID != strings.TrimSpace(rt.cfg.ComputerID) {
+		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+	}
 	manifest, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot)
 	if err == nil {
+		if strings.TrimSpace(manifest.ComputerID) != computerID {
+			return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+		}
+		rt.recordStartupManifest(manifest)
 		return manifest, nil
 	}
-	baselineRoot := trustedBaselineReleaseRoot()
-	if baselineRoot == "" || rt.selfdevUpdater == nil || strings.TrimSpace(rt.selfdevRealizationID) == "" || rt.selfdevRoute == nil {
+	if strings.TrimSpace(baselineRoot) == "" || rt.selfdevUpdater == nil || strings.TrimSpace(rt.selfdevRealizationID) == "" || rt.selfdevRoute == nil {
 		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
 	}
 	slotID, err := routeledger.RouteSlotID(rt.selfdevRouteOwnerID, rt.selfdevRouteDesktopID)
@@ -488,7 +514,21 @@ func (rt *Runtime) ensureCheckpointReleaseManifest(ctx context.Context, computer
 	if err != nil {
 		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
 	}
+	if strings.TrimSpace(manifest.ComputerID) != computerID {
+		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+	}
+	rt.recordStartupManifest(manifest)
 	return manifest, nil
+}
+
+func (rt *Runtime) recordStartupManifest(manifest updater.ReleaseManifest) {
+	if rt == nil {
+		return
+	}
+	rt.selfdevStartupMarker = manifest.Marker
+	rt.selfdevStartupReleaseDigest = manifest.ContentDigest
+	rt.selfdevStartupEventSchema = manifest.EventSchemaVersion
+	rt.selfdevStartupReducer = manifest.ReducerVersion
 }
 func (rt *Runtime) verifyPinnedFrontend(checkpoint selfdevprotocol.Checkpoint) (string, error) {
 	if rt == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
