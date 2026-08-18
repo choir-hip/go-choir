@@ -346,8 +346,10 @@ nodes:
       restore, plus one exact external email under a stronger policy with no
       human seat required for that acceptance and durable consequence receipts.
       The 26 pre-drop replay differences were classified and resolved (workspace
-      replacement + chain bootstrap), and the retained computer is
-      replay-eligible at sequence 1. Checkpoint completeness, revert build,
+      replacement + chain bootstrap). That sequence-1 eligibility was
+      superseded by later retained-computer event-chain work: sequence 3342
+      matches heads and all 1083 run-memory rows but remains ineligible on
+      non-empty texture_document_aliases. Checkpoint completeness, revert build,
       scope refusal, and total restore are owned by choir-tape-recovery-2026-08-13
       and satisfied-by its receipts. This Definition owns decision-policy and
       effect promotion on top of that restore substrate. Effects remain OFF
@@ -359,6 +361,8 @@ nodes:
       Post-acceptance finish.completion_cutover is required
       for goal.complete. choir-self-development-roadmap-2026-08-11.md is
       historical migration evidence only — not schedule authority.
+      Current Definition status is blocked_incomplete pending owner-ratified alias
+      authority; effects remain OFF.
     sources:
       - docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
       - docs/definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md
@@ -372,6 +376,7 @@ nodes:
       - docs/memo-per-computer-frontend-2026-08-13.md
       - docs/ACTIVE.md
       - AGENTS.md
+      - docs/problems/effects-red-replay-texture-alias-authority-2026-08-18.md
   - id: choir-private-go-actor-kernel-2026-08-12
     title: Private Go Actor Kernel
     path: docs/definitions/choir-private-go-actor-kernel-2026-08-12.md
