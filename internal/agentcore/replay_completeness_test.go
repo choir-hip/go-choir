@@ -163,6 +163,37 @@ func TestReplayCompletenessUsesDisposableProjectionWithoutMutatingLiveStore(t *t
 	}
 }
 
+type replayGuestDeadlineResponseWriter struct {
+	*httptest.ResponseRecorder
+	deadline time.Time
+}
+
+func (w *replayGuestDeadlineResponseWriter) SetWriteDeadline(deadline time.Time) error {
+	w.deadline = deadline
+	return nil
+}
+
+func TestReplayCompletenessExtendsGuestWriteDeadline(t *testing.T) {
+	handler := NewAPIHandler(&Runtime{})
+	request := httptest.NewRequest(http.MethodGet, "/api/computers/computer-replay/self-development/replay-completeness", nil)
+	request.Header.Set("X-Authenticated-User", "owner-replay")
+	request.Header.Set("X-Authenticated-Computer", "computer-replay")
+	response := &replayGuestDeadlineResponseWriter{ResponseRecorder: httptest.NewRecorder()}
+	started := time.Now()
+
+	handler.HandleComputersRouter(response, request)
+
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("replay completeness status=%d body=%s, want unavailable runtime", response.Code, response.Body.String())
+	}
+	if response.deadline.Before(started.Add(replayCompletenessGuestTimeout)) {
+		t.Fatalf("guest route deadline=%s, want at least %s after start", response.deadline, replayCompletenessGuestTimeout)
+	}
+	if response.deadline.After(started.Add(replayCompletenessGuestTimeout + 2*replayCompletenessGuestWriteGrace)) {
+		t.Fatalf("guest route deadline=%s, unexpectedly beyond route budget plus grace", response.deadline)
+	}
+}
+
 func TestReplayCompletenessRejectsLiveObservationDriftDuringReplay(t *testing.T) {
 	computerID := "computer-replay-live-drift"
 	storePath := filepath.Join(t.TempDir(), "runtime.db")

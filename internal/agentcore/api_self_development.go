@@ -28,7 +28,11 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
-const selfDevelopmentPromptMediaType = "text/markdown; charset=utf-8"
+const (
+	selfDevelopmentPromptMediaType    = "text/markdown; charset=utf-8"
+	replayCompletenessGuestTimeout    = 10 * time.Minute
+	replayCompletenessGuestWriteGrace = time.Second
+)
 
 type selfDevelopmentStartRequest struct {
 	IdempotencyKey string                 `json:"idempotency_key"`
@@ -90,6 +94,13 @@ func (h *APIHandler) HandleComputersRouter(w http.ResponseWriter, r *http.Reques
 	h.handleSelfDevelopmentRoute(w, r, ownerID, strings.TrimSpace(parts[0]), parts)
 }
 
+// extendReplayCompletenessGuestWriteDeadline keeps the guest's owner-only
+// replay probe from inheriting the short global server write deadline. The
+// global deadline remains fail-fast for every ordinary guest route.
+func extendReplayCompletenessGuestWriteDeadline(w http.ResponseWriter) {
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(replayCompletenessGuestTimeout + replayCompletenessGuestWriteGrace))
+}
+
 func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.Request, ownerID, computerID string, parts []string) {
 	if strings.TrimSpace(r.Header.Get("X-Authenticated-Computer")) != computerID {
 		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "authenticated computer binding required"})
@@ -128,6 +139,7 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 			return
 		}
+		extendReplayCompletenessGuestWriteDeadline(w)
 		report, err := h.rt.ReplayCompleteness(r.Context(), computerID)
 		if err != nil {
 			status := http.StatusInternalServerError
