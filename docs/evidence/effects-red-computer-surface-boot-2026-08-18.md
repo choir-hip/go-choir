@@ -180,3 +180,30 @@ The timing regression holds the guest response for 80ms, proves the 5ms ordinary
 **Replay timeout repair heresy delta:** discovered — none beyond the documented proxy budget; introduced — a dedicated bounded replay-route client and config surface; repaired — the fixed 30-second budget no longer governs replay completeness in source.
 **Replay timeout repair conjecture delta:** the route-level budget repair is locally supported and preserves fail-closed timeout behavior; staging replay eligibility remains unproven until deployment identity, retained-guest state, and a fresh owner-authorized read are verified.
 **Rollback:** revert `cf950de7`; no product-state rollback has been performed.
+
+## Post-repair replay non-equivalence observation
+
+After CI `32118922263` and the successful Node B deployment, staging `/health` and the refreshed retained guest both reported commit `7976ec15dcba462be95feac95670aa4aaeabca77`. An owner-authorized refresh using idempotency key `replay-proxy-timeout-refresh-20260818` produced lifecycle receipt `01a01424-8553-74a2-8547-2373871f4e78` and advanced the same computer from epoch 304 to 305. Guest observability reported the deployed autoputer build at the same commit.
+
+One owner-authorized replay-completeness read completed at `2026-08-18T09:14:04.567717037Z` instead of timing out. It returned HTTP 200 with sequence `3217` on both live and replay heads and matching canonical/desired/effective head fields, but the semantic projection comparison was not equivalent:
+
+```text
+result.status: not_equivalent
+differences:
+- dolt:texture:content_root
+- dolt:texture:table:run_memory_entries
+- dolt:texture:table:self_development_operations
+- dolt:texture:table:self_development_start_intents
+- dolt:texture:table:texture_agent_mutations
+eligibility.eligible: false
+eligibility.reason: behavior-bearing direct-write tables are non-empty without reducers
+eligibility.unsupported_tables: run_memory_entries, self_development_operations, self_development_start_intents, texture_agent_mutations
+probe_digest: 196f723cff6a0ca1a3edc125669050cd4b4fd09816de53ca5c5fb3a1449b93f8
+```
+
+This accepts the route-budget repair as deployed and proves the timeout boundary is crossed, but it does not accept replay eligibility, checkpointability, restore completeness, or self-development readiness. The mismatch is a new projection-authority problem. Do not SQL-empty the listed tables, bind a checkpoint, rematerialize, restore, retry self-development, or send mail. The first next action is source diagnosis of the unsupported direct-write tables and the reducer-backed replacement, with a new problem-first receipt before any runtime repair.
+
+**Replay non-equivalence heresy delta:** discovered — the deployed paged replay now completes but the replay projection is not equivalent because four behavior-bearing direct-write tables lack reducers; introduced — none claimed; repaired — the proxy timeout boundary only.
+**Replay non-equivalence conjecture delta:** transport and route-budget defects are repaired on the refreshed computer; replay eligibility remains fail-closed until those table authorities are represented by the event/reducer path.
+**Evidence:** CI `32118922263`, staging `/health` commit `7976ec15`, refresh receipt `01a01424-8553-74a2-8547-2373871f4e78`, epoch 305 guest observability, replay result captured at `2026-08-18T09:14:04.567717037Z`.
+**Rollback:** no product-state rollback; retain the same computer at epoch 305 with effects OFF while the unsupported-table authority is diagnosed.
