@@ -298,7 +298,16 @@ func (h *Handler) HandleComputerEventReplay(w http.ResponseWriter, r *http.Reque
 		}
 		after = value
 	}
-	records, err := h.eventArtifacts.Events(r.Context(), computerID, after)
+	pageSize := computerevent.EventReplayPageSize
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value <= 0 || value > computerevent.EventReplayMaxPageSize {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: "limit must be a positive integer within the replay page maximum"})
+			return
+		}
+		pageSize = value
+	}
+	records, err := h.eventArtifacts.EventsPage(r.Context(), computerID, after, pageSize)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "computer event replay unavailable"})
 		return

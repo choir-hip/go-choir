@@ -10,15 +10,19 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
-func (s *EventArtifactService) Events(ctx context.Context, computerID string, afterSequence uint64) ([]computerevent.DurableEvent, error) {
+// EventsPage returns one validated, sequence-ordered durable event page.
+func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string, afterSequence uint64, pageSize int) ([]computerevent.DurableEvent, error) {
 	if s == nil || s.platform == nil || s.platform.store == nil || computerID == "" {
 		return nil, fmt.Errorf("event replay: service and computer are required")
+	}
+	if pageSize <= 0 || pageSize > computerevent.EventReplayMaxPageSize {
+		return nil, fmt.Errorf("event replay: page size %d exceeds maximum %d", pageSize, computerevent.EventReplayMaxPageSize)
 	}
 	var credentialEpoch uint64
 	if err := s.platform.store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM computer_event_append_receipts WHERE computer_id=? AND sequence<=? AND event_kind=?`, computerID, afterSequence, computerevent.EventKeyRevoked).Scan(&credentialEpoch); err != nil {
 		return nil, fmt.Errorf("event replay: resolve credential epoch: %w", err)
 	}
-	rows, err := s.platform.store.db.QueryContext(ctx, `SELECT sequence, event_digest, event_artifact_ref, event_pin_receipt_digest, pin_receipt_digests_json, event_head_receipt_json, event_head_receipt_digest, desired_event_head, effective_event_head, COALESCE(pending_transition_ref, ''), desired_state_commitment, effective_state_commitment FROM computer_event_append_receipts WHERE computer_id=? AND sequence>? ORDER BY sequence`, computerID, afterSequence)
+	rows, err := s.platform.store.db.QueryContext(ctx, `SELECT sequence, event_digest, event_artifact_ref, event_pin_receipt_digest, pin_receipt_digests_json, event_head_receipt_json, event_head_receipt_digest, desired_event_head, effective_event_head, COALESCE(pending_transition_ref, ''), desired_state_commitment, effective_state_commitment FROM computer_event_append_receipts WHERE computer_id=? AND sequence>? ORDER BY sequence LIMIT ?`, computerID, afterSequence, pageSize)
 	if err != nil {
 		return nil, fmt.Errorf("event replay: query chain: %w", err)
 	}

@@ -15,6 +15,15 @@ const (
 	SchemaVersionV1  = 1
 	ReducerVersionV1 = 1
 	ZeroHead         = "0000000000000000000000000000000000000000000000000000000000000000"
+
+	// EventReplayPageSize bounds each durable-chain response. The client follows
+	// sequence progress until the requested chain is exhausted.
+	EventReplayPageSize = 32
+	// EventReplayMaxPageSize bounds caller-selected replay pages at corpusd.
+	EventReplayMaxPageSize = 128
+	// EventReplayMaxResponseBytes rejects a single oversized replay page instead
+	// of allowing a transport cap to turn it into a misleading EOF.
+	EventReplayMaxResponseBytes = 8 << 20
 )
 
 type EventKind string
