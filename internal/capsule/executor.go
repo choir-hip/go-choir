@@ -188,9 +188,10 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
-	if err := os.MkdirAll(base, 0o700); err != nil {
+	if err := os.MkdirAll(base, 0o755); err != nil {
 		return nil, fmt.Errorf("capsule create state: %w", err)
 	}
+	_ = os.Chmod(base, 0o755)
 	mounted := false
 	defer func() {
 		if retErr == nil {
@@ -229,6 +230,10 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		}
 	}
 	sourceLower := filepath.Join(base, "source-lower")
+	_ = os.MkdirAll(sourceLower, 0o755)
+	_ = os.Chmod(sourceLower, 0o755)
+	_ = os.MkdirAll(filepath.Join(sourceLower, "workspace"), 0o755)
+	_ = os.Chmod(filepath.Join(sourceLower, "workspace"), 0o755)
 	sourceTarget := filepath.Join(sourceLower, "workspace", "platform")
 	var sourceDigest string
 	if strings.HasPrefix(source.ArtifactRef, subjectArtifactPrefix) {
