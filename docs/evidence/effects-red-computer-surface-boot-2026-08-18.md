@@ -419,3 +419,15 @@ This source repair is not deployed proof. Effects remain OFF; the same retained 
 **Guest replay outer-deadline repair heresy delta:** discovered — the guest's global 120-second write deadline cut the owner-only replay route after the proxy route was extended; introduced — a guest route-local response deadline with a bounded 10-minute budget; repaired — the guest outer deadline without widening ordinary guest routes. **Conjecture delta:** both proxy and guest replay hops now have aligned bounded owner-only budgets; staging replay eligibility remains unproven.
 
 **Rollback:** revert `44c02a07`; no product-state rollback has been performed, and epoch `309` remains retained with effects OFF.
+
+## Replay projection mismatch at Texture mutation sequence 3222
+
+After CI `32153480918` completed successfully and staging `/health` reported `061bfd12a036950f700cf450464493b76a413bbf`, the same retained computer was owner-refreshed with receipt `01a0158a-a081-7039-acb8-de67754ffa32` from epoch `309` to `310`. The fresh owner-authorized replay-completeness read crossed both proxy and guest route deadlines and returned HTTP 500 with the authoritative reconstruction error:
+
+```text
+replay completeness: reconstruct event chain: computer event appender: replay finalize sequence 3222: computer event projection: op 0: computer event projection mismatch: Texture mutation disappeared
+```
+
+This is the first semantic replay result after the transport-boundary repairs. It is not a clean eligibility result and not a permission to retry: reconstruction failed closed before the live/replay comparison. The read is non-mutating; no candidate, bundle, checkpoint, restore, self-development retry, promotion, or effect is authorized. The next action is diagnosis of canonical event sequence `3222`, its Texture mutation payload, and the replay reducer's projection contract before any source repair.
+
+**Problem-first receipt:** discovered `2026-08-18T15:46:04Z`; environment `staging 061bfd12a036950f700cf450464493b76a413bbf`, retained computer `computer-03335285269bdba4f94377e56879f9e6`, epoch `310`; evidence `CI 32153480918`, staging `/health`, refresh receipt `01a0158a-a081-7039-acb8-de67754ffa32`, owner replay command result `HTTP 500` after `135.68s` with the exact sequence-3222 mismatch; remaining error `replay reconstruction cannot apply the Texture mutation at sequence 3222`; rollback `revert 44c02a07` only if the prior guest route configuration must be restored, with no product-state rollback.
