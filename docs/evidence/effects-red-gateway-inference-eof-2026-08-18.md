@@ -52,6 +52,27 @@ gateway/provider transport boundary; this receipt does not establish whether
 EOF originated from the gateway process, its upstream provider connection, or
 an exhausted retry sequence.
 
+## Source convergence probe
+
+The repository contains a timeout mismatch on the exact path that failed:
+
+- `internal/gateway/handlers.go` bounds inference work at 10 minutes.
+- `internal/provider/provider.go` gives upstream HTTP clients a 10-minute
+  timeout.
+- `internal/gateway/client.go` gives the guest-to-gateway client a 10-minute,
+  30-second timeout and now retries transport failures three times.
+- `internal/server/server.go` defaults `http.Server.WriteTimeout` to 120 seconds.
+- `nix/node-b.nix` sets the gateway's `SERVER_SHUTDOWN_TIMEOUT=10m30s` but does
+  not set `SERVER_WRITE_TIMEOUT`, so the gateway process inherits the 120-second
+  write deadline.
+
+This is the leading substrate hypothesis: a long provider call can outlive the
+host gateway's write deadline, causing the guest HTTP client to observe `EOF`
+instead of receiving the gateway's sanitized 502 response. The live receipt does
+not include request-start timing or gateway logs, so this remains a hypothesis,
+not a claimed root-cause proof. It is sufficient to block blind retries and to
+authorize a Define/Implement review of the gateway timeout contract.
+
 ## Remaining error and safe next probe
 
 Do not retry the operation blindly. First inspect the exact deployed gateway
