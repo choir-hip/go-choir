@@ -265,12 +265,12 @@ now:
   question: "What owner-ratified reconstructible authority, if any, gives Texture document aliases a safe whole-computer replay path?"
 
   reconciliation:
-    observed_at: 2026-08-18T22:18:31Z
-    source_ref: "staging /health deployed 7bdc0a7ceb063d29542f2aa90560439db97d8aee after CI 32186509122 and Node B deploy job 95878530936; owner-authorized refresh receipt 01a016dc-161d-7b44-9611-a1bd674e9e7e advanced retained computer epoch 315 to 316; explicit residue import appended 1083 run-memory entries; replay-completeness captured at sequence 3342 with 1083 live and replay rows, zero live-only, zero replay-only, and zero differing rows; texture_document_aliases remains unsupported; docs/evidence/effects-red-replay-run-memory-scope-repair-2026-08-18.md; docs/problems/effects-red-replay-texture-alias-authority-2026-08-18.md"
+    observed_at: 2026-08-18T22:59:20.117161546Z
+    source_ref: "staging /health deployed 7bdc0a7ceb063d29542f2aa90560439db97d8aee after CI 32186509122 and Node B deploy job 95878530936; owner-authorized refresh receipt 01a016dc-161d-7b44-9611-a1bd674e9e7e advanced retained computer epoch 315 to 316; explicit residue import appended 1083 run-memory entries; replay-completeness rechecked at sequence 3342 on 2026-08-18T22:59:20.117161546Z with matching heads and 1083/1083 run-memory rows, zero live-only, zero replay-only, and zero differing rows; texture_document_aliases remains unsupported and eligibility=false; docs/evidence/effects-red-replay-run-memory-scope-repair-2026-08-18.md; docs/evidence/effects-red-replay-eligibility-recheck-2026-08-18.md; docs/problems/effects-red-replay-texture-alias-authority-2026-08-18.md"
     deploy_identity: "Staging /health reports deployed proxy commit 7bdc0a7ceb063d29542f2aa90560439db97d8aee at 2026-08-18T21:49:42Z; CI 32186509122 and Node B deploy job 95878530936 succeeded after unrelated race-shard failures were rerun. The retained computer is active, propose_only generation 1, epoch 316 after the owner-authorized refresh; the corrected residue import appended 1083 run-memory entries and schema-3 replay completeness reached sequence 3342 with matching heads and exact run-memory equivalence. texture_document_aliases remains non-empty and unsupported, whole-computer eligibility is false, and no candidate or bundle exists. Operation selfdev-b090bcd72d300fed17cb3f5a142f8595 remains executing; constructed freeze 7122f279 is not promotion authority."
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: 2026-08-18 source repair 7bdc0a7c, corrected residue import, deployed run-memory acceptance receipt, and docs-first alias-authority blocker receipt; preserved untracked DSH rehearsal docs remain outside this mission
+    worktree_inventory_ref: 2026-08-18 source repair 7bdc0a7c, corrected residue import, deployed run-memory acceptance receipt, docs-first alias-authority blocker receipt, and read-only replay eligibility recheck; preserved untracked DSH rehearsal docs remain outside this mission
     status: reconciled
 
   candidate:
@@ -387,6 +387,22 @@ receipts:
       environment_identity: staging proxy 7bdc0a7c; retained computer active epoch 316, propose_only generation 1; corrected residue import appended 1083 run-memory entries; replay sequence 3342; whole-computer eligibility false
       deployed_acceptance: narrow run-memory scope and replay acceptance only; not whole-computer replay, checkpointability, restore, promotion authority, permission to retry, or effect authorization
     registry_conformance_ref: "effects remains entrypoint; narrow run-memory acceptance is not whole-computer replay eligibility, checkpoint, restore, promotion authority, or permission to retry"
+  - id: effects-red-replay-eligibility-recheck-2026-08-18
+    boundary: execute
+    commit_or_artifact: docs/evidence/effects-red-replay-eligibility-recheck-2026-08-18.md
+    proof_refs: [docs/evidence/effects-red-replay-eligibility-recheck-2026-08-18.md, https://choir.news, "go run ./cmd/choir computer replay-completeness --computer computer-03335285269bdba4f94377e56879f9e6 --timeout 10m"]
+    rollback_ref: revert this documentation-only recheck; no product-state or event-chain rollback
+    disposition: "accepted as a current read-only staging recheck — sequence 3342 still has matching event heads and exact 1083/1083 run-memory equivalence, but whole-computer replay remains not_equivalent and eligible=false on texture_document_aliases; no new repair or authority is selected"
+    problem_ref: effects-red-replay-texture-alias-authority-2026-08-18
+    authorization_ref: Definition next_action after the deployed run-memory scope repair; owner architecture ratification is still missing
+    candidate_or_evidence_refs: [docs/evidence/effects-red-replay-eligibility-recheck-2026-08-18.md]
+    landing:
+      source_commit: docs-only verification
+      ci_ref: pending (Docs Truth Check)
+      deploy_ref: not_applicable
+      environment_identity: staging replay captured 2026-08-18T22:59:20.117161546Z; retained computer sequence 3342; matching heads; run-memory 1083/1083; eligibility false; unsupported texture_document_aliases
+      deployed_acceptance: not_applicable — this read-only recheck confirms the existing blocker and is not whole-computer replay acceptance
+    registry_conformance_ref: "effects remains entrypoint; this recheck is not replay eligibility, checkpoint, restore, promotion authority, permission to retry, or effect authorization"
   - id: effects-red-gateway-inference-eof-2026-08-18
     boundary: execute
     commit_or_artifact: docs/evidence/effects-red-gateway-inference-eof-2026-08-18.md
