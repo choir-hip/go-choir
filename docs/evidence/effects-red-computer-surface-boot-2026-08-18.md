@@ -69,3 +69,18 @@ The next safe probe is the Definition-authorized owner refresh of this same reta
 
 **Post-landing heresy delta:** discovered — successful host deployment can leave the retained immutable computer on the prior guest commit and therefore cannot prove a guest boot repair; introduced — none; repaired — none at this receipt.
 **Post-landing conjecture delta:** the boot bootstrap implementation remains locally supported and deployed, but its behavior on the retained computer is unproven until the owner refresh crosses the immutable-realization boundary.
+
+## Post-refresh replay observation
+
+Owner refresh was executed through the authorized computer-scoped lifecycle key with idempotency key `boot-surface-refresh-20260818`. The lifecycle receipt `01a013c5-c111-7c6f-b0c4-6e6973a71bb4` advanced the same computer from epoch 302 to epoch 303 and left it active. Guest observability now reports autoputer commit `13a0ae7cebc7081753d0a93b92310b00ff41a6d0`, built at `20260818065410`, and the authenticated `X-Choir-Computer`/`X-Choir-Desktop: primary` root request returns HTTP 200 HTML from the guest. The response is not the platform shell, does not contain the underivable-SPA error, and serves asset `/assets/index-yFRxc-PI.js`; the 523-byte root body SHA-256 is `9edd6b0319798d5a2f9eb7bf5c26dcfa29d95dc0efb9466da24ac065e801c0de`.
+
+A separate post-refresh read probe of `/api/computers/computer-03335285269bdba4f94377e56879f9e6/self-development/replay-completeness` repeatedly returns HTTP 500:
+
+```text
+replay completeness: reconstruct event chain: computer event appender: fetch durable chain: computer event client: decode response: unexpected EOF
+```
+
+This receipt does not claim replay eligibility, checkpointability, restore completeness, or self-development readiness. It records a new restore-substrate observation after the successful serving-join proof. Do not blind-retry replay, bind a checkpoint, rematerialize, restore, or retry self-development until the EOF is documented and repaired through its own problem-first landing loop.
+
+**Replay EOF heresy delta:** discovered — post-refresh durable-chain reconstruction can fail with an unexpected EOF even while lifecycle status and the authenticated guest surface are healthy; introduced — none; repaired — none at this receipt.
+**Replay EOF conjecture delta:** the boot serving-join repair is accepted for the named surface, while replay completeness remains unproven and is now a separate blocking substrate problem.
