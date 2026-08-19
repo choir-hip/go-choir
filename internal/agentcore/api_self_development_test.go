@@ -849,6 +849,7 @@ func TestSelfDevelopmentTextureJoinRewakesTerminalPersistentSuper(t *testing.T) 
 	if err != nil || len(first) != 1 {
 		t.Fatalf("first Super runs=%d err=%v", len(first), err)
 	}
+	_ = runtime.CancelRun(ctx, first[0].RunID, "owner")
 	first[0].State = types.RunFailed
 	first[0].Error = "tool loop inject turns after tools: list pending update_coagent turns: record not found"
 	first[0].UpdatedAt = time.Now().UTC()
