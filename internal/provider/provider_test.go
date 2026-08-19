@@ -1152,8 +1152,8 @@ func TestZAIProviderFromEnvPassesModel(t *testing.T) {
 }
 
 func TestZAIProvider_GLM52_Integration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping live provider integration in -short mode")
+	if os.Getenv("RUN_INTEGRATION_TESTS") == "" {
+		t.Skip("skipping live provider integration (set RUN_INTEGRATION_TESTS=1)")
 	}
 	if os.Getenv("ZAI_API_KEY") == "" {
 		t.Skip("ZAI_API_KEY not set, skipping integration test")

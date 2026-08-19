@@ -166,6 +166,9 @@ func TestGuestSignerStateMigrationRejectsHardLinksWithoutMetadataMutation(t *tes
 			if err := os.WriteFile(inside, original, 0o644); err != nil {
 				t.Fatal(err)
 			}
+			if err := os.Chmod(inside, 0o644); err != nil {
+				t.Fatal(err)
+			}
 			outside := filepath.Join(t.TempDir(), "outside-link")
 			if err := os.Link(inside, outside); err != nil {
 				t.Fatal(err)
@@ -207,8 +210,17 @@ func TestGuestSignerStateMigrationFailsClosedWhenDiscoveryFails(t *testing.T) {
 	if err := os.MkdirAll(receipts, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(receipts, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	keyPath := filepath.Join(root, "key.ed25519")
 	if err := os.WriteFile(keyPath, []byte("unchanged"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(keyPath, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	fakeBin := t.TempDir()

@@ -30,67 +30,51 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 0
 fi
 
-if ! command -v rg >/dev/null 2>&1; then
-  echo "rg not found; skipping heresy detector" >&2
-  exit 0
-fi
-
 export repo_root fail_on_regression
 export report_path="${report_path:-}"
 
 python3 - "$@" <<'PY'
-import json, os, re, subprocess, sys
+import fnmatch
+import json
+import os
+import re
+import subprocess
+import sys
 
 repo = os.environ["repo_root"]
 manifest = os.path.join(repo, "docs", "heresy-detectors.md")
-search_paths = [
-    os.path.join(repo, "README.md"),
-    os.path.join(repo, "AGENTS.md"),
-    os.path.join(repo, "docs"),
-    os.path.join(repo, "internal"),
-    os.path.join(repo, "cmd"),
-    os.path.join(repo, "frontend"),
-    os.path.join(repo, "scripts"),
-    os.path.join(repo, "specs"),
-    os.path.join(repo, ".github"),
-]
 
-def count_pattern(pattern, excludes=None):
-    # rg -F counts fixed-string occurrences. Sum per-file counts.
-    # Per-row path exclusions can be listed in the Notes column as
-    #   exclude: glob1, glob2, ...
-    excludes = excludes or []
-    cmd = ["rg", "-F", "--no-heading", "-c"]
-    for glob in excludes:
-        cmd.append("--glob")
-        cmd.append("!" + glob.strip())
-    cmd.append(pattern)
-    cmd.extend(search_paths)
+# Fast file collection: prefer git ls-files if available, else walk with ignores.
+tracked_files = []
+try:
+    cmd = ["git", "ls-files"]
+    result = subprocess.run(cmd, cwd=repo, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=True)
+    tracked_files = [f.strip() for f in result.stdout.splitlines() if f.strip() and not f.startswith("vendor/")]
+except Exception:
+    ignored_dirs = {".git", "node_modules", "vendor", "dist", ".agentic-consensus", ".direnv", "tmp", "states"}
+    for root, dirs, files in os.walk(repo):
+        dirs[:] = [d for d in dirs if d not in ignored_dirs and not d.startswith(".")]
+        rel_dir = os.path.relpath(root, repo)
+        for f in files:
+            if rel_dir == ".":
+                tracked_files.append(f)
+            else:
+                tracked_files.append(os.path.join(rel_dir, f))
+
+# Read all relevant text files into memory in a single pass.
+file_contents = {}
+for rel_path in tracked_files:
+    full_path = os.path.join(repo, rel_path)
     try:
-        result = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            check=False,
-        )
-    except FileNotFoundError:
-        return 0
-    if not result.stdout:
-        return 0
-    total = 0
-    for line in result.stdout.splitlines():
-        if ":" in line:
-            try:
-                total += int(line.rsplit(":", 1)[1])
-            except ValueError:
-                pass
-    return total
+        with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+            file_contents[rel_path] = f.read()
+    except Exception:
+        pass
 
 # Parse the | ID | Detector family | Grep patterns | Target | Notes | table.
 rows = []
 if os.path.exists(manifest):
-    with open(manifest) as f:
+    with open(manifest, "r", encoding="utf-8") as f:
         text = f.read()
     # Find the detector manifest table.
     match = re.search(r"\n\| ID \| Detector family \| Grep patterns \| Target \| Notes \|\n(.*?)\n\## Baseline Counts", text, re.S)
@@ -114,12 +98,18 @@ if os.path.exists(manifest):
             if exclude_match:
                 excludes = [g.strip() for g in exclude_match.group(1).split(",")]
             enforced = bool(re.search(r"enforce:\s*zero(?:\b|$)", notes))
+
             pattern_hits = {}
             total_hits = 0
             for p in patterns:
-                n = count_pattern(p, excludes=excludes)
-                pattern_hits[p] = n
-                total_hits += n
+                hits = 0
+                for rel_path, content in file_contents.items():
+                    if excludes and any(fnmatch.fnmatch(rel_path, pat) or fnmatch.fnmatch(os.path.basename(rel_path), pat) for pat in excludes):
+                        continue
+                    hits += content.count(p)
+                pattern_hits[p] = hits
+                total_hits += hits
+
             rows.append({
                 "id": heresy_id,
                 "family": family,
@@ -133,7 +123,7 @@ if os.path.exists(manifest):
 print(json.dumps(rows, indent=2))
 
 if os.environ.get("report_path"):
-    with open(os.environ["report_path"], "w") as f:
+    with open(os.environ["report_path"], "w", encoding="utf-8") as f:
         json.dump(rows, f, indent=2)
 
 if os.environ.get("fail_on_regression") == "true":

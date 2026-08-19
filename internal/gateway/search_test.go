@@ -759,8 +759,8 @@ func TestHandleSearch_DeniesExternalPeerWithValidToken(t *testing.T) {
 // --- Provider Integration Tests (requires env vars, skipped by default) ---
 
 func TestTavilyProvider_Integration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping live provider integration in -short mode")
+	if os.Getenv("RUN_INTEGRATION_TESTS") == "" {
+		t.Skip("skipping live provider integration (set RUN_INTEGRATION_TESTS=1)")
 	}
 	apiKey := os.Getenv("TAVILY_API_KEY")
 	if apiKey == "" {
@@ -791,8 +791,8 @@ func TestTavilyProvider_Integration(t *testing.T) {
 }
 
 func TestBraveProvider_Integration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping live provider integration in -short mode")
+	if os.Getenv("RUN_INTEGRATION_TESTS") == "" {
+		t.Skip("skipping live provider integration (set RUN_INTEGRATION_TESTS=1)")
 	}
 	apiKey := os.Getenv("BRAVE_API_KEY")
 	if apiKey == "" {
@@ -823,8 +823,8 @@ func TestBraveProvider_Integration(t *testing.T) {
 }
 
 func TestExaProvider_Integration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping live provider integration in -short mode")
+	if os.Getenv("RUN_INTEGRATION_TESTS") == "" {
+		t.Skip("skipping live provider integration (set RUN_INTEGRATION_TESTS=1)")
 	}
 	apiKey := os.Getenv("EXA_API_KEY")
 	if apiKey == "" {
@@ -855,8 +855,8 @@ func TestExaProvider_Integration(t *testing.T) {
 }
 
 func TestSerperProvider_Integration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping live provider integration in -short mode")
+	if os.Getenv("RUN_INTEGRATION_TESTS") == "" {
+		t.Skip("skipping live provider integration (set RUN_INTEGRATION_TESTS=1)")
 	}
 	apiKey := os.Getenv("SERPER_API_KEY")
 	if apiKey == "" {
@@ -909,8 +909,8 @@ func TestParseSerpAPIResults(t *testing.T) {
 }
 
 func TestSerpAPIProvider_Integration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping live provider integration in -short mode")
+	if os.Getenv("RUN_INTEGRATION_TESTS") == "" {
+		t.Skip("skipping live provider integration (set RUN_INTEGRATION_TESTS=1)")
 	}
 	apiKey := os.Getenv("SERPAPI_API_KEY")
 	if apiKey == "" {
@@ -940,8 +940,8 @@ func TestSerpAPIProvider_Integration(t *testing.T) {
 }
 
 func TestParallelProvider_Integration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping live provider integration in -short mode")
+	if os.Getenv("RUN_INTEGRATION_TESTS") == "" {
+		t.Skip("skipping live provider integration (set RUN_INTEGRATION_TESTS=1)")
 	}
 	apiKey := os.Getenv("PARALLEL_API_KEY")
 	if apiKey == "" {
