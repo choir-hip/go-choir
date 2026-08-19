@@ -479,15 +479,17 @@ CREATE TABLE IF NOT EXISTS desktop_state (
 
 CREATE TABLE IF NOT EXISTS desktop_workspaces (
 	owner_id       VARCHAR(255) NOT NULL,
+	computer_id    VARCHAR(255) NOT NULL DEFAULT '',
 	desktop_id     VARCHAR(255) NOT NULL,
 	windows_json   LONGTEXT NOT NULL DEFAULT '[]',
 	active_window  VARCHAR(255) NOT NULL DEFAULT '',
 	updated_at     DATETIME NOT NULL,
-	PRIMARY KEY (owner_id, desktop_id)
+	PRIMARY KEY (owner_id, computer_id, desktop_id)
 );
 
 CREATE TABLE IF NOT EXISTS desktop_sessions (
 	owner_id          VARCHAR(255) NOT NULL,
+	computer_id       VARCHAR(255) NOT NULL DEFAULT '',
 	desktop_id        VARCHAR(255) NOT NULL,
 	session_id        VARCHAR(255) NOT NULL,
 	device_id         VARCHAR(255) NOT NULL DEFAULT '',
@@ -497,11 +499,12 @@ CREATE TABLE IF NOT EXISTS desktop_sessions (
 	driver_until      DATETIME NULL,
 	created_at        DATETIME NOT NULL,
 	updated_at        DATETIME NOT NULL,
-	PRIMARY KEY (owner_id, desktop_id, session_id)
+	PRIMARY KEY (owner_id, computer_id, desktop_id, session_id)
 );
 
 CREATE TABLE IF NOT EXISTS desktop_app_instances (
 	owner_id              VARCHAR(255) NOT NULL,
+	computer_id           VARCHAR(255) NOT NULL DEFAULT '',
 	desktop_id            VARCHAR(255) NOT NULL,
 	app_instance_id       VARCHAR(255) NOT NULL,
 	app_id                VARCHAR(255) NOT NULL,
@@ -513,11 +516,12 @@ CREATE TABLE IF NOT EXISTS desktop_app_instances (
 	created_by_session_id VARCHAR(255) NOT NULL DEFAULT '',
 	created_at            DATETIME NOT NULL,
 	updated_at            DATETIME NOT NULL,
-	PRIMARY KEY (owner_id, desktop_id, app_instance_id)
+	PRIMARY KEY (owner_id, computer_id, desktop_id, app_instance_id)
 );
 
 CREATE TABLE IF NOT EXISTS desktop_window_placements (
 	owner_id               VARCHAR(255) NOT NULL,
+	computer_id            VARCHAR(255) NOT NULL DEFAULT '',
 	desktop_id             VARCHAR(255) NOT NULL,
 	session_id             VARCHAR(255) NOT NULL,
 	app_instance_id        VARCHAR(255) NOT NULL,
@@ -530,7 +534,7 @@ CREATE TABLE IF NOT EXISTS desktop_window_placements (
 	local_focused          BOOLEAN NOT NULL DEFAULT FALSE,
 	restored_geometry_json LONGTEXT NOT NULL DEFAULT '',
 	updated_at             DATETIME NOT NULL,
-	PRIMARY KEY (owner_id, desktop_id, session_id, app_instance_id)
+	PRIMARY KEY (owner_id, computer_id, desktop_id, session_id, app_instance_id)
 );
 
 CREATE TABLE IF NOT EXISTS computer_event_projection_heads (
@@ -904,8 +908,8 @@ func (s *Store) backfillDerivedRuntimeState() error {
 		return fmt.Errorf("backfill events.stream_seq: %w", err)
 	}
 	if _, err := s.db.Exec(`
-		INSERT INTO desktop_workspaces (owner_id, desktop_id, windows_json, active_window, updated_at)
-		SELECT owner_id, 'primary', windows_json, active_window, updated_at
+		INSERT INTO desktop_workspaces (owner_id, computer_id, desktop_id, windows_json, active_window, updated_at)
+		SELECT owner_id, '', 'primary', windows_json, active_window, updated_at
 		  FROM desktop_state
 		 WHERE NOT EXISTS (
 			SELECT 1

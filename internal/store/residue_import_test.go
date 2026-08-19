@@ -75,9 +75,9 @@ func TestImportResidueSnapshotCoMovesDesktopAndOG(t *testing.T) {
 	}
 	if _, err := productStore.db.ExecContext(ctx,
 		`INSERT INTO desktop_sessions (
-			owner_id, desktop_id, session_id, device_id, viewport_profile,
+			owner_id, computer_id, desktop_id, session_id, device_id, viewport_profile,
 			visibility_state, last_input_at, driver_until, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		"owner-1", types.PrimaryDesktopID, "stale-tab", "device-1", "wide",
 		"hidden", time.Now().UTC().Format(time.RFC3339Nano), time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano),
 		time.Now().UTC().Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano),
@@ -385,4 +385,54 @@ func bindResidueTape(t *testing.T, productStore *Store, computerID string) error
 		return err
 	}
 	return productStore.BindProjectionTape(computerID, appender)
+}
+
+func TestImportResidueSnapshotIncludesAliases(t *testing.T) {
+	ctx := context.Background()
+	productStore := openProjectStore(t)
+	computerID := "computer-residue-aliases"
+	prepareGenesis(t, productStore, computerID, "genesis-residue-aliases")
+
+	// Save desktop and OG so co-movement passes
+	if err := productStore.SaveDesktopStateForSession(ctx, residueDesktopState("win-alias"), types.DesktopSessionContext{
+		SessionID: "browser-a", IsDriver: true, DriverUntil: time.Now().UTC().Add(time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := productStore.ogStore.PutObject(ctx, residueObject(computerID, "obj-alias")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert legacy unprojected alias
+	now := time.Date(2026, 8, 19, 1, 0, 0, 0, time.UTC)
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO texture_document_aliases (owner_id, computer_id, source_path, doc_id, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		"owner-1", "", "notes/legacy.md", "doc-legacy-1", now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := bindResidueTape(t, productStore, computerID); err != nil {
+		t.Fatal(err)
+	}
+	result, err := productStore.ImportResidueSnapshotForOwner(ctx, "owner-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Appended || result.TextureAliases != 1 {
+		t.Fatalf("expected 1 texture alias in residue import result, got %+v", result)
+	}
+
+	// Verify the imported alias is now present with the active computer_id
+	var cID string
+	err = productStore.db.QueryRowContext(ctx,
+		`SELECT computer_id FROM texture_document_aliases WHERE owner_id=? AND source_path=?`,
+		"owner-1", "notes/legacy.md").Scan(&cID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cID != computerID {
+		t.Fatalf("imported alias computer_id=%q, want %q", cID, computerID)
+	}
 }

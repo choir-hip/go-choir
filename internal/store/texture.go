@@ -105,11 +105,12 @@ CREATE TABLE IF NOT EXISTS texture_source_refs (
 
 CREATE TABLE IF NOT EXISTS texture_document_aliases (
 	owner_id            VARCHAR(255) NOT NULL,
+	computer_id         VARCHAR(255) NOT NULL DEFAULT '',
 	source_path         VARCHAR(2048) NOT NULL,
 	doc_id              VARCHAR(255) NOT NULL,
 	created_at          DATETIME NOT NULL,
 	updated_at          DATETIME NOT NULL,
-	PRIMARY KEY (owner_id, source_path)
+	PRIMARY KEY (owner_id, computer_id, source_path)
 );
 
 CREATE INDEX IF NOT EXISTS idx_texture_docs_owner ON texture_documents(owner_id);
@@ -119,7 +120,7 @@ CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_created ON texture_revisions(doc
 CREATE INDEX IF NOT EXISTS idx_texture_source_entities_owner ON texture_source_entities(owner_id);
 CREATE INDEX IF NOT EXISTS idx_texture_source_refs_revision ON texture_source_refs(owner_id, doc_id, texture_revision_id);
 CREATE INDEX IF NOT EXISTS idx_texture_source_refs_source ON texture_source_refs(source_entity_canonical_id, source_entity_version_id);
-CREATE INDEX IF NOT EXISTS idx_texture_aliases_doc ON texture_document_aliases(doc_id);
+CREATE INDEX IF NOT EXISTS idx_texture_aliases_doc ON texture_document_aliases(owner_id, computer_id, doc_id);
 
 CREATE TABLE IF NOT EXISTS texture_agent_mutations (
 	doc_id              VARCHAR(255) NOT NULL,
@@ -822,12 +823,16 @@ func (s *Store) ArchiveTextureDocumentAuthority(ctx context.Context, docID, owne
 
 // GetDocumentAlias resolves a file-browser alias to its canonical document ID.
 func (s *Store) GetDocumentAlias(ctx context.Context, ownerID, sourcePath string) (string, error) {
-	row := s.textureHandle().QueryRowContext(ctx,
-		`SELECT doc_id
-		   FROM texture_document_aliases
-		  WHERE owner_id = ? AND source_path = ?`,
-		ownerID, sourcePath,
-	)
+	ownerID = strings.TrimSpace(ownerID)
+	sourcePath = strings.TrimSpace(sourcePath)
+	computerID := s.aliasComputerID()
+	query := `SELECT doc_id FROM texture_document_aliases WHERE owner_id = ? AND computer_id = ? AND source_path = ?`
+	args := []any{ownerID, computerID, sourcePath}
+	if computerID == "" {
+		query = `SELECT doc_id FROM texture_document_aliases WHERE owner_id = ? AND (computer_id = ? OR computer_id = '') AND source_path = ?`
+		args = []any{ownerID, computerID, sourcePath}
+	}
+	row := s.textureHandle().QueryRowContext(ctx, query, args...)
 	var docID string
 	if err := row.Scan(&docID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -841,18 +846,18 @@ func (s *Store) GetDocumentAlias(ctx context.Context, ownerID, sourcePath string
 // GetDocumentAliasSourcePath returns the canonical shortcut path for the given
 // document when one exists, otherwise the most recently updated source path.
 func (s *Store) GetDocumentAliasSourcePath(ctx context.Context, ownerID, docID string) (string, error) {
-	row := s.textureHandle().QueryRowContext(ctx,
-		`SELECT source_path
+	ownerID = strings.TrimSpace(ownerID)
+	docID = strings.TrimSpace(docID)
+	computerID := s.aliasComputerID()
+	query := `SELECT source_path
 		   FROM texture_document_aliases
-		  WHERE owner_id = ? AND doc_id = ?
+		  WHERE owner_id = ? AND (computer_id = ? OR computer_id = '') AND doc_id = ?
 		  ORDER BY CASE
 		             WHEN LOWER(source_path) LIKE '%.texture' THEN 0
-		             WHEN LOWER(source_path) LIKE '%.texture' THEN 1
-		             ELSE 2
+		             ELSE 1
 		           END, updated_at DESC
-		  LIMIT 1`,
-		ownerID, docID,
-	)
+		  LIMIT 1`
+	row := s.textureHandle().QueryRowContext(ctx, query, ownerID, computerID, docID)
 	var sourcePath string
 	if err := row.Scan(&sourcePath); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -868,13 +873,36 @@ func (s *Store) UpsertDocumentAlias(ctx context.Context, ownerID, sourcePath, do
 	if updatedAt.IsZero() {
 		updatedAt = time.Now().UTC()
 	}
+	ownerID = strings.TrimSpace(ownerID)
+	sourcePath = strings.TrimSpace(sourcePath)
+	docID = strings.TrimSpace(docID)
+	computerID := s.aliasComputerID()
+	if s.ProjectionTapeBound() {
+		proj := computerevent.TextureDocumentAliasProjection{
+			OwnerID:    ownerID,
+			ComputerID: computerID,
+			SourcePath: sourcePath,
+			DocID:      docID,
+			CreatedAt:  updatedAt.UTC().Format(time.RFC3339Nano),
+			UpdatedAt:  updatedAt.UTC().Format(time.RFC3339Nano),
+		}
+		body, err := json.Marshal(proj)
+		if err != nil {
+			return fmt.Errorf("store: marshal projected texture alias: %w", err)
+		}
+		return s.projectionTape.appendOps(ctx, []computerevent.ProjectionOp{{
+			Kind: computerevent.ProjectionOpTextureDocumentAlias,
+			Body: body,
+		}})
+	}
 	_, err := s.textureHandle().ExecContext(ctx,
-		`INSERT INTO texture_document_aliases (owner_id, source_path, doc_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?)
+		`INSERT INTO texture_document_aliases (owner_id, computer_id, source_path, doc_id, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE
 		   doc_id = VALUES(doc_id),
 		   updated_at = VALUES(updated_at)`,
 		ownerID,
+		computerID,
 		sourcePath,
 		docID,
 		updatedAt.UTC().Format(time.RFC3339Nano),
@@ -941,10 +969,11 @@ func (s *Store) deleteDocumentPhysicalForTest(ctx context.Context, docID, ownerI
 		}
 	}
 
-	// Delete aliases from SQL (aliases are still SQL-backed).
+	// Delete aliases from SQL.
+	computerID := s.aliasComputerID()
 	_, _ = s.textureHandle().ExecContext(ctx,
-		`DELETE FROM texture_document_aliases WHERE doc_id = ? AND owner_id = ?`,
-		docID, ownerID,
+		`DELETE FROM texture_document_aliases WHERE doc_id = ? AND owner_id = ? AND (computer_id = ? OR computer_id = '')`,
+		docID, ownerID, computerID,
 	)
 
 	// Delete the document from OG.
@@ -2789,4 +2818,11 @@ func scanAgentMutation(row interface{ Scan(...any) error }) (*AgentMutation, err
 	}
 
 	return &m, nil
+}
+
+func (s *Store) aliasComputerID() string {
+	if s == nil || s.projectionTape == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.projectionTape.computerID)
 }

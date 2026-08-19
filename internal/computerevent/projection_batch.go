@@ -27,6 +27,8 @@ const (
 	ProjectionOpSelfDevelopmentStartIntent = "self_development_start_intent_recorded"
 	ProjectionOpSelfDevelopmentOperation   = "self_development_operation_recorded"
 	ProjectionOpTextureAgentMutation       = "texture_agent_mutation_recorded"
+	ProjectionOpTextureDocumentAlias       = "texture_document_alias_recorded"
+	ProjectionOpTextureDocumentAliasDelete = "texture_document_alias_delete_recorded"
 	ProjectionBatchMediaType               = "application/vnd.choir.projection-batch+json"
 )
 
@@ -45,11 +47,13 @@ var projectionOpKinds = map[string]struct{}{
 	ProjectionOpSelfDevelopmentStartIntent: {},
 	ProjectionOpSelfDevelopmentOperation:   {},
 	ProjectionOpTextureAgentMutation:       {},
+	ProjectionOpTextureDocumentAlias:       {},
+	ProjectionOpTextureDocumentAliasDelete: {},
 }
 
 func isProjectionV2OnlyKind(kind string) bool {
 	switch kind {
-	case ProjectionOpRunMemoryEntry, ProjectionOpSelfDevelopmentStartIntent, ProjectionOpSelfDevelopmentOperation, ProjectionOpTextureAgentMutation:
+	case ProjectionOpRunMemoryEntry, ProjectionOpSelfDevelopmentStartIntent, ProjectionOpSelfDevelopmentOperation, ProjectionOpTextureAgentMutation, ProjectionOpTextureDocumentAlias, ProjectionOpTextureDocumentAliasDelete:
 		return true
 	default:
 		return false
@@ -251,4 +255,15 @@ func ClassifyProjectionFailure(err error) error {
 		return fmt.Errorf("%w: %w", ErrPayloadSQLBeforeResolve, err)
 	}
 	return fmt.Errorf("%w: %w", ErrProjectionPoison, err)
+}
+
+// TextureDocumentAliasProjection is the canonical row snapshot for a Texture
+// document file-path alias.
+type TextureDocumentAliasProjection struct {
+	OwnerID    string `json:"owner_id"`
+	ComputerID string `json:"computer_id"`
+	SourcePath string `json:"source_path"`
+	DocID      string `json:"doc_id"`
+	CreatedAt  string `json:"created_at,omitempty"`
+	UpdatedAt  string `json:"updated_at,omitempty"`
 }

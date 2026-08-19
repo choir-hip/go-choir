@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -30,6 +31,7 @@ type ResidueImportResult struct {
 	StartIntents     int
 	Operations       int
 	TextureMutations int
+	TextureAliases   int
 	Appended         bool
 }
 
@@ -68,6 +70,10 @@ func (s *Store) ImportResidueSnapshotForOwner(ctx context.Context, ownerID strin
 	if err != nil {
 		return ResidueImportResult{}, err
 	}
+	aliasOps, err := s.snapshotResidueAliases(ctx, ownerID, computerID)
+	if err != nil {
+		return ResidueImportResult{}, err
+	}
 	sessionCount := 0
 	for _, desktop := range desktops {
 		sessionCount += len(desktop.Sessions)
@@ -76,16 +82,17 @@ func (s *Store) ImportResidueSnapshotForOwner(ctx context.Context, ownerID strin
 		Desktops: len(desktops), Sessions: sessionCount, Objects: len(objects), Edges: len(edges),
 		RunMemoryEntries: counts.runMemory, StartIntents: counts.startIntents,
 		Operations: counts.operations, TextureMutations: counts.textureMutations,
+		TextureAliases: len(aliasOps),
 	}
 	desktopResidue := result.Desktops > 0 || result.Sessions > 0
 	ogResidue := result.Objects > 0 || result.Edges > 0
 	if desktopResidue != ogResidue {
 		return result, ErrResidueImportSplit
 	}
-	if !desktopResidue && !ogResidue && len(runtimeOps) == 0 {
+	if !desktopResidue && !ogResidue && len(runtimeOps) == 0 && len(aliasOps) == 0 {
 		return result, nil
 	}
-	ops := make([]computerevent.ProjectionOp, 0, result.Desktops+result.Objects+result.Edges+len(runtimeOps))
+	ops := make([]computerevent.ProjectionOp, 0, result.Desktops+result.Objects+result.Edges+len(runtimeOps)+len(aliasOps))
 	for _, desktop := range desktops {
 		body, err := json.Marshal(desktop)
 		if err != nil {
@@ -108,6 +115,7 @@ func (s *Store) ImportResidueSnapshotForOwner(ctx context.Context, ownerID strin
 		ops = append(ops, computerevent.ProjectionOp{Kind: computerevent.ProjectionOpObjectEdge, CanonicalID: edge.EdgeID, Body: body})
 	}
 	ops = append(ops, runtimeOps...)
+	ops = append(ops, aliasOps...)
 	if err := s.projectionTape.appendOps(ctx, ops); err != nil {
 		return result, err
 	}
@@ -129,19 +137,19 @@ type residueRuntimeCounts struct {
 
 func (s *Store) snapshotResidueDesktops(ctx context.Context, ownerID, computerID string) ([]projectedDesktopState, error) {
 	keys := map[desktopKey]struct{}{}
-	if err := s.collectDesktopKeys(ctx, `SELECT DISTINCT owner_id, desktop_id FROM desktop_workspaces`, ownerID, keys); err != nil {
+	if err := s.collectDesktopKeys(ctx, `SELECT DISTINCT owner_id, desktop_id FROM desktop_workspaces`, ownerID, computerID, keys); err != nil {
 		return nil, err
 	}
-	if err := s.collectDesktopKeys(ctx, `SELECT DISTINCT owner_id, desktop_id FROM desktop_app_instances`, ownerID, keys); err != nil {
+	if err := s.collectDesktopKeys(ctx, `SELECT DISTINCT owner_id, desktop_id FROM desktop_app_instances`, ownerID, computerID, keys); err != nil {
 		return nil, err
 	}
-	if err := s.collectDesktopKeys(ctx, `SELECT DISTINCT owner_id, desktop_id FROM desktop_window_placements`, ownerID, keys); err != nil {
+	if err := s.collectDesktopKeys(ctx, `SELECT DISTINCT owner_id, desktop_id FROM desktop_window_placements`, ownerID, computerID, keys); err != nil {
 		return nil, err
 	}
-	if err := s.collectDesktopKeys(ctx, `SELECT DISTINCT owner_id, desktop_id FROM desktop_sessions`, ownerID, keys); err != nil {
+	if err := s.collectDesktopKeys(ctx, `SELECT DISTINCT owner_id, desktop_id FROM desktop_sessions`, ownerID, computerID, keys); err != nil {
 		return nil, err
 	}
-	sessions, err := s.snapshotResidueSessionIdentities(ctx, ownerID)
+	sessions, err := s.snapshotResidueSessionIdentities(ctx, ownerID, computerID)
 	if err != nil {
 		return nil, err
 	}
@@ -158,11 +166,16 @@ func (s *Store) snapshotResidueDesktops(ctx context.Context, ownerID, computerID
 	return out, nil
 }
 
-func (s *Store) collectDesktopKeys(ctx context.Context, query, ownerID string, keys map[desktopKey]struct{}) error {
+func (s *Store) collectDesktopKeys(ctx context.Context, query, ownerID, computerID string, keys map[desktopKey]struct{}) error {
 	args := []any{}
-	if strings.TrimSpace(ownerID) != "" {
+	ownerID = strings.TrimSpace(ownerID)
+	computerID = strings.TrimSpace(computerID)
+	if ownerID != "" && computerID != "" {
+		query += ` WHERE owner_id = ? AND (computer_id = ? OR computer_id = '')`
+		args = append(args, ownerID, computerID)
+	} else if ownerID != "" {
 		query += ` WHERE owner_id = ?`
-		args = append(args, strings.TrimSpace(ownerID))
+		args = append(args, ownerID)
 	}
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -187,12 +200,17 @@ func (s *Store) collectDesktopKeys(ctx context.Context, query, ownerID string, k
 	return nil
 }
 
-func (s *Store) snapshotResidueSessionIdentities(ctx context.Context, ownerID string) (map[desktopKey][]projectedSessionIdentity, error) {
+func (s *Store) snapshotResidueSessionIdentities(ctx context.Context, ownerID, computerID string) (map[desktopKey][]projectedSessionIdentity, error) {
 	query := `SELECT owner_id, desktop_id, session_id, device_id, viewport_profile FROM desktop_sessions`
 	args := []any{}
-	if strings.TrimSpace(ownerID) != "" {
+	ownerID = strings.TrimSpace(ownerID)
+	computerID = strings.TrimSpace(computerID)
+	if ownerID != "" && computerID != "" {
+		query += ` WHERE owner_id = ? AND (computer_id = ? OR computer_id = '')`
+		args = append(args, ownerID, computerID)
+	} else if ownerID != "" {
 		query += ` WHERE owner_id = ?`
-		args = append(args, strings.TrimSpace(ownerID))
+		args = append(args, ownerID)
 	}
 	query += ` ORDER BY owner_id, desktop_id, session_id`
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -581,4 +599,54 @@ func scanResidueEdge(row interface{ Scan(...any) error }) (objectgraph.Edge, err
 	edge.Metadata = json.RawMessage(metadata)
 	edge.CreatedAt = edge.CreatedAt.UTC()
 	return edge, nil
+}
+
+func (s *Store) snapshotResidueAliases(ctx context.Context, ownerID, computerID string) ([]computerevent.ProjectionOp, error) {
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	query := `SELECT owner_id, computer_id, source_path, doc_id, created_at, updated_at FROM texture_document_aliases`
+	args := []any{}
+	if ownerID != "" && computerID != "" {
+		query += ` WHERE owner_id = ? AND (computer_id = ? OR computer_id = '')`
+		args = append(args, ownerID, computerID)
+	} else if ownerID != "" {
+		query += ` WHERE owner_id = ?`
+		args = append(args, ownerID)
+	}
+	query += ` ORDER BY source_path`
+	rows, err := s.textureHandle().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("store: list residue texture aliases: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var ops []computerevent.ProjectionOp
+	for rows.Next() {
+		var oID, cID, sourcePath, docID string
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(&oID, &cID, &sourcePath, &docID, &createdAt, &updatedAt); err != nil {
+			return nil, fmt.Errorf("store: scan residue texture alias: %w", err)
+		}
+		if cID == "" {
+			cID = computerID
+		}
+		proj := computerevent.TextureDocumentAliasProjection{
+			OwnerID:    oID,
+			ComputerID: cID,
+			SourcePath: sourcePath,
+			DocID:      docID,
+			CreatedAt:  createdAt.UTC().Format(time.RFC3339Nano),
+			UpdatedAt:  updatedAt.UTC().Format(time.RFC3339Nano),
+		}
+		body, err := json.Marshal(proj)
+		if err != nil {
+			return nil, fmt.Errorf("store: marshal residue texture alias: %w", err)
+		}
+		ops = append(ops, computerevent.ProjectionOp{
+			Kind: computerevent.ProjectionOpTextureDocumentAlias,
+			Body: body,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: iterate residue texture aliases: %w", err)
+	}
+	return ops, nil
 }

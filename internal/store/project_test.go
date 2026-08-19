@@ -511,3 +511,91 @@ type liveTapeVerifier struct{}
 func (liveTapeVerifier) VerifyEventHeadReceipt(context.Context, computerevent.Receipt, computerevent.CASRequest) error {
 	return nil
 }
+
+func TestProjectTextureDocumentAliasAndReplay(t *testing.T) {
+	ctx := context.Background()
+	productStore := openProjectStore(t)
+	computerID := "computer-project-aliases"
+	prepareGenesis(t, productStore, computerID, "genesis-aliases")
+	head, err := productStore.Head(ctx, computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 19, 1, 0, 0, 0, time.UTC)
+	aliasData, err := json.Marshal(computerevent.TextureDocumentAliasProjection{
+		OwnerID:    "owner-1",
+		ComputerID: computerID,
+		SourcePath: "notes/spec.md",
+		DocID:      "doc-spec-1",
+		CreatedAt:  now.Format(time.RFC3339Nano),
+		UpdatedAt:  now.Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	event, digest := prepareProjectionEvent(t, productStore, *head, eventID, "project-alias-upsert")
+	batch := computerevent.ProjectionBatch{
+		Version:          computerevent.ProjectionBatchV2,
+		ProjectorVersion: computerevent.ProjectorVersionV2,
+		ComputerID:       computerID,
+		EventID:          event.EventID,
+		EventDigest:      digest,
+		Ops: []computerevent.ProjectionOp{{
+			Kind: computerevent.ProjectionOpTextureDocumentAlias,
+			Body: aliasData,
+		}},
+	}
+	if err := productStore.FinalizeBatch(ctx, computerID, digest, signedReceipt(t, computerID, digest, event.Sequence), &batch); err != nil {
+		t.Fatal(err)
+	}
+
+	assertCount(t, productStore, `SELECT COUNT(*) FROM texture_document_aliases`, 1)
+
+	var docID, cID string
+	row := productStore.db.QueryRowContext(ctx,
+		`SELECT doc_id, computer_id FROM texture_document_aliases WHERE owner_id=? AND source_path=?`,
+		"owner-1", "notes/spec.md")
+	if err := row.Scan(&docID, &cID); err != nil {
+		t.Fatal(err)
+	}
+	if docID != "doc-spec-1" || cID != computerID {
+		t.Fatalf("projected alias docID=%q computerID=%q, want doc-spec-1 / %s", docID, cID, computerID)
+	}
+
+	// Now project a delete
+	deleteEventID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	newHead, err := productStore.Head(ctx, computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deleteData, _ := json.Marshal(computerevent.TextureDocumentAliasProjection{
+		OwnerID:    "owner-1",
+		ComputerID: computerID,
+		SourcePath: "notes/spec.md",
+	})
+	delEvent, delDigest := prepareProjectionEvent(t, productStore, *newHead, deleteEventID, "project-alias-delete")
+	delBatch := computerevent.ProjectionBatch{
+		Version:          computerevent.ProjectionBatchV2,
+		ProjectorVersion: computerevent.ProjectorVersionV2,
+		ComputerID:       computerID,
+		EventID:          delEvent.EventID,
+		EventDigest:      delDigest,
+		Ops: []computerevent.ProjectionOp{{
+			Kind: computerevent.ProjectionOpTextureDocumentAliasDelete,
+			Body: deleteData,
+		}},
+	}
+	if err := productStore.FinalizeBatch(ctx, computerID, delDigest, signedReceipt(t, computerID, delDigest, delEvent.Sequence), &delBatch); err != nil {
+		t.Fatal(err)
+	}
+	assertCount(t, productStore, `SELECT COUNT(*) FROM texture_document_aliases`, 0)
+}

@@ -35,7 +35,7 @@ type projectedSessionIdentity struct {
 }
 
 func projectBatch(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch) error {
-	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, false, "")
+	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, false, strings.TrimSpace(batch.ComputerID))
 }
 
 func projectBatchForReplay(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch) error {
@@ -49,18 +49,22 @@ func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, bat
 	if err := batch.Validate(); err != nil {
 		return err
 	}
+	computerID := strings.TrimSpace(batch.ComputerID)
+	if computerID == "" {
+		computerID = replayComputerID
+	}
 	for i, op := range batch.Ops {
-		if err := projectOp(ctx, tx, op, allowReplayTextureBootstrap, replayComputerID); err != nil {
+		if err := projectOp(ctx, tx, op, allowReplayTextureBootstrap, replayComputerID, computerID); err != nil {
 			return fmt.Errorf("computer event projection: op %d: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, allowReplayTextureBootstrap bool, replayComputerID string) error {
+func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, allowReplayTextureBootstrap bool, replayComputerID, computerID string) error {
 	switch strings.TrimSpace(op.Kind) {
 	case computerevent.ProjectionOpDesktopState:
-		return projectDesktopState(ctx, tx, op.Body)
+		return projectDesktopState(ctx, tx, op.Body, computerID)
 	case computerevent.ProjectionOpObject:
 		return projectObject(ctx, tx, op.Body)
 	case computerevent.ProjectionOpObjectEdge:
@@ -73,12 +77,16 @@ func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, a
 		return projectSelfDevelopmentOperation(ctx, tx, op.Body)
 	case computerevent.ProjectionOpTextureAgentMutation:
 		return projectTextureAgentMutation(ctx, tx, op.Body, allowReplayTextureBootstrap, replayComputerID)
+	case computerevent.ProjectionOpTextureDocumentAlias:
+		return projectTextureDocumentAlias(ctx, tx, op.Body, computerID)
+	case computerevent.ProjectionOpTextureDocumentAliasDelete:
+		return projectTextureDocumentAliasDelete(ctx, tx, op.Body, computerID)
 	default:
 		return fmt.Errorf("%w: kind %q", computerevent.ErrProjectionBatchInvalid, op.Kind)
 	}
 }
 
-func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage) error {
+func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage, computerID string) error {
 	var state projectedDesktopState
 	if err := json.Unmarshal(body, &state); err != nil {
 		return fmt.Errorf("decode desktop state: %w", err)
@@ -88,6 +96,7 @@ func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage) 
 	if ownerID == "" {
 		return fmt.Errorf("desktop state owner is required")
 	}
+	computerID = strings.TrimSpace(computerID)
 	now := state.UpdatedAt.UTC()
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -102,20 +111,20 @@ func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage) 
 	}
 	stamp := now.Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO desktop_workspaces (owner_id, desktop_id, windows_json, active_window, updated_at)
-		 VALUES (?, ?, ?, ?, ?)
+		`INSERT INTO desktop_workspaces (owner_id, computer_id, desktop_id, windows_json, active_window, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE
 		   windows_json = VALUES(windows_json),
 		   active_window = VALUES(active_window),
 		   updated_at = VALUES(updated_at)`,
-		ownerID, desktopID, string(windowsJSON), state.ActiveWindowID, stamp,
+		ownerID, computerID, desktopID, string(windowsJSON), state.ActiveWindowID, stamp,
 	); err != nil {
 		return fmt.Errorf("project desktop workspace: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM desktop_app_instances WHERE owner_id = ? AND desktop_id = ?`, ownerID, desktopID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM desktop_app_instances WHERE owner_id = ? AND (computer_id = ? OR computer_id = '') AND desktop_id = ?`, ownerID, computerID, desktopID); err != nil {
 		return fmt.Errorf("replace projected app instances: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM desktop_window_placements WHERE owner_id = ? AND desktop_id = ?`, ownerID, desktopID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM desktop_window_placements WHERE owner_id = ? AND (computer_id = ? OR computer_id = '') AND desktop_id = ?`, ownerID, computerID, desktopID); err != nil {
 		return fmt.Errorf("replace projected placements: %w", err)
 	}
 	for i, win := range state.Windows {
@@ -140,10 +149,10 @@ func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage) 
 		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO desktop_app_instances (
-				owner_id, desktop_id, app_instance_id, app_id, title, app_context_json,
+				owner_id, computer_id, desktop_id, app_instance_id, app_id, title, app_context_json,
 				lifecycle, shared_stack_rank, last_used_at, created_by_session_id, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			ownerID, desktopID, appInstanceID, strings.TrimSpace(win.AppID), strings.TrimSpace(win.Title),
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			ownerID, computerID, desktopID, appInstanceID, strings.TrimSpace(win.AppID), strings.TrimSpace(win.Title),
 			string(appContextJSON), lifecycle, stackRank, stamp, sessionID, stamp, stamp,
 		); err != nil {
 			return fmt.Errorf("insert projected app instance: %w", err)
@@ -158,11 +167,11 @@ func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage) 
 		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO desktop_window_placements (
-				owner_id, desktop_id, session_id, app_instance_id,
+				owner_id, computer_id, desktop_id, session_id, app_instance_id,
 				x, y, width, height, mode, local_z_index, local_focused,
 				restored_geometry_json, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			ownerID, desktopID, sessionID, appInstanceID,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			ownerID, computerID, desktopID, sessionID, appInstanceID,
 			win.Geometry.X, win.Geometry.Y, win.Geometry.Width, win.Geometry.Height,
 			string(win.Mode), stackRank, win.WindowID == state.ActiveWindowID,
 			restoredGeometryJSON, stamp,
@@ -180,10 +189,10 @@ func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage) 
 		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO desktop_sessions (
-				owner_id, desktop_id, session_id, device_id, viewport_profile,
-				visibility_state, last_input_at, driver_until, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, '', NULL, NULL, ?, ?)`,
-			ownerID, desktopID, sessionID, strings.TrimSpace(session.DeviceID),
+				owner_id, computer_id, desktop_id, session_id, device_id, viewport_profile,
+				visibility_state, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, '', ?, ?)`,
+			ownerID, computerID, desktopID, sessionID, strings.TrimSpace(session.DeviceID),
 			strings.TrimSpace(session.ViewportProfile), stamp, stamp,
 		); err != nil {
 			return fmt.Errorf("project session identity: %w", err)
@@ -532,4 +541,73 @@ func sameTextureAgentMutationProjection(left, right computerevent.TextureAgentMu
 	left.CreateOnly = false
 	right.CreateOnly = false
 	return reflect.DeepEqual(left, right)
+}
+
+func projectTextureDocumentAlias(ctx context.Context, tx *sql.Tx, body json.RawMessage, computerID string) error {
+	var alias computerevent.TextureDocumentAliasProjection
+	if err := json.Unmarshal(body, &alias); err != nil {
+		return fmt.Errorf("decode Texture document alias: %w", err)
+	}
+	ownerID := strings.TrimSpace(alias.OwnerID)
+	targetComputerID := strings.TrimSpace(alias.ComputerID)
+	if targetComputerID == "" {
+		targetComputerID = strings.TrimSpace(computerID)
+	}
+	sourcePath := strings.TrimSpace(alias.SourcePath)
+	docID := strings.TrimSpace(alias.DocID)
+	if ownerID == "" || sourcePath == "" || docID == "" {
+		return fmt.Errorf("Texture document alias identity (owner_id, source_path, doc_id) is required")
+	}
+	now := time.Now().UTC()
+	createdAt := now
+	if alias.CreatedAt != "" {
+		if t, err := time.Parse(time.RFC3339Nano, alias.CreatedAt); err == nil {
+			createdAt = t
+		}
+	}
+	updatedAt := now
+	if alias.UpdatedAt != "" {
+		if t, err := time.Parse(time.RFC3339Nano, alias.UpdatedAt); err == nil {
+			updatedAt = t
+		}
+	}
+	if targetComputerID != "" {
+		_, _ = tx.ExecContext(ctx, `DELETE FROM texture_document_aliases WHERE owner_id=? AND computer_id='' AND source_path=?`, ownerID, sourcePath)
+	}
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO texture_document_aliases (
+			owner_id, computer_id, source_path, doc_id, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE
+			doc_id=VALUES(doc_id),
+			updated_at=VALUES(updated_at)`,
+		ownerID, targetComputerID, sourcePath, docID, createdAt, updatedAt)
+	if err != nil {
+		return fmt.Errorf("project Texture document alias: %w", err)
+	}
+	return nil
+}
+
+func projectTextureDocumentAliasDelete(ctx context.Context, tx *sql.Tx, body json.RawMessage, computerID string) error {
+	var alias computerevent.TextureDocumentAliasProjection
+	if err := json.Unmarshal(body, &alias); err != nil {
+		return fmt.Errorf("decode Texture document alias delete: %w", err)
+	}
+	ownerID := strings.TrimSpace(alias.OwnerID)
+	targetComputerID := strings.TrimSpace(alias.ComputerID)
+	if targetComputerID == "" {
+		targetComputerID = strings.TrimSpace(computerID)
+	}
+	sourcePath := strings.TrimSpace(alias.SourcePath)
+	if ownerID == "" || sourcePath == "" {
+		return fmt.Errorf("Texture document alias delete identity (owner_id, source_path) is required")
+	}
+	_, err := tx.ExecContext(ctx, `
+		DELETE FROM texture_document_aliases
+		WHERE owner_id=? AND (computer_id=? OR computer_id='') AND source_path=?`,
+		ownerID, targetComputerID, sourcePath)
+	if err != nil {
+		return fmt.Errorf("project Texture document alias delete: %w", err)
+	}
+	return nil
 }

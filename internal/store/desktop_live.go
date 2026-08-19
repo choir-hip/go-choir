@@ -84,14 +84,16 @@ func (s *Store) SaveDesktopStateForSession(ctx context.Context, state types.Desk
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	computerID := s.desktopComputerID()
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO desktop_workspaces (owner_id, desktop_id, windows_json, active_window, updated_at)
-		 VALUES (?, ?, ?, ?, ?)
+		`INSERT INTO desktop_workspaces (owner_id, computer_id, desktop_id, windows_json, active_window, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE
 		   windows_json = VALUES(windows_json),
 		   active_window = VALUES(active_window),
 		   updated_at = VALUES(updated_at)`,
 		state.OwnerID,
+		computerID,
 		desktopID,
 		string(windowsJSON),
 		state.ActiveWindowID,
@@ -101,15 +103,17 @@ func (s *Store) SaveDesktopStateForSession(ctx context.Context, state types.Desk
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM desktop_app_instances WHERE owner_id = ? AND desktop_id = ?`,
+		`DELETE FROM desktop_app_instances WHERE owner_id = ? AND (computer_id = ? OR computer_id = '') AND desktop_id = ?`,
 		state.OwnerID,
+		computerID,
 		desktopID,
 	); err != nil {
 		return fmt.Errorf("replace desktop app instances: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM desktop_window_placements WHERE owner_id = ? AND desktop_id = ?`,
+		`DELETE FROM desktop_window_placements WHERE owner_id = ? AND (computer_id = ? OR computer_id = '') AND desktop_id = ?`,
 		state.OwnerID,
+		computerID,
 		desktopID,
 	); err != nil {
 		return fmt.Errorf("replace desktop window placements: %w", err)
@@ -136,10 +140,11 @@ func (s *Store) SaveDesktopStateForSession(ctx context.Context, state types.Desk
 		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO desktop_app_instances (
-				owner_id, desktop_id, app_instance_id, app_id, title, app_context_json,
+				owner_id, computer_id, desktop_id, app_instance_id, app_id, title, app_context_json,
 				lifecycle, shared_stack_rank, last_used_at, created_by_session_id, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			state.OwnerID,
+			computerID,
 			desktopID,
 			appInstanceID,
 			strings.TrimSpace(win.AppID),
@@ -165,11 +170,12 @@ func (s *Store) SaveDesktopStateForSession(ctx context.Context, state types.Desk
 		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO desktop_window_placements (
-				owner_id, desktop_id, session_id, app_instance_id,
+				owner_id, computer_id, desktop_id, session_id, app_instance_id,
 				x, y, width, height, mode, local_z_index, local_focused,
 				restored_geometry_json, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			state.OwnerID,
+			computerID,
 			desktopID,
 			sessionID,
 			appInstanceID,
@@ -189,8 +195,9 @@ func (s *Store) SaveDesktopStateForSession(ctx context.Context, state types.Desk
 
 	if len(presentIDs) == 0 {
 		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM desktop_window_placements WHERE owner_id = ? AND desktop_id = ?`,
+			`DELETE FROM desktop_window_placements WHERE owner_id = ? AND (computer_id = ? OR computer_id = '') AND desktop_id = ?`,
 			state.OwnerID,
+			computerID,
 			desktopID,
 		); err != nil {
 			return fmt.Errorf("delete desktop placements for empty desktop: %w", err)
@@ -244,7 +251,7 @@ func deleteDesktopPlacementsNotIn(ctx context.Context, tx *sql.Tx, ownerID, desk
 	}
 	query := fmt.Sprintf(
 		`DELETE FROM desktop_window_placements
-		  WHERE owner_id = ? AND desktop_id = ? AND app_instance_id NOT IN (%s)`,
+		  WHERE owner_id = ? AND (computer_id != '' OR computer_id = '') AND desktop_id = ? AND app_instance_id NOT IN (%s)`,
 		strings.Join(placeholders, ","),
 	)
 	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
@@ -485,4 +492,11 @@ func (s *Store) getLegacyDesktopState(ctx context.Context, ownerID, desktopID st
 		ActiveWindowID: activeWindow,
 		UpdatedAt:      parsedTime,
 	}, nil
+}
+
+func (s *Store) desktopComputerID() string {
+	if s == nil || s.projectionTape == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.projectionTape.computerID)
 }
