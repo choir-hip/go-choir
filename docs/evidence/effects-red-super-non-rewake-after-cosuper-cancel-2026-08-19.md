@@ -115,20 +115,21 @@ on a system CoSuper cancel.
 - Not a reason to raise `maxToolLoopIterations` first. A longer loop would
   still complete Super before CoSuper returns.
 
-## Required join (unpaid)
+## Required join (source, unshipped)
 
 A terminal CoSuper producer report must continue persistent Super **without**
-an owner HTTP operations POST:
+an owner HTTP operations POST.
 
-1. `persistSystemCoSuperCancellation` must `wakeUpdatedCoagent` on the
-   cancellation update, matching the tool and restart-reconcile paths.
-2. `reconcilePersistentSuperActor` must treat pending
-   `persistentSuperAdmissibleReport` packets as wake-eligible when Super is
-   terminal and no Texture `execution_request` is pending, **or** Super must
-   park on the same `lifecycle_texture_control` run after `assign_co_super`
-   with open work so the 2026-08-18 injector can fire.
+Source repair `9bc99f90`:
 
-Do not patch in this docs receipt.
+1. `persistSystemCoSuperCancellation` calls `wakeUpdatedCoagent` on the
+   cancellation update.
+2. `reconcilePersistentSuperActor` starts a `lifecycle_texture_control`
+   continuation when Super is terminal and a pending admissible CoSuper
+   report remains, with no new Texture `execution_request`.
+
+Covered by `TestPersistentSuperContinuesFromCoSuperSystemCancellationWithoutTextureRewake`.
+Staging still `d33f245c`. Live re-probe unpaid.
 
 ## Residual (still unpaid)
 
