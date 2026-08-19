@@ -115,8 +115,10 @@ repair, without HTTP Super-start.
   active interactive computers need refresh`) even though the guest
   image pointer changed. Owner refresh recovered it.
 - `deploy-impact` still classifies last push, not last-deployed SHA.
-- Super continuation turn in-flight; do not raise the 200 cap until
-  Super binds a new CoSuper (or the hang is classified).
+- Super `b57705fd` later failed at 200 iterations (19:11:37Z) without a
+  new CoSuper; Super `999bd208` started one second later from the same
+  pending report. See
+  `docs/evidence/effects-red-super-continuation-storm-after-cosuper-cancel-2026-08-19.md`.
 
 ## Forbidden
 
