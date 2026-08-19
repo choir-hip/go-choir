@@ -440,6 +440,12 @@ func (s *Store) bootstrapTexture() error {
 	if err := s.ensureTextureColumn("texture_revisions", "revision_hash", "VARCHAR(255) NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
+	if err := s.ensureTextureColumn("texture_document_aliases", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureTextureDocumentAliasesPrimaryKey(); err != nil {
+		return err
+	}
 	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_version ON texture_revisions(doc_id, owner_id, version_number DESC)`); err != nil {
 		return fmt.Errorf("create texture revision version index: %w", err)
 	}
@@ -2825,4 +2831,42 @@ func (s *Store) aliasComputerID() string {
 		return ""
 	}
 	return strings.TrimSpace(s.projectionTape.computerID)
+}
+
+func (s *Store) ensureTextureDocumentAliasesPrimaryKey() error {
+	rows, err := s.textureHandle().Query(`
+SELECT column_name
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'texture_document_aliases'
+  AND index_name = 'PRIMARY'
+ORDER BY seq_in_index`)
+	if err != nil {
+		return fmt.Errorf("inspect texture document aliases primary key: %w", err)
+	}
+	defer rows.Close()
+	var columns []string
+	for rows.Next() {
+		var column string
+		if err := rows.Scan(&column); err != nil {
+			return fmt.Errorf("scan texture document aliases primary key: %w", err)
+		}
+		columns = append(columns, column)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate texture document aliases primary key: %w", err)
+	}
+	want := []string{"owner_id", "computer_id", "source_path"}
+	if slices.Equal(columns, want) {
+		return nil
+	}
+	if len(columns) > 0 {
+		if _, err := s.textureHandle().Exec(`
+ALTER TABLE texture_document_aliases
+DROP PRIMARY KEY,
+ADD PRIMARY KEY (owner_id, computer_id, source_path)`); err != nil {
+			return fmt.Errorf("scope texture document aliases primary key: %w", err)
+		}
+	}
+	return nil
 }

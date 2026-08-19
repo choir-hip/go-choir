@@ -26,6 +26,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -873,6 +874,10 @@ func (s *Store) bootstrap() error {
 		{"self_development_operations", "code_ref", "VARCHAR(96) NOT NULL DEFAULT ''"},
 		{"self_development_operations", "artifact_program_ref", "VARCHAR(128) NOT NULL DEFAULT ''"},
 		{"self_development_operations", "decision_receipt", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"desktop_workspaces", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"desktop_sessions", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"desktop_app_instances", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"desktop_window_placements", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 	} {
 		if err := s.ensureColumn(migration.table, migration.name, migration.ddl); err != nil {
 			return err
@@ -899,6 +904,9 @@ func (s *Store) bootstrap() error {
 	}
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_coagent_mailboxes_channel ON coagent_mailboxes(owner_id, channel_id)`); err != nil {
 		return fmt.Errorf("create idx_coagent_mailboxes_channel: %w", err)
+	}
+	if err := s.ensureDesktopPrimaryKeys(); err != nil {
+		return err
 	}
 	return s.backfillDerivedRuntimeState()
 }
@@ -3100,4 +3108,40 @@ func (s *Store) SaveDesktopState(ctx context.Context, state types.DesktopState) 
 // owner/desktop pair using UPSERT.
 func (s *Store) SaveDesktopStateForDesktop(ctx context.Context, state types.DesktopState) error {
 	return s.SaveDesktopStateForSession(ctx, state, types.DesktopSessionContext{SessionID: "legacy", IsDriver: true})
+}
+
+func (s *Store) ensureDesktopPrimaryKeys() error {
+	for table, cols := range map[string][]string{
+		"desktop_workspaces":        {"owner_id", "computer_id", "desktop_id"},
+		"desktop_sessions":          {"owner_id", "computer_id", "desktop_id", "session_id"},
+		"desktop_app_instances":     {"owner_id", "computer_id", "desktop_id", "app_instance_id"},
+		"desktop_window_placements": {"owner_id", "computer_id", "desktop_id", "session_id", "app_instance_id"},
+	} {
+		rows, err := s.db.Query(`
+SELECT column_name
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = ?
+  AND index_name = 'PRIMARY'
+ORDER BY seq_in_index`, table)
+		if err != nil {
+			return fmt.Errorf("inspect %s primary key: %w", table, err)
+		}
+		var current []string
+		for rows.Next() {
+			var col string
+			if err := rows.Scan(&col); err != nil {
+				rows.Close()
+				return err
+			}
+			current = append(current, col)
+		}
+		rows.Close()
+		if !slices.Equal(current, cols) && len(current) > 0 {
+			if _, err := s.db.Exec(fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY, ADD PRIMARY KEY (%s)", table, strings.Join(cols, ", "))); err != nil {
+				return fmt.Errorf("scope %s primary key: %w", table, err)
+			}
+		}
+	}
+	return nil
 }
