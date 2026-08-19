@@ -352,7 +352,9 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 		upstream.Header.Set("X-Authenticated-Scopes", strings.Join(authResult.Scopes, ","))
 	}
 	client := h.autoputerHTTP
-	if isComputerImportResidueSnapshotPath(r.URL.Path) && h.residueImportAutoputerHTTP != nil {
+	// Residue import and checkpoint both extract large VM-local Dolt state.
+	// The ordinary 30s autoputerHTTP client 502s first; reuse the 110s budget.
+	if (isComputerImportResidueSnapshotPath(r.URL.Path) || isComputerCheckpointPath(r.URL.Path)) && h.residueImportAutoputerHTTP != nil {
 		client = h.residueImportAutoputerHTTP
 	}
 	if client == nil {

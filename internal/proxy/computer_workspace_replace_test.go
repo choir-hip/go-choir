@@ -374,6 +374,48 @@ func TestImportResidueSnapshotUsesDedicatedTimeout(t *testing.T) {
 	}
 }
 
+func TestCheckpointUsesDedicatedTimeout(t *testing.T) {
+	var requests int
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		time.Sleep(50 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"computer_id": "computer-a", "published_checkpoint": false})
+	}))
+	defer autoputer.Close()
+
+	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/vmctl/lookup" || r.URL.Query().Get("computer_id") != "computer-a" || r.URL.Query().Get("user_id") != "owner-user" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"computer_id": "computer-a", "desktop_id": "primary", "user_id": "owner-user",
+			"state": "active", "computer_url": autoputer.URL,
+		})
+	}))
+	defer ownership.Close()
+
+	handler, privateKey, _, _ := testProxyEnvWithAuthStore(t)
+	handler.vmctlClient = vmctl.NewClient(ownership.URL)
+	// Ordinary routes have a short budget; checkpoint must use the dedicated
+	// long budget or this request would fail before the backend completes.
+	handler.autoputerHTTP = &http.Client{Timeout: 10 * time.Millisecond}
+	handler.residueImportAutoputerHTTP = &http.Client{Timeout: 500 * time.Millisecond}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/lifecycle/checkpoint", strings.NewReader("{}"))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(privateKey, "owner-user")})
+	response := httptest.NewRecorder()
+	handler.HandleAPI(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("checkpoint status=%d body=%s", response.Code, response.Body.String())
+	}
+	if requests != 1 {
+		t.Fatalf("upstream requests=%d, want 1", requests)
+	}
+}
+
 func TestWorkspaceReplaceRequiresLifecycleScope(t *testing.T) {
 	var guestCalls int
 	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
