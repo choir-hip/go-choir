@@ -1182,7 +1182,7 @@ func (h *APIHandler) ensureSelfDevelopmentRun(r *http.Request, operation selfdev
 }
 
 func selfDevelopmentSuperRunTerminal(state types.RunState) bool {
-	return state == types.RunCompleted || state == types.RunFailed || state == types.RunCancelled
+	return state == types.RunCompleted || state == types.RunFailed || state == types.RunCancelled || state == types.RunBlocked
 }
 
 func selfDevelopmentSuperNeedsPersistentIdentity(rec types.RunRecord) bool {
