@@ -352,10 +352,13 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 		upstream.Header.Set("X-Authenticated-Scopes", strings.Join(authResult.Scopes, ","))
 	}
 	client := h.autoputerHTTP
-	// Residue import and checkpoint both extract large VM-local Dolt state.
-	// The ordinary 30s autoputerHTTP client 502s first; reuse the 110s budget.
-	if (isComputerImportResidueSnapshotPath(r.URL.Path) || isComputerCheckpointPath(r.URL.Path)) && h.residueImportAutoputerHTTP != nil {
+	// Residue import serializes a bounded projection batch (110s budget).
+	// Checkpoint, restore, and rematerialize reconstruct/extract full Dolt state (~2m on staging),
+	// matching replay completeness. Route them through replayAutoputerHTTP (10m on staging).
+	if isComputerImportResidueSnapshotPath(r.URL.Path) && h.residueImportAutoputerHTTP != nil {
 		client = h.residueImportAutoputerHTTP
+	} else if (isComputerCheckpointPath(r.URL.Path) || isComputerRestorePath(r.URL.Path) || isComputerRematerializePath(r.URL.Path)) && h.replayAutoputerHTTP != nil {
+		client = h.replayAutoputerHTTP
 	}
 	if client == nil {
 		client = http.DefaultClient

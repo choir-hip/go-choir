@@ -401,7 +401,7 @@ func TestCheckpointUsesDedicatedTimeout(t *testing.T) {
 	// Ordinary routes have a short budget; checkpoint must use the dedicated
 	// long budget or this request would fail before the backend completes.
 	handler.autoputerHTTP = &http.Client{Timeout: 10 * time.Millisecond}
-	handler.residueImportAutoputerHTTP = &http.Client{Timeout: 500 * time.Millisecond}
+	handler.replayAutoputerHTTP = &http.Client{Timeout: 500 * time.Millisecond}
 
 	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/lifecycle/checkpoint", strings.NewReader("{}"))
 	request.Header.Set("Content-Type", "application/json")
