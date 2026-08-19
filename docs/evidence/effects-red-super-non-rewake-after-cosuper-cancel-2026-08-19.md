@@ -115,7 +115,7 @@ on a system CoSuper cancel.
 - Not a reason to raise `maxToolLoopIterations` first. A longer loop would
   still complete Super before CoSuper returns.
 
-## Required join (source, unshipped)
+## Required join (source; live re-probe separate)
 
 A terminal CoSuper producer report must continue persistent Super **without**
 an owner HTTP operations POST.
@@ -129,16 +129,18 @@ Source repair `9bc99f90`:
    report remains, with no new Texture `execution_request`.
 
 Covered by `TestPersistentSuperContinuesFromCoSuperSystemCancellationWithoutTextureRewake`.
-Staging still `d33f245c`. Live re-probe unpaid.
+Live re-probe is
+`docs/evidence/effects-red-super-continuation-after-cosuper-cancel-2026-08-19.md`
+(deployed `51b18f54`, epoch 327, Super `b57705fd` started from the
+pending CoSuper blocker without HTTP Super-start).
 
 ## Residual (still unpaid)
 
 - `maxToolLoopIterations = 200` aborts capsule authorship before freeze.
 - `deploy-impact` still classifies last push, not last-deployed SHA.
-- Texture supervision revision while work is open remains unpaid (document
-  version 0).
+- Super continuation turn `b57705fd` in-flight as of the re-probe receipt.
 
-## Forbidden until the Super-continuation repair deploys
+## Forbidden until Super binds a new CoSuper after processing the blocker
 
 - freeze / propose / promote
 - live send
