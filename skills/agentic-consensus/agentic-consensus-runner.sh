@@ -6,7 +6,7 @@ usage() {
 agentic-consensus-runner.sh --prompt TEXT | --prompt-file FILE [options]
 
 Runs one prompt across an agentic consensus panel and writes one output file per agent.
-Default panel: codex, devin, cursor, opencode, omp-gpt56-sol, omp-gemini36, omp-cursor-grok45, omp-deepseek-v4-flash-free.
+Default panel: codex, devin, cursor, opencode, omp-gpt56-sol, omp-gemini37, omp-cursor-grok46, omp-deepseek-v4-flash-free.
 External CLIs use their configured default model unless a --*-model override is passed.
 
 Required input:
@@ -26,7 +26,7 @@ Thinking mode:
 
 Panel selection:
   --include LIST                Comma-separated agent ids to run.
-                                Default: codex,devin,cursor,opencode,omp-gpt56-sol,omp-gemini36,omp-cursor-grok45,omp-deepseek-v4-flash-free
+                                Default: codex,devin,cursor,opencode,omp-gpt56-sol,omp-gemini37,omp-cursor-grok46,omp-deepseek-v4-flash-free
   --exclude LIST                Comma-separated agent ids to skip.
   --list-agents                 Print supported agent ids and exit.
 
@@ -39,8 +39,8 @@ Model overrides, optional:
   --omp-gpt56-sol-model MODEL   Default: openai-codex/gpt-5.6-sol.
   --omp-gpt56-terra-model MODEL Default: openai-codex/gpt-5.6-terra.
   --omp-gpt56-luna-model MODEL  Default: openai-codex/gpt-5.6-luna.
-  --omp-gemini-model MODEL      Default: google-antigravity/gemini-3.6-flash.
-  --omp-cursor-grok-model MODEL Default: cursor/cursor-grok-4.5-high.
+  --omp-gemini-model MODEL      Default: google-antigravity/gemini-3.7-flash.
+  --omp-cursor-grok-model MODEL Default: cursor/cursor-grok-4.6-high.
   --omp-deepseek-model MODEL    Default: opencode-zen/deepseek-v4-flash-free.
   --omp-gpt56-sol-thinking LEVEL    Default: medium.
   --omp-gpt56-terra-thinking LEVEL   Default: xhigh.
@@ -67,8 +67,8 @@ Output:
 USAGE
 }
 
-DEFAULT_INCLUDE="codex,devin,cursor,opencode,omp-gpt56-sol,omp-gemini36,omp-cursor-grok45,omp-deepseek-v4-flash-free"
-SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt56-sol omp-gpt56-terra omp-gpt56-luna omp-gemini36 omp-cursor-grok45 omp-deepseek-v4-flash-free)
+DEFAULT_INCLUDE="codex,devin,cursor,opencode,omp-gpt56-sol,omp-gemini37,omp-cursor-grok46,omp-deepseek-v4-flash-free"
+SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt56-sol omp-gpt56-terra omp-gpt56-luna omp-gemini37 omp-cursor-grok46 omp-deepseek-v4-flash-free)
 
 PROMPT=""
 PROMPT_FILE=""
@@ -93,8 +93,8 @@ OPENCODE_MODEL=""
 OMP_GPT56_SOL_MODEL="openai-codex/gpt-5.6-sol"
 OMP_GPT56_TERRA_MODEL="openai-codex/gpt-5.6-terra"
 OMP_GPT56_LUNA_MODEL="openai-codex/gpt-5.6-luna"
-OMP_GEMINI_MODEL="google-antigravity/gemini-3.6-flash"
-OMP_CURSOR_GROK_MODEL="cursor/cursor-grok-4.5-high"
+OMP_GEMINI_MODEL="google-antigravity/gemini-3.7-flash"
+OMP_CURSOR_GROK_MODEL="cursor/cursor-grok-4.6-high"
 OMP_DEEPSEEK_MODEL="opencode-zen/deepseek-v4-flash-free"
 OMP_GPT56_SOL_THINKING="medium"
 OMP_GPT56_TERRA_THINKING="xhigh"
@@ -332,11 +332,11 @@ build_cmd() {
       CMD=(omp -p --mode text --model "$OMP_GPT56_LUNA_MODEL" --thinking "$OMP_GPT56_LUNA_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
       [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
       CMD+=("$AGENT_PROMPT") ;;
-    omp-gemini36)
+    omp-gemini37)
       CMD=(omp -p --mode text --model "$OMP_GEMINI_MODEL" --thinking "$OMP_GEMINI_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
       [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
       CMD+=("$AGENT_PROMPT") ;;
-    omp-cursor-grok45)
+    omp-cursor-grok46)
       CMD=(omp -p --mode text --model "$OMP_CURSOR_GROK_MODEL" --thinking "$OMP_CURSOR_GROK_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
       [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
       CMD+=("$AGENT_PROMPT") ;;

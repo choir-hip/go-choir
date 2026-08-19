@@ -24,8 +24,8 @@ The default panel is:
 3. Cursor `agent` CLI with its configured default model.
 4. `opencode` CLI with its configured default model.
 5. OMP `openai-codex/gpt-5.6-sol` with `--thinking medium`.
-6. OMP `google-antigravity/gemini-3.6-flash` with `--thinking high`.
-7. OMP `cursor/cursor-grok-4.5-high` with `--thinking high`.
+6. OMP `google-antigravity/gemini-3.7-flash` with `--thinking high`.
+7. OMP `cursor/cursor-grok-4.6-high` with `--thinking high`.
 8. OMP `opencode-zen/deepseek-v4-flash-free` with `--thinking high` — the best value route (free tier, ~200K context), and the current default model role in OMP.
 
 `claude` is supported but intentionally excluded from the default panel because its token rate limits are lower. Add it explicitly with `--include claude,...` when needed. Claude's configured default tracks the current `opus` tier, so no model override is needed.
@@ -61,8 +61,8 @@ opencode
 omp-gpt56-sol
 omp-gpt56-terra
 omp-gpt56-luna
-omp-gemini36
-omp-cursor-grok45
+omp-gemini37
+omp-cursor-grok46
 omp-deepseek-v4-flash-free
 ```
 
@@ -221,8 +221,8 @@ Runner contracts:
 
 ```bash
 omp -p --mode text --model openai-codex/gpt-5.6-sol --thinking medium --no-session "$PROMPT"
-omp -p --mode text --model google-antigravity/gemini-3.6-flash --thinking high --no-session "$PROMPT"
-omp -p --mode text --model cursor/cursor-grok-4.5-high --thinking high --no-session "$PROMPT"
+omp -p --mode text --model google-antigravity/gemini-3.7-flash --thinking high --no-session "$PROMPT"
+omp -p --mode text --model cursor/cursor-grok-4.6-high --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-zen/deepseek-v4-flash-free --thinking high --no-session "$PROMPT"
 ```
 
