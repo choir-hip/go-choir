@@ -120,7 +120,6 @@ CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_created ON texture_revisions(doc
 CREATE INDEX IF NOT EXISTS idx_texture_source_entities_owner ON texture_source_entities(owner_id);
 CREATE INDEX IF NOT EXISTS idx_texture_source_refs_revision ON texture_source_refs(owner_id, doc_id, texture_revision_id);
 CREATE INDEX IF NOT EXISTS idx_texture_source_refs_source ON texture_source_refs(source_entity_canonical_id, source_entity_version_id);
-CREATE INDEX IF NOT EXISTS idx_texture_aliases_doc ON texture_document_aliases(owner_id, computer_id, doc_id);
 
 CREATE TABLE IF NOT EXISTS texture_agent_mutations (
 	doc_id              VARCHAR(255) NOT NULL,
@@ -445,6 +444,9 @@ func (s *Store) bootstrapTexture() error {
 	}
 	if err := s.ensureTextureDocumentAliasesPrimaryKey(); err != nil {
 		return err
+	}
+	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_aliases_doc ON texture_document_aliases(owner_id, computer_id, doc_id)`); err != nil {
+		return fmt.Errorf("create texture alias document index: %w", err)
 	}
 	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_version ON texture_revisions(doc_id, owner_id, version_number DESC)`); err != nil {
 		return fmt.Errorf("create texture revision version index: %w", err)

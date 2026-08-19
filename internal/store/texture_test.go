@@ -2109,6 +2109,101 @@ func TestTextureAgentMutationIsComputerScoped(t *testing.T) {
 	}
 }
 
+func TestTextureDocumentAliasSchemaMigratesComputerScope(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "legacy-texture-alias.db")
+	legacy, err := OpenTextureWorkspace(dbPath)
+	if err != nil {
+		t.Fatalf("open legacy fixture: %v", err)
+	}
+	for _, statement := range []string{
+		"DROP INDEX idx_texture_aliases_doc ON texture_document_aliases",
+		"ALTER TABLE texture_document_aliases DROP PRIMARY KEY, ADD PRIMARY KEY (owner_id, source_path)",
+		"ALTER TABLE texture_document_aliases DROP COLUMN computer_id",
+	} {
+		if _, err := legacy.textureHandle().Exec(statement); err != nil {
+			_ = legacy.Close()
+			t.Fatalf("prepare legacy alias schema %q: %v", statement, err)
+		}
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatalf("close legacy fixture: %v", err)
+	}
+
+	migrated, err := OpenTextureWorkspace(dbPath)
+	if err != nil {
+		t.Fatalf("reopen migrated fixture: %v", err)
+	}
+	t.Cleanup(func() { _ = migrated.Close() })
+
+	var columnCount int
+	if err := migrated.textureHandle().QueryRow(`
+SELECT COUNT(*)
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'texture_document_aliases'
+  AND column_name = 'computer_id'`).Scan(&columnCount); err != nil {
+		t.Fatalf("query migrated alias computer_id: %v", err)
+	}
+	if columnCount != 1 {
+		t.Fatalf("migrated alias computer_id count = %d, want 1", columnCount)
+	}
+
+	var pk []string
+	rows, err := migrated.textureHandle().Query(`
+SELECT column_name
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'texture_document_aliases'
+  AND index_name = 'PRIMARY'
+ORDER BY seq_in_index`)
+	if err != nil {
+		t.Fatalf("query migrated alias primary key: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var col string
+		if err := rows.Scan(&col); err != nil {
+			t.Fatalf("scan migrated alias primary key: %v", err)
+		}
+		pk = append(pk, col)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate migrated alias primary key: %v", err)
+	}
+	wantPK := []string{"owner_id", "computer_id", "source_path"}
+	if len(pk) != len(wantPK) {
+		t.Fatalf("migrated alias primary key = %v, want %v", pk, wantPK)
+	}
+	for i := range wantPK {
+		if pk[i] != wantPK[i] {
+			t.Fatalf("migrated alias primary key = %v, want %v", pk, wantPK)
+		}
+	}
+
+	now := time.Now().UTC()
+	if _, err := migrated.textureHandle().Exec(`
+INSERT INTO texture_document_aliases (owner_id, computer_id, source_path, doc_id, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)`,
+		"owner-a", "computer-a", "/docs/note.texture", "doc-a", now, now,
+		"owner-a", "computer-b", "/docs/note.texture", "doc-b", now, now); err != nil {
+		t.Fatalf("insert migrated aliases: %v", err)
+	}
+	var docA, docB string
+	if err := migrated.textureHandle().QueryRow(`
+SELECT doc_id FROM texture_document_aliases WHERE owner_id=? AND computer_id=? AND source_path=?`,
+		"owner-a", "computer-a", "/docs/note.texture").Scan(&docA); err != nil {
+		t.Fatalf("select computer-a alias: %v", err)
+	}
+	if err := migrated.textureHandle().QueryRow(`
+SELECT doc_id FROM texture_document_aliases WHERE owner_id=? AND computer_id=? AND source_path=?`,
+		"owner-a", "computer-b", "/docs/note.texture").Scan(&docB); err != nil {
+		t.Fatalf("select computer-b alias: %v", err)
+	}
+	if docA != "doc-a" || docB != "doc-b" {
+		t.Fatalf("migrated aliases docA=%q docB=%q", docA, docB)
+	}
+}
+
 func TestTextureAgentMutationSchemaMigratesComputerScope(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "legacy-texture-mutation.db")
 	legacy, err := OpenTextureWorkspace(dbPath)
