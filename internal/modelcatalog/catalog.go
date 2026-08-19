@@ -60,10 +60,10 @@ func SupportedModels() []ModelInfo {
 			MaxOutputTokens: 32768,
 		},
 		{
-			ID:              "glm-5.2",
-			DisplayName:     "GLM-5.2",
-			Provider:        "zai",
-			MaxOutputTokens: 131072,
+			ID:                  "glm-5.2",
+			DisplayName:         "GLM-5.2",
+			Provider:            "zai",
+			MaxOutputTokens:     131072,
 			ContextWindowTokens: 1_000_000,
 			Modalities:          []string{"text"},
 			AdapterModalities:   []string{"text"},
@@ -99,7 +99,7 @@ func SupportedModels() []ModelInfo {
 			ContextWindowTokens: 1_000_000,
 			Modalities:          []string{"text"},
 			AdapterModalities:   []string{"text"},
-			RecommendedFor:      []string{"conductor", "texture", "researcher"},
+			RecommendedFor:      []string{"conductor", "texture", "researcher", "super", "co-super", "verifier"},
 		},
 		{
 			ID:                  "mimo-v2.5-pro",
@@ -149,6 +149,24 @@ func SupportedModels() []ModelInfo {
 			RecommendedFor:    []string{"verifier_multimodal"},
 		},
 		{
+			ID:              "gpt-5.6-luna",
+			DisplayName:     "GPT-5.6 Luna",
+			Provider:        "chatgpt",
+			MaxOutputTokens: 65536,
+		},
+		{
+			ID:              "gpt-5.6-sol",
+			DisplayName:     "GPT-5.6 Sol",
+			Provider:        "chatgpt",
+			MaxOutputTokens: 65536,
+		},
+		{
+			ID:              "gpt-5.6-terra",
+			DisplayName:     "GPT-5.6 Terra",
+			Provider:        "chatgpt",
+			MaxOutputTokens: 65536,
+		},
+		{
 			ID:              "gpt-5.5",
 			DisplayName:     "GPT-5.5",
 			Provider:        "chatgpt",
@@ -169,6 +187,8 @@ func SupportedModels() []ModelInfo {
 	}
 }
 
+// MaxOutputTokensForModel returns the maximum output tokens for a model ID.
+// Falls back to DefaultMaxOutputTokens if the model is not found in the catalog.
 func MaxOutputTokensForModel(modelID string) int {
 	modelID = strings.TrimSpace(modelID)
 	for _, model := range SupportedModels() {
@@ -179,6 +199,9 @@ func MaxOutputTokensForModel(modelID string) int {
 	return DefaultMaxOutputTokens
 }
 
+// ContextWindowTokensForModel returns the advertised context window size for a
+// model ID. Falls back to DefaultContextWindowTokens if the model is not found
+// or does not advertise a window.
 func ContextWindowTokensForModel(modelID string) int {
 	modelID = strings.TrimSpace(modelID)
 	for _, model := range SupportedModels() {

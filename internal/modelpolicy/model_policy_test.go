@@ -55,9 +55,9 @@ func TestManagerCreatesDefaultCutoverPolicy(t *testing.T) {
 		t.Fatalf("load generated policy: %v", err)
 	}
 	for role, want := range map[string]provideriface.LLMSelection{
-		agentprofile.Conductor: {Provider: "chatgpt", Model: "gpt-5.4-mini", ReasoningEffort: "low"},
-		agentprofile.Super:     {Provider: "chatgpt", Model: "gpt-5.5", ReasoningEffort: "high"},
-		agentprofile.Texture:   {Provider: "chatgpt", Model: "gpt-5.5", ReasoningEffort: "low"},
+		agentprofile.Conductor: {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
+		agentprofile.Super:     {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "high"},
+		agentprofile.Texture:   {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
 		VerifierRole:           {Provider: "deepseek", Model: "deepseek-v4-flash", ReasoningEffort: "low"},
 		MultimodalVerifierRole: {Provider: "xiaomi", Model: "mimo-v2.5", ReasoningEffort: "low"},
 	} {
@@ -156,7 +156,7 @@ reasoning = "medium"
 	if err == nil || !strings.Contains(err.Error(), "overlay expired") {
 		t.Fatalf("expired overlay error = %v", err)
 	}
-	if fallback.Provider != "chatgpt" || fallback.Model != "gpt-5.4-mini" {
+	if fallback.Provider != "chatgpt" || fallback.Model != "gpt-5.6-luna" {
 		t.Fatalf("expired overlay fallback = %+v", fallback)
 	}
 }
@@ -164,7 +164,7 @@ reasoning = "medium"
 func TestManagerEnrichesMetadataAndPreservesExplicitSelection(t *testing.T) {
 	manager := NewManager(ManagerConfig{})
 	metadata := manager.EnrichMetadata(context.Background(), "owner", agentprofile.Super, nil)
-	if metadata[MetadataProvider] != "chatgpt" || metadata[MetadataModel] != "gpt-5.5" || metadata[MetadataReasoningEffort] != "high" || metadata[MetadataPolicySource] != "platform_fallback" {
+	if metadata[MetadataProvider] != "chatgpt" || metadata[MetadataModel] != "gpt-5.6-luna" || metadata[MetadataReasoningEffort] != "high" || metadata[MetadataPolicySource] != "platform_fallback" {
 		t.Fatalf("enriched metadata = %#v", metadata)
 	}
 	explicit := map[string]any{MetadataProvider: "custom", MetadataModel: "custom-model"}
@@ -176,7 +176,7 @@ func TestManagerEnrichesMetadataAndPreservesExplicitSelection(t *testing.T) {
 
 func TestProviderPreconditionFallbacksPreserveOrder(t *testing.T) {
 	fallbacks := ProviderPreconditionFallbackSelections(provideriface.LLMSelection{Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash"})
-	if len(fallbacks) != 3 || fallbacks[0].Provider != "xiaomi" || fallbacks[1].Provider != "deepseek" || fallbacks[2].Provider != "chatgpt" || fallbacks[2].Model != "gpt-5.4-mini" {
+	if len(fallbacks) != 3 || fallbacks[0].Provider != "xiaomi" || fallbacks[1].Provider != "deepseek" || fallbacks[2].Provider != "chatgpt" || fallbacks[2].Model != "gpt-5.6-luna" {
 		t.Fatalf("fallbacks = %+v", fallbacks)
 	}
 }

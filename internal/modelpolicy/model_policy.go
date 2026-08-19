@@ -37,9 +37,9 @@ const (
 	defaultSuperModel                = "deepseek-v4-pro"
 	defaultFlashForegroundReasoning  = "medium"
 	defaultChatGPTProvider           = "chatgpt"
-	defaultChatGPTMiniModel          = "gpt-5.4-mini"
-	defaultChatGPTForegroundModel    = "gpt-5.5"
-	defaultTerminalFallbackModel     = "gpt-5.4-mini"
+	defaultChatGPTMiniModel          = "gpt-5.6-luna"
+	defaultChatGPTForegroundModel    = "gpt-5.6-luna"
+	defaultTerminalFallbackModel     = "gpt-5.6-luna"
 	defaultTerminalFallbackReasoning = "low"
 	legacyFireworksFlashModel        = "accounts/fireworks/models/deepseek-v4-flash"
 	legacyFireworksProModel          = "accounts/fireworks/models/deepseek-v4-pro"
@@ -298,22 +298,22 @@ func defaultPolicyText(_ provideriface.Config) string {
 
 [defaults]
 fallback_provider = "chatgpt"
-fallback_model = "gpt-5.4-mini"
+fallback_model = "gpt-5.6-luna"
 reasoning = "low"
 
 [roles.conductor]
 provider = "chatgpt"
-model = "gpt-5.4-mini"
+model = "gpt-5.6-luna"
 reasoning = "low"
 
 [roles.texture]
 provider = "chatgpt"
-model = "gpt-5.5"
+model = "gpt-5.6-luna"
 reasoning = "low"
 
 [roles.super]
 provider = "chatgpt"
-model = "gpt-5.5"
+model = "gpt-5.6-luna"
 reasoning = "high"
 
 [roles.co-super]
@@ -322,17 +322,17 @@ model = "deepseek-v4-flash"
 
 [roles.researcher]
 provider = "chatgpt"
-model = "gpt-5.4-mini"
+model = "gpt-5.6-luna"
 reasoning = "low"
 
 [roles.processor]
 provider = "chatgpt"
-model = "gpt-5.5"
+model = "gpt-5.6-luna"
 reasoning = "low"
 
 [roles.reconciler]
 provider = "chatgpt"
-model = "gpt-5.5"
+model = "gpt-5.6-luna"
 reasoning = "low"
 
 [roles.verifier]
