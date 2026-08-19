@@ -348,16 +348,19 @@ func (b *Broker) handleExec(ctx context.Context, cap *capsule.Capability, params
 		return BrokerRPCResponse{Error: fmt.Sprintf("invalid cwd: %v", err)}
 	}
 
-	shell := "bash"
+	shell := "sh"
 	var shellArgs []string
-	if _, err := exec.LookPath("bash"); err == nil {
+	if _, err := exec.LookPath("sh"); err == nil {
+		shell = "sh"
+		shellArgs = []string{"-c", p.Command}
+	} else if _, err := exec.LookPath("bash"); err == nil {
 		shell = "bash"
-		shellArgs = []string{"--noprofile", "--norc", "+m", "-c", p.Command}
+		shellArgs = []string{"--noprofile", "--norc", "-c", p.Command}
 	} else if _, err := os.Stat("/run/current-system/sw/bin/bash"); err == nil {
 		shell = "/run/current-system/sw/bin/bash"
-		shellArgs = []string{"--noprofile", "--norc", "+m", "-c", p.Command}
+		shellArgs = []string{"--noprofile", "--norc", "-c", p.Command}
 	} else {
-		shell = "sh"
+		shell = "/bin/sh"
 		shellArgs = []string{"-c", p.Command}
 	}
 	cmd := exec.CommandContext(ctx, shell, shellArgs...)
