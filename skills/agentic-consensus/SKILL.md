@@ -24,9 +24,10 @@ The default panel is:
 3. Cursor `agent` CLI with its configured default model.
 4. `opencode` CLI with its configured default model.
 5. OMP `openai-codex/gpt-5.6-sol` with `--thinking medium`.
-6. OMP `google-antigravity/gemini-3.7-flash` with `--thinking high`.
-7. OMP `cursor/cursor-grok-4.6-high` with `--thinking high`.
-8. OMP `opencode-zen/deepseek-v4-flash-free` with `--thinking high` — the best value route (free tier, ~200K context), and the current default model role in OMP.
+6. OMP `openai-codex/gpt-5.6-luna` with `--thinking max` — the cost champion; fastest/cheapest GPT-5.6 tier (weak long-context recall).
+7. OMP `google-antigravity/gemini-3.7-flash` with `--thinking high`.
+8. OMP `cursor/cursor-grok-4.6-high` with `--thinking high`.
+9. OMP `opencode-zen/deepseek-v4-flash-free` with `--thinking high` — the best value route (free tier, ~200K context), and the current default model role in OMP.
 
 `claude` is supported but intentionally excluded from the default panel because its token rate limits are lower. Add it explicitly with `--include claude,...` when needed. Claude's configured default tracks the current `opus` tier, so no model override is needed.
 
@@ -42,7 +43,7 @@ The three GPT-5.6 tiers are separate models on the same generation, priced per t
 | `omp-gpt56-terra` | `openai-codex/gpt-5.6-terra` | `xhigh` | balanced; GPT-5.5-class at lower cost |
 | `omp-gpt56-luna` | `openai-codex/gpt-5.6-luna` | `max` | fastest/cheapest; weak long-context recall |
 
-Sol is the strongest, Terra is the everyday workhorse, Luna is the cost champion. All three are callable; for the hardest problems run all three as a GPT-5.6 sub-panel:
+Sol is the strongest, Terra is the everyday workhorse, Luna is the cost champion. Sol and Luna are in the default panel; add Terra for the full GPT-5.6 sub-panel on the hardest problems:
 
 ```bash
 skill://agentic-consensus/agentic-consensus-runner.sh \

@@ -6,7 +6,7 @@ usage() {
 agentic-consensus-runner.sh --prompt TEXT | --prompt-file FILE [options]
 
 Runs one prompt across an agentic consensus panel and writes one output file per agent.
-Default panel: codex, devin, cursor, opencode, omp-gpt56-sol, omp-gemini37, omp-cursor-grok46, omp-deepseek-v4-flash-free.
+Default panel: codex, devin, cursor, opencode, omp-gpt56-sol, omp-gpt56-luna, omp-gemini37, omp-cursor-grok46, omp-deepseek-v4-flash-free.
 External CLIs use their configured default model unless a --*-model override is passed.
 
 Required input:
@@ -26,7 +26,7 @@ Thinking mode:
 
 Panel selection:
   --include LIST                Comma-separated agent ids to run.
-                                Default: codex,devin,cursor,opencode,omp-gpt56-sol,omp-gemini37,omp-cursor-grok46,omp-deepseek-v4-flash-free
+                                Default: codex,devin,cursor,opencode,omp-gpt56-sol,omp-gpt56-luna,omp-gemini37,omp-cursor-grok46,omp-deepseek-v4-flash-free
   --exclude LIST                Comma-separated agent ids to skip.
   --list-agents                 Print supported agent ids and exit.
 
@@ -67,7 +67,7 @@ Output:
 USAGE
 }
 
-DEFAULT_INCLUDE="codex,devin,cursor,opencode,omp-gpt56-sol,omp-gemini37,omp-cursor-grok46,omp-deepseek-v4-flash-free"
+DEFAULT_INCLUDE="codex,devin,cursor,opencode,omp-gpt56-sol,omp-gpt56-luna,omp-gemini37,omp-cursor-grok46,omp-deepseek-v4-flash-free"
 SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt56-sol omp-gpt56-terra omp-gpt56-luna omp-gemini37 omp-cursor-grok46 omp-deepseek-v4-flash-free)
 
 PROMPT=""
