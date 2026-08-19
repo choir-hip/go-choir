@@ -445,8 +445,8 @@ func (s *Store) bootstrapTexture() error {
 	if err := s.ensureTextureDocumentAliasesPrimaryKey(); err != nil {
 		return err
 	}
-	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_aliases_doc ON texture_document_aliases(owner_id, computer_id, doc_id)`); err != nil {
-		return fmt.Errorf("create texture alias document index: %w", err)
+	if err := s.ensureTextureDocumentAliasDocIndex(); err != nil {
+		return err
 	}
 	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_version ON texture_revisions(doc_id, owner_id, version_number DESC)`); err != nil {
 		return fmt.Errorf("create texture revision version index: %w", err)
@@ -2869,6 +2869,44 @@ DROP PRIMARY KEY,
 ADD PRIMARY KEY (owner_id, computer_id, source_path)`); err != nil {
 			return fmt.Errorf("scope texture document aliases primary key: %w", err)
 		}
+	}
+	return nil
+}
+
+func (s *Store) ensureTextureDocumentAliasDocIndex() error {
+	rows, err := s.textureHandle().Query(`
+SELECT column_name
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'texture_document_aliases'
+  AND index_name = 'idx_texture_aliases_doc'
+ORDER BY seq_in_index`)
+	if err != nil {
+		return fmt.Errorf("inspect texture alias document index: %w", err)
+	}
+	defer rows.Close()
+	var columns []string
+	for rows.Next() {
+		var column string
+		if err := rows.Scan(&column); err != nil {
+			return fmt.Errorf("scan texture alias document index: %w", err)
+		}
+		columns = append(columns, column)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate texture alias document index: %w", err)
+	}
+	want := []string{"owner_id", "computer_id", "doc_id"}
+	if slices.Equal(columns, want) {
+		return nil
+	}
+	if len(columns) > 0 {
+		if _, err := s.textureHandle().Exec(`DROP INDEX idx_texture_aliases_doc ON texture_document_aliases`); err != nil {
+			return fmt.Errorf("drop leftover texture alias document index: %w", err)
+		}
+	}
+	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_aliases_doc ON texture_document_aliases(owner_id, computer_id, doc_id)`); err != nil {
+		return fmt.Errorf("create texture alias document index: %w", err)
 	}
 	return nil
 }

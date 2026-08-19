@@ -180,6 +180,47 @@ func TestProjectDesktopStateReplacesLeftoverSessions(t *testing.T) {
 	}
 }
 
+func TestProjectDesktopStateRetiresUnscopedWorkspace(t *testing.T) {
+	ctx := context.Background()
+	productStore := openProjectStore(t)
+	computerID := "computer-project-unscoped-workspace"
+	prepareGenesis(t, productStore, computerID, "genesis-unscoped-workspace")
+	if _, err := productStore.db.ExecContext(ctx,
+		`INSERT INTO desktop_workspaces (
+			owner_id, computer_id, desktop_id, windows_json, active_window, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?)`,
+		"owner-1", "", types.PrimaryDesktopID, `[]`, "", "2026-08-01T00:00:00Z",
+	); err != nil {
+		t.Fatal(err)
+	}
+	head, err := productStore.Head(ctx, computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 19, 7, 20, 0, 0, time.UTC)
+	desktop, err := json.Marshal(projectedDesktopState{
+		OwnerID: "owner-1", DesktopID: types.PrimaryDesktopID, UpdatedAt: now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, digest := prepareProjectionEvent(t, productStore, *head, eventID, "project-unscoped-workspace")
+	batch := computerevent.ProjectionBatch{
+		Version: computerevent.ProjectionBatchV1, ProjectorVersion: computerevent.ProjectorVersionV1,
+		ComputerID: computerID, EventID: event.EventID, EventDigest: digest,
+		Ops: []computerevent.ProjectionOp{{Kind: computerevent.ProjectionOpDesktopState, Body: desktop}},
+	}
+	if err := productStore.FinalizeBatch(ctx, computerID, digest, signedReceipt(t, computerID, digest, event.Sequence), &batch); err != nil {
+		t.Fatal(err)
+	}
+	assertCount(t, productStore, `SELECT COUNT(*) FROM desktop_workspaces WHERE computer_id=''`, 0)
+	assertCount(t, productStore, `SELECT COUNT(*) FROM desktop_workspaces WHERE computer_id='`+computerID+`'`, 1)
+}
+
 func TestProjectBatchRefusesSessionPresence(t *testing.T) {
 	batch := computerevent.ProjectionBatch{
 		Version: computerevent.ProjectionBatchV1, ProjectorVersion: computerevent.ProjectorVersionV1,

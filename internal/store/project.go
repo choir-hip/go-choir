@@ -111,6 +111,12 @@ func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage, 
 	}
 	stamp := now.Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM desktop_workspaces WHERE owner_id = ? AND computer_id = '' AND desktop_id = ?`,
+		ownerID, desktopID,
+	); err != nil {
+		return fmt.Errorf("retire unscoped desktop workspace: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO desktop_workspaces (owner_id, computer_id, desktop_id, windows_json, active_window, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE

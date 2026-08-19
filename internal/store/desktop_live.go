@@ -86,6 +86,13 @@ func (s *Store) SaveDesktopStateForSession(ctx context.Context, state types.Desk
 
 	computerID := s.desktopComputerID()
 	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM desktop_workspaces WHERE owner_id = ? AND computer_id = '' AND desktop_id = ?`,
+		state.OwnerID,
+		desktopID,
+	); err != nil {
+		return fmt.Errorf("retire unscoped desktop workspace: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO desktop_workspaces (owner_id, computer_id, desktop_id, windows_json, active_window, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE
