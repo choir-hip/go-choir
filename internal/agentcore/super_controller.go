@@ -20,6 +20,7 @@ import (
 )
 
 const runMetadataWorkerUpdatesInjected = "worker_updates_injected"
+const runMetadataProducerReportIDs = "producer_report_ids"
 
 const (
 	lifecycleLogicalActivationKeyMetadata = "lifecycle_logical_activation_key"
@@ -212,6 +213,14 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	}
 	if len(updateIDs) > 0 && !lifecycleControls && !reportContinuation {
 		metadata["worker_update_ids"] = updateIDs
+	}
+	if reportContinuation && len(updateIDs) > 0 {
+		// Claim these producer_reports on this Super run so a later terminal
+		// Super cannot start another Super from the same undelivered packets.
+		// Do not stamp DeliveredToRunID: ListAllPendingLifecycleUpdates is the
+		// injector source for continuation Super, and BindLifecycleControlDelivery
+		// is Control-only.
+		metadata[runMetadataProducerReportIDs] = updateIDs
 	}
 	if first.AgentID != "" && !lifecycleControls && !reportContinuation {
 		if requester, err := rt.latestActiveRunByAgent(ctx, ownerID, first.AgentID); err == nil {
@@ -788,9 +797,16 @@ func (rt *Runtime) listPendingPersistentSuperAdmissibleReports(ctx context.Conte
 	if err != nil {
 		return nil, fmt.Errorf("list persistent-Super admissible reports: %w", err)
 	}
+	claimed, err := rt.claimedPersistentSuperProducerReportIDs(ctx, ownerID, computerID, agentID)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]types.CoagentSourcePacket, 0, len(pending))
 	for _, update := range pending {
 		if update.DeliveredAt != nil || strings.TrimSpace(update.DeliveredToRunID) != "" {
+			continue
+		}
+		if claimed[strings.TrimSpace(update.UpdateID)] {
 			continue
 		}
 		if persistentSuperAdmissibleReport(update) {
@@ -798,6 +814,33 @@ func (rt *Runtime) listPendingPersistentSuperAdmissibleReports(ctx context.Conte
 		}
 	}
 	return out, nil
+}
+
+func (rt *Runtime) claimedPersistentSuperProducerReportIDs(ctx context.Context, ownerID, computerID, agentID string) (map[string]bool, error) {
+	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
+	if ownerID == "" || computerID == "" || agentID == "" {
+		return nil, nil
+	}
+	runs, err := rt.store.ListRunsByOwner(ctx, ownerID, 100)
+	if err != nil {
+		return nil, fmt.Errorf("list persistent-Super producer-report claims: %w", err)
+	}
+	claimed := map[string]bool{}
+	for i := range runs {
+		run := &runs[i]
+		if run.ComputerID != computerID || run.AgentID != agentID || !isPersistentSuperAgentRun(run) || !run.State.Terminal() {
+			continue
+		}
+		if metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" {
+			continue
+		}
+		for _, id := range metadataStringSlice(run.Metadata[runMetadataProducerReportIDs]) {
+			if id = strings.TrimSpace(id); id != "" {
+				claimed[id] = true
+			}
+		}
+	}
+	return claimed, nil
 }
 
 func (rt *Runtime) validateTargetBoundLifecycleControls(ctx context.Context, ownerID, computerID, agentID string, updates []types.CoagentSourcePacket, executionOnly bool) ([]types.CoagentSourcePacket, error) {

@@ -2140,4 +2140,29 @@ func TestPersistentSuperContinuesFromCoSuperSystemCancellationWithoutTextureRewa
 	if !foundCancelText {
 		t.Fatalf("injected turns do not contain system-cancel reason: %s", injected)
 	}
+	claimedIDs := metadataStringSlice(idle.Metadata[runMetadataProducerReportIDs])
+	if len(claimedIDs) == 0 || claimedIDs[0] != cancelled.Update.UpdateID {
+		t.Fatalf("continuation Super producer_report_ids=%v want %s", claimedIDs, cancelled.Update.UpdateID)
+	}
+
+	finished = time.Now().UTC()
+	idle.State, idle.Error, idle.UpdatedAt, idle.FinishedAt = types.RunFailed, "tool loop: exceeded 200 iterations without end_turn", finished, &finished
+	if err := s.UpdateRun(context.Background(), *idle); err != nil {
+		t.Fatal(err)
+	}
+	rt.maybeContinuePersistentSuperInbox(context.Background(), idle)
+	afterFail, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterFail != nil && afterFail.RunID != idle.RunID {
+		t.Fatalf("continuation Super restormed after 200-iter fail: %s -> %s", idle.RunID, afterFail.RunID)
+	}
+	stillPending, err := s.GetLifecycleUpdate(context.Background(), ownerID, rt.TextureComputerID(), fixture.trajectoryID, superAgent.AgentID, cancelled.Update.AgentID, cancelled.Update.ProducerUpdateID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stillPending.DeliveredToRunID != "" || stillPending.DeliveredAt != nil {
+		t.Fatalf("cancel report should stay undelivered for injector: %+v", stillPending)
+	}
 }
