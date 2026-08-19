@@ -115,18 +115,22 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		return
 	}
 	if len(parts) == 3 && parts[1] == "lifecycle" && parts[2] == "rematerialize-from-tape" {
+		extendReplayCompletenessGuestWriteDeadline(w)
 		h.rematerializeComputerFromTape(w, r, computerID)
 		return
 	}
 	if len(parts) == 3 && parts[1] == "lifecycle" && parts[2] == "restore" {
+		extendReplayCompletenessGuestWriteDeadline(w)
 		h.restoreComputer(w, r, computerID)
 		return
 	}
 	if len(parts) == 3 && parts[1] == "lifecycle" && parts[2] == "checkpoint" {
+		extendReplayCompletenessGuestWriteDeadline(w)
 		h.bindComputerCheckpoint(w, r, computerID)
 		return
 	}
 	if len(parts) == 3 && parts[1] == "lifecycle" && parts[2] == "import-residue-snapshot" {
+		extendReplayCompletenessGuestWriteDeadline(w)
 		h.importResidueSnapshot(w, r, computerID)
 		return
 	}

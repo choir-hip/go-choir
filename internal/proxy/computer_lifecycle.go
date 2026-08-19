@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/platform"
@@ -362,6 +363,9 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 	}
 	if client == nil {
 		client = http.DefaultClient
+	}
+	if client != nil && client.Timeout > 0 {
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(client.Timeout + 30*time.Second))
 	}
 	response, err := client.Do(upstream)
 	if err != nil {
