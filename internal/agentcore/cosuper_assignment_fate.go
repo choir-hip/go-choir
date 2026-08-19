@@ -211,6 +211,9 @@ func (rt *Runtime) persistSystemCoSuperCancellation(ctx context.Context, assignm
 		cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
 		result, cancelErr := rt.store.CancelCoSuperAssignment(ctx, cancel)
 		if cancelErr == nil {
+			if !result.Replay && result.Update != nil {
+				rt.wakeUpdatedCoagent(ctx, *result.Update)
+			}
 			return result, nil
 		}
 		if !errors.Is(cancelErr, store.ErrCoSuperAssignmentInvalid) && !errors.Is(cancelErr, store.ErrConcurrentStateChange) {

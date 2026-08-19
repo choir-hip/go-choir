@@ -1788,7 +1788,6 @@ func TestStartReenqueuesCanonicalOccurrencesAfterBindBeforeSendCrash(t *testing.
 	t.Fatalf("boot did not recover bound occurrence %s from %+v", want, dispatched)
 }
 
-
 func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testing.T) {
 	rt, s := testRuntime(t)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
@@ -1818,12 +1817,12 @@ func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testi
 			Kind: types.CoSuperAssignmentImplementation, Attempt: 1,
 			ScopeDigest: "sha256:" + strings.Repeat("1", 64), RequestDigest: "sha256:" + strings.Repeat("2", 64),
 			CapabilityDigest: store.DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: "sha256:" + strings.Repeat("3", 64),
-			SubjectDigest: "sha256:" + strings.Repeat("4", 64),
+			SubjectDigest:     "sha256:" + strings.Repeat("4", 64),
 			SourceArtifactRef: "capsule-source-git:commit:sha256:" + strings.Repeat("4", 64), Writable: true, CapsuleID: "capsule-" + assignmentID,
 			NetworkMode: types.CoSuperCapsuleNetworkForbidden, FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
 		},
 		AssignedAgent: types.AgentRecord{AgentID: assignedAgentID},
-		AssignedWork: types.WorkItemRecord{WorkItemID: assignedWorkID, AssignedAgentID: assignedAgentID, Objective: "implement feature"},
+		AssignedWork:  types.WorkItemRecord{WorkItemID: assignedWorkID, AssignedAgentID: assignedAgentID, Objective: "implement feature"},
 	}
 	openReq.CommandDigest, _ = store.ComputeOpenCoSuperAssignmentDigest(openReq)
 	ag, _ := s.GetAgentByScope(context.Background(), ownerID, rt.TextureComputerID(), superAgent.AgentID)
@@ -1924,10 +1923,10 @@ func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testi
 		OwnerID: ownerID, ComputerID: rt.TextureComputerID(), CommandID: "turn-rewake-after-cancel",
 		DocumentID: "doc-control-super-cancel-rewake", TrajectoryID: fixture.trajectoryID,
 		CallerAgentID: textureAgentID, CallerRunID: "texture-run-super-cancel-rewake",
-		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+		ExpectedLifecycleVersion:       snapshot.Trajectory.LifecycleVersion,
 		ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion,
-		ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID,
-		CallerWorkItemID: "texture-work-super-cancel-rewake", CallerWorkDisposition: types.WorkItemOpen,
+		ExpectedHeadRevisionID:         snapshot.HeadRevision.RevisionID,
+		CallerWorkItemID:               "texture-work-super-cancel-rewake", CallerWorkDisposition: types.WorkItemOpen,
 		Outcome: types.TextureTurnWait, Reason: "wait after control",
 		Controls: []types.TextureTurnControl{{
 			ControlID: "control-rewake-after-cancel", TargetAgentID: superAgent.AgentID, TargetWorkItemID: fixture.workID,
@@ -1976,5 +1975,169 @@ func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testi
 	}
 	if !foundCancelText {
 		t.Fatalf("injected turns do not contain cancellation reason: %s", injected)
+	}
+}
+
+func TestPersistentSuperContinuesFromCoSuperSystemCancellationWithoutTextureRewake(t *testing.T) {
+	rt, s := testRuntime(t)
+	var wakes []string
+	rt.SetDispatchActor(func(_ context.Context, _, _, agentID, kind, _, _, _ string) error {
+		wakes = append(wakes, kind+":"+agentID)
+		return nil
+	})
+	ownerID := "owner-super-system-cancel-continue"
+	superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-system-cancel-continue", superAgent.AgentID, agentprofile.Super)
+	firstRun, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+	if err != nil || firstRun == nil {
+		t.Fatalf("first run=%+v err=%v", firstRun, err)
+	}
+
+	assignmentID := "assignment-super-system-cancel-continue"
+	assignedAgentID := "co-super:" + assignmentID
+	assignedWorkID := "work:" + assignmentID
+	capability := "opaque-test-capability"
+	openReq := types.OpenCoSuperAssignmentRequest{
+		CommandID: "open-" + assignmentID, AssignmentID: assignmentID,
+		Binding: types.CoSuperAssignmentBinding{
+			OwnerID: ownerID, ComputerID: rt.TextureComputerID(), TrajectoryID: fixture.trajectoryID,
+			ParentAgentID: superAgent.AgentID, ParentRunID: firstRun.RunID,
+			ParentDecisionID: "decision:sha256:" + strings.Repeat("a", 64), ParentControlID: fixture.control.UpdateID,
+			ParentWorkItemID: fixture.workID, AssignedWorkItemID: assignedWorkID, AssignedAgentID: assignedAgentID,
+			Kind: types.CoSuperAssignmentImplementation, Attempt: 1,
+			ScopeDigest: "sha256:" + strings.Repeat("1", 64), RequestDigest: "sha256:" + strings.Repeat("2", 64),
+			CapabilityDigest: store.DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: "sha256:" + strings.Repeat("3", 64),
+			SubjectDigest:     "sha256:" + strings.Repeat("4", 64),
+			SourceArtifactRef: "capsule-source-git:commit:sha256:" + strings.Repeat("4", 64), Writable: true, CapsuleID: "capsule-" + assignmentID,
+			NetworkMode: types.CoSuperCapsuleNetworkForbidden, FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
+		},
+		AssignedAgent: types.AgentRecord{AgentID: assignedAgentID},
+		AssignedWork:  types.WorkItemRecord{WorkItemID: assignedWorkID, AssignedAgentID: assignedAgentID, Objective: "implement feature"},
+	}
+	openReq.CommandDigest, _ = store.ComputeOpenCoSuperAssignmentDigest(openReq)
+	ag, _ := s.GetAgentByScope(context.Background(), ownerID, rt.TextureComputerID(), superAgent.AgentID)
+	ag.ChannelID = superAgent.AgentID
+	if err := s.UpsertAgent(context.Background(), ag); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.OpenCoSuperAssignment(context.Background(), openReq); err != nil {
+		t.Fatal(err)
+	}
+	assignedRunID := "run:" + assignmentID
+	assignedRun := types.RunRecord{
+		RunID: assignedRunID, AgentID: assignedAgentID, ChannelID: assignedAgentID,
+		RequestedByRunID: firstRun.RunID, TrajectoryID: fixture.trajectoryID,
+		AgentProfile: "co-super", AgentRole: "co-super", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
+		State: types.RunPending, Prompt: "implement feature",
+		Metadata: map[string]any{
+			"work_item_ids": []string{openReq.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": openReq.Binding.AssignedWorkItemID,
+			"requested_by_agent_id": openReq.Binding.ParentAgentID, "requested_by_profile": "super",
+			"assignment_id": openReq.AssignmentID, "assignment_attempt": openReq.Binding.Attempt, "assignment_kind": string(openReq.Binding.Kind),
+			"assigned_work_item_id": openReq.Binding.AssignedWorkItemID, "parent_work_item_id": openReq.Binding.ParentWorkItemID,
+			"parent_decision_id": openReq.Binding.ParentDecisionID, "parent_control_id": openReq.Binding.ParentControlID,
+			"capsule_id": openReq.Binding.CapsuleID, "scope_digest": openReq.Binding.ScopeDigest, "request_digest": openReq.Binding.RequestDigest,
+			"capability_digest": openReq.Binding.CapabilityDigest, "execution_handle_digest": openReq.Binding.ExecutionHandleDigest,
+			"subject_digest": openReq.Binding.SubjectDigest, "source_artifact_ref": openReq.Binding.SourceArtifactRef,
+		},
+	}
+	bindReq := types.BindCoSuperAssignmentRequest{
+		CommandID: "bind-" + assignmentID, OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
+		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: 1,
+		RunID: assignedRunID, Run: assignedRun,
+		OpaqueCapability: capability, CapsuleID: openReq.Binding.CapsuleID,
+	}
+	bindReq.CommandDigest, _ = store.ComputeBindCoSuperAssignmentDigest(bindReq)
+	bound, err := s.BindCoSuperAssignment(context.Background(), bindReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	finished := time.Now().UTC()
+	firstRun.State, firstRun.UpdatedAt, firstRun.FinishedAt = types.RunCompleted, finished, &finished
+	if err := s.UpdateRun(context.Background(), *firstRun); err != nil {
+		t.Fatal(err)
+	}
+
+	revoke := types.SetCoSuperCapsuleDispositionRequest{
+		CommandID: "revoke-intent", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
+		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: bound.Assignment.LifecycleVersion,
+		Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: "capsule-revoke-intent:" + assignmentID,
+	}
+	revoke.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(revoke)
+	revRequested, err := s.SetCoSuperCapsuleDisposition(context.Background(), revoke)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ack := revoke
+	ack.CommandID, ack.ExpectedLifecycleVersion, ack.Disposition, ack.AckRef =
+		"revoke-ack", revRequested.Assignment.LifecycleVersion, types.CoSuperCapsuleRevoked, "capsule-revoke:sha256:"+strings.Repeat("a", 64)
+	ack.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(ack)
+	revAcked, err := s.SetCoSuperCapsuleDisposition(context.Background(), ack)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cancelled, err := rt.persistSystemCoSuperCancellation(context.Background(), revAcked.Assignment, "tool loop: exceeded 200 iterations without end_turn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled.Update == nil || cancelled.Update.DeliveredToRunID != "" || cancelled.Update.DeliveredAt != nil {
+		t.Fatalf("system cancel update should be pending delivery to parent mailbox: %+v", cancelled.Update)
+	}
+	foundWake := false
+	for _, wake := range wakes {
+		if wake == "coagent_result:"+superAgent.AgentID {
+			foundWake = true
+			break
+		}
+	}
+	if !foundWake {
+		t.Fatalf("system cancel did not wake Super actor: %v", wakes)
+	}
+
+	idle, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+	if err != nil || idle == nil {
+		t.Fatalf("system-cancel continuation Super=%+v err=%v", idle, err)
+	}
+	if idle.RunID == firstRun.RunID {
+		t.Fatalf("continuation reused completed Super %s", firstRun.RunID)
+	}
+	if metadataStringValue(idle.Metadata, "request_source") != "lifecycle_texture_control" {
+		t.Fatalf("continuation request_source=%q", metadataStringValue(idle.Metadata, "request_source"))
+	}
+	if metadataStringValue(idle.Metadata, "assignment_trajectory_id") != fixture.trajectoryID {
+		t.Fatalf("continuation trajectory=%q want %q", metadataStringValue(idle.Metadata, "assignment_trajectory_id"), fixture.trajectoryID)
+	}
+
+	updates, err := rt.pendingCoagentUpdatesForRun(context.Background(), idle, ownerID, superAgent.AgentID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hasCancelReport := false
+	for _, u := range updates {
+		if u.UpdateID == cancelled.Update.UpdateID {
+			hasCancelReport = true
+		}
+	}
+	if !hasCancelReport {
+		t.Fatalf("continuation Super missing cancel report %s: %+v", cancelled.Update.UpdateID, updates)
+	}
+
+	injector := rt.coagentUpdateTurnInjector(idle)
+	injected, err := injector(false)
+	if err != nil || len(injected) == 0 {
+		t.Fatalf("injected turns=%+v err=%v", injected, err)
+	}
+	foundCancelText := false
+	for _, raw := range injected {
+		if strings.Contains(string(raw), "tool loop: exceeded 200 iterations without end_turn") {
+			foundCancelText = true
+		}
+	}
+	if !foundCancelText {
+		t.Fatalf("injected turns do not contain system-cancel reason: %s", injected)
 	}
 }

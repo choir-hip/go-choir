@@ -145,12 +145,23 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	if err != nil {
 		return nil, err
 	}
+	reportContinuation := false
 	if !lifecycleControls {
 		updates, err = rt.listAndSettlePersistentSuperBacklog(ctx, ownerID, agentID)
 		if err != nil {
 			return nil, err
 		}
 		updates = filterPersistentSuperExecutionUpdates(updates)
+		if len(updates) == 0 {
+			reports, reportErr := rt.listPendingPersistentSuperAdmissibleReports(ctx, ownerID, computerID, agentID)
+			if reportErr != nil {
+				return nil, reportErr
+			}
+			if len(reports) > 0 {
+				updates = reports
+				reportContinuation = true
+			}
+		}
 	}
 	if len(updates) == 0 {
 		if blockedActive != nil {
@@ -161,7 +172,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 
 	first := updates[0]
 	requestSource := "update_coagent"
-	if lifecycleControls {
+	if lifecycleControls || reportContinuation {
 		requestSource = "lifecycle_texture_control"
 	}
 	metadata := map[string]any{
@@ -199,10 +210,10 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 			updateIDs = append(updateIDs, id)
 		}
 	}
-	if len(updateIDs) > 0 && !lifecycleControls {
+	if len(updateIDs) > 0 && !lifecycleControls && !reportContinuation {
 		metadata["worker_update_ids"] = updateIDs
 	}
-	if first.AgentID != "" && !lifecycleControls {
+	if first.AgentID != "" && !lifecycleControls && !reportContinuation {
 		if requester, err := rt.latestActiveRunByAgent(ctx, ownerID, first.AgentID); err == nil {
 			metadata["requested_by_run_id"] = requester.RunID
 			if metadataStringValue(requester.Metadata, "agent_profile") != "" && metadata["requested_by_profile"] == "" {
@@ -218,7 +229,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	if err != nil {
 		return nil, err
 	}
-	if lifecycleControls {
+	if lifecycleControls || reportContinuation {
 		// Persistent Super is deliberately non-lifecycle. createRunWithMetadata
 		// normally stamps a generic trajectory projection; remove only that
 		// projection while retaining the exact assignment_trajectory_id used by
@@ -229,9 +240,11 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 			rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
 			return nil, fmt.Errorf("preserve non-lifecycle persistent-Super run: %w", err)
 		}
-		if _, err := rt.bindLifecycleControlsToRun(ctx, rec, updates); err != nil {
-			rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
-			return nil, err
+		if lifecycleControls {
+			if _, err := rt.bindLifecycleControlsToRun(ctx, rec, updates); err != nil {
+				rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
+				return nil, err
+			}
 		}
 	}
 	rt.activate(rec)
@@ -764,6 +777,27 @@ func (rt *Runtime) listPendingPersistentSuperLifecycleControls(ctx context.Conte
 		}
 	}
 	return rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, controls, true)
+}
+
+func (rt *Runtime) listPendingPersistentSuperAdmissibleReports(ctx context.Context, ownerID, computerID, agentID string) ([]types.CoagentSourcePacket, error) {
+	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
+	if ownerID == "" || computerID == "" || agentID != persistentSuperAgentID(ownerID) {
+		return nil, fmt.Errorf("list persistent-Super admissible reports: exact owner, computer, and persistent agent are required")
+	}
+	pending, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("list persistent-Super admissible reports: %w", err)
+	}
+	out := make([]types.CoagentSourcePacket, 0, len(pending))
+	for _, update := range pending {
+		if update.DeliveredAt != nil || strings.TrimSpace(update.DeliveredToRunID) != "" {
+			continue
+		}
+		if persistentSuperAdmissibleReport(update) {
+			out = append(out, update)
+		}
+	}
+	return out, nil
 }
 
 func (rt *Runtime) validateTargetBoundLifecycleControls(ctx context.Context, ownerID, computerID, agentID string, updates []types.CoagentSourcePacket, executionOnly bool) ([]types.CoagentSourcePacket, error) {
