@@ -21,6 +21,10 @@ import (
 
 const runMetadataWorkerUpdatesInjected = "worker_updates_injected"
 const runMetadataProducerReportIDs = "producer_report_ids"
+const runMetadataCoSuperReplacementRequested = "cosuper_replacement_requested"
+
+const persistentSuperCoagentInboxPrompt = "Process pending coagent update packets for privileged execution."
+const persistentSuperCoSuperCancelContinuationPrompt = "Prior implementation CoSuper assignment is terminal. Open a fresh implementation CoSuper assignment with assign_co_super."
 
 const (
 	lifecycleLogicalActivationKeyMetadata = "lifecycle_logical_activation_key"
@@ -234,7 +238,12 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		}
 	}
 
-	rec, err := rt.createRunWithMetadata(ctx, "Process pending coagent update packets for privileged execution.", ownerID, metadata)
+	prompt := persistentSuperCoagentInboxPrompt
+	if reportContinuation {
+		prompt = persistentSuperCoSuperCancelContinuationPrompt
+		metadata[runMetadataCoSuperReplacementRequested] = true
+	}
+	rec, err := rt.createRunWithMetadata(ctx, prompt, ownerID, metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -832,6 +841,13 @@ func (rt *Runtime) claimedPersistentSuperProducerReportIDs(ctx context.Context, 
 			continue
 		}
 		if metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" {
+			continue
+		}
+		// Only a Super that already requested a replacement CoSuper can retire
+		// these producer_reports. Pre-repair continuation Supers claimed the
+		// IDs and 200-failed without assign_co_super; those claims must not
+		// block one replacement Super with the assign prompt.
+		if !metadataBoolValue(run.Metadata, runMetadataCoSuperReplacementRequested) {
 			continue
 		}
 		for _, id := range metadataStringSlice(run.Metadata[runMetadataProducerReportIDs]) {
