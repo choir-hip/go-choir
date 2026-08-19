@@ -2116,29 +2116,21 @@ func TestPersistentSuperContinuesFromCoSuperSystemCancellationWithoutTextureRewa
 	if err != nil {
 		t.Fatal(err)
 	}
-	hasCancelReport := false
 	for _, u := range updates {
 		if u.UpdateID == cancelled.Update.UpdateID {
-			hasCancelReport = true
+			t.Fatalf("replacement Super injected claimed cancel report %s", cancelled.Update.UpdateID)
 		}
-	}
-	if !hasCancelReport {
-		t.Fatalf("continuation Super missing cancel report %s: %+v", cancelled.Update.UpdateID, updates)
 	}
 
 	injector := rt.coagentUpdateTurnInjector(idle)
 	injected, err := injector(false)
-	if err != nil || len(injected) == 0 {
-		t.Fatalf("injected turns=%+v err=%v", injected, err)
+	if err != nil {
+		t.Fatal(err)
 	}
-	foundCancelText := false
 	for _, raw := range injected {
 		if strings.Contains(string(raw), "tool loop: exceeded 200 iterations without end_turn") {
-			foundCancelText = true
+			t.Fatalf("replacement Super dumped cancel-report body: %s", raw)
 		}
-	}
-	if !foundCancelText {
-		t.Fatalf("injected turns do not contain system-cancel reason: %s", injected)
 	}
 	claimedIDs := metadataStringSlice(idle.Metadata[runMetadataProducerReportIDs])
 	if len(claimedIDs) == 0 || claimedIDs[0] != cancelled.Update.UpdateID {
@@ -2149,6 +2141,9 @@ func TestPersistentSuperContinuesFromCoSuperSystemCancellationWithoutTextureRewa
 	}
 	if !metadataBoolValue(idle.Metadata, runMetadataCoSuperReplacementRequested) {
 		t.Fatalf("continuation Super missing %s: %+v", runMetadataCoSuperReplacementRequested, idle.Metadata)
+	}
+	if !metadataBoolValue(idle.Metadata, runMetadataCoSuperReplacementOmitReports) {
+		t.Fatalf("continuation Super missing %s: %+v", runMetadataCoSuperReplacementOmitReports, idle.Metadata)
 	}
 
 	finished = time.Now().UTC()
@@ -2280,7 +2275,7 @@ func TestPersistentSuperReplacementContinuationAfterUnflaggedClaim(t *testing.T)
 		t.Fatalf("claimed continuation Super=%+v err=%v", claimed, err)
 	}
 	claimed.Metadata = cloneMetadata(claimed.Metadata)
-	delete(claimed.Metadata, runMetadataCoSuperReplacementRequested)
+	delete(claimed.Metadata, runMetadataCoSuperReplacementOmitReports)
 	claimed.Prompt = persistentSuperCoagentInboxPrompt
 	finished = time.Now().UTC()
 	claimed.State, claimed.Error, claimed.UpdatedAt, claimed.FinishedAt = types.RunFailed, "tool loop: exceeded 200 iterations without end_turn", finished, &finished
@@ -2300,6 +2295,9 @@ func TestPersistentSuperReplacementContinuationAfterUnflaggedClaim(t *testing.T)
 	}
 	if !metadataBoolValue(replacement.Metadata, runMetadataCoSuperReplacementRequested) {
 		t.Fatalf("replacement Super missing %s: %+v", runMetadataCoSuperReplacementRequested, replacement.Metadata)
+	}
+	if !metadataBoolValue(replacement.Metadata, runMetadataCoSuperReplacementOmitReports) {
+		t.Fatalf("replacement Super missing %s: %+v", runMetadataCoSuperReplacementOmitReports, replacement.Metadata)
 	}
 	claimedIDs := metadataStringSlice(replacement.Metadata[runMetadataProducerReportIDs])
 	if len(claimedIDs) == 0 || claimedIDs[0] != cancelled.Update.UpdateID {

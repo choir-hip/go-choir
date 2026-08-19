@@ -22,6 +22,7 @@ import (
 const runMetadataWorkerUpdatesInjected = "worker_updates_injected"
 const runMetadataProducerReportIDs = "producer_report_ids"
 const runMetadataCoSuperReplacementRequested = "cosuper_replacement_requested"
+const runMetadataCoSuperReplacementOmitReports = "cosuper_replacement_omit_reports"
 
 const persistentSuperCoagentInboxPrompt = "Process pending coagent update packets for privileged execution."
 const persistentSuperCoSuperCancelContinuationPrompt = "Prior implementation CoSuper assignment is terminal. Open a fresh implementation CoSuper assignment with assign_co_super."
@@ -242,6 +243,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	if reportContinuation {
 		prompt = persistentSuperCoSuperCancelContinuationPrompt
 		metadata[runMetadataCoSuperReplacementRequested] = true
+		metadata[runMetadataCoSuperReplacementOmitReports] = true
 	}
 	rec, err := rt.createRunWithMetadata(ctx, prompt, ownerID, metadata)
 	if err != nil {
@@ -843,11 +845,14 @@ func (rt *Runtime) claimedPersistentSuperProducerReportIDs(ctx context.Context, 
 		if metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" {
 			continue
 		}
-		// Only a Super that already requested a replacement CoSuper can retire
-		// these producer_reports. Pre-repair continuation Supers claimed the
-		// IDs and 200-failed without assign_co_super; those claims must not
-		// block one replacement Super with the assign prompt.
+		// Only a Super that requested a replacement CoSuper and omitted
+		// claimed cancel-report bodies can retire these IDs. Super e4141127
+		// requested replacement but still dumped nine cancel reports and
+		// max_tokens-failed; that claim must not pin authorship closed.
 		if !metadataBoolValue(run.Metadata, runMetadataCoSuperReplacementRequested) {
+			continue
+		}
+		if !metadataBoolValue(run.Metadata, runMetadataCoSuperReplacementOmitReports) {
 			continue
 		}
 		for _, id := range metadataStringSlice(run.Metadata[runMetadataProducerReportIDs]) {
@@ -1470,10 +1475,23 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 			if trajectoryID != "" {
 				pending, listErr := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
 				if listErr == nil {
-					for _, p := range pending {
-						if p.TrajectoryID == trajectoryID && persistentSuperAdmissibleReport(p) {
-							packets = append(packets, p)
+					omitClaimed := metadataBoolValue(rec.Metadata, runMetadataCoSuperReplacementOmitReports)
+					claimed := map[string]bool{}
+					if omitClaimed {
+						for _, id := range metadataStringSlice(rec.Metadata[runMetadataProducerReportIDs]) {
+							if id = strings.TrimSpace(id); id != "" {
+								claimed[id] = true
+							}
 						}
+					}
+					for _, p := range pending {
+						if p.TrajectoryID != trajectoryID || !persistentSuperAdmissibleReport(p) {
+							continue
+						}
+						if omitClaimed && claimed[strings.TrimSpace(p.UpdateID)] {
+							continue
+						}
+						packets = append(packets, p)
 					}
 				}
 			}
