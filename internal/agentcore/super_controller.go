@@ -147,15 +147,24 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	}
 
 	computerID := strings.TrimSpace(rt.TextureComputerID())
-	if err := rt.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, ownerID); err != nil {
-		log.Printf("runtime: self-development Texture rewake after terminal Super: %v", err)
-	}
 	updates, err := rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100)
-	updates = selectLifecycleControlActivation(updates, "", nil)
-	lifecycleControls := len(updates) > 0
 	if err != nil {
 		return nil, err
 	}
+	if len(updates) == 0 {
+		// If no lifecycle control is pending in the mailbox, check if an executing
+		// self-development operation needs a Texture execution_request rewake.
+		if rewakeErr := rt.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, ownerID); rewakeErr != nil {
+			log.Printf("runtime: self-development Texture rewake after terminal Super: %v", rewakeErr)
+		} else {
+			updates, err = rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	updates = selectLifecycleControlActivation(updates, "", nil)
+	lifecycleControls := len(updates) > 0
 	reportContinuation := false
 	if !lifecycleControls {
 		updates, err = rt.listAndSettlePersistentSuperBacklog(ctx, ownerID, agentID)
