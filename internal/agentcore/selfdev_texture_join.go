@@ -301,10 +301,20 @@ func (rt *Runtime) maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx conte
 			continue
 		}
 		if len(runs) == 0 {
-			// Check if latest run had this operation as unbound
+			// Check if latest run had this operation as unbound. Allow rewake for
+			// terminal reportContinuation Supers that lack operation binding (e.g.
+			// omit-reports continuation f515dd0f) when the operation is still
+			// executing without a bundle — otherwise the system stalls after a
+			// 200-loop with no Texture control.
 			unboundID := metadataStringValue(latest.Metadata, "self_development_unbound_operation_id")
 			if unboundID != operation.OperationID {
-				continue
+				if !isPersistentSuperAgentRun(&latest) || !selfDevelopmentSuperRunTerminal(latest.State) || latest.State == types.RunBlocked {
+					continue
+				}
+				// Operation returned via selfdevOperations ListByStates (executing
+				// without bundle) - allow rewake for terminal Super even without
+				// prior operation-bound run. This covers the omit-reports case where
+				// the latest Super is a reportContinuation without operation ID.
 			}
 		} else if !selfDevelopmentSuperRunTerminal(runs[0].State) {
 			continue
