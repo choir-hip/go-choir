@@ -64,16 +64,19 @@ func NewStandardDeck() []Card {
 	return deck
 }
 
-func ShuffleDeck(deck []Card, seed uint64) []Card {
+func ShuffleDeck(deck []Card, seed uint64) ([]Card, uint64) {
 	out := append([]Card(nil), deck...)
 	if seed == 0 {
 		var buf [8]byte
 		_, _ = crand.Read(buf[:])
 		seed = binary.LittleEndian.Uint64(buf[:])
+		if seed == 0 {
+			seed = 1
+		}
 	}
 	r := rand.New(rand.NewPCG(seed, seed^0x5555555555555555))
 	r.Shuffle(len(out), func(i, j int) {
 		out[i], out[j] = out[j], out[i]
 	})
-	return out
+	return out, seed
 }

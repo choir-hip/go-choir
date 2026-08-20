@@ -209,7 +209,7 @@ func (s *Store) SaveDesktopStateForSession(ctx context.Context, state types.Desk
 		); err != nil {
 			return fmt.Errorf("delete desktop placements for empty desktop: %w", err)
 		}
-	} else if err := deleteDesktopPlacementsNotIn(ctx, tx, state.OwnerID, desktopID, presentIDs); err != nil {
+	} else if err := deleteDesktopPlacementsNotIn(ctx, tx, state.OwnerID, computerID, desktopID, presentIDs); err != nil {
 		return err
 	}
 
@@ -249,16 +249,16 @@ func (s *Store) desktopSessionPresence(ownerID, desktopID, sessionID string) (ty
 	return got, ok
 }
 
-func deleteDesktopPlacementsNotIn(ctx context.Context, tx *sql.Tx, ownerID, desktopID string, presentIDs []string) error {
+func deleteDesktopPlacementsNotIn(ctx context.Context, tx *sql.Tx, ownerID, computerID, desktopID string, presentIDs []string) error {
 	placeholders := make([]string, 0, len(presentIDs))
-	args := []any{ownerID, desktopID}
+	args := []any{ownerID, computerID, desktopID}
 	for _, id := range presentIDs {
 		placeholders = append(placeholders, "?")
 		args = append(args, id)
 	}
 	query := fmt.Sprintf(
 		`DELETE FROM desktop_window_placements
-		  WHERE owner_id = ? AND (computer_id != '' OR computer_id = '') AND desktop_id = ? AND app_instance_id NOT IN (%s)`,
+		  WHERE owner_id = ? AND (computer_id = ? OR computer_id = '') AND desktop_id = ? AND app_instance_id NOT IN (%s)`,
 		strings.Join(placeholders, ","),
 	)
 	if _, err := tx.ExecContext(ctx, query, args...); err != nil {

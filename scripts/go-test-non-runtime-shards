@@ -34,7 +34,7 @@ fi
 # Determine if we use store sub-sharding (default for 6 shards: 4 store shards + 2 non-store shards)
 store_sharded=0
 store_shards=4
-if (( total_shards >= 4 )); then
+if (( total_shards > store_shards )); then
   for package in "${all_packages[@]}"; do
     if [[ "$package" == "$store_package_full" || "$package" == "$store_package" ]]; then
       store_sharded=1

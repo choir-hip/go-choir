@@ -27,7 +27,8 @@ func (h *Handler) HandleSolitaireRouter(w http.ResponseWriter, r *http.Request) 
 	ownerID := strings.TrimSpace(r.Header.Get("X-Authenticated-User"))
 	computerID := strings.TrimSpace(r.Header.Get("X-Authenticated-Computer"))
 	if ownerID == "" {
-		ownerID = "default-owner"
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+		return
 	}
 
 	path := strings.TrimPrefix(r.URL.Path, "/api/solitaire")

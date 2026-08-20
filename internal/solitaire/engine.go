@@ -66,14 +66,14 @@ type MoveRecord struct {
 
 func NewGame(ownerID, computerID string, seed uint64) *GameState {
 	now := time.Now().UTC()
-	deck := ShuffleDeck(NewStandardDeck(), seed)
+	deck, effectiveSeed := ShuffleDeck(NewStandardDeck(), seed)
 	
 	game := &GameState{
 		GameID:      "game-" + uuid.New().String(),
 		OwnerID:     ownerID,
 		ComputerID:  computerID,
 		Status:      StatusInProgress,
-		DeckSeed:    seed,
+		DeckSeed:    effectiveSeed,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
