@@ -1558,6 +1558,12 @@ func prepareCapsuleRoot(root, upperDir string) error {
 	if err := writeCapsuleIdentityEtc(upperDir); err != nil {
 		return err
 	}
+	_ = filepath.Walk(upperDir, func(p string, info os.FileInfo, err error) error {
+		if err == nil {
+			_ = os.Chown(p, capsuleNamespaceHostID, capsuleNamespaceHostID)
+		}
+		return nil
+	})
 	return nil
 }
 

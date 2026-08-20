@@ -348,23 +348,22 @@ func (b *Broker) handleExec(ctx context.Context, cap *capsule.Capability, params
 		return BrokerRPCResponse{Error: fmt.Sprintf("invalid cwd: %v", err)}
 	}
 
-	shell := "sh"
-	var shellArgs []string
-	if _, err := exec.LookPath("sh"); err == nil {
-		shell = "sh"
-		shellArgs = []string{"-c", p.Command}
-	} else if _, err := exec.LookPath("bash"); err == nil {
-		shell = "bash"
-		shellArgs = []string{"--noprofile", "--norc", "-c", p.Command}
+	shell := "bash"
+	shellArgs := []string{"--noprofile", "--norc", "-c", p.Command}
+	if path, err := exec.LookPath("bash"); err == nil {
+		shell = path
 	} else if _, err := os.Stat("/run/current-system/sw/bin/bash"); err == nil {
 		shell = "/run/current-system/sw/bin/bash"
-		shellArgs = []string{"--noprofile", "--norc", "-c", p.Command}
+	} else if path, err := exec.LookPath("sh"); err == nil {
+		shell = path
+		shellArgs = []string{"-c", p.Command}
 	} else {
 		shell = "/bin/sh"
 		shellArgs = []string{"-c", p.Command}
 	}
 	cmd := exec.CommandContext(ctx, shell, shellArgs...)
 	cmd.Dir = cwdPath
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: false}
 	brokerEnv := os.Environ()
 	hasPath := false
 	for _, env := range brokerEnv {
