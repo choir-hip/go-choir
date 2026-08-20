@@ -847,7 +847,7 @@ func (rt *Runtime) claimedPersistentSuperProducerReportIDs(ctx context.Context, 
 	if ownerID == "" || computerID == "" || agentID == "" {
 		return nil, nil
 	}
-	runs, err := rt.ListRunsByOwner(ctx, ownerID, 100)
+	runs, err := rt.store.ListRunsByAgent(ctx, ownerID, agentID, 100)
 	if err != nil {
 		return nil, fmt.Errorf("list persistent-Super producer-report claims: %w", err)
 	}

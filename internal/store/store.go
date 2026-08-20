@@ -1776,6 +1776,10 @@ func (s *Store) CountActiveCoSuperSlots(ctx context.Context, ownerID, trajectory
 }
 
 // GetLatestActiveRunByAgent returns the most recent non-terminal run for an agent.
+// ListRunsByAgent returns all runs for an exact agent.
+func (s *Store) ListRunsByAgent(ctx context.Context, ownerID, agentID string, limit int) ([]types.RunRecord, error) {
+	return s.ListRunsByAgentOG(ctx, ownerID, agentID, limit)
+}
 func (s *Store) GetLatestRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
 	objs, err := s.ogListAllByMetadata(ctx, ogKindRun, "agent_id", agentID)
 	if err != nil {

@@ -722,6 +722,38 @@ func (s *Store) listAllRunsByStateOG(ctx context.Context, state types.RunState, 
 
 // ListAllRunsOG lists all runs from the object graph, ordered by
 // created_at descending.
+
+// ListRunsByAgentOG returns all runs for an exact agent, ordered by created_at descending.
+func (s *Store) ListRunsByAgentOG(ctx context.Context, ownerID, agentID string, limit int) ([]types.RunRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.ogListAllByMetadata(ctx, ogKindRun, "agent_id", strings.TrimSpace(agentID))
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]types.RunRecord, 0, len(objs))
+	for i := range objs {
+		var rec types.RunRecord
+		if err := ogDecode(objs[i], &rec); err != nil {
+			return nil, err
+		}
+		if ownerID != "" && rec.OwnerID != ownerID {
+			continue
+		}
+		runs = append(runs, rec)
+	}
+	sort.Slice(runs, func(i, j int) bool {
+		if !runs[i].CreatedAt.Equal(runs[j].CreatedAt) {
+			return runs[i].CreatedAt.After(runs[j].CreatedAt)
+		}
+		return runs[i].RunID < runs[j].RunID
+	})
+	if len(runs) > limit {
+		runs = runs[:limit]
+	}
+	return runs, nil
+}
 func (s *Store) ListAllRunsOG(ctx context.Context, limit int) ([]types.RunRecord, error) {
 	if limit <= 0 {
 		limit = 50
