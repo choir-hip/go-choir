@@ -157,6 +157,9 @@ func (rt *Runtime) ensureSelfDevelopmentTextureJoin(ctx context.Context, operati
 		return fmt.Errorf("load pending Super controls: %w", err)
 	}
 	if wakeToken == "" {
+		if existing := selfDevelopmentOpenSuperWork(snapshot, superAgentID); existing != nil {
+			return nil
+		}
 		for _, update := range pending {
 			if update.Direction == types.LifecyclePacketDirectionControl &&
 				selfDevelopmentOperationIDFromPacketSources(update.Packet.Sources) == operation.OperationID &&
@@ -187,11 +190,9 @@ func (rt *Runtime) ensureSelfDevelopmentTextureJoin(ctx context.Context, operati
 			}
 		}
 	} else if existing := selfDevelopmentOpenSuperWork(snapshot, superAgentID); existing != nil {
-		targetWorkID = existing.WorkItemID
-		controlID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
-			"choir:texture:self-development", ownerID, computerID, operation.OperationID, "continue", existing.WorkItemID, fmt.Sprint(existing.LastReducerSeq),
-		}, ":"))).String()
-		commandID = "turn:selfdev-texture-continue:" + operation.OperationID + ":" + fmt.Sprint(existing.LastReducerSeq)
+		// First-time start: if the open Super work item already exists from a concurrent
+		// opener turn, the opener is already committed; do not mint a competing continue turn.
+		return nil
 	} else {
 		openWork = &types.WorkItemRecord{
 			WorkItemID: superWorkID, Objective: strings.TrimSpace(prompt),
@@ -293,6 +294,21 @@ func (rt *Runtime) maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx conte
 		return err
 	}
 	for _, operation := range operations {
+		// Rewake only applies to an operation that already had a terminal Super run.
+		// A brand-new operation (len(runs) == 0) receives its opener from startSelfDevelopmentPersistentSuper.
+		runs, listErr := rt.store.ListRunsBySelfDevelopmentOperation(ctx, ownerID, operation.OperationID, 2)
+		if listErr != nil {
+			continue
+		}
+		if len(runs) == 0 {
+			// Check if latest run had this operation as unbound
+			unboundID := metadataStringValue(latest.Metadata, "self_development_unbound_operation_id")
+			if unboundID != operation.OperationID {
+				continue
+			}
+		} else if !selfDevelopmentSuperRunTerminal(runs[0].State) {
+			continue
+		}
 		prompt := rt.selfDevelopmentRewakePrompt(ctx, ownerID, operation)
 		if err := rt.ensureSelfDevelopmentTextureJoin(ctx, operation, ownerID, prompt); err != nil {
 			return err
