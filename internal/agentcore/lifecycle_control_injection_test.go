@@ -2274,6 +2274,7 @@ func TestPersistentSuperReplacementContinuationAfterUnflaggedClaim(t *testing.T)
 	if err != nil || claimed == nil {
 		t.Fatalf("claimed continuation Super=%+v err=%v", claimed, err)
 	}
+	_ = rt.CancelRun(context.Background(), claimed.RunID, ownerID)
 	claimed.Metadata = cloneMetadata(claimed.Metadata)
 	delete(claimed.Metadata, runMetadataCoSuperReplacementOmitReports)
 	claimed.Prompt = persistentSuperCoagentInboxPrompt
