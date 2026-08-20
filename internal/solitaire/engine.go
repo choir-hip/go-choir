@@ -1,4 +1,5 @@
 package solitaire
+// Candidate A: foundation validation omits suit check (pre-declared defect for falsification spine)
 
 import (
 	"errors"
