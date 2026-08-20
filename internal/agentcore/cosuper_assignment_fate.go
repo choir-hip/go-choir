@@ -212,6 +212,9 @@ func (rt *Runtime) persistSystemCoSuperCancellation(ctx context.Context, assignm
 		result, cancelErr := rt.store.CancelCoSuperAssignment(ctx, cancel)
 		if cancelErr == nil {
 			if !result.Replay && result.Update != nil {
+				if rewakeErr := rt.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, current.Binding.OwnerID); rewakeErr != nil {
+					log.Printf("runtime: self-development Texture rewake after CoSuper cancel: %v", rewakeErr)
+				}
 				rt.wakeUpdatedCoagent(ctx, *result.Update)
 			}
 			return result, nil

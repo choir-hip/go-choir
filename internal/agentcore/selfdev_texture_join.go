@@ -259,6 +259,90 @@ func (rt *Runtime) ensureSelfDevelopmentTextureJoin(ctx context.Context, operati
 	return nil
 }
 
+const selfDevelopmentRewakeFallbackPrompt = "Author, freeze, and propose the bound self-development operation."
+
+// maybeRewakeSelfDevelopmentTextureAfterTerminalSuper mints turn:selfdev-texture-rewake
+// when the latest persistent Super is terminal and a self-development operation is
+// still executing without a bundle. This is the proven assign_co_super path.
+// It is not HTTP Super-start: callers still reconcile/wake the actor locally.
+func (rt *Runtime) maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx context.Context, ownerID string) error {
+	if rt == nil || rt.store == nil {
+		return nil
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	if ownerID == "" || computerID == "" {
+		return nil
+	}
+	superAgentID := persistentSuperAgentID(ownerID)
+	latest, err := rt.store.GetLatestRunByAgent(ctx, ownerID, superAgentID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("load latest persistent Super for Texture rewake: %w", err)
+	}
+	if !isPersistentSuperAgentRun(&latest) || !selfDevelopmentSuperRunTerminal(latest.State) {
+		return nil
+	}
+	if latest.State == types.RunBlocked {
+		return nil
+	}
+	operations, err := rt.selfDevelopmentRewakeOperations(ctx, ownerID, computerID, &latest)
+	if err != nil {
+		return err
+	}
+	for _, operation := range operations {
+		prompt := rt.selfDevelopmentRewakePrompt(ctx, ownerID, operation)
+		if err := rt.ensureSelfDevelopmentTextureJoin(ctx, operation, ownerID, prompt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (rt *Runtime) selfDevelopmentRewakeOperations(ctx context.Context, ownerID, computerID string, latest *types.RunRecord) ([]selfdev.Operation, error) {
+	if rt.selfdevOperations != nil {
+		operations, err := rt.selfdevOperations.ListByStates(ctx, computerID, selfdev.StateExecuting)
+		if err != nil {
+			return nil, fmt.Errorf("list executing self-development operations: %w", err)
+		}
+		out := make([]selfdev.Operation, 0, len(operations))
+		for _, operation := range operations {
+			if strings.TrimSpace(operation.BundleDigest) == "" {
+				out = append(out, operation)
+			}
+		}
+		if len(out) > 0 {
+			return out, nil
+		}
+	}
+	if latest != nil {
+		operationID := strings.TrimSpace(firstNonEmpty(
+			metadataStringValue(latest.Metadata, "self_development_operation_id"),
+			metadataStringValue(latest.Metadata, "self_development_unbound_operation_id"),
+		))
+		if operationID != "" {
+			return []selfdev.Operation{{OperationID: operationID, ComputerID: computerID}}, nil
+		}
+	}
+	return nil, nil
+}
+
+func (rt *Runtime) selfDevelopmentRewakePrompt(ctx context.Context, ownerID string, operation selfdev.Operation) string {
+	runs, err := rt.store.ListRunsBySelfDevelopmentOperation(ctx, ownerID, operation.OperationID, 8)
+	if err == nil {
+		for _, run := range runs {
+			prompt := strings.TrimSpace(run.Prompt)
+			if prompt == "" || prompt == persistentSuperCoagentInboxPrompt || prompt == persistentSuperCoSuperCancelContinuationPrompt {
+				continue
+			}
+			return prompt
+		}
+	}
+	return selfDevelopmentRewakeFallbackPrompt
+}
+
 func selfDevelopmentOpenSuperWork(snapshot types.LifecycleSnapshot, superAgentID string) *types.WorkItemRecord {
 	var found *types.WorkItemRecord
 	for i := range snapshot.WorkItems {
@@ -283,14 +367,10 @@ func (rt *Runtime) ensureSelfDevelopmentTextureCaller(ctx context.Context, owner
 	// trajectory. Prefer it over any successor Texture activation so the Super
 	// work item's creator-run provenance stays bound to one identity across restarts.
 	if stored, err := rt.store.GetLifecycleRun(ctx, ownerID, computerID, deterministicRunID); err == nil {
-		switch {
-		case stored.State.Active():
+		if stored.State.Active() {
 			return stored, nil
-		case stored.State.Terminal():
-			return types.RunRecord{}, fmt.Errorf("self-development Texture caller %s is terminal", deterministicRunID)
-		default:
-			return rt.reactivateSelfDevelopmentTextureCaller(ctx, ownerID, computerID, trajectoryID, textureAgentID, textureWorkID, docID, stored)
 		}
+		return rt.reactivateSelfDevelopmentTextureCaller(ctx, ownerID, computerID, trajectoryID, textureAgentID, textureWorkID, docID, stored)
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return types.RunRecord{}, fmt.Errorf("load self-development Texture caller: %w", err)
 	}

@@ -93,3 +93,81 @@ func TestSelfDevelopmentTextureCallerReactivatesDeterministicRun(t *testing.T) {
 		t.Fatalf("successor not released: %+v err=%v", successorStored, err)
 	}
 }
+
+
+func TestPersistentSuperReconcileMintsTextureRewakeAfterTerminalSelfDevelopmentSuper(t *testing.T) {
+	ctx := context.Background()
+	runtime, productStore := testRuntime(t)
+	ownerID := "owner-selfdev-rewake"
+	computerID := "computer-selfdev-rewake"
+	runtime.cfg.ComputerID = computerID
+	operation := selfdev.Operation{
+		OperationID:       "selfdev-op-rewake-test",
+		ComputerID:        computerID,
+		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64),
+	}
+	originalPrompt := "Author classic solitaire game engine"
+	if err := runtime.startSelfDevelopmentPersistentSuper(ctx, operation, ownerID, originalPrompt); err != nil {
+		t.Fatal(err)
+	}
+
+	superAgentID := persistentSuperAgentID(ownerID)
+	firstSuper, err := productStore.GetLatestRunByAgent(ctx, ownerID, superAgentID)
+	if err != nil || !firstSuper.State.Active() {
+		t.Fatalf("first Super active state: %+v err=%v", firstSuper, err)
+	}
+	if metadataStringValue(firstSuper.Metadata, "self_development_operation_id") != operation.OperationID {
+		t.Fatalf("first Super missing operation_id: %+v", firstSuper.Metadata)
+	}
+
+	// Simulate first Super failure (e.g. 200 iterations or CoSuper cancel).
+	_ = runtime.CancelRun(ctx, firstSuper.RunID, ownerID)
+	finished := time.Now().UTC()
+	firstSuper.State = types.RunFailed
+	firstSuper.Error = "tool loop: exceeded 200 iterations without end_turn"
+	firstSuper.UpdatedAt = finished
+	firstSuper.FinishedAt = &finished
+	if err := productStore.UpdateRun(ctx, firstSuper); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.unbindSelfDevelopmentSuper(ctx, &firstSuper); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reconcile must natively mint the Texture rewake and start replacement Super.
+	rewakeErr := runtime.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, ownerID)
+	t.Logf("rewakeErr: %v", rewakeErr)
+	updates, listErr := runtime.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, superAgentID, 100)
+	t.Logf("listControls count=%d err=%v", len(updates), listErr)
+	for i, u := range updates {
+		t.Logf("update[%d]: ID=%s Traj=%s TargetWork=%s", i, u.UpdateID, u.TrajectoryID, u.TargetWorkItemID)
+	}
+	rewokeSuper, err := runtime.reconcilePersistentSuperActor(ctx, ownerID, superAgentID)
+	if err != nil {
+		t.Fatalf("reconcile after terminal Super: %v", err)
+	}
+	if rewokeSuper == nil {
+		t.Fatal("expected replacement Super from Texture rewake, got nil")
+	}
+	if rewokeSuper.RunID == firstSuper.RunID {
+		t.Fatalf("expected new Super run, got same run %s", firstSuper.RunID)
+	}
+	if metadataStringValue(rewokeSuper.Metadata, "request_source") != "lifecycle_texture_control" {
+		t.Fatalf("rewoke Super request_source=%q", metadataStringValue(rewokeSuper.Metadata, "request_source"))
+	}
+	if metadataStringValue(rewokeSuper.Metadata, "self_development_operation_id") != operation.OperationID {
+		t.Fatalf("rewoke Super missing operation_id: %+v", rewokeSuper.Metadata)
+	}
+	if len(metadataStringSlice(rewokeSuper.Metadata[runMetadataProducerReportIDs])) > 0 {
+		t.Fatalf("rewoke Super should not carry producer_report_ids: %+v", rewokeSuper.Metadata)
+	}
+
+	// Calling reconcile again while the rewoke Super is active returns the resident run immediately.
+	resident, err := runtime.reconcilePersistentSuperActor(ctx, ownerID, superAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resident.RunID != rewokeSuper.RunID {
+		t.Fatalf("resident run %s != rewoke run %s", resident.RunID, rewokeSuper.RunID)
+	}
+}

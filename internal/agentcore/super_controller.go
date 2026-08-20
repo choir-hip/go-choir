@@ -138,13 +138,18 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	}
 	if active, err := rt.latestActiveRunByAgent(ctx, ownerID, agentID); err == nil {
 		if active.State == types.RunBlocked {
-			blockedActive = &active
+			// A blocked Super is awaiting external input/approval; do not spawn
+			// a competing Super or mint an unprompted Texture rewake.
+			return &active, nil
 		}
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return nil, fmt.Errorf("check blocked super run: %w", err)
 	}
 
 	computerID := strings.TrimSpace(rt.TextureComputerID())
+	if err := rt.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, ownerID); err != nil {
+		log.Printf("runtime: self-development Texture rewake after terminal Super: %v", err)
+	}
 	updates, err := rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100)
 	updates = selectLifecycleControlActivation(updates, "", nil)
 	lifecycleControls := len(updates) > 0
@@ -796,7 +801,8 @@ func (rt *Runtime) listPendingPersistentSuperLifecycleControls(ctx context.Conte
 			controls = append(controls, update)
 		}
 	}
-	return rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, controls, true)
+	validated, valErr := rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, controls, true)
+	return validated, valErr
 }
 
 func (rt *Runtime) listPendingPersistentSuperAdmissibleReports(ctx context.Context, ownerID, computerID, agentID string) ([]types.CoagentSourcePacket, error) {
@@ -832,7 +838,7 @@ func (rt *Runtime) claimedPersistentSuperProducerReportIDs(ctx context.Context, 
 	if ownerID == "" || computerID == "" || agentID == "" {
 		return nil, nil
 	}
-	runs, err := rt.store.ListRunsByOwner(ctx, ownerID, 100)
+	runs, err := rt.ListRunsByOwner(ctx, ownerID, 100)
 	if err != nil {
 		return nil, fmt.Errorf("list persistent-Super producer-report claims: %w", err)
 	}
