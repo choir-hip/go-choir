@@ -1,4 +1,5 @@
 package solitaire
+// trivial bump 2 for CI non-race sampling
 
 import (
 	crand "crypto/rand"
