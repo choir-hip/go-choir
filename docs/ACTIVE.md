@@ -5,8 +5,8 @@ corpus and does not make an unverified graph status into a live work claim.
 
 ## Active Definition — Supervised Self-Development with Effects
 
-[`definitions/choir-supervised-self-development-effects-2026-08-11.md`](definitions/choir-supervised-self-development-effects-2026-08-11.md)
-is the owner-priority executable `/goal` as of 2026-08-15. It is
+[`definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md`](definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md)
+is the owner-priority executable `/goal` as of 2026-08-20. It supersedes the 2026-08-11 effects definition as a compact Definition v2. It is
 owner-ratified and supersedes Continuous Texture Supervision (CTS)
 as of 2026-08-11, corrected by owner direction on 2026-08-13. Proof
 target is **policy-governed autonomy**: capsule-authored source change
@@ -18,10 +18,7 @@ acceptance policy with durable delivery and consequence receipts
 (platform/cycle OUT of restore; computer-surface frontend is
 per-computer by invariant). Effects remain OFF until this
 Definition's decision-policy rehearsal gates pass. Do not
-independently green restore. First `/goal` slice is docs-only
-reconciliation of stale `start.unknowns` / `now.reconciliation`
-against the paid tape-recovery substrate; do not rematerialize or
-invent `choir computer create`.
+independently green restore. Active execution proceeds directly through in-VM candidate authoring inside guest capsules, bundle freeze, qualified consensus under reversible-selfdev-v1, promotion, live play verification, falsification with B, and restore to pre-A checkpoint 99949fe2.
 
 ## Completed Substrate — Tape-Based Recovery
 
@@ -137,8 +134,8 @@ superseded, or historical as stated by their source Definitions, not entrypoints
 
 ## Invocation
 
-Invoke the owner-priority effects Definition through
-`/goal docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`.
+Invoke the owner-priority candidate proof Definition through
+`/goal docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md`.
 Its `now.*` and `finish.*` own the current product schedule. Tape-recovery
 completed 2026-08-15 and is settled evidence, not an entrypoint. After
 effects reaches `complete` and the registries promote the successor, invoke

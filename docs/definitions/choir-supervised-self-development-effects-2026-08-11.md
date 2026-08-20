@@ -305,9 +305,9 @@ measures:
     cannot_prove: the product works
 
 now:
-  status: in_progress
-  slice: "Pre-A checkpoint 99949fe2 verified as restore fence. Staging ab756117 epoch 333. Conductor intake, Texture live supervision, and CI 8.5m pipeline optimization deployed and verified. Ready for autonomous in-VM self-development candidate authoring and verification."
-  question: "How should the CoSuper capsule author, build, test, and freeze the Solitaire candidate change A under the predeclared reversible decision policy, with all five bundle refs bound to capsule receipts and no per-candidate human decision?"
+  status: superseded
+  slice: "Superseded 2026-08-20 by compact Definition v2: docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md"
+  question: none
 
   reconciliation:
     observed_at: 2026-08-20T14:50:00Z
