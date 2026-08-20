@@ -2136,7 +2136,7 @@ func TestPersistentSuperContinuesFromCoSuperSystemCancellationWithoutTextureRewa
 	if len(claimedIDs) == 0 || claimedIDs[0] != cancelled.Update.UpdateID {
 		t.Fatalf("continuation Super producer_report_ids=%v want %s", claimedIDs, cancelled.Update.UpdateID)
 	}
-	if idle.Prompt != persistentSuperCoSuperCancelContinuationPrompt {
+	if !strings.HasPrefix(idle.Prompt, persistentSuperCoSuperCancelContinuationPrompt) {
 		t.Fatalf("continuation prompt=%q", idle.Prompt)
 	}
 	if !metadataBoolValue(idle.Metadata, runMetadataCoSuperReplacementRequested) {
@@ -2291,7 +2291,7 @@ func TestPersistentSuperReplacementContinuationAfterUnflaggedClaim(t *testing.T)
 	if replacement.RunID == claimed.RunID || replacement.RunID == firstRun.RunID {
 		t.Fatalf("replacement reused Super %s", replacement.RunID)
 	}
-	if replacement.Prompt != persistentSuperCoSuperCancelContinuationPrompt {
+	if !strings.HasPrefix(replacement.Prompt, persistentSuperCoSuperCancelContinuationPrompt) {
 		t.Fatalf("replacement prompt=%q", replacement.Prompt)
 	}
 	if !metadataBoolValue(replacement.Metadata, runMetadataCoSuperReplacementRequested) {

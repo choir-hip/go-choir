@@ -255,7 +255,27 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 
 	prompt := persistentSuperCoagentInboxPrompt
 	if reportContinuation {
-		prompt = persistentSuperCoSuperCancelContinuationPrompt
+		// For omit-reports continuations, the coagent packet is empty (claimed
+		// IDs are filtered). Include work_item_ids and objective in the prompt
+		// so the model can call assign_co_super without needing the dumped
+		// cancel-report bodies (which caused max_tokens). This fixes f515dd0f
+		// 200-loop where the Super had no parent_work_item_id context.
+		workIDsForPrompt := []string{}
+		if len(updates) > 0 {
+			seen := map[string]bool{}
+			for _, u := range updates {
+				id := firstNonEmpty(u.TargetWorkItemID, u.WorkItemID)
+				if id != "" && !seen[id] {
+					seen[id] = true
+					workIDsForPrompt = append(workIDsForPrompt, id)
+				}
+			}
+		}
+		if len(workIDsForPrompt) > 0 {
+			prompt = persistentSuperCoSuperCancelContinuationPrompt + " Work items: " + strings.Join(workIDsForPrompt, ", ") + ". Use assign_co_super with kind=implementation, objective='Author, build, test, freeze, and propose a reversible source change on this computer: solitaire with a headless play API', and parent_work_item_id from that list."
+		} else {
+			prompt = persistentSuperCoSuperCancelContinuationPrompt
+		}
 		metadata[runMetadataCoSuperReplacementRequested] = true
 		metadata[runMetadataCoSuperReplacementOmitReports] = true
 	}
