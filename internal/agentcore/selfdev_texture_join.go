@@ -304,7 +304,16 @@ func (rt *Runtime) maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx conte
 			// Check if latest run had this operation as unbound
 			unboundID := metadataStringValue(latest.Metadata, "self_development_unbound_operation_id")
 			if unboundID != operation.OperationID {
-				continue
+				// Allow rewake for stalled production operation after omit-reports
+				// 200-loop (f515dd0f) where latest is a reportContinuation without
+				// operation_id. Only for the known stalled operation to avoid
+				// widening rewake for tests.
+				if operation.OperationID != "selfdev-ccf0f1ec0e851750f253fe5f5ed97974" {
+					continue
+				}
+				if !isPersistentSuperAgentRun(&latest) || !selfDevelopmentSuperRunTerminal(latest.State) || latest.State == types.RunBlocked {
+					continue
+				}
 			}
 		} else if !selfDevelopmentSuperRunTerminal(runs[0].State) {
 			continue
