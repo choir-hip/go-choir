@@ -321,6 +321,9 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 		}
 		controls, readErr := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, run)
 		if readErr != nil {
+			if errors.Is(readErr, store.ErrNotFound) || strings.Contains(readErr.Error(), "not found") {
+				continue
+			}
 			return nil, false, fmt.Errorf("validate restarted persistent-Super control run %s: %w", run.RunID, readErr)
 		}
 		if len(controls) == 0 {
