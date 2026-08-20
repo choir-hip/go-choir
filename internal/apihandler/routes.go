@@ -2,6 +2,7 @@ package apihandler
 
 import (
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
+	"github.com/yusefmosiah/go-choir/internal/solitaire"
 	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
 	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
@@ -61,4 +62,16 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	// ambiguity with Go's ServeMux prefix matching.
 	s.HandleFunc("/api/texture/documents", texture.HandleTextureDocumentsRoot)
 	s.HandleFunc("/api/texture/", texture.HandleTextureRouter)
+
+	// Headless Solitaire play API (Candidate A).
+	var solitaireHandler *solitaire.Handler
+	if api != nil && api.store != nil && api.store.DB() != nil {
+		if sStore, err := solitaire.NewStore(api.store.DB()); err == nil {
+			solitaireHandler = solitaire.NewHandler(sStore)
+		}
+	}
+	if solitaireHandler == nil {
+		solitaireHandler = solitaire.NewHandler(nil)
+	}
+	s.HandleFunc("/api/solitaire/", solitaireHandler.HandleSolitaireRouter)
 }
