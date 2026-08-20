@@ -2469,6 +2469,47 @@ func TestLifecycleRunProjectionIsComputerScoped(t *testing.T) {
 	}
 }
 
+func TestGetLatestActiveLifecycleRunByAgentIgnoresSupersededBlockedRun(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	start.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(start)
+	started, err := s.StartLifecycle(ctx, start)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().UTC()
+	blockedRun := types.RunRecord{
+		RunID: "run-blocked-older", AgentID: started.Agent.AgentID, ChannelID: started.Agent.ChannelID,
+		TrajectoryID: start.TrajectoryID, AgentProfile: started.Agent.Profile, AgentRole: started.Agent.Role,
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, State: types.RunBlocked,
+		Prompt: "older work", CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: now.Add(-2 * time.Hour),
+	}
+	if err := s.UpdateRun(ctx, blockedRun); err != nil {
+		t.Fatal(err)
+	}
+	active, err := s.GetLatestActiveLifecycleRunByAgent(ctx, start.OwnerID, start.ComputerID, started.Agent.AgentID)
+	if err != nil || active.RunID != blockedRun.RunID {
+		t.Fatalf("expected blocked run active before successor: got %+v, err %v", active, err)
+	}
+
+	failedRun := types.RunRecord{
+		RunID: "run-failed-newer", AgentID: started.Agent.AgentID, ChannelID: started.Agent.ChannelID,
+		TrajectoryID: start.TrajectoryID, AgentProfile: started.Agent.Profile, AgentRole: started.Agent.Role,
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, State: types.RunFailed,
+		Prompt: "newer work", CreatedAt: now.Add(-1 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour),
+	}
+	if err := s.UpdateRun(ctx, failedRun); err != nil {
+		t.Fatal(err)
+	}
+
+	afterSuccessor, err := s.GetLatestActiveLifecycleRunByAgent(ctx, start.OwnerID, start.ComputerID, started.Agent.AgentID)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound after newer terminal run, got %+v, err %v", afterSuccessor, err)
+	}
+}
+
 func TestLifecycleSourceGraphIsComputerScoped(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

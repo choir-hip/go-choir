@@ -1825,15 +1825,15 @@ func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID 
 		if rec.OwnerID != ownerID {
 			continue
 		}
-		if !rec.State.Active() {
-			continue
-		}
 		if latest == nil || rec.UpdatedAt.After(latest.UpdatedAt) {
 			recCopy := rec
 			latest = &recCopy
 		}
 	}
 	if latest == nil {
+		return types.RunRecord{}, ErrNotFound
+	}
+	if !latest.State.Active() {
 		return types.RunRecord{}, ErrNotFound
 	}
 	return *latest, nil
@@ -1902,7 +1902,7 @@ func (s *Store) latestLifecycleRunByAgent(ctx context.Context, ownerID, computer
 		if decodeErr != nil {
 			return types.RunRecord{}, decodeErr
 		}
-		if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID || !match(rec.State) {
+		if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID {
 			continue
 		}
 		if latest == nil || rec.UpdatedAt.After(latest.UpdatedAt) {
@@ -1911,6 +1911,9 @@ func (s *Store) latestLifecycleRunByAgent(ctx context.Context, ownerID, computer
 		}
 	}
 	if latest == nil {
+		return types.RunRecord{}, ErrNotFound
+	}
+	if match != nil && !match(latest.State) {
 		return types.RunRecord{}, ErrNotFound
 	}
 	return *latest, nil
