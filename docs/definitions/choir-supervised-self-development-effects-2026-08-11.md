@@ -306,13 +306,13 @@ measures:
 
 now:
   status: in_progress
-  slice: "Pre-A checkpoint 99949fe2 remains the restore fence. Staging 88d6bfe8 epoch 331. Texture rewake and empty mailbox guard deployed. Conductor intake and Texture live supervision aligned. Deep code review and consensus completed. Live op selfdev-ccf0f1ec executing. Effects remain OFF."
+  slice: "Pre-A checkpoint 99949fe2 verified. Staging ab756117 epoch 333. Candidate A Solitaire headless play API verified live on staging (/api/solitaire/games). Pre-promotion safeguards F1-F4 applied. CI pipeline optimized to 8.5m. Conductor intake and Texture live supervision fully aligned."
   question: "How should the CoSuper capsule author, build, test, and freeze the Solitaire candidate change A under the predeclared reversible decision policy, with all five bundle refs bound to capsule receipts and no per-candidate human decision?"
 
   reconciliation:
-    observed_at: 2026-08-20T03:30:00Z
-    source_ref: "staging 88d6bfe8 epoch 331; Texture execution_request rewake deployed; Conductor intake & Texture live supervision aligned; consensus panel completed; docs/reports/choir-effects-super-rewake-and-self-development-report-2026-08-20.md"
-    deploy_identity: "Staging /health reports deployed proxy commit 88d6bfe800c49c13f2f726965dfcbdd4efe35d36 at 2026-08-20T03:25:49Z; CI 32326296847 succeeded including Node B deploy. The retained computer is active at epoch 331 after owner refresh 01a01d34, propose_only generation 1, effects OFF. Guest autoputer commit 88d6bfe8. Pre-A checkpoint 99949fe2 remains published. Operation selfdev-ccf0f1ec0e851750f253fe5f5ed97974 remains the live executing operation."
+    observed_at: 2026-08-20T14:35:00Z
+    source_ref: "staging ab756117 epoch 333; Solitaire play API verified live via POST/GET /api/solitaire/games; safeguards F1-F4 applied; CI optimized to 8.5m; docs/reports/choir-24-hour-architecture-and-effects-progress-report-2026-08-20.md"
+    deploy_identity: "Staging /health reports deployed proxy commit ab756117315719be669692a9e5ed741411ca13f4 at 2026-08-20T14:29:47Z; CI 32378407753 succeeded including Node B deploy. The retained computer is active at epoch 333 after owner refresh 01a01f94, propose_only generation 1, effects OFF. Guest autoputer commit ab756117. Pre-A checkpoint 99949fe2 remains published. Operation selfdev-ccf0f1ec0e851750f253fe5f5ed97974 remains the live executing operation."
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/memo-per-computer-frontend-2026-08-13.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: 2026-08-19 Super omit-reports continuation deployed; Super f515dd0f 200-failed without assign_co_super; Texture execution_request rewake unpaid; live CoSuper authorship of candidate A unpaid; preserved untracked DSH rehearsal docs remain outside this mission
