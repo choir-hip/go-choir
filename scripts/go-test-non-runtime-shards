@@ -1,38 +1,43 @@
 #!/usr/bin/env bash
 # Sharded non-runtime Go test runner for CI.
 #
-# Splits all non-runtime packages across TOTAL_SHARDS runners. Each runner
-# builds and tests only its assigned packages, reducing wall-clock CI time
-# versus running all non-runtime packages in a single serial job.
+# Splits all non-runtime packages across TOTAL_SHARDS runners. When TOTAL_SHARDS >= 4,
+# internal/store (the heaviest non-runtime package with 300+ Dolt tests) is automatically
+# sub-sharded by test name across STORE_SHARDS runners, and all other non-runtime packages
+# are distributed across the remaining runners.
 #
 # Usage in CI:
 #   env:
-#     TOTAL_SHARDS: 3
+#     TOTAL_SHARDS: 6
 #     SHARD_INDEX: ${{ matrix.shard }}
 #   run: scripts/go-test-non-runtime-shards
 #
 # Any extra args (e.g. -race) are forwarded to go test.
 set -euo pipefail
 
-total_shards="${TOTAL_SHARDS:-3}"
+total_shards="${TOTAL_SHARDS:-6}"
 if ! [[ "$total_shards" =~ ^[1-9][0-9]*$ ]]; then
   echo "TOTAL_SHARDS must be a positive integer, got: $total_shards" >&2
   exit 2
 fi
 
-# List all packages except agentcore and textureowner (which have their own sharded runner).
+store_package="./internal/store"
+store_package_full="github.com/yusefmosiah/go-choir/internal/store"
+
+# List all packages except agentcore, textureowner, and store (when store is sub-sharded).
 mapfile -t all_packages < <(go list ./... | grep -Ev '^github.com/yusefmosiah/go-choir/internal/(agentcore|textureowner)$')
 if (( ${#all_packages[@]} == 0 )); then
   echo "No non-agentcore packages found"
   exit 0
 fi
 
-store_package="github.com/yusefmosiah/go-choir/internal/store"
-duration_balanced=0
-if (( total_shards == 3 )); then
+# Determine if we use store sub-sharding (default for 6 shards: 4 store shards + 2 non-store shards)
+store_sharded=0
+store_shards=4
+if (( total_shards >= 4 )); then
   for package in "${all_packages[@]}"; do
-    if [[ "$package" == "$store_package" ]]; then
-      duration_balanced=1
+    if [[ "$package" == "$store_package_full" || "$package" == "$store_package" ]]; then
+      store_sharded=1
       break
     fi
   done
@@ -41,24 +46,71 @@ fi
 run_shard() {
   local shard_index="$1"
   shift
-  local -a selected=()
-  local non_store_index=0
-  for i in "${!all_packages[@]}"; do
-    local package="${all_packages[$i]}"
-    local package_shard
-    if (( duration_balanced )); then
-      if [[ "$package" == "$store_package" ]]; then
-        package_shard=0
-      else
-        package_shard=$(( (non_store_index % (total_shards - 1)) + 1 ))
-        non_store_index=$((non_store_index + 1))
-      fi
-    else
-      package_shard=$(( i % total_shards ))
-    fi
 
-    if (( package_shard == shard_index )); then
-      selected+=("$package")
+  local -a timeout_args=(-timeout=25m)
+
+  if (( store_sharded )); then
+    local non_store_shards=$(( total_shards - store_shards ))
+
+    if (( shard_index < store_shards )); then
+      # Shards 0..(store_shards-1): Run sub-shard of internal/store by test name.
+      local -a store_tests=()
+      mapfile -t store_tests < <(go test "$store_package" -list '^(Test|Example)' | grep -E '^(Test|Example)' || true)
+      if (( ${#store_tests[@]} == 0 )); then
+        echo "No store tests found"
+        return 0
+      fi
+
+      local -a selected_tests=()
+      for i in "${!store_tests[@]}"; do
+        if (( i % store_shards == shard_index )); then
+          selected_tests+=("${store_tests[$i]}")
+        fi
+      done
+
+      if (( ${#selected_tests[@]} == 0 )); then
+        echo "No store tests selected for shard ${shard_index}/${total_shards}"
+        return 0
+      fi
+
+      local regex
+      regex="$(IFS='|'; echo "^(${selected_tests[*]})$")"
+      echo "Running ${#selected_tests[@]} of ${#store_tests[@]} ${store_package} tests in store sub-shard ${shard_index}/${store_shards} (CI shard ${shard_index}/${total_shards})"
+      "$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "$store_package" -run "$regex" "$@"
+      return $?
+    else
+      # Shards store_shards..(total_shards-1): Run other non-runtime packages.
+      local -a non_store_pkgs=()
+      for package in "${all_packages[@]}"; do
+        if [[ "$package" != "$store_package_full" && "$package" != "$store_package" ]]; then
+          non_store_pkgs+=("$package")
+        fi
+      done
+
+      local rel_index=$(( shard_index - store_shards ))
+      local -a selected_pkgs=()
+      for i in "${!non_store_pkgs[@]}"; do
+        if (( i % non_store_shards == rel_index )); then
+          selected_pkgs+=("${non_store_pkgs[$i]}")
+        fi
+      done
+
+      if (( ${#selected_pkgs[@]} == 0 )); then
+        echo "No non-store packages selected for shard ${shard_index}/${total_shards}"
+        return 0
+      fi
+
+      echo "Running ${#selected_pkgs[@]} of ${#non_store_pkgs[@]} non-store packages in non-store sub-shard ${rel_index}/${non_store_shards} (CI shard ${shard_index}/${total_shards})"
+      "$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "${selected_pkgs[@]}" "$@"
+      return $?
+    fi
+  fi
+
+  # Fallback standard package-level sharding
+  local -a selected=()
+  for i in "${!all_packages[@]}"; do
+    if (( i % total_shards == shard_index )); then
+      selected+=("${all_packages[$i]}")
     fi
   done
 
@@ -67,13 +119,7 @@ run_shard() {
     return 0
   fi
 
-  if (( duration_balanced )); then
-    echo "Using duration-aware non-runtime split: ${store_package} isolated in shard 0"
-  fi
   echo "Running ${#selected[@]} of ${#all_packages[@]} non-runtime packages in shard ${shard_index}/${total_shards}"
-  # Pass 25m timeout for all shards to prevent Go's default 10m limit
-  # from cutting multi-package race runs before the 30m CI job limit.
-  local -a timeout_args=(-timeout=25m)
   "$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "${selected[@]}" "$@"
 }
 

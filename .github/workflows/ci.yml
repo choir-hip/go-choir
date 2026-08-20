@@ -175,7 +175,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2]
+        shard: [0, 1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v6
 
@@ -199,7 +199,7 @@ jobs:
       - name: Go test non-runtime shard
         shell: bash
         env:
-          TOTAL_SHARDS: 3
+          TOTAL_SHARDS: 6
           SHARD_INDEX: ${{ matrix.shard }}
           RACE_SELECTED: ${{ needs.plan.outputs.race_selected }}
         run: |
@@ -218,7 +218,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v6
 
@@ -242,7 +242,7 @@ jobs:
       - name: Go test agentcore/textureowner shard
         shell: bash
         env:
-          TOTAL_SHARDS: 4
+          TOTAL_SHARDS: 6
           SHARD_INDEX: ${{ matrix.shard }}
           RACE_SELECTED: ${{ needs.plan.outputs.race_selected }}
         run: |

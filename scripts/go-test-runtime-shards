@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-total_shards="${TOTAL_SHARDS:-4}"
+total_shards="${TOTAL_SHARDS:-6}"
 if ! [[ "$total_shards" =~ ^[1-9][0-9]*$ ]]; then
   echo "TOTAL_SHARDS must be a positive integer, got: $total_shards" >&2
   exit 2
