@@ -334,17 +334,16 @@ def build_pdf(filename):
     story.append(findings_table)
     story.append(Spacer(1, 8))
 
-    # 4. Strategic Landing Roadmap
-    story.append(Paragraph("4. Strategic Execution Roadmap & Landing Gates", h1_style))
+    # 4. Texture Live Supervision & Self-Development Flywheel
+    story.append(Paragraph("4. Texture Live Supervision & Self-Development Flywheel", h1_style))
     story.append(Paragraph(
-        "To ensure zero risk to staging integrity and guarantee total restore to pre-A checkpoint <code>99949fe2</code>, execution proceeds in four sequential gates:",
+        "<b>The Self-Development Flywheel:</b> Choir moves from external coding-harness git-push cycles to autonomous in-VM self-development via the <code>choir</code> CLI and Prompt Bar. Conductor intakes the user request -> Texture creates living document -> Super orchestrates -> CoSuper authors candidate changes inside guest capsules -> Texture updates living revisions (v0 -> vn) with clickable citations transcluding live diffs and test receipts -> Consensus accepts -> VM promotes its own code.",
         body_style
     ))
     story.append(Paragraph(
-        "• <b>Gate 0 (Pre-Promotion Hardening):</b> Apply safeguards F1 (desktop scoping), F2 (event projection), F3 (auth hardening), and F4 (seed preservation). Verify full test suite passes under <code>-race</code> in CI (<8.5m).<br/>"
-        "• <b>Gate 1 (Restore Baseline Re-verification):</b> Confirm staging computer <code>03335285...</code> maintains 40/40 table Dolt equivalence and that live Dolt root matches <code>99949fe2</code>'s content witness <code>c302f6d9...</code>.<br/>"
-        "• <b>Gate 2 (Freeze & Qualified Consensus):</b> Freeze Candidate A with all 5 bundle artifacts bound to capsule receipts. Run qualified consensus under frozen policy <code>reversible-selfdev-v1</code>.<br/>"
-        "• <b>Gate 3 (Live Promotion, Falsification & Restore):</b> Promote Candidate A to live computer code, verify play via <code>/api/solitaire/games</code>, submit falsification evidence (off-suit foundation drag), promote Candidate B (repair), and execute acceptance-fenced restore to Pre-A Checkpoint <code>99949fe2</code>.",
+        "• <b>Clean Repo Cutover:</b> Removed hardcoded example packages and routes from git. Candidate changes are authored dynamically inside guest VM capsules.<br/>"
+        "• <b>Living Revision Protocol:</b> Texture commits human-readable revisions (v0 intake -> v1 scope -> v2 delegation -> v3 authoring diffs -> v4 bundle freeze -> v5 consensus -> v6 promotion -> v7 falsification -> v8 restore).<br/>"
+        "• <b>Live Observable Proof:</b> Trajectory progress is supervised in real-time by opening the active Texture document on <code>choir.news</code>.",
         body_style
     ))
     
