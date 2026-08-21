@@ -432,6 +432,21 @@ func (rt *Runtime) reclaimSupersededAssignmentCapsules(ctx context.Context, pare
 		reclaimParent := parent
 		reclaimParent.RunID = assignment.Binding.ParentRunID
 		reclaimParent.AgentID = assignment.Binding.ParentAgentID
+		if assignment.Disposition.Terminal() && assignment.BoundRunID != "" {
+			// A terminal assignment whose capsule was never revoked still holds
+			// admission budget. cancelAssignedCoSuper replays without revoking
+			// for terminal dispositions, so revoke the capsule directly through
+			// the fate path.
+			reclaimed, err := rt.revokeAssignedCapsule(ctx, assignment,
+				"terminal assignment capsule budget reclaimed for fresh assignment")
+			if err != nil {
+				return fmt.Errorf("reclaim terminal %s (capsule %s): %w",
+					assignment.AssignmentID, assignment.Binding.CapsuleID, err)
+			}
+			log.Printf("runtime: reclaimed terminal assignment capsule %s (capsule %s) disposition=%s",
+				assignment.AssignmentID, assignment.Binding.CapsuleID, reclaimed.CapsuleDisposition)
+			continue
+		}
 		result, err := rt.cancelAssignedCoSuper(ctx, reclaimParent, assignment.AssignmentID, assignment.Binding.Attempt,
 			"superseded by a fresh implementation assignment; capsule budget reclaimed")
 		if err != nil {
