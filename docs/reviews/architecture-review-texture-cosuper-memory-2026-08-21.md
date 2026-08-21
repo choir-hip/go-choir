@@ -99,14 +99,60 @@ The agent's authority is exactly: write revisions (single-writer) and send
 agent-to-agent messages derived from document state. It holds no capsule, no
 event-chain write authority, no provider-routing authority.
 
-## 6. Mission supersession
+## 6. Parallel textures and trajectories (owner direction, 2026-08-21)
 
-The active candidate-proof mission is superseded by this review's conclusions. A new definition sequence starts from:
+Parallel textures are a **release-gate requirement**, not deferred work. The
+product expectation is the one users already have from multiple ChatGPT chats
+or coding-agent sessions: open several documents, each doing its own task,
+concurrently. A sequential-only autoputer cannot ship.
 
-1. Docs-truth mission: rewrite texture-live-supervision-architecture.md (revision protocol + example demotion), current-architecture.md supervision section (actor model, cardinality, scheduling), computer-ontology.md note on capsule↔assignment cardinality direction.
-2. Texture revision-cadence repair: every semantic-state-changing turn yields a new versioned snapshot; add detector for version-stall under continued commits.
-3. Scheduling repair: FIFO selection, prompt narrowing, request-settlement dedup.
-4. Resource policy: memory.high/max split, overcommit factor, pressure pause/resume.
-5. Only then resume the candidate A authorship → consensus → promotion → falsification → restore arc under the new definitions.
+Owner load-test evidence: 50+ VMs on one host without performance
+degradation. The scarce resource framing ("only ~2 capsule slots") was an
+artifact of the current 4096 MiB platform-VM sizing plus hard admission —
+not a physical limit of the architecture.
 
-Effects remain OFF throughout. Checkpoint 99949fe2 remains the restore fence.
+**Mission sequencing (agreed):**
+
+1. **This mission: sequential correctness as proof.** One live assignment per
+   computer, computer-scoped arrival ordering, request expiry, assignment
+   deadlines, retryable admission refusal. This proves the full arc —
+   Texture → Super → CoSuper → freeze → consensus → promote → falsify →
+   restore — on staging with zero concurrency hazards. Candidate A runs here.
+2. **Next mission: parallelism**, grouped with infrastructure headroom:
+   - N concurrent CoSuper assignments per computer, bounded by an admission
+     ledger (sum of requests ≤ overcommit factor × total), not a fixed slot
+     count.
+   - Memory overcommit made real: `memory.high` = requested (throttle),
+     `memory.max` = 2× requested (containment), `memory.events` OOM counters
+     as admission feedback (library support confirmed in containerd/cgroups
+     v3).
+   - VM sizing revisit: raise platform-VM memory and/or right-size per-task;
+     Cloud Hypervisor migration for dynamic resize is the long-term shape —
+     when the VM itself resizes, per-capsule admission accounting becomes
+     advisory rather than load-bearing.
+3. Super remains **one per computer** in both missions — as coherence and
+   error-correction over the whole system (it sees every document's state,
+   arbitrates resources, keeps the computer's story consistent), explicitly
+   *not* as a concurrency limiter. In mission 2 its role shifts from "run one
+   thing at a time" to "admit N things within budget and keep the whole
+   computer coherent."
+
+## 7. Mission supersession
+
+The active candidate-proof mission is superseded by this review's conclusions,
+subject to owner ratification of the successor definition sequence. The new
+sequence:
+
+1. **Docs-truth mission:** rewrite texture-live-supervision-architecture.md
+(Living Document Protocol, example demotion, styleguide plan),
+current-architecture.md supervision section (actor model, two writer classes,
+scheduling contract, resource policy), computer-ontology.md (capsule↔assignment
+cardinality direction; Super as coherence mechanism). Settle the two stale
+selfdev textures on staging (cancel + tombstone pending requests) as mission
+hygiene.
+2. **Sequential-proof mission:** scheduling contract (arrival ordinal, expiry,
+deadlines, retryable refusal), memory.high/max containment, candidate A full
+arc on staging.
+3. **Parallel mission:** admission ledger with overcommit factor, N concurrent
+CoSupers, VM sizing revisit; Cloud Hypervisor migration as the long-term
+resize path.
