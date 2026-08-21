@@ -183,30 +183,34 @@ Some names remain semantically meaningful even on a uniform substrate:
 - **Research** can increasingly be a capability profile and playbook rather
   than a distinct execution architecture.
 
-## Super Is a Protocol, Not a Singleton
+## Super Is a Singleton Supervisor; Consensus Is a Policy Mechanism
 
 No actor should acquire ambient authority merely by being named `Super`.
-Supervision is a durable protocol instance over an explicit scope, membership,
-decision policy, and evidence state. Persistent actors occupy versioned seats
-in that protocol; they do not become the protocol or its authority.
+Ratified 2026-08-21: there is exactly **one Super per ComputerID**, serving as
+the whole-computer coherence, error-correction, and resource-arbitration
+mechanism — it sees every document's state and keeps the system's story
+consistent. It is not a concurrency limiter and never a document or computer
+mutator. Multi-seat *consensus panels* remain a policy mechanism for effect
+authorization; they do not multiply the Super itself.
 
 ```text
-supervision scope + decision class
+one computer -> one Super (coherence/error correction)
+  -> supervision scope + decision class per effect
   -> freeze eligible seats and independence policy
-  -> concurrent or staged supervisor activations
+  -> concurrent or staged consensus activations (policy seats, not Supers)
   -> typed proposals, objections, abstentions, and evidence
   -> quorum/adjudication reducer
   -> policy-evaluated consensus receipt
   -> trusted authority reducer may commit or refuse
 ```
 
-Multiple active seats are the normal mode. A one-seat round may be an explicit
-degraded or low-risk continuity mode only when the selected policy allows it;
-seat count alone neither grants nor denies an effect class. High-consequence
-and irreversible effects require the stronger threshold, independence domains,
-evidence, dissent disposition, and consequence receipts their predeclared
-policy names. A human may be a required, optional, or absent participant. The
-policy is selected before outputs are visible.
+Multiple active consensus seats are the normal mode for consequential effects.
+A one-seat round may be an explicit degraded or low-risk continuity mode only
+when the selected policy allows it; seat count alone neither grants nor denies
+an effect class. High-consequence and irreversible effects require the stronger
+threshold, independence domains, evidence, dissent disposition, and consequence
+receipts their predeclared policy names. A human may be a required, optional, or
+absent participant. The policy is selected before outputs are visible.
 Failures and abstentions remain visible and cannot silently shrink the quorum.
 A coordinator may schedule calls and synthesize evidence, but its synthesis is
 another typed proposal, not a privileged final answer.
@@ -596,8 +600,8 @@ This proposal connects to live or code-present Choir substrate as follows:
 | `internal/modelpolicy` | Per-computer model policy and fallback seed | Generalize from one model per activation role to programmatic multi-call selection and consensus receipts |
 | CoSuper capsule assignments | Initial effects-capable RLM target | Generalize implementation/verification scripts into capability-bound Go orchestration without weakening frozen-subject verification |
 | Researcher typed updates | Research capability profile and typed outcome | Move research orchestration into the same RLM substrate while retaining its narrow canonical write boundary |
-| Texture owner/reducer | Future RLM actor with unique canonical ownership | Preserve atomic Texture turn and reducer authority; do not expose direct document mutation outside its typed transaction |
-| Existing Super lifecycle | Seed for persistent supervision actors | Replace singleton semantics with a scoped Super protocol, versioned seats, quorum receipts, and no direct effect authority |
+| Texture owner/reducer | Future RLM actor; two writer classes | `AuthorUser` owner edits (immediate canonical-head CAS) + `AuthorAppAgent` Texture-agent revisions (sole agent writer). Preserve atomic Texture turn and reducer authority; do not expose direct document mutation outside its typed transaction |
+| Existing Super lifecycle | Seed for the per-computer singleton supervisor | One Super per ComputerID as coherence/error-correction (ratified 2026-08-21), never a concurrency limiter; consensus panels remain policy mechanisms, not additional Supers |
 | Email appagent and maild | Durable integration actor plus trusted connector/outbox | Move drafting/orchestration into RLM while retaining approval and delivery outside model-authored code |
 | Capsule transaction builder | Typed effect proposal | Bind RLM trace root and exact activation/capability/model receipts into the frozen proposal |
 | Computer event, updater, ComputerVersion, vmctl | Audited commit and projection path | No authority collapse; RLM outcomes enter only through existing typed reducers and transactions |
@@ -629,10 +633,12 @@ replacement. A stronger model can take a later shift over unresolved
 obligations without pretending to restore the prior model's mind. This is
 supervisor independence, not only long-context independence.
 
-The same property supports multiple simultaneous supervisory seats. Seats can
-inspect the same frozen decision state, exchange typed objections, or operate
-independently until adjudication. Replacing one seat does not replace the
-protocol, erase dissent, or strand the workstream.
+The same property supports multiple simultaneous consensus seats within a
+policy-defined panel (ratified 2026-08-21: these are policy seats for effect
+authorization, never additional Supers). Seats can inspect the same frozen
+decision state, exchange typed objections, or operate independently until
+adjudication. Replacing one seat does not replace the protocol, erase dissent,
+or strand the workstream.
 
 ### Explicit orchestration graphs
 
@@ -658,9 +664,8 @@ New functions can often ship as typed modules and policy rather than new
 harness roles. A legal-research or incident-response actor can compose research,
 source, communication, and evidence modules on the same kernel.
 
-### Supervision as a programmable organizational graph
-
-Shared channel policies allow a scoped set of supervisory seats to observe an
+Shared channel policies allow a scoped set of consensus-panel seats (policy
+mechanisms under the single per-computer Super) to observe an
 entire delegated workstream, not merely direct replies. Typed disagreements,
 blockers, capability requests, and effect proposals can drive selective
 wakeups, new rounds, and stronger quorum requirements.
@@ -801,16 +806,16 @@ doctrine.
 - Move Email drafting and conversation orchestration onto the RLM kernel.
 - Prove tainted input handling and idempotent external effects.
 
-### Phase 5: Texture and the Super protocol
+### Phase 5: Texture and the per-computer Super
 
-- Give persistent actors versioned seats in a system-owned Super protocol with
-  supervised-channel affordances and no direct effect authority.
+- Keep exactly one Super per ComputerID as coherence/error-correction and give
+  persistent consensus actors versioned policy seats (supervised-channel
+  affordances, no direct effect authority).
 - Add decision-class quorum, independence, dissent, timeout, and replacement
   receipts; require stronger policy for irreversible decisions.
-- Evaluate Texture on the RLM substrate while preserving its unique owner and
-  atomic reducer contract.
-- Delete superseded persona-specific activation loops only after product-path,
-  restart, supervision, and refusal evidence proves the replacement.
+- Evaluate Texture on the RLM substrate while preserving the two writer classes
+  (`AuthorUser` owner CAS; `AuthorAppAgent` Texture revisions) and its atomic
+  reducer contract.
 
 ## Implementation Questions For The Definition
 

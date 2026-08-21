@@ -114,12 +114,12 @@ measures:
 
 now:
   status: working
-  slice: "Author candidate A inside guest capsule on staging computer 03335285... (Epoch 347), freeze 5 bundle artifacts, evaluate qualified consensus under reversible-selfdev-v1, promote, verify, and restore."
-  question: "How should the CoSuper capsule, after the provider credential and model-routing recovery, author, build, test, and freeze candidate change A under the predeclared reversible decision policy, with all five bundle refs bound to capsule receipts and no per-candidate human decision?"
+  slice: "Reconcile competing pending Texture execution requests on computer 03335285... at guest epoch 361/build e42c65c0: select one live request under the ratified scheduling contract, settle stale duplicates, then resume candidate A authoring, five-ref freeze, consensus, promotion, verification, falsification, and restore."
+  question: "How should the scheduler durably choose one non-expired execution request (computer-scoped arrival ordinal/FIFO), settle stale duplicates whose operations already have terminal attempts as late evidence, and keep retryable refusal pending so one CoSuper can author, build, test, and freeze candidate A without assignment ping-pong?"
   reconciliation:
-    observed_at: "2026-08-21T01:06:02Z"
-    source_ref: "staging 3704dd78; pre-A Checkpoint 99949fe2 remains verified; ChatGPT OAuth copied to Node B with matching SHA-256; the retained computer is active at epoch 347; the post-refresh persistent Super remains pending and no post-fix CoSuper tool-loop attempt has yet occurred."
-    deploy_identity: "Staging /health reports deployed proxy commit 3704dd789cd9a2099ddb94f3a20fcaae1cf6a718 at 2026-08-21T00:56:10Z; retained computer computer-03335285269bdba4f94377e56879f9e6 reports active epoch 347 and runtime ready; effects remain OFF; pre-A checkpoint 99949fe2 remains published."
+    observed_at: "2026-08-21 (see docs/evidence/effects-red-assignment-supersession-loop-2026-08-21.md)"
+    source_ref: "staging deployed e42c65c0; retained computer epoch 361; capsule memory reclaim works; competing pending Texture execution requests for distinct operations ping-pong fresh assignments, cancelling every CoSuper before author/build/freeze; no candidate artifact exists."
+    deploy_identity: "Staging /health reports deployed proxy commit e42c65c04f0681e4dd695853ed1396fed736a467; retained computer computer-03335285269bdba4f94377e56879f9e6 reports active epoch 361; effects remain OFF; pre-A checkpoint 99949fe2 remains published and untouched."
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "clean single worktree /Users/wiz/go-choir"
@@ -142,15 +142,15 @@ now:
     recorded_at: "2026-08-13T14:18:16Z"
     consequence: "Execute reversible self-development candidate authorship, qualified consensus under reversible-selfdev-v1, promotion, live play verification, falsification, and acceptance-fenced restore back to checkpoint 99949fe2."
   evidence_refs:
+    - "docs/evidence/effects-red-assignment-supersession-loop-2026-08-21.md"
+    - "docs/evidence/effects-red-capsule-memory-budget-exhaustion-2026-08-21.md"
     - "docs/evidence/effects-red-pre-a-checkpoint-published-2026-08-19.md"
-    - "docs/evidence/effects-red-super-texture-rewake-2026-08-20.md"
-    - "docs/evidence/effects-red-passivated-super-missing-trajectory-blocks-reactivation-2026-08-20.md"
     - "docs/evidence/effects-red-super-model-policy-fallback-2026-08-21.md"
     - "docs/texture-live-supervision-architecture.md"
+    - "docs/reviews/architecture-review-texture-cosuper-memory-2026-08-21.md"
     - "docs/reports/choir-autonomous-supervision-and-self-development-master-blueprint-2026-08-20.md"
-    - "docs/reports/choir-24-hour-architecture-and-effects-progress-report-2026-08-20.md"
-  blocker_or_risk: "The ChatGPT OAuth token is refreshed, copied byte-identically to Node B, and ChatGPT calls succeed. Source fix 3704dd78 is deployed, but the retained computer's post-refresh Super faed9f4f remains pending after boot passivation with empty trajectory/requested_by fields; no post-fix CoSuper has entered the tool loop. Effects remain OFF."
-  next_action: "Resolve the already-documented persistent-Super reactivation blocker without HTTP Super-start or cancellation, then verify a new CoSuper carries ChatGPT model metadata or falls back from a provider-availability error, and resume candidate A authorship. Effects remain OFF."
+  blocker_or_risk: "Competing pending Texture execution requests for distinct self-development operations cause persistent Super cycles to open fresh assignments that supersede and cancel their predecessors (memory reclaim works; scheduling does not yet). No candidate artifact, bundle, proposal, promotion, or live state write exists; effects remain OFF."
+  next_action: "Under the ratified scheduling contract, select exactly one non-expired request by computer arrival ordinal/FIFO, settle stale duplicates whose operations already have terminal attempts as late evidence, and keep retryable refusal pending. Only after the loop is stopped, resume CoSuper candidate A authoring, five-ref freeze, qualified consensus, promotion, live-play verification, falsification with B, and restore. Effects remain OFF."
 
 receipts:
   - id: effects-candidate-proof-baseline-2026-08-20
