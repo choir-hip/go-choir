@@ -501,6 +501,7 @@ func (rt *Runtime) enqueuePersistentSuperRecoveryOccurrence(ctx context.Context,
 		if err != nil {
 			return err
 		}
+		log.Printf("runtime: persistent-Super recovery occurrence queued run=%s update=%s source=%s", rec.RunID, packet.UpdateID, packet.AgentID)
 		if err := rt.dispatchActor(context.WithoutCancel(ctx), rec.OwnerID, rec.ComputerID, rec.AgentID,
 			"coagent_result", occurrence, trajectoryID, packet.AgentID); err != nil {
 			return fmt.Errorf("dispatch persistent Super recovery %s: %w", packet.UpdateID, err)

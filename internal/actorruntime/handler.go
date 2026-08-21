@@ -160,19 +160,23 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		return h.memoryFromRunState(rec)
 	}
 	if strings.HasPrefix(strings.TrimSpace(u.Content), agentcore.PersistentSuperRecoveryPrefix) {
+		log.Printf("actorruntime: persistent Super recovery received agent=%s trajectory=%s from=%s", agentID, u.TrajectoryID, u.FromAgentID)
 		rec, terminal, recoveryErr := h.rt.ResolvePersistentSuperRecovery(ctx, ownerID, computerID, agentID, u.Content, u.TrajectoryID, u.FromAgentID)
 		if recoveryErr != nil {
 			if errors.Is(recoveryErr, agentcore.ErrInvalidPersistentSuperRecovery) {
+				log.Printf("actorruntime: persistent Super recovery discarded as invalid agent=%s: %v", agentID, recoveryErr)
 				return nil, nil
 			}
 			return nil, fmt.Errorf("%w: actorruntime: defer persistent Super recovery until a distinct wake/restart: %v", actor.ErrDeferUnprocessed, recoveryErr)
 		}
 		if terminal {
+			log.Printf("actorruntime: persistent Super recovery terminal agent=%s", agentID)
 			return nil, nil
 		}
 		if rec == nil {
 			return nil, fmt.Errorf("actorruntime: persistent Super recovery returned no exact run")
 		}
+		log.Printf("actorruntime: persistent Super recovery executing run=%s", rec.RunID)
 		if err := h.rt.ExecuteActivationSyncChecked(ctx, rec); err != nil {
 			if errors.Is(err, agentcore.ErrActivationOccurrenceMustRemainUnprocessed) {
 				return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, err)

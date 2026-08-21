@@ -2136,8 +2136,11 @@ func (rt *Runtime) rewarmInterruptedPersistentSuperActors(ctx context.Context) {
 			continue
 		}
 		seen[key] = struct{}{}
+		log.Printf("runtime: boot persistent-Super rewarm candidate run=%s owner=%s agent=%s", run.RunID, run.OwnerID, run.AgentID)
 		if _, reconcileErr := rt.reconcilePersistentSuperActor(ctx, run.OwnerID, run.AgentID); reconcileErr != nil {
 			log.Printf("runtime: boot persistent-Super rewarm run %s: %v", run.RunID, reconcileErr)
+		} else {
+			log.Printf("runtime: boot persistent-Super rewarm dispatched run=%s", run.RunID)
 		}
 	}
 }
