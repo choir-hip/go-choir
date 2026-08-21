@@ -349,6 +349,59 @@ func TestPersistentSuperLifecycleControlsStayTrajectoryIsolatedThenReconcile(t *
 	}
 }
 
+func TestPersistentSuperRestartUsesDistinctRecoveryOccurrence(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	ownerID := "owner-super-recovery-occurrence"
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-recovery-occurrence", superAgent.AgentID, agentprofile.Super)
+	type dispatch struct {
+		kind, content, trajectoryID, fromAgentID string
+	}
+	var dispatches []dispatch
+	rt.SetDispatchActor(func(_ context.Context, _, _, _, kind, content, trajectoryID, fromAgentID string) error {
+		dispatches = append(dispatches, dispatch{kind: kind, content: content, trajectoryID: trajectoryID, fromAgentID: fromAgentID})
+		return nil
+	})
+	first, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	if err != nil || first == nil {
+		t.Fatalf("initial Super reconciliation=%+v err=%v", first, err)
+	}
+	if len(dispatches) != 1 || dispatches[0].kind != "initial_dispatch" {
+		t.Fatalf("initial dispatches=%+v", dispatches)
+	}
+	dispatches = nil
+	first.State = types.RunPassivated
+	first.Metadata = cloneMetadata(first.Metadata)
+	first.Metadata["passivated_reason"] = "runtime_restarted"
+	first.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(ctx, *first); err != nil {
+		t.Fatal(err)
+	}
+	recovered, ok, err := rt.reactivateRestartedPersistentSuperControlRun(ctx, ownerID, superAgent.AgentID)
+	if err != nil || !ok || recovered == nil || recovered.RunID != first.RunID || recovered.State != types.RunPending {
+		t.Fatalf("recovered Super=%+v ok=%t err=%v", recovered, ok, err)
+	}
+	if len(dispatches) != 1 || dispatches[0].kind != "coagent_result" ||
+		!strings.HasPrefix(dispatches[0].content, PersistentSuperRecoveryPrefix) ||
+		dispatches[0].trajectoryID != fixture.trajectoryID || dispatches[0].fromAgentID != fixture.control.AgentID {
+		t.Fatalf("recovery dispatches=%+v", dispatches)
+	}
+	occurrence, err := DecodePersistentSuperRecovery(dispatches[0].content)
+	if err != nil || occurrence.RunID != first.RunID || len(occurrence.Controls) != 1 ||
+		occurrence.Controls[0].UpdateID != fixture.control.UpdateID {
+		t.Fatalf("recovery occurrence=%+v err=%v", occurrence, err)
+	}
+	resolved, terminal, err := rt.ResolvePersistentSuperRecovery(ctx, ownerID, rt.TextureComputerID(), superAgent.AgentID,
+		dispatches[0].content, dispatches[0].trajectoryID, dispatches[0].fromAgentID)
+	if err != nil || terminal || resolved == nil || resolved.RunID != first.RunID {
+		t.Fatalf("resolved recovery=%+v terminal=%t err=%v", resolved, terminal, err)
+	}
+}
+
 func TestPersistentSuperReconcilesOtherTrajectoryAfterTerminalRun(t *testing.T) {
 	rt, s := testRuntime(t)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })

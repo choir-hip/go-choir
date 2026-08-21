@@ -159,6 +159,28 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		}
 		return h.memoryFromRunState(rec)
 	}
+	if strings.HasPrefix(strings.TrimSpace(u.Content), agentcore.PersistentSuperRecoveryPrefix) {
+		rec, terminal, recoveryErr := h.rt.ResolvePersistentSuperRecovery(ctx, ownerID, computerID, agentID, u.Content, u.TrajectoryID, u.FromAgentID)
+		if recoveryErr != nil {
+			if errors.Is(recoveryErr, agentcore.ErrInvalidPersistentSuperRecovery) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("%w: actorruntime: defer persistent Super recovery until a distinct wake/restart: %v", actor.ErrDeferUnprocessed, recoveryErr)
+		}
+		if terminal {
+			return nil, nil
+		}
+		if rec == nil {
+			return nil, fmt.Errorf("actorruntime: persistent Super recovery returned no exact run")
+		}
+		if err := h.rt.ExecuteActivationSyncChecked(ctx, rec); err != nil {
+			if errors.Is(err, agentcore.ErrActivationOccurrenceMustRemainUnprocessed) {
+				return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, err)
+			}
+			return nil, fmt.Errorf("actorruntime: execute persistent Super recovery: %w", err)
+		}
+		return h.memoryFromRunState(rec)
+	}
 	if strings.HasPrefix(agentID, agentprofile.Texture+":") {
 		if h.textureOwner == nil {
 			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture owner is not bound"))

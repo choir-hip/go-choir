@@ -3,12 +3,14 @@ package agentcore
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,6 +42,123 @@ const (
 // that same durable failure. Actor delivery may acknowledge this error; all
 // other reconcile errors remain retryable.
 var ErrDurablyTerminalLifecycleControlActivation = errors.New("durably terminal lifecycle control activation")
+
+const PersistentSuperRecoveryPrefix = "persistent-super-recovery:v1:"
+
+var ErrInvalidPersistentSuperRecovery = errors.New("invalid persistent Super recovery occurrence")
+
+type PersistentSuperRecoveryControl struct {
+	UpdateID         string
+	AgentID          string
+	Direction        types.LifecyclePacketDirection
+	LifecycleVersion int64
+	ReducerSeq       int64
+}
+
+type PersistentSuperRecoveryOccurrence struct {
+	OwnerID, ComputerID, TrajectoryID, AgentID, RunID, SourceAgentID string
+	Controls                                                         []PersistentSuperRecoveryControl
+}
+
+func EncodePersistentSuperRecovery(o PersistentSuperRecoveryOccurrence) (string, error) {
+	fields := []string{o.OwnerID, o.ComputerID, o.TrajectoryID, o.AgentID, o.RunID, o.SourceAgentID, strconv.Itoa(len(o.Controls))}
+	for _, field := range fields[:6] {
+		if strings.TrimSpace(field) == "" {
+			return "", fmt.Errorf("%w: incomplete scope", ErrInvalidPersistentSuperRecovery)
+		}
+	}
+	if len(o.Controls) == 0 || len(o.Controls) > 10000 {
+		return "", fmt.Errorf("%w: controls are required", ErrInvalidPersistentSuperRecovery)
+	}
+	raw := make([]byte, 0, 512)
+	for _, field := range fields {
+		raw = appendTextureOccurrenceField(raw, strings.TrimSpace(field))
+	}
+	for _, control := range o.Controls {
+		if strings.TrimSpace(control.UpdateID) == "" || strings.TrimSpace(control.AgentID) == "" ||
+			control.Direction == "" || control.LifecycleVersion <= 0 || control.ReducerSeq <= 0 ||
+			strings.TrimSpace(control.AgentID) != strings.TrimSpace(o.SourceAgentID) {
+			return "", fmt.Errorf("%w: invalid control", ErrInvalidPersistentSuperRecovery)
+		}
+		raw = appendTextureOccurrenceField(raw, strings.TrimSpace(control.UpdateID))
+		raw = appendTextureOccurrenceField(raw, strings.TrimSpace(control.AgentID))
+		raw = appendTextureOccurrenceField(raw, string(control.Direction))
+		raw = appendTextureOccurrenceField(raw, strconv.FormatInt(control.LifecycleVersion, 10))
+		raw = appendTextureOccurrenceField(raw, strconv.FormatInt(control.ReducerSeq, 10))
+	}
+	return PersistentSuperRecoveryPrefix + base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func DecodePersistentSuperRecovery(content string) (PersistentSuperRecoveryOccurrence, error) {
+	var out PersistentSuperRecoveryOccurrence
+	content = strings.TrimSpace(content)
+	if !strings.HasPrefix(content, PersistentSuperRecoveryPrefix) {
+		return out, fmt.Errorf("%w: unsupported identity", ErrInvalidPersistentSuperRecovery)
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(content, PersistentSuperRecoveryPrefix))
+	if err != nil {
+		return out, fmt.Errorf("%w: decode: %v", ErrInvalidPersistentSuperRecovery, err)
+	}
+	at := 0
+	fields := make([]string, 7)
+	for i := range fields {
+		fields[i], err = readTextureOccurrenceField(raw, &at)
+		if err != nil {
+			return out, fmt.Errorf("%w: read scope: %v", ErrInvalidPersistentSuperRecovery, err)
+		}
+	}
+	count64, err := strconv.ParseInt(fields[6], 10, 32)
+	if err != nil || count64 <= 0 || count64 > 10000 || strconv.FormatInt(count64, 10) != fields[6] {
+		return out, fmt.Errorf("%w: invalid control count", ErrInvalidPersistentSuperRecovery)
+	}
+	out = PersistentSuperRecoveryOccurrence{
+		OwnerID: fields[0], ComputerID: fields[1], TrajectoryID: fields[2],
+		AgentID: fields[3], RunID: fields[4], SourceAgentID: fields[5],
+		Controls: make([]PersistentSuperRecoveryControl, int(count64)),
+	}
+	for i := range out.Controls {
+		updateID, updateErr := readTextureOccurrenceField(raw, &at)
+		if updateErr != nil {
+			return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: read control: %v", ErrInvalidPersistentSuperRecovery, updateErr)
+		}
+		agentID, agentErr := readTextureOccurrenceField(raw, &at)
+		if agentErr != nil {
+			return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: read control agent: %v", ErrInvalidPersistentSuperRecovery, agentErr)
+		}
+		direction, directionErr := readTextureOccurrenceField(raw, &at)
+		if directionErr != nil {
+			return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: read control direction: %v", ErrInvalidPersistentSuperRecovery, directionErr)
+		}
+		versionRaw, versionErr := readTextureOccurrenceField(raw, &at)
+		if versionErr != nil {
+			return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: read lifecycle version: %v", ErrInvalidPersistentSuperRecovery, versionErr)
+		}
+		seqRaw, seqErr := readTextureOccurrenceField(raw, &at)
+		if seqErr != nil {
+			return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: read reducer sequence: %v", ErrInvalidPersistentSuperRecovery, seqErr)
+		}
+		version, versionErr := strconv.ParseInt(versionRaw, 10, 64)
+		seq, seqErr := strconv.ParseInt(seqRaw, 10, 64)
+		if strings.TrimSpace(updateID) == "" || strings.TrimSpace(agentID) != strings.TrimSpace(out.SourceAgentID) ||
+			(direction != string(types.LifecyclePacketDirectionControl) && direction != string(types.LifecyclePacketDirectionProducerReport)) ||
+			version <= 0 || seq <= 0 || versionErr != nil || seqErr != nil ||
+			strconv.FormatInt(version, 10) != versionRaw || strconv.FormatInt(seq, 10) != seqRaw {
+			return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: invalid control authority", ErrInvalidPersistentSuperRecovery)
+		}
+		out.Controls[i] = PersistentSuperRecoveryControl{
+			UpdateID: strings.TrimSpace(updateID), AgentID: strings.TrimSpace(agentID),
+			Direction: types.LifecyclePacketDirection(direction), LifecycleVersion: version, ReducerSeq: seq,
+		}
+	}
+	if at != len(raw) {
+		return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: trailing bytes", ErrInvalidPersistentSuperRecovery)
+	}
+	canonical, canonicalErr := EncodePersistentSuperRecovery(out)
+	if canonicalErr != nil || canonical != content {
+		return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: noncanonical encoding", ErrInvalidPersistentSuperRecovery)
+	}
+	return out, nil
+}
 
 type lifecycleActivationVersion = types.LifecycleControlActivationVersion
 
@@ -311,6 +430,7 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 		return nil, false, fmt.Errorf("list restarted persistent-Super runs: %w", err)
 	}
 	var candidate *types.RunRecord
+	var candidateControls []types.CoagentSourcePacket
 	for i := range runs {
 		run := &runs[i]
 		passivatedReason := metadataStringValue(run.Metadata, "passivated_reason")
@@ -332,6 +452,7 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 		if candidate == nil || run.UpdatedAt.After(candidate.UpdatedAt) || (run.UpdatedAt.Equal(candidate.UpdatedAt) && run.RunID < candidate.RunID) {
 			copy := *run
 			candidate = &copy
+			candidateControls = append([]types.CoagentSourcePacket(nil), controls...)
 		}
 	}
 	if candidate == nil {
@@ -349,8 +470,114 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 	if err := rt.store.UpdateRun(ctx, *candidate); err != nil {
 		return nil, false, fmt.Errorf("reactivate restarted persistent-Super control run %s: %w", candidate.RunID, err)
 	}
-	rt.activate(candidate)
+	if err := rt.enqueuePersistentSuperRecoveryOccurrence(ctx, candidate, candidateControls); err != nil {
+		return nil, false, fmt.Errorf("enqueue restarted persistent-Super recovery: %w", err)
+	}
 	return candidate, true, nil
+}
+
+func (rt *Runtime) enqueuePersistentSuperRecoveryOccurrence(ctx context.Context, rec *types.RunRecord, packets []types.CoagentSourcePacket) error {
+	if rt == nil || rt.store == nil || rt.dispatchActor == nil || rec == nil || len(packets) == 0 {
+		return fmt.Errorf("persistent Super recovery occurrence dispatch unavailable")
+	}
+	trajectoryID := lifecycleControlTrajectoryForRun(rec)
+	if trajectoryID == "" || !isPersistentSuperAgentRun(rec) {
+		return fmt.Errorf("%w: recovery run scope is not persistent Super", ErrInvalidPersistentSuperRecovery)
+	}
+	for _, packet := range packets {
+		if packet.OwnerID != rec.OwnerID || packet.ComputerID != rec.ComputerID ||
+			packet.TargetAgentID != rec.AgentID || packet.TrajectoryID != trajectoryID ||
+			packet.AgentID == "" || packet.Direction == "" {
+			return fmt.Errorf("%w: recovery packet scope mismatch", ErrInvalidPersistentSuperRecovery)
+		}
+		occurrence, err := EncodePersistentSuperRecovery(PersistentSuperRecoveryOccurrence{
+			OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, TrajectoryID: trajectoryID,
+			AgentID: rec.AgentID, RunID: rec.RunID, SourceAgentID: packet.AgentID,
+			Controls: []PersistentSuperRecoveryControl{{
+				UpdateID: packet.UpdateID, AgentID: packet.AgentID, Direction: packet.Direction,
+				LifecycleVersion: packet.LifecycleVersion, ReducerSeq: packet.ReducerSeq,
+			}},
+		})
+		if err != nil {
+			return err
+		}
+		if err := rt.dispatchActor(context.WithoutCancel(ctx), rec.OwnerID, rec.ComputerID, rec.AgentID,
+			"coagent_result", occurrence, trajectoryID, packet.AgentID); err != nil {
+			return fmt.Errorf("dispatch persistent Super recovery %s: %w", packet.UpdateID, err)
+		}
+	}
+	return nil
+}
+
+// ResolvePersistentSuperRecovery authenticates a distinct restart wake for the
+// exact persistent Super run. It does not discover a replacement run: the
+// occurrence names the run and the delivered packet authority it must resume.
+func (rt *Runtime) ResolvePersistentSuperRecovery(ctx context.Context, ownerID, computerID, agentID, content, trajectoryID, fromAgentID string) (*types.RunRecord, bool, error) {
+	occurrence, err := DecodePersistentSuperRecovery(content)
+	if err != nil {
+		return nil, false, err
+	}
+	if occurrence.OwnerID != strings.TrimSpace(ownerID) ||
+		occurrence.ComputerID != strings.TrimSpace(computerID) ||
+		occurrence.AgentID != strings.TrimSpace(agentID) ||
+		occurrence.TrajectoryID != strings.TrimSpace(trajectoryID) ||
+		occurrence.SourceAgentID != strings.TrimSpace(fromAgentID) ||
+		occurrence.AgentID != persistentSuperAgentID(occurrence.OwnerID) {
+		return nil, false, fmt.Errorf("%w: envelope mismatch", ErrInvalidPersistentSuperRecovery)
+	}
+	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, occurrence.OwnerID, occurrence.ComputerID, occurrence.TrajectoryID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, false, fmt.Errorf("%w: trajectory is missing", ErrInvalidPersistentSuperRecovery)
+		}
+		return nil, false, fmt.Errorf("load persistent Super recovery trajectory: %w", err)
+	}
+	if trajectory.Status != types.TrajectoryLive {
+		return nil, true, nil
+	}
+	if _, cancelErr := rt.store.GetLifecycleCancellationIntent(ctx, occurrence.OwnerID, occurrence.ComputerID, occurrence.TrajectoryID); cancelErr == nil {
+		return nil, true, nil
+	} else if !errors.Is(cancelErr, store.ErrNotFound) {
+		return nil, false, fmt.Errorf("load persistent Super recovery cancellation intent: %w", cancelErr)
+	}
+	rec, err := rt.store.GetRunByOwner(ctx, occurrence.OwnerID, occurrence.RunID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, false, fmt.Errorf("%w: run is missing", ErrInvalidPersistentSuperRecovery)
+		}
+		return nil, false, fmt.Errorf("load persistent Super recovery run: %w", err)
+	}
+	if rec.State.Terminal() {
+		return nil, true, nil
+	}
+	if rec.OwnerID != occurrence.OwnerID || rec.ComputerID != occurrence.ComputerID ||
+		rec.AgentID != occurrence.AgentID || !isPersistentSuperAgentRun(&rec) ||
+		rec.TrajectoryID != "" ||
+		metadataStringValue(rec.Metadata, "assignment_trajectory_id") != occurrence.TrajectoryID {
+		return nil, false, fmt.Errorf("%w: run authority mismatch", ErrInvalidPersistentSuperRecovery)
+	}
+	if rec.State != types.RunPending && rec.State != types.RunRunning {
+		return nil, false, fmt.Errorf("%w: run is not executable", ErrInvalidPersistentSuperRecovery)
+	}
+	packets, err := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, &rec)
+	if err != nil {
+		return nil, false, fmt.Errorf("load persistent Super recovery packets: %w", err)
+	}
+	if len(packets) == 0 {
+		return nil, true, nil
+	}
+	if len(packets) != len(occurrence.Controls) {
+		return nil, false, fmt.Errorf("%w: packet set changed", ErrInvalidPersistentSuperRecovery)
+	}
+	for index, packet := range packets {
+		expected := occurrence.Controls[index]
+		if packet.UpdateID != expected.UpdateID || packet.AgentID != expected.AgentID ||
+			packet.Direction != expected.Direction || packet.TargetAgentID != occurrence.AgentID ||
+			packet.LifecycleVersion != expected.LifecycleVersion || packet.ReducerSeq != expected.ReducerSeq {
+			return nil, false, fmt.Errorf("%w: packet authority changed", ErrInvalidPersistentSuperRecovery)
+		}
+	}
+	return &rec, false, nil
 }
 
 func (rt *Runtime) markPersistentSuperRunUpdatesDelivered(ctx context.Context, rec *types.RunRecord) error {
