@@ -11,14 +11,15 @@ owner-ratified and supersedes Continuous Texture Supervision (CTS)
 as of 2026-08-11, corrected by owner direction on 2026-08-13. Proof
 target is **policy-governed autonomy**: capsule-authored source change
 under effect-specific qualified consensus, E2 correction, and
-acceptance-fenced restore through the completed tape-recovery
-substrate (VM-local projection plus computer-surface frontend), plus
-one exact irreversible email send under a stronger no-human-seat
-acceptance policy with durable delivery and consequence receipts
-(platform/cycle OUT of restore; computer-surface frontend is
-per-computer by invariant). Effects remain OFF until this
-Definition's decision-policy rehearsal gates pass. Do not
-independently green restore. Active execution proceeds directly through in-VM candidate authoring inside guest capsules, bundle freeze, qualified consensus under reversible-selfdev-v1, promotion, live play verification, falsification with B, and restore to pre-A checkpoint 99949fe2.
+acceptance-fenced restore through the completed tape-recovery substrate
+(platform/cycle OUT of restore; computer-surface frontend is per-computer).
+This compact candidate-proof Definition does not include the predecessor's
+email leg. Effects remain OFF until this Definition's decision-policy
+rehearsal gates pass. Do not independently green restore. Active execution
+proceeds directly through in-VM candidate authoring inside guest capsules,
+bundle freeze, qualified consensus under reversible-selfdev-v1, promotion,
+live play verification, falsification with B, and restore to pre-A checkpoint
+99949fe2.
 
 ## Completed Substrate — Tape-Based Recovery
 
@@ -33,22 +34,18 @@ settled evidence and the restore substrate, not an executable
 entrypoint. Do not rematerialize or invent `choir computer create`
 to reopen it.
 
-## Effects Envelope — On The Paid Restore Substrate
+## Superseded Effects Definition — Historical Evidence
 
 [`definitions/choir-supervised-self-development-effects-2026-08-11.md`](definitions/choir-supervised-self-development-effects-2026-08-11.md)
-owns decision-policy and effect promotion on top of the completed
-tape-recovery substrate. Proof target is **policy-governed autonomy**
-as stated in the active Definition above (platform/cycle OUT of
-restore; computer-surface frontend is per-computer by invariant;
-tape-recovery paid serving_join 2026-08-15).
-Reasoning and retired approaches live in the Definition's
+is superseded by the candidate-proof Definition above. Its policy, email, and
+restore reasoning remain citable historical evidence; it is not an executable
+entrypoint and does not own current next_action. The tape-recovery Definition
+owns restore substrate receipts; the candidate-proof Definition owns the current
+candidate proof. Reasoning and retired approaches live in the
 [supplement](definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md).
-Its restore legs — checkpoint completeness, revert build, scope refusal,
-and total restore — are owned by and satisfied-by the tape-recovery
-Definition; this Definition owns decision-policy and effect promotion on
-top of that substrate.
 `choir-self-development-roadmap-2026-08-11.md` is a **historical migration
 receipt**, not a live schedule. CTS remains citable evidence, not an entrypoint.
+
 The scope-disjoint
 [`choir-instruction-substrate-prune-2026-08-11.md`](definitions/choir-instruction-substrate-prune-2026-08-11.md)
 completed 2026-08-12: 106/106 beads dispositioned, doccheck signal repaired,
@@ -68,21 +65,21 @@ The latest staging runtime/proxy deployment observed by the rename acceptance is
 `3cd12d1452ad1d06b5df57cf9183313568f60cb5`; `/health` reported proxy status
 OK and vmctl status OK on 2026-08-12. The earlier `914f7a5d976a` frontend/proxy
 capture is historical host/source identity only. Retained guest proof and all
-effects remain OFF. Residual epoch `8253` obligations remain named unknowns on the effects
-Definition; they are not a tape-recovery reopen.
-
-The disposed Mission 0 direct-key ceremony is retained at
-[`continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`](evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md).
-Do not execute it as a live gate. No headless retry, substitute identity,
-recovery bypass, SSH, or weaker authorization is admissible.
+effects remain OFF. The residual epoch `8253` record is historical evidence,
+not an open unknown on any live Definition.
 
 Historical handoff, guest-prefix, mailbox, and terminal-boot receipts remain in
 [the joined runtime review](evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md)
-and [its requirement audit](evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md).
+and [its requirement audit](evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md),
+plus the disposed Mission 0 direct-key ceremony at
+[`continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`](evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md)
+(do not execute it as a live gate; no headless retry, substitute identity,
+recovery bypass, SSH, or weaker authorization is admissible).
 They are historical evidence, not rollback or live schedule; effects remain OFF
-until the effects Definition's decision-policy rehearsal gates pass. The
-current executable slice and `next_action` live only in the effects
-Definition. The tape-recovery restore proof is paid (complete 2026-08-15).
+until the candidate-proof Definition's decision-policy rehearsal gates pass. The
+current executable slice and `next_action` live only in the
+candidate-proof Definition. The tape-recovery restore proof is paid (complete
+2026-08-15).
 
 Completed Definitions are historical evidence, not executable entrypoints; full
 claims and receipts remain in their source files and `mission-graph.yaml`:
@@ -99,8 +96,8 @@ None is executable unless explicitly promoted in the current registry.
 
 [`definitions/choir-private-go-actor-kernel-2026-08-12.md`](definitions/choir-private-go-actor-kernel-2026-08-12.md)
 is the owner-ratified successor for the RLM authoring upgrade. It is sequenced
-after the active supervised-self-development-effects Definition proves the
-effect-policy autonomy window, reversible restore, irreversible consequence
+after the active supervised-self-development-candidate-proof Definition proves
+the effect-policy autonomy window, reversible restore, irreversible consequence
 receipts, and completion cutover. It does not create a concurrent product
 schedule and must not begin effect-bearing implementation while its predecessor
 is working.
@@ -138,7 +135,7 @@ Invoke the owner-priority candidate proof Definition through
 `/goal docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md`.
 Its `now.*` and `finish.*` own the current product schedule. Tape-recovery
 completed 2026-08-15 and is settled evidence, not an entrypoint. After
-effects reaches `complete` and the registries promote the successor, invoke
+candidate proof reaches `complete` and the registries promote the successor, invoke
 `/goal docs/definitions/choir-private-go-actor-kernel-2026-08-12.md`.
 The successor is owner-ratified architecture authority but is not concurrently
 executable. Historical CTS, convergence, performance, Choir-in-Choir, and

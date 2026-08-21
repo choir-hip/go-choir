@@ -357,63 +357,23 @@ nodes:
     enables:
       - choir-private-go-actor-kernel-2026-08-12
     note: >-
-      Owner-ratified executable Definition v2. Proof target is autonomous in-VM
-      self-development candidate proof on staging computer-03335285... at epoch 333:
-      CoSuper capsule authoring, bundle freeze with 5 required artifact refs, qualified
-      consensus under reversible-selfdev-v1, promotion, live play verification, falsification
-      with B, and acceptance-fenced restore back to pre-A checkpoint 99949fe2.
+      Owner-ratified executable compact Definition v2. Proof is in-VM candidate A
+      authoring, five-ref bundle freeze, qualified consensus under
+      reversible-selfdev-v1, promotion, live-play verification, falsification with
+      B, and acceptance-fenced restore to pre-A checkpoint 99949fe2. It does not
+      include the superseded Definition's email leg. Effects remain OFF. Current
+      scheduling blocker and next_action are owned by the Definition's now.* block.
     sources:
-      - docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
+      - docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md
+      - docs/definitions/choir-tape-recovery-2026-08-13.md
       - docs/texture-live-supervision-architecture.md
       - docs/reports/choir-autonomous-supervision-and-self-development-master-blueprint-2026-08-20.md
+      - docs/evidence/effects-red-assignment-supersession-loop-2026-08-21.md
       - docs/standing-questions.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
       - docs/choir-doctrine.md
       - docs/ACTIVE.md
-    depends_on:
-      - choir-coherent-computer-convergence-2026-07-21
-      - choir-tape-recovery-2026-08-13
-    enables: []
-    note: >-
-      Owner-ratified executable Definition superseding Continuous Texture
-      Supervision, corrected by owner direction on 2026-08-13. Proof target is
-      effect-specific qualified consensus across reversible and irreversible
-      effects: capsule-authored solitaire promotion and acceptance-fenced
-      restore, plus one exact external email under a stronger policy with no
-      human seat required for that acceptance and durable consequence receipts.
-      The 26 pre-drop replay differences were classified and resolved (workspace
-      replacement + chain bootstrap). That sequence-1 eligibility was
-      superseded by later retained-computer event-chain work: sequence 3342
-      matches heads and all 1083 run-memory rows but remains ineligible on
-      non-empty texture_document_aliases. Checkpoint completeness, revert build,
-      scope refusal, and total restore are owned by choir-tape-recovery-2026-08-13
-      and satisfied-by its receipts. This Definition owns decision-policy and
-      effect promotion on top of that restore substrate. Effects remain OFF
-      until this Definition's decision-policy gates pass. Tape-recovery
-      completed 2026-08-15; restore legs are satisfied-by its receipts.
-      Invoked 2026-08-15 with panel GO_WITH_CAVEATS; first slice is docs-only
-      reconciliation so start.unknowns cannot reopen restore. Do not rematerialize
-      or invent choir computer create. Effects remain OFF.
-      Post-acceptance finish.completion_cutover is required
-      for goal.complete. choir-self-development-roadmap-2026-08-11.md is
-      historical migration evidence only — not schedule authority.
-      Current Definition status is blocked_incomplete pending owner-ratified alias
-      authority; effects remain OFF.
-    sources:
-      - docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
-      - docs/definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md
-      - docs/choir-self-development-roadmap-2026-08-11.md
-      - docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
-      - docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md
-      - docs/standing-questions.md
-      - docs/computer-ontology.md
-      - docs/agent-product-doctrine.md
-      - docs/choir-doctrine.md
-      - docs/memo-per-computer-frontend-2026-08-13.md
-      - docs/ACTIVE.md
-      - AGENTS.md
-      - docs/problems/effects-red-replay-texture-alias-authority-2026-08-18.md
   - id: choir-private-go-actor-kernel-2026-08-12
     title: Private Go Actor Kernel
     path: docs/definitions/choir-private-go-actor-kernel-2026-08-12.md
