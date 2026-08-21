@@ -212,14 +212,21 @@ func TerminalProviderFallbackSelection() provideriface.LLMSelection {
 // ProviderPreconditionFallbackSelections returns ordered cross-provider
 // fallbacks for a selection that failed provider preconditions.
 func ProviderPreconditionFallbackSelections(selection provideriface.LLMSelection) []provideriface.LLMSelection {
+	terminalFallback := TerminalProviderFallbackSelection()
 	if strings.TrimSpace(selection.Model) == "" {
+		// Even without a known primary model, provide the terminal platform
+		// fallback so that provider-availability errors (e.g. 402) from the
+		// gateway default selection can still recover.
+		if strings.TrimSpace(terminalFallback.Provider) != "" && strings.TrimSpace(terminalFallback.Model) != "" {
+			return []provideriface.LLMSelection{terminalFallback}
+		}
 		return nil
 	}
 	fallbacks := make([]provideriface.LLMSelection, 0, 3)
 	for _, candidate := range flashPreconditionFallbackSelections(selection) {
 		fallbacks = appendUniqueProviderModelFallback(fallbacks, candidate)
 	}
-	return appendProviderPreconditionPlatformFallback(fallbacks, selection, TerminalProviderFallbackSelection())
+	return appendProviderPreconditionPlatformFallback(fallbacks, selection, terminalFallback)
 }
 
 func (m *Manager) providerConfig() provideriface.Config {

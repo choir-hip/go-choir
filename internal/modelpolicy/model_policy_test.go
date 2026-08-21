@@ -180,3 +180,16 @@ func TestProviderPreconditionFallbacksPreserveOrder(t *testing.T) {
 		t.Fatalf("fallbacks = %+v", fallbacks)
 	}
 }
+
+func TestProviderPreconditionFallbacksReturnTerminalWhenModelEmpty(t *testing.T) {
+	fallbacks := ProviderPreconditionFallbackSelections(provideriface.LLMSelection{})
+	if len(fallbacks) != 1 {
+		t.Fatalf("expected 1 terminal fallback for empty selection, got %d: %+v", len(fallbacks), fallbacks)
+	}
+	if fallbacks[0].Provider != "chatgpt" || fallbacks[0].Model != "gpt-5.6-luna" {
+		t.Fatalf("terminal fallback = %+v", fallbacks[0])
+	}
+	if fallbacks[0].Source != "provider_precondition_terminal_fallback" {
+		t.Fatalf("terminal fallback source = %q", fallbacks[0].Source)
+	}
+}

@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -335,6 +336,10 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 			"capability_digest": binding.CapabilityDigest, "execution_handle_digest": binding.ExecutionHandleDigest, "subject_digest": subjectDigest,
 			"source_artifact_ref": preflight.ArtifactRef, "source_candidate_id": req.CandidateID,
 		},
+	}
+	run.Metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, agentprofile.CoSuper, run.Metadata)
+	if model := metadataStringValue(run.Metadata, modelpolicy.MetadataModel); model != "" {
+		run.Metadata[runMetadataModel] = model
 	}
 	bind := types.BindCoSuperAssignmentRequest{
 		CommandID: "co-super-bind:" + assignmentID + fmt.Sprintf(":%d", attempt), OwnerID: ownerID, ComputerID: computerID,
