@@ -114,12 +114,12 @@ measures:
 
 now:
   status: working
-  slice: "Author candidate A inside guest capsule on staging computer 03335285... (Epoch 333), freeze 5 bundle artifacts, evaluate qualified consensus under reversible-selfdev-v1, promote, verify, and restore."
-  question: "How should the CoSuper capsule author, build, test, and freeze candidate change A under the predeclared reversible decision policy, with all five bundle refs bound to capsule receipts and no per-candidate human decision?"
+  slice: "Author candidate A inside guest capsule on staging computer 03335285... (Epoch 347), freeze 5 bundle artifacts, evaluate qualified consensus under reversible-selfdev-v1, promote, verify, and restore."
+  question: "How should the CoSuper capsule, after the provider credential and model-routing recovery, author, build, test, and freeze candidate change A under the predeclared reversible decision policy, with all five bundle refs bound to capsule receipts and no per-candidate human decision?"
   reconciliation:
-    observed_at: "2026-08-20T16:00:00Z"
-    source_ref: "staging ab756117 epoch 333; Pre-A Checkpoint 99949fe2 verified; Conductor intake & Texture live supervision aligned; CI 8.0m pipeline active; docs/reports/choir-autonomous-supervision-and-self-development-master-blueprint-2026-08-20.md"
-    deploy_identity: "Staging /health reports deployed proxy commit e6ee8c68; retained computer computer-03335285269bdba4f94377e56879f9e6 active at epoch 333 (receipt 01a01f94) on guest commit ab756117; propose_only generation 1; effects OFF; pre-A checkpoint 99949fe2 published; live op selfdev-ccf0f1ec0e851750f253fe5f5ed97974 executing."
+    observed_at: "2026-08-21T01:06:02Z"
+    source_ref: "staging 3704dd78; pre-A Checkpoint 99949fe2 remains verified; ChatGPT OAuth copied to Node B with matching SHA-256; the retained computer is active at epoch 347; the post-refresh persistent Super remains pending and no post-fix CoSuper tool-loop attempt has yet occurred."
+    deploy_identity: "Staging /health reports deployed proxy commit 3704dd789cd9a2099ddb94f3a20fcaae1cf6a718 at 2026-08-21T00:56:10Z; retained computer computer-03335285269bdba4f94377e56879f9e6 reports active epoch 347 and runtime ready; effects remain OFF; pre-A checkpoint 99949fe2 remains published."
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "clean single worktree /Users/wiz/go-choir"
@@ -144,11 +144,13 @@ now:
   evidence_refs:
     - "docs/evidence/effects-red-pre-a-checkpoint-published-2026-08-19.md"
     - "docs/evidence/effects-red-super-texture-rewake-2026-08-20.md"
+    - "docs/evidence/effects-red-passivated-super-missing-trajectory-blocks-reactivation-2026-08-20.md"
+    - "docs/evidence/effects-red-super-model-policy-fallback-2026-08-21.md"
     - "docs/texture-live-supervision-architecture.md"
     - "docs/reports/choir-autonomous-supervision-and-self-development-master-blueprint-2026-08-20.md"
     - "docs/reports/choir-24-hour-architecture-and-effects-progress-report-2026-08-20.md"
-  blocker_or_risk: "Staging computer 03335285... active at epoch 333 running ab756117; pre-A checkpoint 99949fe2 verified; CI pipeline optimized to 8.0m; Conductor intake and Texture live supervision aligned. Candidate changes are authored dynamically in guest capsules via choir run start. Effects remain OFF until qualified consensus passes."
-  next_action: "Execute in-VM candidate authoring inside guest capsule on staging, freeze 5 bundle artifacts, run qualified consensus under reversible-selfdev-v1, promote, verify live play, falsify with B, and restore to 99949fe2. Effects remain OFF."
+  blocker_or_risk: "The ChatGPT OAuth token is refreshed, copied byte-identically to Node B, and ChatGPT calls succeed. Source fix 3704dd78 is deployed, but the retained computer's post-refresh Super faed9f4f remains pending after boot passivation with empty trajectory/requested_by fields; no post-fix CoSuper has entered the tool loop. Effects remain OFF."
+  next_action: "Resolve the already-documented persistent-Super reactivation blocker without HTTP Super-start or cancellation, then verify a new CoSuper carries ChatGPT model metadata or falls back from a provider-availability error, and resume candidate A authorship. Effects remain OFF."
 
 receipts:
   - id: effects-candidate-proof-baseline-2026-08-20
