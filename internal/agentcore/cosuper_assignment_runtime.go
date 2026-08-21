@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"slices"
 	"strings"
 	"time"
@@ -14,8 +15,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -125,6 +126,15 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		return AssignedCoSuperStart{}, fmt.Errorf("assigned CoSuper opener was durably committed but not bound; reconcile attempt before retry")
 	} else if !errors.Is(getErr, store.ErrNotFound) {
 		return AssignedCoSuperStart{}, getErr
+	}
+	// One live assignment capsule at a time: before durably opening a new
+	// assignment, reclaim every prior assignment capsule that is not already
+	// revoked. Each 1-GiB capsule holds admission budget; without reclaim the
+	// third spawn exceeds the ~3-GiB VM budget (effects-red-capsule-memory-
+	// budget-exhaustion-2026-08-21). Reclaim rides the existing revoke fate
+	// path so store dispositions and executor accounting stay authoritative.
+	if err := rt.reclaimSupersededAssignmentCapsules(ctx, parent, assignmentID); err != nil {
+		return AssignedCoSuperStart{}, fmt.Errorf("reclaim superseded assignment capsules: %w", err)
 	}
 	parentControlID := runtimePersistentSuperControlID(parent.Metadata, trajectoryID, parentWorkID)
 	if parentControlID == "" {
@@ -398,4 +408,30 @@ func runtimePersistentSuperControlID(metadata map[string]any, trajectoryID, work
 
 func persistentSuperRunStateAllowedRuntime(state types.RunState) bool {
 	return state == types.RunPending || state == types.RunRunning || state == types.RunPassivated
+}
+
+// reclaimSupersededAssignmentCapsules enforces one live assignment capsule at
+// a time. Every prior assignment on this computer whose capsule disposition is
+// not already revoked (and that is not the assignment being opened) is durably
+// cancelled through the existing fate path, which revokes its capsule and
+// releases admission budget before the new capsule spawns. Fail closed: a
+// reclaim failure must not open a new assignment on a leaked budget.
+func (rt *Runtime) reclaimSupersededAssignmentCapsules(ctx context.Context, parent types.RunRecord, currentAssignmentID string) error {
+	assignments, err := rt.store.ListCoSuperAssignmentsForComputer(ctx, parent.ComputerID)
+	if err != nil {
+		return err
+	}
+	for _, assignment := range assignments {
+		if assignment.AssignmentID == currentAssignmentID || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked {
+			continue
+		}
+		result, err := rt.cancelAssignedCoSuper(ctx, parent, assignment.AssignmentID, assignment.Binding.Attempt,
+			"superseded by a fresh implementation assignment; capsule budget reclaimed")
+		if err != nil {
+			return fmt.Errorf("reclaim %s (capsule %s): %w", assignment.AssignmentID, assignment.Binding.CapsuleID, err)
+		}
+		log.Printf("runtime: reclaimed superseded assignment capsule %s (capsule %s) disposition=%s",
+			assignment.AssignmentID, assignment.Binding.CapsuleID, result.Assignment.CapsuleDisposition)
+	}
+	return nil
 }
