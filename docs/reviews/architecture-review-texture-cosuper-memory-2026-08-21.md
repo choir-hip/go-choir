@@ -71,7 +71,35 @@ Target policy:
 
 With the §2 cardinality invariant, pressure should be rare; the policy exists so that when concurrency generalizes, resource contention degrades gracefully instead of deadlocking.
 
-## 5. Mission supersession
+## 5. Texture agent scope (owner clarification, 2026-08-21)
+
+The Texture agent does exactly two things: revise the document, and message
+other agents. That is the whole job.
+
+- **Human interface:** humans interface only with Texture. The document is
+  therefore optimized for human-language writing — prose quality, structure,
+  and readability are first-class concerns, not decoration. Agents never see
+  chat; they see instructions derived from document state.
+- **Owner edits:** an owner message does not need to reach agents verbatim.
+  The edit changes semantic state; the Texture agent incorporates it and
+  propagates downstream whatever is clear — verbatim text when precision
+  matters, distilled instruction when intent matters. The diff is the input;
+  the propagated form is the Texture agent's judgment.
+- **Style guide textures (planned, not implemented):** any document can serve
+  as a styleguide that shapes how the Texture agent writes future revisions.
+  This keeps agent-to-agent comms and domain agents in their own registers —
+  terse, machine-oriented — while the human-facing document stays in the
+  owner's preferred register. A precursor exists in the wire-publish style
+  catalog (`coagent_route.go` `WireStyleSource`), which routes content by
+  style heuristics today; generalizing that into owner-designatable styleguide
+  documents is the planned shape.
+
+Doctrine consequence: "Texture" names both the document class and the agent.
+The agent's authority is exactly: write revisions (single-writer) and send
+agent-to-agent messages derived from document state. It holds no capsule, no
+event-chain write authority, no provider-routing authority.
+
+## 6. Mission supersession
 
 The active candidate-proof mission is superseded by this review's conclusions. A new definition sequence starts from:
 
