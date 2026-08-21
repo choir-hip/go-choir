@@ -425,7 +425,14 @@ func (rt *Runtime) reclaimSupersededAssignmentCapsules(ctx context.Context, pare
 		if assignment.AssignmentID == currentAssignmentID || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked {
 			continue
 		}
-		result, err := rt.cancelAssignedCoSuper(ctx, parent, assignment.AssignmentID, assignment.Binding.Attempt,
+		// Prior assignments may have been opened by a different persistent-Super
+		// run identity (e.g. before a restart reactivated the actor). Reclaim
+		// through the exact parent recorded on each assignment binding, not the
+		// current caller, so the fate path's parent-identity check passes.
+		reclaimParent := parent
+		reclaimParent.RunID = assignment.Binding.ParentRunID
+		reclaimParent.AgentID = assignment.Binding.ParentAgentID
+		result, err := rt.cancelAssignedCoSuper(ctx, reclaimParent, assignment.AssignmentID, assignment.Binding.Attempt,
 			"superseded by a fresh implementation assignment; capsule budget reclaimed")
 		if err != nil {
 			return fmt.Errorf("reclaim %s (capsule %s): %w", assignment.AssignmentID, assignment.Binding.CapsuleID, err)
