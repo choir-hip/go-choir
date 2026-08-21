@@ -484,28 +484,30 @@ func (rt *Runtime) enqueuePersistentSuperRecoveryOccurrence(ctx context.Context,
 	if trajectoryID == "" || !isPersistentSuperAgentRun(rec) {
 		return fmt.Errorf("%w: recovery run scope is not persistent Super", ErrInvalidPersistentSuperRecovery)
 	}
-	for _, packet := range packets {
-		if packet.OwnerID != rec.OwnerID || packet.ComputerID != rec.ComputerID ||
-			packet.TargetAgentID != rec.AgentID || packet.TrajectoryID != trajectoryID ||
-			packet.AgentID == "" || packet.Direction == "" {
-			return fmt.Errorf("%w: recovery packet scope mismatch", ErrInvalidPersistentSuperRecovery)
-		}
-		occurrence, err := EncodePersistentSuperRecovery(PersistentSuperRecoveryOccurrence{
-			OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, TrajectoryID: trajectoryID,
-			AgentID: rec.AgentID, RunID: rec.RunID, SourceAgentID: packet.AgentID,
-			Controls: []PersistentSuperRecoveryControl{{
-				UpdateID: packet.UpdateID, AgentID: packet.AgentID, Direction: packet.Direction,
-				LifecycleVersion: packet.LifecycleVersion, ReducerSeq: packet.ReducerSeq,
-			}},
-		})
-		if err != nil {
-			return err
-		}
-		log.Printf("runtime: persistent-Super recovery occurrence queued run=%s update=%s source=%s", rec.RunID, packet.UpdateID, packet.AgentID)
-		if err := rt.dispatchActor(context.WithoutCancel(ctx), rec.OwnerID, rec.ComputerID, rec.AgentID,
-			"coagent_result", occurrence, trajectoryID, packet.AgentID); err != nil {
-			return fmt.Errorf("dispatch persistent Super recovery %s: %w", packet.UpdateID, err)
-		}
+	if len(packets) == 0 {
+		return fmt.Errorf("persistent Super recovery occurrence has no packets")
+	}
+	packet := packets[0]
+	if packet.OwnerID != rec.OwnerID || packet.ComputerID != rec.ComputerID ||
+		packet.TargetAgentID != rec.AgentID || packet.TrajectoryID != trajectoryID ||
+		packet.AgentID == "" || packet.Direction == "" {
+		return fmt.Errorf("%w: recovery packet scope mismatch", ErrInvalidPersistentSuperRecovery)
+	}
+	occurrence, err := EncodePersistentSuperRecovery(PersistentSuperRecoveryOccurrence{
+		OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, TrajectoryID: trajectoryID,
+		AgentID: rec.AgentID, RunID: rec.RunID, SourceAgentID: packet.AgentID,
+		Controls: []PersistentSuperRecoveryControl{{
+			UpdateID: packet.UpdateID, AgentID: packet.AgentID, Direction: packet.Direction,
+			LifecycleVersion: packet.LifecycleVersion, ReducerSeq: packet.ReducerSeq,
+		}},
+	})
+	if err != nil {
+		return err
+	}
+	log.Printf("runtime: persistent-Super recovery occurrence queued run=%s update=%s source=%s", rec.RunID, packet.UpdateID, packet.AgentID)
+	if err := rt.dispatchActor(context.WithoutCancel(ctx), rec.OwnerID, rec.ComputerID, rec.AgentID,
+		"coagent_result", occurrence, trajectoryID, packet.AgentID); err != nil {
+		return fmt.Errorf("dispatch persistent Super recovery %s: %w", packet.UpdateID, err)
 	}
 	return nil
 }
@@ -567,14 +569,17 @@ func (rt *Runtime) ResolvePersistentSuperRecovery(ctx context.Context, ownerID, 
 	if len(packets) == 0 {
 		return nil, true, nil
 	}
-	if len(packets) != len(occurrence.Controls) {
-		return nil, false, fmt.Errorf("%w: packet set changed", ErrInvalidPersistentSuperRecovery)
-	}
-	for index, packet := range packets {
-		expected := occurrence.Controls[index]
-		if packet.UpdateID != expected.UpdateID || packet.AgentID != expected.AgentID ||
-			packet.Direction != expected.Direction || packet.TargetAgentID != occurrence.AgentID ||
-			packet.LifecycleVersion != expected.LifecycleVersion || packet.ReducerSeq != expected.ReducerSeq {
+	for _, expected := range occurrence.Controls {
+		matched := false
+		for _, packet := range packets {
+			if packet.UpdateID == expected.UpdateID && packet.AgentID == expected.AgentID &&
+				packet.Direction == expected.Direction && packet.TargetAgentID == occurrence.AgentID &&
+				packet.LifecycleVersion == expected.LifecycleVersion && packet.ReducerSeq == expected.ReducerSeq {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			return nil, false, fmt.Errorf("%w: packet authority changed", ErrInvalidPersistentSuperRecovery)
 		}
 	}
