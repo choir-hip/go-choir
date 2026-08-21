@@ -33,9 +33,9 @@ start:
 goal:
   product_outcome: "The automatic computer schedules exactly one non-expired execution request at a time per computer under a durable, restart-safe contract; one CoSuper capsule authors, builds, tests, freezes, and proposes candidate change A end-to-end on staging; qualified consensus, promotion, live play verification, falsification with B, and acceptance-fenced restore to checkpoint 99949fe2 follow under the already-ratified candidate-proof decision policy."
   observed_starting_state: "Retained computer epoch 361 on e42c65c0; assignment supersession loop active (two competing parent requests); effects OFF; docs fully aligned to ratified architecture."
-  final_artifact: "Deployed staging proof: scheduler selects one request by computer-scoped ordinal, settles stale duplicates as late evidence, survives restart without re-supersession; CoSuper completes full candidate A arc through restore; every transition carries a Texture revision authored by the Texture agent."
+  final_artifact: "Deployed staging proof: scheduler selects one request by computer-scoped ordinal, settles stale duplicates as late evidence, survives restart without re-supersession; CoSuper completes full candidate A arc through restore. Texture revisions appear when semantic state changes — authored by the Texture agent — with lifecycle events (assignment/ordinal/deadline) never forcing revisions."
   authority_boundary: "This Definition owns the scheduling-contract implementation, texture-join authoring repair, and the candidate A proof. It does not authorize parallel assignments (Mission B), Cloud Hypervisor migration, PSI/zram tiers, email effects, or any live send/mail/restore outside the acceptance-fenced E2 leg. Effects remain OFF until promotion within this Definition's own gates."
-  rollback: "Git revert through origin/main + CI/deploy for source changes; pre-A checkpoint 99949fe2 is the immutable restore fence for computer state; staging stale textures are cancelled as hygiene before scheduler work begins."
+  rollback: "Restore to published pre-A checkpoint 99949fe2; git revert of platform commits through origin/main + CI/deploy remains the independent repo fallback. Staging stale textures are cancelled as hygiene before scheduler work begins."
   compact_current_state: "Docs aligned; scheduler unimplemented; supersession loop live on staging; candidate A unpaid."
 
 invariants:
@@ -89,7 +89,7 @@ phases:
 
 finish:
   deliver: "Staging computer runs the scheduling contract end-to-end: one selected request executes to completion while others stay pending untouched; restart-safe; supersession loop impossible. On that substrate, candidate A completes the full author->freeze->consensus->promote->play->falsify->restore arc under reversible-selfdev-v1 with zero per-candidate human decisions."
-  artifact: "Authenticated staging trajectory carrying: scheduler receipts (ordinal, selection, expiry, deadline events); Texture revisions at each consequential transition authored by the Texture agent; frozen bundle A with five real refs; consensus/quorum receipts; promotion event + epoch receipt; play API evidence; B falsification evidence; restore-to-99949fe2 witness."
+  artifact: "Authenticated staging trajectory carrying: scheduler receipts (ordinal, selection, expiry, deadline events); Texture revisions wherever semantic state changed during the arc (authored by the Texture agent; scheduler/assignment lifecycle never calls ApplyTextureTurn); frozen bundle A with the five required refs bound to capsule-exec receipts; consensus/quorum receipts; promotion event + epoch receipt; play API evidence; B falsification evidence; restore-to-99949fe2 witness."
   acceptance:
     - action: "Scheduler proof: with two or more pending requests, exactly one runs; restart mid-run preserves selection; stale duplicates settle as late evidence without spawning assignments."
       proves: "The assignment supersession loop is structurally impossible, not merely quiet."
@@ -103,9 +103,20 @@ finish:
     - action: "Live E2: A promotes -> solitaire plays via headless API writing rows -> evidence falsifies A -> B supersedes -> restart shows B effective -> restore to 99949fe2."
       proves: "Correction spine and restore fence on the new scheduler substrate."
       evidence_class: deployed proof
-    - action: "Supervision legibility: each consequential transition has a Texture revision authored by the Texture agent; prose human-readable, identity in metadata/citations."
-      proves: "Document-driven supervision works over the repaired authoring path."
+    - action: "Supervision legibility: Texture revisions authored by the Texture agent appear wherever semantic state changed during the arc (inherited prior gate); turn-outcome vs revision-outcome census shows semantic changes produce exactly one version each and scheduler/assignment lifecycle produces none; prose human-readable, identity in metadata/citations."
       evidence_class: deployed proof
+  not_done_when:
+    - "Candidate bundle lacks any of the 5 required capsule-bound artifact references."
+    - "Effects are enabled prior to qualified consensus authorization under reversible-selfdev-v1."
+    - "Promotion occurs without qualified consensus receipt."
+    - "Restore fails to return computer state to exact pre-A checkpoint 99949fe2."
+    - "Texture supervision exposes only post-hoc summary without live revisions during open work."
+    - "More than one CoSuper assignment is live simultaneously, or any assignment supersedes a live predecessor."
+    - "Scheduler/assignment lifecycle calls ApplyTextureTurn or manufactures revisions."
+  landing:
+    required: true
+    environment: staging
+    required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_acceptance]
   completion_cutover:
     - id: scheduler-survivor-detectors
       action: "Promote H035 from review-level to enforced family once scheduler lands; add detector for duplicate-live-assignment paths."
@@ -150,5 +161,6 @@ now:
     - "docs/reviews/architecture-review-consensus-synthesis-2026-08-21.md"
   blocker_or_risk: "None blocking start; staging supersession loop continues until Phase 1 deploys. Effects remain OFF throughout."
   next_action: "Owner invokes /goal docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md; Phase 1 scheduler contract begins."
+---
 
-receipts: []
+

@@ -3,23 +3,25 @@
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
 
-## Active Definition — Supervised Self-Development with Effects
+## Active Definition — Scheduling Contract and Candidate Proof
 
-[`definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md`](definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md)
-is the owner-priority executable `/goal` as of 2026-08-20. It supersedes the 2026-08-11 effects definition as a compact Definition v2. It is
-owner-ratified and supersedes Continuous Texture Supervision (CTS)
-as of 2026-08-11, corrected by owner direction on 2026-08-13. Proof
-target is **policy-governed autonomy**: capsule-authored source change
-under effect-specific qualified consensus, E2 correction, and
-acceptance-fenced restore through the completed tape-recovery substrate
-(platform/cycle OUT of restore; computer-surface frontend is per-computer).
-This compact candidate-proof Definition does not include the predecessor's
-email leg. Effects remain OFF until this Definition's decision-policy
-rehearsal gates pass. Do not independently green restore. Active execution
-proceeds directly through in-VM candidate authoring inside guest capsules,
-bundle freeze, qualified consensus under reversible-selfdev-v1, promotion,
-live play verification, falsification with B, and restore to pre-A checkpoint
-99949fe2.
+[`definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`](definitions/choir-scheduling-and-candidate-proof-2026-08-21.md)
+is the owner-priority executable `/goal` as of 2026-08-21. It supersedes the
+2026-08-20 candidate-proof Definition (whose finish.acceptance it inherits
+unchanged) and the 2026-08-11 effects definition. Proof target is
+**policy-governed autonomy**: the ratified scheduling contract (one live
+assignment per computer; computer-scoped arrival ordinals; FIFO among
+non-expired requests; expiry/deadlines; retryable refusal) proven end-to-end,
+then capsule-authored candidate change A under effect-specific qualified
+consensus, E2 correction, and acceptance-fenced restore through the completed
+tape-recovery substrate (platform/cycle OUT of restore; computer-surface
+frontend is per-computer). This Definition does not include any email leg.
+Effects remain OFF until this Definition's decision-policy gates pass. Active
+execution: scheduler contract, texture authoring repair, then in-VM candidate
+authoring inside guest capsules, bundle freeze with five refs bound to
+capsule-exec receipts, qualified consensus under reversible-selfdev-v1,
+promotion, live play verification, falsification with B, and restore to pre-A
+checkpoint 99949fe2.
 
 ## Completed Substrate — Tape-Based Recovery
 
@@ -131,11 +133,12 @@ superseded, or historical as stated by their source Definitions, not entrypoints
 
 ## Invocation
 
-Invoke the owner-priority candidate proof Definition through
-`/goal docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md`.
+Invoke the owner-priority scheduling-and-candidate-proof Definition through
+`/goal docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`.
 Its `now.*` and `finish.*` own the current product schedule. Tape-recovery
-completed 2026-08-15 and is settled evidence, not an entrypoint. After
-candidate proof reaches `complete` and the registries promote the successor, invoke
+completed 2026-08-15 and is settled evidence, not an entrypoint. After the
+scheduling Definition reaches `complete` and the registries promote the
+successor, invoke
 `/goal docs/definitions/choir-private-go-actor-kernel-2026-08-12.md`.
 The successor is owner-ratified architecture authority but is not concurrently
 executable. Historical CTS, convergence, performance, Choir-in-Choir, and

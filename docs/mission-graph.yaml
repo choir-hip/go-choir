@@ -347,6 +347,26 @@ nodes:
     title: Supervised Self-Development Candidate Proof
     path: docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md
     ledger: ''
+    status: superseded
+    kind: spine
+    entrypoint: false
+    execution_mode: superseded_non_executable
+    depends_on:
+      - choir-coherent-computer-convergence-2026-07-21
+      - choir-tape-recovery-2026-08-13
+    enables:
+      - choir-scheduling-and-candidate-proof-2026-08-21
+    note: >-
+      Superseded 2026-08-21 by choir-scheduling-and-candidate-proof-2026-08-21,
+      which carries forward the candidate A proof on the ratified scheduling
+      contract; this Definition's finish.acceptance is inherited unchanged by
+      the successor.
+    sources:
+      - docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md
+  - id: choir-scheduling-and-candidate-proof-2026-08-21
+    title: Scheduling Contract and Candidate Proof
+    path: docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md
+    ledger: ''
     status: working
     kind: spine
     entrypoint: true
@@ -354,21 +374,24 @@ nodes:
     depends_on:
       - choir-coherent-computer-convergence-2026-07-21
       - choir-tape-recovery-2026-08-13
+      - choir-supervised-self-development-candidate-proof-2026-08-20
     enables:
       - choir-private-go-actor-kernel-2026-08-12
     note: >-
-      Owner-ratified executable compact Definition v2. Proof is in-VM candidate A
-      authoring, five-ref bundle freeze, qualified consensus under
-      reversible-selfdev-v1, promotion, live-play verification, falsification with
-      B, and acceptance-fenced restore to pre-A checkpoint 99949fe2. It does not
-      include the superseded Definition's email leg. Effects remain OFF. Current
-      scheduling blocker and next_action are owned by the Definition's now.* block.
+      Owner-ratified executable Definition (drafted from architecture review v3,
+      2026-08-21). Mission A scheduling contract (computer-scoped arrival
+      ordinals, FIFO among non-expired requests, expiry/deadlines, retryable
+      refusal), texture authoring repair (genuine Texture turns replace
+      synthetic join wait-turns), then full candidate A proof arc under
+      reversible-selfdev-v1 with acceptance-fenced restore to checkpoint
+      99949fe2. Inherits prior candidate-proof finish.acceptance unchanged.
+      Effects remain OFF until this Definition's own consensus gates pass.
     sources:
-      - docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md
-      - docs/definitions/choir-tape-recovery-2026-08-13.md
-      - docs/texture-live-supervision-architecture.md
-      - docs/reports/choir-autonomous-supervision-and-self-development-master-blueprint-2026-08-20.md
+      - docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md
+      - docs/reviews/architecture-review-texture-cosuper-memory-2026-08-21.md
+      - docs/reviews/architecture-review-consensus-synthesis-2026-08-21.md
       - docs/evidence/effects-red-assignment-supersession-loop-2026-08-21.md
+      - docs/evidence/effects-red-capsule-memory-budget-exhaustion-2026-08-21.md
       - docs/standing-questions.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
@@ -383,7 +406,7 @@ nodes:
     entrypoint: false
     execution_mode: sequenced_successor
     depends_on:
-      - choir-supervised-self-development-candidate-proof-2026-08-20
+      - choir-scheduling-and-candidate-proof-2026-08-21
     enables: []
     note: >-
       Owner-ratified successor, not a concurrent schedule. After the active
