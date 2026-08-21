@@ -2094,6 +2094,133 @@ func seedAdapterLifecycleResearcherControl(t *testing.T, s *store.Store, rt *age
 	return *rec
 }
 
+func seedAdapterLifecycleSuperControl(t *testing.T, s *store.Store, rt *agentcore.Runtime, ownerID, computerID, suffix string) types.RunRecord {
+	t.Helper()
+	ctx := context.Background()
+	docID, trajectoryID := "doc-adapter-super-"+suffix, "trajectory-adapter-super-"+suffix
+	textureAgentID := "texture:" + docID
+	now := time.Now().UTC()
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "start-adapter-super-" + suffix,
+		TrajectoryID: trajectoryID, Kind: types.TrajectoryKindDocument,
+		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		InitialWork:     types.WorkItemRecord{WorkItemID: "texture-work-super-" + suffix, Objective: "author exact control", AssignedAgentID: textureAgentID, AuthorityProfile: agentprofile.Texture},
+		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: "Adapter Super recovery", CreatedAt: now, UpdatedAt: now},
+		InitialRevision: types.Revision{RevisionID: "revision-adapter-super-" + suffix, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "initial", CreatedAt: now},
+		Agent:           types.AgentRecord{AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	caller := types.RunRecord{
+		RunID: "texture-run-adapter-super-" + suffix, OwnerID: ownerID, ComputerID: computerID,
+		AgentID: textureAgentID, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
+		ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunRunning,
+		Metadata:  map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID, "work_item_ids": []string{start.InitialWork.WorkItemID}},
+		CreatedAt: now, UpdatedAt: now,
+	}
+	project := types.ReplaceLifecycleActivationRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "project-adapter-super-" + suffix, TrajectoryID: trajectoryID, AgentID: textureAgentID, Run: caller}
+	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatalf("project Texture: %v", err)
+	}
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ensure Super: %v", err)
+	}
+	workID := "super-work-adapter-" + suffix
+	packet := types.CoagentSourcePacketPayload{
+		SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: "exact Super recovery control",
+		Actions: []types.CoagentPacketAction{{Type: "run_command", Objective: "inspect " + suffix, Safety: types.CoagentPacketActionSafety{MutationClass: "green", Network: "forbidden", FileMutation: "forbidden"}}},
+	}
+	content := "exact Super recovery control " + suffix
+	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	textureAgent, err := s.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
+	if err != nil {
+		t.Fatalf("Texture agent: %v", err)
+	}
+	turn := types.ApplyTextureTurnRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "turn-adapter-super-" + suffix, DocumentID: docID, TrajectoryID: trajectoryID,
+		CallerAgentID: textureAgentID, CallerRunID: caller.RunID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+		ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion, ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID,
+		CallerWorkItemID: start.InitialWork.WorkItemID, CallerWorkDisposition: types.WorkItemOpen, Outcome: types.TextureTurnWait,
+		Reason: "wait for Super recovery", Controls: []types.TextureTurnControl{{
+			ControlID: "control-adapter-super-" + suffix, TargetAgentID: superAgent.AgentID, TargetWorkItemID: workID,
+			Packet: packet, Content: content, PayloadDigest: payloadDigest,
+			OpenWork: &types.WorkItemRecord{WorkItemID: workID, Objective: "execute " + suffix, AuthorityProfile: agentprofile.Super, AssignedAgentID: superAgent.AgentID},
+		}},
+	}
+	turn.CommandDigest, _ = store.ComputeApplyTextureTurnDigest(turn)
+	if _, err := s.ApplyTextureTurn(ctx, turn); err != nil {
+		t.Fatalf("apply Super turn: %v", err)
+	}
+	rec, err := rt.ReconcileCoagentWake(ctx, ownerID, superAgent.AgentID)
+	if err != nil || rec == nil {
+		t.Fatalf("reconcile Super: %+v err=%v", rec, err)
+	}
+	return *rec
+}
+
+func TestAdapterSQLitePersistentSuperRecoveryExecutesWithoutSnapshot(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "persistent-super-recovery.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	counting := &admissionRecoveryCountingProvider{stub: provider.NewStubProvider(0)}
+	const ownerID, computerID = "owner-adapter-super-recovery", "computer-adapter-super-recovery"
+	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	adapter := New(cfg, s, events.NewEventBus(), counting, nil)
+	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
+	rec := seedAdapterLifecycleSuperControl(t, s, adapter.Runtime, ownerID, computerID, "missing-snapshot")
+
+	mailboxID := scopedActorMailboxID(ownerID, computerID, rec.AgentID)
+	initialID := actorDispatchUpdateID(ownerID, computerID, rec.AgentID, "initial_dispatch", rec.RunID, "", "")
+	if err := adapter.log.MarkProcessed(ctx, mailboxID, initialID); err != nil {
+		t.Fatal(err)
+	}
+	rec.State = types.RunPassivated
+	metadata := make(map[string]any, len(rec.Metadata))
+	for key, value := range rec.Metadata {
+		metadata[key] = value
+	}
+	rec.Metadata = metadata
+	rec.Metadata["passivated_reason"] = "runtime_restarted"
+	rec.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+
+	adapter.Runtime.Start(ctx)
+	if err := adapter.actorRT.Sweep(ctx); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		stored, loadErr := s.GetRunByOwner(ctx, ownerID, rec.RunID)
+		if loadErr == nil && stored.State == types.RunCompleted && counting.calls.Load() == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	stored, loadErr := s.GetRunByOwner(ctx, ownerID, rec.RunID)
+	if loadErr != nil || stored.State != types.RunCompleted || counting.calls.Load() != 1 {
+		t.Fatalf("persistent Super recovery state=%s calls=%d err=%v metadata=%+v", stored.State, counting.calls.Load(), loadErr, stored.Metadata)
+	}
+	if memory, err := adapter.log.LoadSnapshot(ctx, mailboxID); err != nil || len(memory) != 0 {
+		t.Fatalf("persistent Super recovery relied on actor snapshot memory=%q err=%v", memory, err)
+	}
+}
+
 func TestAdapterSQLitePreBindResearcherRecoveryBindsAndExecutesWithoutSnapshot(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

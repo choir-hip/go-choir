@@ -187,7 +187,11 @@ func makeSubjectTreeReadOnly(root string) error {
 	}
 	sort.Slice(dirs, func(i, j int) bool { return len(dirs[i]) > len(dirs[j]) })
 	for _, dir := range dirs {
-		if err := os.Chmod(dir, 0o755); err != nil {
+		// Overlayfs checks the lower parent directory with the capsule's
+		// namespace-mapped UID before it can copy up a new artifact. Keep
+		// lower files read-only, but allow directory traversal and copy-up
+		// creation; the lower tree is never exposed as a writable path.
+		if err := os.Chmod(dir, 0o777); err != nil {
 			return err
 		}
 	}

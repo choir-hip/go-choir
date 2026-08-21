@@ -54,6 +54,33 @@ func TestCanonicalSubjectDigestCoversCompleteReconstructableTreeOnly(t *testing.
 	}
 }
 
+func TestMakeSubjectTreeReadOnlyLeavesOverlayParentsWritable(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "workspace", "platform")
+	if err := os.MkdirAll(filepath.Join(root, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "nested", "source.go"), []byte("package source\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := makeSubjectTreeReadOnly(root); err != nil {
+		t.Fatal(err)
+	}
+	dirInfo, err := os.Stat(filepath.Join(root, "nested"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dirInfo.Mode().Perm(); got != 0o777 {
+		t.Fatalf("overlay parent mode=%#o, want %#o", got, os.FileMode(0o777))
+	}
+	fileInfo, err := os.Stat(filepath.Join(root, "nested", "source.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fileInfo.Mode().Perm(); got != 0o444 {
+		t.Fatalf("source file mode=%#o, want %#o", got, os.FileMode(0o444))
+	}
+}
+
 func TestCanonicalSubjectCopyDeterministicAndRejectsEscapingSymlink(t *testing.T) {
 	source := filepath.Join(t.TempDir(), "subject")
 	if err := os.MkdirAll(filepath.Join(source, "dir"), 0o755); err != nil {
