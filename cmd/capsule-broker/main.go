@@ -203,7 +203,11 @@ func runNamespaceLauncher(socketPath, capsuleID, pubKeyHex, mergedDir string, au
 	}
 	command := exec.Command("/run/capsule/broker", args...)
 	command.ExtraFiles = []*os.File{listenerFile}
-	command.Env = []string{"PATH=/bin:/usr/bin:/run/current-system/sw/bin", "HOME=/root", "TMPDIR=/tmp"}
+	// Inherit the autoputer's environment (notably PATH) so exec.LookPath in
+	// the broker resolves `sh` exactly as the service PATH intends — busybox
+	// ash ahead of bash. A hardcoded PATH here would resolve /bin/sh to bash,
+	// whose initialize_job_control fails inside the capsule PID namespace.
+	command.Env = append(os.Environ(), "HOME=/root", "TMPDIR=/tmp")
 	command.Stdout = os.Stdout
 	command.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWPID, Pdeathsig: syscall.SIGKILL}
 	if err := command.Start(); err != nil {
