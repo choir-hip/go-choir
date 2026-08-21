@@ -422,7 +422,11 @@ func (rt *Runtime) reclaimSupersededAssignmentCapsules(ctx context.Context, pare
 		return err
 	}
 	for _, assignment := range assignments {
-		if assignment.AssignmentID == currentAssignmentID || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked {
+		// Only bound/live capsules hold admission budget. Unbound capsules were
+		// never spawned and revoked capsules already released theirs.
+		if assignment.AssignmentID == currentAssignmentID ||
+			assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked ||
+			assignment.CapsuleDisposition == types.CoSuperCapsuleUnbound {
 			continue
 		}
 		// Prior assignments may have been opened by a different persistent-Super

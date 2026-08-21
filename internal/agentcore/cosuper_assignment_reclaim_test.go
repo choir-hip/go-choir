@@ -77,10 +77,10 @@ func TestReclaimSupersededAssignmentCapsulesRevokesStaleAssignments(t *testing.T
 		t.Fatal(err)
 	}
 	// An unbound assignment (opened but never bound/spawned) has no capsule to
-	// revoke; its capsule disposition correctly remains unbound. The assertion
-	// is that the assignment itself reached a terminal disposition.
-	if !reclaimed.Disposition.Terminal() {
-		t.Fatalf("stale assignment disposition = %s, want terminal", reclaimed.Disposition)
+	// revoke and holds no admission budget; reclaim correctly skips it. The
+	// assignment remains open — it is inert without a capsule.
+	if reclaimed.Disposition.Terminal() {
+		t.Fatalf("unbound stale assignment should not be terminal, got %s", reclaimed.Disposition)
 	}
 }
 
@@ -102,8 +102,8 @@ func TestReclaimSkipsCurrentAndAlreadyRevoked(t *testing.T) {
 	current := seedReclaimAssignmentFrom(t, s, fixture, ownerID, computerID, "assignment-current", "capsule-current")
 	stale := seedReclaimAssignmentFrom(t, s, fixture, ownerID, computerID, "assignment-stale2", "capsule-stale2")
 
-	// Reclaim targeting the current assignment ID must not touch it but must
-	// terminalize the stale assignment.
+	// Reclaim targeting the current assignment ID must not touch it. Both
+	// assignments are unbound (never spawned), so reclaim skips them entirely.
 	if err := rt.reclaimSupersededAssignmentCapsules(ctx, parent, current.AssignmentID); err != nil {
 		t.Fatalf("reclaim: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestReclaimSkipsCurrentAndAlreadyRevoked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !staleAfter.Disposition.Terminal() {
-		t.Fatalf("stale assignment disposition = %s, want terminal", staleAfter.Disposition)
+	if staleAfter.Disposition.Terminal() {
+		t.Fatalf("unbound stale assignment should not be terminal, got %s", staleAfter.Disposition)
 	}
 }
