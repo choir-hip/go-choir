@@ -113,9 +113,9 @@ measures:
     cannot_prove: "semantic correctness of candidate"
 
 now:
-  status: working
-  slice: "Reconcile competing pending Texture execution requests on computer 03335285... at guest epoch 361/build e42c65c0: select one live request under the ratified scheduling contract, settle stale duplicates, then resume candidate A authoring, five-ref freeze, consensus, promotion, verification, falsification, and restore."
-  question: "How should the scheduler durably choose one non-expired execution request (computer-scoped arrival ordinal/FIFO), settle stale duplicates whose operations already have terminal attempts as late evidence, and keep retryable refusal pending so one CoSuper can author, build, test, and freeze candidate A without assignment ping-pong?"
+  status: superseded
+  superseded_by: "docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md (carries forward candidate A proof on the ratified scheduling contract; this Definition's finish.acceptance is inherited unchanged)"
+  slice: "Superseded 2026-08-21 before scheduler implementation landed. See successor."
   reconciliation:
     observed_at: "2026-08-21 (see docs/evidence/effects-red-assignment-supersession-loop-2026-08-21.md)"
     source_ref: "staging deployed e42c65c0; retained computer epoch 361; capsule memory reclaim works; competing pending Texture execution requests for distinct operations ping-pong fresh assignments, cancelling every CoSuper before author/build/freeze; no candidate artifact exists."
