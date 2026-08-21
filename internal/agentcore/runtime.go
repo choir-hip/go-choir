@@ -574,6 +574,7 @@ func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWa
 // swept to re-warm cold actors.
 func (rt *Runtime) Start(ctx context.Context) {
 	rt.passivateInterruptedActivations(ctx)
+	rt.reconcileCoSuperAssignmentCapsulesAfterRestart(ctx)
 	rt.rewarmInterruptedLifecycleActivations(ctx)
 	rt.rewarmInterruptedPersistentSuperActors(ctx)
 	rt.recoverOpenWirePublicationClaims(ctx)
