@@ -43,7 +43,10 @@ const (
 // other reconcile errors remain retryable.
 var ErrDurablyTerminalLifecycleControlActivation = errors.New("durably terminal lifecycle control activation")
 
-const PersistentSuperRecoveryPrefix = "persistent-super-recovery:v1:"
+// Version two intentionally advances the actor-log identity after the
+// superseded v1 occurrence was durably acknowledged before multi-packet
+// recovery validation was corrected.
+const PersistentSuperRecoveryPrefix = "persistent-super-recovery:v2:"
 
 var ErrInvalidPersistentSuperRecovery = errors.New("invalid persistent Super recovery occurrence")
 
