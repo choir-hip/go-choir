@@ -275,8 +275,16 @@ remains real even when protocol gates pass.
 
 These are hard consequences of the conjecture set.
 
-`I1` Texture owns canonical document versions. Findings, worker updates, search
-results, and verifier output are non-canonical until Texture incorporates them.
+`I1` Canonical document versions have two writer classes. `AuthorUser` is the
+owner-edit path and performs an immediate canonical-head CAS. `AuthorAppAgent`
+is the Texture agent and the sole *agent* writer; Super, CoSuper, Researcher,
+workers, and runtime updates never write document text directly. Findings,
+worker updates, search results, and verifier output are non-canonical until
+Texture incorporates them through an AuthorAppAgent revision. Every revision is
+a new monotonic version and a self-contained snapshot of current semantic state;
+prior versions are never required context. A Texture-agent turn that changes
+semantic state commits exactly one new version; wait/block/no-change turns
+commit none. `texture_turn_committed` counts turn outcomes, not revisions.
 
 `I2` Texture must not be forced into semantic delegation. Runtime may expose
 affordances and durable obligations; it must not convert role mentions or
@@ -404,6 +412,24 @@ derivable from the bound release or an explicit frontend join. vmctl route CAS
 greens only after that serving join. CI pointer rotation and a host
 `frontend-current` tree are not computer changes. The current host-global SPA
 is non-conformance, not product ontology.
+
+`I26` There is exactly one Super per ComputerID. Super sees every document's
+state, arbitrates resources, and supplies coherence/error correction over the
+computer; it is not a concurrency limiter and holds no document/event mutation
+authority. CoSupers are task-level actuators. The doctrinal shape permits one
+CoSuper assignment to hold N capability-bound capsules; candidate A may
+implement a transitional 1:1 assignment/capsule binding. Mission A admits one
+live CoSuper assignment per computer: each request carries a durable
+computer-scoped arrival ordinal, selection is FIFO among non-expired requests,
+requests expire on operation terminality / superseding owner correction /
+deadline, assignment deadlines fail rather than hang, and admission refusal is
+retryable with work left pending. Mission-A containment is `memory.high`
+= requested, `memory.max` = 2×requested, with `memory.events` OOM counters as
+feedback; PSI pause/resume and zram are not required in Mission A. Mission B —
+parallel Textures/trajectories and N concurrent assignments under an admission
+ledger with overcommit factor — is a release-gate requirement proven after
+sequential correctness.
+
 
 `I14` Source evidence remains object identity, not link-shaped prose. Texture
 and successor artifact surfaces represent sources as durable source entities and

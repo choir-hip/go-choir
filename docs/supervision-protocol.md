@@ -10,7 +10,13 @@ performed by Texture and Super:
 
 - the owner delegates ongoing trajectory supervision to Texture;
 - Texture maintains the canonical, versioned semantic state of the work and
-  uses that state to direct Researcher and Super;
+  uses that state to direct Researcher and Super. Two writer classes exist:
+  `AuthorUser` is the owner and may perform an immediate canonical head CAS;
+  `AuthorAppAgent` (the Texture agent) is the sole *agent* writer. Researcher,
+  Super, and CoSuper outputs are typed inputs/evidence, never direct document
+  writes. Texture's entire agent job is (1) revise the document and
+  (2) message other agents; it has no capsule, host, provider-routing,
+  event-chain, or promotion authority.
 - Super supervises execution, decomposition, and verification;
 - Researcher gathers sourced evidence;
 - CoSuper performs a capability-bounded implementation or verification
@@ -51,6 +57,17 @@ Owner  ------------------------------------------------------------+
 This is a feedback loop, not a request followed by a final report:
 
 1. Texture holds the current idea-level state of the task in version `Vn`.
+
+   An inbound packet wakes or joins a Texture turn; it does not by itself
+   authorize a revision. A semantic-changing Texture authoring turn produces
+   exactly one new self-contained version. A no-change, wait, block, control,
+   rejected, or pending turn may emit a lifecycle event without producing a
+   version — `texture_turn_committed` and similar lifecycle events are not
+   canonical revisions. Owner edits are `AuthorUser` immediate head-CAS
+   transitions; Texture later interprets the resulting diff and sends
+   downstream instructions as its judgment, without a requirement to propagate
+   owner wording verbatim. Prior versions remain inspectable history but are
+   never required to act on the current head.
 2. Texture sends focused requests, questions, or corrections to Researcher or
    the persistent Super.
 3. Those agents return evidence, partial results, contradictions, questions,
@@ -85,6 +102,12 @@ actions teach at idea level.
 A new version means the semantic control state changed. It does not mean the
 owner was notified, read it, or must approve it.
 
+The doctrinal assignment may hold multiple capability-bound capsules (N
+capsules per assignment is the general shape, with bundle provenance over the
+union of receipts). Candidate A intentionally implements 1:1 assignment to
+capsule; this is transitional, not the cardinality doctrine.
+
+
 ## Capability Boundary
 
 These are capability restrictions, not prose instructions. A role does not
@@ -117,30 +140,55 @@ Prompt text explains these boundaries. It does not create them.
 
 ## What Current Code Already Supports
 
-- A Texture document has one durable `texture:<doc_id>` actor and one canonical
-  writer among agents.
+- Each document has one durable `texture:<doc_id>` actor. `AuthorAppAgent`
+  (Texture) is the sole *agent* writer; `AuthorUser` (the owner) is the second,
+  owner-only writer class and performs immediate canonical head CAS. Other
+  agents can only send typed updates.
 - Addressed `update_coagent` packets can wake Texture immediately, join a
-  resident activation, or survive passivation and restart.
-- An update-triggered Texture turn is required to write a canonical revision;
-  packet dispositions distinguish incorporated, rejected, and still-pending
-  updates.
-- One long-running Texture actor can write many canonical revisions. A write is
-  not necessarily run completion.
-- Owner revisions delivered while the actor is resident enter the same durable
-  mailbox rather than replacing or bypassing the loop.
+  resident activation, or survive passivation and restart. An update-triggered
+  Texture turn may incorporate, reject, defer, or find no semantic change; only
+  a successful semantic-changing Texture authoring turn projects one new public
+  version. A single turn may incorporate multiple packets and project at most
+  one version. Packet dispositions distinguish incorporated, rejected, and
+  still-pending updates.
+- One long-running Texture actor can write many canonical versions in one
+  long-lived trajectory. A write is not necessarily run completion.
+- Owner edits are `AuthorUser` immediate head-CAS transitions, not merely
+  mailbox messages; the CAS rebases the complete pending old-head occurrence
+  set atomically.
 - The exact persistent Super consumes durable ordered `execution_request`
   controls without becoming lifecycle-scoped itself. Researcher and Super
   delivery is bound to the exact run and consumed only from authenticated
   durable runtime memory.
 - Texture can send target-constrained lifecycle direction to its Researchers
-  and the persistent Super. Both return typed canonical packets upward; reporting
-  settles only the authenticated consumed delivery intersection.
-- One atomic Texture turn can incorporate several inbound packets while
-  projecting exactly one public version. Direct owner edits rebase the complete
-  pending old-head occurrence set in one CAS transition.
+  and the persistent Super. Both return typed canonical packets upward;
+  reporting settles only the authenticated consumed delivery intersection.
 - Lifecycle cancellation is intent-first and fate-shared with assignment
   capsules; actual delayed reports remain authenticated evidence without
   candidate, Pass, packet, wake, projection, or reopen authority.
+
+## Scheduling and Resource Contract
+
+The Super is a singleton per computer for coherence/error correction — it sees
+every document's state and arbitrates resources — never a concurrency limiter.
+For Mission A, each computer has one live CoSuper assignment. Every request
+receives a durable computer-scoped arrival ordinal; arbitration is FIFO among
+non-expired requests, while unselected work remains pending untouched. A
+request expires when its operation reaches terminal state, an owner correction
+supersedes it, or its deadline passes. An assignment deadline is a failure,
+never an indefinite hang. Admission refusal is retryable: the request remains
+pending and the computer must not deadlock.
+
+Mission-A resource containment: `memory.high` equals requested memory;
+`memory.max` equals 2× requested; `memory.events` OOM counters feed admission
+and diagnosis. Mission A introduces no PSI pause/resume tier and no zram
+dependency. N-way assignments and overcommit-ledger admission belong to the
+parallel mission. Parallel Textures/trajectories are a release-gate
+requirement; Mission A proves sequential correctness first.
+
+Style-guide Textures are planned — not implemented. Any document may later
+shape Texture's writing register; style guidance cannot grant write, execution,
+or routing authority.
 
 ## Acceptance State
 

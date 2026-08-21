@@ -41,6 +41,24 @@ After the opening frame, explain Choir in third person or as system context:
 The shared `core` prompt carries the cross-role Choir explanation. Role prompts
 carry the opening frame plus role-specific theory and operational morphisms.
 
+## Texture role contract
+
+Texture agent scope is exactly two jobs: revise the owner-readable document and
+message other agents. It has no capsule, host filesystem, provider-routing,
+event-chain, or promotion authority. Humans interface only with Texture;
+Texture documents are optimized for human-language prose and structure.
+`AuthorUser` is the owner writer and may immediately CAS the canonical head;
+`AuthorAppAgent` is Texture and the sole agent writer. Researcher, Super, and
+CoSuper packets are inputs/evidence and never direct document writes.
+
+A Texture-agent authoring turn that changes semantic state commits exactly one
+new monotonic, self-contained snapshot. Prior versions are optional history,
+never required context. Wait, block, control, rejected, pending, and no-change
+turns may emit `texture_turn_committed` lifecycle events but do not create
+revisions. A delivered `coagent_update` wakes or supplies a turn; it does not
+itself require a revision. A successful patch test should assert a revision
+only when the patch changes semantic state.
+
 ## Obligation over persona
 
 Prefer obligation, authority envelope, and morphism class over persona:
@@ -107,16 +125,25 @@ uniform across Texture, super, researcher, vsuper, and co-super activations.
 - typed packet builder and Texture warm/cold injection paths;
 - coagent rewarm and resident-activation injection behavior;
 - Texture wake after researcher delivery produces a revision when the model
-  patches.
+  patch changes semantic state; wait/no-change turns correctly produce no
+  revision.
 
 ## Research cadence
 
-Multi-revision Texture work stalls when **researchers stop early**, not when
-Texture refuses to revise. While researchers keep searching and sending
-`update_coagent` checkpoints, Texture should keep incorporating with
-`patch_texture` and, when helpful, keep addressing researchers with follow-up
-questions via `update_coagent` or additional `spawn_agent` probes—until depth
-no longer materially improves the artifact.
+Researcher search cadence is one source of Texture inputs, but update count and
+revision count are distinct. Texture revises whenever its semantic state
+changes, at a cadence ranging from dozens to hundreds per session; it may also
+wait, reject, or defer without a revision. Do not treat researcher checkpoint
+volume, `texture_turn_committed` volume, or a fixed lifecycle stage as a
+revision guarantee. The selfdev join path's synthetic deterministic
+`TextureTurnWait` is a separate defect: it bypasses genuine Texture authoring
+and must not be repaired by forcing every worker milestone into a revision.
+
+While researchers keep searching and sending `update_coagent` checkpoints,
+Texture should keep incorporating with `patch_texture` and, when helpful, keep
+addressing researchers with follow-up questions via `update_coagent` or
+additional `spawn_agent` probes — until depth no longer materially improves
+the artifact.
 
 Researchers should prefer **parallel saturation**: in the same tool-call block,
 combine `update_coagent` with the next `web_search`, `source_search`, `fetch_url`,
@@ -148,3 +175,11 @@ report to exactly one Texture coagent per activation.
 - Runtime fallbacks in `systemPromptForRun` must use the same frame, not
   `You are Choir <role>.`
 - Tests should assert the descriptive opening where they pin default prompt text.
+
+## Style-guide Textures (planned)
+
+Style-guide Textures are planned, not implemented. In the planned shape, any
+document may be designated as a styleguide that influences future Texture prose
+and register; this is a writing input only and does not grant authority or alter
+routing. The existing wire-publish style catalog is a precursor, not the
+generalized arbitrary-document feature.

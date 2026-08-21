@@ -352,8 +352,9 @@ Active hardening:
 1. Keep public desktop and auth-on-mutation verified on staging as the source
    system changes land.
 2. Make Texture/researcher/super/user edit flows smoother, more observable, and
-   less dependent on timing luck, while preserving the existing single-writer
-   and machine-verifiable revision contract.
+   less dependent on timing luck, while preserving the two writer classes
+   (`AuthorUser` owner edits with immediate canonical-head CAS; `AuthorAppAgent`
+   Texture as sole agent writer) and the machine-verifiable revision contract.
 3. Turn source/Wire from substrate into a prominent Wire product surface with
    real edition Textures, userland personalization, and later newsletter and
    radio-queue projections.
@@ -466,8 +467,12 @@ The conductor must not write the first appagent document version. It routes the
 prompt, creates or opens the Texture document shell, preserves the user's seed,
 and starts Texture. Texture writes the first response version. The prior
 "conductor creates an initial seed" policy is superseded because it blurred the
-single-writer boundary. Conductor may materialize the `v0` owner prompt as
-canonical input, but Texture owns `v1`.
+writer-class boundary. Conductor may materialize the `v0` owner prompt as
+canonical input (`AuthorUser`); Texture owns `v1` and every subsequent
+agent-authored version (`AuthorAppAgent`). Every revision is a monotonic,
+self-contained snapshot of current semantic state; owner edits remain immediate
+`AuthorUser` head-CAS versions at any time, and prior versions are never
+required context for acting on the current head.
 
 For existing user-authored Texture documents, the current user revision is
 already canonical document state. A follow-up owner request should not force a
@@ -577,22 +582,28 @@ view state must not live only in browser component variables. Per-app code can
 define the shape of its typed context, but persistence and reload semantics must
 use the universal shell/API path.
 
-`texture` is the single writer for canonical document versions and the delegated
-controller for the trajectory. It synthesizes owner edits and material coagent
-updates into durable, idea-level state; judges that state against the objective;
-and sends revised direction to Researcher or Super. One Texture actor may write
-many versions between owner reads.
+`texture` is the sole *agent* writer (`AuthorAppAgent`) for canonical document
+versions and the delegated controller for the trajectory; the owner is the
+separate `AuthorUser` writer class with immediate canonical-head CAS. Texture
+synthesizes owner edits and material coagent updates into durable, idea-level
+state; judges that state against the objective; and sends revised direction to
+Researcher or Super. One Texture actor may write many versions between owner
+reads. A semantic-changing Texture turn produces exactly one new version;
+wait/block/no-change turns produce none.
 
 `researcher` reads local files and the web, then submits findings/evidence only
 through the typed `update_coagent` source-packet mutation. Its production
 registry excludes bash, raw Dolt, writable files, capsule commit, acceptance,
 route, and host authority.
 
-`super` is the per-user foreground execution controller. It can orchestrate
-capsules and delegation, inspect evidence, request verification, and return
-intermediate or terminal operational synthesis to Texture. Its production
-registry excludes bash, capsule command execution, direct writable/coding,
-shipper, worker-VM, route, and host tools.
+`super` is exactly one per computer: the whole-computer coherence,
+error-correction, and resource-arbitration authority — not a concurrency
+limiter. It sees every document's state, orchestrates capsules and delegation,
+inspects evidence, requests verification, and returns intermediate or terminal
+operational synthesis to Texture through typed updates. It cannot mutate the
+document or the computer directly; its production registry excludes document
+writes, direct host writes, acceptance/commit, candidate shipper, worker-VM,
+route, and host tools.
 
 `vsuper`, `candidate-super`, and aliases are retired from production
 self-development profiles and fail closed.
@@ -625,10 +636,15 @@ The complete bidirectional product loop is not currently accepted live
 behavior. Texture's production registry can spawn Researcher but lacks the
 `update_coagent` tool its prompt names for follow-up, and its delegate policy
 does not currently connect it to the persistent Super. Effects also remain OFF,
-and no current Definition authorizes capsule/self-development effects. The next
-product mission must prove multiple Texture revision-and-redirection cycles over
-one live trajectory, including the Texture → Super → scoped CoSuper → Super →
-Texture path, rather than invent a generic supervision service, findings
+and no current Definition authorizes capsule/self-development effects. The
+next product missions must prove, in order: (Mission A) multiple Texture
+revision-and-redirection cycles over one live trajectory with one live CoSuper
+assignment per computer — computer-scoped arrival ordinals, FIFO among
+non-expired requests, request expiry and assignment deadlines, retryable
+admission refusal — including the Texture → Super → scoped CoSuper → Super →
+Texture path; then (Mission B) parallel Textures/trajectories with N concurrent
+assignments under an admission-ledger overcommit factor — a release-gate
+requirement. Neither mission invents a generic supervision service, findings
 reducer, observer hierarchy, or second causal tape. See
 [supervision-protocol.md](supervision-protocol.md) for the bounded contract.
 
