@@ -1,6 +1,23 @@
 #!/usr/bin/env bash
 # Deploy provider credentials to Node B for the go-choir-gateway service.
 #
+# ChatGPT OAuth is refreshed locally, outside this script. The operator flow is:
+#   1. Refresh/login with the local Codex/ChatGPT client.
+#   2. Confirm the refreshed file is ~/.codex/auth.json, or set
+#      CODEX_AUTH_PATH=/path/to/auth.json.
+#   3. Run: ./nix/deploy-provider-creds.sh node-b
+#   4. Verify the local and remote auth-file SHA-256 digests match, then
+#      inspect the gateway journal for a successful provider=chatgpt call.
+#
+# This script copies the local OAuth JSON to
+# /var/lib/go-choir/codex-auth.json, sets CHATGPT_AUTH_PATH in the gateway
+# EnvironmentFile, and restarts only go-choir-gateway. It does not refresh the
+# OAuth token itself. Never print or commit the auth JSON or its token values.
+#
+# The full helper also regenerates gateway-provider.env from .env and optional
+# provider-settings.json. Use it only when that broader credential deployment
+# is intended; the OAuth copy is not an isolated API.
+#
 # This script reads provider credentials from
 # ${CHOIR_PROVIDER_ENV_FILE:-./.env}, plus optional custom model settings from
 # ${CHOIR_PROVIDER_SETTINGS:-$HOME/.config/go-choir/provider-settings.json}, and
@@ -12,7 +29,7 @@
 #
 # Usage:
 #   ./nix/deploy-provider-creds.sh           # deploy to node-b (default)
-#   ./nix/deploy-provider-creds.sh node-b    # explicit host
+#   CODEX_AUTH_PATH=~/.codex/auth.json ./nix/deploy-provider-creds.sh node-b
 #
 # Required: jq, ssh access to Node B
 set -euo pipefail

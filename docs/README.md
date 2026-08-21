@@ -60,5 +60,33 @@ Read the relevant contract before touching its protected surface.
 - `doc-authority-manifest.yaml` is navigation metadata, not doctrine or a
   historical catalog.
 
+## Operational helper: gateway ChatGPT OAuth
+
+The gateway's ChatGPT OAuth file is refreshed locally and copied to Node B by
+[`nix/deploy-provider-creds.sh`](../nix/deploy-provider-creds.sh). The helper
+does not refresh OAuth itself. Refresh/login with the local Codex/ChatGPT client
+first, then run:
+
+```sh
+./nix/deploy-provider-creds.sh node-b
+```
+
+The default source is `~/.codex/auth.json`; override it with
+`CODEX_AUTH_PATH`. The helper copies the JSON to
+`/var/lib/go-choir/codex-auth.json`, sets `CHATGPT_AUTH_PATH`, regenerates the
+gateway provider environment from the configured credential sources, and
+restarts `go-choir-gateway`. It is therefore a broad credential deployment,
+not a ChatGPT-only operation. Never print or commit the auth JSON.
+
+Verify without exposing secrets:
+
+```sh
+sha256sum ~/.codex/auth.json
+ssh node-b sha256sum /var/lib/go-choir/codex-auth.json
+ssh node-b systemctl is-active go-choir-gateway
+ssh node-b journalctl -u go-choir-gateway -n 50 --no-pager
+```
+
+
 When a semantic, current-state, or active-work claim changes, update its source
 authority and this compact view together. Do not add another orientation page.
