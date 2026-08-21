@@ -690,6 +690,7 @@ EOF
       CHOIR_SELF_DEVELOPMENT_G1_RECEIPT = genesisG1Receipt;
       CHOIR_SELF_DEVELOPMENT_G1_CANDIDATE_REF = genesisCandidateRef;
       PATH = lib.mkForce (lib.makeBinPath (with pkgs; [
+        busybox
         bash
         coreutils
         curl
