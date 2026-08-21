@@ -349,6 +349,32 @@ Ideal direction:
 - the artifact graph records who changed what, what verified, what failed, what
   was reused, and what became public memory.
 
+## Supervision Actor Contract
+
+- **Texture document authority has two writer classes:** `AuthorUser` owner
+  edits with immediate canonical-head CAS, and `AuthorAppAgent` Texture-agent
+  revisions. No other agent writes document text. Each Texture-agent
+  semantic-change turn creates one monotonic, self-contained version; no-change
+  turns create none. `texture_turn_committed` lifecycle events are not
+  revisions. The Texture agent's only jobs are revising the document and
+  messaging other agents.
+- **Super is one singleton per ComputerID**: a coherence/error-correction and
+  resource-arbitration mechanism over the whole computer — not a concurrency
+  limiter, and never a document or computer mutator. CoSupers are task-level
+  actuators; one assignment may hold N capability-bound capsules doctrinally,
+  while candidate-A implementation is transitional 1:1.
+- **Scheduling (Mission A):** one live CoSuper assignment per computer;
+  durable computer-scoped arrival ordinals; FIFO among non-expired requests;
+  expiry by terminal operation / superseding owner correction / deadline;
+  assignment deadlines fail rather than hang; admission refusal is retryable
+  with work pending. Mission-B parallelism (N concurrent assignments,
+  admission ledger, overcommit factor) is a release-gate requirement after
+  sequential proof.
+- **Memory containment (Mission A):** `memory.high` = requested,
+  `memory.max` = 2×requested, `memory.events` OOM counters as feedback; no PSI
+  pause/resume tier or zram dependency. Long-term, dynamic VM resize under
+  Cloud Hypervisor makes admission accounting advisory.
+
 ## Naming Rules
 
 - Use **computer** for the durable product object identified by ComputerID and

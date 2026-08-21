@@ -88,10 +88,15 @@ path, its only agent delegation target is `texture`.
 `appagent` owns one user-facing app domain and mutates only typed app state
 through product APIs.
 
-`texture` is the primary appagent and single writer for canonical document
-versions. Workers do not write canonical `texture` text and do not send patches to
-`texture`. They emit updates: findings, evidence, source refs, artifacts,
-branches/commits, previews, tests, questions, constraints, or proposals.
+`texture` is the primary appagent and the sole *agent* writer (`AuthorAppAgent`)
+for canonical document versions. `AuthorUser` owner edits are the second writer
+class and perform immediate canonical-head CAS. Workers do not write canonical
+`texture` text and do not send patches to `texture`. They emit updates:
+findings, evidence, source refs, artifacts, branches/commits, previews, tests,
+questions, constraints, or proposals. Each Texture-agent semantic-changing turn
+creates exactly one new monotonic, self-contained version; wait/block/no-change
+turns create none; `texture_turn_committed` counts outcomes, not revisions. The
+synthetic TextureTurnWait selfdev-join path is a known authoring bypass defect.
 
 Texture source citation is tri-state (Choir Doctrine I15). Source citations are
 `source_ref` nodes only; the `source_embed` node type is removed. `display_mode`
@@ -104,19 +109,35 @@ guidance is unconditional, driven by the default Style.texture.
 `researcher` reads local context and the web, writes findings/evidence to Dolt,
 and does not own document text.
 
-`super` is the per-user privileged orchestration root. It may orchestrate
-durable delegated runs and capability-bound capsules and inspect their evidence;
-it does not directly mutate the computer, host, route, or canonical event state.
+`super` is exactly one per ComputerID: the whole-computer coherence,
+error-correction, and resource-arbitration authority — not a concurrency
+limiter and not a document/computer mutator. It may orchestrate durable
+delegated runs and capability-bound capsules and inspect their evidence; it
+does not directly mutate the computer, host, route, or canonical event state.
 
 `vsuper` is retired. Its aliases, profile, prompt, spawn rules, tool grants, and
 runtime paths are deleted; it must not survive as a privileged worker role.
 
-`cosuper` performs scoped effectful work only inside a capability-bound guest
-capsule. It has no host, raw VM, route, canonical event, or acceptance authority.
+`cosuper` is a task-level actuator performing scoped effectful work inside
+capability-bound guest capsule(s). One assignment may hold N capsules
+doctrinally; candidate A implements transitional 1:1. CoSuper has no host, raw
+VM, route, canonical event, or acceptance authority.
 
 Delegated agents such as researcher, super, cosuper, and future specialized
 roles are durable runs/trajectories with scoped tools. They are not worker
 computers or worker VMs.
+
+## Scheduling and Memory Containment (Mission A)
+
+One live CoSuper assignment per computer. Durable computer-scoped arrival
+ordinals order requests; FIFO applies among non-expired requests; requests
+expire on operation terminality / superseding owner correction / deadline;
+assignment deadlines fail rather than hang; admission refusal is retryable with
+work pending. Containment: `memory.high` = requested, `memory.max` =
+2×requested, `memory.events` OOM counters as feedback — no PSI pause/resume and
+no zram in Mission A. Mission B (parallel textures/trajectories, N concurrent
+assignments, admission-ledger overcommit) is a release-gate requirement after
+sequential proof.
 
 ## Computer Model
 

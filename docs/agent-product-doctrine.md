@@ -19,7 +19,10 @@ unless `AGENTS.md` is carrying a newer explicitly promoted operating update.
 ## Authority Boundaries
 
 - `conductor` routes exogenous user/app/connector input into Texture/artifact state. It has no self-development mutation authority.
-- Appagents own durable app artifacts. `texture` owns canonical document versions.
+- Appagents own durable app artifacts. Canonical document versions have two
+  writer classes: `AuthorUser` owner edits (immediate canonical-head CAS) and
+  `AuthorAppAgent` Texture revisions (sole agent writer). No other agent writes
+  document text.
 - `researcher` currently reads/researches and may submit only the typed
   `update_coagent` source-packet mutation through the canonical event appender.
   It has no Bash, raw Dolt, writable files, capsule commit, acceptance, route,
@@ -44,6 +47,25 @@ One stable `ComputerID` plus its canonical event chain is the evolving
 computer. A frozen capsule effect bundle is speculative and inert. Canonical
 desired state changes only by an authorized acceptance event; effective state
 changes only after verified guest materialization.
+
+## Supervision Contract (2026-08-21)
+
+- **Texture agent scope is exactly two jobs:** revise the human-readable
+  document and message other agents. No capsule, host, provider-routing,
+  event-chain, or promotion authority. Humans interface only with Texture.
+- **Super singleton:** exactly one per ComputerID — coherence,
+  error-correction, and resource arbitration over the whole computer; not a
+  concurrency limiter, never a document/computer mutator.
+- **CoSuper cardinality:** task-level actuator; N capability-bound capsules
+  per assignment is doctrinal; candidate A implements transitional 1:1.
+- **Mission A scheduling:** one live CoSuper assignment per computer;
+  computer-scoped arrival ordinals; FIFO among non-expired requests; expiry by
+  terminal operation / superseding owner correction / deadline; deadlines fail
+  rather than hang; admission refusal retryable with work pending.
+- **Mission-A memory containment:** `memory.high` = requested, `memory.max` =
+  2×requested, `memory.events` OOM feedback; no PSI pause/resume or zram.
+  Mission B — parallel Textures/trajectories, N assignments, admission-ledger
+  overcommit — is a release-gate requirement after sequential proof.
 
 ## Current Invariants (2026-07-08)
 
