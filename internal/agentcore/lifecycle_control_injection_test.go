@@ -321,6 +321,16 @@ func TestPersistentSuperLifecycleControlsStayTrajectoryIsolatedThenReconcile(t *
 	if err != nil || bootRun.RunID != firstRun.RunID || lifecycleControlTrajectoryForRun(&bootRun) != firstTrajectory {
 		t.Fatalf("boot exact-run reconciliation=%+v err=%v", bootRun, err)
 	}
+	foundRecovery := false
+	for _, dispatch := range dispatches {
+		if strings.HasPrefix(dispatch, "coagent_result:"+PersistentSuperRecoveryPrefix) {
+			foundRecovery = true
+			break
+		}
+	}
+	if !foundRecovery {
+		t.Fatalf("boot did not enqueue exact persistent Super recovery occurrence: %v", dispatches)
+	}
 	bootInject := rt.coagentUpdateTurnInjectorWithInitialPhase(&bootRun, coagentPacketDeliveryCold)
 	firstBootPayload, err := bootInject(false)
 	if err != nil || len(firstBootPayload) != 1 || !strings.Contains(string(firstBootPayload[0]), "durable typed control content") {

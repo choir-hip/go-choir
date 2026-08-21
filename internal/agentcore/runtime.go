@@ -575,7 +575,7 @@ func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWa
 func (rt *Runtime) Start(ctx context.Context) {
 	rt.passivateInterruptedActivations(ctx)
 	rt.rewarmInterruptedLifecycleActivations(ctx)
-	rt.reconcileCoSuperAssignmentCapsulesAfterRestart(ctx)
+	rt.rewarmInterruptedPersistentSuperActors(ctx)
 	rt.recoverOpenWirePublicationClaims(ctx)
 	terminalOutcomeTargets := rt.reconcileTerminalRunOutcomes(ctx)
 	rt.sweepPassivatedSpawnedCoagentWork(ctx)
@@ -2104,6 +2104,42 @@ func (rt *Runtime) rewarmInterruptedLifecycleActivations(ctx context.Context) {
 		}
 	}
 	rt.reactivateRetryableLifecycleInjectionRuns(ctx, computerID)
+}
+
+// rewarmInterruptedPersistentSuperActors re-enters the persistent Super
+// controller for exact lifecycle runs that were passivated by a process
+// restart. The controller selects only the run's delivered controls and emits
+// a distinct exact-run recovery occurrence; this does not create a new Super
+// from arbitrary backlog.
+func (rt *Runtime) rewarmInterruptedPersistentSuperActors(ctx context.Context) {
+	if rt == nil || rt.store == nil {
+		return
+	}
+	runs, err := rt.store.ListAllRunsByState(ctx, types.RunPassivated)
+	if err != nil {
+		log.Printf("runtime: boot persistent-Super rewarm: list passivated runs: %v", err)
+		return
+	}
+	seen := make(map[string]struct{})
+	for _, run := range runs {
+		if agentprofile.Canonical(agentProfileForRun(&run)) != agentprofile.Super ||
+			agentprofile.Canonical(run.AgentRole) != agentprofile.Super ||
+			metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" {
+			continue
+		}
+		reason := metadataStringValue(run.Metadata, "passivated_reason")
+		if reason != "runtime_restarted" && reason != runtimeInjectionAppendFailurePassivationReason {
+			continue
+		}
+		key := strings.TrimSpace(run.OwnerID) + "\x00" + strings.TrimSpace(run.AgentID)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		if _, reconcileErr := rt.reconcilePersistentSuperActor(ctx, run.OwnerID, run.AgentID); reconcileErr != nil {
+			log.Printf("runtime: boot persistent-Super rewarm run %s: %v", run.RunID, reconcileErr)
+		}
+	}
 }
 
 // reactivateRetryableLifecycleInjectionRuns resumes the same passivated
