@@ -34,8 +34,7 @@ goal:
   product_outcome: "The automatic computer schedules exactly one non-expired execution request at a time per computer under a durable, restart-safe contract; one CoSuper capsule authors, builds, tests, freezes, and proposes candidate change A end-to-end on staging; qualified consensus, promotion, live play verification, falsification with B, and acceptance-fenced restore to checkpoint 99949fe2 follow under the already-ratified candidate-proof decision policy."
   observed_starting_state: "Retained computer epoch 361 on e42c65c0; assignment supersession loop active (two competing parent requests); effects OFF; docs fully aligned to ratified architecture."
   final_artifact: "Deployed staging proof: scheduler selects one request by computer-scoped ordinal, settles stale duplicates as late evidence, survives restart without re-supersession; CoSuper completes full candidate A arc through restore. Texture revisions appear when semantic state changes — authored by the Texture agent — with lifecycle events (assignment/ordinal/deadline) never forcing revisions."
-  authority_boundary: "This Definition owns the scheduling-contract implementation, texture-join authoring repair, and the candidate A proof. It does not authorize parallel assignments (Mission B), Cloud Hypervisor migration, PSI/zram tiers, email effects, or any live send/mail/restore outside the acceptance-fenced E2 leg. Effects remain OFF until promotion within this Definition's own gates."
-  rollback: "Restore to published pre-A checkpoint 99949fe2; git revert of platform commits through origin/main + CI/deploy remains the independent repo fallback. Staging stale textures are cancelled as hygiene before scheduler work begins."
+  authority_boundary: "This Definition owns the scheduling-contract implementation, texture-join authoring repair, and the candidate A proof. It does not authorize parallel assignments (Mission B), Cloud Hypervisor migration, PSI/zram tiers, email effects, any live send/mail/restore outside the acceptance-fenced E2 leg, or redesign of the consensus panel architecture (deferred to a post-RLM mission; reversible-selfdev-v1 is used as-frozen with gpt-5.6-terra staffing the independent-reviewer seat). Effects remain OFF until promotion within this Definition's own gates."
   compact_current_state: "Docs aligned; scheduler unimplemented; supersession loop live on staging; candidate A unpaid."
 
 invariants:
@@ -65,6 +64,9 @@ conjectures:
   - id: genuine-authoring-turn-cadence-ok
     conjecture: "Routing selfdev joins through genuine Texture authoring turns produces healthy revision cadence without milestone-forcing."
     falsifier: "Turn-outcome census after repair shows semantic changes going unpublished or revision spam from mechanical transitions."
+  - id: panel-diversity-deferred
+    conjecture: "A two-model verification panel (luna authoring + terra reviewing) is adequate for candidate A; deeper panel design (true model diversity, seat topology, RLM-era agentic model config) is deliberately deferred to a post-RLM mission when node-b gateway compute expands."
+    falsifier: "Candidate A promotion passes while the two models share a correlated blind spot that restore/falsification then exposes — evidence that same-family review was insufficient."
 
 phases:
   - name: Scheduler Contract
@@ -83,7 +85,7 @@ phases:
     items:
       - "Verify scheduler holds under real candidate A load (no supersession across full arc)"
       - "CoSuper capsule authors, builds, tests, freezes candidate A with five bundle refs bound to capsule receipts"
-      - "Qualified consensus under reversible-selfdev-v1 approves exact subject"
+      - "Qualified consensus under reversible-selfdev-v1 approves exact subject; independent-reviewer seat runs on gpt-5.6-terra (distinct from authoring CoSuper's luna) per owner direction 2026-08-21"
       - "Promotion, live play API verification, falsification with B"
       - "Acceptance-fenced restore to pre-A checkpoint 99949fe2"
 
