@@ -127,6 +127,7 @@ now:
     - "docs/designs/host-orchestrated-recovery-2026-08-22.md"
     - ".agentic-consensus/restore-when-guest-down-20260822/manifest.tsv"
     - ".agentic-consensus/host-orchestrated-recovery-plan-20260822/manifest.tsv"
+    - "docs/evidence/effects-red-recovery-trusted-guest-copy-authority-2026-08-22.md"
   blocker_or_risk: "Local unit coverage passes for strict protocol, quarantine/staging, proxy owner isolation, lease fencing, and frontend build. New red evidence shows no concrete trusted-guest privacy-key attachment authority exists yet (`docs/evidence/effects-red-recovery-trusted-guest-copy-authority-2026-08-22.md`); vmctl production wiring still needs that authority plus corpusd head-reader and post-boot replay/ComputerVersion/frontend verifier. No recovery endpoint is claimed deployed until those authorities are configured."
   next_action: "Design and implement the reviewed trusted recovery-unit contract, wire it in cmd/vmctl, add fault/isolation coverage, then commit/push, pass CI, deploy, and run the owner product-path recovery proof on 0333528."
 ---
