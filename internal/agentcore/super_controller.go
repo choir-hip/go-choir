@@ -16,6 +16,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -234,10 +235,104 @@ func lifecycleActivationKeys(ownerID, computerID, trajectoryID, agentID, buildCo
 	return logicalKey, failedKey, versions, nil
 }
 
-// reconcilePersistentSuperActor is the durable controller boundary for the
-// user's privileged execution actor. update_coagent can append addressed work
-// for the persistent super, but only this runtime controller starts or reuses
-// the super execution loop that drains those durable updates.
+// pendingSelfDevelopmentTextureInstruction reports whether any self-development
+// supervision trajectory for this owner carries a pending Texture owner
+// instruction (the genuine-authoring rewake queued by
+// ensureSelfDevelopmentTextureJoin after a terminal Super).
+func (rt *Runtime) pendingSelfDevelopmentTextureInstruction(ctx context.Context, ownerID string) (bool, error) {
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	superAgentID := persistentSuperAgentID(ownerID)
+	latest, err := rt.store.GetLatestRunByAgent(ctx, ownerID, superAgentID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	if !isPersistentSuperAgentRun(&latest) || !selfDevelopmentSuperRunTerminal(latest.State) {
+		return false, nil
+	}
+	operations, err := rt.selfDevelopmentRewakeOperations(ctx, ownerID, computerID, &latest)
+	if err != nil {
+		return false, err
+	}
+	for _, operation := range operations {
+		docID, _, _, trajectoryID, _, _ := selfDevelopmentTextureJoinIDs(ownerID, computerID, operation.OperationID)
+		instructions, instrErr := rt.store.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, computerID, trajectoryID, agentprofile.Texture+":"+docID, "")
+		if instrErr != nil {
+			continue
+		}
+		if len(instructions) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// resumeSelfDevelopmentSuperForPendingInstruction starts a fresh persistent
+// Super bound to the operation whose Texture instruction is pending. The Super
+// prompt directs it to reconcile the operation; the Texture actor consumes the
+// instruction through its own tool loop in parallel.
+func (rt *Runtime) resumeSelfDevelopmentSuperForPendingInstruction(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	superAgentID := persistentSuperAgentID(ownerID)
+	if agentID != superAgentID {
+		return nil, nil
+	}
+	// Never mint a competing Super: an active resident run owns the slot, and
+	// reconcile returns the resident through the earlier branch. If this check
+	// raced a just-activated run, the run-count guard below still holds.
+	if active, found, activeErr := rt.activeRunByAgent(ctx, ownerID, superAgentID); activeErr == nil && found {
+		return &active, nil
+	}
+	latest, err := rt.store.GetLatestRunByAgent(ctx, ownerID, superAgentID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	var operationID string
+	if latest.RunID != "" {
+		operationID = strings.TrimSpace(firstNonEmpty(
+			metadataStringValue(latest.Metadata, "self_development_operation_id"),
+			metadataStringValue(latest.Metadata, "self_development_unbound_operation_id"),
+		))
+	}
+	if operationID == "" {
+		operations, listErr := rt.selfDevelopmentRewakeOperations(ctx, ownerID, computerID, &latest)
+		if listErr != nil || len(operations) == 0 {
+			return nil, nil
+		}
+		operationID = operations[0].OperationID
+	}
+	// An operation that already resolves to a run is owned by that run's
+	// activation or the API start path (selfdevStartMu). Instruction resume
+	// only fills the no-run gap.
+	if runs, runErr := rt.store.ListRunsBySelfDevelopmentOperation(ctx, ownerID, operationID, 2); runErr == nil && len(runs) > 0 {
+		return nil, nil
+	}
+	prompt := rt.selfDevelopmentRewakePrompt(ctx, ownerID, selfdev.Operation{OperationID: operationID})
+	_, _, textureTrajectoryID, _, _, _ := selfDevelopmentTextureJoinIDs(ownerID, computerID, operationID)
+	metadata := map[string]any{
+		runMetadataAgentProfile:         agentprofile.Super,
+		runMetadataAgentRole:            agentprofile.Super,
+		runMetadataAgentID:              agentID,
+		"request_source":                "lifecycle_texture_control",
+		"self_development_operation_id": operationID,
+		"assignment_trajectory_id":      textureTrajectoryID,
+	}
+	rec, createErr := rt.createRunWithMetadata(ctx, prompt, ownerID, metadata)
+	if createErr != nil {
+		return nil, createErr
+	}
+	rec.TrajectoryID = ""
+	delete(rec.Metadata, runMetadataTrajectoryID)
+	if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+		rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
+		return nil, fmt.Errorf("preserve non-lifecycle persistent-Super run: %w", err)
+	}
+	rt.activate(rec)
+	return rec, nil
+}
+
 func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	agentID = strings.TrimSpace(agentID)
@@ -277,14 +372,22 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		return nil, err
 	}
 	if len(updates) == 0 {
-		// If no lifecycle control is pending in the mailbox, check if an executing
-		// self-development operation needs a Texture execution_request rewake.
+		// If no lifecycle control is pending in the mailbox, check whether an
+		// executing self-development operation needs a Texture execution_request
+		// rewake (the original path), and separately whether a genuine-authoring
+		// owner instruction is already queued on a supervision trajectory. The
+		// resume path only fills the no-run gap: it never mints a Super when any
+		// run is already bound to the operation.
 		if rewakeErr := rt.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, ownerID); rewakeErr != nil {
 			log.Printf("runtime: self-development Texture rewake after terminal Super: %v", rewakeErr)
-		} else {
-			updates, err = rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100)
-			if err != nil {
+		}
+		pending, instrErr := rt.pendingSelfDevelopmentTextureInstruction(ctx, ownerID)
+		if instrErr == nil && pending {
+			if updates, err = rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100); err != nil {
 				return nil, err
+			}
+			if len(updates) == 0 {
+				return rt.resumeSelfDevelopmentSuperForPendingInstruction(ctx, ownerID, agentID)
 			}
 		}
 	}

@@ -140,8 +140,7 @@ func (rt *Runtime) ensureSelfDevelopmentTextureJoin(ctx context.Context, operati
 	if err != nil {
 		return fmt.Errorf("load self-development Texture lifecycle: %w", err)
 	}
-	caller, err := rt.ensureSelfDevelopmentTextureCaller(ctx, ownerID, computerID, trajectoryID, textureAgentID, textureWorkID, docID)
-	if err != nil {
+	if _, err := rt.ensureSelfDevelopmentTextureCaller(ctx, ownerID, computerID, trajectoryID, textureAgentID, textureWorkID, docID); err != nil {
 		return err
 	}
 	wakeToken := ""
@@ -167,100 +166,123 @@ func (rt *Runtime) ensureSelfDevelopmentTextureJoin(ctx context.Context, operati
 				return nil
 			}
 		}
-	}
-	controlID := openerControlID
-	commandID := "turn:selfdev-texture:" + operation.OperationID
-	var openWork *types.WorkItemRecord
-	targetWorkID := superWorkID
-	if wakeToken != "" {
-		controlID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
-			"choir:texture:self-development", ownerID, computerID, operation.OperationID, "rewake", wakeToken,
-		}, ":"))).String()
-		commandID = "turn:selfdev-texture-rewake:" + operation.OperationID + ":" + wakeToken
-		if existing := selfDevelopmentOpenSuperWork(snapshot, superAgentID); existing != nil {
-			targetWorkID = existing.WorkItemID
-		} else {
-			rewakeWorkID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
-				"choir:texture:self-development", ownerID, computerID, operation.OperationID, "work:super:rewake", wakeToken,
-			}, ":"))).String()
-			targetWorkID = rewakeWorkID
-			openWork = &types.WorkItemRecord{
-				WorkItemID: rewakeWorkID, Objective: strings.TrimSpace(prompt),
-				AuthorityProfile: agentprofile.Super, Status: types.WorkItemOpen, AssignedAgentID: superAgentID,
-			}
+		// First-time start: the deterministic caller run IS the Texture agent's
+		// activation for this trajectory. Its opener turn (work + first typed
+		// execution_request) is committed by ApplyTextureTurn under the Texture
+		// agent's own authority — the same reducer path a resident Texture
+		// actor's tool-loop turn uses. This is the one direct runtime commit that
+		// remains: it creates the supervision subject itself, before any
+		// resident Texture run exists to commit turns.
+		packet, packetErr := PrepareTextureControlPacket(types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "execution_request",
+			Summary:       "Author, freeze, and propose the bound self-development operation.",
+			Sources: []types.CoagentPacketSource{{
+				SourceID: "src-operation",
+				Kind:     sourcecontract.SourceKindCapsuleBundle,
+				Target:   types.CoagentPacketSourceTarget{URI: "operation:" + operation.OperationID},
+			}},
+			Actions: []types.CoagentPacketAction{{
+				Type:      "run_command",
+				Objective: strings.TrimSpace(prompt),
+				Safety: types.CoagentPacketActionSafety{
+					MutationClass: "green",
+					Network:       "forbidden",
+					FileMutation:  "forbidden",
+				},
+			}},
+		})
+		if packetErr != nil {
+			return fmt.Errorf("prepare self-development Super execution_request: %w", packetErr)
 		}
-	} else if existing := selfDevelopmentOpenSuperWork(snapshot, superAgentID); existing != nil {
-		// First-time start: if the open Super work item already exists from a concurrent
-		// opener turn, the opener is already committed; do not mint a competing continue turn.
+		content := BuildTextureLifecycleControlContent(packet, superAgentID, superWorkID)
+		payloadDigest, digestErr := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+		if digestErr != nil {
+			return fmt.Errorf("digest self-development Super control: %w", digestErr)
+		}
+		textureAgent, agentErr := rt.store.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
+		if agentErr != nil {
+			return fmt.Errorf("load self-development Texture agent: %w", agentErr)
+		}
+		freshSnapshot, snapErr := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+		if snapErr != nil {
+			return fmt.Errorf("reload self-development Texture lifecycle: %w", snapErr)
+		}
+		turn := types.ApplyTextureTurnRequest{
+			OwnerID: ownerID, ComputerID: computerID, CommandID: "turn:selfdev-texture:" + operation.OperationID,
+			DocumentID: docID, TrajectoryID: trajectoryID,
+			CallerAgentID: textureAgentID, CallerRunID: rt.selfDevelopmentCallerRunID(ownerID, computerID, trajectoryID),
+			ExpectedLifecycleVersion: freshSnapshot.Trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion,
+			ExpectedHeadRevisionID: freshSnapshot.HeadRevision.RevisionID, CallerWorkItemID: textureWorkID,
+			CallerWorkDisposition: types.WorkItemOpen, Outcome: types.TextureTurnWait, Reason: "wait after self-development Super control",
+			Controls: []types.TextureTurnControl{{
+				ControlID: openerControlID, TargetAgentID: superAgentID, TargetWorkItemID: superWorkID,
+				OpenWork: &types.WorkItemRecord{
+					WorkItemID: superWorkID, Objective: strings.TrimSpace(prompt),
+					AuthorityProfile: agentprofile.Super, Status: types.WorkItemOpen, AssignedAgentID: superAgentID,
+				},
+				Packet: packet, Content: content, PayloadDigest: payloadDigest,
+			}},
+		}
+		turn.CommandDigest, err = store.ComputeApplyTextureTurnDigest(turn)
+		if err != nil {
+			return fmt.Errorf("digest self-development Texture turn: %w", err)
+		}
+		if _, err := rt.store.ApplyTextureTurn(ctx, turn); err != nil {
+			return fmt.Errorf("apply self-development Texture Super opener: %w", err)
+		}
 		return nil
-	} else {
-		openWork = &types.WorkItemRecord{
-			WorkItemID: superWorkID, Objective: strings.TrimSpace(prompt),
-			AuthorityProfile: agentprofile.Super, Status: types.WorkItemOpen, AssignedAgentID: superAgentID,
+	}
+
+	// Rewake after a terminal Super: the runtime never commits a Texture turn
+	// directly here. Queue one occurrence-keyed owner instruction on the
+	// Texture trajectory and wake the genuine Texture agent; the agent's own
+	// tool-loop turn consumes the instruction and commits its own outcome
+	// (wait/revision/block) through applyTextureLifecycleTurn.
+	controlID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
+		"choir:texture:self-development", ownerID, computerID, operation.OperationID, "rewake", wakeToken,
+	}, ":"))).String()
+	requestID := "owner-request-selfdev-rewake-" + controlID
+	instructionID := "owner-instruction-selfdev-rewake-" + controlID
+	instructionContent := strings.TrimSpace(prompt) + "\n\nSelf-development operation " + operation.OperationID +
+		" requires supervision: open or continue exactly one implementation CoSuper assignment with assign_co_super."
+	instructionReq := types.QueueLifecycleOwnerInstructionRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "queue:" + instructionID,
+		RequestID: requestID, InstructionID: instructionID, DocumentID: docID, TrajectoryID: trajectoryID,
+		TargetAgentID: textureAgentID, TargetWorkItemID: textureWorkID,
+		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+		ExpectedHeadRevisionID:   snapshot.HeadRevision.RevisionID,
+		Kind:                     types.LifecycleOwnerTell, Content: instructionContent,
+	}
+	instructionReq.CommandDigest, err = store.ComputeQueueLifecycleOwnerInstructionDigest(instructionReq)
+	if err != nil {
+		return fmt.Errorf("digest self-development Texture owner instruction: %w", err)
+	}
+	if _, err := rt.store.QueueLifecycleOwnerInstruction(ctx, instructionReq); err != nil {
+		if errors.Is(err, store.ErrLifecycleCommandConflict) {
+			return nil // this rewake occurrence is already durably queued.
 		}
+		return fmt.Errorf("queue self-development Texture owner instruction: %w", err)
 	}
-	var notes []string
-	if wakeToken != "" {
-		notes = []string{"Prior implementation attempts for operation " + operation.OperationID + " are terminal. Open a fresh implementation CoSuper assignment with assign_co_super."}
+	if !rt.DispatchActorActive() {
+		return fmt.Errorf("self-development Texture owner instruction queued but actor dispatch unavailable")
 	}
-	packet, err := PrepareTextureControlPacket(types.CoagentSourcePacketPayload{
-		SchemaVersion: types.CoagentSourcePacketSchemaV1,
-		Kind:          "execution_request",
-		Summary:       "Author, freeze, and propose the bound self-development operation.",
-		Sources: []types.CoagentPacketSource{{
-			SourceID: "src-operation",
-			Kind:     sourcecontract.SourceKindCapsuleBundle,
-			Target:   types.CoagentPacketSourceTarget{URI: "operation:" + operation.OperationID},
-		}},
-		Actions: []types.CoagentPacketAction{{
-			Type:      "run_command",
-			Objective: strings.TrimSpace(prompt),
-			Safety: types.CoagentPacketActionSafety{
-				MutationClass: "green",
-				Network:       "forbidden",
-				FileMutation:  "forbidden",
-			},
-		}},
-		Notes: notes,
-	})
-	if err != nil {
-		return fmt.Errorf("prepare self-development Super execution_request: %w", err)
-	}
-	content := BuildTextureLifecycleControlContent(packet, superAgentID, targetWorkID)
-	payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
-	if err != nil {
-		return fmt.Errorf("digest self-development Super control: %w", err)
-	}
-	textureAgent, err := rt.store.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
-	if err != nil {
-		return fmt.Errorf("load self-development Texture agent: %w", err)
-	}
-	snapshot, err = rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
-	if err != nil {
-		return fmt.Errorf("reload self-development Texture lifecycle: %w", err)
-	}
-	turn := types.ApplyTextureTurnRequest{
-		OwnerID: ownerID, ComputerID: computerID, CommandID: commandID, DocumentID: docID, TrajectoryID: trajectoryID,
-		CallerAgentID: textureAgentID, CallerRunID: caller.RunID,
-		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion,
-		ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, CallerWorkItemID: textureWorkID,
-		CallerWorkDisposition: types.WorkItemOpen, Outcome: types.TextureTurnWait, Reason: "wait after self-development Super control",
-		Controls: []types.TextureTurnControl{{
-			ControlID: controlID, TargetAgentID: superAgentID, TargetWorkItemID: targetWorkID,
-			OpenWork: openWork, Packet: packet, Content: content, PayloadDigest: payloadDigest,
-		}},
-	}
-	turn.CommandDigest, err = store.ComputeApplyTextureTurnDigest(turn)
-	if err != nil {
-		return fmt.Errorf("digest self-development Texture turn: %w", err)
-	}
-	if _, err := rt.store.ApplyTextureTurn(ctx, turn); err != nil {
-		return fmt.Errorf("apply self-development Texture Super opener: %w", err)
+	if err := rt.DispatchActor(ctx, ownerID, computerID, textureAgentID, "coagent_result",
+		instructionID, trajectoryID, "owner:"+ownerID); err != nil {
+		return fmt.Errorf("wake self-development Texture actor for owner instruction: %w", err)
 	}
 	return nil
 }
 
 const selfDevelopmentRewakeFallbackPrompt = "Author, freeze, and propose the bound self-development operation."
+
+// selfDevelopmentCallerRunID derives the stable deterministic Texture caller
+// run identity for one self-development trajectory.
+func (rt *Runtime) selfDevelopmentCallerRunID(ownerID, computerID, trajectoryID string) string {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
+		"choir:texture:self-development", ownerID, computerID, trajectoryID, "texture-run",
+	}, ":"))).String()
+}
 
 // maybeRewakeSelfDevelopmentTextureAfterTerminalSuper mints turn:selfdev-texture-rewake
 // when the latest persistent Super is terminal and a self-development operation is
