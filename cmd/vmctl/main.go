@@ -120,6 +120,12 @@ func main() {
 	}
 	handler := vmctl.NewHandler(registry)
 	handler.SetColdRecoveryStorage(mgr)
+	stateRoot := mgr.StateDir()
+	if stateRoot == "" {
+		stateRoot = "/var/lib/go-choir/vm-state"
+	}
+	handler.SetTrustedGuestKeyCopier(vmctl.TrustedGuestCopier{StateRoot: stateRoot})
+	log.Printf("vmctl: recover_current trusted guest copier configured (state_root=%s)", stateRoot)
 	if corpusdURL := strings.TrimSpace(os.Getenv("VMCTL_CORPUSD_URL")); corpusdURL != "" {
 		handler.SetColdRecoveryHeadReader(vmctl.HTTPRecoveryHeadReader{BaseURL: corpusdURL})
 		handler.SetColdRecoveryVerifier(vmctl.HTTPRecoveryVerifier{

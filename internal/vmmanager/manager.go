@@ -277,11 +277,16 @@ type Manager struct {
 	opMu     sync.Mutex
 	vmOps    map[string]*sync.Mutex // serializes lifecycle operations per VM identity
 
-	// healthCancel is used to stop the background health checker.
 	healthCancel chan struct{}
 	healthDone   chan struct{}
 }
 
+func (m *Manager) StateDir() string {
+	if m == nil {
+		return ""
+	}
+	return m.cfg.StateDir
+}
 const (
 	vmSubnetSecondOctetBase  = 200
 	vmSubnetSecondOctetCount = 16

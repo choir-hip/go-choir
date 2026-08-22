@@ -95,17 +95,16 @@ conjectures:
 phases:
   - name: Recovery Orchestration
     items:
-      - "Implement vmctl POST /internal/vmctl/computers/{id}/cold-recover (recover_current only) with per-ComputerID fencing token, corpusd recovery lease allowlisting boot appends, durable journal (fenced→stopped→key_copied→staging→verified→swapped→booted→route_published→done), whole-file quarantine, trusted-guest single-key attachment boundary, sparse staging via vmmanager, and route CAS bound to token. The concrete trusted recovery unit remains a blocking sub-item."
+      - "Implement vmctl POST /internal/vmctl/computers/{id}/cold-recover (recover_current only) with per-ComputerID fencing token, corpusd recovery lease allowlisting boot appends, durable journal (fenced→stopped→key_copied→staging→verified→swapped→booted→route_published→done), whole-file quarantine, trusted-guest single-key attachment (TrustedGuestCopier via debugfs/plain), sparse staging via vmmanager, and route CAS bound to token."
       - "Implement proxy/BIOS integration: owner-authorized fallback for inactive computer (recover_current only, no checkpoint passthrough) and Desktop.svelte one-shot cold-recover after :8085 refusal with recovery.status."
       - "Tests: rewind-refusal, multitenant isolation, lease/head-movement/re-verify, crash-resume, rollback-on-verification-failure."
-
 now:
   status: working
-  slice: "Phase 1 implementation landed locally; deployed staging proof remains outstanding."
-  question: "Will the product-wired trusted-guest attachment plus final-head verifier make recover_current boot-fresh without host ext4 surgery?"
+  slice: "Trusted-guest single-key copy wired locally; awaiting push/CI/deploy and owner staging proof."
+  question: "Will the host-emulated trusted-guest copy plus final-head verifier make recover_current boot-fresh without host ext4 mount?"
   reconciliation:
     observed_at: "2026-08-22T21:00:00Z"
-    source_ref: "working tree after local recovery implementation; staging remains stopped epoch 361"
+    source_ref: "working tree after trusted-guest copy wiring (copier + StateDir + verifier/headReader); staging remains stopped epoch 361"
     deploy_identity: "staging proxy f54eb735 guest f54eb735 computer 0333528 stopped"
     authority_identities: [docs/choir-doctrine.md, docs/computer-ontology.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
@@ -115,7 +114,7 @@ now:
     id: none
     state: none
   decision:
-    selected: "Host-orchestrated recover_current now; authorized_checkpoint (99949fe2) deferred to E2 Definition. No ext4 host parse; privacy-key via trusted-guest attachment."
+    selected: "Host-orchestrated recover_current now; authorized_checkpoint (99949fe2) deferred to E2 Definition. No ext4 host mount; privacy-key via trusted-guest single-file copy (debugfs/plain) with fencing token."
     kind: architecture
     status: settled
     source: owner direction 2026-08-22 + agentic consensus (Claude included, approve with repairs)
@@ -128,6 +127,6 @@ now:
     - ".agentic-consensus/restore-when-guest-down-20260822/manifest.tsv"
     - ".agentic-consensus/host-orchestrated-recovery-plan-20260822/manifest.tsv"
     - "docs/evidence/effects-red-recovery-trusted-guest-copy-authority-2026-08-22.md"
-  blocker_or_risk: "Local unit coverage passes for strict protocol, quarantine/staging, proxy owner isolation, lease fencing, and frontend build. New red evidence shows no concrete trusted-guest privacy-key attachment authority exists yet (`docs/evidence/effects-red-recovery-trusted-guest-copy-authority-2026-08-22.md`); vmctl production wiring still needs that authority plus corpusd head-reader and post-boot replay/ComputerVersion/frontend verifier. No recovery endpoint is claimed deployed until those authorities are configured."
-  next_action: "Design and implement the reviewed trusted recovery-unit contract, wire it in cmd/vmctl, add fault/isolation coverage, then commit/push, pass CI, deploy, and run the owner product-path recovery proof on 0333528."
----
+    - "docs/evidence/effects-red-recovery-trusted-guest-copy-fix-2026-08-22.md"
+  blocker_or_risk: "Trusted-guest copier is wired (TrustedGuestCopier via debugfs/plain, StateDir, headReader, verifier). Local unit, quarantine/staging, proxy isolation, lease, and frontend build pass. Remaining is push/CI/deploy and owner product-path recovery proof on 0333528; quarantine retention and mode-0400 are verified locally, staging proof will confirm replay equivalence."
+  next_action: "Commit, push, wait CI, verify Node B deploy, then run owner cookie/BIOS cold-recover on 0333528 and collect recovery.status, quarantine, rewind-refusal, lease, and isolation receipts."
