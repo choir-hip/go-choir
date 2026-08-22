@@ -138,7 +138,13 @@ type Runtime struct {
 	selfdevStartupEventSchema   uint64
 	selfdevStartupReducer       uint64
 	selfdevStartMu              sync.Mutex
-	selfdevMaterializeMu        sync.Mutex
+	// superReconcileMu serializes persistent-Super creation across every
+	// reconcile entry path (API start, inbox continuation, boot rewarm). It is
+	// distinct from selfdevStartMu, which only guards ensureSelfDevelopmentRun;
+	// a blocking Lock here would self-deadlock that path (sync.Mutex is not
+	// re-entrant).
+	superReconcileMu     sync.Mutex
+	selfdevMaterializeMu sync.Mutex
 }
 
 type textureWakeTimer interface {

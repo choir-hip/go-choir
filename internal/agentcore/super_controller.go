@@ -333,9 +333,20 @@ func (rt *Runtime) resumeSelfDevelopmentSuperForPendingInstruction(ctx context.C
 	return rec, nil
 }
 
+// reconcilePersistentSuperActor is the durable controller boundary for the
+// user's privileged execution actor. update_coagent can append addressed work
+// for the persistent super, but only this runtime controller starts or reuses
+// the super execution loop that drains those durable updates. Creation is
+// serialized across every entry path by superReconcileMu: without it, an
+// inbox-continuation reconcile can interleave with a selfdevStartMu-holding
+// API start and both mint operation-bound Supers (multiple-runs defect).
 func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
-	ownerID = strings.TrimSpace(ownerID)
-	agentID = strings.TrimSpace(agentID)
+	rt.superReconcileMu.Lock()
+	defer rt.superReconcileMu.Unlock()
+	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID)
+}
+
+func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
 	if ownerID == "" {
 		return nil, fmt.Errorf("owner_id is required")
 	}
@@ -383,28 +394,15 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		}
 		pending, instrErr := rt.pendingSelfDevelopmentTextureInstruction(ctx, ownerID)
 		if instrErr == nil && pending {
-			// Instruction resume mints a Super outside selfdevStartMu. TryLock
-			// serializes against the API start path when free; if this call is
-			// already inside ensureSelfDevelopmentRun (which holds selfdevStartMu),
-			// we are serialized by definition and must not re-lock (sync.Mutex is
-			// not re-entrant).
-			serialized := rt.selfdevStartMu.TryLock()
-			if serialized {
-				updates, err = rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100)
-				if err != nil {
-					rt.selfdevStartMu.Unlock()
-					return nil, err
-				}
+			// superReconcileMu (held by the wrapper) serializes this resume
+			// against every other Super creation path. Re-list controls under
+			// the same critical section; if still empty, fill the no-run gap.
+			updates, err = rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100)
+			if err != nil {
+				return nil, err
 			}
 			if len(updates) == 0 {
-				rec, resumeErr := rt.resumeSelfDevelopmentSuperForPendingInstruction(ctx, ownerID, agentID)
-				if serialized {
-					rt.selfdevStartMu.Unlock()
-				}
-				return rec, resumeErr
-			}
-			if serialized {
-				rt.selfdevStartMu.Unlock()
+				return rt.resumeSelfDevelopmentSuperForPendingInstruction(ctx, ownerID, agentID)
 			}
 		}
 	}
