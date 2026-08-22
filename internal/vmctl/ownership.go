@@ -1967,7 +1967,7 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 		return nil, err
 	}
 
-	if own.State != VMStateDegraded && own.State != VMStateFailed {
+	if own.State != VMStateDegraded && own.State != VMStateFailed && own.State != VMStateStopped {
 		return nil, fmt.Errorf("VM %s is not in a recoverable state (state=%s)", own.VMID, own.State)
 	}
 
