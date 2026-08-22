@@ -95,7 +95,7 @@ conjectures:
 phases:
   - name: Recovery Orchestration
     items:
-      - "Implement vmctl POST /internal/vmctl/computers/{id}/cold-recover (recover_current only) with per-ComputerID fencing token, corpusd recovery lease allowlisting boot appends, durable journal (fenced→stopped→key_copied→staging→verified→swapped→booted→route_published→done), whole-file quarantine, trusted-guest single-key attachment, sparse staging via vmmanager, and route CAS bound to token."
+      - "Implement vmctl POST /internal/vmctl/computers/{id}/cold-recover (recover_current only) with per-ComputerID fencing token, corpusd recovery lease allowlisting boot appends, durable journal (fenced→stopped→key_copied→staging→verified→swapped→booted→route_published→done), whole-file quarantine, trusted-guest single-key attachment boundary, sparse staging via vmmanager, and route CAS bound to token. The concrete trusted recovery unit remains a blocking sub-item."
       - "Implement proxy/BIOS integration: owner-authorized fallback for inactive computer (recover_current only, no checkpoint passthrough) and Desktop.svelte one-shot cold-recover after :8085 refusal with recovery.status."
       - "Tests: rewind-refusal, multitenant isolation, lease/head-movement/re-verify, crash-resume, rollback-on-verification-failure."
 
