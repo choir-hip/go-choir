@@ -104,6 +104,52 @@ func (c *Client) ResolveDesktopContext(ctx context.Context, userID, desktopID st
 	return &result, nil
 }
 
+// ColdRecover requests a recover_current transition for an owner-authorized,
+// inactive computer. The caller supplies both optimistic concurrency values;
+// vmctl independently re-derives owner, VM, and route authority.
+func (c *Client) ColdRecover(ctx context.Context, computerID, expectedCanonicalHead string, expectedRouteGeneration uint64, idempotencyKey string) (*ColdRecoverResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	requestBody := ColdRecoverRequest{
+		ComputerID:              strings.TrimSpace(computerID),
+		ExpectedCanonicalHead:   strings.TrimSpace(expectedCanonicalHead),
+		ExpectedRouteGeneration: expectedRouteGeneration,
+		IdempotencyKey:          strings.TrimSpace(idempotencyKey),
+	}
+	data, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: marshal cold recovery request: %w", err)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, ColdRecoverEndpoint(c.baseURL, requestBody.ComputerID), bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: create cold recovery request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Internal-Caller", "true")
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: cold recovery call failed: %w", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: read cold recovery response: %w", err)
+	}
+	if response.StatusCode != http.StatusAccepted {
+		var errorResponse vmctlErrorResponse
+		if err := json.Unmarshal(body, &errorResponse); err == nil && errorResponse.Error != "" {
+			return nil, fmt.Errorf("vmctl client: cold recovery failed: %s", errorResponse.Error)
+		}
+		return nil, fmt.Errorf("vmctl client: cold recovery failed with status %s", response.Status)
+	}
+	var result ColdRecoverResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("vmctl client: decode cold recovery response: %w", err)
+	}
+	return &result, nil
+}
+
 // RefreshDesktopContext force-refreshes an existing user/desktop VM while
 // preserving its persistent data image.
 func (c *Client) RefreshDesktopContext(ctx context.Context, userID, desktopID string) (*resolveResponse, error) {

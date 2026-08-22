@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -92,13 +93,15 @@ func main() {
 	// and wire it to the ownership registry so that VM boot/stop/resume
 	// operations are delegated to real Firecracker VMs (VAL-VM-010).
 	// If not, vmctl can still run in host-process mode for local development,
-	// but deployed environments should disable that fallback explicitly.
+	// Deployed vmctl always has Firecracker; keep the manager in scope for
+	// recover_current's filesystem-safe quarantine/staging operations.
+	var mgr *vmmanager.Manager
 	if vmmanager.IsFirecrackerAvailable() {
 		mgrCfg := vmmanager.LoadConfigFromEnv()
 		if err := mgrCfg.Validate(); err != nil {
 			log.Fatalf("vmctl: Firecracker config validation failed: %v", err)
 		}
-		mgr := vmmanager.NewManager(mgrCfg)
+		mgr = vmmanager.NewManager(mgrCfg)
 		mgr.Start()
 		if envBool("VMCTL_STOP_MANAGED_ON_EXIT", true) {
 			defer mgr.Stop()
@@ -116,6 +119,20 @@ func main() {
 		log.Fatal("vmctl: Firecracker is mandatory; host-process autoputer mode is forbidden")
 	}
 	handler := vmctl.NewHandler(registry)
+	handler.SetColdRecoveryStorage(mgr)
+	if corpusdURL := strings.TrimSpace(os.Getenv("VMCTL_CORPUSD_URL")); corpusdURL != "" {
+		handler.SetColdRecoveryHeadReader(vmctl.HTTPRecoveryHeadReader{BaseURL: corpusdURL})
+		handler.SetColdRecoveryVerifier(vmctl.HTTPRecoveryVerifier{
+			GuestURLFor: func(computerID string) (string, error) {
+				ownership := registry.GetOwnershipByComputerID(computerID)
+				if ownership == nil {
+					return "", fmt.Errorf("computer ownership not found")
+				}
+				return ownership.ComputerURL, nil
+			},
+		})
+		log.Printf("vmctl: recover_current corpusd head and guest replay authorities configured")
+	}
 	handler.RequireRouteAuthority()
 	if dsn := strings.TrimSpace(os.Getenv("VMCTL_ROUTE_DSN")); dsn != "" {
 		routeDB, err := sql.Open("mysql", dsn)

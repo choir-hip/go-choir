@@ -324,6 +324,16 @@ func (h *Handler) authorizeComputerEvent(w http.ResponseWriter, r *http.Request,
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "computer_id is required"})
 		return false
 	}
+	// Host-orchestrated recover_current: allow internal caller with owner attestation
+	// to read the canonical head without a per-computer capability, so that
+	// vmctl/proxy can derive expected_head without a guest. The caller is still
+	// authenticated as internal (X-Internal-Caller) and asserts the owner via
+	// X-Authenticated-User; cross-tenant is prevented by the subsequent
+	// ownership/route check in vmctl which re-derives owner from the registry.
+	// Only event:read is allowlisted; append/pin still require capabilities.
+	if scope == "event:read" && r.Header.Get("X-Internal-Caller") == "true" && strings.TrimSpace(r.Header.Get("X-Authenticated-User")) != "" {
+		return true
+	}
 	if err := h.eventAuth.Authorize(r, computerID, scope); err != nil {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "computer event capability refused"})
 		return false

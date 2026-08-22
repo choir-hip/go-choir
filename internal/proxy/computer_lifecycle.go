@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/platform"
+	"github.com/yusefmosiah/go-choir/internal/routeledger"
 )
 
 func parseComputerLifecyclePath(path string) (computerID, action string, ok bool) {
@@ -44,6 +45,10 @@ type resolvedComputerTarget struct {
 	ComputerURL string
 	State       string
 	Epoch       int64
+}
+
+type coldRecoveryRequest struct {
+	IdempotencyKey string `json:"idempotency_key"`
 }
 
 func (h *Handler) resolveAuthorizedComputer(ctx context.Context, authResult *AuthResult, computerID string) (*resolvedComputerTarget, error) {
@@ -234,6 +239,15 @@ func computerImportResidueSnapshotComputerID(path string) (string, bool) {
 	return computerLifecycleGuestComputerID(path, "import-residue-snapshot")
 }
 
+func computerColdRecoverComputerID(path string) (string, bool) {
+	return computerLifecycleGuestComputerID(path, "cold-recover")
+}
+
+func isComputerColdRecoverPath(path string) bool {
+	_, ok := computerColdRecoverComputerID(path)
+	return ok
+}
+
 func isComputerWorkspaceReplacePath(path string) bool {
 	_, ok := computerWorkspaceReplaceComputerID(path)
 	return ok
@@ -258,9 +272,12 @@ func isComputerImportResidueSnapshotPath(path string) bool {
 	_, ok := computerImportResidueSnapshotComputerID(path)
 	return ok
 }
-
 func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.Request) {
-	computerID, ok := computerWorkspaceReplaceComputerID(r.URL.Path)
+	computerID, ok := computerColdRecoverComputerID(r.URL.Path)
+	coldRecoverRequest := ok
+	if !ok {
+		computerID, ok = computerWorkspaceReplaceComputerID(r.URL.Path)
+	}
 	if !ok {
 		computerID, ok = computerRematerializeComputerID(r.URL.Path)
 	}
@@ -307,6 +324,10 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 			return
 		}
 	}
+	if coldRecoverRequest {
+		h.handleComputerColdRecover(w, r, authResult, target, "")
+		return
+	}
 
 	var autoputerURL string
 	if authResult.AuthMethod == "api_key" {
@@ -317,6 +338,17 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 		err = fmt.Errorf("computer realization is not active")
 	}
 	if err != nil {
+		if isComputerRematerializePath(r.URL.Path) && coldRecoverOwnerAuthorized(r, authResult, target) {
+			if r.Body != nil {
+				body, readErr := io.ReadAll(io.LimitReader(r.Body, 1))
+				if readErr != nil || len(body) != 0 {
+					writeJSON(w, http.StatusBadRequest, errorResponse{Error: "cold recovery does not accept a checkpoint request"})
+					return
+				}
+			}
+			h.handleComputerColdRecover(w, r, authResult, target, fmt.Sprintf("owner-cold-recover:%s:%d", target.ComputerID, target.Epoch))
+			return
+		}
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "computer authority unavailable"})
 		return
 	}
@@ -383,6 +415,90 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 	}
 	w.WriteHeader(response.StatusCode)
 	_, _ = w.Write(body)
+}
+
+func coldRecoverOwnerAuthorized(r *http.Request, authResult *AuthResult, target *resolvedComputerTarget) bool {
+	if authResult == nil || target == nil || target.UserID != authResult.UserID || target.ComputerID == "" {
+		return false
+	}
+	if authResult.AuthMethod == "cookie" {
+		return true
+	}
+	return authResult.AuthMethod == "api_key" && strings.TrimSpace(r.Header.Get("X-Choir-Computer")) == target.ComputerID
+}
+
+func (h *Handler) handleComputerColdRecover(w http.ResponseWriter, r *http.Request, authResult *AuthResult, target *resolvedComputerTarget, idempotencyKey string) {
+	if !coldRecoverOwnerAuthorized(r, authResult, target) {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "computer ownership required"})
+		return
+	}
+	if strings.TrimSpace(idempotencyKey) == "" {
+		var request coldRecoveryRequest
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&request); err != nil || decoder.Decode(&struct{}{}) != io.EOF {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "idempotency_key is required"})
+			return
+		}
+		idempotencyKey = strings.TrimSpace(request.IdempotencyKey)
+		if idempotencyKey == "" {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "idempotency_key is required"})
+			return
+		}
+	}
+	routeSlotID, err := routeledger.RouteSlotID(target.UserID, target.DesktopID)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "immutable ComputerVersion route unavailable"})
+		return
+	}
+	route, err := h.vmctlClient.ResolveComputerVersionRoute(r.Context(), routeSlotID)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "immutable ComputerVersion route unavailable"})
+		return
+	}
+	canonicalHead, err := h.corpusdCanonicalHead(r.Context(), target.ComputerID, authResult.UserID)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "canonical event head unavailable"})
+		return
+	}
+	recovery, err := h.vmctlClient.ColdRecover(r.Context(), target.ComputerID, canonicalHead, route.Slot.Generation, idempotencyKey)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "cold recovery authority unavailable"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"recovery":        map[string]string{"status": recovery.Status},
+		"quarantine_path": recovery.QuarantinePath,
+		"fencing_token":   recovery.FencingToken,
+	})
+}
+
+func (h *Handler) corpusdCanonicalHead(ctx context.Context, computerID, userID string) (string, error) {
+	target, err := joinBasePath(h.cfg.CorpusdURL, "/internal/computers/events/head")
+	if err != nil {
+		return "", err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, target+"?computer_id="+url.QueryEscape(computerID), nil)
+	if err != nil {
+		return "", err
+	}
+	request.Header.Set("X-Internal-Caller", "true")
+	request.Header.Set("X-Authenticated-User", userID)
+	response, err := h.corpusd.Do(request)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("corpusd event head status %d", response.StatusCode)
+	}
+	var head computerevent.Head
+	decoder := json.NewDecoder(io.LimitReader(response.Body, 64<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&head); err != nil || decoder.Decode(&struct{}{}) != io.EOF || !computerevent.IsSHA256(head.CanonicalEventHead) {
+		return "", fmt.Errorf("invalid corpusd canonical event head")
+	}
+	return head.CanonicalEventHead, nil
 }
 
 func computerBootstrapChainComputerID(path string) (string, bool) {

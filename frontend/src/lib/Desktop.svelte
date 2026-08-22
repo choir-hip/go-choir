@@ -117,7 +117,7 @@
   const BOOTSTRAP_STABILITY_DEADLINE_MS = 300_000;
   const BOOTSTRAP_STABILITY_DELAY_MS = 1_000;
   const BOOTSTRAP_PROBE_TIMEOUT_MS = 15_000;
-  const BOOTSTRAP_RECOVERY_AFTER_ATTEMPT = 2;
+  const BOOTSTRAP_RECOVERY_AFTER_ATTEMPT = 3;
   const MAX_BOOT_LINES = 9;
   let bootPromptPlaceholder = 'Booting user computer...';
   let bootLines = [];
@@ -945,29 +945,44 @@
     return false;
   }
 
-  function requestBootstrapRecovery(reason) {
+  async function requestBootstrapRecovery(reason) {
     if (bootstrapRecoveryInFlight) return;
     bootstrapRecoveryInFlight = true;
-    appendBootLine('Requesting computer recovery', 'warn');
-    fetchWithRenewal('/api/compute/recovery', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'wake_current_computer' }),
-    }).then((res) => {
+    try {
+      let computerId = String(bootstrapData?.computer_id || '').trim();
+      if (!computerId) {
+        const status = await fetchWithRenewal('/api/compute/status', { method: 'GET' });
+        if (status.ok) {
+          const payload = await status.json().catch(() => null);
+          computerId = String(payload?.current_computer?.computer_id || '').trim();
+        }
+      }
+      if (!computerId) {
+        appendBootLine(`Computer identity is unavailable; continuing (${reason})`, 'warn');
+        return;
+      }
+      appendBootLine('Requesting cold computer recovery', 'warn');
+      const res = await fetchWithRenewal(`/api/computers/${encodeURIComponent(computerId)}/lifecycle/cold-recover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idempotency_key: `bios-cold-recover-${computerId}-${Date.now()}` }),
+      });
+      const recovery = await res.json().catch(() => null);
+      const recoveryStatus = String(recovery?.recovery?.status || '').trim();
       if (res.ok) {
-        appendBootLine('Computer recovery requested');
+        appendBootLine(recoveryStatus ? `Computer recovery: ${recoveryStatus}` : 'Computer recovery requested');
       } else {
         appendBootLine(`Recovery request returned ${res.status}; continuing`, 'warn');
       }
-    }).catch((err) => {
+    } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
         return;
       }
       appendBootLine(`Recovery request failed; continuing (${reason})`, 'warn');
-    }).finally(() => {
+    } finally {
       bootstrapRecoveryInFlight = false;
-    });
+    }
   }
 
   async function fetchBootstrapProbe() {

@@ -686,6 +686,100 @@ func TestCreateDataImage_CreatesMissingFile(t *testing.T) {
 	}
 }
 
+func TestQuarantineDataImageRenamesDurablyAndPrunesOnlyCompletedRecovery(t *testing.T) {
+	root := t.TempDir()
+	vmID := "vm-recovery"
+	vmDir := filepath.Join(root, vmID)
+	if err := os.Mkdir(vmDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data := filepath.Join(vmDir, "data.img")
+	if err := os.WriteFile(data, []byte("old-realization"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mgr := NewManager(DefaultManagerConfig())
+	first, err := mgr.QuarantineDataImage(root, vmID, 1, "opone", 1)
+	if err != nil {
+		t.Fatalf("quarantine first realization: %v", err)
+	}
+	if got, want := filepath.Base(first), "data.img.quarantine-1-opone"; got != want {
+		t.Fatalf("quarantine name = %q, want %q", got, want)
+	}
+	if _, err := os.Stat(data); !os.IsNotExist(err) {
+		t.Fatalf("original image remains after quarantine: %v", err)
+	}
+	if got, err := os.ReadFile(first); err != nil || string(got) != "old-realization" {
+		t.Fatalf("quarantined image = %q, %v", got, err)
+	}
+	if err := os.WriteFile(filepath.Join(vmDir, "rec-1-opone.journal"), []byte(`{"phase":"done"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(data, []byte("next-realization"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	second, err := mgr.QuarantineDataImage(root, vmID, 2, "optwo", 1)
+	if err != nil {
+		t.Fatalf("quarantine second realization: %v", err)
+	}
+	if _, err := os.Lstat(first); !os.IsNotExist(err) {
+		t.Fatalf("completed quarantine was not pruned: %v", err)
+	}
+	if got, err := os.ReadFile(second); err != nil || string(got) != "next-realization" {
+		t.Fatalf("second quarantined image = %q, %v", got, err)
+	}
+}
+
+func TestQuarantineDataImageDoesNotPruneIncompleteRecovery(t *testing.T) {
+	root := t.TempDir()
+	vmID := "vm-recovery-pending"
+	vmDir := filepath.Join(root, vmID)
+	if err := os.Mkdir(vmDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	first := filepath.Join(vmDir, "data.img.quarantine-1-opone")
+	if err := os.WriteFile(first, []byte("prior"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vmDir, "rec-1-opone.journal"), []byte(`{"phase":"staging"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vmDir, "data.img"), []byte("current"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewManager(DefaultManagerConfig()).QuarantineDataImage(root, vmID, 2, "optwo", 1); err == nil {
+		t.Fatal("incomplete quarantine must block retention pruning")
+	}
+	if got, err := os.ReadFile(first); err != nil || string(got) != "prior" {
+		t.Fatalf("incomplete quarantine changed = %q, %v", got, err)
+	}
+	if got, err := os.ReadFile(filepath.Join(vmDir, "data.img")); err != nil || string(got) != "current" {
+		t.Fatalf("current image changed on rejected quarantine = %q, %v", got, err)
+	}
+}
+
+func TestStageSparseImageCreatesDeterministicSparseImage(t *testing.T) {
+	root := t.TempDir()
+	vmID := "vm-staging"
+	if err := os.Mkdir(filepath.Join(root, vmID), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mkfs := filepath.Join(root, "mkfs.ext4")
+	if err := os.WriteFile(mkfs, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mgr := NewManager(ManagerConfig{MkfsExt4Path: mkfs})
+	staging, err := mgr.StageSparseImage(root, vmID, 7, "operation", 8)
+	if err != nil {
+		t.Fatalf("stage sparse image: %v", err)
+	}
+	if got, want := filepath.Base(staging), "data.img.staging-7-operation"; got != want {
+		t.Fatalf("staging name = %q, want %q", got, want)
+	}
+	if info, err := os.Stat(staging); err != nil || info.Size() != 8*1024*1024 {
+		t.Fatalf("staging image = %#v, %v", info, err)
+	}
+}
+
 func TestDataImageSizeCoversSelfDevelopmentWorkspace(t *testing.T) {
 	if dataImageSizeMB < 32768 {
 		t.Fatalf("dataImageSizeMB = %d, want at least 32768 for persistent user computers, candidate repos, Dolt, cache, and export artifacts", dataImageSizeMB)

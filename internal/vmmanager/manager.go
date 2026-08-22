@@ -27,6 +27,7 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -2007,38 +2008,63 @@ func (m *Manager) createCredentialDisk(vmStateDir, encodedEnvelope string) (stri
 }
 
 func (m *Manager) createDataImage(path string, sizeMB int) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create data image dir %s: %w", filepath.Dir(path), err)
+	mkfsBin := strings.TrimSpace(m.cfg.MkfsExt4Path)
+	if mkfsBin == "" || mkfsBin == "mkfs.ext4" {
+		mkfsBin = findBinary("mkfs.ext4", "/run/current-system/sw/bin/mkfs.ext4")
 	}
+	return createSparseDataImage(path, sizeMB, mkfsBin)
+}
 
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+// CreateSparseDataImage creates the default-sized ext4 data image used by a
+// recover_current staging drive. Its caller owns the path and must not expose
+// the image until this function returns.
+func CreateSparseDataImage(path string) error {
+	return createSparseDataImage(path, dataImageSizeMB, findBinary("mkfs.ext4", "/run/current-system/sw/bin/mkfs.ext4"))
+}
+
+func createSparseDataImage(path string, sizeMB int, mkfsBin string) (err error) {
+	if sizeMB <= 0 {
+		return fmt.Errorf("data image size must be positive")
+	}
+	path = filepath.Clean(path)
+	parent := filepath.Dir(path)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return fmt.Errorf("create data image dir %s: %w", parent, err)
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o644)
 	if err != nil {
 		return fmt.Errorf("create data image %s: %w", path, err)
 	}
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("close data image %s: %w", path, err)
+	defer func() {
+		if err != nil {
+			_ = os.Remove(path)
+		}
+	}()
+	if err = file.Truncate(int64(sizeMB) * 1024 * 1024); err == nil {
+		err = file.Sync()
 	}
-
-	// Create a sparse file of the desired size.
-	if err := os.Truncate(path, int64(sizeMB)*1024*1024); err != nil {
-		return fmt.Errorf("truncate data image %s: %w", path, err)
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
 	}
-
-	// Format as ext4 using mkfs.ext4.
-	// The -F flag forces creation without confirmation.
-	// The -L flag sets a filesystem label for easy identification.
-	mkfsBin := findBinary("mkfs.ext4", "/run/current-system/sw/bin/mkfs.ext4")
+	if err != nil {
+		return fmt.Errorf("size data image %s: %w", path, err)
+	}
 	cmd := exec.Command(mkfsBin, "-F", "-L", "go-choir-data", path)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("mkfs.ext4 data image %s: %w (%s)", path, err, string(output))
+	if output, commandErr := cmd.CombinedOutput(); commandErr != nil {
+		return fmt.Errorf("mkfs.ext4 data image %s: %w (%s)", path, commandErr, string(output))
 	}
-
+	if err := syncRegularFileAndParent(path); err != nil {
+		return fmt.Errorf("sync data image %s: %w", path, err)
+	}
 	return nil
 }
 
 func (m *Manager) ensureDataImageMinSize(path string, sizeMB int) error {
+	if sizeMB <= 0 {
+		return fmt.Errorf("data image size must be positive")
+	}
 	want := int64(sizeMB) * 1024 * 1024
-	info, err := os.Stat(path)
+	info, err := regularFileInfo(path)
 	if err != nil {
 		return err
 	}
@@ -2053,7 +2079,252 @@ func (m *Manager) ensureDataImageMinSize(path string, sizeMB int) error {
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("resize2fs data image %s: %w (%s)", path, err, string(output))
 	}
+	if err := syncRegularFileAndParent(path); err != nil {
+		return fmt.Errorf("sync resized data image %s: %w", path, err)
+	}
 	return nil
+}
+
+// QuarantineDataImage atomically moves a VM's data image into the
+// deterministic recovery quarantine. It retains prior completed recoveries
+// only up to maxRetained and never removes an in-progress quarantine.
+func (m *Manager) QuarantineDataImage(stateRoot, vmID string, recoveryGeneration uint64, operationID string, maxRetained int) (string, error) {
+	vmDir, err := recoveryVMStateDir(stateRoot, vmID)
+	if err != nil {
+		return "", err
+	}
+	if recoveryGeneration == 0 || !validRecoveryOperationID(operationID) {
+		return "", fmt.Errorf("invalid recovery identity")
+	}
+	if maxRetained <= 0 {
+		return "", fmt.Errorf("recovery quarantine retention must be positive")
+	}
+	dataImage := filepath.Join(vmDir, "data.img")
+	quarantine := filepath.Join(vmDir, fmt.Sprintf("data.img.quarantine-%d-%s", recoveryGeneration, operationID))
+	if err := pruneCompletedQuarantines(vmDir, maxRetained); err != nil {
+		return "", err
+	}
+	info, err := regularFileInfo(dataImage)
+	if err != nil {
+		return "", fmt.Errorf("validate data image: %w", err)
+	}
+	if err := ensureQuarantineCapacity(vmDir, info); err != nil {
+		return "", err
+	}
+	if _, err := os.Lstat(quarantine); !errors.Is(err, os.ErrNotExist) {
+		if err == nil {
+			return "", fmt.Errorf("recovery quarantine already exists")
+		}
+		return "", fmt.Errorf("inspect recovery quarantine: %w", err)
+	}
+	if err := syncRegularFile(dataImage); err != nil {
+		return "", fmt.Errorf("sync data image before quarantine: %w", err)
+	}
+	if err := os.Rename(dataImage, quarantine); err != nil {
+		return "", fmt.Errorf("quarantine data image: %w", err)
+	}
+	if err := syncRegularFileAndParent(quarantine); err != nil {
+		return "", fmt.Errorf("durably quarantine data image: %w", err)
+	}
+	return quarantine, nil
+}
+
+// StageSparseImage creates the deterministic, default-empty successor image
+// for a recovery. The source quarantine remains untouched.
+func (m *Manager) StageSparseImage(stateRoot, vmID string, recoveryGeneration uint64, operationID string, sizeMB int) (string, error) {
+	vmDir, err := recoveryVMStateDir(stateRoot, vmID)
+	if err != nil {
+		return "", err
+	}
+	if recoveryGeneration == 0 || !validRecoveryOperationID(operationID) || sizeMB <= 0 {
+		return "", fmt.Errorf("invalid recovery staging identity")
+	}
+	staging := filepath.Join(vmDir, fmt.Sprintf("data.img.staging-%d-%s", recoveryGeneration, operationID))
+	if _, err := os.Lstat(staging); !errors.Is(err, os.ErrNotExist) {
+		if err == nil {
+			return "", fmt.Errorf("recovery staging image already exists")
+		}
+		return "", fmt.Errorf("inspect recovery staging image: %w", err)
+	}
+	if err := m.createDataImage(staging, sizeMB); err != nil {
+		return "", err
+	}
+	return staging, nil
+}
+
+type recoveryQuarantine struct {
+	path       string
+	generation uint64
+	operation  string
+}
+
+func recoveryVMStateDir(stateRoot, vmID string) (string, error) {
+	root := filepath.Clean(strings.TrimSpace(stateRoot))
+	if !filepath.IsAbs(root) || vmID == "" || filepath.Base(vmID) != vmID {
+		return "", fmt.Errorf("invalid VM state path")
+	}
+	rootInfo, err := os.Lstat(root)
+	if err != nil {
+		return "", err
+	}
+	if rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
+		return "", fmt.Errorf("VM state root is not a directory")
+	}
+	vmDir := filepath.Join(root, vmID)
+	relative, err := filepath.Rel(root, vmDir)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("VM state path escapes root")
+	}
+	info, err := os.Lstat(vmDir)
+	if err != nil {
+		return "", err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return "", fmt.Errorf("VM state directory is not a directory")
+	}
+	return vmDir, nil
+}
+
+func validRecoveryOperationID(operationID string) bool {
+	if operationID == "" || filepath.Base(operationID) != operationID {
+		return false
+	}
+	for _, character := range operationID {
+		if !(character >= 'a' && character <= 'z') && !(character >= 'A' && character <= 'Z') &&
+			!(character >= '0' && character <= '9') && character != '-' && character != '_' {
+			return false
+		}
+	}
+	return true
+}
+
+func regularFileInfo(path string) (os.FileInfo, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("path is not a regular file")
+	}
+	return info, nil
+}
+
+func syncRegularFile(path string) error {
+	if _, err := regularFileInfo(path); err != nil {
+		return err
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return file.Sync()
+}
+
+func syncRegularFileAndParent(path string) error {
+	if err := syncRegularFile(path); err != nil {
+		return err
+	}
+	directory, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
+}
+
+func ensureQuarantineCapacity(vmDir string, info os.FileInfo) error {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Blocks <= 0 {
+		return nil
+	}
+	var filesystem syscall.Statfs_t
+	if err := syscall.Statfs(vmDir, &filesystem); err != nil {
+		return fmt.Errorf("inspect recovery filesystem capacity: %w", err)
+	}
+	available := uint64(filesystem.Bavail) * uint64(filesystem.Bsize)
+	retainedBytes := uint64(stat.Blocks) * 512
+	if available < retainedBytes {
+		return fmt.Errorf("insufficient capacity to retain quarantined data image")
+	}
+	return nil
+}
+
+func pruneCompletedQuarantines(vmDir string, maxRetained int) error {
+	entries, err := os.ReadDir(vmDir)
+	if err != nil {
+		return err
+	}
+	const prefix = "data.img.quarantine-"
+	var quarantines []recoveryQuarantine
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		suffix := strings.TrimPrefix(name, prefix)
+		separator := strings.IndexByte(suffix, '-')
+		if separator <= 0 {
+			continue
+		}
+		generation, parseErr := strconv.ParseUint(suffix[:separator], 10, 64)
+		operation := suffix[separator+1:]
+		if parseErr != nil || generation == 0 || !validRecoveryOperationID(operation) {
+			continue
+		}
+		path := filepath.Join(vmDir, name)
+		if _, err := regularFileInfo(path); err != nil {
+			return fmt.Errorf("validate retained quarantine %s: %w", path, err)
+		}
+		quarantines = append(quarantines, recoveryQuarantine{path: path, generation: generation, operation: operation})
+	}
+	sort.Slice(quarantines, func(left, right int) bool {
+		if quarantines[left].generation != quarantines[right].generation {
+			return quarantines[left].generation < quarantines[right].generation
+		}
+		return quarantines[left].operation < quarantines[right].operation
+	})
+	for len(quarantines) >= maxRetained {
+		pruned := false
+		for index, quarantine := range quarantines {
+			if !recoveryJournalDone(vmDir, quarantine.generation, quarantine.operation) {
+				continue
+			}
+			if err := os.Remove(quarantine.path); err != nil {
+				return fmt.Errorf("prune completed recovery quarantine: %w", err)
+			}
+			if err := syncDirectory(vmDir); err != nil {
+				return fmt.Errorf("sync recovery quarantine pruning: %w", err)
+			}
+			quarantines = append(quarantines[:index], quarantines[index+1:]...)
+			pruned = true
+			break
+		}
+		if !pruned {
+			return fmt.Errorf("recovery quarantine retention capacity reached")
+		}
+	}
+	return nil
+}
+
+func recoveryJournalDone(vmDir string, generation uint64, operation string) bool {
+	journal, err := os.ReadFile(filepath.Join(vmDir, fmt.Sprintf("rec-%d-%s.journal", generation, operation)))
+	if err != nil {
+		return false
+	}
+	var record struct {
+		Phase string `json:"phase"`
+	}
+	return json.Unmarshal(journal, &record) == nil && record.Phase == "done"
+}
+
+func syncDirectory(path string) error {
+	directory, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
 }
 
 // createTapDevice creates a TAP network device for Firecracker VM

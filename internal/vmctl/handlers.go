@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
@@ -97,6 +98,8 @@ type Handler struct {
 	routeAuthority             *RouteAuthority
 	routeAuthorityRequired     bool
 	immutableArtifacts         immutableArtifactOpener
+	coldRecoveryMu             sync.Mutex
+	coldRecoveryState          *coldRecoveryState
 }
 
 // NewHandler creates a vmctl Handler with the given ownership registry.
@@ -1249,6 +1252,7 @@ func isInternalCaller(r *http.Request) bool {
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/internal/vmctl/resolve", h.HandleResolve)
+	s.HandleFunc("/internal/vmctl/computers/{computerID}/cold-recover", h.HandleColdRecover)
 	s.HandleFunc("/internal/vmctl/computer-version-inputs/resolve", h.HandleResolveComputerVersionInputs)
 	s.HandleFunc("/internal/vmctl/computer-version-routes/resolve", h.HandleResolveComputerVersionRoute)
 	s.HandleFunc("/internal/vmctl/computer-version-routes/apply-self-development", h.HandleApplySelfDevelopmentRouteProjection)
@@ -1317,6 +1321,12 @@ func ResumeEndpoint(baseURL string) string {
 // service at the given base URL.
 func RecoverEndpoint(baseURL string) string {
 	return fmt.Sprintf("%s/internal/vmctl/recover", baseURL)
+}
+
+// ColdRecoverEndpoint returns the recover_current endpoint for one stable
+// ComputerID. The ID occupies a path segment and is escaped as such.
+func ColdRecoverEndpoint(baseURL, computerID string) string {
+	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computers/" + url.PathEscape(strings.TrimSpace(computerID)) + "/cold-recover"
 }
 
 // RefreshEndpoint returns the full refresh endpoint URL for the vmctl service

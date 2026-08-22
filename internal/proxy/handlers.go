@@ -726,6 +726,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case isComputerLifecyclePath(path):
 		h.HandleComputerLifecycle(w, r)
 		return
+	case isComputerColdRecoverPath(path):
+		h.HandleComputerWorkspaceReplace(w, r)
+		return
 	case isComputerWorkspaceReplacePath(path):
 		h.HandleComputerWorkspaceReplace(w, r)
 		return
