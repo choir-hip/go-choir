@@ -101,16 +101,16 @@ phases:
 
 now:
   status: working
-  slice: "Definition drafted 2026-08-22; awaiting owner invocation via /goal"
-  question: "Will whole-file quarantine plus single-key trusted attachment be sufficient to make recover_current boot-fresh without host ext4 surgery?"
+  slice: "Phase 1 implementation landed locally; deployed staging proof remains outstanding."
+  question: "Will the product-wired trusted-guest attachment plus final-head verifier make recover_current boot-fresh without host ext4 surgery?"
   reconciliation:
     observed_at: "2026-08-22T21:00:00Z"
-    source_ref: "main@f54eb735; staging stopped epoch 361; BIOS looping; consensus approve-with-repairs 2026-08-22"
+    source_ref: "working tree after local recovery implementation; staging remains stopped epoch 361"
     deploy_identity: "staging proxy f54eb735 guest f54eb735 computer 0333528 stopped"
     authority_identities: [docs/choir-doctrine.md, docs/computer-ontology.md, docs/standing-questions.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "clean single worktree /Users/wiz/go-choir; evidence + design added"
-    status: reconciled
+    worktree_inventory_ref: "working tree owns vmctl/proxy/vmmanager/platform/frontend recovery changes; unrelated WIP preserved"
+    status: implementation_in_progress
   candidate:
     id: none
     state: none
@@ -127,6 +127,6 @@ now:
     - "docs/designs/host-orchestrated-recovery-2026-08-22.md"
     - ".agentic-consensus/restore-when-guest-down-20260822/manifest.tsv"
     - ".agentic-consensus/host-orchestrated-recovery-plan-20260822/manifest.tsv"
-  blocker_or_risk: "None blocking Definition creation; execution blocked until owner invokes /goal docs/definitions/choir-host-orchestrated-recovery-2026-08-22.md. Risk: additional non-privacy-key secret required on fresh disk beyond current inventory — would amend the recovery unit's allowlist."
-  next_action: "Owner invokes /goal docs/definitions/choir-host-orchestrated-recovery-2026-08-22.md; Phase 1 cold-recover orchestration begins."
+  blocker_or_risk: "Local unit coverage passes for strict protocol, quarantine/staging, proxy owner isolation, lease fencing, and frontend build. New red evidence shows no concrete trusted-guest privacy-key attachment authority exists yet (`docs/evidence/effects-red-recovery-trusted-guest-copy-authority-2026-08-22.md`); vmctl production wiring still needs that authority plus corpusd head-reader and post-boot replay/ComputerVersion/frontend verifier. No recovery endpoint is claimed deployed until those authorities are configured."
+  next_action: "Design and implement the reviewed trusted recovery-unit contract, wire it in cmd/vmctl, add fault/isolation coverage, then commit/push, pass CI, deploy, and run the owner product-path recovery proof on 0333528."
 ---
