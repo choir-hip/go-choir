@@ -1981,18 +1981,25 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 		if cfg.ComputerCredentialEnvelope == "" && strings.TrimSpace(corpusdURL) != "" {
 			return nil, fmt.Errorf("failed to recover VM %s: realization credential unavailable", own.VMID)
 		}
-		info, err := r.vmManager.RecoverVM(own.VMID, cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to recover VM %s: %w", own.VMID, err)
+		// For stopped VMs that are not in the manager's active set (e.g. after a clean stop or after a failed cold-recover that left the VM stopped), RecoverVM would fail with "not found". In that case try a fresh BootVM with the recovery config, which is the same fresh-boot path but without requiring the old instance to be present.
+		if r.vmManager.GetVM(own.VMID) == nil {
+			info, err := r.vmManager.BootVM(cfg)
+			if err != nil {
+				return nil, fmt.Errorf("failed to boot recovered VM %s: %w", own.VMID, err)
+			}
+			own.ComputerURL = info.HostURL
+			own.Epoch = info.Epoch
+		} else {
+			info, err := r.vmManager.RecoverVM(own.VMID, cfg)
+			if err != nil {
+				return nil, fmt.Errorf("failed to recover VM %s: %w", own.VMID, err)
+			}
+			own.ComputerURL = info.HostURL
+			own.Epoch = info.Epoch
 		}
-		own.ComputerURL = info.HostURL
-		own.Epoch = info.Epoch
 	} else {
-		// Increment epoch on recovery — this is a fresh boot, not a resume.
-		// The epoch change prevents duplicate canonical effects (VAL-CROSS-117).
 		own.Epoch = r.nextEpoch()
 	}
-
 	own.State = VMStateActive
 	own.LastActiveAt = time.Now()
 	own.StoppedBy = ""
