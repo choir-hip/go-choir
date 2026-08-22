@@ -172,23 +172,27 @@ type CoagentSourcePacket struct {
 	Direction        LifecyclePacketDirection `json:"direction,omitempty"`
 	// ControlBindingID authenticates the exact downward control occurrence that
 	// authorizes a direction-specific upward report. It is runtime-derived.
-	ControlBindingID    string                     `json:"control_binding_id,omitempty"`
-	ProducerWorkItemID  string                     `json:"producer_work_item_id,omitempty"`
-	TargetWorkItemID    string                     `json:"target_work_item_id,omitempty"`
-	WorkItemID          string                     `json:"work_item_id,omitempty"` // legacy producer-work alias
-	WorkDisposition     WorkItemStatus             `json:"work_disposition,omitempty"`
-	Role                string                     `json:"role,omitempty"`
-	SourceRunID         string                     `json:"source_run_id,omitempty"`
-	SourceOutcomeSHA256 string                     `json:"source_outcome_sha256,omitempty"`
-	PayloadDigest       string                     `json:"payload_digest,omitempty"`
-	Disposition         UpdateDisposition          `json:"disposition,omitempty"`
-	DispositionRef      string                     `json:"disposition_ref,omitempty"`
-	DispositionReason   string                     `json:"disposition_reason,omitempty"`
-	LifecycleVersion    int64                      `json:"lifecycle_version,omitempty"`
-	ReducerSeq          int64                      `json:"reducer_seq,omitempty"`
-	Packet              CoagentSourcePacketPayload `json:"packet"`
-	Content             string                     `json:"content"`
-	CreatedAt           time.Time                  `json:"created_at"`
-	DeliveredToRunID    string                     `json:"delivered_to_loop_id,omitempty"`
-	DeliveredAt         *time.Time                 `json:"delivered_at,omitempty"`
+	ControlBindingID    string            `json:"control_binding_id,omitempty"`
+	ProducerWorkItemID  string            `json:"producer_work_item_id,omitempty"`
+	TargetWorkItemID    string            `json:"target_work_item_id,omitempty"`
+	WorkItemID          string            `json:"work_item_id,omitempty"` // legacy producer-work alias
+	WorkDisposition     WorkItemStatus    `json:"work_disposition,omitempty"`
+	Role                string            `json:"role,omitempty"`
+	SourceRunID         string            `json:"source_run_id,omitempty"`
+	SourceOutcomeSHA256 string            `json:"source_outcome_sha256,omitempty"`
+	PayloadDigest       string            `json:"payload_digest,omitempty"`
+	Disposition         UpdateDisposition `json:"disposition,omitempty"`
+	DispositionRef      string            `json:"disposition_ref,omitempty"`
+	DispositionReason   string            `json:"disposition_reason,omitempty"`
+	LifecycleVersion    int64             `json:"lifecycle_version,omitempty"`
+	ReducerSeq          int64             `json:"reducer_seq,omitempty"`
+	// ArrivalOrdinal is the durable computer-scoped FIFO position assigned when
+	// this control entered the scheduling mailbox. Zero means unassigned
+	// (pre-ordinal legacy row); the scheduler treats those as oldest-first.
+	ArrivalOrdinal   int64                      `json:"arrival_ordinal,omitempty"`
+	Packet           CoagentSourcePacketPayload `json:"packet"`
+	Content          string                     `json:"content"`
+	CreatedAt        time.Time                  `json:"created_at"`
+	DeliveredToRunID string                     `json:"delivered_to_loop_id,omitempty"`
+	DeliveredAt      *time.Time                 `json:"delivered_at,omitempty"`
 }

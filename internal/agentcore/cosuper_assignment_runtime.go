@@ -25,6 +25,12 @@ const (
 	coSuperAssignmentMemoryMax = int64(1 << 30)
 	coSuperAssignmentCPUQuota  = int64(100000)
 	coSuperAssignmentPidsMax   = int64(256)
+	// coSuperAssignmentDeadline is the fail-closed scheduling deadline for one
+	// live assignment (I26): a bound assignment that has not reached a terminal
+	// disposition by this bound is cancelled with an expired reason. The
+	// underlying execution request stays pending and retryable — the scheduler
+	// may re-admit it later; expiry fails the assignment, never the work.
+	coSuperAssignmentDeadline = 6 * time.Hour
 )
 
 type assignmentCapsuleRuntime interface {

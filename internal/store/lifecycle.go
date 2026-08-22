@@ -25,6 +25,87 @@ type lifecycleSequence struct {
 	ReducerSeq   int64  `json:"reducer_seq"`
 }
 
+// arrivalSequence is the durable computer-scoped FIFO counter behind the
+// scheduling contract (choir-doctrine I26): one monotonic ordinal per
+// execution-request arrival across all trajectories on one computer.
+// ReducerSeq is trajectory-local and cannot order cross-trajectory arrivals,
+// which is exactly the assignment-supersession loop defect
+// (effects-red-assignment-supersession-loop-2026-08-21).
+type arrivalSequence struct {
+	ComputerID string `json:"computer_id"`
+	Ordinal    int64  `json:"ordinal"`
+}
+
+const arrivalSequenceKey = "scheduling:arrival"
+
+func (s *Store) nextArrivalOrdinal(ctx context.Context, ownerID, computerID string) (int64, error) {
+	obj, getErr := s.lifecycleGetObject(ctx, ogKindSchedulerSeq, ownerID, computerID, arrivalSequenceKey)
+	var sequence arrivalSequence
+	switch {
+	case getErr == nil:
+		if sequence, getErr = decodeLifecycleObject[arrivalSequence](obj); getErr != nil {
+			return 0, getErr
+		}
+	case errors.Is(getErr, ErrNotFound):
+		sequence = arrivalSequence{ComputerID: strings.TrimSpace(computerID), Ordinal: 0}
+	default:
+		return 0, getErr
+	}
+	sequence.Ordinal++
+	next := sequence
+	updated, err := lifecycleObject(ogKindSchedulerSeq, ownerID, computerID, arrivalSequenceKey, next,
+		lifecycleMetadata("trajectory_id", "scheduling", computerID, "scheduling", sequence.Ordinal), time.Now().UTC(), time.Now().UTC())
+	if err != nil {
+		return 0, err
+	}
+	condition := objectgraph.ObjectCondition{CanonicalID: updated.CanonicalID}
+	if getErr == nil {
+		condition.Exists = true
+		condition.ExpectedContentHash = obj.ContentHash
+	}
+	if err := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{condition}, objectgraph.Batch{Objects: []objectgraph.Object{updated}}); err != nil {
+		if errors.Is(err, objectgraph.ErrConflict) {
+			return 0, ErrConcurrentStateChange
+		}
+		return 0, err
+	}
+	return next.Ordinal, nil
+}
+
+func (s *Store) peekArrivalOrdinal(ctx context.Context, ownerID, computerID string) (int64, bool, error) {
+	obj, err := s.lifecycleGetObject(ctx, ogKindSchedulerSeq, ownerID, computerID, arrivalSequenceKey)
+	if errors.Is(err, ErrNotFound) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	sequence, err := decodeLifecycleObject[arrivalSequence](obj)
+	if err != nil {
+		return 0, false, err
+	}
+	return sequence.Ordinal, true, nil
+}
+
+// nextArrivalOrdinalFrom is the test seam for stale-allocator conflicts: it
+// allocates as if the caller had read the supplied content hash.
+func (s *Store) nextArrivalOrdinalFrom(ctx context.Context, ownerID, computerID, staleHash string) (int64, error) {
+	updated, err := lifecycleObject(ogKindSchedulerSeq, ownerID, computerID, arrivalSequenceKey,
+		arrivalSequence{ComputerID: strings.TrimSpace(computerID), Ordinal: 999},
+		lifecycleMetadata("trajectory_id", "scheduling", computerID, "scheduling", 999), time.Now().UTC(), time.Now().UTC())
+	if err != nil {
+		return 0, err
+	}
+	condition := objectgraph.ObjectCondition{CanonicalID: updated.CanonicalID, Exists: true, ExpectedContentHash: staleHash}
+	if err := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{condition}, objectgraph.Batch{Objects: []objectgraph.Object{updated}}); err != nil {
+		if errors.Is(err, objectgraph.ErrConflict) {
+			return 0, ErrConcurrentStateChange
+		}
+		return 0, err
+	}
+	return 999, nil
+}
+
 func lifecycleTerminalTrajectoryRef(trajectoryID string) string {
 	return "trajectory:" + strings.TrimSpace(trajectoryID)
 }

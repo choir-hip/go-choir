@@ -269,6 +269,9 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	}
 
 	computerID := strings.TrimSpace(rt.TextureComputerID())
+	// I26 scheduling contract: fail closed on assignments past their deadline
+	// before selecting fresh work, so an expired holder releases the slot.
+	rt.enforceCoSuperAssignmentDeadlines(ctx)
 	updates, err := rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100)
 	if err != nil {
 		return nil, err

@@ -809,6 +809,18 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 			PayloadDigest: control.PayloadDigest, Disposition: types.UpdatePending, LifecycleVersion: 1, ReducerSeq: seq,
 			Packet: control.Packet, Content: control.Content, CreatedAt: now,
 		}
+		// Scheduling contract (I26): every execution_request bound for the
+		// persistent Super receives one durable computer-scoped arrival ordinal
+		// at mailbox entry so cross-trajectory FIFO selection is restart-safe.
+		// Ordinal allocation rides this turn's conditional batch; a concurrent
+		// allocator conflicts the whole command instead of reusing a number.
+		if packet.Packet.Kind == "execution_request" && control.TargetAgentID == agentprofile.Super+":"+ownerID {
+			ordinal, ordinalErr := s.nextArrivalOrdinal(ctx, ownerID, computerID)
+			if ordinalErr != nil {
+				return types.LifecycleResult{}, fmt.Errorf("apply Texture turn: allocate arrival ordinal: %w", ordinalErr)
+			}
+			packet.ArrivalOrdinal = ordinal
+		}
 		updateMeta := lifecycleMetadata("update_id", packet.UpdateID, computerID, req.TrajectoryID, seq)
 		updateMeta["producer_update_id"], updateMeta["target_agent_id"] = packet.ProducerUpdateID, packet.TargetAgentID
 		controlObj, buildErr := lifecycleObject(ogKindWorkerUpdate, ownerID, computerID, updateKey, packet, updateMeta, now, now)

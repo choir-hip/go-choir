@@ -470,6 +470,52 @@ func (rt *Runtime) reconcileCoSuperAssignmentCapsulesAfterRestart(ctx context.Co
 	}
 }
 
+// enforceCoSuperAssignmentDeadlines fails closed on bound assignments that
+// outlive coSuperAssignmentDeadline without reaching a terminal disposition
+// (I26 scheduling contract). Deadline expiry cancels the assignment through
+// the same fate path a Super-initiated cancel uses — capsule revoke receipt,
+// durable cancel, run terminalization — so the one-live-slot invariant is
+// never held hostage by a wedged capsule. The underlying execution request is
+// untouched: it stays pending in the Texture trajectory and remains retryable
+// by a later admission cycle.
+func (rt *Runtime) enforceCoSuperAssignmentDeadlines(ctx context.Context) {
+	if rt == nil || rt.store == nil || rt.assignedCapsule() == nil {
+		return
+	}
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	if computerID == "" {
+		return
+	}
+	assignments, err := rt.store.ListCoSuperAssignmentsForComputer(ctx, computerID)
+	if err != nil {
+		log.Printf("runtime: assignment deadline sweep list: %v", err)
+		return
+	}
+	for _, assignment := range assignments {
+		if assignment.Disposition.Terminal() || assignment.BoundRunID == "" || assignment.CreatedAt.IsZero() {
+			continue
+		}
+		if time.Since(assignment.CreatedAt) < coSuperAssignmentDeadline {
+			continue
+		}
+		parent := types.RunRecord{
+			RunID: assignment.Binding.ParentRunID, OwnerID: assignment.Binding.OwnerID,
+			ComputerID: assignment.Binding.ComputerID, AgentID: assignment.Binding.ParentAgentID,
+		}
+		result, cancelErr := rt.cancelAssignedCoSuper(ctx, parent, assignment.AssignmentID, assignment.Binding.Attempt,
+			fmt.Sprintf("assignment deadline expired after %s; request remains pending and retryable", coSuperAssignmentDeadline))
+		if cancelErr != nil {
+			log.Printf("runtime: assignment %s deadline cancellation: %v", assignment.AssignmentID, cancelErr)
+			continue
+		}
+		if !result.Replay {
+			log.Printf("runtime: assignment %s failed closed at deadline (attempt %d); request stays pending",
+				assignment.AssignmentID, assignment.Binding.Attempt)
+			rt.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, assignment.Binding.OwnerID)
+		}
+	}
+}
+
 func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.RunRecord, toolCallID string, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentCommandResult, error) {
 	var lastErr error
 	for attempt := 0; attempt < 4; attempt++ {
