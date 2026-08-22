@@ -383,15 +383,31 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		}
 		pending, instrErr := rt.pendingSelfDevelopmentTextureInstruction(ctx, ownerID)
 		if instrErr == nil && pending {
-			if updates, err = rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100); err != nil {
-				return nil, err
+			// Instruction resume mints a Super outside selfdevStartMu. TryLock
+			// serializes against the API start path when free; if this call is
+			// already inside ensureSelfDevelopmentRun (which holds selfdevStartMu),
+			// we are serialized by definition and must not re-lock (sync.Mutex is
+			// not re-entrant).
+			serialized := rt.selfdevStartMu.TryLock()
+			if serialized {
+				updates, err = rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100)
+				if err != nil {
+					rt.selfdevStartMu.Unlock()
+					return nil, err
+				}
 			}
 			if len(updates) == 0 {
-				return rt.resumeSelfDevelopmentSuperForPendingInstruction(ctx, ownerID, agentID)
+				rec, resumeErr := rt.resumeSelfDevelopmentSuperForPendingInstruction(ctx, ownerID, agentID)
+				if serialized {
+					rt.selfdevStartMu.Unlock()
+				}
+				return rec, resumeErr
+			}
+			if serialized {
+				rt.selfdevStartMu.Unlock()
 			}
 		}
 	}
-	updates = selectLifecycleControlActivation(updates, "", nil)
 	lifecycleControls := len(updates) > 0
 	reportContinuation := false
 	if !lifecycleControls {
