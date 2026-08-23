@@ -169,7 +169,7 @@ jobs:
   go-test:
     name: Go Test (${{ needs.plan.outputs.race_selected == 'true' && 'race' || 'standard' }}, non-runtime shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     needs: plan
     if: needs.plan.outputs.go == 'true'
     strategy:
@@ -212,7 +212,7 @@ jobs:
   go-test-runtime:
     name: Go Test (${{ needs.plan.outputs.race_selected == 'true' && 'race' || 'standard' }}, agentcore/textureowner shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     needs: plan
     if: needs.plan.outputs.go == 'true'
     strategy:
