@@ -1955,48 +1955,69 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 			r.ensureExistingGatewayCredential(ensureVMID)
 		}
 	}()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	key := ownershipKey(userID, desktopID)
+	r.mu.Lock()
 	own, ok := r.ownerships[key]
 	if !ok {
+		r.mu.Unlock()
 		return nil, fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
 	}
 	if err := r.rejectRefreshConflictLocked(key); err != nil {
+		r.mu.Unlock()
 		return nil, err
 	}
 
 	if own.State != VMStateDegraded && own.State != VMStateFailed && own.State != VMStateStopped {
+		r.mu.Unlock()
 		return nil, fmt.Errorf("VM %s is not in a recoverable state (state=%s)", own.VMID, own.State)
 	}
 
-	// Delegate to the real VM manager if available.
-	if r.vmManager != nil {
-		cfg, corpusdURL, err := r.reserveFreshVMConfigLocked(own, "", r.vmManager)
+	mgr := r.vmManager
+	var cfg VMManagerConfig
+	var corpusdURL string
+	var wasStopped bool
+	var vmid string
+	if mgr != nil {
+		var err error
+		cfg, corpusdURL, err = r.reserveFreshVMConfigLocked(own, "", mgr)
 		if err != nil {
+			r.mu.Unlock()
 			return nil, fmt.Errorf("reserve recovery realization for VM %s: %w", own.VMID, err)
 		}
+		wasStopped = own.State == VMStateStopped && mgr.GetVM(own.VMID) == nil
+		vmid = own.VMID
+	}
+	r.mu.Unlock()
+
+	var info *VMInstanceInfo
+	if mgr != nil {
 		cfg.ComputerCredentialEnvelope = issueComputerCredentialEnvelope(corpusdURL, cfg.ComputerID, cfg.RealizationID, cfg.Epoch)
 		if cfg.ComputerCredentialEnvelope == "" && strings.TrimSpace(corpusdURL) != "" {
-			return nil, fmt.Errorf("failed to recover VM %s: realization credential unavailable", own.VMID)
+			return nil, fmt.Errorf("failed to recover VM %s: realization credential unavailable", vmid)
 		}
-		// For stopped VMs that are not in the manager's active set (e.g. after a clean stop or after a failed cold-recover that left the VM stopped), RecoverVM would fail with "not found". In that case try a fresh BootVM with the recovery config, which is the same fresh-boot path but without requiring the old instance to be present. Only for stopped; degraded/failed must use RecoverVM.
-		if own.State == VMStateStopped && r.vmManager.GetVM(own.VMID) == nil {
-			info, err := r.vmManager.BootVM(cfg)
+		var err error
+		if wasStopped {
+			info, err = mgr.BootVM(cfg)
 			if err != nil {
-				return nil, fmt.Errorf("failed to boot recovered VM %s: %w", own.VMID, err)
+				return nil, fmt.Errorf("failed to boot recovered VM %s: %w", vmid, err)
 			}
-			own.ComputerURL = info.HostURL
-			own.Epoch = info.Epoch
 		} else {
-			info, err := r.vmManager.RecoverVM(own.VMID, cfg)
+			info, err = mgr.RecoverVM(vmid, cfg)
 			if err != nil {
-				return nil, fmt.Errorf("failed to recover VM %s: %w", own.VMID, err)
+				return nil, fmt.Errorf("failed to recover VM %s: %w", vmid, err)
 			}
-			own.ComputerURL = info.HostURL
-			own.Epoch = info.Epoch
 		}
+	}
+
+	r.mu.Lock()
+	own = r.ownerships[key]
+	if own == nil {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("ownership vanished during recovery for user %s desktop %s", userID, normalizeDesktopID(desktopID))
+	}
+	if mgr != nil && info != nil {
+		own.ComputerURL = info.HostURL
+		own.Epoch = info.Epoch
 	} else {
 		own.Epoch = r.nextEpoch()
 	}
@@ -2006,6 +2027,7 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 	r.saveLocked()
 	log.Printf("vmctl: recovered VM %s for user %s desktop %s (new_epoch=%d, fresh-boot)", own.VMID, userID, own.DesktopID, own.Epoch)
 	ensureVMID = own.VMID
+	r.mu.Unlock()
 	return own, nil
 }
 
