@@ -152,7 +152,7 @@ func Run() {
 		platformURL := strings.TrimSpace(os.Getenv("CHOIR_PLATFORM_URL"))
 		restartHandoffPath := strings.TrimSpace(os.Getenv("CHOIR_RESTART_CREDENTIAL_HANDOFF"))
 		recoveryHandoffPath := strings.TrimSpace(os.Getenv("CHOIR_REVOCATION_CREDENTIAL_HANDOFF"))
-		bootstrapCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		bootstrapCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		var credentials *selfdev.GuestCredentials
 		var restoredPath string
 		var err error

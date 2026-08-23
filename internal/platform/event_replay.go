@@ -19,8 +19,10 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 		return nil, fmt.Errorf("event replay: page size %d exceeds maximum %d", pageSize, computerevent.EventReplayMaxPageSize)
 	}
 	var credentialEpoch uint64
-	if err := s.platform.store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM computer_event_append_receipts WHERE computer_id=? AND sequence<=? AND event_kind=?`, computerID, afterSequence, computerevent.EventKeyRevoked).Scan(&credentialEpoch); err != nil {
-		return nil, fmt.Errorf("event replay: resolve credential epoch: %w", err)
+	if afterSequence > 0 {
+		if err := s.platform.store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM computer_event_append_receipts WHERE computer_id=? AND sequence<=? AND event_kind=?`, computerID, afterSequence, computerevent.EventKeyRevoked).Scan(&credentialEpoch); err != nil {
+			return nil, fmt.Errorf("event replay: resolve credential epoch: %w", err)
+		}
 	}
 	rows, err := s.platform.store.db.QueryContext(ctx, `SELECT sequence, event_digest, event_artifact_ref, event_pin_receipt_digest, pin_receipt_digests_json, event_head_receipt_json, event_head_receipt_digest, desired_event_head, effective_event_head, COALESCE(pending_transition_ref, ''), desired_state_commitment, effective_state_commitment FROM computer_event_append_receipts WHERE computer_id=? AND sequence>? ORDER BY sequence LIMIT ?`, computerID, afterSequence, pageSize)
 	if err != nil {

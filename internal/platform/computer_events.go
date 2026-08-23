@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS computer_event_append_receipts (
   created_at DATETIME(6) NOT NULL,
   PRIMARY KEY (computer_id, idempotency_key),
   UNIQUE KEY computer_event_append_sequence_uq (computer_id, sequence),
-  UNIQUE KEY computer_event_append_digest_uq (computer_id, event_digest)
+  UNIQUE KEY computer_event_append_digest_uq (computer_id, event_digest),
+  KEY computer_event_append_kind_seq_idx (computer_id, event_kind, sequence)
 );
 CREATE TABLE IF NOT EXISTS control_key_history (
   signer_domain VARCHAR(64) NOT NULL,
