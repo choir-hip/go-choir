@@ -1222,17 +1222,33 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			mgr := r.vmManager
 			snapshot := *own
 			if activeOwnershipNeedsReadinessCheck(&snapshot, mgr) {
+				if waiters, ok := r.pendingWaiters[key]; ok {
+					return r.waitForPendingAssignmentLocked(ctx, key, userID, desktopID, waiters)
+				}
+				r.pendingWaiters[key] = nil
 				r.mu.Unlock()
 				info, err := r.ensureActiveVMReady(&snapshot, mgr)
 				if err != nil {
 					log.Printf("vmctl: active VM %s readiness check failed: %v", snapshot.VMID, err)
+					r.mu.Lock()
+					waiters := r.pendingWaiters[key]
+					delete(r.pendingWaiters, key)
+					r.mu.Unlock()
+					for _, ch := range waiters {
+						ch <- nil
+					}
 					return nil, fmt.Errorf("failed to verify active VM %s: %w", snapshot.VMID, err)
 				}
 
 				r.mu.Lock()
+				waiters := r.pendingWaiters[key]
+				delete(r.pendingWaiters, key)
 				current := r.ownerships[key]
 				if current == nil || current.VMID != snapshot.VMID || !current.IsReady() {
 					r.mu.Unlock()
+					for _, ch := range waiters {
+						ch <- nil
+					}
 					return r.resolveDesktopContext(ctx, userID, desktopID, allowAssignment, expectedVMID)
 				}
 				if info != nil {
@@ -1247,6 +1263,9 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 				result := cloneOwnership(current)
 				r.mu.Unlock()
 				r.ensureExistingGatewayCredential(vmID)
+				for _, ch := range waiters {
+					ch <- cloneOwnership(result)
+				}
 				return result, nil
 			}
 

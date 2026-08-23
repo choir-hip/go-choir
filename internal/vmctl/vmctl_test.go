@@ -183,19 +183,21 @@ func TestOwnershipRegistry_ConcurrentRequestsCollapseToOneVM(t *testing.T) {
 }
 
 type blockingBootVMManager struct {
-	mu        sync.Mutex
-	boots     []VMManagerConfig
-	started   chan struct{}
-	release   chan struct{}
-	hostURL   string
-	startOnce sync.Once
+	mu         sync.Mutex
+	boots      []VMManagerConfig
+	runningVMs map[string]*VMInstanceInfo
+	started    chan struct{}
+	release    chan struct{}
+	hostURL    string
+	startOnce  sync.Once
 }
 
 func newBlockingBootVMManager(hostURL string) *blockingBootVMManager {
 	return &blockingBootVMManager{
-		started: make(chan struct{}),
-		release: make(chan struct{}),
-		hostURL: hostURL,
+		runningVMs: make(map[string]*VMInstanceInfo),
+		started:    make(chan struct{}),
+		release:    make(chan struct{}),
+		hostURL:    hostURL,
 	}
 }
 
@@ -227,7 +229,11 @@ func (m *blockingBootVMManager) RefreshVM(vmID string, cfg VMManagerConfig) (*VM
 	return &VMInstanceInfo{HostURL: m.hostURL, Epoch: 3, Healthy: true, State: "running"}, nil
 }
 func (m *blockingBootVMManager) DestroyVMState(vmID string) error      { return nil }
-func (m *blockingBootVMManager) GetVM(vmID string) *VMInstanceInfo     { return nil }
+func (m *blockingBootVMManager) GetVM(vmID string) *VMInstanceInfo {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.runningVMs[vmID]
+}
 func (m *blockingBootVMManager) CheckHealth(vmID string) (bool, error) { return true, nil }
 
 func TestOwnershipRegistry_BootingRequestsWaitForReadyVM(t *testing.T) {
@@ -670,6 +676,96 @@ func TestHandler_RuntimePackageDeniesExternalCaller(t *testing.T) {
 	handler.HandleRuntimePackage(rr, req)
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandler_ResolveConcurrentUsersDoNotBlockOnSlowBoot(t *testing.T) {
+	srv, reg := newTestServer(t)
+	manager := newBlockingBootVMManager("http://127.0.0.1:9009")
+	manager.runningVMs["vm-ready-1"] = &VMInstanceInfo{
+		HostURL: "http://127.0.0.1:9010",
+		Epoch:   1,
+		Healthy: true,
+		State:   "running",
+	}
+	reg.SetVMManager(manager)
+	// Pre-populate an active ready ownership for user-ready.
+	ownReady := &VMOwnership{
+		VMID:         "vm-ready-1",
+		UserID:       "user-ready",
+		DesktopID:    PrimaryDesktopID,
+		Kind:         VMKindInteractive,
+		ComputerURL:  "http://127.0.0.1:9010",
+		State:        VMStateActive,
+		LastActiveAt: time.Now(),
+		Epoch:        1,
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("user-ready", PrimaryDesktopID)] = ownReady
+	reg.vmByID["vm-ready-1"] = ownReady
+	reg.mu.Unlock()
+
+	// Start a resolve request for user-slow that blocks in BootVM.
+	slowDone := make(chan int, 1)
+	go func() {
+		reqBody := strings.NewReader(`{"user_id":"user-slow","desktop_id":"primary"}`)
+		req, err := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", reqBody)
+		if err != nil {
+			slowDone <- 0
+			return
+		}
+		req.Header.Set("X-Internal-Caller", "true")
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			slowDone <- 0
+			return
+		}
+		defer resp.Body.Close()
+		slowDone <- resp.StatusCode
+	}()
+
+	// Wait until user-slow enters BootVM.
+	select {
+	case <-manager.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected user-slow resolve to start BootVM")
+	}
+
+	// Now, while user-slow is blocked in BootVM, user-ready resolves.
+	// This must complete immediately and NOT block on user-slow's boot.
+	readyReqBody := strings.NewReader(`{"user_id":"user-ready","desktop_id":"primary"}`)
+	readyReq, err := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", readyReqBody)
+	if err != nil {
+		t.Fatalf("create ready request: %v", err)
+	}
+	readyReq.Header.Set("X-Internal-Caller", "true")
+	readyReq.Header.Set("Content-Type", "application/json")
+
+	readyStart := time.Now()
+	readyResp, err := http.DefaultClient.Do(readyReq)
+	readyElapsed := time.Since(readyStart)
+	if err != nil {
+		t.Fatalf("user-ready resolve failed: %v", err)
+	}
+	defer readyResp.Body.Close()
+
+	if readyResp.StatusCode != http.StatusOK {
+		t.Fatalf("user-ready resolve status = %d, want %d", readyResp.StatusCode, http.StatusOK)
+	}
+	if readyElapsed > 500*time.Millisecond {
+		t.Fatalf("user-ready resolve took %s; expected immediate non-blocking resolution (<500ms)", readyElapsed)
+	}
+
+	// Release user-slow's boot.
+	close(manager.release)
+	select {
+	case status := <-slowDone:
+		if status != http.StatusOK {
+			t.Fatalf("user-slow resolve status = %d, want %d", status, http.StatusOK)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("user-slow resolve did not complete after release")
 	}
 }
 

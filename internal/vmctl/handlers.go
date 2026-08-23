@@ -187,10 +187,6 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
-	if h.routeAuthority != nil {
-		h.routeAuthority.mutationMu.Lock()
-		defer h.routeAuthority.mutationMu.Unlock()
-	}
 	route, routeKnown, err := h.resolveComputerVersionRoute(r.Context(), req.UserID, req.DesktopID)
 	if err != nil {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
