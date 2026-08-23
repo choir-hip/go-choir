@@ -21,6 +21,8 @@ The same recovery attempt transmitted approximately 566 MB over the guest tap an
 
 Increasing the boot timeout only postpones failure and holds the ownership/recovery request for the full duration. Recovery needs one durable Dolt checkpoint after the replay transaction stream, not one checkpoint per replayed event. Semantic event verification and projection ordering remain required; only replay checkpoint frequency changes.
 
+The first checkpoint repair was not active on the guest boot path: `autoputer.Run` called `appender.Reconstruct` without enabling the appender's replay-only finalization mode, so the normal `Finalize` path continued to checkpoint every event. The 30-minute retry later confirmed the same mechanism: an out-of-memory kill followed by `replay finalize sequence 3213: runtime store: dolt checkpoint: Error 1105: context deadline exceeded`.
+
 ## Repair boundary
 
 The repair will suppress per-event `DOLT_COMMIT` calls for the explicit replay-only projection path and issue one final checkpoint after the canonical replay reaches its target. Live append/finalize paths retain their existing checkpoint behavior. Effects remain OFF and canonical corpusd events are not rewound.
