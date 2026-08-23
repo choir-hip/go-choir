@@ -23,6 +23,8 @@ Increasing the boot timeout only postpones failure and holds the ownership/recov
 
 The first checkpoint repair was not active on the guest boot path: `autoputer.Run` called `appender.Reconstruct` without enabling the appender's replay-only finalization mode, so the normal `Finalize` path continued to checkpoint every event. The 30-minute retry later confirmed the same mechanism: an out-of-memory kill followed by `replay finalize sequence 3213: runtime store: dolt checkpoint: Error 1105: context deadline exceeded`.
 
+After boot replay mode was enabled, the guest still hit the unchanged 10-minute `bootstrapCtx` at sequence 2277 (`2026-08-23 11:33:21Z`), while `VM_BOOT_READY_TIMEOUT` was already 30 minutes. The local replay path therefore needs a bootstrap budget aligned with the boot budget.
+
 ## Repair boundary
 
 The repair will suppress per-event `DOLT_COMMIT` calls for the explicit replay-only projection path and issue one final checkpoint after the canonical replay reaches its target. Live append/finalize paths retain their existing checkpoint behavior. Effects remain OFF and canonical corpusd events are not rewound.
