@@ -83,6 +83,11 @@ type EventSource interface {
 	Events(ctx context.Context, computerID string, afterSequence uint64) ([]DurableEvent, error)
 }
 
+// PagedEventSource exposes bounded replay pages so long chains do not have to
+// materialize in guest memory before projection begins.
+type PagedEventSource interface {
+	EventsPage(ctx context.Context, computerID string, afterSequence uint64, pageSize int) ([]DurableEvent, error)
+}
 type ReceiptVerifier interface {
 	VerifyEventHeadReceipt(ctx context.Context, receipt Receipt, request CASRequest) error
 }
@@ -586,12 +591,8 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 	if localHead != nil {
 		after = localHead.Sequence
 	}
-	records, err := source.Events(ctx, a.computerID, after)
-	if err != nil {
-		return fmt.Errorf("computer event appender: fetch durable chain: %w", err)
-	}
 	current := localHead
-	for _, record := range records {
+	apply := func(record DurableEvent) error {
 		next, err := Reduce(current, record.Request.Event, record.Request.Input)
 		if err != nil {
 			return fmt.Errorf("computer event appender: replay sequence %d: %w", record.Request.Event.Sequence, err)
@@ -609,11 +610,49 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			return fmt.Errorf("computer event appender: replay finalize sequence %d: %w", record.Request.Event.Sequence, err)
 		}
 		current = &next
-		if targetHead != "" && current.CanonicalEventHead == targetHead {
-			if err := a.commitReplay(ctx); err != nil {
-				return fmt.Errorf("computer event appender: replay commit: %w", err)
+		return nil
+	}
+	pageSize := EventReplayPageSize
+	if pageSource, ok := source.(PagedEventSource); ok {
+		for {
+			page, err := pageSource.EventsPage(ctx, a.computerID, after, pageSize)
+			if err != nil {
+				return fmt.Errorf("computer event appender: fetch durable chain: %w", err)
 			}
-			return nil
+			if len(page) == 0 {
+				break
+			}
+			for _, record := range page {
+				if err := apply(record); err != nil {
+					return err
+				}
+				after = record.Request.Event.Sequence
+				if targetHead != "" && current.CanonicalEventHead == targetHead {
+					if err := a.commitReplay(ctx); err != nil {
+						return fmt.Errorf("computer event appender: replay commit: %w", err)
+					}
+					return nil
+				}
+			}
+			if len(page) < pageSize || after == ^uint64(0) {
+				break
+			}
+		}
+	} else {
+		records, err := source.Events(ctx, a.computerID, after)
+		if err != nil {
+			return fmt.Errorf("computer event appender: fetch durable chain: %w", err)
+		}
+		for _, record := range records {
+			if err := apply(record); err != nil {
+				return err
+			}
+			if targetHead != "" && current.CanonicalEventHead == targetHead {
+				if err := a.commitReplay(ctx); err != nil {
+					return fmt.Errorf("computer event appender: replay commit: %w", err)
+				}
+				return nil
+			}
 		}
 	}
 	if targetHead != "" {

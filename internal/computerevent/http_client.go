@@ -162,26 +162,37 @@ func (c *HTTPClient) FetchPayload(ctx context.Context, computerID, artifactDiges
 	return raw, nil
 }
 
+func (c *HTTPClient) EventsPage(ctx context.Context, computerID string, afterSequence uint64, pageSize int) ([]DurableEvent, error) {
+	if pageSize <= 0 || pageSize > EventReplayMaxPageSize {
+		return nil, fmt.Errorf("computer event client: replay page size %d is invalid", pageSize)
+	}
+	query := url.Values{
+		"computer_id":    []string{computerID},
+		"after_sequence": []string{fmt.Sprintf("%d", afterSequence)},
+		"limit":          []string{fmt.Sprintf("%d", pageSize)},
+	}
+	var page []DurableEvent
+	_, err := c.doWithResponseLimit(ctx, http.MethodGet, "/internal/computers/events/replay?"+query.Encode(), nil, &page, EventReplayMaxResponseBytes)
+	if err != nil {
+		return nil, fmt.Errorf("computer event client: replay page after sequence %d: %w", afterSequence, err)
+	}
+	if len(page) > pageSize {
+		return nil, fmt.Errorf("computer event client: replay page returned %d records, exceeds requested %d", len(page), pageSize)
+	}
+	return page, nil
+}
+
 func (c *HTTPClient) Events(ctx context.Context, computerID string, afterSequence uint64) ([]DurableEvent, error) {
 	pageSize := EventReplayPageSize
 	after := afterSequence
 	var records []DurableEvent
 	for {
-		query := url.Values{
-			"computer_id":    []string{computerID},
-			"after_sequence": []string{fmt.Sprintf("%d", after)},
-			"limit":          []string{fmt.Sprintf("%d", pageSize)},
-		}
-		var page []DurableEvent
-		_, err := c.doWithResponseLimit(ctx, http.MethodGet, "/internal/computers/events/replay?"+query.Encode(), nil, &page, EventReplayMaxResponseBytes)
+		page, err := c.EventsPage(ctx, computerID, after, pageSize)
 		if err != nil {
-			return nil, fmt.Errorf("computer event client: replay page after sequence %d: %w", after, err)
+			return nil, err
 		}
 		if len(page) == 0 {
 			break
-		}
-		if len(page) > pageSize {
-			return nil, fmt.Errorf("computer event client: replay page returned %d records, exceeds requested %d", len(page), pageSize)
 		}
 		previous := after
 		for _, record := range page {
