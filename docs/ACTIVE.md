@@ -23,6 +23,18 @@ capsule-exec receipts, qualified consensus under reversible-selfdev-v1,
 promotion, live play verification, falsification with B, and restore to pre-A
 checkpoint 99949fe2.
 
+### Subordinate Operational Contract — Recovery of Stopped Computer 0333528
+
+[`definitions/choir-durable-substrate-recovery-2026-08-23.md`](definitions/choir-durable-substrate-recovery-2026-08-23.md)
+is the owner-ratified subordinate operational contract executing as of
+2026-08-23. It unblocks the retained computer `computer-03335285269bdba4f94377e56879f9e6`
+(stopped epoch 361) so the scheduling Definition can proceed. It supersedes the
+predecessor [`definitions/choir-host-orchestrated-recovery-2026-08-22.md`](definitions/choir-host-orchestrated-recovery-2026-08-22.md).
+Delivery is an isolated, resumable offline full-tape rebuild to head 132,436,
+publishing the first `ProjectionBase` blob artifact in `platform-artifacts`,
+and booting the computer with $\Delta = 0$ events replayed into active state on
+staging.
+
 ## Completed Substrate — Tape-Based Recovery
 
 [`definitions/choir-tape-recovery-2026-08-13.md`](definitions/choir-tape-recovery-2026-08-13.md)
@@ -112,6 +124,12 @@ a CoSuper vertical slice with dynamic delegation, citable command/message
 receipts, forced activation death, cross-model durable recovery, Texture
 transclusions, and an exact externally governed effect bundle. The same kernel
 must then refuse Bash and general execution under a Researcher profile.
+
+[`definitions/choir-durable-substrate-overhauls-2026-08-23.md`](definitions/choir-durable-substrate-overhauls-2026-08-23.md)
+is the owner-ratified successor for the 4-track substrate overhauls (Track K key
+escrow, Track F file-CAS + periodic event watermarks, Track M host MTA spool +
+guest Maildir, and Assurance daily restore drills). It is sequenced after the
+subordinate recovery Definition unblocks `computer-0333528...` on staging.
 
 ## Draft Successor Definitions — Not Executable
 

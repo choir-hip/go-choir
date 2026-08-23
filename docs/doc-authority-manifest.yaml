@@ -353,6 +353,49 @@ documents:
     depends_on: [docs/definitions/choir-tape-recovery-2026-08-13.md]
     witnesses: [docs/definitions/choir-supervised-self-development-effects-2026-08-11.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, AGENTS.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, autonomy_policy_change, trajectory_settlement_change, capsule_effect_boundary_change, deployed_acceptance, registry_closure]
+  - path: docs/definitions/choir-host-orchestrated-recovery-2026-08-22.md
+    claim_scope: historical
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded, entrypoint: false}
+    superseded_by: [docs/definitions/choir-durable-substrate-recovery-2026-08-23.md]
+    witnesses: [docs/definitions/choir-durable-substrate-recovery-2026-08-23.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: []
+
+  - path: docs/definitions/choir-durable-substrate-recovery-2026-08-23.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: subordinate_mission_contract, lifecycle: active, entrypoint: false}
+    supersedes: [docs/definitions/choir-host-orchestrated-recovery-2026-08-22.md]
+    depends_on: [docs/definitions/choir-tape-recovery-2026-08-13.md]
+    witnesses: [docs/designs/choir-durable-substrate-2026-08-23.md, docs/evidence/root-cause-clustering-recovery-substrate-2026-08-23.md, docs/evidence/effects-red-recovery-projections-present-2026-08-23.md, docs/evidence/effects-red-recovery-no-differential-base-2026-08-23.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/choir-doctrine.md, AGENTS.md]
+    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, projection_base_change, deployed_acceptance, registry_closure]
+
+  - path: docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: owner_ratified_sequenced_successor, lifecycle: blocked_on_predecessor, entrypoint: false}
+    depends_on: [docs/definitions/choir-durable-substrate-recovery-2026-08-23.md]
+    witnesses: [docs/designs/choir-durable-substrate-2026-08-23.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/choir-doctrine.md, AGENTS.md]
+    refresh_triggers: [mission_state_change, predecessor_completion, file_cas_change, key_escrow_change, mail_spool_change, deployed_acceptance, registry_closure]
+
+  - path: docs/designs/choir-durable-substrate-2026-08-23.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: design, authority: target_design, lifecycle: living}
+    witnesses: [docs/definitions/choir-durable-substrate-recovery-2026-08-23.md, docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md, docs/computer-ontology.md, docs/choir-doctrine.md, AGENTS.md]
+    refresh_triggers: [durable_substrate_change, consensus_review_change]
+
+  - path: docs/evidence/root-cause-clustering-recovery-substrate-2026-08-23.md
+    claim_scope: current
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: evidence, authority: problem_documentation, lifecycle: retained}
+    witnesses: [docs/definitions/choir-durable-substrate-recovery-2026-08-23.md, docs/designs/choir-durable-substrate-2026-08-23.md, AGENTS.md]
+    refresh_triggers: [recovery_incident_change]
   - path: docs/definitions/choir-private-go-actor-kernel-2026-08-12.md
     claim_scope: current
     is_root: []

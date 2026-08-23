@@ -397,6 +397,79 @@ nodes:
       - docs/agent-product-doctrine.md
       - docs/choir-doctrine.md
       - docs/ACTIVE.md
+  - id: choir-host-orchestrated-recovery-2026-08-22
+    title: Host-Orchestrated Recovery (Cold Recover Current)
+    path: docs/definitions/choir-host-orchestrated-recovery-2026-08-22.md
+    ledger: ''
+    status: settled
+    kind: operational_recovery
+    entrypoint: false
+    execution_mode: superseded_incomplete_mission_evidence
+    depends_on:
+      - choir-tape-recovery-2026-08-13
+    enables:
+      - choir-durable-substrate-recovery-2026-08-23
+    note: >-
+      Superseded 2026-08-23 by choir-durable-substrate-recovery-2026-08-23.
+      Initial cold recover_current attempt blank-seeded sparse image without a
+      differential base, hitting the same 132k-event replay timeout.
+    sources:
+      - docs/definitions/choir-host-orchestrated-recovery-2026-08-22.md
+      - docs/evidence/effects-red-guest-dependent-restore-2026-08-22.md
+      - docs/evidence/effects-red-recovery-no-differential-base-2026-08-23.md
+  - id: choir-durable-substrate-recovery-2026-08-23
+    title: Recovery of Stopped Computer (ProjectionBase Rebuild)
+    path: docs/definitions/choir-durable-substrate-recovery-2026-08-23.md
+    ledger: ''
+    status: working
+    kind: operational_recovery
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-tape-recovery-2026-08-13
+      - choir-host-orchestrated-recovery-2026-08-22
+    enables:
+      - choir-scheduling-and-candidate-proof-2026-08-21
+      - choir-durable-substrate-overhauls-2026-08-23
+    note: >-
+      Owner-ratified subordinate operational contract. Unblocks retained computer
+      computer-03335285269bdba4f94377e56879f9e6 (stopped epoch 361) via isolated
+      offline full-tape rebuild to head 132,436, publishing first ProjectionBase
+      blob artifact, and hydrating to active on staging with delta=0 replay.
+    sources:
+      - docs/definitions/choir-durable-substrate-recovery-2026-08-23.md
+      - docs/designs/choir-durable-substrate-2026-08-23.md
+      - docs/evidence/root-cause-clustering-recovery-substrate-2026-08-23.md
+      - docs/evidence/effects-red-recovery-projections-present-2026-08-23.md
+      - docs/evidence/effects-red-recovery-no-differential-base-2026-08-23.md
+      - docs/standing-questions.md
+      - docs/computer-ontology.md
+      - docs/choir-doctrine.md
+      - docs/ACTIVE.md
+      - AGENTS.md
+  - id: choir-durable-substrate-overhauls-2026-08-23
+    title: Durable Substrate Overhauls
+    path: docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
+    ledger: ''
+    status: blocked
+    kind: spine
+    entrypoint: false
+    execution_mode: sequenced_successor
+    depends_on:
+      - choir-durable-substrate-recovery-2026-08-23
+    enables: []
+    note: >-
+      Owner-ratified sequenced successor for full 4-track substrate overhauls
+      (Track K key escrow, Track F file-CAS + periodic event watermarks, Track M
+      MTA spool + Maildir, Assurance daily drills + scrub + cells). Sequenced
+      after computer 0333528 is active.
+    sources:
+      - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
+      - docs/designs/choir-durable-substrate-2026-08-23.md
+      - docs/choir-doctrine.md
+      - docs/computer-ontology.md
+      - docs/ACTIVE.md
+      - AGENTS.md
   - id: choir-private-go-actor-kernel-2026-08-12
     title: Private Go Actor Kernel
     path: docs/definitions/choir-private-go-actor-kernel-2026-08-12.md
