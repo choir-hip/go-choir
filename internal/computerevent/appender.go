@@ -616,7 +616,7 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		return fmt.Errorf("computer event appender: reconstruction final local head: %w", err)
 	}
 	if !sameHead(platformHead, finalLocal) {
-		return ErrNeedsProjectionRepair
+		return fmt.Errorf("%w: local=%s platform=%s", ErrNeedsProjectionRepair, replayHeadSummary(finalLocal), replayHeadSummary(platformHead))
 	}
 	if err := a.commitReplay(ctx); err != nil {
 		return fmt.Errorf("computer event appender: replay commit: %w", err)
@@ -633,6 +633,16 @@ func (a *ComputerEventAppender) commitReplay(ctx context.Context) error {
 		return nil
 	}
 	return committer.CommitReplay(ctx)
+}
+
+func replayHeadSummary(head *Head) string {
+	if head == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("seq=%d canonical=%s desired=%s effective=%s desired_state=%s effective_state=%s pending=%s reducer=%d credential_epoch=%d",
+		head.Sequence, head.CanonicalEventHead, head.DesiredEventHead, head.EffectiveEventHead,
+		head.DesiredStateCommitment, head.EffectiveStateCommitment, head.PendingTransitionRef,
+		head.ReducerVersion, head.CredentialRevocationEpoch)
 }
 
 func (a *ComputerEventAppender) finalizeProjection(ctx context.Context, event Event, digest string, receipt Receipt) error {
