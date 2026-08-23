@@ -175,7 +175,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@v6
 
@@ -183,18 +183,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: ${{ needs.plan.outputs.race_selected != 'true' }}
-
-      - name: Restore Go cache for Race
-        if: needs.plan.outputs.race_selected == 'true'
-        uses: actions/cache/restore@v6
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
-          restore-keys: |
-            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
+          cache: true
 
       - name: Go test non-runtime shard
         shell: bash
@@ -218,7 +207,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@v6
 
@@ -226,18 +215,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: ${{ needs.plan.outputs.race_selected != 'true' }}
-
-      - name: Restore Go cache for Race
-        if: needs.plan.outputs.race_selected == 'true'
-        uses: actions/cache/restore@v6
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
-          restore-keys: |
-            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
+          cache: true
 
       - name: Go test agentcore/textureowner shard
         shell: bash
