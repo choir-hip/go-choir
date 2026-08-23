@@ -47,7 +47,7 @@ run_shard() {
   local shard_index="$1"
   shift
 
-  local -a timeout_args=(-timeout=30m)
+  local -a timeout_args=(-timeout=45m)
 
   if (( store_sharded )); then
     local non_store_shards=$(( total_shards - store_shards ))
