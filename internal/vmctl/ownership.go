@@ -1719,9 +1719,10 @@ func (r *OwnershipRegistry) StopVMForDesktop(userID, desktopID string) error {
 		return err
 	}
 
-	// Every product start is a fresh realization. Propagate actuator failure;
-	// never project a stopped state that vmctl did not observe.
-	if r.vmManager != nil && (own.State == VMStateActive || own.State == VMStateDegraded) {
+	// Every product stop is a fresh realization boundary. Propagate actuator
+	// failure whenever the manager still tracks an instance, even if durable
+	// ownership state is stale and says stopped.
+	if r.vmManager != nil && (own.State == VMStateActive || own.State == VMStateDegraded || r.vmManager.GetVM(own.VMID) != nil) {
 		if err := r.vmManager.StopVM(own.VMID); err != nil {
 			return fmt.Errorf("stop VM %s: %w", own.VMID, err)
 		}
@@ -1731,6 +1732,23 @@ func (r *OwnershipRegistry) StopVMForDesktop(userID, desktopID string) error {
 	own.LastActiveAt = time.Now()
 	r.saveLocked()
 	log.Printf("vmctl: stopped VM %s for user %s desktop %s", own.VMID, userID, own.DesktopID)
+	return nil
+}
+
+// MarkRecoveryInProgress fences premium warmness while recover_current owns
+// the stopped-to-fresh-boot transition.
+func (r *OwnershipRegistry) MarkRecoveryInProgress(userID, desktopID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own, ok := r.ownerships[ownershipKey(userID, desktopID)]
+	if !ok {
+		return fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
+	}
+	if own.State != VMStateStopped {
+		return fmt.Errorf("VM %s is not stopped for recovery", own.VMID)
+	}
+	own.StoppedBy = "recover_current"
+	r.saveLocked()
 	return nil
 }
 
@@ -2266,6 +2284,9 @@ func (r *OwnershipRegistry) WarmAlwaysOnDesktops(ctx context.Context, guard Comp
 			continue
 		}
 		if !cfg.AlwaysOnUserIDs[strings.TrimSpace(own.UserID)] {
+			continue
+		}
+		if own.StoppedBy == "recover_current" {
 			continue
 		}
 		if own.State != VMStateStopped && own.State != VMStateHibernated {

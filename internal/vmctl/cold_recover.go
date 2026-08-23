@@ -527,6 +527,10 @@ func (h *Handler) HandleColdRecover(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 		return
 	}
+	if err := h.registry.MarkRecoveryInProgress(ownership.UserID, ownership.DesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
 	if err := h.writeColdRecoveryPhase(vmDir, &journal, "stopped"); err != nil {
 		writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "could not persist recovery journal"})
 		return
