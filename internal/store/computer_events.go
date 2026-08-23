@@ -171,7 +171,16 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 		return err
 	}
 	s.markDoltHistoryDirty()
+	if allowLegacyTextureBootstrap {
+		return nil
+	}
 	return s.commitDoltCheckpoint(ctx, "finalize computer event "+eventDigest)
+}
+
+// CommitReplay makes the complete replay working set addressable by Dolt
+// history once, instead of committing once per replayed event.
+func (s *Store) CommitReplay(ctx context.Context) error {
+	return s.commitDoltCheckpoint(ctx, "finalize computer event replay")
 }
 
 func (s *Store) DiscardPrepared(ctx context.Context, computerID, eventDigest string) error {

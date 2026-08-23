@@ -52,6 +52,12 @@ type ReplayBatchProjectionStore interface {
 	FinalizeReplayBatch(ctx context.Context, computerID, eventDigest string, receipt Receipt, batch *ProjectionBatch) error
 }
 
+// ReplayCommitter flushes deferred VM-local history after a complete replay.
+// Implementations must not expose this boundary to live append paths.
+type ReplayCommitter interface {
+	CommitReplay(context.Context) error
+}
+
 type CASRequest struct {
 	Event                    Event           `json:"event"`
 	EventDigest              string          `json:"event_digest"`
@@ -592,6 +598,9 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		}
 		current = &next
 		if targetHead != "" && current.CanonicalEventHead == targetHead {
+			if err := a.commitReplay(ctx); err != nil {
+				return fmt.Errorf("computer event appender: replay commit: %w", err)
+			}
 			return nil
 		}
 	}
@@ -609,7 +618,21 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 	if !sameHead(platformHead, finalLocal) {
 		return ErrNeedsProjectionRepair
 	}
+	if err := a.commitReplay(ctx); err != nil {
+		return fmt.Errorf("computer event appender: replay commit: %w", err)
+	}
 	return nil
+}
+
+func (a *ComputerEventAppender) commitReplay(ctx context.Context) error {
+	if a == nil || !a.replayProjection {
+		return nil
+	}
+	committer, ok := a.projection.(ReplayCommitter)
+	if !ok {
+		return nil
+	}
+	return committer.CommitReplay(ctx)
 }
 
 func (a *ComputerEventAppender) finalizeProjection(ctx context.Context, event Event, digest string, receipt Receipt) error {
