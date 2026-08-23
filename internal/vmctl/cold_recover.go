@@ -541,7 +541,7 @@ func (h *Handler) HandleColdRecover(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: "could not quarantine data image"})
 		return
 	}
-	staging, err = storage.StageSparseImage(root, ownership.VMID, generation, operationID, 512)
+	staging, err = storage.StageSparseImage(root, ownership.VMID, generation, operationID, 32768)
 	if err != nil {
 		writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "could not stage data image"})
 		return
