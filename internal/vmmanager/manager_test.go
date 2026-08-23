@@ -728,6 +728,43 @@ func TestQuarantineDataImageRenamesDurablyAndPrunesOnlyCompletedRecovery(t *test
 		t.Fatalf("second quarantined image = %q, %v", got, err)
 	}
 }
+func TestQuarantineDataImageDisabledPruningPreservesAllQuarantines(t *testing.T) {
+	root := t.TempDir()
+	vmID := "vm-recovery-noprune"
+	vmDir := filepath.Join(root, vmID)
+	if err := os.Mkdir(vmDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data := filepath.Join(vmDir, "data.img")
+	if err := os.WriteFile(data, []byte("initial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mgr := NewManager(DefaultManagerConfig())
+	first, err := mgr.QuarantineDataImage(root, vmID, 1, "opone", 0)
+	if err != nil {
+		t.Fatalf("quarantine first realization: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(vmDir, "rec-1-opone.journal"), []byte(`{"phase":"done"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(data, []byte("next-realization"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	second, err := mgr.QuarantineDataImage(root, vmID, 2, "optwo", 0)
+	if err != nil {
+		t.Fatalf("quarantine second realization: %v", err)
+	}
+	if _, err := os.Lstat(first); err != nil {
+		t.Fatalf("prior completed quarantine was pruned when maxRetained=0: %v", err)
+	}
+	if got, err := os.ReadFile(first); err != nil || string(got) != "initial" {
+		t.Fatalf("first quarantined image corrupted: %q, %v", got, err)
+	}
+	if got, err := os.ReadFile(second); err != nil || string(got) != "next-realization" {
+		t.Fatalf("second quarantined image corrupted: %q, %v", got, err)
+	}
+}
+
 
 func TestQuarantineDataImageDoesNotPruneIncompleteRecovery(t *testing.T) {
 	root := t.TempDir()

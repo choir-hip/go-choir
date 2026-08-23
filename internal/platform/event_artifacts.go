@@ -200,7 +200,7 @@ func (s *EventArtifactService) FetchPayload(computerID, artifactDigest string) (
 	if computerID == "" || !computerevent.IsSHA256(artifactDigest) {
 		return nil, fmt.Errorf("event artifact service: computer and payload digest are required")
 	}
-	for _, namespace := range []string{"computer-event-payload", "computer-event"} {
+	for _, namespace := range []string{"computer-event-payload", "computer-event", "projection-base"} {
 		path, err := s.platform.artifactPath(filepath.Join("sha256", namespace, artifactDigest))
 		if err != nil {
 			return nil, err

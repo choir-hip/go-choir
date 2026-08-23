@@ -65,6 +65,14 @@ func newPrivateArtifactCipher(computerID, encodedKey string) (*PrivateArtifactCi
 	if err != nil || len(raw) != chacha20poly1305.KeySize || strings.TrimSpace(computerID) == "" {
 		return nil, fmt.Errorf("privacy keyring: invalid guest key")
 	}
+	return NewPrivateArtifactCipher(computerID, raw)
+}
+
+// NewPrivateArtifactCipher constructs a cipher from raw key bytes for trusted recovery.
+func NewPrivateArtifactCipher(computerID string, raw []byte) (*PrivateArtifactCipher, error) {
+	if len(raw) != chacha20poly1305.KeySize || strings.TrimSpace(computerID) == "" {
+		return nil, fmt.Errorf("privacy keyring: invalid guest key")
+	}
 	var key [chacha20poly1305.KeySize]byte
 	copy(key[:], raw)
 	return &PrivateArtifactCipher{keys: &guestPrivacyKeyring{

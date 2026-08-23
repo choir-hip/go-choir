@@ -2091,8 +2091,9 @@ func (m *Manager) ensureDataImageMinSize(path string, sizeMB int) error {
 }
 
 // QuarantineDataImage atomically moves a VM's data image into the
-// deterministic recovery quarantine. It retains prior completed recoveries
-// only up to maxRetained and never removes an in-progress quarantine.
+// deterministic recovery quarantine. If maxRetained > 0, it retains prior
+// completed recoveries only up to maxRetained and never removes an in-progress
+// quarantine. If maxRetained <= 0, retention pruning is disabled.
 func (m *Manager) QuarantineDataImage(stateRoot, vmID string, recoveryGeneration uint64, operationID string, maxRetained int) (string, error) {
 	vmDir, err := recoveryVMStateDir(stateRoot, vmID)
 	if err != nil {
@@ -2101,13 +2102,12 @@ func (m *Manager) QuarantineDataImage(stateRoot, vmID string, recoveryGeneration
 	if recoveryGeneration == 0 || !validRecoveryOperationID(operationID) {
 		return "", fmt.Errorf("invalid recovery identity")
 	}
-	if maxRetained <= 0 {
-		return "", fmt.Errorf("recovery quarantine retention must be positive")
-	}
 	dataImage := filepath.Join(vmDir, "data.img")
 	quarantine := filepath.Join(vmDir, fmt.Sprintf("data.img.quarantine-%d-%s", recoveryGeneration, operationID))
-	if err := pruneCompletedQuarantines(vmDir, maxRetained); err != nil {
-		return "", err
+	if maxRetained > 0 {
+		if err := pruneCompletedQuarantines(vmDir, maxRetained); err != nil {
+			return "", err
+		}
 	}
 	info, err := regularFileInfo(dataImage)
 	if err != nil {

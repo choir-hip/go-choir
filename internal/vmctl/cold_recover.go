@@ -540,7 +540,7 @@ func (h *Handler) HandleColdRecover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	quarantine, err = storage.QuarantineDataImage(root, ownership.VMID, generation, operationID, 3)
+	quarantine, err = storage.QuarantineDataImage(root, ownership.VMID, generation, operationID, 0)
 	if err != nil {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: "could not quarantine data image"})
 		return
