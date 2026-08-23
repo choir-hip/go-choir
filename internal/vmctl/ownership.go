@@ -1981,8 +1981,8 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 		if cfg.ComputerCredentialEnvelope == "" && strings.TrimSpace(corpusdURL) != "" {
 			return nil, fmt.Errorf("failed to recover VM %s: realization credential unavailable", own.VMID)
 		}
-		// For stopped VMs that are not in the manager's active set (e.g. after a clean stop or after a failed cold-recover that left the VM stopped), RecoverVM would fail with "not found". In that case try a fresh BootVM with the recovery config, which is the same fresh-boot path but without requiring the old instance to be present.
-		if r.vmManager.GetVM(own.VMID) == nil {
+		// For stopped VMs that are not in the manager's active set (e.g. after a clean stop or after a failed cold-recover that left the VM stopped), RecoverVM would fail with "not found". In that case try a fresh BootVM with the recovery config, which is the same fresh-boot path but without requiring the old instance to be present. Only for stopped; degraded/failed must use RecoverVM.
+		if own.State == VMStateStopped && r.vmManager.GetVM(own.VMID) == nil {
 			info, err := r.vmManager.BootVM(cfg)
 			if err != nil {
 				return nil, fmt.Errorf("failed to boot recovered VM %s: %w", own.VMID, err)
