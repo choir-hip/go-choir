@@ -131,29 +131,58 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 			r.ensureExistingGatewayCredential(vmID)
 			return own, nil
 		case own.State == VMStateStopped || own.State == VMStateHibernated:
+			if waiters, ok := r.pendingWaiters[key]; ok {
+				return r.waitForPendingAssignmentLocked(ctx, key, UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID, waiters)
+			}
 			mgr := r.vmManager
 			snapshot := *own
+			r.pendingWaiters[key] = nil
+			own.State = VMStateBooting
+			r.saveLocked()
 			r.mu.Unlock()
 			if mgr != nil {
 				info, err := r.startExistingVM(&snapshot, mgr)
 				if err != nil {
+					r.mu.Lock()
+					waiters := r.pendingWaiters[key]
+					delete(r.pendingWaiters, key)
+					if current, ok := r.ownerships[key]; ok && current != nil && current.VMID == snapshot.VMID {
+						current.State = VMStateFailed
+						r.saveLocked()
+					}
+					r.mu.Unlock()
+					for _, ch := range waiters {
+						ch <- nil
+					}
 					return nil, fmt.Errorf("start platform computer %s: %w", snapshot.VMID, err)
 				}
 				r.mu.Lock()
+				waiters := r.pendingWaiters[key]
+				delete(r.pendingWaiters, key)
 				current := r.ownerships[key]
-				if current == nil {
+				if current == nil || current.VMID != snapshot.VMID {
 					r.mu.Unlock()
+					for _, ch := range waiters {
+						ch <- nil
+					}
 					return nil, fmt.Errorf("platform computer ownership disappeared during resume")
 				}
-				current.ComputerURL = info.HostURL
-				current.Epoch = info.Epoch
+				if info != nil {
+					current.ComputerURL = info.HostURL
+					current.Epoch = info.Epoch
+				}
 				current.State = VMStateActive
 				current.LastActiveAt = time.Now()
+				current.StoppedBy = ""
 				r.saveLocked()
 				vmID := current.VMID
+				result := cloneOwnership(current)
 				r.mu.Unlock()
 				r.ensureExistingGatewayCredential(vmID)
-				return current, nil
+				for _, ch := range waiters {
+					ch <- cloneOwnership(result)
+				}
+				return result, nil
 			}
 			r.mu.Lock()
 			own.State = VMStateActive
@@ -241,31 +270,57 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 			return current, nil
 		default:
 			// Unknown or failed state; treat as needing recovery.
+			if waiters, ok := r.pendingWaiters[key]; ok {
+				return r.waitForPendingAssignmentLocked(ctx, key, UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID, waiters)
+			}
 			mgr := r.vmManager
 			snapshot := *own
+			r.pendingWaiters[key] = nil
+			own.State = VMStateBooting
+			r.saveLocked()
 			r.mu.Unlock()
 			info, err := r.startExistingVM(&snapshot, mgr)
 			if err != nil {
+				r.mu.Lock()
+				waiters := r.pendingWaiters[key]
+				delete(r.pendingWaiters, key)
+				if current, ok := r.ownerships[key]; ok && current != nil && current.VMID == snapshot.VMID {
+					current.State = VMStateFailed
+					r.saveLocked()
+				}
+				r.mu.Unlock()
+				for _, ch := range waiters {
+					ch <- nil
+				}
 				return nil, fmt.Errorf("recover platform computer %s: %w", snapshot.VMID, err)
 			}
 			r.mu.Lock()
+			waiters := r.pendingWaiters[key]
+			delete(r.pendingWaiters, key)
 			current := r.ownerships[key]
-			if current == nil {
+			if current == nil || current.VMID != snapshot.VMID {
 				r.mu.Unlock()
+				for _, ch := range waiters {
+					ch <- nil
+				}
 				return nil, fmt.Errorf("platform computer ownership disappeared during recovery")
 			}
 			current.ComputerURL = info.HostURL
 			current.Epoch = info.Epoch
 			current.State = VMStateActive
 			current.LastActiveAt = time.Now()
+			current.StoppedBy = ""
 			r.saveLocked()
 			vmID := current.VMID
+			result := cloneOwnership(current)
 			r.mu.Unlock()
 			r.ensureExistingGatewayCredential(vmID)
-			return current, nil
+			for _, ch := range waiters {
+				ch <- cloneOwnership(result)
+			}
+			return result, nil
 		}
 	}
-
 	// No existing ownership — create one.
 	vmID := UniversalWirePlatformVMID
 	mgr := r.vmManager

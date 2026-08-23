@@ -820,33 +820,28 @@ func (r *OwnershipRegistry) ensureActiveVMReady(own *VMOwnership, mgr VMManager)
 	}
 }
 
-func (r *OwnershipRegistry) reserveFreshVMConfigLocked(own *VMOwnership, gatewayToken string, mgr VMManager) (VMManagerConfig, string, error) {
+func (r *OwnershipRegistry) reserveFreshVMConfig(own *VMOwnership, gatewayToken string, mgr VMManager) (VMManagerConfig, error) {
 	if own == nil || mgr == nil {
-		return VMManagerConfig{}, "", fmt.Errorf("VM realization authority is unavailable")
+		return VMManagerConfig{}, fmt.Errorf("VM realization authority is unavailable")
 	}
 	epoch, err := mgr.ReserveBootEpoch(own.VMID, own.Epoch+1)
 	if err != nil {
-		return VMManagerConfig{}, "", err
+		return VMManagerConfig{}, err
 	}
+	r.mu.Lock()
 	if r.epochCounter < epoch {
 		r.epochCounter = epoch
 	}
 	if err := r.writePersistenceLocked(); err != nil {
-		return VMManagerConfig{}, "", fmt.Errorf("persist reserved VM realization %d: %w", epoch, err)
+		r.mu.Unlock()
+		return VMManagerConfig{}, fmt.Errorf("persist reserved VM realization %d: %w", epoch, err)
 	}
 	cfg := vmManagerConfigForOwnership(own, gatewayToken)
 	cfg.Epoch = epoch
 	cfg.RealizationID = realizationIDFor(own.VMID, epoch)
-	return cfg, r.corpusdURL, nil
-}
-
-func (r *OwnershipRegistry) reserveFreshVMConfig(own *VMOwnership, gatewayToken string, mgr VMManager) (VMManagerConfig, error) {
-	r.mu.Lock()
-	cfg, corpusdURL, err := r.reserveFreshVMConfigLocked(own, gatewayToken, mgr)
+	corpusdURL := r.corpusdURL
 	r.mu.Unlock()
-	if err != nil {
-		return VMManagerConfig{}, err
-	}
+
 	cfg.ComputerCredentialEnvelope = issueComputerCredentialEnvelope(corpusdURL, cfg.ComputerID, cfg.RealizationID, cfg.Epoch)
 	if cfg.ComputerCredentialEnvelope == "" && strings.TrimSpace(corpusdURL) != "" {
 		return VMManagerConfig{}, fmt.Errorf("realization credential unavailable")
@@ -2010,17 +2005,11 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 	}
 
 	mgr := r.vmManager
-	var cfg VMManagerConfig
-	var corpusdURL string
 	var wasStopped bool
 	var vmid string
+	var snapshot VMOwnership
 	if mgr != nil {
-		var err error
-		cfg, corpusdURL, err = r.reserveFreshVMConfigLocked(own, "", mgr)
-		if err != nil {
-			r.mu.Unlock()
-			return nil, fmt.Errorf("reserve recovery realization for VM %s: %w", own.VMID, err)
-		}
+		snapshot = *own
 		wasStopped = own.State == VMStateStopped && mgr.GetVM(own.VMID) == nil
 		vmid = own.VMID
 	}
@@ -2028,11 +2017,10 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 
 	var info *VMInstanceInfo
 	if mgr != nil {
-		cfg.ComputerCredentialEnvelope = issueComputerCredentialEnvelope(corpusdURL, cfg.ComputerID, cfg.RealizationID, cfg.Epoch)
-		if cfg.ComputerCredentialEnvelope == "" && strings.TrimSpace(corpusdURL) != "" {
-			return nil, fmt.Errorf("failed to recover VM %s: realization credential unavailable", vmid)
+		cfg, err := r.reserveFreshVMConfig(&snapshot, "", mgr)
+		if err != nil {
+			return nil, fmt.Errorf("reserve recovery realization for VM %s: %w", vmid, err)
 		}
-		var err error
 		if wasStopped {
 			info, err = mgr.BootVM(cfg)
 			if err != nil {
@@ -2101,16 +2089,6 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 	}
 
 	mgr := r.vmManager
-	var cfg VMManagerConfig
-	var corpusdURL string
-	if mgr != nil {
-		var err error
-		cfg, corpusdURL, err = r.reserveFreshVMConfigLocked(own, "", mgr)
-		if err != nil {
-			r.mu.Unlock()
-			return nil, fmt.Errorf("reserve refresh realization for VM %s: %w", own.VMID, err)
-		}
-	}
 	snapshot := *own
 	missingManagerInstance := mgr != nil && mgr.GetVM(own.VMID) == nil &&
 		(own.State == VMStateStopped || own.State == VMStateHibernated || own.State == VMStateFailed)
@@ -2124,11 +2102,10 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 
 	var info *VMInstanceInfo
 	if mgr != nil {
-		cfg.ComputerCredentialEnvelope = issueComputerCredentialEnvelope(corpusdURL, cfg.ComputerID, cfg.RealizationID, cfg.Epoch)
-		if cfg.ComputerCredentialEnvelope == "" && strings.TrimSpace(corpusdURL) != "" {
-			return nil, fmt.Errorf("failed to refresh VM %s: realization credential unavailable", snapshot.VMID)
+		cfg, err := r.reserveFreshVMConfig(&snapshot, "", mgr)
+		if err != nil {
+			return nil, fmt.Errorf("reserve refresh realization for VM %s: %w", snapshot.VMID, err)
 		}
-		var err error
 		if missingManagerInstance {
 			info, err = mgr.BootVM(cfg)
 		} else {

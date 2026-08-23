@@ -768,6 +768,83 @@ func TestHandler_ResolveConcurrentUsersDoNotBlockOnSlowBoot(t *testing.T) {
 		t.Fatal("user-slow resolve did not complete after release")
 	}
 }
+func TestHandler_ReserveFreshVMConfigDoesNotDeadlockDuringSlowBoot(t *testing.T) {
+	srv, reg := newTestServer(t)
+	manager := newBlockingBootVMManager("http://127.0.0.1:9009")
+	reg.SetVMManager(manager)
+
+	// Pre-populate stopped ownership for slow user.
+	ownSlow := &VMOwnership{
+		VMID:         "vm-slow-1",
+		UserID:       "user-slow",
+		DesktopID:    PrimaryDesktopID,
+		Kind:         VMKindInteractive,
+		ComputerURL:  "http://127.0.0.1:9009",
+		State:        VMStateStopped,
+		LastActiveAt: time.Now(),
+		Epoch:        1,
+	}
+	ownReady := &VMOwnership{
+		VMID:         "vm-ready-1",
+		UserID:       "user-ready",
+		DesktopID:    PrimaryDesktopID,
+		Kind:         VMKindInteractive,
+		ComputerURL:  "http://127.0.0.1:9010",
+		State:        VMStateActive,
+		LastActiveAt: time.Now(),
+		Epoch:        1,
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("user-slow", PrimaryDesktopID)] = ownSlow
+	reg.vmByID["vm-slow-1"] = ownSlow
+	reg.ownerships[ownershipKey("user-ready", PrimaryDesktopID)] = ownReady
+	reg.vmByID["vm-ready-1"] = ownReady
+	reg.mu.Unlock()
+
+	// Start a resume for user-slow that enters BootVM and blocks.
+	slowDone := make(chan error, 1)
+	go func() {
+		_, err := reg.ResumeVMForDesktop("user-slow", PrimaryDesktopID)
+		slowDone <- err
+	}()
+
+	// Wait until BootVM is reached.
+	select {
+	case <-manager.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("user-slow boot did not start within 2s")
+	}
+
+	// Concurrently call GET /health which requires r.mu.RLock.
+	healthReq, err := http.NewRequest(http.MethodGet, srv.URL+"/health", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	healthStart := time.Now()
+	healthResp, err := http.DefaultClient.Do(healthReq)
+	healthElapsed := time.Since(healthStart)
+	if err != nil {
+		t.Fatalf("health check failed: %v", err)
+	}
+	defer healthResp.Body.Close()
+	if healthResp.StatusCode != http.StatusOK {
+		t.Fatalf("health status = %d, want 200", healthResp.StatusCode)
+	}
+	if healthElapsed > 500*time.Millisecond {
+		t.Fatalf("health check took %s; expected non-blocking execution (<500ms)", healthElapsed)
+	}
+
+	// Release slow boot.
+	close(manager.release)
+	select {
+	case err := <-slowDone:
+		if err != nil {
+			t.Fatalf("slow resume returned error: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("slow resume did not complete after release")
+	}
+}
 
 func TestHandler_Health(t *testing.T) {
 	srv, reg := newTestServer(t)
