@@ -25,6 +25,8 @@ The first checkpoint repair was not active on the guest boot path: `autoputer.Ru
 
 After boot replay mode was enabled, the guest still hit the unchanged 10-minute `bootstrapCtx` at sequence 2277 (`2026-08-23 11:33:21Z`), while `VM_BOOT_READY_TIMEOUT` was already 30 minutes. The local replay path therefore needs a bootstrap budget aligned with the boot budget.
 
+With the replay-only finalization mode enabled and a 30-minute bootstrap budget, the fresh guest still accumulated roughly 1.8 GiB RSS and the kernel killed `autoputer` after about 15 minutes. The source client materialized the entire 132,436-event chain in one `Events` slice before applying it; the subsequent restart loop surfaced only the generic projection-repair error. Recovery must page and apply records incrementally instead of retaining the complete chain.
+
 ## Repair boundary
 
 The repair will suppress per-event `DOLT_COMMIT` calls for the explicit replay-only projection path and issue one final checkpoint after the canonical replay reaches its target. Live append/finalize paths retain their existing checkpoint behavior. Effects remain OFF and canonical corpusd events are not rewound.
