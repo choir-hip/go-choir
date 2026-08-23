@@ -27,7 +27,10 @@ The default panel is:
 6. OMP `openai-codex/gpt-5.6-luna` with `--thinking max` — the cost champion; fastest/cheapest GPT-5.6 tier (weak long-context recall).
 7. OMP `google-antigravity/gemini-3.7-flash` with `--thinking high`.
 8. OMP `cursor/cursor-grok-4.6-high` with `--thinking high`.
-9. OMP `opencode-zen/deepseek-v4-flash-free` with `--thinking high` — the best value route (free tier, ~200K context), and the current default model role in OMP.
+9. OMP `opencode-zen/muse-spark-1.2-contributor-free` with `--thinking high`.
+10. OMP `opencode-zen/nemotron-3-ultra-free` with `--thinking high`.
+11. OMP `opencode-zen/x-preview-f-free` with `--thinking high`.
+12. OMP `opencode-zen/hy3-free` with `--thinking high`.
 
 `claude` is supported but intentionally excluded from the default panel because its token rate limits are lower. Add it explicitly with `--include claude,...` when needed. Claude's configured default tracks the current `opus` tier, so no model override is needed.
 
@@ -64,7 +67,10 @@ omp-gpt56-terra
 omp-gpt56-luna
 omp-gemini37
 omp-cursor-grok46
-omp-deepseek-v4-flash-free
+omp-muse-spark
+omp-nemotron-3-ultra
+omp-x-preview-f
+omp-hy3
 ```
 
 ## Verified CLI Invocation Contracts
@@ -224,7 +230,10 @@ Runner contracts:
 omp -p --mode text --model openai-codex/gpt-5.6-sol --thinking medium --no-session "$PROMPT"
 omp -p --mode text --model google-antigravity/gemini-3.7-flash --thinking high --no-session "$PROMPT"
 omp -p --mode text --model cursor/cursor-grok-4.6-high --thinking high --no-session "$PROMPT"
-omp -p --mode text --model opencode-zen/deepseek-v4-flash-free --thinking high --no-session "$PROMPT"
+omp -p --mode text --model opencode-zen/muse-spark-1.2-contributor-free --thinking high --no-session "$PROMPT"
+omp -p --mode text --model opencode-zen/nemotron-3-ultra-free --thinking high --no-session "$PROMPT"
+omp -p --mode text --model opencode-zen/x-preview-f-free --thinking high --no-session "$PROMPT"
+omp -p --mode text --model opencode-zen/hy3-free --thinking high --no-session "$PROMPT"
 ```
 
 The runner also passes `--auto-approve` and `--max-time` to OMP so a tool call
@@ -243,8 +252,14 @@ Optional overrides:
 --omp-gemini-thinking LEVEL
 --omp-cursor-grok-model MODEL
 --omp-cursor-grok-thinking LEVEL
---omp-deepseek-model MODEL
---omp-deepseek-thinking LEVEL
+--omp-muse-spark-model MODEL
+--omp-muse-spark-thinking LEVEL
+--omp-nemotron-3-ultra-model MODEL
+--omp-nemotron-3-ultra-thinking LEVEL
+--omp-x-preview-f-model MODEL
+--omp-x-preview-f-thinking LEVEL
+--omp-hy3-model MODEL
+--omp-hy3-thinking LEVEL
 --no-tools-omp
 ```
 
@@ -252,7 +267,7 @@ Notes:
 
 - Do not use `--no-tools` for OMP if the OMP agent needs to see skills; OMP only lists skills when the `read` tool is available.
 - Use `--no-tools-omp` for pure opinion prompts where tool use would be wasteful.
-- Model IDs are `provider/model` exactly as `omp models` lists them (e.g. `openai-codex/gpt-5.6-sol`, `opencode-zen/deepseek-v4-flash-free`).
+- Model IDs are `provider/model` exactly as `omp models` lists them (e.g. `openai-codex/gpt-5.6-sol`, `opencode-zen/muse-spark-1.2-contributor-free`).
 
 ## Runner Usage
 

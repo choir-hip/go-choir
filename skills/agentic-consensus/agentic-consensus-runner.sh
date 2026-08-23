@@ -6,7 +6,7 @@ usage() {
 agentic-consensus-runner.sh --prompt TEXT | --prompt-file FILE [options]
 
 Runs one prompt across an agentic consensus panel and writes one output file per agent.
-Default panel: codex, devin, cursor, opencode, omp-gpt56-sol, omp-gpt56-luna, omp-gemini37, omp-cursor-grok46, omp-deepseek-v4-flash-free.
+Default panel: codex, devin, cursor, opencode, omp-gpt56-sol, omp-gpt56-luna, omp-gemini37, omp-cursor-grok46, omp-muse-spark, omp-nemotron-3-ultra, omp-x-preview-f, omp-hy3.
 External CLIs use their configured default model unless a --*-model override is passed.
 
 Required input:
@@ -26,7 +26,7 @@ Thinking mode:
 
 Panel selection:
   --include LIST                Comma-separated agent ids to run.
-                                Default: codex,devin,cursor,opencode,omp-gpt56-sol,omp-gpt56-luna,omp-gemini37,omp-cursor-grok46,omp-deepseek-v4-flash-free
+                                Default: codex,devin,cursor,opencode,omp-gpt56-sol,omp-gpt56-luna,omp-gemini37,omp-cursor-grok46,omp-muse-spark,omp-nemotron-3-ultra,omp-x-preview-f,omp-hy3
   --exclude LIST                Comma-separated agent ids to skip.
   --list-agents                 Print supported agent ids and exit.
 
@@ -41,13 +41,19 @@ Model overrides, optional:
   --omp-gpt56-luna-model MODEL  Default: openai-codex/gpt-5.6-luna.
   --omp-gemini-model MODEL      Default: google-antigravity/gemini-3.7-flash.
   --omp-cursor-grok-model MODEL Default: cursor/cursor-grok-4.6-high.
-  --omp-deepseek-model MODEL    Default: opencode-zen/deepseek-v4-flash-free.
+  --omp-muse-spark-model MODEL       Default: opencode-zen/muse-spark-1.2-contributor-free.
+  --omp-nemotron-3-ultra-model MODEL Default: opencode-zen/nemotron-3-ultra-free.
+  --omp-x-preview-f-model MODEL      Default: opencode-zen/x-preview-f-free.
+  --omp-hy3-model MODEL              Default: opencode-zen/hy3-free.
   --omp-gpt56-sol-thinking LEVEL    Default: medium.
   --omp-gpt56-terra-thinking LEVEL   Default: xhigh.
   --omp-gpt56-luna-thinking LEVEL    Default: max.
   --omp-gemini-thinking LEVEL   Default: high.
   --omp-cursor-grok-thinking LEVEL   Default: high.
-  --omp-deepseek-thinking LEVEL Default: high.
+  --omp-muse-spark-thinking LEVEL       Default: high.
+  --omp-nemotron-3-ultra-thinking LEVEL Default: high.
+  --omp-x-preview-f-thinking LEVEL      Default: high.
+  --omp-hy3-thinking LEVEL              Default: high.
 
 Execution:
   --cwd DIR                     Working directory/context root. Default: current directory.
@@ -67,8 +73,8 @@ Output:
 USAGE
 }
 
-DEFAULT_INCLUDE="codex,devin,cursor,opencode,omp-gpt56-sol,omp-gpt56-luna,omp-gemini37,omp-cursor-grok46,omp-deepseek-v4-flash-free"
-SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt56-sol omp-gpt56-terra omp-gpt56-luna omp-gemini37 omp-cursor-grok46 omp-deepseek-v4-flash-free)
+DEFAULT_INCLUDE="codex,devin,cursor,opencode,omp-gpt56-sol,omp-gpt56-luna,omp-gemini37,omp-cursor-grok46,omp-muse-spark,omp-nemotron-3-ultra,omp-x-preview-f,omp-hy3"
+SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt56-sol omp-gpt56-terra omp-gpt56-luna omp-gemini37 omp-cursor-grok46 omp-muse-spark omp-nemotron-3-ultra omp-x-preview-f omp-hy3)
 
 PROMPT=""
 PROMPT_FILE=""
@@ -95,13 +101,19 @@ OMP_GPT56_TERRA_MODEL="openai-codex/gpt-5.6-terra"
 OMP_GPT56_LUNA_MODEL="openai-codex/gpt-5.6-luna"
 OMP_GEMINI_MODEL="google-antigravity/gemini-3.7-flash"
 OMP_CURSOR_GROK_MODEL="cursor/cursor-grok-4.6-high"
-OMP_DEEPSEEK_MODEL="opencode-zen/deepseek-v4-flash-free"
+OMP_MUSE_SPARK_MODEL="opencode-zen/muse-spark-1.2-contributor-free"
+OMP_NEMOTRON_3_ULTRA_MODEL="opencode-zen/nemotron-3-ultra-free"
+OMP_X_PREVIEW_F_MODEL="opencode-zen/x-preview-f-free"
+OMP_HY3_MODEL="opencode-zen/hy3-free"
 OMP_GPT56_SOL_THINKING="medium"
 OMP_GPT56_TERRA_THINKING="xhigh"
 OMP_GPT56_LUNA_THINKING="max"
 OMP_GEMINI_THINKING="high"
 OMP_CURSOR_GROK_THINKING="high"
-OMP_DEEPSEEK_THINKING="high"
+OMP_MUSE_SPARK_THINKING="high"
+OMP_NEMOTRON_3_ULTRA_THINKING="high"
+OMP_X_PREVIEW_F_THINKING="high"
+OMP_HY3_THINKING="high"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -153,9 +165,18 @@ while [[ $# -gt 0 ]]; do
     --omp-cursor-grok-model)
       [[ $# -ge 2 ]] || { echo "--omp-cursor-grok-model requires a value" >&2; exit 2; }
       OMP_CURSOR_GROK_MODEL="$2"; shift 2 ;;
-    --omp-deepseek-model)
-      [[ $# -ge 2 ]] || { echo "--omp-deepseek-model requires a value" >&2; exit 2; }
-      OMP_DEEPSEEK_MODEL="$2"; shift 2 ;;
+    --omp-muse-spark-model)
+      [[ $# -ge 2 ]] || { echo "--omp-muse-spark-model requires a value" >&2; exit 2; }
+      OMP_MUSE_SPARK_MODEL="$2"; shift 2 ;;
+    --omp-nemotron-3-ultra-model)
+      [[ $# -ge 2 ]] || { echo "--omp-nemotron-3-ultra-model requires a value" >&2; exit 2; }
+      OMP_NEMOTRON_3_ULTRA_MODEL="$2"; shift 2 ;;
+    --omp-x-preview-f-model)
+      [[ $# -ge 2 ]] || { echo "--omp-x-preview-f-model requires a value" >&2; exit 2; }
+      OMP_X_PREVIEW_F_MODEL="$2"; shift 2 ;;
+    --omp-hy3-model)
+      [[ $# -ge 2 ]] || { echo "--omp-hy3-model requires a value" >&2; exit 2; }
+      OMP_HY3_MODEL="$2"; shift 2 ;;
     --omp-gpt56-sol-thinking)
       [[ $# -ge 2 ]] || { echo "--omp-gpt56-sol-thinking requires a value" >&2; exit 2; }
       OMP_GPT56_SOL_THINKING="$2"; shift 2 ;;
@@ -171,9 +192,18 @@ while [[ $# -gt 0 ]]; do
     --omp-cursor-grok-thinking)
       [[ $# -ge 2 ]] || { echo "--omp-cursor-grok-thinking requires a value" >&2; exit 2; }
       OMP_CURSOR_GROK_THINKING="$2"; shift 2 ;;
-    --omp-deepseek-thinking)
-      [[ $# -ge 2 ]] || { echo "--omp-deepseek-thinking requires a value" >&2; exit 2; }
-      OMP_DEEPSEEK_THINKING="$2"; shift 2 ;;
+    --omp-muse-spark-thinking)
+      [[ $# -ge 2 ]] || { echo "--omp-muse-spark-thinking requires a value" >&2; exit 2; }
+      OMP_MUSE_SPARK_THINKING="$2"; shift 2 ;;
+    --omp-nemotron-3-ultra-thinking)
+      [[ $# -ge 2 ]] || { echo "--omp-nemotron-3-ultra-thinking requires a value" >&2; exit 2; }
+      OMP_NEMOTRON_3_ULTRA_THINKING="$2"; shift 2 ;;
+    --omp-x-preview-f-thinking)
+      [[ $# -ge 2 ]] || { echo "--omp-x-preview-f-thinking requires a value" >&2; exit 2; }
+      OMP_X_PREVIEW_F_THINKING="$2"; shift 2 ;;
+    --omp-hy3-thinking)
+      [[ $# -ge 2 ]] || { echo "--omp-hy3-thinking requires a value" >&2; exit 2; }
+      OMP_HY3_THINKING="$2"; shift 2 ;;
     --sequential) SEQUENTIAL=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --keep-going) KEEP_GOING=1; shift ;;
@@ -340,8 +370,20 @@ build_cmd() {
       CMD=(omp -p --mode text --model "$OMP_CURSOR_GROK_MODEL" --thinking "$OMP_CURSOR_GROK_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
       [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
       CMD+=("$AGENT_PROMPT") ;;
-    omp-deepseek-v4-flash-free)
-      CMD=(omp -p --mode text --model "$OMP_DEEPSEEK_MODEL" --thinking "$OMP_DEEPSEEK_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
+    omp-muse-spark)
+      CMD=(omp -p --mode text --model "$OMP_MUSE_SPARK_MODEL" --thinking "$OMP_MUSE_SPARK_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
+      [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
+      CMD+=("$AGENT_PROMPT") ;;
+    omp-nemotron-3-ultra)
+      CMD=(omp -p --mode text --model "$OMP_NEMOTRON_3_ULTRA_MODEL" --thinking "$OMP_NEMOTRON_3_ULTRA_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
+      [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
+      CMD+=("$AGENT_PROMPT") ;;
+    omp-x-preview-f)
+      CMD=(omp -p --mode text --model "$OMP_X_PREVIEW_F_MODEL" --thinking "$OMP_X_PREVIEW_F_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
+      [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
+      CMD+=("$AGENT_PROMPT") ;;
+    omp-hy3)
+      CMD=(omp -p --mode text --model "$OMP_HY3_MODEL" --thinking "$OMP_HY3_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
       [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
       CMD+=("$AGENT_PROMPT") ;;
     *) return 2 ;;
