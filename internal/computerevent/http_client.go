@@ -289,11 +289,11 @@ func NewGuestHTTPClient(baseURL string, capability CapabilitySource) (*HTTPClien
 	}
 	return &HTTPClient{
 		baseURL:    parsed,
-		http:       &http.Client{Timeout: 30 * time.Second},
+		http:       &http.Client{Timeout: 60 * time.Second},
 		capability: capability,
 	}, nil
 }
 
 func NewDefaultHTTPClient(baseURL string, capability CapabilitySource) (*HTTPClient, error) {
-	return NewHTTPClient(baseURL, &http.Client{Timeout: 30 * time.Second}, capability, false)
+	return NewHTTPClient(baseURL, &http.Client{Timeout: 60 * time.Second}, capability, false)
 }
