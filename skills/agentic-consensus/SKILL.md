@@ -370,7 +370,7 @@ prompt, manifest, candidate identity, adjudicated findings, and reviewer-health
 telemetry under a durable referenced identity. Raw transcripts need not become
 their own Git commit.
 
-Every agent has a 180-second hard deadline by default. Override it with
+Every agent has a 1200-second hard deadline by default. Override it with
 `--timeout-seconds N`.
 
 Manifest statuses:

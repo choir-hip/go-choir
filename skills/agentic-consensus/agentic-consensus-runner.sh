@@ -62,7 +62,7 @@ Execution:
   --dry-run                     Print commands but do not run them.
   --keep-going                  Return 0 if at least one agent succeeds. Default: fail if any selected agent fails.
   --no-tools-omp                Add --no-tools to OMP runs. Default: OMP tools enabled.
-  --timeout-seconds N           Hard deadline for each agent. Default: 180.
+  --timeout-seconds N           Hard deadline for each agent. Default: 1200.
   --help                       Show this help.
 
 Output:
@@ -86,7 +86,7 @@ SEQUENTIAL=0
 DRY_RUN=0
 KEEP_GOING=0
 NO_TOOLS_OMP=0
-TIMEOUT_SECONDS=180
+TIMEOUT_SECONDS=1200
 MODE="convergent"
 LENSES=""
 LENS_LIST=()
