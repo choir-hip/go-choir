@@ -221,7 +221,9 @@ func Run() {
 			err = db.BindProjectionTape(computerID, appender)
 		}
 		if err == nil {
+			appender.SetReplayMode(true)
 			err = appender.Reconstruct(bootstrapCtx, eventClient)
+			appender.SetReplayMode(false)
 		}
 		if err == nil {
 			for _, lifecycleReceipt := range credentials.PendingLifecycleReceipts() {

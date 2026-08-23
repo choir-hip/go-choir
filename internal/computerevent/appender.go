@@ -126,6 +126,18 @@ func (a *ComputerEventAppender) SetPayloadResolver(reader ArtifactReader, cipher
 	a.cipher = cipher
 }
 
+// SetReplayMode enables the replay-only projection path for a bounded
+// reconstruction. Callers must disable it before using the appender for live
+// semantic appends.
+func (a *ComputerEventAppender) SetReplayMode(enabled bool) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	a.replayProjection = enabled
+	a.mu.Unlock()
+}
+
 func (a *ComputerEventAppender) RebindProjection(projection ProjectionStore) error {
 	if a == nil || projection == nil {
 		return fmt.Errorf("computer event appender: projection rebind requires complete dependencies")
