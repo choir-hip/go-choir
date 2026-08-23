@@ -349,7 +349,7 @@ in
         # instead of keeping the public request open for the full boot wait.
         # Cold computer boot completion is handled by vmctl's
         # VM_BOOT_READY_TIMEOUT and the retry/replay path (Phase D).
-        "PROXY_VMCTL_TIMEOUT=10m"
+        "PROXY_VMCTL_TIMEOUT=15m"
         # Replay completeness reconstructs a disposable projection and is an
         # owner-only route with a dedicated 10m budget; ordinary interactive
         # proxy routes stay at 30s. The handler extends the response deadline
@@ -541,7 +541,7 @@ in
         "VM_MEM_MIB=4096"
         "VM_HEALTH_CHECK_INTERVAL=15s"
         "VM_HEALTH_CHECK_TIMEOUT=10s"
-        "VM_BOOT_READY_TIMEOUT=10m"
+        "VM_BOOT_READY_TIMEOUT=15m"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # Keep personal computers resident while the host is under capacity.
         "VMCTL_IDLE_TIMEOUT=30m"

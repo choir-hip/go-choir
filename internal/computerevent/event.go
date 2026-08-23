@@ -18,9 +18,9 @@ const (
 
 	// EventReplayPageSize bounds each durable-chain response. The client follows
 	// sequence progress until the requested chain is exhausted.
-	EventReplayPageSize = 256
+	EventReplayPageSize = 1024
 	// EventReplayMaxPageSize bounds caller-selected replay pages at corpusd.
-	EventReplayMaxPageSize = 512
+	EventReplayMaxPageSize = 2048
 	// EventReplayMaxResponseBytes rejects a single oversized replay page instead
 	// of allowing a transport cap to turn it into a misleading EOF.
 	EventReplayMaxResponseBytes = 8 << 20
