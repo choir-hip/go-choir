@@ -162,6 +162,10 @@ func idleOwnershipCandidates(ownerships []*VMOwnership, cfg WarmnessPolicyConfig
 		if own == nil || own.State != VMStateActive {
 			continue
 		}
+		if own.IsHeld() {
+			// A held computer is never idle-stopped/hibernated by the sweeper.
+			continue
+		}
 		if own.LastActiveAt.IsZero() {
 			continue
 		}

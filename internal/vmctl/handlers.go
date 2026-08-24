@@ -379,6 +379,69 @@ func (h *Handler) HandleStop(w http.ResponseWriter, r *http.Request) {
 
 // HandleRemove handles POST /internal/vmctl/remove.
 // Removes the ownership for a user (used during logout).
+// holdRequest is the JSON payload for POST /internal/vmctl/hold and
+// POST /internal/vmctl/unhold.
+type holdRequest struct {
+	ComputerID string `json:"computer_id"`
+	Reason     string `json:"reason,omitempty"`
+	HeldBy     string `json:"held_by,omitempty"`
+}
+
+// HandleHold places a computer under a durable host-authoritative maintenance
+// hold. While held, vmctl refuses any automatic lifecycle action for the VM
+// and the deploy active-VM refresh skips it. This is an authorized owner/
+// recovery operation, not a reconciler-driven call.
+func (h *Handler) HandleHold(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
+		return
+	}
+	var req holdRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
+		return
+	}
+	if req.ComputerID == "" {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "computer_id is required"})
+		return
+	}
+	if err := h.registry.SetHold(req.ComputerID, req.Reason, req.HeldBy); err != nil {
+		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	writeVMCTLJSON(w, http.StatusOK, map[string]string{"status": "held", "computer_id": req.ComputerID})
+}
+
+// HandleUnhold removes a maintenance hold from a computer. This is an
+// authorized owner/recovery operation, not a reconciler-driven call.
+func (h *Handler) HandleUnhold(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
+		return
+	}
+	var req holdRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
+		return
+	}
+	if req.ComputerID == "" {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "computer_id is required"})
+		return
+	}
+	if err := h.registry.ClearHold(req.ComputerID); err != nil {
+		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	writeVMCTLJSON(w, http.StatusOK, map[string]string{"status": "unheld", "computer_id": req.ComputerID})
+}
 func (h *Handler) HandleRemove(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
@@ -1263,6 +1326,8 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/logout", h.HandleLogout)
 	s.HandleFunc("/internal/vmctl/idle-check", h.HandleIdleCheck)
 	s.HandleFunc("/internal/vmctl/reclaim", h.HandleReclaim)
+	s.HandleFunc("/internal/vmctl/hold", h.HandleHold)
+	s.HandleFunc("/internal/vmctl/unhold", h.HandleUnhold)
 	s.HandleFunc("/internal/vmctl/retention-plan", h.HandleRetentionPlan)
 	s.HandleFunc("/internal/vmctl/retention-shadow-plan", h.HandleRetentionShadowPlan)
 	s.HandleFunc("/internal/vmctl/pulse", h.HandlePulse)

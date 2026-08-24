@@ -127,11 +127,80 @@ type VMOwnership struct {
 	// StoppedBy indicates why the VM was stopped. Empty if running.
 	// Valid values: "idle", "logout", "recovery", "manual".
 	StoppedBy string `json:"stopped_by,omitempty"`
+	// HoldStatus, when non-nil, places the computer under a durable
+	// host-authoritative maintenance hold. vmctl refuses any automatic
+	// lifecycle action (boot/recover/refresh/reattach/resume/reclaim/
+	// retention) while held, and the deploy active-VM refresh skips it.
+	// It is set and cleared only by an authorized owner/recovery operation.
+	HoldStatus *MaintenanceHold `json:"hold_status,omitempty"`
 }
 
 // IsReady returns true if the VM is in a state that can serve routed requests.
 func (o *VMOwnership) IsReady() bool {
 	return o.State == VMStateActive
+}
+// MaintenanceHold is the host-authoritative maintenance hold for a computer.
+// While set, vmctl refuses automatic lifecycle action for the VM.
+type MaintenanceHold struct {
+	// Reason is why the computer is held (e.g. maintenance, recovery).
+	Reason string `json:"reason,omitempty"`
+	// HeldBy is the authorization authority that set the hold.
+	HeldBy string `json:"held_by,omitempty"`
+	// HeldAt is when the hold was set.
+	HeldAt time.Time `json:"held_at,omitempty"`
+}
+
+// IsHeld returns true when the computer is under a maintenance hold.
+func (o *VMOwnership) IsHeld() bool {
+	return o != nil && o.HoldStatus != nil
+}
+// byComputerIDLocked returns the ownership for a stable computer ID, or nil.
+// The caller must hold r.mu.
+func (r *OwnershipRegistry) byComputerIDLocked(computerID string) *VMOwnership {
+	for _, own := range r.ownerships {
+		if own.ComputerID == computerID {
+			return own
+		}
+	}
+	return nil
+}
+
+// SetHold places a computer under a durable host-authoritative maintenance
+// hold. While held, vmctl refuses any automatic lifecycle action
+// (boot/recover/refresh/reattach/resume/reclaim/retention) for the VM and the
+// deploy active-VM refresh skips it. This is an authorized owner/recovery
+// operation; it is NOT called by the deployment refresh loop or the self-drive
+// reconciler. Idempotent for the same reason/heldBy.
+func (r *OwnershipRegistry) SetHold(computerID, reason, heldBy string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own := r.byComputerIDLocked(computerID)
+	if own == nil {
+		return fmt.Errorf("vmctl: no ownership for computer %s", computerID)
+	}
+	now := time.Now().UTC()
+	if own.HoldStatus == nil {
+		own.HoldStatus = &MaintenanceHold{}
+	} else if own.HoldStatus.HeldBy == heldBy && own.HoldStatus.Reason == reason {
+		return nil // idempotent
+	}
+	own.HoldStatus.Reason = reason
+	own.HoldStatus.HeldBy = heldBy
+	own.HoldStatus.HeldAt = now
+	return r.writePersistenceLocked()
+}
+
+// ClearHold removes a maintenance hold from a computer. This is an authorized
+// owner/recovery operation; it is NOT called by any automatic reconciler.
+func (r *OwnershipRegistry) ClearHold(computerID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own := r.byComputerIDLocked(computerID)
+	if own == nil {
+		return fmt.Errorf("vmctl: no ownership for computer %s", computerID)
+	}
+	own.HoldStatus = nil
+	return r.writePersistenceLocked()
 }
 
 // VMManager is the interface the OwnershipRegistry uses to manage real
@@ -475,7 +544,12 @@ func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard Comput
 	candidates := make([]VMOwnership, 0)
 	if mgr != nil {
 		for _, own := range r.ownerships {
-			if own.State == VMStateStopped && own.StoppedBy == "vmctl-restart" && strings.TrimSpace(own.ComputerURL) != "" {
+			if own.IsHeld() {
+			// A held computer is never reattached to a stale route after a
+			// vmctl restart; it stays in maintenance hold.
+			continue
+		}
+		if own.State == VMStateStopped && own.StoppedBy == "vmctl-restart" && strings.TrimSpace(own.ComputerURL) != "" {
 				candidates = append(candidates, *own)
 			}
 		}
@@ -767,6 +841,18 @@ func activeVMCanRouteDuringHealthGrace(info *VMInstanceInfo, now time.Time) bool
 func (r *OwnershipRegistry) ensureActiveVMReady(own *VMOwnership, mgr VMManager) (*VMInstanceInfo, error) {
 	if own == nil {
 		return nil, fmt.Errorf("ownership is required")
+	}
+	if own.IsHeld() {
+		// A held computer is never automatically booted/recovered/restarted on
+		// a resolve/readiness check. It stays in its current (held) state; the
+		// epoch is not incremented and no new realization is started. Only an
+		// authorized maintenance recovery may move it.
+		return &VMInstanceInfo{
+			HostURL: own.ComputerURL,
+			Epoch:   own.Epoch,
+			Healthy: false,
+			State:   "held",
+		}, nil
 	}
 	if mgr == nil {
 		return &VMInstanceInfo{
@@ -1290,6 +1376,21 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			}
 			mgr := r.vmManager
 			pending := cloneOwnership(own)
+			if pending.IsHeld() {
+				// A held computer is never auto-started on resolve. It stays
+				// stopped (or is transitioned to stopped); the epoch is not
+				// incremented and no realization is booted. Only an authorized
+				// maintenance recovery may move it.
+				log.Printf("vmctl: computer %s is under maintenance hold; refusing auto-start on resolve", pending.ComputerID)
+				if own.State != VMStateStopped {
+					own.State = VMStateStopped
+				}
+				r.pendingWaiters[key] = nil
+				r.saveLocked()
+				result := cloneOwnership(own)
+				r.mu.Unlock()
+				return result, nil
+			}
 			recovering := pending.State == VMStateDegraded || pending.State == VMStateFailed || pending.State == VMStateBooting
 			r.pendingWaiters[key] = nil
 			r.mu.Unlock()
@@ -2074,6 +2175,10 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 		r.mu.Unlock()
 		return nil, fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
 	}
+	if own.IsHeld() {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("VM %s (computer %s) is under maintenance hold; refusing refresh", own.VMID, own.ComputerID)
+	}
 	if own.State != VMStateActive &&
 		own.State != VMStateBooting &&
 		own.State != VMStateStopped &&
@@ -2274,6 +2379,10 @@ func (r *OwnershipRegistry) WarmAlwaysOnDesktops(ctx context.Context, guard Comp
 	targets := make([]warmTarget, 0)
 	for _, own := range r.ownerships {
 		if own == nil {
+			continue
+		}
+		if own.IsHeld() {
+			// A held computer is never warm-resumed by the always-on policy.
 			continue
 		}
 		if own.DesktopID != PrimaryDesktopID {

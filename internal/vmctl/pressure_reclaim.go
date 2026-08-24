@@ -620,6 +620,10 @@ func protectedReclaimReasons(own *VMOwnership, cfg PressureReclaimConfig, warmne
 	if own == nil {
 		return []string{"missing_ownership"}
 	}
+	if own.IsHeld() {
+		// A held computer is never reclaimed under memory pressure.
+		return []string{"maintenance_hold"}
+	}
 	switch warmnessClassForOwnership(own, warmnessPolicy) {
 	case WarmnessClassPremiumAlwaysOn:
 		reasons = append(reasons, "premium_always_on")

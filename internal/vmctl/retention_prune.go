@@ -385,6 +385,10 @@ func retentionOwnershipReclaimable(own *VMOwnership, email string, cfg Retention
 	if own == nil || strings.TrimSpace(own.VMID) == "" || own.LastActiveAt.IsZero() {
 		return false
 	}
+	if own.IsHeld() {
+		// A held computer is never reclaimable/prunable.
+		return false
+	}
 	if !retentionOwnershipEphemeral(own, email, cfg) {
 		return false
 	}
