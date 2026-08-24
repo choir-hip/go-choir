@@ -148,7 +148,7 @@ phases:
       - "Fold receipts into the Define/Implement boundary; close the Definition against completion_evidence_floor."
 
 now:
-  status: COMPLETE-2026-08-24 (receipt docs/evidence/recovery-complete-2026-08-24.md; panel adjudication docs/evidence/recovery-replay-guest-io-ceiling-assessment-2026-08-24.md)
+  status: "COMPLETE-2026-08-24 (receipt docs/evidence/recovery-complete-2026-08-24.md; panel adjudication docs/evidence/recovery-replay-guest-io-ceiling-assessment-2026-08-24.md)"
   slice: "RECOVERED 2026-08-24: B14 host drive (f7b3ccd2, RUNTIME_RECOVERY_REPLAY_ONLY=1, replay-only: no runtime start, no reconcile, no appends — platform head 132,539 verified before+after the drive) materialized the embedded projection to head 132,539/acc54c39... on the retained data.img (rollback reflink data.img.pre-hostdrive-20260824); BootVM epoch 715 -> local==platform -> head+witness verified by the runtime -> 200 ready -> resolve route CAS under fencing token -> ownership state active, running_runs=0, effects mode off (self_development_marker genesis-baseline); quarantine preserved (data.img.quarantine-1/-2 untouched)."
   question: "RESOLVED by probes 2026-08-23T23:45Z (see observed_artifact): (1) no persisted working set -> fresh-replay-with-durable-checkpoints; (2) periodic DOLT_COMMIT required (nothing persists today); (3) 30m live; (4) 4096 MiB; (5) ordinary boots after rec-2. Remaining open: why /mnt/persistent/state is a 0-byte file rather than a Dolt workspace (deployed guest open/commit path), RecoverPrepared replay semantics, quiesce fence mechanism, checkpoint cadence from measured throughput."
   reconciliation:
@@ -179,7 +179,7 @@ now:
     - "internal/vmmanager/manager.go; internal/autoputer/run.go; internal/store/computer_events.go; internal/computerevent/appender.go"
     - ".agentic-consensus/recovery-definition-review-20260823-r3/ (gitignored raw outputs)"
   blocker_or_risk: "Confirmed: live timeout 30m, guest 4096 MiB, ordinary BootVM path (rec-2 last cold-recover), no persisted runtime working set (0-byte state file; empty texture repo) => durable checkpoints mandatory; ~3.8 ev/s (approx 10h single pass) means multiple-boot resumable replay is the only path unless throughput improves. Risks: store open at /mnt/persistent/state currently produces a 0-byte file (must be fixed/verified before checkpoints have any effect); RecoverPrepared ErrNeedsProjectionRepair trap on partial-replay kill; bootstrapCtx 30m guest budget; RSS ~1.8 GiB near kernel kill at ~15m in past evidence; stale pending lifecycle receipts could append events during recovery."
-  next_action: "NONE — recovery complete. Follow-ups (separate work): (1) guest-native replay I/O ceiling at the 4 GiB/7 GiB-workspace scale (per-event 3-6s; panel dissent: D appender per-page batching as the durable product fix); (2) candidate-fleet-d03dacaa invalid-genesis loop (~7h; separate problem receipt needed before a fix).""
+  next_action: "NONE — recovery complete. Follow-ups (separate work): (1) guest-native replay I/O ceiling at the 4 GiB/7 GiB-workspace scale (per-event 3-6s; panel dissent: D appender per-page batching as the durable product fix); (2) candidate-fleet-d03dacaa invalid-genesis loop (~7h; separate problem receipt needed before a fix)."
 
 
 
