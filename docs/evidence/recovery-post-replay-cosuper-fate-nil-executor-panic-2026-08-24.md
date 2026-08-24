@@ -83,3 +83,24 @@ call through, and `exec.AssignmentHandle(...)` dispatches on the typed-nil
 - The pre-replay reset that the Phase-0/Phase-1 work fixed is independent and
   unaffected; this crash is a NEW discovery at the post-replay boundary.
 - Not counted as a repair until a nil-guard + regression test lands.
+
+## Resolution (2026-08-24, commit `85fa83b4`)
+
+`assignedCapsule()` now returns an untyped nil when `rt.capsuleExecutor ==
+nil`, so the existing `exec == nil` guards at `assignedCoSuperCapsuleUsable`
+and `revokeAssignedCapsule` short-circuit correctly instead of dispatching on
+a boxed typed nil. Regression tests
+(`cosuper_assignment_nil_executor_test.go`):
+
+- `TestAssignedCapsuleWithoutExecutorIsNilInterface` — the interface itself
+  must be nil, not a typed-nil box.
+- `TestAssignedCoSuperCapsuleUsableWithoutExecutorDoesNotPanic` — a bound
+  assignment with no executor reports unusable instead of SIGSEGV.
+
+Both fail on the pre-fix code (non-nil interface / nil-receiver panic) and
+pass on `85fa83b4`. Verified live: run 3 of the experiment (capsule executor
+configured) crossed the boundary without a crash (see the experiment receipt).
+
+heresy: discovered (post-replay nil-executor SIGSEGV at the replay-complete
+boundary), repaired (nil-interface return; guards now effective), introduced
+(none).

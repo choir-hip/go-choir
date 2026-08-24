@@ -7,7 +7,7 @@ start:
   captured_at: "2026-08-23T23:00:00Z"
   source:
     canonical_ref: "main@7109b070"
-    deploy_identity: "staging https://choir.news; retained computer computer-03335285269bdba4f94377e56879f9e6 (VM candidate-fleet-e15cb89f25d963c220319b7b) state stopped, epoch file 707, no live firecracker process (stale pid); canonical head sequence 132,436 canonical_event_head 8df7efbba8617b37cc17cab9695fe62e2870b36b1ee6ec8fcbfeef8467927777 reducer v1 frozen since 2026-08-22"
+    deploy_identity: "staging https://choir.news; retained computer computer-03335285269bdba4f94377e56879f9e6 (VM candidate-fleet-e15cb89f25d963c220319b7b) state stopped, epoch file 707, no live firecracker process (stale pid); canonical head sequence 132,436 canonical_event_head 8df7efbba8617b37cc17cab9695fe62e2870b36b1ee6ec8fcbfeef8467927777 reducer v1 frozen since 2026-08-22; DELTA 2026-08-24 (A2/A3 experiment run 3): the post-replay runtime auth-reporting appended 2 key_revoked + 101 projection_batch_recorded events; canonical head is now sequence 132,539, canonical_event_head acc54c39ee05d89af13223e3b8cca195e04d7dfc8f137ce1bb27b96f657b7201. Chain integrity intact; the experiment consumed no semantic event and the pre-delta head 132,436/8df7efbba... was reached and verified before the appends. "
   worktree_inventory:
     status: reconciled
     evidence_ref: "git status 2026-08-23: worktree at main@7109b070 with M docs/ACTIVE.md + M docs/definitions/choir-durable-substrate-recovery-2026-08-23.md (this Define-boundary update) and M docs/evidence/recovery-consensus-review-2026-08-23.md; skills/agentic-consensus/* committed at 7109b070; .agentic-consensus/ gitignored"
@@ -24,7 +24,7 @@ start:
   observed_artifact:
     - claim: "Retained computer 0333528 is stopped. Original observation (2026-08-23T02:00:00Z) recorded epoch 361; dated correction at 2026-08-23T22:30:00Z records epoch 707 after later boot attempts, no live firecracker (stale pid). Initial break: capsule memory exhaustion + assignment supersession loop, then boot timeouts because autoputer replays the full event chain before opening :8085."
       evidence_ref: "docs/evidence/effects-red-capsule-memory-budget-exhaustion-2026-08-21.md; docs/evidence/effects-red-assignment-supersession-loop-2026-08-21.md; docs/evidence/effects-red-guest-dependent-restore-2026-08-22.md"
-    - claim: "Canonical event chain intact at head seq 132,436; Dolt computer_event_heads: canonical_event_head 8df7efbba8617b37cc17cab9695fe62e2870b36b1ee6ec8fcbfeef8467927777, reducer_version 1, updated 2026-08-22. All projection batch bodies present (~756 MiB in computer-event-payload/)."
+    - claim: "Canonical event chain intact at head seq 132,436; Dolt computer_event_heads: canonical_event_head 8df7efbba8617b37cc17cab9695fe62e2870b36b1ee6ec8fcbfeef8467927777, reducer_version 1, updated 2026-08-22. DELTA 2026-08-24 (A2/A3 experiment run 3): the post-replay runtime auth-reporting appended 2 key_revoked + 101 projection_batch_recorded events; canonical head is now sequence 132,539, canonical_event_head acc54c39ee05d89af13223e3b8cca195e04d7dfc8f137ce1bb27b96f657b7201. Chain integrity intact; the experiment consumed no semantic event and the pre-delta head 132,436/8df7efbba... was reached and verified before the appends. All projection batch bodies present (~756 MiB in computer-event-payload/)."
       evidence_ref: "docs/evidence/effects-red-recovery-projections-present-2026-08-23.md"
     - claim: "Privacy DEK (32-byte XChaCha20) at /mnt/persistent/choir-credentials/privacy-key in the guest disk; debugfs trusted-guest read is the sole documented exception to 'host never parses guest ext4'. Extracted + verified: computer_id matches, DEK hex 1a55efbbaf764fbc0ce17c7ccd537cdb1fae432c75bff82dc8c7f7870c704593."
       evidence_ref: "internal/computerevent/privacy.go; docs/evidence/effects-red-recovery-trusted-guest-copy-authority-2026-08-22.md"
@@ -36,14 +36,14 @@ start:
       evidence_ref: "internal/projectionbase/source.go; internal/projectionbase/rebuilder.go; internal/platform/event_replay.go; node-b /var/lib/go-choir/rebuild-0333528.log"
     - claim: "A1 ANSWERED (2026-08-23): the deployed guest image PREDATES the RUNTIME_STORE_PATH wiring by 11 days. Wiring added 2026-04-20 (git blame d4a5f160 in nix/sandbox-vm.nix:727); deployed guest image is nixos-system-go-choir-autoputer-26.05.20260409.4c1018d (build date 2026-04-09, still the image referenced by fc-config.json at the last boot epoch 707). The guest therefore runs the store at DefaultStorePath /tmp/go-choir-m3/runtime.db (provideriface/config.go:14,105), so ALL replay progress died with every VM — the empty state.texture repo and zero progress across 361->707 are fully explained, and no checkpoint code can help until the guest is rebuilt with the wiring. The guest image is also ~4.5 months stale vs repo HEAD (many refactors since) — the Phase-1 guest rebuild replaces it wholesale; the canonical chain and persistent files are unaffected by guest-version drift, and store runtime-schema bootstrap handles migrations."
       evidence_ref: "git blame nix/autoputer-vm.nix:727 (d4a5f160, 2026-04-20); fc-config.json init path (26.05.20260409.4c1018d); internal/provideriface/config.go:14,105"
-    - claim: "OWNER DECISIONS 2026-08-23 (recorded for Phase-1): B5 ship guest+host together (guest image rebuild REQUIRED per A1); B6 host-side gate (vmctl refuses route CAS + assignment until head+witness verified); B7 save progress at 30m boundary — treat 30m as one resume quantum (checkpoint, exit cleanly, boot again); B8 discard half-finished/prepared records on replay and re-apply from the log, never CAS on the replay path; B9 finish = head >= 132,436 with intact witness (lifecycle appends allowed after replay); B10 checkpoint cadence + stall timeout per recommendation (finalized after A3 measurement: cadence ~60s/200-500 events, stall 120-300s); B11 Dolt GC OFF during recovery; B12 AGENTIC/manual driver (agent drives ~20 x 30m sessions with receipts); B13 NO protective backup — on non-convergence, ABANDON this recovery and start anew (fresh computer, owner ratifies at that point); canonical chain is never rewound either way; the 'no data lost' streak is maintained platform-wide but explicitly relaxed for 0333528 by owner choice."
+    - claim: "OWNER DECISIONS 2026-08-23 (recorded for Phase-1): B5 ship guest+host together (guest image rebuild REQUIRED per A1); B6 host-side gate (vmctl refuses route CAS + assignment until head+witness verified); B7 save progress at 30m boundary — treat 30m as one resume quantum (checkpoint, exit cleanly, boot again); B8 discard half-finished/prepared records on replay and re-apply from the log, never CAS on the replay path; B9 finish = head >= 132,539 (revised 2026-08-24 per the A2/A3 delta) with intact witness (lifecycle appends allowed after replay); B10 checkpoint cadence + stall timeout per recommendation (finalized after A3 measurement: cadence ~60s/200-500 events, stall 120-300s); B11 Dolt GC OFF during recovery; B12 AGENTIC/manual driver (agent drives ~20 x 30m sessions with receipts); B13 NO protective backup — on non-convergence, ABANDON this recovery and start anew (fresh computer, owner ratifies at that point); canonical chain is never rewound either way; the 'no data lost' streak is maintained platform-wide but explicitly relaxed for 0333528 by owner choice."
       evidence_ref: "owner direction 2026-08-23 (walkthrough decisions B5-B13)"
 
 finish:
-  deliver: "The retained stopped computer computer-03335285269bdba4f94377e56879f9e6 is recovered to canonical head 132,436 (canonical_event_head 8df7efbba8617b37cc17cab9695fe62e2870b36b1ee6ec8fcbfeef8467927777) via the fixed boot/replay contract: a replay is never hard-killed while making progress (liveness = progress, readiness = head+witness match), replay state is durable/resumable per Phase-0 findings, and the computer boots to a quiesced active state on staging with no rewind and no second semantic writer."
-  artifact: "A deployed staging trajectory showing 0333528 stopped -> Phase-0 probe results -> boot/replay-contract fix (liveness/readiness split; stall-gated kill; resumable durability; RecoverPrepared replay-safe) -> BootVM of the existing data.img -> resumable replay converges to head 8df7efbba... @ 132,436 -> final head+witness match -> route CAS under fencing token -> computer active in quiesced state, with no-rewind refusal receipts, quarantine preserved, and fleet healthy-boot regression green."
+  deliver: "The retained stopped computer computer-03335285269bdba4f94377e56879f9e6 is recovered to canonical head 132,539 (canonical_event_head acc54c39ee05d89af13223e3b8cca195e04d7dfc8f137ce1bb27b96f657b7201) via the fixed boot/replay contract: a replay is never hard-killed while making progress (liveness = progress, readiness = head+witness match), replay state is durable/resumable per Phase-0 findings, and the computer boots to a quiesced active state on staging with no rewind and no second semantic writer."
+  artifact: "A deployed staging trajectory showing 0333528 stopped -> Phase-0 probe results -> boot/replay-contract fix (liveness/readiness split; stall-gated kill; resumable durability; RecoverPrepared replay-safe) -> BootVM of the existing data.img -> resumable replay converges to head acc54c39... @ 132,539 -> final head+witness match -> route CAS under fencing token -> computer active in quiesced state, with no-rewind refusal receipts, quarantine preserved, and fleet healthy-boot regression green."
   acceptance:
-    - action: "Recover 0333528 via the product boot path (B9 = head >= 132,436 with intact witness): BootVM a REBUILT guest image (B5) on the EXISTING data.img (ordinary boot; never recover_current wipe), resumable replay (30m resume quanta, B7) converges to head 8df7efbba... @ seq 132,436 (lifecycle appends after replay allowed; final head >= 132,436 with intact witness), final head+witness match, host-side gate (B6) then route CAS under fencing token -> active in quiesced state. Show ReplayCompleteness equivalent and effective ComputerVersion/frontend serving-join before route CAS."
+    - action: "Recover 0333528 via the product boot path (B9 = head >= 132,539 with intact witness): BootVM a REBUILT guest image (B5) on the EXISTING data.img (ordinary boot; never recover_current wipe), resumable replay (30m resume quanta, B7) converges to head acc54c39... @ seq 132,539 (lifecycle appends after replay allowed; final head >= 132,539 with intact witness), final head+witness match, host-side gate (B6) then route CAS under fencing token -> active in quiesced state. Show ReplayCompleteness equivalent and effective ComputerVersion/frontend serving-join before route CAS."
       proves: "The down computer is recovered to current canonical head without memory exhaustion, event rewinds, or a missing-snapshot dependency."
       evidence_class: deployed proof on staging 0333528, stopped -> recovered -> active
     - action: "Prove liveness != readiness: guest serves a replay-progress signal (e.g. 503 ReplayInProgress seq=N) during Reconstruct; product /health is 200 only after head+witness match; waitForGuestReady does not mark the computer Running on 200-during-replay; a stalled replay (no sequence advance for N seconds) is still hard-killed; healthy small-chain computers still boot normally (fleet regression)."
@@ -79,14 +79,14 @@ not_done_when:
   - quarantine is deleted or pruned while recovery is unfinished
   - computer 0333528 is SQL-emptied, replaced, or its canonical chain rewound
   - the computer boots into an active supersession loop rather than a quiesced state
-  - the recovery claims completion while the guest never reaches head 8df7efbba... @ seq 132,436
+  - the recovery claims completion while the guest never reaches head acc54c39... @ seq 132,539
 
 boundaries:
   mutation_class: red
   authority_sources: [owner direction 2026-08-23 (boot-contract-fix-first route), docs/evidence/recovery-consensus-review-2026-08-23.md, docs/designs/choir-durable-substrate-2026-08-23.md, docs/evidence/effects-red-recovery-no-differential-base-2026-08-23.md, docs/evidence/effects-red-recovery-projections-present-2026-08-23.md, docs/choir-doctrine.md, docs/computer-ontology.md, AGENTS.md]
   must_preserve:
     - Single guest ComputerEventAppender remains the sole semantic event writer; host recovery path never constructs a semantic CASRequest.
-    - Canonical events never rewound; recovery targets final head 8df7efbba... @ 132,436.
+    - Canonical events never rewound; recovery targets final head acc54c39... @ 132,539.
     - Checkpoint 99949fe2 untouched until scheduling Definition reaches E2.
     - Effects remain OFF; assignment/capsule admission fenced until head+witness+route CAS (quiesce).
     - Quarantine never deleted or pruned during active recovery; maxRetained pruning bypassed during recovery.
@@ -103,8 +103,8 @@ boundaries:
 measures:
   - name: recover_0333528_to_head
     kind: gate
-    baseline: "stopped, canonical head 8df7efbba... @ seq 132,436"
-    desired: "0333528 active at head 132,436 via fixed boot/replay contract + route CAS in quiesced state"
+    baseline: "stopped, canonical head 8df7efbba... @ seq 132,436 (pre-delta state recorded 2026-08-22)"
+    desired: "0333528 active at head 132,539 via fixed boot/replay contract + route CAS in quiesced state"
     decision_use: gates the recovery finish claim
     cannot_prove: O(delta) recovery on future writes (ProjectionBase successor Definition / Track F overhaul)
   - name: boot_contract_fix_proven
@@ -137,7 +137,7 @@ phases:
   - name: Recover 0333528
     status: pending
     items:
-      - "BootVM the EXISTING data.img of 0333528 (ordinary boot; never recover_current). Watch sequence advance across at least one intentional kill. Converge to head 8df7efbba... @ 132,436."
+      - "BootVM the EXISTING data.img of 0333528 (ordinary boot; never recover_current). Watch sequence advance across at least one intentional kill. Converge to head acc54c39... @ 132,539."
       - "Verify final head + content witness + ReplayCompleteness + effective ComputerVersion/frontend join, THEN route CAS under fencing token; assignment/capsule admission fenced until then."
       - "Observe quiesced state: no CoSuper cancellation/supersession churn for a bounded window."
       - "Confirm quarantine preserved; confirm no-rewind refusals; confirm no host-appended events."
@@ -154,7 +154,7 @@ now:
   reconciliation:
     observed_at: "2026-08-24T00:00:00Z"
     source_ref: "main@7109b070"
-    deploy_identity: "staging proxy+vmctl ok (health 200); computer 0333528 stopped, epoch file 707, no live firecracker; canonical head 8df7efbba... seq 132,436"
+    deploy_identity: "staging proxy+vmctl ok (health 200); computer 0333528 stopped, epoch file 707, no live firecracker; canonical head 132,436/8df7efbba... pre-delta; post A2/A3 delta head acc54c39... seq 132,539"
     authority_identities: [docs/choir-doctrine.md, docs/computer-ontology.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "working tree owns recovery definition + design + consensus evidence doc; dirty docs categorized goal_owned"
@@ -179,7 +179,7 @@ now:
     - "internal/vmmanager/manager.go; internal/autoputer/run.go; internal/store/computer_events.go; internal/computerevent/appender.go"
     - ".agentic-consensus/recovery-definition-review-20260823-r3/ (gitignored raw outputs)"
   blocker_or_risk: "Confirmed: live timeout 30m, guest 4096 MiB, ordinary BootVM path (rec-2 last cold-recover), no persisted runtime working set (0-byte state file; empty texture repo) => durable checkpoints mandatory; ~3.8 ev/s (approx 10h single pass) means multiple-boot resumable replay is the only path unless throughput improves. Risks: store open at /mnt/persistent/state currently produces a 0-byte file (must be fixed/verified before checkpoints have any effect); RecoverPrepared ErrNeedsProjectionRepair trap on partial-replay kill; bootstrapCtx 30m guest budget; RSS ~1.8 GiB near kernel kill at ~15m in past evidence; stale pending lifecycle receipts could append events during recovery."
-  next_action: "Run the A2/A3 disposable-image experiment (SIGKILL mid-replay then reopen: does the working set resume from the committed head; measured ev/s with payload fetch and checkpointing; RSS and disk slope) on a COPY of the data.img; then BootVM 0333528 (ordinary boot, rebuilt guest image) and drive the ~20 x 30m resumable replay quanta to head 8df7efbba... at 132,436 with receipts (B12 agentic driver; B13 abandon-and-recreate on non-convergence)."
+  next_action: "A2/A3 DONE 2026-08-24 (receipt docs/evidence/recovery-replay-resume-experiment-2026-08-24.md): SIGKILL mid-replay resumes from the committed head (committed 60,122 -> kill -> 62,651 resume, monotonic); measured 27-82 ev/s (~28-55 min total window, 1-2 quanta), RSS 1.14-1.9 GiB, workspace 1.3-7.6 GiB; full-chain finish proven (head 132,539 -> 200 ready -> runtime wired). Platform head now 132,539/acc54c39... (+103 auth-report events from run 3; see delta in this file). Post-replay nil-executor panic discovered, fixed and landed (85fa83b4). Next: BootVM 0333528 (ordinary boot, rebuilt guest image) and drive the resumable replay quanta to head acc54c39... @ 132,539 with receipts (B12 agentic driver; B13 abandon-and-recreate on non-convergence)."
 
 receipts:
   - id: define-recovery-boundary

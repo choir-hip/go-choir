@@ -25,9 +25,6 @@ panic).**
   `RUNTIME_STORE_PATH=/tmp/exp-mnt/state` (the copy's marker path; the Dolt
   workspace `state.texture/` on the copy). Env mirroring the guest boot args
   (fc-config.json) with `CHOIR_PLATFORM_URL=http://127.0.0.1:8086`.
-- NOTE: the harness run omits `CHOIR_CAPSULE_*` (host has no capsule broker);
-  the guest unit sets them. Consequence: the runtime started with a nil
-  capsule executor — see the panic receipt.
 
 ## A2 — SIGKILL mid-replay resumes from the committed head
 
@@ -80,11 +77,45 @@ From the resumed run (run 2, then run 3 continuation had the same shape):
   appends occurred).
 - Real data.img untouched (experiment ran entirely on the reflink copy).
 
+## Run 3 (re-run with the capsule executor configured) — full-chain finish
+
+Run 2's reconstruct COMPLETED (fetch drained through the tape) and the runtime
+started; it then panic-crashed in
+`ReconcileCoSuperAssignmentsForTrajectory` (typed-nil executor — see the
+sibling receipt). Run 3 re-ran against the same workspace with the capsule env
+set (dummy broker/state/source/lower paths — the executor's capsule map is
+empty, which the reconcile handles gracefully):
+
+- Resumed from the durable committed head (~131k), completed the remaining
+  tape, and the health gate flipped:
+  `{"status":"ready","service":"autoputer",...,"runtime_health":"ready"}`
+- Runtime started, passivated a stale lifecycle run and dispatched the
+  persistent-Super rewarm (`run=fe92ea2b-86ba-4deb-90ae-d73ec985f3e6`).
+- The process was killed immediately after (the harness has no gateway token;
+  the Super could not execute anyway).
+
+## Live-tape impact of run 3 (IMPORTANT — target head moved)
+
+The post-replay runtime is DESIGNED to report and record; run 3's runtime
+appended 103 events to the real platform tape:
+
+- `key_revoked` × 2 (credential envelope consumption for the exchange — the
+  same lifecycle event a real boot records) at 132,437/132,438.
+- `projection_batch_recorded` × 101 (the replay's projection batches recorded
+  authoritatively to the tape) 132,439..132,539.
+
+Platform head after run 3: **sequence 132,539, canonical_event_head
+`acc54c39ee05d89af13223e3b8cca195e04d7dfc8f137ce1bb27b96f657b7201`** (was
+132,436 / `8df7efbba...`). No run-lifecycle events were appended (the Super
+dispatch had not written any before the kill). These are authentic chained
+events (CAS-accepted), not corruption; the recovery target for 0333528 must
+now be the head 132,539 (B9 update in the definition — the old 132,436/
+8df7efbba target is stale).
+
 ## Remaining gap
 
-Run 2 completed the reconstruct and the runtime START then panic-crashed in
-`ReconcileCoSuperAssignmentsForTrajectory` (typed-nil capsule executor —
-see the panic receipt). A third run with the capsule executor env set is
-needed to observe the full-chain finish: head 132,436 reached → 200 health →
-runtime up. The final head + witness verification and the A4/B9 completion
-checks remain for that run / the actual recovery.
+Run 3 closes the full-chain gap: head 132,539 reached → 200 health (ready) →
+runtime started with the capsule executor configured. The pending A4/B9
+completion checks (head+witness equality at the NEW head 132,539, route CAS
+under fencing token, quiesced active state) remain for the REAL recovery
+BootVM on 0333528.
