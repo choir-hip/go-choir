@@ -56,6 +56,9 @@
             url = "https://go.dev/dl/go1.26.2.src.tar.gz";
             sha256 = "sha256-LpHrtpR6lulDb7KzkmqIAu/mOm03Xf/sT4Kqnb1v1Ds=";
           };
+          # The pinned nixpkgs' Go carries version-targeted patches for 1.26.1;
+          # a version override must not apply them to 1.26.2.
+          patches = [ ];
         });
       };
       importPkgs = system:
