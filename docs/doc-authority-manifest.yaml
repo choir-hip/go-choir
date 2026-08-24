@@ -390,6 +390,14 @@ documents:
     witnesses: [docs/designs/choir-durable-substrate-2026-08-23.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/choir-doctrine.md, AGENTS.md]
     refresh_triggers: [mission_state_change, predecessor_completion, file_cas_change, key_escrow_change, mail_spool_change, deployed_acceptance, registry_closure]
 
+  - path: docs/definitions/choir-0333528-stabilize-and-hold-2026-08-24.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: owner_ratified, lifecycle: active, entrypoint: true}
+    depends_on: [docs/definitions/choir-durable-substrate-recovery-2026-08-23.md]
+    witnesses: [docs/evidence/0333528-recurring-corruption-loop-2026-08-24.md, docs/definitions/choir-durable-substrate-recovery-2026-08-23.md, docs/definitions/choir-durable-substrate-preflight-2026-08-24.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/choir-doctrine.md, AGENTS.md]
+    refresh_triggers: [mission_state_change, predecessor_completion, protected_surface_change, deployed_acceptance, registry_closure]
   - path: docs/designs/choir-durable-substrate-2026-08-23.md
     claim_scope: current
     is_root: []

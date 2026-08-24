@@ -3,6 +3,19 @@
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
 
+## Active — Stabilize and Hold 0333528 (maintenance hold gate)
+
+[`definitions/choir-0333528-stabilize-and-hold-2026-08-24.md`](definitions/choir-0333528-stabilize-and-hold-2026-08-24.md)
+is the owner-ratified active operation as of 2026-08-24. It blocks the
+scheduling + overhauls definitions because the retained computer
+`computer-03335285269bdba4f94377e56879f9e6` (owner yusefnathanson) is in a
+recover→corrupt→recover loop (pre-genesis restart loop, epoch 774). It holds
+the computer FIRST — fence the vmctl lifecycle matrix + deploy-VM refresh +
+self-dev admission/auto-rewake (host + guest-visible) — then B14-recover-under-hold
+to local==platform (δ0, no restart loop), then the stable-state gate. The Tracks
+K/F/M/Assurance overhauls run on a test computer; adoption + release are a HAND-OFF
+to the overhauls/effects definitions once the hold gate passes. Effects remain OFF.
+
 ## Active Definition — Scheduling Contract and Candidate Proof
 
 [`definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`](definitions/choir-scheduling-and-candidate-proof-2026-08-21.md)
