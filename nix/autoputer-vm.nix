@@ -675,13 +675,14 @@ EOF
     wants = [ "network-online.target" ];
     requires = [ "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-guest-receipt-signer.service" "go-choir-verifier-signer.service" ];
     bindsTo = [ "go-choir-guest-receipt-signer.service" ];
-+      # B11: embedded Dolt GC is OFF during the recovered guest's lifetime —
-+      # its memory demand at the multi-GiB chunk-store scale OOMs the 4096 MiB
-+      # guest (recovery boot crash-loop receipt 2026-08-24). The store's
-+      # MaybeRunDoltGC additionally guards on workspace size; the recovery
-+      # never needs the guest-side GC (the disk has ample headroom).
-+      RUNTIME_DOLT_GC_DISABLED = "1";
-      CHOIR_REVOCATION_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/revocation-capability";
+    environment = {
+      CHOIR_COMPUTER_CREDENTIAL_FILE = "/run/choir-bootstrap/computer-event-envelope";
+      # B11: embedded Dolt GC is OFF during the recovered guest's lifetime —
+      # its memory demand at the multi-GiB chunk-store scale OOMs the 4096 MiB
+      # guest (recovery boot crash-loop receipt 2026-08-24). The store's
+      # MaybeRunDoltGC additionally guards on workspace size; the recovery
+      # never needs the guest-side GC (the disk has ample headroom).
+      RUNTIME_DOLT_GC_DISABLED = "1";
       CHOIR_REVOCATION_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/revocation-capability";
       CHOIR_RESTART_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/restart-capability";
       CHOIR_VERIFIER_AUTHORITY_SOCKET = "/run/choir-verifier/authority.sock";
