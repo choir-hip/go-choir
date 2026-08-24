@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	embedded "github.com/dolthub/driver"
+	embedded "github.com/dolthub/driver/v2"
 )
 
 // openTestDoltWorkspace creates a temporary embedded Dolt workspace with

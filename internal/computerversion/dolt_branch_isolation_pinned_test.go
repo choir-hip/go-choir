@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	embedded "github.com/dolthub/driver"
+	embedded "github.com/dolthub/driver/v2"
 )
 
 // TestDoltEmbeddedBranchIsolationPinnedConnection verifies that branch-based

@@ -7,7 +7,7 @@
 // per-user in-process storage inside the autoputer.
 //
 // Design decisions:
-//   - Embedded Dolt (`github.com/dolthub/driver`) for version-native document
+//   - Embedded Dolt (`github.com/dolthub/driver/v2`) for version-native document
 //     storage without a separate server process.
 //   - Full-content revisions (not deltas) so that historical snapshots are
 //     directly accessible without reconstruction.
@@ -34,7 +34,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	embedded "github.com/dolthub/driver"
+	embedded "github.com/dolthub/driver/v2"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"

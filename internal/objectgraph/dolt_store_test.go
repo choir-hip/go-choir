@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	embedded "github.com/dolthub/driver"
+	embedded "github.com/dolthub/driver/v2"
 )
 
 func openTestDoltDB(t *testing.T) *sql.DB {
