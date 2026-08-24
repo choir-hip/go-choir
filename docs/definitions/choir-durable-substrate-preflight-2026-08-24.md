@@ -122,7 +122,7 @@ phases:
     items:
       - "Bump the Nix flake toolchain to Go >= 1.26.2; verify guest image + CI builds (ICU/cgo/zstd); bump ALL go-toolchain surfaces together and verify: root go.mod, cmd/desktop/go.mod (1.25.6 today), the CI matrix (ci.yml pins 1.26.1 today — must be >= 1.26.2), and the Nix flake's go package."
       - "Migrate imports to github.com/dolthub/driver/v2 v2.2.0; let go mod tidy resolve the matching graph; then pin + record the result (incl. the PR 11058 lineage)."
-      - "Embedded smoke suite + retained-workspace snapshot open + downgrade-proof (v1 reads the untouched snapshot) — snapshot disks only, NO live-store touch."
+      - "Embedded smoke suite + retained-workspace snapshot open + downgrade-proof (v1 reads the untouched snapshot) — snapshot disks only, NO live-store touch; the candidate build NEVER reaches the staging service pointers or the deploy's active-VM refresh (local nix-build + local runtime package run only) until PF-1b."
       - "Build the candidate guest image + runtime package; freeze the v1 baseline package."
   - name: PF-2 — Like-for-like Measurement
     items:
@@ -136,7 +136,7 @@ phases:
       - "Live flip: deploy to 0333528 + d03 (with the PF-3 fix if coalesced) with per-computer snapshot-fence receipts; verify builds + heads."
   - name: PF-5 — Ceiling Resolution (gated)
     items:
-      - "PF-2 verdict branches (owner-adjudicated, recorded): (i) correctness/OOM/regression NOT met -> v2 REJECT: no flip, PF-1b does not run, the pre-flight re-baselines; (ii) correctness met but p95 above the 1s safety line -> repair-re-measure (PF-2 rerun on fresh clones) before any flip; (iii) correctness met -> flip authorized. The ceiling gate (separate from the v2 verdict): p95 <= 150ms done-line closes the ceiling by evidence; p95 > 150ms REQUIRES PF-5 (no 'evidence closure' above the done-line); the owner ratifies either outcome with the measured full-band recovery-time implication named in the receipt."
+      - "The v2 verdict and the ceiling gate are SEPARATE questions; conflating them deadlocks the mission (the research predicts v2 will NOT lower the 3-6s p95, so an absolute p95 bar on the v2 accept would block the flip while PF-5 sits after it). V2 VERDICT (upgrade soundness only — owner-adjudicated, recorded): (i) REJECT if correctness (schema/count/heads/branch behavior on the snapshot) regressed, the measurement OOM'd, or the archive-index memory exceeded the 4 GiB budget — no flip, PF-1b does not run, the pre-flight re-baselines; (ii) repair-re-measure if the v2 measurement shows a RELATIVE write-path regression vs the v1 baseline beyond the comparability protocol (fresh clones, same band, p95_v2/p95_v1 > 1.5x) — the ABSOLUTE p95 is NOT part of the v2 verdict; (iii) accept if sound — flip authorized. CEILING GATE (independent, always evaluated): p95 <= 150ms done-line closes the ceiling by evidence; p95 > 150ms REQUIRES PF-5 wherever it lands (the batching applies to either runtime graph); the owner ratifies either outcome with the measured full-band recovery-time implication named in the receipt."
       - "If the PF-2 verdict passes but p95 > 150ms: implement the appender per-page batching (D; C per-event nonfsync evaluated as the lower-risk first option per the assessment), freeze + panel-review the implementation, re-measure to the done-line."
       - "If the done-line is unreachable: execute the pre-authorized named escalation (option B, 8-12 GiB guest) — owner-visible, receipted — or stop + escalate."
   - name: PF-3b — d03 Fix (if not independently landed)
@@ -152,7 +152,7 @@ phases:
       - "Independent panel review of the PF-2 verdict + PF-5 scope decision (evidence receipt with adjudicated outcome); final receipt + landing loop summary; overhauls definition now-card sequencing update."
 now:
   status: working
-  slice: "Definition draft v2 (post-panel round 1: sequence split into candidate/flip, PF-3 investigation first, measurement + rollback rigor, standing-questions + registry conformance). Awaiting panel round 2 approval before execution."
+  slice: "Definition v4 after panel rounds 1-3 (candidate/flip split; PF-3 forward; measurement + rollback rigor; per-slice landing; toolchain surfaces; v2-verdict vs ceiling-gate separation fixing the round-3 deadlock; PF-1a never touches staging pointers). Awaiting round-4 confirmation before execution."
   question: none
   reconciliation:
     observed_at: "2026-08-24T06:40:00Z"
