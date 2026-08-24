@@ -920,12 +920,15 @@ in
     htop
     jq
     nodejs
+    python3
     pkg-config
     icu
     icu.dev
     goChoirPackages.maildctl
     goChoirPackages.zot
     procps
+    lsof
+    strace
     ripgrep
     vim
   ];
