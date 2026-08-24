@@ -152,7 +152,7 @@ phases:
       - "Independent panel review of the PF-2 verdict + PF-5 scope decision (evidence receipt with adjudicated outcome); final receipt + landing loop summary; overhauls definition now-card sequencing update."
 now:
   status: working
-  slice: "Reconcile + PF-3a complete: d03 genesis loop root-caused (empty canonical chain — creation skipped bootstrap-chain; boot accepts the empty chain; Reduce nil-head = invalid genesis on every write; NOT substrate-level, no escalation; fix legs recorded, containment = stop submissions). PF-1a (Dolt 2.0 candidate: toolchain + driver/v2 migrate + snapshot smoke) starts now."
+  slice: "Reconcile + PF-3a + PF-1a complete: candidate green (toolchain >= 1.26.2, driver/v2 v2.2.0 + pinned late graph, imports migrated, smoke suites green, retained-store open both ways — v2 open proof + v1 downgrade-proof, candidate guest image k1drcj7d4kbgc8xichlv0lsy3m8fv6dc built, v1 baseline frozen; no live-store v2 touch, nothing on main). PF-2 like-for-like measurement (frozen pre-state clones, band sample, archive/RSS/OOM, owner verdict) is the next gate."
   question: none
   reconciliation:
     observed_at: "2026-08-24T06:40:00Z"
@@ -183,6 +183,22 @@ now:
   next_action: "BEGIN Reconcile: answer docs/standing-questions.md for this Definition (recorded), register the id in the mission registry hygiene surface, take pre-upgrade snapshots of all live computer disks + retain the pre-bump v1 binary/package + image digest, and start the PF-3a read-only root-cause investigation of the d03dacaa invalid-genesis loop. Panel record: .agentic-consensus/preflight-def-review-20260824/ (rounds 1-4 manifests + outputs; round 4 = approval with only non-blocking wording items, now folded)."
 
 receipts:
+  - id: preflight-pf1a-candidate
+    boundary: pf1a
+    commit_or_artifact: "branch preflight/pf1a @ dcd6c599 (43310064 -> dcd6c599 is test-file-only; the candidate guest image production closure = 43310064 unchanged)"
+    proof_refs: ["driver/v2 embedded smoke (internal/computerversion/driver_v2_smoke_test.go: SHOW DATABASES, CREATE DATABASE, per-db connect, multi-statement, client-found-rows, CALL DOLT_GC + close/reopen; root engine closed before per-db writes per v2 single-writer semantics) PASS", "go.mod go 1.26.2 + cmd/desktop/go.mod 1.26.2 + ci.yml go-version 1.26.2 + nixpkgs flake input 2c423e03bbaf (go 1.26.5)", "go.mod graph: dolthub/driver/v2 v2.2.0, dolt/go v0.40.5-0.20260715172757-a6690826d767, go-mysql-server v0.20.1-0.20260713210757-6d01d00bbbf3, vitess v0.0.0-20260624214226-81d034e0fde8, go-icu-regex v0.0.0-20260610153742-72563bc7ca83, gozstd unchanged (exact research pin; PR 11058 lineage = late graph)", "flake.nix vendorHash sha256-J+n6oBbHa1CbCALcYoRcCBG4w4zChFJw/84BNMHYfFo= (v2 graph)", "smoke: go test ./internal/store (Dolt|GC|Projection|Trajectory|Texture|Open) ok 168s; ./internal/computerversion ./internal/objectgraph ./internal/cycle (Dolt|Store|Storage|Branch) ok; ./internal/platform ./cmd/sourcecycled ok", "v2 open proof: DoltStateExtractor on the 0333528 pre-upgrade snapshot workspace clone V2-OK observations=86 (same extractor under v2; snapshot untouched; clone discarded)", "downgrade-proof (v1 reads the same snapshot): Reconcile receipt — v1 f7b3ccd2 extractor read the same pre-upgrade snapshot store: e15cb8 observations=86, d03 observations=96; snapshot files untouched (digests in the reconcile receipt)", "candidate guest image: nix build .#guest-image -> /nix/store/k1drcj7d4kbgc8xichlv0lsy3m8fv6dc-go-choir-guest-image (commit 43310064 in build.json); artifact digests vmlinux 637a937a..., rootfs.ext4 acb3d224..., initrd 47658645..., storedisk.erofs c06b1382...", "v1 baseline frozen: deployed artifacts at /var/lib/go-choir/guest/ (deployed commit f7b3ccd2): vmlinux bf818249..., rootfs.ext4 95075fc6..., initrd 662acf4a..., storedisk.erofs e3750b09..."]
+    rollback_ref: "preflight/pf1a branch; main untouched; deployment classifiers never trigger (no main push)"
+    disposition: "Dolt 2.0 candidate complete and evidence-only: toolchain >= 1.26.2 everywhere (nixpkgs bump to 2026-08-22 = go 1.26.5), driver/v2 v2.2.0 + exact pinned late graph (PR 11058 lineage), all imports migrated (11 files + comments), full go build clean, focused store/computerversion/objectgraph/cycle/platform/sourcecycled suites green, retained-store open verified both ways (v2 open proof + v1 downgrade-proof from Reconcile against the untouched pre-upgrade snapshot), candidate guest image built with artifact digests, v1 baseline package frozen (deployed f7b3ccd2 artifact digests). NO live-store v2 touch: snapshot clones only, candidate built locally (node-b worktree), nothing pushed to main, staging service pointers and active-VM refresh untouched. PF-2 measurement is the next gate; the flip is gated on its owner-adjudicated verdict."
+    problem_ref: "recovery-replay-guest-io-ceiling-assessment-2026-08-24.md"
+    authorization_ref: "owner direction 2026-08-24"
+    candidate_or_evidence_refs: ["preflight/pf1a@43310064; /root/preflight-guest-image -> /nix/store/k1drcj7d4kbgc8xichlv0lsy3m8fv6dc-go-choir-guest-image (node-b)"]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "docs/mission-graph.yaml choir-durable-substrate-preflight-2026-08-24"
   - id: preflight-pf3a-root-cause
     boundary: pf3a
     commit_or_artifact: "(pending)"
