@@ -42,27 +42,10 @@
         "x86_64-linux"
       ];
       forDevSystems = nixpkgs.lib.genAttrs devSystems;
-      # Go >= 1.26.2 is REQUIRED by the Dolt v2 graph (driver/v2 v2.2.0 go.mod
-      # directive). The existing nixpkgs input carries Go 1.26.1; rather than
-      # bumping the whole input (which would drag the entire host/guest NixOS
-      # system forward and force a full-system deploy), pin Go 1.26.2 with a
-      # targeted overlay on the current base. Everything else (kernel, icu,
-      # zstd, NixOS modules) stays put; the host system, guest image base, and
-      # dev shells all keep the existing nixpkgs rev.
-      goOverlay = final: prev: {
-        go = prev.go.overrideAttrs (old: {
-          version = "1.26.2";
-          src = prev.fetchurl {
-            url = "https://go.dev/dl/go1.26.2.src.tar.gz";
-            sha256 = "sha256-LpHrtpR6lulDb7KzkmqIAu/mOm03Xf/sT4Kqnb1v1Ds=";
-          };
-          # The pinned nixpkgs' Go carries version-targeted patches for 1.26.1;
-          # a version override must not apply them to 1.26.2.
-          patches = [ ];
-        });
-      };
+      # nixpkgs tracks nixos-unstable; the locked revision ships Go >= 1.26.2,
+      # which the Dolt v2 graph (driver/v2 v2.2.0 go.mod directive) requires.
       importPkgs = system:
-        import nixpkgs { inherit system; overlays = [ goOverlay ]; };
+        import nixpkgs { inherit system; };
       mkDevShell = devSystem:
         let
           devPkgs = importPkgs devSystem;
@@ -418,7 +401,6 @@ EOF
           inherit buildCommit sourceRepoRemote;
         };
         modules = [
-          { nixpkgs.overlays = [ goOverlay ]; }
           microvm.nixosModules.microvm
           ./nix/autoputer-vm.nix
         ];
