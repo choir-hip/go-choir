@@ -58,7 +58,8 @@ finish:
   landing:
     required: true
     environment: staging
-    required_receipts: [pushed_commit, ci, deploy, staging_build_identity, smoke, downgrade_proof, measurement, owner_verdict, canary_flip, d03_fix, gc_policy, ceiling_verdict, independent_panel_review]
+    required_receipts: [pf1a_smoke, downgrade_proof, measurement, owner_verdict, pf2_independent_review, canary_rehearsal, per_computer_flip, d03_fix, gc_policy, ceiling_verdict, independent_panel_review]
+    per_slice_landing: "EACH red slice (PF-1a candidate is evidence-only; the flip PF-1b, PF-3b, PF-5-if-gated, PF-4 are behavior changes) carries its own pushed SHA -> CI -> deploy identity -> scoped acceptance; the landing requirements are tracked per slice, not as one flat receipt bag."
 not_done_when:
   - any v2 binary opens a live computer's store before the PF-2 verdict and the one-way rollback rehearsal
   - a live staff flip happens without the canary proof + per-computer snapshot-fence receipt
@@ -119,7 +120,7 @@ phases:
       - "Escalate per the repo dead-end rule if the cause is substrate-level (shared genesis/projection code, no narrow fix): stop, record the structural assessment, owner decision."
   - name: PF-1a — Dolt 2.0 Candidate
     items:
-      - "Bump the Nix flake toolchain to Go >= 1.26.2; verify guest image + CI builds (ICU/cgo/zstd); bump go.mod's go directive together."
+      - "Bump the Nix flake toolchain to Go >= 1.26.2; verify guest image + CI builds (ICU/cgo/zstd); bump ALL go-toolchain surfaces together and verify: root go.mod, cmd/desktop/go.mod (1.25.6 today), the CI matrix (ci.yml pins 1.26.1 today — must be >= 1.26.2), and the Nix flake's go package."
       - "Migrate imports to github.com/dolthub/driver/v2 v2.2.0; let go mod tidy resolve the matching graph; then pin + record the result (incl. the PR 11058 lineage)."
       - "Embedded smoke suite + retained-workspace snapshot open + downgrade-proof (v1 reads the untouched snapshot) — snapshot disks only, NO live-store touch."
       - "Build the candidate guest image + runtime package; freeze the v1 baseline package."
@@ -130,11 +131,13 @@ phases:
       - "Publish the measurement receipt; owner-adjudicated verdict: accept v2 / repair-re-measure / reject."
   - name: PF-1b — Flip (gated)
     items:
-      - "Canary: deploy the v2 runtime/image to an isolated/disposable computer first; prove the per-computer snapshot-fence flip protocol."
+      - "Canary: deploy the v2 runtime/image to an isolated/disposable computer first; REHEARSE the full per-computer fence -> snapshot -> flip -> restore-from-snapshot-under-v1 cycle on the canary (not just the protocol on paper); record the rehearsal receipt with digests."
+      - "Independent PF-2 review BEFORE any live flip: the measurement receipt + verdict bound to frozen digests (pre-state snapshot digest, clone digests, image digest, sample protocol); a panel review of the verdict + the flip boundaries precedes PF-1b; any candidate change after the review requires re-measurement."
       - "Live flip: deploy to 0333528 + d03 (with the PF-3 fix if coalesced) with per-computer snapshot-fence receipts; verify builds + heads."
   - name: PF-5 — Ceiling Resolution (gated)
     items:
-      - "If the PF-2 verdict leaves p95 above the skip-gate: implement the appender per-page batching (D; C per-event nonfsync evaluated as the lower-risk first option per the assessment), freeze + panel-review the implementation, re-measure to the done-line."
+      - "PF-2 verdict branches (owner-adjudicated, recorded): (i) correctness/OOM/regression NOT met -> v2 REJECT: no flip, PF-1b does not run, the pre-flight re-baselines; (ii) correctness met but p95 above the 1s safety line -> repair-re-measure (PF-2 rerun on fresh clones) before any flip; (iii) correctness met -> flip authorized. The ceiling gate (separate from the v2 verdict): p95 <= 150ms done-line closes the ceiling by evidence; p95 > 150ms REQUIRES PF-5 (no 'evidence closure' above the done-line); the owner ratifies either outcome with the measured full-band recovery-time implication named in the receipt."
+      - "If the PF-2 verdict passes but p95 > 150ms: implement the appender per-page batching (D; C per-event nonfsync evaluated as the lower-risk first option per the assessment), freeze + panel-review the implementation, re-measure to the done-line."
       - "If the done-line is unreachable: execute the pre-authorized named escalation (option B, 8-12 GiB guest) — owner-visible, receipted — or stop + escalate."
   - name: PF-3b — d03 Fix (if not independently landed)
     items:
@@ -159,6 +162,9 @@ now:
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "clean main; prunable agent worktrees preserved"
     status: reconciled
+  candidate:
+    id: none
+    state: none
   decision:
     selected: "Scope the loose ends (Dolt 2.0, d03 genesis loop, active-guest GC policy, replay ceiling) into one pre-flight mission before the overhauls; the Dolt update is executed as candidate-first (no live-store v2 touch before the measurement gate + one-way rehearsal); PF-3 investigation begins in Reconcile; the ceiling fix (fix-D) is gated by the PF-2 measurement and owner-adjudicated; Go >= 1.26.2 is a strict superset of the yaegi kernel's go 1.21 requirement."
     kind: architecture
