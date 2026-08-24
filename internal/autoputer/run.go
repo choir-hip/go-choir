@@ -478,6 +478,14 @@ func startPeriodicDoltGC(storePath string) {
 // the canonical tape.
 func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEventAppender, client *computerevent.HTTPClient, credentials *selfdev.GuestCredentials, computerID string, bootstrapCtx context.Context, cancel context.CancelFunc, afterReplay func() error) {
 	defer cancel()
+	// B14 host-drive boundary: when RUNTIME_RECOVERY_REPLAY_ONLY is set the
+	// reconstruct is a one-shot, deterministic projection materialization on
+	// the host against the retained disk. It MUST NOT start the runtime,
+	// reconcile lifecycle receipts, or append any semantic event; the process
+	// exits after the target head is reached (or a quantum boundary) with the
+	// workspace durably checkpointed. The guest boot afterwards sees
+	// local==platform and takes over verification + route authority.
+	replayOnly := strings.TrimSpace(os.Getenv("RUNTIME_RECOVERY_REPLAY_ONLY")) == "1"
 	appender.SetReplayMode(true)
 	err := appender.Reconstruct(bootstrapCtx, client)
 	appender.SetReplayMode(false)
@@ -489,6 +497,11 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 			os.Exit(1)
 		}
 		log.Fatalf("autoputer: reconstruct computer event authority: %v", err)
+	}
+	if replayOnly {
+		snap := appender.ReplaySnapshot()
+		log.Printf("autoputer: recovery replay-only drive complete (seq=%d committed=%d); exiting without runtime start or reconciliation", snap.Sequence, snap.CommittedSequence)
+		os.Exit(0)
 	}
 	gate.setPending(false)
 	if err := reconcilePendingLifecycleReceipts(appender, credentials, computerID, bootstrapCtx); err != nil {
