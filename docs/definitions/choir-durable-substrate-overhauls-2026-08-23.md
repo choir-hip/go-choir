@@ -105,7 +105,7 @@ phases:
 
 now:
   status: working
-  slice: "Sequenced after choir-durable-substrate-recovery-2026-08-23.md completes."
+  slice: "Pre-Flight definition (choir-durable-substrate-preflight-2026-08-24.md) completed; 0333528 active and liveness restored on staging. Beginning Track K (Key Escrow & Wrap Hierarchy)."
   question: none
   reconciliation:
     observed_at: "2026-08-23T02:00:00Z"
@@ -130,7 +130,7 @@ now:
   evidence_refs:
     - "docs/designs/choir-durable-substrate-2026-08-23.md"
   blocker_or_risk: "None for definition authoring; execution waits on completion of the recovery definition."
-  next_action: "Wait for choir-durable-substrate-recovery-2026-08-23.md completion, then begin Track K."
+  next_action: "Execute Track K: Key Escrow & Wrap Hierarchy."
 
 receipts:
   - id: define-overhauls-boundary

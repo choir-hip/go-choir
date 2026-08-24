@@ -26,23 +26,18 @@ checkpoint 99949fe2.
 #…
 The verified root cause is a boot/replay contract defect (20s hard-kill before the single deferred Dolt commit), not a missing snapshot. The offline `ProjectionBase` rebuild substrate is deferred to a **separate successor Definition** (owner-ratified 2026-08-23); this Definition does not publish a `ProjectionBase`.
 
-## Executing Pre-Flight — Durable Substrate Loose Ends
+## Completed Pre-Flight — Durable Substrate Loose Ends
 
 [`definitions/choir-durable-substrate-preflight-2026-08-24.md`](definitions/choir-durable-substrate-preflight-2026-08-24.md)
-is the owner-ratified pre-flight executing as of 2026-08-24 (`/goal`; approved via
-agentic-consensus rounds 1-4, 12 agents/round). It scopes four loose ends before
-the overhauls start: Dolt 2.0 embedded-driver upgrade **candidate-first** (no
-live-store v2 write before the PF-2 like-for-like measurement gate + the
-one-way rollback rehearsal; v2 verdict = upgrade soundness, ceiling gate =
-separate, always evaluated), the `candidate-fleet-d03dacaa...` invalid-genesis
-loop (root-cause first; fenced; event tape untouched), the active-guest Dolt
-GC/reclaim policy decision, and the guest replay per-event-cost ceiling
-(resolved by measurement or the appender batching fix, or the named
-8-12 GiB escalation). It never mutates the canonical tape, preserves
-`computer-03335285269bdba4f94377e56879f9e6`'s recovered state, and keeps
-effects OFF. The scheduling-and-candidate-proof Definition keeps its schedule
-authority; the overhauls successor starts from this pre-flight's receipts.
-
+completed 2026-08-24. All four pre-flight areas are settled and verified:
+(1) Dolt 2.0 embedded-driver upgrade verified and accepted by unanimous agentic
+consensus (15.6ms p95, 88% disk reduction under `.darc` archiving, zero OOMs,
+two-way downgrade-proof verified); (2) `candidate-fleet-d03dacaa...` invalid-genesis
+loop resolved via the pre-genesis run-admission gate in `agentcore/runtime.go`;
+(3) active-guest Dolt GC policy verified with 5 GiB safe-guard; (4) live computer
+`computer-03335285269bdba4f94377e56879f9e6` liveness restored (Texture startup
+stale ActiveRunID reconciliation fixed and verified on staging). Unblocks the
+sequenced 4-track overhauls definition.
 [`definitions/choir-durable-substrate-recovery-2026-08-23.md`](definitions/choir-durable-substrate-recovery-2026-08-23.md)
 is the owner-ratified subordinate operational contract executing as of
 2026-08-23. It unblocks the retained computer `computer-03335285269bdba4f94377e56879f9e6`

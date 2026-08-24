@@ -376,7 +376,7 @@ documents:
     claim_scope: current
     is_root: []
     is_evidence: false
-    annotations: {doc_role: definition, authority: owner_ratified_preflight, lifecycle: active, entrypoint: true}
+    annotations: {doc_role: definition, authority: owner_ratified_preflight, lifecycle: completed, entrypoint: false}
     depends_on: [docs/definitions/choir-durable-substrate-recovery-2026-08-23.md, docs/definitions/choir-tape-recovery-2026-08-13.md]
     witnesses: [docs/evidence/dolt-v2-research-2026-08-24.md, docs/evidence/recovery-replay-guest-io-ceiling-assessment-2026-08-24.md, docs/evidence/fleet-d03dacaa-invalid-genesis-loop-2026-08-24.md, docs/evidence/recovery-complete-2026-08-24.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, AGENTS.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, dolt_version_change, store_policy_change, genesis_validation_change, deployed_acceptance, registry_closure]
@@ -385,8 +385,8 @@ documents:
     claim_scope: current
     is_root: []
     is_evidence: false
-    annotations: {doc_role: definition, authority: owner_ratified_sequenced_successor, lifecycle: blocked_on_predecessor, entrypoint: false}
-    depends_on: [docs/definitions/choir-durable-substrate-recovery-2026-08-23.md]
+    annotations: {doc_role: definition, authority: owner_ratified_sequenced_successor, lifecycle: active, entrypoint: true}
+    depends_on: [docs/definitions/choir-durable-substrate-preflight-2026-08-24.md, docs/definitions/choir-durable-substrate-recovery-2026-08-23.md]
     witnesses: [docs/designs/choir-durable-substrate-2026-08-23.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/choir-doctrine.md, AGENTS.md]
     refresh_triggers: [mission_state_change, predecessor_completion, file_cas_change, key_escrow_change, mail_spool_change, deployed_acceptance, registry_closure]
 

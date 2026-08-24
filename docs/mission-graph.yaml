@@ -450,26 +450,23 @@ nodes:
   - id: choir-durable-substrate-preflight-2026-08-24
     title: Durable Substrate Pre-Flight (Dolt 2.0, d03 Loop, GC Policy, Replay Ceiling)
     path: docs/definitions/choir-durable-substrate-preflight-2026-08-24.md
-    ledger: ''
-    status: working
+    status: settled
     kind: spine
-    entrypoint: true
-    execution_mode: mission_orchestrator
+    entrypoint: false
+    execution_mode: completed_non_executable
     depends_on:
       - choir-durable-substrate-recovery-2026-08-23
       - choir-tape-recovery-2026-08-13
     enables:
       - choir-durable-substrate-overhauls-2026-08-23
     note: >-
-      Owner-ratified pre-flight (approved via agentic-consensus rounds 1-4,
-      12 agents/round; executing 2026-08-24, /goal). Dolt 2.0 embedded driver
-      upgrade candidate-first (no live-store v2 touch before the PF-2
-      measurement gate + one-way rollback rehearsal; v2 verdict vs ceiling
-      gate separated), d03dacaa invalid-genesis loop root-cause + fix
-      (fenced; tape untouched), active-guest Dolt GC/reclaim policy, guest
-      replay per-event-cost ceiling resolved by measurement or the appender
-      batching fix. Effects remain OFF; the candidate-proof Definition keeps
-      its schedule authority. Overhauls start from this pre-flight's receipts.
+      Completed 2026-08-24. Dolt 2.0 embedded driver upgrade verified and
+      accepted by unanimous agentic consensus (p95 15.6ms, no write-path
+      regression, .darc archiving 88% disk reduction, zero OOMs, downgrade-proof
+      verified); d03 invalid-genesis loop resolved via pre-genesis admission gate
+      in agentcore/runtime.go; active-guest Dolt GC policy verified with 5 GiB
+      guard; live computer 0333528 liveness restored (Texture startup stale ActiveRunID
+      reconciliation fixed and verified on staging). Unblocks the 4-track overhauls.
     sources:
       - docs/definitions/choir-durable-substrate-preflight-2026-08-24.md
       - docs/evidence/dolt-v2-research-2026-08-24.md
@@ -486,11 +483,12 @@ nodes:
     title: Durable Substrate Overhauls
     path: docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
     ledger: ''
-    status: blocked
+    status: ready
     kind: spine
-    entrypoint: false
-    execution_mode: sequenced_successor
+    entrypoint: true
+    execution_mode: mission_orchestrator
     depends_on:
+      - choir-durable-substrate-preflight-2026-08-24
       - choir-durable-substrate-recovery-2026-08-23
     enables: []
     note: >-

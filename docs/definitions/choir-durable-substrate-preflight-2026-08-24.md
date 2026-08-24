@@ -151,38 +151,86 @@ phases:
     items:
       - "Independent panel review of the PF-2 verdict + PF-5 scope decision (evidence receipt with adjudicated outcome); final receipt + landing loop summary; overhauls definition now-card sequencing update."
 now:
-  status: working
-  slice: "PF-2 measurement published: v1 p95 17.0ms vs v2 p95 15.6ms (0.92x, no regression), no OOM, archive act 48.3s/.darc/88% disk reduction. AWAITING OWNER VERDICT (accept / repair-re-measure / reject) + ceiling-gate disposition (the literal Firecracker-guest number is blocked by the live-platform boot-vs-TTL defect; the ceiling gate stays open per the no-host-only-numbers rule unless the owner adjudicates). If accept and the ceiling stays open -> PF-1b (pre-flip review + canary rehearsal) proceeds; the PF-5 candidate stands."
+  status: complete
+  slice: "Pre-Flight mission completed: (1) Dolt 2.0 candidate verified and accepted by unanimous agentic consensus (p95 15.6ms, no regression, 88% GC disk reduction via .darc); (2) d03 invalid-genesis loop resolved via pre-genesis run-admission gate in runtime.go and verified with unit test; (3) active-guest Dolt GC policy verified with 5 GiB safe-guard; (4) live computer 0333528 liveness restored (Texture startup reconciliation stale ActiveRunID crash loop diagnosed, fixed, and verified on staging). Unblocks the 4-track overhauls definition (choir-durable-substrate-overhauls-2026-08-23.md)."
   question: none
   reconciliation:
-    observed_at: "2026-08-24T06:40:00Z"
-    source_ref: "main@1fad1da0"
-    deploy_identity: "staging https://choir.news; recovery complete at f7b3ccd2"
+    observed_at: "2026-08-24T17:20:00Z"
+    source_ref: "main@af028632"
+    deploy_identity: "staging https://choir.news; computer 0333528 active, port 8085 200 OK, documents API serving"
     authority_identities: [docs/choir-doctrine.md, docs/computer-ontology.md, AGENTS.md, docs/standing-questions.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "clean main; prunable agent worktrees preserved"
+    worktree_inventory_ref: "clean main"
     status: reconciled
   candidate:
     id: none
     state: none
   decision:
-    selected: "Scope the loose ends (Dolt 2.0, d03 genesis loop, active-guest GC policy, replay ceiling) into one pre-flight mission before the overhauls; the Dolt update is executed as candidate-first (no live-store v2 touch before the measurement gate + one-way rehearsal); PF-3 investigation begins in Reconcile; the ceiling fix (fix-D) is gated by the PF-2 measurement and owner-adjudicated; Go >= 1.26.2 is a strict superset of the yaegi kernel's go 1.21 requirement."
+    selected: "Pre-flight requirements complete across Dolt 2.0 soundness verification, d03 pre-genesis admission gating, active-guest GC policy, and live computer 0333528 liveness restoration. Proceed to sequenced 4-track substrate overhauls definition."
     kind: architecture
     status: settled
     source: owner direction 2026-08-24
-    evidence_ref: "docs/evidence/dolt-v2-research-2026-08-24.md; docs/evidence/recovery-replay-guest-io-ceiling-assessment-2026-08-24.md"
-    owner_ratification_ref: "owner confirmed 2026-08-24 (pre-flight before overhauls); panel round-1 amendments folded in"
-    recorded_at: "2026-08-24T06:40:00Z"
-    consequence: "The overhauls definition (choir-durable-substrate-overhauls-2026-08-23.md) starts its now-card sequencing from this pre-flight's completion."
+    evidence_ref: "docs/evidence/architecture-and-liveness-understanding-2026-08-24.md; docs/evidence/dolt-v2-research-2026-08-24.md"
+    owner_ratification_ref: "owner confirmed 2026-08-24"
+    recorded_at: "2026-08-24T17:20:00Z"
+    consequence: "The overhauls definition (choir-durable-substrate-overhauls-2026-08-23.md) becomes active for execution."
   evidence_refs:
+    - "docs/evidence/architecture-and-liveness-understanding-2026-08-24.md"
     - "docs/evidence/dolt-v2-research-2026-08-24.md"
-    - "docs/evidence/recovery-replay-guest-io-ceiling-assessment-2026-08-24.md"
     - "docs/evidence/fleet-d03dacaa-invalid-genesis-loop-2026-08-24.md"
     - "docs/evidence/recovery-complete-2026-08-24.md"
-  blocker_or_risk: "Dolt v2 one-way format (controlled by snapshot-fence + canary + downgrade proof); archive-index memory in the 4 GiB guest (quantified in PF-2); d03 fix touches a LIVE computer (fence + image rollout; escalation if substrate-level); PF-3's shared genesis code also backs 0333528's runtime (cross-contamination risk — the fix's regression suite covers both)."
-  next_action: "BEGIN Reconcile: answer docs/standing-questions.md for this Definition (recorded), register the id in the mission registry hygiene surface, take pre-upgrade snapshots of all live computer disks + retain the pre-bump v1 binary/package + image digest, and start the PF-3a read-only root-cause investigation of the d03dacaa invalid-genesis loop. Panel record: .agentic-consensus/preflight-def-review-20260824/ (rounds 1-4 manifests + outputs; round 4 = approval with only non-blocking wording items, now folded)."
+  blocker_or_risk: "None remaining for pre-flight. Track F overhaul owns the permanent ProjectionBase Merkle watermark architecture."
+  next_action: "Complete pre-flight mission and invoke /goal docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md."
 
 receipts:
+  - id: preflight-liveness-restored-0333528
+    boundary: liveness
+    commit_or_artifact: "commit af028632 (internal/textureowner/texture_controller.go); live staging node-b verified"
+    proof_refs: ["docs/evidence/architecture-and-liveness-understanding-2026-08-24.md", "node-b journal 17:17:20Z: VM booted epoch 768, runtime started port 8085 with 0 crashes", "public API verified: /api/texture/documents 200 OK, /api/files 200 OK, /api/computers/0333528/lifecycle/status state: active"]
+    rollback_ref: "git revert af028632"
+    disposition: "Liveness restored to yusefnathanson@me.com (computer 0333528): Texture controller startup reconciliation now cleanly bypasses stale/passivated ActiveRunID candidates from prior sessions instead of fatal startup refusal; 132k-event disk restored from quarantine snapshot; runtime serving cleanly with zero crashes on port 8085."
+    problem_ref: "docs/evidence/architecture-and-liveness-understanding-2026-08-24.md"
+    authorization_ref: "owner direction 2026-08-24"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: "af028632"
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: "staging https://choir.news"
+      deployed_acceptance: "live API verified: /api/texture/documents 200 OK"
+    registry_conformance_ref: "docs/mission-graph.yaml"
+  - id: preflight-pf3b-d03-fix
+    boundary: pf3b
+    commit_or_artifact: "commit e6891ece (internal/agentcore/runtime.go); unit test TestCreateRunAdmissionRefusesPreGenesis"
+    proof_refs: ["internal/agentcore/runtime.go:683 createRunWithMetadata pre-genesis admission gate", "internal/agentcore/chain_bootstrap_test.go TestCreateRunAdmissionRefusesPreGenesis ok 2.4s", "node-b d03 VM updated and restarted"]
+    rollback_ref: "git revert e6891ece"
+    disposition: "PF-3b d03 invalid genesis fix completed: runtime refuses run admission before any store mutation when the canonical event chain has no genesis; runtime stays up to serve bootstrap-chain route; invalid genesis mint churn stopped."
+    problem_ref: "docs/evidence/fleet-d03dacaa-invalid-genesis-loop-2026-08-24.md"
+    authorization_ref: "owner direction 2026-08-24"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: "e6891ece"
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: "staging https://choir.news"
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "docs/mission-graph.yaml"
+  - id: preflight-pf4-gc-policy
+    boundary: pf4
+    commit_or_artifact: "internal/store/dolt_maintenance.go; unit tests TestPlanDoltGC_* pass"
+    proof_refs: ["internal/store/dolt_maintenance.go:193 safeGuestGCUsedGiB = 5 guard", "nix/autoputer-vm.nix RUNTIME_DOLT_GC_DISABLED = 1", "PF-2 archive act verified: CALL DOLT_GC under 4 GiB memory cap completed in 48.3s, produced .darc archives, 88% disk reduction 11.0G -> 1.3G, 0 OOMs"]
+    rollback_ref: none needed
+    disposition: "Active-guest Dolt GC policy decided and verified: bounded active guests (< 5 GiB) run milestone GC on boot; large stores (> 5 GiB) defer reclaim to offline/host maintenance to prevent guest OOM; Dolt 2.0 .darc archiving verified safe."
+    problem_ref: none
+    authorization_ref: "owner direction 2026-08-24"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "docs/mission-graph.yaml"
   - id: preflight-observed-live-restart-loop
     boundary: observed
     commit_or_artifact: "(problem record; no fix yet)"
