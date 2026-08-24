@@ -245,8 +245,17 @@ type ManagerConfig struct {
 	HealthCheckTimeout time.Duration
 
 	// BootReadyTimeout is how long BootVM/ResumeVM wait for the guest
-	// to answer /health before treating the launch as failed.
+	// to answer /health before treating the launch as failed. Replay progress
+	// (503 ReplayInProgress with an advancing sequence) extends this timeout
+	// indefinitely; only a STALL (no sequence advance for ReplayStallTimeout)
+	// fails the boot.
 	BootReadyTimeout time.Duration
+
+	// ReplayStallTimeout is how long a replaying guest may go without advancing
+	// its replay sequence before waitForGuestReady treats it as stuck and fails
+	// the boot (B5/B10). It must comfortably exceed a payload page fetch + a
+	// Dolt checkpoint commit plus a guest process restart window.
+	ReplayStallTimeout time.Duration
 }
 
 // DefaultManagerConfig returns a sensible default configuration.
@@ -263,6 +272,7 @@ func DefaultManagerConfig() ManagerConfig {
 		HealthCheckInterval: 15 * time.Second,
 		HealthCheckTimeout:  3 * time.Second,
 		BootReadyTimeout:    20 * time.Second,
+		ReplayStallTimeout:  120 * time.Second,
 	}
 }
 
@@ -1833,6 +1843,11 @@ type guestHealthProbeResult struct {
 	Status  int
 	Body    string
 	Err     error
+	// Replay state parsed from a 503 ReplayInProgress body. While set, the guest
+	// is alive and making replay progress; it is NOT product-ready.
+	ReplayInProgress        bool
+	ReplaySequence          uint64
+	ReplayCommittedSequence uint64
 }
 
 func (r guestHealthProbeResult) String() string {
@@ -1864,11 +1879,27 @@ func (m *Manager) probeGuestHealthDetailed(hostURL string) guestHealthProbeResul
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	return guestHealthProbeResult{
+	result := guestHealthProbeResult{
 		Healthy: resp.StatusCode == http.StatusOK,
 		Status:  resp.StatusCode,
 		Body:    string(body),
 	}
+	// A 503 ReplayInProgress body signals a live guest mid-replay: liveness, not
+	// readiness. Parse the applied and durably committed sequence so the wait
+	// loop can gate the kill on replay progress instead of wall clock (B5/B6).
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		var replayBody struct {
+			Status             string `json:"status"`
+			Sequence           uint64 `json:"sequence"`
+			CommittedSequence  uint64 `json:"committed_sequence"`
+		}
+		if json.Unmarshal(body, &replayBody) == nil && replayBody.Status == "replaying" {
+			result.ReplayInProgress = true
+			result.ReplaySequence = replayBody.Sequence
+			result.ReplayCommittedSequence = replayBody.CommittedSequence
+		}
+	}
+	return result
 }
 
 // probeGuestHealth attempts to reach the guest's /health endpoint.
@@ -1881,11 +1912,33 @@ func (m *Manager) probeGuestHealth(hostURL string) bool {
 
 func (m *Manager) waitForGuestReady(hostURL string) error {
 	deadline := time.Now().Add(m.cfg.BootReadyTimeout)
+	stall := m.cfg.ReplayStallTimeout
+	if stall <= 0 {
+		stall = 120 * time.Second
+	}
 	var lastProbe guestHealthProbeResult
+	var lastReplaySeq uint64
+	var lastSequenceAdvance time.Time
+	firstReplay := true
 	for {
 		lastProbe = m.probeGuestHealthDetailed(hostURL)
 		if lastProbe.Healthy {
 			return nil
+		}
+		if lastProbe.ReplayInProgress {
+			if firstReplay || lastProbe.ReplaySequence != lastReplaySeq {
+				firstReplay = false
+				lastReplaySeq = lastProbe.ReplaySequence
+				lastSequenceAdvance = time.Now()
+			}
+			// A replaying guest is alive and progressing: extend the boot window.
+			// The deadline only applies to a guest that has never reported replay
+			// progress, and the stall window kills a genuinely stuck replay.
+			if !lastSequenceAdvance.IsZero() && time.Since(lastSequenceAdvance) > stall {
+				return fmt.Errorf("guest replay stalled at %s (no sequence advance for %s, seq=%d): %s", hostURL, stall, lastProbe.ReplaySequence, lastProbe.String())
+			}
+			time.Sleep(250 * time.Millisecond)
+			continue
 		}
 		if time.Now().After(deadline) {
 			return fmt.Errorf("guest did not become healthy at %s within %s (last probe: %s)", hostURL, m.cfg.BootReadyTimeout, lastProbe.String())

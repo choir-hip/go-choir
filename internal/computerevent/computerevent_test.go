@@ -717,3 +717,134 @@ func cloneHead(head *Head) *Head {
 	copy := *head
 	return &copy
 }
+
+type replayCommitProjection struct {
+	memoryProjection
+	commits int
+}
+
+func (p *replayCommitProjection) CommitReplay(context.Context) error {
+	p.commits++
+	return nil
+}
+
+func TestAppenderReplayCheckpointsPeriodically(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := SigningKey{SignerRef: SignerRef{SignerDomain: "platform-control", KeyID: "platform-1"}, PrivateKey: privateKey}
+	cas := &memoryCAS{signer: signer}
+	pinner := memoryPinner{signer: signer}
+	verifier := EventHeadReceiptVerifier{Keys: staticKeyResolver{key: publicKey}}
+	original := &memoryProjection{}
+	appender, err := NewComputerEventAppender(testComputerID, pinner, original, cas, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesis := testEvent(t, nil, EventGenesisImported)
+	genesis.ResultingEffectiveCommitment = testDigestA
+	genesisInput := TransitionInput{TargetStateCommitment: testDigestA}
+	bindTestRequest(t, &genesis, genesisInput, nil)
+	if _, err := appender.Append(context.Background(), genesis, genesisInput, nil); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 5; i++ {
+		causal := testEvent(t, original.head, EventArtifactProduced)
+		bindTestRequest(t, &causal, TransitionInput{}, nil)
+		if _, err := appender.Append(context.Background(), causal, TransitionInput{}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if cas.head.Sequence != 6 {
+		t.Fatalf("canonical sequence=%d, want 6", cas.head.Sequence)
+	}
+
+	replayProjection := &replayCommitProjection{}
+	replay, err := NewComputerEventAppender(testComputerID, pinner, replayProjection, cas, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay.SetReplayCheckpointPolicy(2, time.Hour)
+	replay.SetReplayMode(true)
+	if err := replay.Reconstruct(context.Background(), cas); err != nil {
+		t.Fatal(err)
+	}
+	replay.SetReplayMode(false)
+	if replayProjection.commits == 0 {
+		t.Fatalf("periodic replay checkpoint was never issued")
+	}
+	if replayProjection.commits < 3 {
+		t.Fatalf("checkpoint commits=%d, want >=3 (cadence 2 over 6 events)", replayProjection.commits)
+	}
+	if replayProjection.head == nil || replayProjection.head.Sequence != 6 {
+		t.Fatalf("replay head=%+v, want sequence 6", replayProjection.head)
+	}
+	snap := replay.ReplaySnapshot()
+	if snap.InProgress {
+		t.Fatalf("replay still active after Reconstruct returned")
+	}
+	if snap.Sequence != 6 || snap.CommittedSequence != 6 {
+		t.Fatalf("replay snapshot seq=%d committed=%d, want 6/6", snap.Sequence, snap.CommittedSequence)
+	}
+}
+
+func TestAppenderRecoverPreparedReplayDiscardsNoCAS(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := SigningKey{SignerRef: SignerRef{SignerDomain: "platform-control", KeyID: "platform-1"}, PrivateKey: privateKey}
+	cas := &memoryCAS{signer: signer}
+	pinner := memoryPinner{signer: signer}
+	verifier := EventHeadReceiptVerifier{Keys: staticKeyResolver{key: publicKey}}
+	original := &memoryProjection{}
+	appender, err := NewComputerEventAppender(testComputerID, pinner, original, cas, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesis := testEvent(t, nil, EventGenesisImported)
+	genesis.ResultingEffectiveCommitment = testDigestA
+	genesisInput := TransitionInput{TargetStateCommitment: testDigestA}
+	bindTestRequest(t, &genesis, genesisInput, nil)
+	if _, err := appender.Append(context.Background(), genesis, genesisInput, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate a crash between Prepare and Finalize during an EARLIER boot: a
+	// leftover prepared row at sequence 5 while the canonical head is 1. In live
+	// mode RecoverPrepared must refuse (ErrNeedsProjectionRepair); in replay mode
+	// it must discard the row and re-apply from the tape without any CAS.
+	stray := testEvent(t, cas.head, EventArtifactProduced)
+	stray.Sequence = 5
+	bindTestRequest(t, &stray, TransitionInput{}, nil)
+	replayProjection := &memoryProjection{}
+	replayProjection.prepared = []CASRequest{{Event: stray, EventDigest: testDigestA, Next: *cas.head}}
+
+	replay, err := NewComputerEventAppender(testComputerID, pinner, replayProjection, cas, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay.SetReplayMode(true)
+	if err := replay.Reconstruct(context.Background(), cas); err != nil {
+		t.Fatalf("replay with stray prepared row failed: %v", err)
+	}
+	replay.SetReplayMode(false)
+	if len(replayProjection.prepared) != 0 {
+		t.Fatalf("stray prepared row was not discarded: %d rows", len(replayProjection.prepared))
+	}
+	if replayProjection.head == nil || replayProjection.head.Sequence != 1 {
+		t.Fatalf("replay head=%+v, want sequence 1", replayProjection.head)
+	}
+
+	// Live mode must still refuse the same stray (regression guard).
+	liveProjection := &memoryProjection{}
+	liveProjection.prepared = []CASRequest{{Event: stray, EventDigest: testDigestA, Next: *cas.head}}
+	live, err := NewComputerEventAppender(testComputerID, pinner, liveProjection, cas, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := live.RecoverPrepared(context.Background()); err == nil || !errors.Is(err, ErrNeedsProjectionRepair) {
+		t.Fatalf("live RecoverPrepared on stray row: err=%v, want ErrNeedsProjectionRepair", err)
+	}
+}

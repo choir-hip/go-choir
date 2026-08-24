@@ -94,6 +94,12 @@ func LoadConfigFromEnv() ManagerConfig {
 		}
 	}
 
+	if v := os.Getenv("VM_REPLAY_STALL_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.ReplayStallTimeout = d
+		}
+	}
+
 	return cfg
 }
 

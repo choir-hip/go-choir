@@ -542,6 +542,7 @@ in
         "VM_HEALTH_CHECK_INTERVAL=15s"
         "VM_HEALTH_CHECK_TIMEOUT=10s"
         "VM_BOOT_READY_TIMEOUT=30m"
+        "VM_REPLAY_STALL_TIMEOUT=120s"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # Keep personal computers resident while the host is under capacity.
         "VMCTL_IDLE_TIMEOUT=30m"

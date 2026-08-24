@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 )
 
 var ErrNeedsProjectionRepair = errors.New("computer event projection repair required")
@@ -107,13 +108,85 @@ type ComputerEventAppender struct {
 	livePayloads     map[string][]byte
 	replayProjection bool
 	mu               sync.Mutex
+	// Replay progress snapshot (guarded by mu) so the guest health surface can
+	// report a replay in progress with its sequence to the host wait-for-ready
+	// probe without racing the replay goroutine.
+	replayActive        bool
+	replaySeq           uint64
+	replayCommittedSeq  uint64
+	replayCheckpointEvery int
+	replayCheckpointInterval time.Duration
+}
+
+// ReplaySnapshot describes the durable replay progress for the liveness probe.
+type ReplaySnapshot struct {
+	InProgress        bool   `json:"in_progress"`
+	Sequence          uint64 `json:"sequence"`
+	CommittedSequence uint64 `json:"committed_sequence"`
+}
+
+// ReplaySnapshot returns the current durable replay progress. Zero value means
+// no replay is running.
+func (a *ComputerEventAppender) ReplaySnapshot() ReplaySnapshot {
+	if a == nil {
+		return ReplaySnapshot{}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return ReplaySnapshot{InProgress: a.replayActive, Sequence: a.replaySeq, CommittedSequence: a.replayCommittedSeq}
+}
+
+// SetReplayCheckpointPolicy configures the durable checkpoint cadence during a
+// replay: a commit is issued after checkpointEvery applied events or
+// checkpointInterval wall time, whichever comes first. Non-positive values keep
+// the defaults (500 events / 60s). Call before SetReplayMode(true).
+func (a *ComputerEventAppender) SetReplayCheckpointPolicy(every int, interval time.Duration) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if every > 0 {
+		a.replayCheckpointEvery = every
+	}
+	if interval > 0 {
+		a.replayCheckpointInterval = interval
+	}
+}
+
+func (a *ComputerEventAppender) setReplayActive(active bool) {
+	a.mu.Lock()
+	a.replayActive = active
+	a.mu.Unlock()
+}
+
+func (a *ComputerEventAppender) setReplayProgress(seq, committedSeq uint64) {
+	a.mu.Lock()
+	a.replaySeq = seq
+	if committedSeq > a.replayCommittedSeq {
+		a.replayCommittedSeq = committedSeq
+	}
+	a.mu.Unlock()
+}
+func (a *ComputerEventAppender) committedReplaySeq() uint64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.replayCommittedSeq
 }
 
 func NewComputerEventAppender(computerID string, pins ArtifactPinner, projection ProjectionStore, cas HeadCAS, verifier ReceiptVerifier) (*ComputerEventAppender, error) {
 	if computerID == "" || pins == nil || projection == nil || cas == nil || verifier == nil {
 		return nil, fmt.Errorf("computer event appender: complete dependencies are required")
 	}
-	return &ComputerEventAppender{computerID: computerID, pins: pins, projection: projection, cas: cas, verifier: verifier}, nil
+	return &ComputerEventAppender{
+		computerID:              computerID,
+		pins:                    pins,
+		projection:              projection,
+		cas:                     cas,
+		verifier:                verifier,
+		replayCheckpointEvery:   500,
+		replayCheckpointInterval: 60 * time.Second,
+	}, nil
 }
 
 // RebindProjection replaces the local projection store after a tape rematerialize
@@ -529,6 +602,17 @@ func (a *ComputerEventAppender) RecoverPrepared(ctx context.Context) error {
 		return fmt.Errorf("computer event appender: list prepared projections: %w", err)
 	}
 	for _, request := range prepared {
+		if a.replayProjection {
+			// Replay is rebuilding from the canonical tape: any leftover prepared
+			// row is re-derivable, so discard it and let the replay re-apply from
+			// the tape. The replay path NEVER performs a semantic CAS (it must not
+			// become a second writer), and a prepared row at seq << platform head
+			// must not trip ErrNeedsProjectionRepair and brick the resume.
+			if err := a.projection.DiscardPrepared(ctx, a.computerID, request.EventDigest); err != nil {
+				return fmt.Errorf("computer event appender: discard replay prepared projection: %w", err)
+			}
+			continue
+		}
 		platformHead, err := a.cas.Head(ctx, a.computerID)
 		if err != nil {
 			return fmt.Errorf("computer event appender: recovery head: %w", err)
@@ -577,6 +661,10 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 	if source == nil {
 		return fmt.Errorf("computer event appender: event source is required")
 	}
+	if a.replayProjection {
+		a.setReplayActive(true)
+		defer a.setReplayActive(false)
+	}
 	if err := a.RecoverPrepared(ctx); err != nil {
 		return err
 	}
@@ -585,6 +673,9 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		return fmt.Errorf("computer event appender: reconstruction local head: %w", err)
 	}
 	if targetHead != "" && localHead != nil && localHead.CanonicalEventHead == targetHead {
+		if a.replayProjection {
+			a.setReplayProgress(localHead.Sequence, localHead.Sequence)
+		}
 		return nil
 	}
 	var after uint64
@@ -612,6 +703,31 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		current = &next
 		return nil
 	}
+	// Periodic durable checkpoint: every replayCheckpointEvery applied events or
+	// replayCheckpointInterval wall time, whichever comes first. Progress is only
+	// considered durable when the Dolt checkpoint commit succeeds; the SQL working
+	// set alone is not the resume authority for crash safety (B7/B10).
+	eventsSinceCommit := 0
+	var lastCheckpointAt time.Time
+	checkpoint := func(seq uint64) error {
+		if !a.replayProjection {
+			a.setReplayProgress(seq, seq)
+			return nil
+		}
+		eventsSinceCommit++
+		committed := a.committedReplaySeq()
+		due := eventsSinceCommit >= a.replayCheckpointEvery || lastCheckpointAt.IsZero() || time.Since(lastCheckpointAt) >= a.replayCheckpointInterval
+		if due {
+			if err := a.commitReplay(ctx); err != nil {
+				return fmt.Errorf("computer event appender: replay periodic checkpoint: %w", err)
+			}
+			eventsSinceCommit = 0
+			lastCheckpointAt = time.Now()
+			committed = seq
+		}
+		a.setReplayProgress(seq, committed)
+		return nil
+	}
 	pageSize := EventReplayPageSize
 	if pageSource, ok := source.(PagedEventSource); ok {
 		for {
@@ -627,11 +743,25 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 					return err
 				}
 				after = record.Request.Event.Sequence
+				if err := checkpoint(after); err != nil {
+					return err
+				}
 				if targetHead != "" && current.CanonicalEventHead == targetHead {
 					if err := a.commitReplay(ctx); err != nil {
 						return fmt.Errorf("computer event appender: replay commit: %w", err)
 					}
+					a.setReplayProgress(after, after)
 					return nil
+				}
+				// Quantum-end flush: when the replay context expires, publish a
+				// final durable checkpoint before erroring so the next boot resumes
+				// from the committed head (B7 30m resume quantum).
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					if ferr := a.commitReplay(context.WithoutCancel(ctx)); ferr != nil {
+						return fmt.Errorf("computer event appender: replay quantum flush: %w", ferr)
+					}
+					a.setReplayProgress(after, after)
+					return ctxErr
 				}
 			}
 			if len(page) < pageSize || after == ^uint64(0) {
@@ -647,11 +777,21 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			if err := apply(record); err != nil {
 				return err
 			}
+			if err := checkpoint(record.Request.Event.Sequence); err != nil {
+				return err
+			}
 			if targetHead != "" && current.CanonicalEventHead == targetHead {
 				if err := a.commitReplay(ctx); err != nil {
 					return fmt.Errorf("computer event appender: replay commit: %w", err)
 				}
 				return nil
+			}
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				if ferr := a.commitReplay(context.WithoutCancel(ctx)); ferr != nil {
+					return fmt.Errorf("computer event appender: replay quantum flush: %w", ferr)
+				}
+				a.setReplayProgress(record.Request.Event.Sequence, record.Request.Event.Sequence)
+				return ctxErr
 			}
 		}
 	}
@@ -683,7 +823,17 @@ func (a *ComputerEventAppender) commitReplay(ctx context.Context) error {
 	if !ok {
 		return nil
 	}
-	return committer.CommitReplay(ctx)
+	if err := committer.CommitReplay(ctx); err != nil {
+		return err
+	}
+	// A successful durable checkpoint makes the last applied sequence the
+	// committed resume head for the liveness probe.
+	a.mu.Lock()
+	if a.replaySeq > a.replayCommittedSeq {
+		a.replayCommittedSeq = a.replaySeq
+	}
+	a.mu.Unlock()
+	return nil
 }
 
 func replayHeadSummary(head *Head) string {

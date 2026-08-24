@@ -136,6 +136,15 @@ func NewServer(serviceName, port string) *Server {
 func (s *Server) SetHealthHandler(handler http.HandlerFunc) {
 	s.healthHandler = handler
 }
+// HealthHandler returns the currently installed /health handler so a caller can
+// wrap it (e.g. gate readiness behind replay progress) without replacing the
+// service-specific health body. May return nil before SetHealthHandler.
+func (s *Server) HealthHandler() http.HandlerFunc {
+	if s == nil {
+		return nil
+	}
+	return s.healthHandler
+}
 
 // HandleFunc registers a handler for the given pattern on the server's mux.
 // This must be called before Start.

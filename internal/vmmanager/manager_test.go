@@ -1923,3 +1923,52 @@ func TestWaitForGuestReady_TimesOut(t *testing.T) {
 		t.Fatalf("timeout error missing response body from last probe: %v", err)
 	}
 }
+
+func TestWaitForGuestReadyReplayProgressExtendsAndStallFails(t *testing.T) {
+	var seq atomic.Uint64
+	seq.Store(1)
+	ready := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if seq.Load() < 4 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = fmt.Fprintf(w, `{"status":"replaying","sequence":%d,"committed_sequence":%d}`, seq.Load(), seq.Load())
+			seq.Add(1)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprintf(w, `{"status":"ok"}`)
+	}))
+	defer ready.Close()
+	m := &Manager{cfg: ManagerConfig{BootReadyTimeout: 10 * time.Second, ReplayStallTimeout: 5 * time.Second}}
+	if err := m.waitForGuestReady(ready.URL); err != nil {
+		t.Fatalf("replay-progress then ready should boot: %v", err)
+	}
+	if seq.Load() < 4 {
+		t.Fatalf("never advanced replay sequence in probe")
+	}
+
+	stall := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = fmt.Fprintf(w, `{"status":"replaying","sequence":7,"committed_sequence":7}`)
+	}))
+	defer stall.Close()
+	m2 := &Manager{cfg: ManagerConfig{BootReadyTimeout: 30 * time.Second, ReplayStallTimeout: 300 * time.Millisecond}}
+	start := time.Now()
+	err := m2.waitForGuestReady(stall.URL)
+	if err == nil || !strings.Contains(err.Error(), "stalled") {
+		t.Fatalf("stalled replay must fail: %v", err)
+	}
+	if time.Since(start) > 5*time.Second {
+		t.Fatalf("stall failure took too long: %v", time.Since(start))
+	}
+
+	deadline := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer deadline.Close()
+	m3 := &Manager{cfg: ManagerConfig{BootReadyTimeout: 300 * time.Millisecond, ReplayStallTimeout: time.Second}}
+	if err := m3.waitForGuestReady(deadline.URL); err == nil || !strings.Contains(err.Error(), "did not become healthy") {
+		t.Fatalf("non-replaying unhealthy guest must respect the deadline: %v", err)
+	}
+}

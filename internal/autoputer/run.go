@@ -2,6 +2,8 @@ package autoputer
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -9,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -39,6 +42,56 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"github.com/yusefmosiah/go-choir/internal/zot"
 )
+
+// replayHealthGate serves the guest /health surface while the computer event
+// tape replay is running. During replay it reports 503 ReplayInProgress with the
+// applied and durably committed sequence so the host wait-for-ready probe can
+// distinguish liveness (progress) from readiness (head+witness matched). Product
+// readiness (HTTP 200) is served only after the replay completes and the guest
+// reaches its canonical head (B5/B6/B9).
+type replayHealthGate struct {
+	mu       sync.Mutex
+	pending  bool
+	appender *computerevent.ComputerEventAppender
+	base     http.HandlerFunc
+}
+
+func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	g.mu.Lock()
+	pending := g.pending
+	app := g.appender
+	base := g.base
+	g.mu.Unlock()
+	if pending {
+		var snap computerevent.ReplaySnapshot
+		if app != nil {
+			snap = app.ReplaySnapshot()
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":             "replaying",
+			"sequence":           snap.Sequence,
+			"committed_sequence": snap.CommittedSequence,
+		})
+		return
+	}
+	if base == nil {
+		http.Error(w, "not ready", http.StatusServiceUnavailable)
+		return
+	}
+	base(w, r)
+}
+
+func (g *replayHealthGate) setPending(pending bool) {
+	g.mu.Lock()
+	g.pending = pending
+	g.mu.Unlock()
+}
 
 // RunZotSession runs the autoputer binary's zot-session process mode.
 func RunZotSession(stdin io.Reader, stdout, stderr io.Writer) int {
@@ -91,14 +144,6 @@ func Run() {
 		_ = db.Close()
 	}()
 
-	// Start periodic DoltDB garbage collection to reclaim disk space between
-	// autoputer restarts (milestone-based, idempotent).
-	go func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		store.StartPeriodicDoltGC(ctx, filepath.Dir(rtCfg.StorePath), rtCfg.StorePath, 5*time.Minute)
-	}()
-
 	bus := events.NewEventBus()
 	browserHandler := browsercontrol.NewHandler(rtRuntimeCfg, db, bus)
 	defer browserHandler.Close()
@@ -146,6 +191,14 @@ func Run() {
 		coreOpts = append(coreOpts, agentcore.WithCapsuleExecutor(capsuleExecutor))
 		log.Printf("autoputer: production networkless assignment capsule executor enabled")
 	}
+	var (
+		replayAppender        *computerevent.ComputerEventAppender
+		replayClient          *computerevent.HTTPClient
+		replayCredentials     *selfdev.GuestCredentials
+		replayComputerID      string
+		replayBootstrapCtx    context.Context
+		replayBootstrapCancel context.CancelFunc
+	)
 	if credentialPath := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_CREDENTIAL_FILE")); credentialPath != "" {
 		computerID := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))
 		realizationID := strings.TrimSpace(os.Getenv("CHOIR_REALIZATION_ID"))
@@ -221,56 +274,18 @@ func Run() {
 			err = db.BindProjectionTape(computerID, appender)
 		}
 		if err == nil {
-			appender.SetReplayMode(true)
-			err = appender.Reconstruct(bootstrapCtx, eventClient)
-			appender.SetReplayMode(false)
-		}
-		if err == nil {
-			for _, lifecycleReceipt := range credentials.PendingLifecycleReceipts() {
-				payload, payloadErr := lifecycleReceipt.CanonicalBytes()
-				computerField, _ := lifecycleReceipt.KindFields["computer_id"].(string)
-				actionField, _ := lifecycleReceipt.KindFields["action"].(string)
-				if payloadErr != nil || lifecycleReceipt.ReceiptKind != "LifecycleReceipt" || lifecycleReceipt.Verify(credentials.KeyResolver()) != nil ||
-					computerField != computerID || (actionField != "start" && actionField != "stop" && actionField != "restart" && actionField != "credential_envelope_consumed") {
-					err = fmt.Errorf("autoputer: pending lifecycle receipt binding refused")
-					break
-				}
-				eventID, eventErr := computerevent.NewEventID()
-				if eventErr != nil {
-					err = eventErr
-					break
-				}
-				eventKind := computerevent.EventLifecycleObserved
-				authorityRef := "platform-control:lifecycle"
-				if actionField == "credential_envelope_consumed" {
-					eventKind = computerevent.EventKeyRevoked
-					authorityRef = "platform-control:credential-revocation"
-				}
-				event := computerevent.Event{
-					SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
-					EventKind: eventKind, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-					IdempotencyKey: "lifecycle-observed:" + lifecycleReceipt.ReceiptID,
-					ActorProfile:   agentprofile.Super, AuthorityRef: authorityRef,
-					PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
-				}
-				if _, _, appendErr := appender.AppendNewPayload(bootstrapCtx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.lifecycle-receipt+json", "public"); appendErr != nil {
-					err = appendErr
-					break
-				}
-				if actionField == "credential_envelope_consumed" {
-					if transitionErr := credentials.CompletePostRevocation(lifecycleReceipt.ReceiptID); transitionErr != nil {
-						err = transitionErr
-						break
-					}
-				} else if acknowledgeErr := credentials.AcknowledgePendingLifecycleReceipt(lifecycleReceipt.ReceiptID); acknowledgeErr != nil {
-					err = acknowledgeErr
-					break
-				}
-			}
-		}
-		cancel()
-		if err != nil {
-			log.Fatalf("autoputer: reconstruct computer event authority: %v", err)
+			// Defer the tape replay to a dedicated phase that runs AFTER the HTTP
+			// surface is up, so the host wait-for-ready probe sees the replay
+			// progress instead of connection refusal (B5/B6/B7/B9).
+			replayAppender = appender
+			replayClient = eventClient
+			replayCredentials = credentials
+			replayComputerID = computerID
+			replayBootstrapCtx = bootstrapCtx
+			replayBootstrapCancel = cancel
+		} else {
+			cancel()
+			log.Fatalf("autoputer: acquire computer event authority: %v", err)
 		}
 		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher))
 		if credentials != nil {
@@ -414,15 +429,124 @@ func Run() {
 	// observability is servable through the product API, not only shell access.
 	rt.Runtime.CaptureBootLog(512)
 
-	// Start the runtime engine and supervisor.
+	// Start the runtime engine and supervisor. When a computer event authority is
+	// present, the server starts FIRST with the replay-aware health gate so the
+	// long tape replay is observable as 503 ReplayInProgress; the runtime starts
+	// only after the replay reaches the canonical head (B5/B6/B9).
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	log.Printf("autoputer: orchestration topology (super=1, researchers=%d)", rtCfg.ResearcherCount)
-	if err := rt.Start(ctx); err != nil {
-		log.Fatalf("autoputer: runtime startup refused: %v", err)
+	gate := &replayHealthGate{base: s.HealthHandler()}
+	if replayAppender != nil {
+		gate.mu.Lock()
+		gate.pending = true
+		gate.appender = replayAppender
+		gate.mu.Unlock()
+		s.SetHealthHandler(gate.ServeHTTP)
+		go runReplayPhase(gate, replayAppender, replayClient, replayCredentials, replayComputerID, replayBootstrapCtx, replayBootstrapCancel, func() error {
+			startPeriodicDoltGC(rtCfg.StorePath)
+			return rt.Start(ctx)
+		})
+	} else {
+		startPeriodicDoltGC(rtCfg.StorePath)
+		if err := rt.Start(ctx); err != nil {
+			log.Fatalf("autoputer: runtime startup refused: %v", err)
+		}
 	}
 
 	s.Start()
+}
+
+
+// startPeriodicDoltGC starts the milestone-based Dolt garbage collector. It is
+// deferred until AFTER the tape replay completes so GC churn never looks like a
+// replay stall and never races the recovery working set (B11).
+func startPeriodicDoltGC(storePath string) {
+	go func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		store.StartPeriodicDoltGC(ctx, filepath.Dir(storePath), storePath, 5*time.Minute)
+	}()
+}
+
+// runReplayPhase replays the computer event tape (30m resume quanta per B7),
+// reconciles fenced pending lifecycle receipts (B9), then starts the runtime.
+// A quantum expiry is a controlled end-of-session: the reconstruct loop has
+// already flushed a durable checkpoint, so exiting lets systemd
+// (Restart=on-failure) restart the guest and the next boot resumes from the
+// committed head. Never CAS during replay (B8); the appender is read-only over
+// the canonical tape.
+func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEventAppender, client *computerevent.HTTPClient, credentials *selfdev.GuestCredentials, computerID string, bootstrapCtx context.Context, cancel context.CancelFunc, afterReplay func() error) {
+	defer cancel()
+	appender.SetReplayMode(true)
+	err := appender.Reconstruct(bootstrapCtx, client)
+	appender.SetReplayMode(false)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			// 30m resume quantum complete; the final durable checkpoint was flushed
+			// inside the reconstruct loop before this error returned.
+			log.Printf("autoputer: replay quantum complete; resuming on next boot (progress seq=%d)", appender.ReplaySnapshot().Sequence)
+			os.Exit(1)
+		}
+		log.Fatalf("autoputer: reconstruct computer event authority: %v", err)
+	}
+	gate.setPending(false)
+	if err := reconcilePendingLifecycleReceipts(appender, credentials, computerID, bootstrapCtx); err != nil {
+		log.Fatalf("autoputer: reconcile pending lifecycle receipts: %v", err)
+	}
+	if afterReplay != nil {
+		if err := afterReplay(); err != nil {
+			log.Fatalf("autoputer: runtime startup refused: %v", err)
+		}
+	}
+	log.Printf("autoputer: computer event authority reconstructed (replay complete)")
+}
+
+// reconcilePendingLifecycleReceipts appends lifecycle-observed events for any
+// pending platform lifecycle receipts (start/stop/restart/credential events).
+// It runs ONLY after the replay reached the canonical head so the finish is an
+// intact witness chain (B9) and never re-enters the replay path.
+func reconcilePendingLifecycleReceipts(appender *computerevent.ComputerEventAppender, credentials *selfdev.GuestCredentials, computerID string, ctx context.Context) error {
+	if appender == nil || credentials == nil {
+		return nil
+	}
+	for _, lifecycleReceipt := range credentials.PendingLifecycleReceipts() {
+		payload, payloadErr := lifecycleReceipt.CanonicalBytes()
+		computerField, _ := lifecycleReceipt.KindFields["computer_id"].(string)
+		actionField, _ := lifecycleReceipt.KindFields["action"].(string)
+		if payloadErr != nil || lifecycleReceipt.ReceiptKind != "LifecycleReceipt" || lifecycleReceipt.Verify(credentials.KeyResolver()) != nil ||
+			computerField != computerID || (actionField != "start" && actionField != "stop" && actionField != "restart" && actionField != "credential_envelope_consumed") {
+			return fmt.Errorf("autoputer: pending lifecycle receipt binding refused")
+		}
+		eventID, eventErr := computerevent.NewEventID()
+		if eventErr != nil {
+			return eventErr
+		}
+		eventKind := computerevent.EventLifecycleObserved
+		authorityRef := "platform-control:lifecycle"
+		if actionField == "credential_envelope_consumed" {
+			eventKind = computerevent.EventKeyRevoked
+			authorityRef = "platform-control:credential-revocation"
+		}
+		event := computerevent.Event{
+			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
+			EventKind: eventKind, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+			IdempotencyKey: "lifecycle-observed:" + lifecycleReceipt.ReceiptID,
+			ActorProfile:   agentprofile.Super, AuthorityRef: authorityRef,
+			PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
+		}
+		if _, _, appendErr := appender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.lifecycle-receipt+json", "public"); appendErr != nil {
+			return appendErr
+		}
+		if actionField == "credential_envelope_consumed" {
+			if transitionErr := credentials.CompletePostRevocation(lifecycleReceipt.ReceiptID); transitionErr != nil {
+				return transitionErr
+			}
+		} else if acknowledgeErr := credentials.AcknowledgePendingLifecycleReceipt(lifecycleReceipt.ReceiptID); acknowledgeErr != nil {
+			return acknowledgeErr
+		}
+	}
+	return nil
 }
 
 // storeDir extracts the directory portion of a file path.
