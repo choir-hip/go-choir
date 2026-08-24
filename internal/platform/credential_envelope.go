@@ -20,7 +20,7 @@ import (
 
 var credentialEnvelopeDomain = []byte("choir-computer-credential-envelope-v1\x00")
 
-const maximumCredentialEnvelopeTTL = 5 * time.Minute
+const maximumCredentialEnvelopeTTL = 15 * time.Minute
 
 type ComputerCredentialEnvelope struct {
 	Version                int    `json:"version"`

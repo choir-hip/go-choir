@@ -498,6 +498,18 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 		}
 		log.Fatalf("autoputer: reconstruct computer event authority: %v", err)
 	}
+	// Pre-genesis guard (PF-3 fix): a computer whose canonical chain is empty
+	// (no genesis_imported ever CAS'd) must not serve run dispatch — every
+	// semantic write would fail at Reduce(nil, ...) with "invalid genesis" and
+	// run-dispatch would re-mint into an endless failed-run churn. Refuse
+	// runtime start with a clear pre-genesis state; bootstrap-chain (product
+	// path, owner authority) is the required repair. Recovery replay-only
+	// drives exit before this point.
+	if !replayOnly {
+		if snap := appender.ReplaySnapshot(); snap.Sequence == 0 && snap.CommittedSequence == 0 {
+			log.Fatalf("autoputer: computer is pre-genesis (no canonical genesis on the tape); refusing runtime start — bootstrap-chain required")
+		}
+	}
 	if replayOnly {
 		snap := appender.ReplaySnapshot()
 		log.Printf("autoputer: recovery replay-only drive complete (seq=%d committed=%d); exiting without runtime start or reconciliation", snap.Sequence, snap.CommittedSequence)
