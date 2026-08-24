@@ -28,12 +28,9 @@ checkpoint 99949fe2.
 [`definitions/choir-durable-substrate-recovery-2026-08-23.md`](definitions/choir-durable-substrate-recovery-2026-08-23.md)
 is the owner-ratified subordinate operational contract executing as of
 2026-08-23. It unblocks the retained computer `computer-03335285269bdba4f94377e56879f9e6`
-(stopped epoch 361) so the scheduling Definition can proceed. It supersedes the
+(stopped, epoch file 707, no live firecracker — stale pid) so the scheduling Definition can proceed. It supersedes the
 predecessor [`definitions/choir-host-orchestrated-recovery-2026-08-22.md`](definitions/choir-host-orchestrated-recovery-2026-08-22.md).
-Delivery is an isolated, resumable offline full-tape rebuild to head 132,436,
-publishing the first `ProjectionBase` blob artifact in `platform-artifacts`,
-and booting the computer with $\Delta = 0$ events replayed into active state on
-staging.
+Delivery: 0333528 recovered to canonical head 132,436 via the fixed boot/replay contract — resumable replay (periodic Dolt checkpointing; `Reconstruct` resumes from `localHead.Sequence`) and no hard-kill at the 20s `BootReadyTimeout` — converging to active, quiesced state on staging. The verified root cause is a boot/replay contract defect (20s hard-kill before the single deferred Dolt commit), not a missing snapshot. The offline `ProjectionBase` rebuild substrate is deferred to a **separate successor Definition** (owner-ratified 2026-08-23); this Definition does not publish a `ProjectionBase`.
 
 ## Completed Substrate — Tape-Based Recovery
 
