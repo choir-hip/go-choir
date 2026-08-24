@@ -71,6 +71,9 @@ func (rt *Runtime) assignedCapsule() assignmentCapsuleRuntime {
 	if rt.assignmentRuntime != nil {
 		return rt.assignmentRuntime
 	}
+	if rt.capsuleExecutor == nil {
+		return nil
+	}
 	return rt.capsuleExecutor
 }
 
