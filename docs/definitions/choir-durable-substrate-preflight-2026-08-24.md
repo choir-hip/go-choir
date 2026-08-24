@@ -152,7 +152,7 @@ phases:
       - "Independent panel review of the PF-2 verdict + PF-5 scope decision (evidence receipt with adjudicated outcome); final receipt + landing loop summary; overhauls definition now-card sequencing update."
 now:
   status: working
-  slice: "Reconcile complete: standings-conformance receipt + registry entry + pre-upgrade snapshots of all active computer disks (e15cb8=0333528, d03, + hibernated 49ee3bd0; digests recorded, v1-read proof passed for both active snapshot stores) recorded; PF-3a (d03 genesis-loop root cause) starts now; PF-1a (Dolt 2.0 candidate) follows."
+  slice: "Reconcile + PF-3a complete: d03 genesis loop root-caused (empty canonical chain — creation skipped bootstrap-chain; boot accepts the empty chain; Reduce nil-head = invalid genesis on every write; NOT substrate-level, no escalation; fix legs recorded, containment = stop submissions). PF-1a (Dolt 2.0 candidate: toolchain + driver/v2 migrate + snapshot smoke) starts now."
   question: none
   reconciliation:
     observed_at: "2026-08-24T06:40:00Z"
@@ -183,6 +183,22 @@ now:
   next_action: "BEGIN Reconcile: answer docs/standing-questions.md for this Definition (recorded), register the id in the mission registry hygiene surface, take pre-upgrade snapshots of all live computer disks + retain the pre-bump v1 binary/package + image digest, and start the PF-3a read-only root-cause investigation of the d03dacaa invalid-genesis loop. Panel record: .agentic-consensus/preflight-def-review-20260824/ (rounds 1-4 manifests + outputs; round 4 = approval with only non-blocking wording items, now folded)."
 
 receipts:
+  - id: preflight-pf3a-root-cause
+    boundary: pf3a
+    commit_or_artifact: "(pending)"
+    proof_refs: ["docs/evidence/fleet-d03dacaa-invalid-genesis-loop-2026-08-24.md (Root cause — resolved section)", "node-b d03 store probe: computer_event_index count=0, no projection head row, no genesis_imported, no bootstrap idempotency key (snapshot data.img.pre-upgrade-20260824T074931Z clone, v1 owner probe)", "node-b journal read-only: d03 VM created/started 2026-08-23T21:10:34Z, credential issued 21:10:33Z, no bootstrap-chain POST ever in proxy logs, firecracker 3155521 continuous since creation"]
+    rollback_ref: revert docs commit
+    disposition: "RESOLVED-ROOT-CAUSE: computer-4c20ff4a21a021c4306d8c783be0037d (vm candidate-fleet-d03dacaa7404b1e4412b2e6f) has an EMPTY canonical chain — no genesis_imported (seq 1) ever CAS'd. appendLocked resolves a nil platform head (corpusd 404 -> nil); Reduce nil-head branch (reducer.go:68-70) always routes through reduceGenesis; any non-genesis event fails 'invalid computer event transition: invalid genesis'; run-dispatch re-mints -> ~3s churn (>=7h). Root cause = two contract gaps, NOT substrate-level shared genesis code: (1) creation path (external fleet harness; fleet-scoped owner key) never called bootstrap-chain; (2) autoputer boot (runReplayPhase) accepts an empty chain after no-op Reconstruct and serves normally. Escalation: NOT required (narrow bounded fix legs; no store schema change, no tape mutation, no shared-genesis rewrite; reducer nil-head semantics test-covered and intended). Fix legs recorded: (a) d03 repair = fleet-owner bootstrap-chain POST + one guest refresh (no code); (b) contract fix = boot-time pre-genesis gate (refuse serve / pre_genesis health + refuse run dispatch; clear 'genesis required' write error) — red guest-image leg, sequenced with PF-3b; (c) interim containment = stop run submissions to d03 (fleet operator) — churn is submission-driven, failed runs inert."
+    problem_ref: "fleet-d03dacaa-invalid-genesis-loop-2026-08-24.md"
+    authorization_ref: "owner direction 2026-08-24"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
   - id: preflight-reconcile-snapshots
     boundary: reconcile
     commit_or_artifact: "(pending)"
