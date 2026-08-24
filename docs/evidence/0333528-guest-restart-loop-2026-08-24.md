@@ -45,3 +45,37 @@
   deployed-v1 absolute reference (3.2-6.5 s/event).
 - PF-5: ceiling resolution (appender batching or the named 8-12 GiB
   escalation) — gated on the PF-2 verdict.
+
+
+## Root cause — confirmed (PF-2 harness observation, 11:37-11:42Z)
+
+The clone guest (measurement clone of the same image + the same 11 GiB store)
+boots to the runtime's credential stage at **~308 s guest uptime** — the
+4-minute credential envelope TTL expires before the exchange, so the runtime
+fails "credential envelope: invalid bootstrap lifetime", the unit restarts,
+and the pattern repeats. 19 consecutive "invalid bootstrap lifetime" retries
+in the clone serial; the LIVE guest's vmctl restart loop (epochs 748->754,
+~3-5 min cadence) has the same shape: each boot's envelope (minted by
+vmmanager per boot) expires before the guest reaches the exchange, the
+runtime never starts, the health check never clears, vmctl kills + reboots.
+
+This is the mechanism behind the live 0333528 restart loop, and it is a
+separate live-platform problem from the replay I/O ceiling: the guest systemd
+boot unit chain (credentials/signers/updater before the runtime store open)
+takes ~5 min on the 32 GiB data disk; the credential envelope is bounded to a
+4-minute issuance window (platform maximumCredentialEnvelopeTTL 5 min,
+minted at +4 min). Either the boot must reach the exchange within the TTL or
+the issuance window must cover the guest boot duration (per-boot minted at
+vmmanager launch is insufficient: the boot outlives it).
+
+## Measurement workaround
+
+The Firecracker guest-sample plan is blocked by this boot-vs-TTL gap (the
+same gap the live computer runs on). The PF-2 sample measurement therefore
+runs the bounded sample (200 events, target 105,700) with the SAME binaries
+(v1-base and v2 graphs), the SAME frozen pre-state workspace, at the
+comparable resource boundary (systemd-run MemoryMax=4096M + CPU quota 2,
+cgroup-visible RSS + OOM) — the def's like-for-like requirement (same image
+base, 4 GiB, 2 vCPU) is preserved with the resource-boundary harness; the
+boot-time gap is a live-platform problem documented here, not a measurement
+requirement.
