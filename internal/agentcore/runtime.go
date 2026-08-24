@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -579,6 +580,10 @@ func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWa
 // pending/running run projections, then durable backlog and assigned work are
 // swept to re-warm cold actors.
 func (rt *Runtime) Start(ctx context.Context) {
+	if rt.maintenanceHeld() {
+		log.Printf("runtime: maintenance hold active (RUNTIME_MAINTENANCE_HOLD=1); refusing run admission + agent rewake while held")
+		return
+	}
 	rt.passivateInterruptedActivations(ctx)
 	rt.reconcileCoSuperAssignmentCapsulesAfterRestart(ctx)
 	rt.rewarmInterruptedLifecycleActivations(ctx)
@@ -596,6 +601,16 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// path also ensures the collection lazily on first use.
 	go rt.ensureProductionQdrantCollectionBestEffort(ctx)
 	log.Printf("runtime: started (autoputer=%s)", rt.cfg.ComputerID)
+}
+
+// maintenanceHeld reports whether the guest runtime was booted under a
+// maintenance hold (RUNTIME_MAINTENANCE_HOLD=1), set by the host when it holds
+// a computer. While held the runtime refuses run admission and skips every
+// boot-time rewake/dispatch sweep so no run (self-dev or otherwise) is admitted
+// or rewarmed and nothing is written; the runtime stays up for health and the
+// bootstrap-chain route so the computer remains servable but mutation-fenced.
+func (rt *Runtime) maintenanceHeld() bool {
+	return os.Getenv("RUNTIME_MAINTENANCE_HOLD") == "1"
 }
 
 // ensureProductionQdrantCollectionBestEffort attempts to create the production
@@ -681,6 +696,13 @@ func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID str
 }
 
 func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID string, metadata map[string]any) (*types.RunRecord, error) {
+	// Maintenance-hold admission gate (Phase Fence): a computer booted under
+	// RUNTIME_MAINTENANCE_HOLD=1 refuses run admission BEFORE any store mutation
+	// while held, so no run (self-dev or otherwise) executes and nothing is
+	// written. This is the guest-visible mirror of the host hold.
+	if rt.maintenanceHeld() {
+		return nil, fmt.Errorf("computer is under maintenance hold: run admission refused")
+	}
 	// Pre-genesis admission gate (PF-3 fix): a computer with an empty canonical
 	// chain (no genesis_imported ever CAS'd) refuses run admission BEFORE any
 	// store mutation. Unbounded write attempts would fail at Reduce(nil, ...)

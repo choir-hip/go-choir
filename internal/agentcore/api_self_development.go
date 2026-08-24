@@ -1131,6 +1131,9 @@ func selfDevelopmentDecisionBinding(operationID string, request selfDevelopmentD
 func (h *APIHandler) ensureSelfDevelopmentRun(r *http.Request, operation selfdev.Operation, ownerID, prompt string) (selfdev.Operation, error) {
 	h.rt.selfdevStartMu.Lock()
 	defer h.rt.selfdevStartMu.Unlock()
+	if h.rt.maintenanceHeld() {
+		return operation, fmt.Errorf("computer is under maintenance hold: self-development run refused")
+	}
 	current, err := h.rt.selfdevOperations.Get(r.Context(), operation.ComputerID, operation.OperationID)
 	if err != nil {
 		return operation, fmt.Errorf("refresh self-development operation: %w", err)

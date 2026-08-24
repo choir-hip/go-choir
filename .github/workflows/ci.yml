@@ -1138,11 +1138,10 @@ jobs:
                 IFS=$'\t' read -r immutable_user_id immutable_desktop_id immutable_vm_id immutable_computer_url immutable_code_ref immutable_program_ref immutable_disk_receipt_id <<< "$record"
                 echo "    Preserving immutable constructed computer ${immutable_vm_id} for user ${immutable_user_id} desktop ${immutable_desktop_id}: code=${immutable_code_ref} artifact_program=${immutable_program_ref} disk_receipt=${immutable_disk_receipt_id} endpoint=${immutable_computer_url}"
               done
-              mapfile -t active_interactive < <(printf '%s' "$ownerships_json" | jq -r '
-                .ownerships[]
-                | select(.state == "active")
-                | select((.kind == null) or (.kind == "") or (.kind == "interactive"))
-                | select((.snapshot_kind // "") != "constructed-computer-version")
+                | select((.held // false) == false)
+                | [.user_id, (.desktop_id // "primary"), .vm_id, .computer_url]
+                | @tsv
+              ')
                 | [.user_id, (.desktop_id // "primary"), .vm_id, .computer_url]
                 | @tsv
               ')

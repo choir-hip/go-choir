@@ -67,6 +67,7 @@ type ownershipResponse struct {
 	WarmnessClass             string                           `json:"warmness_class,omitempty"`
 	ComputerURL               string                           `json:"computer_url"`
 	State                     string                           `json:"state"`
+	Held                      bool                             `json:"held,omitempty"`
 	CreatedAt                 string                           `json:"created_at"`
 	LastActiveAt              string                           `json:"last_active_at"`
 	Epoch                     int64                            `json:"epoch"`
@@ -893,6 +894,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 			WarmnessClass:             string(h.registry.WarmnessClassForOwnership(own)),
 			ComputerURL:               own.ComputerURL,
 			State:                     string(own.State),
+			Held:                      own.IsHeld(),
 			CreatedAt:                 own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 			LastActiveAt:              own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
 			Epoch:                     own.Epoch,
