@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -684,6 +685,7 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 	}
 	current := localHead
 	apply := func(record DurableEvent) error {
+		applyStarted := time.Now()
 		next, err := Reduce(current, record.Request.Event, record.Request.Input)
 		if err != nil {
 			return fmt.Errorf("computer event appender: replay sequence %d: %w", record.Request.Event.Sequence, err)
@@ -699,6 +701,9 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		}
 		if err := a.finalizeProjection(ctx, record.Request.Event, record.Request.EventDigest, record.Receipt); err != nil {
 			return fmt.Errorf("computer event appender: replay finalize sequence %d: %w", record.Request.Event.Sequence, err)
+		}
+		if elapsed := time.Since(applyStarted); elapsed > 2*time.Second {
+			log.Printf("computer event appender: replay apply slow seq=%d elapsed=%s", record.Request.Event.Sequence, elapsed)
 		}
 		current = &next
 		return nil
@@ -718,8 +723,12 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		committed := a.committedReplaySeq()
 		due := eventsSinceCommit >= a.replayCheckpointEvery || lastCheckpointAt.IsZero() || time.Since(lastCheckpointAt) >= a.replayCheckpointInterval
 		if due {
+			commitStarted := time.Now()
 			if err := a.commitReplay(ctx); err != nil {
 				return fmt.Errorf("computer event appender: replay periodic checkpoint: %w", err)
+			}
+			if elapsed := time.Since(commitStarted); elapsed > 2*time.Second {
+				log.Printf("computer event appender: replay checkpoint seq=%d commit elapsed=%s", seq, elapsed)
 			}
 			eventsSinceCommit = 0
 			lastCheckpointAt = time.Now()
@@ -731,9 +740,13 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 	pageSize := EventReplayPageSize
 	if pageSource, ok := source.(PagedEventSource); ok {
 		for {
+			pageStarted := time.Now()
 			page, err := pageSource.EventsPage(ctx, a.computerID, after, pageSize)
 			if err != nil {
 				return fmt.Errorf("computer event appender: fetch durable chain: %w", err)
+			}
+			if elapsed := time.Since(pageStarted); elapsed > 2*time.Second {
+				log.Printf("computer event appender: replay page fetch after=%d count=%d elapsed=%s", after, len(page), elapsed)
 			}
 			if len(page) == 0 {
 				break
