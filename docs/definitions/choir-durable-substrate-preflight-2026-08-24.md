@@ -152,7 +152,7 @@ phases:
       - "Independent panel review of the PF-2 verdict + PF-5 scope decision (evidence receipt with adjudicated outcome); final receipt + landing loop summary; overhauls definition now-card sequencing update."
 now:
   status: working
-  slice: "Reconcile + PF-3a + PF-1a complete: candidate green (toolchain >= 1.26.2, driver/v2 v2.2.0 + pinned late graph, imports migrated, smoke suites green, retained-store open both ways — v2 open proof + v1 downgrade-proof, candidate guest image k1drcj7d4kbgc8xichlv0lsy3m8fv6dc built, v1 baseline frozen; no live-store v2 touch, nothing on main). PF-2 like-for-like measurement (frozen pre-state clones, band sample, archive/RSS/OOM, owner verdict) is the next gate."
+  slice: "PF-2 in flight: pre-state replay to seq 105,500 running on node-b (host, v1 graph, bounded harness; ~2h ETA); v1/v2 measurement guest images building on the identical nixpkgs base (same kernel/rootfs, only the Dolt graph differs); clone launcher scripted. PF-2 order: freeze pre-state (digest+head+witness) -> construct v1/v2 clone disks -> 200-event sample guest runs (RUNTIME_RECOVERY_REPLAY_ONLY+TARGET_SEQ=105700) -> per-event p50/p95, RSS/OOM check, checkpoint latency, disk growth; archive act (CALL DOLT_GC on a second v2 clone + archive-index RSS) -> measurement receipt + owner verdict. Reconcile + PF-3a + PF-1a complete: candidate green (toolchain >= 1.26.2, driver/v2 v2.2.0 + pinned late graph, imports migrated, smoke suites green, retained-store open both ways — v2 open proof + v1 downgrade-proof, candidate guest image k1drcj7d4kbgc8xichlv0lsy3m8fv6dc built, v1 baseline frozen; no live-store v2 touch, nothing on main). PF-2 like-for-like measurement (frozen pre-state clones, band sample, archive/RSS/OOM, owner verdict) is the next gate."
   question: none
   reconciliation:
     observed_at: "2026-08-24T06:40:00Z"
@@ -183,6 +183,22 @@ now:
   next_action: "BEGIN Reconcile: answer docs/standing-questions.md for this Definition (recorded), register the id in the mission registry hygiene surface, take pre-upgrade snapshots of all live computer disks + retain the pre-bump v1 binary/package + image digest, and start the PF-3a read-only root-cause investigation of the d03dacaa invalid-genesis loop. Panel record: .agentic-consensus/preflight-def-review-20260824/ (rounds 1-4 manifests + outputs; round 4 = approval with only non-blocking wording items, now folded)."
 
 receipts:
+  - id: preflight-pf2-harness-prep
+    boundary: pf2
+    commit_or_artifact: "local measurement branches (node-b worktrees /root/preflight-v1base + /root/preflight-pf1a; NOT pushed to main/origin; harness-only)"
+    proof_refs: ["bounded replay harness: RUNTIME_RECOVERY_REPLAY_TARGET_SEQ env in internal/autoputer/run.go (local branch) pages the tape to the target record and ReconstructThrough's its CanonicalEventHead; health gate + per-event 'replay apply slow' logs = the measurement instrumentation", "frozen pre-state manufacture running: autoputer replay-only (v1 graph, host) replay 0 -> seq 105,500 at /root/preflight-prestate (health gate committed_sequence/sequence + workspace growth observed: 273M at 3.4k, 427M at 5.2k)", "measurement images building: v1-base (g7hrc0rjh236xn5x31p6rv6v3p02k06y for the plain v1-base; measure variant with RUNTIME_RECOVERY_REPLAY_ONLY=1 + TARGET_SEQ=105700 in the guest unit) + v2 measure variant — both from the SAME nixpkgs base 2c423e0 = identical kernel/rootfs/initrd/store-disk surface, only the Dolt module graph differs", "launcher ready: /root/pf2-launch.sh (clone disks from the frozen snapshot + pre-state workspace swap, credential.img via internal credentials/issue, tap vm-<b32[:12]>, /30 ip, fc-config with the measure image artifacts + 2 vCPU/4096 MiB, firecracker launch; serial console captured to logs)", "same-base interpretation: PF-2 like-for-like = v1-graph-on-new-base vs v2-graph-on-new-base (identical kernel/rootfs per the definition's 'identical Firecracker image digest' requirement); the truly-retained deployed v1 (f7b3ccd2 image) remains the frozen baseline + the downgrade-proof subject; the recovery's guest-boot numbers (3.2-6.5s at 107k+) are the absolute reference"]
+    rollback_ref: "local branches only; no origin/main push; staging service pointers untouched (deploy still f7b3ccd2)"
+    disposition: "PF-2 measurement harness prepared and in flight: bounded replay harness (target-seq), pre-state replay to seq 105,500 running (ETA ~2h), v1/v2 measurement guest images building from the identical nixpkgs base, clone launcher scripted. Live computer 0333528 stable active (epoch 748, one firecracker; the 739->746->748 deltas were vmctl restarts of the OWN guest, not a crash loop); staging still f7b3ccd2 (v1) — candidate not exposed."
+    problem_ref: "recovery-replay-guest-io-ceiling-assessment-2026-08-24.md"
+    authorization_ref: "owner direction 2026-08-24"
+    candidate_or_evidence_refs: ["/root/pf2-launch.sh; /root/preflight-prestate; /root/preflight-v1base-measure-image; /root/preflight-v2-measure-image"]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "docs/mission-graph.yaml"
   - id: preflight-pf1a-candidate
     boundary: pf1a
     commit_or_artifact: "branch preflight/pf1a @ dcd6c599 (43310064 -> dcd6c599 is test-file-only; the candidate guest image production closure = 43310064 unchanged)"
