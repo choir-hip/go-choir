@@ -66,23 +66,41 @@ func (rt *Handler) Start(ctx context.Context) error {
 		var runID, tailID, mutationIdentity string
 		candidateRunID := ""
 		if activationEligible {
-			candidateRunID = strings.TrimSpace(subject.ActiveRunID)
+			rawActiveID := strings.TrimSpace(subject.ActiveRunID)
+			if rawActiveID != "" {
+				activeRun, activeErr := rt.Store.GetLifecycleRun(ctx, subject.OwnerID, subject.ComputerID, rawActiveID)
+				if activeErr == nil && activeRun.AgentID == subject.AgentID && activeRun.OwnerID == subject.OwnerID &&
+					activeRun.ComputerID == subject.ComputerID && activeRun.ChannelID == docID &&
+					activeRun.TrajectoryID == doc.TrajectoryID && !activeRun.State.Terminal() &&
+					isTextureAgentRevisionTaskType(metadataStringValue(activeRun.Metadata, "type")) {
+					candidateRunID = rawActiveID
+				} else if activeErr != nil && !errors.Is(activeErr, store.ErrNotFound) {
+					return fmt.Errorf("load boot Texture active run %s: %w", rawActiveID, activeErr)
+				}
+			}
 		}
 		if activationEligible && candidateRunID == "" {
 			memoryRunID, entries, memoryErr := rt.Store.LatestActorRunMemoryEntries(ctx, subject.OwnerID, subject.ComputerID, subject.AgentID, "")
-			if memoryErr == nil {
-				candidateRunID = memoryRunID
-				if len(entries) > 0 {
-					tailID = entries[len(entries)-1].EntryID
+			if memoryErr == nil && memoryRunID != "" {
+				memRun, memErr := rt.Store.GetLifecycleRun(ctx, subject.OwnerID, subject.ComputerID, memoryRunID)
+				if memErr == nil && memRun.AgentID == subject.AgentID && memRun.OwnerID == subject.OwnerID &&
+					memRun.ComputerID == subject.ComputerID && memRun.ChannelID == docID &&
+					memRun.TrajectoryID == doc.TrajectoryID && !memRun.State.Terminal() &&
+					isTextureAgentRevisionTaskType(metadataStringValue(memRun.Metadata, "type")) {
+					candidateRunID = memoryRunID
+					if len(entries) > 0 {
+						tailID = entries[len(entries)-1].EntryID
+					}
+				} else if memErr != nil && !errors.Is(memErr, store.ErrNotFound) {
+					return fmt.Errorf("load boot Texture memory candidate run %s: %w", memoryRunID, memErr)
 				}
-			} else if !errors.Is(memoryErr, store.ErrNotFound) {
+			} else if memoryErr != nil && !errors.Is(memoryErr, store.ErrNotFound) {
 				return fmt.Errorf("load boot Texture actor memory: %w", memoryErr)
 			}
 		}
 		if activationEligible && candidateRunID == "" {
 			// A pre-repair passivated run can have neither ActiveRunID nor memory.
 			// Enumerate only to prove a unique exact document/trajectory/mutation
-			// join; list recency/order is never selection authority.
 			runs, listErr := rt.Store.ListLifecycleRunsByChannel(ctx, subject.OwnerID, subject.ComputerID, docID, 0)
 			if listErr != nil {
 				return fmt.Errorf("list boot Texture recovery candidates: %w", listErr)

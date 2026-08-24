@@ -410,3 +410,33 @@ func TestTextureOwnerWakeKeepsMissingOpenWorkFatalWhileTrajectoryIsLive(t *testi
 		t.Fatalf("live no-work wake run=%+v err=%v", run, err)
 	}
 }
+
+func TestTextureOwnerStartBypassesStaleTerminalActiveRunID(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	ctx := t.Context()
+
+	runID := "stale-run-123"
+	now := time.Now().UTC()
+	staleRun := types.RunRecord{
+		RunID: runID, AgentID: start.Agent.AgentID, ChannelID: start.InitialDocument.DocID,
+		TrajectoryID: start.TrajectoryID, AgentProfile: "texture", AgentRole: "texture",
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, State: types.RunPassivated,
+		CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{"type": "texture_revision"},
+	}
+	replaceReq := types.ReplaceLifecycleActivationRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "replace-stale-act",
+		TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: staleRun,
+	}
+	replaceReq.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(replaceReq)
+	if _, err := core.Store().ReplaceLifecycleActivation(ctx, replaceReq); err != nil {
+		t.Fatalf("replace lifecycle activation: %v", err)
+	}
+
+	// Start() should cleanly bypass the stale passivated ActiveRunID instead of returning
+	// fatal error "boot Texture run is not exact canonical authority".
+	if err := handler.Start(ctx); err != nil {
+		t.Fatalf("handler.Start() failed with stale passivated ActiveRunID: %v", err)
+	}
+}
