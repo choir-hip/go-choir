@@ -34,7 +34,7 @@ finish:
     - "PF-1 flip (only after the PF-2 verdict and the one-way rollback rehearsal): pushed source + CI + deploy; the v2 runtime package and guest image deployed with an isolated canary first; the canary proves the per-computer snapshot-fence protocol; then the active computers refresh. Downgrade proof: the untouched pre-flip snapshot reads under the retained pre-bump v1 binary/package."
     - "PF-3: d03dacaa invalid-genesis loop root-caused (investigation started in Reconcile; receipt precedes any fix code — the existing receipt stands) and fixed; the fix lands in the same guest-image rebuild as the flip (if the flip gate has passed) or in an earlier isolated image (if bounded and independent); the live computer shows zero mint-fail errors over >= 1h post-landing; failed-run churn cleanup touches store rows only, never the event tape; the computer stays active/healthy throughout."
     - "PF-4: active-guest Dolt GC/reclaim policy decided and implemented (bounded-guest GC, host-side GC including .darc under v2, or an explicitly accepted warning + document); no guest OOM from GC remains possible; the standing persistent_disk warning disposition recorded; the policy re-validated under v2's GC semantics."
-    - "PF-5 (gated by PF-2 and owner-adjudicated): if the v2 verdict is accept but the per-event p95 at the band exceeds the skip-gate, implement the appender per-page batching (option D; option C per-event nonfsync evaluated first as the lower-risk alternative per the assessment) and re-measure to the done-line; the ceiling receipt names the resolved outcome, or the named escalation (option B guest machine 8-12 GiB) is taken per the pre-authorized stop/escalate."
+    - "PF-5 (gated by the CEILING GATE, not by the v2 verdict): if the per-event p95 at the band exceeds the 150ms done-line, implement the appender per-page batching (option D; option C per-event nonfsync evaluated first as the lower-risk alternative per the assessment) and re-measure to the done-line; the ceiling receipt names the resolved outcome, or the named escalation (option B guest machine 8-12 GiB) is taken per the pre-authorized stop/escalate. The ceiling gate is independent of the v2 verdict and does not block the flip."
   acceptance:
     - action: "PF-1 candidate: a snapshot-only open of the retained store under the v2 binary shows the same databases/schema/rows/commits/branch behavior; the smoke suite passes; the snapshot remains readable by the retained v1 binary (downgrade-proof receipt)."
       proves: "The store open/DSN/connector path survives the v2 graph with no behavioral drift; rollback proof exists before any flip."
@@ -89,8 +89,8 @@ boundaries:
 measures:
   - signal: "per-event apply p95 at the 105k-132k band (sample protocol: checkpoint-restore the clone to >=105k, then apply a defined 200-event sample; p95 reported over the sample; same image/runtime/disk for v1 and v2)"
     baseline: "3.2-6.5s (v0.40, 4 GiB guest, 7-9 GiB workspace)"
-    direction: "skip-gate: <= 1s p95 (decides whether PF-5 is required); done-line: <= 150ms p95 (the band's guest-native replay then fits ~2 resume quanta)"
-    decides: "PF-5 scope + closure; the owner-adjudicated v2 accept/repair/reject"
+    direction: "done-line: <= 150ms p95 closes the ceiling by evidence; > 150ms REQUIRES PF-5 regardless of the v2 verdict. The 1s figure is only the relative-regression detect threshold (p95_v2/p95_v1 > 1.5x triggers v2 repair-re-measure), NOT a PF-5 gate."
+    decides: "CEILING GATE (PF-5 scope + closure) and the relative-regression detect for the v2 verdict — two separate decisions"
     limits: "measures the guest replay write path only; does not prove store correctness (smoke suite covers that); the sample p95 is a bounded estimate, not a full-band scan"
   - signal: "guest RSS + OOM during the v2 replay measurement and over an archive-producing act (CALL DOLT_GC on a second clone)"
     baseline: "no archives today (noms chunk + journal); RSS peak 1.9 GiB on the host-side measurement"
@@ -129,7 +129,7 @@ phases:
       - "Freeze the measurement pre-state (digest + head + schema/count witness + quiescence evidence); clone one disk per runtime (v1 package vs v2 candidate package); identical machine shape + telemetry."
       - "Run the band measurement (checkpoint-restore to ~105k + 200-event sample), archive act on a second v2 clone, RSS/OOM/GC/syscall traces."
       - "Publish the measurement receipt; owner-adjudicated verdict: accept v2 / repair-re-measure / reject."
-  - name: PF-1b — Flip (gated)
+  - name: PF-1b — Flip (gated on the V2 VERDICT only)
     items:
       - "Canary: deploy the v2 runtime/image to an isolated/disposable computer first; REHEARSE the full per-computer fence -> snapshot -> flip -> restore-from-snapshot-under-v1 cycle on the canary (not just the protocol on paper); record the rehearsal receipt with digests."
       - "Independent PF-2 review BEFORE any live flip: the measurement receipt + verdict bound to frozen digests (pre-state snapshot digest, clone digests, image digest, sample protocol); a panel review of the verdict + the flip boundaries precedes PF-1b; any candidate change after the review requires re-measurement."
