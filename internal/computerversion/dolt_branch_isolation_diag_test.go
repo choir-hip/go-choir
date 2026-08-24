@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	embedded "github.com/dolthub/driver"
+	embedded "github.com/dolthub/driver/v2"
 )
 
 // TestDoltBranchIsolationDiagnostic is a historical 2026-07-07 diagnostic that

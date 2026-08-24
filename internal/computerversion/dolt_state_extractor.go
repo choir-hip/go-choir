@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	embedded "github.com/dolthub/driver"
+	embedded "github.com/dolthub/driver/v2"
 )
 
 const (

@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/events"
 	"testing"
 	"time"
 
@@ -146,5 +148,32 @@ func TestBootstrapChainRejectsNonPost(t *testing.T) {
 	handler.HandleComputersRouter(response, request)
 	if response.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET bootstrap-chain status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestCreateRunAdmissionRefusesPreGenesis(t *testing.T) {
+	computerID := "computer-pre-genesis-admission"
+	rt := chainBootstrapRuntime(t, computerID)
+	rt.bus = events.NewEventBus()
+	if err := rt.store.BindProjectionTape(computerID, rt.eventAppender); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	// Empty chain -> admission refused before any store mutation.
+	rec, err := rt.createRunWithMetadata(ctx, "hello", "owner-admission", map[string]any{})
+	if err == nil || rec != nil || !strings.Contains(err.Error(), "pre-genesis") {
+		t.Fatalf("pre-genesis admission = rec=%v err=%v, want pre-genesis refusal", rec, err)
+	}
+	// The gate must NOT fire once the chain has a genesis: the bootstrapped
+	// computer's admission proceeds normally (the gate is a no-op when the
+	// projection head exists; the full run path is exercised by the runtime
+	// suites). Verify the head now exists so the gate would pass.
+	report, err := rt.BootstrapChain(ctx, "owner-bootstrap", computerID)
+	if err != nil || !report.AppendedEvent {
+		t.Fatalf("bootstrap = %#v %v", report, err)
+	}
+	head, err := rt.store.Head(ctx, computerID)
+	if err != nil || head == nil || head.Sequence != 1 {
+		t.Fatalf("post-bootstrap head = %#v %v", head, err)
 	}
 }

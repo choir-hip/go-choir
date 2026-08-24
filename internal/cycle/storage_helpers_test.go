@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	embedded "github.com/dolthub/driver"
+	embedded "github.com/dolthub/driver/v2"
 )
 
 // openTestStorage creates an embedded Dolt-backed Storage for cycle package

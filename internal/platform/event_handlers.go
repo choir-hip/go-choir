@@ -58,7 +58,7 @@ func (h *Handler) HandleComputerCredentialIssue(w http.ResponseWriter, r *http.R
 	request.ComputerID = strings.TrimSpace(request.ComputerID)
 	request.RealizationID = strings.TrimSpace(request.RealizationID)
 	request.IdempotencyKey = strings.TrimSpace(request.IdempotencyKey)
-	envelope, receipt, err := h.service.MintComputerCredentialEnvelope(r.Context(), request.ComputerID, request.RealizationID, request.IdempotencyKey, time.Now().UTC().Add(4*time.Minute))
+	envelope, receipt, err := h.service.MintComputerCredentialEnvelope(r.Context(), request.ComputerID, request.RealizationID, request.IdempotencyKey, time.Now().UTC().Add(10*time.Minute))
 	if err != nil {
 		writeJSON(w, http.StatusConflict, apiError{Error: "credential issuance refused"})
 		return

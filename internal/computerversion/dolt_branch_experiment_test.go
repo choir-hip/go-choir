@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	embedded "github.com/dolthub/driver"
+	embedded "github.com/dolthub/driver/v2"
 )
 
 // TestDoltBranchMergeTagExperiment is a historical 2026-07-07 experiment that

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	embedded "github.com/dolthub/driver"
+	embedded "github.com/dolthub/driver/v2"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/cycle"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
