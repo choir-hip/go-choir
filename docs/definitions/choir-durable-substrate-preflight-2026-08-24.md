@@ -152,7 +152,7 @@ phases:
       - "Independent panel review of the PF-2 verdict + PF-5 scope decision (evidence receipt with adjudicated outcome); final receipt + landing loop summary; overhauls definition now-card sequencing update."
 now:
   status: working
-  slice: "Definition APPROVED via agentic-consensus rounds 1-4; Reconcile: standings-conformance receipt recorded; registry entry pending; snapshots + v1 retention next; PF-3a root-cause investigation starts concurrently."
+  slice: "Reconcile complete: standings-conformance receipt + registry entry + pre-upgrade snapshots of all active computer disks (e15cb8=0333528, d03, + hibernated 49ee3bd0; digests recorded, v1-read proof passed for both active snapshot stores) recorded; PF-3a (d03 genesis-loop root cause) starts now; PF-1a (Dolt 2.0 candidate) follows."
   question: none
   reconciliation:
     observed_at: "2026-08-24T06:40:00Z"
@@ -183,6 +183,22 @@ now:
   next_action: "BEGIN Reconcile: answer docs/standing-questions.md for this Definition (recorded), register the id in the mission registry hygiene surface, take pre-upgrade snapshots of all live computer disks + retain the pre-bump v1 binary/package + image digest, and start the PF-3a read-only root-cause investigation of the d03dacaa invalid-genesis loop. Panel record: .agentic-consensus/preflight-def-review-20260824/ (rounds 1-4 manifests + outputs; round 4 = approval with only non-blocking wording items, now folded)."
 
 receipts:
+  - id: preflight-reconcile-snapshots
+    boundary: reconcile
+    commit_or_artifact: "(pending)"
+    proof_refs: []
+    rollback_ref: revert docs commit
+    disposition: "Pre-upgrade snapshots + v1 retention (2026-08-24T07:49:31Z, host /var/lib/go-choir/vm-state, btrfs reflink, crash-consistent): per computer data.img.pre-upgrade-20260824T074931Z + credential.img.pre-upgrade-20260824T074931Z (+ epoch + fc-config copies). VM->computer map from ownerships.json: candidate-fleet-e15cb89f25d963c220319b7b = computer-03335285269bdba4f94377e56879f9e6 (active, epoch 739; CLI status reports state=degraded, realization_epoch=737 — vmctl shows the VM running, guest serving degraded); candidate-fleet-d03dacaa7404b1e4412b2e6f = computer-4c20ff4a21a021c4306d8c783be0037d (active, epoch 12405; 403 api-key ownership => fleet-scope key, product-path status/checkpoint unavailable to this owner key); candidate-fleet-49ee3bd0ec6f366a164c02d2 (hibernated, epoch 49; snapshot taken for completeness). SHA256: e15cb8 data.img 9882714f581e5fdd15c855e1ba3a003add4b126cd25cf2492cae81f3bf63a815, credential 2cad8c73410fa52312eaa6a90a437b071954f8e8264420814476b90cc7b73dc6; d03 data.img bc6b21bc579ebae7f57bea5b31a5985cf7ed093ddc777c7af3a6839d2c8bed7d, credential 1c1eb5a1e12bdbf27ff7ab1eea618bfa95e6a2e2a00e6eabb6b870650e2dc796; 49ee3bd0 data.img 29f536ca9ba39fdfefd6c1e8e361ba50d30ade5e0f12eb60f026c69b2459cba1, credential c63149fe696b3d23e7225d2c7c9286ac55b3eb6afddaa3a609c045ec5fe3ae7e. v1-read proof: the retained v1 binary/source = deployed commit f7b3ccd2cb92d26dc5ef3ce3f0051aa3b710a5bb (/health build; /opt/go-choir HEAD identical + clean). The snapshot workspaces were cloned (ext4 loop source, plain copy) and opened with the v1 graph at f7b3ccd2 through computerversion.DoltStateExtractor (Database=texture): e15cb8 OK observations=86, d03 OK observations=96 — both snapshots read under v1, snapshots untouched (clones discarded, RO mounts unmounted). Gap recorded: product-path computer checkpoint binder unavailable at Reconcile time (0333528 checkpoint POST -> 502 computer authority unavailable; d03 -> 403 ownership) — the per-computer fenced checkpoint bind remains a PF-1b flip-phase action under the fence protocol; the host reflink is the pre-upgrade snapshot layer."
+    problem_ref: "fleet-d03dacaa-invalid-genesis-loop-2026-08-24.md"
+    authorization_ref: "owner direction 2026-08-24"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
   - id: preflight-standings-conformance
     boundary: reconcile
     commit_or_artifact: "(pending)"
