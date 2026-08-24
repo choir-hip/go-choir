@@ -681,6 +681,18 @@ func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID str
 }
 
 func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID string, metadata map[string]any) (*types.RunRecord, error) {
+	// Pre-genesis admission gate (PF-3 fix): a computer with an empty canonical
+	// chain (no genesis_imported ever CAS'd) refuses run admission BEFORE any
+	// store mutation. Unbounded write attempts would fail at Reduce(nil, ...)
+	// with "invalid genesis" and re-mint into an endless failed-run churn; the
+	// gate keeps the runtime up (health + bootstrap-chain route remain
+	// servable) while refusing writes, so bootstrap-chain (owner authority) can
+	// repair the computer. Test/unbound stores keep their direct path.
+	if rt != nil && rt.store != nil && rt.store.ProjectionTapeBound() {
+		if head, headErr := rt.store.Head(ctx, rt.cfg.ComputerID); headErr == nil && head == nil {
+			return nil, fmt.Errorf("computer is pre-genesis: run admission refused (bootstrap-chain required; no canonical genesis on the tape)")
+		}
+	}
 	now := time.Now().UTC()
 	runID := uuid.New().String()
 	metadata = ensureDesktopID(metadata, nil, metadataStringValue(metadata, runMetadataDesktopID))
