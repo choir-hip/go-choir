@@ -447,6 +447,41 @@ nodes:
       - docs/choir-doctrine.md
       - docs/ACTIVE.md
       - AGENTS.md
+  - id: choir-durable-substrate-preflight-2026-08-24
+    title: Durable Substrate Pre-Flight (Dolt 2.0, d03 Loop, GC Policy, Replay Ceiling)
+    path: docs/definitions/choir-durable-substrate-preflight-2026-08-24.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-durable-substrate-recovery-2026-08-23
+      - choir-tape-recovery-2026-08-13
+    enables:
+      - choir-durable-substrate-overhauls-2026-08-23
+    note: >-
+      Owner-ratified pre-flight (approved via agentic-consensus rounds 1-4,
+      12 agents/round; executing 2026-08-24, /goal). Dolt 2.0 embedded driver
+      upgrade candidate-first (no live-store v2 touch before the PF-2
+      measurement gate + one-way rollback rehearsal; v2 verdict vs ceiling
+      gate separated), d03dacaa invalid-genesis loop root-cause + fix
+      (fenced; tape untouched), active-guest Dolt GC/reclaim policy, guest
+      replay per-event-cost ceiling resolved by measurement or the appender
+      batching fix. Effects remain OFF; the candidate-proof Definition keeps
+      its schedule authority. Overhauls start from this pre-flight's receipts.
+    sources:
+      - docs/definitions/choir-durable-substrate-preflight-2026-08-24.md
+      - docs/evidence/dolt-v2-research-2026-08-24.md
+      - docs/evidence/recovery-replay-guest-io-ceiling-assessment-2026-08-24.md
+      - docs/evidence/fleet-d03dacaa-invalid-genesis-loop-2026-08-24.md
+      - docs/evidence/recovery-complete-2026-08-24.md
+      - docs/standing-questions.md
+      - docs/computer-ontology.md
+      - docs/agent-product-doctrine.md
+      - docs/choir-doctrine.md
+      - docs/ACTIVE.md
+      - AGENTS.md
   - id: choir-durable-substrate-overhauls-2026-08-23
     title: Durable Substrate Overhauls
     path: docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md

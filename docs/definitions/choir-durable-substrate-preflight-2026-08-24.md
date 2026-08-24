@@ -152,7 +152,7 @@ phases:
       - "Independent panel review of the PF-2 verdict + PF-5 scope decision (evidence receipt with adjudicated outcome); final receipt + landing loop summary; overhauls definition now-card sequencing update."
 now:
   status: working
-  slice: "Definition APPROVED via agentic-consensus rounds 1-4 (12 agents/round): v4 folds the round-1 structural cluster, the round-2 blockers (evidence doc promoted, verdict branches, per-slice landing, toolchain surfaces, canary rehearsal, pre-flip review, now.candidate), the round-3 deadlock fix (v2 verdict vs ceiling gate separated; PF-1a never touches staging pointers), and the round-4 stale-text removal (ceiling gate decoupled from the v2 verdict everywhere). Execution begins at Reconcile."
+  slice: "Definition APPROVED via agentic-consensus rounds 1-4; Reconcile: standings-conformance receipt recorded; registry entry pending; snapshots + v1 retention next; PF-3a root-cause investigation starts concurrently."
   question: none
   reconciliation:
     observed_at: "2026-08-24T06:40:00Z"
@@ -183,6 +183,22 @@ now:
   next_action: "BEGIN Reconcile: answer docs/standing-questions.md for this Definition (recorded), register the id in the mission registry hygiene surface, take pre-upgrade snapshots of all live computer disks + retain the pre-bump v1 binary/package + image digest, and start the PF-3a read-only root-cause investigation of the d03dacaa invalid-genesis loop. Panel record: .agentic-consensus/preflight-def-review-20260824/ (rounds 1-4 manifests + outputs; round 4 = approval with only non-blocking wording items, now folded)."
 
 receipts:
+  - id: preflight-standings-conformance
+    boundary: reconcile
+    commit_or_artifact: "(pending)"
+    proof_refs: []
+    rollback_ref: revert docs commit
+    disposition: "Standing-questions answer set for this Definition (recorded 2026-08-24 at Reconcile): Q1 settled_by = owner (decision.source = owner direction 2026-08-24; owner_ratification_ref recorded; panel rounds 1-4 ratify, not settle — the orchestrator folded their amendments under owner authority). Q2 topology conformance verified against docs/computer-ontology.md (two non-conflated stores: corpusd world-wire sql-server + VM-local embedded Dolt per computer; D-STORES/D-WIRE og-dolt-heresy-completion) — this mission upgrades the VM-local EMBEDDED driver only; the corpusd sql-server wire-store topology, D-ROUTE, and the two-store boundary are untouched; no third semantic store. Q3 no deletion — module-path migration driver -> driver/v2 migrates every consumer (internal/store, internal/texture, internal/objectgraph, internal/platform, internal/computerversion, internal/cycle, cmd/sourcecycled + tests); no citer of the old module survives the migration. Q4 production consumers are exactly those migrated surfaces (runtime store.Open, corpusd, texture revision storage, objectgraph dolt_store, computerversion experiments); no non-test consumer left on the old path. Q5 single authority = canonical event tape (sole semantic writer = the guest ComputerEventAppender; head 132,539 immutable); the Dolt workspace is a materialized projection; this mission performs NO tape mutation; the d03 failed-run cleanup touches store rows only. Q6 success artifact = the definition's required_receipts set (pf1a_smoke, downgrade_proof, measurement, owner_verdict, pf2_independent_review, canary_rehearsal, per_computer_flip, d03_fix, gc_policy, ceiling_verdict, independent_panel_review). Q7 read-path fate-sharing unchanged: the VM-local store is served by the guest runtime locally (no corpusd proxy hop for computer state) and is restart-durable via tape replay (proved by the recovery definition); the tape is preserved by this mission, so servability is not degraded. Q8 restart: no process-local state is load-bearing; the flip restarts reconstruct from tape; product-path checkpoint bind + host crash-consistent reflink snapshot cover the one-way-format window. Q9 operability: product path throughout (choir CLI computer status/checkpoint/restore/refresh, /api, CI deploy identity, /health); node-b journal used READ-ONLY for d03 loop diagnosis (as in the recovery mission); the host-level reflink snapshot is the definition's explicitly required crash-consistent storage primitive (platform break-glass storage op on the mission's own host, not a tape or computer-surface mutation). Registry hygiene: id registered in ACTIVE.md + mission-graph.yaml + doc-authority-manifest.yaml (this receipt)."
+    problem_ref: "fleet-d03dacaa-invalid-genesis-loop-2026-08-24.md; recovery-replay-guest-io-ceiling-assessment-2026-08-24.md"
+    authorization_ref: "owner direction 2026-08-24"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "docs/ACTIVE.md pre-flight section; docs/mission-graph.yaml choir-durable-substrate-preflight-2026-08-24; docs/doc-authority-manifest.yaml same id"
   - id: define-preflight-round1
     boundary: define
     commit_or_artifact: "(pending round-2 approval)"
