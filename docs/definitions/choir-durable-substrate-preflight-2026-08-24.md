@@ -199,6 +199,22 @@ receipts:
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
     registry_conformance_ref: "docs/mission-graph.yaml"
+  - id: preflight-pf2-verdict-panel
+    boundary: pf2
+    commit_or_artifact: "agentic-consensus pf2-verdict-20260824/round1 (12/12, unanimous; manifests + outputs under .agentic-consensus/)"
+    proof_refs: ["Q1: ACCEPT v2 (12/12) — every reject/repair trigger mechanically untested: no correctness drift (store open + 42-table witness both ways), no OOM at the 4 GiB boundary, archive-index within budget (GC 48.3s under MemoryMax=4096M), relative p95 0.92x <= 1.5x bar. Panel: 'not an owner judgment call; it falls out of the definition's bar mechanically'", "Q2: CEILING GATE OPEN (12/12) — the 15.6ms p95 is a host-equivalent proxy; the definition forbids closing on host-only numbers ('host-only numbers do not count'); the Firecracker-guest number remains blocked by the live-platform boot-vs-TTL defect; do NOT escalate to 8-12 GiB yet. PF-5 candidate STANDS", "genuine owner calls deferred: (a) the PF-5 REMEDY choice (appender per-page batching vs per-event nonfsync vs the 8-12 GiB escalation) — a later adjudication with the implementation data; (b) the live-platform boot-vs-TTL defect repair (the live 0333528 restart loop) — red live-platform work, separate decision"]
+    rollback_ref: "the flip remains gated: PF-1b proceeds ONLY after the pre-flip independent PF-2 review + the canary rehearsal"
+    disposition: "Panel-adjudicated PF-2: ACCEPT v2 (upgrade soundness; mechanical per the definition bar) + CEILING OPEN (PF-5 stands; no escalation). The owner's remaining real call = the PF-5 remedy choice and the boot-vs-TTL live-platform repair. PF-1b next: independent PF-2 review (frozen digests + sample protocol + flip boundaries) then the canary fence/snapshot/flip/restore rehearsal."
+    problem_ref: "0333528-guest-restart-loop-2026-08-24.md; recovery-replay-guest-io-ceiling-assessment-2026-08-24.md"
+    authorization_ref: "owner direction 2026-08-24"
+    candidate_or_evidence_refs: [".agentic-consensus/pf2-verdict-20260824/round1/"]
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "docs/mission-graph.yaml"
   - id: preflight-pf2-measurement
     boundary: pf2
     commit_or_artifact: "(measurement receipt; owner verdict pending)"
