@@ -152,7 +152,7 @@ phases:
       - "Independent panel review of the PF-2 verdict + PF-5 scope decision (evidence receipt with adjudicated outcome); final receipt + landing loop summary; overhauls definition now-card sequencing update."
 now:
   status: working
-  slice: "Definition v4 after panel rounds 1-3 (candidate/flip split; PF-3 forward; measurement + rollback rigor; per-slice landing; toolchain surfaces; v2-verdict vs ceiling-gate separation fixing the round-3 deadlock; PF-1a never touches staging pointers). Awaiting round-4 confirmation before execution."
+  slice: "Definition APPROVED via agentic-consensus rounds 1-4 (12 agents/round): v4 folds the round-1 structural cluster, the round-2 blockers (evidence doc promoted, verdict branches, per-slice landing, toolchain surfaces, canary rehearsal, pre-flip review, now.candidate), the round-3 deadlock fix (v2 verdict vs ceiling gate separated; PF-1a never touches staging pointers), and the round-4 stale-text removal (ceiling gate decoupled from the v2 verdict everywhere). Execution begins at Reconcile."
   question: none
   reconciliation:
     observed_at: "2026-08-24T06:40:00Z"
@@ -180,7 +180,7 @@ now:
     - "docs/evidence/fleet-d03dacaa-invalid-genesis-loop-2026-08-24.md"
     - "docs/evidence/recovery-complete-2026-08-24.md"
   blocker_or_risk: "Dolt v2 one-way format (controlled by snapshot-fence + canary + downgrade proof); archive-index memory in the 4 GiB guest (quantified in PF-2); d03 fix touches a LIVE computer (fence + image rollout; escalation if substrate-level); PF-3's shared genesis code also backs 0333528's runtime (cross-contamination risk — the fix's regression suite covers both)."
-  next_action: "Run agentic-consensus round 2 on this amended draft (convergent, default panel), adjudicate, iterate until panel approval; then bind the approved definition, promote the research receipt, and begin Reconcile (standing-questions answers, snapshots, PF-3 investigation)."
+  next_action: "BEGIN Reconcile: answer docs/standing-questions.md for this Definition (recorded), register the id in the mission registry hygiene surface, take pre-upgrade snapshots of all live computer disks + retain the pre-bump v1 binary/package + image digest, and start the PF-3a read-only root-cause investigation of the d03dacaa invalid-genesis loop. Panel record: .agentic-consensus/preflight-def-review-20260824/ (rounds 1-4 manifests + outputs; round 4 = approval with only non-blocking wording items, now folded)."
 
 receipts:
   - id: define-preflight-round1
