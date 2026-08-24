@@ -28,7 +28,7 @@
     let
       # Packages are x86_64-linux only (deployment target)
       system = "x86_64-linux";
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = importPkgs system;
 
       # Go module version from go.mod
       goModuleVersion = "0.1.0";
@@ -42,9 +42,27 @@
         "x86_64-linux"
       ];
       forDevSystems = nixpkgs.lib.genAttrs devSystems;
+      # Go >= 1.26.2 is REQUIRED by the Dolt v2 graph (driver/v2 v2.2.0 go.mod
+      # directive). The existing nixpkgs input carries Go 1.26.1; rather than
+      # bumping the whole input (which would drag the entire host/guest NixOS
+      # system forward and force a full-system deploy), pin Go 1.26.2 with a
+      # targeted overlay on the current base. Everything else (kernel, icu,
+      # zstd, NixOS modules) stays put; the host system, guest image base, and
+      # dev shells all keep the existing nixpkgs rev.
+      goOverlay = final: prev: {
+        go = prev.go.overrideAttrs (old: {
+          version = "1.26.2";
+          src = prev.fetchurl {
+            url = "https://go.dev/dl/go1.26.2.src.tar.gz";
+            sha256 = "sha256-LpHrtpR6lulDb7KzkmqIAu/mOm03Xf/sT4Kqnb1v1Ds=";
+          };
+        });
+      };
+      importPkgs = system:
+        import nixpkgs { inherit system; overlays = [ goOverlay ]; };
       mkDevShell = devSystem:
         let
-          devPkgs = import nixpkgs { system = devSystem; };
+          devPkgs = importPkgs devSystem;
         in
         devPkgs.mkShell {
           packages = [
@@ -332,7 +350,7 @@ EOF
       # or interfere with the main Go dev environment.
       mkDesktopShell = devSystem:
         let
-          devPkgs = import nixpkgs { system = devSystem; };
+          devPkgs = importPkgs devSystem;
         in
         devPkgs.mkShell {
           packages = [
@@ -397,6 +415,7 @@ EOF
           inherit buildCommit sourceRepoRemote;
         };
         modules = [
+          { nixpkgs.overlays = [ goOverlay ]; }
           microvm.nixosModules.microvm
           ./nix/autoputer-vm.nix
         ];
