@@ -95,3 +95,39 @@ from its own refusal loop.
   `data.img.pre-upgrade-20260825`, `data.img.pre-stop`
 - Envelope mint endpoint: `POST /internal/computers/credentials/issue`
   (X-Internal-Caller), 201, TTL 10 min.
+
+## Consensus amendment (2026-08-25, agentic-consensus panel, 10/12 succeeded)
+
+The 4/4-hold vs 3/3-normal boot correlation is **confounded** (panel consensus;
+locally verified in `nix/autoputer-vm.nix:135-158`):
+
+- Every hung boot was a vmctl **refresh** boot carrying `choir.refresh_runtime=1`.
+  The guest wrapper, on that param, **deletes `/mnt/persistent/choir-updater/current`**
+  and falls back to the immutable **store binary** (the new a29f52cc autoputer).
+- Every working manual boot omitted `refresh_runtime`, so the wrapper exec'd the
+  **old dynamic binary** from the ancestor image's persistent
+  `choir-updater/current`.
+- `RUNTIME_MAINTENANCE_HOLD` is consulted only inside `agentcore.Runtime.Start`
+  (`internal/agentcore/runtime.go:583`) — after store open and many log lines — so it
+  cannot itself explain a hang before the first autoputer log.
+
+Discriminated hypotheses for the hang, to be settled by a sequential boot matrix on a
+reflink clone of the ancestor image (never the live disk):
+(a) the new store binary hangs at first-open of the old persistent store state
+    (silent migration/lock) when `current` is absent;
+(b) the old dynamic binary boots fine only because it is old (baseline selection);
+(c) a vmctl launch-path difference (tap/credential/waitForGuestReady).
+
+Protective posture now: host hold SET (`held=true`,
+"protect-live-guest-during-hang-diagnosis") so deploy-triggered active-VM refreshes
+skip this computer; guest remains serving under its own env fence, appending.
+
+Agreed plan skeleton (panel consensus): instrument wrapper/updater early markers, then
+a sequential clone-boot matrix isolating refresh_runtime/binary-selection; repair the
+demonstrated branch only; fail-closed fencing for heresies 1+2 (cold-recover refuses
+without a validated ancestor base; prelaunch assertion that credential.img contains a
+regular computer-event-envelope); land via CI/deploy; require THREE consecutive clean
+vmctl-managed normal boots on the retained computer; unhold; one product-path owner
+refresh; verify choir.news route + replay-completeness; resume self-development
+(Conductor intake, no HTTP Super-start). The manual envelope/tap procedure stays
+recovery-only and must not be scripted as steady-state.
