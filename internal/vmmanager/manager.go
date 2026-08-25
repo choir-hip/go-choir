@@ -149,6 +149,17 @@ type VMConfig struct {
 	// and exec the current deploy image. Restart/recover must leave this
 	// false so a promoted release survives ordinary stop+resolve.
 	RefreshRuntime bool
+
+	// MaintenanceHold boots the guest with RUNTIME_MAINTENANCE_HOLD=1 so the
+	// runtime refuses run admission and skips every rewake sweep while the
+	// host holds the computer (audited maintenance/recovery boot path).
+	MaintenanceHold bool
+
+	// RecoveryReplayOnly boots the guest into the B14 replay-only drive: the
+	// runtime materializes the canonical tape to the platform head and exits
+	// without starting the runtime, reconciling, or appending (authorized
+	// recovery boot only).
+	RecoveryReplayOnly bool
 }
 
 // VMInstance represents a running or stopped Firecracker VM.
@@ -297,6 +308,7 @@ func (m *Manager) StateDir() string {
 	}
 	return m.cfg.StateDir
 }
+
 const (
 	vmSubnetSecondOctetBase  = 200
 	vmSubnetSecondOctetCount = 16
@@ -1416,6 +1428,12 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		if cfg.RefreshRuntime {
 			runtimeArgs = append(runtimeArgs, "choir.refresh_runtime=1")
 		}
+		if cfg.RecoveryReplayOnly {
+			runtimeArgs = append(runtimeArgs, "choir.runtime_recovery_replay_only=1")
+		}
+		if cfg.MaintenanceHold {
+			runtimeArgs = append(runtimeArgs, "choir.runtime_maintenance_hold=1")
+		}
 		bootArgs = strings.Join(append([]string{kernelParams}, runtimeArgs...), " ")
 	} else {
 		// Legacy approach with custom init script. Keep the same runtime service
@@ -1889,9 +1907,9 @@ func (m *Manager) probeGuestHealthDetailed(hostURL string) guestHealthProbeResul
 	// loop can gate the kill on replay progress instead of wall clock (B5/B6).
 	if resp.StatusCode == http.StatusServiceUnavailable {
 		var replayBody struct {
-			Status             string `json:"status"`
-			Sequence           uint64 `json:"sequence"`
-			CommittedSequence  uint64 `json:"committed_sequence"`
+			Status            string `json:"status"`
+			Sequence          uint64 `json:"sequence"`
+			CommittedSequence uint64 `json:"committed_sequence"`
 		}
 		if json.Unmarshal(body, &replayBody) == nil && replayBody.Status == "replaying" {
 			result.ReplayInProgress = true

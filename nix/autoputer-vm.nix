@@ -355,6 +355,12 @@ EOF
           choir.desktop_id=*)
             echo "CHOIR_DESKTOP_ID=''${param#choir.desktop_id=}" >> "$ENV_FILE"
             ;;
+          choir.runtime_maintenance_hold=*)
+            echo "RUNTIME_MAINTENANCE_HOLD=''${param#choir.runtime_maintenance_hold=}" >> "$ENV_FILE"
+            ;;
+          choir.runtime_recovery_replay_only=*)
+            echo "RUNTIME_RECOVERY_REPLAY_ONLY=''${param#choir.runtime_recovery_replay_only=}" >> "$ENV_FILE"
+            ;;
           choir.gateway_token=*)
             echo "RUNTIME_GATEWAY_TOKEN=''${param#choir.gateway_token=}" >> "$ENV_FILE"
             ;;

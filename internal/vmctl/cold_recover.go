@@ -577,7 +577,9 @@ func (h *Handler) HandleColdRecover(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "could not persist recovery journal"})
 		return
 	}
-	if _, err := h.registry.RecoverVMForDesktop(ownership.UserID, ownership.DesktopID); err != nil {
+	// Authorized maintenance recovery: boot the held computer into the B14
+	// replay-only drive under the guest-visible hold (never a plain recover).
+	if _, err := h.registry.RecoverVMForDesktopMaintenance(ownership.UserID, ownership.DesktopID, true); err != nil {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 		return
 	}

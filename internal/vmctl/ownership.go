@@ -139,6 +139,7 @@ type VMOwnership struct {
 func (o *VMOwnership) IsReady() bool {
 	return o.State == VMStateActive
 }
+
 // MaintenanceHold is the host-authoritative maintenance hold for a computer.
 // While set, vmctl refuses automatic lifecycle action for the VM.
 type MaintenanceHold struct {
@@ -154,6 +155,7 @@ type MaintenanceHold struct {
 func (o *VMOwnership) IsHeld() bool {
 	return o != nil && o.HoldStatus != nil
 }
+
 // byComputerIDLocked returns the ownership for a stable computer ID, or nil.
 // The caller must hold r.mu.
 func (r *OwnershipRegistry) byComputerIDLocked(computerID string) *VMOwnership {
@@ -276,6 +278,13 @@ type VMManagerConfig struct {
 	ComputerKind               string
 	OwnerID                    string
 	DesktopID                  string
+	// MaintenanceHold boots the guest under the guest-visible maintenance
+	// hold (RUNTIME_MAINTENANCE_HOLD=1): run admission refused, no rewake.
+	MaintenanceHold bool
+	// RecoveryReplayOnly boots the guest into the B14 one-shot replay drive
+	// (RUNTIME_RECOVERY_REPLAY_ONLY=1): materialize to head, then exit
+	// without starting the runtime or appending.
+	RecoveryReplayOnly bool
 }
 
 // VMInstanceInfo holds the information returned by the VM manager
@@ -545,11 +554,11 @@ func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard Comput
 	if mgr != nil {
 		for _, own := range r.ownerships {
 			if own.IsHeld() {
-			// A held computer is never reattached to a stale route after a
-			// vmctl restart; it stays in maintenance hold.
-			continue
-		}
-		if own.State == VMStateStopped && own.StoppedBy == "vmctl-restart" && strings.TrimSpace(own.ComputerURL) != "" {
+				// A held computer is never reattached to a stale route after a
+				// vmctl restart; it stays in maintenance hold.
+				continue
+			}
+			if own.State == VMStateStopped && own.StoppedBy == "vmctl-restart" && strings.TrimSpace(own.ComputerURL) != "" {
 				candidates = append(candidates, *own)
 			}
 		}
@@ -2081,7 +2090,23 @@ func (r *OwnershipRegistry) RecoverVM(userID string) (*VMOwnership, error) {
 	return r.RecoverVMForDesktop(userID, PrimaryDesktopID)
 }
 
+// RecoverVMForDesktop recovers a degraded/failed/stopped VM. It refuses a held
+// computer: automatic recovery is exactly what the maintenance hold fences.
+// The authorized maintenance path is RecoverVMForDesktopMaintenance.
 func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOwnership, error) {
+	return r.recoverVMForDesktop(userID, desktopID, false, false)
+}
+
+// RecoverVMForDesktopMaintenance is the authorized maintenance exception: it
+// recovers a held computer (the B14 cold-recover replay-only drive). It still
+// boots the guest under the hold (RUNTIME_MAINTENANCE_HOLD=1) and, with
+// replayOnly, into the one-shot replay drive that exits without starting the
+// runtime or appending.
+func (r *OwnershipRegistry) RecoverVMForDesktopMaintenance(userID, desktopID string, replayOnly bool) (*VMOwnership, error) {
+	return r.recoverVMForDesktop(userID, desktopID, true, replayOnly)
+}
+
+func (r *OwnershipRegistry) recoverVMForDesktop(userID, desktopID string, maintenance, replayOnly bool) (*VMOwnership, error) {
 	var ensureVMID string
 	defer func() {
 		if ensureVMID != "" {
@@ -2095,6 +2120,7 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 		r.mu.Unlock()
 		return nil, fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
 	}
+	held := own.IsHeld()
 	if err := r.rejectRefreshConflictLocked(key); err != nil {
 		r.mu.Unlock()
 		return nil, err
@@ -2103,6 +2129,10 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 	if own.State != VMStateDegraded && own.State != VMStateFailed && own.State != VMStateStopped {
 		r.mu.Unlock()
 		return nil, fmt.Errorf("VM %s is not in a recoverable state (state=%s)", own.VMID, own.State)
+	}
+	if held && !maintenance {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("VM %s (computer %s) is under maintenance hold: recovery refused", own.VMID, own.ComputerID)
 	}
 
 	mgr := r.vmManager
@@ -2122,6 +2152,8 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 		if err != nil {
 			return nil, fmt.Errorf("reserve recovery realization for VM %s: %w", vmid, err)
 		}
+		cfg.MaintenanceHold = held
+		cfg.RecoveryReplayOnly = replayOnly
 		if wasStopped {
 			info, err = mgr.BootVM(cfg)
 			if err != nil {

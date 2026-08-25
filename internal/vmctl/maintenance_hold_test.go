@@ -112,3 +112,52 @@ func TestMaintenanceHoldResolveDoesNotAutoStart(t *testing.T) {
 		t.Fatalf("held computer must not boot/recover on resolve, boots=%v recovers=%v", mgr.boots, mgr.recovers)
 	}
 }
+
+func TestMaintenanceHoldRefusesPlainRecover(t *testing.T) {
+	reg := NewOwnershipRegistry("")
+	key := ownershipKey("user-hold", PrimaryDesktopID)
+	reg.ownerships[key] = &VMOwnership{
+		VMID:       "vm-hold-1",
+		ComputerID: "computer-hold-1",
+		UserID:     "user-hold",
+		DesktopID:  PrimaryDesktopID,
+		State:      VMStateStopped,
+		HoldStatus: &MaintenanceHold{Reason: "maintenance", HeldBy: "recovery"},
+	}
+	reg.SetVMManager(&mockVMManager{})
+
+	_, err := reg.RecoverVMForDesktop("user-hold", PrimaryDesktopID)
+	if err == nil || !strings.Contains(err.Error(), "maintenance hold") {
+		t.Fatalf("plain recover must refuse a held computer, got %v", err)
+	}
+}
+
+func TestMaintenanceHoldAuthorizesReplayOnlyRecoveryBoot(t *testing.T) {
+	reg := NewOwnershipRegistry("")
+	key := ownershipKey("user-hold", PrimaryDesktopID)
+	reg.ownerships[key] = &VMOwnership{
+		VMID:       "vm-hold-1",
+		ComputerID: "computer-hold-1",
+		UserID:     "user-hold",
+		DesktopID:  PrimaryDesktopID,
+		State:      VMStateStopped,
+		HoldStatus: &MaintenanceHold{Reason: "maintenance", HeldBy: "recovery"},
+	}
+	mock := &mockVMManager{}
+	reg.SetVMManager(mock)
+
+	own, err := reg.RecoverVMForDesktopMaintenance("user-hold", PrimaryDesktopID, true)
+	if err != nil {
+		t.Fatalf("authorized maintenance recovery: %v", err)
+	}
+	if len(mock.boots) != 1 {
+		t.Fatalf("expected exactly one boot, got %d", len(mock.boots))
+	}
+	boot := mock.boots[0]
+	if !boot.RecoveryReplayOnly || !boot.MaintenanceHold {
+		t.Fatalf("recovery boot must carry replay-only + maintenance hold, got %+v", boot)
+	}
+	if own.State != VMStateActive {
+		t.Fatalf("recovered ownership should be active, got %s", own.State)
+	}
+}
