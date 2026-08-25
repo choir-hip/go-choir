@@ -96,7 +96,7 @@ phases:
 
 now:
   status: working
-  slice: "Phase Fence landed + deployed: host-authoritative maintenance hold (VMOwnership.HoldStatus + lifecycle-matrix guards on resolve/ready/refresh/reattach/warm/idle/retention/pressure-reclaim; commit e1742675), guest-visible hold channel (Runtime.Start rewake gate + run-admission + ensureSelfDevelopmentRun gate; 87a71119 + ci.yml fix c25ca7d7). Staging deployed at c25ca7d7 via force-deploy 32792957766. selfdev-ccf0f1ec left executing + unmutated. NEXT: Apply-hold needs an owner-scoped product-path hold route (proxy + corpusd + vmctl client + CLI), since /internal/vmctl/hold is Node-B-internal only."
+  slice: "Phase Fence landed + deployed (host hold e1742675; guest-visible hold 87a71119 + ci.yml fix c25ca7d7; staging c25ca7d7 via force-deploy 32792957766; selfdev-ccf0f1ec unmutated). Read-only audit DONE (ce9081c6): platform canonical head SURVIVES at sequence 133,209 / canonical 6e7424f0... (670 events past the preflight 132,539/acc54c39, which is now an ancestor, not the head); NO on-disk image carries the current head (quarantines are 8df7efbb/7c78131c; live data.img is post-refresh/pre-genesis) -> recovery is B14 rematerialize-to-head (133,209), not image-reuse, not escalate. Apply-hold still DEFERRED per owner direction; the hold mechanism is inert until set."
   question: none
   reconciliation:
     observed_at: "2026-08-24T22:10:00Z"
@@ -119,7 +119,7 @@ now:
     - docs/definitions/choir-durable-substrate-preflight-2026-08-24.md
     - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
     - docs/designs/choir-durable-substrate-2026-08-23.md
-  next_action: "Apply-hold: add owner-scoped product-path hold/unhold (CLI computer hold -> proxy lifecycle -> corpusd -> vmctl SetHold/ClearHold) + deploy; then set the host hold on 0333528 FIRST, verify no epoch increment / no auto-restart / no redeploy-refresh / no selfdev rewake, cleanly stop the realization, reflink snapshot data.img.stable-hold-20260824, read-only audit (head 132,539/acc54c39 survival), B14 recover-under-hold, stable-state gate."
+  next_action: "Recover-under-hold: set the host hold on 0333528 first (owner-scoped product-path hold route, or Node B holder), verify quiesced + no epoch increment + no auto-restart, then B14 replay-only rematerialize to platform head 133,209 under hold; verify local==133,209, <30s boot, valid credentials, no restart loop, no run admitted (guest-visible hold gate). Then stable-state gate + HAND-OFF."
 
 receipts:
   - id: define-stabilize-hold
@@ -138,6 +138,22 @@ receipts:
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
     registry_conformance_ref: pending (update ACTIVE.md / mission-graph.yaml / doc-authority-manifest.yaml on accept)
+
+  - id: audit-stabilize-hold
+    boundary: audit
+    commit_or_artifact: "docs/evidence/0333528-read-only-audit-2026-08-25.md (ce9081c6)"
+    proof_refs: [corpusd /internal/computers/events/head sequence 133209 canonical 6e7424f0..., image inventory + rec-*.journal heads]
+    rollback_ref: revert docs commit
+    disposition: "Read-only audit: platform head survives at 133,209/6e7424f0 (670 past preflight 132,539/acc54c39, now an ancestor); no image carries the current head -> B14 rematerialize-to-head, not escalate. No mutation performed."
+    problem_ref: docs/evidence/0333528-recurring-corruption-loop-2026-08-24.md
+    authorization_ref: owner direction 2026-08-24
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: ce9081c6
+      ci_ref: docs-only
+      deploy_ref: not_applicable
+      environment_identity: corpusd platform head read on node-b :8086
+      deployed_acceptance: "platform canonical head 133,209/6e7424f0 confirmed read-only; guest recovery path = B14-to-head"
 
   - id: fence-stabilize-hold
     boundary: fence
