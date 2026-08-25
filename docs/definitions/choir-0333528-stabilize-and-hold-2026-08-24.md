@@ -96,7 +96,7 @@ phases:
 
 now:
   status: working
-  slice: "Define authored; agentic-consensus define-confirm (6 agents) returned REPAIR; the five must-fixes adjudicated into the Definition (fence lifecycle matrix expanded, guest-visible hold channel added, selfdev op left unmutated / no non-existent StatePaused, deploy-refresh enforced on deployed vmctl + CI, snapshot-then-stop order fixed, finish trimmed to the hold gate with overhauls/adopt/release marked HAND-OFF). ; the agentic-consensus re-confirm (6 agents) returned REPAIR (5/6, 1 accept); its residuals adjudicated in (post-stop resolve path resolveDesktopContext -> startExistingVM added to the matrix; authorized maintenance capability added to resolve the refuse-all vs must-stop/boot contradiction; guest-visible hold short-circuits at the START of Runtime.Start; "non-writing" scoped to no run admitted while held). Definition now reflects all panel findings."
+  slice: "Phase Fence landed + deployed: host-authoritative maintenance hold (VMOwnership.HoldStatus + lifecycle-matrix guards on resolve/ready/refresh/reattach/warm/idle/retention/pressure-reclaim; commit e1742675), guest-visible hold channel (Runtime.Start rewake gate + run-admission + ensureSelfDevelopmentRun gate; 87a71119 + ci.yml fix c25ca7d7). Staging deployed at c25ca7d7 via force-deploy 32792957766. selfdev-ccf0f1ec left executing + unmutated. NEXT: Apply-hold needs an owner-scoped product-path hold route (proxy + corpusd + vmctl client + CLI), since /internal/vmctl/hold is Node-B-internal only."
   question: none
   reconciliation:
     observed_at: "2026-08-24T22:10:00Z"
@@ -119,7 +119,7 @@ now:
     - docs/definitions/choir-durable-substrate-preflight-2026-08-24.md
     - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
     - docs/designs/choir-durable-substrate-2026-08-23.md
-  next_action: "Run the proportionate agentic-consensus re-confirm on the repaired Definition; on accept, update the registry-hygiene surfaces (docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml) and record the owner ratification, then begin Phase Fence (implement the host hold)."
+  next_action: "Apply-hold: add owner-scoped product-path hold/unhold (CLI computer hold -> proxy lifecycle -> corpusd -> vmctl SetHold/ClearHold) + deploy; then set the host hold on 0333528 FIRST, verify no epoch increment / no auto-restart / no redeploy-refresh / no selfdev rewake, cleanly stop the realization, reflink snapshot data.img.stable-hold-20260824, read-only audit (head 132,539/acc54c39 survival), B14 recover-under-hold, stable-state gate."
 
 receipts:
   - id: define-stabilize-hold
@@ -138,3 +138,19 @@ receipts:
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
     registry_conformance_ref: pending (update ACTIVE.md / mission-graph.yaml / doc-authority-manifest.yaml on accept)
+
+  - id: fence-stabilize-hold
+    boundary: fence
+    commit_or_artifact: "e1742675 (host hold), 87a71119 + c25ca7d7 (guest-visible hold + CI filter); staging deployed c25ca7d7 via force-deploy 32792957766"
+    proof_refs: [maintenance_hold_test.go (vmctl + agentcore), lifecycle-matrix guard grep, staging /health build.deployed_commit c25ca7d7]
+    rollback_ref: revert origin/main + CI
+    disposition: "Host fence + guest-visible hold channel + CI held filter implemented, tested (go test -mod=mod internal/vmctl + agentcore green), built (autoputer/gateway/choir/proxy/vmctl), and deployed to staging c25ca7d7. selfdev op left executing + unmutated. Next: product-path hold route then Apply-hold."
+    problem_ref: docs/evidence/0333528-recurring-corruption-loop-2026-08-24.md
+    authorization_ref: owner direction 2026-08-24
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: c25ca7d7
+      ci_ref: "32787344984 (host, success); 32792957766 (force-deploy, success)"
+      deploy_ref: workflow_dispatch force_staging_deploy=true
+      environment_identity: "staging https://choir.news deployed_commit c25ca7d7"
+      deployed_acceptance: "internal/vmctl + agentcore maintenance-hold unit tests green; host fence e1742675; guest hold 87a71119; CI filter c25ca7d7"
