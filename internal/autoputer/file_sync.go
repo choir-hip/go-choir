@@ -158,6 +158,24 @@ func (s *fileSync) HydrateIfNeeded(ctx context.Context) (int, error) {
 	if err := swapHydrationTree(stagingDir, s.filesRoot); err != nil {
 		return 0, fmt.Errorf("file sync: install hydrated tree: %w", err)
 	}
+
+	// Seed in-memory cache so subsequent syncs do not re-upload restored chunks
+	for _, entry := range manifest.Files {
+		rel, err := safeHydrationPath(entry.Path)
+		if err != nil {
+			continue
+		}
+		info, err := os.Stat(filepath.Join(s.filesRoot, filepath.FromSlash(rel)))
+		if err == nil {
+			pathChunks := make(map[string]bool)
+			for _, ch := range entry.Chunks {
+				pathChunks[ch] = true
+			}
+			s.fileCache[rel] = cachedSyncedFile{size: info.Size(), modTime: info.ModTime(), entry: entry}
+			s.chunkCache[rel] = pathChunks
+		}
+	}
+
 	s.lastHydratedRoot = root
 	return restored, nil
 }

@@ -398,3 +398,173 @@ func TestFileSyncHydrateIfNeededSkipsNonEmptyLocalTree(t *testing.T) {
 		t.Fatalf("hydration made %d platform requests for non-empty local tree", requests)
 	}
 }
+func TestFileSyncIncrementalAndRestoreCycle(t *testing.T) {
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "file-a.txt"), []byte("content A v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	chunks := make(map[string][]byte)
+	manifests := make(map[string][]byte)
+	var roots []string
+	uploadedChunksCount := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/internal/computers/files/chunks/"):
+			data, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			mu.Lock()
+			digest := strings.TrimPrefix(r.URL.Path, "/internal/computers/files/chunks/")
+			chunks[digest] = data
+			uploadedChunksCount++
+			mu.Unlock()
+			w.WriteHeader(http.StatusCreated)
+		case r.Method == http.MethodPut && r.URL.Path == "/internal/computers/files/root":
+			var request struct {
+				Manifest string `json:"manifest"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			manifest, err := filecas.ParseManifest([]byte(request.Manifest))
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			mu.Lock()
+			manifests[manifest.Root] = []byte(request.Manifest)
+			roots = append([]string{manifest.Root}, roots...)
+			mu.Unlock()
+			w.WriteHeader(http.StatusCreated)
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/computers/files/roots":
+			mu.Lock()
+			response := struct {
+				Roots []struct {
+					Root string `json:"root"`
+				} `json:"roots"`
+			}{}
+			for _, root := range roots {
+				response.Roots = append(response.Roots, struct {
+					Root string `json:"root"`
+				}{Root: root})
+			}
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(response)
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/computers/files/root":
+			mu.Lock()
+			manifest := append([]byte(nil), manifests[r.URL.Query().Get("root")]...)
+			mu.Unlock()
+			if manifest == nil {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = w.Write(manifest)
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/computers/files/chunks/"):
+			mu.Lock()
+			chunk := append([]byte(nil), chunks[strings.TrimPrefix(r.URL.Path, "/internal/computers/files/chunks/")]...)
+			mu.Unlock()
+			if chunk == nil {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = w.Write(chunk)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i + 1)
+	}
+	cipher, err := computerevent.NewPrivateArtifactCipher("computer-test", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := func(context.Context) (string, error) { return "token", nil }
+
+	syncer := newFileSync(source, server.URL, capability, "computer-test", cipher, func(context.Context) (uint64, error) { return 1, nil }, nil)
+
+	// Cycle 1: initial sync
+	res1, err := syncer.syncOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res1.files != 1 || res1.chunksUploaded != 1 {
+		t.Fatalf("cycle 1: expected 1 file, 1 chunk, got %+v", res1)
+	}
+
+	// Cycle 2: add file B, modify file A
+	if err := os.WriteFile(filepath.Join(source, "file-b.txt"), []byte("content B v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "file-a.txt"), []byte("content A v2 (modified)"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res2, err := syncer.syncOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.files != 2 || res2.chunksUploaded != 2 {
+		t.Fatalf("cycle 2: expected 2 files, 2 uploaded chunks, got %+v", res2)
+	}
+
+	// Cycle 3: simulate disk loss and restore to empty destination
+	destination := t.TempDir()
+	restorer := newFileSync(destination, server.URL, capability, "computer-test", cipher, nil, nil)
+	restored, err := restorer.HydrateIfNeeded(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored != 2 {
+		t.Fatalf("expected 2 restored files, got %d", restored)
+	}
+
+	// Verify restored contents
+	dataA, err := os.ReadFile(filepath.Join(destination, "file-a.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(dataA) != "content A v2 (modified)" {
+		t.Fatalf("restored file A mismatch: %q", string(dataA))
+	}
+	dataB, err := os.ReadFile(filepath.Join(destination, "file-b.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(dataB) != "content B v1" {
+		t.Fatalf("restored file B mismatch: %q", string(dataB))
+	}
+
+	// Cycle 4: sync from restored destination uploads 0 new chunks
+	mu.Lock()
+	uploadedBefore := uploadedChunksCount
+	mu.Unlock()
+
+	res4, err := restorer.syncOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res4.files != 2 {
+		t.Fatalf("cycle 4: expected 2 files, got %+v", res4)
+	}
+	if res4.chunksUploaded != 0 {
+		t.Fatalf("cycle 4: expected 0 uploaded chunks, got %d", res4.chunksUploaded)
+	}
+	mu.Lock()
+	uploadedAfter := uploadedChunksCount
+	mu.Unlock()
+	if uploadedAfter != uploadedBefore {
+		t.Fatalf("expected 0 new chunk uploads from restored tree, got %d", uploadedAfter-uploadedBefore)
+	}
+}
