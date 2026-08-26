@@ -3,6 +3,7 @@ package auth
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
@@ -20,6 +21,7 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/keyescrow"
 )
 
 // AccessTokenCookieName is the cookie name for the short-lived access JWT.
@@ -78,8 +80,10 @@ type errorResponse struct {
 
 // finishResponse is the JSON response for successful register/login finish.
 type finishResponse struct {
-	OK   bool      `json:"ok"`
-	User *userInfo `json:"user"`
+	OK        bool      `json:"ok"`
+	User      *userInfo `json:"user"`
+	RootKey   *string   `json:"root_key,omitempty"`
+	Protector string    `json:"protector,omitempty"`
 }
 
 // --- Helper functions ---
@@ -464,6 +468,9 @@ func (h *Handler) HandleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 		webauthn.WithAuthenticatorSelection(
 			webauthn.SelectAuthenticator("platform", nil, "required"),
 		),
+		webauthn.WithExtensions(protocol.AuthenticationExtensions{
+			"prf": map[string]any{},
+		}),
 	)
 	if err != nil {
 		log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s result=error step=begin_registration error=%q", emailHash, user.ID, err)
@@ -556,8 +563,30 @@ func (h *Handler) HandleLoginBegin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Request a PRF evaluation when a registered credential is PRF-capable.
+	// The authenticated credential is determined by the assertion response;
+	// FinishLogin independently checks that credential before using any result.
+	loginOptions := make([]webauthn.LoginOption, 0, 1)
+	for _, cred := range creds {
+		capable, salt, prfErr := h.store.GetCredentialPRFInfo(cred.ID)
+		if prfErr != nil {
+			log.Printf("[auth] operation=login_begin user_id=%s credential_id=%s result=warning step=get_prf_info error=%q", user.ID, cred.ID, prfErr)
+			continue
+		}
+		if capable {
+			loginOptions = append(loginOptions, webauthn.WithAssertionExtensions(protocol.AuthenticationExtensions{
+				"prf": map[string]any{
+					"eval": map[string]any{
+						"first": base64.RawURLEncoding.EncodeToString(salt),
+					},
+				},
+			}))
+			break
+		}
+	}
+
 	// Begin the WebAuthn login ceremony.
-	assertion, session, err := h.webauthn.BeginLogin(waUser)
+	assertion, session, err := h.webauthn.BeginLogin(waUser, loginOptions...)
 	if err != nil {
 		log.Printf("[auth] operation=login_begin email_hash=%s user_id=%s result=error step=begin_login error=%q", emailHash, user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to begin login"})
@@ -720,6 +749,17 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if passkeyPRFEnabled(parsedResponse.ClientExtensionResults) {
+		salt := make([]byte, 32)
+		if _, err := rand.Read(salt); err != nil {
+			log.Printf("[auth] operation=register_finish user_id=%s credential_id=%s result=warning step=prf_salt_random error=%q", user.ID, dbCred.ID, err)
+		} else if err := h.store.SetCredentialPRFCapable(dbCred.ID, salt); err != nil {
+			log.Printf("[auth] operation=register_finish user_id=%s credential_id=%s result=warning step=store_prf_info error=%q", user.ID, dbCred.ID, err)
+		} else {
+			log.Printf("[auth] operation=register_finish user_id=%s credential_id=%s result=success detail=\"passkey prf capable\"", user.ID, dbCred.ID)
+		}
+	}
+
 	log.Printf("[auth] operation=register_finish user_id=%s credential_id=%s sign_count=%d result=success step=credential_stored", user.ID, dbCred.ID, dbCred.SignCount)
 
 	// Issue cookie-backed auth state.
@@ -750,6 +790,8 @@ func (h *Handler) HandleLoginFinish(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
+
+	unwrapRoot := loginRequestsRootUnwrap(body)
 
 	// Extract the challenge from the WebAuthn response to look up the session.
 	challengeID, err := extractChallengeFromBody(body)
@@ -858,9 +900,140 @@ func (h *Handler) HandleLoginFinish(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
 		return
 	}
-
+	response := finishResponse{OK: true, User: userInfo}
+	if unwrapRoot {
+		rootKey, protector := h.unwrapOwnerRoot(user.ID, string(credential.ID), parsedResponse.ClientExtensionResults)
+		response.RootKey = &rootKey
+		response.Protector = protector
+	}
 	log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=success step=session_issued", user.ID, string(credential.ID))
-	writeJSON(w, http.StatusOK, finishResponse{OK: true, User: userInfo})
+	writeJSON(w, http.StatusOK, response)
+}
+
+func loginRequestsRootUnwrap(body []byte) bool {
+	var request struct {
+		UnwrapRoot bool `json:"unwrap_root"`
+	}
+	return json.Unmarshal(body, &request) == nil && request.UnwrapRoot
+}
+
+func passkeyPRFEnabled(results protocol.AuthenticationExtensionsClientOutputs) bool {
+	prf, ok := results["prf"].(map[string]any)
+	if !ok {
+		return false
+	}
+	enabled, _ := prf["enabled"].(bool)
+	return enabled
+}
+
+func prfResultFirst(results protocol.AuthenticationExtensionsClientOutputs) ([]byte, error) {
+	prf, ok := results["prf"].(map[string]any)
+	if !ok {
+		return nil, errors.New("PRF extension result missing")
+	}
+	prfResults, ok := prf["results"].(map[string]any)
+	if !ok {
+		return nil, errors.New("PRF result values missing")
+	}
+	first, ok := prfResults["first"].(string)
+	if !ok {
+		return nil, errors.New("PRF first result missing")
+	}
+	secret, err := base64.RawURLEncoding.DecodeString(first)
+	if err != nil || len(secret) != 32 {
+		return nil, errors.New("PRF first result invalid")
+	}
+	return secret, nil
+}
+
+// unwrapOwnerRoot performs the data-key portion of a completed PRF assertion.
+// Failure is deliberately non-fatal to login: authentication has already
+// succeeded, while key availability is an independent capability.
+func (h *Handler) unwrapOwnerRoot(ownerID, credentialID string, results protocol.AuthenticationExtensionsClientOutputs) (string, string) {
+	capable, credentialSalt, err := h.store.GetCredentialPRFInfo(credentialID)
+	if err != nil {
+		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=warning step=get_prf_info error=%q", ownerID, credentialID, err)
+		return "", ""
+	}
+	if !capable {
+		return "", ""
+	}
+	prfSecret, err := prfResultFirst(results)
+	if err != nil {
+		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=warning step=read_prf_result error=%q", ownerID, credentialID, err)
+		return "", ""
+	}
+	wrapKey := keyescrow.DerivePRFWrapKey(prfSecret, ownerID)
+
+	wrapSalt, wrappedRoot, err := h.store.GetOwnerRootWrap(ownerID, credentialID)
+	if err == sql.ErrNoRows {
+		root, created, ensureErr := h.store.EnsureOwnerRoot(ownerID)
+		if ensureErr != nil {
+			log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=warning step=ensure_root error=%q", ownerID, credentialID, ensureErr)
+			return "", ""
+		}
+		if !created {
+			log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=warning step=ensure_root error=%q", ownerID, credentialID, errors.New("owner ROOT exists without this credential wrap"))
+			return "", ""
+		}
+		wrappedRoot, err = keyescrow.SealRoot(wrapKey, ownerID, root)
+		if err != nil {
+			log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=warning step=seal_root error=%q", ownerID, credentialID, err)
+			return "", ""
+		}
+		if err := h.store.PutOwnerRootWrap(ownerID, credentialID, credentialSalt, wrappedRoot); err != nil {
+			log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=warning step=store_root_wrap error=%q", ownerID, credentialID, err)
+			return "", ""
+		}
+		return base64.RawURLEncoding.EncodeToString(root), keyescrow.ProtectorPasskeyPRF
+	}
+	if err != nil {
+		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=warning step=get_root_wrap error=%q", ownerID, credentialID, err)
+		return "", ""
+	}
+	if !bytes.Equal(credentialSalt, wrapSalt) {
+		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=warning step=get_root_wrap error=%q", ownerID, credentialID, errors.New("PRF salt does not match credential"))
+		return "", ""
+	}
+	root, err := keyescrow.OpenRoot(wrapKey, ownerID, wrappedRoot)
+	if err != nil {
+		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=warning step=open_root error=%q", ownerID, credentialID, err)
+		return "", ""
+	}
+	return base64.RawURLEncoding.EncodeToString(root), keyescrow.ProtectorPasskeyPRF
+}
+
+type rootStatusResponse struct {
+	HasRoot               bool `json:"has_root"`
+	PRFCapableCredentials int  `json:"prf_capable_credentials"`
+}
+
+// HandleRootStatus reports the authenticated owner's ROOT and PRF readiness.
+func (h *Handler) HandleRootStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+	user := h.requireAuthUser(w, r)
+	if user == nil {
+		return
+	}
+	hasRoot, err := h.store.HasOwnerRoot(user.ID)
+	if err != nil {
+		log.Printf("[auth] operation=root_status user_id=%s result=error step=has_root error=%q", user.ID, err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
+		return
+	}
+	prfCredentials, err := h.store.CountPRFCapableCredentials(user.ID)
+	if err != nil {
+		log.Printf("[auth] operation=root_status user_id=%s result=error step=count_prf_credentials error=%q", user.ID, err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, rootStatusResponse{
+		HasRoot:               hasRoot,
+		PRFCapableCredentials: prfCredentials,
+	})
 }
 
 // HandleSession handles GET /auth/session.

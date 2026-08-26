@@ -42,9 +42,12 @@ CREATE TABLE IF NOT EXISTS credentials (
 	aaguid          BLOB    NOT NULL,
 	flags           TEXT    NOT NULL DEFAULT '{}',
 	name            TEXT    NOT NULL DEFAULT '',
+	prf_capable     INTEGER NOT NULL DEFAULT 0,
+	prf_salt        BLOB,
 	created_at      DATETIME NOT NULL,
 	last_used_at    DATETIME
 );
+
 
 CREATE TABLE IF NOT EXISTS challenge_state (
 	id                 TEXT PRIMARY KEY,
@@ -117,6 +120,23 @@ CREATE INDEX IF NOT EXISTS idx_recovery_tokens_ip_hash ON recovery_tokens(ip_has
 CREATE INDEX IF NOT EXISTS idx_recovery_tokens_token_hash ON recovery_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_recovery_tokens_expires_at ON recovery_tokens(expires_at);
 CREATE INDEX IF NOT EXISTS idx_recovery_tokens_user_id ON recovery_tokens(user_id);
+
+CREATE TABLE IF NOT EXISTS owner_root_keys (
+	owner_id   TEXT PRIMARY KEY,
+	created_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS owner_root_key_wraps (
+	id            INTEGER PRIMARY KEY AUTOINCREMENT,
+	owner_id      TEXT NOT NULL,
+	credential_id BLOB NOT NULL,
+	protector     TEXT NOT NULL DEFAULT 'passkey_prf',
+	prf_salt      BLOB NOT NULL,
+	wrapped_root  BLOB NOT NULL,
+	created_at    DATETIME NOT NULL,
+	UNIQUE(owner_id, credential_id)
+);
+CREATE INDEX IF NOT EXISTS idx_owner_root_key_wraps_owner_id ON owner_root_key_wraps(owner_id);
 `
 
 // schemaMigrations contains DDL statements that add columns to existing tables
@@ -140,6 +160,9 @@ var schemaMigrations = []string{
 	`ALTER TABLE refresh_sessions ADD COLUMN last_used_at DATETIME`,
 	// Self-development keys are explicitly bound to one stable ComputerID.
 	`ALTER TABLE api_keys ADD COLUMN computer_id TEXT`,
+	// Track K 1b: passkey PRF capability and per-credential evaluation salt.
+	`ALTER TABLE credentials ADD COLUMN prf_capable INTEGER NOT NULL DEFAULT 0`,
+	`ALTER TABLE credentials ADD COLUMN prf_salt BLOB`,
 }
 
 // User represents a row in the users table.
@@ -487,6 +510,144 @@ func (s *Store) GetCredentialsByUserID(userID string) ([]Credential, error) {
 		creds = append(creds, c)
 	}
 	return creds, rows.Err()
+}
+
+// SetCredentialPRFCapable records that a credential enabled the passkey PRF
+// extension during registration and stores its server-chosen evaluation salt.
+func (s *Store) SetCredentialPRFCapable(credentialID string, salt []byte) error {
+	if credentialID == "" || len(salt) != 32 {
+		return errors.New("set credential PRF capable: credential id and 32-byte salt required")
+	}
+	res, err := s.db.Exec(
+		"UPDATE credentials SET prf_capable = 1, prf_salt = ? WHERE id = ?",
+		salt, credentialID,
+	)
+	if err != nil {
+		return fmt.Errorf("set credential PRF capable %q: %w", credentialID, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set credential PRF capable rows affected: %w", err)
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// GetCredentialPRFInfo returns a credential's PRF capability and evaluation
+// salt. A non-capable credential has a nil salt.
+func (s *Store) GetCredentialPRFInfo(credentialID string) (capable bool, salt []byte, err error) {
+	var capableInt int
+	if err := s.db.QueryRow(
+		"SELECT prf_capable, prf_salt FROM credentials WHERE id = ?",
+		credentialID,
+	).Scan(&capableInt, &salt); err != nil {
+		return false, nil, err
+	}
+	if capableInt == 0 {
+		return false, nil, nil
+	}
+	if len(salt) != 32 {
+		return false, nil, fmt.Errorf("credential %q has invalid PRF salt", credentialID)
+	}
+	return true, salt, nil
+}
+
+// EnsureOwnerRoot records the one-time existence of an owner's ROOT key and
+// returns its newly generated value. ROOT material is never persisted: callers
+// must wrap it before returning. If a ROOT already exists, root is nil.
+func (s *Store) EnsureOwnerRoot(ownerID string) (root []byte, created bool, err error) {
+	if strings.TrimSpace(ownerID) == "" {
+		return nil, false, errors.New("ensure owner root: owner id required")
+	}
+	root = make([]byte, 32)
+	if _, err := rand.Read(root); err != nil {
+		return nil, false, fmt.Errorf("ensure owner root: random: %w", err)
+	}
+	res, err := s.db.Exec(
+		"INSERT OR IGNORE INTO owner_root_keys (owner_id, created_at) VALUES (?, ?)",
+		ownerID, time.Now().UTC(),
+	)
+	if err != nil {
+		return nil, false, fmt.Errorf("ensure owner root: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return nil, false, fmt.Errorf("ensure owner root rows affected: %w", err)
+	}
+	if n == 0 {
+		return nil, false, nil
+	}
+	return root, true, nil
+}
+
+// PutOwnerRootWrap stores a PRF-protected owner ROOT wrap for a credential.
+func (s *Store) PutOwnerRootWrap(ownerID, credentialID string, salt, wrappedRoot []byte) error {
+	if strings.TrimSpace(ownerID) == "" || credentialID == "" || len(salt) != 32 || len(wrappedRoot) == 0 {
+		return errors.New("put owner root wrap: owner, credential, 32-byte salt, and wrapped root required")
+	}
+	_, err := s.db.Exec(`
+		INSERT INTO owner_root_key_wraps (owner_id, credential_id, protector, prf_salt, wrapped_root, created_at)
+		VALUES (?, ?, 'passkey_prf', ?, ?, ?)
+		ON CONFLICT(owner_id, credential_id) DO UPDATE SET
+			protector = excluded.protector,
+			prf_salt = excluded.prf_salt,
+			wrapped_root = excluded.wrapped_root,
+			created_at = excluded.created_at`,
+		ownerID, []byte(credentialID), salt, wrappedRoot, time.Now().UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("put owner root wrap: %w", err)
+	}
+	return nil
+}
+
+// GetOwnerRootWrap retrieves the passkey PRF salt and wrapped ROOT for one
+// owner credential pair, or sql.ErrNoRows when no wrap exists.
+func (s *Store) GetOwnerRootWrap(ownerID, credentialID string) (salt, wrappedRoot []byte, err error) {
+	err = s.db.QueryRow(`
+		SELECT prf_salt, wrapped_root
+		FROM owner_root_key_wraps
+		WHERE owner_id = ? AND credential_id = ? AND protector = 'passkey_prf'`,
+		ownerID, []byte(credentialID),
+	).Scan(&salt, &wrappedRoot)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(salt) != 32 || len(wrappedRoot) == 0 {
+		return nil, nil, errors.New("owner root wrap has invalid data")
+	}
+	return salt, wrappedRoot, nil
+}
+
+// HasOwnerRoot reports whether an owner has ever initialized a ROOT key.
+func (s *Store) HasOwnerRoot(ownerID string) (bool, error) {
+	var present int
+	err := s.db.QueryRow(
+		"SELECT 1 FROM owner_root_keys WHERE owner_id = ?",
+		ownerID,
+	).Scan(&present)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// CountPRFCapableCredentials returns the number of PRF-capable credentials
+// belonging to an owner.
+func (s *Store) CountPRFCapableCredentials(ownerID string) (int, error) {
+	var count int
+	if err := s.db.QueryRow(
+		"SELECT COUNT(*) FROM credentials WHERE user_id = ? AND prf_capable = 1",
+		ownerID,
+	).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 // UpdateCredentialSignCount updates the sign_count for the given credential ID.

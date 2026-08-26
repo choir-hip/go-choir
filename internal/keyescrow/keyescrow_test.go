@@ -42,6 +42,36 @@ func TestSealOpenRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPasskeyPRFRootWrap(t *testing.T) {
+	prfSecret := bytes.Repeat([]byte{0x11}, 32)
+	root := bytes.Repeat([]byte{0x22}, 32)
+	wrapKey := DerivePRFWrapKey(prfSecret, "owner-a")
+	if len(wrapKey) != 32 {
+		t.Fatalf("wrap key length = %d, want 32", len(wrapKey))
+	}
+	blob, err := SealRoot(wrapKey, "owner-a", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := OpenRoot(wrapKey, "owner-a", blob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, root) {
+		t.Fatal("recovered ROOT mismatch")
+	}
+	if _, err := OpenRoot(wrapKey, "owner-b", blob); err == nil {
+		t.Fatal("expected wrong owner rejection")
+	}
+	if _, err := OpenRoot(DerivePRFWrapKey(bytes.Repeat([]byte{0x33}, 32), "owner-a"), "owner-a", blob); err == nil {
+		t.Fatal("expected wrong key rejection")
+	}
+	blob[len(blob)-1] ^= 1
+	if _, err := OpenRoot(wrapKey, "owner-a", blob); err == nil {
+		t.Fatal("expected tamper rejection")
+	}
+}
+
 func TestOpenRejectsWrongComputerBinding(t *testing.T) {
 	priv, pub, err := GenerateKeyPair()
 	if err != nil {

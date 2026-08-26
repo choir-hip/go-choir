@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"path/filepath"
@@ -205,6 +206,68 @@ func TestCreateAndGetCredential(t *testing.T) {
 	}
 	if string(creds[0].PublicKey) != "fake-public-key" {
 		t.Errorf("PublicKey: got %q, want %q", string(creds[0].PublicKey), "fake-public-key")
+	}
+}
+
+func TestOwnerRootWrapPersistence(t *testing.T) {
+	store := TestStore(t)
+	if _, err := store.CreateUser("owner-1", "owner@example.com"); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	cred := &Credential{
+		ID:              "prf-credential",
+		UserID:          "owner-1",
+		PublicKey:       []byte("fake-public-key"),
+		AttestationType: "none",
+		Transport:       `["internal"]`,
+		AAGUID:          make([]byte, 16),
+		Flags:           "{}",
+		CreatedAt:       time.Now().UTC(),
+	}
+	if err := store.CreateCredential(cred); err != nil {
+		t.Fatalf("CreateCredential: %v", err)
+	}
+	salt := bytes.Repeat([]byte{0x11}, 32)
+	if err := store.SetCredentialPRFCapable(cred.ID, salt); err != nil {
+		t.Fatalf("SetCredentialPRFCapable: %v", err)
+	}
+	capable, gotCredentialSalt, err := store.GetCredentialPRFInfo(cred.ID)
+	if err != nil {
+		t.Fatalf("GetCredentialPRFInfo: %v", err)
+	}
+	if !capable || !bytes.Equal(gotCredentialSalt, salt) {
+		t.Fatal("credential PRF info was not persisted")
+	}
+	root, created, err := store.EnsureOwnerRoot("owner-1")
+	if err != nil {
+		t.Fatalf("EnsureOwnerRoot: %v", err)
+	}
+	if !created || len(root) != 32 {
+		t.Fatal("expected a new 32-byte owner ROOT")
+	}
+	if err := store.PutOwnerRootWrap("owner-1", cred.ID, salt, []byte("sealed-root")); err != nil {
+		t.Fatalf("PutOwnerRootWrap: %v", err)
+	}
+	gotSalt, gotWrap, err := store.GetOwnerRootWrap("owner-1", cred.ID)
+	if err != nil {
+		t.Fatalf("GetOwnerRootWrap: %v", err)
+	}
+	if !bytes.Equal(gotSalt, salt) || !bytes.Equal(gotWrap, []byte("sealed-root")) {
+		t.Fatal("owner ROOT wrap was not persisted")
+	}
+	hasRoot, err := store.HasOwnerRoot("owner-1")
+	if err != nil {
+		t.Fatalf("HasOwnerRoot: %v", err)
+	}
+	if !hasRoot {
+		t.Fatal("owner ROOT existence was not persisted")
+	}
+	root, created, err = store.EnsureOwnerRoot("owner-1")
+	if err != nil {
+		t.Fatalf("EnsureOwnerRoot repeat: %v", err)
+	}
+	if created || root != nil {
+		t.Fatal("existing ROOT should not be regenerated")
 	}
 }
 

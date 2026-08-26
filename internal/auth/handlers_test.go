@@ -19,8 +19,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/yusefmosiah/go-choir/internal/keyescrow"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -56,6 +58,112 @@ func testHandlerEnv(t *testing.T) (*Handler, ed25519.PrivateKey) {
 
 	handler := NewHandler(store, wa, cfg, priv)
 	return handler, priv
+}
+
+func TestLoginFinishPRFRootUnwrap(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	user, err := h.store.CreateUser("prf-owner", "prf-owner@example.com")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	credential := &Credential{
+		ID:              "prf-credential",
+		UserID:          user.ID,
+		PublicKey:       []byte("fake-public-key"),
+		AttestationType: "none",
+		Transport:       `["internal"]`,
+		AAGUID:          make([]byte, 16),
+		Flags:           "{}",
+		CreatedAt:       time.Now().UTC(),
+	}
+	if err := h.store.CreateCredential(credential); err != nil {
+		t.Fatalf("CreateCredential: %v", err)
+	}
+	salt := bytes.Repeat([]byte{0x11}, 32)
+	if err := h.store.SetCredentialPRFCapable(credential.ID, salt); err != nil {
+		t.Fatalf("SetCredentialPRFCapable: %v", err)
+	}
+	prfSecret := bytes.Repeat([]byte{0x22}, 32)
+	root := bytes.Repeat([]byte{0x33}, 32)
+	wrappedRoot, err := keyescrow.SealRoot(keyescrow.DerivePRFWrapKey(prfSecret, user.ID), user.ID, root)
+	if err != nil {
+		t.Fatalf("SealRoot: %v", err)
+	}
+	if err := h.store.PutOwnerRootWrap(user.ID, credential.ID, salt, wrappedRoot); err != nil {
+		t.Fatalf("PutOwnerRootWrap: %v", err)
+	}
+
+	clientData := base64.RawURLEncoding.EncodeToString([]byte(`{"type":"webauthn.get","challenge":"test"}`))
+	authenticatorData := make([]byte, 37)
+	authenticatorData[32] = 0x01 // user present
+	assertionJSON := fmt.Sprintf(
+		`{"id":%q,"rawId":%q,"type":"public-key","response":{"clientDataJSON":%q,"authenticatorData":%q,"signature":""},"clientExtensionResults":{"prf":{"results":{"first":%q}}}}`,
+		credential.ID,
+		credential.ID,
+		clientData,
+		base64.RawURLEncoding.EncodeToString(authenticatorData),
+		base64.RawURLEncoding.EncodeToString(prfSecret),
+	)
+	parsed, err := protocol.ParseCredentialRequestResponseBody(strings.NewReader(assertionJSON))
+	if err != nil {
+		t.Fatalf("ParseCredentialRequestResponseBody: %v", err)
+	}
+	rootKey, protector := h.unwrapOwnerRoot(user.ID, credential.ID, parsed.ClientExtensionResults)
+	if protector != keyescrow.ProtectorPasskeyPRF {
+		t.Fatalf("protector = %q, want %q", protector, keyescrow.ProtectorPasskeyPRF)
+	}
+	got, err := base64.RawURLEncoding.DecodeString(rootKey)
+	if err != nil {
+		t.Fatalf("decode root key: %v", err)
+	}
+	if !bytes.Equal(got, root) {
+		t.Fatal("unwrapped ROOT does not match original")
+	}
+}
+
+func TestRootStatusIsOwnerScoped(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	user, err := h.store.CreateUser("root-status-owner", "root-status@example.com")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	credential := &Credential{
+		ID:              "root-status-prf-credential",
+		UserID:          user.ID,
+		PublicKey:       []byte("fake-public-key"),
+		AttestationType: "none",
+		Transport:       `["internal"]`,
+		AAGUID:          make([]byte, 16),
+		Flags:           "{}",
+		CreatedAt:       time.Now().UTC(),
+	}
+	if err := h.store.CreateCredential(credential); err != nil {
+		t.Fatalf("CreateCredential: %v", err)
+	}
+	if err := h.store.SetCredentialPRFCapable(credential.ID, bytes.Repeat([]byte{0x44}, 32)); err != nil {
+		t.Fatalf("SetCredentialPRFCapable: %v", err)
+	}
+	if _, created, err := h.store.EnsureOwnerRoot(user.ID); err != nil || !created {
+		t.Fatalf("EnsureOwnerRoot: created=%v err=%v", created, err)
+	}
+	token, err := h.issueAccessJWT(user)
+	if err != nil {
+		t.Fatalf("issueAccessJWT: %v", err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/auth/root/status", nil)
+	request.AddCookie(&http.Cookie{Name: AccessTokenCookieName, Value: token})
+	recorder := httptest.NewRecorder()
+	h.HandleRootStatus(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var response rootStatusResponse
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode root status: %v", err)
+	}
+	if !response.HasRoot || response.PRFCapableCredentials != 1 {
+		t.Fatalf("unexpected root status: %+v", response)
+	}
 }
 
 // --- Register Begin Tests ---

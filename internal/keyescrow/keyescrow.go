@@ -37,7 +37,8 @@ const (
 	// ProtectorOfflineCapsule is the owner offline capsule protector.
 	ProtectorOfflineCapsule = "offline_capsule"
 
-	hkdfInfo = "choir/keyescrow/v1/custodian/xchacha"
+	hkdfInfo       = "choir/keyescrow/v1/custodian/xchacha"
+	passkeyPRFInfo = "choir/keyescrow/v1/passkey_prf"
 )
 
 // ErrInvalidWrap marks malformed or unauthentic wrap records.
@@ -220,6 +221,60 @@ func ParseWrappedKey(data []byte) (*WrappedKey, error) {
 		return nil, fmt.Errorf("%w: incomplete record", ErrInvalidWrap)
 	}
 	return &record, nil
+}
+
+// DerivePRFWrapKey derives the owner-specific key used to wrap an owner ROOT
+// key. The passkey PRF secret is never persisted and never used for bulk data.
+func DerivePRFWrapKey(prfSecret []byte, ownerID string) []byte {
+	out := make([]byte, chacha20poly1305.KeySize)
+	reader := hkdf.New(sha256.New, prfSecret, []byte(ownerID), []byte(passkeyPRFInfo))
+	if _, err := readFull(reader, out); err != nil {
+		// HKDF does not exhaust while deriving a 32-byte key.
+		panic(fmt.Sprintf("keyescrow: derive PRF wrap key: %v", err))
+	}
+	return out
+}
+
+// SealRoot wraps a 32-byte owner ROOT key under a derived passkey PRF key.
+// The returned blob is nonce || ciphertext, authenticated to ownerID.
+func SealRoot(wrapKey []byte, ownerID string, root []byte) ([]byte, error) {
+	if len(wrapKey) != chacha20poly1305.KeySize {
+		return nil, fmt.Errorf("keyescrow: wrap key must be %d bytes", chacha20poly1305.KeySize)
+	}
+	if len(root) != chacha20poly1305.KeySize {
+		return nil, fmt.Errorf("keyescrow: root key must be %d bytes", chacha20poly1305.KeySize)
+	}
+	if strings.TrimSpace(ownerID) == "" {
+		return nil, errors.New("keyescrow: owner id required")
+	}
+	aead, err := chacha20poly1305.NewX(wrapKey)
+	if err != nil {
+		return nil, fmt.Errorf("keyescrow: root aead: %w", err)
+	}
+	blob := make([]byte, aead.NonceSize(), aead.NonceSize()+chacha20poly1305.KeySize+aead.Overhead())
+	if _, err := rand.Read(blob); err != nil {
+		return nil, fmt.Errorf("keyescrow: read root nonce: %w", err)
+	}
+	return aead.Seal(blob, blob, root, []byte(ownerID)), nil
+}
+
+// OpenRoot opens a passkey PRF wrap created by SealRoot.
+func OpenRoot(wrapKey []byte, ownerID string, blob []byte) ([]byte, error) {
+	if len(wrapKey) != chacha20poly1305.KeySize || strings.TrimSpace(ownerID) == "" {
+		return nil, ErrInvalidWrap
+	}
+	aead, err := chacha20poly1305.NewX(wrapKey)
+	if err != nil {
+		return nil, fmt.Errorf("keyescrow: root aead: %w", err)
+	}
+	if len(blob) != aead.NonceSize()+chacha20poly1305.KeySize+aead.Overhead() {
+		return nil, ErrInvalidWrap
+	}
+	root, err := aead.Open(nil, blob[:aead.NonceSize()], blob[aead.NonceSize():], []byte(ownerID))
+	if err != nil || len(root) != chacha20poly1305.KeySize {
+		return nil, ErrInvalidWrap
+	}
+	return root, nil
 }
 
 func deriveWrapKey(shared []byte, computerID string) []byte {

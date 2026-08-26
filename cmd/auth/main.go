@@ -66,6 +66,7 @@ func registerRoutes(s authRouteRegistrar, handler *auth.Handler, rateLimiter *au
 	s.HandleFunc("/auth/logout", limit(handler.HandleLogout))
 	s.HandleFunc("/auth/desktop/exchange-redirect", limit(handler.HandleDesktopExchangeRedirect))
 	s.HandleFunc("/auth/desktop/redeem", limit(handler.HandleDesktopRedeem))
+	s.HandleFunc("GET /api/auth/root/status", limit(handler.HandleRootStatus))
 
 	// M1: API key management (headless auth).
 	s.HandleFunc("POST /auth/api-keys", limit(handler.HandleCreateAPIKey))
