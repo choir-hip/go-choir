@@ -38,9 +38,13 @@ func TestCapsuleGoEvalToolDispatchesToExecutorGoEval(t *testing.T) {
 	})
 	_, err := tool.Func(ctx, raw)
 	if err == nil {
-		t.Fatalf("expected capsule_go_eval to dispatch to Executor.GoEval and return an error on the stub executor, got nil")
+		t.Fatalf("expected capsule_go_eval to dispatch to Executor.GoEval and return an error, got nil")
 	}
-	if !strings.Contains(err.Error(), "go_eval") {
-		t.Fatalf("expected the executor's go_eval error (proving dispatch to Executor.GoEval), got: %v", err)
+	// The tool must dispatch into the capsule executor path. On linux the real
+	// Executor.GoEval resolves the capability and refuses (no capsules bound);
+	// on darwin the stub returns the kernel-required error. Both prove the tool
+	// reached Executor.GoEval rather than short-circuiting or exiting early.
+	if !strings.Contains(err.Error(), "capsule operation refused") && !strings.Contains(err.Error(), "go_eval") {
+		t.Fatalf("expected the executor's refusal/error (proving dispatch to Executor.GoEval), got: %v", err)
 	}
 }
