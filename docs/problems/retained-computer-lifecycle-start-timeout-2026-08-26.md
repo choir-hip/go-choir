@@ -31,6 +31,14 @@ require a running computer.
   (so the lifecycle controller itself is healthy; the transition for this
   computer specifically does not complete).
 - Post-attempt status → still stopped; no partial state, no epoch bump.
+- Long-timeout start (240s client timeout) still failed `context deadline exceeded
+   while awaiting headers` — the server NEVER returns HTTP headers for the
+   lifecycle/start request (connection hangs at the proxy/autoputer layer), which
+   is not a slow-boot issue.
+- Fire-and-forget start then polling status for 4 minutes: state stayed `stopped`
+   (realization_epoch 794, unchanged) at all three checks — the start does not
+   initiate server-side either. This is a definitive platform-level blocker: the
+   retained computer cannot be brought up via the product path.
 
 ## Consequence
 
