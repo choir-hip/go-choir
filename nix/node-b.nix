@@ -454,6 +454,11 @@ in
       RestartSec = 3;
       StateDirectory = "go-choir/platform-artifacts";
       ReadWritePaths = [ platformArtifactsDir ];
+      # Track K two-approval operator credentials live in a deploy-created
+      # file outside git (same trust class as gateway credentials):
+      # CHOIR_KEY_ESCROW_OPERATORS="name:token,..." — the unwrap gate stays
+      # closed (503) while the file or entries are absent.
+      EnvironmentFile = "-/var/lib/go-choir/secrets/corpusd-escrow-operators.env";
       Environment = [
         "SERVER_HOST=0.0.0.0"
         "CORPUSD_PORT=8086"
