@@ -104,13 +104,12 @@ phases:
       - "Build recovery cells with per-cell restore budgets and weighted fair scheduling."
 
 now:
-  status: working
-  slice: "Promoted to active executable /goal on 2026-08-26 by the substrate cleanup Definition's completion cutover. Beginning Track K (Key Escrow & Wrap Hierarchy) on a fresh snapshot-backed test computer on staging; 0333528 remains sealed."
-  question: "How will Track K passkey PRF wrapping integrate cleanly with the fresh computer creation path?"
+  slice: "Track K Keys Acceptance PROVEN on staging (docs/evidence/track-k-keys-acceptance-staging-2026-08-26.md): custodian escrow on boot, backfill of existing computer, two-approval unwrap gate with transparency log, PRF 1b handler-proven. Remaining: Track F (file-CAS + periodic bases), Track M (mail), Assurance; plus browser-level PRF proof."
+  question: "How should Track F chunk pinning interact with the guest write-back cache eviction policy?"
   reconciliation:
-    observed_at: "2026-08-26T04:20:00Z"
-    source_ref: "main@c3314c59"
-    deploy_identity: "staging https://choir.news deployed_commit c3314c59; guest closure single-store-binary, standard Dolt GC"
+    observed_at: "2026-08-26T11:40:00Z"
+    source_ref: "main@84e4daee"
+    deploy_identity: "staging https://choir.news deployed_commit 84e4daee; corpusd key-escrow endpoints live; guest runtime package 84e4daee"
     authority_identities: [docs/choir-doctrine.md, docs/computer-ontology.md, docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "clean single worktree /Users/wiz/go-choir"
@@ -130,9 +129,25 @@ now:
   evidence_refs:
     - "docs/designs/choir-durable-substrate-2026-08-23.md"
     - "docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md"
-  blocker_or_risk: "Node B host disk 76% full; fresh test computer provisioning must respect the calibrated 100 GiB deploy preflight floor."
-  next_action: "Execute Track K: Key Escrow & Wrap Hierarchy."
+  blocker_or_risk: "actorruntime SQLITE_BUSY CI shard flake failed 2 deploys today (passes locally; clustering assessment owed). Browser-level PRF proof pending (CDP virtual authenticator hasPrf)."
+  next_action: "Execute Track F: file-CAS commit protocol and periodic ProjectionBase event bases."
+
 receipts:
+  - id: track-k-keys-acceptance
+    boundary: track-keys-proof
+    commit_or_artifact: "f0e68b0a + 983b8995 + 28d352c1 + 84e4daee + 84ca50e6"
+    proof_refs: [docs/evidence/track-k-keys-acceptance-staging-2026-08-26.md]
+    rollback_ref: "git revert mission commits"
+    disposition: "Keys acceptance deployed-proven on staging: custodian escrow on boot, backfill via per-boot upgrade, two-approval unwrap gate with self-approval rejection and premature-reveal refusal, DEK digest verified, transparency log chained seq 0->2; PRF 1b handler-proven, browser proof residual."
+    problem_ref: docs/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md
+    authorization_ref: "owner direction 2026-08-25; design 3.2"
+    candidate_or_evidence_refs: [docs/evidence/track-k-keys-acceptance-staging-2026-08-26.md]
+    landing:
+      source_commit: "84e4daee"
+      ci_ref: "https://github.com/choir-hip/go-choir/actions/runs/32961151492 (force_staging_deploy)"
+      deploy_ref: "Node B deployed; /health deployed_commit 84e4daee"
+      environment_identity: "corpusd escrow endpoints live on :8086; guest runtime package 84e4daee"
+      deployed_acceptance: "docs/evidence/track-k-keys-acceptance-staging-2026-08-26.md"
   - id: define-overhauls-boundary
     boundary: define
     commit_or_artifact: "(pending)"
