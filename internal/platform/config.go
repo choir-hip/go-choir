@@ -13,18 +13,22 @@ const (
 )
 
 type Config struct {
-	Port           string
-	DoltDSN        string
-	ArtifactsRoot  string
-	SigningKeyPath string
+	Port                  string
+	DoltDSN               string
+	ArtifactsRoot         string
+	SigningKeyPath        string
+	KeyEscrowKeyPath      string
+	KeyEscrowOperatorsRaw string
 }
 
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
-		Port:           envOr("CORPUSD_PORT", DefaultPort),
-		DoltDSN:        envOr("CORPUSD_DOLT_DSN", DefaultDoltDSN),
-		ArtifactsRoot:  envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot),
-		SigningKeyPath: envOr("PLATFORM_SIGNING_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "signing-key")),
+		Port:                  envOr("CORPUSD_PORT", DefaultPort),
+		DoltDSN:               envOr("CORPUSD_DOLT_DSN", DefaultDoltDSN),
+		ArtifactsRoot:         envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot),
+		SigningKeyPath:        envOr("PLATFORM_SIGNING_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "signing-key")),
+		KeyEscrowKeyPath:      envOr("CHOIR_KEY_ESCROW_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "key-escrow-key")),
+		KeyEscrowOperatorsRaw: os.Getenv("CHOIR_KEY_ESCROW_OPERATORS"),
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err

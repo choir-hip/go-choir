@@ -4,6 +4,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/keyescrow"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -50,6 +51,13 @@ func main() {
 	}
 	if err := handler.ConfigureSelfDevelopmentModes(modeCAS); err != nil {
 		log.Fatalf("corpusd self-development mode routes: %v", err)
+	}
+	escrowPrivateKey, err := keyescrow.LoadOrGeneratePrivateKey(cfg.KeyEscrowKeyPath)
+	if err != nil {
+		log.Fatalf("corpusd key escrow key: %v", err)
+	}
+	if err := handler.ConfigureKeyEscrow(escrowPrivateKey, cfg.KeyEscrowOperatorsRaw); err != nil {
+		log.Fatalf("corpusd key escrow routes: %v", err)
 	}
 	s := server.NewServer("corpusd", cfg.Port)
 	platform.RegisterRoutes(s, handler)

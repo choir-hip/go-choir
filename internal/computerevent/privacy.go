@@ -81,6 +81,20 @@ func NewPrivateArtifactCipher(computerID string, raw []byte) (*PrivateArtifactCi
 	}}, nil
 }
 
+// ExportKeyForEscrow returns the raw current DEK for the named computer so
+// the guest can wrap it under the host custodian escrow (Track K). The caller
+// MUST only use it to seal a wrap; it must never be logged or persisted
+// unencrypted.
+func (c *PrivateArtifactCipher) ExportKeyForEscrow(ctx context.Context, computerID string) ([]byte, error) {
+	material, err := c.keys.current(ctx, computerID)
+	if err != nil {
+		return nil, fmt.Errorf("privacy keyring: export for escrow: %w", err)
+	}
+	out := make([]byte, chacha20poly1305.KeySize)
+	copy(out, material.key[:])
+	return out, nil
+}
+
 // LoadGuestPrivateArtifactCipher loads the root guest-owned per-computer key.
 // A key may be created only before the canonical event chain exists.
 func LoadGuestPrivateArtifactCipher(path, computerID string, allowCreate bool) (*PrivateArtifactCipher, error) {

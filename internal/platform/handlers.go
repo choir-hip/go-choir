@@ -19,8 +19,8 @@ type Handler struct {
 	eventAuth            EventCapabilityAuthorizer
 	selfDevelopmentModes *SelfDevelopmentModeCAS
 	checkpointAuthority  *CheckpointAuthority
+	keyEscrow            *keyEscrowRuntime
 }
-
 type healthResponse struct {
 	Status  string         `json:"status"`
 	Service string         `json:"service"`
@@ -383,6 +383,12 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/computers/events/replay", h.HandleComputerEventReplay)
 	s.HandleFunc("/internal/computers/checkpoints", h.HandleComputerCheckpoint)
 	s.HandleFunc("/internal/computers/route-projection-certificates", h.HandleRouteProjectionCertificate)
+	s.HandleFunc("/internal/computers/keys/escrow-public-key", h.HandleKeyEscrowPublicKey)
+	s.HandleFunc("/internal/computers/keys/escrow", h.HandleKeyEscrow)
+	s.HandleFunc("/internal/computers/keys/escrow/status", h.HandleKeyEscrowStatus)
+	s.HandleFunc("/internal/computers/keys/unwrap-requests", h.HandleKeyUnwrapRequests)
+	s.HandleFunc("/internal/computers/keys/unwrap-requests/", h.HandleKeyUnwrapRequestAction)
+	s.HandleFunc("/internal/computers/keys/transparency-head", h.HandleKeyEscrowTransparencyHead)
 	s.HandleFunc("/internal/platform/control-key", h.HandlePlatformControlPublicKey)
 	s.HandleFunc("/internal/platform/execution-identity/attest", h.HandleExecutionIdentityAttestation)
 	s.HandleFunc("/internal/platform/publications/texture", h.HandleInternalPublishTexture)

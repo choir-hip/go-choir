@@ -366,6 +366,43 @@ CREATE TABLE IF NOT EXISTS og_edges (
 );
 CREATE INDEX IF NOT EXISTS idx_og_edges_from ON og_edges(from_id);
 CREATE INDEX IF NOT EXISTS idx_og_edges_to ON og_edges(to_id);
+CREATE TABLE IF NOT EXISTS computer_key_escrows (
+	computer_id VARCHAR(255) NOT NULL,
+	protector VARCHAR(64) NOT NULL,
+	wrap_version INT NOT NULL,
+	wrapped_key_json LONGTEXT NOT NULL,
+	key_digest VARCHAR(128) NOT NULL,
+	escrowed_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	PRIMARY KEY(computer_id, protector)
+);
+
+CREATE TABLE IF NOT EXISTS computer_key_unwrap_requests (
+	request_id VARCHAR(255) PRIMARY KEY,
+	computer_id VARCHAR(255) NOT NULL,
+	requested_by VARCHAR(255) NOT NULL,
+	reason TEXT NOT NULL,
+	status VARCHAR(32) NOT NULL,
+	idempotency_key VARCHAR(128) NOT NULL UNIQUE,
+	created_at DATETIME NOT NULL,
+	revealed_at DATETIME NULL
+);
+
+CREATE TABLE IF NOT EXISTS computer_key_unwrap_approvals (
+	request_id VARCHAR(255) NOT NULL,
+	approver VARCHAR(255) NOT NULL,
+	approved_at DATETIME NOT NULL,
+	PRIMARY KEY(request_id, approver)
+);
+
+CREATE TABLE IF NOT EXISTS computer_key_escrow_transparency (
+	seq BIGINT AUTO_INCREMENT PRIMARY KEY,
+	prev_hash VARCHAR(128) NOT NULL,
+	entry_hash VARCHAR(128) NOT NULL,
+	payload_json LONGTEXT NOT NULL,
+	created_at DATETIME NOT NULL
+);
+
 `
 
 func OpenStore(dsn string) (*Store, error) {

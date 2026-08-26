@@ -265,6 +265,23 @@ func Run() {
 			cancel()
 			log.Fatalf("autoputer: configure guest-owned private artifact cipher: %v", err)
 		}
+		// Track K lazy per-boot custodian escrow: best-effort, never blocks
+		// boot; retried on the next boot when the platform is unreachable.
+		if platformURL != "" {
+			escrowCtx, escrowCancel := context.WithTimeout(context.Background(), 45*time.Second)
+			go func(computerID string) {
+				defer escrowCancel()
+				rawDEK, err := privateCipher.ExportKeyForEscrow(escrowCtx, computerID)
+				if err != nil {
+					log.Printf("autoputer: key escrow export unavailable (will retry next boot): %v", err)
+					return
+				}
+				if _, err := newKeyEscrowClient(platformURL).EnsureCustodianEscrow(escrowCtx, computerID, rawDEK); err != nil {
+					log.Printf("autoputer: custodian key escrow deferred (will retry next boot): %v", err)
+					return
+				}
+			}(computerID)
+		}
 		appender, err := computerevent.NewComputerEventAppender(
 			computerID, eventClient, db, eventClient,
 			computerevent.EventHeadReceiptVerifier{Keys: credentials.KeyResolver()},
@@ -456,7 +473,6 @@ func Run() {
 
 	s.Start()
 }
-
 
 // startPeriodicDoltGC starts the milestone-based Dolt garbage collector. It is
 // deferred until AFTER the tape replay completes so GC churn never looks like a
