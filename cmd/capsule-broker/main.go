@@ -518,13 +518,21 @@ func (b *Broker) handleGoEval(ctx context.Context, cap *capsule.Capability, para
 	result := capsule.GoEvalResult{ExitCode: 0}
 	select {
 	case <-evalCtx.Done():
+		// Kill the whole worker process group, then REAP it with a bounded
+		// grace period so no zombie or lingering cmd.Wait goroutine survives.
 		if cmd.Process != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 			_ = cmd.Process.Kill()
 		}
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			// Worker not reaped in grace; it is already SIGKILLed as a group.
+		}
 		result.Stdout = stdoutCap.String()
 		result.Stderr = stderrCap.String()
 		result.Error = "go_eval evaluation timed out"
+		result.ExitCode = 1 // a timed-out attempt must never look successful
 		result.Duration = time.Since(start)
 		resultBytes, _ := json.Marshal(result)
 		return BrokerRPCResponse{Result: resultBytes}

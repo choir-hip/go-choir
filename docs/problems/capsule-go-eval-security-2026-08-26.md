@@ -131,6 +131,14 @@ before dispatch; a failed/timed-out attempt no longer reports ExitCode 0. This
 closes the "executed attempts unrecorded" and "timeout looks successful" parts of
 critical #4.
 
+Containment hardening in the same window: the go_eval timeout path now SIGKILLs
+the worker process group AND reaps it (bounded 5s grace), so no zombie process or
+lingering cmd.Wait goroutine survives; a timed-out attempt reports ExitCode 1
+rather than a successful-looking ExitCode 0. Note the classic exec verb has the
+same single-broker RPC cancellation semantics; true client-cancellation ->
+broker-cancel with request IDs would be a broker-protocol change shared by all
+verbs and is deferred as a single-path design, not a go_eval-only patch.
+
 Still open (next review): explicit client-cancellation -> broker-cancel binding
 with request IDs; a genuinely wired Researcher profile with an end-to-end
 Go-succeeds/Bash-fails proof (the Researcher capsule-context path and a
