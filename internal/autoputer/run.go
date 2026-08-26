@@ -475,10 +475,6 @@ func Run() {
 		gate.mu.Unlock()
 		s.SetHealthHandler(gate.ServeHTTP)
 		go runReplayPhase(gate, replayAppender, replayClient, replayCredentials, replayComputerID, replayBootstrapCtx, replayBootstrapCancel, func() error {
-			startPeriodicDoltGC(rtCfg.StorePath)
-			if err := rt.Start(ctx); err != nil {
-				return err
-			}
 			if fileSyncService != nil {
 				restored, err := fileSyncService.HydrateIfNeeded(ctx)
 				if err != nil {
@@ -487,14 +483,14 @@ func Run() {
 					log.Printf("autoputer: file tree hydrated %d files from CAS root %s", restored, root)
 				}
 			}
+			startPeriodicDoltGC(rtCfg.StorePath)
+			if err := rt.Start(ctx); err != nil {
+				return err
+			}
 			StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
 			return nil
 		})
 	} else {
-		startPeriodicDoltGC(rtCfg.StorePath)
-		if err := rt.Start(ctx); err != nil {
-			log.Fatalf("autoputer: runtime startup refused: %v", err)
-		}
 		if fileSyncService != nil {
 			restored, err := fileSyncService.HydrateIfNeeded(ctx)
 			if err != nil {
@@ -502,6 +498,10 @@ func Run() {
 			} else if root := fileSyncService.hydratedRoot(); root != "" {
 				log.Printf("autoputer: file tree hydrated %d files from CAS root %s", restored, root)
 			}
+		}
+		startPeriodicDoltGC(rtCfg.StorePath)
+		if err := rt.Start(ctx); err != nil {
+			log.Fatalf("autoputer: runtime startup refused: %v", err)
 		}
 		StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
 	}
@@ -537,6 +537,18 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 	// workspace durably checkpointed. The guest boot afterwards sees
 	// local==platform and takes over verification + route authority.
 	replayOnly := strings.TrimSpace(os.Getenv("RUNTIME_RECOVERY_REPLAY_ONLY")) == "1"
+	if client != nil {
+		platformURL := client.BaseURL()
+		capSource := client.Capability()
+		if platformURL != "" && capSource != nil {
+			storeDirectory := storeDir(provideriface.DefaultStorePath)
+			if materialized, err := materializeProjectionBaseIfNeeded(bootstrapCtx, storeDirectory, computerID, platformURL, capSource); err != nil {
+				log.Printf("autoputer: ProjectionBase materialization deferred: %v", err)
+			} else if materialized {
+				log.Printf("autoputer: ProjectionBase materialized before reconstruct for %s", computerID)
+			}
+		}
+	}
 	appender.SetReplayMode(true)
 	err := appender.Reconstruct(bootstrapCtx, client)
 	appender.SetReplayMode(false)

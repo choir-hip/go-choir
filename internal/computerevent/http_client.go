@@ -43,6 +43,19 @@ func NewHTTPClient(baseURL string, client *http.Client, capability CapabilitySou
 	}
 	return &HTTPClient{baseURL: parsed, http: client, capability: capability}, nil
 }
+func (c *HTTPClient) BaseURL() string {
+	if c == nil || c.baseURL == nil {
+		return ""
+	}
+	return c.baseURL.String()
+}
+
+func (c *HTTPClient) Capability() CapabilitySource {
+	if c == nil {
+		return nil
+	}
+	return c.capability
+}
 
 func (c *HTTPClient) Head(ctx context.Context, computerID string) (*Head, error) {
 	query := url.Values{"computer_id": []string{computerID}}
