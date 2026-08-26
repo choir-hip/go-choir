@@ -87,6 +87,32 @@ let
 
     df -h / /var/lib/go-choir 2>/dev/null || df -h /
   '';
+  platformDoltHistoryAudit = pkgs.writeShellScript "go-choir-platform-dolt-history-audit" ''
+    set -euo pipefail
+    export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.dolt pkgs.systemd ]}:$PATH"
+    # Recurrence control for the 2026-08-26 incident: per-mutation
+    # CALL DOLT_COMMIT in internal/platform/store.go and internal/cycle/
+    # storage.go grows reachable commit history that NO dolt gc (shallow or
+    # --full) can collect. See docs/evidence/platform-dolt-oldgen-218g-dead-
+    # history-2026-08-26.md. This audit fails loudly (nonzero exit ->
+    # failed unit -> monitoring) when history regrows past the squash
+    # thresholds, so the squash runbook runs before the disk refills.
+    dbdir="${platformDoltDBDir}"
+    commits=$(cd "$dbdir" && HOME="${platformDoltDir}" dolt sql -q "SELECT COUNT(*) FROM dolt_log" 2>/dev/null | grep -oE '[0-9]+' | head -1 || echo 0)
+    oldgen_kib=$(du -sk "$dbdir/.dolt/noms/oldgen" 2>/dev/null | cut -f1 || echo 0)
+    noms_kib=$(du -sk "$dbdir/.dolt/noms" 2>/dev/null | cut -f1 || echo 0)
+    echo "platform-dolt history audit: dolt_log commits=''${commits} oldgen=''${oldgen_kib}KiB noms=''${noms_kib}KiB"
+    max_commits="''${GO_CHOIR_DOLT_MAX_COMMITS:-1000000}"
+    max_oldgen_kib="''${GO_CHOIR_DOLT_MAX_OLDGEN_KIB:-52428800}"
+    if [ "''${commits:-0}" -gt "$max_commits" ]; then
+      echo "platform-dolt history audit FAILED: $commits commits > $max_commits; run the history-squash runbook (docs/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md)" >&2
+      exit 1
+    fi
+    if [ "''${oldgen_kib:-0}" -gt "$max_oldgen_kib" ]; then
+      echo "platform-dolt history audit FAILED: oldgen ''${oldgen_kib}KiB > ''${max_oldgen_kib}KiB; run the history-squash runbook" >&2
+      exit 1
+    fi
+  '';
 
   # Common systemd service hardening options applied to all go-choir
   # services. These restrict what the service process can do at the
@@ -625,6 +651,26 @@ in
     timerConfig = {
       OnCalendar = "daily";
       RandomizedDelaySec = "1h";
+      Persistent = true;
+    };
+  };
+
+  systemd.services.go-choir-platform-dolt-history-audit = {
+    description = "go-choir platform dolt commit-history growth audit";
+    after = [ "go-choir-platform-dolt.service" ];
+    requires = [ "go-choir-platform-dolt.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = platformDoltHistoryAudit;
+    };
+  };
+
+  systemd.timers.go-choir-platform-dolt-history-audit = {
+    description = "Daily platform dolt commit-history growth audit";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "daily";
+      RandomizedDelaySec = "30m";
       Persistent = true;
     };
   };
