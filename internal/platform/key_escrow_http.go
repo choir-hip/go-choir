@@ -82,10 +82,6 @@ func (h *Handler) HandleKeyEscrow(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if !internalKeyEscrowCaller(r) {
-		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
-		return
-	}
 	if h == nil || h.service == nil || h.service.store == nil || h.keyEscrow == nil {
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "key escrow unavailable"})
 		return
@@ -122,10 +118,6 @@ func (h *Handler) HandleKeyEscrow(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleKeyEscrowStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-	if !internalKeyEscrowCaller(r) {
-		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
 	if h == nil || h.service == nil || h.service.store == nil || h.keyEscrow == nil {
