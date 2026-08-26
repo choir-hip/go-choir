@@ -610,22 +610,36 @@ func (e *Executor) GoEval(ctx context.Context, agentRunID, handle string, reques
 	if len(computerevent.DetectPrivateSecrets([]byte(request.Source))) != 0 {
 		return GoEvalResult{}, fmt.Errorf("capsule: secret-bearing Go source cannot produce auditable execution evidence")
 	}
-	result, err := caps.GoEval(ctx, capability, request)
-	if err != nil {
-		return GoEvalResult{}, err
-	}
+	// Host-owned attempt record MUST exist regardless of outcome. We persist a
+	// receipt for every admitted evaluation: success, interpreter error,
+	// timeout, cancellation, and receipt-persistence failure. The source digest
+	// is bound before dispatch so the record identifies exactly which program
+	// ran, even when it failed.
+	sourceDigest := computerevent.DigestBytes([]byte(request.Source))
 	worktreeDigest, err := digestCapsuleWorktree(ctx, caps)
 	if err != nil {
-		return GoEvalResult{}, err
+		worktreeDigest = ""
 	}
-	// Bind the source digest so the host-derived record identifies exactly which
-	// program ran. Distinct programs with equivalent output must be separable.
-	sourceDigest := computerevent.DigestBytes([]byte(request.Source))
+
+	result, err := caps.GoEval(ctx, capability, request)
+	exitCode := 0
+	stdoutDigest := computerevent.DigestBytes([]byte(result.Stdout))
+	stderrDigest := computerevent.DigestBytes([]byte(result.Stderr))
+	if err != nil {
+		exitCode = 1
+		// An interpreter error or timeout must never look like a successful exit.
+		if result.ExitCode != 0 {
+			exitCode = result.ExitCode
+		}
+	} else {
+		exitCode = result.ExitCode
+	}
+
 	receipt := ExecutionReceipt{
 		AgentRunID: agentRunID, CapabilityHandleDigest: computerevent.DigestBytes([]byte(handle)),
 		CapsuleID: caps.ID,
-		Command:   "go_eval:" + sourceDigest, Cwd: request.Cwd, ExitCode: result.ExitCode,
-		StdoutDigest: computerevent.DigestBytes([]byte(result.Stdout)), StderrDigest: computerevent.DigestBytes([]byte(result.Stderr)),
+		Command:   "go_eval:" + sourceDigest, Cwd: request.Cwd, ExitCode: exitCode,
+		StdoutDigest: stdoutDigest, StderrDigest: stderrDigest,
 		WorktreeDigest: worktreeDigest, SourceTreeDigest: caps.SourceSnapshotDigest, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	canonical, err := computerevent.CanonicalJSON(receipt)
@@ -643,8 +657,14 @@ func (e *Executor) GoEval(ctx context.Context, agentRunID, handle string, reques
 	e.mu.Lock()
 	e.executionReceipts[receipt.ReceiptRef] = receipt
 	e.mu.Unlock()
+
+	// Bind the attempt outcome into the returned result so the actor can cite the
+	// exact receipt even on failure; a timeout must not report ExitCode 0.
 	result.ReceiptRef = receipt.ReceiptRef
-	return result, nil
+	if result.ExitCode == 0 && err != nil {
+		result.ExitCode = exitCode
+	}
+	return result, err
 }
 
 func (e *Executor) Exec(ctx context.Context, agentRunID, handle string, request ExecRequest) (ExecResult, error) {

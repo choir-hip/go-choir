@@ -124,11 +124,19 @@ Repaired in the follow-up slice (not yet re-reviewed):
   worker; NewAllowlist defaults to the safe set when empty (also fixes the
   default-invocation regression that rejected base packages).
 
+Progress on critical #4 (host-owned attempt record on every outcome) was added:
+Executor.GoEval now persists an auditable receipt for every ADMITTED evaluation
+(success, interpreter error, timeout, cancellation) and binds the source digest
+before dispatch; a failed/timed-out attempt no longer reports ExitCode 0. This
+closes the "executed attempts unrecorded" and "timeout looks successful" parts of
+critical #4.
+
 Still open (next review): explicit client-cancellation -> broker-cancel binding
-with request IDs; full host-owned attempt record before dispatch and on every
-outcome (including timeout exit code); a genuinely wired Researcher profile with
-an end-to-end Go-succeeds/Bash-fails proof; and deployed adversarial proof of no
-descendant/socket/credential inheritance under Landlock/seccomp.
+with request IDs; a genuinely wired Researcher profile with an end-to-end
+Go-succeeds/Bash-fails proof (the Researcher capsule-context path and a
+non-wildcard Researcher capsule binding are an architectural design boundary);
+and deployed adversarial proof of no descendant/socket/credential inheritance
+under Landlock/seccomp.
 
 ## Additional critical functional find (still after the first repair)
 
