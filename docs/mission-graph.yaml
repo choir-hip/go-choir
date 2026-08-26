@@ -367,22 +367,23 @@ nodes:
     title: Substrate Cleanup and Cutover
     path: docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md
     ledger: ''
-    status: working
+    status: settled
     kind: spine
-    entrypoint: true
-    execution_mode: mission_orchestrator
+    entrypoint: false
+    execution_mode: completed_non_executable
     depends_on:
       - choir-0333528-stabilize-and-hold-2026-08-24
     enables:
       - choir-durable-substrate-overhauls-2026-08-23
     note: >-
-      Owner-ratified executable Definition (2026-08-25). Eliminates mutable
-      dynamic binary fallback, removes RUNTIME_DOLT_GC_DISABLED workaround,
-      deletes choir.refresh_runtime dance, seals computer-0333528 as an immutable
-      historical artifact, suspends self-development candidate proof, and provisions
-      clean test computer for Overhauls Tracks K, F, M, Assurance.
+      Completed 2026-08-26. Guest closure cleaned and deployed (a12532d2,
+      staging c3314c59): single immutable store binary, standard Dolt GC,
+      refresh_runtime dance deleted. Boot-proven on staging via product-path
+      resume of a hibernated test computer. Overhauls promoted to active
+      entrypoint.
     sources:
       - docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md
+      - docs/evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md
       - docs/reports/choir-system-orientation-and-station-report-2026-08-25.md
       - docs/choir-doctrine.md
       - docs/ACTIVE.md
@@ -495,10 +496,10 @@ nodes:
     title: Durable Substrate Overhauls
     path: docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
     ledger: ''
-    status: blocked
+    status: working
     kind: spine
-    entrypoint: false
-    execution_mode: draft_non_executable
+    entrypoint: true
+    execution_mode: mission_orchestrator
     depends_on:
       - choir-substrate-cleanup-and-cutover-2026-08-25
     enables:
@@ -507,7 +508,8 @@ nodes:
       Owner-ratified sequenced successor for full 4-track substrate overhauls
       (Track K key escrow, Track F file-CAS + periodic event watermarks, Track M
       MTA spool + Maildir, Assurance daily drills + scrub + cells). Runs on fresh
-      test computer; 0333528 remains sealed.
+      test computer; 0333528 remains sealed. Promoted to active executable
+      /goal on 2026-08-26 by the cleanup Definition's completion cutover.
     sources:
       - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
       - docs/designs/choir-durable-substrate-2026-08-23.md

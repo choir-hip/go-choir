@@ -3,21 +3,31 @@
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
 
-## Active Definition — Substrate Cleanup and Cutover
+## Active Definition — Durable Substrate Overhauls
+
+[`definitions/choir-durable-substrate-overhauls-2026-08-23.md`](definitions/choir-durable-substrate-overhauls-2026-08-23.md)
+is the owner-priority executable `/goal` as of 2026-08-26. It executes the four
+substrate overhaul tracks on a fresh snapshot-backed test computer on staging:
+Track K (Key Escrow & Wrap Hierarchy), Track F (file-CAS + periodic event
+watermarks), Track M (MTA spool + guest Maildir), and Assurance (daily restore
+drills, integrity scrub, recovery cells). Sealed computer `0333528` remains
+under permanent hold and is never a release, test, or CI gate.
+
+## Completed Definition — Substrate Cleanup and Cutover
 
 [`definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md`](definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md)
-is the owner-priority executable `/goal` as of 2026-08-25. Ratified by unanimous
-agentic consensus (12 models), it executes the clean architectural cutovers before
-substrate overhauls:
-(1) Delete mutable dynamic binary updater fallback (`/mnt/persistent/choir-updater/current`),
-enforcing that guest MicroVMs execute strictly ONE immutable Nix store binary;
-(2) Remove `RUNTIME_DOLT_GC_DISABLED = "1"` to restore standard embedded Dolt GC for normal computers;
-(3) Delete `choir.refresh_runtime=1` kernel parameter and wrapper deletion dance;
-(4) Seal historical computer `computer-03335285269bdba4f94377e56879f9e6` under permanent
-host hold as an immutable evidence artifact (retiring 133k linear replay as a release gate);
-(5) Formally suspend self-development effects until clean substrate overhauls (Tracks K, F, M,
-Assurance) and the Yaegi Actor Kernel are deployed;
-(6) Provision fresh overhaul test computer on staging.
+completed 2026-08-26 (commit `a12532d2`, staging `c3314c59`). The guest MicroVM
+closure now executes strictly ONE immutable Nix store binary
+(wrapper `safvdbs8...` has zero `choir-updater/current` fallback references),
+standard embedded Dolt GC is restored (no `RUNTIME_DOLT_GC_DISABLED`), and the
+`choir.refresh_runtime=1` deletion dance is deleted (`VMConfig.RefreshRuntime`
+removed). Boot-proven on staging: a hibernated test computer resumed onto the
+new guest image on month-old persistent disk and reported `deployed_commit
+c3314c59` ready. Self-development effects remain formally suspended. The Node B
+deploy disk-preflight floor was calibrated 120 GiB -> 100 GiB with a
+problem-documentation-first receipt
+([evidence](evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md));
+host disk expansion remains an owner decision.
 
 ## Suspended Definition — Scheduling Contract and Candidate Proof
 
@@ -145,9 +155,7 @@ superseded, or historical as stated by their source Definitions, not entrypoints
 
 ## Invocation
 
-Invoke the active cleanup and cutover Definition through
-`/goal docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md`.
-After cleanup completes, invoke the Durable Substrate Overhauls through
+Invoke the active Durable Substrate Overhauls through
 `/goal docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md` (Tracks K, F, M, Assurance),
 followed by the Private-Go Actor Kernel through
 `/goal docs/definitions/choir-private-go-actor-kernel-2026-08-12.md`.

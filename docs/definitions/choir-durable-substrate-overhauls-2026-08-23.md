@@ -104,34 +104,34 @@ phases:
       - "Build recovery cells with per-cell restore budgets and weighted fair scheduling."
 
 now:
-  status: blocked_incomplete
-  slice: "Sequenced after choir-substrate-cleanup-and-cutover-2026-08-25.md. Overhauls run on fresh snapshot-backed test computer on staging; 0333528 remains sealed."
+  status: working
+  slice: "Promoted to active executable /goal on 2026-08-26 by the substrate cleanup Definition's completion cutover. Beginning Track K (Key Escrow & Wrap Hierarchy) on a fresh snapshot-backed test computer on staging; 0333528 remains sealed."
   question: "How will Track K passkey PRF wrapping integrate cleanly with the fresh computer creation path?"
   reconciliation:
-    observed_at: "2026-08-25T17:30:00Z"
-    source_ref: "main@20701098"
-    deploy_identity: "staging https://choir.news; computer-0333528 sealed under hold"
+    observed_at: "2026-08-26T04:20:00Z"
+    source_ref: "main@c3314c59"
+    deploy_identity: "staging https://choir.news deployed_commit c3314c59; guest closure single-store-binary, standard Dolt GC"
     authority_identities: [docs/choir-doctrine.md, docs/computer-ontology.md, docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md, AGENTS.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "working tree owns substrate overhauls definition"
+    worktree_inventory_ref: "clean single worktree /Users/wiz/go-choir"
     status: reconciled
   candidate:
     id: none
     state: none
   decision:
-    selected: "Execute complete substrate overhauls across Tracks K, F, M, and Assurance as one sequenced goal following substrate cleanup, executing on fresh test computer."
+    selected: "Execute complete substrate overhauls across Tracks K, F, M, and Assurance as one sequenced goal on a fresh snapshot-backed test computer."
     kind: architecture
     status: settled
     source: owner direction 2026-08-25
     evidence_ref: docs/designs/choir-durable-substrate-2026-08-23.md
     owner_ratification_ref: "owner confirmed 2026-08-25"
-    recorded_at: "2026-08-25T17:30:00Z"
-    consequence: "All four overhaul tracks proceed under one cohesive definition once cleanup lands."
+    recorded_at: "2026-08-26T04:20:00Z"
+    consequence: "Overhauls are the active executable mission; cleanup is settled."
   evidence_refs:
     - "docs/designs/choir-durable-substrate-2026-08-23.md"
     - "docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md"
-  blocker_or_risk: "None for definition authoring; execution waits on completion of the cleanup definition."
-  next_action: "Wait for docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md completion, then execute Track K."
+  blocker_or_risk: "Node B host disk 76% full; fresh test computer provisioning must respect the calibrated 100 GiB deploy preflight floor."
+  next_action: "Execute Track K: Key Escrow & Wrap Hierarchy."
 receipts:
   - id: define-overhauls-boundary
     boundary: define

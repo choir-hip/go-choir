@@ -102,24 +102,24 @@ finish:
       class: registry update
 
 now:
-  status: working
-  slice: "Phase A complete (registries updated); ready for Phase B code cutover."
-  question: "Does the NixOS guest build cleanly and boot strictly the immutable store binary on staging?"
+  status: complete
+  slice: "Phases A-C complete. Guest closure cleaned and deployed; staging verified; overhauls promoted to active entrypoint."
+  question: none
   reconciliation:
-    observed_at: "2026-08-25T17:30:00Z"
-    source_ref: "main@20701098"
-    deploy_identity: "staging https://choir.news; computer-0333528 sealed under hold (epoch 794)"
+    observed_at: "2026-08-26T04:20:00Z"
+    source_ref: "main@c3314c59"
+    deploy_identity: "staging https://choir.news /health deployed_commit c3314c59897d33fd2ed05698f9c32ce805dc35b8; guest image /var/lib/go-choir/guest -> 1mab9wjimvbd53z4rfqx2gl26lvslw02 (build.json commit c3314c59)"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "clean single worktree /Users/wiz/go-choir"
     status: reconciled
   candidate:
     id: clean-store-closure
-    state: ready
-    ref: "nix/autoputer-vm.nix; internal/vmmanager/manager.go"
+    state: accepted
+    ref: "a12532d2 (nix/autoputer-vm.nix; internal/vmmanager/manager.go)"
     owner: main
     base: "20701098"
-    digest: pending_commit
+    digest: "guest wrapper safvdbs8l3yfwgrnm3wvfsrj32f9ryrw-go-choir-run-autoputer-runtime; guest image 1mab9wjimvbd53z4rfqx2gl26lvslw02-go-choir-guest-image"
     scope: [nix/autoputer-vm.nix, internal/vmmanager/manager.go]
   decision:
     selected: "Eliminate mutable binary fallback, re-enable standard Dolt GC, seal computer-0333528, suspend self-dev effects, and sequence Durable Substrate Overhauls -> Yaegi Actor Kernel -> Self-Development."
@@ -128,12 +128,13 @@ now:
     source: owner direction 2026-08-25 + agentic consensus triad 2026-08-25
     owner_ratification_ref: "owner direction 2026-08-25"
     recorded_at: "2026-08-25T17:30:00Z"
-    consequence: "Active goal is cleanup; self-dev suspended; overhauls unblocked."
+    consequence: "Cleanup complete; self-dev suspended; overhauls are the active entrypoint."
   evidence_refs:
     - docs/reports/choir-system-orientation-and-station-report-2026-08-25.md
     - docs/evidence/effects-red-b14-ancestor-restore-2026-08-25.md
-  blocker_or_risk: "None blocking Phase B implementation; computer-0333528 safely sealed."
-  next_action: "Execute Phase B code cleanup in nix/autoputer-vm.nix and internal/vmmanager/manager.go."
+    - docs/evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md
+  blocker_or_risk: "None for this Definition. Residual: Node B host disk 76% full; the 100 GiB preflight floor is calibrated, not solved - disk expansion (owner decision) and product-path lifecycle for sealed computer state remain overhauls-scale work."
+  next_action: "Execute docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md (Track K first) via /goal."
 
 receipts:
   - id: define-substrate-cleanup
@@ -144,6 +145,56 @@ receipts:
     disposition: "Substrate cleanup Definition v2 authored and ratified by owner direction + agentic consensus."
     problem_ref: "dual-binary split brain and B11 GC disablement"
     authorization_ref: "owner direction 2026-08-25"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+  - id: guest-closure-cutover
+    boundary: code-cutover
+    commit_or_artifact: "a12532d2ebcd60d7b4cec20167bd77a10b97a3bd"
+    proof_refs:
+      - nix/autoputer-vm.nix
+      - internal/vmmanager/manager.go
+    rollback_ref: "git revert a12532d2"
+    disposition: "Single immutable store binary enforced; RUNTIME_DOLT_GC_DISABLED removed; choir.refresh_runtime=1 and VMConfig.RefreshRuntime deleted; refresh-runtime tests removed."
+    problem_ref: "dual-binary split brain and B11 GC disablement"
+    authorization_ref: "owner direction 2026-08-25"
+    candidate_or_evidence_refs: ["docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md"]
+    landing:
+      source_commit: "a12532d2ebcd60d7b4cec20167bd77a10b97a3bd"
+      ci_ref: "https://github.com/choir-hip/go-choir/actions/runs/32926590495 (force_staging_deploy; push run 32925808886 superseded by doomed Node B preflight)"
+      deploy_ref: "Node B deployed 2026-08-26T03:54:17Z; /health deployed_commit c3314c59897d33fd2ed05698f9c32ce805dc35b8"
+      environment_identity: "guest image /var/lib/go-choir/guest -> /nix/store/1mab9wjimvbd53z4rfqx2gl26lvslw02-go-choir-guest-image (build.json commit c3314c59); wrapper /nix/store/safvdbs8l3yfwgrnm3wvfsrj32f9ryrw-go-choir-run-autoputer-runtime (0 choir-updater/current refs, 0 refresh_runtime refs); kernel-params contain no refresh_runtime"
+      deployed_acceptance: "Resumed hibernated candidate-fleet-49ee3bd0ec6f366a164c02d2 (computer-bb0f4fa583c0cde14334818d946e6378) via POST /internal/vmctl/resume: guest booted on month-old persistent disk, /health status=ready runtime_health=ready build.commit=c3314c59 deployed_commit=c3314c59; VM hibernated back (epoch 70). No mutable active interactive computer existed for the deploy refresh path (0333528 held, universal-wire-platform immutable constructed), so this product-path resume is the boot proof."
+  - id: disk-preflight-floor-calibration
+    boundary: landing-blocker-repair
+    commit_or_artifact: "6b4bb1a7 (receipt) + c3314c59 (fix: DEPLOY_MIN_FREE_KIB default 120GiB -> 100GiB)"
+    proof_refs: [docs/evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md]
+    rollback_ref: "git revert c3314c59; or set DEPLOY_MIN_FREE_KIB env"
+    disposition: "Node B deploy preflight floor calibrated after bounded reclaim, retention prune, journal vacuum, and nix store gc all proved no-ops against irreducible occupancy (224G platform Dolt, 89G sealed 0333528, 22G live universal-wire-platform computer)."
+    problem_ref: "docs/evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md"
+    authorization_ref: "problem-documentation-first receipt precedes fix"
+    candidate_or_evidence_refs: ["CI 32924736378 Node B failure", "CI 32926590495 Node B success in 14m23s"]
+    landing:
+      source_commit: "c3314c59897d33fd2ed05698f9c32ce805dc35b8"
+      ci_ref: "https://github.com/choir-hip/go-choir/actions/runs/32926590495"
+      deploy_ref: "same run; preflight passed with 116.3 GiB free > 100 GiB floor"
+      environment_identity: "staging https://choir.news"
+      deployed_acceptance: "Node B deploy completed 14m23s; guest image pointer updated to 1mab9wjimvbd53z4rfqx2gl26lvslw02"
+  - id: promote-overhauls-entrypoint
+    boundary: completion-cutover
+    commit_or_artifact: "this docs commit"
+    proof_refs:
+      - docs/ACTIVE.md
+      - docs/mission-graph.yaml
+      - docs/doc-authority-manifest.yaml
+      - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
+    rollback_ref: "revert this docs commit"
+    disposition: "Durable Substrate Overhauls promoted to sole active executable /goal; cleanup definition settled to completed_non_executable."
+    problem_ref: none
+    authorization_ref: "completion_cutover.promote-overhauls-entrypoint of this Definition"
     candidate_or_evidence_refs: []
     landing:
       source_commit: not_applicable

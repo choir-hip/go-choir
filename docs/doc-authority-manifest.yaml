@@ -345,13 +345,13 @@ documents:
     refresh_triggers: []
 
   - path: docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md
-    claim_scope: current
-    is_root: [authority, entry]
-    is_evidence: false
-    annotations: {doc_role: definition, authority: active_product_mission, lifecycle: active, entrypoint: true}
+    claim_scope: historical
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: definition, authority: completed_product_mission, lifecycle: complete, entrypoint: false}
     supersedes: [docs/definitions/choir-0333528-stabilize-and-hold-2026-08-24.md]
     depends_on: [docs/definitions/choir-0333528-stabilize-and-hold-2026-08-24.md]
-    witnesses: [docs/reports/choir-system-orientation-and-station-report-2026-08-25.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, AGENTS.md]
+    witnesses: [docs/reports/choir-system-orientation-and-station-report-2026-08-25.md, docs/evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md, AGENTS.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
 
   - path: docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md
@@ -391,9 +391,9 @@ documents:
 
   - path: docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
     claim_scope: current
-    is_root: []
+    is_root: [authority, entry]
     is_evidence: false
-    annotations: {doc_role: definition, authority: owner_ratified_sequenced_successor, lifecycle: blocked_on_predecessor, entrypoint: false}
+    annotations: {doc_role: definition, authority: active_product_mission, lifecycle: active, entrypoint: true}
     depends_on: [docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md]
     witnesses: [docs/designs/choir-durable-substrate-2026-08-23.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/choir-doctrine.md, AGENTS.md]
     refresh_triggers: [mission_state_change, predecessor_completion, file_cas_change, key_escrow_change, mail_spool_change, deployed_acceptance, registry_closure]
