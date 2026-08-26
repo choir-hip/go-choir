@@ -188,11 +188,11 @@ measures:
 
 now:
   status: executable
-  slice: "REORIENTED 2026-08-26: Phase 0–3 landed as an isolated candidate library (internal/yaegikernel, 13 files) but is UNWIRED — zero product callers. Next is product wiring into the existing capsule/activation substrate, not more isolated-library code."
+  slice: "WIRED 2026-08-26: go_eval now routes model-authored Go through the EXISTING capsule-broker (single broker invariant). CoSuper gets Go+Bash; Researcher gets Go-only. Kernel-contract fixes land (CheckImports fail-closed, RunSubprocess fail-closed). Remaining: kernel state must DELEGATE to trajectory/coagent (it is not the state authority), then deploy + frozen-candidate security review."
   question: none
   reconciliation:
     observed_at: 2026-08-26T18:40:00Z
-    source_ref: main@3d88dcc9
+    source_ref: main@d01553f8
     deploy_identity: staging https://choir.news deployed_commit not asserted to include yaegikernel; no staging_build_identity for the kernel commits
     authority_identities:
       - owner directive 2026-08-12
@@ -208,9 +208,9 @@ now:
     state: unaccepted-candidate
     ref: current worktree
     owner: mission lead
-    base: 3d88dcc9
-    digest: "e93177223164787b5d63520dd518f7039184ed8dd231e417ad528df5e4981833 (sha256 of internal/yaegikernel/*.go paths)"
-    scope: "[internal/yaegikernel] — internal/capsule and internal/agentcore NOT yet touched"
+    base: d01553f8
+    digest: "wiring slice d01553f8: go_eval verb through the existing capsule-broker; internal/yaegikernel was already the unwired candidate library at e9317722"
+    scope: "[internal/capsule, cmd/capsule-broker, internal/agentcore, internal/yaegikernel] — go_eval wiring and kernel-contract fixes landed"
   decision:
     selected: "Promote the common private-Go kernel with process-per-activation sidecar containment; first implement isolated Phase 0 refusal & resource suite, then CoSuper Go+Bash broker, then restricted Researcher profile."
     kind: architecture
@@ -227,8 +227,8 @@ now:
     - docs/computer-ontology.md
     - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
     - docs/reports/choir-family-a-and-yaegi-rlm-architecture-spec-2026-08-18.md
-  blocker_or_risk: "VERIFIED 2026-08-26: internal/yaegikernel is an isolated UNWIRED candidate library (zero imports outside the package). 'Durability' is in-memory (ActorStateManager maps, Broker maps). SidecarRunner.RunSubprocess falls back to RunInProcess when WorkerBinaryPath is empty (no process isolation by default). CheckImports returns nil on parse failure (allowlist bypass risk). Broker uses its own os/exec path, not the existing capsule broker (violates not_done_when single-broker invariant). No CI/deploy identity, no frozen-candidate security review, no capsule resource experiment, no deployed sealed CoSuper activation, no forced-death/rewarm proof, no supervision/Texture transclusion proof, no Researcher conformance probe. Predecessor effects Definition is NOT goal.complete — effect-bearing acceptance is blocked by not_done_when."
-  next_action: "Wire the yaegikernel evaluator into the EXISTING capsule execution path on internal/capsule and route CoSuper/Researcher through the common kernel profile resolver; do NOT create a parallel broker. Then run CI/deploy and bind a frozen-candidate security review."
+  blocker_or_risk: "WIRING SLICE LANDED 2026-08-26 (d01553f8), but NOT mission-complete. Remaining hard gates: (1) kernel must DELEGATE continuity to trajectory/coagent, not own in-memory ActorStateManager/Broker maps (the Definition says the kernel is not the durable actor; those are candidate-library internals with zero product callers); (2) NO deployed staging proof — linux-only capsule/executor/broker verified only by GOOS=linux cross-build (type-check), runtime landlock/seccomp containment and the deployed sealed CoSuper activation are unpaid; (3) no frozen-candidate security review; (4) no cross-model forced-death/rewarm proof; (5) no supervision/Texture transclusion proof; (6) no Researcher-profile conformance probe; (7) predecessor effects Definition is NOT goal.complete — effect-bearing acceptance is blocked by not_done_when."
+  next_action: "Confirm the go_eval wiring builds and tests green under linux CI (race shard), then bind a frozen-candidate security review before any deployed activation. In parallel, the kernel must delegate continuity to trajectory/coagent (delete or de-emphasize the parallel in-memory yaegikernel Broker/ActorStateManager artifacts rather than wiring a second state authority)."
 receipts:
   - id: rlm-kernel-doctrine-definition-opening
     boundary: define
