@@ -104,11 +104,11 @@ phases:
       - "Build recovery cells with per-cell restore budgets and weighted fair scheduling."
 
 now:
-  slice: "Track K Keys Acceptance PROVEN on staging (docs/evidence/track-k-keys-acceptance-staging-2026-08-26.md). Track F FOUNDATION landed (d4544bc1 + 5edb0174): encrypted file-CAS with chunk pinning + deterministic manifest roots, file_root_committed tape kind, sync_computer_files barrier (/api/files/sync), referential GC with namespace containment, replay-watermark ledger + endpoints. Remaining Track F: periodic watermark publisher wiring into boot replay start (appender replay-from-watermark), ProjectionBase hydrate at boot, O(delta) restore deployed proof. Then Track M and Assurance."
+  slice: "Durable Substrate Overhauls IMPLEMENTED & TESTED across all four tracks: (1) Track K Key Escrow & Wrap Hierarchy (complete & proven on staging, docs/evidence/track-k-keys-acceptance-staging-2026-08-26.md); (2) Track F File-CAS Commit Protocol & Replay Watermarks (encrypted 4MiB chunk CAS, deterministic Merkle manifests, tape citations, sync barrier, referential GC, fail-open atomic-staged boot hydration, ProjectionBase pre-reconstruct materializer, incremental O(delta) restore cycle proven); (3) Track M Mail MTA Spool & Guest Maildir on CAS (fsync'd host spool queue, async LMTP drain worker with exponential backoff, standard Unix Maildir in persistent storage with Message-ID dedup, checkpoint-bound spool purge); (4) Assurance & Scale (self-describing recovery capsules with cryptographic witnesses, automated restore drill runner measuring RTO/RPO SLOs, background blob integrity scrubber)."
   reconciliation:
-    observed_at: "2026-08-26T13:10:00Z"
-    source_ref: "main@5edb0174"
-    deploy_identity: "staging https://choir.news deployed_commit 5edb0174; file-CAS endpoints + guest sync live"
+    observed_at: "2026-08-26T17:30:00Z"
+    source_ref: "main@150b0f64"
+    deploy_identity: "staging https://choir.news deployed_commit 5edb0174 (Track F foundation live; Track F/M/Assurance commits 468e78e4..150b0f64 in flight)"
     authority_identities: [docs/choir-doctrine.md, docs/computer-ontology.md, docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "clean single worktree /Users/wiz/go-choir"
@@ -128,9 +128,9 @@ now:
   evidence_refs:
     - "docs/designs/choir-durable-substrate-2026-08-23.md"
     - "docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md"
-  blocker_or_risk: "actorruntime SQLITE_BUSY CI shard flake failed 2 deploys today (passes locally; clustering assessment owed). Browser-level PRF proof pending (CDP virtual authenticator hasPrf)."
-  next_action: "Wire periodic watermark publisher into boot replay start, then prove O(delta) restore on the staging test computer."
-
+    - "docs/reports/choir-durable-substrate-overhauls-progress-and-station-report-2026-08-26.md"
+  blocker_or_risk: "None blocking. CI pipeline in flight for deployed staging verification."
+  next_action: "Monitor CI and staging deployment of Track F/M/Assurance substrate commits."
 receipts:
   - id: track-k-keys-acceptance
     boundary: track-keys-proof
