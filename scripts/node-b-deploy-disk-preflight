@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-min_free_kib="${DEPLOY_MIN_FREE_KIB:-125829120}"
+# 100 GiB (calibrated 2026-08-26, see
+# docs/evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md): the host's
+# irreducible occupancy (224G platform Dolt store, 89G sealed evidence
+# computer, 22G live platform computer) leaves ~116G free on a 476G disk; the
+# previous 120G floor assumed reclaimable headroom that no longer exists.
+# The NixOS closure + guest image build footprint is single-digit GiB.
+min_free_kib="${DEPLOY_MIN_FREE_KIB:-104857600}"
 avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
 
 echo "==> Deploy disk preflight"
