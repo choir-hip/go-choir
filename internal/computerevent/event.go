@@ -58,6 +58,7 @@ const (
 	EventRecoveryRecorded        EventKind = "recovery_recorded"
 	EventRestoreRequested        EventKind = "restore_requested"
 	EventProjectionBatchRecorded EventKind = "projection_batch_recorded"
+	EventFileRootCommitted       EventKind = "file_root_committed"
 )
 
 var validEventKinds = map[EventKind]struct{}{
@@ -68,7 +69,7 @@ var validEventKinds = map[EventKind]struct{}{
 	EventMaterializationApplied: {}, EventMaterializationFailed: {}, EventRollbackRequested: {},
 	EventRollbackApplied: {}, EventResearcherUpdate: {}, EventCheckpointPublished: {},
 	EventRouteProjectionUpdated: {}, EventLifecycleObserved: {}, EventKeyRotated: {},
-	EventKeyRevoked: {}, EventRecoveryRecorded: {}, EventRestoreRequested: {}, EventProjectionBatchRecorded: {},
+	EventProjectionBatchRecorded: {}, EventFileRootCommitted: {},
 }
 
 // Event is the complete V1 semantic event envelope. Event bodies contain no

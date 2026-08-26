@@ -198,6 +198,7 @@ func Run() {
 		replayComputerID      string
 		replayBootstrapCtx    context.Context
 		replayBootstrapCancel context.CancelFunc
+		fileSyncService       *fileSync
 	)
 	if credentialPath := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_CREDENTIAL_FILE")); credentialPath != "" {
 		computerID := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))
@@ -304,6 +305,18 @@ func Run() {
 			cancel()
 			log.Fatalf("autoputer: acquire computer event authority: %v", err)
 		}
+		if platformURL != "" {
+			fileSyncService = newFileSync(filesRoot, platformURL, credentials.Capability, computerID, privateCipher, func(ctx context.Context) (uint64, error) {
+				head, err := eventClient.Head(ctx, computerID)
+				if err != nil {
+					return 0, err
+				}
+				if head == nil {
+					return 0, nil
+				}
+				return head.Sequence, nil
+			}, appender)
+		}
 		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher))
 		if credentials != nil {
 			credentials.StartBackgroundRenewal(context.Background())
@@ -371,6 +384,7 @@ func Run() {
 		}
 	})
 	RegisterFileRoutes(s, fileHandler)
+	RegisterFileSyncRoute(s, fileSyncService)
 
 	// Default-on: install the full per-profile tool registry. Set
 	// RUNTIME_DISABLE_TOOLS=1 to opt out (for stub-only tests where no tools
@@ -462,13 +476,18 @@ func Run() {
 		s.SetHealthHandler(gate.ServeHTTP)
 		go runReplayPhase(gate, replayAppender, replayClient, replayCredentials, replayComputerID, replayBootstrapCtx, replayBootstrapCancel, func() error {
 			startPeriodicDoltGC(rtCfg.StorePath)
-			return rt.Start(ctx)
+			if err := rt.Start(ctx); err != nil {
+				return err
+			}
+			StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
+			return nil
 		})
 	} else {
 		startPeriodicDoltGC(rtCfg.StorePath)
 		if err := rt.Start(ctx); err != nil {
 			log.Fatalf("autoputer: runtime startup refused: %v", err)
 		}
+		StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
 	}
 
 	s.Start()
