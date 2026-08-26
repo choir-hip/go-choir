@@ -459,11 +459,27 @@ func (b *Broker) handleGoEval(ctx context.Context, cap *capsule.Capability, para
 		timeout = time.Duration(p.TimeoutMS) * time.Millisecond
 	}
 
+	// Server-side package allowlist, NEVER model-controlled. The model's
+	// allowed_packages is ignored: the effective allowlist is derived from the
+	// verified capability's AgentRole, so an actor cannot authorize its own
+	// package deputies or otherwise expand its authority. This is the
+	// assignment-scoped authority boundary, not a request-trusted vocabulary.
+	allowed := yaegikernel.DefaultSafeStdlibPackages
+	if cap.AgentRole == capsule.RoleCoSuper {
+		// CoSuper may additionally use the narrow set needed for authoring,
+		// but it is still a fixed server-owned set, not caller input.
+		allowed = yaegikernel.DefaultSafeStdlibPackages
+	}
+	allowedList := make([]string, 0, len(allowed))
+	for pkg := range allowed {
+		allowedList = append(allowedList, pkg)
+	}
+
 	// Spawn the worker as a sibling child of the broker in its own process
 	// group so a timeout can SIGKILL the whole group.
 	req := yaegikernel.SidecarRequest{
 		Source:          p.Source,
-		AllowedPackages: p.AllowedPackages,
+		AllowedPackages: allowedList,
 	}
 	reqData, err := json.Marshal(req)
 	if err != nil {
@@ -479,11 +495,12 @@ func (b *Broker) handleGoEval(ctx context.Context, cap *capsule.Capability, para
 
 	cmd := exec.CommandContext(evalCtx, bin, "--exec-go-stdin")
 	cmd.Dir = cwdPath
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // new process group for clean kill
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL} // new group; worker dies if broker dies
 	cmd.Stdin = bytes.NewReader(reqData)
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	stdoutCap := &cappedBuffer{max: goEvalMaxOutputBytes}
+	stderrCap := &cappedBuffer{max: goEvalMaxOutputBytes}
+	cmd.Stdout = stdoutCap
+	cmd.Stderr = stderrCap
 
 	start := time.Now()
 	err = cmd.Start()
@@ -501,16 +518,22 @@ func (b *Broker) handleGoEval(ctx context.Context, cap *capsule.Capability, para
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 			_ = cmd.Process.Kill()
 		}
-		result.Stdout = stdoutBuf.String()
-		result.Stderr = stderrBuf.String()
+		result.Stdout = stdoutCap.String()
+		result.Stderr = stderrCap.String()
 		result.Error = "go_eval evaluation timed out"
 		result.Duration = time.Since(start)
 		resultBytes, _ := json.Marshal(result)
 		return BrokerRPCResponse{Result: resultBytes}
 	case waitErr := <-done:
-		result.Stdout = stdoutBuf.String()
-		result.Stderr = stderrBuf.String()
+		result.Stdout = stdoutCap.String()
+		result.Stderr = stderrCap.String()
 		result.Duration = time.Since(start)
+		if stdoutCap.overflow || stderrCap.overflow {
+			result.Error = "go_eval output exceeded limit (truncated)"
+			if waitErr == nil {
+				result.ExitCode = 1
+			}
+		}
 		if waitErr != nil {
 			if exitErr, ok := waitErr.(*exec.ExitError); ok {
 				result.ExitCode = exitErr.ExitCode()
@@ -762,3 +785,29 @@ func (w *stderrWriter) Write(p []byte) (int, error) {
 	*w.buf = append(*w.buf, p...)
 	return len(p), nil
 }
+
+// cappedBuffer bounds total buffered output to maxBytes and records overflow.
+// It lets the broker enforce a hard output limit so a misbehaving worker cannot
+// exhaust the capsule cgroup or the trusted broker with unbounded output.
+const goEvalMaxOutputBytes = 2 * 1024 * 1024 // 2 MiB
+
+type cappedBuffer struct {
+	buf      bytes.Buffer
+	overflow bool
+	max      int
+}
+
+func (c *cappedBuffer) Write(p []byte) (int, error) {
+	if c.buf.Len()+len(p) > c.max {
+		c.overflow = true
+		// Accept only the bytes that fit, then stop accepting.
+		remaining := c.max - c.buf.Len()
+		if remaining > 0 {
+			_, _ = c.buf.Write(p[:remaining])
+		}
+		return len(p), nil
+	}
+	_, _ = c.buf.Write(p)
+	return len(p), nil
+}
+func (c *cappedBuffer) String() string { return c.buf.String() }

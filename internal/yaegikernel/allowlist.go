@@ -47,6 +47,9 @@ type Allowlist struct {
 }
 
 // NewAllowlist creates an allowlist with the provided permitted package paths.
+// When empty (no packages), it fails closed to the default safe stdlib set so
+// an omitted or nil package list never yields an empty allowlist that rejects
+// every safe package or, worse, an ambiguous one.
 func NewAllowlist(packages ...string) *Allowlist {
 	m := make(map[string]bool)
 	for _, p := range packages {
@@ -54,6 +57,9 @@ func NewAllowlist(packages ...string) *Allowlist {
 		if p != "" {
 			m[p] = true
 		}
+	}
+	if len(m) == 0 {
+		m = NewDefaultSafeAllowlist().allowed
 	}
 	return &Allowlist{allowed: m}
 }

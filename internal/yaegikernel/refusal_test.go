@@ -117,3 +117,42 @@ func TestRunSubprocessFailClosedWithoutWorker(t *testing.T) {
 		t.Fatalf("expected fail-closed error message, got %v", err)
 	}
 }
+
+// TestEmptyAllowlistDefaultsToSafe asserts that an empty/nil package list fails
+// CLOSED to the default safe stdlib set, so an omitted list never yields an
+// empty allowlist that rejects every safe package (nor accepts any package).
+func TestEmptyAllowlistDefaultsToSafe(t *testing.T) {
+	// An empty allowlist must still admit safe packages.
+	e := NewEvaluator(NewAllowlist(), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	res, err := e.Eval(ctx, `package main; import "fmt"; func main(){ fmt.Println("ok") }`)
+	if err != nil {
+		t.Fatalf("empty allowlist should default to safe set but refused: %v (stderr=%s)", err, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "ok") {
+		t.Fatalf("expected stdout output, got %q", res.Stdout)
+	}
+
+	// But an empty allowlist must still refuse a banned package.
+	_, err = e.Eval(ctx, `package main; import "os/exec"; func main(){}`)
+	if err == nil {
+		t.Fatalf("empty allowlist default must still refuse banned os/exec")
+	}
+}
+
+// TestCannotExpandPackagesPastServerAllowlist asserts that adding an
+// authority-bearing package to the request does not broaden the effective
+// allowlist: the worker's package set is server-owned, so a model-supplied
+// dangerous package is still refused.
+func TestCannotExpandPackagesPastServerAllowlist(t *testing.T) {
+	// A request allowlisting only "fmt" must refuse "go/parser" even if the
+	// model tried to widen it, because the effective set is server-owned.
+	e := NewEvaluator(NewAllowlist("fmt"), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := e.Eval(ctx, `package main; import "go/parser"; func main(){}`)
+	if err == nil {
+		t.Fatalf("expected go/parser to be refused when the allowlist is fmt-only")
+	}
+}

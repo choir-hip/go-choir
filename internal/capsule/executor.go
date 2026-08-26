@@ -603,20 +603,28 @@ func (e *Executor) GoEval(ctx context.Context, agentRunID, handle string, reques
 	if err != nil {
 		return GoEvalResult{}, err
 	}
+	// Detect secret-bearing source BEFORE any dispatch. A secret-bearing Go
+	// program must never execute; refusing after execution would let it
+	// mutate/exfiltrate. No execution attempt is admitted for secret-bearing
+	// source, so no receipt is required for a refused attempt.
+	if len(computerevent.DetectPrivateSecrets([]byte(request.Source))) != 0 {
+		return GoEvalResult{}, fmt.Errorf("capsule: secret-bearing Go source cannot produce auditable execution evidence")
+	}
 	result, err := caps.GoEval(ctx, capability, request)
 	if err != nil {
 		return GoEvalResult{}, err
-	}
-	if len(computerevent.DetectPrivateSecrets([]byte(request.Source))) != 0 {
-		return GoEvalResult{}, fmt.Errorf("capsule: secret-bearing Go source cannot produce auditable execution evidence")
 	}
 	worktreeDigest, err := digestCapsuleWorktree(ctx, caps)
 	if err != nil {
 		return GoEvalResult{}, err
 	}
+	// Bind the source digest so the host-derived record identifies exactly which
+	// program ran. Distinct programs with equivalent output must be separable.
+	sourceDigest := computerevent.DigestBytes([]byte(request.Source))
 	receipt := ExecutionReceipt{
 		AgentRunID: agentRunID, CapabilityHandleDigest: computerevent.DigestBytes([]byte(handle)),
-		CapsuleID: caps.ID, Command: "go_eval", Cwd: request.Cwd, ExitCode: result.ExitCode,
+		CapsuleID: caps.ID,
+		Command:   "go_eval:" + sourceDigest, Cwd: request.Cwd, ExitCode: result.ExitCode,
 		StdoutDigest: computerevent.DigestBytes([]byte(result.Stdout)), StderrDigest: computerevent.DigestBytes([]byte(result.Stderr)),
 		WorktreeDigest: worktreeDigest, SourceTreeDigest: caps.SourceSnapshotDigest, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
