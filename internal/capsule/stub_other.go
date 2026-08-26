@@ -82,6 +82,9 @@ func (e *Executor) ResolveTarget(*Capability) ([]string, error) { return nil, st
 func (e *Executor) Exec(context.Context, string, string, ExecRequest) (ExecResult, error) {
 	return ExecResult{}, stubErr("exec")
 }
+func (e *Executor) GoEval(context.Context, string, string, GoEvalRequest) (GoEvalResult, error) {
+	return GoEvalResult{}, stubErr("go_eval")
+}
 func (e *Executor) PersistGrantedFreezeReceipt(context.Context, string, string) (CapsuleFateReceipt, error) {
 	return CapsuleFateReceipt{}, stubErr("freeze receipt")
 }
@@ -132,6 +135,9 @@ type Capsule struct {
 func (c *Capsule) Exec(context.Context, *Capability, ExecRequest) (ExecResult, error) {
 	return ExecResult{}, stubErr("exec")
 }
+func (c *Capsule) GoEval(context.Context, *Capability, GoEvalRequest) (GoEvalResult, error) {
+	return GoEvalResult{}, stubErr("go_eval")
+}
 func (c *Capsule) Quiesce(context.Context) error              { return stubErr("quiesce") }
 func (c *Capsule) Thaw(context.Context) error                 { return stubErr("thaw") }
 func (c *Capsule) Diff(context.Context) ([]FileChange, error) { return nil, stubErr("diff") }
@@ -145,6 +151,9 @@ type BrokerClient struct{}
 func NewBrokerClient(string, ed25519.PublicKey) *BrokerClient { return &BrokerClient{} }
 func (b *BrokerClient) Connect(context.Context) error         { return stubErr("broker") }
 func (b *BrokerClient) Close() error                          { return nil }
+func (b *BrokerClient) GoEval(context.Context, *Capability, GoEvalRequest) (GoEvalResult, error) {
+	return GoEvalResult{}, stubErr("go_eval")
+}
 
 func LoadWorkloadFilter() error { return stubErr("seccomp") }
 func LoadBrokerFilter() error   { return stubErr("seccomp") }

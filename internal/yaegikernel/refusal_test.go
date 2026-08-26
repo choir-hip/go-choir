@@ -84,3 +84,36 @@ func main() {
 		t.Fatalf("unexpected stdout: %q", res.Stdout)
 	}
 }
+
+// TestCheckImportsFailClosedOnParseError asserts that an import block that
+// cannot be statically parsed is refused rather than silently proceeding to the
+// interpreter (the allowlist-bypass risk).
+func TestCheckImportsFailClosedOnParseError(t *testing.T) {
+	evaluator := NewEvaluator(NewDefaultSafeAllowlist(), nil)
+
+	// A snippet whose import block cannot be parsed (no package clause, unbalanced
+	// braces) must be refused by CheckImports, not pass through with nil.
+	src := `import "os/exec"; func main() {`
+	if err := evaluator.CheckImports(src); err == nil {
+		t.Fatalf("expected CheckImports to fail closed on unparseable import block, got nil")
+	}
+}
+
+// TestRunSubprocessFailClosedWithoutWorker asserts that RunSubprocess refuses to
+// fall back to in-process execution when no worker binary is configured — the
+// process-isolation boundary is the safety contract.
+func TestRunSubprocessFailClosedWithoutWorker(t *testing.T) {
+	runner := NewSidecarRunner(SidecarConfig{
+		Timeout:         1 * time.Second,
+		MaxOutputBytes:  1024,
+		AllowedPackages: []string{"fmt"},
+	})
+	ctx := context.Background()
+	_, err := runner.RunSubprocess(ctx, `package main; import "fmt"; func main() { fmt.Println("x") }`)
+	if err == nil {
+		t.Fatalf("expected RunSubprocess to fail closed without WorkerBinaryPath, got nil")
+	}
+	if !strings.Contains(err.Error(), "fail closed") {
+		t.Fatalf("expected fail-closed error message, got %v", err)
+	}
+}

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
@@ -23,6 +24,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // Broker is the exec-broker that runs inside each capsule's namespace.
@@ -41,6 +43,7 @@ type Broker struct {
 	revokedCaps       map[string]bool
 	authorizedPeerUID uint32
 	listener          net.Listener
+	brokerBin         string // path to this broker binary (for go_eval worker spawn)
 }
 
 // Session represents a long-lived shell session.
@@ -89,6 +92,13 @@ func main() {
 	flag.Parse()
 	if uint64(authorizedPeerUID) > uint64(^uint32(0)) {
 		log.Fatal("--authorized-peer-uid exceeds uint32")
+	}
+	if isolationStage == "exec-go-stdin" {
+		// Standalone activation worker: read a SidecarRequest on stdin and
+		// write a SidecarResponse on stdout. This is the killable process PG
+		// boundary for model-authored Go evaluation inside the capsule.
+		yaegikernel.ExecuteWorkerStdin()
+		return
 	}
 	if isolationStage == "launcher" {
 		if listenerFD != 3 {
@@ -166,6 +176,7 @@ func main() {
 		listener:          listener,
 		sessions:          make(map[string]*Session),
 		revokedCaps:       make(map[string]bool),
+		brokerBin:         "/run/capsule/broker",
 	}
 
 	// Handle signals for clean shutdown.
@@ -328,6 +339,8 @@ func (b *Broker) handleRPC(req BrokerRPCRequest) BrokerRPCResponse {
 		return b.handleRemove(ctx, &cap, req.Params)
 	case "kill_session":
 		return b.handleKillSession(ctx, &cap, req.Params)
+	case "go_eval":
+		return b.handleGoEval(ctx, &cap, req.Params)
 	default:
 		return BrokerRPCResponse{Error: fmt.Sprintf("unknown verb: %s", req.Verb)}
 	}
@@ -419,6 +432,94 @@ func (b *Broker) handleExec(ctx context.Context, cap *capsule.Capability, params
 
 	resultBytes, _ := json.Marshal(result)
 	return BrokerRPCResponse{Result: resultBytes}
+}
+
+// handleGoEval evaluates model-authored Go source inside the capsule's
+// restricted Yaegi interpreter. It spawns this same broker binary in
+// --exec-go-stdin worker mode as a separate killable process group, so a
+// runaway interpreter is SIGKILLed on timeout and never runs in guest core.
+func (b *Broker) handleGoEval(ctx context.Context, cap *capsule.Capability, params json.RawMessage) BrokerRPCResponse {
+	var p capsule.GoEvalRequest
+	if err := json.Unmarshal(params, &p); err != nil {
+		return BrokerRPCResponse{Error: fmt.Sprintf("failed to parse go_eval params: %v", err)}
+	}
+
+	// Resolve cwd safely within the merged dir.
+	cwd := p.Cwd
+	if cwd == "" {
+		cwd = "/"
+	}
+	cwdPath, err := resolveWithin(b.mergedDir, cwd)
+	if err != nil {
+		return BrokerRPCResponse{Error: fmt.Sprintf("invalid cwd: %v", err)}
+	}
+
+	timeout := 60 * time.Second
+	if p.TimeoutMS > 0 {
+		timeout = time.Duration(p.TimeoutMS) * time.Millisecond
+	}
+
+	// Spawn the worker as a sibling child of the broker in its own process
+	// group so a timeout can SIGKILL the whole group.
+	req := yaegikernel.SidecarRequest{
+		Source:          p.Source,
+		AllowedPackages: p.AllowedPackages,
+	}
+	reqData, err := json.Marshal(req)
+	if err != nil {
+		return BrokerRPCResponse{Error: fmt.Sprintf("failed to marshal go_eval request: %v", err)}
+	}
+
+	bin := "/run/capsule/broker"
+	if b.brokerBin != "" {
+		bin = b.brokerBin
+	}
+	evalCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(evalCtx, bin, "--exec-go-stdin")
+	cmd.Dir = cwdPath
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // new process group for clean kill
+	cmd.Stdin = bytes.NewReader(reqData)
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+
+	start := time.Now()
+	err = cmd.Start()
+	if err != nil {
+		return BrokerRPCResponse{Error: fmt.Sprintf("failed to start go_eval worker: %v", err)}
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	result := capsule.GoEvalResult{ExitCode: 0}
+	select {
+	case <-evalCtx.Done():
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = cmd.Process.Kill()
+		}
+		result.Stdout = stdoutBuf.String()
+		result.Stderr = stderrBuf.String()
+		result.Error = "go_eval evaluation timed out"
+		result.Duration = time.Since(start)
+		resultBytes, _ := json.Marshal(result)
+		return BrokerRPCResponse{Result: resultBytes}
+	case waitErr := <-done:
+		result.Stdout = stdoutBuf.String()
+		result.Stderr = stderrBuf.String()
+		result.Duration = time.Since(start)
+		if waitErr != nil {
+			if exitErr, ok := waitErr.(*exec.ExitError); ok {
+				result.ExitCode = exitErr.ExitCode()
+			}
+			result.Error = waitErr.Error()
+		}
+		resultBytes, _ := json.Marshal(result)
+		return BrokerRPCResponse{Result: resultBytes}
+	}
 }
 
 // handleReadFile reads a file from the capsule.

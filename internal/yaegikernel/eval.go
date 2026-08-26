@@ -63,8 +63,9 @@ func (e *Evaluator) CheckImports(src string) error {
 		wrapped := "package main\n" + src
 		node, err = parser.ParseFile(fset, "src.go", wrapped, parser.ImportsOnly)
 		if err != nil {
-			// Not a valid import block; let interpreter syntax error report it
-			return nil
+			// Fail closed: an import block we cannot statically parse must never
+			// reach the interpreter, or the allowlist is silently bypassed.
+			return fmt.Errorf("yaegi: cannot statically resolve imports (fail closed): %w", err)
 		}
 	}
 

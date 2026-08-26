@@ -77,7 +77,7 @@ func RegisterCapsuleTools(registry *toolregistry.ToolRegistry) error {
 // composed by the assigned CoSuper registry, not inherited from any host profile.
 func RegisterCapsuleLocalTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
 	for _, tool := range []toolregistry.Tool{
-		newCapsuleExecTool(), newCapsuleReadFileTool(), newCapsuleWriteFileTool(), newCapsuleListDirTool(), newRecordAssignedCoSuperReportTool(rt),
+		newCapsuleExecTool(), newCapsuleGoEvalTool(), newCapsuleReadFileTool(), newCapsuleWriteFileTool(), newCapsuleListDirTool(), newRecordAssignedCoSuperReportTool(rt),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
@@ -723,6 +723,52 @@ func newCapsuleExecTool() toolregistry.Tool {
 				return "", err
 			}
 			result, err := toolCtx.Executor.Exec(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, capsule.ExecRequest{Command: input.Command, Cwd: input.Cwd, TimeoutMS: input.TimeoutMS})
+			if err != nil {
+				return "", err
+			}
+			return toolregistry.ResultJSON(result)
+		},
+	}
+}
+
+// newCapsuleGoEvalTool evaluates model-authored Go source inside the assigned
+// capsule through the same broker as capsule_exec. CoSuper and Researcher both
+// receive go_eval (Go-only for Researcher per the kernel profile); the role
+// check is a direct capsule role match, not the mutation-path requirement.
+func newCapsuleGoEvalTool() toolregistry.Tool {
+	type args struct {
+		Source          string   `json:"source"`
+		Code            string   `json:"code"`
+		Cwd             string   `json:"cwd"`
+		TimeoutMS       int      `json:"timeout_ms"`
+		AllowedPackages []string `json:"allowed_packages"`
+	}
+	return toolregistry.Tool{
+		Name: "capsule_go_eval", Description: "Evaluate model-authored Go source inside the assigned isolated capsule (restricted Yaegi interpreter).",
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
+			"source": map[string]any{"type": "string"}, "code": map[string]any{"type": "string"}, "cwd": map[string]any{"type": "string"},
+			"timeout_ms": map[string]any{"type": "integer"}, "allowed_packages": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		}, []string{}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+			if err != nil {
+				// Researcher is Go-only: no mutation path, but may evaluate Go.
+				toolCtx, err = requireCapsuleRole(ctx, capsule.RoleResearcher)
+				if err != nil {
+					return "", err
+				}
+			}
+			var input args
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return "", err
+			}
+			src := input.Source
+			if src == "" {
+				src = input.Code
+			}
+			result, err := toolCtx.Executor.GoEval(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, capsule.GoEvalRequest{
+				Source: src, Cwd: input.Cwd, TimeoutMS: input.TimeoutMS, AllowedPackages: input.AllowedPackages,
+			})
 			if err != nil {
 				return "", err
 			}

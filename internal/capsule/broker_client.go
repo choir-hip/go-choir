@@ -125,6 +125,20 @@ func (b *BrokerClient) Exec(ctx context.Context, cap *Capability, req ExecReques
 	return result, nil
 }
 
+// GoEval evaluates model-authored Go source in the capsule via the go_eval verb.
+func (b *BrokerClient) GoEval(ctx context.Context, cap *Capability, req GoEvalRequest) (GoEvalResult, error) {
+	resp, err := b.call(ctx, "go_eval", cap, req)
+	if err != nil {
+		return GoEvalResult{}, err
+	}
+
+	var result GoEvalResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return GoEvalResult{}, fmt.Errorf("failed to unmarshal go_eval result: %w", err)
+	}
+	return result, nil
+}
+
 // ReadFile reads a file from the capsule via the broker.
 func (b *BrokerClient) ReadFile(ctx context.Context, cap *Capability, path string) ([]byte, error) {
 	resp, err := b.call(ctx, "read_file", cap, map[string]string{"path": path})

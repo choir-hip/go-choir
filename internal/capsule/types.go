@@ -91,6 +91,27 @@ type ExecResult struct {
 	ReceiptRef string        `json:"receipt_ref,omitempty"`
 }
 
+// GoEvalRequest is a request to evaluate model-authored Go source inside the
+// capsule's restricted Yaegi interpreter. All package access is constrained by
+// the kernel allowlist; the interpreted process runs as a killable child of the
+// broker, never in guest core.
+type GoEvalRequest struct {
+	Source          string   `json:"source"`           // Go source to evaluate
+	Cwd             string   `json:"cwd"`              // working directory (optional)
+	AllowedPackages []string `json:"allowed_packages"` // kernel allowlist override (optional)
+	TimeoutMS       int      `json:"timeout_ms"`       // timeout in milliseconds (0 = broker default)
+}
+
+// GoEvalResult is the result of evaluating Go source in the capsule.
+type GoEvalResult struct {
+	Stdout     string        `json:"stdout"`
+	Stderr     string        `json:"stderr"`
+	Error      string        `json:"error,omitempty"`
+	Duration   time.Duration `json:"duration,omitempty"`
+	ExitCode   int           `json:"exit_code"`
+	ReceiptRef string        `json:"receipt_ref,omitempty"`
+}
+
 type ExecutionReceipt struct {
 	ReceiptRef             string `json:"receipt_ref"`
 	GrantedReceiptRef      string `json:"granted_receipt_ref,omitempty"`

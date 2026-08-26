@@ -112,7 +112,7 @@ func TestAssignedCoSuperBuilderIsExactClosedSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build assigned registry: %v", err)
 	}
-	want := []string{"capsule_exec", "capsule_list_dir", "capsule_read_file", "capsule_write_file", "commit_transaction", "inspect_self_development_bundle", "record_assignment_result", "record_self_development_verification", "update_coagent"}
+	want := []string{"capsule_exec", "capsule_go_eval", "capsule_list_dir", "capsule_read_file", "capsule_write_file", "commit_transaction", "inspect_self_development_bundle", "record_assignment_result", "record_self_development_verification", "update_coagent"}
 	if got := registryToolNames(registry); !slices.Equal(got, want) {
 		t.Fatalf("assigned registry tools = %v, want exact %v", got, want)
 	}
@@ -129,7 +129,7 @@ func TestCapsuleLocalAndHostSelfDevelopmentInstallersAreDisjoint(t *testing.T) {
 		t.Fatalf("register capsule-local tools: %v", err)
 	}
 	if got, want := registryToolNames(capsuleLocal), []string{
-		"capsule_exec", "capsule_list_dir", "capsule_read_file", "capsule_write_file", "record_assignment_result",
+		"capsule_exec", "capsule_go_eval", "capsule_list_dir", "capsule_read_file", "capsule_write_file", "record_assignment_result",
 	}; !slices.Equal(got, want) {
 		t.Fatalf("capsule-local tools = %v, want %v", got, want)
 	}

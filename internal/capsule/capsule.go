@@ -72,6 +72,27 @@ func (c *Capsule) Exec(ctx context.Context, cap *Capability, req ExecRequest) (E
 	return c.broker.Exec(ctx, cap, req)
 }
 
+// GoEval evaluates model-authored Go source in the capsule via the broker's
+// go_eval verb. Authorization is the capability's role verb set (go_eval is
+// granted to CoSuper and Researcher), never the raw payload.
+func (c *Capsule) GoEval(ctx context.Context, cap *Capability, req GoEvalRequest) (GoEvalResult, error) {
+
+	if !cap.AgentRole.HasVerb("go_eval") {
+		return GoEvalResult{}, fmt.Errorf("role %s does not allow go_eval", cap.AgentRole)
+	}
+
+	if err := VerifyCapabilityWithKey(cap, c.broker.publicKey, c.revokedCaps); err != nil {
+		return GoEvalResult{}, fmt.Errorf("capability verification failed: %w", err)
+	}
+
+	if err := c.acquireOp(); err != nil {
+		return GoEvalResult{}, err
+	}
+	defer c.releaseOp()
+
+	return c.broker.GoEval(ctx, cap, req)
+}
+
 // Quiesce closes operation admission, drains all broker RPCs, and freezes the
 // capsule cgroup so detached descendants cannot mutate the filesystem.
 func (c *Capsule) Quiesce(ctx context.Context) error {

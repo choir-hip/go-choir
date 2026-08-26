@@ -34,6 +34,18 @@ func TestRoleVerbSets(t *testing.T) {
 	if researcher["write_file"] {
 		t.Error("researcher should NOT have write_file verb")
 	}
+
+	// Go evaluation goes through the SAME broker as Bash. CoSuper gets both
+	// (Go + Bash); Researcher gets Go-only (no exec); Super gets neither.
+	if !cosuper["go_eval"] {
+		t.Error("cosuper should have go_eval verb (Go + Bash through one broker)")
+	}
+	if !researcher["go_eval"] {
+		t.Error("researcher should have go_eval verb (Go-only profile)")
+	}
+	if RoleVerbSets[RoleSuper]["go_eval"] {
+		t.Error("super should NOT have go_eval verb")
+	}
 }
 
 func TestHasVerb(t *testing.T) {

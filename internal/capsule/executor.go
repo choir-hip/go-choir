@@ -594,6 +594,51 @@ func (e *Executor) ResolveTarget(capability *Capability) ([]string, error) {
 	return ids, nil
 }
 
+// GoEval evaluates model-authored Go source inside the capsule's restricted
+// Yaegi interpreter. It routes through the same broker as Bash exec (single
+// broker invariant), spawns a killable worker process, and produces an
+// auditable execution receipt.
+func (e *Executor) GoEval(ctx context.Context, agentRunID, handle string, request GoEvalRequest) (GoEvalResult, error) {
+	capability, caps, err := e.resolveOne(agentRunID, handle, "go_eval")
+	if err != nil {
+		return GoEvalResult{}, err
+	}
+	result, err := caps.GoEval(ctx, capability, request)
+	if err != nil {
+		return GoEvalResult{}, err
+	}
+	if len(computerevent.DetectPrivateSecrets([]byte(request.Source))) != 0 {
+		return GoEvalResult{}, fmt.Errorf("capsule: secret-bearing Go source cannot produce auditable execution evidence")
+	}
+	worktreeDigest, err := digestCapsuleWorktree(ctx, caps)
+	if err != nil {
+		return GoEvalResult{}, err
+	}
+	receipt := ExecutionReceipt{
+		AgentRunID: agentRunID, CapabilityHandleDigest: computerevent.DigestBytes([]byte(handle)),
+		CapsuleID: caps.ID, Command: "go_eval", Cwd: request.Cwd, ExitCode: result.ExitCode,
+		StdoutDigest: computerevent.DigestBytes([]byte(result.Stdout)), StderrDigest: computerevent.DigestBytes([]byte(result.Stderr)),
+		WorktreeDigest: worktreeDigest, SourceTreeDigest: caps.SourceSnapshotDigest, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	canonical, err := computerevent.CanonicalJSON(receipt)
+	if err != nil {
+		return GoEvalResult{}, err
+	}
+	receipt.ReceiptRef = "capsule-go-eval:sha256:" + computerevent.DigestBytes(canonical)
+	storedCanonical, err := computerevent.CanonicalJSON(receipt)
+	if err != nil {
+		return GoEvalResult{}, err
+	}
+	if err := e.persistReceiptArtifact("execution", receipt.ReceiptRef, storedCanonical); err != nil {
+		return GoEvalResult{}, err
+	}
+	e.mu.Lock()
+	e.executionReceipts[receipt.ReceiptRef] = receipt
+	e.mu.Unlock()
+	result.ReceiptRef = receipt.ReceiptRef
+	return result, nil
+}
+
 func (e *Executor) Exec(ctx context.Context, agentRunID, handle string, request ExecRequest) (ExecResult, error) {
 	capability, caps, err := e.resolveOne(agentRunID, handle, "exec")
 	if err != nil {

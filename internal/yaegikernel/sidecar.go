@@ -80,24 +80,15 @@ func (r *SidecarRunner) RunSubprocess(ctx context.Context, src string) (SidecarR
 		return SidecarResponse{}, fmt.Errorf("sidecar: marshal request: %w", err)
 	}
 
-	// Use current executable if no worker binary path is configured
+	// Process-per-activation isolation is the contract. Without a configured
+	// worker binary there is no process boundary, so fail closed rather than
+	// silently falling back to an in-process interpreter that cannot be
+	// process-group killed on timeout.
 	bin := r.cfg.WorkerBinaryPath
-	var cmd *exec.Cmd
-	if bin != "" {
-		cmd = exec.CommandContext(evalCtx, bin)
-	} else {
-		// Run standalone in-process fallback if no separate worker binary exists
-		res, evalErr := r.RunInProcess(ctx, src)
-		resp := SidecarResponse{
-			Stdout:     res.Stdout,
-			Stderr:     res.Stderr,
-			DurationMs: time.Since(start).Milliseconds(),
-		}
-		if evalErr != nil {
-			resp.Error = evalErr.Error()
-		}
-		return resp, evalErr
+	if bin == "" {
+		return SidecarResponse{}, fmt.Errorf("sidecar: WorkerBinaryPath is required for subprocess isolation (fail closed)")
 	}
+	cmd := exec.CommandContext(evalCtx, bin)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdin = bytes.NewReader(reqData)
