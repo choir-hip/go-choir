@@ -133,26 +133,6 @@ let
       echo "go-choir-autoputer: wire publish URL not configured" >&2
     fi
 
-    refresh_runtime=0
-    for param in $(cat /proc/cmdline); do
-      case "$param" in
-        choir.refresh_runtime=1)
-          refresh_runtime=1
-          ;;
-      esac
-    done
-
-    current="/mnt/persistent/choir-updater/current"
-    if [ "$refresh_runtime" = "1" ] && [ -L "$current" ]; then
-      echo "go-choir-autoputer: refresh runtime dropping stale updater current"
-      rm -f "$current"
-    fi
-    dynamic="$current/bin/autoputer"
-    if [ -x "$dynamic" ]; then
-      export RUNTIME_SKILLS_ROOT="$current/share/go-choir/skills"
-      export CHOIR_UPDATER_ROOT="/mnt/persistent/choir-updater"
-      exec "$dynamic" "$@"
-    fi
     export CHOIR_UPDATER_ROOT="/mnt/persistent/choir-updater"
     export RUNTIME_SKILLS_ROOT="${goChoirPackages.autoputer}/share/go-choir/skills"
     exec ${goChoirPackages.autoputer}/bin/autoputer "$@"
@@ -683,12 +663,6 @@ EOF
     bindsTo = [ "go-choir-guest-receipt-signer.service" ];
     environment = {
       CHOIR_COMPUTER_CREDENTIAL_FILE = "/run/choir-bootstrap/computer-event-envelope";
-      # B11: embedded Dolt GC is OFF during the recovered guest's lifetime —
-      # its memory demand at the multi-GiB chunk-store scale OOMs the 4096 MiB
-      # guest (recovery boot crash-loop receipt 2026-08-24). The store's
-      # MaybeRunDoltGC additionally guards on workspace size; the recovery
-      # never needs the guest-side GC (the disk has ample headroom).
-      RUNTIME_DOLT_GC_DISABLED = "1";
       CHOIR_REVOCATION_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/revocation-capability";
       CHOIR_RESTART_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/restart-capability";
       CHOIR_VERIFIER_AUTHORITY_SOCKET = "/run/choir-verifier/authority.sock";

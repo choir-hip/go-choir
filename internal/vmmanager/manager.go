@@ -145,11 +145,6 @@ type VMConfig struct {
 	// a VM went through a fresh boot vs. a resume (VAL-CROSS-117).
 	Epoch int64
 
-	// RefreshRuntime asks the guest to drop a stale updater-current pointer
-	// and exec the current deploy image. Restart/recover must leave this
-	// false so a promoted release survives ordinary stop+resolve.
-	RefreshRuntime bool
-
 	// MaintenanceHold boots the guest with RUNTIME_MAINTENANCE_HOLD=1 so the
 	// runtime refuses run admission and skips every rewake sweep while the
 	// host holds the computer (audited maintenance/recovery boot path).
@@ -1236,7 +1231,6 @@ func (m *Manager) RefreshVMWithConfig(vmID string, overrides VMConfig) (*VMInsta
 		cfg.Epoch = 0
 	}
 	cfg.VMID = vmID
-	cfg.RefreshRuntime = true
 	m.mu.Unlock()
 
 	return m.bootVM(cfg)
@@ -1425,9 +1419,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		if cfg.GatewayToken != "" {
 			runtimeArgs = append(runtimeArgs, fmt.Sprintf("choir.gateway_token=%s", kernelParamValue(cfg.GatewayToken)))
 		}
-		if cfg.RefreshRuntime {
-			runtimeArgs = append(runtimeArgs, "choir.refresh_runtime=1")
-		}
 		if cfg.RecoveryReplayOnly {
 			runtimeArgs = append(runtimeArgs, "choir.runtime_recovery_replay_only=1")
 		}
@@ -1463,9 +1454,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		}
 		if cfg.GatewayToken != "" {
 			bootArgs += fmt.Sprintf(" choir.gateway_token=%s", kernelParamValue(cfg.GatewayToken))
-		}
-		if cfg.RefreshRuntime {
-			bootArgs += " choir.refresh_runtime=1"
 		}
 	}
 

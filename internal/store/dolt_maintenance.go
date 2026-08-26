@@ -187,9 +187,10 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 	// (evidence: recovery boot #2 crash loop, 2026-08-24). While the
 	// persistent disk holds a large store the GC is skipped with a diagnostic;
 	// the milestone marker is left untouched so a later small-store run can
-	// proceed. Guest units set RUNTIME_DOLT_GC_DISABLED=1 for the recovery;
-	// this guard is the safety net that keeps the GC from ever bricking a
-	// constrained guest through restart churn.
+	// Guest units no longer set RUNTIME_DOLT_GC_DISABLED (substrate cleanup
+	// 2026-08-25 removed the B11 disablement); this size guard is the safety
+	// net that keeps the GC from ever bricking a constrained guest through
+	// restart churn.
 	const safeGuestGCUsedGiB = 5
 	if usage.UsedBytes > safeGuestGCUsedGiB*gibBytes {
 		log.Printf("store: dolt gc skipped: used=%d GiB exceeds safe bounded-guest GC size (%d GiB); reclaim deferred",
