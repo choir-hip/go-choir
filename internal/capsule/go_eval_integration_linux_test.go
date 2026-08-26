@@ -4,7 +4,6 @@ package capsule
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -106,11 +105,10 @@ func TestCapsuleGoEvalEndToEnd(t *testing.T) {
 	_, err = client.GoEval(ctx, capability, GoEvalRequest{
 		Source: `package main; import "os/exec"; func main(){}`,
 	})
-	if err != nil {
-		// Accept either a refusal (allowlist blocked) or a worker error.
-		return
+	if err == nil {
+		t.Fatal("go_eval accepted os/exec import through the real capsule; want refusal")
 	}
-	t.Fatalf("go_eval accepted os/exec import through the real capsule; want refusal or worker error")
-
-	_ = fmt.Sprintf // keep fmt in case future assertions need it
+	if !strings.Contains(err.Error(), "refused") && !strings.Contains(err.Error(), "os/exec") {
+		t.Fatalf("go_eval returned a non-refusal error for the banned import: %v", err)
+	}
 }
