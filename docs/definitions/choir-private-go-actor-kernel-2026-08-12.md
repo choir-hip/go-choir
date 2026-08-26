@@ -188,12 +188,12 @@ measures:
 
 now:
   status: executable
-  slice: "WIRED 2026-08-26: go_eval now routes model-authored Go through the EXISTING capsule-broker (single broker invariant). CoSuper gets Go+Bash; Researcher gets Go-only. Kernel-contract fixes land (CheckImports fail-closed, RunSubprocess fail-closed). Remaining: kernel state must DELEGATE to trajectory/coagent (it is not the state authority), then deploy + frozen-candidate security review."
+  slice: "SECURITY-REPAIRED + DEPLOYED 2026-08-26 (a0523e52, CI 33007866880 success, staging deployed_commit a0523e52): go_eval wiring repaired per adversarial security review (server-side allowlist, obligation revalidation, secret-before-execution, bounded output, Pdeathsig) and landed on staging. NOT mission-complete: the finish requires a deployed sealed CoSuper activation, cross-model forced-death recovery, supervision/Texture transclusion, Researcher conformance probe, and predecessor effects goal.complete — none achieved."
   question: none
   reconciliation:
-    observed_at: 2026-08-26T18:40:00Z
-    source_ref: main@d01553f8
-    deploy_identity: staging https://choir.news deployed_commit not asserted to include yaegikernel; no staging_build_identity for the kernel commits
+    observed_at: 2026-08-26T20:25:00Z
+    source_ref: main@a0523e52
+    deploy_identity: staging https://choir.news deployed_commit a0523e52 (security-repaired go_eval wiring; CI 33007866880 success, Deploy to Staging succeeded 2026-08-26T20:21:43Z)
     authority_identities:
       - owner directive 2026-08-12
       - docs/choir-doctrine.md
@@ -208,9 +208,9 @@ now:
     state: unaccepted-candidate
     ref: current worktree
     owner: mission lead
-    base: d01553f8
-    digest: "wiring slice d01553f8: go_eval verb through the existing capsule-broker; internal/yaegikernel was already the unwired candidate library at e9317722"
-    scope: "[internal/capsule, cmd/capsule-broker, internal/agentcore, internal/yaegikernel] — go_eval wiring and kernel-contract fixes landed"
+    base: a0523e52
+    digest: "security-repaired wiring slice a0523e52 (frozen security review was bound to d65a562a at deploy de0597c2; repairs landed as a0523e52)"
+    scope: "[internal/capsule, cmd/capsule-broker, internal/agentcore, internal/yaegikernel] — go_eval wiring repaired per adversarial security review and deployed"
   decision:
     selected: "Promote the common private-Go kernel with process-per-activation sidecar containment; first implement isolated Phase 0 refusal & resource suite, then CoSuper Go+Bash broker, then restricted Researcher profile."
     kind: architecture
@@ -227,8 +227,8 @@ now:
     - docs/computer-ontology.md
     - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
     - docs/reports/choir-family-a-and-yaegi-rlm-architecture-spec-2026-08-18.md
-  blocker_or_risk: "WIRING SLICE LANDED 2026-08-26 (d01553f8), but NOT mission-complete. Remaining hard gates: (1) kernel must DELEGATE continuity to trajectory/coagent, not own in-memory ActorStateManager/Broker maps (the Definition says the kernel is not the durable actor; those are candidate-library internals with zero product callers); (2) NO deployed staging proof — linux-only capsule/executor/broker verified only by GOOS=linux cross-build (type-check), runtime landlock/seccomp containment and the deployed sealed CoSuper activation are unpaid; (3) no frozen-candidate security review; (4) no cross-model forced-death/rewarm proof; (5) no supervision/Texture transclusion proof; (6) no Researcher-profile conformance probe; (7) predecessor effects Definition is NOT goal.complete — effect-bearing acceptance is blocked by not_done_when."
-  next_action: "Confirm the go_eval wiring builds and tests green under linux CI (race shard), then bind a frozen-candidate security review before any deployed activation. In parallel, the kernel must delegate continuity to trajectory/coagent (delete or de-emphasize the parallel in-memory yaegikernel Broker/ActorStateManager artifacts rather than wiring a second state authority)."
+  blocker_or_risk: "SECURITY REVIEW ADJUDICATED 2026-08-26: go_eval wiring was REJECT/NEEDS-REPAIR (Sol, Codex, Gemini) on the deployed candidate d65a562a; repairs landed as a0523e52 and are deployed (CI 33007866880 success). NOT mission-complete. Remaining hard gates per finish/not_done_when: (1) deployed sealed CoSuper activation (actors author reusable Go, dynamic >=2 assignment, typed updates, frozen artifacts) — NOT done; (2) cross-model forced-death/rewarm recovery — NOT done; (3) supervision/Texture transclusion proof with host-owned salient set — NOT done; (4) Researcher-profile conformance probe (Go succeeds, Bash/mutation/HOST tools fail) — NOT done, and the Researcher capsule-context path in runtime.go is not wired (High finding #5, still open); (5) explicit client-cancellation->broker-cancel binding with request IDs and full host-owned attempt record on every outcome — still open from review; (6) predecessor effects Definition is NOT goal.complete — effect-bearing acceptance is blocked by not_done_when; (7) no registry atomic promotion receipt verified."
+  next_action: "Deliver the deployed sealed CoSuper activation proof: wire a real activation through the existing capsule path using capsule_go_eval + capsule_exec, dynamically assign >=2 actors, exchange typed updates, freeze artifacts, and record the exact trajectory/activation/work/message/artifact IDs. Before that: wire the Researcher capsule-context path (runtime.go) and add the explicit cancellation-broker binding and host-owned attempt record. Then run the cross-model forced-death/rewarm proof and the supervision/Texture transclusion proof, and reconcile the predecessor effects goal.complete gate."
 receipts:
   - id: rlm-kernel-doctrine-definition-opening
     boundary: define
@@ -273,6 +273,27 @@ receipts:
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
     registry_conformance_ref: docs/ACTIVE.md + docs/mission-graph.yaml + docs/doc-authority-manifest.yaml; all three already show this Definition working/executable/active (no completion recorded, so no reversal required)
+
+  - id: rlm-kernel-go-eval-security-repair-2026-08-26
+    boundary: define
+    commit_or_artifact: "go_eval wiring repaired and deployed as a0523e52; frozen-candidate security review bound to d65a562a (deployed de0597c2); repairs per adversarial review (Sol=REJECT, Codex=NEEDS-REPAIR, Gemini=NEEDS-REPAIR)."
+    proof_refs:
+      - "docs/problems/capsule-go-eval-security-2026-08-26.md"
+      - ".agentic-consensus/agentic-consensus-20260826-154655/ (sol, codex, gemini outputs)"
+      - "CI 33007866880 success; Deploy to Staging (Node B) succeeded; staging deployed_commit a0523e52 confirmed on https://choir.news/health"
+    rollback_ref: revert a0523e52 (and d01553f8 if rolling back the wiring)
+    disposition: repaired and deployed, but NOT mission-complete (finish gates unmet)
+    problem_ref: docs/problems/capsule-go-eval-security-2026-08-26.md
+    authorization_ref: owner instruction to reorient via agentic consensus; repo problem-documentation-first for red platform issues
+    candidate_or_evidence_refs:
+      - .agentic-consensus/wiring-diff.txt
+    landing:
+      source_commit: a0523e52
+      ci_ref: CI 33007866880 success (all 15 race shards, SBOM candidate+accept, heresy detector, doccheck)
+      deploy_ref: Deploy to Staging (Node B) succeeded
+      environment_identity: staging https://choir.news deployed_commit a0523e52
+      deployed_acceptance: not achieved (no deployed sealed CoSuper activation / forced-death / supervision / Researcher probe)
+    registry_conformance_ref: docs/ACTIVE.md + docs/mission-graph.yaml + docs/doc-authority-manifest.yaml (working/executable/active; no completion recorded)
 
 view:
   path: none
