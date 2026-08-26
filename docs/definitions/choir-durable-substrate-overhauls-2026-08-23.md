@@ -104,14 +104,14 @@ phases:
       - "Build recovery cells with per-cell restore budgets and weighted fair scheduling."
 
 now:
-  status: working
-  slice: "Pre-Flight definition (choir-durable-substrate-preflight-2026-08-24.md) completed; 0333528 active and liveness restored on staging. Beginning Track K (Key Escrow & Wrap Hierarchy)."
-  question: none
+  status: blocked_incomplete
+  slice: "Sequenced after choir-substrate-cleanup-and-cutover-2026-08-25.md. Overhauls run on fresh snapshot-backed test computer on staging; 0333528 remains sealed."
+  question: "How will Track K passkey PRF wrapping integrate cleanly with the fresh computer creation path?"
   reconciliation:
-    observed_at: "2026-08-23T02:00:00Z"
-    source_ref: "main@3f9173be"
-    deploy_identity: "staging https://choir.news"
-    authority_identities: [docs/choir-doctrine.md, docs/computer-ontology.md, AGENTS.md]
+    observed_at: "2026-08-25T17:30:00Z"
+    source_ref: "main@20701098"
+    deploy_identity: "staging https://choir.news; computer-0333528 sealed under hold"
+    authority_identities: [docs/choir-doctrine.md, docs/computer-ontology.md, docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "working tree owns substrate overhauls definition"
     status: reconciled
@@ -119,19 +119,19 @@ now:
     id: none
     state: none
   decision:
-    selected: "Execute complete substrate overhauls across Tracks K, F, M, and Assurance as one sequenced goal following immediate recovery."
+    selected: "Execute complete substrate overhauls across Tracks K, F, M, and Assurance as one sequenced goal following substrate cleanup, executing on fresh test computer."
     kind: architecture
     status: settled
-    source: owner direction 2026-08-23
+    source: owner direction 2026-08-25
     evidence_ref: docs/designs/choir-durable-substrate-2026-08-23.md
-    owner_ratification_ref: "owner confirmed 2026-08-23"
-    recorded_at: "2026-08-23T02:00:00Z"
-    consequence: "All four overhaul tracks proceed under one cohesive definition once 0333528 is unblocked."
+    owner_ratification_ref: "owner confirmed 2026-08-25"
+    recorded_at: "2026-08-25T17:30:00Z"
+    consequence: "All four overhaul tracks proceed under one cohesive definition once cleanup lands."
   evidence_refs:
     - "docs/designs/choir-durable-substrate-2026-08-23.md"
-  blocker_or_risk: "None for definition authoring; execution waits on completion of the recovery definition."
-  next_action: "Execute Track K: Key Escrow & Wrap Hierarchy."
-
+    - "docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md"
+  blocker_or_risk: "None for definition authoring; execution waits on completion of the cleanup definition."
+  next_action: "Wait for docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md completion, then execute Track K."
 receipts:
   - id: define-overhauls-boundary
     boundary: define

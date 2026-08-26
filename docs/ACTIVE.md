@@ -3,61 +3,49 @@
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
 
-## Active — Stabilize and Hold 0333528 (maintenance hold gate)
+## Active Definition — Substrate Cleanup and Cutover
 
-[`definitions/choir-0333528-stabilize-and-hold-2026-08-24.md`](definitions/choir-0333528-stabilize-and-hold-2026-08-24.md)
-is the owner-ratified active operation as of 2026-08-24. It blocks the
-scheduling + overhauls definitions because the retained computer
-`computer-03335285269bdba4f94377e56879f9e6` (owner yusefnathanson) is in a
-recover→corrupt→recover loop (pre-genesis restart loop, epoch 774). It holds
-the computer FIRST — fence the vmctl lifecycle matrix + deploy-VM refresh +
-self-dev admission/auto-rewake (host + guest-visible) — then B14-recover-under-hold
-to local==platform (δ0, no restart loop), then the stable-state gate. The Tracks
-K/F/M/Assurance overhauls run on a test computer; adoption + release are a HAND-OFF
-to the overhauls/effects definitions once the hold gate passes. Effects remain OFF.
+[`definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md`](definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md)
+is the owner-priority executable `/goal` as of 2026-08-25. Ratified by unanimous
+agentic consensus (12 models), it executes the clean architectural cutovers before
+substrate overhauls:
+(1) Delete mutable dynamic binary updater fallback (`/mnt/persistent/choir-updater/current`),
+enforcing that guest MicroVMs execute strictly ONE immutable Nix store binary;
+(2) Remove `RUNTIME_DOLT_GC_DISABLED = "1"` to restore standard embedded Dolt GC for normal computers;
+(3) Delete `choir.refresh_runtime=1` kernel parameter and wrapper deletion dance;
+(4) Seal historical computer `computer-03335285269bdba4f94377e56879f9e6` under permanent
+host hold as an immutable evidence artifact (retiring 133k linear replay as a release gate);
+(5) Formally suspend self-development effects until clean substrate overhauls (Tracks K, F, M,
+Assurance) and the Yaegi Actor Kernel are deployed;
+(6) Provision fresh overhaul test computer on staging.
 
-## Active Definition — Scheduling Contract and Candidate Proof
+## Suspended Definition — Scheduling Contract and Candidate Proof
 
 [`definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`](definitions/choir-scheduling-and-candidate-proof-2026-08-21.md)
-is the owner-priority executable `/goal` as of 2026-08-21. It supersedes the
-2026-08-20 candidate-proof Definition (whose finish.acceptance it inherits
-unchanged) and the 2026-08-11 effects definition. Proof target is
-**policy-governed autonomy**: the ratified scheduling contract (one live
-assignment per computer; computer-scoped arrival ordinals; FIFO among
-non-expired requests; expiry/deadlines; retryable refusal) proven end-to-end,
-then capsule-authored candidate change A under effect-specific qualified
-consensus, E2 correction, and acceptance-fenced restore through the completed
-tape-recovery substrate (platform/cycle OUT of restore; computer-surface
-frontend is per-computer). This Definition does not include any email leg.
-Effects remain OFF until this Definition's decision-policy gates pass. Active
-execution: scheduler contract, texture authoring repair, then in-VM candidate
-authoring inside guest capsules, bundle freeze with five refs bound to
-capsule-exec receipts, qualified consensus under reversible-selfdev-v1,
-promotion, live play verification, falsification with B, and restore to pre-A
-checkpoint 99949fe2.
+is **suspended pending substrate overhauls**. Attempting to author and prove
+self-development candidates on an uncompacted, fragile staging computer with 200-iteration
+shell loops was an inverted dependency. It will be re-opened on a fresh, snapshot-backed,
+Yaegi-powered computer after the substrate overhauls and actor kernel land.
 
-#…
-The verified root cause is a boot/replay contract defect (20s hard-kill before the single deferred Dolt commit), not a missing snapshot. The offline `ProjectionBase` rebuild substrate is deferred to a **separate successor Definition** (owner-ratified 2026-08-23); this Definition does not publish a `ProjectionBase`.
+## Sealed Operation — Stabilize and Hold 0333528
 
-## Completed Pre-Flight — Durable Substrate Loose Ends
+[`definitions/choir-0333528-stabilize-and-hold-2026-08-24.md`](definitions/choir-0333528-stabilize-and-hold-2026-08-24.md)
+is **settled and sealed**. Computer `computer-03335285269bdba4f94377e56879f9e6` is
+permanently held host-side (`held=true`) and guest-fenced (`RUNTIME_MAINTENANCE_HOLD=1`),
+serving on `:8085` (HTTP 200) with canonical head advancing past 133,319. It serves as
+an immutable historical evidence artifact.
+
+## Completed Pre-Flight & Historical Recovery
 
 [`definitions/choir-durable-substrate-preflight-2026-08-24.md`](definitions/choir-durable-substrate-preflight-2026-08-24.md)
 completed 2026-08-24. All four pre-flight areas are settled and verified:
-(1) Dolt 2.0 embedded-driver upgrade verified and accepted by unanimous agentic
-consensus (15.6ms p95, 88% disk reduction under `.darc` archiving, zero OOMs,
-two-way downgrade-proof verified); (2) `candidate-fleet-d03dacaa...` invalid-genesis
-loop resolved via the pre-genesis run-admission gate in `agentcore/runtime.go`;
-(3) active-guest Dolt GC policy verified with 5 GiB safe-guard; (4) live computer
-`computer-03335285269bdba4f94377e56879f9e6` liveness restored (Texture startup
-stale ActiveRunID reconciliation fixed and verified on staging). Unblocks the
-sequenced 4-track overhauls definition.
-[`definitions/choir-durable-substrate-recovery-2026-08-23.md`](definitions/choir-durable-substrate-recovery-2026-08-23.md)
-is the owner-ratified subordinate operational contract executing as of
-2026-08-23. It unblocks the retained computer `computer-03335285269bdba4f94377e56879f9e6`
-(stopped, epoch file 707, no live firecracker — stale pid) so the scheduling Definition can proceed. It supersedes the
-predecessor [`definitions/choir-host-orchestrated-recovery-2026-08-22.md`](definitions/choir-host-orchestrated-recovery-2026-08-22.md).
-Delivery: 0333528 recovered to canonical head 132,436 via the fixed boot/replay contract — resumable replay (periodic Dolt checkpointing; `Reconstruct` resumes from `localHead.Sequence`) and no hard-kill at the 20s `BootReadyTimeout` — converging to active, quiesced state on staging. The verified root cause is a boot/replay contract defect (20s hard-kill before the single deferred Dolt commit), not a missing snapshot. The offline `ProjectionBase` rebuild substrate is deferred to a **separate successor Definition** (owner-ratified 2026-08-23); this Definition does not publish a `ProjectionBase`.
+(1) Dolt 2.0 embedded-driver upgrade verified; (2) `candidate-fleet-d03dacaa...` invalid-genesis
+loop resolved; (3) active-guest Dolt GC policy verified with 5 GiB safe-guard; (4) live computer
+`computer-03335285269bdba4f94377e56879f9e6` liveness restored.
 
+[`definitions/choir-durable-substrate-recovery-2026-08-23.md`](definitions/choir-durable-substrate-recovery-2026-08-23.md)
+is settled historical recovery evidence. 0333528 was recovered to canonical head 132,436
+via the fixed boot/replay contract. Offline ProjectionBase rebuild was deferred to Track F.
 ## Completed Substrate — Tape-Based Recovery
 
 [`definitions/choir-tape-recovery-2026-08-13.md`](definitions/choir-tape-recovery-2026-08-13.md)
@@ -74,14 +62,10 @@ to reopen it.
 ## Superseded Effects Definition — Historical Evidence
 
 [`definitions/choir-supervised-self-development-effects-2026-08-11.md`](definitions/choir-supervised-self-development-effects-2026-08-11.md)
-is superseded by the candidate-proof Definition above. Its policy, email, and
-restore reasoning remain citable historical evidence; it is not an executable
-entrypoint and does not own current next_action. The tape-recovery Definition
-owns restore substrate receipts; the candidate-proof Definition owns the current
-candidate proof. Reasoning and retired approaches live in the
-[supplement](definitions/choir-supervised-self-development-effects-2026-08-11-supplement.md).
-`choir-self-development-roadmap-2026-08-11.md` is a **historical migration
-receipt**, not a live schedule. CTS remains citable evidence, not an entrypoint.
+is superseded historical evidence. Its policy, email, and restore reasoning remain
+citable historical evidence; it is not an executable entrypoint. The tape-recovery Definition
+owns restore substrate receipts. Active execution lives solely in
+[`definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md`](definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md).
 
 The scope-disjoint
 [`choir-instruction-substrate-prune-2026-08-11.md`](definitions/choir-instruction-substrate-prune-2026-08-11.md)
@@ -112,12 +96,10 @@ plus the disposed Mission 0 direct-key ceremony at
 [`continuous-texture-supervision-direct-key-ceremony-2026-08-09.md`](evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md)
 (do not execute it as a live gate; no headless retry, substitute identity,
 recovery bypass, SSH, or weaker authorization is admissible).
-They are historical evidence, not rollback or live schedule; effects remain OFF
-until the candidate-proof Definition's decision-policy rehearsal gates pass. The
-current executable slice and `next_action` live only in the
-candidate-proof Definition. The tape-recovery restore proof is paid (complete
-2026-08-15).
-
+They are historical evidence, not rollback or live schedule; effects remain OFF.
+The active executable slice and `next_action` live solely in
+[`definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md`](definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md).
+The tape-recovery restore proof is paid (complete 2026-08-15).
 Completed Definitions are historical evidence, not executable entrypoints; full
 claims and receipts remain in their source files and `mission-graph.yaml`:
 `choir-tape-recovery-2026-08-13.md` (whole-computer restore substrate);
@@ -129,31 +111,20 @@ D-ROUTE); `choir-autoputer-completion-2026-07-14.md` and
 `og-dolt-heresy-completion-2026-07-08.md` (settled storage/D-ROUTE/H031).
 None is executable unless explicitly promoted in the current registry.
 
-## Ratified Successor Definition — Sequenced, Not Yet Executable
+## Ratified Successor Definitions — Sequenced, Not Yet Executable
+
+[`definitions/choir-durable-substrate-overhauls-2026-08-23.md`](definitions/choir-durable-substrate-overhauls-2026-08-23.md)
+is the owner-ratified immediate successor for the 4-track substrate overhauls (Track K key
+escrow, Track F file-CAS + periodic event watermarks, Track M host MTA spool +
+guest Maildir, and Assurance daily restore drills). It is sequenced directly after
+`choir-substrate-cleanup-and-cutover-2026-08-25.md` completes and executes on a fresh
+staging computer.
 
 [`definitions/choir-private-go-actor-kernel-2026-08-12.md`](definitions/choir-private-go-actor-kernel-2026-08-12.md)
 is the owner-ratified successor for the RLM authoring upgrade. It is sequenced
-after the active supervised-self-development-candidate-proof Definition proves
-the effect-policy autonomy window, reversible restore, irreversible consequence
-receipts, and completion cutover. It does not create a concurrent product
-schedule and must not begin effect-bearing implementation while its predecessor
-is working.
-
-The successor converges Researcher and CoSuper on one durable-actor kernel with
-private disposable model-authored Go activations. Restricted profiles receive
-Go only; an effects-capable implementation assignment additionally receives
-direct Bash through the existing capsule broker. The first acceptance target is
-a CoSuper vertical slice with dynamic delegation, citable command/message
-receipts, forced activation death, cross-model durable recovery, Texture
-transclusions, and an exact externally governed effect bundle. The same kernel
-must then refuse Bash and general execution under a Researcher profile.
-
-[`definitions/choir-durable-substrate-overhauls-2026-08-23.md`](definitions/choir-durable-substrate-overhauls-2026-08-23.md)
-is the owner-ratified successor for the 4-track substrate overhauls (Track K key
-escrow, Track F file-CAS + periodic event watermarks, Track M host MTA spool +
-guest Maildir, and Assurance daily restore drills). It is sequenced after the
-subordinate recovery Definition unblocks `computer-0333528...` on staging.
-
+after the Durable Substrate Overhauls. It converges Researcher and CoSuper on one
+durable-actor kernel with private disposable model-authored Go activations inside
+isolated guest capsules.
 ## Draft Successor Definitions — Not Executable
 
 Draft successors are blocked hypotheses, not schedules or implementation
@@ -174,19 +145,13 @@ superseded, or historical as stated by their source Definitions, not entrypoints
 
 ## Invocation
 
-Invoke the owner-priority scheduling-and-candidate-proof Definition through
-`/goal docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`.
-Its `now.*` and `finish.*` own the current product schedule. Tape-recovery
-completed 2026-08-15 and is settled evidence, not an entrypoint. After the
-scheduling Definition reaches `complete` and the registries promote the
-successor, invoke
+Invoke the active cleanup and cutover Definition through
+`/goal docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md`.
+After cleanup completes, invoke the Durable Substrate Overhauls through
+`/goal docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md` (Tracks K, F, M, Assurance),
+followed by the Private-Go Actor Kernel through
 `/goal docs/definitions/choir-private-go-actor-kernel-2026-08-12.md`.
-The successor is owner-ratified architecture authority but is not concurrently
-executable. Historical CTS, convergence, performance, Choir-in-Choir, and
-Autopaper material is evidence or blocked hypothesis, never an entrypoint.
-The OG/Dolt/heresy and computer contracts retain D-ROUTE, H031, lifecycle,
-route-projection, and single-event-chain authority; this Definition adds no
-third semantic store.
+Self-development candidate proof resumes only after the substrate and actor kernel are deployed.
 
 ## Unowned External Work
 

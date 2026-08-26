@@ -95,32 +95,31 @@ phases:
       - "This is a successor boundary, not this mission's finish: the hold is explicitly released and the effects operation resumes from preserved state only after the overhauls definition completes full durable-substrate acceptance and the adopted slices are applied under snapshot fences. On this mission's completion, update the now card to the HAND-OFF and surface the successor boundary (overhauls + effects definitions)."
 
 now:
-  status: working
-  slice: "Phase Fence landed + deployed (host hold e1742675; guest-visible hold 87a71119 + ci.yml fix c25ca7d7; staging c25ca7d7 via force-deploy 32792957766; selfdev-ccf0f1ec unmutated). Read-only audit DONE (ce9081c6): platform canonical head SURVIVES at sequence 133,209 / canonical 6e7424f0... (670 events past the preflight 132,539/acc54c39, which is now an ancestor, not the head); NO on-disk image carries the current head (quarantines are 8df7efbb/7c78131c; live data.img is post-refresh/pre-genesis) -> recovery is B14 rematerialize-to-head (133,209), not image-reuse, not escalate. Apply-hold still DEFERRED per owner direction; the hold mechanism is inert until set."
+  status: settled_and_sealed
+  slice: "Settled 2026-08-25: computer-0333528... restored to ancestor base 132,539 via manual B14, caught up and appending past 133,319, and sealed under permanent host hold (held=true) and guest fence (RUNTIME_MAINTENANCE_HOLD=1). Authority transitioned to choir-substrate-cleanup-and-cutover-2026-08-25.md."
   question: none
   reconciliation:
-    observed_at: "2026-08-24T22:10:00Z"
-    source_ref: "main@e9a0be7f"
-    deploy_identity: "staging https://choir.news; 0333528 pre-genesis restart loop epoch 774"
+    observed_at: "2026-08-25T17:00:00Z"
+    source_ref: "docs/evidence/effects-red-b14-ancestor-restore-2026-08-25.md"
+    deploy_identity: "staging https://choir.news; 0333528 active epoch 794, held=true"
     status: reconciled
   candidate:
     id: none
     state: none
   decision:
-    selected: "Hold-then-unblock: fence 0333528 first (host hold + guest admission gate; selfdev op unmutated), then preserve stop-snapshot + read-only audit, then B14-recover under hold, then overhauls on a test computer, then adopt + release only after full acceptance. This inverts the prior recover-then-hope sequence that kept re-corrupting."
+    selected: "Seal computer-0333528... under permanent hold as an immutable historical evidence artifact. Do not attempt 133k linear replay as a production gate. Execute substrate cleanup and overhauls on fresh snapshot-backed computers."
     kind: architecture
-    status: proposed (owner ratification pending; supported by agentic-consensus persistent-stability-20260824 + the define-confirm round)
-    source: owner direction 2026-08-24 + agentic consensus 2026-08-24
-    owner_ratification_ref: pending
-  blocker_or_risk: "Platform head 132,539/acc54c39 survival is unverified (audit decides); in-guest bootstrap-chain/replay on 0333528 re-triggers the restart loop (credential TTL < boot; replay 3-6s/event) so the hold must precede any tape write; unblocking before the fence is the documented recurrence trap."
+    status: owner-ratified
+    source: owner direction 2026-08-25 + agentic consensus triad 2026-08-25
+    owner_ratification_ref: "owner direction 2026-08-25"
+    recorded_at: "2026-08-25T17:00:00Z"
+    consequence: "Hold operation settled; authority transfers to choir-substrate-cleanup-and-cutover-2026-08-25.md."
   evidence_refs:
-    - docs/evidence/0333528-recurring-corruption-loop-2026-08-24.md
-    - docs/definitions/choir-durable-substrate-recovery-2026-08-23.md
-    - docs/definitions/choir-durable-substrate-preflight-2026-08-24.md
-    - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
-    - docs/designs/choir-durable-substrate-2026-08-23.md
-  next_action: "Recover-under-hold: set the host hold on 0333528 first (owner-scoped product-path hold route, or Node B holder), verify quiesced + no epoch increment + no auto-restart, then B14 replay-only rematerialize to platform head 133,209 under hold; verify local==133,209, <30s boot, valid credentials, no restart loop, no run admitted (guest-visible hold gate). Then stable-state gate + HAND-OFF."
-
+    - docs/evidence/effects-red-b14-ancestor-restore-2026-08-25.md
+    - docs/reports/choir-system-orientation-and-station-report-2026-08-25.md
+    - docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md
+  blocker_or_risk: "None blocking settlement; computer-0333528... permanently sealed; live execution moves to cleanup mission."
+  next_action: "Execute docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md."
 receipts:
   - id: define-stabilize-hold
     boundary: define

@@ -363,29 +363,44 @@ nodes:
       the successor.
     sources:
       - docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md
-  - id: choir-scheduling-and-candidate-proof-2026-08-21
-    title: Scheduling Contract and Candidate Proof
-    path: docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md
+  - id: choir-substrate-cleanup-and-cutover-2026-08-25
+    title: Substrate Cleanup and Cutover
+    path: docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md
     ledger: ''
     status: working
     kind: spine
     entrypoint: true
     execution_mode: mission_orchestrator
     depends_on:
-      - choir-coherent-computer-convergence-2026-07-21
-      - choir-tape-recovery-2026-08-13
-      - choir-supervised-self-development-candidate-proof-2026-08-20
+      - choir-0333528-stabilize-and-hold-2026-08-24
     enables:
-      - choir-private-go-actor-kernel-2026-08-12
+      - choir-durable-substrate-overhauls-2026-08-23
     note: >-
-      Owner-ratified executable Definition (drafted from architecture review v3,
-      2026-08-21). Mission A scheduling contract (computer-scoped arrival
-      ordinals, FIFO among non-expired requests, expiry/deadlines, retryable
-      refusal), texture authoring repair (genuine Texture turns replace
-      synthetic join wait-turns), then full candidate A proof arc under
-      reversible-selfdev-v1 with acceptance-fenced restore to checkpoint
-      99949fe2. Inherits prior candidate-proof finish.acceptance unchanged.
-      Effects remain OFF until this Definition's own consensus gates pass.
+      Owner-ratified executable Definition (2026-08-25). Eliminates mutable
+      dynamic binary fallback, removes RUNTIME_DOLT_GC_DISABLED workaround,
+      deletes choir.refresh_runtime dance, seals computer-0333528 as an immutable
+      historical artifact, suspends self-development candidate proof, and provisions
+      clean test computer for Overhauls Tracks K, F, M, Assurance.
+    sources:
+      - docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md
+      - docs/reports/choir-system-orientation-and-station-report-2026-08-25.md
+      - docs/choir-doctrine.md
+      - docs/ACTIVE.md
+  - id: choir-scheduling-and-candidate-proof-2026-08-21
+    title: Scheduling Contract and Candidate Proof
+    path: docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md
+    ledger: ''
+    status: blocked
+    kind: spine
+    entrypoint: false
+    execution_mode: draft_non_executable
+    depends_on:
+      - choir-private-go-actor-kernel-2026-08-12
+    enables: []
+    note: >-
+      Suspended 2026-08-25 pending substrate overhauls (Tracks K, F, M, Assurance)
+      and Yaegi Actor Kernel. Self-development proof resumes on a fresh snapshot-backed
+      computer once the durable substrate is clean.
     sources:
       - docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md
       - docs/reviews/architecture-review-texture-cosuper-memory-2026-08-21.md
@@ -421,21 +436,18 @@ nodes:
     title: Recovery of Stopped Computer (ProjectionBase Rebuild)
     path: docs/definitions/choir-durable-substrate-recovery-2026-08-23.md
     ledger: ''
-    status: working
-    kind: operational_recovery
+    status: settled
+    kind: subordinate_contract
     entrypoint: false
-    execution_mode: mission_orchestrator
+    execution_mode: completed_non_executable
     depends_on:
       - choir-tape-recovery-2026-08-13
       - choir-host-orchestrated-recovery-2026-08-22
     enables:
-      - choir-scheduling-and-candidate-proof-2026-08-21
-      - choir-durable-substrate-overhauls-2026-08-23
+      - choir-substrate-cleanup-and-cutover-2026-08-25
     note: >-
-      Owner-ratified subordinate operational contract. Unblocks retained computer
-      computer-03335285269bdba4f94377e56879f9e6 (stopped epoch 361) via isolated
-      offline full-tape rebuild to head 132,436, publishing first ProjectionBase
-      blob artifact, and hydrating to active on staging with delta=0 replay.
+      Settled historical recovery operation. 0333528 was recovered to canonical head
+      132,436 via the fixed boot/replay contract. Offline ProjectionBase rebuild was deferred.
     sources:
       - docs/definitions/choir-durable-substrate-recovery-2026-08-23.md
       - docs/designs/choir-durable-substrate-2026-08-23.md
@@ -483,19 +495,19 @@ nodes:
     title: Durable Substrate Overhauls
     path: docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
     ledger: ''
-    status: ready
+    status: blocked
     kind: spine
-    entrypoint: true
-    execution_mode: mission_orchestrator
+    entrypoint: false
+    execution_mode: draft_non_executable
     depends_on:
-      - choir-durable-substrate-preflight-2026-08-24
-      - choir-durable-substrate-recovery-2026-08-23
-    enables: []
+      - choir-substrate-cleanup-and-cutover-2026-08-25
+    enables:
+      - choir-private-go-actor-kernel-2026-08-12
     note: >-
       Owner-ratified sequenced successor for full 4-track substrate overhauls
       (Track K key escrow, Track F file-CAS + periodic event watermarks, Track M
-      MTA spool + Maildir, Assurance daily drills + scrub + cells). Sequenced
-      after computer 0333528 is active.
+      MTA spool + Maildir, Assurance daily drills + scrub + cells). Runs on fresh
+      test computer; 0333528 remains sealed.
     sources:
       - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
       - docs/designs/choir-durable-substrate-2026-08-23.md
@@ -507,23 +519,18 @@ nodes:
     title: Stabilize and Hold 0333528 (maintenance hold gate)
     path: docs/definitions/choir-0333528-stabilize-and-hold-2026-08-24.md
     ledger: ''
-    status: working
-    kind: operational_recovery
-    entrypoint: true
-    execution_mode: mission_orchestrator
+    status: settled
+    kind: subordinate_contract
+    entrypoint: false
+    execution_mode: completed_non_executable
     depends_on:
       - choir-durable-substrate-recovery-2026-08-23
     enables:
-      - choir-scheduling-and-candidate-proof-2026-08-21
-      - choir-durable-substrate-overhauls-2026-08-23
+      - choir-substrate-cleanup-and-cutover-2026-08-25
     note: >-
-      Owner-ratified 2026-08-24. Durable host-authoritative maintenance hold on
-      computer-03335285269bdba4f94377e56879f9e6 (owner yusefnathanson): fence the
-      vmctl lifecycle matrix + deploy-VM refresh + self-dev admission/auto-rewake
-      (host + guest-visible) BEFORE any recovery; hold + clean-stop snapshot; then
-      B14 recover-under-hold to local==platform (delta 0); then the stable-state
-      gate. Overhauls run on a test computer; adoption + release are a HAND-OFF to
-      the overhauls/effects definitions. Breaks the recover->corrupt->recover loop.
+      Settled 2026-08-25. Durable host-authoritative maintenance hold on
+      computer-03335285269bdba4f94377e56879f9e6 (held=true, RUNTIME_MAINTENANCE_HOLD=1).
+      Sealed as an immutable historical evidence artifact.
     sources:
       - docs/definitions/choir-0333528-stabilize-and-hold-2026-08-24.md
       - docs/evidence/0333528-recurring-corruption-loop-2026-08-24.md
@@ -539,25 +546,15 @@ nodes:
     ledger: ''
     status: blocked
     kind: spine
-    entrypoint: false
-    execution_mode: sequenced_successor
+    execution_mode: draft_non_executable
     depends_on:
+      - choir-durable-substrate-overhauls-2026-08-23
+    enables:
       - choir-scheduling-and-candidate-proof-2026-08-21
-    enables: []
     note: >-
-      Owner-ratified successor, not a concurrent schedule. After the active
-      Definition proves effect-policy autonomy, reversible restore,
-      irreversible consequence receipts, and completion cutover, converge
-      Researcher and CoSuper on one durable-actor kernel with disposable private
-      model-authored Go activations.
-      Restricted profiles receive Go only; an effects-capable implementation
-      assignment may additionally receive direct Bash through
-      the same guest-local capsule execution broker. First proof requires
-      dynamic delegation, typed durable messaging, citable consequential
-      receipts, forced activation death, cross-model recovery from durable
-      state, Texture transclusions, and an exact externally governed effect
-      bundle. Then prove the same kernel refuses Bash and general execution
-      under Researcher policy.
+      Owner-ratified successor for private-Go / Yaegi actor kernel. Sequenced
+      after Durable Substrate Overhauls. Replaces sprawling subagent tool loops
+      with structured in-process interpreted Go activations and typed obligations.
     sources:
       - docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
       - docs/memo-persistent-rlm-actors-2026-08-09.md

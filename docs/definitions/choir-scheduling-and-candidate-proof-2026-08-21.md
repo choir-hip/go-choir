@@ -128,41 +128,31 @@ finish:
       class: registry update
 
 now:
-  status: working
-  slice: "Draft ratified 2026-08-21; begin Phase 1 scheduler contract after owner invokes /goal."
-  question: "Will the FIFO-with-expiry scheduler hold under the full candidate A arc without starving any legitimate request?"
+  status: suspended_pending_substrate
+  slice: "Suspended 2026-08-25 by owner direction and unanimous agentic consensus (12 models)."
+  question: "How will the scheduler and candidate proof run once the clean substrate overhauls (Tracks K, F, M, Assurance) and Yaegi Actor Kernel deploy on a snapshot-backed computer?"
   reconciliation:
-    observed_at: "2026-08-21T22:00:00Z"
-    source_ref: "docs aligned through 91797509; staging epoch 361/e42c65c0; supersession loop documented and unfixed"
-    deploy_identity: "staging proxy e42c65c04f0681e4dd695853ed1396fed736a467; retained computer epoch 361"
-    authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, AGENTS.md]
+    observed_at: "2026-08-25T17:00:00Z"
+    source_ref: "docs/reports/choir-system-orientation-and-station-report-2026-08-25.md"
+    deploy_identity: "staging proxy; live computer computer-0333528... sealed under permanent hold"
+    authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "clean single worktree /Users/wiz/go-choir"
     status: reconciled
-  candidate:
-    id: candidate-a-solitaire
-    state: ready
-    ref: "capsule-isolated guest workspace"
-    owner: cosuper
-    base: "ab756117315719be669692a9e5ed741411ca13f4"
-    digest: pending_freeze
-    scope: [internal/solitaire]
   decision:
-    selected: "Sequential-proof-first sequencing: scheduler contract + texture authoring repair + candidate A in one mission; parallel Mission B follows as its own definition grouped with VM-sizing/Cloud-Hypervisor work."
+    selected: "Suspend self-development effects until substrate cleanup, overhauls (Tracks K, F, M, Assurance), and Yaegi Actor Kernel deploy on clean computers ('clean while cooking')."
     kind: sequencing
-    status: settled
+    status: owner-ratified
     source: owner
-    evidence_ref: "docs/reviews/architecture-review-texture-cosuper-memory-2026-08-21.md section 6"
-    owner_ratification_ref: "owner direction 2026-08-21: sequential proof then parallel release gate"
-    recorded_at: "2026-08-21T22:00:00Z"
-    consequence: "No parallel assignments, PSI tiers, zram, or hypervisor migration in this mission."
+    evidence_ref: "docs/reports/choir-system-orientation-and-station-report-2026-08-25.md"
+    owner_ratification_ref: "owner direction 2026-08-25: overhauls and Yaegi before self-development resumption"
+    recorded_at: "2026-08-25T17:00:00Z"
+    consequence: "Self-development proof suspended; active execution transitions to choir-substrate-cleanup-and-cutover-2026-08-25.md."
   evidence_refs:
-    - "docs/evidence/effects-red-assignment-supersession-loop-2026-08-21.md"
-    - "docs/evidence/effects-red-capsule-memory-budget-exhaustion-2026-08-21.md"
-    - "docs/reviews/architecture-review-texture-cosuper-memory-2026-08-21.md"
-    - "docs/reviews/architecture-review-consensus-synthesis-2026-08-21.md"
-  blocker_or_risk: "None blocking start; staging supersession loop continues until Phase 1 deploys. Effects remain OFF throughout."
-  next_action: "Owner invokes /goal docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md; Phase 1 scheduler contract begins."
+    - "docs/reports/choir-system-orientation-and-station-report-2026-08-25.md"
+    - "docs/evidence/effects-red-b14-ancestor-restore-2026-08-25.md"
+  blocker_or_risk: "None blocking suspension; computer-0333528... safely sealed; active execution is cleanup mission."
+  next_action: "Execute docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md."
 ---
 
 
