@@ -385,6 +385,12 @@ func Run() {
 	})
 	RegisterFileRoutes(s, fileHandler)
 	RegisterFileSyncRoute(s, fileSyncService)
+	maildir, err := NewMaildir(filepath.Join(filesRoot, "mail"))
+	if err != nil {
+		log.Printf("autoputer: init maildir: %v", err)
+	} else {
+		RegisterMailRoutes(s, maildir)
+	}
 
 	// Default-on: install the full per-profile tool registry. Set
 	// RUNTIME_DISABLE_TOOLS=1 to opt out (for stub-only tests where no tools
