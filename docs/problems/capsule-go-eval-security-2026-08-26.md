@@ -139,12 +139,23 @@ same single-broker RPC cancellation semantics; true client-cancellation ->
 broker-cancel with request IDs would be a broker-protocol change shared by all
 verbs and is deferred as a single-path design, not a go_eval-only patch.
 
+Researcher design boundary (verified, requires a Define boundary not a patch):
+the Researcher role has NO capsule-context path today. RegisterCapsuleLocalTools
+is called only from the CoSuper builder; the Researcher registry (built via
+buildRegistryForRole) installs no capsule tool. `MintCapabilityHandle` forces
+RoleResearcher to TargetCapsule="*" (read-only inspection across capsules), and
+resolveOne rejects any wildcard target, so a Researcher cannot obtain a specific
+capsule for Go evaluation. wiring the Researcher Go-only profile therefore
+requires a NEW dedicated Researcher capsule lifecycle (a read-only capsule bound
+non-wildcard to the Researcher run) plus context injection in executeWithToolLoop
+and Researcher registry registration. That is an architectural design change, not
+a safe patch; do not fabricate a Researcher binding that introduces a new
+authority path without a Define boundary and re-review.
+
 Still open (next review): explicit client-cancellation -> broker-cancel binding
-with request IDs; a genuinely wired Researcher profile with an end-to-end
-Go-succeeds/Bash-fails proof (the Researcher capsule-context path and a
-non-wildcard Researcher capsule binding are an architectural design boundary);
-and deployed adversarial proof of no descendant/socket/credential inheritance
-under Landlock/seccomp.
+with request IDs; a genuinely wired Researcher profile (see design boundary
+above); and deployed adversarial proof of no descendant/socket/credential
+inheritance under Landlock/seccomp.
 
 ## Additional critical functional find (still after the first repair)
 
