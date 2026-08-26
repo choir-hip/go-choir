@@ -17,6 +17,7 @@ require (
 	github.com/landlock-lsm/go-landlock v0.9.0
 	github.com/moby/sys/capability v0.4.0
 	github.com/sergi/go-diff v1.3.1
+	github.com/traefik/yaegi v0.16.1
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.52.0
 	golang.org/x/net v0.55.0
