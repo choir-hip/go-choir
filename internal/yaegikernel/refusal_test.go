@@ -196,3 +196,28 @@ func TestExecuteWorkerStdinRoundTrip(t *testing.T) {
 		t.Fatalf("expected worker output, got stdout=%q", resp.Stdout)
 	}
 }
+
+// TestEvalOutputOverflowFailsClosed asserts that a model-authored program which
+// prints well beyond maxEvalOutputBytes is cut off and returns an overflow
+// error, rather than consuming unbounded memory.
+func TestEvalOutputOverflowFailsClosed(t *testing.T) {
+	e := NewEvaluator(NewDefaultSafeAllowlist(), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	src := `package main
+import "fmt"
+func main() {
+  for i := 0; i < 1000000; i++ { fmt.Println("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") }
+}
+`
+	res, err := e.Eval(ctx, src)
+	if err == nil {
+		t.Fatalf("expected overflow error for runaway output, got nil")
+	}
+	if !strings.Contains(err.Error(), "output exceeded limit") {
+		t.Fatalf("expected output-exceeded error, got: %v (stdout len=%d)", err, len(res.Stdout))
+	}
+	if len(res.Stdout) > maxEvalOutputBytes {
+		t.Fatalf("stdout exceeded cap: got %d bytes, cap %d", len(res.Stdout), maxEvalOutputBytes)
+	}
+}

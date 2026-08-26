@@ -799,7 +799,24 @@ func (e *Executor) OpenExecutionReceipt(ref string) (ExecutionReceipt, error) {
 	unsigned := receipt
 	unsigned.ReceiptRef = ""
 	canonical, err := computerevent.CanonicalJSON(unsigned)
-	if err != nil || "capsule-exec:sha256:"+computerevent.DigestBytes(canonical) != ref {
+	if err != nil {
+		return ExecutionReceipt{}, fmt.Errorf("executor receipt digest mismatch")
+	}
+	// Validate using the receipt's OWN prefix (capsule-exec, capsule-go-eval, or
+	// capsule-fate), not a hard-coded one. A Go-eval receipt stored as
+	// capsule-go-eval:sha256: must re-verify after executor restart, or auditable
+	// evidence is not restart-durable.
+	if !strings.HasPrefix(ref, "capsule-exec:sha256:") && !strings.HasPrefix(ref, "capsule-go-eval:sha256:") && !strings.HasPrefix(ref, "capsule-fate:sha256:") {
+		return ExecutionReceipt{}, fmt.Errorf("executor receipt digest mismatch")
+	}
+	prefix := "capsule-exec:sha256:"
+	switch {
+	case strings.HasPrefix(ref, "capsule-go-eval:sha256:"):
+		prefix = "capsule-go-eval:sha256:"
+	case strings.HasPrefix(ref, "capsule-fate:sha256:"):
+		prefix = "capsule-fate:sha256:"
+	}
+	if prefix+computerevent.DigestBytes(canonical) != ref {
 		return ExecutionReceipt{}, fmt.Errorf("executor receipt digest mismatch")
 	}
 	return receipt, nil

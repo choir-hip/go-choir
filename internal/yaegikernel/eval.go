@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
+	"io"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/traefik/yaegi/interp"
@@ -89,10 +91,20 @@ func (e *Evaluator) Eval(ctx context.Context, src string) (EvalResult, error) {
 		return res, err
 	}
 
-	var stdoutBuf, stderrBuf bytes.Buffer
+	// Bounded, concurrency-safe output capture: a model-authored program that
+	// prints indefinitely must be cut off at MaxOutputBytes (via a second worker
+	// context cancel), or it can consume the capsule memory limit before the
+	// broker's own post-eval cap is reached.
+	stdoutCap := &cappedBuffer{max: maxEvalOutputBytes}
+	stderrCap := &cappedBuffer{max: maxEvalOutputBytes}
+	stdoutOverflow := make(chan struct{}, 1)
+	stderrOverflow := make(chan struct{}, 1)
+	wrapOverflow := func(ch chan struct{}, b *cappedBuffer) io.Writer {
+		return &overflowWriter{c: b, notify: ch}
+	}
 	i := interp.New(interp.Options{
-		Stdout: &stdoutBuf,
-		Stderr: &stderrBuf,
+		Stdout: wrapOverflow(stdoutOverflow, stdoutCap),
+		Stderr: wrapOverflow(stderrOverflow, stderrCap),
 	})
 
 	if err := i.Use(e.symbols); err != nil {
@@ -103,6 +115,10 @@ func (e *Evaluator) Eval(ctx context.Context, src string) (EvalResult, error) {
 	done := make(chan struct{})
 	var val reflect.Value
 	var evalErr error
+	// outCtx derives from ctx so it inherits the caller's deadline but can also
+	// be cancelled on output overflow. Declared before the goroutine uses it.
+	outCtx, outCancel := context.WithCancel(ctx)
+	defer outCancel()
 
 	go func() {
 		defer func() {
@@ -111,21 +127,53 @@ func (e *Evaluator) Eval(ctx context.Context, src string) (EvalResult, error) {
 			}
 			close(done)
 		}()
-		val, evalErr = i.EvalWithContext(ctx, src)
+		val, evalErr = i.EvalWithContext(outCtx, src)
+	}()
+
+	// Kill the interpreter on output overflow by cancelling its own context.
+	// The interpreter runs on outCtx (already declared above) so cancelling it
+	// on overflow actually terminates EvalWithContext rather than leaving a
+	// runaway goroutine. A watcher goroutine cancels outCtx the moment an
+	// overflow fires, so the select below wakes on overflow rather than waiting
+	// for the program to finish.
+	overflowed := make(chan struct{}, 1)
+	go func() {
+		select {
+		case <-stdoutOverflow:
+			outCancel()
+		case <-stderrOverflow:
+			outCancel()
+		case <-done:
+			return
+		}
+		select {
+		case overflowed <- struct{}{}:
+		default:
+		}
 	}()
 
 	select {
-	case <-ctx.Done():
-		res.Stdout = stdoutBuf.String()
-		res.Stderr = stderrBuf.String()
+	case <-outCtx.Done():
+		res.Stdout = stdoutCap.String()
+		res.Stderr = stderrCap.String()
 		res.Duration = time.Since(start)
-		return res, fmt.Errorf("yaegi: evaluation timed out: %w", ctx.Err())
+		select {
+		case <-overflowed:
+			return res, fmt.Errorf("yaegi: evaluation output exceeded limit")
+		default:
+		}
+		return res, fmt.Errorf("yaegi: evaluation timed out: %w", outCtx.Err())
 	case <-done:
-		res.Stdout = stdoutBuf.String()
-		res.Stderr = stderrBuf.String()
+		res.Stdout = stdoutCap.String()
+		res.Stderr = stderrCap.String()
 		res.Value = val
 		res.Duration = time.Since(start)
-		return res, evalErr
+		select {
+		case <-overflowed:
+			return res, fmt.Errorf("yaegi: evaluation output exceeded limit")
+		default:
+			return res, evalErr
+		}
 	}
 }
 
@@ -135,4 +183,56 @@ func cleanImportPathFromSymbolKey(key string) string {
 		return key[:idx]
 	}
 	return key
+}
+
+
+// maxEvalOutputBytes bounds model-authored interpreter output so a runaway
+// print loop cannot consume the capsule memory limit before the broker cap.
+const maxEvalOutputBytes = 2 * 1024 * 1024 // 2 MiB
+
+// cappedBuffer bounds total written bytes and records whether it overflowed.
+type cappedBuffer struct {
+	mu   sync.Mutex
+	buf  bytes.Buffer
+	max  int
+	full bool
+}
+
+func (c *cappedBuffer) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.buf.Len()+len(p) > c.max {
+		c.full = true
+		remaining := c.max - c.buf.Len()
+		if remaining > 0 {
+			_, _ = c.buf.Write(p[:remaining])
+		}
+		return len(p), nil
+	}
+	_, _ = c.buf.Write(p)
+	return len(p), nil
+}
+
+func (c *cappedBuffer) String() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.buf.String()
+}
+
+// overflowWriter signals via notify when the underlying bounded buffer
+// overflows, so Eval can cancel the interpreter promptly.
+type overflowWriter struct {
+	c      *cappedBuffer
+	notify chan struct{}
+}
+
+func (w *overflowWriter) Write(p []byte) (int, error) {
+	n, err := w.c.Write(p)
+	if w.c.full {
+		select {
+		case w.notify <- struct{}{}:
+		default:
+		}
+	}
+	return n, err
 }

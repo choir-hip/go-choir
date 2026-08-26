@@ -152,10 +152,23 @@ and Researcher registry registration. That is an architectural design change, no
 a safe patch; do not fabricate a Researcher binding that introduces a new
 authority path without a Define boundary and re-review.
 
-Still open (next review): explicit client-cancellation -> broker-cancel binding
-with request IDs; a genuinely wired Researcher profile (see design boundary
-above); and deployed adversarial proof of no descendant/socket/credential
-inheritance under Landlock/seccomp.
+Additional repair (from repaired-candidate re-review c4e03779, panel diverge:
+Gemini=SAFE-TO-LAND, Sol=NEEDS-REPAIR):
+- RESTART-DURABILITY FIX (real bug): OpenExecutionReceipt hard-coded the
+  capsule-exec:sha256: prefix, so Go-eval receipts stored as
+  capsule-go-eval:sha256: failed to re-verify after executor restart. Now
+  validates using the receipt's OWN prefix (exec/go-eval/fate).
+- WORKER OUTPUT BOUND FIX (real bug): the worker's interpreter wrote to
+  unbounded bytes.Buffer; the broker's 2 MiB cap saw only the post-eval JSON, so
+  a runaway print loop could OOM the capsule before the cap. Eval now bounds the
+  interpreter's Stdout/Stderr at maxEvalOutputBytes with a concurrency-safe
+  cappedBuffer + overflowWriter, and cancels the interpreter context on
+  overflow. Test TestEvalOutputOverflowFailsClosed pins it.
+- Still open (acknowledged, single-path deferral): client/activation cancellation
+  -> broker-cancel verb (shared by all broker verbs including exec); the worker
+  attempt record is post-dispatch (write-ahead admission record would make it
+  crash-durable); concurrent RPCs on one net.Conn (no request id/serialization);
+  a genuinely wired Researcher profile (design boundary).
 
 ## Additional critical functional find (still after the first repair)
 
