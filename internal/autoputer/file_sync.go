@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
@@ -61,6 +62,8 @@ type fileSync struct {
 	fileCache       map[string]cachedSyncedFile
 	chunkCache      map[string]map[string]bool
 	pendingCitation *pendingFileRootCitation
+
+	lastHydratedRoot string
 }
 
 func newFileSync(filesRoot, platformURL string, capability func(context.Context) (string, error), computerID string, cipher *computerevent.PrivateArtifactCipher, head func(context.Context) (uint64, error), appender *computerevent.ComputerEventAppender) *fileSync {
@@ -83,6 +86,246 @@ func newFileSync(filesRoot, platformURL string, capability func(context.Context)
 func (s *fileSync) SyncOnce(ctx context.Context) (string, error) {
 	result, err := s.syncOnce(ctx)
 	return result.root, err
+}
+
+// HydrateIfNeeded restores the latest CAS root only when the local Files tree
+// has no regular files. A local file always wins over a remote snapshot.
+func (s *fileSync) HydrateIfNeeded(ctx context.Context) (int, error) {
+	if s == nil || s.cipher == nil || strings.TrimSpace(s.filesRoot) == "" || strings.TrimSpace(s.platformURL) == "" || strings.TrimSpace(s.computerID) == "" {
+		return 0, fmt.Errorf("file sync: incomplete configuration")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastHydratedRoot = ""
+
+	hasFiles, err := hasRegularFiles(s.filesRoot)
+	if err != nil {
+		return 0, fmt.Errorf("file sync: inspect files root: %w", err)
+	}
+	if hasFiles {
+		return 0, nil
+	}
+
+	root, err := s.latestRoot(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if root == "" {
+		return 0, nil
+	}
+	manifestJSON, err := s.get(ctx, "/internal/computers/files/root?computer_id="+url.QueryEscape(s.computerID)+"&root="+url.QueryEscape(root))
+	if err != nil {
+		return 0, fmt.Errorf("file sync: fetch root %s: %w", root, err)
+	}
+	manifest, err := filecas.ParseManifest(manifestJSON)
+	if err != nil {
+		return 0, fmt.Errorf("file sync: parse root %s: %w", root, err)
+	}
+	if err := manifest.VerifyRoot(); err != nil {
+		return 0, fmt.Errorf("file sync: verify root %s: %w", root, err)
+	}
+	if manifest.Root != root || manifest.ComputerID != s.computerID {
+		return 0, fmt.Errorf("file sync: root %s does not belong to computer", root)
+	}
+
+	dek, err := s.cipher.ExportKeyForEscrow(ctx, s.computerID)
+	if err != nil {
+		return 0, fmt.Errorf("file sync: export DEK: %w", err)
+	}
+	defer clearBytes(dek)
+
+	restored := 0
+	for _, entry := range manifest.Files {
+		rel, err := safeHydrationPath(entry.Path)
+		if err != nil {
+			return 0, fmt.Errorf("file sync: invalid manifest path %q: %w", entry.Path, err)
+		}
+		if err := s.hydrateFile(ctx, dek, rel, entry); err != nil {
+			return 0, err
+		}
+		restored++
+	}
+	s.lastHydratedRoot = root
+	return restored, nil
+}
+
+func (s *fileSync) hydratedRoot() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastHydratedRoot
+}
+
+func hasRegularFiles(root string) (bool, error) {
+	info, err := os.Stat(root)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !info.IsDir() {
+		return false, fmt.Errorf("files root is not a directory")
+	}
+	found := false
+	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path != root && entry.Type().IsRegular() {
+			found = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found, err
+}
+
+func (s *fileSync) latestRoot(ctx context.Context) (string, error) {
+	body, err := s.get(ctx, "/internal/computers/files/roots?computer_id="+url.QueryEscape(s.computerID)+"&limit=1")
+	if err != nil {
+		return "", fmt.Errorf("file sync: list roots: %w", err)
+	}
+	var response struct {
+		Roots []struct {
+			Root string `json:"root"`
+		} `json:"roots"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return "", fmt.Errorf("file sync: decode roots: %w", err)
+	}
+	if len(response.Roots) == 0 {
+		return "", nil
+	}
+	if strings.TrimSpace(response.Roots[0].Root) == "" {
+		return "", fmt.Errorf("file sync: latest root is empty")
+	}
+	return response.Roots[0].Root, nil
+}
+
+func (s *fileSync) get(ctx context.Context, path string) ([]byte, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, s.platformURL+path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	if err := s.authorize(request); err != nil {
+		return nil, err
+	}
+	response, err := s.httpClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("status %d", response.StatusCode)
+	}
+	return io.ReadAll(response.Body)
+}
+
+func safeHydrationPath(path string) (string, error) {
+	if path == "" || filepath.IsAbs(path) {
+		return "", fmt.Errorf("path must be relative")
+	}
+	for _, component := range strings.Split(filepath.ToSlash(path), "/") {
+		if component == ".." {
+			return "", fmt.Errorf("path traversal")
+		}
+	}
+	clean := filepath.Clean(filepath.FromSlash(path))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || filepath.IsAbs(clean) {
+		return "", fmt.Errorf("path traversal")
+	}
+	return clean, nil
+}
+
+func (s *fileSync) hydrateFile(ctx context.Context, dek []byte, rel string, entry filecas.FileEntry) (err error) {
+	parent, err := ensureHydrationParent(s.filesRoot, filepath.Dir(rel))
+	if err != nil {
+		return fmt.Errorf("file sync: create parent for %s: %w", entry.Path, err)
+	}
+	file, err := os.CreateTemp(parent, ".choir-hydrate-*")
+	if err != nil {
+		return fmt.Errorf("file sync: create %s: %w", entry.Path, err)
+	}
+	temp := file.Name()
+	defer func() {
+		if err != nil {
+			_ = file.Close()
+			_ = os.Remove(temp)
+		}
+	}()
+
+	var written int64
+	for _, digest := range entry.Chunks {
+		sealed, err := s.get(ctx, "/internal/computers/files/chunks/"+digest+"?computer_id="+url.QueryEscape(s.computerID))
+		if err != nil {
+			return fmt.Errorf("file sync: fetch chunk %s for %s: %w", digest, entry.Path, err)
+		}
+		if len(sealed) == 0 {
+			return fmt.Errorf("file sync: empty chunk %s for %s", digest, entry.Path)
+		}
+		plain, err := filecas.OpenChunk(dek, s.computerID, digest, sealed)
+		if err != nil {
+			return fmt.Errorf("file sync: open chunk %s for %s: %w", digest, entry.Path, err)
+		}
+		n, err := file.Write(plain)
+		written += int64(n)
+		if err != nil {
+			return fmt.Errorf("file sync: write %s: %w", entry.Path, err)
+		}
+		if n != len(plain) {
+			return fmt.Errorf("file sync: short write %s", entry.Path)
+		}
+	}
+	if written != entry.Size {
+		return fmt.Errorf("file sync: size mismatch for %s: got %d, want %d", entry.Path, written, entry.Size)
+	}
+	if err := file.Chmod(fs.FileMode(entry.Mode).Perm()); err != nil {
+		return fmt.Errorf("file sync: chmod %s: %w", entry.Path, err)
+	}
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("file sync: sync %s: %w", entry.Path, err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("file sync: close %s: %w", entry.Path, err)
+	}
+	if err := os.Rename(temp, filepath.Join(parent, filepath.Base(rel))); err != nil {
+		return fmt.Errorf("file sync: install %s: %w", entry.Path, err)
+	}
+	return nil
+}
+
+func ensureHydrationParent(root, relativeParent string) (string, error) {
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(root)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("files root is not a directory")
+	}
+	parent := root
+	if relativeParent == "." {
+		return parent, nil
+	}
+	for _, component := range strings.Split(relativeParent, string(filepath.Separator)) {
+		parent = filepath.Join(parent, component)
+		info, err := os.Lstat(parent)
+		if os.IsNotExist(err) {
+			if err := os.Mkdir(parent, 0o700); err != nil {
+				return "", err
+			}
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("parent %q is not a directory", component)
+		}
+	}
+	return parent, nil
 }
 
 func (s *fileSync) syncOnce(ctx context.Context) (fileSyncResult, error) {

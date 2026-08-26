@@ -479,6 +479,14 @@ func Run() {
 			if err := rt.Start(ctx); err != nil {
 				return err
 			}
+			if fileSyncService != nil {
+				restored, err := fileSyncService.HydrateIfNeeded(ctx)
+				if err != nil {
+					log.Printf("autoputer: file tree hydration deferred: %v", err)
+				} else if root := fileSyncService.hydratedRoot(); root != "" {
+					log.Printf("autoputer: file tree hydrated %d files from CAS root %s", restored, root)
+				}
+			}
 			StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
 			return nil
 		})
@@ -486,6 +494,14 @@ func Run() {
 		startPeriodicDoltGC(rtCfg.StorePath)
 		if err := rt.Start(ctx); err != nil {
 			log.Fatalf("autoputer: runtime startup refused: %v", err)
+		}
+		if fileSyncService != nil {
+			restored, err := fileSyncService.HydrateIfNeeded(ctx)
+			if err != nil {
+				log.Printf("autoputer: file tree hydration deferred: %v", err)
+			} else if root := fileSyncService.hydratedRoot(); root != "" {
+				log.Printf("autoputer: file tree hydrated %d files from CAS root %s", restored, root)
+			}
 		}
 		StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
 	}
