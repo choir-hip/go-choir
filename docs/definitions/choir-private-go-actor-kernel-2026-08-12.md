@@ -188,12 +188,12 @@ measures:
 
 now:
   status: executable
-  slice: "Execute Phase 0 of the Private Go Actor Kernel: process-per-activation Yaegi sidecar inside disposable guest-local capsules with adversarial import refusal suite, resource containment (infinite loops, goroutines, fork bombs, memory/disk bounds), and flat DTO broker protocol."
+  slice: "REORIENTED 2026-08-26: Phase 0–3 landed as an isolated candidate library (internal/yaegikernel, 13 files) but is UNWIRED — zero product callers. Next is product wiring into the existing capsule/activation substrate, not more isolated-library code."
   question: none
   reconciliation:
-    observed_at: 2026-08-26T17:45:00Z
-    source_ref: main@e65e91c4
-    deploy_identity: staging https://choir.news deployed_commit 5edb0174 (substrate overhauls complete)
+    observed_at: 2026-08-26T18:40:00Z
+    source_ref: main@3d88dcc9
+    deploy_identity: staging https://choir.news deployed_commit not asserted to include yaegikernel; no staging_build_identity for the kernel commits
     authority_identities:
       - owner directive 2026-08-12
       - docs/choir-doctrine.md
@@ -204,13 +204,13 @@ now:
     worktree_inventory_ref: clean single worktree /Users/wiz/go-choir
     status: reconciled
   candidate:
-    id: yaegi-kernel-phase0
-    state: active
+    id: yaegi-kernel-candidate-library
+    state: unaccepted-candidate
     ref: current worktree
     owner: mission lead
-    base: e65e91c4
-    digest: pending
-    scope: [internal/yaegikernel, internal/capsule, tests]
+    base: 3d88dcc9
+    digest: "e93177223164787b5d63520dd518f7039184ed8dd231e417ad528df5e4981833 (sha256 of internal/yaegikernel/*.go paths)"
+    scope: "[internal/yaegikernel] — internal/capsule and internal/agentcore NOT yet touched"
   decision:
     selected: "Promote the common private-Go kernel with process-per-activation sidecar containment; first implement isolated Phase 0 refusal & resource suite, then CoSuper Go+Bash broker, then restricted Researcher profile."
     kind: architecture
@@ -227,8 +227,8 @@ now:
     - docs/computer-ontology.md
     - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
     - docs/reports/choir-family-a-and-yaegi-rlm-architecture-spec-2026-08-18.md
-  blocker_or_risk: "None blocking. Substrate overhauls completed; readiness check unanimously approved with process-per-activation sidecar containment caveat."
-  next_action: "Implement Phase 0: isolated process-per-activation Yaegi sidecar and adversarial import refusal suite in guest-local capsules."
+  blocker_or_risk: "VERIFIED 2026-08-26: internal/yaegikernel is an isolated UNWIRED candidate library (zero imports outside the package). 'Durability' is in-memory (ActorStateManager maps, Broker maps). SidecarRunner.RunSubprocess falls back to RunInProcess when WorkerBinaryPath is empty (no process isolation by default). CheckImports returns nil on parse failure (allowlist bypass risk). Broker uses its own os/exec path, not the existing capsule broker (violates not_done_when single-broker invariant). No CI/deploy identity, no frozen-candidate security review, no capsule resource experiment, no deployed sealed CoSuper activation, no forced-death/rewarm proof, no supervision/Texture transclusion proof, no Researcher conformance probe. Predecessor effects Definition is NOT goal.complete — effect-bearing acceptance is blocked by not_done_when."
+  next_action: "Wire the yaegikernel evaluator into the EXISTING capsule execution path on internal/capsule and route CoSuper/Researcher through the common kernel profile resolver; do NOT create a parallel broker. Then run CI/deploy and bind a frozen-candidate security review."
 receipts:
   - id: rlm-kernel-doctrine-definition-opening
     boundary: define
@@ -252,6 +252,27 @@ receipts:
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
     registry_conformance_ref: \"docs/ACTIVE.md + docs/mission-graph.yaml + docs/doc-authority-manifest.yaml; doccheck live pass 2026-08-13T03:30:02Z\"
+
+  - id: rlm-kernel-consensus-reorientation-2026-08-26
+    boundary: define
+    commit_or_artifact: "Definition now card reconciled at main@3d88dcc9; candidate internal/yaegikernel marked unaccepted-candidate (digest e93177223164787b5d63520dd518f7039184ed8dd231e417ad528df5e4981833); prior session goal.complete was premature and is void -- the registries never recorded complete (mission-graph status working, doc-authority lifecycle executable, ACTIVE.md active executable /goal)."
+    proof_refs:
+      - "agentic consensus (11/12 completed; omp-x-preview-f failed/7s): unanimous verdict NOT complete and premature goal.complete void (Sol, Codex, Gemini, Cursor, Luna, opencode, Nemotron, Grok, muse-spark, hy3, Devin)"
+      - "grep -rl 'go-choir/internal/yaegikernel' --include='*.go' . => zero files outside internal/yaegikernel/"
+      - "sidecar.go RunSubprocess falls back to RunInProcess when WorkerBinaryPath empty; actor_state.go in-memory maps; broker.go own os/exec path; allowlist.go CheckImports returns nil on parse failure"
+    rollback_ref: revert this Definition now-card reconciliation (docs-only)
+    disposition: reoriented; scope corrected to internal/yaegikernel only (internal/capsule and internal/agentcore untouched)
+    problem_ref: not_applicable (no new platform problem documented -- this is completion-claim correction, not a new failure)
+    authorization_ref: owner instruction to reorient via agentic consensus
+    candidate_or_evidence_refs:
+      - .agentic-consensus/reorient-prompt.md
+    landing:
+      source_commit: not_applicable until committed
+      ci_ref: not_applicable (docs-only reconciliation)
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: docs/ACTIVE.md + docs/mission-graph.yaml + docs/doc-authority-manifest.yaml; all three already show this Definition working/executable/active (no completion recorded, so no reversal required)
 
 view:
   path: none
