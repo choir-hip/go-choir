@@ -61,9 +61,14 @@ func (h *Handler) HandleKeyEscrowPublicKey(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
+	// The escrow public key is not secret; guests present any valid computer
+	// capability (read scope) and internal callers use X-Internal-Caller.
 	if !internalKeyEscrowCaller(r) {
-		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
-		return
+		computerID := strings.TrimSpace(r.URL.Query().Get("computer_id"))
+		if computerID == "" || h.authorizeKeyEscrowGuest(r, computerID, "event:read") != nil {
+			writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+			return
+		}
 	}
 	if h == nil || h.keyEscrow == nil {
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "key escrow unavailable"})
@@ -87,8 +92,16 @@ func (h *Handler) HandleKeyEscrow(w http.ResponseWriter, r *http.Request) {
 	}
 	var input keyEscrowPutRequest
 	if !decodeKeyEscrowJSON(r, &input) {
-		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid escrow record"})
 		return
+	}
+	// Guest-facing: the computer authorizes with its signed capability
+	// (write scope); host-internal callers use X-Internal-Caller.
+	if !internalKeyEscrowCaller(r) {
+		if h.authorizeKeyEscrowGuest(r, input.ComputerID, "event:append") != nil {
+			writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+			return
+		}
 	}
 	if input.Protector != keyescrow.ProtectorCustodian || strings.TrimSpace(input.ComputerID) == "" || strings.TrimSpace(input.KeyDigest) == "" || input.WrappedKey == "" {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid escrow record"})
@@ -123,6 +136,14 @@ func (h *Handler) HandleKeyEscrowStatus(w http.ResponseWriter, r *http.Request) 
 	if computerID == "" {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "computer_id is required"})
 		return
+	}
+	// Guest-facing: the computer reads its own escrow status with its signed
+	// capability (read scope); host-internal callers use X-Internal-Caller.
+	if !internalKeyEscrowCaller(r) {
+		if h.authorizeKeyEscrowGuest(r, computerID, "event:read") != nil {
+			writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+			return
+		}
 	}
 	statuses, err := h.service.store.ListKeyEscrowStatus(r.Context(), computerID)
 	if err != nil {
@@ -308,6 +329,16 @@ func parseKeyEscrowOperators(raw string) (map[string][sha256.Size]byte, bool) {
 		operators[name] = sha256.Sum256([]byte(token))
 	}
 	return operators, len(operators) > 0
+}
+
+// authorizeKeyEscrowGuest authorizes a computer-identity request with its
+// signed platform capability. Returns nil when the capability is valid for
+// the named computer and carries the required scope.
+func (h *Handler) authorizeKeyEscrowGuest(r *http.Request, computerID, requiredScope string) error {
+	if h == nil || h.eventAuth == nil {
+		return fmt.Errorf("key escrow: capability verifier unavailable")
+	}
+	return h.eventAuth.Authorize(r, computerID, requiredScope)
 }
 
 func internalKeyEscrowCaller(r *http.Request) bool {

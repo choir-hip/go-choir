@@ -22,12 +22,14 @@ import (
 // boot (design: docs/designs/choir-durable-substrate-2026-08-23.md §3.2).
 type keyEscrowClient struct {
 	platformURL string
+	capability  func(context.Context) (string, error)
 	httpClient  *http.Client
 }
 
-func newKeyEscrowClient(platformURL string) *keyEscrowClient {
+func newKeyEscrowClient(platformURL string, capability func(context.Context) (string, error)) *keyEscrowClient {
 	return &keyEscrowClient{
 		platformURL: strings.TrimRight(platformURL, "/"),
+		capability:  capability,
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
 	}
 }
@@ -61,7 +63,7 @@ func (c *keyEscrowClient) EnsureCustodianEscrow(ctx context.Context, computerID 
 	if escrowed {
 		return true, nil
 	}
-	pubKeyB64, err := c.fetchPublicKey(ctx)
+	pubKeyB64, err := c.fetchPublicKey(ctx, computerID)
 	if err != nil {
 		return false, err
 	}
@@ -112,8 +114,8 @@ func (c *keyEscrowClient) custodianEscrowed(ctx context.Context, computerID stri
 	return false, nil
 }
 
-func (c *keyEscrowClient) fetchPublicKey(ctx context.Context) (string, error) {
-	body, err := c.get(ctx, "/internal/computers/keys/escrow-public-key")
+func (c *keyEscrowClient) fetchPublicKey(ctx context.Context, computerID string) (string, error) {
+	body, err := c.get(ctx, "/internal/computers/keys/escrow-public-key?computer_id="+computerID)
 	if err != nil {
 		return "", err
 	}
@@ -125,6 +127,20 @@ func (c *keyEscrowClient) fetchPublicKey(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("key escrow: empty host public key")
 	}
 	return pub.PublicKey, nil
+}
+
+func (c *keyEscrowClient) authorize(request *http.Request) error {
+	if c.capability == nil {
+		return nil
+	}
+	token, err := c.capability(context.Background())
+	if err != nil {
+		return fmt.Errorf("key escrow: capability: %w", err)
+	}
+	if strings.TrimSpace(token) != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
+	return nil
 }
 
 func (c *keyEscrowClient) get(ctx context.Context, path string) ([]byte, error) {
@@ -146,6 +162,9 @@ func (c *keyEscrowClient) do(ctx context.Context, method, path string, body []by
 }
 
 func (c *keyEscrowClient) roundTrip(request *http.Request) ([]byte, error) {
+	if err := c.authorize(request); err != nil {
+		return nil, err
+	}
 	response, err := c.httpClient.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("key escrow: %s %s: %w", request.Method, request.URL.Path, err)

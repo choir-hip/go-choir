@@ -276,7 +276,7 @@ func Run() {
 					log.Printf("autoputer: key escrow export unavailable (will retry next boot): %v", err)
 					return
 				}
-				if _, err := newKeyEscrowClient(platformURL).EnsureCustodianEscrow(escrowCtx, computerID, rawDEK); err != nil {
+				if _, err := newKeyEscrowClient(platformURL, credentials.Capability).EnsureCustodianEscrow(escrowCtx, computerID, rawDEK); err != nil {
 					log.Printf("autoputer: custodian key escrow deferred (will retry next boot): %v", err)
 					return
 				}

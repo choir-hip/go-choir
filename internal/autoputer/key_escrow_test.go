@@ -53,7 +53,7 @@ func TestEnsureCustodianEscrowUploadsWrapOnce(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newKeyEscrowClient(server.URL)
+	client := newKeyEscrowClient(server.URL, nil)
 	present, err := client.EnsureCustodianEscrow(context.Background(), computerID, dek)
 	if err != nil {
 		t.Fatal(err)
