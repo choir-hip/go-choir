@@ -169,10 +169,14 @@ Gemini=SAFE-TO-LAND, Sol=NEEDS-REPAIR):
   frames and one caller reads another's response. Added connMu serializing the
   full encode/decode round trip. (acquireOp counts inflight for quiesce but does
   not serialize the stream.)
-- Still open (acknowledged, single-path deferral): client/activation cancellation
-  -> broker-cancel verb (shared by all broker verbs including exec); the worker
-  attempt record is post-dispatch (write-ahead admission record would make it
-  crash-durable); a genuinely wired Researcher profile (design boundary).
+- Still open, now bound as Define-boundary design decisions (see
+  docs/designs/choir-researcher-go-eval-capsule-context-2026-08-26.md and
+  docs/designs/choir-broker-client-cancellation-binding-2026-08-26.md):
+  client/activation cancellation -> broker-cancel verb (single-path across all
+  broker verbs); a genuinely wired Researcher profile needing a dedicated
+  read-only Researcher capsule + non-wildcard binding + registry/context
+  injection. The worker attempt record is post-dispatch (a write-ahead admission
+  record would make it crash-durable); not yet a committed fix.
 
 ## Additional critical functional find (still after the first repair)
 
