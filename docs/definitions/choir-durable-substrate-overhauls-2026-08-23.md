@@ -104,12 +104,11 @@ phases:
       - "Build recovery cells with per-cell restore budgets and weighted fair scheduling."
 
 now:
-  slice: "Track K Keys Acceptance PROVEN on staging (docs/evidence/track-k-keys-acceptance-staging-2026-08-26.md): custodian escrow on boot, backfill of existing computer, two-approval unwrap gate with transparency log, PRF 1b handler-proven. Remaining: Track F (file-CAS + periodic bases), Track M (mail), Assurance; plus browser-level PRF proof."
-  question: "How should Track F chunk pinning interact with the guest write-back cache eviction policy?"
+  slice: "Track K Keys Acceptance PROVEN on staging (docs/evidence/track-k-keys-acceptance-staging-2026-08-26.md). Track F FOUNDATION landed (d4544bc1 + 5edb0174): encrypted file-CAS with chunk pinning + deterministic manifest roots, file_root_committed tape kind, sync_computer_files barrier (/api/files/sync), referential GC with namespace containment, replay-watermark ledger + endpoints. Remaining Track F: periodic watermark publisher wiring into boot replay start (appender replay-from-watermark), ProjectionBase hydrate at boot, O(delta) restore deployed proof. Then Track M and Assurance."
   reconciliation:
-    observed_at: "2026-08-26T11:40:00Z"
-    source_ref: "main@84e4daee"
-    deploy_identity: "staging https://choir.news deployed_commit 84e4daee; corpusd key-escrow endpoints live; guest runtime package 84e4daee"
+    observed_at: "2026-08-26T13:10:00Z"
+    source_ref: "main@5edb0174"
+    deploy_identity: "staging https://choir.news deployed_commit 5edb0174; file-CAS endpoints + guest sync live"
     authority_identities: [docs/choir-doctrine.md, docs/computer-ontology.md, docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md, AGENTS.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "clean single worktree /Users/wiz/go-choir"
@@ -130,7 +129,7 @@ now:
     - "docs/designs/choir-durable-substrate-2026-08-23.md"
     - "docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md"
   blocker_or_risk: "actorruntime SQLITE_BUSY CI shard flake failed 2 deploys today (passes locally; clustering assessment owed). Browser-level PRF proof pending (CDP virtual authenticator hasPrf)."
-  next_action: "Execute Track F: file-CAS commit protocol and periodic ProjectionBase event bases."
+  next_action: "Wire periodic watermark publisher into boot replay start, then prove O(delta) restore on the staging test computer."
 
 receipts:
   - id: track-k-keys-acceptance
