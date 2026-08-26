@@ -69,6 +69,7 @@ var validEventKinds = map[EventKind]struct{}{
 	EventMaterializationApplied: {}, EventMaterializationFailed: {}, EventRollbackRequested: {},
 	EventRollbackApplied: {}, EventResearcherUpdate: {}, EventCheckpointPublished: {},
 	EventRouteProjectionUpdated: {}, EventLifecycleObserved: {}, EventKeyRotated: {},
+	EventKeyRevoked: {}, EventRecoveryRecorded: {}, EventRestoreRequested: {},
 	EventProjectionBatchRecorded: {}, EventFileRootCommitted: {},
 }
 
