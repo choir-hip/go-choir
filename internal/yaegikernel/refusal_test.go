@@ -1,7 +1,11 @@
 package yaegikernel
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -154,5 +158,41 @@ func TestCannotExpandPackagesPastServerAllowlist(t *testing.T) {
 	_, err := e.Eval(ctx, `package main; import "go/parser"; func main(){}`)
 	if err == nil {
 		t.Fatalf("expected go/parser to be refused when the allowlist is fmt-only")
+	}
+}
+
+// TestExecuteWorkerStdinRoundTrip verifies the --isolation-stage=exec-go-stdin
+// worker contract end-to-end: feeding a SidecarRequest JSON on stdin produces a
+// SidecarResponse JSON on stdout with the evaluated program output. It re-execs
+// the test binary as a subprocess running ExecuteWorkerStdin (the worker entry
+// point), mirroring how cmd/capsule-broker launches --isolation-stage exec-go-stdin.
+func TestExecuteWorkerStdinRoundTrip(t *testing.T) {
+	if os.Getenv("YAEGI_WORKER_EXEC") == "1" {
+		ExecuteWorkerStdin()
+		return
+	}
+	req, _ := json.Marshal(SidecarRequest{
+		Source:          `package main; import "fmt"; func main(){ fmt.Print("worker-ok") }`,
+		AllowedPackages: []string{"fmt"},
+	})
+	cmd := exec.Command(os.Args[0], "-test.run=TestExecuteWorkerStdinRoundTrip")
+	cmd.Env = append(os.Environ(), "YAEGI_WORKER_EXEC=1")
+	cmd.Stdin = bytes.NewReader(req)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("worker subprocess failed: %v stderr=%s", err, stderr.String())
+	}
+	var resp SidecarResponse
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal worker response: %v (raw=%q)", err, out.String())
+	}
+	if resp.Error != "" {
+		t.Fatalf("worker returned error: %s", resp.Error)
+	}
+	if !strings.Contains(resp.Stdout, "worker-ok") {
+		t.Fatalf("expected worker output, got stdout=%q", resp.Stdout)
 	}
 }

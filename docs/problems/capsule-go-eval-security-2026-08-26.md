@@ -129,3 +129,14 @@ with request IDs; full host-owned attempt record before dispatch and on every
 outcome (including timeout exit code); a genuinely wired Researcher profile with
 an end-to-end Go-succeeds/Bash-fails proof; and deployed adversarial proof of no
 descendant/socket/credential inheritance under Landlock/seccomp.
+
+## Additional critical functional find (still after the first repair)
+
+The security review's "worker mode cannot start" finding was CONFIRMED as a real
+deployed bug and fixed in the same follow-up: handleGoEval launched the worker
+with the bare flag `--exec-go-stdin`, but main() dispatches on --isolation-stage,
+so flag.Parse rejected the unknown flag and the worker exited before evaluating.
+Fixed to `--isolation-stage=exec-go-stdin`. The worker environment was also
+sanitized (PATH/TMPDIR only) so it does not inherit broker credentials or
+control-socket variables. Test TestExecuteWorkerStdinRoundTrip pins the worker
+contract end-to-end.

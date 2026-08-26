@@ -493,9 +493,13 @@ func (b *Broker) handleGoEval(ctx context.Context, cap *capsule.Capability, para
 	evalCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(evalCtx, bin, "--exec-go-stdin")
+	cmd := exec.CommandContext(evalCtx, bin, "--isolation-stage", "exec-go-stdin")
 	cmd.Dir = cwdPath
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL} // new group; worker dies if broker dies
+	// Sanitized worker environment: the worker must not inherit broker-injected
+	// credentials, CANONICAL paths, or control-socket variables. Only a minimal
+	// PATH/TMPDIR is provided inside the capsule.
+	cmd.Env = []string{"PATH=/run/current-system/sw/bin:/bin:/usr/bin", "TMPDIR=/tmp"}
 	cmd.Stdin = bytes.NewReader(reqData)
 	stdoutCap := &cappedBuffer{max: goEvalMaxOutputBytes}
 	stderrCap := &cappedBuffer{max: goEvalMaxOutputBytes}
