@@ -187,48 +187,48 @@ measures:
     cannot_prove: restart durability, correctness, or containment
 
 now:
-  status: blocked_incomplete
-  slice: owner-ratified successor authority; runtime work is blocked until predecessor completion and atomic registry promotion
+  status: executable
+  slice: "Execute Phase 0 of the Private Go Actor Kernel: process-per-activation Yaegi sidecar inside disposable guest-local capsules with adversarial import refusal suite, resource containment (infinite loops, goroutines, fork bombs, memory/disk bounds), and flat DTO broker protocol."
   question: none
   reconciliation:
-    observed_at: 2026-08-13T03:30:02Z
-    source_ref: main@0e48720295b0cda4d72ca748a8304c7e495bd027 plus reviewed docs candidate
-    deploy_identity: staging proxy 633131aa0521bd1a427f335e147610a314829886
+    observed_at: 2026-08-26T17:45:00Z
+    source_ref: main@e65e91c4
+    deploy_identity: staging https://choir.news deployed_commit 5edb0174 (substrate overhauls complete)
     authority_identities:
       - owner directive 2026-08-12
-      - docs/choir-doctrine.md current candidate
-      - docs/agent-product-doctrine.md current candidate
-      - docs/definitions/choir-supervised-self-development-effects-2026-08-11.md working
+      - docs/choir-doctrine.md
+      - docs/agent-product-doctrine.md
+      - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md completed
+      - docs/reports/choir-family-a-and-yaegi-rlm-architecture-spec-2026-08-18.md
     policy_resolution_ref: not_applicable until first activation rehearsal
-    worktree_inventory_ref: opening git status receipt plus current docs candidate
+    worktree_inventory_ref: clean single worktree /Users/wiz/go-choir
     status: reconciled
   candidate:
-    id: rlm-kernel-opening
-    state: reviewed
+    id: yaegi-kernel-phase0
+    state: active
     ref: current worktree
     owner: mission lead
-    base: 0e48720295b0cda4d72ca748a8304c7e495bd027
-    digest: none; no runtime candidate exists while blocked
-    scope: [docs]
+    base: e65e91c4
+    digest: pending
+    scope: [internal/yaegikernel, internal/capsule, tests]
   decision:
-    selected: "Promote the common private-Go kernel and layered capability boundary; first implement one complete CoSuper profile, then prove restricted Researcher conformance on the same kernel."
+    selected: "Promote the common private-Go kernel with process-per-activation sidecar containment; first implement isolated Phase 0 refusal & resource suite, then CoSuper Go+Bash broker, then restricted Researcher profile."
     kind: architecture
     status: settled
     source: owner
-    evidence_ref: owner directive and deliberation in conversation on 2026-08-12
-    owner_ratification_ref: not_applicable
-    recorded_at: 2026-08-13T03:25:35Z
-    consequence: doctrine and this successor Definition may land; no runtime implementation or capsule experiment may begin before predecessor goal.complete and atomic registry promotion
+    evidence_ref: owner directive and unanimous agentic consensus readiness check (2026-08-26)
+    owner_ratification_ref: "owner ratified 2026-08-18"
+    recorded_at: 2026-08-26T17:45:00Z
+    consequence: "Yaegi RLM is the active executable mission; predecessor substrate overhauls are complete."
   evidence_refs:
     - docs/memo-persistent-rlm-actors-2026-08-09.md
     - docs/choir-doctrine.md
     - docs/agent-product-doctrine.md
     - docs/computer-ontology.md
-    - docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
-    - \"agentic-consensus session receipt: .agentic-consensus/agentic-consensus-20260812-232742/manifest.tsv; two succeeded, three timed out; raw outputs gitignored\"
-  blocker_or_risk: "Blocked on predecessor goal.complete plus atomic promotion in docs/ACTIVE.md, docs/mission-graph.yaml, and docs/doc-authority-manifest.yaml. The consensus panel had two successful reviewers and three timeouts; all must-fix findings from successful reviews were adjudicated, but raw outputs are gitignored session diagnostics."
-  next_action: "Complete the supervised-self-development-effects Definition; then reconcile this goal against landed doctrine and current runtime, atomically promote it in all three registries, select exact safe-package/module/resource/continuation/trace contracts, and prepare the first isolated implementation candidate."
-
+    - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
+    - docs/reports/choir-family-a-and-yaegi-rlm-architecture-spec-2026-08-18.md
+  blocker_or_risk: "None blocking. Substrate overhauls completed; readiness check unanimously approved with process-per-activation sidecar containment caveat."
+  next_action: "Implement Phase 0: isolated process-per-activation Yaegi sidecar and adversarial import refusal suite in guest-local capsules."
 receipts:
   - id: rlm-kernel-doctrine-definition-opening
     boundary: define

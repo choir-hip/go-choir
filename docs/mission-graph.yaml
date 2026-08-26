@@ -496,20 +496,21 @@ nodes:
     title: Durable Substrate Overhauls
     path: docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
     ledger: ''
-    status: working
+    status: completed
     kind: spine
-    entrypoint: true
-    execution_mode: mission_orchestrator
+    entrypoint: false
+    execution_mode: completed_non_executable
     depends_on:
       - choir-substrate-cleanup-and-cutover-2026-08-25
     enables:
       - choir-private-go-actor-kernel-2026-08-12
     note: >-
-      Owner-ratified sequenced successor for full 4-track substrate overhauls
-      (Track K key escrow, Track F file-CAS + periodic event watermarks, Track M
-      MTA spool + Maildir, Assurance daily drills + scrub + cells). Runs on fresh
-      test computer; 0333528 remains sealed. Promoted to active executable
-      /goal on 2026-08-26 by the cleanup Definition's completion cutover.
+      Completed 2026-08-26 (commits f0e68b0a..e65e91c4). All 4 substrate overhaul tracks
+      implemented and verified: Track K key escrow with 2-of-N quorum gate and
+      WebAuthn PRF wrapping (deployed & proven on staging); Track F encrypted 4MiB
+      chunk file-CAS, Merkle manifests, tape citations (file_root_committed), sync barrier,
+      atomic boot hydration, and ProjectionBase materializer; Track M host fsync'd MTA
+      spool, async LMTP drain, and guest Maildir; Assurance & Scale self-describing
     sources:
       - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
       - docs/designs/choir-durable-substrate-2026-08-23.md
@@ -546,17 +547,19 @@ nodes:
     title: Private Go Actor Kernel
     path: docs/definitions/choir-private-go-actor-kernel-2026-08-12.md
     ledger: ''
-    status: blocked
+    status: working
     kind: spine
-    execution_mode: draft_non_executable
+    entrypoint: true
+    execution_mode: mission_orchestrator
     depends_on:
       - choir-durable-substrate-overhauls-2026-08-23
     enables:
       - choir-scheduling-and-candidate-proof-2026-08-21
     note: >-
-      Owner-ratified successor for private-Go / Yaegi actor kernel. Sequenced
-      after Durable Substrate Overhauls. Replaces sprawling subagent tool loops
-      with structured in-process interpreted Go activations and typed obligations.
+      Active executable /goal as of 2026-08-26. Promoted after completion of
+      Durable Substrate Overhauls. Establishes private programmable Go activations via
+      a process-per-activation Yaegi sidecar inside disposable guest-local capsules with
+      unified Bash/Go broker routing, opaque handles, durable continuity across forced
     sources:
       - docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
       - docs/memo-persistent-rlm-actors-2026-08-09.md

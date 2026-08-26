@@ -3,16 +3,25 @@
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
 
-## Active Definition — Durable Substrate Overhauls
+## Active Definition — Private Programmable Go Actor Kernel
+
+[`definitions/choir-private-go-actor-kernel-2026-08-12.md`](definitions/choir-private-go-actor-kernel-2026-08-12.md)
+is the owner-priority executable `/goal` as of 2026-08-26. It establishes private,
+interpreted Go activations via a process-per-activation Yaegi sidecar inside
+disposable guest-local capsules with unified Bash/Go broker routing, opaque
+handles, durable continuity across forced activation death, and immutable Texture
+transclusion of host-selected salient receipts.
+
+## Completed Definition — Durable Substrate Overhauls
 
 [`definitions/choir-durable-substrate-overhauls-2026-08-23.md`](definitions/choir-durable-substrate-overhauls-2026-08-23.md)
-is the owner-priority executable `/goal` as of 2026-08-26. It executes the four
-substrate overhaul tracks on a fresh snapshot-backed test computer on staging:
-Track K (Key Escrow & Wrap Hierarchy), Track F (file-CAS + periodic event
-watermarks), Track M (MTA spool + guest Maildir), and Assurance (daily restore
-drills, integrity scrub, recovery cells). Sealed computer `0333528` remains
-under permanent hold and is never a release, test, or CI gate.
-
+completed 2026-08-26 (commits `f0e68b0a`..`e65e91c4`). All four tracks are
+implemented and verified: (1) Track K key escrow with 2-of-N quorum gate and
+WebAuthn PRF wrapping (deployed & proven on staging); (2) Track F encrypted 4MiB
+chunk file-CAS, Merkle manifests, tape citations (`file_root_committed`), sync barrier,
+atomic boot hydration, and ProjectionBase materializer; (3) Track M host fsync'd MTA
+spool, async LMTP drain, and guest Maildir; (4) Assurance & Scale self-describing
+recovery capsules, automated restore drill runner, and background blob integrity scrubber.
 ## Completed Definition — Substrate Cleanup and Cutover
 
 [`definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md`](definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md)
