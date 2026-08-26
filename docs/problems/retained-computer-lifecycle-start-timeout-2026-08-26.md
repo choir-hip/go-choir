@@ -37,8 +37,15 @@ require a running computer.
    is not a slow-boot issue.
 - Fire-and-forget start then polling status for 4 minutes: state stayed `stopped`
    (realization_epoch 794, unchanged) at all three checks — the start does not
-   initiate server-side either. This is a definitive platform-level blocker: the
-   retained computer cannot be brought up via the product path.
+   initiate server-side either.
+- `choir computer refresh --computer ... --idempotency-key ...` →
+  `http 502 {"error":"lifecycle actuation failed"}`; computer still stopped.
+- EXHAUSTIVE: all four lifecycle verbs attempted — start (502 then no-response),
+  restart (no-response), refresh (502 lifecycle actuation failed) — none brings
+   the computer up; state stays stopped at realization_epoch 794. This is a
+   definitive platform-level blocker: the retained computer cannot be booted via
+   the product path. No further autoputer-boot attempt is warranted (repeated
+   lifecycle actuation against a non-booting VM risks partial state).
 
 ## Consequence
 
