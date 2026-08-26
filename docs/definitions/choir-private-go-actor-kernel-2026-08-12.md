@@ -188,11 +188,11 @@ measures:
 
 now:
   status: executable
-  slice: "SECURITY-REPAIRED + DEPLOYED 2026-08-26 (a0523e52, CI 33007866880 success, staging deployed_commit a0523e52): go_eval wiring repaired per adversarial security review (server-side allowlist, obligation revalidation, secret-before-execution, bounded output, Pdeathsig) and landed on staging. NOT mission-complete: the finish requires a deployed sealed CoSuper activation, cross-model forced-death recovery, supervision/Texture transclusion, Researcher conformance probe, and predecessor effects goal.complete — none achieved."
+  slice: "CLOSE-SECURITY-GAPS PHASE COMPLETE + DEPLOYED 2026-08-26: go_eval kernel path hardened and deployed (ae12f82d -> 8b3e864b, CI green, staging deployed_commit verified). Repaired per two adversarial reviews (candidate d65a562a and repaired f252fc55): server-side allowlist, obligation revalidation, secret-before-execution, every-outcome attempt receipt, restart-durable receipt reopen (4910c7e2), bounded worker+browser output (4910c7e2), broker RPC connMu serialization (ae12f82d), worker Pdeathsig/reap, --isolation-stage flag fix. Re-review: Gemini SAFE-TO-LAND, Sol NEEDS-REPAIR. Researcher capsule-context and client-cancellation broker binding are now Define-boundary design decisions (docs/designs/...). NOT mission-complete: the finish still requires a deployed sealed CoSuper activation, cross-model forced-death recovery, supervision/Texture transclusion, Researcher conformance probe, and the predecessor effects goal.complete gate (unsatisfiable while predecessor is superseded)."
   question: none
   reconciliation:
     observed_at: 2026-08-26T21:00:00Z
-    source_ref: main@ae12f82d
+    source_ref: main@8b3e864b
     deploy_identity: staging https://choir.news deployed_commit a0523e52 (security-repaired go_eval wiring; CI 33007866880 success, Deploy to Staging succeeded 2026-08-26T20:21:43Z)
     authority_identities:
       - owner directive 2026-08-12
