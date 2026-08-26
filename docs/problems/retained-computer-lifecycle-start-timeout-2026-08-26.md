@@ -23,6 +23,10 @@ require a running computer.
   1st attempt: `http 502 {"error":"lifecycle resulting state was not observed"}`
   2nd attempt: `POST .../lifecycle/start: context deadline exceeded (Client.Timeout
    exceeded while awaiting headers)` after 120s.
+- `choir computer restart --computer ... --idempotency-key ...` →
+  `POST .../lifecycle/restart: context deadline exceeded (Client.Timeout exceeded
+   while awaiting headers)` after 120s; computer still stopped. BOTH start and
+   restart lifecycle verbs fail for this computer.
 - `choir.news/health` → vmctl_status ok, upstream vmctl, vmctl_routing enabled
   (so the lifecycle controller itself is healthy; the transition for this
   computer specifically does not complete).
