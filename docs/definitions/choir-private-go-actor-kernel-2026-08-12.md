@@ -191,8 +191,8 @@ now:
   slice: "SECURITY-REPAIRED + DEPLOYED 2026-08-26 (a0523e52, CI 33007866880 success, staging deployed_commit a0523e52): go_eval wiring repaired per adversarial security review (server-side allowlist, obligation revalidation, secret-before-execution, bounded output, Pdeathsig) and landed on staging. NOT mission-complete: the finish requires a deployed sealed CoSuper activation, cross-model forced-death recovery, supervision/Texture transclusion, Researcher conformance probe, and predecessor effects goal.complete — none achieved."
   question: none
   reconciliation:
-    observed_at: 2026-08-26T20:25:00Z
-    source_ref: main@a0523e52
+    observed_at: 2026-08-26T21:00:00Z
+    source_ref: main@220a1731
     deploy_identity: staging https://choir.news deployed_commit a0523e52 (security-repaired go_eval wiring; CI 33007866880 success, Deploy to Staging succeeded 2026-08-26T20:21:43Z)
     authority_identities:
       - owner directive 2026-08-12
