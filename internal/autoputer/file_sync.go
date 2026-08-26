@@ -134,16 +134,29 @@ func (s *fileSync) HydrateIfNeeded(ctx context.Context) (int, error) {
 	}
 	defer clearBytes(dek)
 
+	stagingDir := filepath.Clean(s.filesRoot) + ".hydrate-staging"
+	_ = os.RemoveAll(stagingDir)
+	if err := os.MkdirAll(stagingDir, 0o700); err != nil {
+		return 0, fmt.Errorf("file sync: create staging directory: %w", err)
+	}
+	defer func() {
+		_ = os.RemoveAll(stagingDir)
+	}()
+
 	restored := 0
 	for _, entry := range manifest.Files {
 		rel, err := safeHydrationPath(entry.Path)
 		if err != nil {
 			return 0, fmt.Errorf("file sync: invalid manifest path %q: %w", entry.Path, err)
 		}
-		if err := s.hydrateFile(ctx, dek, rel, entry); err != nil {
+		if err := s.hydrateFile(ctx, dek, stagingDir, rel, entry); err != nil {
 			return 0, err
 		}
 		restored++
+	}
+
+	if err := swapHydrationTree(stagingDir, s.filesRoot); err != nil {
+		return 0, fmt.Errorf("file sync: install hydrated tree: %w", err)
 	}
 	s.lastHydratedRoot = root
 	return restored, nil
@@ -237,8 +250,8 @@ func safeHydrationPath(path string) (string, error) {
 	return clean, nil
 }
 
-func (s *fileSync) hydrateFile(ctx context.Context, dek []byte, rel string, entry filecas.FileEntry) (err error) {
-	parent, err := ensureHydrationParent(s.filesRoot, filepath.Dir(rel))
+func (s *fileSync) hydrateFile(ctx context.Context, dek []byte, targetRoot, rel string, entry filecas.FileEntry) (err error) {
+	parent, err := ensureHydrationParent(targetRoot, filepath.Dir(rel))
 	if err != nil {
 		return fmt.Errorf("file sync: create parent for %s: %w", entry.Path, err)
 	}
@@ -326,6 +339,42 @@ func ensureHydrationParent(root, relativeParent string) (string, error) {
 		}
 	}
 	return parent, nil
+}
+func swapHydrationTree(stagingDir, targetRoot string) error {
+	parent := filepath.Dir(targetRoot)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return err
+	}
+
+	backupDir := filepath.Clean(targetRoot) + ".old"
+	_ = os.RemoveAll(backupDir)
+
+	if _, err := os.Stat(targetRoot); err == nil {
+		if err := os.Rename(targetRoot, backupDir); err != nil {
+			return fmt.Errorf("backup existing empty root: %w", err)
+		}
+	}
+
+	if err := os.Rename(stagingDir, targetRoot); err != nil {
+		// Roll back backup if rename fails
+		if _, statErr := os.Stat(backupDir); statErr == nil {
+			_ = os.Rename(backupDir, targetRoot)
+		}
+		return fmt.Errorf("install staged root: %w", err)
+	}
+	_ = os.RemoveAll(backupDir)
+
+	// Fsync targetRoot directory
+	if dir, err := os.Open(targetRoot); err == nil {
+		_ = dir.Sync()
+		_ = dir.Close()
+	}
+	// Fsync parent directory
+	if dir, err := os.Open(parent); err == nil {
+		_ = dir.Sync()
+		_ = dir.Close()
+	}
+	return nil
 }
 
 func (s *fileSync) syncOnce(ctx context.Context) (fileSyncResult, error) {
