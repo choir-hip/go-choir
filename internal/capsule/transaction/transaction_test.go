@@ -131,3 +131,49 @@ func repeatHex(fill byte) string {
 	}
 	return string(out)
 }
+
+// TestCapsuleEffectBundleValidateRefusesIncompleteFreeze pins the freeze-refusal
+// contract: a draft bundle missing ANY of the required immutable refs
+// (SourceTreeRef, BuildRecipeRef, RuntimeArtifactRef, TestReceipts,
+// DependencyToolchainRefs) is REFUSED by Validate, so an actor cannot freeze a
+// proposable bundle that lacks capsule-bound verification evidence.
+func TestCapsuleEffectBundleValidateRefusesIncompleteFreeze(t *testing.T) {
+	digest := func(fill byte) string { return string(make([]byte, 0)) + repeatHex(fill) }
+	base := CapsuleEffectBundle{
+		BundleVersion: 1, ComputerID: "computer-1", BaseEventHead: digest('a'),
+		TrajectoryRef: "trajectory-1", CapsuleIdentity: "capsule-1", CapabilityPolicyDigest: digest('b'),
+		SourceTreeRef:         "source-tree:sha256:" + digest('c'),
+		OrderedFileEffects:    []ChangeRecord{{Path: "var/lib/artifact/release/bin/autoputer", Kind: "added", Mode: 0o755}},
+		GeneratedArtifactRefs: []string{"artifact:sha256:" + digest('d')},
+		BuildRecipeRef:        "capsule-exec:sha256:" + digest('e'),
+		RuntimeArtifactRef:    "runtime-artifact:sha256:" + digest('f'),
+		TestReceipts:          []string{"capsule-exec:sha256:" + digest('1')}, VerifierReceipts: []string{},
+		DependencyToolchainRefs: []string{"capsule-exec:sha256:" + digest('2')},
+		ResourceReceipts:        []string{"resource:sha256:" + digest('3')},
+		RuntimeFiles:            []capsule.FrozenReleaseFile{{Path: "bin/autoputer", SHA256: digest('d'), Mode: 0o755}},
+		Groups:                  map[string][]ChangeRecord{}, Ignored: []ChangeRecord{},
+	}
+	// Sanity: the complete bundle validates as a draft.
+	complete := base
+	complete.ContentDigest, _ = complete.ComputeContentDigest()
+	if err := complete.Validate(false); err != nil {
+		t.Fatalf("complete draft should validate: %v", err)
+	}
+
+	// Each required ref removed must cause refusal (incomplete freeze).
+	cases := map[string]func(*CapsuleEffectBundle){
+		"SourceTreeRef":           func(b *CapsuleEffectBundle) { b.SourceTreeRef = "" },
+		"BuildRecipeRef":          func(b *CapsuleEffectBundle) { b.BuildRecipeRef = "" },
+		"RuntimeArtifactRef":      func(b *CapsuleEffectBundle) { b.RuntimeArtifactRef = "" },
+		"TestReceipts empty":      func(b *CapsuleEffectBundle) { b.TestReceipts = []string{} },
+		"DependencyToolchainRefs": func(b *CapsuleEffectBundle) { b.DependencyToolchainRefs = []string{} },
+	}
+	for name, mutate := range cases {
+		broken := base
+		mutate(&broken)
+		broken.ContentDigest, _ = broken.ComputeContentDigest()
+		if err := broken.Validate(false); err == nil {
+			t.Fatalf("bundle with missing %s was accepted (incomplete freeze); want refusal", name)
+		}
+	}
+}
