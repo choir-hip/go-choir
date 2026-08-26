@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -19,6 +20,13 @@ type BrokerClient struct {
 	conn       net.Conn
 	socketPath string
 	publicKey  ed25519.PublicKey // injected at spawn, used for capability verification
+
+	// connMu serializes the full encode/decode round trip on the shared Unix
+	// socket. A single net.Conn supports only one in-flight JSON-RPC exchange;
+	// without serialization, two concurrent calls can interleave frames and one
+	// caller reads the other's response. Operation admission (acquireOp) counts
+	// inflight work for quiesce but does not serialize this stream.
+	connMu sync.Mutex
 }
 
 // BrokerRPCRequest is the wire format for broker RPCs.
@@ -82,6 +90,11 @@ func (b *BrokerClient) call(ctx context.Context, verb string, cap *Capability, p
 		Capability: capBytes,
 		Params:     paramBytes,
 	}
+
+	// Serialize the whole exchange so concurrent calls do not interleave frames
+	// on the shared connection.
+	b.connMu.Lock()
+	defer b.connMu.Unlock()
 
 	if deadline, ok := ctx.Deadline(); ok {
 		b.conn.SetWriteDeadline(deadline)

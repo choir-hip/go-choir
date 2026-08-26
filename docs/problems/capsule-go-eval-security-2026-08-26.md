@@ -164,11 +164,15 @@ Gemini=SAFE-TO-LAND, Sol=NEEDS-REPAIR):
   interpreter's Stdout/Stderr at maxEvalOutputBytes with a concurrency-safe
   cappedBuffer + overflowWriter, and cancels the interpreter context on
   overflow. Test TestEvalOutputOverflowFailsClosed pins it.
+- CONCURRENT-RPC SERIALIZATION FIX (real bug): BrokerClient.call shared one
+  net.Conn with no mutex or request IDs, so concurrent RPCs could interleave
+  frames and one caller reads another's response. Added connMu serializing the
+  full encode/decode round trip. (acquireOp counts inflight for quiesce but does
+  not serialize the stream.)
 - Still open (acknowledged, single-path deferral): client/activation cancellation
   -> broker-cancel verb (shared by all broker verbs including exec); the worker
   attempt record is post-dispatch (write-ahead admission record would make it
-  crash-durable); concurrent RPCs on one net.Conn (no request id/serialization);
-  a genuinely wired Researcher profile (design boundary).
+  crash-durable); a genuinely wired Researcher profile (design boundary).
 
 ## Additional critical functional find (still after the first repair)
 
