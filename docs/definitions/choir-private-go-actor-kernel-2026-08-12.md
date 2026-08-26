@@ -192,7 +192,7 @@ now:
   question: none
   reconciliation:
     observed_at: 2026-08-26T21:00:00Z
-    source_ref: main@220a1731
+    source_ref: main@ae12f82d
     deploy_identity: staging https://choir.news deployed_commit a0523e52 (security-repaired go_eval wiring; CI 33007866880 success, Deploy to Staging succeeded 2026-08-26T20:21:43Z)
     authority_identities:
       - owner directive 2026-08-12
