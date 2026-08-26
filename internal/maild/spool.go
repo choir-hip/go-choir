@@ -265,6 +265,43 @@ func (q *SpoolQueue) PurgeDelivered(ctx context.Context, id string) error {
 	return err
 }
 
+// PurgeDeliveredBefore deletes all delivered spool messages for computerID whose
+// delivery occurred at or before the given checkpoint time (e.g. FileRootCommitted).
+func (q *SpoolQueue) PurgeDeliveredBefore(ctx context.Context, computerID string, checkpointTime time.Time) (int, error) {
+	if q == nil || q.db == nil {
+		return 0, fmt.Errorf("spool: queue uninitialized")
+	}
+	query := `
+	SELECT id, raw_path
+	FROM spool_queue
+	WHERE computer_id = ? AND status = ? AND delivered_at <= ?;
+	`
+	rows, err := q.db.QueryContext(ctx, query, computerID, string(SpoolStatusDelivered), checkpointTime.UTC())
+	if err != nil {
+		return 0, fmt.Errorf("spool: query purgeable: %w", err)
+	}
+	defer rows.Close()
+
+	var purged int
+	var ids []string
+	for rows.Next() {
+		var id, rawPath string
+		if err := rows.Scan(&id, &rawPath); err != nil {
+			return purged, err
+		}
+		if rawPath != "" {
+			_ = os.Remove(rawPath)
+		}
+		ids = append(ids, id)
+	}
+	for _, id := range ids {
+		if _, err := q.db.ExecContext(ctx, "DELETE FROM spool_queue WHERE id = ?", id); err == nil {
+			purged++
+		}
+	}
+	return purged, nil
+}
+
 func newRandomID(prefix string) (string, error) {
 	b := make([]byte, 12)
 	if _, err := rand.Read(b); err != nil {

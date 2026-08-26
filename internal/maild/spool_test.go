@@ -95,3 +95,40 @@ func TestSpoolQueueBackoff(t *testing.T) {
 		t.Fatalf("expected 0 pending messages due to backoff, got %d", len(pending))
 	}
 }
+
+func TestSpoolQueuePurgeDeliveredBefore(t *testing.T) {
+	dir := t.TempDir()
+	queue, err := NewSpoolQueue(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer queue.Close()
+
+	ctx := context.Background()
+	spoolID1, err := queue.Enqueue(ctx, "computer-test-1", "bob@example.com", "alice@example.com", "Msg 1", "<msg-1>", []byte("raw 1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spoolID2, err := queue.Enqueue(ctx, "computer-test-1", "bob@example.com", "alice@example.com", "Msg 2", "<msg-2>", []byte("raw 2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Mark both delivered
+	if err := queue.MarkDelivered(ctx, spoolID1); err != nil {
+		t.Fatal(err)
+	}
+	if err := queue.MarkDelivered(ctx, spoolID2); err != nil {
+		t.Fatal(err)
+	}
+
+	// Purge with future cutoff should purge both
+	cutoff := time.Now().UTC().Add(time.Minute)
+	purged, err := queue.PurgeDeliveredBefore(ctx, "computer-test-1", cutoff)
+	if err != nil {
+		t.Fatalf("PurgeDeliveredBefore failed: %v", err)
+	}
+	if purged != 2 {
+		t.Fatalf("expected 2 purged messages, got %d", purged)
+	}
+}
