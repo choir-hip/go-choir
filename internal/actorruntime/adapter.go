@@ -568,8 +568,18 @@ func (a *Adapter) Start(ctx context.Context) error {
 	// Refresh-runtime may intentionally remove the persistent updater current
 	// pointer. Rejoin the immutable baseline before the service is considered
 	// started; failures remain observable as a fail-closed 503 at the surface.
-	if err := a.Runtime.EnsureComputerSurface(ctx); err != nil {
-		log.Printf("actorruntime: computer surface baseline bootstrap deferred: %v", err)
+	for attempt := range 10 {
+		if err := a.Runtime.EnsureComputerSurface(ctx); err == nil {
+			break
+		} else if attempt == 9 {
+			log.Printf("actorruntime: computer surface baseline bootstrap deferred: %v", err)
+		} else {
+			select {
+			case <-ctx.Done():
+				break
+			case <-time.After(250 * time.Millisecond):
+			}
+		}
 	}
 	a.Runtime.Start(ctx)
 	if a.textureOwner != nil {

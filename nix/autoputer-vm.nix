@@ -657,8 +657,8 @@ EOF
   systemd.services.go-choir-autoputer = {
     description = "go-choir Autoputer Runtime (VM guest)";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-guest-receipt-signer.service" "go-choir-verifier-signer.service" ];
-    wants = [ "network-online.target" ];
+    after = [ "network-online.target" "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-guest-receipt-signer.service" "go-choir-verifier-signer.service" "go-choir-updater.service" ];
+    wants = [ "network-online.target" "go-choir-updater.service" ];
     requires = [ "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-guest-receipt-signer.service" "go-choir-verifier-signer.service" ];
     bindsTo = [ "go-choir-guest-receipt-signer.service" ];
     environment = {
