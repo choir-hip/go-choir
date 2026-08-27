@@ -201,21 +201,25 @@ func makeSubjectTreeReadOnly(root string) error {
 func immutableGitCommitIdentity(ctx context.Context, source string) (string, error) {
 	for _, args := range [][]string{{"diff", "--quiet", "--"}, {"diff", "--cached", "--quiet", "--"}} {
 		command := exec.CommandContext(ctx, "git", append([]string{"-C", source}, args...)...)
-		if err := command.Run(); err != nil {
+		output, err := command.CombinedOutput()
+		if err != nil {
 			if contextErr := ctx.Err(); contextErr != nil {
 				return "", contextErr
 			}
-			return "", fmt.Errorf("source snapshot refuses dirty tracked files")
+			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+				return "", fmt.Errorf("source snapshot refuses dirty tracked files")
+			}
+			return "", fmt.Errorf("source snapshot git %s failed (exit %v): %s (%w)", strings.Join(args, " "), err, strings.TrimSpace(string(output)), err)
 		}
 	}
-	raw, err := exec.CommandContext(ctx, "git", "-C", source, "rev-parse", "--verify", "HEAD^{commit}").Output()
+	raw, err := exec.CommandContext(ctx, "git", "-C", source, "rev-parse", "--verify", "HEAD^{commit}").CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("source snapshot commit identity: %w", err)
+		return "", fmt.Errorf("source snapshot commit identity (%s): %w", strings.TrimSpace(string(raw)), err)
 	}
 	commit := strings.TrimSpace(string(raw))
 	decoded, err := hex.DecodeString(commit)
 	if err != nil || (len(decoded) != 20 && len(decoded) != 32) {
-		return "", fmt.Errorf("source snapshot commit identity is invalid")
+		return "", fmt.Errorf("source snapshot commit identity is invalid: %q", commit)
 	}
 	return commit, nil
 }
