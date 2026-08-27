@@ -37,13 +37,18 @@ problem-documentation-first receipt
 ([evidence](evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md));
 host disk expansion remains an owner decision.
 
-## Active Definition — Scheduling Contract and Candidate Proof
+## Active Operational Priority — Account & Mail Recovery (yusefnathanson@me.com / 000@choir.news)
+
+Active focus on staging Node B is regaining access to owner account `yusefnathanson@me.com`
+(`5bd6de97-3b58-408c-bf89-c42c81b083de`), restoring its primary computer liveness, and ensuring
+incoming mail delivered to `000@choir.news` is preserved and accessible.
+
+## Tabled Definition — Scheduling Contract and Candidate Proof
 
 [`definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`](definitions/choir-scheduling-and-candidate-proof-2026-08-21.md)
-is **active on staging**. Substrate overhauls, cleanup cutover, and Phase 1
-ArrivalOrdinal FIFO scheduling are deployed (`cc2cb702`). Active execution proceeds
-on fresh snapshot-backed staging computer `computer-aa7739a6c3f7ebec4e984bad8b086486`
-(`new@new.com`) with canonical event chain bootstrapped.
+is **tabled pending account recovery**. Pre-A checkpoint `732427d7...` was published and signed,
+`propose_only` generation 1 was committed, and operation `selfdev-80201d0a...` was initialized on
+`computer-aa7739a6c3f7ebec4e984bad8b086486` (`new@new.com`). All artifacts are preserved.
 
 ## Sealed Operation — Stabilize and Hold 0333528
 

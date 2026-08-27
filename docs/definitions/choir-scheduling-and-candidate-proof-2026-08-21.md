@@ -128,30 +128,30 @@ finish:
       class: registry update
 
 now:
-  status: active
-  slice: "Candidate proof resumed on fresh snapshot-backed staging computer computer-aa7739a6c3f7ebec4e984bad8b086486 following substrate overhauls, cleanup cutover, and Phase 1 ArrivalOrdinal FIFO scheduling deployment (cc2cb702)."
-  question: "How does CoSuper capsule candidate A authoring, consensus, promotion, play API verification, and restore to pre-A checkpoint execute under the hardened ArrivalOrdinal scheduler on fresh staging microVM?"
+  status: tabled_pending_account_recovery
+  slice: "Candidate proof work safely tabled at owner direction 2026-08-27 following successful pre-A checkpoint publication (732427d7...), propose_only mode generation 1 (01a0451b...), and self-development operation initiation (selfdev-80201d0a...) on computer-aa7739a6c3f7ebec4e984bad8b086486. Active focus pivoted to urgent recovery of yusefnathanson@me.com (000@choir.news) account."
+  question: "How will yusefnathanson@me.com account and its associated computer/mail infrastructure be restored to full health on staging?"
   reconciliation:
-    observed_at: "2026-08-27T16:15:00Z"
+    observed_at: "2026-08-27T23:00:00Z"
     source_ref: "docs/reports/choir-system-state-and-consensus-review-2026-08-27.md"
-    deploy_identity: "staging https://choir.news proxy cc2cb702; active microVM vm-fe04398168752e256835e02d3876bd1c (computer-aa7739a6c3f7ebec4e984bad8b086486) bootstrapped on cc2cb702 with sequence 1 head 96f7728a6ce323622ca900b109c3f2c58798954cc6077de8e243668d43e498f9"
+    deploy_identity: "staging https://choir.news proxy d14dc341; active computer-aa7739a6c3f7ebec4e984bad8b086486 pre-A checkpoint 732427d7... published and verified"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "clean single worktree /Users/wiz/go-choir"
     status: reconciled
   decision:
-    selected: "Execute candidate change A arc on fresh staging computer computer-aa7739a6c3f7ebec4e984bad8b086486 with qualified consensus under reversible-selfdev-v1, promotion, live play verification, falsification, and restore to checkpoint 99949fe2."
-    kind: execution
+    selected: "Safely table candidate proof and prioritize recovery of yusefnathanson@me.com account and 000@choir.news mail."
+    kind: priority_pivot
     status: owner-ratified
     source: owner
-    evidence_ref: "docs/reports/choir-system-state-and-consensus-review-2026-08-27.md"
-    owner_ratification_ref: "owner direction 2026-08-27: proceed with candidate proof arc"
-    recorded_at: "2026-08-27T16:15:00Z"
-    consequence: "Active execution resumed under choir-scheduling-and-candidate-proof-2026-08-21.md."
+    evidence_ref: "owner direction 2026-08-27: table candidate proof, recover yusefnathanson@me.com (000@choir.news)"
+    owner_ratification_ref: "owner direction 2026-08-27"
+    recorded_at: "2026-08-27T23:00:00Z"
+    consequence: "Candidate proof paused with all checkpoint/operation artifacts preserved; active work focuses on account recovery."
   evidence_refs:
     - "docs/reports/choir-system-state-and-consensus-review-2026-08-27.md"
-  blocker_or_risk: "None blocking execution; staging microVM is online, bootstrapped, and proven with live Texture model revision."
-  next_action: "Enable propose_only mode and author candidate A inside CoSuper capsule on staging computer computer-aa7739a6c3f7ebec4e984bad8b086486."
+  blocker_or_risk: "yusefnathanson@me.com account is down and unaccessible; incoming email received at 000@choir.news must be preserved and accessible."
+  next_action: "Diagnose and restore yusefnathanson@me.com account, computer, and 000@choir.news mail flow on Node B."
 ---
 
 
