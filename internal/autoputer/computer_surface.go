@@ -46,6 +46,11 @@ func (h *ComputerSurface) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	info, err := os.Stat(target)
 	if err != nil || info.IsDir() {
+		if strings.HasPrefix(rel, "assets/") {
+			w.Header().Set("Cache-Control", "no-store")
+			http.NotFound(w, r)
+			return
+		}
 		target = filepath.Join(root, "index.html")
 		info, err = os.Stat(target)
 		if err != nil || info.IsDir() {

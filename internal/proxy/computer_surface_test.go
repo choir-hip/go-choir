@@ -124,6 +124,29 @@ func TestComputerSurfaceSelectsGuestBytesAfterResolve(t *testing.T) {
 	}
 }
 
+func TestPlatformShellRefusesMissingHashedAssetWithoutHTMLFallback(t *testing.T) {
+	shellDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(shellDir, "index.html"), []byte("<html>platform-shell</html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler, _, _, _ := testProxyEnvWithAuthStore(t)
+	handler.cfg.PlatformShellRoot = shellDir
+
+	// Missing asset must return 404 with no-store, NEVER index.html
+	missingAsset := httptest.NewRecorder()
+	handler.HandleComputerSurface(missingAsset, httptest.NewRequest(http.MethodGet, "/assets/SettingsApp-DtEB7MbW.css", nil))
+	if missingAsset.Code != http.StatusNotFound {
+		t.Fatalf("missing platform shell asset status=%d want 404", missingAsset.Code)
+	}
+	if strings.Contains(missingAsset.Body.String(), "<html>platform-shell</html>") {
+		t.Fatalf("missing asset fell back to HTML: %s", missingAsset.Body.String())
+	}
+	if missingAsset.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("missing asset cache header = %q want no-store", missingAsset.Header().Get("Cache-Control"))
+	}
+}
+
 func TestCaddyNoLongerServesHostFrontendCurrentAsComputerSurface(t *testing.T) {
 	for _, rel := range []string{"../../nix/node-b.nix", "../../nix/node-a.nix"} {
 		raw, err := os.ReadFile(rel)

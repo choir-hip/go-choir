@@ -127,27 +127,28 @@ measures:
 
 now:
   status: working
-  slice: "Step 2: Substrate implementation of asset 404 fail-closed and blocking genesis serving join"
+  slice: "Step 3: Land code repairs, monitor CI and Node B staging deployment"
   reconciliation:
-    canonical_ref: main@47db6bce26e85bc17e8264d12f689fbf09121703
+    canonical_ref: main@93031849f1db12e6945037d04ea7e9095ae511e6
     deploy_identity: staging proxy 05cc87b6d228eb17451e721ec4b3cbcf3774139a
-    worktree: "docs/problems/genesis-computer-surface-underivable-spa-2026-08-26.md and docs/definitions/choir-computer-recovery-and-genesis-surface-2026-08-26.md"
+    worktree: "clean code repairs in internal/autoputer, internal/proxy, internal/updater, internal/agentcore"
   candidate:
     id: genesis-surface-derivability-v1
     disposition: active
     digest: "sha256:genesis-surface-derivability-v1"
   decision:
-    selected: "Scoped Definition to Genesis Computer Surface & Staged SPA Derivability; unblocks Yaegi live proof and fresh operator computer as immediate successor; holds computer-0333... permanently sealed."
-    kind: owner_ratified_sequence
-    source_ref: "user prompt 2026-08-26; consensus panel 20260827-000032"
-    recorded_at: 2026-08-27T00:15:00Z
+    selected: "Implemented asset 404 fail-closed in autoputer and proxy; added VerifyCurrentRelease in updater and rematerialize. Ready for staging deployment and browser acceptance."
+    kind: implementation_slice
+    source_ref: "docs/definitions/choir-computer-recovery-and-genesis-surface-2026-08-26.md"
+    recorded_at: 2026-08-27T00:20:00Z
   blocker: none
   risk: "Staging deploy concurrency during multi-commit landing loop."
   evidence_refs:
     - docs/problems/genesis-computer-surface-underivable-spa-2026-08-26.md
-    - docs/reports/choir-yaegi-private-go-actor-kernel-reorientation-report-2026-08-26.md
-    - .agentic-consensus/agentic-consensus-20260827-000032/manifest.tsv
-  next_action: "Implement asset 404 fail-closed in internal/autoputer/computer_surface.go and internal/proxy/computer_surface.go with tests."
+    - internal/autoputer/computer_surface_test.go
+    - internal/proxy/computer_surface_test.go
+    - internal/updater/updater_test.go
+  next_action: "Commit and push code repairs to main, monitor CI and Node B staging deploy, then run deployed browser acceptance."
 
 receipts:
   - id: problem-documented-2026-08-26

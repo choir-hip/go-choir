@@ -92,3 +92,34 @@ func TestTwoComputerSurfacesServeDivergentBytes(t *testing.T) {
 		t.Fatal("two computers served the same SPA")
 	}
 }
+
+func TestComputerSurfaceRefusesMissingHashedAssetWithoutHTMLFallback(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "current", "frontend")
+	if err := os.MkdirAll(filepath.Join(root, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "index.html"), []byte("<html>shell</html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	surface := &ComputerSurface{Root: root}
+
+	// Missing asset must return 404 with no-store, NEVER 200 index.html
+	missingAsset := httptest.NewRecorder()
+	surface.ServeHTTP(missingAsset, httptest.NewRequest(http.MethodGet, "/assets/SettingsApp-DtEB7MbW.css", nil))
+	if missingAsset.Code != http.StatusNotFound {
+		t.Fatalf("missing asset status=%d want 404", missingAsset.Code)
+	}
+	if strings.Contains(missingAsset.Body.String(), "<html>shell</html>") {
+		t.Fatalf("missing asset fell back to HTML: %s", missingAsset.Body.String())
+	}
+	if missingAsset.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("missing asset cache header = %q want no-store", missingAsset.Header().Get("Cache-Control"))
+	}
+
+	// Non-asset SPA route must still fall back to index.html with 200
+	spaRoute := httptest.NewRecorder()
+	surface.ServeHTTP(spaRoute, httptest.NewRequest(http.MethodGet, "/desktop/settings", nil))
+	if spaRoute.Code != http.StatusOK || !strings.Contains(spaRoute.Body.String(), "<html>shell</html>") {
+		t.Fatalf("spa route status=%d body=%s", spaRoute.Code, spaRoute.Body.String())
+	}
+}

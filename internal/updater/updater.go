@@ -498,6 +498,48 @@ func ReadCurrentManifest(root string) (ReleaseManifest, error) {
 	return readReleaseManifest(target)
 }
 
+// VerifyReleaseFiles verifies that index.html and all files listed in manifest.Files
+// exist on disk under releaseDir.
+func VerifyReleaseFiles(releaseDir string, manifest ReleaseManifest) error {
+	releaseDir = filepath.Clean(releaseDir)
+	index := filepath.Join(releaseDir, "frontend", "index.html")
+	if info, err := os.Stat(index); err != nil || info.IsDir() {
+		return fmt.Errorf("updater: frontend index missing in %s", releaseDir)
+	}
+	for _, f := range manifest.Files {
+		relPath := filepath.FromSlash(strings.TrimPrefix(strings.TrimSpace(f.Path), "/"))
+		if relPath == "" {
+			continue
+		}
+		target := filepath.Join(releaseDir, relPath)
+		if info, err := os.Stat(target); err != nil || info.IsDir() {
+			return fmt.Errorf("updater: release file missing: %s", relPath)
+		}
+	}
+	return nil
+}
+
+// VerifyCurrentRelease verifies that the current symlink points to a valid release
+// and all files declared in release-manifest.json exist on disk.
+func VerifyCurrentRelease(root string) (ReleaseManifest, error) {
+	root = filepath.Clean(root)
+	target, err := os.Readlink(filepath.Join(root, "current"))
+	if err != nil {
+		return ReleaseManifest{}, err
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(root, target)
+	}
+	manifest, err := readReleaseManifest(target)
+	if err != nil {
+		return ReleaseManifest{}, err
+	}
+	if err := VerifyReleaseFiles(target, manifest); err != nil {
+		return ReleaseManifest{}, err
+	}
+	return manifest, nil
+}
+
 func FinalizeManifest(manifest ReleaseManifest) (ReleaseManifest, error) {
 	manifest.ContentDigest = ""
 	canonical, err := computerevent.CanonicalJSON(manifest)

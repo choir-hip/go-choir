@@ -348,3 +348,64 @@ func TestUpdaterImportsImmutableBaselineOnce(t *testing.T) {
 		t.Fatalf("changed baseline error=%v", err)
 	}
 }
+
+func TestVerifyCurrentRelease(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	engine, err := New(root, "computer-test", "realization-test", &fakeServiceManager{}, fakeHealthProber{}, testReceiptSigner{key: computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(root, "incoming", "genesis")
+	if err := os.MkdirAll(filepath.Join(source, "frontend", "assets"), 0o755); err != nil {
+	}
+	if err := os.WriteFile(filepath.Join(source, "frontend", "index.html"), []byte("index"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "frontend", "assets", "app.css"), []byte("css"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := BuildBaselineManifest(source, "computer-test", "code:baseline", "artifact-program:baseline")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request := BaselineImportRequest{
+		ComputerID: "computer-test", RealizationID: "realization-test", IdempotencyKey: "genesis-1",
+		SourceDir: source, Manifest: manifest,
+	}
+	request.RequestCommitment, err = ComputeBaselineImportCommitment(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	imported, err := engine.ImportBaseline(request)
+	if err != nil {
+		t.Fatalf("import baseline: %v", err)
+	}
+
+	// Complete release must verify successfully
+	verified, err := VerifyCurrentRelease(root)
+	if err != nil || verified.ContentDigest != imported.ContentDigest {
+		t.Fatalf("verify complete release failed: %v (digest=%s want %s)", err, verified.ContentDigest, imported.ContentDigest)
+	}
+	releaseDir := filepath.Join(root, "releases", imported.ContentDigest)
+	makeTreeWritable(releaseDir)
+	if err := os.Remove(filepath.Join(releaseDir, "frontend", "assets", "app.css")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyCurrentRelease(root); err == nil {
+		t.Fatal("expected error on missing asset file, got nil")
+	}
+
+	// Missing index.html must fail verification
+	if err := os.Remove(filepath.Join(releaseDir, "frontend", "index.html")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyCurrentRelease(root); err == nil {
+		t.Fatal("expected error on missing index.html, got nil")
+	}
+}

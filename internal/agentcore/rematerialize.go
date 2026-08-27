@@ -482,7 +482,7 @@ func (rt *Runtime) ensureServingBaseline(ctx context.Context, computerID, baseli
 	if computerID == "" || computerID != strings.TrimSpace(rt.cfg.ComputerID) {
 		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
 	}
-	manifest, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot)
+	manifest, err := updater.VerifyCurrentRelease(rt.selfdevUpdaterRoot)
 	if err == nil {
 		if strings.TrimSpace(manifest.ComputerID) != computerID {
 			return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")

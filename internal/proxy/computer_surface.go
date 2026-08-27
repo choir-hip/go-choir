@@ -117,6 +117,11 @@ func (h *Handler) servePlatformShell(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if info, err := os.Stat(target); err != nil || info.IsDir() {
+		if strings.HasPrefix(rel, "assets/") {
+			w.Header().Set("Cache-Control", "no-store")
+			http.NotFound(w, r)
+			return
+		}
 		target = index
 		w.Header().Set("Cache-Control", "no-store")
 	}
