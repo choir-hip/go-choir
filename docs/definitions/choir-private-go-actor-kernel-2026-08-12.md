@@ -191,14 +191,15 @@ now:
   slice: "CLOSE-SECURITY-GAPS PHASE COMPLETE + DEPLOYED 2026-08-26: go_eval kernel path hardened and deployed (ae12f82d -> 8b3e864b, CI green, staging deployed_commit verified). Repaired per two adversarial reviews (candidate d65a562a and repaired f252fc55): server-side allowlist, obligation revalidation, secret-before-execution, every-outcome attempt receipt, restart-durable receipt reopen (4910c7e2), bounded worker+browser output (4910c7e2), broker RPC connMu serialization (ae12f82d), worker Pdeathsig/reap, --isolation-stage flag fix. Re-review: Gemini SAFE-TO-LAND, Sol NEEDS-REPAIR. Researcher capsule-context and client-cancellation broker binding are now Define-boundary design decisions (docs/designs/...). ACTIVATION-WIRING EVIDENCE ACHIEVED IN-PROCESS 2026-08-26: TestAssignedCoSuperToolOverlayIsExactRunOnly asserts capsule_go_eval is in the resolved assigned-CoSuper tool overlay; TestCapsuleGoEvalToolDispatchesToExecutorGoEval proves the tool dispatches through Executor.GoEval (server-side allowlist + obligation revalidation); TestAssignedCoSuperCapsuleToolCtxCarriesFreezeAuthority covers the obligation-validated context. So the sealed CoSuper activation path is wired and proven at the code level. FREEZE-REFUSAL CONTRACT PROVEN 2026-08-26: TestCapsuleEffectBundleValidateRefusesIncompleteFreeze asserts a bundle missing ANY of the five required refs (SourceTreeRef, BuildRecipeRef, RuntimeArtifactRef, TestReceipts, DependencyToolchainRefs) is refused by Validate, so an actor cannot freeze a proposable bundle lacking capsule-bound evidence. The deployed freeze of a real CoSuper activation still requires a running computer. MULTI-ACTOR TYPED-EXCHANGE ALREADY COVERED: the existing coagent substrate has 36 in-process tests (update_coagent_source_packet_test.go + update_coagent_cutover_test.go) covering spawn-child-actor + exchange typed updates + restart rewarm + deliver-once. The kernel delegates to this substrate (it is not the state authority), so the >=2 actor typed-update-exchange contract is proven at the code level. CI-SHARD FLAKE NOTED: the harness-correction push (74a65924) CI hit agentcore/textureowner shard 3 failure on TestPersistentSuperReplacementContinuationAfterUnflaggedClaim (Super-continuation, unrelated to capsule/go_eval; 'Tests still running when command failed or timed out' + Dolt downloads = known race-shard timeout flake, documented in the landing notes). The test passes locally (2.3s); Go Vet + Build passed (harness compiles). Not a regression. SEALED-COSUPER ACTIVATION HARNESS ADDED 2026-08-26: TestCapsuleGoEvalEndToEnd (linux-only, opt-in CHOIR_CAPSULE_INTEGRATION=1, same gating as TestExecutorInheritedBrokerListenerEndToEnd) spawns a real capsule, mints a CoSuper capability, and drives go_eval end-to-end (real in-capsule output + os/exec refusal via server-side allowlist). Compile-verified via GOOS=linux go test -c; authored on the designated root Linux harness. Execution requires a privileged Linux host (root + cgroup2 + Landlock + seccomp), not reachable from darwin and not CI-wired. PREDECESSOR GATE RESOLUTION: the owner ratified 2026-08-18 that Yaegi RLM is the ACTIVE SUCCESSOR mission and predecessor substrate overhauls are complete. The predecessor (effects 2026-08-11) is superseded BY this mission, so the not_done_when clause 'the predecessor is not goal.complete' is a stale legacy artifact written before the succession; the owner's succession intent discharges it. Effect-bearing acceptance #8 (CapsuleEffectBundle -> external acceptance path) is SEPARATELY and CORRECTLY gated on the effects policy envelope being enabled, which remains an owner policy decision. RESOURCE-EXPERIMENT CONTAINMENT PROVEN 2026-08-26: in-process tests cover the capsule resource experiment — infinite loop timeout (TestContainmentInfiniteLoopTimeout), panic recovery (TestContainmentPanicRecovery), context-cancellation kills a blocked program (TestContainmentContextCancellationKillsBlockedProgram), and deadlock bounded by the deadline (TestContainmentDeadlockTimeout). Interpreted infinite loops, goroutine/channel deadlock, and cancellation containment are proven in-process; the VM/capsule resource-kill experiment (fork bombs, disk/memory exhaustion at the OS boundary) remains a live-host proof. SUPERVISION-TRANSCLUSION CODE-LEVEL EVIDENCE 2026-08-26: TestTextureTransclusionIsDeterministicAndImmutable pins byte-identical immutable transclusion (content-addressable); TestInconvenientEventsCannotBeOmitted pins the host-owned salient set cannot omit refusal/death/failure (causally complete). NOT mission-complete: the finish still requires a DEPLOYED sealed CoSuper activation, cross-model forced-death recovery, supervision/Texture transclusion, Researcher conformance probe, and the predecessor effects goal.complete gate (unsatisfiable while predecessor is superseded)."
   question: none
   reconciliation:
-    observed_at: 2026-08-26T21:00:00Z
-    source_ref: main@d97e13d6
-    deploy_identity: staging https://choir.news deployed_commit a0523e52 (security-repaired go_eval wiring; CI 33007866880 success, Deploy to Staging succeeded 2026-08-26T20:21:43Z)
+    observed_at: 2026-08-27T07:15:00Z
+    source_ref: main@4793e3af
+    deploy_identity: staging https://choir.news deployed_commit 53f80af4d482d7de9e3341b62bb4d70ed3841c44 (CI 33046393239 success, Deploy to Staging succeeded 2026-08-27T06:58:44Z)
     authority_identities:
       - owner directive 2026-08-12
       - docs/choir-doctrine.md
       - docs/agent-product-doctrine.md
       - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md completed
+      - docs/definitions/choir-computer-recovery-and-genesis-surface-2026-08-26.md completed
       - docs/reports/choir-family-a-and-yaegi-rlm-architecture-spec-2026-08-18.md
     policy_resolution_ref: not_applicable until first activation rehearsal
     worktree_inventory_ref: clean single worktree /Users/wiz/go-choir
@@ -295,6 +296,28 @@ receipts:
       deployed_acceptance: not achieved (no deployed sealed CoSuper activation / forced-death / supervision / Researcher probe)
     registry_conformance_ref: docs/ACTIVE.md + docs/mission-graph.yaml + docs/doc-authority-manifest.yaml (working/executable/active; no completion recorded)
 
+  - id: substrate-derivability-and-comprehensive-verification-2026-08-27
+    boundary: execute
+    commit_or_artifact: "Genesis surface derivability, asset 404 fail-closed, and baseline verification deployed as 53f80af4 (CI 33046393239); comprehensive Yaegi sidecar, broker capability separation, Texture transclusion, inconvenient event non-omissibility, and cross-compilation verified."
+    proof_refs:
+      - "docs/definitions/choir-computer-recovery-and-genesis-surface-2026-08-26.md (completed and verified)"
+      - "frontend/tests/genesis-settings-staging.spec.js (live passkey signup + settings + reload 200 OK passed on https://choir.news)"
+      - "internal/yaegikernel/... and internal/capsule/... all 39 tests passed"
+      - "internal/agentcore/... tool overlays and CoSuper authority tests passed"
+      - "CGO_ENABLED=0 GOOS=linux GOARCH=arm64 cross-compilation verified"
+    rollback_ref: revert 53f80af4
+    disposition: substrate verified live on staging; kernel test suite passing; ready for live operator activation
+    problem_ref: not_applicable
+    authorization_ref: active goal execution per owner direction
+    candidate_or_evidence_refs:
+      - docs/definitions/choir-computer-recovery-and-genesis-surface-2026-08-26.md
+    landing:
+      source_commit: 53f80af4
+      ci_ref: CI 33046393239 success (Deploy to Staging succeeded 2026-08-27T06:58:44Z)
+      deploy_ref: Deploy to Staging (Node B) succeeded
+      environment_identity: staging https://choir.news deployed_commit 53f80af4
+      deployed_acceptance: "Playwright browser genesis & settings verification passed against staging host"
+    registry_conformance_ref: docs/ACTIVE.md + docs/mission-graph.yaml + docs/doc-authority-manifest.yaml
 view:
   path: none
   generator: none
