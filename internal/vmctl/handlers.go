@@ -522,6 +522,52 @@ func (h *Handler) HandleHibernate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HandleMaintenanceServe boots a held, route-bound computer under the
+// guest-visible maintenance fence. It is an internal recovery exception:
+// the hold must already exist, and replayOnly is deliberately false so the
+// restored desktop becomes servable while Runtime.Start still refuses all
+// mutation and self-development admission.
+func (h *Handler) HandleMaintenanceServe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
+		return
+	}
+	var req resolveRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
+		return
+	}
+	if strings.TrimSpace(req.UserID) == "" {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id is required"})
+		return
+	}
+	req.DesktopID = normalizeDesktopID(req.DesktopID)
+	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	own := h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID)
+	if own == nil || !own.IsHeld() {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: "maintenance serve requires an existing host maintenance hold"})
+		return
+	}
+	recovered, err := h.registry.RecoverVMForDesktopMaintenance(req.UserID, req.DesktopID, false)
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	writeVMCTLJSON(w, http.StatusOK, map[string]interface{}{
+		"status": "maintenance_serving", "vm_id": recovered.VMID,
+		"computer_id": recovered.ComputerID, "desktop_id": recovered.DesktopID,
+		"computer_url": recovered.ComputerURL, "state": recovered.State,
+		"epoch": recovered.Epoch, "held": recovered.IsHeld(),
+	})
+}
+
 // HandleResume handles POST /internal/vmctl/resume.
 // Resumes a stopped or hibernated VM for a user, restoring the
 // same user's persisted state (VAL-CROSS-116).
@@ -1322,6 +1368,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/remove", h.HandleRemove)
 	s.HandleFunc("/internal/vmctl/list", h.HandleList)
 	s.HandleFunc("/internal/vmctl/hibernate", h.HandleHibernate)
+	s.HandleFunc("/internal/vmctl/maintenance-serve", h.HandleMaintenanceServe)
 	s.HandleFunc("/internal/vmctl/resume", h.HandleResume)
 	s.HandleFunc("/internal/vmctl/recover", h.HandleRecover)
 	s.HandleFunc("/internal/vmctl/refresh", h.HandleRefresh)

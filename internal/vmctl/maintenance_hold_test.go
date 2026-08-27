@@ -2,6 +2,8 @@ package vmctl
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -159,5 +161,37 @@ func TestMaintenanceHoldAuthorizesReplayOnlyRecoveryBoot(t *testing.T) {
 	}
 	if own.State != VMStateActive {
 		t.Fatalf("recovered ownership should be active, got %s", own.State)
+	}
+}
+
+func TestMaintenanceServeBootsHeldComputerWithGuestHold(t *testing.T) {
+	reg := NewOwnershipRegistry("")
+	own := &VMOwnership{
+		VMID: "vm-hold-serve", ComputerID: "computer-hold-serve",
+		UserID: "user-hold-serve", DesktopID: PrimaryDesktopID,
+		State: VMStateStopped, HoldStatus: &MaintenanceHold{Reason: "maintenance", HeldBy: "recovery"},
+	}
+	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
+	mock := &mockVMManager{}
+	reg.SetVMManager(mock)
+	handler := NewHandler(reg)
+
+	request := httptest.NewRequest(http.MethodPost, "/internal/vmctl/maintenance-serve", strings.NewReader(
+		`{"user_id":"user-hold-serve","desktop_id":"primary"}`,
+	))
+	request.Header.Set("X-Internal-Caller", "true")
+	response := httptest.NewRecorder()
+	handler.HandleMaintenanceServe(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("maintenance serve status=%d body=%s", response.Code, response.Body.String())
+	}
+	if len(mock.boots) != 1 {
+		t.Fatalf("expected one maintenance boot, got %d", len(mock.boots))
+	}
+	if !mock.boots[0].MaintenanceHold || mock.boots[0].RecoveryReplayOnly {
+		t.Fatalf("maintenance serve must retain guest hold without replay-only mode: %+v", mock.boots[0])
+	}
+	if own.State != VMStateActive || !own.IsHeld() {
+		t.Fatalf("maintenance serve must leave ownership active and held: %+v", own)
 	}
 }
