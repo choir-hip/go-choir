@@ -328,7 +328,7 @@ func verifyManifest(root string, manifest ReleaseManifest) error {
 			return fmt.Errorf("updater: unsafe manifest file %q", file.Path)
 		}
 		path := filepath.Join(root, filepath.FromSlash(file.Path))
-		info, err := os.Lstat(path)
+		info, err := os.Stat(path)
 		if err != nil || !info.Mode().IsRegular() {
 			return fmt.Errorf("updater: manifest file %q is unavailable or not regular", file.Path)
 		}
@@ -373,9 +373,12 @@ func BuildBaselineManifest(sourceDir, computerID, codeRef, artifactProgramRef st
 		if path == sourceDir || entry.IsDir() {
 			return nil
 		}
-		info, err := entry.Info()
+		info, err := os.Stat(path)
 		if err != nil {
 			return err
+		}
+		if info.IsDir() {
+			return nil
 		}
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("updater: baseline contains non-regular file %q", path)
@@ -722,7 +725,7 @@ func writeJournal(path string, journal operationJournal) error {
 }
 
 func copyRegularFile(source, target string, mode fs.FileMode) error {
-	info, err := os.Lstat(source)
+	info, err := os.Stat(source)
 	if err != nil || !info.Mode().IsRegular() {
 		return fmt.Errorf("updater: source file is not regular: %s", source)
 	}
