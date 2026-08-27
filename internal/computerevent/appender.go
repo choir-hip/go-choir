@@ -702,6 +702,7 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		if err := a.finalizeProjection(ctx, record.Request.Event, record.Request.EventDigest, record.Receipt); err != nil {
 			return fmt.Errorf("computer event appender: replay finalize sequence %d: %w", record.Request.Event.Sequence, err)
 		}
+		a.setReplayProgress(record.Request.Event.Sequence, a.committedReplaySeq())
 		if elapsed := time.Since(applyStarted); elapsed > 2*time.Second {
 			log.Printf("computer event appender: replay apply slow seq=%d elapsed=%s", record.Request.Event.Sequence, elapsed)
 		}
