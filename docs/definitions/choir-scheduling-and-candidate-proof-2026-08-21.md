@@ -128,31 +128,30 @@ finish:
       class: registry update
 
 now:
-  status: suspended_pending_substrate
-  slice: "Suspended 2026-08-25 by owner direction and unanimous agentic consensus (12 models)."
-  question: "How will the scheduler and candidate proof run once the clean substrate overhauls (Tracks K, F, M, Assurance) and Yaegi Actor Kernel deploy on a snapshot-backed computer?"
+  status: active
+  slice: "Candidate proof resumed on fresh snapshot-backed staging computer computer-aa7739a6c3f7ebec4e984bad8b086486 following substrate overhauls, cleanup cutover, and Phase 1 ArrivalOrdinal FIFO scheduling deployment (cc2cb702)."
+  question: "How does CoSuper capsule candidate A authoring, consensus, promotion, play API verification, and restore to pre-A checkpoint execute under the hardened ArrivalOrdinal scheduler on fresh staging microVM?"
   reconciliation:
-    observed_at: "2026-08-25T17:00:00Z"
-    source_ref: "docs/reports/choir-system-orientation-and-station-report-2026-08-25.md"
-    deploy_identity: "staging proxy; live computer computer-0333528... sealed under permanent hold"
-    authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md]
+    observed_at: "2026-08-27T16:15:00Z"
+    source_ref: "docs/reports/choir-system-state-and-consensus-review-2026-08-27.md"
+    deploy_identity: "staging https://choir.news proxy cc2cb702; active microVM vm-fe04398168752e256835e02d3876bd1c (computer-aa7739a6c3f7ebec4e984bad8b086486) bootstrapped on cc2cb702 with sequence 1 head 96f7728a6ce323622ca900b109c3f2c58798954cc6077de8e243668d43e498f9"
+    authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "clean single worktree /Users/wiz/go-choir"
     status: reconciled
   decision:
-    selected: "Suspend self-development effects until substrate cleanup, overhauls (Tracks K, F, M, Assurance), and Yaegi Actor Kernel deploy on clean computers ('clean while cooking')."
-    kind: sequencing
+    selected: "Execute candidate change A arc on fresh staging computer computer-aa7739a6c3f7ebec4e984bad8b086486 with qualified consensus under reversible-selfdev-v1, promotion, live play verification, falsification, and restore to checkpoint 99949fe2."
+    kind: execution
     status: owner-ratified
     source: owner
-    evidence_ref: "docs/reports/choir-system-orientation-and-station-report-2026-08-25.md"
-    owner_ratification_ref: "owner direction 2026-08-25: overhauls and Yaegi before self-development resumption"
-    recorded_at: "2026-08-25T17:00:00Z"
-    consequence: "Self-development proof suspended; active execution transitions to choir-substrate-cleanup-and-cutover-2026-08-25.md."
+    evidence_ref: "docs/reports/choir-system-state-and-consensus-review-2026-08-27.md"
+    owner_ratification_ref: "owner direction 2026-08-27: proceed with candidate proof arc"
+    recorded_at: "2026-08-27T16:15:00Z"
+    consequence: "Active execution resumed under choir-scheduling-and-candidate-proof-2026-08-21.md."
   evidence_refs:
-    - "docs/reports/choir-system-orientation-and-station-report-2026-08-25.md"
-    - "docs/evidence/effects-red-b14-ancestor-restore-2026-08-25.md"
-  blocker_or_risk: "None blocking suspension; computer-0333528... safely sealed; active execution is cleanup mission."
-  next_action: "Execute docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md."
+    - "docs/reports/choir-system-state-and-consensus-review-2026-08-27.md"
+  blocker_or_risk: "None blocking execution; staging microVM is online, bootstrapped, and proven with live Texture model revision."
+  next_action: "Enable propose_only mode and author candidate A inside CoSuper capsule on staging computer computer-aa7739a6c3f7ebec4e984bad8b086486."
 ---
 
 

@@ -647,6 +647,37 @@ CREATE INDEX IF NOT EXISTS idx_self_development_operations_trajectory ON self_de
 CREATE INDEX IF NOT EXISTS idx_self_development_operations_state ON self_development_operations(computer_id, state, updated_at);
 CREATE INDEX IF NOT EXISTS idx_self_development_operations_bundle ON self_development_operations(computer_id, bundle_digest);
 
+
+CREATE TABLE IF NOT EXISTS solitaire_games (
+	game_id          VARCHAR(255) PRIMARY KEY,
+	owner_id         VARCHAR(255) NOT NULL,
+	computer_id      VARCHAR(255) NOT NULL DEFAULT '',
+	state            VARCHAR(64) NOT NULL DEFAULT 'in_progress',
+	deck_seed        BIGINT NOT NULL DEFAULT 0,
+	tableau_json     LONGTEXT NOT NULL DEFAULT '[]',
+	foundations_json LONGTEXT NOT NULL DEFAULT '[]',
+	stock_json       LONGTEXT NOT NULL DEFAULT '[]',
+	waste_json       LONGTEXT NOT NULL DEFAULT '[]',
+	score            INT NOT NULL DEFAULT 0,
+	moves_count      INT NOT NULL DEFAULT 0,
+	created_at       DATETIME NOT NULL,
+	updated_at       DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_solitaire_owner ON solitaire_games (owner_id, computer_id);
+
+CREATE TABLE IF NOT EXISTS solitaire_moves (
+	move_id          VARCHAR(255) PRIMARY KEY,
+	game_id          VARCHAR(255) NOT NULL,
+	owner_id         VARCHAR(255) NOT NULL,
+	computer_id      VARCHAR(255) NOT NULL DEFAULT '',
+	move_seq         BIGINT NOT NULL,
+	move_type        VARCHAR(64) NOT NULL,
+	from_pile        VARCHAR(64) NOT NULL,
+	to_pile          VARCHAR(64) NOT NULL,
+	cards_json       LONGTEXT NOT NULL,
+	created_at       DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_solitaire_game_moves ON solitaire_moves (game_id, move_seq);
 CREATE INDEX IF NOT EXISTS idx_desktop_workspaces_owner_id ON desktop_workspaces(owner_id);
 CREATE INDEX IF NOT EXISTS idx_desktop_sessions_driver ON desktop_sessions(owner_id, desktop_id, driver_until);
 CREATE INDEX IF NOT EXISTS idx_desktop_app_instances_stack ON desktop_app_instances(owner_id, desktop_id, shared_stack_rank);

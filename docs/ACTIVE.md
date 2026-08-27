@@ -37,13 +37,13 @@ problem-documentation-first receipt
 ([evidence](evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md));
 host disk expansion remains an owner decision.
 
-## Suspended Definition — Scheduling Contract and Candidate Proof
+## Active Definition — Scheduling Contract and Candidate Proof
 
 [`definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`](definitions/choir-scheduling-and-candidate-proof-2026-08-21.md)
-is **suspended pending substrate overhauls**. Attempting to author and prove
-self-development candidates on an uncompacted, fragile staging computer with 200-iteration
-shell loops was an inverted dependency. It will be re-opened on a fresh, snapshot-backed,
-Yaegi-powered computer after the substrate overhauls and actor kernel land.
+is **active on staging**. Substrate overhauls, cleanup cutover, and Phase 1
+ArrivalOrdinal FIFO scheduling are deployed (`cc2cb702`). Active execution proceeds
+on fresh snapshot-backed staging computer `computer-aa7739a6c3f7ebec4e984bad8b086486`
+(`new@new.com`) with canonical event chain bootstrapped.
 
 ## Sealed Operation — Stabilize and Hold 0333528
 

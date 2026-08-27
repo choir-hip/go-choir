@@ -82,6 +82,8 @@ var replayAirworthinessEntries = map[string]ReplayObservationClass{
 	"podcast_subscriptions":           ReplayEmptyUntilSupported,
 	"og_edges":                        ReplayEventProjection,
 	"og_objects":                      ReplayEventProjection,
+	"solitaire_games":                 ReplayEventProjection,
+	"solitaire_moves":                 ReplayEventProjection,
 	"app_adoptions":                   ReplayRetiredAbsent,
 	"app_change_packages":             ReplayRetiredAbsent,
 	"candidate_package_intakes":       ReplayRetiredAbsent,
