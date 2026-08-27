@@ -497,11 +497,19 @@ func (rt *Runtime) ensureServingBaseline(ctx context.Context, computerID, baseli
 	if err != nil {
 		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
 	}
-	resolution, err := rt.selfdevRoute.ResolveComputerVersionRoute(ctx, slotID)
+	resolution, err := rt.selfdevRoute.ResolveComputerVersionRouteOrAbsent(ctx, slotID)
 	if err != nil {
 		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
 	}
-	manifest, err = updater.BuildBaselineManifest(baselineRoot, computerID, string(resolution.Slot.Current.CodeRef), string(resolution.Slot.Current.ArtifactProgramRef))
+	codeRef := string(resolution.Slot.Current.CodeRef)
+	if codeRef == "" || resolution.RouteAbsent {
+		codeRef = "code:genesis"
+	}
+	artifactRef := string(resolution.Slot.Current.ArtifactProgramRef)
+	if artifactRef == "" || resolution.RouteAbsent {
+		artifactRef = "artifact-program:genesis"
+	}
+	manifest, err = updater.BuildBaselineManifest(baselineRoot, computerID, codeRef, artifactRef)
 	if err != nil {
 		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
 	}
