@@ -490,24 +490,23 @@ func (rt *Runtime) ensureServingBaseline(ctx context.Context, computerID, baseli
 		rt.recordStartupManifest(manifest)
 		return manifest, nil
 	}
-	if strings.TrimSpace(baselineRoot) == "" || rt.selfdevUpdater == nil || strings.TrimSpace(rt.selfdevRealizationID) == "" || rt.selfdevRoute == nil {
+	if strings.TrimSpace(baselineRoot) == "" || rt.selfdevUpdater == nil || strings.TrimSpace(rt.selfdevRealizationID) == "" {
 		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
 	}
-	slotID, err := routeledger.RouteSlotID(rt.selfdevRouteOwnerID, rt.selfdevRouteDesktopID)
-	if err != nil {
-		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
-	}
-	resolution, err := rt.selfdevRoute.ResolveComputerVersionRouteOrAbsent(ctx, slotID)
-	if err != nil {
-		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
-	}
-	codeRef := string(resolution.Slot.Current.CodeRef)
-	if codeRef == "" || resolution.RouteAbsent {
-		codeRef = "code:genesis"
-	}
-	artifactRef := string(resolution.Slot.Current.ArtifactProgramRef)
-	if artifactRef == "" || resolution.RouteAbsent {
-		artifactRef = "artifact-program:genesis"
+	codeRef := "code:genesis"
+	artifactRef := "artifact-program:genesis"
+	if rt.selfdevRoute != nil {
+		slotID, err := routeledger.RouteSlotID(rt.selfdevRouteOwnerID, rt.selfdevRouteDesktopID)
+		if err == nil {
+			if resolution, err := rt.selfdevRoute.ResolveComputerVersionRouteOrAbsent(ctx, slotID); err == nil && !resolution.RouteAbsent {
+				if rCode := string(resolution.Slot.Current.CodeRef); rCode != "" {
+					codeRef = rCode
+				}
+				if rArt := string(resolution.Slot.Current.ArtifactProgramRef); rArt != "" {
+					artifactRef = rArt
+				}
+			}
+		}
 	}
 	manifest, err = updater.BuildBaselineManifest(baselineRoot, computerID, codeRef, artifactRef)
 	if err != nil {

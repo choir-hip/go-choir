@@ -284,6 +284,91 @@ func TestEnsureServingBaselineImportsGenesisBaselineWhenRouteSlotAbsent(t *testi
 	}
 }
 
+func TestEnsureServingBaselineImportsBaselineWhenRouteClientNil(t *testing.T) {
+	computerID := "computer-nil-route-bootstrap"
+	realizationID := "realization-nil-route-bootstrap"
+	updaterRoot := filepath.Join(t.TempDir(), "updater")
+	baselineRoot := filepath.Join(t.TempDir(), "baseline")
+	if err := os.MkdirAll(filepath.Join(baselineRoot, "frontend", "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(baselineRoot, "frontend", "index.html"), []byte("nil-route-baseline"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(baselineRoot, "frontend", "assets", "app.js"), []byte("nil-route-asset"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	socketPath := filepath.Join("/tmp", "choir-surface-nil-route-"+strings.ReplaceAll(t.Name(), "/", "-")+".sock")
+	_ = os.Remove(socketPath)
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var importCalls atomic.Int32
+	var importedCodeRef, importedArtifactRef string
+	updaterServer := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/import-baseline" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		var request updater.BaselineImportRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		importCalls.Add(1)
+		importedCodeRef = request.Manifest.CodeRef
+		importedArtifactRef = request.Manifest.ArtifactProgramRef
+		releaseDir := filepath.Join(updaterRoot, "releases", request.Manifest.ContentDigest)
+		for _, file := range request.Manifest.Files {
+			source := filepath.Join(baselineRoot, filepath.FromSlash(file.Path))
+			target := filepath.Join(releaseDir, filepath.FromSlash(file.Path))
+			_ = os.MkdirAll(filepath.Dir(target), 0o700)
+			raw, _ := os.ReadFile(source)
+			_ = os.WriteFile(target, raw, 0o644)
+		}
+		manifestBytes, _ := json.Marshal(request.Manifest)
+		_ = os.WriteFile(filepath.Join(releaseDir, "release-manifest.json"), manifestBytes, 0o644)
+		_ = os.MkdirAll(updaterRoot, 0o700)
+		_ = os.Symlink(releaseDir, filepath.Join(updaterRoot, "current"))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(request.Manifest)
+	})}
+	go func() { _ = updaterServer.Serve(listener) }()
+	defer func() {
+		_ = updaterServer.Shutdown(context.Background())
+		_ = os.Remove(socketPath)
+	}()
+
+	client, err := updater.NewClient(socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := &Runtime{
+		cfg:                  provideriface.Config{ComputerID: computerID},
+		selfdevUpdater:       client,
+		selfdevUpdaterRoot:   updaterRoot,
+		selfdevComputerID:    computerID,
+		selfdevRealizationID: realizationID,
+		selfdevRoute:         nil, // route client nil
+	}
+
+	manifest, err := rt.ensureServingBaseline(context.Background(), computerID, baselineRoot)
+	if err != nil {
+		t.Fatalf("nil-route baseline bootstrap failed: %v", err)
+	}
+	if importCalls.Load() != 1 {
+		t.Fatalf("baseline import calls=%d, want 1", importCalls.Load())
+	}
+	if importedCodeRef != "code:genesis" || importedArtifactRef != "artifact-program:genesis" {
+		t.Fatalf("unexpected refs: code=%q artifact=%q", importedCodeRef, importedArtifactRef)
+	}
+	if manifest.CodeRef != "code:genesis" || manifest.ArtifactProgramRef != "artifact-program:genesis" {
+		t.Fatalf("unexpected manifest refs: %+v", manifest)
+	}
+}
+
 func surfaceBootstrapRoute(t *testing.T, ownerID, desktopID string) (string, vmctl.RouteResolution) {
 	t.Helper()
 	createdAt := time.Date(2026, 8, 18, 0, 0, 0, 0, time.UTC)
