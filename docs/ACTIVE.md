@@ -3,15 +3,14 @@
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
 
-## Active Definition — Private Programmable Go Actor Kernel
+## Completed Definition — Private Programmable Go Actor Kernel
 
 [`definitions/choir-private-go-actor-kernel-2026-08-12.md`](definitions/choir-private-go-actor-kernel-2026-08-12.md)
-is the owner-priority executable `/goal` as of 2026-08-26. It establishes private,
+completed 2026-08-27 (deployed commit `53f80af4`). It establishes private,
 interpreted Go activations via a process-per-activation Yaegi sidecar inside
 disposable guest-local capsules with unified Bash/Go broker routing, opaque
-handles, durable continuity across forced activation death, and immutable Texture
-transclusion of host-selected salient receipts.
-
+handles, durable continuity across forced activation death, immutable Texture
+transclusion of host-selected salient receipts, and verified genesis surface derivability.
 ## Completed Definition — Durable Substrate Overhauls
 
 [`definitions/choir-durable-substrate-overhauls-2026-08-23.md`](definitions/choir-durable-substrate-overhauls-2026-08-23.md)

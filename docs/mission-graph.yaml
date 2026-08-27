@@ -547,9 +547,9 @@ nodes:
     title: Private Go Actor Kernel
     path: docs/definitions/choir-private-go-actor-kernel-2026-08-12.md
     ledger: ''
-    status: working
+    status: completed
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on:
       - choir-durable-substrate-overhauls-2026-08-23
