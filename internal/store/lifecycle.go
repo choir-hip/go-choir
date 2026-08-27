@@ -1305,6 +1305,19 @@ func (s *Store) ListPendingLifecycleUpdates(ctx context.Context, ownerID, comput
 		}
 	}
 	sort.Slice(updates, func(i, j int) bool {
+		// Scheduling contract (I26): ArrivalOrdinal takes precedence over trajectory-local
+		// ReducerSeq to guarantee cross-trajectory FIFO selection.
+		if updates[i].ArrivalOrdinal != updates[j].ArrivalOrdinal {
+			if updates[i].ArrivalOrdinal > 0 && updates[j].ArrivalOrdinal > 0 {
+				return updates[i].ArrivalOrdinal < updates[j].ArrivalOrdinal
+			}
+			if updates[i].ArrivalOrdinal > 0 {
+				return true
+			}
+			if updates[j].ArrivalOrdinal > 0 {
+				return false
+			}
+		}
 		if updates[i].ReducerSeq != updates[j].ReducerSeq {
 			return updates[i].ReducerSeq < updates[j].ReducerSeq
 		}

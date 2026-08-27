@@ -672,40 +672,57 @@ func (e *Executor) Exec(ctx context.Context, agentRunID, handle string, request 
 	if err != nil {
 		return ExecResult{}, err
 	}
-	result, err := caps.Exec(ctx, capability, request)
-	if err != nil {
-		return ExecResult{}, err
-	}
+	// Detect secret-bearing command BEFORE any dispatch. A secret-bearing
+	// command must never execute; refusing after execution would let it
+	// mutate/exfiltrate. No execution attempt is admitted for secret-bearing
+	// commands.
 	if len(computerevent.DetectPrivateSecrets([]byte(request.Command))) != 0 {
 		return ExecResult{}, fmt.Errorf("capsule: secret-bearing command cannot produce auditable execution evidence")
 	}
-	worktreeDigest, err := digestCapsuleWorktree(ctx, caps)
+
+	result, err := caps.Exec(ctx, capability, request)
+	exitCode := 0
+	stdoutDigest := computerevent.DigestBytes([]byte(result.Stdout))
+	stderrDigest := computerevent.DigestBytes([]byte(result.Stderr))
 	if err != nil {
-		return ExecResult{}, err
+		exitCode = 1
+		if result.ExitCode != 0 {
+			exitCode = result.ExitCode
+		}
+	} else {
+		exitCode = result.ExitCode
+	}
+
+	worktreeDigest, errWorktree := digestCapsuleWorktree(ctx, caps)
+	if errWorktree != nil {
+		worktreeDigest = ""
 	}
 	receipt := ExecutionReceipt{
 		AgentRunID: agentRunID, CapabilityHandleDigest: computerevent.DigestBytes([]byte(handle)),
-		CapsuleID: caps.ID, Command: request.Command, Cwd: request.Cwd, ExitCode: result.ExitCode,
-		StdoutDigest: computerevent.DigestBytes([]byte(result.Stdout)), StderrDigest: computerevent.DigestBytes([]byte(result.Stderr)),
+		CapsuleID: caps.ID, Command: request.Command, Cwd: request.Cwd, ExitCode: exitCode,
+		StdoutDigest: stdoutDigest, StderrDigest: stderrDigest,
 		WorktreeDigest: worktreeDigest, SourceTreeDigest: caps.SourceSnapshotDigest, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
-	canonical, err := computerevent.CanonicalJSON(receipt)
-	if err != nil {
-		return ExecResult{}, err
+	canonical, errJSON := computerevent.CanonicalJSON(receipt)
+	if errJSON != nil {
+		return result, errJSON
 	}
 	receipt.ReceiptRef = "capsule-exec:sha256:" + computerevent.DigestBytes(canonical)
-	storedCanonical, err := computerevent.CanonicalJSON(receipt)
-	if err != nil {
-		return ExecResult{}, err
+	storedCanonical, errStored := computerevent.CanonicalJSON(receipt)
+	if errStored != nil {
+		return result, errStored
 	}
-	if err := e.persistReceiptArtifact("execution", receipt.ReceiptRef, storedCanonical); err != nil {
-		return ExecResult{}, err
+	if errPersist := e.persistReceiptArtifact("execution", receipt.ReceiptRef, storedCanonical); errPersist != nil {
+		return result, errPersist
 	}
 	e.mu.Lock()
 	e.executionReceipts[receipt.ReceiptRef] = receipt
 	e.mu.Unlock()
 	result.ReceiptRef = receipt.ReceiptRef
-	return result, nil
+	if result.ExitCode == 0 && err != nil {
+		result.ExitCode = exitCode
+	}
+	return result, err
 }
 
 func digestCapsuleWorktree(ctx context.Context, caps *Capsule) (string, error) {

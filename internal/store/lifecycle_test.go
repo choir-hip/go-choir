@@ -3514,3 +3514,91 @@ func TestDispatchWorkerUpdateAllowsAssignedCoSuperPersistentSuperReport(t *testi
 		t.Fatalf("unsigned CoSuper mailbox dispatch error = %v, want ErrLifecycleAuthorityRequired", err)
 	}
 }
+
+func TestListPendingLifecycleUpdatesArrivalOrdinalSort(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().UTC()
+	targetAgent := "super:" + start.OwnerID
+
+	// update1: higher ReducerSeq (50), earlier ArrivalOrdinal (10)
+	update1 := types.CoagentSourcePacket{
+		UpdateID:         "update-arrival-1",
+		OwnerID:          start.OwnerID,
+		ComputerID:       start.ComputerID,
+		AgentID:          "co-super:assigned-a",
+		TargetAgentID:    targetAgent,
+		ChannelID:        targetAgent,
+		TrajectoryID:     start.TrajectoryID,
+		Role:             "co-super",
+		Direction:        types.LifecyclePacketDirectionProducerReport,
+		LifecycleVersion: 1,
+		ReducerSeq:       50,
+		ArrivalOrdinal:   10,
+		Disposition:      types.UpdatePending,
+		Packet: types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "evidence_update",
+			Summary:       "first arrival",
+		},
+		Content:   "first arrival",
+		CreatedAt: now,
+	}
+
+	// update2: lower ReducerSeq (10), later ArrivalOrdinal (20)
+	update2 := types.CoagentSourcePacket{
+		UpdateID:         "update-arrival-2",
+		OwnerID:          start.OwnerID,
+		ComputerID:       start.ComputerID,
+		AgentID:          "co-super:assigned-a",
+		TargetAgentID:    targetAgent,
+		ChannelID:        targetAgent,
+		TrajectoryID:     start.TrajectoryID,
+		Role:             "co-super",
+		Direction:        types.LifecyclePacketDirectionProducerReport,
+		LifecycleVersion: 1,
+		ReducerSeq:       10,
+		ArrivalOrdinal:   20,
+		Disposition:      types.UpdatePending,
+		Packet: types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "evidence_update",
+			Summary:       "second arrival",
+		},
+		Content:   "second arrival",
+		CreatedAt: now,
+	}
+	meta1 := map[string]any{"target_agent_id": targetAgent, "trajectory_id": start.TrajectoryID}
+	meta2 := map[string]any{"target_agent_id": targetAgent, "trajectory_id": start.TrajectoryID}
+	obj1, err := lifecycleObject(ogKindWorkerUpdate, start.OwnerID, start.ComputerID, update1.UpdateID, update1, meta1, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj2, err := lifecycleObject(ogKindWorkerUpdate, start.OwnerID, start.ComputerID, update2.UpdateID, update2, meta2, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ogStore.PutObject(ctx, obj1); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ogStore.PutObject(ctx, obj2); err != nil {
+		t.Fatal(err)
+	}
+
+	pending, err := s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, targetAgent, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 2 {
+		t.Fatalf("expected 2 pending updates, got %d", len(pending))
+	}
+	if pending[0].UpdateID != "update-arrival-1" || pending[1].UpdateID != "update-arrival-2" {
+		t.Fatalf("expected ArrivalOrdinal ordering (update-arrival-1 then update-arrival-2), got: %s, %s",
+			pending[0].UpdateID, pending[1].UpdateID)
+	}
+}

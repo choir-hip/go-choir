@@ -129,26 +129,19 @@ D-ROUTE); `choir-autoputer-completion-2026-07-14.md` and
 `og-dolt-heresy-completion-2026-07-08.md` (settled storage/D-ROUTE/H031).
 None is executable unless explicitly promoted in the current registry.
 
-## Ratified Successor Definitions — Sequenced, Not Yet Executable
+## Next Phase — Scheduling Contract and Candidate Proof
 
-[`definitions/choir-durable-substrate-overhauls-2026-08-23.md`](definitions/choir-durable-substrate-overhauls-2026-08-23.md)
-is the owner-ratified immediate successor for the 4-track substrate overhauls (Track K key
-escrow, Track F file-CAS + periodic event watermarks, Track M host MTA spool +
-guest Maildir, and Assurance daily restore drills). It is sequenced directly after
-`choir-substrate-cleanup-and-cutover-2026-08-25.md` completes and executes on a fresh
-staging computer.
+[`definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`](definitions/choir-scheduling-and-candidate-proof-2026-08-21.md)
+is the owner-ratified successor for self-development candidate authorship and
+proof on a fresh, snapshot-backed staging computer using the completed and verified
+Durable Substrate Overhauls, Genesis Surface Derivability, and Private Go Actor Kernel.
 
-[`definitions/choir-private-go-actor-kernel-2026-08-12.md`](definitions/choir-private-go-actor-kernel-2026-08-12.md)
-is the owner-ratified successor for the RLM authoring upgrade. It is sequenced
-after the Durable Substrate Overhauls. It converges Researcher and CoSuper on one
-durable-actor kernel with private disposable model-authored Go activations inside
-isolated guest capsules.
 ## Draft Successor Definitions — Not Executable
 
 Draft successors are blocked hypotheses, not schedules or implementation
 authority. Their source Definitions and three registries retain constraints:
-`definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md`
-and `definitions/choir-in-choir-computer-control-draft-2026-07-18.md`.
+[`definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md`](definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md)
+and [`definitions/choir-in-choir-computer-control-draft-2026-07-18.md`](definitions/choir-in-choir-computer-control-draft-2026-07-18.md).
 Neither authorizes implementation, host access, raw vmctl, SSH, shared
 credentials, candidate VMs, or promotion without separate owner ratification.
 
@@ -163,12 +156,9 @@ superseded, or historical as stated by their source Definitions, not entrypoints
 
 ## Invocation
 
-Invoke the active Durable Substrate Overhauls through
-`/goal docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md` (Tracks K, F, M, Assurance),
-followed by the Private-Go Actor Kernel through
-`/goal docs/definitions/choir-private-go-actor-kernel-2026-08-12.md`.
-Self-development candidate proof resumes only after the substrate and actor kernel are deployed.
-
+Invoke the active self-development scheduling and candidate proof via
+`/goal docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`.
+Self-development candidate proof executes on the validated staging substrate.
 ## Unowned External Work
 
 No Definition owns runtime dissolution, broader Wire work, external capsules,

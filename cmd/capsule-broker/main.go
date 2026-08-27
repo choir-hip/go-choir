@@ -396,7 +396,9 @@ func (b *Broker) handleExec(ctx context.Context, cap *capsule.Capability, params
 	}
 	cmd.Env = append(brokerEnv, p.Env...)
 
-	var stdout, stderr []byte
+	var stdout, stderr cappedBuffer
+	stdout.max = goEvalMaxOutputBytes
+	stderr.max = goEvalMaxOutputBytes
 	var execErr error
 	if p.Stdin != "" {
 		stdin, pipeErr := cmd.StdinPipe()
@@ -407,21 +409,18 @@ func (b *Broker) handleExec(ctx context.Context, cap *capsule.Capability, params
 			stdin.Write([]byte(p.Stdin))
 			stdin.Close()
 		}()
-		stdout, execErr = cmd.CombinedOutput()
-	} else {
-		cmd.Stdout = &stdoutWriter{&stdout}
-		cmd.Stderr = &stderrWriter{&stderr}
-		execErr = cmd.Run()
 	}
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	execErr = cmd.Run()
 
 	result := capsule.ExecResult{
 		ExitCode:  0,
 		SessionID: p.SessionID,
-		Duration:  0, // TODO: track duration
-		Stdout:    string(stdout),
-		Stderr:    string(stderr),
+		Duration:  0,
+		Stdout:    stdout.String(),
+		Stderr:    stderr.String(),
 	}
-
 	if execErr != nil {
 		if exitErr, ok := execErr.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
