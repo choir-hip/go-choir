@@ -126,29 +126,31 @@ measures:
     cannot_prove: "tape reproducibility"
 
 now:
-  status: working
-  slice: "Step 3: Land code repairs, monitor CI and Node B staging deployment"
+  status: complete
+  slice: "Genesis Computer Surface & Staged SPA Derivability proven on staging"
   reconciliation:
-    canonical_ref: main@93031849f1db12e6945037d04ea7e9095ae511e6
-    deploy_identity: staging proxy 05cc87b6d228eb17451e721ec4b3cbcf3774139a
-    worktree: "clean code repairs in internal/autoputer, internal/proxy, internal/updater, internal/agentcore"
+    canonical_ref: main@53f80af4d482d7de9e3341b62bb4d70ed3841c44
+    deploy_identity: staging proxy 53f80af4d482d7de9e3341b62bb4d70ed3841c44 observed via https://choir.news/health at 2026-08-27T06:58Z
+    worktree: clean
   candidate:
     id: genesis-surface-derivability-v1
-    disposition: active
+    disposition: accepted
     digest: "sha256:genesis-surface-derivability-v1"
   decision:
-    selected: "Implemented asset 404 fail-closed in autoputer and proxy; added VerifyCurrentRelease in updater and rematerialize. Ready for staging deployment and browser acceptance."
-    kind: implementation_slice
-    source_ref: "docs/definitions/choir-computer-recovery-and-genesis-surface-2026-08-26.md"
-    recorded_at: 2026-08-27T00:20:00Z
+    selected: "All acceptance criteria verified on staging: asset 404 fail-closed, on-disk file verification, route-independent baseline import, systemd ordering, and real browser signup/settings/reload on choir.news passed with zero errors."
+    kind: terminal_acceptance
+    source_ref: "frontend/tests/genesis-settings-staging.spec.js"
+    recorded_at: 2026-08-27T07:05:00Z
   blocker: none
-  risk: "Staging deploy concurrency during multi-commit landing loop."
+  risk: none
   evidence_refs:
     - docs/problems/genesis-computer-surface-underivable-spa-2026-08-26.md
     - internal/autoputer/computer_surface_test.go
     - internal/proxy/computer_surface_test.go
     - internal/updater/updater_test.go
-  next_action: "Commit and push code repairs to main, monitor CI and Node B staging deploy, then run deployed browser acceptance."
+    - internal/agentcore/selfdev_surface_boot_test.go
+    - frontend/tests/genesis-settings-staging.spec.js
+  next_action: "Resume Private Go Actor Kernel (Yaegi) live sealed CoSuper activation proof on the validated staging substrate."
 
 receipts:
   - id: problem-documented-2026-08-26
@@ -159,4 +161,14 @@ receipts:
     kind: consensus_receipt
     ref: .agentic-consensus/agentic-consensus-20260827-000032/manifest.tsv
     recorded_at: 2026-08-27T00:15:00Z
+  - id: staging-deployed-53f80af4
+    kind: deploy_receipt
+    commit: "53f80af4d482d7de9e3341b62bb4d70ed3841c44"
+    ci_run: "33046393239"
+    recorded_at: 2026-08-27T06:58:44Z
+  - id: browser-acceptance-proof
+    kind: e2e_acceptance_receipt
+    ref: frontend/tests/genesis-settings-staging.spec.js
+    result: "pass (signup + desktop + settings dynamic chunks + reload 200 OK)"
+    recorded_at: 2026-08-27T07:02:00Z
 ---
