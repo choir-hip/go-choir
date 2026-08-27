@@ -67,19 +67,24 @@ func (h *ComputerSurface) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ComputerSurface) resolvedRoot() (string, error) {
-	if h == nil || strings.TrimSpace(h.Root) == "" {
-		return "", fmt.Errorf("self-development checkpoint: served SPA is underivable")
+	if h != nil && strings.TrimSpace(h.Root) != "" {
+		root, err := filepath.Abs(h.Root)
+		if err == nil {
+			index := filepath.Join(root, "index.html")
+			if info, err := os.Stat(index); err == nil && !info.IsDir() {
+				return root, nil
+			}
+		}
 	}
-	root, err := filepath.Abs(h.Root)
-	if err != nil {
-		return "", fmt.Errorf("self-development checkpoint: served SPA is underivable")
+	baselineRoot := filepath.Clean(strings.TrimSpace(os.Getenv("CHOIR_BASELINE_RELEASE_ROOT")))
+	if strings.HasPrefix(baselineRoot, "/nix/store/") {
+		frontendDir := filepath.Join(baselineRoot, "frontend")
+		index := filepath.Join(frontendDir, "index.html")
+		if info, err := os.Stat(index); err == nil && !info.IsDir() {
+			return frontendDir, nil
+		}
 	}
-	index := filepath.Join(root, "index.html")
-	info, err := os.Stat(index)
-	if err != nil || info.IsDir() {
-		return "", fmt.Errorf("self-development checkpoint: served SPA is underivable")
-	}
-	return root, nil
+	return "", fmt.Errorf("self-development checkpoint: served SPA is underivable")
 }
 
 func RegisterComputerSurface(s interface{ Handle(string, http.Handler) }, surface *ComputerSurface) {
