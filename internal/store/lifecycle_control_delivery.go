@@ -60,6 +60,34 @@ func metadataStringValueStore(metadata map[string]any, key string) string {
 	return strings.TrimSpace(value)
 }
 
+// lifecycleWorkerUpdateScanCap bounds choir.worker_update bodies loaded for
+// one exact-run delivered-control listing. ReadObjectSnapshot of the whole
+// owner/computer graph (runs, events, texture) OOMs a 4 GiB guest.
+const lifecycleWorkerUpdateScanCap = 65536
+
+func (s *Store) listWorkerUpdateObjects(ctx context.Context, ownerID, computerID string) ([]objectgraph.Object, error) {
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("lifecycle worker updates: object graph not initialized")
+	}
+	objects, err := graph.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:       ogKindWorkerUpdate,
+		OwnerID:    ownerID,
+		ComputerID: computerID,
+		Limit:      lifecycleWorkerUpdateScanCap + 1,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(objects) > lifecycleWorkerUpdateScanCap {
+		return nil, fmt.Errorf("lifecycle worker updates: scan cap %d exceeded for owner %s computer %s", lifecycleWorkerUpdateScanCap, ownerID, computerID)
+	}
+	return objects, nil
+}
+
 func normalizeLifecycleControlActivationRefresh(refresh *types.LifecycleControlActivationRefresh) error {
 	if refresh == nil {
 		return nil
@@ -492,22 +520,12 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 		return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 	}
 
-	graph := s.ogReadStore
-	if graph == nil {
-		graph = s.ogStore
-	}
-	if graph == nil {
-		return LifecycleDeliveredPacketPage{}, fmt.Errorf("lifecycle delivered controls: object graph not initialized")
-	}
-	objects, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	objects, err := s.listWorkerUpdateObjects(ctx, ownerID, computerID)
 	if err != nil {
 		return LifecycleDeliveredPacketPage{}, err
 	}
 	updates := make([]types.CoagentSourcePacket, 0)
 	for _, obj := range objects {
-		if obj.ObjectKind != ogKindWorkerUpdate {
-			continue
-		}
 		update, decodeErr := decodeLifecycleObject[types.CoagentSourcePacket](obj)
 		if decodeErr != nil {
 			return LifecycleDeliveredPacketPage{}, decodeErr
@@ -627,22 +645,12 @@ func (s *Store) ListHistoricalLifecycleControlsDeliveredToRun(ctx context.Contex
 		!persistentSuperHistoricalReportRunStateAllowed(run.State) {
 		return nil, ErrLifecycleInvalidTransition
 	}
-	graph := s.ogReadStore
-	if graph == nil {
-		graph = s.ogStore
-	}
-	if graph == nil {
-		return nil, fmt.Errorf("historical lifecycle controls: object graph not initialized")
-	}
-	objects, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	objects, err := s.listWorkerUpdateObjects(ctx, ownerID, computerID)
 	if err != nil {
 		return nil, err
 	}
 	controls := make([]types.CoagentSourcePacket, 0)
 	for _, obj := range objects {
-		if obj.ObjectKind != ogKindWorkerUpdate {
-			continue
-		}
 		control, decodeErr := decodeLifecycleObject[types.CoagentSourcePacket](obj)
 		if decodeErr != nil {
 			return nil, decodeErr

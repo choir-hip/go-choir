@@ -572,6 +572,13 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 			(passivatedReason != "runtime_restarted" && passivatedReason != runtimeInjectionAppendFailurePassivationReason) {
 			continue
 		}
+		if strings.TrimSpace(run.TrajectoryID) != "" {
+			// Super delivery requires empty TrajectoryID. Listing packets for a
+			// tombstone used to ReadObjectSnapshot the whole computer.
+			log.Printf("runtime: skip restarted persistent-Super control run %s: non-empty trajectory_id", run.RunID)
+			continue
+		}
+		log.Printf("runtime: persistent-Super rewarm validate run=%s", run.RunID)
 		controls, readErr := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, run)
 		if readErr != nil {
 			if errors.Is(readErr, store.ErrNotFound) || strings.Contains(readErr.Error(), "not found") {

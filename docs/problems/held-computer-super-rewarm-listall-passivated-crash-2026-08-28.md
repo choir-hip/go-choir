@@ -101,3 +101,19 @@ After deploy: product-path start, guest `commit=HEAD`, observability
 shows `runtime: started` plus `boot persistent-Super rewarm owner-scoped`
 and `boot terminal outcome owner-scoped`, `deployed_at` does not reset
 for ≥3 minutes, and no 502 recycle.
+
+## 6. Landing (2026-08-28T10:08Z)
+
+`fb1c9e93` deployed `2026-08-28T10:07:52Z` (force-deploy CI `33160584506`).
+Active VM refresh epoch **817**. Observability:
+
+- `10:08:12` `boot persistent-Super rewarm owner-scoped` `candidates=27`
+- skip tombstones `05e9537e-…` and `5c5a2f9d-…`
+- no `ListAllRunsByState` log
+- no dispatched, no `runtime: started`
+- `10:08:42` process dead; host `degraded` epoch 817
+
+The owner-scoped passivated Super header list held. Death moved to
+`ListLifecycleControlsDeliveredToRunPage` → `ReadObjectSnapshot` of every
+`og_objects` body for the owner+computer. See
+`held-computer-super-rewarm-snapshot-crash-2026-08-28`.

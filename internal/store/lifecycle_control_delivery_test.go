@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -299,5 +301,43 @@ func TestQueueLifecycleUpdateDigestPreservesHistoricalShape(t *testing.T) {
 	reportDigest, err := ComputeQueuePersistentSuperReportDigest(extended)
 	if err != nil || reportDigest == historical {
 		t.Fatalf("persistent Super report lacks distinct digest domain: historical=%s report=%s err=%v", historical, reportDigest, err)
+	}
+}
+
+func TestListLifecycleControlsDeliveredToRunDoesNotLoadOwnerSnapshot(t *testing.T) {
+	s, start, caller, researcherWork := setupLifecycleTextureTargetFixture(t)
+	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
+	req.CommandID = "turn-kind-scoped-delivery"
+	req.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-kind-scoped", researcherWork.AssignedAgentID, researcherWork.WorkItemID)}
+	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
+	turn, err := s.ApplyTextureTurn(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := s.GetLifecycleRun(context.Background(), start.OwnerID, start.ComputerID, "run-researcher-target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bind := bindControlRequestForTest(t, s, start, run, turn.Controls)
+	if _, err := s.BindLifecycleControlDelivery(context.Background(), bind); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	for i := 0; i < 32; i++ {
+		id, err := objectgraph.BuildCanonicalID(objectgraph.ObjectKind("choir.event"), start.OwnerID, fmt.Sprintf("noise-%d", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.ogStore.PutObject(context.Background(), objectgraph.Object{
+			CanonicalID: id, ObjectKind: "choir.event", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+			VersionID: "v1", ContentHash: "sha256:test", Body: []byte(`{"kind":"noise"}`), Metadata: json.RawMessage(`{}`),
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	delivered, err := s.ListLifecycleControlsDeliveredToRun(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID, run.AgentID, run.RunID, 100)
+	if err != nil || len(delivered) != 1 || delivered[0].UpdateID != turn.Controls[0].UpdateID {
+		t.Fatalf("kind-scoped delivered control = %+v, %v", delivered, err)
 	}
 }
