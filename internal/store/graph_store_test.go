@@ -475,6 +475,54 @@ func TestListRecentRunsByOwnerLoadsRequestedChildrenOnly(t *testing.T) {
 	}
 }
 
+func TestListPassivatedPersistentSuperControlRunsByOwnerLoadsSuperOnly(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := "owner-passivated-super"
+	superRun := types.RunRecord{
+		RunID: "run-passivated-super", AgentID: "super:" + ownerID, OwnerID: ownerID,
+		ComputerID: "autoputer-1", AgentProfile: "super", AgentRole: "super",
+		State: types.RunPassivated, CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{"request_source": "lifecycle_texture_control", "passivated_reason": "runtime_restarted"},
+	}
+	researcher := types.RunRecord{
+		RunID: "run-passivated-researcher", AgentID: "researcher:passivated", OwnerID: ownerID,
+		ComputerID: "autoputer-1", AgentProfile: "researcher", AgentRole: "researcher",
+		State: types.RunPassivated, CreatedAt: now, UpdatedAt: now,
+	}
+	foreign := types.RunRecord{
+		RunID: "run-passivated-super-foreign", AgentID: "super:owner-passivated-super-foreign",
+		OwnerID: "owner-passivated-super-foreign", ComputerID: "autoputer-1",
+		AgentProfile: "super", AgentRole: "super", State: types.RunPassivated,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	completed := types.RunRecord{
+		RunID: "run-completed-super", AgentID: "super:" + ownerID, OwnerID: ownerID,
+		ComputerID: "autoputer-1", AgentProfile: "super", AgentRole: "super",
+		State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
+	}
+	for _, rec := range []types.RunRecord{superRun, researcher, foreign, completed} {
+		if err := s.CreateRunOG(ctx, rec); err != nil {
+			t.Fatalf("create %s: %v", rec.RunID, err)
+		}
+	}
+	got, err := s.ListPassivatedPersistentSuperControlRunsByOwner(ctx, ownerID, "autoputer-1", "", 16)
+	if err != nil {
+		t.Fatalf("list passivated super runs: %v", err)
+	}
+	if len(got) != 1 || got[0].RunID != superRun.RunID {
+		t.Fatalf("passivated super runs = %+v, want [%s]", got, superRun.RunID)
+	}
+	byAgent, err := s.ListPassivatedPersistentSuperControlRunsByOwner(ctx, ownerID, "autoputer-1", "super:"+ownerID, 16)
+	if err != nil {
+		t.Fatalf("list passivated super runs by agent: %v", err)
+	}
+	if len(byAgent) != 1 || byAgent[0].RunID != superRun.RunID {
+		t.Fatalf("passivated super runs by agent = %+v, want [%s]", byAgent, superRun.RunID)
+	}
+}
+
 func TestOGAppendAndListEvents(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

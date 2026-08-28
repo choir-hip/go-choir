@@ -859,6 +859,80 @@ func (s *Store) ListRecentRunsByOwner(ctx context.Context, ownerID, computerID s
 	return runs, nil
 }
 
+const passivatedSuperRunsByOwnerDefaultLimit = 1024
+
+// ListPassivatedPersistentSuperControlRunsByOwner returns passivated
+// persistent-Super runs for one owner. It lists og_objects headers through
+// idx_og_objects_kind_owner (no metadata JSON_EXTRACT, no body), then
+// GetObject only for passivated Super rows. Callers apply request_source
+// and passivated_reason. Historical non-Super passivated runs and other
+// owners are not loaded.
+func (s *Store) ListPassivatedPersistentSuperControlRunsByOwner(ctx context.Context, ownerID, computerID, agentID string, limit int) ([]types.RunRecord, error) {
+	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
+	if ownerID == "" {
+		return nil, fmt.Errorf("list passivated super runs: owner_id is required")
+	}
+	if limit <= 0 {
+		limit = passivatedSuperRunsByOwnerDefaultLimit
+	}
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("store: object graph not initialized")
+	}
+	refs, err := graph.ListObjectRefsByKindOwner(ctx, string(ogKindRun), ownerID, limit)
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]types.RunRecord, 0)
+	for _, ref := range refs {
+		if ref.Tombstone {
+			continue
+		}
+		if computerID != "" && strings.TrimSpace(ref.ComputerID) != "" && strings.TrimSpace(ref.ComputerID) != computerID {
+			continue
+		}
+		meta := map[string]any{}
+		if len(ref.Metadata) > 0 {
+			if err := json.Unmarshal(ref.Metadata, &meta); err != nil {
+				return nil, fmt.Errorf("list passivated super runs: decode metadata %s: %w", ref.CanonicalID, err)
+			}
+		}
+		if ogMetadataText(meta, "state") != string(types.RunPassivated) {
+			continue
+		}
+		headerAgentID := ogMetadataText(meta, "agent_id")
+		if agentID != "" {
+			if headerAgentID != agentID {
+				continue
+			}
+		} else {
+			profile := strings.ToLower(ogMetadataText(meta, "agent_profile"))
+			if profile != "super" && !strings.HasPrefix(headerAgentID, "super:") {
+				continue
+			}
+		}
+		obj, err := graph.GetObject(ctx, ref.CanonicalID)
+		if err != nil {
+			return nil, fmt.Errorf("list passivated super runs: get %s: %w", ref.CanonicalID, err)
+		}
+		var rec types.RunRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.State != types.RunPassivated {
+			continue
+		}
+		if agentID != "" && strings.TrimSpace(rec.AgentID) != agentID {
+			continue
+		}
+		runs = append(runs, rec)
+	}
+	return runs, nil
+}
+
 // ListAllRunsOG lists all runs from the object graph, ordered by
 // created_at descending.
 

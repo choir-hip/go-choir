@@ -129,3 +129,13 @@ Follow-up fix: production boot repair lists **headers** via
 `idx_og_objects_kind_owner` (`ListObjectRefsByKindOwner`) and
 `GetObject` only for recent terminal children with `requested_by_run_id`.
 Do not JSON_EXTRACT the completed-state keyset at boot.
+
+## 7. Live proof that owner-scoped terminal repair never ran (2026-08-28T09:20Z)
+
+`3a38a6e8` is on the guest (`deployed_at=2026-08-28T09:20:36Z`). Product-path
+start receipt `01a047ab` epoch **816**. Super rewarm still
+`ListAllRunsByState(passivated)` twice. Process died ~35s after listen,
+after skipping Super tombstones `05e9537e-…` and `5c5a2f9d-…`, **before**
+`boot terminal outcome owner-scoped` and **before** `runtime: started`.
+
+See `held-computer-super-rewarm-listall-passivated-crash-2026-08-28`.

@@ -548,7 +548,17 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 }
 
 func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Context, ownerID, agentID string) (*types.RunRecord, bool, error) {
-	runs, err := rt.store.ListAllRunsByState(ctx, types.RunPassivated)
+	var runs []types.RunRecord
+	var err error
+	computerID := ""
+	if rt != nil {
+		computerID = strings.TrimSpace(rt.TextureComputerID())
+	}
+	if strings.TrimSpace(ownerID) != "" {
+		runs, err = rt.store.ListPassivatedPersistentSuperControlRunsByOwner(ctx, ownerID, computerID, agentID, bootPersistentSuperRewarmLimit)
+	} else {
+		runs, err = rt.store.ListAllRunsByState(ctx, types.RunPassivated)
+	}
 	if err != nil {
 		return nil, false, fmt.Errorf("list restarted persistent-Super runs: %w", err)
 	}

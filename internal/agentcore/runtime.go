@@ -2171,10 +2171,31 @@ func (rt *Runtime) rewarmInterruptedPersistentSuperActors(ctx context.Context) {
 	if rt == nil || rt.store == nil {
 		return
 	}
-	runs, err := rt.store.ListAllRunsByState(ctx, types.RunPassivated)
-	if err != nil {
-		log.Printf("runtime: boot persistent-Super rewarm: list passivated runs: %v", err)
+	ownerID := strings.TrimSpace(rt.selfdevRouteOwnerID)
+	if ownerID == "" {
+		ownerID = strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))
+	}
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	productionComputer := rt.cfg.ComputerID != "" && strings.HasPrefix(strings.TrimSpace(rt.cfg.ComputerID), "computer-")
+	var runs []types.RunRecord
+	var err error
+	if ownerID != "" {
+		log.Printf("runtime: boot persistent-Super rewarm owner-scoped owner=%s computer=%s limit=%d", ownerID, computerID, bootPersistentSuperRewarmLimit)
+		runs, err = rt.store.ListPassivatedPersistentSuperControlRunsByOwner(ctx, ownerID, computerID, "", bootPersistentSuperRewarmLimit)
+		if err != nil {
+			log.Printf("runtime: boot persistent-Super rewarm owner-scoped list: %v", err)
+			return
+		}
+		log.Printf("runtime: boot persistent-Super rewarm owner-scoped candidates=%d", len(runs))
+	} else if productionComputer {
+		log.Printf("runtime: boot persistent-Super rewarm skipped: owner_id required on production computer %s", rt.cfg.ComputerID)
 		return
+	} else {
+		runs, err = rt.store.ListAllRunsByState(ctx, types.RunPassivated)
+		if err != nil {
+			log.Printf("runtime: boot persistent-Super rewarm: list passivated runs: %v", err)
+			return
+		}
 	}
 	seen := make(map[string]struct{})
 	for _, run := range runs {
@@ -2308,6 +2329,12 @@ func (rt *Runtime) enqueueLifecycleResearcherAdmissionRecoveryOccurrence(ctx con
 // completed/failed/cancelled choir.run body and killed the 4 GiB guest before
 // the first scanned=256 log.
 const bootTerminalRepairRecentLimit = 256
+
+// bootPersistentSuperRewarmLimit caps the owner-indexed header window used
+// to find passivated Super control runs. ListAllRunsByState(passivated)
+// JSON_EXTRACT-scans every choir.run body and is what kills the 4 GiB guest
+// before Super dispatch.
+const bootPersistentSuperRewarmLimit = 1024
 
 // reconcileTerminalRunOutcomes repairs missing terminal-outcome bindings.
 // Production computers (computer-* or CHOIR_OWNER_ID) use an owner-scoped
