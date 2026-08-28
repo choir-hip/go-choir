@@ -606,3 +606,87 @@ func TestDoltStoreWithService(t *testing.T) {
 		t.Fatalf("expected 1 object, got %d", len(objs))
 	}
 }
+
+func TestDoltStoreListJSONBodyFieldsByKindOwner(t *testing.T) {
+	db := openTestDoltDB(t)
+	store := NewDoltStore(db)
+	ctx := context.Background()
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+	now := time.Now().UTC()
+	objects := []Object{
+		{
+			CanonicalID: "obj:choir.worker_update:owner:pending-a",
+			ObjectKind:  "choir.worker_update",
+			OwnerID:     "owner",
+			ComputerID:  "computer-a",
+			ContentHash: "sha256:pending-a",
+			Body:        []byte(`{"delivered_to_loop_id":"run-a","disposition":"pending"}`),
+			Metadata:    json.RawMessage(`{}`),
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		},
+		{
+			CanonicalID: "obj:choir.worker_update:owner:acked-a",
+			ObjectKind:  "choir.worker_update",
+			OwnerID:     "owner",
+			ComputerID:  "computer-a",
+			ContentHash: "sha256:acked-a",
+			Body:        []byte(`{"delivered_to_loop_id":"run-a","disposition":"acknowledged"}`),
+			Metadata:    json.RawMessage(`{}`),
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		},
+		{
+			CanonicalID: "obj:choir.worker_update:owner:pending-b",
+			ObjectKind:  "choir.worker_update",
+			OwnerID:     "owner",
+			ComputerID:  "computer-b",
+			ContentHash: "sha256:pending-b",
+			Body:        []byte(`{"delivered_to_loop_id":"run-b","disposition":"pending"}`),
+			Metadata:    json.RawMessage(`{}`),
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		},
+		{
+			CanonicalID: "obj:choir.run:owner:noise",
+			ObjectKind:  "choir.run",
+			OwnerID:     "owner",
+			ComputerID:  "computer-a",
+			ContentHash: "sha256:noise",
+			Body:        []byte(`{"delivered_to_loop_id":"run-a","disposition":"pending"}`),
+			Metadata:    json.RawMessage(`{}`),
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		},
+	}
+	for _, obj := range objects {
+		if err := store.PutObject(ctx, obj); err != nil {
+			t.Fatalf("put %s: %v", obj.CanonicalID, err)
+		}
+	}
+	rows, err := store.ListJSONBodyFieldsByKindOwner(ctx, "choir.worker_update", "owner", []string{"$.delivered_to_loop_id", "$.disposition"}, 10)
+	if err != nil {
+		t.Fatalf("list json fields: %v", err)
+	}
+	got := map[string][]string{}
+	for _, row := range rows {
+		if len(row.Fields) != 2 {
+			t.Fatalf("fields=%v", row.Fields)
+		}
+		got[row.Fields[0]+":"+row.Fields[1]+":"+row.ComputerID] = row.Fields
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %+v", got)
+	}
+	if _, ok := got["run-a:pending:computer-a"]; !ok {
+		t.Fatalf("missing pending-a in %+v", got)
+	}
+	if _, ok := got["run-a:acknowledged:computer-a"]; !ok {
+		t.Fatalf("missing acked-a in %+v", got)
+	}
+	if _, ok := got["run-b:pending:computer-b"]; !ok {
+		t.Fatalf("missing pending-b in %+v", got)
+	}
+}

@@ -562,6 +562,14 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 	if err != nil {
 		return nil, false, fmt.Errorf("list restarted persistent-Super runs: %w", err)
 	}
+	var pendingByRun map[string]int
+	if strings.TrimSpace(ownerID) != "" && rt != nil && rt.store != nil {
+		pendingByRun, err = rt.store.CountPendingDeliveredWorkerUpdatesByRun(ctx, ownerID, computerID)
+		if err != nil {
+			return nil, false, fmt.Errorf("index delivered worker updates: %w", err)
+		}
+		log.Printf("runtime: persistent-Super rewarm delivered-pending-runs=%d", len(pendingByRun))
+	}
 	var candidate *types.RunRecord
 	var candidateControls []types.CoagentSourcePacket
 	for i := range runs {
@@ -576,6 +584,10 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 			// Super delivery requires empty TrajectoryID. Listing packets for a
 			// tombstone used to ReadObjectSnapshot the whole computer.
 			log.Printf("runtime: skip restarted persistent-Super control run %s: non-empty trajectory_id", run.RunID)
+			continue
+		}
+		if pendingByRun != nil && pendingByRun[run.RunID] == 0 {
+			log.Printf("runtime: persistent-Super rewarm packets run=%s pending=0", run.RunID)
 			continue
 		}
 		log.Printf("runtime: persistent-Super rewarm validate run=%s", run.RunID)

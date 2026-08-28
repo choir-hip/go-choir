@@ -107,6 +107,45 @@ func (s *Store) listWorkerUpdateObjects(ctx context.Context, ownerID, computerID
 	return objects, nil
 }
 
+// CountPendingDeliveredWorkerUpdatesByRun indexes pending choir.worker_update
+// packets by DeliveredToRunID without materializing LONGBLOB bodies. Super
+// rewarm uses this to skip tombstones with nothing delivered before
+// ListLifecycleControlsDeliveredToRunPage (per-run JSON_EXTRACT + body).
+func (s *Store) CountPendingDeliveredWorkerUpdatesByRun(ctx context.Context, ownerID, computerID string) (map[string]int, error) {
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("lifecycle worker updates: object graph not initialized")
+	}
+	rows, err := graph.ListJSONBodyFieldsByKindOwner(ctx, string(ogKindWorkerUpdate), ownerID, []string{
+		"$.delivered_to_loop_id",
+		"$.disposition",
+	}, lifecycleWorkerUpdateScanCap+1)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) > lifecycleWorkerUpdateScanCap {
+		return nil, fmt.Errorf("lifecycle worker updates: scan cap %d exceeded for owner %s computer %s", lifecycleWorkerUpdateScanCap, ownerID, computerID)
+	}
+	out := map[string]int{}
+	for _, row := range rows {
+		if computerID != "" && strings.TrimSpace(row.ComputerID) != computerID {
+			continue
+		}
+		if len(row.Fields) < 2 {
+			continue
+		}
+		runID := strings.TrimSpace(row.Fields[0])
+		if runID == "" || strings.TrimSpace(row.Fields[1]) != string(types.UpdatePending) {
+			continue
+		}
+		out[runID]++
+	}
+	return out, nil
+}
+
 func normalizeLifecycleControlActivationRefresh(refresh *types.LifecycleControlActivationRefresh) error {
 	if refresh == nil {
 		return nil

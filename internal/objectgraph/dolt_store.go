@@ -595,6 +595,66 @@ func (s *DoltStore) ListObjectRefsByKindOwner(ctx context.Context, kind, ownerID
 	return out, rows.Err()
 }
 
+// JSONBodyFieldRow is extracted JSON body fields plus computer_id. Super
+// rewarm indexes pending delivered worker-updates this way so it does not
+// materialize LONGBLOB bodies.
+type JSONBodyFieldRow struct {
+	ComputerID string
+	Fields     []string
+}
+
+// ListJSONBodyFieldsByKindOwner extracts JSON body fields for one kind+owner
+// using idx_og_objects_kind_owner. It does not SELECT body.
+func (s *DoltStore) ListJSONBodyFieldsByKindOwner(ctx context.Context, kind, ownerID string, jsonPaths []string, limit int) ([]JSONBodyFieldRow, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return nil, fmt.Errorf("objectgraph dolt: owner_id is required")
+	}
+	if len(jsonPaths) == 0 {
+		return nil, fmt.Errorf("objectgraph dolt: json path is required")
+	}
+	query := `SELECT computer_id`
+	args := make([]any, 0, len(jsonPaths)+3)
+	for _, path := range jsonPaths {
+		if strings.TrimSpace(path) == "" {
+			return nil, fmt.Errorf("objectgraph dolt: json path is required")
+		}
+		query += `, JSON_UNQUOTE(JSON_EXTRACT(CAST(CAST(body AS CHAR) AS JSON), ?))`
+		args = append(args, path)
+	}
+	query += ` FROM og_objects WHERE object_kind = ? AND owner_id = ? ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, kind, ownerID, NormalizedLimit(limit))
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: list json body fields: %w", err)
+	}
+	defer rows.Close()
+	var out []JSONBodyFieldRow
+	for rows.Next() {
+		var computerID sql.NullString
+		nulls := make([]sql.NullString, len(jsonPaths))
+		dest := make([]any, 1+len(jsonPaths))
+		dest[0] = &computerID
+		for i := range nulls {
+			dest[i+1] = &nulls[i]
+		}
+		if scanErr := rows.Scan(dest...); scanErr != nil {
+			return nil, scanErr
+		}
+		fields := make([]string, len(jsonPaths))
+		for i, ns := range nulls {
+			if ns.Valid && ns.String != "null" {
+				fields[i] = ns.String
+			}
+		}
+		out = append(out, JSONBodyFieldRow{ComputerID: computerID.String, Fields: fields})
+	}
+	return out, rows.Err()
+}
+
 // GetEdge finds a single non-tombstoned edge by from_id + kind.
 func (s *DoltStore) GetEdge(ctx context.Context, fromID string, kind EdgeKind) (Edge, error) {
 	if s == nil || s.db == nil {

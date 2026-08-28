@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
@@ -69,6 +70,11 @@ type Runtime struct {
 	running   map[string]context.CancelFunc // loop_id → cancel function
 	healthMu  sync.Mutex
 	health    types.RuntimeHealthState
+	// startComplete is set when Runtime.Start returns. Health probes that
+	// run while HTTP is already up must not JSON_EXTRACT/list og_objects
+	// until boot sweeps finish; they contend with Super rewarm and OOM the
+	// 4 GiB guest.
+	startComplete atomic.Bool
 	// internalIngestionSubmissionMu serializes the durable idempotency lookup
 	// and creation of typed ingestion runs submitted through the internal runtime
 	// API. It also owns the processor overload check. Without one critical
@@ -580,6 +586,7 @@ func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWa
 // pending/running run projections, then durable backlog and assigned work are
 // swept to re-warm cold actors.
 func (rt *Runtime) Start(ctx context.Context) {
+	defer rt.startComplete.Store(true)
 	if rt.maintenanceHeld() {
 		log.Printf("runtime: maintenance hold active (RUNTIME_MAINTENANCE_HOLD=1); refusing run admission + agent rewake while held")
 		return
@@ -1888,6 +1895,9 @@ func (rt *Runtime) RunningCount() int {
 // the work-item table; acceptable at current run volumes), and any lookup
 // error silently defaults to "occupies admission" — the conservative side.
 func (rt *Runtime) RunningCountByProfile(ctx context.Context, profile string) int {
+	if !rt.startComplete.Load() {
+		return rt.RunningCount()
+	}
 	profile = agentprofile.Canonical(profile)
 	var runs []types.RunRecord
 	var err error

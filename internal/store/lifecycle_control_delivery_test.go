@@ -341,3 +341,46 @@ func TestListLifecycleControlsDeliveredToRunDoesNotLoadOwnerSnapshot(t *testing.
 		t.Fatalf("kind-scoped delivered control = %+v, %v", delivered, err)
 	}
 }
+
+func TestCountPendingDeliveredWorkerUpdatesByRun(t *testing.T) {
+	s, start, caller, researcherWork := setupLifecycleTextureTargetFixture(t)
+	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
+	req.CommandID = "turn-count-pending-delivery"
+	req.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-count-pending", researcherWork.AssignedAgentID, researcherWork.WorkItemID)}
+	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
+	turn, err := s.ApplyTextureTurn(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := s.GetLifecycleRun(context.Background(), start.OwnerID, start.ComputerID, "run-researcher-target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bind := bindControlRequestForTest(t, s, start, run, turn.Controls)
+	if _, err := s.BindLifecycleControlDelivery(context.Background(), bind); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	ackedID, err := objectgraph.BuildCanonicalID(objectgraph.ObjectKind("choir.worker_update"), start.OwnerID, "acked-other-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ogStore.PutObject(context.Background(), objectgraph.Object{
+		CanonicalID: ackedID, ObjectKind: "choir.worker_update", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		VersionID: "v1", ContentHash: "sha256:acked",
+		Body:     []byte(`{"delivered_to_loop_id":"run-empty-tombstone","disposition":"acknowledged"}`),
+		Metadata: json.RawMessage(`{}`), CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	counts, err := s.CountPendingDeliveredWorkerUpdatesByRun(context.Background(), start.OwnerID, start.ComputerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts[run.RunID] != 1 {
+		t.Fatalf("pending for %s = %+v", run.RunID, counts)
+	}
+	if counts["run-empty-tombstone"] != 0 {
+		t.Fatalf("acked tombstone counted: %+v", counts)
+	}
+}

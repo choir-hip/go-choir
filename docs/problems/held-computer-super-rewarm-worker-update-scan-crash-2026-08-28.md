@@ -87,3 +87,51 @@ After deploy: product-path start, guest `commit=HEAD`, observability
 shows `runtime: started` plus `boot persistent-Super rewarm owner-scoped`
 and `boot terminal outcome owner-scoped`, `deployed_at` does not reset
 for ≥3 minutes, and no 502 recycle.
+
+## 6. Live proof that per-run JSON_EXTRACT still dies (2026-08-28T11:52Z)
+
+`5e5e8671` is on the guest (`deployed_at=2026-08-28T11:52:01Z`). Deploy
+refresh epoch **823**. Observability:
+
+| t (UTC) | observation |
+|---|---|
+| 11:52:58 | listen |
+| 11:53:12 | `boot passivation owner-scoped candidates=1`; Super `02668507-…` |
+| 11:53:19 | passivate 6.683s; Super rewarm `candidates=40`; candidate `02668507-…` |
+| 11:53:20 | `validate run=02668507-…` |
+| 11:53:24 | `packets run=02668507-… pending=0` (SQL filter paid, ~4s) |
+| 11:53:25 | `validate run=9151c01b-…` — second full worker-update JSON_EXTRACT |
+| 11:53:36–11:54:01 | `/health` `RunningCountByProfile` → `ListObjectRefsByKindOwner` **context canceled** |
+| 11:54:13 | observability 502; host `degraded` epoch 823 |
+
+No `rewarm dispatched`. No `runtime: started`. Owner-scoped passivation
+held. First empty-trajectory Super listed in 4s with pending=0. The
+second tombstone plus concurrent health header scans killed Dolt.
+
+Follow-up: in-memory processor count until `runtime: started`; one
+worker-update `ListObjects` to skip tombstones with no delivered packets
+before any per-run JSON_EXTRACT.
+
+## 7. Follow-up fix (not yet live)
+
+`5e5e8671` paid per-run `JSON_EXTRACT($.delivered_to_loop_id)` and owner-scoped
+passivation. Live death: second tombstone extract plus concurrent `/health`
+`RunningCountByProfile` → `ListObjectRefsByKindOwner` context-canceled.
+
+Code in this landing:
+
+1. `Runtime.startComplete` — `RunningCountByProfile` uses in-memory
+   `RunningCount()` until `Runtime.Start` returns. HTTP is up during boot;
+   health must not share the Dolt engine with Super rewarm.
+2. `ListJSONBodyFieldsByKindOwner` extracts `$.delivered_to_loop_id` and
+   `$.disposition` for `choir.worker_update` without `SELECT body`.
+3. `CountPendingDeliveredWorkerUpdatesByRun` builds that index once.
+   `reactivateRestartedPersistentSuperControlRun` logs
+   `delivered-pending-runs=N` and `packets run=… pending=0` **without**
+   `validate run=` for tombstones that have nothing pending. Per-run
+   `ListLifecycleControlsDeliveredToRunPage` runs only for a run with
+   pending > 0, then still `break`s.
+
+Do not start the guest until this commit is on it. Acceptance unpaid until
+observability shows `runtime: started`, owner-scoped Super + terminal logs,
+`deployed_at` stable ≥3 min, no 502 recycle.
