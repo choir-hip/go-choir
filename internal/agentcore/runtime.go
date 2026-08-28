@@ -613,6 +613,14 @@ func (rt *Runtime) maintenanceHeld() bool {
 	return os.Getenv("RUNTIME_MAINTENANCE_HOLD") == "1"
 }
 
+// MaintenanceHeld reports whether the runtime was booted under a maintenance
+// hold. It is exported so holders of the Runtime (e.g. the Texture-owner boot
+// reconcile) can treat the held state as a benign, mutation-fenced state rather
+// than a fatal startup failure.
+func (rt *Runtime) MaintenanceHeld() bool {
+	return rt.maintenanceHeld()
+}
+
 // ensureProductionQdrantCollectionBestEffort attempts to create the production
 // Qdrant collection with a short timeout. Failures are logged but never
 // propagated: the ingestion dedup path falls back to pass-through when the

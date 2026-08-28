@@ -36,6 +36,15 @@ func (rt *Handler) scheduleTextureWorkerWake(ownerID, docID, instructionID strin
 // projected pending, preventing an already-used initial_dispatch from becoming
 // reactivation authority.
 func (rt *Handler) Start(ctx context.Context) error {
+	if rt.Core != nil && rt.Core.MaintenanceHeld() {
+		// The computer is under a maintenance hold: no run admission or Texture
+		// reconcile dispatch is permitted while held. Defer the durable
+		// reconcile to the next unheld boot; the guest stays up (health +
+		// bootstrap route) but mutation-fenced. This converts the hold from a
+		// fatal startup failure into a benign held state.
+		log.Printf("textureowner: maintenance hold active; deferring Texture reconcile until unhold")
+		return nil
+	}
 	subjects, err := rt.Store.ListLifecycleSubjects(ctx, rt.Core.TextureComputerID())
 	if err != nil {
 		return fmt.Errorf("reconcile lifecycle Texture subjects: %w", err)
