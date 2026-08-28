@@ -128,31 +128,33 @@ finish:
       class: registry update
 
 now:
-  status: tabled_account_recovered
-  slice: "Candidate proof remains safely tabled after account recovery. The owner account, primary computer, and host mailbox are restored; candidate A artifacts remain preserved and effects remain fenced."
-  question: "When should the owner resume candidate proof on computer-aa7739a6c3f7ebec4e984bad8b086486 after account recovery?"
+  status: resumed_owner_directed
+  slice: "Owner directed resumption 2026-08-28 after account-recovery acceptance and closure of the held-computer boot outage. Candidate A artifacts remain preserved; effects remain fenced OFF."
+  question: "Answered 2026-08-28: owner direction 'get back on track' resumes candidate proof on the retained computer after the substrate repair landed."
   reconciliation:
-    observed_at: "2026-08-28T00:52:15Z"
-    source_ref: "docs/evidence/account-recovery-yusefnathanson-2026-08-27.md"
-    deploy_identity: "staging https://choir.news proxy c4b7a9a5; computer-03335285269bdba4f94377e56879f9e6 active epoch 804, held under guest-visible maintenance fence"
+    observed_at: "2026-08-28T16:30:00Z"
+    source_ref: "docs/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md; docs/evidence/root-cause-clustering-objectgraph-body-scan-2026-08-28.md"
+    deploy_identity: "staging https://choir.news deployed_commit 42d476044ec80efe8a31d043af577ad77ba7572b at 2026-08-28T16:21:10Z (force-deploy CI 33187442230 after push-CI 33186276753 hit a receipted SQLITE_BUSY race-shard flake); computer-03335285269bdba4f94377e56879f9e6 active epoch 831 after owner refresh idempotency effects-boot-probe-42d47604-2026-08-28T1623Z; guest boot stable; GUI bootstrap working"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "clean single worktree /Users/wiz/go-choir"
+    worktree_inventory_ref: "clean; reports, clustering assessment, and worker-update substrate repair committed on main"
     status: reconciled
   decision:
-    selected: "Keep candidate proof tabled after restoring yusefnathanson@me.com account and 000@choir.news access through the held 0333528 maintenance-serve path."
-    kind: recovery_complete
-    status: owner-ratified
+    selected: "Resume candidate A proof on the retained computer under the ratified scheduling contract now that the account, boot surface, and boot-path worker-update substrate are repaired."
+    kind: resume
+    status: owner-directed
     source: owner
-    evidence_ref: "docs/evidence/account-recovery-yusefnathanson-2026-08-27.md"
-    owner_ratification_ref: "owner direction 2026-08-27"
-    recorded_at: "2026-08-28T00:52:15Z"
-    consequence: "Account recovery is complete; candidate A proof remains paused until explicitly resumed."
+    evidence_ref: "docs/reports/choir-whole-system-status-retrospective-2026-08-28.md"
+    owner_ratification_ref: "owner direction 2026-08-28 (session): 'get back on track' after post-mortem delivery"
+    recorded_at: "2026-08-28T16:30:00Z"
+    consequence: "CoSuper candidate A authorship, five-ref freeze, qualified consensus under reversible-selfdev-v1, promotion, live-play verification, falsification with B, and acceptance-fenced restore to 99949fe2 proceed in order; effects stay OFF until rehearsal gates pass."
   evidence_refs:
     - "docs/evidence/account-recovery-yusefnathanson-2026-08-27.md"
-    - "docs/reports/choir-system-state-and-consensus-review-2026-08-27.md"
-  blocker_or_risk: "No account blocker remains. Browser WebAuthn interaction was not exercised in this shell session; authenticated API and shell bootstrap passed. The host and guest maintenance holds remain intentional."
-  next_action: "Keep effects and candidate proof tabled; resume only with explicit owner direction after account recovery acceptance."
+    - "docs/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md"
+    - "docs/reports/choir-whole-system-status-retrospective-2026-08-28.md"
+    - "docs/evidence/root-cause-clustering-objectgraph-body-scan-2026-08-28.md"
+  blocker_or_risk: "Residual same-substrate scans remain outside this repair (run-family ogListAllByMetadata, mailbox backlog paging, sweepPassivatedSpawnedCoagentWork) and could re-enter the boot death loop on corpus growth; nine undelivered CoSuper cancel producer reports from the 08-19 storm still need a fresh CoSuper binding to consume. Pre-A checkpoint 99949fe2 is the fence; effects OFF."
+  next_action: "Bind a fresh CoSuper assignment on computer-03335285269bdba4f94377e56879f9e6, author candidate change A inside the guest capsule with the pre-declared foundation defect, freeze five capsule-bound bundle refs, run qualified consensus under reversible-selfdev-v1, promote, verify live play, falsify with B, and restore to checkpoint 99949fe2. Effects remain OFF."
 ---
 
 
