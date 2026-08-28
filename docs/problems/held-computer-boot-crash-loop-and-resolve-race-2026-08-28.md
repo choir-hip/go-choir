@@ -248,11 +248,35 @@ computer or a sealed archive — owner said **live always-warm** (supersedes sea
 is **capability-open-to-all + entitlement-gated** (premium) vs default-on;
 (iv) mail SoR is host `mail.db` or guest Maildir for acceptance.
 
-Fix-order (causal): (a) guest hold-fatal crash-loop fix (`run.go:510/581`),
-(b) tape-open bound (compaction >50k events and/or browser-timeout +
-`context.WithoutCancel` on resolve — the actual non-corruption boot bug),
-(c) clear **both** holds via general per-computer product path, (d) File-CAS
-restore, (e) Track M Maildir (downstream of compute), + outbound SMTP "respond"
-path. Then the ontology collapse (delete `desktop_id`/`PrimaryDesktopID`
-special-casing; route-slot key correction) as a phased red change with a
-dual-read window.
+## 8. Landing Status (2026-08-28 UTC, verified)
+
+- **fix (a) landed:** commit `eb27cac8` ("treat maintenance hold as benign on
+  Texture reconcile") on `main`; push CI `33141788363` **success** (all agentcore/
+  textureowner race shards green), Node B `Deploy to Staging` with active VM
+  refresh; `/health` `deployed_commit` = `eb27cac8`. Guest is no longer expected
+  to crash-loop on the hold (the fatal `log.Fatalf` path is removed).
+- **Live symptom confirmed pre-fix:** guest flapped — api-key `/api/shell/bootstrap`
+  returned 200 (probe 1, guest briefly up) then 502 (probes 2-5) over a ~40s
+  window, matching the documented ~18s crash-loop while the guest churned.
+- **Post-deploy state:** `/health` `deployed_commit` `eb27cac8`, but the computer
+  now reports `state: stopped` (was `active`/epoch 804). The deploy's active-VM
+  refresh recycled the VM; a **held** computer is never auto-started on resolve
+  (`resolveDesktopContext` refuses auto-start under `IsHeld()`), so it stays
+  stopped. The api-key bootstrap now 502s because `target.State != "active"`.
+- **Blocker for (c):** clearing the host+guest holds is the owner-directed step to
+  make `computer-03335285…` a live always-warm computer. `SetHold`/`ClearHold`
+  are only reachable through internal vmctl control (`isInternalCaller`); there is
+  **no product-path unhold verb** (no proxy endpoint, no `choir computer unhold`),
+  and this shell has no SSH to Node B (`go-choir-node-b` unresolvable). Either the
+  authorized operator clears the host hold (which stops passing
+  `RUNTIME_MAINTENANCE_HOLD=1` on the next guest boot), or a general
+  product-path recovery verb is built (doctrine gap, red). `fix (a)` must be on
+  the guest before the guest boots without the fence so the hold-fatal is gone.
+- **fix (b) staged locally, not pushed:** `34896b7e` (held computer
+  short-circuits `activeOwnershipNeedsReadinessCheck` so a held, serving computer
+  resolves instantly without a pendingWaiter race). Held locally to avoid another
+  deploy cycle while the computer is stopped+held, since it only helps the
+  held+`active` state. Land it as part of the recovery commit once unhold is
+  authorized or as a standalone.
+- **Acceptance not yet met:** no stable browser boot, no unheld live computer,
+  no guest Maildir / SMTP. Problem receipt remains open.
