@@ -755,6 +755,72 @@ func TestSelfDevelopmentStartRevivesTerminalPersistentSuper(t *testing.T) {
 	}
 }
 
+func TestSelfDevelopmentStartRevivesPassivatedPersistentSuper(t *testing.T) {
+	ctx := context.Background()
+	runtime, productStore := testRuntime(t)
+	computerID := "computer-selfdev-revive-passivated"
+	idempotencyKey := "selfdev-revive-passivated"
+	prompt := "revive passivated persistent Super"
+	runtime.cfg.ComputerID = computerID
+	operations, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime.selfdevOperations = operations
+	requestCommitment := computerevent.DigestBytes([]byte(computerID + "\x00" + idempotencyKey + "\x00" + computerevent.DigestBytes([]byte(prompt))))
+	identityDigest := computerevent.DigestBytes([]byte(computerID + "\x00" + idempotencyKey))
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	operationID := "selfdev-" + identityDigest[:32]
+	if _, err := productStore.DB().ExecContext(ctx, `INSERT INTO self_development_operations (operation_id,computer_id,idempotency_key,request_commitment,trajectory_id,base_head,prompt_artifact_ref,verifier_refs_json,desired_head,effective_head,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'[]',?,?,?, ?,?)`,
+		operationID, computerID, idempotencyKey, requestCommitment, "trajectory-"+identityDigest[32:], strings.Repeat("a", 64),
+		"artifact:sha256:"+strings.Repeat("b", 64), strings.Repeat("c", 64), strings.Repeat("c", 64), selfdev.StateExecuting, now, now); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := runtime.createRunWithMetadata(ctx, prompt, "owner", map[string]any{
+		runMetadataAgentProfile:         agentprofile.Super,
+		runMetadataAgentRole:            agentprofile.Super,
+		"request_source":                "self_development_operation",
+		"self_development_operation_id": operationID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec.State = types.RunPassivated
+	rec.Result = ""
+	rec.Metadata = cloneMetadata(rec.Metadata)
+	rec.Metadata["passivated_reason"] = "runtime_restarted"
+	if err := productStore.UpdateRun(ctx, *rec); err != nil {
+		t.Fatal(err)
+	}
+	handler := &APIHandler{rt: runtime}
+	body, _ := json.Marshal(selfDevelopmentStartRequest{IdempotencyKey: idempotencyKey, Prompt: prompt})
+	retry := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/self-development/operations", strings.NewReader(string(body)))
+	retry.Header.Set("X-Authenticated-User", "owner")
+	retry.Header.Set("X-Authenticated-Computer", computerID)
+	retryResponse := httptest.NewRecorder()
+	handler.HandleComputersRouter(retryResponse, retry)
+	if retryResponse.Code != http.StatusOK {
+		t.Fatalf("passivated revive retry status=%d body=%s", retryResponse.Code, retryResponse.Body.String())
+	}
+	revived, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operationID, 2)
+	if err != nil || len(revived) != 1 {
+		t.Fatalf("revived Super runs=%d err=%v", len(revived), err)
+	}
+	if revived[0].RunID == rec.RunID {
+		t.Fatalf("passivated Super was not unbound and replaced: run=%s", rec.RunID)
+	}
+	old, err := productStore.GetRunByOwner(ctx, "owner", rec.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadataStringValue(old.Metadata, "self_development_operation_id") != "" {
+		t.Fatalf("passivated Super stayed bound to the operation: %+v", old.Metadata)
+	}
+	if metadataStringValue(old.Metadata, "self_development_unbound_operation_id") != operationID {
+		t.Fatalf("passivated Super unbind did not preserve unbound operation id: %+v", old.Metadata)
+	}
+}
+
 func TestSelfDevelopmentPersistentSuperPassesAssignCoSuperGate(t *testing.T) {
 	ctx := context.Background()
 	runtime, productStore := testRuntime(t)

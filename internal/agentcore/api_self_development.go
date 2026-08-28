@@ -1185,7 +1185,11 @@ func (h *APIHandler) ensureSelfDevelopmentRun(r *http.Request, operation selfdev
 }
 
 func selfDevelopmentSuperRunTerminal(state types.RunState) bool {
-	return state == types.RunCompleted || state == types.RunFailed || state == types.RunCancelled || state == types.RunBlocked
+	// RunPassivated is terminal for the self-development wake: boot
+	// passivation marks an interrupted run as permanently replaced
+	// (passivated_reason=runtime_restarted) and never auto-resumes it.
+	// See docs/problems/selfdev-wake-passivated-super-silent-noop-2026-08-28.md.
+	return state == types.RunCompleted || state == types.RunFailed || state == types.RunCancelled || state == types.RunBlocked || state == types.RunPassivated
 }
 
 func selfDevelopmentSuperNeedsPersistentIdentity(rec types.RunRecord) bool {
