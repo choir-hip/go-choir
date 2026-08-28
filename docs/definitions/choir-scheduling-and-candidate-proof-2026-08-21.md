@@ -128,30 +128,31 @@ finish:
       class: registry update
 
 now:
-  status: tabled_pending_account_recovery
-  slice: "Candidate proof work safely tabled at owner direction 2026-08-27 following successful pre-A checkpoint publication (732427d7...), propose_only mode generation 1 (01a0451b...), and self-development operation initiation (selfdev-80201d0a...) on computer-aa7739a6c3f7ebec4e984bad8b086486. Active focus pivoted to urgent recovery of yusefnathanson@me.com (000@choir.news) account."
-  question: "How will yusefnathanson@me.com account and its associated computer/mail infrastructure be restored to full health on staging?"
+  status: tabled_account_recovered
+  slice: "Candidate proof remains safely tabled after account recovery. The owner account, primary computer, and host mailbox are restored; candidate A artifacts remain preserved and effects remain fenced."
+  question: "When should the owner resume candidate proof on computer-aa7739a6c3f7ebec4e984bad8b086486 after account recovery?"
   reconciliation:
-    observed_at: "2026-08-27T23:00:00Z"
-    source_ref: "docs/reports/choir-system-state-and-consensus-review-2026-08-27.md"
-    deploy_identity: "staging https://choir.news proxy d14dc341; active computer-aa7739a6c3f7ebec4e984bad8b086486 pre-A checkpoint 732427d7... published and verified"
+    observed_at: "2026-08-28T00:52:15Z"
+    source_ref: "docs/evidence/account-recovery-yusefnathanson-2026-08-27.md"
+    deploy_identity: "staging https://choir.news proxy c4b7a9a5; computer-03335285269bdba4f94377e56879f9e6 active epoch 804, held under guest-visible maintenance fence"
     authority_identities: [docs/choir-vision.md, docs/choir-doctrine.md, docs/standing-questions.md, docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "clean single worktree /Users/wiz/go-choir"
     status: reconciled
   decision:
-    selected: "Safely table candidate proof and prioritize recovery of yusefnathanson@me.com account and 000@choir.news mail."
-    kind: priority_pivot
+    selected: "Keep candidate proof tabled after restoring yusefnathanson@me.com account and 000@choir.news access through the held 0333528 maintenance-serve path."
+    kind: recovery_complete
     status: owner-ratified
     source: owner
-    evidence_ref: "owner direction 2026-08-27: table candidate proof, recover yusefnathanson@me.com (000@choir.news)"
+    evidence_ref: "docs/evidence/account-recovery-yusefnathanson-2026-08-27.md"
     owner_ratification_ref: "owner direction 2026-08-27"
-    recorded_at: "2026-08-27T23:00:00Z"
-    consequence: "Candidate proof paused with all checkpoint/operation artifacts preserved; active work focuses on account recovery."
+    recorded_at: "2026-08-28T00:52:15Z"
+    consequence: "Account recovery is complete; candidate A proof remains paused until explicitly resumed."
   evidence_refs:
+    - "docs/evidence/account-recovery-yusefnathanson-2026-08-27.md"
     - "docs/reports/choir-system-state-and-consensus-review-2026-08-27.md"
-  blocker_or_risk: "yusefnathanson@me.com account is down and unaccessible; incoming email received at 000@choir.news must be preserved and accessible."
-  next_action: "Diagnose and restore yusefnathanson@me.com account, computer, and 000@choir.news mail flow on Node B."
+  blocker_or_risk: "No account blocker remains. Browser WebAuthn interaction was not exercised in this shell session; authenticated API and shell bootstrap passed. The host and guest maintenance holds remain intentional."
+  next_action: "Keep effects and candidate proof tabled; resume only with explicit owner direction after account recovery acceptance."
 ---
 
 

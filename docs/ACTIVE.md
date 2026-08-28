@@ -37,18 +37,20 @@ problem-documentation-first receipt
 ([evidence](evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md));
 host disk expansion remains an owner decision.
 
-## Active Operational Priority — Account & Mail Recovery (yusefnathanson@me.com / 000@choir.news)
+## Completed Recovery — Account & Mail (`yusefnathanson@me.com` / `000@choir.news`)
 
-Active focus on staging Node B is regaining access to owner account `yusefnathanson@me.com`
-(`5bd6de97-3b58-408c-bf89-c42c81b083de`), restoring its primary computer liveness, and ensuring
-incoming mail delivered to `000@choir.news` is preserved and accessible.
+Account `yusefnathanson@me.com` (`5bd6de97-3b58-408c-bf89-c42c81b083de`) is restored:
+the route-bound 0333528 computer is active at epoch 804 under the host and guest
+maintenance holds, authenticated shell bootstrap returns HTTP 200, and the owner
+mailbox exposes the Ryan message. Guest Maildir synchronization is not claimed.
+Evidence: [`evidence/account-recovery-yusefnathanson-2026-08-27.md`](evidence/account-recovery-yusefnathanson-2026-08-27.md).
 
 ## Tabled Definition — Scheduling Contract and Candidate Proof
 
 [`definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`](definitions/choir-scheduling-and-candidate-proof-2026-08-21.md)
-is **tabled pending account recovery**. Pre-A checkpoint `732427d7...` was published and signed,
-`propose_only` generation 1 was committed, and operation `selfdev-80201d0a...` was initialized on
-`computer-aa7739a6c3f7ebec4e984bad8b086486` (`new@new.com`). All artifacts are preserved.
+is **tabled after account recovery**. Pre-A checkpoint `732427d7...`, `propose_only`
+generation 1, and operation `selfdev-80201d0a...` on `computer-aa7739a6c3f7ebec4e984bad8b086486`
+are preserved. Candidate proof and effects remain paused until explicit owner direction.
 
 ## Sealed Operation — Stabilize and Hold 0333528
 
