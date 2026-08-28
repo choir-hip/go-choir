@@ -1888,12 +1888,23 @@ func (rt *Runtime) RunningCount() int {
 // the work-item table; acceptable at current run volumes), and any lookup
 // error silently defaults to "occupies admission" — the conservative side.
 func (rt *Runtime) RunningCountByProfile(ctx context.Context, profile string) int {
-	runs, err := rt.store.ListRunsByState(ctx, types.RunRunning, 1000)
+	profile = agentprofile.Canonical(profile)
+	var runs []types.RunRecord
+	var err error
+	ownerID := strings.TrimSpace(rt.selfdevRouteOwnerID)
+	if ownerID == "" {
+		ownerID = strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))
+	}
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	if ownerID != "" {
+		runs, err = rt.store.ListRunsByOwnerStates(ctx, ownerID, computerID, []types.RunState{types.RunRunning}, 1024)
+	} else {
+		runs, err = rt.store.ListRunsByState(ctx, types.RunRunning, 1000)
+	}
 	if err != nil {
 		log.Printf("runtime: count running %s runs: %v", profile, err)
 		return rt.RunningCount()
 	}
-	profile = agentprofile.Canonical(profile)
 	count := 0
 	for i := range runs {
 		if agentprofile.Canonical(runs[i].AgentProfile) != profile {
@@ -1934,6 +1945,64 @@ func (rt *Runtime) processorRunOccupiesAdmission(ctx context.Context, rec types.
 // update_coagent send or trajectory sweep may re-warm the actor.
 func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 	states := []types.RunState{types.RunPending, types.RunRunning}
+	ownerID := strings.TrimSpace(rt.selfdevRouteOwnerID)
+	if ownerID == "" {
+		ownerID = strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))
+	}
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	productionComputer := rt.cfg.ComputerID != "" && strings.HasPrefix(strings.TrimSpace(rt.cfg.ComputerID), "computer-")
+	passivateBatch := func(runs []types.RunRecord, state types.RunState) bool {
+		progressed := false
+		for i := range runs {
+			rec := &runs[i]
+			was := rec.State
+			if state != "" {
+				was = state
+			}
+			now := time.Now().UTC()
+			rec.State = types.RunPassivated
+			rec.Error = ""
+			rec.UpdatedAt = now
+			rec.FinishedAt = nil
+			rec.Metadata = cloneMetadata(rec.Metadata)
+			rec.Metadata["passivated_reason"] = "runtime_restarted"
+			if item, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, nil, "passivated_spawned_work_item_id"); err != nil {
+				log.Printf("runtime: boot passivation: create spawned work item for run %s: %v", rec.RunID, err)
+			} else if item.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
+				log.Printf("runtime: boot passivation: spawned work item skipped for run=%s profile=%s trajectory=%s agent=%s requested_by=%s",
+					rec.RunID, agentprofile.Canonical(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
+			}
+			if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+				log.Printf("runtime: boot passivation: update run %s: %v", rec.RunID, err)
+				continue
+			}
+			progressed = true
+			if runHasProfile(rec, agentprofile.Texture) {
+				if err := rt.store.MarkAgentMutationStale(context.WithoutCancel(ctx), rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil {
+					log.Printf("runtime: boot passivation: stale mutation %s: %v", rec.RunID, err)
+				}
+			}
+			rt.emitEvent(ctx, rec, types.EventRunPassivated, events.CauseSupervisorRecovery,
+				json.RawMessage(`{"recovery":"passivated_on_restart"}`))
+			log.Printf("runtime: passivated run %s (was %s) after restart", rec.RunID, was)
+		}
+		return progressed
+	}
+	if ownerID != "" {
+		log.Printf("runtime: boot passivation owner-scoped owner=%s computer=%s", ownerID, computerID)
+		runs, err := rt.store.ListRunsByOwnerStates(ctx, ownerID, computerID, states, 1024)
+		if err != nil {
+			log.Printf("runtime: boot passivation owner-scoped list: %v", err)
+			return
+		}
+		log.Printf("runtime: boot passivation owner-scoped candidates=%d", len(runs))
+		passivateBatch(runs, "")
+		return
+	}
+	if productionComputer {
+		log.Printf("runtime: boot passivation skipped: owner_id required on production computer %s", rt.cfg.ComputerID)
+		return
+	}
 	for _, state := range states {
 		for {
 			runs, err := rt.store.ListRunsByState(ctx, state, 100)
@@ -1944,38 +2013,7 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 			if len(runs) == 0 {
 				break
 			}
-			progressed := false
-			for i := range runs {
-				rec := &runs[i]
-				now := time.Now().UTC()
-				rec.State = types.RunPassivated
-				rec.Error = ""
-				rec.UpdatedAt = now
-				rec.FinishedAt = nil
-				rec.Metadata = cloneMetadata(rec.Metadata)
-				rec.Metadata["passivated_reason"] = "runtime_restarted"
-				if item, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, nil, "passivated_spawned_work_item_id"); err != nil {
-					log.Printf("runtime: boot passivation: create spawned work item for run %s: %v", rec.RunID, err)
-				} else if item.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
-					log.Printf("runtime: boot passivation: spawned work item skipped for run=%s profile=%s trajectory=%s agent=%s requested_by=%s",
-						rec.RunID, agentprofile.Canonical(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
-				}
-
-				if err := rt.store.UpdateRun(ctx, *rec); err != nil {
-					log.Printf("runtime: boot passivation: update run %s: %v", rec.RunID, err)
-					continue
-				}
-				progressed = true
-				if runHasProfile(rec, agentprofile.Texture) {
-					if err := rt.store.MarkAgentMutationStale(context.WithoutCancel(ctx), rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil {
-						log.Printf("runtime: boot passivation: stale mutation %s: %v", rec.RunID, err)
-					}
-				}
-				rt.emitEvent(ctx, rec, types.EventRunPassivated, events.CauseSupervisorRecovery,
-					json.RawMessage(`{"recovery":"passivated_on_restart"}`))
-				log.Printf("runtime: passivated run %s (was %s) after restart", rec.RunID, state)
-			}
-			if !progressed {
+			if !passivateBatch(runs, state) {
 				break
 			}
 		}

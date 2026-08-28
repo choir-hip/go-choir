@@ -596,13 +596,17 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 			return nil, false, fmt.Errorf("validate restarted persistent-Super control run %s: %w", run.RunID, readErr)
 		}
 		if len(controls) == 0 {
+			log.Printf("runtime: persistent-Super rewarm packets run=%s pending=0", run.RunID)
 			continue
 		}
-		if candidate == nil || run.UpdatedAt.After(candidate.UpdatedAt) || (run.UpdatedAt.Equal(candidate.UpdatedAt) && run.RunID < candidate.RunID) {
-			copy := *run
-			candidate = &copy
-			candidateControls = append([]types.CoagentSourcePacket(nil), controls...)
-		}
+		log.Printf("runtime: persistent-Super rewarm packets run=%s pending=%d", run.RunID, len(controls))
+		// Passivated Super refs are already newest-first. The first run with
+		// pending controls is the reactivation authority; later tombstones
+		// must not each list worker updates.
+		copy := *run
+		candidate = &copy
+		candidateControls = append([]types.CoagentSourcePacket(nil), controls...)
+		break
 	}
 	if candidate == nil {
 		return nil, false, nil

@@ -1557,3 +1557,46 @@ func TestOGSaveAndGetDesktopState(t *testing.T) {
 		t.Fatalf("expected 1 window, got %d", len(got.Windows))
 	}
 }
+
+func TestListRunsByOwnerStatesLoadsMatchingStatesOnly(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := "owner-run-states"
+	pending := types.RunRecord{
+		RunID: "run-pending-owner", AgentID: "agent-pending", OwnerID: ownerID,
+		ComputerID: "autoputer-1", AgentProfile: "super", AgentRole: "super",
+		State: types.RunPending, CreatedAt: now, UpdatedAt: now,
+	}
+	running := types.RunRecord{
+		RunID: "run-running-owner", AgentID: "agent-running", OwnerID: ownerID,
+		ComputerID: "autoputer-1", AgentProfile: "researcher", AgentRole: "researcher",
+		State: types.RunRunning, CreatedAt: now.Add(time.Second), UpdatedAt: now.Add(time.Second),
+	}
+	completed := types.RunRecord{
+		RunID: "run-completed-owner", AgentID: "agent-completed", OwnerID: ownerID,
+		ComputerID: "autoputer-1", AgentProfile: "super", AgentRole: "super",
+		State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
+	}
+	foreign := types.RunRecord{
+		RunID: "run-pending-foreign", AgentID: "agent-foreign", OwnerID: "owner-run-states-foreign",
+		ComputerID: "autoputer-1", AgentProfile: "super", AgentRole: "super",
+		State: types.RunPending, CreatedAt: now, UpdatedAt: now,
+	}
+	for _, rec := range []types.RunRecord{pending, running, completed, foreign} {
+		if err := s.CreateRunOG(ctx, rec); err != nil {
+			t.Fatalf("create %s: %v", rec.RunID, err)
+		}
+	}
+	got, err := s.ListRunsByOwnerStates(ctx, ownerID, "autoputer-1", []types.RunState{types.RunPending, types.RunRunning}, 16)
+	if err != nil {
+		t.Fatalf("list runs by owner states: %v", err)
+	}
+	ids := map[string]bool{}
+	for _, rec := range got {
+		ids[rec.RunID] = true
+	}
+	if !ids[pending.RunID] || !ids[running.RunID] || ids[completed.RunID] || ids[foreign.RunID] || len(got) != 2 {
+		t.Fatalf("owner states = %+v", got)
+	}
+}

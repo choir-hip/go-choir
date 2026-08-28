@@ -933,6 +933,80 @@ func (s *Store) ListPassivatedPersistentSuperControlRunsByOwner(ctx context.Cont
 	return runs, nil
 }
 
+const runsByOwnerStatesDefaultLimit = 1024
+
+// ListRunsByOwnerStates returns newest choir.run rows for one owner whose
+// header state is in states. It lists og_objects headers through
+// idx_og_objects_kind_owner (no metadata JSON_EXTRACT, no body), then
+// GetObject only matching rows. Boot passivation and health processor
+// counts use this instead of ListRunsByState JSON_EXTRACT.
+func (s *Store) ListRunsByOwnerStates(ctx context.Context, ownerID, computerID string, states []types.RunState, limit int) ([]types.RunRecord, error) {
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	if ownerID == "" {
+		return nil, fmt.Errorf("list runs by owner states: owner_id is required")
+	}
+	if limit <= 0 {
+		limit = runsByOwnerStatesDefaultLimit
+	}
+	wanted := map[string]bool{}
+	for _, state := range states {
+		if state.Valid() {
+			wanted[string(state)] = true
+		}
+	}
+	if len(wanted) == 0 {
+		return nil, fmt.Errorf("list runs by owner states: at least one valid state is required")
+	}
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("store: object graph not initialized")
+	}
+	refs, err := graph.ListObjectRefsByKindOwner(ctx, string(ogKindRun), ownerID, limit)
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]types.RunRecord, 0)
+	for _, ref := range refs {
+		if ref.Tombstone {
+			continue
+		}
+		if computerID != "" && strings.TrimSpace(ref.ComputerID) != "" && strings.TrimSpace(ref.ComputerID) != computerID {
+			continue
+		}
+		meta := map[string]any{}
+		if len(ref.Metadata) > 0 {
+			if err := json.Unmarshal(ref.Metadata, &meta); err != nil {
+				return nil, fmt.Errorf("list runs by owner states: decode metadata %s: %w", ref.CanonicalID, err)
+			}
+		}
+		if !wanted[ogMetadataText(meta, "state")] {
+			continue
+		}
+		obj, err := graph.GetObject(ctx, ref.CanonicalID)
+		if err != nil {
+			return nil, fmt.Errorf("list runs by owner states: get %s: %w", ref.CanonicalID, err)
+		}
+		var rec types.RunRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		if computerID != "" && strings.TrimSpace(rec.ComputerID) != "" && strings.TrimSpace(rec.ComputerID) != computerID {
+			continue
+		}
+		if !wanted[string(rec.State)] {
+			continue
+		}
+		runs = append(runs, rec)
+	}
+	return runs, nil
+}
+
 // ListAllRunsOG lists all runs from the object graph, ordered by
 // created_at descending.
 

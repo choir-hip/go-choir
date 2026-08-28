@@ -135,3 +135,20 @@ are that contention, not the primary load.
 Follow-up: `latestLifecycleRunByAgent` lists `choir.run` headers via
 `idx_og_objects_kind_owner` and `GetObject` only the newest row for that
 agent.
+
+## 7. Landing (2026-08-28T11:18Z)
+
+`15e6d6d0` deployed via CI `33164995176`. Product-path start receipt
+`01a04817` epoch **821**. Observability:
+
+- skip Super tombstones with non-empty `TrajectoryID`
+- `persistent-Super rewarm validate run=` for `aa8f274b`, `9f2ff6d0`,
+  `80e55525`
+- no dispatched, no `runtime: started`
+- death ~20s after listen; systemd restart; second death during
+  `passivate_interrupted_activations`
+
+`latestLifecycleRunByAgent` no longer snapshots the owner graph. Death
+moved to `listWorkerUpdateObjects` loading every `choir.worker_update`
+body, then to `ListRunsByState` passivation. See
+`held-computer-super-rewarm-worker-update-scan-crash-2026-08-28`.

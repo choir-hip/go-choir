@@ -65,7 +65,7 @@ func metadataStringValueStore(metadata map[string]any, key string) string {
 // owner/computer graph (runs, events, texture) OOMs a 4 GiB guest.
 const lifecycleWorkerUpdateScanCap = 65536
 
-func (s *Store) listWorkerUpdateObjects(ctx context.Context, ownerID, computerID string) ([]objectgraph.Object, error) {
+func (s *Store) listWorkerUpdateObjects(ctx context.Context, ownerID, computerID, deliveredToRunID string) ([]objectgraph.Object, error) {
 	graph := s.ogReadStore
 	if graph == nil {
 		graph = s.ogStore
@@ -73,14 +73,33 @@ func (s *Store) listWorkerUpdateObjects(ctx context.Context, ownerID, computerID
 	if graph == nil {
 		return nil, fmt.Errorf("lifecycle worker updates: object graph not initialized")
 	}
-	objects, err := graph.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:       ogKindWorkerUpdate,
-		OwnerID:    ownerID,
-		ComputerID: computerID,
-		Limit:      lifecycleWorkerUpdateScanCap + 1,
-	})
+	deliveredToRunID = strings.TrimSpace(deliveredToRunID)
+	var objects []objectgraph.Object
+	var err error
+	if deliveredToRunID != "" {
+		objects, err = graph.ListObjectsByOwnerAndBody(ctx, string(ogKindWorkerUpdate), ownerID, []objectgraph.JSONFieldMatch{{
+			JSONPath: "$.delivered_to_loop_id",
+			Value:    deliveredToRunID,
+		}}, lifecycleWorkerUpdateScanCap+1)
+	} else {
+		objects, err = graph.ListObjects(ctx, objectgraph.ListFilter{
+			Kind:       ogKindWorkerUpdate,
+			OwnerID:    ownerID,
+			ComputerID: computerID,
+			Limit:      lifecycleWorkerUpdateScanCap + 1,
+		})
+	}
 	if err != nil {
 		return nil, err
+	}
+	if computerID != "" {
+		filtered := make([]objectgraph.Object, 0, len(objects))
+		for _, obj := range objects {
+			if strings.TrimSpace(obj.ComputerID) == computerID {
+				filtered = append(filtered, obj)
+			}
+		}
+		objects = filtered
 	}
 	if len(objects) > lifecycleWorkerUpdateScanCap {
 		return nil, fmt.Errorf("lifecycle worker updates: scan cap %d exceeded for owner %s computer %s", lifecycleWorkerUpdateScanCap, ownerID, computerID)
@@ -520,7 +539,7 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 		return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 	}
 
-	objects, err := s.listWorkerUpdateObjects(ctx, ownerID, computerID)
+	objects, err := s.listWorkerUpdateObjects(ctx, ownerID, computerID, targetRunID)
 	if err != nil {
 		return LifecycleDeliveredPacketPage{}, err
 	}
@@ -645,7 +664,7 @@ func (s *Store) ListHistoricalLifecycleControlsDeliveredToRun(ctx context.Contex
 		!persistentSuperHistoricalReportRunStateAllowed(run.State) {
 		return nil, ErrLifecycleInvalidTransition
 	}
-	objects, err := s.listWorkerUpdateObjects(ctx, ownerID, computerID)
+	objects, err := s.listWorkerUpdateObjects(ctx, ownerID, computerID, targetRunID)
 	if err != nil {
 		return nil, err
 	}
