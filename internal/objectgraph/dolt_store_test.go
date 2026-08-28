@@ -671,17 +671,23 @@ func TestDoltStoreListJSONBodyFieldsByKindOwner(t *testing.T) {
 		t.Fatalf("list json fields: %v", err)
 	}
 	got := map[string][]string{}
+	gotID := map[string]string{}
 	for _, row := range rows {
 		if len(row.Fields) != 2 {
 			t.Fatalf("fields=%v", row.Fields)
 		}
-		got[row.Fields[0]+":"+row.Fields[1]+":"+row.ComputerID] = row.Fields
+		key := row.Fields[0] + ":" + row.Fields[1] + ":" + row.ComputerID
+		got[key] = row.Fields
+		gotID[key] = row.CanonicalID
 	}
 	if len(got) != 3 {
 		t.Fatalf("got %+v", got)
 	}
 	if _, ok := got["run-a:pending:computer-a"]; !ok {
 		t.Fatalf("missing pending-a in %+v", got)
+	}
+	if gotID["run-a:pending:computer-a"] != "obj:choir.worker_update:owner:pending-a" {
+		t.Fatalf("canonical pending-a=%q", gotID["run-a:pending:computer-a"])
 	}
 	if _, ok := got["run-a:acknowledged:computer-a"]; !ok {
 		t.Fatalf("missing acked-a in %+v", got)

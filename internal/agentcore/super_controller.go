@@ -562,13 +562,13 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 	if err != nil {
 		return nil, false, fmt.Errorf("list restarted persistent-Super runs: %w", err)
 	}
-	var pendingByRun map[string]int
+	var pendingIDsByRun map[string][]string
 	if strings.TrimSpace(ownerID) != "" && rt != nil && rt.store != nil {
-		pendingByRun, err = rt.store.CountPendingDeliveredWorkerUpdatesByRun(ctx, ownerID, computerID)
+		pendingIDsByRun, err = rt.store.PendingDeliveredWorkerUpdateCanonicalIDsByRun(ctx, ownerID, computerID)
 		if err != nil {
 			return nil, false, fmt.Errorf("index delivered worker updates: %w", err)
 		}
-		log.Printf("runtime: persistent-Super rewarm delivered-pending-runs=%d", len(pendingByRun))
+		log.Printf("runtime: persistent-Super rewarm delivered-pending-runs=%d", len(pendingIDsByRun))
 	}
 	var candidate *types.RunRecord
 	var candidateControls []types.CoagentSourcePacket
@@ -586,12 +586,18 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 			log.Printf("runtime: skip restarted persistent-Super control run %s: non-empty trajectory_id", run.RunID)
 			continue
 		}
-		if pendingByRun != nil && pendingByRun[run.RunID] == 0 {
+		if pendingIDsByRun != nil && len(pendingIDsByRun[run.RunID]) == 0 {
 			log.Printf("runtime: persistent-Super rewarm packets run=%s pending=0", run.RunID)
 			continue
 		}
 		log.Printf("runtime: persistent-Super rewarm validate run=%s", run.RunID)
-		controls, readErr := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, run)
+		var controls []types.CoagentSourcePacket
+		var readErr error
+		if pendingIDsByRun != nil {
+			controls, readErr = rt.pendingSuperRecoveryPacketsByCanonicalID(ctx, run, pendingIDsByRun[run.RunID])
+		} else {
+			controls, readErr = rt.listPendingLifecyclePacketsDeliveredToRun(ctx, run)
+		}
 		if readErr != nil {
 			if errors.Is(readErr, store.ErrNotFound) || strings.Contains(readErr.Error(), "not found") {
 				continue
@@ -614,7 +620,7 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 		log.Printf("runtime: persistent-Super rewarm packets run=%s pending=%d", run.RunID, len(controls))
 		// Passivated Super refs are already newest-first. The first run with
 		// pending controls is the reactivation authority; later tombstones
-		// must not each list worker updates.
+		// must not each GetObject worker updates.
 		copy := *run
 		candidate = &copy
 		candidateControls = append([]types.CoagentSourcePacket(nil), controls...)
@@ -962,6 +968,35 @@ func lifecycleControlTrajectoryForRun(rec *types.RunRecord) string {
 		return ""
 	}
 	return strings.TrimSpace(firstNonEmpty(rec.TrajectoryID, metadataStringValue(rec.Metadata, "assignment_trajectory_id"), metadataStringValue(rec.Metadata, runMetadataTrajectoryID)))
+}
+
+func (rt *Runtime) pendingSuperRecoveryPacketsByCanonicalID(ctx context.Context, rec *types.RunRecord, canonicalIDs []string) ([]types.CoagentSourcePacket, error) {
+	if rt == nil || rt.store == nil || rec == nil {
+		return nil, nil
+	}
+	trajectoryID := lifecycleControlTrajectoryForRun(rec)
+	if trajectoryID == "" {
+		return nil, store.ErrLifecycleInvalidTransition
+	}
+	out := make([]types.CoagentSourcePacket, 0, 1)
+	for _, canonicalID := range canonicalIDs {
+		packet, err := rt.store.GetCoagentSourcePacket(ctx, canonicalID)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) || strings.Contains(err.Error(), "not found") {
+				continue
+			}
+			return nil, err
+		}
+		if packet.DeliveredToRunID != rec.RunID || packet.Disposition != types.UpdatePending ||
+			packet.OwnerID != rec.OwnerID || packet.ComputerID != rec.ComputerID ||
+			packet.TargetAgentID != rec.AgentID || packet.TrajectoryID != trajectoryID ||
+			packet.AgentID == "" || packet.Direction == "" {
+			continue
+		}
+		out = append(out, packet)
+		break
+	}
+	return out, nil
 }
 
 func (rt *Runtime) listAllLifecyclePacketsDeliveredToRun(ctx context.Context, rec *types.RunRecord) ([]types.CoagentSourcePacket, error) {

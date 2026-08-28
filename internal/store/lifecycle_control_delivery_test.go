@@ -383,6 +383,20 @@ func TestCountPendingDeliveredWorkerUpdatesByRun(t *testing.T) {
 	if counts["run-empty-tombstone"] != 0 {
 		t.Fatalf("acked tombstone counted: %+v", counts)
 	}
+	ids, err := s.PendingDeliveredWorkerUpdateCanonicalIDsByRun(context.Background(), start.OwnerID, start.ComputerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids[run.RunID]) == 0 {
+		t.Fatalf("missing canonical ids for %s: %+v", run.RunID, ids)
+	}
+	packet, err := s.GetCoagentSourcePacket(context.Background(), ids[run.RunID][0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if packet.DeliveredToRunID != run.RunID || packet.Disposition != types.UpdatePending {
+		t.Fatalf("packet=%+v", packet)
+	}
 }
 
 func TestListPendingLifecycleUpdatesDoesNotLoadOwnerSnapshot(t *testing.T) {

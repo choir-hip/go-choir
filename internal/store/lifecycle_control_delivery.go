@@ -107,29 +107,62 @@ func (s *Store) listWorkerUpdateObjects(ctx context.Context, ownerID, computerID
 	return objects, nil
 }
 
+const pendingDeliveredWorkerUpdateRefCap = 8
+
 // CountPendingDeliveredWorkerUpdatesByRun indexes pending choir.worker_update
-// packets by DeliveredToRunID without materializing LONGBLOB bodies. Super
-// rewarm uses this to skip tombstones with nothing delivered before
-// ListLifecycleControlsDeliveredToRunPage (per-run JSON_EXTRACT + body).
+// packets by DeliveredToRunID without materializing LONGBLOB bodies.
 func (s *Store) CountPendingDeliveredWorkerUpdatesByRun(ctx context.Context, ownerID, computerID string) (map[string]int, error) {
+	counts, _, err := s.indexPendingDeliveredWorkerUpdatesByRun(ctx, ownerID, computerID)
+	return counts, err
+}
+
+// PendingDeliveredWorkerUpdateCanonicalIDsByRun maps delivered-to run IDs to
+// newest choir.worker_update canonical IDs. Super rewarm GetObject those rows
+// instead of JSON_EXTRACT-scanning every worker-update body per tombstone.
+func (s *Store) PendingDeliveredWorkerUpdateCanonicalIDsByRun(ctx context.Context, ownerID, computerID string) (map[string][]string, error) {
+	_, ids, err := s.indexPendingDeliveredWorkerUpdatesByRun(ctx, ownerID, computerID)
+	return ids, err
+}
+
+func (s *Store) GetCoagentSourcePacket(ctx context.Context, canonicalID string) (types.CoagentSourcePacket, error) {
+	canonicalID = strings.TrimSpace(canonicalID)
+	if canonicalID == "" {
+		return types.CoagentSourcePacket{}, ErrNotFound
+	}
 	graph := s.ogReadStore
 	if graph == nil {
 		graph = s.ogStore
 	}
 	if graph == nil {
-		return nil, fmt.Errorf("lifecycle worker updates: object graph not initialized")
+		return types.CoagentSourcePacket{}, fmt.Errorf("lifecycle worker updates: object graph not initialized")
+	}
+	obj, err := graph.GetObject(ctx, canonicalID)
+	if err != nil {
+		return types.CoagentSourcePacket{}, err
+	}
+	return decodeLifecycleObject[types.CoagentSourcePacket](obj)
+}
+
+func (s *Store) indexPendingDeliveredWorkerUpdatesByRun(ctx context.Context, ownerID, computerID string) (map[string]int, map[string][]string, error) {
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, nil, fmt.Errorf("lifecycle worker updates: object graph not initialized")
 	}
 	rows, err := graph.ListJSONBodyFieldsByKindOwner(ctx, string(ogKindWorkerUpdate), ownerID, []string{
 		"$.delivered_to_loop_id",
 		"$.disposition",
 	}, lifecycleWorkerUpdateScanCap+1)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(rows) > lifecycleWorkerUpdateScanCap {
-		return nil, fmt.Errorf("lifecycle worker updates: scan cap %d exceeded for owner %s computer %s", lifecycleWorkerUpdateScanCap, ownerID, computerID)
+		return nil, nil, fmt.Errorf("lifecycle worker updates: scan cap %d exceeded for owner %s computer %s", lifecycleWorkerUpdateScanCap, ownerID, computerID)
 	}
-	out := map[string]int{}
+	counts := map[string]int{}
+	ids := map[string][]string{}
 	for _, row := range rows {
 		if computerID != "" && strings.TrimSpace(row.ComputerID) != computerID {
 			continue
@@ -141,9 +174,13 @@ func (s *Store) CountPendingDeliveredWorkerUpdatesByRun(ctx context.Context, own
 		if runID == "" || strings.TrimSpace(row.Fields[1]) != string(types.UpdatePending) {
 			continue
 		}
-		out[runID]++
+		counts[runID]++
+		canonicalID := strings.TrimSpace(row.CanonicalID)
+		if canonicalID != "" && len(ids[runID]) < pendingDeliveredWorkerUpdateRefCap {
+			ids[runID] = append(ids[runID], canonicalID)
+		}
 	}
-	return out, nil
+	return counts, ids, nil
 }
 
 func normalizeLifecycleControlActivationRefresh(refresh *types.LifecycleControlActivationRefresh) error {

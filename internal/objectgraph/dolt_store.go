@@ -599,8 +599,9 @@ func (s *DoltStore) ListObjectRefsByKindOwner(ctx context.Context, kind, ownerID
 // rewarm indexes pending delivered worker-updates this way so it does not
 // materialize LONGBLOB bodies.
 type JSONBodyFieldRow struct {
-	ComputerID string
-	Fields     []string
+	CanonicalID string
+	ComputerID  string
+	Fields      []string
 }
 
 // ListJSONBodyFieldsByKindOwner extracts JSON body fields for one kind+owner
@@ -616,7 +617,7 @@ func (s *DoltStore) ListJSONBodyFieldsByKindOwner(ctx context.Context, kind, own
 	if len(jsonPaths) == 0 {
 		return nil, fmt.Errorf("objectgraph dolt: json path is required")
 	}
-	query := `SELECT computer_id`
+	query := `SELECT canonical_id, computer_id`
 	args := make([]any, 0, len(jsonPaths)+3)
 	for _, path := range jsonPaths {
 		if strings.TrimSpace(path) == "" {
@@ -634,12 +635,13 @@ func (s *DoltStore) ListJSONBodyFieldsByKindOwner(ctx context.Context, kind, own
 	defer rows.Close()
 	var out []JSONBodyFieldRow
 	for rows.Next() {
-		var computerID sql.NullString
+		var canonicalID, computerID sql.NullString
 		nulls := make([]sql.NullString, len(jsonPaths))
-		dest := make([]any, 1+len(jsonPaths))
-		dest[0] = &computerID
+		dest := make([]any, 2+len(jsonPaths))
+		dest[0] = &canonicalID
+		dest[1] = &computerID
 		for i := range nulls {
-			dest[i+1] = &nulls[i]
+			dest[i+2] = &nulls[i]
 		}
 		if scanErr := rows.Scan(dest...); scanErr != nil {
 			return nil, scanErr
@@ -650,7 +652,7 @@ func (s *DoltStore) ListJSONBodyFieldsByKindOwner(ctx context.Context, kind, own
 				fields[i] = ns.String
 			}
 		}
-		out = append(out, JSONBodyFieldRow{ComputerID: computerID.String, Fields: fields})
+		out = append(out, JSONBodyFieldRow{CanonicalID: canonicalID.String, ComputerID: computerID.String, Fields: fields})
 	}
 	return out, rows.Err()
 }
