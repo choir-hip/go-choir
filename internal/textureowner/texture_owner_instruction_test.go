@@ -759,13 +759,13 @@ func TestOwnerInstructionWakeSurvivesPassivationRaceAndBootReconcile(t *testing.
 	}
 }
 
-func TestPassivatedTextureWakeFailsClosedOnAmbiguousCanonicalRuns(t *testing.T) {
+func TestPassivatedTextureWakeResolvesResidueByCanonicalOrder(t *testing.T) {
 	core, handler := testAPISetup(t)
 	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	start := startObservationLifecycle(t, core.Store())
 	handler.wakeOwnerInstruction = func(context.Context, string, string, string) error { return nil }
 	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
-	queued := postOwnerInstruction(t, handler, path, start.OwnerID, "ambiguous-passivated", "retain exact ambiguity", start.InitialRevision.RevisionID)
+	queued := postOwnerInstruction(t, handler, path, start.OwnerID, "residue-resolve", "supersede crash-loop residue", start.InitialRevision.RevisionID)
 	if queued.Code != http.StatusAccepted {
 		t.Fatalf("queue status=%d body=%s", queued.Code, queued.Body.String())
 	}
@@ -775,13 +775,13 @@ func TestPassivatedTextureWakeFailsClosedOnAmbiguousCanonicalRuns(t *testing.T) 
 	}
 	passivated := *run
 	passivated.State, passivated.UpdatedAt = types.RunPassivated, time.Now().UTC()
-	req := types.ReplaceLifecycleActivationRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "passivate-ambiguous-primary", TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: passivated}
+	req := types.ReplaceLifecycleActivationRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "passivate-residue-primary", TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: passivated}
 	req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
 	if _, err := core.Store().ReplaceLifecycleActivation(t.Context(), req); err != nil {
 		t.Fatal(err)
 	}
 	duplicate := passivated
-	duplicate.RunID, duplicate.CreatedAt, duplicate.UpdatedAt = "texture-run-ambiguous-duplicate", time.Now().UTC().Add(-time.Second), time.Now().UTC()
+	duplicate.RunID, duplicate.CreatedAt, duplicate.UpdatedAt = "texture-run-residue-duplicate", time.Now().UTC().Add(-time.Second), time.Now().UTC()
 	if err := core.Store().CreateRun(t.Context(), duplicate); err != nil {
 		t.Fatal(err)
 	}
@@ -791,18 +791,71 @@ func TestPassivatedTextureWakeFailsClosedOnAmbiguousCanonicalRuns(t *testing.T) 
 	}
 	primaryMutation.RunID = duplicate.RunID
 	primaryMutation.State = "sleeping"
+	primaryMutation.ScheduledMessageSeq = primaryMutation.ScheduledMessageSeq + 1
 	primaryMutation.CreatedAt = time.Now().UTC()
 	if err := core.Store().CreateAgentMutation(t.Context(), *primaryMutation); err != nil {
 		t.Fatal(err)
 	}
 	got, wakeErr := handler.ReconcileActorWake(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	if wakeErr != nil || got == nil {
+		t.Fatalf("residue resolve wake run=%+v err=%v", got, wakeErr)
+	}
+	if got.RunID != duplicate.RunID {
+		t.Fatalf("canonical order did not select newest mutation generation: got=%s want=%s", got.RunID, duplicate.RunID)
+	}
+	first, _ := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, run.RunID)
+	second, _ := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, duplicate.RunID)
+	if first.State != types.RunPassivated {
+		t.Fatalf("losing residue candidate was mutated: %+v", first)
+	}
+	if second.State != types.RunRunning && second.State != types.RunPending {
+		t.Fatalf("winning residue candidate was not resumed: %+v", second)
+	}
+}
+
+func TestPassivatedTextureWakeFailsClosedOnExactCanonicalOrderingTie(t *testing.T) {
+	core, handler := testAPISetup(t)
+	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	start := startObservationLifecycle(t, core.Store())
+	handler.wakeOwnerInstruction = func(context.Context, string, string, string) error { return nil }
+	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
+	queued := postOwnerInstruction(t, handler, path, start.OwnerID, "residue-tie", "exact tie still refuses", start.InitialRevision.RevisionID)
+	if queued.Code != http.StatusAccepted {
+		t.Fatalf("queue status=%d body=%s", queued.Code, queued.Body.String())
+	}
+	run, err := handler.ReconcileAgentWake(t.Context(), start.OwnerID, start.InitialDocument.DocID)
+	if err != nil || run == nil {
+		t.Fatalf("initial run=%+v err=%v", run, err)
+	}
+	passivated := *run
+	passivated.State, passivated.UpdatedAt = types.RunPassivated, time.Now().UTC()
+	req := types.ReplaceLifecycleActivationRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "passivate-tie-primary", TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: passivated}
+	req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
+	if _, err := core.Store().ReplaceLifecycleActivation(t.Context(), req); err != nil {
+		t.Fatal(err)
+	}
+	tieMutation, err := core.Store().GetAgentMutationByRun(t.Context(), start.OwnerID, start.ComputerID, run.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicate := passivated
+	duplicate.RunID = "texture-run-tie-duplicate"
+	if err := core.Store().CreateRun(t.Context(), duplicate); err != nil {
+		t.Fatal(err)
+	}
+	tieMutation.RunID = duplicate.RunID
+	tieMutation.State = "sleeping"
+	if err := core.Store().CreateAgentMutation(t.Context(), *tieMutation); err != nil {
+		t.Fatal(err)
+	}
+	got, wakeErr := handler.ReconcileActorWake(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
 	if wakeErr == nil || !strings.Contains(wakeErr.Error(), "ambiguous passivated Texture run authority") || got != nil {
-		t.Fatalf("ambiguous wake run=%+v err=%v", got, wakeErr)
+		t.Fatalf("exact canonical tie must refuse: run=%+v err=%v", got, wakeErr)
 	}
 	first, _ := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, run.RunID)
 	second, _ := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, duplicate.RunID)
 	if first.State != types.RunPassivated || second.State != types.RunPassivated {
-		t.Fatalf("ambiguity mutated candidates first=%+v second=%+v", first, second)
+		t.Fatalf("tie mutated candidates first=%+v second=%+v", first, second)
 	}
 }
 

@@ -109,11 +109,16 @@ func (rt *Handler) Start(ctx context.Context) error {
 		}
 		if activationEligible && candidateRunID == "" {
 			// A pre-repair passivated run can have neither ActiveRunID nor memory.
-			// Enumerate only to prove a unique exact document/trajectory/mutation
+			// Enumerate exact document/trajectory/mutation candidates. Live
+			// (active) multiplicity fails closed; passivated residue supersession
+			// resolves by canonical order (see selectPassivatedTextureAuthority).
+			// See docs/reviews/passivated-authority-structural-assessment-2026-08-28.md.
 			runs, listErr := rt.Store.ListLifecycleRunsByChannel(ctx, subject.OwnerID, subject.ComputerID, docID, 0)
 			if listErr != nil {
 				return fmt.Errorf("list boot Texture recovery candidates: %w", listErr)
 			}
+			activeRuns := 0
+			var passivated []passivatedTextureAuthority
 			for i := range runs {
 				candidate := runs[i]
 				if candidate.AgentID != subject.AgentID || candidate.OwnerID != subject.OwnerID || candidate.ComputerID != subject.ComputerID || candidate.ChannelID != docID || candidate.TrajectoryID != doc.TrajectoryID || candidate.State.Terminal() || !isTextureAgentRevisionTaskType(metadataStringValue(candidate.Metadata, "type")) {
@@ -126,10 +131,24 @@ func (rt *Handler) Start(ctx context.Context) error {
 				if mutation == nil || mutation.RunID != candidate.RunID || mutation.DocID != docID || mutation.OwnerID != subject.OwnerID || mutation.ComputerID != subject.ComputerID {
 					continue
 				}
-				if candidateRunID != "" {
+				if candidate.State.Active() {
+					activeRuns++
+					if activeRuns > 1 {
+						return fmt.Errorf("ambiguous boot Texture recovery run authority")
+					}
+					candidateRunID = candidate.RunID
+					continue
+				}
+				passivated = append(passivated, passivatedTextureAuthority{run: candidate, sequence: mutation.ScheduledMessageSeq, mutationCreatedAt: mutation.CreatedAt})
+			}
+			if activeRuns == 0 {
+				winner, selectErr := selectPassivatedTextureAuthority(passivated)
+				if selectErr != nil {
 					return fmt.Errorf("ambiguous boot Texture recovery run authority")
 				}
-				candidateRunID = candidate.RunID
+				if winner != nil {
+					candidateRunID = winner.RunID
+				}
 			}
 		}
 		if activationEligible && candidateRunID != "" {
@@ -290,6 +309,76 @@ func (rt *Handler) ReconcileActorOccurrenceWake(ctx context.Context, ownerID, co
 	return rec, nil
 }
 
+// errAmbiguousPassivatedTextureAuthority is refused when passivated residue
+// cannot be disambiguated by the canonical supersession order.
+var errAmbiguousPassivatedTextureAuthority = errors.New("ambiguous passivated Texture run authority")
+
+// passivatedTextureAuthority is one fully-validated passivated Texture
+// recovery claim paired with its canonical supersession ordering fields.
+type passivatedTextureAuthority struct {
+	run               types.RunRecord
+	sequence          int64
+	mutationCreatedAt time.Time
+}
+
+// selectPassivatedTextureAuthority applies the passivated-residue supersession
+// contract (docs/reviews/passivated-authority-structural-assessment-2026-08-28.md
+// section 6): passivated multiplicity is crash-loop residue, not concurrent
+// live authority; exactly one uniquely dominant candidate may be resumed while
+// every loser stays passivated. Candidates are ordered by mutation
+// ScheduledMessageSeq desc (activation freshness), then immutable mutation
+// CreatedAt desc, then run CreatedAt desc, then run UpdatedAt desc. A
+// full-tuple tie across different run IDs refuses.
+func selectPassivatedTextureAuthority(candidates []passivatedTextureAuthority) (*types.RunRecord, error) {
+	var best *passivatedTextureAuthority
+	for i := range candidates {
+		candidate := &candidates[i]
+		if best == nil {
+			best = candidate
+			continue
+		}
+		switch comparePassivatedTextureAuthority(candidate, best) {
+		case 1:
+			best = candidate
+		case 0:
+			return nil, errAmbiguousPassivatedTextureAuthority
+		}
+	}
+	if best == nil {
+		return nil, nil
+	}
+	winner := best.run
+	return &winner, nil
+}
+
+func comparePassivatedTextureAuthority(a, b *passivatedTextureAuthority) int {
+	if a.sequence != b.sequence {
+		if a.sequence > b.sequence {
+			return 1
+		}
+		return -1
+	}
+	if !a.mutationCreatedAt.Equal(b.mutationCreatedAt) {
+		if a.mutationCreatedAt.After(b.mutationCreatedAt) {
+			return 1
+		}
+		return -1
+	}
+	if !a.run.CreatedAt.Equal(b.run.CreatedAt) {
+		if a.run.CreatedAt.After(b.run.CreatedAt) {
+			return 1
+		}
+		return -1
+	}
+	if !a.run.UpdatedAt.Equal(b.run.UpdatedAt) {
+		if a.run.UpdatedAt.After(b.run.UpdatedAt) {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
 // validateOccurrenceReconciliationCandidates is a read-only gate. It proves
 // that generic reconciliation cannot stale/reactivate a foreign or ambiguous
 // candidate before the exact occurrence/run join is known.
@@ -298,7 +387,7 @@ func (rt *Handler) validateOccurrenceReconciliationCandidates(ctx context.Contex
 	if err != nil {
 		return err
 	}
-	eligible := 0
+	var passivated []passivatedTextureAuthority
 	for i := range runs {
 		candidate := &runs[i]
 		if candidate.State != types.RunPassivated || candidate.AgentID != agentID || candidate.TrajectoryID != doc.TrajectoryID ||
@@ -320,12 +409,12 @@ func (rt *Handler) validateOccurrenceReconciliationCandidates(ctx context.Contex
 		if head != doc.CurrentRevisionID {
 			continue
 		}
-		eligible++
 		if metadataStringValue(candidate.Metadata, "lifecycle_work_item_id") != resolvedWorkID {
 			return invalidTextureOccurrence("Texture occurrence does not authorize passivated candidate work")
 		}
+		passivated = append(passivated, passivatedTextureAuthority{run: *candidate, sequence: mutation.ScheduledMessageSeq, mutationCreatedAt: mutation.CreatedAt})
 	}
-	if eligible > 1 {
+	if _, selectErr := selectPassivatedTextureAuthority(passivated); selectErr != nil {
 		return invalidTextureOccurrence("ambiguous passivated Texture run authority for document %s", doc.DocID)
 	}
 	active, found, activeErr := rt.Core.TextureActiveRunByAgent(ctx, doc.OwnerID, doc.ComputerID, agentID)
@@ -699,7 +788,7 @@ func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types
 	if err != nil {
 		return nil, false, fmt.Errorf("list passivated Texture runs: %w", err)
 	}
-	var rec *types.RunRecord
+	var passivated []passivatedTextureAuthority
 	for i := range runs {
 		candidate := &runs[i]
 		if candidate.State != types.RunPassivated ||
@@ -736,10 +825,11 @@ func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types
 		if mutation == nil || (mutation.State != "pending" && mutation.State != "stale_activation" && (mutation.State != "sleeping" || scheduledSeq <= 0)) {
 			continue
 		}
-		if rec != nil {
-			return nil, false, fmt.Errorf("ambiguous passivated Texture run authority for document %s", docID)
-		}
-		rec = candidate
+		passivated = append(passivated, passivatedTextureAuthority{run: *candidate, sequence: mutation.ScheduledMessageSeq, mutationCreatedAt: mutation.CreatedAt})
+	}
+	rec, selectErr := selectPassivatedTextureAuthority(passivated)
+	if selectErr != nil {
+		return nil, false, fmt.Errorf("%w for document %s", selectErr, docID)
 	}
 	if rec == nil {
 		return nil, false, nil
