@@ -86,3 +86,15 @@ Guest boot on the repair commit reaches `runtime: started` AND holds past the
 Texture owner reconcile (no `startup refused`), >= 3 minutes stable, owner API
 200s. Unit test: two passivated revision runs for one document must not produce
 the ambiguity error and must not activate either run.
+
+## 6. Live Proof (2026-08-28T21:53Z)
+
+Fix `0ec9c2f0` (CI `33212825722`, Node B deploy 21:53:31Z), owner refresh
+`effects-texture-bprime-refresh-2026-08-28T2200Z` -> epoch 837. Guest
+generation 21:54:14 on `0ec9c2f0`: all boot phases completed, `runtime:
+started` 21:54:40, no `ambiguous ... Texture ... authority` refusal, single
+generation stable through 22:01+ (previous cadence was ~33s generations).
+Boot rewarm dispatched Super `fe92ea2b` with the assignment-report
+cancel-report recovery occurrence queued (21:54:34), and the self-dev
+operations retry wake returned 200 - the supervised self-development mission
+machinery resumed on the restored computer.
