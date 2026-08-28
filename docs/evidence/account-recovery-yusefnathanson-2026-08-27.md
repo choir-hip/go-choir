@@ -41,6 +41,19 @@ The account's email alias `000@choir.news` remains healthy. A Resend `email.rece
 - Full interactive WebAuthn browser login was not exercised in this shell session; authenticated product API and shell bootstrap acceptance passed.
 - Mail remains host-side `maild` data; guest Maildir synchronization is not claimed because Track M drain is not wired on the live path.
 
+## Break-glass actions disclosed
+
+- During diagnosis, the host `ownerships.json` was temporarily edited to test an
+  alternate desktop key and was then restored to `desktop_id: primary`; a backup
+  `ownerships.json.backup-before-yusef-recovery-1787872076` was created. The
+  final persisted ownership matches the original ComputerID/VMID and route.
+- The held VM's `data.img` was replaced from retained `data.img.stable-hold-20260825`
+  and later `data.img.stable-hold-20260825-poststop` using host reflink copy while
+  the VM was held/stopped between attempts. All retained source images remain.
+- Verified orphan Firecracker processes and stale VM-specific tap devices were
+  removed during diagnosis. The durable c4b7a9a5 repair now performs stale-tap
+  cleanup in the VM manager before orphan relaunch.
+
 ## Safety / rollback
 
 - Host hold was reasserted through the vmctl hold control and must remain set.
