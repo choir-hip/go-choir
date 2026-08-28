@@ -95,3 +95,66 @@ without B is not durable.
   repair + self-dev wake fix; NOT the reverted texture change).
 - The self-dev operations retry wake is now functional and will fire once boot
   survives Texture reconcile.
+
+## 6. Agentic Consensus Adjudication (2026-08-28T21:05Z)
+
+Panel: 11 usable outputs of 12
+(`.agentic-consensus/agentic-consensus-20260828-164858/`, prompt
+`.agentic-consensus/prompt-passivated-authority-2026-08-28.md`); failed:
+`omp-x-preview-f`. Mode: convergent.
+
+### Verdict (11/11)
+
+**Option B — deterministic passivated-residue disambiguation at all three
+Texture guard sites** (`:130` boot enumeration, `:329` occurrence gate,
+`:740` reactivation pick). A is rejected (leaves staging down); C-alone is
+rejected (residue re-accumulates after the next mass-passivation event and
+re-bricks boot; C may follow later as hygiene).
+
+### Sharpened contract (adopted, amended from the assessment)
+
+The assessment's newest-`UpdatedAt` tiebreak is **rejected by the panel**
+(`gpt56-sol` B′, `grok46`, `luna` concur): boot passivation stamps
+`UpdatedAt=time.Now()` on every duplicate in one sweep
+(`runtime.go:1955-1996`), so `UpdatedAt` is recovery machinery noise, not
+authority, and batch-stamped duplicates approach ties. Encoded contract:
+
+1. A unique `Active()` (pending/running/blocked) candidate wins outright;
+   passivated residue never competes with a live run.
+2. More than one `Active()` candidate on the same
+   document/trajectory/revision/occurrence → **fail closed**.
+3. Passivated-only multiplicity: select by canonical order —
+   `mutation.ScheduledMessageSeq` desc (activation freshness; scoped to
+   same-trajectory candidates), then immutable `mutation.CreatedAt` desc,
+   then `run.CreatedAt` desc, then `run.UpdatedAt` desc.
+4. Indistinguishable on the full tuple with **different run IDs** →
+   **fail closed** (never fall back to RunID lexical order — rejected
+   dissent, `opencode`).
+5. `RunState.Terminal()` untouched; losers stay passivated (no unbinds in
+   this commit); `TestAdapterSQLiteBootRecoveryUsesJoinedOccurrenceNotDuplicateInitialDispatch`
+   stays unchanged and green.
+
+### Failsafes retained
+
+Live-active ambiguity, authority mismatches (owner/computer/doc/trajectory/
+revision/work), mutation-sequence inconsistency, cancellation intent, and
+store errors all still refuse. Re-pinned test invariant (per `gpt56-sol`):
+passivated multiplicity is residue, not concurrent live authority; reconcile
+may reactivate exactly one uniquely dominant exact-canonical candidate while
+every loser stays passivated; any live or equal-rank ambiguity refuses
+without mutation.
+
+### Plan (panel-converged)
+
+1. One shared selector helper in `textureowner`; wire the three sites.
+2. Re-pin `TestPassivatedTextureWakeFailsClosedOnAmbiguousCanonicalRuns`
+   to the contract above (distinct-order resolves newest; exact-tie refuses;
+   live-active refuses) and add boot-path tests: two passivated distinct
+   orderings → newest resumed; two active → refuse; one active + one
+   passivated → active wins.
+3. `go test ./internal/textureowner ./internal/actorruntime ./internal/agentcore`
+   green → commit (red class, rollback = revert) → CI → Node B → owner
+   refresh → acceptance: boot past `runtime: started` with no
+   `ambiguous ... Texture ... authority` refusal, >= 3 min stable, then the
+   self-dev wake retry fires and candidate A resumes.
+
