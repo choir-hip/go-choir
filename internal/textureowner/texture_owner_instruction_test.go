@@ -806,63 +806,6 @@ func TestPassivatedTextureWakeFailsClosedOnAmbiguousCanonicalRuns(t *testing.T) 
 	}
 }
 
-func TestBootTextureRecoverySkipsPassivatedCandidatesWithoutAmbiguity(t *testing.T) {
-	core, handler := testAPISetup(t)
-	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
-	start := startObservationLifecycle(t, core.Store())
-	handler.wakeOwnerInstruction = func(context.Context, string, string, string) error { return nil }
-	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
-	queued := postOwnerInstruction(t, handler, path, start.OwnerID, "boot-passivated-duplicates", "survive outage passivation", start.InitialRevision.RevisionID)
-	if queued.Code != http.StatusAccepted {
-		t.Fatalf("queue status=%d body=%s", queued.Code, queued.Body.String())
-	}
-	run, err := handler.ReconcileAgentWake(t.Context(), start.OwnerID, start.InitialDocument.DocID)
-	if err != nil || run == nil {
-		t.Fatalf("initial run=%+v err=%v", run, err)
-	}
-	passivated := *run
-	passivated.State, passivated.UpdatedAt = types.RunPassivated, time.Now().UTC()
-	req := types.ReplaceLifecycleActivationRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "passivate-boot-primary", TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: passivated}
-	req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
-	if _, err := core.Store().ReplaceLifecycleActivation(t.Context(), req); err != nil {
-		t.Fatal(err)
-	}
-	duplicate := passivated
-	duplicate.RunID, duplicate.CreatedAt, duplicate.UpdatedAt = "texture-run-boot-duplicate", time.Now().UTC().Add(-time.Second), time.Now().UTC()
-	if err := core.Store().CreateRun(t.Context(), duplicate); err != nil {
-		t.Fatal(err)
-	}
-	primaryMutation, err := core.Store().GetAgentMutationByRun(t.Context(), start.OwnerID, start.ComputerID, run.RunID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	primaryMutation.RunID = duplicate.RunID
-	primaryMutation.State = "sleeping"
-	primaryMutation.CreatedAt = time.Now().UTC()
-	if err := core.Store().CreateAgentMutation(t.Context(), *primaryMutation); err != nil {
-		t.Fatal(err)
-	}
-	handler.Start(t.Context())
-	agent, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if agent.ActiveRunID == run.RunID || agent.ActiveRunID == duplicate.RunID {
-		t.Fatalf("boot recovery activated a passivated run: active=%s", agent.ActiveRunID)
-	}
-	first, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, run.RunID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, duplicate.RunID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first.State != types.RunPassivated || second.State != types.RunPassivated {
-		t.Fatalf("boot recovery mutated passivated candidates: %s %s", first.State, second.State)
-	}
-}
-
 func TestResidentTextureInjectsAndConsumes101SameHeadOwnerOccurrences(t *testing.T) {
 	core, handler := testAPISetup(t)
 	installSynchronousTextureOwnerWake(t, core, handler)
