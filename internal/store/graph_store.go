@@ -784,6 +784,81 @@ func (s *Store) forEachRunsByStatePageSize(ctx context.Context, state types.RunS
 	})
 }
 
+const recentRunsByOwnerDefaultLimit = 256
+
+func ogMetadataText(meta map[string]any, key string) string {
+	if meta == nil {
+		return ""
+	}
+	v, ok := meta[key]
+	if !ok || v == nil {
+		return ""
+	}
+	s, ok := v.(string)
+	if !ok {
+		return strings.TrimSpace(fmt.Sprint(v))
+	}
+	return strings.TrimSpace(s)
+}
+
+// ListRecentRunsByOwner returns the newest terminal delegated children for
+// one owner. It lists og_objects headers through idx_og_objects_kind_owner
+// (no metadata JSON_EXTRACT, no body), then GetObject only for terminal
+// rows whose metadata requested_by_run_id is set. Historical roots and
+// other computers are not loaded.
+func (s *Store) ListRecentRunsByOwner(ctx context.Context, ownerID, computerID string, limit int) ([]types.RunRecord, error) {
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	if ownerID == "" {
+		return nil, fmt.Errorf("list recent runs: owner_id is required")
+	}
+	if limit <= 0 {
+		limit = recentRunsByOwnerDefaultLimit
+	}
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("store: object graph not initialized")
+	}
+	refs, err := graph.ListObjectRefsByKindOwner(ctx, string(ogKindRun), ownerID, limit)
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]types.RunRecord, 0, len(refs))
+	for _, ref := range refs {
+		if ref.Tombstone {
+			continue
+		}
+		if computerID != "" && strings.TrimSpace(ref.ComputerID) != "" && strings.TrimSpace(ref.ComputerID) != computerID {
+			continue
+		}
+		meta := map[string]any{}
+		if len(ref.Metadata) > 0 {
+			if err := json.Unmarshal(ref.Metadata, &meta); err != nil {
+				return nil, fmt.Errorf("list recent runs: decode metadata %s: %w", ref.CanonicalID, err)
+			}
+		}
+		state := ogMetadataText(meta, "state")
+		if state != string(types.RunCompleted) && state != string(types.RunFailed) && state != string(types.RunCancelled) {
+			continue
+		}
+		if ogMetadataText(meta, "requested_by_run_id") == "" {
+			continue
+		}
+		obj, err := graph.GetObject(ctx, ref.CanonicalID)
+		if err != nil {
+			return nil, fmt.Errorf("list recent runs: get %s: %w", ref.CanonicalID, err)
+		}
+		var rec types.RunRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		runs = append(runs, rec)
+	}
+	return runs, nil
+}
+
 // ListAllRunsOG lists all runs from the object graph, ordered by
 // created_at descending.
 

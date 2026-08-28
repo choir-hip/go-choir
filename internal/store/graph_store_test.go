@@ -427,6 +427,54 @@ func TestForEachRunsByStateExhaustsKeysetPages(t *testing.T) {
 	}
 }
 
+func TestListRecentRunsByOwnerLoadsRequestedChildrenOnly(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := "owner-recent-window"
+	child := types.RunRecord{
+		RunID:            "run-recent-child",
+		AgentID:          "co-super:recent-child",
+		RequestedByRunID: "parent-recent",
+		OwnerID:          ownerID,
+		ComputerID:       "autoputer-1",
+		State:            types.RunCompleted,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	root := types.RunRecord{
+		RunID:      "run-recent-root",
+		AgentID:    "researcher:recent-root",
+		OwnerID:    ownerID,
+		ComputerID: "autoputer-1",
+		State:      types.RunCompleted,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	foreign := types.RunRecord{
+		RunID:            "run-recent-foreign",
+		AgentID:          "co-super:recent-foreign",
+		RequestedByRunID: "parent-recent-foreign",
+		OwnerID:          "owner-recent-foreign",
+		ComputerID:       "autoputer-1",
+		State:            types.RunCompleted,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	for _, rec := range []types.RunRecord{child, root, foreign} {
+		if err := s.CreateRunOG(ctx, rec); err != nil {
+			t.Fatalf("create %s: %v", rec.RunID, err)
+		}
+	}
+	got, err := s.ListRecentRunsByOwner(ctx, ownerID, "autoputer-1", 16)
+	if err != nil {
+		t.Fatalf("list recent runs: %v", err)
+	}
+	if len(got) != 1 || got[0].RunID != child.RunID {
+		t.Fatalf("recent delegated children = %+v, want [%s]", got, child.RunID)
+	}
+}
+
 func TestOGAppendAndListEvents(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

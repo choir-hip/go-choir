@@ -3,7 +3,7 @@
 <problem_id: held-computer-boot-terminal-outcome-scan-crash-2026-08-28>
 <first_observed: 2026-08-28T07:52Z>
 <mutation_class: red>
-<deployed_commit: 04fd704d7aa763ae25c7db8121a36012b43d3632>
+<deployed_commit: 9023abbbc702dfacb85dfdef581d3710eeefff67>
 <affected_surfaces: [internal/agentcore/runtime.go, internal/agentcore/researcher_checkpoint_fallback.go, internal/store/graph_store.go, internal/store/lifecycle.go, guest systemd go-choir-autoputer]>
 
 ## 1. Problem Description
@@ -92,7 +92,40 @@ missing. Historical already-bound children are the volume.
 4. `ensurePersistedTerminalRunOutcome`: `GetWorkerUpdate` of the
    deterministic synthetic outcome ID before parent/agent/producer-list
    work, so already-repaired children are O(1) by ID.
+5. Production computers (`computer-*` or `CHOIR_OWNER_ID`) must not call
+   `ForEachRunsByState` / `ForEachLifecycleRunsByState` at boot. Repair
+   recent delegated children through `ListObjectRefsByKindOwner` +
+   `GetObject` (indexed kind+owner, no body, no JSON_EXTRACT). Tests
+   without an owner keep the exhaustive walk on tiny stores.
 
 After deploy: product-path start, guest `commit=HEAD`, observability
-shows `runtime: started`, boot `deployed_at` does not reset for ≥3
-minutes, and no 502 recycle.
+shows `runtime: started` plus `boot terminal outcome owner-scoped`,
+boot `deployed_at` does not reset for ≥3 minutes, and no 502 recycle.
+
+## 6. Live proof that paging is not enough (2026-08-28T08:41Z)
+
+`9023abbb` is on the guest (`deployed_at=2026-08-28T08:41:40Z`).
+Product-path start receipt `01a04788` epoch **814**. Dense 8s polls:
+
+| t (UTC) | observation |
+|---|---|
+| 08:41:59 | boot phases through Super rewarm begin; candidate `25493355-…` |
+| 08:42:05 | skip Super tombstone `5c5a2f9d-…` |
+| 08:42:15 | Super **dispatched**; `rewarm_persistent_super` 16.428s; wire claims 27ms; **`boot phase begin reconcile_terminal_run_outcomes`** |
+| 08:42:15–08:42:42 | no `scanned=256`, no lifecycle `scanned=` |
+| 08:42:42 | process restart (`starting server on 0.0.0.0:8085`); same `deployed_at` |
+| 08:43:01 | second boot Super rewarm begin |
+| 08:43:28 | `count running processor runs: Error 1105: context canceled` |
+| 08:43:47 | lifecycle `degraded` epoch 814; observability 502 |
+
+`ListObjectsByMetadataPage` still does
+`JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?))` over `og_objects`
+and selects **body**. Page size 256 does not prevent a full-kind scan or
+loading huge run payloads. The first page never returns, so boot-phase
+progress logs never fire. Indexes on this table are
+`(object_kind, owner_id)` and `(updated_at)` — not metadata.state.
+
+Follow-up fix: production boot repair lists **headers** via
+`idx_og_objects_kind_owner` (`ListObjectRefsByKindOwner`) and
+`GetObject` only for recent terminal children with `requested_by_run_id`.
+Do not JSON_EXTRACT the completed-state keyset at boot.

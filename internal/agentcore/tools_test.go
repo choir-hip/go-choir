@@ -1018,6 +1018,65 @@ func TestBootTerminalRepairSkipsHistoricalRootRuns(t *testing.T) {
 	}
 }
 
+func TestBootTerminalRepairUsesOwnerScopedRecentWindow(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	now := time.Now().UTC()
+	ownerID := "owner-scoped-terminal-repair"
+	otherOwner := "owner-foreign-terminal-repair"
+	t.Setenv("CHOIR_OWNER_ID", ownerID)
+	targetAgentID := "super:scoped-terminal-parent"
+	channelID := "channel-scoped-terminal-repair"
+	child := func(runID, owner string) types.RunRecord {
+		return types.RunRecord{
+			RunID:            runID,
+			AgentID:          "co-super:" + runID,
+			RequestedByRunID: "parent-scoped-terminal",
+			ChannelID:        channelID,
+			OwnerID:          owner,
+			AgentProfile:     agentprofile.CoSuper,
+			AgentRole:        agentprofile.CoSuper,
+			State:            types.RunCompleted,
+			Result:           "delegated child result",
+			CreatedAt:        now,
+			UpdatedAt:        now,
+			FinishedAt:       &now,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: agentprofile.CoSuper,
+				runMetadataAgentRole:    agentprofile.CoSuper,
+				runMetadataAgentID:      "co-super:" + runID,
+				runMetadataChannelID:    channelID,
+				runMetadataTrajectoryID: "trajectory-" + runID,
+				"requested_by_agent_id": targetAgentID,
+			},
+		}
+	}
+	if err := s.CreateRun(ctx, child("run-scoped-terminal-child", ownerID)); err != nil {
+		t.Fatalf("create owner child: %v", err)
+	}
+	if err := s.CreateRun(ctx, child("run-foreign-terminal-child", otherOwner)); err != nil {
+		t.Fatalf("create foreign child: %v", err)
+	}
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
+		return nil
+	})
+	rt.reconcileTerminalRunOutcomes(ctx)
+	mine, err := s.ListPendingWorkerUpdates(ctx, ownerID, targetAgentID, 10)
+	if err != nil {
+		t.Fatalf("list owner-scoped repairs: %v", err)
+	}
+	if len(mine) != 1 || mine[0].SourceRunID != "run-scoped-terminal-child" {
+		t.Fatalf("owner-scoped repairs = %+v, want one packet for run-scoped-terminal-child", mine)
+	}
+	foreign, err := s.ListPendingWorkerUpdates(ctx, otherOwner, targetAgentID, 10)
+	if err != nil {
+		t.Fatalf("list foreign repairs: %v", err)
+	}
+	if len(foreign) != 0 {
+		t.Fatalf("foreign owner repairs = %+v, want none (global state walk leaked)", foreign)
+	}
+}
+
 func TestExecuteToolsParallel(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 

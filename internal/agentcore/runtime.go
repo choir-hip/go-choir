@@ -2303,8 +2303,15 @@ func (rt *Runtime) enqueueLifecycleResearcherAdmissionRecoveryOccurrence(ctx con
 	return rt.dispatchActor(context.WithoutCancel(ctx), rec.OwnerID, rec.ComputerID, rec.AgentID, "coagent_result", content, rec.TrajectoryID, o.SourceAgentID)
 }
 
-// reconcileTerminalRunOutcomes exhausts terminal runs, repairs their outcome
-// bindings, then wakes each distinct pending repaired target exactly once.
+// bootTerminalRepairRecentLimit caps the owner-indexed header window used on
+// production computers. The previous full-state JSON_EXTRACT walk loaded every
+// completed/failed/cancelled choir.run body and killed the 4 GiB guest before
+// the first scanned=256 log.
+const bootTerminalRepairRecentLimit = 256
+
+// reconcileTerminalRunOutcomes repairs missing terminal-outcome bindings.
+// Production computers (computer-* or CHOIR_OWNER_ID) use an owner-scoped
+// recent window. Tests without an owner keep the exhaustive keyset walk.
 func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) map[string]bool {
 	woken := map[string]bool{}
 	if rt == nil || rt.store == nil {
@@ -2313,65 +2320,71 @@ func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) map[string]
 	var pending []types.CoagentSourcePacket
 	queued := map[string]bool{}
 	computerID := rt.TextureComputerID()
-	for _, state := range []types.RunState{types.RunCompleted, types.RunFailed, types.RunCancelled} {
-		lifecycleScanned := 0
-		lifecycleRequested := 0
-		lifecycleErr := rt.store.ForEachLifecycleRunsByState(ctx, "", computerID, state, func(rec types.RunRecord) error {
-			lifecycleScanned++
-			if !store.LifecycleTerminalSettlementRequested(rec) {
-				return nil
-			}
-			lifecycleRequested++
-			if err := rt.store.ReconcileLifecycleSettlementForTerminalRun(ctx, rec); err != nil {
-				log.Printf("runtime: boot lifecycle settlement reconciliation for run %s: %v", rec.RunID, err)
-			}
-			return nil
-		})
-		if lifecycleErr != nil {
-			log.Printf("runtime: boot lifecycle settlement reconciliation: query %s runs: %v", state, lifecycleErr)
-		} else {
-			log.Printf("runtime: boot lifecycle settlement scanned=%d requested=%d state=%s", lifecycleScanned, lifecycleRequested, state)
-		}
-		genericScanned := 0
-		requesterChildren := 0
-		err := rt.store.ForEachRunsByState(ctx, state, func(rec types.RunRecord) error {
-			genericScanned++
-			if genericScanned%256 == 0 {
-				log.Printf("runtime: boot terminal outcome progress scanned=%d requester_children=%d state=%s", genericScanned, requesterChildren, state)
-			}
-			if !terminalOutcomeCapableProfile(agentProfileForRun(&rec)) {
-				return nil
-			}
-			if strings.TrimSpace(rec.RequestedByRunID) == "" {
-				return nil
-			}
-			requesterChildren++
-			binding, err := rt.ensurePersistedTerminalRunOutcome(ctx, &rec)
-			if err != nil {
-				log.Printf("runtime: boot terminal outcome reconciliation for run %s: %v", rec.RunID, err)
-				return nil
-			}
-			if !binding.Present || strings.TrimSpace(binding.Update.DeliveredToRunID) != "" {
-				return nil
-			}
-			ownerID := strings.TrimSpace(binding.Update.OwnerID)
-			target := strings.TrimSpace(binding.Update.TargetAgentID)
-			if ownerID == "" || target == "" {
-				return nil
-			}
-			key := ownerID + "\x00" + target
-			if queued[key] {
-				return nil
-			}
-			queued[key] = true
-			pending = append(pending, binding.Update)
-			return nil
-		})
+	ownerID := strings.TrimSpace(rt.selfdevRouteOwnerID)
+	if ownerID == "" {
+		ownerID = strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))
+	}
+	productionComputer := strings.HasPrefix(strings.TrimSpace(rt.cfg.ComputerID), "computer-")
+	collect := func(rec types.RunRecord) {
+		rt.collectTerminalRunOutcome(ctx, rec, queued, &pending)
+	}
+	if ownerID != "" {
+		log.Printf("runtime: boot terminal outcome owner-scoped owner=%s computer=%s limit=%d", ownerID, computerID, bootTerminalRepairRecentLimit)
+		runs, err := rt.store.ListRecentRunsByOwner(ctx, ownerID, computerID, bootTerminalRepairRecentLimit)
 		if err != nil {
-			log.Printf("runtime: boot terminal outcome reconciliation: query %s runs: %v", state, err)
-			continue
+			log.Printf("runtime: boot terminal outcome owner-scoped list: %v", err)
+			return woken
 		}
-		log.Printf("runtime: boot terminal outcome scanned=%d requester_children=%d state=%s", genericScanned, requesterChildren, state)
+		log.Printf("runtime: boot terminal outcome owner-scoped candidates=%d", len(runs))
+		for _, rec := range runs {
+			collect(rec)
+		}
+	} else if productionComputer {
+		log.Printf("runtime: boot terminal outcome skipped: owner_id required on production computer %s", rt.cfg.ComputerID)
+	} else {
+		for _, state := range []types.RunState{types.RunCompleted, types.RunFailed, types.RunCancelled} {
+			log.Printf("runtime: boot terminal outcome foreach begin state=%s", state)
+			lifecycleScanned := 0
+			lifecycleRequested := 0
+			lifecycleErr := rt.store.ForEachLifecycleRunsByState(ctx, "", computerID, state, func(rec types.RunRecord) error {
+				lifecycleScanned++
+				if !store.LifecycleTerminalSettlementRequested(rec) {
+					return nil
+				}
+				lifecycleRequested++
+				if err := rt.store.ReconcileLifecycleSettlementForTerminalRun(ctx, rec); err != nil {
+					log.Printf("runtime: boot lifecycle settlement reconciliation for run %s: %v", rec.RunID, err)
+				}
+				return nil
+			})
+			if lifecycleErr != nil {
+				log.Printf("runtime: boot lifecycle settlement reconciliation: query %s runs: %v", state, lifecycleErr)
+			} else {
+				log.Printf("runtime: boot lifecycle settlement scanned=%d requested=%d state=%s", lifecycleScanned, lifecycleRequested, state)
+			}
+			genericScanned := 0
+			requesterChildren := 0
+			err := rt.store.ForEachRunsByState(ctx, state, func(rec types.RunRecord) error {
+				genericScanned++
+				if genericScanned%256 == 0 {
+					log.Printf("runtime: boot terminal outcome progress scanned=%d requester_children=%d state=%s", genericScanned, requesterChildren, state)
+				}
+				if !terminalOutcomeCapableProfile(agentProfileForRun(&rec)) {
+					return nil
+				}
+				if strings.TrimSpace(rec.RequestedByRunID) == "" {
+					return nil
+				}
+				requesterChildren++
+				rt.queuePersistedTerminalRunOutcome(ctx, &rec, queued, &pending)
+				return nil
+			})
+			if err != nil {
+				log.Printf("runtime: boot terminal outcome reconciliation: query %s runs: %v", state, err)
+				continue
+			}
+			log.Printf("runtime: boot terminal outcome scanned=%d requester_children=%d state=%s", genericScanned, requesterChildren, state)
+		}
 	}
 	for _, update := range pending {
 		key := strings.TrimSpace(update.OwnerID) + "\x00" + strings.TrimSpace(update.TargetAgentID)
@@ -2379,6 +2392,43 @@ func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) map[string]
 		woken[key] = true
 	}
 	return woken
+}
+
+func (rt *Runtime) collectTerminalRunOutcome(ctx context.Context, rec types.RunRecord, queued map[string]bool, pending *[]types.CoagentSourcePacket) {
+	if store.LifecycleTerminalSettlementRequested(rec) {
+		if err := rt.store.ReconcileLifecycleSettlementForTerminalRun(ctx, rec); err != nil {
+			log.Printf("runtime: boot lifecycle settlement reconciliation for run %s: %v", rec.RunID, err)
+		}
+	}
+	if !terminalOutcomeCapableProfile(agentProfileForRun(&rec)) {
+		return
+	}
+	if strings.TrimSpace(rec.RequestedByRunID) == "" {
+		return
+	}
+	rt.queuePersistedTerminalRunOutcome(ctx, &rec, queued, pending)
+}
+
+func (rt *Runtime) queuePersistedTerminalRunOutcome(ctx context.Context, rec *types.RunRecord, queued map[string]bool, pending *[]types.CoagentSourcePacket) {
+	binding, err := rt.ensurePersistedTerminalRunOutcome(ctx, rec)
+	if err != nil {
+		log.Printf("runtime: boot terminal outcome reconciliation for run %s: %v", rec.RunID, err)
+		return
+	}
+	if !binding.Present || strings.TrimSpace(binding.Update.DeliveredToRunID) != "" {
+		return
+	}
+	ownerID := strings.TrimSpace(binding.Update.OwnerID)
+	target := strings.TrimSpace(binding.Update.TargetAgentID)
+	if ownerID == "" || target == "" {
+		return
+	}
+	key := ownerID + "\x00" + target
+	if queued[key] {
+		return
+	}
+	queued[key] = true
+	*pending = append(*pending, binding.Update)
 }
 
 func (rt *Runtime) sweepPendingUpdateActors(ctx context.Context, seen map[string]bool) {

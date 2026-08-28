@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // SchemaDDL creates the og_objects and og_edges tables if they do not
@@ -545,6 +546,51 @@ func (s *DoltStore) ListObjectsByOwnerAndBody(ctx context.Context, kind, ownerID
 			return nil, err
 		}
 		out = append(out, obj)
+	}
+	return out, rows.Err()
+}
+
+// ObjectRef is an og_objects row without the body payload. Boot and other
+// bounded owner scans use it so JSON_EXTRACT + LONGBLOB materialization of
+// every choir.run cannot OOM the guest.
+type ObjectRef struct {
+	CanonicalID string
+	ComputerID  string
+	Metadata    json.RawMessage
+	UpdatedAt   time.Time
+	Tombstone   bool
+}
+
+// ListObjectRefsByKindOwner returns the newest objects of one kind for one
+// owner using idx_og_objects_kind_owner. It does not JSON_EXTRACT metadata
+// and does not load body.
+func (s *DoltStore) ListObjectRefsByKindOwner(ctx context.Context, kind, ownerID string, limit int) ([]ObjectRef, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return nil, fmt.Errorf("objectgraph dolt: owner_id is required")
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT canonical_id, computer_id, metadata, updated_at, tombstone
+		 FROM og_objects
+		 WHERE object_kind = ? AND owner_id = ?
+		 ORDER BY updated_at DESC LIMIT ?`,
+		kind, ownerID, NormalizedLimit(limit))
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: list refs by kind owner: %w", err)
+	}
+	defer rows.Close()
+	var out []ObjectRef
+	for rows.Next() {
+		var ref ObjectRef
+		var metadata string
+		if scanErr := rows.Scan(&ref.CanonicalID, &ref.ComputerID, &metadata, &ref.UpdatedAt, &ref.Tombstone); scanErr != nil {
+			return nil, scanErr
+		}
+		ref.Metadata = json.RawMessage(metadata)
+		out = append(out, ref)
 	}
 	return out, rows.Err()
 }
