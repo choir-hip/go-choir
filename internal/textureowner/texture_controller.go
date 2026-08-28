@@ -80,7 +80,7 @@ func (rt *Handler) Start(ctx context.Context) error {
 				activeRun, activeErr := rt.Store.GetLifecycleRun(ctx, subject.OwnerID, subject.ComputerID, rawActiveID)
 				if activeErr == nil && activeRun.AgentID == subject.AgentID && activeRun.OwnerID == subject.OwnerID &&
 					activeRun.ComputerID == subject.ComputerID && activeRun.ChannelID == docID &&
-					activeRun.TrajectoryID == doc.TrajectoryID && !activeRun.State.Terminal() &&
+					activeRun.TrajectoryID == doc.TrajectoryID && activeRun.State.Active() &&
 					isTextureAgentRevisionTaskType(metadataStringValue(activeRun.Metadata, "type")) {
 					candidateRunID = rawActiveID
 				} else if activeErr != nil && !errors.Is(activeErr, store.ErrNotFound) {
@@ -94,7 +94,7 @@ func (rt *Handler) Start(ctx context.Context) error {
 				memRun, memErr := rt.Store.GetLifecycleRun(ctx, subject.OwnerID, subject.ComputerID, memoryRunID)
 				if memErr == nil && memRun.AgentID == subject.AgentID && memRun.OwnerID == subject.OwnerID &&
 					memRun.ComputerID == subject.ComputerID && memRun.ChannelID == docID &&
-					memRun.TrajectoryID == doc.TrajectoryID && !memRun.State.Terminal() &&
+					memRun.TrajectoryID == doc.TrajectoryID && memRun.State.Active() &&
 					isTextureAgentRevisionTaskType(metadataStringValue(memRun.Metadata, "type")) {
 					candidateRunID = memoryRunID
 					if len(entries) > 0 {
@@ -116,7 +116,7 @@ func (rt *Handler) Start(ctx context.Context) error {
 			}
 			for i := range runs {
 				candidate := runs[i]
-				if candidate.AgentID != subject.AgentID || candidate.OwnerID != subject.OwnerID || candidate.ComputerID != subject.ComputerID || candidate.ChannelID != docID || candidate.TrajectoryID != doc.TrajectoryID || candidate.State.Terminal() || !isTextureAgentRevisionTaskType(metadataStringValue(candidate.Metadata, "type")) {
+				if candidate.AgentID != subject.AgentID || candidate.OwnerID != subject.OwnerID || candidate.ComputerID != subject.ComputerID || candidate.ChannelID != docID || candidate.TrajectoryID != doc.TrajectoryID || !candidate.State.Active() || !isTextureAgentRevisionTaskType(metadataStringValue(candidate.Metadata, "type")) {
 					continue
 				}
 				mutation, mutationErr := rt.Store.GetAgentMutationByRun(ctx, subject.OwnerID, subject.ComputerID, candidate.RunID)
