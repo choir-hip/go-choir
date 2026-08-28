@@ -952,6 +952,72 @@ func TestBootTerminalRepairSynthesizesGenericChildrenAndWakesTargetOnce(t *testi
 	}
 }
 
+func TestBootTerminalRepairSkipsHistoricalRootRuns(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	now := time.Now().UTC()
+	ownerID := "owner-historical-root-skip"
+	targetAgentID := "super:historical-root-parent"
+	channelID := "channel-historical-root-skip"
+	for i := range 5 {
+		root := types.RunRecord{
+			RunID:        "run-historical-root-" + string(rune('A'+i)),
+			AgentID:      "researcher:historical-root-" + string(rune('A'+i)),
+			OwnerID:      ownerID,
+			AgentProfile: agentprofile.Researcher,
+			AgentRole:    agentprofile.Researcher,
+			State:        types.RunCompleted,
+			Result:       "historical root",
+			CreatedAt:    now,
+			UpdatedAt:    now,
+			FinishedAt:   &now,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: agentprofile.Researcher,
+				runMetadataAgentRole:    agentprofile.Researcher,
+			},
+		}
+		if err := s.CreateRun(ctx, root); err != nil {
+			t.Fatalf("create historical root %d: %v", i, err)
+		}
+	}
+	child := types.RunRecord{
+		RunID:            "run-historical-root-child",
+		AgentID:          "co-super:historical-root-child",
+		RequestedByRunID: "parent-historical-root",
+		ChannelID:        channelID,
+		OwnerID:          ownerID,
+		AgentProfile:     agentprofile.CoSuper,
+		AgentRole:        agentprofile.CoSuper,
+		State:            types.RunCompleted,
+		Result:           "delegated child still needs repair",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		FinishedAt:       &now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataAgentID:      "co-super:historical-root-child",
+			runMetadataChannelID:    channelID,
+			runMetadataTrajectoryID: "trajectory-historical-root-child",
+			"requested_by_agent_id": targetAgentID,
+		},
+	}
+	if err := s.CreateRun(ctx, child); err != nil {
+		t.Fatalf("create historical child: %v", err)
+	}
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
+		return nil
+	})
+	rt.reconcileTerminalRunOutcomes(ctx)
+	updates, err := s.ListPendingWorkerUpdates(ctx, ownerID, targetAgentID, 10)
+	if err != nil {
+		t.Fatalf("list historical child repair: %v", err)
+	}
+	if len(updates) != 1 || updates[0].SourceRunID != child.RunID {
+		t.Fatalf("historical child repair = %+v, want one packet for %s", updates, child.RunID)
+	}
+}
+
 func TestExecuteToolsParallel(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 

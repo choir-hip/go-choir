@@ -65,6 +65,17 @@ func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persis
 			return terminalOutcomeBinding{}, fmt.Errorf("resolve terminal run lifecycle authority: %w", err)
 		}
 	}
+	outcomeDigest := types.TerminalRunOutcomeSHA256(persisted.RunID, persisted.State, persisted.Result, persisted.Error)
+	if len(outcomeDigest) >= 32 {
+		syntheticID := terminalOutcomeReferenceUpdatePrefix + outcomeDigest[:32]
+		if existing, getErr := rt.store.GetWorkerUpdate(ctx, persisted.OwnerID, syntheticID); getErr == nil {
+			if existing.SourceRunID == persisted.RunID && existing.SourceOutcomeSHA256 == outcomeDigest {
+				return terminalOutcomeBinding{Update: existing, Present: true}, nil
+			}
+		} else if !errors.Is(getErr, store.ErrNotFound) {
+			return terminalOutcomeBinding{}, fmt.Errorf("get terminal outcome %s: %w", syntheticID, getErr)
+		}
+	}
 	targetAgentID, channelID, ok, err := rt.terminalOutcomeRequesterTarget(ctx, persisted)
 	if err != nil {
 		return terminalOutcomeBinding{}, err
@@ -72,7 +83,6 @@ func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persis
 	if !ok {
 		return terminalOutcomeBinding{}, nil
 	}
-	outcomeDigest := types.TerminalRunOutcomeSHA256(persisted.RunID, persisted.State, persisted.Result, persisted.Error)
 	producerUpdates, err := rt.store.ListWorkerUpdatesBySourceRun(ctx, persisted.OwnerID, persisted.RunID)
 	if err != nil {
 		return terminalOutcomeBinding{}, fmt.Errorf("list producer updates for terminal run %s: %w", persisted.RunID, err)

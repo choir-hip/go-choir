@@ -948,6 +948,33 @@ func (s *Store) ListLifecycleRunsByState(ctx context.Context, ownerID, computerI
 	return runs, nil
 }
 
+// ForEachLifecycleRunsByState visits lifecycle-owned runs in one computer and
+// state, one object-graph page at a time. A non-empty ownerID narrows the
+// result. It does not accumulate the full metadata keyset.
+func (s *Store) ForEachLifecycleRunsByState(ctx context.Context, ownerID, computerID string, state types.RunState, fn func(types.RunRecord) error) error {
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	if computerID == "" {
+		return fmt.Errorf("list lifecycle runs: computer_id is required")
+	}
+	if !state.Valid() {
+		return fmt.Errorf("list lifecycle runs: invalid state %q", state)
+	}
+	if fn == nil {
+		return fmt.Errorf("list lifecycle runs: callback is required")
+	}
+	return s.ogForEachByMetadata(ctx, ogKindRun, "state", string(state), func(obj objectgraph.Object) error {
+		if (ownerID != "" && obj.OwnerID != ownerID) || obj.ComputerID != computerID {
+			return nil
+		}
+		run, decodeErr := decodeLifecycleObject[types.RunRecord](obj)
+		if decodeErr != nil || !lifecycleRunProjection(obj, run) ||
+			(ownerID != "" && run.OwnerID != ownerID) || run.ComputerID != computerID || run.State != state {
+			return nil
+		}
+		return fn(run)
+	})
+}
+
 func (s *Store) ListLifecycleTrajectoriesByOwner(ctx context.Context, ownerID, computerID string, limit int) ([]types.TrajectoryRecord, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
 	if err != nil {

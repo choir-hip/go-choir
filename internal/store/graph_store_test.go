@@ -390,6 +390,43 @@ func TestListAllRunsByStateOGExhaustsKeysetPages(t *testing.T) {
 	}
 }
 
+func TestForEachRunsByStateExhaustsKeysetPages(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for i := range 3 {
+		rec := types.RunRecord{
+			RunID:      "run-og-foreach-page-" + string(rune('A'+i)),
+			AgentID:    "researcher:foreach-page",
+			OwnerID:    "owner-foreach-page",
+			ComputerID: "autoputer-1",
+			State:      types.RunCompleted,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}
+		if err := s.CreateRunOG(ctx, rec); err != nil {
+			t.Fatalf("create foreach terminal run %d: %v", i, err)
+		}
+	}
+	var seen []string
+	if err := s.forEachRunsByStatePageSize(ctx, types.RunCompleted, 2, func(rec types.RunRecord) error {
+		seen = append(seen, rec.RunID)
+		return nil
+	}); err != nil {
+		t.Fatalf("foreach terminal runs across pages: %v", err)
+	}
+	if len(seen) != 3 {
+		t.Fatalf("foreach terminal runs across keyset pages = %d, want 3: %v", len(seen), seen)
+	}
+	limited, err := s.ListRunsByStateOG(ctx, types.RunCompleted, 2)
+	if err != nil {
+		t.Fatalf("limited list by state: %v", err)
+	}
+	if len(limited) != 2 {
+		t.Fatalf("limited list by state = %d, want 2: %+v", len(limited), limited)
+	}
+}
+
 func TestOGAppendAndListEvents(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

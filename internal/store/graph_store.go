@@ -162,6 +162,47 @@ func (s *Store) ogListAllByMetadataPageSize(ctx context.Context, kind objectgrap
 	}
 }
 
+func (s *Store) ogForEachByMetadata(ctx context.Context, kind objectgraph.ObjectKind, metadataField, value string, fn func(objectgraph.Object) error) error {
+	return s.ogForEachByMetadataPageSize(ctx, kind, metadataField, value, ogMetadataPageSize, fn)
+}
+
+func (s *Store) ogForEachByMetadataPageSize(ctx context.Context, kind objectgraph.ObjectKind, metadataField, value string, pageSize int, fn func(objectgraph.Object) error) error {
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return fmt.Errorf("store: object graph not initialized")
+	}
+	if fn == nil {
+		return fmt.Errorf("store: metadata foreach callback is required")
+	}
+	if pageSize <= 0 {
+		pageSize = ogMetadataPageSize
+	}
+
+	afterCanonicalID := ""
+	for {
+		page, err := store.ListObjectsByMetadataPage(ctx, string(kind), "$."+metadataField, value, afterCanonicalID, pageSize)
+		if err != nil {
+			return err
+		}
+		if len(page) == 0 {
+			return nil
+		}
+		nextCursor := page[len(page)-1].CanonicalID
+		if nextCursor == "" || nextCursor <= afterCanonicalID {
+			return fmt.Errorf("store: metadata page did not advance canonical ID cursor")
+		}
+		for _, obj := range page {
+			if err := fn(obj); err != nil {
+				return err
+			}
+		}
+		afterCanonicalID = nextCursor
+	}
+}
+
 func (s *Store) ogListAllObjectsByKind(ctx context.Context, kind objectgraph.ObjectKind) ([]objectgraph.Object, error) {
 	store := s.ogReadStore
 	if store == nil {
@@ -687,12 +728,16 @@ func (s *Store) ListRunsByStateOG(ctx context.Context, state types.RunState, lim
 	if limit <= 0 {
 		limit = 100
 	}
-	runs, err := s.ListAllRunsByStateOG(ctx, state)
-	if err != nil {
+	runs := make([]types.RunRecord, 0, limit)
+	err := s.forEachRunsByStatePageSize(ctx, state, ogMetadataPageSize, func(rec types.RunRecord) error {
+		runs = append(runs, rec)
+		if len(runs) >= limit {
+			return errForEachStop
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errForEachStop) {
 		return nil, err
-	}
-	if len(runs) > limit {
-		runs = runs[:limit]
 	}
 	return runs, nil
 }
@@ -703,22 +748,40 @@ func (s *Store) ListAllRunsByStateOG(ctx context.Context, state types.RunState) 
 }
 
 func (s *Store) listAllRunsByStateOG(ctx context.Context, state types.RunState, pageSize int) ([]types.RunRecord, error) {
-	objs, err := s.ogListAllByMetadataPageSize(ctx, ogKindRun, "state", string(state), pageSize)
-	if err != nil {
-		return nil, err
+	var runs []types.RunRecord
+	err := s.forEachRunsByStatePageSize(ctx, state, pageSize, func(rec types.RunRecord) error {
+		runs = append(runs, rec)
+		return nil
+	})
+	return runs, err
+}
+
+var errForEachStop = errors.New("store: foreach stop")
+
+// ForEachRunsByState visits every generic (non-lifecycle-projection) run in
+// one state, one object-graph page at a time. It does not accumulate the
+// full keyset. fn returning a non-nil error stops the walk and is returned.
+func (s *Store) ForEachRunsByState(ctx context.Context, state types.RunState, fn func(types.RunRecord) error) error {
+	return s.forEachRunsByStatePageSize(ctx, state, ogMetadataPageSize, fn)
+}
+
+func (s *Store) forEachRunsByStatePageSize(ctx context.Context, state types.RunState, pageSize int, fn func(types.RunRecord) error) error {
+	if fn == nil {
+		return fmt.Errorf("foreach runs by state: callback is required")
 	}
-	runs := make([]types.RunRecord, 0, len(objs))
-	for _, obj := range objs {
+	if !state.Valid() {
+		return fmt.Errorf("foreach runs by state: invalid state %q", state)
+	}
+	return s.ogForEachByMetadataPageSize(ctx, ogKindRun, "state", string(state), pageSize, func(obj objectgraph.Object) error {
 		var rec types.RunRecord
 		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
+			return err
 		}
 		if lifecycleRunProjection(obj, rec) {
-			continue
+			return nil
 		}
-		runs = append(runs, rec)
-	}
-	return runs, nil
+		return fn(rec)
+	})
 }
 
 // ListAllRunsOG lists all runs from the object graph, ordered by

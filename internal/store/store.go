@@ -1142,6 +1142,13 @@ func lifecycleTerminalSettlementRequested(rec types.RunRecord) bool {
 	return requested
 }
 
+// LifecycleTerminalSettlementRequested reports the durable boot-repair
+// trigger copied onto a terminal lifecycle run. Callers may skip GetLifecycleRun
+// when the listed projection is already false.
+func LifecycleTerminalSettlementRequested(rec types.RunRecord) bool {
+	return lifecycleTerminalSettlementRequested(rec)
+}
+
 // ReconcileLifecycleSettlementForTerminalRun invokes the canonical settlement
 // reducer for a durable active-to-terminal trigger. The trigger is evidence
 // that a product caller should try; it is not settlement authority.

@@ -102,3 +102,24 @@ ENOSPC. Host VM-dir block accounting remains a separate mismatch
 
 After deploy: same 60s+ product-path probe **and** observability must show
 `runtime: started` and a boot timestamp that does not reset for ≥3 minutes.
+
+## 6. Landing (2026-08-28T07:49Z)
+
+`04fd704d` deployed `2026-08-28T07:49:30Z` (CI `33151481361` success, including
+agentcore/textureowner shard 3). Product-path start
+`effects-start-04fd704d-20260828T0752Z` receipt `01a0475b` (epoch 809
+degraded → 811 active, 12.0s).
+
+Guest served `commit=04fd704d` `deployed_at=2026-08-28T07:52:21Z`:
+
+- `07:52:26` topology + listen
+- `07:52:41` Super rewarm candidate `25493355-…`
+- `07:52:46` **skip** `5c5a2f9d-…: lifecycle invalid transition` (the fix)
+- `07:52:55` Super rewarm **dispatched** `25493355-…`
+- no per-trajectory `validate restarted` loop
+- no `runtime: started`
+- `07:53:09` still HTTP 200 (10 log lines); `07:54:12` 502 / host `degraded`
+
+The Super skip+dedup held. Death moved to the next silent
+`Runtime.Start` phase. See
+`held-computer-boot-terminal-outcome-scan-crash-2026-08-28`.

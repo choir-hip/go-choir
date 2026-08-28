@@ -584,17 +584,24 @@ func (rt *Runtime) Start(ctx context.Context) {
 		log.Printf("runtime: maintenance hold active (RUNTIME_MAINTENANCE_HOLD=1); refusing run admission + agent rewake while held")
 		return
 	}
-	rt.passivateInterruptedActivations(ctx)
-	rt.reconcileCoSuperAssignmentCapsulesAfterRestart(ctx)
-	rt.rewarmInterruptedLifecycleActivations(ctx)
-	rt.rewarmInterruptedPersistentSuperActors(ctx)
-	rt.recoverOpenWirePublicationClaims(ctx)
-	terminalOutcomeTargets := rt.reconcileTerminalRunOutcomes(ctx)
-	rt.sweepPassivatedSpawnedCoagentWork(ctx)
+	bootPhase := func(name string, fn func()) {
+		started := time.Now()
+		log.Printf("runtime: boot phase begin %s", name)
+		fn()
+		log.Printf("runtime: boot phase end %s dur=%s", name, time.Since(started).Round(time.Millisecond))
+	}
+	bootPhase("passivate_interrupted_activations", func() { rt.passivateInterruptedActivations(ctx) })
+	bootPhase("cosuper_assignment_capsules", func() { rt.reconcileCoSuperAssignmentCapsulesAfterRestart(ctx) })
+	bootPhase("rewarm_lifecycle_activations", func() { rt.rewarmInterruptedLifecycleActivations(ctx) })
+	bootPhase("rewarm_persistent_super", func() { rt.rewarmInterruptedPersistentSuperActors(ctx) })
+	bootPhase("recover_wire_publication_claims", func() { rt.recoverOpenWirePublicationClaims(ctx) })
+	var terminalOutcomeTargets map[string]bool
+	bootPhase("reconcile_terminal_run_outcomes", func() { terminalOutcomeTargets = rt.reconcileTerminalRunOutcomes(ctx) })
+	bootPhase("sweep_passivated_spawned_work", func() { rt.sweepPassivatedSpawnedCoagentWork(ctx) })
 	// Reconcile canonical lifecycle work/control joins before the generic actor
 	// update sweep can acknowledge a durable occurrence around an unbound run.
-	rt.sweepOpenWorkItemActors(ctx)
-	rt.sweepPendingUpdateActors(ctx, terminalOutcomeTargets)
+	bootPhase("sweep_open_work_item_actors", func() { rt.sweepOpenWorkItemActors(ctx) })
+	bootPhase("sweep_pending_update_actors", func() { rt.sweepPendingUpdateActors(ctx, terminalOutcomeTargets) })
 	// Best-effort: ensure the production Qdrant collection exists so the
 	// semantic dedup pass on ingestion has a target. Runs asynchronously so
 	// a slow or unreachable Qdrant cannot block runtime startup; the dedup
@@ -2305,47 +2312,66 @@ func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) map[string]
 	}
 	var pending []types.CoagentSourcePacket
 	queued := map[string]bool{}
+	computerID := rt.TextureComputerID()
 	for _, state := range []types.RunState{types.RunCompleted, types.RunFailed, types.RunCancelled} {
-		lifecycleRuns, lifecycleErr := rt.store.ListLifecycleRunsByState(ctx, "", rt.TextureComputerID(), state)
+		lifecycleScanned := 0
+		lifecycleRequested := 0
+		lifecycleErr := rt.store.ForEachLifecycleRunsByState(ctx, "", computerID, state, func(rec types.RunRecord) error {
+			lifecycleScanned++
+			if !store.LifecycleTerminalSettlementRequested(rec) {
+				return nil
+			}
+			lifecycleRequested++
+			if err := rt.store.ReconcileLifecycleSettlementForTerminalRun(ctx, rec); err != nil {
+				log.Printf("runtime: boot lifecycle settlement reconciliation for run %s: %v", rec.RunID, err)
+			}
+			return nil
+		})
 		if lifecycleErr != nil {
 			log.Printf("runtime: boot lifecycle settlement reconciliation: query %s runs: %v", state, lifecycleErr)
 		} else {
-			for i := range lifecycleRuns {
-				if err := rt.store.ReconcileLifecycleSettlementForTerminalRun(ctx, lifecycleRuns[i]); err != nil {
-					log.Printf("runtime: boot lifecycle settlement reconciliation for run %s: %v", lifecycleRuns[i].RunID, err)
-				}
-			}
+			log.Printf("runtime: boot lifecycle settlement scanned=%d requested=%d state=%s", lifecycleScanned, lifecycleRequested, state)
 		}
-		runs, err := rt.store.ListAllRunsByState(ctx, state)
-		if err != nil {
-			log.Printf("runtime: boot terminal outcome reconciliation: query %s runs: %v", state, err)
-			continue
-		}
-		for i := range runs {
-			rec := &runs[i]
-			if !terminalOutcomeCapableProfile(agentProfileForRun(rec)) {
-				continue
+		genericScanned := 0
+		requesterChildren := 0
+		err := rt.store.ForEachRunsByState(ctx, state, func(rec types.RunRecord) error {
+			genericScanned++
+			if genericScanned%256 == 0 {
+				log.Printf("runtime: boot terminal outcome progress scanned=%d requester_children=%d state=%s", genericScanned, requesterChildren, state)
 			}
-			binding, err := rt.ensurePersistedTerminalRunOutcome(ctx, rec)
+			if !terminalOutcomeCapableProfile(agentProfileForRun(&rec)) {
+				return nil
+			}
+			if strings.TrimSpace(rec.RequestedByRunID) == "" {
+				return nil
+			}
+			requesterChildren++
+			binding, err := rt.ensurePersistedTerminalRunOutcome(ctx, &rec)
 			if err != nil {
 				log.Printf("runtime: boot terminal outcome reconciliation for run %s: %v", rec.RunID, err)
-				continue
+				return nil
 			}
 			if !binding.Present || strings.TrimSpace(binding.Update.DeliveredToRunID) != "" {
-				continue
+				return nil
 			}
 			ownerID := strings.TrimSpace(binding.Update.OwnerID)
 			target := strings.TrimSpace(binding.Update.TargetAgentID)
 			if ownerID == "" || target == "" {
-				continue
+				return nil
 			}
 			key := ownerID + "\x00" + target
 			if queued[key] {
-				continue
+				return nil
 			}
 			queued[key] = true
 			pending = append(pending, binding.Update)
+			return nil
+		})
+		if err != nil {
+			log.Printf("runtime: boot terminal outcome reconciliation: query %s runs: %v", state, err)
+			continue
 		}
+		log.Printf("runtime: boot terminal outcome scanned=%d requester_children=%d state=%s", genericScanned, requesterChildren, state)
 	}
 	for _, update := range pending {
 		key := strings.TrimSpace(update.OwnerID) + "\x00" + strings.TrimSpace(update.TargetAgentID)
@@ -2391,6 +2417,7 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 		log.Printf("runtime: boot work-item sweep: %v", err)
 		return
 	}
+	log.Printf("runtime: boot work-item sweep open_items=%d", len(items))
 	grouped := map[string][]types.WorkItemRecord{}
 	for _, item := range items {
 		ownerID := strings.TrimSpace(item.OwnerID)
