@@ -1911,6 +1911,8 @@ func (s *Store) GetLatestPassivatedRunByAgent(ctx context.Context, ownerID, agen
 	return *latest, nil
 }
 
+const latestRunByAgentScanCap = 8192
+
 func (s *Store) latestLifecycleRunByAgent(ctx context.Context, ownerID, computerID, agentID string, match func(types.RunState) bool) (types.RunRecord, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
 	if err != nil {
@@ -1927,14 +1929,29 @@ func (s *Store) latestLifecycleRunByAgent(ctx context.Context, ownerID, computer
 	if graph == nil {
 		return types.RunRecord{}, fmt.Errorf("lifecycle runs: object graph not initialized")
 	}
-	objs, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	refs, err := graph.ListObjectRefsByKindOwner(ctx, string(ogKindRun), ownerID, latestRunByAgentScanCap)
 	if err != nil {
 		return types.RunRecord{}, err
 	}
-	var latest *types.RunRecord
-	for _, obj := range objs {
-		if obj.ObjectKind != ogKindRun {
+	for _, ref := range refs {
+		if ref.Tombstone {
 			continue
+		}
+		if computerID != "" && strings.TrimSpace(ref.ComputerID) != "" && strings.TrimSpace(ref.ComputerID) != computerID {
+			continue
+		}
+		meta := map[string]any{}
+		if len(ref.Metadata) > 0 {
+			if err := json.Unmarshal(ref.Metadata, &meta); err != nil {
+				return types.RunRecord{}, fmt.Errorf("latest lifecycle run: decode metadata %s: %w", ref.CanonicalID, err)
+			}
+		}
+		if ogMetadataText(meta, "agent_id") != agentID {
+			continue
+		}
+		obj, err := graph.GetObject(ctx, ref.CanonicalID)
+		if err != nil {
+			return types.RunRecord{}, fmt.Errorf("latest lifecycle run: get %s: %w", ref.CanonicalID, err)
 		}
 		rec, decodeErr := decodeLifecycleObject[types.RunRecord](obj)
 		if decodeErr != nil {
@@ -1943,18 +1960,12 @@ func (s *Store) latestLifecycleRunByAgent(ctx context.Context, ownerID, computer
 		if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID {
 			continue
 		}
-		if latest == nil || rec.UpdatedAt.After(latest.UpdatedAt) {
-			copy := rec
-			latest = &copy
+		if match != nil && !match(rec.State) {
+			return types.RunRecord{}, ErrNotFound
 		}
+		return rec, nil
 	}
-	if latest == nil {
-		return types.RunRecord{}, ErrNotFound
-	}
-	if match != nil && !match(latest.State) {
-		return types.RunRecord{}, ErrNotFound
-	}
-	return *latest, nil
+	return types.RunRecord{}, ErrNotFound
 }
 
 func (s *Store) GetLatestActiveLifecycleRunByAgent(ctx context.Context, ownerID, computerID, agentID string) (types.RunRecord, error) {

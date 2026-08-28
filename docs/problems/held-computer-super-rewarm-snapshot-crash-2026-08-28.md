@@ -106,3 +106,32 @@ After deploy: product-path start or deploy refresh, guest `commit=HEAD`,
 observability shows `runtime: started` plus `boot persistent-Super rewarm
 owner-scoped` and `boot terminal outcome owner-scoped`, `deployed_at`
 does not reset for ≥3 minutes, and no 502 recycle.
+
+## 6. Live proof that packet listing was not reached (2026-08-28T10:45Z)
+
+`d17457f1` is on the guest (`deployed_at=2026-08-28T10:45:14Z`). Deploy
+refresh epoch **819**. Dense polls:
+
+| t (UTC) | observation |
+|---|---|
+| 10:45:20 | topology + listen |
+| 10:45:32–10:45:38 | passivate pending Super `b563243b-…` (empty TrajectoryID) 5.782s |
+| 10:45:38 | `boot persistent-Super rewarm owner-scoped` `candidates=31` |
+| 10:45:38 | candidate `b563243b-…` |
+| 10:46:05–10:46:20 | `count running processor runs: list by metadata page: context canceled` |
+| 10:46:33 | observability 502; host `degraded` epoch 819 |
+
+No `skip … non-empty trajectory_id`. No `persistent-Super rewarm validate
+run=`. No dispatched. `reconcilePersistentSuperActor` calls
+`activeRunByAgent` → `GetLatestActiveLifecycleRunByAgent` →
+`latestLifecycleRunByAgent` **before** packet listing. That helper still
+`ReadObjectSnapshot`s every `og_objects` body for the owner+computer to
+learn the Super is passivated. Same snapshot defect, earlier caller.
+
+HTTP health/bootstrap concurrently calls `RunningCountByProfile` →
+`ListRunsByState(running)` (`JSON_EXTRACT` page). Context-canceled lines
+are that contention, not the primary load.
+
+Follow-up: `latestLifecycleRunByAgent` lists `choir.run` headers via
+`idx_og_objects_kind_owner` and `GetObject` only the newest row for that
+agent.
