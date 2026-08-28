@@ -1439,6 +1439,12 @@ func ColdRecoverEndpoint(baseURL, computerID string) string {
 	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computers/" + url.PathEscape(strings.TrimSpace(computerID)) + "/cold-recover"
 }
 
+// UnholdEndpoint returns the full unhold endpoint URL for the vmctl service at
+// the given base URL.
+func UnholdEndpoint(baseURL string) string {
+	return fmt.Sprintf("%s/internal/vmctl/unhold", baseURL)
+}
+
 // RefreshEndpoint returns the full refresh endpoint URL for the vmctl service
 // at the given base URL.
 func RefreshEndpoint(baseURL string) string {

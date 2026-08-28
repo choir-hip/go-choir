@@ -195,6 +195,47 @@ func (c *Client) RefreshDesktopContext(ctx context.Context, userID, desktopID st
 	return &result, nil
 }
 
+// Unhold clears the host-authoritative maintenance hold for a computer. The
+// proxy is the trusted internal caller; public callers must authorise the exact
+// ComputerID before reaching this. ClearHold is idempotent: it succeeds when
+// the computer is not held.
+func (c *Client) Unhold(ctx context.Context, computerID string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reqBody := holdRequest{ComputerID: computerID}
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("vmctl client: marshal unhold request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, UnholdEndpoint(c.baseURL), bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("vmctl client: create unhold request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Caller", "true")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("vmctl client: unhold call failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("vmctl client: read unhold response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		var errResp vmctlErrorResponse
+		if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != "" {
+			return fmt.Errorf("vmctl client: unhold failed: %s", errResp.Error)
+		}
+		return fmt.Errorf("vmctl client: unhold failed with status %s", resp.Status)
+	}
+	return nil
+}
+
 // Lookup returns the current ownership for a user without creating a VM.
 // Returns nil if no ownership exists.
 func (c *Client) Lookup(userID string) (*ownershipResponse, error) {

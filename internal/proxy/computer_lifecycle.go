@@ -22,7 +22,7 @@ func parseComputerLifecyclePath(path string) (computerID, action string, ok bool
 		return "", "", false
 	}
 	parts := strings.Split(strings.TrimPrefix(path, prefix), "/")
-	if len(parts) != 3 || parts[1] != "lifecycle" || (parts[2] != "status" && parts[2] != "start" && parts[2] != "stop" && parts[2] != "restart" && parts[2] != "refresh") {
+	if len(parts) != 3 || parts[1] != "lifecycle" || (parts[2] != "status" && parts[2] != "start" && parts[2] != "stop" && parts[2] != "restart" && parts[2] != "refresh" && parts[2] != "recover") {
 		return "", "", false
 	}
 	computerID, err := url.PathUnescape(parts[0])
@@ -151,6 +151,18 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 		}
 	case "refresh":
 		_, err = h.vmctlClient.RefreshDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
+	case "recover":
+		// Owner-directed recovery on the general product path (no per-user
+		// special-casing): clear the maintenance hold (authorised, idempotent
+		// when already unheld) then ensure the computer is started so the next
+		// guest boot no longer injects RUNTIME_MAINTENANCE_HOLD=1. authz above
+		// already guaranteed this ComputerID belongs to the caller.
+		if err = h.vmctlClient.Unhold(r.Context(), ownership.ComputerID); err != nil {
+			break
+		}
+		if ownership.State != "active" {
+			_, err = h.vmctlClient.ResolveDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
+		}
 	}
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "lifecycle actuation failed"})
