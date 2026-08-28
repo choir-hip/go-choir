@@ -1667,6 +1667,7 @@ func (m *Manager) forceCleanup(vmID string) {
 
 func (m *Manager) cleanupOrphanedFirecrackerLocked(vmID string) {
 	pids := firecrackerPIDsForVM(vmID)
+	tapName := tapNameForVMID(vmID)
 	if len(pids) > 0 {
 		for _, pid := range pids {
 			log.Printf("vmmanager: killing orphaned Firecracker process for VM %s (pid=%d) before restart", vmID, pid)
@@ -1675,20 +1676,28 @@ func (m *Manager) cleanupOrphanedFirecrackerLocked(vmID string) {
 			}
 		}
 		_ = os.Remove(m.pidPath(vmID))
+		// Firecracker does not own the tap lifetime. Remove it explicitly
+		// after reclaiming an orphan, otherwise the next launch can fail with
+		// TapOpen(IfreqExecuteError) even though no VM uses the interface.
+		m.deleteTapDevice(tapName)
 		return
 	}
 
 	pid, err := m.loadPID(vmID)
 	if err != nil {
+		// A stale tap can remain even when the PID file was already removed.
+		m.deleteTapDevice(tapName)
 		return
 	}
 	if !processExists(pid) {
 		_ = os.Remove(m.pidPath(vmID))
+		m.deleteTapDevice(tapName)
 		return
 	}
 	if !firecrackerCmdlineMatchesVM(pid, vmID) {
 		log.Printf("vmmanager: ignoring stale pid file for VM %s; pid %d does not identify this Firecracker VM", vmID, pid)
 		_ = os.Remove(m.pidPath(vmID))
+		m.deleteTapDevice(tapName)
 		return
 	}
 	log.Printf("vmmanager: killing orphaned Firecracker process for VM %s (pid=%d) before restart", vmID, pid)
