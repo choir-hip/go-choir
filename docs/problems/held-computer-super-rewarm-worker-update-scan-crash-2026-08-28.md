@@ -120,9 +120,10 @@ passivation. Live death: second tombstone extract plus concurrent `/health`
 
 Code in this landing:
 
-1. `Runtime.startComplete` — `RunningCountByProfile` uses in-memory
-   `RunningCount()` until `Runtime.Start` returns. HTTP is up during boot;
-   health must not share the Dolt engine with Super rewarm.
+1. `Runtime.bootInProgress` — while `Runtime.Start` is executing,
+   `RunningCountByProfile` uses in-memory `RunningCount()`. HTTP is up
+   during boot; health must not share the Dolt engine with Super rewarm.
+   Default false so overload admission still counts durable processors.
 2. `ListJSONBodyFieldsByKindOwner` extracts `$.delivered_to_loop_id` and
    `$.disposition` for `choir.worker_update` without `SELECT body`.
 3. `CountPendingDeliveredWorkerUpdatesByRun` builds that index once.
