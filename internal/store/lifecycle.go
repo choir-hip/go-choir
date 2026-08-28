@@ -1315,31 +1315,40 @@ func (s *Store) ListPendingLifecycleUpdates(ctx context.Context, ownerID, comput
 		return nil, fmt.Errorf("lifecycle updates: object graph not initialized")
 	}
 	targetAgentID = strings.TrimSpace(targetAgentID)
-	objects, err := graph.ListObjectsByOwnerAndBody(ctx, string(ogKindWorkerUpdate), ownerID, []objectgraph.JSONFieldMatch{
-		{JSONPath: "$.target_agent_id", Value: targetAgentID},
-		{JSONPath: "$.disposition", Value: string(types.UpdatePending)},
-		{JSONPath: "$.delivered_to_loop_id", Value: "", MissingMatchesEmpty: true},
+	rows, err := graph.ListJSONBodyFieldsByKindOwner(ctx, string(ogKindWorkerUpdate), ownerID, []string{
+		"$.target_agent_id",
+		"$.disposition",
+		"$.delivered_to_loop_id",
 	}, lifecycleWorkerUpdateScanCap+1)
 	if err != nil {
 		return nil, err
 	}
-	if computerID != "" {
-		filtered := make([]objectgraph.Object, 0, len(objects))
-		for _, obj := range objects {
-			if strings.TrimSpace(obj.ComputerID) == computerID {
-				filtered = append(filtered, obj)
-			}
-		}
-		objects = filtered
-	}
-	if len(objects) > lifecycleWorkerUpdateScanCap {
+	if len(rows) > lifecycleWorkerUpdateScanCap {
 		return nil, fmt.Errorf("lifecycle updates: scan cap %d exceeded for owner %s computer %s", lifecycleWorkerUpdateScanCap, ownerID, computerID)
 	}
+	canonicalIDs := make([]string, 0)
+	for _, row := range rows {
+		if len(row.Fields) < 3 {
+			continue
+		}
+		if computerID != "" && strings.TrimSpace(row.ComputerID) != computerID {
+			continue
+		}
+		if strings.TrimSpace(row.Fields[0]) != targetAgentID || strings.TrimSpace(row.Fields[1]) != string(types.UpdatePending) || strings.TrimSpace(row.Fields[2]) != "" {
+			continue
+		}
+		if id := strings.TrimSpace(row.CanonicalID); id != "" {
+			canonicalIDs = append(canonicalIDs, id)
+		}
+	}
 	updates := make([]types.CoagentSourcePacket, 0)
-	for _, obj := range objects {
-		update, decodeErr := decodeLifecycleObject[types.CoagentSourcePacket](obj)
-		if decodeErr != nil {
-			return nil, decodeErr
+	for _, id := range canonicalIDs {
+		update, getErr := s.GetCoagentSourcePacket(ctx, id)
+		if getErr != nil {
+			if errors.Is(getErr, ErrNotFound) {
+				continue
+			}
+			return nil, getErr
 		}
 		if update.LifecycleVersion > 0 && update.TargetAgentID == targetAgentID && update.Disposition == types.UpdatePending && update.DeliveredAt == nil && strings.TrimSpace(update.DeliveredToRunID) == "" {
 			updates = append(updates, update)

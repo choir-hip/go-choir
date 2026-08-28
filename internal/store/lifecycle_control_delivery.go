@@ -77,18 +77,34 @@ func (s *Store) listWorkerUpdateObjects(ctx context.Context, ownerID, computerID
 	var objects []objectgraph.Object
 	var err error
 	if deliveredToRunID != "" {
-		objects, err = graph.ListObjectsByOwnerAndBody(ctx, string(ogKindWorkerUpdate), ownerID, []objectgraph.JSONFieldMatch{{
-			JSONPath: "$.delivered_to_loop_id",
-			Value:    deliveredToRunID,
-		}}, lifecycleWorkerUpdateScanCap+1)
-	} else {
-		objects, err = graph.ListObjects(ctx, objectgraph.ListFilter{
-			Kind:       ogKindWorkerUpdate,
-			OwnerID:    ownerID,
-			ComputerID: computerID,
-			Limit:      lifecycleWorkerUpdateScanCap + 1,
-		})
+		rows, scanErr := graph.ListJSONBodyFieldsByKindOwner(ctx, string(ogKindWorkerUpdate), ownerID, []string{
+			"$.delivered_to_loop_id",
+		}, lifecycleWorkerUpdateScanCap+1)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		objects = make([]objectgraph.Object, 0, len(rows))
+		for _, row := range rows {
+			if len(row.Fields) < 1 || strings.TrimSpace(row.Fields[0]) != deliveredToRunID {
+				continue
+			}
+			if computerID != "" && strings.TrimSpace(row.ComputerID) != computerID {
+				continue
+			}
+			obj, getErr := graph.GetObject(ctx, strings.TrimSpace(row.CanonicalID))
+			if getErr != nil {
+				return nil, getErr
+			}
+			objects = append(objects, obj)
+		}
+		return objects, nil
 	}
+	objects, err = graph.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:       ogKindWorkerUpdate,
+		OwnerID:    ownerID,
+		ComputerID: computerID,
+		Limit:      lifecycleWorkerUpdateScanCap + 1,
+	})
 	if err != nil {
 		return nil, err
 	}
