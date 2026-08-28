@@ -2558,6 +2558,23 @@ func TestVMctlRouting_BootstrapRoutesThroughVM(t *testing.T) {
 	}
 }
 
+func TestVMctlRouting_BootstrapResolveSurvivesCanceledRequestContext(t *testing.T) {
+	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
+	accessToken := issueTestAccessJWT(priv, "user-vm-cancel")
+	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
+	req.Header.Set("Cookie", "choir_access="+accessToken)
+	ctx, cancel := context.WithCancel(req.Context())
+	cancel()
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	handler.HandleBootstrap(w, req)
+	client := vmctl.NewClient(vmctlSrv.URL)
+	lookup, err := client.Lookup("user-vm-cancel")
+	if err != nil || lookup == nil || strings.TrimSpace(lookup.ComputerURL) == "" {
+		t.Fatalf("vmctl resolve must complete despite canceled request: status=%d lookup=%+v err=%v", w.Code, lookup, err)
+	}
+}
+
 // TestVMctlRouting_DifferentUsersGetDifferentVMs tests that different users
 // receive distinct VMs (VAL-VM-005, VAL-CROSS-113).
 func TestVMctlRouting_DifferentUsersGetDifferentVMs(t *testing.T) {

@@ -1099,6 +1099,20 @@ func autoputerWSURLForBase(baseURL, rawQuery string) string {
 	return u.String()
 }
 
+// vmctlOpContext detaches a vmctl lifecycle/resolve call from the inbound
+// HTTP request cancel so a browser abort cannot cancel VM assignment. The
+// operation is still bounded by the configured vmctl timeout.
+func (h *Handler) vmctlOpContext(parent context.Context) (context.Context, context.CancelFunc) {
+	timeout := DefaultVmctlTimeout
+	if h != nil && h.cfg != nil && h.cfg.VmctlTimeout > 0 {
+		timeout = h.cfg.VmctlTimeout
+	}
+	if parent == nil {
+		parent = context.Background()
+	}
+	return context.WithTimeout(context.WithoutCancel(parent), timeout)
+}
+
 // resolveComputerURL resolves one immutable D-ROUTE slot before consulting
 // vmctl for its current disposable realization. Missing route authority is a
 // product-visible refusal; there is no static autoputer fallback.
@@ -1109,9 +1123,8 @@ func (h *Handler) resolveComputerURL(ctx context.Context, userID, desktopID stri
 		}
 		return "", fmt.Errorf("ComputerVersion route authority is not configured")
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx, cancel := h.vmctlOpContext(ctx)
+	defer cancel()
 
 	start := time.Now()
 	delay := autoputerResolveRetryBaseDelay

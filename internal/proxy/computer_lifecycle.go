@@ -132,6 +132,8 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 		return
 	}
 	control.PriorState, control.PriorEpoch = prepared.PriorState, prepared.PriorEpoch
+	opCtx, cancelOp := h.vmctlOpContext(r.Context())
+	defer cancelOp()
 	switch action {
 	case "stop":
 		if ownership.State != "stopped" {
@@ -139,29 +141,29 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 		}
 	case "start":
 		if ownership.State != "active" {
-			_, err = h.vmctlClient.ResolveDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
+			_, err = h.vmctlClient.ResolveDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
 		}
 	case "restart":
 		if ownership.State == "stopped" {
-			_, err = h.vmctlClient.ResolveDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
+			_, err = h.vmctlClient.ResolveDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
 		} else if ownership.Epoch <= control.PriorEpoch {
 			if err = h.vmctlClient.StopDesktop(ownership.UserID, ownership.DesktopID); err == nil {
-				_, err = h.vmctlClient.ResolveDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
+				_, err = h.vmctlClient.ResolveDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
 			}
 		}
 	case "refresh":
-		_, err = h.vmctlClient.RefreshDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
+		_, err = h.vmctlClient.RefreshDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
 	case "recover":
 		// Owner-directed recovery on the general product path (no per-user
 		// special-casing): clear the maintenance hold (authorised, idempotent
 		// when already unheld) then ensure the computer is started so the next
 		// guest boot no longer injects RUNTIME_MAINTENANCE_HOLD=1. authz above
 		// already guaranteed this ComputerID belongs to the caller.
-		if err = h.vmctlClient.Unhold(r.Context(), ownership.ComputerID); err != nil {
+		if err = h.vmctlClient.Unhold(opCtx, ownership.ComputerID); err != nil {
 			break
 		}
 		if ownership.State != "active" {
-			_, err = h.vmctlClient.ResolveDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
+			_, err = h.vmctlClient.ResolveDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
 		}
 	}
 	if err != nil {
