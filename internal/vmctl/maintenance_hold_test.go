@@ -115,6 +115,28 @@ func TestMaintenanceHoldResolveDoesNotAutoStart(t *testing.T) {
 	}
 }
 
+func TestHeldServingOwnershipSkipsResolveReadinessCheck(t *testing.T) {
+	reg := NewOwnershipRegistry("")
+	mgr := &mockVMManager{}
+	reg.SetVMManager(mgr)
+	own := &VMOwnership{
+		VMID:        "vm-hold-1",
+		ComputerID:  "computer-hold-1",
+		UserID:      "user-hold",
+		DesktopID:   PrimaryDesktopID,
+		State:       VMStateActive,
+		ComputerURL: "http://10.0.0.1:8085",
+		HoldStatus:  &MaintenanceHold{Reason: "maintenance", HeldBy: "recovery"},
+	}
+	// The mock VM is not ready (GetVM nil), so without the held short-circuit
+	// this would return true and register a pendingWaiter that a concurrent
+	// browser probe blocks on until the 15s abort. A held, serving computer
+	// must skip the readiness wait and resolve instantly.
+	if activeOwnershipNeedsReadinessCheck(own, mgr) {
+		t.Fatal("held, serving computer must skip the resolve readiness wait")
+	}
+}
+
 func TestMaintenanceHoldRefusesPlainRecover(t *testing.T) {
 	reg := NewOwnershipRegistry("")
 	key := ownershipKey("user-hold", PrimaryDesktopID)

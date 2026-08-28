@@ -810,6 +810,15 @@ func activeOwnershipNeedsReadinessCheck(own *VMOwnership, mgr VMManager) bool {
 	if own == nil || mgr == nil {
 		return false
 	}
+	if own.IsHeld() {
+		// A held, serving computer resolves from its persisted ComputerURL
+		// without a readiness/assignment wait. Registering a pendingWaiter here
+		// serializes concurrent browser probes such that a second probe blocks
+		// on a nil-channel wait that nobody signals until the browser aborts
+		// (15s) — the resolve-race in the held-computer receipt. Short-circuit so
+		// the held computer resolves instantly and deterministically.
+		return false
+	}
 	if !vmInstanceInfoReady(mgr.GetVM(own.VMID)) {
 		return true
 	}
