@@ -272,11 +272,36 @@ is **capability-open-to-all + entitlement-gated** (premium) vs default-on;
   `RUNTIME_MAINTENANCE_HOLD=1` on the next guest boot), or a general
   product-path recovery verb is built (doctrine gap, red). `fix (a)` must be on
   the guest before the guest boots without the fence so the hold-fatal is gone.
-- **fix (b) staged locally, not pushed:** `34896b7e` (held computer
-  short-circuits `activeOwnershipNeedsReadinessCheck` so a held, serving computer
-  resolves instantly without a pendingWaiter race). Held locally to avoid another
-  deploy cycle while the computer is stopped+held, since it only helps the
-  held+`active` state. Land it as part of the recovery commit once unhold is
-  authorized or as a standalone.
-- **Acceptance not yet met:** no stable browser boot, no unheld live computer,
-  no guest Maildir / SMTP. Problem receipt remains open.
+- **fix (b) landed:** commit `34896b7e` (held computer short-circuits
+  `activeOwnershipNeedsReadinessCheck`). Deployed as part of the recover
+  landing at `445c8fc2`.
+- **fix (c) landed (product-path recover):** commits `3c25ea25` (proxy
+  `POST /api/computers/{id}/lifecycle/recover` = Unhold + start) and
+  `445c8fc2` (`isOwnerVMLifecycleAction` + `choir computer recover`). Forced
+  staging deploy CI `33144950319` (`workflow_dispatch force_staging_deploy=true`);
+  `/health` `deployed_commit` `445c8fc2` at `2026-08-28T05:52:41Z`.
+  Live invocation `POST .../lifecycle/recover` with owner-scoped API key +
+  `X-Choir-Computer` + idempotency `effects-recover-unhold-start-2026-08-28T0555Z`
+  returned **201** in 12.657s. LifecycleReceipt `01a046ee-c88c-7e1a-ac46-bdf2ef203de1`:
+  prior `stopped`/epoch **804** → resulting `active`/epoch **805**.
+- **Live post-recover proof (2026-08-28T05:54Z–05:55Z):** three consecutive
+  api-key `/api/shell/bootstrap` probes returned 200 with matching
+  `computer_id=computer-03335285269bdba4f94377e56879f9e6` in 154ms / 138ms /
+  416ms (including a probe after a 20s crash-loop window). Proxy `/health`
+  `bootstrap.resolve` 3/3 `ok` avg 3ms max 5ms; `bootstrap.total` 3/3
+  `http_200`. `/api/compute/status`: `state=active`, `warmness_class=
+  premium_always_on`, `runtime.reachable=true`, `runtime_health=ready`,
+  `researcher_count=3` (guest is admitting researchers — `RUNTIME_MAINTENANCE_HOLD`
+  is not injected on this boot). Host hold was cleared by Unhold before start.
+- **CI substrate (not a product heresy):** push CI for `3c25ea25`/`445c8fc2`
+  failed agentcore/textureowner shard 3 on
+  `TestPersistentSuperReplacementContinuationAfterUnflaggedClaim` (local
+  flake: cancel report delivered onto the already-completed first Super so
+  continuation reconcile returns nil). Recovered with force-deploy; do not
+  patch that test as the first move.
+- **Still unpaid:** (3.3) bootstrap resolve still uses `r.Context()` so a 15s
+  browser abort can cancel a slow assignment; 132k-event tape-open still
+  unbounded; File-CAS restore / Track M Maildir+SMTP; ontology collapse of
+  `desktop_id`/`PrimaryDesktopID`/`AlwaysOnUserIDs` (compute/status still
+  reports `protection: protected always-on primary computer`). Problem
+  receipt remains open until those land.
