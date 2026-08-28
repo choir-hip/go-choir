@@ -1314,15 +1314,29 @@ func (s *Store) ListPendingLifecycleUpdates(ctx context.Context, ownerID, comput
 	if graph == nil {
 		return nil, fmt.Errorf("lifecycle updates: object graph not initialized")
 	}
-	objects, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	targetAgentID = strings.TrimSpace(targetAgentID)
+	objects, err := graph.ListObjectsByOwnerAndBody(ctx, string(ogKindWorkerUpdate), ownerID, []objectgraph.JSONFieldMatch{
+		{JSONPath: "$.target_agent_id", Value: targetAgentID},
+		{JSONPath: "$.disposition", Value: string(types.UpdatePending)},
+		{JSONPath: "$.delivered_to_loop_id", Value: "", MissingMatchesEmpty: true},
+	}, lifecycleWorkerUpdateScanCap+1)
 	if err != nil {
 		return nil, err
 	}
+	if computerID != "" {
+		filtered := make([]objectgraph.Object, 0, len(objects))
+		for _, obj := range objects {
+			if strings.TrimSpace(obj.ComputerID) == computerID {
+				filtered = append(filtered, obj)
+			}
+		}
+		objects = filtered
+	}
+	if len(objects) > lifecycleWorkerUpdateScanCap {
+		return nil, fmt.Errorf("lifecycle updates: scan cap %d exceeded for owner %s computer %s", lifecycleWorkerUpdateScanCap, ownerID, computerID)
+	}
 	updates := make([]types.CoagentSourcePacket, 0)
 	for _, obj := range objects {
-		if obj.ObjectKind != ogKindWorkerUpdate {
-			continue
-		}
 		update, decodeErr := decodeLifecycleObject[types.CoagentSourcePacket](obj)
 		if decodeErr != nil {
 			return nil, decodeErr

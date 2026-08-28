@@ -2588,7 +2588,10 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 			pendingControls, pendingErr := rt.store.ListAllPendingLifecycleUpdates(ctx, first.OwnerID, computerID, first.AssignedAgentID)
 			if pendingErr != nil {
 				err = pendingErr
-			} else if len(pendingControls) > 0 {
+			} else {
+				log.Printf("runtime: boot work-item sweep researcher owner=%s agent=%s trajectory=%s pending=%d", first.OwnerID, first.AssignedAgentID, first.TrajectoryID, len(pendingControls))
+			}
+			if pendingErr == nil && len(pendingControls) > 0 {
 				_, err = rt.reconcileUpdatedCoagentActor(ctx, first.OwnerID, first.AssignedAgentID)
 				if errors.Is(err, ErrDurablyTerminalLifecycleControlActivation) {
 					err = nil

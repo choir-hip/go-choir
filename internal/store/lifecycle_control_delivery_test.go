@@ -384,3 +384,32 @@ func TestCountPendingDeliveredWorkerUpdatesByRun(t *testing.T) {
 		t.Fatalf("acked tombstone counted: %+v", counts)
 	}
 }
+
+func TestListPendingLifecycleUpdatesDoesNotLoadOwnerSnapshot(t *testing.T) {
+	s, start, caller, researcherWork := setupLifecycleTextureTargetFixture(t)
+	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
+	req.CommandID = "turn-pending-kind-scoped"
+	req.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-pending-kind-scoped", researcherWork.AssignedAgentID, researcherWork.WorkItemID)}
+	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
+	if _, err := s.ApplyTextureTurn(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	for i := 0; i < 32; i++ {
+		id, err := objectgraph.BuildCanonicalID(objectgraph.ObjectKind("choir.event"), start.OwnerID, fmt.Sprintf("pending-noise-%d", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.ogStore.PutObject(context.Background(), objectgraph.Object{
+			CanonicalID: id, ObjectKind: "choir.event", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+			VersionID: "v1", ContentHash: "sha256:test", Body: []byte(`{"kind":"noise"}`), Metadata: json.RawMessage(`{}`),
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pending, err := s.ListPendingLifecycleUpdates(context.Background(), start.OwnerID, start.ComputerID, researcherWork.AssignedAgentID, 10)
+	if err != nil || len(pending) == 0 {
+		t.Fatalf("kind-scoped pending updates = %+v, %v", pending, err)
+	}
+}
