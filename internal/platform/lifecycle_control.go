@@ -44,7 +44,7 @@ func lifecycleControlCommitment(request LifecycleControlRequest) (string, error)
 
 func isOwnerVMLifecycleAction(action string) bool {
 	switch strings.TrimSpace(action) {
-	case "start", "stop", "restart", "refresh":
+	case "start", "stop", "restart", "refresh", "recover":
 		return true
 	default:
 		return false

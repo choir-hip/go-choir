@@ -1233,7 +1233,7 @@ func runComputer(args []string, stdout, stderr io.Writer) int {
 		return runComputerRestore(args[1:], stdout, stderr)
 	case "bootstrap-chain":
 		return runComputerBootstrapChain(args[1:], stdout, stderr)
-	case "stop", "start", "restart", "refresh":
+	case "stop", "start", "restart", "refresh", "recover":
 		return runComputerAction(args[1:], args[0], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "choir computer: unknown subcommand %q\n", args[0])
