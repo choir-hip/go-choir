@@ -1,10 +1,13 @@
 package agentcore
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -2380,5 +2383,73 @@ func TestPersistentSuperReplacementContinuationAfterUnflaggedClaim(t *testing.T)
 	}
 	if afterFail != nil && afterFail.RunID != replacement.RunID {
 		t.Fatalf("replacement Super restormed after 200-iter fail: %s -> %s", replacement.RunID, afterFail.RunID)
+	}
+}
+
+func TestPersistentSuperRewarmSkipsInvalidTransitionControlRun(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	ownerID := "owner-super-skip-invalid"
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
+		return nil
+	})
+	now := time.Now().UTC()
+	tombstone := types.RunRecord{
+		RunID: "super-tombstone-invalid-transition", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
+		AgentID: superAgent.AgentID, AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super,
+		TrajectoryID: "stale-super-trajectory", State: types.RunPassivated, CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{
+			"request_source":    "lifecycle_texture_control",
+			"passivated_reason": "runtime_restarted",
+		},
+	}
+	if err := s.CreateRun(ctx, tombstone); err != nil {
+		t.Fatal(err)
+	}
+	_ = seedTextureLifecycleControl(t, s, ownerID, "super-skip-invalid", superAgent.AgentID, agentprofile.Super)
+	rec, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	if err != nil || rec == nil || rec.RunID == tombstone.RunID {
+		t.Fatalf("healthy Super should mint past tombstone run=%+v err=%v", rec, err)
+	}
+}
+
+func TestBootWorkItemSweepReconcilesPersistentSuperOncePerAgent(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	ownerID := "owner-super-sweep-once"
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
+		return nil
+	})
+	now := time.Now().UTC()
+	tombstone := types.RunRecord{
+		RunID: "super-tombstone-sweep-once", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
+		AgentID: superAgent.AgentID, AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super,
+		TrajectoryID: "stale-super-sweep-trajectory", State: types.RunPassivated, CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{
+			"request_source":    "lifecycle_texture_control",
+			"passivated_reason": "runtime_restarted",
+		},
+	}
+	if err := s.CreateRun(ctx, tombstone); err != nil {
+		t.Fatal(err)
+	}
+	for _, suffix := range []string{"sweep-a", "sweep-b", "sweep-c"} {
+		_ = seedTextureLifecycleControl(t, s, ownerID, suffix, superAgent.AgentID, agentprofile.Super)
+	}
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	rt.sweepOpenWorkItemActors(ctx)
+	skips := strings.Count(buf.String(), "skip restarted persistent-Super control run "+tombstone.RunID)
+	if skips != 1 {
+		t.Fatalf("expected one Super tombstone scan, got %d\n%s", skips, buf.String())
 	}
 }

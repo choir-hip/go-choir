@@ -2402,6 +2402,7 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 		key := ownerID + "\x00" + agentID + "\x00" + trajectoryID
 		grouped[key] = append(grouped[key], item)
 	}
+	superSeen := map[string]struct{}{}
 	for _, workItems := range grouped {
 		first := workItems[0]
 		var err error
@@ -2417,6 +2418,11 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 			continue
 		}
 		if strings.TrimSpace(first.AssignedAgentID) == persistentSuperAgentID(strings.TrimSpace(first.OwnerID)) {
+			superKey := strings.TrimSpace(first.OwnerID) + "\x00" + strings.TrimSpace(first.AssignedAgentID)
+			if _, ok := superSeen[superKey]; ok {
+				continue
+			}
+			superSeen[superKey] = struct{}{}
 			_, err = rt.reconcilePersistentSuperActor(ctx, first.OwnerID, first.AssignedAgentID)
 		} else if agentprofile.Canonical(first.AuthorityProfile) == agentprofile.CoSuper {
 			err = rt.ReconcileCoSuperAssignmentsForTrajectory(ctx, first.OwnerID,

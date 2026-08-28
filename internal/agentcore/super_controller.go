@@ -567,6 +567,15 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 			if errors.Is(readErr, store.ErrNotFound) || strings.Contains(readErr.Error(), "not found") {
 				continue
 			}
+			if errors.Is(readErr, store.ErrLifecycleInvalidTransition) {
+				// A Super run that cannot present its delivered controls (empty
+				// TrajectoryID contract, stale assignment_trajectory_id, etc.)
+				// is not reactivation authority. Keep scanning; aborting here
+				// blocks minting a healthy Super and makes every boot work-item
+				// trajectory repeat ListAllRunsByState until the guest OOMs.
+				log.Printf("runtime: skip restarted persistent-Super control run %s: %v", run.RunID, readErr)
+				continue
+			}
 			return nil, false, fmt.Errorf("validate restarted persistent-Super control run %s: %w", run.RunID, readErr)
 		}
 		if len(controls) == 0 {
