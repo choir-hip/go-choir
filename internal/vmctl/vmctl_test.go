@@ -228,7 +228,7 @@ func (m *blockingBootVMManager) RecoverVM(vmID string, cfg VMManagerConfig) (*VM
 func (m *blockingBootVMManager) RefreshVM(vmID string, cfg VMManagerConfig) (*VMInstanceInfo, error) {
 	return &VMInstanceInfo{HostURL: m.hostURL, Epoch: 3, Healthy: true, State: "running"}, nil
 }
-func (m *blockingBootVMManager) DestroyVMState(vmID string) error      { return nil }
+func (m *blockingBootVMManager) DestroyVMState(vmID string) error { return nil }
 func (m *blockingBootVMManager) GetVM(vmID string) *VMInstanceInfo {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -1551,6 +1551,61 @@ func TestHandler_LookupDemotesUnhealthyActiveOwnership(t *testing.T) {
 	}
 	if len(manager.checkHealthCalls) != 1 || manager.checkHealthCalls[0] != own.VMID {
 		t.Fatalf("health checks = %v, want [%s]", manager.checkHealthCalls, own.VMID)
+	}
+}
+
+func TestHandler_LookupKeepsActiveDuringUnhealthyRouteGrace(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	persistencePath := filepath.Join(t.TempDir(), "ownership.json")
+	if err := reg.SetPersistencePath(persistencePath); err != nil {
+		t.Fatalf("SetPersistencePath: %v", err)
+	}
+	own := &VMOwnership{
+		VMID:        "vm-grace",
+		ComputerID:  "computer-grace",
+		UserID:      "user-grace",
+		DesktopID:   PrimaryDesktopID,
+		ComputerURL: "http://127.0.0.1:9001",
+		State:       VMStateActive,
+		Epoch:       8,
+	}
+	key := ownershipKey(own.UserID, own.DesktopID)
+	reg.ownerships[key] = own
+	reg.vmByID[own.VMID] = own
+	unhealthy := false
+	recentHealthy := time.Now().Add(-10 * time.Second)
+	manager := &mockVMManager{
+		getVMs: map[string]*VMInstanceInfo{
+			own.VMID: {
+				HostURL:       own.ComputerURL,
+				Epoch:         own.Epoch,
+				Healthy:       false,
+				State:         "running",
+				LastHealthyAt: recentHealthy,
+			},
+		},
+		checkHealthOK: &unhealthy,
+	}
+	reg.SetVMManager(manager)
+	handler := NewHandler(reg)
+
+	request := httptest.NewRequest(http.MethodGet, "/internal/vmctl/lookup?user_id="+own.UserID, nil)
+	request.Header.Set("X-Internal-Caller", "true")
+	response := httptest.NewRecorder()
+	handler.HandleLookup(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("lookup status = %d body=%s", response.Code, response.Body.String())
+	}
+	var result ownershipResponse
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.State != string(VMStateActive) {
+		t.Fatalf("lookup state = %q, want active during unhealthy-route grace", result.State)
+	}
+	stored := reg.GetOwnershipForDesktop(own.UserID, own.DesktopID)
+	if stored == nil || stored.State != VMStateActive {
+		t.Fatalf("stored ownership = %+v, want active during grace", stored)
 	}
 }
 

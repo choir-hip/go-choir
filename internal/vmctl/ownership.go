@@ -1717,6 +1717,14 @@ func (r *OwnershipRegistry) reconcileLookupReadiness(own *VMOwnership) *VMOwners
 	if healthErr == nil && healthy {
 		return own
 	}
+	if activeVMCanRouteDuringHealthGrace(mgr.GetVM(own.VMID), time.Now()) {
+		if healthErr != nil {
+			log.Printf("vmctl: active VM %s lookup health check failed during unhealthy-route grace; keeping active: %v", own.VMID, healthErr)
+		} else {
+			log.Printf("vmctl: active VM %s lookup health check returned unhealthy during unhealthy-route grace; keeping active", own.VMID)
+		}
+		return own
+	}
 
 	r.mu.Lock()
 	current := r.ownerships[key]
