@@ -179,14 +179,12 @@ depends on them:
 
 ## 5. What runs in parallel with candidate A (safe now)
 
-- M1: delete `internal/yaegikernel/{actor_state,broker,broker_protocol,
-  profiles,handles}.go` (verified zero production importers; only
-  `eval/sidecar/allowlist` are live, via `cmd/capsule-broker`).
+- M1: delete the dead yaegi actor sub-stack — verified 1,036 source LOC +
+  613 own-test LOC across `actor_state/broker/broker_protocol/profiles/
+  handles/transclusion`, zero references outside the package (only
+  `cmd/capsule-broker` imports it, for `eval/sidecar/allowlist`). Keep the
+  containment/refusal tests that exercise the live evaluator.
 - Inert type declarations (session protocol, continuation, manifest).
-- The parity fixture harness; predicate-family extraction.
-- Wave-1 deletions from the prior consensus (orphan `internal/base` API +
-  cmds, unused adapter options, dead stubs) and registry reconciliation.
-- Contract/paper design for the candidate-package export/import mechanism.
 
 Must wait behind candidate A: everything touching broker RPC framing, worker
 lifecycle, `runtime.go`/tool profiles, and the two delivery-semantics
@@ -224,3 +222,104 @@ boundaries, no second activation loop. The implementation is orange/red
 (model routing, capability checks, receipts, recovery identity are protected
 surfaces), gated twice: candidate A first, parity second, with the memo's
 forced-death/different-model recovery as the final acceptance before staging.
+
+## 8. Second pass: verified deletion manifest & refactor consolidations
+
+A follow-up verification pass re-checked every deletion candidate with
+whole-repo searches (Go + tests, cmd/, frontend/, docs/, nix/, scripts/,
+CI) — distinguishing real callers from doc-inventory mentions — and swept
+for aggressive refactor consolidations. Numbers below are verified, not
+estimated.
+
+### 8.1 SAFE-DELETE-NOW — ~5,000 LOC
+
+| Target | LOC | Evidence |
+|---|---|---|
+| `internal/yaegikernel` actor sub-stack: `actor_state, broker, broker_protocol, profiles, handles, transclusion` + own tests | 1,036 src + 613 test | Zero refs outside package; only `cmd/capsule-broker` imports yaegikernel, resolving to `eval/sidecar/allowlist`. Keep containment/refusal tests covering the live evaluator |
+| `internal/base` API: `handlers.go` (532) + `persistent.go` (84) + tests, plus `cmd/baseobserve`, `cmd/baseharness` | ~2,076 | Imported by nothing except those commands; commands referenced by no nix/scripts/CI; no normative doc promise |
+| `internal/base` testkit scenarios | ~588 | No production or active normative references |
+| `cmd/choir-rebuild-base` | 110 | Only the seq-2-failing offline rebuilder's CLI; deleting it executes the prior wire-or-delete decision (the guest materializer stays) |
+| `cmd/zot` | 15 | Flake uses a separate upstream zot package |
+| `internal/capsule/diagnostics.go` | 139 | All functions self-referenced only; capsule.go uses manifest.go's walkUpperdir |
+| `internal/agentcore/qdrant_dedup.go` | 186 | Every helper self-referenced only; `qdrant_runtime.go` STAYS (live startup/health wiring) |
+| `internal/store/json.go` | 10 | Zero callers |
+| `capsule/stub_other.go` ListCapsules method | ~1 | Zero callers (Linux impl also unused); rest of stub kept for API parity |
+| 13 dead store wrapper methods: `ListActiveLifecycleRunsByTrajectory, CoSuperSlotByAgent, GetLatestPassivatedRunByAgent, GetLatestPassivatedLifecycleRunByAgent, ListEventsByChannel, ListEventsByTrajectoryAfter, ListChannelMessagesByTrajectory, GetRunAcceptanceByID, ListAllDocuments, SearchDocuments, DeleteTextureAliasesByOwner, GetHistoryByScope, CancelAgentMutation` | ~250 (est.) | Declaration-only; doc mentions are inventory strings, not callers |
+
+### 8.2 TEST-MIGRATE-FIRST — ~445 LOC after migration
+
+- `store/continuations.go` wrappers (58) + graph continuation methods
+  (~102, graph_store.go:2065-2166): referenced only by their own tests.
+- `store/cosuper_assignment_seed.go` (97): test-fixture contract only
+  (~1,261 LOC of tests reference it); replace fixture or retire tests.
+- Raw terminal shell path: `NewTerminalHandler/findShell/shell field/
+  sessionCommand fallback/RegisterTerminalRoutes` + the raw test suite;
+  proxy already 410s `/api/terminal/ws`. Keep Super Console
+  (`run.go:119-120`).
+- `QdrantDedupThreshold` config plumbing (~20) once qdrant_dedup.go is
+  gone; `QdrantURL/OllamaURL` stay live (readiness checks).
+
+### 8.3 KEEP — verified still load-bearing
+
+`qdrant_runtime.go` (startup + health), `base blob/journal/model/tree`
+(computerversion imports), `base planner` (a definition normatively promises
+`planner.Plan`), `cmd/basecompare` (cited by evidence docs as analysis CLI),
+`cmd/runtime-ratchet` (active acceptance contract), `ListTextureSourceEntities`
+(real callers), all nix-declared services.
+
+### 8.4 Refactor consolidations (top 5 by value/diff ratio)
+
+1. **Ownerless run-scan fallbacks → streaming** (yellow, ~20-40 LOC):
+   `runtime.go:2244` and `super_controller.go:560` still call
+   `ListAllRunsByState` (unbounded slice); migrate to the existing
+   `ForEachRunsByState` callback, keeping the owner-index branch. This is
+   the highest OOM-prevention value in the set.
+2. **VM state adapter mapping** (yellow, ~20-35 LOC + tests):
+   `cmd/vmctl/main.go:244-253` leaks manager state strings; add an explicit
+   `managerStateToVMCTLState` mapping AND update the three consumer
+   switches (`ownership.go:831-837, :843-857, :892-922`) in the same diff —
+   mapping without consumers breaks readiness. Keep the two enums separate:
+   manager state is process state, vmctl state is ownership/wire state.
+3. **`ListLifecycleEventPage` streaming** (orange, ~40-80 LOC): the page
+   API full-scans `ListLifecycleEvents` then slices (lifecycle.go:1234);
+   SSE callers (`api_trajectory.go:112,166`) deserve a real cursor. A true
+   bounded replacement needs a `(kind, scope, sequence)` keyset index —
+   orange/red per the boot-outage postmortem's repair classification.
+4. **Generic merged-list helper** (yellow, ~45-80 LOC): collapse
+   `runtime.go:1724/:1766/:1797` (trajectories/owner/channel list + merge +
+   sort + cap triplicates); watch dedupe semantics (trajectories dedupe,
+   runs do not).
+5. **Latest-run trio collapse** (yellow/orange, ~40-70 LOC):
+   `GetLatestRunByAgent/GetLatestActiveRunByAgent/GetLatestPassivatedRunByAgent`
+   (store.go:1822/:1850/:1884) duplicate scan/decode/latest; one helper with
+   a state predicate.
+
+Also verified worth doing: the rematerialize double-validation collapse
+(~15-30 LOC, yellow); texture revision aggregate dupes
+(`texture.go:1257-1290`, ~35-60 LOC, yellow — note truncation is possible
+today); and the CoSuper authority-validator join duplication
+(`cosuper_assignments.go:473/:531`, ~60-100 LOC) — the largest single
+reduction, but red-class (authority validation) with exhaustive test
+requirements, so last.
+
+### 8.5 The H3 scan-cutover map (concrete)
+
+The `ogListAllByMetadata` family has 26 production callsites, each now with
+a named bounded target: owner+body exact predicates via
+`ListObjectsByOwnerAndBody` (worker updates, texture revisions, work items,
+mailbox, latest-run trio), `ListJSONBodyFieldsByKindOwner` for pending
+fields, `ListObjectRefsByKindOwner` + GetObject where newest-updated
+semantics suffice, `ogForEachByMetadata`/`ListObjectsByMetadataPage` for
+legacy ambiguity-resolvers (never `LIMIT 1` — it can hide a legacy twin),
+and `ListObjectsPage`/a new `ogForEachObjectsByKind` for the global scans.
+Two honest limits: (a) existing cursors bound memory, not SQL work — they
+cannot stop early when the order key differs, so event/page APIs need an
+indexed keyset query (orange/red: schema + cursor-expiry contracts); (b)
+`ReadObjectSnapshot` STAYS for `GetLifecycleSnapshot` and
+`GetCoSuperCapsuleEvidence` — the atomic serializable same-commit join has
+no bounded substitute today; the replacement is a transactional filtered
+snapshot, not independent point reads (which could assemble an impossible
+mixed-version state).
+
+Deletion total: **~5,445 LOC removable now or after test migration**, plus
+the refactor consolidations above — before any RLM code is written.
