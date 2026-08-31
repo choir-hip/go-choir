@@ -12,8 +12,8 @@ spec = importlib.util.spec_from_file_location(
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
-SRC = "docs/reviews/optimal-harness-thesis-2026-08-31.md"
-HEADER = "CHOIR - THE OPTIMAL HARNESS THESIS"
+SRC = sys.argv[2] if len(sys.argv) > 2 else "docs/reviews/optimal-harness-thesis-2026-08-31.md"
+HEADER = "CHOIR - THE OPTIMAL HARNESS THESIS, v2"
 DATE = "2026-08-31"
 
 
