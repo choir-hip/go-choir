@@ -367,10 +367,18 @@ the design.
    prevention); and a **continuous-operation acceptance proof**: N days of
    scheduled sends across M live feeds with zero human unblocks, one
    injected failure handled by fail-over, and one autonomous correction
-   issued. Then broadcast audio (radio), then actuation on information
-   within ratified risk controls (capital). Each step raises the autonomy
-   bar and exercises the same machinery: multiplexed ingestion → RLM
-   orchestration → heterogeneous supervision → receipted, bounded,
+   issued. Then automatic radio as its own Definition (the forward plan
+   already specifies its proof: non-repeating source-grounded playback that
+   accepts pause/skip/deeper/explain without ending the session), then
+   automatic capital last — CHIPS/citation economics and trading stay
+   unimplemented until users, data, and the security posture justify them
+   (today prediction-market data is *ingestion-only* — a sources.json entry
+   with no adapter and no trading, per the legal docs); the
+   prepare-the-ground obligation is §4.1's provenance/citation/compute
+   accounting plus the untrusted-evidence pipeline of
+   `docs/source-external-data-publication.md`. Each step raises the
+   autonomy bar and exercises the same machinery: multiplexed ingestion →
+   RLM orchestration → heterogeneous supervision → receipted, bounded,
    policy-checked effects → forward correction when wrong.
 
 Human involvement in 1–7 is the ordinary owner role: ratifying the mission
@@ -441,3 +449,16 @@ repairs above came from that round:
   and the audit principle's too-narrow test were all repaired in place.
 
 Panel outputs: `.agentic-consensus/agentic-consensus-20260831-111816/`
+*Squaring pass (same day): §1's radio and capital descriptions, §4.1's
+multimodal-durable-state and provenance/compute-accounting obligations,
+§4.4's interruption semantics, and §8's sequencing were squared against the
+existing docs — chiefly
+`docs/archive/news-voice-autoradio-forward-plan-2026-06-06.md`,
+`docs/archive/mission-geometry.md`, `docs/archive/north-star.md` (CHIPS
+explicitly deferred), `docs/archive/choir-agentic-depth-canonical.md`
+(external content adversarial by default), and
+`docs/source-external-data-publication.md` (untrusted-evidence pipeline,
+the security/provenance foundation any citation economy attaches to). The
+token-for-attention formulation of the citation economy is recorded as the
+owner's current articulation; the docs defer the mechanics and no formula
+is specified here.*
