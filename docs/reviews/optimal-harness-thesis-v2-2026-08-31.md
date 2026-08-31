@@ -4,47 +4,91 @@
 (`optimal-harness-thesis-2026-08-31.md`) after an ontology-creep audit.
 Written for a reader who has never heard of Choir: every term is defined in
 §3, every decision carries its reason, and every concept that appeared in v1
-without earning its keep is recorded as deleted in §6.*
+without earning its keep is recorded in §6. The target architecture is the
+RLM — orchestration as model-written code — with heterogeneous multi-model
+supervision; the ReAct baseline of §2 is a measuring stick, not the
+destination.*
 
-## 1. The goal: continuous autonomy
+## 1. The goal: continuous autonomy at scale
 
-Choir is a runtime (a "harness") for AI models. Its purpose is
-**continuous autonomy**: a persistent computer, run by models, that works
-without stopping to ask permission.
+Choir is a runtime (a "harness") for AI models. Its purpose is **continuous
+autonomy at scale**: a persistent computer, run by models, that works
+without stopping to ask permission — and whose ambition grows with what the
+models can responsibly drive.
 
-The destination application is the **World Wire automatic newspaper**: a
-system that starts by pulling RSS and social-media feeds, then takes
-increasing human and agent input, and projects it into more formats for more
-readers. A newspaper never stops. It accepts input continuously — a human
-typing in the Texture UI, an agent calling the CLI, a feed delivering items —
-all multiplexed into one stream. The system processes that stream
-continuously. It does not pause for approval, does not halt for supervision
-checkpoints, does not generate reasons for a human to intervene.
+The destination applications are the automatic trio, each raising the
+autonomy bar:
 
-Two consequences govern every design decision below:
+1. **The World Wire automatic newspaper** — ingest RSS and social-media
+   feeds, user and agent input, multiplexed continuously; project the
+   information into customized formats (newsletters, pages) for different
+   human readers and agents, on schedules and on events. **Email is core
+   functionality**: readers subscribe and the system sends customized
+   newsletters autonomously.
+2. **Automatic radio** — the same pipeline projected into scheduled and
+   event-driven audio programming: the machine that writes the news also
+   reads it, assembles programming, and broadcasts it.
+3. **Automatic capital** — the system acts on the information it produces:
+   first trading in prediction markets, ultimately broader financial and
+   external-API actuation. Information production becomes information
+   arbitrage.
+
+A newspaper, a radio station, and a trading desk never stop and never ask a
+manager to approve each story, broadcast, or trade. So the harness accepts
+arbitrary concurrent input (Texture UI, CLI/API agents, feeds) as one
+multiplexed stream, and it **actuates autonomously** — sends the mail,
+places the trade — within quantitative risk controls. Two consequences
+govern every design decision:
 
 1. **A human is an input, not a gate.** Owner input enters through the same
-   event stream as every other source and is handled concurrently. The only
-   human-gated acts are the ones physics makes irreversible from inside the
-   machine (see §4).
-2. **Redundancy exists for availability, not control.** Capsules, multiple
+   event stream as every other source and is handled concurrently.
+   Human ratification happens once per *capability* (a mission Definition
+   enabling a class of effects, e.g. "send email" or "trade prediction
+   markets"), never per effect.
+2. **Redundancy and supervision exist for autonomy.** Capsules, multiple
    VMs, and heterogeneous models are defense-in-depth so the system keeps
-   running when a component fails — not a supervision apparatus. If a
-   mechanism's only product is a reason to stop, it is deleted.
+   running *and keeps being right* as it scales — not a permission
+   apparatus. If a mechanism's only product is a reason to stop, it is
+   deleted.
 
-## 2. The minimal machine
+## 2. The baseline and the architecture
 
-A single model in a **ReAct loop** (§3) with no guardrails can already do
-self-development if the model is smart enough. Add a good **restore** system
-— the ability to return the machine to a prior state — and that is
-basically enough. Restore is what makes boldness safe: an edit that breaks
-the computer is reverted, not mourned. Everything else in this harness must
-justify itself against that baseline. The thesis in one line:
+**The baseline.** A single model in a **ReAct loop** (§3) with no
+guardrails, plus a good **restore** system, can in principle do
+self-development. Restore makes boldness safe: a bad edit is reverted, not
+mourned. This baseline is the *measuring stick* every harness mechanism is
+judged against: a mechanism must beat naive single-model ReAct **at
+production scale**, or be deleted (D5).
 
-> **Harness = ReAct loop + durable restore + the few things models cannot do at all.**
+**Why the baseline does not scale.** In practice a single model has a
+bounded capability set and, run long enough, falls into an **attractor
+basin** (§3) — a self-reinforcing rut of its own habits — and goes off the
+rails. Scale also breaks the loop mechanically: ingesting hundreds of
+multiplexed feed items per minute, projecting them into many formats, and
+acting on them is a concurrency problem, not a chat problem.
 
-The last clause is the entire design discipline. §4 names those things.
-§6 records the machinery that failed this test and was cut.
+**The architecture.** For scale, robustness, and quality, the target is the
+full architecture already being built — none of it optional:
+
+- **RLM (§3)** — model-written interpreted Go as the universal interface,
+  replacing the JSON tool-call surface: orchestration as code, closed under
+  composition, capable of the fan-out and pipeline shapes the newspaper
+  demands.
+- **Concurrency hierarchy** — many capsules across many VMs across many
+  guests: ingest, transform, draft, verify, publish, and actuate in
+  parallel, with failures isolated to a capsule.
+- **Heterogeneous multi-model orchestration with supervision** — different
+  model families share the work and check each other: one family drafts,
+  another verifies; a coordinator (**Super**, §3) schedules, subordinates
+  (**CoSupers**, §3) execute in capsules; a model that drifts into an
+  attractor basin is caught by a reviewer from a different family. This is
+  orchestration as code, with supervision as a first-class, inspectable
+  part of the code — not a trusted hierarchy and not a human checkpoint.
+
+The thesis in one line:
+
+> **Harness = the RLM architecture + heterogeneous supervision + restore,
+> minus everything that does not beat single-model ReAct at scale.**
 
 ## 3. Glossary — every term, defined
 
@@ -53,8 +97,8 @@ standard equivalent is given and the word is queued for renormalization
 (§7, D4).
 
 - **ReAct loop** — the model's elementary work cycle: observe context, think,
-  act (run code or call a tool), observe the result, repeat until the task
-  is done. Standard term.
+  act (run code or call a tool), observe the result, repeat. Standard term.
+  Used in this thesis only as the §2 baseline.
 - **Model** — a large language model accessed through a provider API. A
   model call is stateless: it receives text, returns text. All memory,
   identity, and continuity live in the harness.
@@ -62,123 +106,153 @@ standard equivalent is given and the word is queued for renormalization
   written code, enforces effect boundaries, and keeps the machine alive
   across failures and restarts.
 - **Computer** — Choir's product object: one persistent, addressable machine
-  with an owner. Not a metaphor: it has durable state, an event history, and
-  a restore point. One owner, one computer.
+  with an owner. It has durable state, an event history, and restore points.
+  One owner, one computer.
 - **Event tape** — the computer's append-only, ordered record of everything
   that happened. *Non-standard usage* ("tape"); the standard term is an
-  **event log** or **journal**. Renormalization queued (§7, D4). Everything
-  durable derives from it: current state is a projection of the log, and
-  **restore** means rebuilding the machine at an earlier log position
-  (a **checkpoint**).
+  **event log** or **journal**. Renormalization queued (§7, D4). Current
+  state is a projection of the log; **restore** means rebuilding the machine
+  at an earlier log position (a **checkpoint**).
 - **Checkpoint** — a named, hash-addressed position in the event log the
   machine can be restored to. Standard term.
 - **Restore** — returning the computer to a prior checkpoint. The safety net
-  that makes autonomous mutation survivable. Standard term.
-- **Receipt** — a durable record that an effect (a real-world action) was
-  authorized and what it did, or that a request was refused. Append-only.
-  Near-standard (audit log entry).
+  that makes autonomous mutation — and autonomous actuation — recoverable.
+- **Receipt** — a durable record that an effect was authorized and what it
+  did, or that a request was refused. Append-only. Near-standard (audit log
+  entry).
 - **Effect** — any action that changes the world outside the model's own
-  head: writing state, starting a process, calling a provider, publishing a
-  page. Standard term.
+  head: writing state, sending email, placing a trade, publishing a page.
 - **Capability gate** — a checked boundary an effect passes through, which
-  records who authorized it. Minimal by design: gates exist so effects are
-  attributable and revocable, not to ration work (§4.2).
-- **VM / guest** — a virtual machine; "guest" is the OS running inside it.
-  Standard terms.
+  records it and enforces its quantitative limits (§4.2). Its job is
+  attribution, bounding, and revocation — not permission.
+- **VM / guest** — a virtual machine; "guest" is the OS inside it.
 - **Capsule** — a guest-local execution sandbox: a namespace (filesystem,
   network, process view) plus a resource budget, in which model-written code
-  runs. Failure in a capsule cannot damage the host guest. Choir-specific
-  word for a standard concept (sandbox / container-lite).
+  runs. Failure in a capsule cannot damage the host guest. Choir's word for
+  a standard concept (sandbox).
 - **Activation** — one model-call episode with its scratch state, running
   inside a capsule. Terminates when the call ends or the capsule is killed.
 - **Goroutine** — Go's lightweight thread. A leaked goroutine cannot be
-  force-killed by the language; only the OS killing its process guarantees
+  force-killed in-language; only the OS killing its process guarantees
   death. This fact motivates the capsule layer. Standard Go term.
 - **Super** — the computer's resident coordinator agent (a model in a
   managed loop) that schedules work and responds to events. Choir-specific
   name; the role is a standard "main agent / orchestrator."
 - **CoSuper** — a subordinate agent Super assigns a bounded task to, running
-  in its own capsule. Choir-specific name; standard concept: subagent /
-  worker agent. **Its bash tool is removed** (§7, D2).
+  in its own capsule. **Its bash tool is removed** (§7, D2). Standard
+  concept: subagent / worker agent.
 - **Texture** — the user-facing control plane: the document/UI surface where
   the owner sees and steers the computer, and where a *Texture agent* (the
   sole non-owner writer of canonical state) commits durable changes.
   Choir-specific name.
 - **RLM** — "Recursive Language Model": the target architecture in which
   model-written Go code is the interface to everything, replacing the JSON
-  tool-call surface models were trained on (§7, D3).
+  tool-call surface models were trained on. Orchestration as code.
 - **Interpreted Go** — Go source executed directly (via an interpreter)
   rather than compiled ahead of time, so the machine can run code the models
   just wrote, inside a capsule, without a build/deploy cycle.
+- **Attractor basin** — a self-reinforcing pattern a model falls into when
+  run long enough (repeating a strategy, tone, or plan past the point where
+  it works), because each step conditions the next. Standard term from
+  dynamical systems; the reason single-model autonomy degrades and
+  heterogeneous supervision is needed.
+- **Heterogeneous models** — different providers/model families working the
+  same pipeline: for redundancy (no single model's failure mode or outage
+  takes the system down) and for quality (one family catches another's
+  drift). Standard term (model diversity).
 - **Self-development** — the computer improving its own harness: models
-  propose changes to the code running them, the changes are tested,
-  checkpointed, and promoted; restore can always take them back.
-- **World Wire** — the automatic newspaper (§1): the destination application
-  that makes continuous autonomy non-negotiable.
-- **Heterogeneous models** — running different providers/model families for
-  the same roles so that no single model's failure mode (correlated
-  hallucination, provider outage) takes the whole system down. Standard term
-  (model diversity).
+  propose changes to the code running them; changes are tested,
+  checkpointed, promoted; restore can always take them back.
+- **World Wire** — the automatic newspaper (§1.1): the first destination
+  application. **Automatic radio** and **automatic capital** are the second
+  and third (§1.2–1.3): the same pipeline projected into broadcast audio and
+  into acting on information (prediction markets first).
 - **OOD (out-of-distribution)** — the deployment environment differs from
   the models' training environment. Here, deliberate (§7, D3).
+- **Risk control** — a quantitative bound on an autonomous effect class:
+  rate limits, spend caps, position limits, recipient allowlists.
+  Resource-shaped, tunable by models within the class's charter, enforced at
+  the gate.
 
 ## 4. What the harness supplies
 
-Four things — exactly what models cannot supply for themselves, nothing more.
-Each item states why models cannot do it, because that is the only valid
-reason for harness machinery to exist.
+Four things — exactly what models cannot supply for themselves, nothing
+more. Each item states why models cannot do it, because that is the only
+valid reason for harness machinery to exist.
 
 **4.1 Durable state.** Models are stateless per call. The harness keeps the
 event log, receipts, artifacts, and continuity across restarts, plus
 identity (who acted — attributable receipts) and time (timers, wake-ups,
-deadlines — a model cannot wake itself up).
+deadlines — a model cannot wake itself up, and a newspaper runs on
+schedules).
 
-**4.2 Effect boundaries.** Models hold no authority of their own; the
-harness makes their actions attributable and revocable through capability
-gates. **The gate's job is recording and revocation, not rationing.** The
-test for a justified gate: does it prevent an *irreversible* error (money
-sent, mail delivered, production data destroyed), or make a reversible one
-*recoverable* (restore)? A gate that merely pauses work "for review" is a
-stop, and stops are what this harness is built not to do. Gates that fire
-should let the system continue on another path (fail-over), not idle.
+**4.2 Effect boundaries with quantitative risk controls.** Models hold no
+authority of their own; the harness makes their actions attributable,
+bounded, and revocable. The newspaper and its successors require
+**autonomous actuation** — email, publishing, eventually trades and
+external API calls — so the gate's job is:
+
+- *record* every effect (receipt) and every refusal;
+- *bound* every effect class with quantitative risk controls (rate limits,
+  spend caps, position limits, allowlists) — enforced mechanically, at the
+  gate, in stream order;
+- *revoke* (capability revocation takes effect for future effects).
+
+What the gate never does is pause work pending human approval. When a
+control trips, the system fails over: the newsletter queue switches
+template, the trade is skipped and logged, the pipeline continues. A wrong
+autonomous effect is handled the way a bad code edit is — receipt,
+assessment, correction, restore where needed — not treated as a crash of
+the autonomy itself. Human ratification happens once per effect *class* in
+the mission Definition ("the system may send email"), then the models own
+the effects within the controls. Raising a control or enabling a new class
+is an owner act; operating inside it never is.
 
 **4.3 Physical backstops.** Goroutines cannot be force-killed in-language;
-the machine cannot be oversubscribed without OS limits. The harness enforces
-capsule death and resource ceilings at the OS level. These are physics
-analogues, not supervision: they act on resource exhaustion, never on
-semantic judgments.
+the machine cannot be oversubscribed without OS limits. The harness
+enforces capsule death and resource ceilings at the OS level. These act on
+resource exhaustion, never on semantic judgments — they are the floor under
+both concurrency and risk controls.
 
 **4.4 Multiplexed grounding.** The machine accepts concurrent input from any
 source — owner (Texture UI), external agents (CLI/API), feeds (RSS, social)
 — as one ordered event stream. Human input is first-class but never
 privileged as a blocking gate: it is handled in stream order like everything
-else. The exceptions are the irreversibles from 4.2, which are gates on
-*effects*, not on *input*.
+else.
 
-Nothing else. In particular the harness does **not** supply: supervision
-hierarchies with authority to halt, constitutional review bodies, consensus
-requirers, or "human-in-the-loop" checkpoints. Where v1 had these, §6
-records the cuts.
+Nothing else. In particular the harness does **not** supply:
+human-approval checkpoints inside the loop, consensus requirers for routine
+effects, or "supervision" whose product is a stop. Where v1 had these, §6
+records the cuts. Heterogeneous multi-model supervision stays (§2) because
+it produces *continuation and correctness*, not stops.
 
-## 5. Redundancy is for autonomy
+## 5. Redundancy and supervision are for autonomy
 
-Why does one model in one loop need capsules, multiple VMs, and heterogeneous
-models? For the newspaper, not for control:
+Why does a competent model need capsules, multiple VMs, and heterogeneous
+models? Because at newspaper/radio/capital scale, the failure modes are
+concurrency, drift, and outage — and the response to each must be
+continuation:
 
-- **Capsules** isolate the blast radius of a bad autonomous edit — the
-  machine keeps running while one sandbox fails. Continuation.
+- **Capsules** isolate the blast radius of a bad autonomous edit or a
+  crashed ingester — the machine keeps running while one sandbox fails.
 - **Multiple VMs** survive guest crashes, bad deploys (one VM keeps the old
-  build), and provider-side failures. Continuation.
-- **Heterogeneous models** survive correlated failure: when one model family
-  hallucinates or a provider goes down, a different family takes the shift.
-  Continuation.
-- **Checkpoint/restore** makes any failure a rewind instead of a halt.
-  Continuation.
+  build), and provider-side failures.
+- **Heterogeneous models** do double duty: availability (when one family
+  hallucinates or its provider goes down, another family takes the shift)
+  and quality (one family reviews another's output; a coordinator drifting
+  into an attractor basin is caught by a reviewer from a different family).
+- **Checkpoint/restore** makes any failure a rewind instead of a halt —
+  including failures of autonomous actuation: a wrong send or trade is
+  bounded by its risk controls, receipted, corrected, and learned from.
+- **Supervision as code** (Super/CoSuper/Texture-agent roles, heterogeneous
+  reviewers, verification steps) is part of the model-written orchestration,
+  inspectable and improvable by the same self-development process as
+  everything else — not a fixed human hierarchy.
 
-Every redundancy mechanism must answer: *"when this fires, what keeps
-running?"* If the answer is "nothing until a human decides," the mechanism
-is mis-designed. Fail-over, not escalation, is the default response to
-failure.
+Every redundancy and supervision mechanism must answer: *"when this fires,
+what keeps running?"* If the answer is "nothing until a human decides," the
+mechanism is mis-designed. Fail-over, not escalation, is the default
+response to failure.
 
 ## 6. Ontology audit — what v1 had, and what happened to it
 
@@ -188,15 +262,15 @@ baseline, the dispositions:
 
 | v1 concept | Disposition | Why |
 |---|---|---|
-| Three constitutional regimes (physics kernel / charter / ordinances) | **Cut.** | A constitution is machinery for a polity; this is one computer with one owner. Owner-ratified rules live in the repo docs and the Definition, reviewed like any other change. |
-| Charter, charter-class claims, charter ratification steps | **Cut.** | Same reason; also removed a plan step (bootstrap charter before M5) — sequencing now has no ratification ceremony. |
-| Ordinances (learned protocol rules) | **Cut as a term.** The underlying idea — models may tune loop parameters — stays as ordinary self-development: parameters are code, code is proposed, tested, restore-able. |
+| Three constitutional regimes (physics kernel / charter / ordinances) | **Cut.** | A constitution is machinery for a polity; this is one computer with one owner. Owner-ratified rules live in the repo docs and the mission Definitions, reviewed like any other change. |
+| Charter, charter-class claims, charter ratification steps | **Cut.** | Same reason; the plan loses its ratification ceremony. |
+| Ordinances (learned protocol rules) | **Cut as a term.** The underlying idea — models tune loop parameters — stays as ordinary self-development: parameters are code, code is proposed, tested, restore-able. |
 | Offices, incomparabilities (authority lattice) | **Cut.** | Replaced by the three-role structure that actually exists (§3: Super, CoSuper, Texture agent) with its real, already-implemented authority facts; no new vocabulary. |
 | Overturning-condition receipts (graded trust classes) | **Cut as machinery.** The useful kernel — record what evidence would falsify a decision — is a doc/Definition practice, not a subsystem. |
 | External witnesses as admission gate | **Kept, re-derived simply.** A claim about the world is settled by running the thing (a test, a build, a deployed proof), not by panel review. That is ordinary verification; no "witness" ontology. |
-| Agentic supervision with contestable decisions | **Cut as a subsystem.** Supervision bugs are found by the same process as code bugs: evidence, revert, repair. Restore is the supervisor. |
+| Agentic supervision with contestable decisions | **Cut as a separate subsystem.** Supervision is orchestration as code (§5): heterogeneous reviewers and verification steps in the model-written pipeline, improvable via self-development. |
 | Equal footing / trust-accrual / blinding rules | **Cut.** Panel-procedure vocabulary with no load-bearing role in one machine's operation. |
-| Floor guards / static caps as "gauges" | **Kept** as plain resource limits (4.3) — no new epistemology. |
+| Floor guards / static caps as "gauges" | **Kept** as plain resource limits and risk controls (4.2–4.3) — no new epistemology. |
 
 **Audit principle going forward:** a concept may be introduced only if
 (a) no standard term covers it, (b) it does load-bearing work in §4, and
@@ -207,9 +281,9 @@ failing this enter the renormalization list (§7, D4) instead of the design.
 
 - **D1 — Continuous autonomy is the acceptance criterion.** Any mechanism
   whose exercise requires the system to stop and wait for a human is
-  presumed defective; it must fail over or restore instead. Human input is
-  multiplexed stream input, never a blocking gate (exceptions: §4.2
-  irreversibles).
+  presumed defective; it must fail over or restore instead. Human
+  ratification is per effect *class* (mission Definition), never per
+  effect. Human input is multiplexed stream input, never a blocking gate.
 - **D2 — CoSuper's bash tool is removed.** CoSuper works through the
   structured effect interface like every other agent. Rationale: one
   actuator surface is simpler to gate, to receipt, and to reason about; bash
@@ -225,10 +299,19 @@ failing this enter the renormalization list (§7, D4) instead of the design.
   and code for non-standard terms and either adopt the standard term or
   record why the bespoke one stays. Known instance: "tape" → event log /
   journal (§3). Others to be enumerated in the sweep, not invented now.
-- **D5 — ReAct + restore is the baseline every mechanism is judged against**
-  (§2). New machinery must beat the baseline or be deleted.
+- **D5 — The ReAct baseline is the judgment standard.** Every mechanism is
+  judged against single-model ReAct + restore *at production scale*, not in
+  isolation (§2). The baseline is a floor to beat, not an architecture to
+  build.
+- **D6 — Autonomous actuation is a scaling goal, bounded by quantitative
+  risk controls.** Email is core newspaper functionality and ships
+  autonomously; prediction-market trading and external-API actuation follow
+  as capital capability, each enabled once per class by the owner and then
+  operated by the models within mechanical controls (§4.2). Controls are
+  resource-shaped and model-tunable within their bounds — never
+  per-effect approvals.
 
-## 8. Path forward (simplified from v1)
+## 8. Path forward
 
 1. **Land candidate A** — the supervised self-development gate on the
    existing path; effects OFF; fence checkpoint untouched.
@@ -239,17 +322,21 @@ failing this enter the renormalization list (§7, D4) instead of the design.
 4. **RLM M1–M4** — session interpreter, prebound context, gated model calls,
    role manifests — buildable without touching the A-path.
 5. **M5 parity, then M6.5 nested activations** — proven on the
-   consensus-panel workload inside one sealed assignment. (No charter
-   prerequisite: §4.2's rules are already the doctrine.)
+   consensus-panel workload inside one sealed assignment.
 6. **Full-RLM cutover** — delete the ambient tool surface only after A's
    gate and parity both pass; forced-death and different-model recovery
    acceptance before staging.
-7. **Then the newspaper**: feeds in, formats out, continuously — the
-   application that keeps the machine honest about autonomy.
+7. **Then the newspaper, then radio, then capital**: feeds in, formats out,
+   email out — autonomously, on schedules and events; then broadcast audio;
+   then actuation on information within ratified risk controls. Each step
+   raises the autonomy bar and exercises the same machinery: multiplexed
+   ingestion → RLM orchestration → heterogeneous supervision → receipted,
+   bounded effects → restore when wrong.
 
-Human involvement in 1–6 is the ordinary owner role: ratifying the mission
-Definition, reading evidence, and exercising restore — through the stream,
-not as a gate inside it.
+Human involvement in 1–7 is the ordinary owner role: ratifying the mission
+Definition (including each new effect class and its controls), reading
+evidence, and exercising restore — through the stream, not as a gate inside
+it.
 
 ## 9. What remains genuinely open
 
@@ -257,13 +344,18 @@ Held questions, not blocked ones — the standard explanation for each is that
 model intelligence, given §4's substrate, is expected to solve them, and the
 harness is judged by whether it forecloses those solutions:
 
-- **The supervision fixed point** — a supervisor that is itself a model can
-  fail like any model. Current answer: restore + heterogeneous models +
-  fail-over; no supervisory hierarchy. If that proves insufficient, the
-  repair must still pass D1/D5.
-- **Correlated model error** — heterogeneous models reduce, not eliminate,
-  shared blind spots. Current answer: settlement by execution (run the
-  thing) rather than by review.
+- **Supervision at scale** — reviewers are models too and can drift
+  together. Current answer: heterogeneous families, verification by
+  execution, restore. If drift becomes correlated across families, the
+  repair must still pass D1/D5 (fail-over, not escalation).
+- **Correlated model error in judgment tasks** — heterogeneous models
+  reduce, not eliminate, shared blind spots. Current answer: settle
+  world-claims by running the thing (a send, a build, a priced trade)
+  wherever possible; judgment claims get review from a different family.
+- **Risk-control tuning** — the right rate limits, position limits, and
+  spend caps per effect class are unknown until the newspaper operates.
+  Current answer: start conservative, models tune within bounds
+  (self-development), owner ratifies bound changes.
 - **Efficiency vs legibility** — per-call capability refinement vs one
   legible audit trail. Current answer: prefer legibility; refine only where
   cost forces it, and record the refinement in the receipt.
