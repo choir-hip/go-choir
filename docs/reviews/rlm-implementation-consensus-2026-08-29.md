@@ -272,6 +272,48 @@ boundaries, no second activation loop. The implementation is orange/red
 surfaces), gated twice: candidate A first, parity second, with the memo's
 forced-death/different-model recovery as the final acceptance before staging.
 
+**D9 — Full RLM: nested activations as the orchestration primitive (added
+on owner direction).** The owner's target goes beyond `go_cell`-in-
+`RunToolLoop`: models write Go that operates on context, calls other models
+that themselves run Go with scoped module imports, and orchestration is
+code. That requires a third primitive between bare calls and actor spawns:
+
+| Primitive | What it is | Cost | Creates |
+|---|---|---|---|
+| `models.Call` | Bare inference: text in, text out, nothing executes | one completion + receipt | nothing |
+| **Nested activation** | Sub-RLM: sub-model + its own interpreter + own scoped manifest + own cells, runs to a typed outcome | bounded slice of parent budget; receipts link into the parent graph | nothing durable |
+| Actor spawn | Durable, supervised, mailboxed run | full actor lifecycle | a real run |
+
+A react loop is "model + tool harness + transcript" — in this substrate the
+harness is the session protocol, the tools are module manifests, and the
+transcript is the cell stream. So N react loops collapse into one parent
+activation fanning out N nested activations via goroutines, each varying
+only (model policy, manifest, lens prompt) — data, not infrastructure.
+Orchestration-as-code: the parent launches, collects, composes, and
+adjudicates. This is the memo's "dynamic multiagent orchestration inside
+one sealed assignment" proof obligation, and the natural first workload is
+the agentic-consensus panel itself: panelist = nested activation with its
+own model policy and read-scoped manifest; parent composes verdicts,
+dissent, and confidence as code. External CLI panels stay for red-class
+gates (heterogeneous harnesses correlate less than same-substrate
+panelists); in-Choir nested panels cover routine review volume.
+
+Mechanics: a nested activation is a new `interp.Interpreter` in the worker
+with its own manifest (interpreters are cheap objects), prebound context
+slice, and a carve-out of the parent's budget; child receipts link
+child->parent so the host sees one activation tree. **Monotone downgrade is
+enforced by the host dispatcher: a child manifest is always a subset of the
+parent's grants** — a Researcher nests Researcher-or-smaller freely inside
+its budget (metered exactly like bare calls); nobody nests their way to
+CoSuper authority, and prompt-escalation remains structurally impossible
+(child capability comes from the host-signed manifest, never prompt
+content). Depth cap 2-3; forced-death granularity is the worker process
+group — one kill reclaims the whole nested tree. Sequencing: after M5
+parity, as **M6.5** — prove nested activations (monotone downgrade, budget
+carve-out, depth cap, forced-death of a nested tree, and the consensus-
+panel workload) inside one sealed assignment before the full-RLM cutover
+deletes ambient tools.
+
 ## 8. Second pass: verified deletion manifest & refactor consolidations
 
 A follow-up verification pass re-checked every deletion candidate with
