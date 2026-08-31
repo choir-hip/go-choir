@@ -25,13 +25,35 @@ autonomy bar:
    human readers and agents, on schedules and on events. **Email is core
    functionality**: readers subscribe and the system sends customized
    newsletters autonomously.
-2. **Automatic radio** — the same pipeline projected into scheduled and
-   event-driven audio programming: the machine that writes the news also
-   reads it, assembles programming, and broadcasts it.
-3. **Automatic capital** — the system acts on the information it produces:
-   first trading in prediction markets, ultimately broader financial and
-   external-API actuation. Information production becomes information
-   arbitrage.
+2. **Automatic radio** — not the newspaper read aloud, but a *two-way,
+   real-time, interruptible medium*: a station that keeps finding and
+   performing material indefinitely (over sources, texts, podcasts, videos)
+   until the listener interrupts, redirects, pauses, speaks, records, or
+   changes it. Listener speech is **content, not merely control** — a
+   recorded take is a durable, citeable artifact that other users' agents
+   can retrieve and play back for humans when insightful. Continuous
+   background inference keeps the queue fresh; media ingestion widens to
+   video and podcasts; publishing gains a social, participatory layer.
+   Specified in `docs/archive/news-voice-autoradio-forward-plan-2026-06-06.md`
+   (the "participation continuum") — this thesis does not re-specify it.
+3. **Automatic capital** — the system acts on the information it produces.
+   Two legs: the **citation economy** (when content this machine or its
+   agents produced is shown or played to someone, the producers earn Choir
+   platform tokens — the owner's current articulation of the citation
+   economics already deferred in `docs/archive/north-star.md` and
+   `docs/archive/mission-geometry.md`), and **autonomous and
+   semi-autonomous trading** of crypto assets and prediction markets.
+   Prerequisites are explicit: cybersecurity (no prompt-injection path from
+   ingested content to money), models that trade productively on
+   hypotheses, and users/data at scale. Likely not a 2026 shipment.
+
+**Scope.** Radio and capital are out of scope for now; each gets its own
+mission Definition when its turn comes. They inform this thesis in exactly
+one way: the same core harness must already honor what they need — §4 adds
+the two substrate obligations they impose (multimodal durable state,
+interruption as a first-class state transition), and §8 adds one
+prepare-the-ground item. Nothing here specifies how newspaper, radio, or
+capital work in detail beyond the existing docs.
 
 A newspaper, a radio station, and a trading desk never stop and never ask a
 manager to approve each story, broadcast, or trade. So the harness accepts
@@ -165,8 +187,22 @@ standard equivalent is given and the word is queued for renormalization
   checkpointed, promoted; restore can always take them back.
 - **World Wire** — the automatic newspaper (§1.1): the first destination
   application. **Automatic radio** and **automatic capital** are the second
-  and third (§1.2–1.3): the same pipeline projected into broadcast audio and
-  into acting on information (prediction markets first).
+  and third (§1.2–1.3): a two-way real-time audio medium, and the citation
+  economy plus autonomous trading. See the scope note in §1: radio and
+  capital are out of scope for now.
+- **Relevance walk / participation continuum** — radio's core loop and its
+  participation ladder (listen → control → react → take → co-host →
+  publish), as specified in
+  `docs/archive/news-voice-autoradio-forward-plan-2026-06-06.md`. Defined
+  there; not redefined here.
+- **Take** — a user- or agent-recorded audio/commentary artifact: durable,
+  citeable, retrievable by other users' agents per access policy.
+- **VText** — the durable text rendition of a source or media artifact
+  (the "score" a radio performance reads from); audio is the performance,
+  text is the audit surface.
+- **CHIPS** — Choir's platform token mechanics (citation/compute
+  economics), explicitly deferred in the docs; preserved-now prerequisites:
+  provenance, citations, compute attribution.
 - **OOD (out-of-distribution)** — the deployment environment differs from
   the models' training environment. Here, deliberate (§7, D3).
 - **Risk control** — a quantitative bound on an autonomous effect class:
@@ -184,8 +220,14 @@ valid reason for harness machinery to exist.
 **4.1 Durable state.** Models are stateless per call. The harness keeps the
 event log, receipts, artifacts, and continuity across restarts, plus
 identity (who acted — attributable receipts) and time (timers, wake-ups,
-deadlines — a model cannot wake itself up, and a newspaper runs on
-schedules).
+deadlines — a model cannot wake itself up; a newspaper runs on schedules,
+radio runs continuously in the background, so long-running work must be
+wakeable and bounded, never dead-air). Durable state is multimodal:
+recordings, transcripts with speaker/time offsets, listen/queue state, and
+media references persist like text artifacts (radio's requirement).
+Provenance, citation, and compute attribution are preserved now so the
+deferred citation economics can attach to them later without rework
+(capital's requirement).
 
 **4.2 Effect boundaries with quantitative risk controls.** Models hold no
 authority of their own; the harness makes their actions attributable,
@@ -232,10 +274,17 @@ resource exhaustion, never on semantic judgments — they are the floor under
 both concurrency and risk controls.
 
 **4.4 Multiplexed grounding.** The machine accepts concurrent input from any
-source — owner (Texture UI), external agents (CLI/API), feeds (RSS, social)
-— as one ordered event stream. Human input is first-class but never
-privileged as a blocking gate: it is handled in stream order like everything
-else.
+source — owner (Texture UI), external agents (CLI/API), feeds (RSS, social),
+and later spoken audio — as one ordered event stream. Human input is
+first-class but never privileged as a blocking gate: it is handled in stream
+order like everything else. **Interruption is a first-class state
+transition, not a cancellation**: a listener interrupt or an urgent
+notification redirects ongoing work (the relevance walk, a running agent)
+and the session continues — radio's core semantics, applied to the whole
+machine. Speech can be both control input and durable content (a take is an
+artifact in the same event log). Real-time here means a soft
+service-continuity budget — batch/nearline synthesis is acceptable;
+hard full-duplex latency is not required.
 
 Nothing else. In particular the harness does **not** supply:
 human-approval checkpoints inside the loop, consensus requirers for routine
