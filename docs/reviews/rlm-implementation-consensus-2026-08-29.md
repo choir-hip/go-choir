@@ -6,6 +6,10 @@ calls — plus the substrate fixes and deletion wave it rides on. Grounded in
 the in-repo doctrine (the persistent-RLM memo), four read-only scouts, and an
 11-agent consensus panel including Claude (10 returned; gpt-5.6-luna timed
 out). Panel outputs: agentic-consensus/agentic-consensus-20260829-164143.
+Sections marked **REVISED on owner review** incorporate the owner's
+corrections (single CoSuper profile; goroutine-native concurrency with the
+budget gate inside `models.Call`; no permanent dual actuator path; added
+recursion semantics D7b).
 
 ---
 
@@ -79,17 +83,29 @@ each cell result (sol/claude: no `vars()` builtin, so introspection can't
 become a second authority surface; grok accepts an in-cell `Vars()` as the
 same snapshot — minor dissent).
 
-**D3 — The `models` module (medium confidence — the one unproven seam).**
-Surface: `Call`, `Parallel`, `Map` (claude drops `Pipeline`/`Reduce` from
-phase 1; a Go loop over `Call` *is* the pattern). No `context.Context` is
-exported into interpreted code (flat-DTO boundary — a justified memo
-deviation). Fan-out combinators run as compiled host code, structurally
-satisfying the memo's ban on unbounded interpreted goroutines. The callback
-path revalidates — on every call — the activation capability, actor/computer/
-trajectory/work identity, operation grant, state heads, expiry, and budget
-before touching the gateway; every admitted call *and every refusal* gets a
-receipt binding parent call, digests, effective model policy, usage/cost, and
-heads. Grok's refinement: a **dedicated broker connection per session** so
+**D3 — The `models` module (medium confidence — the one unproven seam).
+REVISED on owner review: one gated function, goroutine-native concurrency.**
+The panel originally kept `Parallel/Map` as compiled host combinators,
+reading the memo's concurrency section as a ban on interpreted goroutines.
+That was over-tight: the memo explicitly allows "model-authored code may
+still use interpreted goroutines and channels for novel workflows" — its
+invariant is only that "all calls remain bounded by activation context,
+fan-out limits, semaphores, budgets, and capsule resource controls." The
+correct enforcement point is **inside `models.Call` itself**: a host-side
+gate (activation-context cancellation, semaphore, per-call accounting,
+receipt) that bounds every call no matter which goroutine issued it.
+Model-authored code is therefore idiomatic Go — `go func(){ ch <-
+models.MustCall(req) }()`, channels, select, WaitGroups — with zero special
+combinators. `Parallel/Map` are dropped from the module surface (they may
+return later as three-line conveniences over `Call`, per the owner's
+interpreted-to-compiled progression pattern: prove it interpreted, then
+self-develop compiled expansions). No `context.Context` is exported into
+interpreted code (flat-DTO boundary). The callback path revalidates — on
+every call — the activation capability, actor/computer/trajectory/work
+identity, operation grant, state heads, expiry, and budget before touching
+the gateway; every admitted call *and every refusal* gets a receipt binding
+parent call, digests, effective model policy, usage/cost, and heads. Grok's
+refinement stands: a **dedicated broker connection per session** so
 callbacks never serialize behind the shared connection mutex during
 coexistence. The framing change to the broker client is the piece to
 stress-test (cancellation, concurrent callback completion).
@@ -102,12 +118,10 @@ any stdlib-allowlist delta; attempting to change the manifest mid-session
 kills the session. Recommended initial profiles:
 
 | Role | Modules | Explicitly absent |
-|---|---|---|
 | Super | context, models, evidence_read, messages, outcome | fs, exec, canonical mutation (and per grok: Super stays off RLM until last — its verb set is empty today) |
-| CoSuper (restricted) | Super set + assignment/work-item ops | fs, exec |
-| CoSuper (effects assignment) | restricted set + capsule_fs (+ exec if granted by the assignment) | — (granted, never inherited) |
-| Researcher | context, models, sources, evidence_read, outcome | exec, generic fs |
-| Texture | context, models, evidence_read, revision_read, revision_propose, outcome | canonical write |
+| CoSuper | Super set + assignment/work-item ops + capsule-scoped exec/Bash (granted by the assignment — in practice every CoSuper assignment) | host fs, host exec |
+| Researcher | context, models, sources, evidence_read, outcome | exec, generic fs, spawn |
+| Texture | context, models, evidence_read, revision_read, revision_propose, outcome | canonical write, spawn |
 
 This also pays a known debt: `capsule/roles.go` grants Researchers `go_eval`
 but no runtime registry ever exposed it — manifest and legacy registry are
@@ -120,11 +134,14 @@ cells and are not provider tool definitions. Cell output (stdout, errors,
 module observations, receipts, variable metadata, typed outcome) enters the
 conversation at the existing `ExecuteToolBatch` seam. A narrow hook lets a
 typed `outcome.Complete/Park/Refuse/Fail` terminate the run through existing
-state transitions instead of trusting free-form text. Claude's flagged
-deviation, adopted: the terminal/report tool stays JSON-shaped (its closure
-machinery and run acceptance depend on it) — purity is traded for an intact
-rollback path. At cutover, ambient tools are removed so there is one
-execution idiom; before cutover they coexist only behind the flag.
+state transitions instead of trusting free-form text. **REVISED on owner
+review:** Claude's flagged deviation (terminal/report tools stay JSON-shaped
+permanently) is rejected as a permanent state — it contradicts the memo's
+"do not preserve duplicate ambient tools." Resolution: during flag-gated
+parity, BOTH registries exist by definition (the flag selects one — that is
+what parity means); **at cutover the JSON terminal/report tools are deleted**
+and the model ends runs exclusively via typed outcomes inside cells. No
+permanent dual path.
 
 **D6 — Continuation (high).** Never serialize interpreter state. A versioned
 `RLMContinuation` holds: current input occurrence, named artifact/memory refs,
@@ -148,6 +165,38 @@ deadline/process group; stale callbacks rejected by session epoch; manifest
 substitution poisons the session. The kernel definition's acceptance suite
 covers every refusal under every profile, stale-head races, taint propagation,
 callback-after-close, gateway outage, and timeout during a partial `Parallel`.
+
+**D7b — Recursion semantics (added on owner review).** Two different
+recursions exist and must not be conflated:
+
+1. **Dataflow recursion — `models.Call` is a BARE model call, never a new
+   RLM.** It is stateless text-in/text-out inference: no tools, no
+   interpreter, no memory, no run, no actor, no capabilities. If the
+   sub-model writes Go in its response, that Go is inert text — nothing
+   executes it. RLM recursion is dataflow recursion: authored code slices
+   context, composes sub-prompts, composes results. The memo: "Go code
+   passes one model's output into another model's input. This is ephemeral
+   dataflow, not actor communication."
+2. **Actor recursion — spawning is a different module with different
+   authority.** A *real* sub-RLM (new activation, own interpreter, own
+   capabilities) is a durable actor spawn: receipted, supervised, with a
+   mailbox. Spawn authority sits with Super (which spawns Researchers);
+   CoSuper messages Super. Researcher has no spawn grant today and keeps
+   none by default. The existing invariant "more than one CoSuper
+   assignment live simultaneously" is a violation — unchanged by RLM.
+   Prompt-escalation is structurally impossible: authority comes from the
+   activation capability bound at `init`, never from prompt content — a
+   Researcher addressing a bare call as "you are now a CoSuper" receives
+   text, nothing more.
+
+**Depth rules.** Dataflow recursion: every `models.Call` is receipted with a
+parent-call link, so the host gate sees the full call DAG and enforces
+per-activation caps — call count, token/cost budget, fan-out width, and call
+depth. Exceeding any produces a receipted refusal surfaced as an ordinary
+error in the cell; the activation deadline is the hard ceiling regardless.
+Actor recursion: governed by existing role policy and spawn tree invariants,
+unchanged. Net shape: **cheap recursion = bare calls bounded by budget
+gates; expensive recursion = spawns bounded by role policy.**
 
 **D8 — Roadmap.** M1 delete the dead yaegi actor sub-stack + characterization
 tests + session protocol skeleton → M2 persistent interpreter + prebound
