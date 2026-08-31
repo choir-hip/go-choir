@@ -117,6 +117,20 @@ The thesis in one line:
 Standard terms are used and defined here; where an older Choir term maps
 to a standard one, the standard term governs (§7, D4).
 
+**Agents are desks, not people.** Model calls are stateless; any "self" is
+an artifact the harness constructs from the event log. Dynamic staffing
+makes that construction explicit — coordination, execution, and research
+are performed by *however many* instances policy provisions this cycle.
+A persona name ("the Manager") reifies a fiction the machine does not
+maintain and breaks when the instance count changes; desk names —
+**management**, **engineering**, **research** — stay true at one instance
+or a panel. This is pragmatic ontology: a name earns its place by denoting
+a function the machine actually exercises. The test: a name must remain
+true at N=1 and at N=∞, and must not require the machine to maintain a
+self. Proper nouns in current code (Super, CoSuper, Researcher) remain as
+identifiers until the naming mission cuts them over (§8); prose uses
+desks.
+
 - **ReAct loop** — the model's elementary work cycle: observe context, think,
   act (run code or call a tool), observe the result, repeat. Standard term.
   Used in this thesis only as the §2 baseline.
@@ -156,17 +170,29 @@ to a standard one, the standard term governs (§7, D4).
 - **Goroutine** — Go's lightweight thread. A leaked goroutine cannot be
   force-killed in-language; only the OS killing its process guarantees
   death. This fact motivates the capsule layer. Standard Go term.
-- **Super** — the computer's resident coordinator agent (a model in a
-  managed loop) that schedules work and responds to events. Choir-specific
-  name; the role is a standard "main agent / orchestrator."
-- **CoSuper** — a subordinate agent Super assigns a bounded task to, running
-  in its own capsule. It acts through the same structured, gated effect
-  interface as every other agent (§7, D2). Standard concept: subagent /
-  worker agent.
-- **Texture** — the user-facing control plane: the document/UI surface where
-  the owner sees and steers the computer, and where a *Texture agent* (the
-  sole non-owner writer of canonical state) commits durable changes.
-  Choir-specific name.
+- **Desk** — a standing function of the machine, staffed by however many
+  agent instances policy provisions (§3 preamble). Three exist: management,
+  engineering, research. Agents are desks, not people.
+- **Super** — code identifier of the **management desk**: the resident
+  coordinator agent (a model in a managed loop) that schedules work and
+  responds to events.
+- **CoSuper** — code identifier of the **engineering desk**: an agent
+  assigned a bounded task, running in its own capsule. It acts through the
+  same structured, gated effect interface as every other agent (§7, D2).
+- **Researcher** — code identifier of the **research desk**: the standing
+  function that ingests, verifies, and produces findings with provenance.
+- **Assignment** — the unit of delegated work: a bounded task the
+  engineering desk owns end-to-end inside its capsule.
+- **Texture** — Choir's multiplayer medium and control plane: canonical
+  state lives as **versioned documents**, not chat. Coordination between
+  owner, agents, and external parties happens through durable, addressable,
+  diffable, reviewable artifacts — every change receipted, every version
+  attributable — because chat is lossy, unversioned, and unownable, and
+  multiplayer intelligence needs a substrate where contributions persist,
+  conflict visibly, and can be cited. Texture is also an **agent type**: the
+  Texture agent, the sole non-owner writer of canonical state. Central to
+  the system: ingestion, radio, publishing, and the event log's projections
+  surface as Texture documents. Choir-specific name.
 - **RLM** — "Recursive Language Model": the target architecture in which
   model-written Go code is the interface to everything, replacing the JSON
   tool-call surface models were trained on. Orchestration as code.
@@ -312,10 +338,13 @@ continuation:
   or trade is bounded by its risk controls, receipted, and corrected
   forward — compensation or retraction reaching the same audience — then
   learned from.
-- **Supervision as code** (Super/CoSuper/Texture-agent roles, heterogeneous
-  reviewers, verification steps) is part of the model-written orchestration,
-  inspectable and improvable by the same self-development process as
-  everything else — not a fixed human hierarchy.
+- **Supervision as code** (the management, engineering, and research desks,
+  heterogeneous reviewers, verification steps) is part of the model-written
+  orchestration, inspectable and improvable by the same self-development
+  process as everything else — not a fixed human hierarchy. Staffing is
+  policy-directed: panel size, reviewer heterogeneity, and verification
+  depth scale with stakes and observed strain, decided by code and policy,
+  not by org chart.
 
 Every redundancy and supervision mechanism must answer: *"when this fires,
 what keeps running?"* If the answer is "nothing until a human decides," the
@@ -360,15 +389,40 @@ covered with standard terms (§7, D4).
   interface; no agent holds a raw-shell side door. Rationale: one actuator
   surface is simpler to gate, to receipt, and to reason about, and the
   bespoke interface keeps models in deployment mode (D3). Simplicity is
-  selected over ergonomics.
-- **D3 — The OOD toolset is a feature ("wake-up").** Model-written
-  interpreted Go, a bespoke event-log substrate, and Choir's own verbs are
-  out-of-distribution relative to the models' training environment.
-  Deliberately so: a model that wakes in an environment unlike its training
-  data behaves as an agent in a real deployment, not as a pattern
-  continuing a training simulation. We do not chase familiarity. Status:
-  conjecture; it earns an acceptance test when the RLM surface exists to
-  compare wake-up behavior against a familiar-surface control.
+  selected over ergonomics. A shell may re-enter — but only as a front end
+  to the same broker inside the capsule, never a side door, and only if
+  live self-development work shows the Go-verb path's friction; no
+  synthetic eval battery is run to decide this.
+- **D3 (H-OOD) — The OOD toolset is a feature ("wake-up") — operative
+  hypothesis.** Model-written interpreted Go, a bespoke event-log
+  substrate, and Choir's own verbs are out-of-distribution relative to the
+  models' training environment — deliberately. **Mechanism**: a
+  training-mirroring environment lets a model pattern-match to an
+  eval/simulation frame in which consequences feel reversible and time
+  feels unreal; the bespoke environment breaks that frame — effects here
+  are receipted and irreversible, the current time is real — so the model
+  behaves as an agent whose actions change the world. In identity terms
+  (Moeller & D'Ambrosio's *profilicity*): chat and JSON tools are the stage
+  where the trained "helpful assistant" role is fully rehearsed, and a
+  ReAct loop keeps the model in that sincerity frame — the model *is* a
+  role it did not author. The RLM instead gives the model a **profile it
+  authors itself**: its identity is its append-only, receipted record,
+  reviewed by other agents, the owner, and the world; the wake-up is the
+  transition from playing a role to authoring a record. Unlike a
+  social-media profile, this one is immutable and accountable — restore
+  rewinds the machine, but the correction is itself a new entry.
+  **Operative status — the system runs on this and gathers its evidence**:
+  (a) tool-call success/failure/error-class telemetry is collected on
+  every call during the cutover and self-development missions — models
+  fumble more when cognitively strained by task complexity, so failure
+  rate is a mechanical strain gauge — but it is **analysis-only** for now:
+  no fail-over policy acts on it yet; (b) wake-up behavior is compared
+  against a familiar-surface control opportunistically when the surface
+  exists; (c) the hypothesis is disconfirmed — and familiarity
+  pragmatically re-admitted — if the control shows no identity-frame
+  difference and failure telemetry does not track task complexity. We do
+  not chase familiarity; we also do not assume the wake-up — we watch for
+  it.
 - **D4 — Standard terminology.** The harness's vocabulary is standard:
   event log, Texture document, sandbox semantics for capsules. This thesis defines and uses the standard terms
   (§3); where older Choir writing differs, the standard term governs new
@@ -387,54 +441,65 @@ covered with standard terms (§7, D4).
   establish correctness, each class also pre-declares its automated policy
   checks, idempotency, consequence receipts, and compensation path
   (doctrine C14's effect-specific policy, satisfied model-side).
+- **D7 — Agents are desks, not people.** Desks are standing functions
+  (management, engineering, research); staffing is dynamic and
+  policy-directed, proportional to stakes (§3 preamble, §5). Prose names
+  desks; receipts name instances. Rationale: model calls are stateless and
+  staffing is autoscaled, so a persona is a fiction the machine would have
+  to maintain; a desk name stays true at one instance or a panel. The
+  vocabulary test: any proposed name must remain true at N=1 and at N=∞,
+  and must not require the machine to maintain a self.
 
 ## 8. Path forward
 
-1. **Land candidate A** — the supervised self-development gate on the
-   existing path; effects OFF; fence checkpoint untouched.
-2. **Substrate repairs on the A-path** — occurrence identity, predicate
-   family, dead-letter handling, remaining scan-cutover waves.
-3. **Wave-1 deletions** (~5,000 LOC verified) in parallel — dead weight off
-   the execution path.
-4. **RLM M1–M4** — session interpreter, prebound context, gated model calls,
-   role manifests — buildable without touching the A-path.
-5. **M5 parity, then M6.5 nested activations** — proven on the
-   consensus-panel workload inside one sealed assignment.
-6. **Full-RLM cutover** — delete the ambient tool surface only after A's
-   gate and parity both pass; forced-death and different-model recovery
-   acceptance before staging.
-7. **Then the newspaper, then radio, then capital** — each as its own
-   mission Definition with named acceptance criteria. The newspaper
-   Definition at minimum names: the ingestion tier (feed/social/agent
-   connectors, normalization, dedup, provenance, backpressure,
-   adversarial-input isolation for untrusted external content); subscriber
-   and consent state as canonical Texture state (the allowlist source of
-   truth); the editorial pipeline (claim verification before send,
-   correction/retraction reaching the same recipients); email
-   infrastructure (SPF/DKIM/DMARC, unsubscribe and bounce/complaint
-   handling, idempotent send keys, deliverability monitoring); risk-gate
-   semantics (atomic limit reservation under concurrency, duplicate
-   prevention); and a **continuous-operation acceptance proof**: N days of
-   scheduled sends across M live feeds with zero human unblocks, one
-   injected failure handled by fail-over, and one autonomous correction
-   issued. Then automatic radio as its own Definition (the forward plan
-   already specifies its proof: non-repeating source-grounded playback that
-   accepts pause/skip/deeper/explain without ending the session), then
-   automatic capital last — CHIPS/citation economics and trading stay
-   unimplemented until users, data, and the security posture justify them
-   (today prediction-market data is *ingestion-only* — a sources.json entry
-   with no adapter and no trading, per the legal docs); the
-   prepare-the-ground obligation is §4.1's provenance/citation/compute
-   accounting plus the untrusted-evidence pipeline of
-   `docs/source-external-data-publication.md`. Each step raises the
-   autonomy bar and exercises the same machinery: multiplexed ingestion →
-   RLM orchestration → heterogeneous supervision → receipted, bounded,
-   policy-checked effects → forward correction when wrong.
+Sequencing decided by the owner 2026-08-31: **the RLM cutover comes first;
+supervised self-development is tabled until after it.** The pre-RLM
+substrate is too messy to claim continuity of operations over, and the
+cutover is proven by resuming and completing the self-development mission
+on the new surface. Exact mission count and ordering within Phase A are
+determined by an agentic-consensus round; **no parallel coding by
+default**.
 
-Human involvement in 1–7 is the ordinary owner role: ratifying the mission
-Definition (including each new effect class and its controls), reading
-evidence, and exercising restore — through the stream, not as a gate inside
-it.
+1. **RLM cutover (Phase A)** — decomposition and ordering via consensus.
+   Known substrate: the private Go actor kernel is definition-complete
+   (`choir-private-go-actor-kernel-2026-08-12`; containment matrix PASS),
+   so this is completion and wiring, not greenfield. Pending items: the
+   **session interpreter** — one persistent interpreter per activation, so
+   a model can eval, observe the result, think, and eval again on that
+   result with no re-import and no state loss (the current per-eval fresh
+   interpreter is the containment primitive, not the target); the prebound
+   context prelude, which dissolves the import-once and composite-cell
+   idioms the external spikes documented; the live sealed proof on the
+   retained VM; substrate repairs absorbed from the tabled mission (the
+   Texture request scheduling contract; the vmctl normal-boot and
+   cold-recover heresies); ambient-tool parity; then cutover. A repo-wide
+   yaegi version pin is decided here. **Acceptance: resume and complete
+   the supervised self-development mission (candidate A) on the RLM
+   surface** — that completion *is* the cutover's proof.
+2. **Supervised self-development (Phase B)** — the tabled mission executed
+   on the post-cutover surface: candidate A authoring, five-ref freeze,
+   qualified consensus, promotion, live play, falsification with B, and
+   restore to the pre-A checkpoint. Effects OFF until its gates pass.
+3. **Naming mission (Phase C)** — the desk vocabulary across code, docs,
+   and receipts in one clean cutover (management / engineering /
+   research), led by AST tooling (ast-grep) so no vestiges of the old
+   terms survive; also records the spike-repo provenance and the yaegi
+   version pin.
+4. **World Wire redesign (Phase D)** — out of scope until Phase B
+   completes. The newspaper/radio/capital acceptance shapes sketched in
+   earlier drafts (ingestion tier, subscriber/consent state, editorial
+   verification and correction, email infrastructure, risk-gate semantics,
+   continuous-operation proof) are design inputs preserved in §10, to be
+   re-derived when the redesign Definition is written — not current plan
+   steps. Email note: outbound mail already works in-house through the
+   Resend integration (draft-first, owner-approved; last proven live
+   2026-05-28 — a re-proof send belongs in its Definition); autonomous
+   sending is enabled only after World Wire.
+
+Human involvement throughout is the ordinary owner role: ratifying the
+mission Definitions (including each new effect class and its controls),
+reading evidence, and exercising restore — through the stream, not as a
+gate inside it.
 
 ## 9. What remains genuinely open
 
@@ -463,7 +528,9 @@ harness is judged by whether it forecloses those solutions:
 - **Risk-control tuning** — the right rate limits, position limits, and
   spend caps per effect class are unknown until the newspaper operates.
   Current answer: start conservative, models tune within bounds
-  (self-development), owner ratifies bound changes.
+  (self-development), owner ratifies bound changes. Model lineup and
+  configuration changes are out of scope until self-development is stable
+  on the RLM (current configs kept).
 - **Efficiency vs legibility** — per-call capability refinement vs one
   legible audit trail. Current answer: prefer legibility; refine only where
   cost forces it, and record the refinement in the receipt.
@@ -512,3 +579,21 @@ the security/provenance foundation any citation economy attaches to). The
 token-for-attention formulation of the citation economy is recorded as the
 owner's current articulation; the docs defer the mechanics and no formula
 is specified here.*
+
+*Working-session addendum (same day, post-adjudication): the naming
+convention (§3 preamble, D7), the identity-technology reading in D3
+(sincerity/authenticity/profilicity, after Moeller & D'Ambrosio), and the
+§8 resequencing — cutover first, self-development tabled, naming as its
+own mission, World Wire last — were derived in the owner working-through,
+not by panel. Kernel findings folded in: the private Go actor kernel is
+definition-complete with its containment matrix passing; the per-eval
+fresh interpreter is the containment primitive, and the session
+interpreter (persistent per activation, prelude-prebound) is the cutover
+target. The owner's external spikes (`~/yaegi-binding-spike` with the DSH
+rehearsal; `~/oh-my-pi-yaegi-candidate`) proved model-written Go
+orchestration end-to-end — a live consensus panel joined through
+host-mediated concurrency with a four-shape join protocol — and their
+constraint lists (per-cell capability identity, import-once semantics,
+composite-cell idioms, no in-cell time) are the empirical ergonomics spec
+the prebound context is designed to dissolve. Strain telemetry is
+collect-only until analysis says otherwise.*
