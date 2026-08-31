@@ -114,9 +114,8 @@ The thesis in one line:
 
 ## 3. Glossary — every term, defined
 
-Standard terms are preferred. Where Choir uses a word non-standardly, the
-standard equivalent is given and the word is queued for renormalization
-(§7, D4).
+Standard terms are used and defined here; where an older Choir term maps
+to a standard one, the standard term governs (§7, D4).
 
 - **ReAct loop** — the model's elementary work cycle: observe context, think,
   act (run code or call a tool), observe the result, repeat. Standard term.
@@ -130,11 +129,11 @@ standard equivalent is given and the word is queued for renormalization
 - **Computer** — Choir's product object: one persistent, addressable machine
   with an owner. It has durable state, an event history, and restore points.
   One owner, one computer.
-- **Event tape** — the computer's append-only, ordered record of everything
-  that happened. *Non-standard usage* ("tape"); the standard term is an
-  **event log** or **journal**. Renormalization queued (§7, D4). Current
-  state is a projection of the log; **restore** means rebuilding the machine
-  at an earlier log position (a **checkpoint**).
+- **Event log** — the computer's append-only, ordered record of everything
+  that happened (older Choir writing says "tape"; this document and the
+  norm go by the standard term). Current state is a projection of the log;
+  **restore** means rebuilding the machine at an earlier log position
+  (a **checkpoint**).
 - **Checkpoint** — a named, hash-addressed position in the event log the
   machine can be restored to. Standard term.
 - **Restore** — returning the computer to a prior checkpoint. The safety net
@@ -161,8 +160,9 @@ standard equivalent is given and the word is queued for renormalization
   managed loop) that schedules work and responds to events. Choir-specific
   name; the role is a standard "main agent / orchestrator."
 - **CoSuper** — a subordinate agent Super assigns a bounded task to, running
-  in its own capsule. **Its bash tool is removed** (§7, D2). Standard
-  concept: subagent / worker agent.
+  in its own capsule. It acts through the same structured, gated effect
+  interface as every other agent (§7, D2). Standard concept: subagent /
+  worker agent.
 - **Texture** — the user-facing control plane: the document/UI surface where
   the owner sees and steers the computer, and where a *Texture agent* (the
   sole non-owner writer of canonical state) commits durable changes.
@@ -197,9 +197,9 @@ standard equivalent is given and the word is queued for renormalization
   there; not redefined here.
 - **Take** — a user- or agent-recorded audio/commentary artifact: durable,
   citeable, retrievable by other users' agents per access policy.
-- **VText** — the durable text rendition of a source or media artifact
-  (the "score" a radio performance reads from); audio is the performance,
-  text is the audit surface.
+- **Texture document** — the durable document rendition of a source or
+  media artifact (the "score" a radio performance reads from); audio is
+  the performance, the Texture document is the audit surface.
 - **CHIPS** — Choir's platform token mechanics (citation/compute
   economics), explicitly deferred in the docs; preserved-now prerequisites:
   provenance, citations, compute attribution.
@@ -344,8 +344,8 @@ baseline, the dispositions:
 (a) no standard term covers it, (b) it does load-bearing work in authority,
 evidence, privacy, or causality — not just §4's list, and (c) it is
 exercisable, testable, replaceable, and retirable like everything else.
-Concepts failing this enter the renormalization list (§7, D4) instead of
-the design.
+Concepts failing this do not enter the design; their subject matter is
+covered with standard terms (§7, D4).
 
 ## 7. Decisions recorded in this version
 
@@ -355,11 +355,12 @@ the design.
   effect class with the machine continuing is a legitimate risk control.
   Human ratification is per effect *class* (mission Definition), never per
   effect. Human input is multiplexed stream input, never a blocking gate.
-- **D2 — CoSuper's bash tool is removed.** CoSuper works through the
-  structured effect interface like every other agent. Rationale: one
-  actuator surface is simpler to gate, to receipt, and to reason about; bash
-  was an ergonomics shortcut that duplicated a privileged path. Simplicity
-  is chosen over ergonomics.
+- **D2 — One actuator surface.** Every agent — Super, CoSuper, Texture
+  agent — acts through the same structured, gated, receipted effect
+  interface; no agent holds a raw-shell side door. Rationale: one actuator
+  surface is simpler to gate, to receipt, and to reason about, and the
+  bespoke interface keeps models in deployment mode (D3). Simplicity is
+  selected over ergonomics.
 - **D3 — The OOD toolset is a feature ("wake-up").** Model-written
   interpreted Go, a bespoke event-log substrate, and Choir's own verbs are
   out-of-distribution relative to the models' training environment.
@@ -368,10 +369,10 @@ the design.
   continuing a training simulation. We do not chase familiarity. Status:
   conjecture; it earns an acceptance test when the RLM surface exists to
   compare wake-up behavior against a familiar-surface control.
-- **D4 — Terminology renormalization (future task).** Sweep all Choir docs
-  and code for non-standard terms and either adopt the standard term or
-  record why the bespoke one stays. Known instance: "tape" → event log /
-  journal (§3). Others to be enumerated in the sweep, not invented now.
+- **D4 — Standard terminology.** The harness's vocabulary is standard:
+  event log, Texture document, sandbox semantics for capsules. This thesis defines and uses the standard terms
+  (§3); where older Choir writing differs, the standard term governs new
+  work and new definitions.
 - **D5 — The ReAct baseline is the judgment standard.** Every mechanism is
   judged against single-model ReAct + restore *at production scale*, not in
   isolation (§2). The baseline is a floor to beat, not an architecture to
