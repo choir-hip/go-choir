@@ -171,8 +171,9 @@ standard equivalent is given and the word is queued for renormalization
   the models' training environment. Here, deliberate (§7, D3).
 - **Risk control** — a quantitative bound on an autonomous effect class:
   rate limits, spend caps, position limits, recipient allowlists.
-  Resource-shaped, tunable by models within the class's charter, enforced at
-  the gate.
+  Resource-shaped, tunable by models within the class's ratified bounds, enforced at
+  the gate. Bounds limit *magnitude*, never by themselves establish *correctness*
+  — see 4.2.
 
 ## 4. What the harness supplies
 
@@ -200,10 +201,26 @@ external API calls — so the gate's job is:
 
 What the gate never does is pause work pending human approval. When a
 control trips, the system fails over: the newsletter queue switches
-template, the trade is skipped and logged, the pipeline continues. A wrong
-autonomous effect is handled the way a bad code edit is — receipt,
-assessment, correction, restore where needed — not treated as a crash of
-the autonomy itself. Human ratification happens once per effect *class* in
+template, the trade is skipped and logged, the pipeline continues. A
+mechanical halt of one effect class with the machine continuing (a kill
+switch with fail-over) is a legitimate control; the defect is idling
+pending a human decision.
+
+**Bounds limit magnitude; they do not establish correctness.** A
+within-limits send can still be wrong (hallucinated, private, defamatory)
+and a within-limits trade can still be systematically bad. Each
+irreversible effect class therefore also carries, pre-declared in its
+mission Definition: automated pre-actuation policy checks (content,
+subject, privacy — executed by models, no human in the loop, aligned with
+doctrine C14's effect-specific policy), idempotent execution keys (no
+duplicate sends or fills), exact consequence receipts, and a predefined
+**compensation path** — for publication, a correction or retraction that
+reaches the same recipients as the error.
+
+**The restore boundary.** Restore repairs the machine, never external
+reality: it cannot unsend mail or reverse a settled trade. Wrong external
+effects are corrected *forward* — compensation, retraction, offsetting
+action — using the consequence receipts as the record of what happened. Human ratification happens once per effect *class* in
 the mission Definition ("the system may send email"), then the models own
 the effects within the controls. Raising a control or enabling a new class
 is an owner act; operating inside it never is.
@@ -241,9 +258,11 @@ continuation:
   hallucinates or its provider goes down, another family takes the shift)
   and quality (one family reviews another's output; a coordinator drifting
   into an attractor basin is caught by a reviewer from a different family).
-- **Checkpoint/restore** makes any failure a rewind instead of a halt —
-  including failures of autonomous actuation: a wrong send or trade is
-  bounded by its risk controls, receipted, corrected, and learned from.
+- **Checkpoint/restore** makes any *machine* failure a rewind instead of a
+  halt. External effects are outside the restore set (see 4.2): a wrong send
+  or trade is bounded by its risk controls, receipted, and corrected
+  forward — compensation or retraction reaching the same audience — then
+  learned from.
 - **Supervision as code** (Super/CoSuper/Texture-agent roles, heterogeneous
   reviewers, verification steps) is part of the model-written orchestration,
   inspectable and improvable by the same self-development process as
@@ -273,16 +292,19 @@ baseline, the dispositions:
 | Floor guards / static caps as "gauges" | **Kept** as plain resource limits and risk controls (4.2–4.3) — no new epistemology. |
 
 **Audit principle going forward:** a concept may be introduced only if
-(a) no standard term covers it, (b) it does load-bearing work in §4, and
-(c) it can be exercised, restored, or deleted like everything else. Concepts
-failing this enter the renormalization list (§7, D4) instead of the design.
+(a) no standard term covers it, (b) it does load-bearing work in authority,
+evidence, privacy, or causality — not just §4's list, and (c) it is
+exercisable, testable, replaceable, and retirable like everything else.
+Concepts failing this enter the renormalization list (§7, D4) instead of
+the design.
 
 ## 7. Decisions recorded in this version
 
 - **D1 — Continuous autonomy is the acceptance criterion.** Any mechanism
-  whose exercise requires the system to stop and wait for a human is
-  presumed defective; it must fail over or restore instead. Human
-  ratification is per effect *class* (mission Definition), never per
+  whose exercise requires the system to stop *and wait for a human decision*
+  is presumed defective; it must fail over instead. A mechanical halt of one
+  effect class with the machine continuing is a legitimate risk control.
+  Human ratification is per effect *class* (mission Definition), never per
   effect. Human input is multiplexed stream input, never a blocking gate.
 - **D2 — CoSuper's bash tool is removed.** CoSuper works through the
   structured effect interface like every other agent. Rationale: one
@@ -294,7 +316,9 @@ failing this enter the renormalization list (§7, D4) instead of the design.
   out-of-distribution relative to the models' training environment.
   Deliberately so: a model that wakes in an environment unlike its training
   data behaves as an agent in a real deployment, not as a pattern
-  continuing a training simulation. We do not chase familiarity.
+  continuing a training simulation. We do not chase familiarity. Status:
+  conjecture; it earns an acceptance test when the RLM surface exists to
+  compare wake-up behavior against a familiar-surface control.
 - **D4 — Terminology renormalization (future task).** Sweep all Choir docs
   and code for non-standard terms and either adopt the standard term or
   record why the bespoke one stays. Known instance: "tape" → event log /
@@ -304,12 +328,15 @@ failing this enter the renormalization list (§7, D4) instead of the design.
   isolation (§2). The baseline is a floor to beat, not an architecture to
   build.
 - **D6 — Autonomous actuation is a scaling goal, bounded by quantitative
-  risk controls.** Email is core newspaper functionality and ships
-  autonomously; prediction-market trading and external-API actuation follow
-  as capital capability, each enabled once per class by the owner and then
-  operated by the models within mechanical controls (§4.2). Controls are
-  resource-shaped and model-tunable within their bounds — never
-  per-effect approvals.
+  risk controls plus per-class correctness machinery.** Email is core
+  newspaper functionality and ships autonomously; prediction-market trading
+  and external-API actuation follow as capital capability, each enabled once
+  per class by the owner and then operated by the models within mechanical
+  controls (§4.2). Controls are resource-shaped and model-tunable within
+  their bounds — never per-effect approvals. Because bounds do not
+  establish correctness, each class also pre-declares its automated policy
+  checks, idempotency, consequence receipts, and compensation path
+  (doctrine C14's effect-specific policy, satisfied model-side).
 
 ## 8. Path forward
 
@@ -326,12 +353,25 @@ failing this enter the renormalization list (§7, D4) instead of the design.
 6. **Full-RLM cutover** — delete the ambient tool surface only after A's
    gate and parity both pass; forced-death and different-model recovery
    acceptance before staging.
-7. **Then the newspaper, then radio, then capital**: feeds in, formats out,
-   email out — autonomously, on schedules and events; then broadcast audio;
-   then actuation on information within ratified risk controls. Each step
-   raises the autonomy bar and exercises the same machinery: multiplexed
-   ingestion → RLM orchestration → heterogeneous supervision → receipted,
-   bounded effects → restore when wrong.
+7. **Then the newspaper, then radio, then capital** — each as its own
+   mission Definition with named acceptance criteria. The newspaper
+   Definition at minimum names: the ingestion tier (feed/social/agent
+   connectors, normalization, dedup, provenance, backpressure,
+   adversarial-input isolation for untrusted external content); subscriber
+   and consent state as canonical Texture state (the allowlist source of
+   truth); the editorial pipeline (claim verification before send,
+   correction/retraction reaching the same recipients); email
+   infrastructure (SPF/DKIM/DMARC, unsubscribe and bounce/complaint
+   handling, idempotent send keys, deliverability monitoring); risk-gate
+   semantics (atomic limit reservation under concurrency, duplicate
+   prevention); and a **continuous-operation acceptance proof**: N days of
+   scheduled sends across M live feeds with zero human unblocks, one
+   injected failure handled by fail-over, and one autonomous correction
+   issued. Then broadcast audio (radio), then actuation on information
+   within ratified risk controls (capital). Each step raises the autonomy
+   bar and exercises the same machinery: multiplexed ingestion → RLM
+   orchestration → heterogeneous supervision → receipted, bounded,
+   policy-checked effects → forward correction when wrong.
 
 Human involvement in 1–7 is the ordinary owner role: ratifying the mission
 Definition (including each new effect class and its controls), reading
@@ -352,6 +392,16 @@ harness is judged by whether it forecloses those solutions:
   reduce, not eliminate, shared blind spots. Current answer: settle
   world-claims by running the thing (a send, a build, a priced trade)
   wherever possible; judgment claims get review from a different family.
+- **Irreversible-effect correction** — how good forward correction
+  (retraction, offsetting trade) can get without undo. Current answer:
+  pre-actuation policy checks, idempotency, consequence receipts, and
+  compensation paths per class (4.2); quality measured by correction
+  latency and reach.
+- **Adversarial input** — feeds and agent input are untrusted; prompt
+  injection and malicious content must not become autonomous effects.
+  Current answer: ingestion-tier isolation (untrusted content never
+  executes; it is data), provenance on every claim, verification before
+  send.
 - **Risk-control tuning** — the right rate limits, position limits, and
   spend caps per effect class are unknown until the newspaper operates.
   Current answer: start conservative, models tune within bounds
@@ -362,3 +412,32 @@ harness is judged by whether it forecloses those solutions:
 
 Each is revisited on evidence from the operating machine, not by adding
 ontology.
+
+## 10. Convergent adjudication (panel on this revision, 2026-08-31)
+
+A ten-panelist convergent round (including Claude) adjudicated this
+revision. All sections sound or sound-with-repair; coherence under the
+owner's frame confirmed — no per-effect human checkpoint survives. The
+repairs above came from that round:
+
+- **Restore boundary restored.** The panel unanimously rejected
+  "restore when wrong" as applied to sent mail or settled trades
+  (contradicting the computer ontology's restore boundary). §4.2/§5 now
+  distinguish machine restore from forward correction of external effects.
+- **Bounds ≠ correctness.** The strongest surviving objection, converged
+  across panelists: *quantitative risk controls bound magnitude, not
+  correctness* — an allowed-rate hallucinated newsletter or a sequence of
+  within-limits losing trades stays green under resource-shaped controls
+  alone. Repair adopted: per-class automated policy checks, idempotent
+  execution, consequence receipts, and compensation paths (4.2, D6) —
+  model-side, no human per effect.
+- **D1 disambiguated** between idling pending a human decision (defective)
+  and mechanical class-level halts with fail-over (legitimate).
+- **§8 step 7 was one sentence**; the newspaper's acceptance shape
+  (ingestion, subscriber/consent state, editorial verification and
+  correction, email infrastructure, risk-gate semantics,
+  continuous-operation proof) is now named as a required Definition.
+- Residue: the word "charter" in §3's risk-control entry, D1/D6 wording,
+  and the audit principle's too-narrow test were all repaired in place.
+
+Panel outputs: `.agentic-consensus/agentic-consensus-20260831-111816/`
