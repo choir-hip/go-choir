@@ -13,8 +13,21 @@ mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
 SRC = sys.argv[2] if len(sys.argv) > 2 else "docs/reviews/optimal-harness-thesis-2026-08-31.md"
-HEADER = "CHOIR - THE OPTIMAL HARNESS THESIS, v2"
-DATE = "2026-08-31"
+
+# Auto-detect title and date from source file
+def detect_header_and_date(src_path):
+    header = "CHOIR REPORT"
+    date = "2026-09-02"
+    if os.path.exists(src_path):
+        with open(src_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("# "):
+                    header = "CHOIR - " + line[2:].strip().upper()
+                    break
+    return header, date
+
+HEADER, DATE = detect_header_and_date(SRC)
 
 
 def main():
