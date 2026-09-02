@@ -25,7 +25,7 @@ The default panel is:
 4. `opencode` CLI with its configured default model.
 5. OMP `openai-codex/gpt-5.6-sol` with `--thinking medium`.
 6. OMP `openai-codex/gpt-5.6-luna` with `--thinking max` — the cost champion; fastest/cheapest GPT-5.6 tier (weak long-context recall).
-7. OMP `google-antigravity/gemini-3.7-flash` with `--thinking high`.
+7. OMP `google-antigravity/gemini-3.8-flash` with `--thinking high`.
 8. OMP `cursor/cursor-grok-4.6-high` with `--thinking high`.
 9. OMP `opencode-zen/muse-spark-1.2-contributor-free` with `--thinking high`.
 10. OMP `opencode-zen/nemotron-3-ultra-free` with `--thinking high`.
@@ -65,7 +65,7 @@ opencode
 omp-gpt56-sol
 omp-gpt56-terra
 omp-gpt56-luna
-omp-gemini37
+omp-gemini38
 omp-cursor-grok46
 omp-muse-spark
 omp-nemotron-3-ultra
@@ -228,7 +228,7 @@ Runner contracts:
 
 ```bash
 omp -p --mode text --model openai-codex/gpt-5.6-sol --thinking medium --no-session "$PROMPT"
-omp -p --mode text --model google-antigravity/gemini-3.7-flash --thinking high --no-session "$PROMPT"
+omp -p --mode text --model google-antigravity/gemini-3.8-flash --thinking high --no-session "$PROMPT"
 omp -p --mode text --model cursor/cursor-grok-4.6-high --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-zen/muse-spark-1.2-contributor-free --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-zen/nemotron-3-ultra-free --thinking high --no-session "$PROMPT"
