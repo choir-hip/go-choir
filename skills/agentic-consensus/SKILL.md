@@ -29,7 +29,7 @@ The default panel is:
 8. OMP `cursor/cursor-grok-4.6-high` with `--thinking high`.
 9. OMP `opencode-zen/muse-spark-1.2-contributor-free` with `--thinking high`.
 10. OMP `opencode-zen/nemotron-3-ultra-free` with `--thinking high`.
-11. OMP `opencode-zen/x-preview-f-free` with `--thinking high`.
+11. OMP `opencode-go/glm-5.3-flash` with `--thinking high`.
 12. OMP `opencode-zen/hy3-free` with `--thinking high`.
 
 `claude` is supported but intentionally excluded from the default panel because its token rate limits are lower. Add it explicitly with `--include claude,...` when needed. Claude's configured default tracks the current `opus` tier, so no model override is needed.
@@ -69,7 +69,7 @@ omp-gemini38
 omp-cursor-grok46
 omp-muse-spark
 omp-nemotron-3-ultra
-omp-x-preview-f
+omp-glm53-flash
 omp-hy3
 ```
 
@@ -88,7 +88,7 @@ codex exec [OPTIONS] [PROMPT]
 Runner contract:
 
 ```bash
-codex exec --cd "$CWD" --autoputer read-only -c 'approval_policy="never"' --ephemeral --skip-git-repo-check "$PROMPT"
+codex exec --cd "$CWD" --sandbox read-only -c 'approval_policy="never"' --ephemeral --skip-git-repo-check "$PROMPT"
 ```
 
 Optional model override:
@@ -100,7 +100,7 @@ Optional model override:
 Notes:
 
 - `codex exec` reads from stdin if prompt is omitted or `-` is used, but the runner passes the prompt as an argument.
-- `--autoputer read-only` and `-c 'approval_policy="never"'` keep consensus runs non-interactive and review-oriented.
+- `--sandbox read-only` and `-c 'approval_policy="never"'` keep consensus runs non-interactive and review-oriented.
 - `--ephemeral` avoids session persistence.
 - If the configured default model is unavailable, pass `--codex-model` to override it.
 
@@ -232,7 +232,7 @@ omp -p --mode text --model google-antigravity/gemini-3.8-flash --thinking high -
 omp -p --mode text --model cursor/cursor-grok-4.6-high --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-zen/muse-spark-1.2-contributor-free --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-zen/nemotron-3-ultra-free --thinking high --no-session "$PROMPT"
-omp -p --mode text --model opencode-zen/x-preview-f-free --thinking high --no-session "$PROMPT"
+omp -p --mode text --model opencode-go/glm-5.3-flash --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-zen/hy3-free --thinking high --no-session "$PROMPT"
 ```
 
@@ -256,8 +256,8 @@ Optional overrides:
 --omp-muse-spark-thinking LEVEL
 --omp-nemotron-3-ultra-model MODEL
 --omp-nemotron-3-ultra-thinking LEVEL
---omp-x-preview-f-model MODEL
---omp-x-preview-f-thinking LEVEL
+--omp-glm53-flash-model MODEL
+--omp-glm53-flash-thinking LEVEL
 --omp-hy3-model MODEL
 --omp-hy3-thinking LEVEL
 --no-tools-omp
