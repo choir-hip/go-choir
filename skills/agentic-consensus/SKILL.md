@@ -27,7 +27,7 @@ The default panel is:
 6. OMP `openai-codex/gpt-5.6-luna` with `--thinking max` — the cost champion; fastest/cheapest GPT-5.6 tier (weak long-context recall).
 7. OMP `google-antigravity/gemini-3.8-flash` with `--thinking high`.
 8. OMP `cursor/cursor-grok-4.6-high` with `--thinking high`.
-9. OMP `opencode-zen/muse-spark-1.2-contributor-free` with `--thinking high`.
+9. OMP `opencode-zen/muse-spark-1.3-contributor-free` with `--thinking high`.
 10. OMP `opencode-zen/nemotron-3-ultra-free` with `--thinking high`.
 11. OMP `opencode-go/glm-5.3-flash` with `--thinking high`.
 12. OMP `opencode-zen/hy3-free` with `--thinking high`.
@@ -230,7 +230,7 @@ Runner contracts:
 omp -p --mode text --model openai-codex/gpt-5.6-sol --thinking medium --no-session "$PROMPT"
 omp -p --mode text --model google-antigravity/gemini-3.8-flash --thinking high --no-session "$PROMPT"
 omp -p --mode text --model cursor/cursor-grok-4.6-high --thinking high --no-session "$PROMPT"
-omp -p --mode text --model opencode-zen/muse-spark-1.2-contributor-free --thinking high --no-session "$PROMPT"
+omp -p --mode text --model opencode-zen/muse-spark-1.3-contributor-free --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-zen/nemotron-3-ultra-free --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-go/glm-5.3-flash --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-zen/hy3-free --thinking high --no-session "$PROMPT"
@@ -267,7 +267,7 @@ Notes:
 
 - Do not use `--no-tools` for OMP if the OMP agent needs to see skills; OMP only lists skills when the `read` tool is available.
 - Use `--no-tools-omp` for pure opinion prompts where tool use would be wasteful.
-- Model IDs are `provider/model` exactly as `omp models` lists them (e.g. `openai-codex/gpt-5.6-sol`, `opencode-zen/muse-spark-1.2-contributor-free`).
+- Model IDs are `provider/model` exactly as `omp models` lists them (e.g. `openai-codex/gpt-5.6-sol`, `opencode-zen/muse-spark-1.3-contributor-free`).
 
 ## Runner Usage
 

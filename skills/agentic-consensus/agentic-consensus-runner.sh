@@ -41,7 +41,7 @@ Model overrides, optional:
   --omp-gpt56-luna-model MODEL  Default: openai-codex/gpt-5.6-luna.
   --omp-gemini-model MODEL      Default: google-antigravity/gemini-3.8-flash.
   --omp-cursor-grok-model MODEL Default: cursor/cursor-grok-4.6-high.
-  --omp-muse-spark-model MODEL       Default: opencode-zen/muse-spark-1.2-contributor-free.
+  --omp-muse-spark-model MODEL       Default: opencode-zen/muse-spark-1.3-contributor-free.
   --omp-nemotron-3-ultra-model MODEL Default: opencode-zen/nemotron-3-ultra-free.
   --omp-glm53-flash-model MODEL      Default: opencode-go/glm-5.3-flash.
   --omp-hy3-model MODEL              Default: opencode-zen/hy3-free.
@@ -101,7 +101,7 @@ OMP_GPT56_TERRA_MODEL="openai-codex/gpt-5.6-terra"
 OMP_GPT56_LUNA_MODEL="openai-codex/gpt-5.6-luna"
 OMP_GEMINI_MODEL="google-antigravity/gemini-3.8-flash"
 OMP_CURSOR_GROK_MODEL="cursor/cursor-grok-4.6-high"
-OMP_MUSE_SPARK_MODEL="opencode-zen/muse-spark-1.2-contributor-free"
+OMP_MUSE_SPARK_MODEL="opencode-zen/muse-spark-1.3-contributor-free"
 OMP_NEMOTRON_3_ULTRA_MODEL="opencode-zen/nemotron-3-ultra-free"
 OMP_GLM53_FLASH_MODEL="opencode-go/glm-5.3-flash"
 OMP_HY3_MODEL="opencode-zen/hy3-free"
