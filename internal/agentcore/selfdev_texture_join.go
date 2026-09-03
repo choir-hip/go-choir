@@ -56,7 +56,7 @@ func (rt *Runtime) startSelfDevelopmentPersistentSuper(ctx context.Context, oper
 		return err
 	}
 	superAgentID := persistentSuperAgentID(ownerID)
-	rec, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgentID)
+	rec, err := rt.reconcilePersistentSuperActorForOwnerStart(ctx, ownerID, superAgentID)
 	if err != nil {
 		return fmt.Errorf("start self-development run: %w", err)
 	}

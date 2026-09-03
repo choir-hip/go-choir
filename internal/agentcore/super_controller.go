@@ -343,7 +343,20 @@ func (rt *Runtime) resumeSelfDevelopmentSuperForPendingInstruction(ctx context.C
 func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
 	rt.superReconcileMu.Lock()
 	defer rt.superReconcileMu.Unlock()
-	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID)
+	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, false)
+}
+
+// reconcilePersistentSuperActorForOwnerStart is the wake path for the owner's
+// explicit self-development start/retry action. The owner action is a live
+// trigger; when the Texture turn that consumes the just-queued owner
+// instruction has not committed its execution_request yet, this path fills
+// the no-run gap from that pending instruction. It is reachable ONLY from
+// startSelfDevelopmentPersistentSuper — never from boot rewarm, the boot
+// work-item sweep, terminal continuation, or generic coagent wake reconcile.
+func (rt *Runtime) reconcilePersistentSuperActorForOwnerStart(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
+	rt.superReconcileMu.Lock()
+	defer rt.superReconcileMu.Unlock()
+	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, true)
 }
 
 // ResumeInterruptedPersistentSuperControlRun is the dedicated structurally isolated
@@ -383,7 +396,7 @@ func (rt *Runtime) resumeInterruptedPersistentSuperControlRunLocked(ctx context.
 	return nil, false, nil
 }
 
-func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
+func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, ownerID, agentID string, allowInstructionResume bool) (*types.RunRecord, error) {
 	if ownerID == "" {
 		return nil, fmt.Errorf("owner_id is required")
 	}
@@ -420,6 +433,12 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 	}
 	lifecycleControls := len(updates) > 0
 	if !lifecycleControls {
+		if allowInstructionResume {
+			// Owner-start live trigger: the owner instruction queued by this
+			// start action wakes Super when the Texture turn has not yet
+			// committed its execution_request. Resume only fills the no-run gap.
+			return rt.resumeSelfDevelopmentSuperForPendingInstruction(ctx, ownerID, agentID)
+		}
 		updates, err = rt.listAndSettlePersistentSuperBacklog(ctx, ownerID, agentID)
 		if err != nil {
 			return nil, err
@@ -1208,7 +1227,6 @@ func (rt *Runtime) listPendingPersistentSuperLifecycleControls(ctx context.Conte
 	validated, valErr := rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, controls, true)
 	return validated, valErr
 }
-
 
 func (rt *Runtime) validateTargetBoundLifecycleControls(ctx context.Context, ownerID, computerID, agentID string, updates []types.CoagentSourcePacket, executionOnly bool) ([]types.CoagentSourcePacket, error) {
 	out := make([]types.CoagentSourcePacket, 0, len(updates))

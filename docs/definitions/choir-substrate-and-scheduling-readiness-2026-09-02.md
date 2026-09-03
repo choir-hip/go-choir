@@ -184,15 +184,15 @@ now:
     evidence_ref: "docs/evidence/effects-red-boot-as-scheduler-ontological-error-2026-09-03.md"
     owner_ratification_ref: "owner direction 2026-09-03 (boot is recovery, not scheduler); consensus adjudication 2026-09-03 (10/10 returned, unanimous REVISE-then-execute with direction approved)"
     recorded_at: "2026-09-03T02:20:00Z"
-    consequence: "5e01ac3a replacement-continuation direction is superseded as an end-state; the full backlog-selection ladder (lifecycle controls first, then Texture-rewake fallthrough, pending-instruction resume, mailbox settle, producer reports) is deleted as a wake source; exact-run resume is structurally isolated; Definition 1 acceptance now comprises six criteria including a terminal-event probe."
+    consequence: "5e01ac3a replacement-continuation direction is superseded as an end-state; the full backlog-selection ladder (lifecycle controls first, then Texture-rewake fallthrough, pending-instruction resume, mailbox settle, producer reports) is deleted as a wake source from boot, terminal, and generic reconcile entry points; exact-run resume is structurally isolated; Definition 1 acceptance now comprises six criteria including a terminal-event probe. Owner-start instruction resume is preserved as the mechanism of the owner's live start trigger (reconcilePersistentSuperActorForOwnerStart), reachable only from startSelfDevelopmentPersistentSuper."
   evidence_refs:
     - "docs/evidence/effects-red-boot-as-scheduler-ontological-error-2026-09-03.md"
     - "docs/evidence/effects-red-substrate-boot-probe-partial-evidence-2026-09-03.md"
     - "docs/evidence/effects-red-super-texture-rewake-2026-08-20.md"
     - "docs/evidence/effects-red-assignment-supersession-loop-2026-08-21.md"
     - "docs/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md"
-  blocker_or_risk: "None for implementation (5/5 deterministic criteria pass locally); staging ordinals 2/3 admissibility and live trigger delivery must be confirmed on deployed environment."
-  next_action: "Commit and push to origin/main, monitor CI and staging deploy, verify deployed environment identity, and execute deployed acceptance proofs across criteria 1-6."
+  blocker_or_risk: "Implementation complete locally (all touched suites green); CI on the owner-start refinement commit pending; staging ordinals 2/3 admissibility and live trigger delivery must be confirmed on the deployed environment."
+  next_action: "Commit and push the owner-start refinement, monitor CI and staging deploy, verify deployed environment identity, and execute deployed acceptance proofs across criteria 1-6."
 
 receipts:
   - id: substrate-scheduling-baseline-2026-09-02
