@@ -2502,10 +2502,15 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 			}
 			updates = selectLifecycleControlActivation(updates, resident.TrajectoryID, lifecycleControlWorkIDsForRun(&resident))
 			if listErr != nil || len(updates) == 0 {
-				log.Printf("runtime: bind resident lifecycle controls target=%s: %v", target, listErr)
-				return
-			}
-			if _, bindErr := rt.bindLifecycleControlsToRun(ctx, &resident, updates); bindErr != nil {
+				// The live trigger's control does not bind to the resident run's
+				// trajectory/work scope (or the pending list could not be read).
+				// Never drop the wake: fall through to the actor dispatch so the
+				// serialized actor boundary processes it when the slot frees —
+				// binding when warm, reconciling when cold. FIFO backlog order
+				// is preserved because selection still picks the lowest
+				// pending arrival ordinal.
+				log.Printf("runtime: resident lifecycle control bind deferred target=%s: %v (dispatching wake)", target, listErr)
+			} else if _, bindErr := rt.bindLifecycleControlsToRun(ctx, &resident, updates); bindErr != nil {
 				log.Printf("runtime: bind resident lifecycle controls target=%s: %v", target, bindErr)
 				return
 			}
