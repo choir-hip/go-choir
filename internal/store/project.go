@@ -496,11 +496,8 @@ func projectTextureAgentMutation(ctx context.Context, tx *sql.Tx, body json.RawM
 				return fmt.Errorf("%w: Texture mutation state is %s", computerevent.ErrProjectionMismatch, existing.State)
 			}
 		}
-		if mutation.RequireRevision != nil {
-			hasRevision := strings.TrimSpace(existing.RevisionID) != ""
-			if *mutation.RequireRevision != hasRevision {
-				return fmt.Errorf("%w: Texture mutation revision presence changed", computerevent.ErrProjectionMismatch)
-			}
+		if textureRevisionPresenceConflict(existing.RevisionID, mutation.RequireRevision, mutation.RevisionID, allowReplayTextureBootstrap) {
+			return fmt.Errorf("%w: Texture mutation revision presence changed", computerevent.ErrProjectionMismatch)
 		}
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("read Texture agent mutation: %w", err)
@@ -529,6 +526,34 @@ func projectTextureAgentMutation(ctx context.Context, tx *sql.Tx, body json.RawM
 		return fmt.Errorf("project Texture agent mutation: %w", err)
 	}
 	return nil
+}
+
+// textureRevisionPresenceConflict reports whether a Texture agent mutation op
+// must fail the revision-presence guard against the projected row.
+//
+// Live finalization is strict: any mismatch between the op's RequireRevision
+// assertion and the row's revision presence fails closed. Replay rebuilds the
+// projection from canonical events the platform already accepted onto the
+// tape, so it additionally tolerates the one case that introduces and removes
+// nothing: the op carries forward the exact revision already projected
+// (byte-for-byte). Refusing that case bricks every future boot on an event
+// that is already canonical (2026-09-03: seq 138612 sleep-after-non-revision
+// turn for a mutation created with its revision attached), with no forward
+// path. An op that clears or swaps the revision still fails in replay, as
+// does an op that requires a revision the tape never projected.
+func textureRevisionPresenceConflict(existingRevisionID string, requireRevision *bool, opRevisionID string, allowReplayTextureBootstrap bool) bool {
+	if requireRevision == nil {
+		return false
+	}
+	hasRevision := strings.TrimSpace(existingRevisionID) != ""
+	if *requireRevision == hasRevision {
+		return false
+	}
+	if !allowReplayTextureBootstrap {
+		return true
+	}
+	existing := strings.TrimSpace(existingRevisionID)
+	return existing == "" || strings.TrimSpace(opRevisionID) != existing
 }
 
 func sameTextureAgentMutationProjection(left, right computerevent.TextureAgentMutationProjection) bool {
