@@ -355,12 +355,40 @@ documents:
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
 
   - path: docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md
-    claim_scope: suspended
+    claim_scope: historical
     is_root: []
     is_evidence: true
-    annotations: {doc_role: definition, authority: suspended_mission_evidence, lifecycle: suspended, entrypoint: false}
+    annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded, entrypoint: false}
+    superseded_by:
+      - docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md
+      - docs/definitions/choir-supervised-self-development-on-rlm-2026-09-02.md
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: []
+
+  - path: docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: active_mission_contract, lifecycle: active, entrypoint: true}
+    supersedes: [docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md]
+    witnesses: [docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/choir-doctrine.md]
+    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
+
+  - path: docs/definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: subordinate_mission_contract, lifecycle: blocked, entrypoint: false}
+    witnesses: [docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/choir-doctrine.md]
+    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
+
+  - path: docs/definitions/choir-supervised-self-development-on-rlm-2026-09-02.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: subordinate_mission_contract, lifecycle: blocked, entrypoint: false}
+    witnesses: [docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/choir-doctrine.md]
+    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
   - path: docs/definitions/choir-host-orchestrated-recovery-2026-08-22.md
     claim_scope: historical
     is_root: []

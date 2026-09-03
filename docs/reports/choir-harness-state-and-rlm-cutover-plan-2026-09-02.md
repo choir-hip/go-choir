@@ -125,9 +125,18 @@ A crucial finding emerged from source analysis:
 
 ---
 
-## 5. Next Action
+## 5. Review Adjudication & Execution Readiness
 
-Author and ratify **Definition 1 (Substrate & Scheduling Readiness)**:
-- Supersede the mixed scheduling/candidate Definition (`choir-scheduling-and-candidate-proof-2026-08-21.md`).
-- Target: FIFO request contract and vmctl normal-boot proof on staging.
-- No parallel coding; candidate A remains tabled until Definition 2 cutover completes.
+A second independent consensus review across 10 frontier models (Claude Fable 5.1, Codex/GPT-5.6-Sol, GPT-5.6-Luna, Cursor/Grok-4.6, Gemini-3.8-Flash, GLM-5.3-Flash, Cursor Agent, Opencode, Nemotron-3-Ultra) evaluated the authored 3-Definition package.
+
+### Review Verdict & Incorporated Repairs:
+The panel confirmed Option B as the correct architecture and identified necessary authority and schema repairs, all of which have been executed:
+1. **Single State Authority**: Explicitly reconciled `computer-03335285269bdba4f94377e56879f9e6` (epoch 831+) and pre-A restore fence `99949fe2` across all three Definitions.
+2. **Definition 1 (Substrate & Scheduling)**: Completed the full I26 contract (multi-request arrival ordering, restart mid-run selection preservation, stale duplicate settlement, 5x normal-boot probe without maintenance hold), added Conjectures and Heresy deltas, and demoted cold recovery out of the critical path.
+3. **Definition 2 (RLM Cutover)**: Set `now.status: blocked_incomplete` to enforce strict serialization, defined mechanical rollback via runtime route flag (`actuator=tools`), added P0 500ms sidecar process-group SIGKILL containment gate, and included `internal/agentcore/tool_profiles.go` in protected surfaces.
+4. **Definition 3 (Candidate A Self-Dev)**: Set `now.status: blocked_incomplete`, restored all five named bundle refs, inherited the full predecessor acceptance suite (`reversible-selfdev-v1` consensus with gpt-5.6-terra independent reviewer, promotion, live play API, falsification, and restore), and added red ceremony deltas.
+5. **Registry Hygiene (Standing Question 9)**: Updated `docs/ACTIVE.md`, `docs/mission-graph.yaml`, and `docs/doc-authority-manifest.yaml`. Predecessor `choir-scheduling-and-candidate-proof-2026-08-21.md` is superseded. Definition 1 is registered as the sole active executable entrypoint; Definitions 2 and 3 are registered as blocked/queued.
+
+### Execution Status:
+**Definition 1 (`docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md`) is approved and ready for immediate autonomous execution.**
+Next action: execute 5x normal-boot probe on `computer-03335285269bdba4f94377e56879f9e6`, then run the competing 2-request FIFO selection test on staging.

@@ -391,26 +391,87 @@ nodes:
     title: Scheduling Contract and Candidate Proof
     path: docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md
     ledger: ''
+    status: superseded
+    kind: spine
+    entrypoint: false
+    execution_mode: superseded_incomplete_mission_evidence
+    depends_on:
+      - choir-private-go-actor-kernel-2026-08-12
+    enables:
+      - choir-substrate-and-scheduling-readiness-2026-09-02
+      - choir-supervised-self-development-on-rlm-2026-09-02
+    note: >-
+      Superseded 2026-09-02 by the 3-Definition autonomous engineering sequence:
+      Definition 1 (choir-substrate-and-scheduling-readiness-2026-09-02) owns FIFO
+      scheduling and normal-boot stability; Definition 3
+      (choir-supervised-self-development-on-rlm-2026-09-02) owns Candidate A self-development.
+    sources:
+      - docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md
+      - docs/standing-questions.md
+      - docs/choir-doctrine.md
+      - docs/ACTIVE.md
+  - id: choir-substrate-and-scheduling-readiness-2026-09-02
+    title: Substrate & Scheduling Readiness
+    path: docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md
+    ledger: ''
+    status: active
+    kind: spine
+    entrypoint: true
+    execution_mode: executable
+    depends_on:
+      - choir-substrate-cleanup-and-cutover-2026-08-25
+    enables:
+      - choir-rlm-session-interpreter-cutover-2026-09-02
+    note: >-
+      Phase 1 of autonomous engineering sequence. Executes FIFO scheduling contract
+      and 5x normal-boot probe without maintenance hold on staging computer-0333528
+      (epoch 831, pre-A checkpoint 99949fe2).
+    sources:
+      - docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md
+      - docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md
+      - docs/standing-questions.md
+      - docs/choir-doctrine.md
+      - docs/ACTIVE.md
+  - id: choir-rlm-session-interpreter-cutover-2026-09-02
+    title: RLM Session Interpreter & Ambient Tool Parity
+    path: docs/definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md
+    ledger: ''
     status: blocked
     kind: spine
     entrypoint: false
-    execution_mode: draft_non_executable
+    execution_mode: blocked_incomplete
     depends_on:
+      - choir-substrate-and-scheduling-readiness-2026-09-02
       - choir-private-go-actor-kernel-2026-08-12
+    enables:
+      - choir-supervised-self-development-on-rlm-2026-09-02
+    note: >-
+      Phase 2 of autonomous engineering sequence. Evolving cmd/capsule-broker and
+      internal/yaegikernel to persistent Session worker per activation, prebound
+      choir package exports, ambient JSON tool removal from CoSuper prompt schema.
+    sources:
+      - docs/definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md
+      - docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md
+      - docs/choir-doctrine.md
+      - docs/ACTIVE.md
+  - id: choir-supervised-self-development-on-rlm-2026-09-02
+    title: Supervised Self-Development on RLM
+    path: docs/definitions/choir-supervised-self-development-on-rlm-2026-09-02.md
+    ledger: ''
+    status: blocked
+    kind: spine
+    entrypoint: false
+    execution_mode: blocked_incomplete
+    depends_on:
+      - choir-rlm-session-interpreter-cutover-2026-09-02
     enables: []
     note: >-
-      Suspended 2026-08-25 pending substrate overhauls (Tracks K, F, M, Assurance)
-      and Yaegi Actor Kernel. Self-development proof resumes on a fresh snapshot-backed
-      computer once the durable substrate is clean.
+      Phase 3 of autonomous engineering sequence. Candidate A solitaire proof,
+      5-ref freeze, qualified consensus under reversible-selfdev-v1, promotion,
+      falsification, and restore to pre-A checkpoint 99949fe2 on the RLM surface.
     sources:
-      - docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md
-      - docs/reviews/architecture-review-texture-cosuper-memory-2026-08-21.md
-      - docs/reviews/architecture-review-consensus-synthesis-2026-08-21.md
-      - docs/evidence/effects-red-assignment-supersession-loop-2026-08-21.md
-      - docs/evidence/effects-red-capsule-memory-budget-exhaustion-2026-08-21.md
-      - docs/standing-questions.md
-      - docs/computer-ontology.md
-      - docs/agent-product-doctrine.md
+      - docs/definitions/choir-supervised-self-development-on-rlm-2026-09-02.md
+      - docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md
       - docs/choir-doctrine.md
       - docs/ACTIVE.md
   - id: choir-host-orchestrated-recovery-2026-08-22

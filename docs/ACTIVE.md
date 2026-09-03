@@ -45,13 +45,35 @@ maintenance holds, authenticated shell bootstrap returns HTTP 200, and the owner
 mailbox exposes the Ryan message. Guest Maildir synchronization is not claimed.
 Evidence: [`evidence/account-recovery-yusefnathanson-2026-08-27.md`](evidence/account-recovery-yusefnathanson-2026-08-27.md).
 
-## Tabled Definition — Scheduling Contract and Candidate Proof
+## Active Definition — Substrate & Scheduling Readiness
+
+[`definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md`](definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md)
+is **active** (owner direction 2026-09-02, unanimous agentic consensus Option B).
+It supersedes the substrate/scheduling scope of `choir-scheduling-and-candidate-proof-2026-08-21.md`.
+Target: FIFO scheduling contract under arrival-ordinal and 5x normal-boot probe without
+`RUNTIME_MAINTENANCE_HOLD` on staging `computer-03335285269bdba4f94377e56879f9e6` (epoch 831, pre-A checkpoint `99949fe2`).
+Effects remain OFF.
+
+## Queued Definition — RLM Session Interpreter Cutover
+
+[`definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md`](definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md)
+is **paused pending Definition 1 deployed acceptance**. Target: persistent Session worker per
+activation in `cmd/capsule-broker` and `internal/yaegikernel`, prebound `choir` modules,
+SIGKILL reaped <500ms, ambient JSON tool removal from CoSuper prompt, live sealed proof on staging.
+
+## Queued Definition — Supervised Self-Development on RLM
+
+[`definitions/choir-supervised-self-development-on-rlm-2026-09-02.md`](definitions/choir-supervised-self-development-on-rlm-2026-09-02.md)
+is **paused pending Definition 1 and Definition 2 deployed acceptance**.
+Target: Candidate change A solitaire implementation authored via RLM session cells, 5-ref freeze,
+qualified consensus under `reversible-selfdev-v1`, promotion, live play verification, falsification with B,
+and restore to pre-A checkpoint `99949fe2`.
+
+## Superseded Definition — Scheduling Contract and Candidate Proof
 
 [`definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`](definitions/choir-scheduling-and-candidate-proof-2026-08-21.md)
-is **tabled after account recovery**. Pre-A checkpoint `732427d7...`, `propose_only`
-generation 1, and operation `selfdev-80201d0a...` on `computer-aa7739a6c3f7ebec4e984bad8b086486`
-are preserved. Candidate proof and effects remain paused until explicit owner direction.
-
+is **superseded** by the 3-Definition autonomous engineering sequence (Definition 1 for substrate/scheduling,
+Definition 3 for candidate A solitaire proof).
 ## Sealed Operation — Stabilize and Hold 0333528
 
 [`definitions/choir-0333528-stabilize-and-hold-2026-08-24.md`](definitions/choir-0333528-stabilize-and-hold-2026-08-24.md)
