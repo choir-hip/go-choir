@@ -31,6 +31,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -785,7 +786,24 @@ func machineShapeForOwnership(own *VMOwnership) (int, int) {
 	if own != nil && isPlatformOwnership(own) {
 		return platformVMCPUCount, platformVMMemSizeMib
 	}
-	return interactiveVMCPUCount, interactiveVMMemSizeMib
+	return interactiveMachineShape()
+}
+
+// interactiveMachineShape returns the interactive guest CPU/memory shape,
+// honoring host overrides. Malformed override values fall back to the
+// compiled defaults rather than refusing to boot.
+func interactiveMachineShape() (int, int) {
+	return envPositiveOrDefault(interactiveVMCPUCountEnv, interactiveVMCPUCount),
+		envPositiveOrDefault(interactiveVMMemSizeMibEnv, interactiveVMMemSizeMib)
+}
+
+func envPositiveOrDefault(key string, def int) int {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return def
 }
 
 func isPlatformOwnership(own *VMOwnership) bool {
@@ -1162,8 +1180,15 @@ const (
 	activeResolvePendingRouteGrace         = 3 * time.Minute
 	interactiveVMCPUCount                  = 2
 	interactiveVMMemSizeMib                = 2048
-	platformVMCPUCount                     = 2
-	platformVMMemSizeMib                   = 4096
+	// Host overrides for the interactive guest shape. The retained staging
+	// computer outgrew the 2 CPU / 2 GiB default (11 GiB texture/object-graph
+	// store OOMs the 2 GiB guest on boot replay and snapshot scans,
+	// 2026-09-03). Set VM_INTERACTIVE_CPU_COUNT / VM_INTERACTIVE_MEM_MIB on
+	// the vmctl service to resize guests without a code change.
+	interactiveVMCPUCountEnv   = "VM_INTERACTIVE_CPU_COUNT"
+	interactiveVMMemSizeMibEnv = "VM_INTERACTIVE_MEM_MIB"
+	platformVMCPUCount         = 2
+	platformVMMemSizeMib       = 4096
 )
 
 func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
@@ -1542,14 +1567,15 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 		if credentialEnvelope == "" && corpusdConfigured {
 			err = fmt.Errorf("realization credential unavailable")
 		} else {
+			shapeCPU, shapeMem := interactiveMachineShape()
 			info, err = mgr.BootVM(VMManagerConfig{
 				VMID:                       vmID,
 				ComputerID:                 own.ComputerID,
 				RealizationID:              realizationID,
 				Epoch:                      epoch,
 				GuestPort:                  8085,
-				MachineCPUCount:            interactiveVMCPUCount,
-				MachineMemSizeMib:          interactiveVMMemSizeMib,
+				MachineCPUCount:            shapeCPU,
+				MachineMemSizeMib:          shapeMem,
 				GatewayToken:               gwToken,
 				ComputerCredentialEnvelope: credentialEnvelope,
 				ComputerKind:               "active",
