@@ -50,6 +50,39 @@ func (rt *Runtime) ListPendingProducerReports(ctx context.Context, ownerID, comp
 	return rt.store.ListPendingProducerReports(ctx, ownerID, computerID, requestedByAgentID)
 }
 
+// ListDeliveredStaleProducerReports returns pending producer reports already
+// delivered to a run, excluding reports delivered to the currently active
+// resident Super (those are live execution input, not residue).
+func (rt *Runtime) ListDeliveredStaleProducerReports(ctx context.Context, ownerID, computerID, requestedByAgentID string) ([]types.CoagentSourcePacket, error) {
+	if rt == nil || rt.store == nil {
+		return nil, fmt.Errorf("list delivered stale producer reports: store unavailable")
+	}
+	reports, err := rt.store.ListDeliveredPendingProducerReports(ctx, ownerID, computerID, requestedByAgentID)
+	if err != nil {
+		return nil, err
+	}
+	activeRuns := map[string]bool{}
+	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, persistentSuperAgentID(ownerID)); err != nil {
+		return nil, fmt.Errorf("list delivered stale producer reports: resolve resident super: %w", err)
+	} else if found {
+		activeRuns[resident.RunID] = true
+	}
+	out := make([]types.CoagentSourcePacket, 0, len(reports))
+	for _, u := range reports {
+		deliveredTo := strings.TrimSpace(u.DeliveredToRunID)
+		if deliveredTo == "" || activeRuns[deliveredTo] {
+			continue
+		}
+		if !activeRuns[deliveredTo] {
+			if run, getErr := rt.store.GetRunByOwner(ctx, ownerID, deliveredTo); getErr == nil && run.State.Active() {
+				activeRuns[deliveredTo] = true
+				continue
+			}
+		}
+		out = append(out, u)
+	}
+	return out, nil
+}
 func (h *APIHandler) listPendingProducerReports(w http.ResponseWriter, r *http.Request, ownerID, computerID string) {
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -60,7 +93,13 @@ func (h *APIHandler) listPendingProducerReports(w http.ResponseWriter, r *http.R
 		return
 	}
 	requestedByAgentID := strings.TrimSpace(r.URL.Query().Get("agent_id"))
-	reports, err := h.rt.ListPendingProducerReports(r.Context(), ownerID, computerID, requestedByAgentID)
+	var reports []types.CoagentSourcePacket
+	var err error
+	if strings.TrimSpace(r.URL.Query().Get("stale_delivered")) != "" {
+		reports, err = h.rt.ListDeliveredStaleProducerReports(r.Context(), ownerID, computerID, requestedByAgentID)
+	} else {
+		reports, err = h.rt.ListPendingProducerReports(r.Context(), ownerID, computerID, requestedByAgentID)
+	}
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 		return

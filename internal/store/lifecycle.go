@@ -4633,6 +4633,65 @@ func (s *Store) ListPendingProducerReports(ctx context.Context, ownerID, compute
 	return out, nil
 }
 
+// ListDeliveredPendingProducerReports returns producer reports addressed to
+// the persistent Super that are still pending disposition but already
+// delivered to a run — the delivered half of the storm-era residue class.
+func (s *Store) ListDeliveredPendingProducerReports(ctx context.Context, ownerID, computerID, requestedByAgentID string) ([]types.CoagentSourcePacket, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	targetAgentID := agentprofile.Super + ":" + ownerID
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("delivered producer reports: object graph not initialized")
+	}
+	rows, err := graph.ListJSONBodyFieldsByKindOwner(ctx, string(ogKindWorkerUpdate), ownerID, []string{
+		"$.target_agent_id",
+		"$.disposition",
+		"$.delivered_to_loop_id",
+	}, lifecycleWorkerUpdateScanCap+1)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) > lifecycleWorkerUpdateScanCap {
+		return nil, fmt.Errorf("delivered producer reports: scan cap %d exceeded for owner %s", lifecycleWorkerUpdateScanCap, ownerID)
+	}
+	canonicalIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if len(row.Fields) < 3 {
+			continue
+		}
+		if strings.TrimSpace(row.Fields[0]) != targetAgentID || strings.TrimSpace(row.Fields[1]) != string(types.UpdatePending) || strings.TrimSpace(row.Fields[2]) == "" {
+			continue
+		}
+		if id := strings.TrimSpace(row.CanonicalID); id != "" {
+			canonicalIDs = append(canonicalIDs, id)
+		}
+	}
+	var out []types.CoagentSourcePacket
+	for _, id := range canonicalIDs {
+		update, getErr := s.GetCoagentSourcePacket(ctx, id)
+		if getErr != nil {
+			if errors.Is(getErr, ErrNotFound) {
+				continue
+			}
+			return nil, getErr
+		}
+		if update.Direction != types.LifecyclePacketDirectionProducerReport || update.Disposition != types.UpdatePending || strings.TrimSpace(update.DeliveredToRunID) == "" {
+			continue
+		}
+		if requestedByAgentID != "" && strings.TrimSpace(update.AgentID) != strings.TrimSpace(requestedByAgentID) {
+			continue
+		}
+		out = append(out, update)
+	}
+	return out, nil
+}
+
 func (s *Store) SettleLifecycleProducerReports(ctx context.Context, req types.SettleLifecycleProducerReportsRequest) (types.LifecycleResult, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
 	if err != nil {

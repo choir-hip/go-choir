@@ -1483,6 +1483,7 @@ func runComputerProducerReports(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	computerID := fs.String("computer", "", "Stable ComputerID")
 	agentID := fs.String("agent-id", "", "Filter by producer agent ID")
+	staleDelivered := fs.Bool("stale-delivered", false, "List pending reports already delivered to non-active runs")
 	c, err := newClient(fs, args, stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "choir computer producer-reports: %v\n", err)
@@ -1494,8 +1495,15 @@ func runComputerProducerReports(args []string, stdout, stderr io.Writer) int {
 	}
 	var response json.RawMessage
 	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/producer-reports"
+	query := url.Values{}
 	if strings.TrimSpace(*agentID) != "" {
-		path += "?agent_id=" + url.QueryEscape(strings.TrimSpace(*agentID))
+		query.Set("agent_id", strings.TrimSpace(*agentID))
+	}
+	if *staleDelivered {
+		query.Set("stale_delivered", "true")
+	}
+	if len(query) > 0 {
+		path += "?" + query.Encode()
 	}
 	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
 		fmt.Fprintf(stderr, "choir computer producer-reports: %v\n", err)
