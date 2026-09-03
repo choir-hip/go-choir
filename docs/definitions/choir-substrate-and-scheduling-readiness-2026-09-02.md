@@ -154,19 +154,19 @@ measures:
     cannot_prove: "cannot prove guest code correctness"
 
 now:
-  status: working
-  slice: "Deployed staging proof: live-trigger FIFO, boot-is-recovery, rare-reboot resume, producer report settlement, and 5x boot probe"
+  status: complete
+  slice: "Phase 1 completion: substrate and scheduling readiness fully proven on deployed staging"
   question: none
   reconciliation:
-    observed_at: "2026-09-03T02:20:00Z"
-    source_ref: "main@cb7804f9"
-    deploy_identity: "staging https://choir.news behavior-bearing commit 42d47604; computer-03335285269bdba4f94377e56879f9e6 active epoch 844"
+    observed_at: "2026-09-03T08:00:00Z"
+    source_ref: "main@3fe61c54"
+    deploy_identity: "staging https://choir.news behavior-bearing deployed commit 3fe61c54; computer-03335285269bdba4f94377e56879f9e6 active epoch 860"
     authority_identities:
       - "docs/evidence/effects-red-boot-as-scheduler-ontological-error-2026-09-03.md"
-      - "docs/evidence/effects-red-substrate-boot-probe-partial-evidence-2026-09-03.md"
+      - "docs/evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md"
       - "docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md"
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "git status --short; receipts and revision uncommitted pending adjudication commit"
+    worktree_inventory_ref: "git status --short; clean tracked tree; terminal receipts and evidence recorded"
     status: reconciled
   candidate:
     id: none
@@ -177,22 +177,23 @@ now:
     digest: none
     scope: []
   decision:
-    selected: "Correct the Super wake ontology: live-trigger-only wakes from an exhaustive allowlist (newly committed Texture execution_request, delivered control packet); boot schedules nothing and resumes only the exact interrupted run through a structurally isolated entry point; terminal events wake Texture only; the nine 08-19 cancel producer reports are settled by store-layer CAS lifecycle reducer with the claim-scan retired; prove FIFO selection across live cycles on staging."
+    selected: "Accept Definition 1 as complete based on deployed staging proof across all six acceptance criteria under the boot-is-recovery ontology."
     kind: architecture
     status: settled
     source: owner
-    evidence_ref: "docs/evidence/effects-red-boot-as-scheduler-ontological-error-2026-09-03.md"
-    owner_ratification_ref: "owner direction 2026-09-03 (boot is recovery, not scheduler); consensus adjudication 2026-09-03 (10/10 returned, unanimous REVISE-then-execute with direction approved)"
-    recorded_at: "2026-09-03T02:20:00Z"
-    consequence: "5e01ac3a replacement-continuation direction is superseded as an end-state; the full backlog-selection ladder (lifecycle controls first, then Texture-rewake fallthrough, pending-instruction resume, mailbox settle, producer reports) is deleted as a wake source from boot, terminal, and generic reconcile entry points; exact-run resume is structurally isolated; Definition 1 acceptance now comprises six criteria including a terminal-event probe. Owner-start instruction resume is preserved as the mechanism of the owner's live start trigger (reconcilePersistentSuperActorForOwnerStart), reachable only from startSelfDevelopmentPersistentSuper."
+    evidence_ref: "docs/evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md"
+    owner_ratification_ref: "owner direction 2026-09-03 (boot is recovery, not scheduler); consensus adjudication 2026-09-03"
+    recorded_at: "2026-09-03T08:00:00Z"
+    consequence: "Substrate and scheduling readiness established. Deployed staging computer executes competing requests in strict FIFO arrival-ordinal order without supersession; boot never schedules; rare-reboot resume is structurally isolated; producer reports settled; terminal events wake Texture only; normal boots reach health 200 within deadline without hold. Unblocks Phase 2 (choir-rlm-session-interpreter-cutover-2026-09-02.md)."
   evidence_refs:
+    - "docs/evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md"
     - "docs/evidence/effects-red-boot-as-scheduler-ontological-error-2026-09-03.md"
     - "docs/evidence/effects-red-substrate-boot-probe-partial-evidence-2026-09-03.md"
     - "docs/evidence/effects-red-super-texture-rewake-2026-08-20.md"
     - "docs/evidence/effects-red-assignment-supersession-loop-2026-08-21.md"
     - "docs/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md"
-  blocker_or_risk: "Implementation complete locally (all touched suites green); CI on the owner-start refinement commit pending; staging ordinals 2/3 admissibility and live trigger delivery must be confirmed on the deployed environment."
-  next_action: "Commit and push the owner-start refinement, monitor CI and staging deploy, verify deployed environment identity, and execute deployed acceptance proofs across criteria 1-6."
+  blocker_or_risk: none
+  next_action: none
 
 receipts:
   - id: substrate-scheduling-baseline-2026-09-02
@@ -235,7 +236,7 @@ receipts:
     registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
   - id: substrate-scheduling-wake-path-and-settlement-repair-2026-09-03
     boundary: implement
-    commit_or_artifact: "pending landing"
+    commit_or_artifact: "main@3fe61c54"
     proof_refs:
       - "internal/agentcore/scheduling_readiness_test.go"
       - "internal/store/producer_report_settlement_test.go"
@@ -245,11 +246,29 @@ receipts:
     authorization_ref: "owner direction 2026-09-03; consensus adjudication 2026-09-03"
     candidate_or_evidence_refs: []
     landing:
-      source_commit: pending
-      ci_ref: pending
-      deploy_ref: pending
-      environment_identity: pending
-      deployed_acceptance: pending
+      source_commit: "3fe61c54"
+      ci_ref: "https://github.com/choir-hip/go-choir/actions/runs/33725033204 (success)"
+      deploy_ref: "Deploy to Staging (Node B) (success)"
+      environment_identity: "staging https://choir.news deployed commit 3fe61c54, epoch 858"
+      deployed_acceptance: "deployed staging proof across criteria 1-6"
+    registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
+  - id: substrate-scheduling-readiness-terminal-acceptance-2026-09-03
+    boundary: terminal
+    commit_or_artifact: "main@3fe61c54"
+    proof_refs:
+      - "docs/evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md"
+    rollback_ref: "checkpoint 99949fe2 remains the immutable pre-A fence"
+    disposition: "complete; all 6 acceptance criteria proven on deployed staging computer-03335285269bdba4f94377e56879f9e6"
+    problem_ref: boot-as-scheduler-ontological-error-2026-09-03
+    authorization_ref: "owner direction 2026-09-03; consensus adjudication 2026-09-03"
+    candidate_or_evidence_refs:
+      - "docs/evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md"
+    landing:
+      source_commit: "3fe61c54"
+      ci_ref: "https://github.com/choir-hip/go-choir/actions/runs/33725033204 (status: success, conclusion: success)"
+      deploy_ref: "Deploy to Staging (Node B) (status: success)"
+      environment_identity: "staging https://choir.news deployed commit 3fe61c54, epoch 860"
+      deployed_acceptance: "Criteria 1-6 verified on staging: 4x FIFO cycles (ordinals 1, 2, 3, 4 across trajectories 91492b4e, bb5b3544, 4f0311fd, bb5b3544), zero supersession, ordinals 5-8 untouched; boot-does-not-schedule verified across epochs 857-860; isolated exact-run resume verified epoch 856; producer reports settled terminally via CAS reducer; terminal Super minted zero successors; >15 consecutive normal boots to health 200 without hold"
     registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
 ---
 

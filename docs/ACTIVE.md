@@ -45,26 +45,26 @@ maintenance holds, authenticated shell bootstrap returns HTTP 200, and the owner
 mailbox exposes the Ryan message. Guest Maildir synchronization is not claimed.
 Evidence: [`evidence/account-recovery-yusefnathanson-2026-08-27.md`](evidence/account-recovery-yusefnathanson-2026-08-27.md).
 
-## Active Definition — Substrate & Scheduling Readiness
+## Completed Definition — Substrate & Scheduling Readiness
 
 [`definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md`](definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md)
-is **active**, revised 2026-09-03 to the boot-is-recovery ontology (owner direction 2026-09-03;
-revises the 2026-09-02 Option B baseline). It supersedes the substrate/scheduling scope of
-`choir-scheduling-and-candidate-proof-2026-08-21.md`. Target: live-trigger-only Super wakes,
-FIFO selection under computer-scoped arrival ordinals, boot-does-not-schedule assertion,
-settlement (tombstone) of the nine 08-19 cancel producer reports, and 5x normal-boot probe
+completed 2026-09-03 (deployed commits `2bf93be7`..`3fe61c54`). Target achieved:
+live-trigger-only Super wakes, FIFO selection under computer-scoped arrival ordinals
+across 4 sequential cycles without supersession, boot-does-not-schedule assertion
+verified across epochs, settlement (tombstone) of the nine 08-19 cancel producer
+reports via dedicated store reducer with claim-scan retired, exact-run resume structurally
+isolated, terminal-event probe negative and positive verified, and normal-boot stability
 without `RUNTIME_MAINTENANCE_HOLD` on staging `computer-03335285269bdba4f94377e56879f9e6`
-(pre-A checkpoint `99949fe2`). Boot probes are partially proven
-([evidence](evidence/effects-red-substrate-boot-probe-partial-evidence-2026-09-03.md));
-scheduling acceptance is open. Effects remain OFF.
+(pre-A checkpoint `99949fe2`). Deployed evidence:
+[`evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md`](evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md).
+Effects remain OFF.
 
-## Queued Definition — RLM Session Interpreter Cutover
+## Active Definition — RLM Session Interpreter Cutover
 
 [`definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md`](definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md)
-is **paused pending Definition 1 deployed acceptance**. Target: persistent Session worker per
+is **unblocked and active** following Definition 1 completion. Target: persistent Session worker per
 activation in `cmd/capsule-broker` and `internal/yaegikernel`, prebound `choir` modules,
 SIGKILL reaped <500ms, ambient JSON tool removal from CoSuper prompt, live sealed proof on staging.
-
 ## Queued Definition — Supervised Self-Development on RLM
 
 [`definitions/choir-supervised-self-development-on-rlm-2026-09-02.md`](definitions/choir-supervised-self-development-on-rlm-2026-09-02.md)

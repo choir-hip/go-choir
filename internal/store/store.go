@@ -1922,9 +1922,14 @@ func (s *Store) latestLifecycleRunByAgent(ctx context.Context, ownerID, computer
 	if agentID == "" {
 		return types.RunRecord{}, ErrLifecycleInvalidTransition
 	}
-	graph := s.ogReadStore
+	// Scheduling authority reads the PRIMARY object graph, not the read pool:
+	// the read pool's transaction snapshot can predate a just-committed mint,
+	// and a stale "no resident" answer here mints a second Super and breaks the
+	// I26 singleton (one active Super run per computer). This query is bounded
+	// (refs scan + single object loads), so primary reads are proportionate.
+	graph := s.ogStore
 	if graph == nil {
-		graph = s.ogStore
+		graph = s.ogReadStore
 	}
 	if graph == nil {
 		return types.RunRecord{}, fmt.Errorf("lifecycle runs: object graph not initialized")
