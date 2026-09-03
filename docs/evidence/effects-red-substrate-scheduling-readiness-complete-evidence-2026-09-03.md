@@ -30,9 +30,11 @@ are proven on deployed staging under the complete landing loop chain.
 4. **Criterion 4 (Producer Report Settlement)**: PROVEN via CAS reducer command settling
    all undelivered 08-19 storm cancel reports; `claimedPersistentSuperProducerReportIDs`
    metadata claim-scan retired and code-deleted; pending selectors exclude settled reports.
-5. **Criterion 5 (Terminal-Event Probe: Negative and Positive)**: PROVEN. Terminal Super
+3. **Criterion 5 (Terminal-Event Probe: Negative and Positive)**: PROVEN. Terminal Super
    with 4 pending backlog items minted zero successors from undelivered backlog (negative
-   assertion, `maybeContinuePersistentSuperInbox` deleted as wake source). Live Texture rewake
+   assertion; `maybeContinuePersistentSuperInbox` narrowed to Texture rewake plus
+   delivery-marking — it no longer reconciles or mints, but the function still exists
+   and is invoked at its call sites). Live Texture rewake
    chain intact (positive assertion: terminal Super -> Texture turn -> live wake -> new Super).
 6. **Criterion 6 (Normal Boot Stability)**: PROVEN across >15 consecutive normal boots
    (epochs 844..860) reaching guest `/health` 200 within 60s hard timeout without

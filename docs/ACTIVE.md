@@ -48,7 +48,7 @@ Evidence: [`evidence/account-recovery-yusefnathanson-2026-08-27.md`](evidence/ac
 ## Completed Definition — Substrate & Scheduling Readiness
 
 [`definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md`](definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md)
-completed 2026-09-03 (deployed commits `2bf93be7`..`3fe61c54`). Target achieved:
+completed 2026-09-03 (deployed commits `2bf93be7`..`bf6c51c0`). Target achieved:
 live-trigger-only Super wakes, FIFO selection under computer-scoped arrival ordinals
 across 4 sequential cycles without supersession, boot-does-not-schedule assertion
 verified across epochs, settlement (tombstone) of the nine 08-19 cancel producer
@@ -116,8 +116,8 @@ to reopen it.
 is superseded historical evidence. Its policy, email, and restore reasoning remain
 citable historical evidence; it is not an executable entrypoint. The tape-recovery Definition
 owns restore substrate receipts. Active execution lives solely in
-[`definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md`](definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md)
-(revised 2026-09-03, boot-is-recovery ontology).
+[`definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md`](definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md)
+(activated 2026-09-03 following Definition 1 terminal receipt; Definition 1 is completed evidence, not an entrypoint).
 
 The scope-disjoint
 [`choir-instruction-substrate-prune-2026-08-11.md`](definitions/choir-instruction-substrate-prune-2026-08-11.md)
@@ -150,7 +150,7 @@ plus the disposed Mission 0 direct-key ceremony at
 recovery bypass, SSH, or weaker authorization is admissible).
 They are historical evidence, not rollback or live schedule; effects remain OFF.
 The active executable slice and `next_action` live solely in
-[`definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md`](definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md).
+[`definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md`](definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md).
 The tape-recovery restore proof is paid (complete 2026-08-15).
 Completed Definitions are historical evidence, not executable entrypoints; full
 claims and receipts remain in their source files and `mission-graph.yaml`:
@@ -193,10 +193,10 @@ superseded, or historical as stated by their source Definitions, not entrypoints
 
 ## Invocation
 
-Invoke the active Definition 1 via
-`/goal docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md`.
-Substrate and scheduling readiness executes on staging
-`computer-03335285269bdba4f94377e56879f9e6` under the boot-is-recovery ontology.
+Invoke the active Definition 2 via
+`/goal docs/definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md`.
+RLM session interpreter cutover executes on staging
+`computer-03335285269bdba4f94377e56879f9e6` following Definition 1 completion.
 
 ## Unowned External Work
 

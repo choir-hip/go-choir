@@ -2,7 +2,7 @@
 
 - Date: 2026-09-03
 - Mutation class of this receipt: green (documentation); the repair it directs is red (proxy routing + owner-authority surface)
-- Status: documented before any code fix (problem-documentation-first)
+- Status: process deviation recorded — problem documentation and proxy fix shipped in the same commit (`d76c788c`); no advance-docs commit and no recorded exception justification. Repair itself verified (proxy route + scope gating in tree; criterion 4 re-proven through the product path after `d76c788c`).
 - Discovered by: deployed acceptance for Definition 1 criterion 4 on staging `2bf93be7`
 
 ## The Problem

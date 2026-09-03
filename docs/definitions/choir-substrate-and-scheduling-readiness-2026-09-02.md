@@ -187,13 +187,14 @@ now:
     consequence: "Substrate and scheduling readiness established. Deployed staging computer executes competing requests in strict FIFO arrival-ordinal order without supersession; boot never schedules; rare-reboot resume is structurally isolated; producer reports settled; terminal events wake Texture only; normal boots reach health 200 within deadline without hold. Unblocks Phase 2 (choir-rlm-session-interpreter-cutover-2026-09-02.md)."
   evidence_refs:
     - "docs/evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md"
+    - "docs/evidence/effects-red-substrate-scheduling-review-2026-09-03.md"
     - "docs/evidence/effects-red-boot-as-scheduler-ontological-error-2026-09-03.md"
     - "docs/evidence/effects-red-substrate-boot-probe-partial-evidence-2026-09-03.md"
     - "docs/evidence/effects-red-super-texture-rewake-2026-08-20.md"
     - "docs/evidence/effects-red-assignment-supersession-loop-2026-08-21.md"
     - "docs/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md"
-  blocker_or_risk: none
-  next_action: none
+  blocker_or_risk: "Open residuals per independent review effects-red-substrate-scheduling-review-2026-09-03: (1) acceptance proofs ran on guest binary 3fe61c54; guest refresh to bf6c51c0 and re-proof owed; (2) resume-hang residual (fe92ea2b, 52 stale candidates; candidate repairs unpaid); (3) boots 856-860 lack recorded boot-log receipts."
+  next_action: "Follow-up staging run: refresh guest to bf6c51c0, re-run criteria 1-3 and 5 with recorded boot receipts, close or ratify the resume-hang residual, amend terminal landing chain."
 
 receipts:
   - id: substrate-scheduling-baseline-2026-09-02

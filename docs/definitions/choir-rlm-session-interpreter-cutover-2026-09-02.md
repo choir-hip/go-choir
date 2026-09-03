@@ -105,19 +105,19 @@ measures:
     cannot_prove: "cannot prove model reasoning quality"
 
 now:
-  status: blocked_incomplete
-  slice: "RLM Session Interpreter Cutover definition baseline"
+  status: working
+  slice: "RLM Session Interpreter Cutover active execution"
   question: none
   reconciliation:
-    observed_at: "2026-09-02T21:05:00Z"
-    source_ref: "main@a52ef06d"
-    deploy_identity: "staging https://choir.news; computer-03335285269bdba4f94377e56879f9e6 active epoch 831"
+    observed_at: "2026-09-03T15:00:00Z"
+    source_ref: "main@bf6c51c0"
+    deploy_identity: "staging https://choir.news proxy deployed_commit bf6c51c0; guest binary 3fe61c54 (refresh to final commit owed); computer-03335285269bdba4f94377e56879f9e6"
     authority_identities:
-      - "docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md"
-      - "docs/definitions/choir-private-go-actor-kernel-2026-08-12.md"
       - "docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md"
+      - "docs/evidence/effects-red-substrate-scheduling-review-2026-09-03.md"
+      - "docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md"
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "git status --short clean on main@a52ef06d"
+    worktree_inventory_ref: "git status --short; review repairs committed"
     status: reconciled
   candidate:
     id: none
@@ -128,20 +128,22 @@ now:
     digest: none
     scope: []
   decision:
-    selected: "Wire session persistence and prebound choir modules directly into the live cmd/capsule-broker actuator; remove legacy JSON tools from CoSuper prompt schema upon cutover."
+    selected: "Begin RLM cutover execution: session persistence and prebound choir modules in cmd/capsule-broker and internal/yaegikernel; code work may proceed immediately."
     kind: architecture
     status: settled
     source: owner
-    evidence_ref: "docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md"
-    owner_ratification_ref: "owner direction 2026-09-02"
-    recorded_at: "2026-09-02T21:05:00Z"
-    consequence: "Execution evolves yaegikernel and capsule-broker to persistent session architecture; CoSuper executes purely via model-written Go."
+    evidence_ref: "docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md"
+    owner_ratification_ref: "Definition 1 terminal receipt 2026-09-03; review receipt effects-red-substrate-scheduling-review-2026-09-03"
+    recorded_at: "2026-09-03T15:00:00Z"
+    consequence: "Def 2 code work proceeds; its live sealed proof on staging is gated on a guest refresh to the final commit (guest still runs 3fe61c54 per observability)."
   evidence_refs:
     - "docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md"
+    - "docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md"
+    - "docs/evidence/effects-red-substrate-scheduling-review-2026-09-03.md"
     - "cmd/capsule-broker/main.go"
     - "internal/yaegikernel/eval.go"
-  blocker_or_risk: "Strict serialization: Def 1 substrate readiness must pass deployed acceptance before Def 2 live sealed proof can run on staging."
-  next_action: "Remain paused until Definition 1 achieves complete deployed acceptance on staging."
+  blocker_or_risk: "Live sealed proof requires guest refresh to bf6c51c0 and closure of the Definition 1 resume-hang residual; code work (session worker, prebound modules, containment tests) is unblocked."
+  next_action: "Implement the runtime route flag (actuator=tools vs actuator=rlm) and persistent Session worker per the acceptance criteria."
 
 receipts:
   - id: rlm-cutover-baseline-2026-09-02
