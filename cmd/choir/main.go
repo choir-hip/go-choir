@@ -1213,7 +1213,7 @@ func runSelfDevelopmentModeSet(args []string, stdout, stderr io.Writer) int {
 
 func runComputer(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir computer: subcommand required (status|replay-completeness|checkpoint|import-residue-snapshot|replace-workspace|rematerialize-from-tape|restore|bootstrap-chain|stop|start|restart|refresh)")
+		fmt.Fprintln(stderr, "choir computer: subcommand required (status|replay-completeness|checkpoint|import-residue-snapshot|replace-workspace|rematerialize-from-tape|restore|bootstrap-chain|producer-reports|settle-producer-reports|stop|start|restart|refresh)")
 		return 2
 	}
 	switch args[0] {
@@ -1233,6 +1233,10 @@ func runComputer(args []string, stdout, stderr io.Writer) int {
 		return runComputerRestore(args[1:], stdout, stderr)
 	case "bootstrap-chain":
 		return runComputerBootstrapChain(args[1:], stdout, stderr)
+	case "producer-reports":
+		return runComputerProducerReports(args[1:], stdout, stderr)
+	case "settle-producer-reports":
+		return runComputerSettleProducerReports(args[1:], stdout, stderr)
 	case "stop", "start", "restart", "refresh", "recover":
 		return runComputerAction(args[1:], args[0], stdout, stderr)
 	default:
@@ -1469,6 +1473,85 @@ func runComputerBootstrapChain(args []string, stdout, stderr io.Writer) int {
 	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/bootstrap-chain"
 	if err := c.do(http.MethodPost, path, nil, &response); err != nil {
 		fmt.Fprintf(stderr, "choir computer bootstrap-chain: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, response)
+}
+
+func runComputerProducerReports(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir computer producer-reports", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	agentID := fs.String("agent-id", "", "Filter by producer agent ID")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir computer producer-reports: %v\n", err)
+		return 2
+	}
+	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir computer producer-reports: --computer is required")
+		return 2
+	}
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/producer-reports"
+	if strings.TrimSpace(*agentID) != "" {
+		path += "?agent_id=" + url.QueryEscape(strings.TrimSpace(*agentID))
+	}
+	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
+		fmt.Fprintf(stderr, "choir computer producer-reports: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, response)
+}
+
+func runComputerSettleProducerReports(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir computer settle-producer-reports", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	commandID := fs.String("command-id", "", "Idempotency command ID (generated if empty)")
+	trajectoryID := fs.String("trajectory", "", "Trajectory ID")
+	reportIDsFlag := fs.String("report-ids", "", "Comma-separated report IDs to settle")
+	reason := fs.String("reason", "", "Settlement reason")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir computer settle-producer-reports: %v\n", err)
+		return 2
+	}
+	if strings.TrimSpace(*computerID) == "" {
+		fmt.Fprintln(stderr, "choir computer settle-producer-reports: --computer is required")
+		return 2
+	}
+	var reportIDs []string
+	if strings.TrimSpace(*reportIDsFlag) != "" {
+		for _, id := range strings.Split(*reportIDsFlag, ",") {
+			if trimmed := strings.TrimSpace(id); trimmed != "" {
+				reportIDs = append(reportIDs, trimmed)
+			}
+		}
+	}
+	for _, arg := range fs.Args() {
+		if trimmed := strings.TrimSpace(arg); trimmed != "" {
+			reportIDs = append(reportIDs, trimmed)
+		}
+	}
+	if len(reportIDs) == 0 {
+		fmt.Fprintln(stderr, "choir computer settle-producer-reports: at least one report ID is required (via --report-ids or positional args)")
+		return 2
+	}
+	cmdID := strings.TrimSpace(*commandID)
+	if cmdID == "" {
+		cmdID = fmt.Sprintf("cmd-settle-producer-reports-%d", time.Now().UTC().UnixNano())
+	}
+	req := map[string]any{
+		"command_id":    cmdID,
+		"trajectory_id": strings.TrimSpace(*trajectoryID),
+		"report_ids":    reportIDs,
+		"reason":        strings.TrimSpace(*reason),
+	}
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/settle-producer-reports"
+	if err := c.do(http.MethodPost, path, req, &response); err != nil {
+		fmt.Fprintf(stderr, "choir computer settle-producer-reports: %v\n", err)
 		return 1
 	}
 	return writeJSON(stdout, response)

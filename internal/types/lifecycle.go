@@ -32,6 +32,7 @@ const (
 	LifecycleRecordCoSuperAssignment      LifecycleCommandKind = "record_co_super_assignment"
 	LifecycleCancelCoSuperAssignment      LifecycleCommandKind = "cancel_co_super_assignment"
 	LifecycleSetCoSuperCapsuleDisposition LifecycleCommandKind = "set_co_super_capsule_disposition"
+	LifecycleSettleProducerReports        LifecycleCommandKind = "settle_producer_reports"
 )
 
 type LifecycleEventKind string
@@ -362,6 +363,17 @@ type SettleLifecycleTrajectoryRequest struct {
 	TrajectoryID             string `json:"trajectory_id"`
 	ExpectedLifecycleVersion int64  `json:"expected_lifecycle_version"`
 	ExpectedHeadRevisionID   string `json:"expected_head_revision_id"`
+}
+
+type SettleLifecycleProducerReportsRequest struct {
+	OwnerID             string            `json:"owner_id"`
+	ComputerID          string            `json:"computer_id"`
+	CommandID           string            `json:"command_id"`
+	CommandDigest       string            `json:"command_digest"`
+	TrajectoryID        string            `json:"trajectory_id,omitempty"`
+	ReportIDs           []string          `json:"report_ids"`
+	Reason              string            `json:"reason"`
+	TerminalDisposition UpdateDisposition `json:"terminal_disposition,omitempty"`
 }
 
 type CommitLifecycleOwnerCorrection struct {

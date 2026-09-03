@@ -10,6 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -134,14 +135,103 @@ func TestPersistentSuperReconcileMintsTextureRewakeAfterTerminalSelfDevelopmentS
 		t.Fatal(err)
 	}
 
-	// Reconcile must natively mint the Texture rewake and start replacement Super.
+	// Terminal event wakes Texture (queues owner instruction on Texture trajectory), never mints Super directly.
 	rewakeErr := runtime.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, ownerID)
-	t.Logf("rewakeErr: %v", rewakeErr)
-	updates, listErr := runtime.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, superAgentID, 100)
-	t.Logf("listControls count=%d err=%v", len(updates), listErr)
-	for i, u := range updates {
-		t.Logf("update[%d]: ID=%s Traj=%s TargetWork=%s", i, u.UpdateID, u.TrajectoryID, u.TargetWorkItemID)
+	if rewakeErr != nil {
+		t.Fatalf("rewake Texture error: %v", rewakeErr)
 	}
+	// Before Texture turn commits a new execution_request, reconcile mints ZERO Super:
+	noSuper, err := runtime.reconcilePersistentSuperActor(ctx, ownerID, superAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noSuper != nil {
+		t.Fatalf("expected nil Super before Texture turn commits execution_request, got: %+v", noSuper)
+	}
+
+	// Texture turn commits a NEW typed execution_request in response to the instruction:
+	docID, _, textureWorkID, trajectoryID, superWorkID, _ := selfDevelopmentTextureJoinIDs(ownerID, computerID, operation.OperationID)
+	textureAgentID := agentprofile.Texture + ":" + docID
+	snapshot, err := productStore.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	textureAgent, err := productStore.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packet, err := PrepareTextureControlPacket(types.CoagentSourcePacketPayload{
+		SchemaVersion: types.CoagentSourcePacketSchemaV1,
+		Kind:          "execution_request",
+		Summary:       "Continue self-development operation",
+		Sources: []types.CoagentPacketSource{{
+			SourceID: "src-operation",
+			Kind:     sourcecontract.SourceKindCapsuleBundle,
+			Target:   types.CoagentPacketSourceTarget{URI: "operation:" + operation.OperationID},
+		}},
+		Actions: []types.CoagentPacketAction{{
+			Type:      "run_command",
+			Objective: originalPrompt,
+			Safety: types.CoagentPacketActionSafety{
+				MutationClass: "green",
+				Network:       "forbidden",
+				FileMutation:  "forbidden",
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := BuildTextureLifecycleControlContent(packet, superAgentID, superWorkID)
+	payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedInstructions, err := productStore.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, computerID, trajectoryID, textureAgentID, snapshot.HeadRevision.RevisionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ownerInstructions []types.TextureTurnOwnerInstruction
+	for _, inst := range expectedInstructions {
+		ownerInstructions = append(ownerInstructions, types.TextureTurnOwnerInstruction{
+			InstructionID: inst.InstructionID,
+			RequestID:     inst.RequestID,
+		})
+	}
+	turn := types.ApplyTextureTurnRequest{
+		OwnerID:                        ownerID,
+		ComputerID:                     computerID,
+		CommandID:                      "turn:selfdev-texture-rewake:" + operation.OperationID,
+		DocumentID:                     docID,
+		TrajectoryID:                   trajectoryID,
+		CallerAgentID:                  textureAgentID,
+		CallerRunID:                    runtime.selfDevelopmentCallerRunID(ownerID, computerID, trajectoryID),
+		ExpectedLifecycleVersion:       snapshot.Trajectory.LifecycleVersion,
+		ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion,
+		ExpectedHeadRevisionID:         snapshot.HeadRevision.RevisionID,
+		CallerWorkItemID:               textureWorkID,
+		CallerWorkDisposition:          types.WorkItemOpen,
+		Outcome:                        types.TextureTurnWait,
+		Reason:                         "continue after terminal Super",
+		Controls: []types.TextureTurnControl{{
+			ControlID:        "control-rewake-" + operation.OperationID,
+			TargetAgentID:    superAgentID,
+			TargetWorkItemID: superWorkID,
+			Packet:           packet,
+			Content:          content,
+			PayloadDigest:    payloadDigest,
+		}},
+		OwnerInstructions: ownerInstructions,
+	}
+	turn.CommandDigest, err = store.ComputeApplyTextureTurnDigest(turn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := productStore.ApplyTextureTurn(ctx, turn); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now the live trigger wakes Super and mints exactly one replacement Super:
 	rewokeSuper, err := runtime.reconcilePersistentSuperActor(ctx, ownerID, superAgentID)
 	if err != nil {
 		t.Fatalf("reconcile after terminal Super: %v", err)

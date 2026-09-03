@@ -155,7 +155,7 @@ measures:
 
 now:
   status: working
-  slice: "Wake-path ontological repair: structural isolation, live-trigger FIFO proof, store-layer settlement"
+  slice: "Deployed staging proof: live-trigger FIFO, boot-is-recovery, rare-reboot resume, producer report settlement, and 5x boot probe"
   question: none
   reconciliation:
     observed_at: "2026-09-03T02:20:00Z"
@@ -191,8 +191,8 @@ now:
     - "docs/evidence/effects-red-super-texture-rewake-2026-08-20.md"
     - "docs/evidence/effects-red-assignment-supersession-loop-2026-08-21.md"
     - "docs/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md"
-  blocker_or_risk: "Test suite currently enforces the wrong ontology (backlog -> new Super as success case); contract flip across lifecycle_control_injection_test.go and survivor/continuation tests is the bulk of the repair. Panel medium-confidence flag: staging ordinals 2/3 admissibility as Super controls is unconfirmed and gates criterion 1."
-  next_action: "Implement the wake-path repair per the revised problem-receipt repair direction (structural isolation first), then run the six acceptance criteria in order against staging."
+  blocker_or_risk: "None for implementation (5/5 deterministic criteria pass locally); staging ordinals 2/3 admissibility and live trigger delivery must be confirmed on deployed environment."
+  next_action: "Commit and push to origin/main, monitor CI and staging deploy, verify deployed environment identity, and execute deployed acceptance proofs across criteria 1-6."
 
 receipts:
   - id: substrate-scheduling-baseline-2026-09-02
@@ -232,6 +232,24 @@ receipts:
       deploy_ref: not_applicable
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
+    registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
+  - id: substrate-scheduling-wake-path-and-settlement-repair-2026-09-03
+    boundary: implement
+    commit_or_artifact: "pending landing"
+    proof_refs:
+      - "internal/agentcore/scheduling_readiness_test.go"
+      - "internal/store/producer_report_settlement_test.go"
+    rollback_ref: "git revert of repair commits; checkpoint 99949fe2 remains the immutable pre-A fence"
+    disposition: "implemented; structurally isolates exact-run resume, deletes backlog selection as a wake source at boot/terminal events, settles the nine 08-19 cancel producer reports via dedicated CAS lifecycle reducer with claim-scan retired, flips test contract across unit suite"
+    problem_ref: boot-as-scheduler-ontological-error-2026-09-03
+    authorization_ref: "owner direction 2026-09-03; consensus adjudication 2026-09-03"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: pending
+      ci_ref: pending
+      deploy_ref: pending
+      environment_identity: pending
+      deployed_acceptance: pending
     registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
 ---
 

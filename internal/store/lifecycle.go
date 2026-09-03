@@ -386,6 +386,11 @@ func ComputeSettleLifecycleTrajectoryDigest(req types.SettleLifecycleTrajectoryR
 	return lifecycleDigest(req)
 }
 
+func ComputeSettleLifecycleProducerReportsDigest(req types.SettleLifecycleProducerReportsRequest) (string, error) {
+	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
+	return lifecycleDigest(req)
+}
+
 func ComputeCancelLifecycleDigest(req types.CancelLifecycleRequest) (string, error) {
 	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
 	// RequestedLifecycleVersion preserves the caller's original CAS identity
@@ -4597,4 +4602,209 @@ func (s *Store) CancelLifecycleTrajectory(ctx context.Context, req types.CancelL
 	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: eventObj.CanonicalID}, objectgraph.ObjectCondition{CanonicalID: receiptObj.CanonicalID})
 	objects = append(objects, eventObj, receiptObj)
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Document: &document, Revision: &head, Events: []types.LifecycleEvent{event}})
+}
+
+func (s *Store) ListPendingProducerReports(ctx context.Context, ownerID, computerID, requestedByAgentID string) ([]types.CoagentSourcePacket, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	targetAgentID := agentprofile.Super + ":" + ownerID
+	updates, err := s.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, targetAgentID)
+	if err != nil {
+		return nil, err
+	}
+	var out []types.CoagentSourcePacket
+	for _, u := range updates {
+		if u.Direction != types.LifecyclePacketDirectionProducerReport {
+			continue
+		}
+		if u.Disposition != types.UpdatePending {
+			continue
+		}
+		if u.DeliveredAt != nil || strings.TrimSpace(u.DeliveredToRunID) != "" {
+			continue
+		}
+		if requestedByAgentID != "" && strings.TrimSpace(u.AgentID) != strings.TrimSpace(requestedByAgentID) {
+			continue
+		}
+		out = append(out, u)
+	}
+	return out, nil
+}
+
+func (s *Store) SettleLifecycleProducerReports(ctx context.Context, req types.SettleLifecycleProducerReportsRequest) (types.LifecycleResult, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	req.OwnerID, req.ComputerID = ownerID, computerID
+	req.CommandID = strings.TrimSpace(req.CommandID)
+	if req.CommandID == "" {
+		return types.LifecycleResult{}, fmt.Errorf("settle producer reports: command_id is required")
+	}
+	computedDigest, digestErr := ComputeSettleLifecycleProducerReportsDigest(req)
+	if err := requireLifecycleDigest(req.CommandDigest, computedDigest, digestErr); err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if replay, found, replayErr := s.replayLifecycleCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || replayErr != nil {
+		return replay, replayErr
+	}
+	if len(req.ReportIDs) == 0 {
+		return types.LifecycleResult{}, fmt.Errorf("settle producer reports: report_ids must not be empty")
+	}
+	terminalDisposition := req.TerminalDisposition
+	if terminalDisposition == "" {
+		terminalDisposition = types.UpdateLate
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if reason == "" {
+		reason = "settled producer report as late evidence"
+	}
+
+	graph := s.ogStore
+	if graph == nil {
+		return types.LifecycleResult{}, fmt.Errorf("settle producer reports: object graph not initialized")
+	}
+
+	now := time.Now().UTC()
+	var conditions []objectgraph.ObjectCondition
+	var objects []objectgraph.Object
+	var events []types.LifecycleEvent
+	var eventObjs []objectgraph.Object
+	var settledUpdates []types.CoagentSourcePacket
+
+	trajectoryID := strings.TrimSpace(req.TrajectoryID)
+	seenReports := make(map[string]bool)
+
+	type reportTarget struct {
+		obj    objectgraph.Object
+		update types.CoagentSourcePacket
+	}
+	var targets []reportTarget
+
+	for _, reportID := range req.ReportIDs {
+		reportID = strings.TrimSpace(reportID)
+		if reportID == "" || seenReports[reportID] {
+			continue
+		}
+		seenReports[reportID] = true
+
+		objs, err := s.ogListAllByMetadata(ctx, ogKindWorkerUpdate, "update_id", reportID)
+		if err != nil {
+			return types.LifecycleResult{}, fmt.Errorf("settle producer report %s: %w", reportID, err)
+		}
+		var matchedObj *objectgraph.Object
+		var matchedUpdate types.CoagentSourcePacket
+		for i := range objs {
+			if objs[i].OwnerID != ownerID || (computerID != "" && objs[i].ComputerID != computerID) {
+				continue
+			}
+			var u types.CoagentSourcePacket
+			if err := ogDecode(objs[i], &u); err != nil {
+				continue
+			}
+			if strings.TrimSpace(u.UpdateID) == reportID {
+				matchedObj = &objs[i]
+				matchedUpdate = u
+				break
+			}
+		}
+		if matchedObj == nil {
+			return types.LifecycleResult{}, fmt.Errorf("settle producer report %s: %w", reportID, ErrNotFound)
+		}
+
+		if matchedUpdate.Disposition != types.UpdatePending {
+			return types.LifecycleResult{}, fmt.Errorf("settle producer report %s: invalid disposition %q (want %q): %w", reportID, matchedUpdate.Disposition, types.UpdatePending, ErrLifecycleInvalidTransition)
+		}
+		if matchedUpdate.DeliveredAt != nil || strings.TrimSpace(matchedUpdate.DeliveredToRunID) != "" {
+			return types.LifecycleResult{}, fmt.Errorf("settle producer report %s: already delivered to run %q: %w", reportID, matchedUpdate.DeliveredToRunID, ErrLifecycleInvalidTransition)
+		}
+
+		if trajectoryID == "" {
+			trajectoryID = strings.TrimSpace(matchedUpdate.TrajectoryID)
+		}
+		targets = append(targets, reportTarget{obj: *matchedObj, update: matchedUpdate})
+	}
+
+	if trajectoryID == "" {
+		return types.LifecycleResult{}, fmt.Errorf("settle producer reports: trajectory_id required")
+	}
+
+	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return types.LifecycleResult{}, fmt.Errorf("settle producer reports trajectory %s: %w", trajectoryID, err)
+	}
+
+	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash})
+	seq := trajectory.ReducerSeq
+
+	for i, target := range targets {
+		seq++
+		update := target.update
+		update.Disposition = terminalDisposition
+		update.DispositionReason = reason
+		update.DispositionRef = req.CommandID
+		update.LifecycleVersion++
+		update.ReducerSeq = seq
+
+		meta := lifecycleMetadata("update_id", update.UpdateID, computerID, trajectoryID, seq)
+		meta["producer_update_id"] = update.ProducerUpdateID
+		meta["target_agent_id"] = update.TargetAgentID
+		key := update.TrajectoryID + "\x00" + update.TargetAgentID + "\x00" + update.AgentID + "\x00" + update.ProducerUpdateID
+		updatedObj, err := lifecycleObject(ogKindWorkerUpdate, ownerID, computerID, key, update, meta, target.obj.CreatedAt, now)
+		if err != nil {
+			return types.LifecycleResult{}, err
+		}
+		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: target.obj.CanonicalID, Exists: true, ExpectedContentHash: target.obj.ContentHash})
+		objects = append(objects, updatedObj)
+		settledUpdates = append(settledUpdates, update)
+
+		event := types.LifecycleEvent{
+			EventID:        req.CommandID + ":" + fmt.Sprintf("%d", i+1),
+			OwnerID:        ownerID,
+			ComputerID:     computerID,
+			TrajectoryID:   trajectoryID,
+			UpdateID:       update.UpdateID,
+			Kind:           types.LifecycleUpdateLate,
+			ReducerVersion: types.LifecycleReducerVersion,
+			ReducerSeq:     seq,
+			CommandID:      req.CommandID,
+			CommandDigest:  req.CommandDigest,
+			Reason:         reason,
+			CreatedAt:      now,
+		}
+		eventObj, err := lifecycleObject(ogKindLifecycleEvent, ownerID, computerID, event.EventID, event, lifecycleMetadata("event_id", event.EventID, computerID, trajectoryID, seq), now, now)
+		if err != nil {
+			return types.LifecycleResult{}, err
+		}
+		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: eventObj.CanonicalID})
+		objects = append(objects, eventObj)
+		events = append(events, event)
+		eventObjs = append(eventObjs, eventObj)
+	}
+
+	trajectory.ReducerSeq = seq
+	trajectory.LifecycleVersion++
+	trajectory.UpdatedAt = now
+	updatedTrajectoryObj, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, trajectory.TrajectoryID, trajectory, lifecycleMetadata("trajectory_id", trajectory.TrajectoryID, computerID, trajectory.TrajectoryID, seq), trajectoryObj.CreatedAt, now)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	objects = append(objects, updatedTrajectoryObj)
+
+	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, trajectoryID, req.CommandID, req.CommandDigest, types.LifecycleSettleProducerReports, seq, eventObjs)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: receiptObj.CanonicalID})
+	objects = append(objects, receiptObj)
+
+	result := types.LifecycleResult{
+		Receipt:    receipt,
+		Trajectory: trajectory,
+		Events:     events,
+		Controls:   settledUpdates,
+	}
+	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, result)
 }

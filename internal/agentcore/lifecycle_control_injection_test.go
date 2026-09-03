@@ -352,11 +352,16 @@ func TestPersistentSuperLifecycleControlsStayTrajectoryIsolatedThenReconcile(t *
 		t.Fatal(err)
 	}
 	rt.maybeContinuePersistentSuperInbox(context.Background(), &bootRun)
-	secondRun, err := rt.latestActiveRunByAgent(context.Background(), ownerID, superAgent.AgentID)
-	if err != nil || secondRun.RunID == firstRun.RunID || lifecycleControlTrajectoryForRun(&secondRun) != secondTrajectory {
+	// Terminal/passivation events wake Texture, never select backlog:
+	if _, err := rt.latestActiveRunByAgent(context.Background(), ownerID, superAgent.AgentID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("passivation inbox continuation minted unexpected Super from backlog: err=%v", err)
+	}
+	// The next live trigger drains the pending backlog in FIFO order:
+	secondRun, err := rt.ReconcileCoagentWake(context.Background(), ownerID, superAgent.AgentID)
+	if err != nil || secondRun == nil || secondRun.RunID == firstRun.RunID || lifecycleControlTrajectoryForRun(secondRun) != secondTrajectory {
 		t.Fatalf("second trajectory reconciliation=%+v err=%v dispatches=%v", secondRun, err, dispatches)
 	}
-	secondPayload, err := rt.pendingCoagentUpdatesForRun(context.Background(), &secondRun, ownerID, superAgent.AgentID, 10)
+	secondPayload, err := rt.pendingCoagentUpdatesForRun(context.Background(), secondRun, ownerID, superAgent.AgentID, 10)
 	if err != nil || len(secondPayload) != 1 || secondPayload[0].TrajectoryID != secondTrajectory {
 		t.Fatalf("second run payload=%+v err=%v", secondPayload, err)
 	}
@@ -440,11 +445,16 @@ func TestPersistentSuperReconcilesOtherTrajectoryAfterTerminalRun(t *testing.T) 
 		t.Fatal(err)
 	}
 	rt.maybeContinuePersistentSuperInbox(context.Background(), first)
-	second, err := rt.latestActiveRunByAgent(context.Background(), ownerID, superAgent.AgentID)
-	if err != nil || second.RunID == first.RunID || lifecycleControlTrajectoryForRun(&second) != secondTrajectory {
-		t.Fatalf("terminal continuation=%+v err=%v", second, err)
+	// Terminal events wake Texture, never select backlog:
+	if _, err := rt.latestActiveRunByAgent(context.Background(), ownerID, superAgent.AgentID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("terminal inbox continuation minted unexpected Super from backlog: err=%v", err)
 	}
-	payload, err := rt.pendingCoagentUpdatesForRun(context.Background(), &second, ownerID, superAgent.AgentID, 10)
+	// The next live trigger drains the pending backlog in FIFO order:
+	second, err := rt.ReconcileCoagentWake(context.Background(), ownerID, superAgent.AgentID)
+	if err != nil || second == nil || second.RunID == first.RunID || lifecycleControlTrajectoryForRun(second) != secondTrajectory {
+		t.Fatalf("live trigger reconciliation=%+v err=%v", second, err)
+	}
+	payload, err := rt.pendingCoagentUpdatesForRun(context.Background(), second, ownerID, superAgent.AgentID, 10)
 	if err != nil || len(payload) != 1 || payload[0].TrajectoryID != secondTrajectory || payload[0].TrajectoryID == firstTrajectory {
 		t.Fatalf("terminal continuation payload=%+v err=%v", payload, err)
 	}
@@ -2044,40 +2054,35 @@ func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testi
 	}
 }
 
-func TestPersistentSuperContinuesFromCoSuperSystemCancellationWithoutTextureRewake(t *testing.T) {
-	rt, s := testRuntime(t)
-	var wakes []string
-	rt.SetDispatchActor(func(_ context.Context, _, _, agentID, kind, _, _, _ string) error {
-		wakes = append(wakes, kind+":"+agentID)
-		return nil
-	})
-	ownerID := "owner-super-system-cancel-continue"
+func seedCancelledCoSuperReport(t *testing.T, rt *Runtime, s *store.Store, ownerID, suffix string) (*types.RunRecord, types.CoagentSourcePacket, string) {
+	t.Helper()
 	superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-system-cancel-continue", superAgent.AgentID, agentprofile.Super)
+	fixture := seedTextureLifecycleControl(t, s, ownerID, suffix, superAgent.AgentID, agentprofile.Super)
 	firstRun, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
 	if err != nil || firstRun == nil {
 		t.Fatalf("first run=%+v err=%v", firstRun, err)
 	}
 
-	assignmentID := "assignment-super-system-cancel-continue"
+	assignmentID := "assignment-" + suffix
 	assignedAgentID := "co-super:" + assignmentID
 	assignedWorkID := "work:" + assignmentID
-	capability := "opaque-test-capability"
+	capability := "opaque-test-capability-" + suffix
+	char := string(suffix[len(suffix)-1])
 	openReq := types.OpenCoSuperAssignmentRequest{
 		CommandID: "open-" + assignmentID, AssignmentID: assignmentID,
 		Binding: types.CoSuperAssignmentBinding{
 			OwnerID: ownerID, ComputerID: rt.TextureComputerID(), TrajectoryID: fixture.trajectoryID,
 			ParentAgentID: superAgent.AgentID, ParentRunID: firstRun.RunID,
-			ParentDecisionID: "decision:sha256:" + strings.Repeat("a", 64), ParentControlID: fixture.control.UpdateID,
+			ParentDecisionID: "decision:sha256:" + strings.Repeat(char, 64), ParentControlID: fixture.control.UpdateID,
 			ParentWorkItemID: fixture.workID, AssignedWorkItemID: assignedWorkID, AssignedAgentID: assignedAgentID,
 			Kind: types.CoSuperAssignmentImplementation, Attempt: 1,
-			ScopeDigest: "sha256:" + strings.Repeat("1", 64), RequestDigest: "sha256:" + strings.Repeat("2", 64),
-			CapabilityDigest: store.DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: "sha256:" + strings.Repeat("3", 64),
-			SubjectDigest:     "sha256:" + strings.Repeat("4", 64),
-			SourceArtifactRef: "capsule-source-git:commit:sha256:" + strings.Repeat("4", 64), Writable: true, CapsuleID: "capsule-" + assignmentID,
+			ScopeDigest: "sha256:" + strings.Repeat(char, 64), RequestDigest: "sha256:" + strings.Repeat(char, 64),
+			CapabilityDigest: store.DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: "sha256:" + strings.Repeat(char, 64),
+			SubjectDigest:     "sha256:" + strings.Repeat(char, 64),
+			SourceArtifactRef: "capsule-source-git:commit:sha256:" + strings.Repeat(char, 64), Writable: true, CapsuleID: "capsule-" + assignmentID,
 			NetworkMode: types.CoSuperCapsuleNetworkForbidden, FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
 		},
 		AssignedAgent: types.AgentRecord{AgentID: assignedAgentID},
@@ -2128,7 +2133,7 @@ func TestPersistentSuperContinuesFromCoSuperSystemCancellationWithoutTextureRewa
 	}
 
 	revoke := types.SetCoSuperCapsuleDispositionRequest{
-		CommandID: "revoke-intent", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
+		CommandID: "revoke-intent-" + suffix, OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: bound.Assignment.LifecycleVersion,
 		Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: "capsule-revoke-intent:" + assignmentID,
 	}
@@ -2139,7 +2144,7 @@ func TestPersistentSuperContinuesFromCoSuperSystemCancellationWithoutTextureRewa
 	}
 	ack := revoke
 	ack.CommandID, ack.ExpectedLifecycleVersion, ack.Disposition, ack.AckRef =
-		"revoke-ack", revRequested.Assignment.LifecycleVersion, types.CoSuperCapsuleRevoked, "capsule-revoke:sha256:"+strings.Repeat("a", 64)
+		"revoke-ack-" + suffix, revRequested.Assignment.LifecycleVersion, types.CoSuperCapsuleRevoked, "capsule-revoke:sha256:" + strings.Repeat("a", 64)
 	ack.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(ack)
 	revAcked, err := s.SetCoSuperCapsuleDisposition(context.Background(), ack)
 	if err != nil {
@@ -2151,238 +2156,150 @@ func TestPersistentSuperContinuesFromCoSuperSystemCancellationWithoutTextureRewa
 		t.Fatal(err)
 	}
 	if cancelled.Update == nil || cancelled.Update.DeliveredToRunID != "" || cancelled.Update.DeliveredAt != nil {
-		t.Fatalf("system cancel update should be pending delivery to parent mailbox: %+v", cancelled.Update)
+		t.Fatalf("system cancel update should be pending delivery in store: %+v", cancelled.Update)
 	}
-	foundWake := false
-	for _, wake := range wakes {
-		if wake == "coagent_result:"+superAgent.AgentID {
-			foundWake = true
-			break
+	return firstRun, *cancelled.Update, fixture.trajectoryID
+}
+
+func TestPersistentSuperCoSuperCancellationDoesNotMintSuperFromReportAndSettles(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	ownerID := "owner-super-system-cancel-continue"
+	_, cancelReport, trajectoryID := seedCancelledCoSuperReport(t, rt, s, ownerID, "system-cancel-continue")
+	superAgentID := persistentSuperAgentID(ownerID)
+
+	// Ontological repair: system cancellation does NOT wake Super directly, and
+	// reconcile never selects the cancel producer report as a Super wake source.
+	continuationSuper, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if continuationSuper != nil {
+		t.Fatalf("reconcile minted unexpected Super from cancel producer report: %+v", continuationSuper)
+	}
+
+	// Enumerate pending producer reports via dedicated method
+	pendingReports, err := rt.ListPendingProducerReports(context.Background(), ownerID, rt.TextureComputerID(), cancelReport.AgentID)
+	if err != nil {
+		t.Fatalf("list pending producer reports: %v", err)
+	}
+	if len(pendingReports) != 1 || pendingReports[0].UpdateID != cancelReport.UpdateID {
+		t.Fatalf("expected 1 pending producer report, got %v", pendingReports)
+	}
+
+	// Settle the cancel producer report via dedicated CAS lifecycle reducer
+	settleReq := types.SettleLifecycleProducerReportsRequest{
+		OwnerID:      ownerID,
+		ComputerID:   rt.TextureComputerID(),
+		CommandID:    "settle-cancel-report-" + cancelReport.UpdateID,
+		TrajectoryID: trajectoryID,
+		ReportIDs:    []string{cancelReport.UpdateID},
+		Reason:       "co-super system cancellation settled at store layer as late evidence",
+	}
+	settleReq.CommandDigest, err = store.ComputeSettleLifecycleProducerReportsDigest(settleReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settleRes, err := rt.SettleLifecycleProducerReports(context.Background(), settleReq)
+	if err != nil {
+		t.Fatalf("settle producer report: %v", err)
+	}
+	if settleRes.Receipt.Kind != types.LifecycleSettleProducerReports {
+		t.Fatalf("settlement receipt kind = %s, want %s", settleRes.Receipt.Kind, types.LifecycleSettleProducerReports)
+	}
+
+	// Assert: pending store selectors exclude the settled report
+	pendingAfter, err := rt.ListPendingProducerReports(context.Background(), ownerID, rt.TextureComputerID(), cancelReport.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pendingAfter) != 0 {
+		t.Fatalf("expected 0 pending producer reports after settlement, got %d", len(pendingAfter))
+	}
+
+	allPendingAfter, err := s.ListAllPendingLifecycleUpdates(context.Background(), ownerID, rt.TextureComputerID(), superAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range allPendingAfter {
+		if u.UpdateID == cancelReport.UpdateID {
+			t.Fatalf("settled cancel report still returned by ListAllPendingLifecycleUpdates: %+v", u)
 		}
 	}
-	if !foundWake {
-		t.Fatalf("system cancel did not wake Super actor: %v", wakes)
-	}
 
-	idle, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
-	if err != nil || idle == nil {
-		t.Fatalf("system-cancel continuation Super=%+v err=%v", idle, err)
-	}
-	if idle.RunID == firstRun.RunID {
-		t.Fatalf("continuation reused completed Super %s", firstRun.RunID)
-	}
-	if metadataStringValue(idle.Metadata, "request_source") != "lifecycle_texture_control" {
-		t.Fatalf("continuation request_source=%q", metadataStringValue(idle.Metadata, "request_source"))
-	}
-	if metadataStringValue(idle.Metadata, "assignment_trajectory_id") != fixture.trajectoryID {
-		t.Fatalf("continuation trajectory=%q want %q", metadataStringValue(idle.Metadata, "assignment_trajectory_id"), fixture.trajectoryID)
-	}
-
-	updates, err := rt.pendingCoagentUpdatesForRun(context.Background(), idle, ownerID, superAgent.AgentID, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, u := range updates {
-		if u.UpdateID == cancelled.Update.UpdateID {
-			t.Fatalf("replacement Super injected claimed cancel report %s", cancelled.Update.UpdateID)
-		}
-	}
-
-	injector := rt.coagentUpdateTurnInjector(idle)
-	injected, err := injector(false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, raw := range injected {
-		if strings.Contains(string(raw), "tool loop: exceeded 200 iterations without end_turn") {
-			t.Fatalf("replacement Super dumped cancel-report body: %s", raw)
-		}
-	}
-	claimedIDs := metadataStringSlice(idle.Metadata[runMetadataProducerReportIDs])
-	if len(claimedIDs) == 0 || claimedIDs[0] != cancelled.Update.UpdateID {
-		t.Fatalf("continuation Super producer_report_ids=%v want %s", claimedIDs, cancelled.Update.UpdateID)
-	}
-	if !strings.HasPrefix(idle.Prompt, persistentSuperCoSuperCancelContinuationPrompt) {
-		t.Fatalf("continuation prompt=%q", idle.Prompt)
-	}
-	if !metadataBoolValue(idle.Metadata, runMetadataCoSuperReplacementRequested) {
-		t.Fatalf("continuation Super missing %s: %+v", runMetadataCoSuperReplacementRequested, idle.Metadata)
-	}
-	if !metadataBoolValue(idle.Metadata, runMetadataCoSuperReplacementOmitReports) {
-		t.Fatalf("continuation Super missing %s: %+v", runMetadataCoSuperReplacementOmitReports, idle.Metadata)
-	}
-
-	finished = time.Now().UTC()
-	idle.State, idle.Error, idle.UpdatedAt, idle.FinishedAt = types.RunFailed, "tool loop: exceeded 200 iterations without end_turn", finished, &finished
-	if err := s.UpdateRun(context.Background(), *idle); err != nil {
-		t.Fatal(err)
-	}
-	rt.maybeContinuePersistentSuperInbox(context.Background(), idle)
-	afterFail, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if afterFail != nil && afterFail.RunID != idle.RunID {
-		t.Fatalf("continuation Super restormed after 200-iter fail: %s -> %s", idle.RunID, afterFail.RunID)
-	}
-	stillPending, err := s.GetLifecycleUpdate(context.Background(), ownerID, rt.TextureComputerID(), fixture.trajectoryID, superAgent.AgentID, cancelled.Update.AgentID, cancelled.Update.ProducerUpdateID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stillPending.DeliveredToRunID != "" || stillPending.DeliveredAt != nil {
-		t.Fatalf("cancel report should stay undelivered for injector: %+v", stillPending)
+	// Assert: boot or reconcile after settlement mints zero Super runs
+	afterSettleSuper, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgentID)
+	if err != nil || afterSettleSuper != nil {
+		t.Fatalf("reconcile after settlement minted unexpected Super=%+v err=%v", afterSettleSuper, err)
 	}
 }
 
-func TestPersistentSuperReplacementContinuationAfterUnflaggedClaim(t *testing.T) {
+func TestPersistentSuperProducerReportSettlementCASAndIdempotency(t *testing.T) {
 	rt, s := testRuntime(t)
-	ownerID := "owner-super-unflagged-claim"
-	superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	ownerID := "owner-super-settle-cas"
+
+	_, rep1, traj1 := seedCancelledCoSuperReport(t, rt, s, ownerID, "settle-cas-1")
+	_, rep2, _ := seedCancelledCoSuperReport(t, rt, s, ownerID, "settle-cas-2")
+
+	// Enumerate
+	pending, err := rt.ListPendingProducerReports(context.Background(), ownerID, rt.TextureComputerID(), rep1.AgentID)
+	if err != nil || len(pending) != 1 {
+		t.Fatalf("pending reports for rep1 = %v, err=%v", pending, err)
+	}
+	allPending, err := rt.ListPendingProducerReports(context.Background(), ownerID, rt.TextureComputerID(), "")
+	if err != nil || len(allPending) != 2 {
+		t.Fatalf("all pending reports = %v, err=%v", allPending, err)
+	}
+
+	// Settle rep1
+	settleReq := types.SettleLifecycleProducerReportsRequest{
+		OwnerID:      ownerID,
+		ComputerID:   rt.TextureComputerID(),
+		CommandID:    "cmd-settle-cas-test-1",
+		TrajectoryID: traj1,
+		ReportIDs:    []string{rep1.UpdateID},
+		Reason:       "settling cancel report 1",
+	}
+	settleReq.CommandDigest, _ = store.ComputeSettleLifecycleProducerReportsDigest(settleReq)
+	result, err := rt.SettleLifecycleProducerReports(context.Background(), settleReq)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("settle failed: %v", err)
 	}
-	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-unflagged-claim", superAgent.AgentID, agentprofile.Super)
-	firstRun, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
-	if err != nil || firstRun == nil {
-		t.Fatalf("first run=%+v err=%v", firstRun, err)
+	if len(result.Events) != 1 {
+		t.Fatalf("expected 1 settlement event, got %d", len(result.Events))
 	}
 
-	assignmentID := "assignment-super-unflagged-claim"
-	assignedAgentID := "co-super:" + assignmentID
-	assignedWorkID := "work:" + assignmentID
-	capability := "opaque-test-capability"
-	openReq := types.OpenCoSuperAssignmentRequest{
-		CommandID: "open-" + assignmentID, AssignmentID: assignmentID,
-		Binding: types.CoSuperAssignmentBinding{
-			OwnerID: ownerID, ComputerID: rt.TextureComputerID(), TrajectoryID: fixture.trajectoryID,
-			ParentAgentID: superAgent.AgentID, ParentRunID: firstRun.RunID,
-			ParentDecisionID: "decision:sha256:" + strings.Repeat("a", 64), ParentControlID: fixture.control.UpdateID,
-			ParentWorkItemID: fixture.workID, AssignedWorkItemID: assignedWorkID, AssignedAgentID: assignedAgentID,
-			Kind: types.CoSuperAssignmentImplementation, Attempt: 1,
-			ScopeDigest: "sha256:" + strings.Repeat("1", 64), RequestDigest: "sha256:" + strings.Repeat("2", 64),
-			CapabilityDigest: store.DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: "sha256:" + strings.Repeat("3", 64),
-			SubjectDigest:     "sha256:" + strings.Repeat("4", 64),
-			SourceArtifactRef: "capsule-source-git:commit:sha256:" + strings.Repeat("4", 64), Writable: true, CapsuleID: "capsule-" + assignmentID,
-			NetworkMode: types.CoSuperCapsuleNetworkForbidden, FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
-		},
-		AssignedAgent: types.AgentRecord{AgentID: assignedAgentID},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: assignedWorkID, AssignedAgentID: assignedAgentID, Objective: "implement feature"},
-	}
-	openReq.CommandDigest, _ = store.ComputeOpenCoSuperAssignmentDigest(openReq)
-	ag, _ := s.GetAgentByScope(context.Background(), ownerID, rt.TextureComputerID(), superAgent.AgentID)
-	ag.ChannelID = superAgent.AgentID
-	if err := s.UpsertAgent(context.Background(), ag); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.OpenCoSuperAssignment(context.Background(), openReq); err != nil {
-		t.Fatal(err)
-	}
-	assignedRunID := "run:" + assignmentID
-	assignedRun := types.RunRecord{
-		RunID: assignedRunID, AgentID: assignedAgentID, ChannelID: assignedAgentID,
-		RequestedByRunID: firstRun.RunID, TrajectoryID: fixture.trajectoryID,
-		AgentProfile: "co-super", AgentRole: "co-super", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
-		State: types.RunPending, Prompt: "implement feature",
-		Metadata: map[string]any{
-			"work_item_ids": []string{openReq.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": openReq.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": openReq.Binding.ParentAgentID, "requested_by_profile": "super",
-			"assignment_id": openReq.AssignmentID, "assignment_attempt": openReq.Binding.Attempt, "assignment_kind": string(openReq.Binding.Kind),
-			"assigned_work_item_id": openReq.Binding.AssignedWorkItemID, "parent_work_item_id": openReq.Binding.ParentWorkItemID,
-			"parent_decision_id": openReq.Binding.ParentDecisionID, "parent_control_id": openReq.Binding.ParentControlID,
-			"capsule_id": openReq.Binding.CapsuleID, "scope_digest": openReq.Binding.ScopeDigest, "request_digest": openReq.Binding.RequestDigest,
-			"capability_digest": openReq.Binding.CapabilityDigest, "execution_handle_digest": openReq.Binding.ExecutionHandleDigest,
-			"subject_digest": openReq.Binding.SubjectDigest, "source_artifact_ref": openReq.Binding.SourceArtifactRef,
-		},
-	}
-	bindReq := types.BindCoSuperAssignmentRequest{
-		CommandID: "bind-" + assignmentID, OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
-		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: 1,
-		RunID: assignedRunID, Run: assignedRun,
-		OpaqueCapability: capability, CapsuleID: openReq.Binding.CapsuleID,
-	}
-	bindReq.CommandDigest, _ = store.ComputeBindCoSuperAssignmentDigest(bindReq)
-	bound, err := s.BindCoSuperAssignment(context.Background(), bindReq)
-	if err != nil {
-		t.Fatal(err)
+	// Idempotent replay with same command returns cached receipt
+	replay, err := rt.SettleLifecycleProducerReports(context.Background(), settleReq)
+	if err != nil || replay.Receipt.CommandID != settleReq.CommandID {
+		t.Fatalf("replay failed: %+v err=%v", replay, err)
 	}
 
-	finished := time.Now().UTC()
-	firstRun.State, firstRun.UpdatedAt, firstRun.FinishedAt = types.RunCompleted, finished, &finished
-	if err := s.UpdateRun(context.Background(), *firstRun); err != nil {
-		t.Fatal(err)
+	// Attempting a NEW settlement command on already-settled report fails CAS precondition
+	conflictReq := types.SettleLifecycleProducerReportsRequest{
+		OwnerID:      ownerID,
+		ComputerID:   rt.TextureComputerID(),
+		CommandID:    "cmd-settle-conflict",
+		TrajectoryID: traj1,
+		ReportIDs:    []string{rep1.UpdateID},
+		Reason:       "double settle should fail CAS",
+	}
+	conflictReq.CommandDigest, _ = store.ComputeSettleLifecycleProducerReportsDigest(conflictReq)
+	_, err = rt.SettleLifecycleProducerReports(context.Background(), conflictReq)
+	if err == nil {
+		t.Fatalf("expected CAS conflict on already-settled report, got nil error")
 	}
 
-	revoke := types.SetCoSuperCapsuleDispositionRequest{
-		CommandID: "revoke-intent", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
-		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: bound.Assignment.LifecycleVersion,
-		Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: "capsule-revoke-intent:" + assignmentID,
+	// Assert: pending selectors exclude settled IDs
+	afterPending, err := rt.ListPendingProducerReports(context.Background(), ownerID, rt.TextureComputerID(), rep1.AgentID)
+	if err != nil || len(afterPending) != 0 {
+		t.Fatalf("expected 0 pending reports after settlement for rep1, got %d", len(afterPending))
 	}
-	revoke.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(revoke)
-	revRequested, err := s.SetCoSuperCapsuleDisposition(context.Background(), revoke)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ack := revoke
-	ack.CommandID, ack.ExpectedLifecycleVersion, ack.Disposition, ack.AckRef =
-		"revoke-ack", revRequested.Assignment.LifecycleVersion, types.CoSuperCapsuleRevoked, "capsule-revoke:sha256:"+strings.Repeat("a", 64)
-	ack.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(ack)
-	revAcked, err := s.SetCoSuperCapsuleDisposition(context.Background(), ack)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cancelled, err := rt.persistSystemCoSuperCancellation(context.Background(), revAcked.Assignment, "tool loop: exceeded 200 iterations without end_turn")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	claimed, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
-	if err != nil || claimed == nil {
-		t.Fatalf("claimed continuation Super=%+v err=%v", claimed, err)
-	}
-	_ = rt.CancelRun(context.Background(), claimed.RunID, ownerID)
-	claimed.Metadata = cloneMetadata(claimed.Metadata)
-	delete(claimed.Metadata, runMetadataCoSuperReplacementOmitReports)
-	claimed.Prompt = persistentSuperCoagentInboxPrompt
-	finished = time.Now().UTC()
-	claimed.State, claimed.Error, claimed.UpdatedAt, claimed.FinishedAt = types.RunFailed, "tool loop: exceeded 200 iterations without end_turn", finished, &finished
-	if err := s.UpdateRun(context.Background(), *claimed); err != nil {
-		t.Fatal(err)
-	}
-
-	replacement, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
-	if err != nil || replacement == nil {
-		t.Fatalf("replacement Super=%+v err=%v", replacement, err)
-	}
-	if replacement.RunID == claimed.RunID || replacement.RunID == firstRun.RunID {
-		t.Fatalf("replacement reused Super %s", replacement.RunID)
-	}
-	if !strings.HasPrefix(replacement.Prompt, persistentSuperCoSuperCancelContinuationPrompt) {
-		t.Fatalf("replacement prompt=%q", replacement.Prompt)
-	}
-	if !metadataBoolValue(replacement.Metadata, runMetadataCoSuperReplacementRequested) {
-		t.Fatalf("replacement Super missing %s: %+v", runMetadataCoSuperReplacementRequested, replacement.Metadata)
-	}
-	if !metadataBoolValue(replacement.Metadata, runMetadataCoSuperReplacementOmitReports) {
-		t.Fatalf("replacement Super missing %s: %+v", runMetadataCoSuperReplacementOmitReports, replacement.Metadata)
-	}
-	claimedIDs := metadataStringSlice(replacement.Metadata[runMetadataProducerReportIDs])
-	if len(claimedIDs) == 0 || claimedIDs[0] != cancelled.Update.UpdateID {
-		t.Fatalf("replacement producer_report_ids=%v want %s", claimedIDs, cancelled.Update.UpdateID)
-	}
-
-	finished = time.Now().UTC()
-	replacement.State, replacement.Error, replacement.UpdatedAt, replacement.FinishedAt = types.RunFailed, "tool loop: exceeded 200 iterations without end_turn", finished, &finished
-	if err := s.UpdateRun(context.Background(), *replacement); err != nil {
-		t.Fatal(err)
-	}
-	rt.maybeContinuePersistentSuperInbox(context.Background(), replacement)
-	afterFail, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if afterFail != nil && afterFail.RunID != replacement.RunID {
-		t.Fatalf("replacement Super restormed after 200-iter fail: %s -> %s", replacement.RunID, afterFail.RunID)
+	// rep2 should still be pending
+	rep2Pending, err := rt.ListPendingProducerReports(context.Background(), ownerID, rt.TextureComputerID(), rep2.AgentID)
+	if err != nil || len(rep2Pending) != 1 {
+		t.Fatalf("expected 1 pending report for rep2, got %d", len(rep2Pending))
 	}
 }
 
@@ -2417,7 +2334,7 @@ func TestPersistentSuperRewarmSkipsInvalidTransitionControlRun(t *testing.T) {
 	}
 }
 
-func TestBootWorkItemSweepReconcilesPersistentSuperOncePerAgent(t *testing.T) {
+func TestBootWorkItemSweepSkipsPersistentSuper(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	ownerID := "owner-super-sweep-once"
@@ -2428,19 +2345,6 @@ func TestBootWorkItemSweepReconcilesPersistentSuperOncePerAgent(t *testing.T) {
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
 		return nil
 	})
-	now := time.Now().UTC()
-	tombstone := types.RunRecord{
-		RunID: "super-tombstone-sweep-once", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
-		AgentID: superAgent.AgentID, AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super,
-		TrajectoryID: "stale-super-sweep-trajectory", State: types.RunPassivated, CreatedAt: now, UpdatedAt: now,
-		Metadata: map[string]any{
-			"request_source":    "lifecycle_texture_control",
-			"passivated_reason": "runtime_restarted",
-		},
-	}
-	if err := s.CreateRun(ctx, tombstone); err != nil {
-		t.Fatal(err)
-	}
 	for _, suffix := range []string{"sweep-a", "sweep-b", "sweep-c"} {
 		_ = seedTextureLifecycleControl(t, s, ownerID, suffix, superAgent.AgentID, agentprofile.Super)
 	}
@@ -2448,8 +2352,10 @@ func TestBootWorkItemSweepReconcilesPersistentSuperOncePerAgent(t *testing.T) {
 	log.SetOutput(&buf)
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 	rt.sweepOpenWorkItemActors(ctx)
-	skips := strings.Count(buf.String(), "skip restarted persistent-Super control run "+tombstone.RunID)
-	if skips != 1 {
-		t.Fatalf("expected one Super tombstone scan, got %d\n%s", skips, buf.String())
+	if !strings.Contains(buf.String(), "boot work-item sweep skipping persistent Super") {
+		t.Fatalf("expected boot work-item sweep to skip persistent Super, got:\n%s", buf.String())
+	}
+	if _, err := rt.latestActiveRunByAgent(ctx, ownerID, superAgent.AgentID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("boot work-item sweep minted unexpected Super run: err=%v", err)
 	}
 }

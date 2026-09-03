@@ -346,6 +346,43 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID)
 }
 
+// ResumeInterruptedPersistentSuperControlRun is the dedicated structurally isolated
+// entry point for boot rewarm. It reactivates only exact in-flight runs passivated
+// by a process restart (or injection-append failure), and returns unconditionally
+// without entering any backlog selection logic.
+func (rt *Runtime) ResumeInterruptedPersistentSuperControlRun(ctx context.Context, ownerID, agentID string) (*types.RunRecord, bool, error) {
+	rt.superReconcileMu.Lock()
+	defer rt.superReconcileMu.Unlock()
+	return rt.resumeInterruptedPersistentSuperControlRunLocked(ctx, ownerID, agentID)
+}
+
+func (rt *Runtime) resumeInterruptedPersistentSuperControlRunLocked(ctx context.Context, ownerID, agentID string) (*types.RunRecord, bool, error) {
+	if ownerID == "" {
+		return nil, false, fmt.Errorf("owner_id is required")
+	}
+	if agentID == "" {
+		agentID = persistentSuperAgentID(ownerID)
+	}
+	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
+		return nil, false, fmt.Errorf("check resident super run: %w", err)
+	} else if found {
+		log.Printf("runtime: persistent-Super exact-run resume found resident run=%s owner=%s agent=%s", resident.RunID, ownerID, agentID)
+		return &resident, false, nil
+	}
+	resumed, ok, err := rt.reactivateRestartedPersistentSuperControlRun(ctx, ownerID, agentID)
+	if err != nil {
+		return nil, false, err
+	}
+	if ok && resumed != nil {
+		log.Printf("runtime: persistent-Super exact-run resume reactivated run=%s owner=%s agent=%s", resumed.RunID, ownerID, agentID)
+		return resumed, true, nil
+	}
+	// Boot is a recovery event, never a scheduler tick. Return unconditionally
+	// without falling through to any backlog selection.
+	log.Printf("runtime: persistent-Super exact-run resume did not enter selection (resumed=false) owner=%s agent=%s", ownerID, agentID)
+	return nil, false, nil
+}
+
 func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
 	if ownerID == "" {
 		return nil, fmt.Errorf("owner_id is required")
@@ -353,7 +390,6 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 	if agentID == "" {
 		agentID = persistentSuperAgentID(ownerID)
 	}
-	var blockedActive *types.RunRecord
 	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
 		return nil, fmt.Errorf("check resident super run: %w", err)
 	} else if found {
@@ -383,60 +419,11 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 		return nil, err
 	}
 	if len(updates) == 0 {
-		// If no lifecycle control is pending in the mailbox, check whether an
-		// executing self-development operation needs a Texture execution_request
-		// rewake (the original path), and separately whether a genuine-authoring
-		// owner instruction is already queued on a supervision trajectory. The
-		// resume path only fills the no-run gap: it never mints a Super when any
-		// run is already bound to the operation.
-		if rewakeErr := rt.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, ownerID); rewakeErr != nil {
-			log.Printf("runtime: self-development Texture rewake after terminal Super: %v", rewakeErr)
-		}
-		pending, instrErr := rt.pendingSelfDevelopmentTextureInstruction(ctx, ownerID)
-		if instrErr == nil && pending {
-			// superReconcileMu (held by the wrapper) serializes this resume
-			// against every other Super creation path. Re-list controls under
-			// the same critical section; if still empty, fill the no-run gap.
-			updates, err = rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100)
-			if err != nil {
-				return nil, err
-			}
-			if len(updates) == 0 {
-				return rt.resumeSelfDevelopmentSuperForPendingInstruction(ctx, ownerID, agentID)
-			}
-		}
-	}
-	lifecycleControls := len(updates) > 0
-	reportContinuation := false
-	if !lifecycleControls {
-		updates, err = rt.listAndSettlePersistentSuperBacklog(ctx, ownerID, agentID)
-		if err != nil {
-			return nil, err
-		}
-		updates = filterPersistentSuperExecutionUpdates(updates)
-		if len(updates) == 0 {
-			reports, reportErr := rt.listPendingPersistentSuperAdmissibleReports(ctx, ownerID, computerID, agentID)
-			if reportErr != nil {
-				return nil, reportErr
-			}
-			if len(reports) > 0 {
-				updates = reports
-				reportContinuation = true
-			}
-		}
-	}
-	if len(updates) == 0 {
-		if blockedActive != nil {
-			return blockedActive, nil
-		}
 		return nil, nil
 	}
 
 	first := updates[0]
-	requestSource := "update_coagent"
-	if lifecycleControls || reportContinuation {
-		requestSource = "lifecycle_texture_control"
-	}
+	requestSource := "lifecycle_texture_control"
 	metadata := map[string]any{
 		runMetadataAgentProfile: agentprofile.Super,
 		runMetadataAgentRole:    agentprofile.Super,
@@ -455,93 +442,33 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 		metadata["self_development_operation_id"] = operationID
 	}
 	targetWorkItemID := firstNonEmpty(first.TargetWorkItemID, first.WorkItemID)
+	targetControls := selectLifecycleControlActivation(updates, first.TrajectoryID, map[string]bool{targetWorkItemID: true})
+	if len(targetControls) == 0 {
+		targetControls = []types.CoagentSourcePacket{first}
+	}
 	if targetWorkItemID != "" {
 		metadata["lifecycle_work_item_id"] = targetWorkItemID
-		workIDs, seenWork := make([]string, 0, len(updates)), map[string]bool{}
-		for _, update := range updates {
-			if id := firstNonEmpty(update.TargetWorkItemID, update.WorkItemID); id != "" && !seenWork[id] {
-				seenWork[id] = true
-				workIDs = append(workIDs, id)
-			}
-		}
-		metadata["work_item_ids"] = workIDs
-	}
-	updateIDs := make([]string, 0, len(updates))
-	for _, update := range updates {
-		if id := strings.TrimSpace(update.UpdateID); id != "" {
-			updateIDs = append(updateIDs, id)
-		}
-	}
-	if len(updateIDs) > 0 && !lifecycleControls && !reportContinuation {
-		metadata["worker_update_ids"] = updateIDs
-	}
-	if reportContinuation && len(updateIDs) > 0 {
-		// Claim these producer_reports on this Super run so a later terminal
-		// Super cannot start another Super from the same undelivered packets.
-		// Do not stamp DeliveredToRunID: ListAllPendingLifecycleUpdates is the
-		// injector source for continuation Super, and BindLifecycleControlDelivery
-		// is Control-only.
-		metadata[runMetadataProducerReportIDs] = updateIDs
-	}
-	if first.AgentID != "" && !lifecycleControls && !reportContinuation {
-		if requester, err := rt.latestActiveRunByAgent(ctx, ownerID, first.AgentID); err == nil {
-			metadata["requested_by_run_id"] = requester.RunID
-			if metadataStringValue(requester.Metadata, "agent_profile") != "" && metadata["requested_by_profile"] == "" {
-				metadata["requested_by_profile"] = metadataStringValue(requester.Metadata, "agent_profile")
-			}
-			if desktopID := metadataStringValue(requester.Metadata, runMetadataDesktopID); desktopID != "" {
-				metadata[runMetadataDesktopID] = desktopID
-			}
-		}
+		metadata["work_item_ids"] = []string{targetWorkItemID}
 	}
 
 	prompt := persistentSuperCoagentInboxPrompt
-	if reportContinuation {
-		// For omit-reports continuations, the coagent packet is empty (claimed
-		// IDs are filtered). Include work_item_ids and objective in the prompt
-		// so the model can call assign_co_super without needing the dumped
-		// cancel-report bodies (which caused max_tokens). This fixes f515dd0f
-		// 200-loop where the Super had no parent_work_item_id context.
-		workIDsForPrompt := []string{}
-		if len(updates) > 0 {
-			seen := map[string]bool{}
-			for _, u := range updates {
-				id := firstNonEmpty(u.TargetWorkItemID, u.WorkItemID)
-				if id != "" && !seen[id] {
-					seen[id] = true
-					workIDsForPrompt = append(workIDsForPrompt, id)
-				}
-			}
-		}
-		if len(workIDsForPrompt) > 0 {
-			prompt = persistentSuperCoSuperCancelContinuationPrompt + " Work items: " + strings.Join(workIDsForPrompt, ", ") + ". Use assign_co_super with kind=implementation, objective='Author, build, test, freeze, and propose a reversible source change on this computer: solitaire with a headless play API', and parent_work_item_id from that list."
-		} else {
-			prompt = persistentSuperCoSuperCancelContinuationPrompt
-		}
-		metadata[runMetadataCoSuperReplacementRequested] = true
-		metadata[runMetadataCoSuperReplacementOmitReports] = true
-	}
 	rec, err := rt.createRunWithMetadata(ctx, prompt, ownerID, metadata)
 	if err != nil {
 		return nil, err
 	}
-	if lifecycleControls || reportContinuation {
-		// Persistent Super is deliberately non-lifecycle. createRunWithMetadata
-		// normally stamps a generic trajectory projection; remove only that
-		// projection while retaining the exact assignment_trajectory_id used by
-		// the lifecycle control-delivery authority.
-		rec.TrajectoryID = ""
-		delete(rec.Metadata, runMetadataTrajectoryID)
-		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
-			rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
-			return nil, fmt.Errorf("preserve non-lifecycle persistent-Super run: %w", err)
-		}
-		if lifecycleControls {
-			if _, err := rt.bindLifecycleControlsToRun(ctx, rec, updates); err != nil {
-				rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
-				return nil, err
-			}
-		}
+	// Persistent Super is deliberately non-lifecycle. createRunWithMetadata
+	// normally stamps a generic trajectory projection; remove only that
+	// projection while retaining the exact assignment_trajectory_id used by
+	// the lifecycle control-delivery authority.
+	rec.TrajectoryID = ""
+	delete(rec.Metadata, runMetadataTrajectoryID)
+	if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+		rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
+		return nil, fmt.Errorf("preserve non-lifecycle persistent-Super run: %w", err)
+	}
+	if _, err := rt.bindLifecycleControlsToRun(ctx, rec, targetControls); err != nil {
+		rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
+		return nil, err
 	}
 	rt.activate(rec)
 	return rec, nil
@@ -877,11 +804,11 @@ func (rt *Runtime) maybeContinuePersistentSuperInbox(ctx context.Context, rec *t
 			return
 		}
 	}
-	// A persistent Super run owns exactly one lifecycle trajectory. Once that
-	// realization passivates or terminates, release the singleton actor slot and
-	// deterministically reconcile the oldest still-pending control trajectory.
-	if _, err := rt.reconcilePersistentSuperActor(ctx, rec.OwnerID, rec.AgentID); err != nil {
-		log.Printf("runtime: continue persistent super actor after %s: %v", rec.RunID, err)
+	// Terminal events wake Texture, never select backlog.
+	if rec.State.Terminal() {
+		if rewakeErr := rt.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, rec.OwnerID); rewakeErr != nil {
+			log.Printf("runtime: self-development Texture rewake after terminal Super %s: %v", rec.RunID, rewakeErr)
+		}
 	}
 }
 
@@ -1270,70 +1197,6 @@ func (rt *Runtime) listPendingPersistentSuperLifecycleControls(ctx context.Conte
 	return validated, valErr
 }
 
-func (rt *Runtime) listPendingPersistentSuperAdmissibleReports(ctx context.Context, ownerID, computerID, agentID string) ([]types.CoagentSourcePacket, error) {
-	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
-	if ownerID == "" || computerID == "" || agentID != persistentSuperAgentID(ownerID) {
-		return nil, fmt.Errorf("list persistent-Super admissible reports: exact owner, computer, and persistent agent are required")
-	}
-	pending, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
-	if err != nil {
-		return nil, fmt.Errorf("list persistent-Super admissible reports: %w", err)
-	}
-	claimed, err := rt.claimedPersistentSuperProducerReportIDs(ctx, ownerID, computerID, agentID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]types.CoagentSourcePacket, 0, len(pending))
-	for _, update := range pending {
-		if update.DeliveredAt != nil || strings.TrimSpace(update.DeliveredToRunID) != "" {
-			continue
-		}
-		if claimed[strings.TrimSpace(update.UpdateID)] {
-			continue
-		}
-		if persistentSuperAdmissibleReport(update) {
-			out = append(out, update)
-		}
-	}
-	return out, nil
-}
-
-func (rt *Runtime) claimedPersistentSuperProducerReportIDs(ctx context.Context, ownerID, computerID, agentID string) (map[string]bool, error) {
-	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
-	if ownerID == "" || computerID == "" || agentID == "" {
-		return nil, nil
-	}
-	runs, err := rt.store.ListRunsByAgent(ctx, ownerID, agentID, 100)
-	if err != nil {
-		return nil, fmt.Errorf("list persistent-Super producer-report claims: %w", err)
-	}
-	claimed := map[string]bool{}
-	for i := range runs {
-		run := &runs[i]
-		if run.ComputerID != computerID || run.AgentID != agentID || !isPersistentSuperAgentRun(run) || !run.State.Terminal() {
-			continue
-		}
-		if metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" {
-			continue
-		}
-		// Only a Super that requested a replacement CoSuper and omitted
-		// claimed cancel-report bodies can retire these IDs. Super e4141127
-		// requested replacement but still dumped nine cancel reports and
-		// max_tokens-failed; that claim must not pin authorship closed.
-		if !metadataBoolValue(run.Metadata, runMetadataCoSuperReplacementRequested) {
-			continue
-		}
-		if !metadataBoolValue(run.Metadata, runMetadataCoSuperReplacementOmitReports) {
-			continue
-		}
-		for _, id := range metadataStringSlice(run.Metadata[runMetadataProducerReportIDs]) {
-			if id = strings.TrimSpace(id); id != "" {
-				claimed[id] = true
-			}
-		}
-	}
-	return claimed, nil
-}
 
 func (rt *Runtime) validateTargetBoundLifecycleControls(ctx context.Context, ownerID, computerID, agentID string, updates []types.CoagentSourcePacket, executionOnly bool) ([]types.CoagentSourcePacket, error) {
 	out := make([]types.CoagentSourcePacket, 0, len(updates))
@@ -2593,6 +2456,9 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 	}
 	target := strings.TrimSpace(update.TargetAgentID)
 	if target == "" {
+		return
+	}
+	if target == persistentSuperAgentID(update.OwnerID) && update.Direction == types.LifecyclePacketDirectionProducerReport {
 		return
 	}
 	if update.Direction == types.LifecyclePacketDirectionControl {

@@ -2264,10 +2264,12 @@ func (rt *Runtime) rewarmInterruptedPersistentSuperActors(ctx context.Context) {
 		}
 		seen[key] = struct{}{}
 		log.Printf("runtime: boot persistent-Super rewarm candidate run=%s owner=%s agent=%s", run.RunID, run.OwnerID, run.AgentID)
-		if _, reconcileErr := rt.reconcilePersistentSuperActor(ctx, run.OwnerID, run.AgentID); reconcileErr != nil {
-			log.Printf("runtime: boot persistent-Super rewarm run %s: %v", run.RunID, reconcileErr)
+		if resumed, ok, resumeErr := rt.ResumeInterruptedPersistentSuperControlRun(ctx, run.OwnerID, run.AgentID); resumeErr != nil {
+			log.Printf("runtime: boot persistent-Super rewarm run %s: %v", run.RunID, resumeErr)
+		} else if ok && resumed != nil {
+			log.Printf("runtime: boot persistent-Super rewarm dispatched run=%s", resumed.RunID)
 		} else {
-			log.Printf("runtime: boot persistent-Super rewarm dispatched run=%s", run.RunID)
+			log.Printf("runtime: boot persistent-Super rewarm candidate run %s did not resume", run.RunID)
 		}
 	}
 }
@@ -2577,7 +2579,9 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 				continue
 			}
 			superSeen[superKey] = struct{}{}
-			_, err = rt.reconcilePersistentSuperActor(ctx, first.OwnerID, first.AssignedAgentID)
+			// Boot is recovery, not a scheduler tick: backlog is durable and waits for live triggers.
+			log.Printf("runtime: boot work-item sweep skipping persistent Super owner=%s agent=%s (boot does not schedule)", first.OwnerID, first.AssignedAgentID)
+			continue
 		} else if agentprofile.Canonical(first.AuthorityProfile) == agentprofile.CoSuper {
 			err = rt.ReconcileCoSuperAssignmentsForTrajectory(ctx, first.OwnerID,
 				firstNonEmpty(first.ComputerID, rt.TextureComputerID()), first.TrajectoryID)
