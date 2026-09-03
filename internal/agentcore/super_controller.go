@@ -602,7 +602,138 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 	if err := rt.enqueuePersistentSuperRecoveryOccurrence(ctx, candidate, candidateControls); err != nil {
 		return nil, false, fmt.Errorf("enqueue restarted persistent-Super recovery: %w", err)
 	}
+	rt.armReactivatedSuperResumeWatchdog(ownerID, candidate.RunID, candidate.UpdatedAt)
 	return candidate, true, nil
+}
+
+// persistentSuperResumeDispatchDeadline bounds how long a reactivated persistent
+// Super run may sit in pending without its recovery occurrence dispatching.
+// Running runs self-terminate through the tool-loop iteration cap, and blocked
+// runs are excluded from residency, so pending-never-dispatched is the only
+// state that can jam the I26 singleton slot indefinitely (2026-09-03 fe92ea2b:
+// reactivated at boot, never dispatched, blocked every live wake for hours).
+const persistentSuperResumeDispatchDeadline = 10 * time.Minute
+
+// resumeWatchdogFiredMetadata marks runs terminalized by the resume watchdog,
+// distinguishing them from model-loop failures in forensics.
+const resumeWatchdogFiredMetadata = "resume_watchdog_fired"
+
+// errResumeWatchdogScanCap stops the boot rewarm walk once the scan budget is
+// spent; it is swallowed by the walker, never surfaced as a boot error.
+var errResumeWatchdogScanCap = errors.New("resume watchdog scan cap reached")
+
+// reactivatedSuperResumeExpired is the pure hang predicate: a persistent Super
+// run carrying the reactivation flag, still pending past the dispatch deadline.
+// Scoped strictly to persistent Super runs — the Researcher injection-recovery
+// path shares the flag and must never be failed here. Zero UpdatedAt counts as
+// expired: with no freshness signal the fail-closed choice releases the slot.
+func reactivatedSuperResumeExpired(rec *types.RunRecord, now time.Time) bool {
+	if rec == nil || !isPersistentSuperAgentRun(rec) {
+		return false
+	}
+	if rec.State != types.RunPending {
+		return false
+	}
+	if !metadataBoolValue(rec.Metadata, "actor_reactivated_from_passivated") {
+		return false
+	}
+	if rec.UpdatedAt.IsZero() {
+		return true
+	}
+	return now.Sub(rec.UpdatedAt) > persistentSuperResumeDispatchDeadline
+}
+
+// failExpiredReactivatedSuperResume terminalizes a reactivated persistent Super
+// run stuck in pending past the dispatch deadline, releasing the singleton
+// slot. Fail-closed with a structured reason; delivered packets stay durable
+// and a fresh live trigger can re-drive the work. Returns true when it failed
+// a run. A recovery occurrence arriving after this fail resolves terminal and
+// no-ops, so late dispatch is harmless in either order.
+func (rt *Runtime) failExpiredReactivatedSuperResume(ctx context.Context, ownerID, runID string, now time.Time) (bool, error) {
+	if rt == nil || rt.store == nil {
+		return false, fmt.Errorf("resume watchdog: store unavailable")
+	}
+	rec, err := rt.store.GetRunByOwner(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(runID))
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	if !reactivatedSuperResumeExpired(&rec, now.UTC()) {
+		return false, nil
+	}
+	finished := now.UTC()
+	rec.State = types.RunFailed
+	rec.Error = "persistent Super resume activation never dispatched within 10m; slot released, re-drive via live trigger"
+	rec.FinishedAt = &finished
+	rec.UpdatedAt = finished
+	rec.Metadata = cloneMetadata(rec.Metadata)
+	rec.Metadata[resumeWatchdogFiredMetadata] = true
+	if err := rt.store.UpdateRun(ctx, rec); err != nil {
+		return false, err
+	}
+	log.Printf("runtime: persistent-Super resume watchdog failed undispatched run=%s owner=%s agent=%s", rec.RunID, rec.OwnerID, rec.AgentID)
+	return true, nil
+}
+
+// armReactivatedSuperResumeWatchdog starts the dispatch watchdog for a freshly
+// reactivated run. Fire-and-forget: if the process dies first, the boot rewarm
+// below re-arms or fails it, so no lost timer can jam the slot.
+func (rt *Runtime) armReactivatedSuperResumeWatchdog(ownerID, runID string, armedAt time.Time) {
+	ownerID, runID = strings.TrimSpace(ownerID), strings.TrimSpace(runID)
+	if rt == nil || ownerID == "" || runID == "" {
+		return
+	}
+	delay := persistentSuperResumeDispatchDeadline
+	if !armedAt.IsZero() {
+		if remaining := persistentSuperResumeDispatchDeadline - time.Since(armedAt); remaining > 0 {
+			delay = remaining
+		}
+	}
+	time.AfterFunc(delay, func() {
+		if _, err := rt.failExpiredReactivatedSuperResume(context.Background(), ownerID, runID, time.Now().UTC()); err != nil {
+			log.Printf("runtime: persistent-Super resume watchdog run %s: %v", runID, err)
+		}
+	})
+}
+
+// rewarmReactivatedSuperResumeWatchdogs bounds reactivations that survived a
+// process restart: a run reactivated before the crash sits pending with the
+// flag but no live timer. Already-expired ones fail immediately; the rest get
+// a fresh watchdog for their remaining window. Computer-scoped paged walk with
+// a scan cap, so this adds no unbounded body scan to boot.
+func (rt *Runtime) rewarmReactivatedSuperResumeWatchdogs(ctx context.Context, ownerID, computerID string) {
+	if rt == nil || rt.store == nil {
+		return
+	}
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	if ownerID == "" || computerID == "" {
+		return
+	}
+	now := time.Now().UTC()
+	scanned := 0
+	walkErr := rt.store.ForEachLifecycleRunsByState(ctx, ownerID, computerID, types.RunPending, func(rec types.RunRecord) error {
+		if scanned >= bootPersistentSuperRewarmLimit {
+			return errResumeWatchdogScanCap
+		}
+		scanned++
+		if !isPersistentSuperAgentRun(&rec) ||
+			!metadataBoolValue(rec.Metadata, "actor_reactivated_from_passivated") {
+			return nil
+		}
+		if reactivatedSuperResumeExpired(&rec, now) {
+			if _, err := rt.failExpiredReactivatedSuperResume(ctx, rec.OwnerID, rec.RunID, now); err != nil {
+				log.Printf("runtime: boot resume-watchdog fail run %s: %v", rec.RunID, err)
+			}
+			return nil
+		}
+		rt.armReactivatedSuperResumeWatchdog(rec.OwnerID, rec.RunID, rec.UpdatedAt)
+		return nil
+	})
+	if walkErr != nil && !errors.Is(walkErr, errResumeWatchdogScanCap) {
+		log.Printf("runtime: boot resume-watchdog rewarm list: %v", walkErr)
+	}
 }
 
 func (rt *Runtime) enqueuePersistentSuperRecoveryOccurrence(ctx context.Context, rec *types.RunRecord, packets []types.CoagentSourcePacket) error {

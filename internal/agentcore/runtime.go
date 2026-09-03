@@ -2268,6 +2268,7 @@ func (rt *Runtime) rewarmInterruptedPersistentSuperActors(ctx context.Context) {
 			log.Printf("runtime: boot persistent-Super rewarm candidate run %s did not resume", run.RunID)
 		}
 	}
+	rt.rewarmReactivatedSuperResumeWatchdogs(ctx, ownerID, computerID)
 }
 
 // reactivateRetryableLifecycleInjectionRuns resumes the same passivated
