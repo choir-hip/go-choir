@@ -1,0 +1,5 @@
+# Scale/quarantine tests: load-sensitive tests that must run alone on a quiet
+# runner instead of inside a shared shard process. One exact test name per
+# line; consumed by scripts/go-test-runtime-shards (exclusion) and the
+# go-test-scale CI job (execution with one retry).
+^TestCancelRunTrajectoryDrainsMoreThanOneActivePage$

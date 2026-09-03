@@ -25,6 +25,10 @@ run_shard() {
     local -a selected=()
     for i in "${!tests[@]}"; do
       if (( i % total_shards == shard_index )); then
+        if [[ -n "${QUARANTINE_FILE:-}" && -f "$QUARANTINE_FILE" ]] && grep -Eq -f "$QUARANTINE_FILE" <<<"${tests[$i]}"; then
+          echo "Skipping quarantined ${package} test ${tests[$i]} (runs in go-test-scale)"
+          continue
+        fi
         selected+=("${tests[$i]}")
       fi
     done

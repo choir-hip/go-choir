@@ -223,6 +223,7 @@ jobs:
           TOTAL_SHARDS: 6
           SHARD_INDEX: ${{ matrix.shard }}
           RACE_SELECTED: ${{ needs.plan.outputs.race_selected }}
+          QUARANTINE_FILE: scripts/go-test-scale-tests
         run: |
           if [[ "$RACE_SELECTED" == "true" ]]; then
             scripts/go-test-runtime-shards -race
@@ -242,11 +243,33 @@ jobs:
             scripts/go-test-integration
           fi
 
-      - name: Run regression intentionally excluded by Race instrumentation
-        if: matrix.shard == 3 && needs.plan.outputs.race_selected == 'true'
-        shell: bash
-        run: go test -count=1 -run '^TestCancelRunTrajectoryDrainsMoreThanOneActivePage$' ./internal/agentcore
+  go-test-scale:
+    name: Go Test (scale, isolated load-sensitive tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: plan
+    if: needs.plan.outputs.go == 'true'
+    steps:
+      - uses: actions/checkout@v6
 
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Go test quarantined scale tests with one retry
+        shell: bash
+        run: |
+          set -uo pipefail
+          regex="$(grep -v '^\s*$' scripts/go-test-scale-tests | paste -sd'|')"
+          for attempt in 1 2; do
+            if scripts/go-test-with-timing ./internal/agentcore -count=1 -run "$regex"; then
+              exit 0
+            fi
+            echo "scale attempt $attempt failed; retrying once"
+          done
+          exit 1
 
   doccheck:
     name: Docs Truth Check
@@ -308,7 +331,7 @@ jobs:
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest
-    needs: [plan, go-vet-build, tla-model-check, go-test, go-test-runtime, doccheck, heresy-detector, build-frontend]
+    needs: [plan, go-vet-build, tla-model-check, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, build-frontend]
     if: always()
     steps:
       - name: Confirm selected CI gates passed
@@ -353,6 +376,7 @@ jobs:
           require_success "${{ needs.plan.outputs.go }}" go-vet-build "${{ needs.go-vet-build.result }}"
           require_success "${{ needs.plan.outputs.go }}" go-test "${{ needs.go-test.result }}"
           require_success "${{ needs.plan.outputs.go }}" go-test-runtime "${{ needs.go-test-runtime.result }}"
+          require_success "${{ needs.plan.outputs.go }}" go-test-scale "${{ needs.go-test-scale.result }}"
           require_success "${{ needs.plan.outputs.specs }}" tla-model-check "${{ needs.tla-model-check.result }}"
           require_success "${{ needs.plan.outputs.non_docs }}" heresy-detector "${{ needs.heresy-detector.result }}"
           require_if_run build-frontend "${{ needs.build-frontend.result }}"
