@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"net/http"
 	"strings"
 
@@ -11,10 +12,22 @@ import (
 )
 
 // SettleLifecycleProducerReports settles pending producer reports via store-layer CAS transition.
+// The runtime derives the command digest server-side from the canonical received
+// fields — the same owner-facing command pattern as cancelTrajectoryAuthorityCommand —
+// so product-path callers bind their commitment with the request body itself.
 func (rt *Runtime) SettleLifecycleProducerReports(ctx context.Context, req types.SettleLifecycleProducerReportsRequest) (types.LifecycleResult, error) {
 	if rt == nil || rt.store == nil {
 		return types.LifecycleResult{}, fmt.Errorf("settle producer reports: store unavailable")
 	}
+	req.CommandID = strings.TrimSpace(req.CommandID)
+	if req.CommandID == "" {
+		req.CommandID = "lifecycle-settle-producer-reports:" + strings.TrimSpace(req.TrajectoryID)
+	}
+	digest, err := store.ComputeSettleLifecycleProducerReportsDigest(req)
+	if err != nil {
+		return types.LifecycleResult{}, fmt.Errorf("settle producer reports: %w", err)
+	}
+	req.CommandDigest = digest
 	return rt.store.SettleLifecycleProducerReports(ctx, req)
 }
 
