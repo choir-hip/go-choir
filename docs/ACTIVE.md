@@ -48,11 +48,15 @@ Evidence: [`evidence/account-recovery-yusefnathanson-2026-08-27.md`](evidence/ac
 ## Active Definition — Substrate & Scheduling Readiness
 
 [`definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md`](definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md)
-is **active** (owner direction 2026-09-02, unanimous agentic consensus Option B).
-It supersedes the substrate/scheduling scope of `choir-scheduling-and-candidate-proof-2026-08-21.md`.
-Target: FIFO scheduling contract under arrival-ordinal and 5x normal-boot probe without
-`RUNTIME_MAINTENANCE_HOLD` on staging `computer-03335285269bdba4f94377e56879f9e6` (epoch 831, pre-A checkpoint `99949fe2`).
-Effects remain OFF.
+is **active**, revised 2026-09-03 to the boot-is-recovery ontology (owner direction 2026-09-03;
+revises the 2026-09-02 Option B baseline). It supersedes the substrate/scheduling scope of
+`choir-scheduling-and-candidate-proof-2026-08-21.md`. Target: live-trigger-only Super wakes,
+FIFO selection under computer-scoped arrival ordinals, boot-does-not-schedule assertion,
+settlement (tombstone) of the nine 08-19 cancel producer reports, and 5x normal-boot probe
+without `RUNTIME_MAINTENANCE_HOLD` on staging `computer-03335285269bdba4f94377e56879f9e6`
+(pre-A checkpoint `99949fe2`). Boot probes are partially proven
+([evidence](evidence/effects-red-substrate-boot-probe-partial-evidence-2026-09-03.md));
+scheduling acceptance is open. Effects remain OFF.
 
 ## Queued Definition — RLM Session Interpreter Cutover
 
@@ -112,7 +116,8 @@ to reopen it.
 is superseded historical evidence. Its policy, email, and restore reasoning remain
 citable historical evidence; it is not an executable entrypoint. The tape-recovery Definition
 owns restore substrate receipts. Active execution lives solely in
-[`definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md`](definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md).
+[`definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md`](definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md)
+(revised 2026-09-03, boot-is-recovery ontology).
 
 The scope-disjoint
 [`choir-instruction-substrate-prune-2026-08-11.md`](definitions/choir-instruction-substrate-prune-2026-08-11.md)
@@ -145,7 +150,7 @@ plus the disposed Mission 0 direct-key ceremony at
 recovery bypass, SSH, or weaker authorization is admissible).
 They are historical evidence, not rollback or live schedule; effects remain OFF.
 The active executable slice and `next_action` live solely in
-[`definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md`](definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md).
+[`definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md`](definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md).
 The tape-recovery restore proof is paid (complete 2026-08-15).
 Completed Definitions are historical evidence, not executable entrypoints; full
 claims and receipts remain in their source files and `mission-graph.yaml`:
@@ -158,12 +163,15 @@ D-ROUTE); `choir-autoputer-completion-2026-07-14.md` and
 `og-dolt-heresy-completion-2026-07-08.md` (settled storage/D-ROUTE/H031).
 None is executable unless explicitly promoted in the current registry.
 
-## Next Phase — Scheduling Contract and Candidate Proof
+## Superseded — Scheduling Contract and Candidate Proof
 
 [`definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`](definitions/choir-scheduling-and-candidate-proof-2026-08-21.md)
-is the owner-ratified successor for self-development candidate authorship and
-proof on a fresh, snapshot-backed staging computer using the completed and verified
-Durable Substrate Overhauls, Genesis Surface Derivability, and Private Go Actor Kernel.
+is superseded by the 3-Definition autonomous engineering sequence (2026-09-02):
+substrate/scheduling scope lives in Definition 1
+([`choir-substrate-and-scheduling-readiness-2026-09-02.md`](definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md));
+candidate proof scope lives in Definition 3
+([`choir-supervised-self-development-on-rlm-2026-09-02.md`](definitions/choir-supervised-self-development-on-rlm-2026-09-02.md)).
+It is not an executable entrypoint.
 
 ## Draft Successor Definitions — Not Executable
 
@@ -185,9 +193,11 @@ superseded, or historical as stated by their source Definitions, not entrypoints
 
 ## Invocation
 
-Invoke the active self-development scheduling and candidate proof via
-`/goal docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`.
-Self-development candidate proof executes on the validated staging substrate.
+Invoke the active Definition 1 via
+`/goal docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md`.
+Substrate and scheduling readiness executes on staging
+`computer-03335285269bdba4f94377e56879f9e6` under the boot-is-recovery ontology.
+
 ## Unowned External Work
 
 No Definition owns runtime dissolution, broader Wire work, external capsules,

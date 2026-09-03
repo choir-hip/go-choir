@@ -367,11 +367,11 @@ documents:
 
   - path: docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md
     claim_scope: current
-    is_root: []
+    is_root: [authority, entry]
     is_evidence: false
     annotations: {doc_role: definition, authority: active_mission_contract, lifecycle: active, entrypoint: true}
     supersedes: [docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md]
-    witnesses: [docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/choir-doctrine.md]
+    witnesses: [docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md, docs/evidence/effects-red-boot-as-scheduler-ontological-error-2026-09-03.md, docs/evidence/effects-red-substrate-boot-probe-partial-evidence-2026-09-03.md, docs/evidence/effects-red-super-texture-rewake-2026-08-20.md, docs/computer-ontology.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/choir-doctrine.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
 
   - path: docs/definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md
@@ -570,6 +570,21 @@ documents:
     annotations: {doc_role: implementation_evidence, authority: reviewed_runtime_and_landing_receipt, lifecycle: append_only}
     witnesses: [docs/definitions/choir-continuous-texture-supervision-2026-08-07.md, docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md]
     refresh_triggers: [runtime_candidate_change, independent_review, ci, deployment_identity_change, deployed_acceptance]
+
+  - path: docs/evidence/effects-red-boot-as-scheduler-ontological-error-2026-09-03.md
+    claim_scope: current
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: evidence, authority: problem_documentation, lifecycle: append_only, entrypoint: false}
+    witnesses: [docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md, docs/computer-ontology.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: []
+
+  - path: docs/evidence/effects-red-substrate-boot-probe-partial-evidence-2026-09-03.md
+    claim_scope: current
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: evidence, authority: deployed_acceptance_evidence, lifecycle: append_only, entrypoint: false}
+    refresh_triggers: [deployed_acceptance, runtime_candidate_change]
 
   - path: docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md
     claim_scope: current

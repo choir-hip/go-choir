@@ -414,23 +414,30 @@ nodes:
     title: Substrate & Scheduling Readiness
     path: docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md
     ledger: ''
-    status: active
+    status: working
     kind: spine
     entrypoint: true
-    execution_mode: executable
+    execution_mode: mission_orchestrator
     depends_on:
       - choir-substrate-cleanup-and-cutover-2026-08-25
     enables:
       - choir-rlm-session-interpreter-cutover-2026-09-02
     note: >-
-      Phase 1 of autonomous engineering sequence. Executes FIFO scheduling contract
-      and 5x normal-boot probe without maintenance hold on staging computer-0333528
-      (epoch 831, pre-A checkpoint 99949fe2).
+      Phase 1 of autonomous engineering sequence, revised 2026-09-03 to the
+      boot-is-recovery ontology: live-trigger-only Super wakes, FIFO selection
+      under computer-scoped arrival ordinals, boot-does-not-schedule assertion,
+      settlement of the nine 08-19 cancel producer reports, and 5x normal-boot
+      probe without maintenance hold on staging computer-0333528 (pre-A
+      checkpoint 99949fe2). Boot probes partially proven; scheduling acceptance
+      open.
     sources:
       - docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md
+      - docs/evidence/effects-red-boot-as-scheduler-ontological-error-2026-09-03.md
+      - docs/evidence/effects-red-substrate-boot-probe-partial-evidence-2026-09-03.md
       - docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md
       - docs/standing-questions.md
       - docs/choir-doctrine.md
+      - docs/computer-ontology.md
       - docs/ACTIVE.md
   - id: choir-rlm-session-interpreter-cutover-2026-09-02
     title: RLM Session Interpreter & Ambient Tool Parity
