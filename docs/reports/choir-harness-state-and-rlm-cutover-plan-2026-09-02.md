@@ -6,7 +6,7 @@
 
 ## 1. Executive Synthesis & Consensus Verdict
 
-An independent agentic consensus panel across 9 frontier models (Claude 3.7 Sonnet, Codex/GPT-5.6-Sol, GPT-5.6-Luna, Cursor/Grok-4.6, Gemini-3.8-Flash, GLM-5.3-Flash, Cursor Agent, and Opencode) evaluated the repository state, the external architecture audit, and the path forward.
+An independent agentic consensus panel across 9 frontier models (Claude Fable 5.1, Codex/GPT-5.6-Sol, GPT-5.6-Luna, Cursor/Grok-4.6, Gemini-3.8-Flash, GLM-5.3-Flash, Cursor Agent, and Opencode) evaluated the repository state, the external architecture audit, and the path forward.
 
 ### Unanimous Verdict: Option B — Three Sequential Definitions
 The panel **unanimously rejected** co-landing substrate repairs with the RLM interpreter (Option A) and rejected a monolithic milestone (Option C).
