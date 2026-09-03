@@ -2226,7 +2226,6 @@ func (rt *Runtime) rewarmInterruptedPersistentSuperActors(ctx context.Context) {
 		ownerID = strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))
 	}
 	computerID := strings.TrimSpace(rt.TextureComputerID())
-	productionComputer := rt.cfg.ComputerID != "" && strings.HasPrefix(strings.TrimSpace(rt.cfg.ComputerID), "computer-")
 	var runs []types.RunRecord
 	var err error
 	if ownerID != "" {
@@ -2237,9 +2236,6 @@ func (rt *Runtime) rewarmInterruptedPersistentSuperActors(ctx context.Context) {
 			return
 		}
 		log.Printf("runtime: boot persistent-Super rewarm owner-scoped candidates=%d", len(runs))
-	} else if productionComputer {
-		log.Printf("runtime: boot persistent-Super rewarm skipped: owner_id required on production computer %s", rt.cfg.ComputerID)
-		return
 	} else {
 		runs, err = rt.store.ListAllRunsByState(ctx, types.RunPassivated)
 		if err != nil {

@@ -418,12 +418,23 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 	if err != nil {
 		return nil, err
 	}
+	lifecycleControls := len(updates) > 0
+	if !lifecycleControls {
+		updates, err = rt.listAndSettlePersistentSuperBacklog(ctx, ownerID, agentID)
+		if err != nil {
+			return nil, err
+		}
+		updates = filterPersistentSuperExecutionUpdates(updates)
+	}
 	if len(updates) == 0 {
 		return nil, nil
 	}
 
 	first := updates[0]
-	requestSource := "lifecycle_texture_control"
+	requestSource := "update_coagent"
+	if lifecycleControls {
+		requestSource = "lifecycle_texture_control"
+	}
 	metadata := map[string]any{
 		runMetadataAgentProfile: agentprofile.Super,
 		runMetadataAgentRole:    agentprofile.Super,
@@ -442,13 +453,12 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 		metadata["self_development_operation_id"] = operationID
 	}
 	targetWorkItemID := firstNonEmpty(first.TargetWorkItemID, first.WorkItemID)
-	targetControls := selectLifecycleControlActivation(updates, first.TrajectoryID, map[string]bool{targetWorkItemID: true})
-	if len(targetControls) == 0 {
-		targetControls = []types.CoagentSourcePacket{first}
-	}
 	if targetWorkItemID != "" {
 		metadata["lifecycle_work_item_id"] = targetWorkItemID
 		metadata["work_item_ids"] = []string{targetWorkItemID}
+	}
+	if !lifecycleControls {
+		metadata["worker_update_ids"] = []string{first.UpdateID}
 	}
 
 	prompt := persistentSuperCoagentInboxPrompt
@@ -456,19 +466,21 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 	if err != nil {
 		return nil, err
 	}
-	// Persistent Super is deliberately non-lifecycle. createRunWithMetadata
-	// normally stamps a generic trajectory projection; remove only that
-	// projection while retaining the exact assignment_trajectory_id used by
-	// the lifecycle control-delivery authority.
-	rec.TrajectoryID = ""
-	delete(rec.Metadata, runMetadataTrajectoryID)
-	if err := rt.store.UpdateRun(ctx, *rec); err != nil {
-		rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
-		return nil, fmt.Errorf("preserve non-lifecycle persistent-Super run: %w", err)
-	}
-	if _, err := rt.bindLifecycleControlsToRun(ctx, rec, targetControls); err != nil {
-		rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
-		return nil, err
+	if lifecycleControls {
+		rec.TrajectoryID = ""
+		delete(rec.Metadata, runMetadataTrajectoryID)
+		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+			rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
+			return nil, fmt.Errorf("preserve non-lifecycle persistent-Super run: %w", err)
+		}
+		targetControls := selectLifecycleControlActivation(updates, first.TrajectoryID, map[string]bool{targetWorkItemID: true})
+		if len(targetControls) == 0 {
+			targetControls = []types.CoagentSourcePacket{first}
+		}
+		if _, err := rt.bindLifecycleControlsToRun(ctx, rec, targetControls); err != nil {
+			rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
+			return nil, err
+		}
 	}
 	rt.activate(rec)
 	return rec, nil
