@@ -619,6 +619,13 @@ documents:
     annotations: {doc_role: evidence, authority: problem_documentation, lifecycle: append_only, entrypoint: false}
     witnesses: [docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md, docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: []
+  - path: docs/evidence/effects-red-texture-phantom-revision-brick-2026-09-03.md
+    claim_scope: current
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: evidence, authority: problem_documentation, lifecycle: append_only, entrypoint: false}
+    witnesses: [docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: []
 
   - path: docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md
     claim_scope: current

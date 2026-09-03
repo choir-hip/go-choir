@@ -70,3 +70,19 @@ proxy→vmctl→guest resolution/routing.
 - Definition 1 follow-up re-proof: blocked on the same recovery.
 - No data-loss signal: fence `99949fe2` untouched; last observed guest state
   (epoch 861) was healthy with zero active Super rows.
+## Diagnosis Update (2026-09-03 ~18:20–18:45Z, via authorized Node B SSH)
+
+Root cause is NOT routability: the guest VM boots but its event replay dies on
+a canonical poison event, crash-loops, and vmctl kills it after a 5-minute
+ready wait. Details in
+`docs/evidence/effects-red-texture-phantom-revision-brick-2026-09-03.md`:
+tape seq 138612 (prepared 16:16:22Z, CAS'd, never finalized) carries a
+sleep-after-non-revision-turn op (`require_revision: false`) for a mutation
+created with a phantom revision (`f1511357`, absent from
+`texture_revisions`). Boot replay fails
+`Texture mutation revision presence changed` every ~5s; vmctl reports
+`guest replay stalled (no sequence advance for 5m0s, seq=0)`, kills the VM,
+marks it failed. The two refresh 502s were vmctl resolve timeouts during
+doomed boot attempts. Refresh #2 did NOT cause this; the poison was prepared
+at 16:16:22Z during the healthy epoch-861 window, before the 16:50 deploy.
+Repair: replay-only projection tolerance (fix commit follows this receipt).
