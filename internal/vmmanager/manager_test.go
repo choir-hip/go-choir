@@ -1924,3 +1924,17 @@ func TestWaitForGuestReadyReplayProgressExtendsAndStallFails(t *testing.T) {
 		t.Fatalf("non-replaying unhealthy guest must respect the deadline: %v", err)
 	}
 }
+
+func TestMergeVMConfigOverridesTakesBootModeFromOverrides(t *testing.T) {
+	staleHeld := VMConfig{VMID: "vm-1", MaintenanceHold: true, RecoveryReplayOnly: true}
+	clear := VMConfig{VMID: "vm-1"}
+	if got := mergeVMConfigOverrides(staleHeld, clear); got.MaintenanceHold || got.RecoveryReplayOnly {
+		t.Fatalf("merge kept stale boot-mode flags: %+v", got)
+	}
+	if got := mergeVMConfigOverrides(VMConfig{VMID: "vm-1"}, VMConfig{VMID: "vm-1", MaintenanceHold: true}); !got.MaintenanceHold {
+		t.Fatalf("merge dropped explicit maintenance hold: %+v", got)
+	}
+	if got := mergeVMConfigOverrides(VMConfig{VMID: "vm-1"}, VMConfig{VMID: "vm-1", RecoveryReplayOnly: true}); !got.RecoveryReplayOnly {
+		t.Fatalf("merge dropped explicit replay-only: %+v", got)
+	}
+}

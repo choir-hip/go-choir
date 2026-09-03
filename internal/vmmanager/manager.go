@@ -1291,6 +1291,13 @@ func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
 	if overrides.DesktopID != "" {
 		cfg.DesktopID = overrides.DesktopID
 	}
+	// Boot-mode flags are authoritative per call: a plain bool merge cannot
+	// express "clear", so a stale MaintenanceHold/RecoveryReplayOnly retained
+	// in the instance config would fence every future recover/refresh boot
+	// after an unhold (2026-09-03: two successful unholds still booted
+	// RUNTIME_MAINTENANCE_HOLD=1). Every caller sets these explicitly.
+	cfg.MaintenanceHold = overrides.MaintenanceHold
+	cfg.RecoveryReplayOnly = overrides.RecoveryReplayOnly
 	return cfg
 }
 
