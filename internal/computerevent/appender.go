@@ -54,6 +54,16 @@ type ReplayBatchProjectionStore interface {
 	FinalizeReplayBatch(ctx context.Context, computerID, eventDigest string, receipt Receipt, batch *ProjectionBatch) error
 }
 
+// BatchDryRunner validates a projection batch against committed state without
+// writing. The appender consults it before pin/CAS so a batch that could never
+// finalize is refused to the caller instead of becoming a canonical poison
+// every future boot replay dies on (2026-09-03 seq 138612). Live guards remain
+// authoritative: concurrent appends between dry-run and finalize can still
+// fail closed at finalize time.
+type BatchDryRunner interface {
+	DryRunProjectionBatch(ctx context.Context, computerID string, batch *ProjectionBatch) error
+}
+
 // ReplayCommitter flushes deferred VM-local history after a complete replay.
 // Implementations must not expose this boundary to live append paths.
 type ReplayCommitter interface {
@@ -112,10 +122,10 @@ type ComputerEventAppender struct {
 	// Replay progress snapshot (guarded by mu) so the guest health surface can
 	// report a replay in progress with its sequence to the host wait-for-ready
 	// probe without racing the replay goroutine.
-	replayActive        bool
-	replaySeq           uint64
-	replayCommittedSeq  uint64
-	replayCheckpointEvery int
+	replayActive             bool
+	replaySeq                uint64
+	replayCommittedSeq       uint64
+	replayCheckpointEvery    int
 	replayCheckpointInterval time.Duration
 }
 
@@ -180,12 +190,12 @@ func NewComputerEventAppender(computerID string, pins ArtifactPinner, projection
 		return nil, fmt.Errorf("computer event appender: complete dependencies are required")
 	}
 	return &ComputerEventAppender{
-		computerID:              computerID,
-		pins:                    pins,
-		projection:              projection,
-		cas:                     cas,
-		verifier:                verifier,
-		replayCheckpointEvery:   500,
+		computerID:               computerID,
+		pins:                     pins,
+		projection:               projection,
+		cas:                      cas,
+		verifier:                 verifier,
+		replayCheckpointEvery:    500,
 		replayCheckpointInterval: 60 * time.Second,
 	}, nil
 }
@@ -283,6 +293,17 @@ func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Even
 	pinIntentCommitment, err := ComputePinIntentCommitment(event, input)
 	if err != nil {
 		return Receipt{}, "", fmt.Errorf("computer event appender: compute payload pin intent: %w", err)
+	}
+	if strings.TrimSpace(mediaType) == ProjectionBatchMediaType {
+		if runner, ok := a.projection.(BatchDryRunner); ok {
+			batch, derr := DecodeProjectionBatch(payload)
+			if derr != nil {
+				return Receipt{}, "", fmt.Errorf("computer event appender: projection dry-run decode: %w", derr)
+			}
+			if derr = runner.DryRunProjectionBatch(ctx, a.computerID, &batch); derr != nil {
+				return Receipt{}, "", fmt.Errorf("computer event appender: projection dry-run refused batch: %w", derr)
+			}
+		}
 	}
 	pin, err := pinner.PinNonPrivatePayload(ctx, a.computerID, payload, mediaType, privacyClass, pinIntentCommitment)
 	if err != nil {

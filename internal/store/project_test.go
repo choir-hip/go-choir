@@ -640,3 +640,87 @@ func TestProjectTextureDocumentAliasAndReplay(t *testing.T) {
 	}
 	assertCount(t, productStore, `SELECT COUNT(*) FROM texture_document_aliases`, 0)
 }
+
+func dryRunSleepBatch(t *testing.T, computerID string, proj computerevent.TextureAgentMutationProjection) computerevent.ProjectionBatch {
+	t.Helper()
+	body, err := json.Marshal(proj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return computerevent.ProjectionBatch{
+		Version:          computerevent.ProjectionBatchV2,
+		ProjectorVersion: computerevent.ProjectorVersionV2,
+		ComputerID:       computerID,
+		EventID:          "01dryrun-sleep-test",
+		Ops: []computerevent.ProjectionOp{{
+			Kind:        computerevent.ProjectionOpTextureAgentMutation,
+			CanonicalID: proj.OwnerID + "\x00" + proj.ComputerID + "\x00" + proj.DocID + "\x00" + proj.RunID,
+			Body:        body,
+		}},
+	}
+}
+
+func seedDryRunMutation(t *testing.T, s *Store, revisionID string) {
+	t.Helper()
+	if err := s.CreateAgentMutation(context.Background(), AgentMutation{
+		DocID: "doc-dryrun", RunID: "run-dryrun", OwnerID: "user-dryrun",
+		ComputerID: "computer-dryrun", State: "pending", RevisionID: revisionID,
+		CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed mutation: %v", err)
+	}
+}
+
+// TestDryRunProjectionBatchRefusesPoison replays the seq-138612 shape: a sleep
+// op asserting requireRevision=false for a row that carries a revision. The
+// dry-run must refuse it before pin/CAS, and must leave the row untouched.
+func TestDryRunProjectionBatchRefusesPoison(t *testing.T) {
+	ctx := context.Background()
+	s := openProjectStore(t)
+	seedDryRunMutation(t, s, "rev-phantom")
+	completedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	requireRevision := false
+	batch := dryRunSleepBatch(t, "computer-dryrun", computerevent.TextureAgentMutationProjection{
+		DocID: "doc-dryrun", RunID: "run-dryrun", OwnerID: "user-dryrun",
+		ComputerID: "computer-dryrun", State: "sleeping", RevisionID: "rev-phantom",
+		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), CompletedAt: &completedAt,
+		ExpectedStates: []string{"pending"}, RequireRevision: &requireRevision,
+	})
+	err := s.DryRunProjectionBatch(ctx, "computer-dryrun", &batch)
+	if err == nil || !strings.Contains(err.Error(), "revision presence") {
+		t.Fatalf("dry-run = %v, want revision-presence refusal", err)
+	}
+	got, err := s.GetPendingAgentMutationByDoc(ctx, "user-dryrun", "computer-dryrun", "doc-dryrun")
+	if err != nil {
+		t.Fatalf("read back mutation: %v", err)
+	}
+	if got == nil || got.State != "pending" || got.RevisionID != "rev-phantom" {
+		t.Fatalf("dry-run mutated the row: %+v", got)
+	}
+}
+
+// TestDryRunProjectionBatchAcceptsHealthy proves the firewall is not a wall:
+// a guard-consistent sleep validates clean and writes nothing.
+func TestDryRunProjectionBatchAcceptsHealthy(t *testing.T) {
+	ctx := context.Background()
+	s := openProjectStore(t)
+	seedDryRunMutation(t, s, "")
+	completedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	requireRevision := false
+	batch := dryRunSleepBatch(t, "computer-dryrun", computerevent.TextureAgentMutationProjection{
+		DocID: "doc-dryrun", RunID: "run-dryrun", OwnerID: "user-dryrun",
+		ComputerID: "computer-dryrun", State: "sleeping",
+		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), CompletedAt: &completedAt,
+		ExpectedStates: []string{"pending"}, RequireRevision: &requireRevision,
+	})
+	if err := s.DryRunProjectionBatch(ctx, "computer-dryrun", &batch); err != nil {
+		t.Fatalf("dry-run healthy batch: %v", err)
+	}
+	got, err := s.GetPendingAgentMutationByDoc(ctx, "user-dryrun", "computer-dryrun", "doc-dryrun")
+	if err != nil {
+		t.Fatalf("read back mutation: %v", err)
+	}
+	if got == nil || got.State != "pending" {
+		t.Fatalf("dry-run applied the batch: %+v", got)
+	}
+}

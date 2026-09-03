@@ -83,6 +83,30 @@ func (s *Store) FinalizeReplayBatch(ctx context.Context, computerID, eventDigest
 	return s.finalizeBatch(ctx, computerID, eventDigest, receipt, batch, true)
 }
 
+// DryRunProjectionBatch validates a projection batch against committed state
+// without writing (implements computerevent.BatchDryRunner). The appender
+// calls it before pin/CAS so a batch that could never finalize is refused to
+// the caller instead of becoming canonical poison (2026-09-03 seq 138612).
+// Live guards remain authoritative: state that changes between dry-run and
+// finalize can still fail closed at finalize time.
+func (s *Store) DryRunProjectionBatch(ctx context.Context, computerID string, batch *computerevent.ProjectionBatch) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("computer event projection: nil store")
+	}
+	if batch == nil {
+		return fmt.Errorf("computer event projection: dry-run batch is required")
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return fmt.Errorf("computer event projection: dry-run begin: %w", err)
+	}
+	defer tx.Rollback()
+	if err := projectBatch(ctx, tx, *batch); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest string, receipt computerevent.Receipt, batch *computerevent.ProjectionBatch, allowLegacyTextureBootstrap bool) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("computer event projection: nil store")

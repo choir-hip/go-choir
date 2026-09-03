@@ -848,3 +848,81 @@ func TestAppenderRecoverPreparedReplayDiscardsNoCAS(t *testing.T) {
 		t.Fatalf("live RecoverPrepared on stray row: err=%v, want ErrNeedsProjectionRepair", err)
 	}
 }
+
+type dryRunProjection struct {
+	*memoryProjection
+	dryRunErr  error
+	dryRunSeen int
+}
+
+func (p *dryRunProjection) DryRunProjectionBatch(_ context.Context, _ string, _ *ProjectionBatch) error {
+	p.dryRunSeen++
+	return p.dryRunErr
+}
+func (p *dryRunProjection) FinalizeBatch(ctx context.Context, computerID string, digest string, receipt Receipt, batch *ProjectionBatch) error {
+	if batch == nil {
+		return p.memoryProjection.Finalize(ctx, computerID, digest, receipt)
+	}
+	return nil
+}
+
+func testBatchPayloadFor(t *testing.T, eventID string) []byte {
+	t.Helper()
+	raw, err := json.Marshal(ProjectionBatch{
+		Version: ProjectionBatchV2, ProjectorVersion: ProjectorVersionV2,
+		ComputerID: testComputerID, EventID: eventID,
+		Ops: []ProjectionOp{{Kind: ProjectionOpDesktopState, Body: json.RawMessage(`{}`)}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func TestAppenderDryRunRefusesPoisonBeforePin(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := SigningKey{SignerRef: SignerRef{SignerDomain: "platform-control", KeyID: "platform-1"}, PrivateKey: privateKey}
+	projection := &dryRunProjection{memoryProjection: &memoryProjection{}, dryRunErr: ErrProjectionMismatch}
+	cas := &memoryCAS{signer: signer}
+	appender, err := NewComputerEventAppender(testComputerID, memoryPinner{signer: signer}, projection, cas, EventHeadReceiptVerifier{Keys: staticKeyResolver{key: publicKey}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	proposed := testEvent(t, nil, EventProjectionBatchRecorded)
+	_, _, err = appender.AppendNewPayload(context.Background(), proposed, TransitionInput{}, testBatchPayloadFor(t, proposed.EventID), ProjectionBatchMediaType, "owner")
+	if err == nil || !strings.Contains(err.Error(), "dry-run") {
+		t.Fatalf("append poison batch = %v, want dry-run refusal", err)
+	}
+	if projection.dryRunSeen != 1 || len(cas.records) != 0 {
+		t.Fatalf("dry-run consulted %d times, CAS records %d; want 1 and 0 (nothing pinned)", projection.dryRunSeen, len(cas.records))
+	}
+}
+
+func TestAppenderDryRunPassesHealthyBatch(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := SigningKey{SignerRef: SignerRef{SignerDomain: "platform-control", KeyID: "platform-1"}, PrivateKey: privateKey}
+	projection := &dryRunProjection{memoryProjection: &memoryProjection{}}
+	cas := &memoryCAS{signer: signer}
+	appender, err := NewComputerEventAppender(testComputerID, memoryPinner{signer: signer}, projection, cas, EventHeadReceiptVerifier{Keys: staticKeyResolver{key: publicKey}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesis := testEvent(t, nil, EventGenesisImported)
+	genesis.ResultingEffectiveCommitment = testDigestA
+	if _, err := appender.AppendNew(context.Background(), genesis, TransitionInput{TargetStateCommitment: testDigestA}, nil); err != nil {
+		t.Fatal(err)
+	}
+	proposed := testEvent(t, nil, EventProjectionBatchRecorded)
+	if _, _, err := appender.AppendNewPayload(context.Background(), proposed, TransitionInput{}, testBatchPayloadFor(t, proposed.EventID), ProjectionBatchMediaType, "owner"); err != nil {
+		t.Fatalf("append healthy batch: %v", err)
+	}
+	if projection.dryRunSeen != 1 || len(cas.records) == 0 {
+		t.Fatalf("dry-run consulted %d times, CAS records %d; want 1 and >0", projection.dryRunSeen, len(cas.records))
+	}
+}
