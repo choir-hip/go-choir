@@ -4717,8 +4717,12 @@ func (s *Store) SettleLifecycleProducerReports(ctx context.Context, req types.Se
 		if matchedUpdate.Disposition != types.UpdatePending {
 			return types.LifecycleResult{}, fmt.Errorf("settle producer report %s: invalid disposition %q (want %q): %w", reportID, matchedUpdate.Disposition, types.UpdatePending, ErrLifecycleInvalidTransition)
 		}
-		if matchedUpdate.DeliveredAt != nil || strings.TrimSpace(matchedUpdate.DeliveredToRunID) != "" {
-			return types.LifecycleResult{}, fmt.Errorf("settle producer report %s: already delivered to run %q: %w", reportID, matchedUpdate.DeliveredToRunID, ErrLifecycleInvalidTransition)
+		deliveredTo := strings.TrimSpace(matchedUpdate.DeliveredToRunID)
+		if deliveredTo != "" && !req.IncludeDeliveredStale {
+			return types.LifecycleResult{}, fmt.Errorf("settle producer report %s: already delivered to run %q: %w", reportID, deliveredTo, ErrLifecycleInvalidTransition)
+		}
+		if deliveredTo != "" && req.ExcludeDeliveredToRunID != "" && deliveredTo == strings.TrimSpace(req.ExcludeDeliveredToRunID) {
+			return types.LifecycleResult{}, fmt.Errorf("settle producer report %s: delivered to protected run %q: %w", reportID, deliveredTo, ErrLifecycleInvalidTransition)
 		}
 
 		if trajectoryID == "" {

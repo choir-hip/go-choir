@@ -374,6 +374,13 @@ type SettleLifecycleProducerReportsRequest struct {
 	ReportIDs           []string          `json:"report_ids"`
 	Reason              string            `json:"reason"`
 	TerminalDisposition UpdateDisposition `json:"terminal_disposition,omitempty"`
+
+	// IncludeDeliveredStale extends settlement to reports already delivered to a
+	// run (storm-era residue bound to stale interrupted runs). The caller binds
+	// the protection: ExcludeDeliveredToRunID refuses settlement of reports
+	// delivered to a named run (e.g. one still executing).
+	IncludeDeliveredStale    bool   `json:"include_delivered_stale,omitempty"`
+	ExcludeDeliveredToRunID  string `json:"exclude_delivered_to_run_id,omitempty"`
 }
 
 type CommitLifecycleOwnerCorrection struct {

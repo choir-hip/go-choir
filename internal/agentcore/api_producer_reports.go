@@ -19,6 +19,17 @@ func (rt *Runtime) SettleLifecycleProducerReports(ctx context.Context, req types
 	if rt == nil || rt.store == nil {
 		return types.LifecycleResult{}, fmt.Errorf("settle producer reports: store unavailable")
 	}
+	if req.IncludeDeliveredStale {
+		// Delivered-stale settlement must never tombstone the live work of the
+		// resident Super: reports delivered to the currently active run are that
+		// run's execution input, everything else delivered is storm-era residue.
+		ownerID := strings.TrimSpace(req.OwnerID)
+		if resident, found, err := rt.activeRunByAgent(ctx, ownerID, persistentSuperAgentID(ownerID)); err != nil {
+			return types.LifecycleResult{}, fmt.Errorf("settle producer reports: resolve resident super: %w", err)
+		} else if found {
+			req.ExcludeDeliveredToRunID = resident.RunID
+		}
+	}
 	req.CommandID = strings.TrimSpace(req.CommandID)
 	if req.CommandID == "" {
 		req.CommandID = "lifecycle-settle-producer-reports:" + strings.TrimSpace(req.TrajectoryID)
