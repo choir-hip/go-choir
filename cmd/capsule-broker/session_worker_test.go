@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
@@ -69,15 +70,10 @@ func TestGoEvalSessionFailsClosedWithoutBinary(t *testing.T) {
 	params, _ := json.Marshal(map[string]string{"source": `1 + 1`})
 	cap := &capsule.Capability{AgentRunID: "run-test"}
 	resp := b.handleGoEvalSession(context.Background(), cap, params)
-	if resp.Error != "" {
-		t.Fatalf("transport-level error: %v", resp.Error)
-	}
-	var result capsule.GoEvalResult
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
-		t.Fatal(err)
-	}
-	if result.ExitCode != 1 || result.Error == "" {
-		t.Fatalf("result = %+v, want failed exit with error", result)
+	// Spawn failure surfaces as a transport error, mirroring the one-shot
+	// path's "failed to start go_eval worker" shape — never a fake result.
+	if resp.Error == "" || !strings.Contains(resp.Error, "session worker") {
+		t.Fatalf("resp = %+v, want session-worker transport error", resp)
 	}
 	if len(b.sessionWorkers) != 0 {
 		t.Fatalf("failed eval left %d workers", len(b.sessionWorkers))
