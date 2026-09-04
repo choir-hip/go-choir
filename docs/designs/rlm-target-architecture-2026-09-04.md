@@ -1,14 +1,36 @@
-# RLM Target Architecture (proposal, 2026-09-04, rev 3)
+# RLM Target Architecture (proposal, 2026-09-04, rev 5)
 
-Status: draft for owner review. No code changes.
+Status: draft incorporating agentic consensus review (8/8 panel models:
+Codex, Cursor, Sol, Terra, Luna, Gemini, Grok, Opencode). No code changes.
 Rule: no dual paths. One broker, one exec, one message protocol, one
 surface per plane.
-Rev 3 folds the rev-2 panel (7 approve-with-changes, 1 block whose
-substance matches the majority's fix list — convergent). Raw:
-`.agentic-consensus/agentic-consensus-20260904-140742/`.
-Prior round: `.agentic-consensus/agentic-consensus-20260904-133048/`.
 
-## Principles
+Rev 5 folds the consensus panel's unanimous technical adjudications:
+1. **Spatial Isolation Invariant**: One activation $\leftrightarrow$ one
+   dedicated, disposable capsule. No shared namespaces across desks. The only
+   shared asset is the immutable, content-addressed lower layer (EROFS / Nix store).
+   Super runs in `autoputer` as the lifecycle supervisor, never in a capsule.
+2. **Reconciled REPL Context & Restart Durability**: Within an activation,
+   working variables and objects live in the Go runtime heap, keeping the model's
+   prompt lean. Settlement-critical state (work items, trajectory evidence,
+   and unread backlogs) lives durably in Dolt / `actor.Log`. New activations
+   hydrate from durable state.
+3. **Inbox Snapshot & Two-Phase Ack**: `choir.Inbox()` is a side-effect-free
+   read of a cell-start snapshot injected by `autoputer`. The durable cursor
+   advances in Dolt only upon successful cell reduction; failed or timed-out
+   cells never acknowledge unread mail.
+4. **Bounded Adaptive Coalescing**: Parent wakes are coalesced via bounded
+   quiescence (e.g. 500ms window, all-complete, timeout deadline, or error
+   tombstone). Never an unbounded barrier that induces deadlocks.
+5. **Role-Bounded Fan-Out & Scoped Fan-In**: `choir.Spawn()` strictly enforces
+   role capabilities (Research cannot spawn Engineering). Child workers report
+   exclusively to their durable return target in `autoputer`.
+6. **Command Runner Allowlist**: Strict environment allowlist (`PATH`, `HOME`,
+   `TMPDIR`, `LANG`) plus explicit capability grants, replacing denylisting.
+
+---
+
+## 1. Principles
 
 1. **Orchestration as code**: Code is closed under composition;
    tool DSLs are not. The cell is a full computational shell:
@@ -19,26 +41,27 @@ Prior round: `.agentic-consensus/agentic-consensus-20260904-133048/`.
    The model has unbounded expressivity to compute, inspect, and
    transform workspace state in code, but narrow, strictly gated
    authority for external action. External effects pass exclusively
-   through typed capability gates and host reducers.
-3. **Local syscalls vs. external staged intents**: Files and
+   through typed capability gates and reducers.
+3. **Context in the REPL; durability in the log**: Within an activation,
+   working memory lives as Go variables, preventing prompt context bloat.
+   Across restarts, passivations, and crashes, all settlement-critical state
+   is reconstructible from the durable Dolt event log and mailbox records.
+4. **Local syscalls vs. external staged intents**: Files and
    processes inside the capsule are synchronous guest syscalls.
-   Anything touching another actor, durable persistence, or task
-   settlement is an intent staged in an in-memory tray, never a
-   live mid-cell network call.
-4. **No function claims success the host has not performed**: Local
-   ids are tray bookkeeping, never delivery receipts. The host
-   commits the batch, mints durable IDs, binds execution receipts,
-   and triggers recipient wakes.
-5. **Async messaging & supervision as code**: Sends never block on
-   the recipient; wake is the host's job after commit, always
-   (with fate exemptions, not content suppressions). Multi-agent
-   supervision and verification panels are first-class, inspectable
-   code within the pipeline, improvable via self-development.
-6. **No legacy carries weight**: update_coagent's cell-facing kinds,
-   summaries, and wake suppressions do not constrain the new
-   protocol. The host adapter to existing durable machinery is
-   specified exactly below — one fixed envelope, not a table.
-## Virtualization Boundaries and System Ontology
+   External communication and task settlement are intents staged
+   in an in-memory tray, returning in microseconds without blocking.
+5. **No function claims success the runtime has not performed**: Local
+   IDs are tray bookkeeping, never delivery receipts. The guest daemon
+   (`autoputer`) commits the batch, mints durable IDs, binds execution
+   receipts, and delivers into recipient Go channels.
+6. **Async messaging & supervision as code**: Sends never block on
+   the recipient; wake is the guest daemon's job after commit, always.
+   Multi-agent supervision and verification panels are first-class,
+   inspectable code within the pipeline, improvable via self-development.
+
+---
+
+## 2. Virtualization Boundaries and System Ontology
 
 Strict terminology is enforced across all documentation and code:
 
@@ -53,212 +76,204 @@ Strict terminology is enforced across all documentation and code:
   overlayfs (`internal/capsule/executor.go`). All agent code execution
   lives exclusively inside capsules.
 
-### Capsule Allocation Policy: Dedicated vs. Shared
+### Desks ("Agents are desks, not people")
+* **Management Desk** (`Super`): Owns trajectory, strategy, budget, and supervisor decisions.
+  Runs directly in `autoputer` as the lifecycle supervisor; does NOT run in a capsule.
+* **Engineering Desk** (`CoSuper`): Owns code implementation, builds, tests, and candidate bundles.
+  Runs in a dedicated, isolated capsule with write and build authority.
+* **Research Desk** (`Researcher`): Owns codebase inspection, source verification, and evidence gathering.
+  Runs in a dedicated read-only capsule.
 
-1. **Dedicated Capsules (Mandatory)**:
-   * **Any agent with Bash / shell access**: Must execute in its own
-     dedicated capsule. Shell access allows arbitrary process
-     spawning, `/proc` inspection, and scratch file mutation, which
-     shatters isolation if shared.
-   * **Any agent authoring or testing candidate changes**: Self-development
-     candidate changes are frozen directly from the capsule's writable
-     overlay filesystem (`upperDir`). Sharing a capsule would
-     contaminate candidate bundles with uncommitted scratch files.
-   * **Any agent with concurrent write authority**: Prevents race
-     conditions on `/workspace/platform`.
-2. **Shared Capsules**:
-   * Permissible **only for read-only inspection** (e.g., passive
-     researchers examining the clean baseline source tree without
-     write or shell authority).
+### Capsule Allocation Invariant: One Activation ↔ One Dedicated Capsule
+1. **Uncompromised Spatial Isolation**:
+   Every agent activation receives its own dedicated, disposable capsule
+   and its own private Yaegi session worker process.
+2. **Never Share Linux Namespaces**:
+   Namespaces (PID, mount, net, IPC, UTS) are never shared across desks or
+   activations. Sharing namespaces introduces `/proc` visibility, IPC snooping,
+   and `/tmp` scratch file contamination.
+3. **What Is Shared**:
+   Only the **immutable, content-addressed lower layer** (read-only EROFS /
+   Nix store baseline source tree) and immutable artifact blobs are shared
+   across capsules.
 
-## Topology (target)
+---
 
-The model sees exactly ONE JSON tool (implementation slot).
-Everything else is a Go spelling inside cells, reduced by the guest
-runtime (`autoputer`) after the cell ends.
-![Target Architecture Topology](../reports/diagrams/diagram-architecture-topology.svg)
+## 3. Communication Topology: Mesh vs. Scoped Fan-Out/Fan-In
 
-```mermaid
-flowchart TB
-    M[CoSuper model] -- "JSON: capsule_go_eval(source)<br/>THE ONLY implementation-slot tool" --> H["autoputer supervisor<br/>(guest runtime)"]
-    H -- "framed cell" --> B["capsule broker<br/>(in-capsule daemon)"]
-    B -- "spawn + pipes" --> W["session worker<br/>(in-capsule yaegi,<br/>syscalls + intent tray)"]
-    W -- "typed frames:<br/>cell I/O + file/exec values" --> B
-    B -- "file/exec verbs<br/>single impl, in-capsule" --> FS[(capsule overlay)]
-    W -- "intent tray<br/>with cell result" --> B
-    B -- "intent batch<br/>post-cell (Unix socket)" --> H
-    H -- "reducer: Dolt event log,<br/>push to Go channel" --> S["recipient Go-channel<br/>mailbox (chan Update)"]
+```
+          [ Management Desk (Super) ]
+                   ▲         ▲
+                   │ (Mesh)  │ (Mesh)
+                   ▼         ▼
+     [ Engineering Desk ] ◄─────► [ Research Desk (Root) ]
+                                            │
+                             ┌──────────────┼──────────────┐
+                             │ (Async       │  Fan-Out)    │
+                             ▼              ▼              ▼
+                       [Sub-Res 1]    [Sub-Res 2]    [Sub-Res 3]
+                             │              │              │
+                             └──────────────┼──────────────┘
+                                            │ (Scoped Fan-In ONLY)
+                                            ▼
+                                  [ Research Desk Inbox ]
+                                  (Adaptive Coalesced Wake)
 ```
 
-Crossing notes: file/exec values round-trip mid-cell, but stay
-capsule-internal (worker↔broker pipes). NOTHING crosses the capsule
-boundary mid-cell. All external effects (messages, task completion)
-travel post-cell as one intent batch over the internal Unix domain
-socket to `autoputer`, which persists them to Dolt and delivers them
-directly into the recipient actor's resident Go channel. This dissolves
-the distributed deadlock objection by construction: there is no mid-cell
-blocking roundtrip to deadlock.
-## The exec split, and its resolution
+### A. Peer-to-Peer Mesh Across Root Desks
+Management, Engineering, and Research desks communicate directly in a
+peer-to-peer mesh. Engineering can query Research directly without
+bouncing through Management.
 
-Two runners exist today with different languages, environments, and
-kill semantics:
-![Command Execution Divergence](../reports/diagrams/diagram-command-execution.svg)
+### B. Asynchronous Fan-Out (`choir.Spawn`)
+When a desk needs to parallelize work, it spawns child workers asynchronously
+via `choir.Spawn(role, objective)`.
+* **Capability Bound**: `Spawn` enforces strict role policies. The Research desk
+  cannot spawn an Engineering CoSuper or request Bash tools.
+* **Non-Blocking**: The spawning desk does NOT block; it continues or finishes its cell.
+
+### C. Scoped Fan-In (Durable Return Binding)
+Spawned child workers are transient, task-bound nodes. They are strictly
+fenced to report back **only to their assigned return target** (`ReturnToActorID` /
+`AssignedWorkItemID`), validated by `autoputer` during reduction. They cannot
+broadcast to other desks.
+
+### D. Bounded Adaptive Coalescing
+When child workers finish, their completions stream into the parent's mailbox.
+To eliminate distributed deadlocks and token waste:
+* `autoputer` uses **bounded adaptive quiescence** (e.g. 500ms quiescence debounce,
+  all-children-complete, or a timeout deadline).
+* It wakes the parent for **one unified synthesis turn**.
+* If a child worker crashes, is OOM-killed, or times out, `autoputer` immediately
+  injects an error tombstone into the parent mailbox to release any wait.
+
+---
+
+## 4. In-Capsule Go API (`choir` package)
+
+```go
+package choir
+
+// --- Workspace Syscalls (synchronous in-capsule) ---
+
+func ReadFile(path string) (string, error)
+func WriteFile(path, content string) (int, error)
+func ListDir(path string) ([]string, error)
+func Exec(command string, args []string) (ExecResult, error)
+func Context() ActivationContext
+
+// --- Asynchronous Messaging & Delegation ---
+
+// Message stages an asynchronous outbound message to a peer desk (Mesh)
+// or to parent (Fan-In). Non-blocking; returns immediately.
+func Message(toDesk, body string) (string, error)
+
+// Inbox returns the cell-start snapshot of unread messages.
+// Side-effect-free inside the cell; durable cursor commits on successful reduction.
+func Inbox() []IncomingMessage
+
+// Spawn asynchronously delegates a subtask (Fan-Out) within allowed role policy.
+// Returns a child task handle.
+func Spawn(role, objective string) (string, error)
+
+// Complete marks the assignment finished with a typed verdict.
+// Reducible only from a successful cell; binds execution receipts.
+func Complete(result, verdict, summary string, evidenceRefs []string) error
+```
+
+Supporting structures:
+```go
+type IncomingMessage struct {
+    ID           string    `json:"id"`
+    FromDesk     string    `json:"from_desk"`
+    ToDesk       string    `json:"to_desk"`
+    Kind         string    `json:"kind"`
+    CreatedAt    time.Time `json:"created_at"`
+    EvidenceRefs []string  `json:"evidence_refs,omitempty"`
+    Body         string    `json:"body"`
+}
+
+type ExecResult struct {
+    ExitCode   int    `json:"exit_code"`
+    Stdout     string `json:"stdout"`
+    Stderr     string `json:"stderr"`
+    DurationMs int64  `json:"duration_ms"`
+}
+
+type ActivationContext struct {
+    ComputerID   string `json:"computer_id"`
+    Epoch        uint64 `json:"epoch"`
+    ActivationID string `json:"activation_id"`
+    Desk         string `json:"desk"`
+    Role         string `json:"role"`
+}
+```
+
+---
+
+## 5. Execution Semantics: Non-Blocking Staging to Go-Channel Mailbox
 
 ```mermaid
 flowchart LR
-    subgraph INNER["inner (yaegikernel, worker-local)"]
-        I["exec.Command(cmd, args...)<br/>NO shell: named program runs directly"]
-        IE["env: PATH/HOME/TMPDIR only<br/>caller keys filtered<br/>(drops CHOIR_*, *KEY*, *TOKEN*)"]
-        IK["own process group<br/>timeout SIGKILLs the group"]
-    end
-    subgraph OUTER["outer (capsule-broker handleExec)"]
-        O["sh -c 'command string'<br/>FULL shell: pipes, globs,<br/>expansion, substitution"]
-        OE["env: broker's WHOLE os.Environ()<br/>+ caller extras appended"]
-        OK["stays in broker's group<br/>(Setpgid false)"]
-    end
-    I --> T["TARGET: inner semantics<br/>implemented ONCE in the<br/>capsule broker"]
-    O -.->|"frozen for tools-route<br/>rollback only"| T
-```
-
-Why `sh` first and not bash: the minimal guest image is only
-guaranteed to have `sh`; bash may not be installed. The code tries
-`sh`, then `bash --noprofile --norc` (startup files skipped, so no
-profile-injected env), then a Nix store bash, then `/bin/sh`.
-
-Resolution (convergent): inner semantics win — argv, clean env,
-secret scan, per-cell process group + SIGKILL on cell deadline
-(broker children keyed by cell id, reaped explicitly so worker-group
-kill cannot orphan them). Canonical exec additionally returns effect
-manifest entries (command, args, cwd, exit code, output digests,
-local effect token) that ride the cell result so the host can mint
-real `ExecutionReceipt`s. The outer shell form stays frozen for the
-tools-route rollback only (separate retirement commit); it is never
-reachable from RLM.
-
-## The message protocol v2 (rev 3)
-
-No cell-chosen kinds. No live mid-cell cross-calls of any kind:
-
-- Cell calls `choir.Message(to, body)`. The call appends an intent
-  to the cell's outbound tray and returns a local intent id
-  immediately in microseconds. Nothing is sent across sockets mid-cell;
-  nothing is claimed.
-- Intent ids are guest-runtime-derived, never worker counters: derived from
-  (spawning activation, tool-call id, cell id, sequence).
-  Same id + same payload on retry returns the original durable id;
-  different calls get distinct ids even with identical bodies.
-- Tray caps, first slice: at most 16 intents per cell, 16 KiB per
-  body, 256 KiB serialized tray aggregate, plus a per-activation
-  mailbox quota. Over-cap calls fail in-cell; over-quota fails
-  closed in the tool result.
-- When the cell ends, the tray travels as a field on the cell
-  result across the Unix domain socket to `autoputer`. The guest
-  runtime reducer, in intent order:
-  1. validates `to` (must equal the bound parent Super this slice;
-     terminal/revoked actors fail closed with reason);
-  2. persists each intent to the recipient's durable Dolt event/mailbox
-     table with a FIXED runtime-built envelope — sender/role/direction
-     from the spawning activation, `Kind=evidence_update`,
-     `schema_version=v1`, summary plus one claim carrying the body
-     verbatim. The cell chooses nothing but `to` and `body`;
-  3. mints durable packet ids; replays return originals, never new
-     rows or wakes;
-  4. delivers the update into the recipient actor's resident Go channel
-     (`mailbox chan Update` in `internal/actor`), waking the recipient
-     actor for its next LLM inference turn.
-- Wake exemptions (fate, not legacy): no wake on replayed intents;
-  no wake/reopen on late evidence after cancel/revoke; one wake per
-  batch when the recipient is already live.
-- The tool result reports per-intent durable ids or explicit
-  rejection with reason. Timeout loses undrained intents loudly
-  (`intents_dropped: true`). Failed non-timeout cells still deliver
-  Message intents tagged with cell status — but never a Complete.
-- Delivery surfaces on the recipient's next turn through the
-  existing update path. Ordering: FIFO per recipient by commit
-  sequence. Bodies are untrusted evidence, never executable: no
-  intent can imply `execution_request`.
-![Intent Lifecycle and Post-Cell Reduction](../reports/diagrams/diagram-intent-lifecycle.svg)
-
-```mermaid
-flowchart LR
-    C[cell: Message/Complete] --> T[tray: ordered intents]
+    C[cell: Message/Complete/Spawn] --> T[tray: staged intents]
     T --> R[cell result + tray]
-    R --> V{cell status}
-    V -->|ok| RD[reducer: validate, persist,<br/>receipts, fate, wake once]
-    V -->|failed| RM[reducer: messages only,<br/>Complete rejected + reason]
-    V -->|timeout| RL[lost: intents_dropped true]
-    RD --> TR[tool result: durable ids]
+    R -- Unix Domain Socket --> H[autoputer daemon]
+    H --> D[(Dolt Event Log)]
+    H --> M[Go-Channel Mailbox<br/>mailbox chan Update]
+    M --> W[Recipient Actor Turn]
 ```
 
-## Completion (rev 3)
+1. **Cell-Start Hydration**: `autoputer` injects a snapshot of unread messages
+   into the worker frame at cell launch. `choir.Inbox()` returns this snapshot
+   idempotently without network roundtrips.
+2. **In-Cell Phase**: `choir.Message()` or `choir.Spawn()` appends intents to the
+   cell's in-memory tray in microseconds. No blocking; zero deadlock risk.
+3. **Cell Completion & Frame Packaging**: When the Go cell finishes, the capsule
+   broker packages the execution status, manifest digests, and staged intent tray
+   into an atomic frame over the Unix domain socket to `autoputer`.
+4. **Guest Runtime Reduction & Two-Phase Ack**:
+   * **Validate & Fence**: `autoputer` verifies sender authorization and restricts
+     spawned workers to their assigned return target.
+   * **Dolt Persistence**: `autoputer` appends updates to the durable Dolt log,
+     minting durable IDs.
+   * **Advance Mailbox Cursor**: `autoputer` advances the unread cursor in Dolt
+     for messages consumed by the successful cell. Failed or timed-out cells never ack.
+   * **Go-Channel Delivery & Adaptive Wake**: Delivers updates into the recipient's
+     in-memory Go channel (`mailbox chan Update` in `internal/actor`), scheduling
+     its next LLM turn via adaptive quiescence.
 
-- Spelling: `choir.Complete(result, verdict, summary,
-  evidence_refs)` with `result ∈ {completed, failed, blocked}`.
-  Partial progress is a Message, not a Complete. No
-  `execution_refs` parameter: the guest runtime binds this activation's
-  persisted broker exec receipts when assembling the report.
-- At most one Complete per activation; it must be the final tray
-  entry — later appends fail in-cell. Reducible only from a
-  successful cell. Reporting assignment failure = successfully
-  returning `Complete(failed, …)`.
-- The reducer runs the existing assignment-fate path
-  (freeze → bind receipts → record → revoke) and returns the
-  durable report identity. Crash-safety: the batch persists before
-  effects run; reduction resumes from per-intent disposition;
-  replays return originals.
+---
 
-## Surface table (target): one model tool, named exceptions
+## 6. Command Runner Unification & Strict Environment Allowlist
 
-| Symbol | Plane | Fate |
-|---|---|---|
-| capsule_go_eval | the ONLY implementation-slot JSON tool | doorway; cells in, results + intent batch out |
-| choir.ReadFile/WriteFile/ListDir/Exec | capsule syscalls in-cell | real, via the one broker, per-call verified |
-| choir.Context | capsule syscall in-cell | read-only activation identity |
-| choir.Message(to, body) | capsule spelling, host act | intent now; durable mailbox + wake after cell |
-| choir.Complete(...) | capsule spelling, host act | terminal intent; fate path post-cell |
-| choir.Assign | — | DELETED (never designed, no counterpart) |
-| choir.Outcome | — | REMOVED for now (goal completion deferred) |
-| record/update/commit | guest runtime functions, NOT model tools | the reducer calls these; the model never sees them |
+1. **Direct-Argv Semantics**: Port `internal/yaegikernel/broker.go` direct
+   `exec.Command(binary, args...)` execution natively into `cmd/capsule-broker`.
+2. **Strict Environment Allowlist**:
+   - Baseline environment defaults strictly to `PATH`, `HOME=/tmp`, `TMPDIR=/tmp`,
+     and `LANG=C.UTF-8`.
+   - Replaces fragile substring denylisting (`!strings.Contains("KEY")`) with an
+     authoritative allowlist. Additional variables pass only if declared in signed
+     capsule capability grants.
+3. **PID Namespace Reaping**:
+   - The capsule broker relies on the capsule's dedicated Linux PID namespace
+     (`CLONE_NEWPID`). On timeout, killing the root process in the namespace
+     guarantees that all descendants are cleanly reaped without leaking background daemons.
+4. **Legacy Runner Freeze**: The shell-based runner (`sh -c`) is frozen strictly
+   for rollback of legacy JSON tools, completely unreachable in RLM mode.
 
-Implementation overlay registers EXACTLY `{capsule_go_eval}`:
-delete `update_coagent`, `record_assignment_result`,
-`commit_transaction` from it. Named exceptions, both tracked for
-Def 3 removal: (1) verifier slot keeps
-`inspect_self_development_bundle` +
-`record_self_development_verification`; (2) `commit_transaction`
-stays JSON on the implementation slot until the Complete reducer
-owns bundle classification (it does not today — assignment fate
-and bundle commit are different functions with different refs).
+---
 
-## Worker↔broker framing (guest-internal only)
+## 7. Migration Sequence
 
-Typed frames with correlation ids (`cell`, `effect_request`,
-`effect_response`, `result`, `close`) over a DEDICATED inherited
-pipe — never the stdout the cell can write to. Chunked payload
-frames with bounded reassembly; the governing inequality is
-result-frame bound ≥ tray bound, and it is stated in the code, not
-assumed. Bounded outstanding calls; deadline inherited from the
-parent call; tray cleared at cell start. Fallback one-shot workers
-have no tray path: cells importing `choir` fail closed there.
-
-## Migration order (load-bearing — out of order deadlocks or lies)
-
-1. Machine-setting boot channel for the route flag (rollback and
-   schema/dispatch unity depend on it; overlay follows broker
-   `get_actuator`, never a second env read).
-2. Frame multiplexer on the dedicated fd + canonical argv exec in
-   the capsule broker (per-cell pgid, group kill).
-3. Move worker file/exec onto frames; bind sessions to spawning
-   capabilities with per-effect revocation rechecks; wire the
-   revocation verb or make revoke-destroys-capsule the invariant.
-4. Intent tray + post-cell reducer (mailbox, receipts, Complete
-   fate, dedicated wake).
-5. Overlay exact sets per slot + mode-aware prompt fix +
-   `run_acceptance` freeze-event recognition.
-6. Retire, in tracked order: shell exec, CoSuper JSON
-   `update_coagent`, verifier exception, commit exception.
-
-Rollback throughout: route flag unset + refresh returns today's
-tools behavior; every commit reverts independently. Revocation and
-epoch gaps ship as problem receipts in the code phase, not as
-silent claims.
+1. **Control Plane Boot Channel**: Wire the machine setting through
+   `choir.actuator` into the guest microVM boot parameters.
+2. **Multiplexed Transport Pipe**: Establish the dedicated Unix domain socket
+   and frame protocol between worker and broker.
+3. **Canonical Command Runner**: Implement direct-argv, strict-allowlist
+   command execution in `cmd/capsule-broker`.
+4. **Intent Tray & Reducer**: Deploy in-memory tray buffering in Yaegi and
+   the reduction engine in `autoputer` (Dolt log + Go channel delivery + `choir.Inbox()` snapshot).
+5. **Tool Surface & Prompt Update**: Update agent tool profiles to expose only
+   `capsule_go_eval`; enable mode-aware system prompts.
+6. **Live Staging Verification**: Run the end-to-end self-development task on the
+   retained staging microVM; verify all receipts.

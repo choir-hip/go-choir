@@ -58,23 +58,25 @@ The multi-model review panels converged on a clean target architecture (document
 * **Guest MicroVM (User Computer)**: The persistent virtual machine running the `autoputer` daemon, `agentcore`, Super, CoSuper, Dolt DB, and the causal event log.
 * **Capsule**: An ephemeral sandbox *inside* the microVM, created via Linux namespaces (PID, mount, net, IPC), cgroups v2, and overlayfs. All agent code execution lives exclusively inside capsules.
 
-### Capsule Allocation Policy: Dedicated vs. Shared
+### Capsule Allocation: One Activation ↔ One Dedicated Capsule
 
-1. **Dedicated Capsules (Mandatory)**:
-   * **Any agent with Bash / shell access**: Must run in its own capsule to prevent process inspection, `/proc` visibility, background daemons, or scratch file contamination.
-   * **Any agent authoring or testing candidate changes**: Candidate changes are frozen directly from the capsule's writable overlay (`upperDir`). Running another agent in that capsule would contaminate the candidate bundle with uncommitted scratch files.
-   * **Any agent with concurrent write privileges**: Prevents race conditions on `/workspace/platform`.
-2. **Shared Capsules**:
-   * Permitted **only for read-only inspection** (e.g., passive researchers reading the clean baseline source tree without write or shell authority).
+("Agents are desks, not people" — management, engineering, research.)
+
+1. **Dedicated Capsules (The Spatial Isolation Invariant)**:
+   * Every agent activation receives its own dedicated, disposable capsule and private Yaegi session worker.
+   * Linux namespaces (PID, mount, net, IPC, UTS) are NEVER shared across desks or activations, eliminating `/proc` inspection, IPC snooping, and scratch file contamination.
+   * `Super` (Management Desk) runs directly in `autoputer` as the lifecycle supervisor; it does NOT run in a capsule.
+2. **What Is Shared**:
+   * Only the **immutable, content-addressed lower layer** (read-only EROFS / Nix store baseline source tree) is shared across capsules.
 
 ![Target Architecture Topology](diagrams/diagram-architecture-topology.svg)
 
-### Agent Messaging Dynamics: Why Go Channels Need Staging
+### Messaging, Fan-Out, and the In-Cell `Inbox()` API
 
-Inside `autoputer`, the actor runtime (`internal/actor/actor.go`) already uses **Go channels as the delivery mechanism** (`mailbox chan Update`). However, in-cell code cannot write directly to a peer's channel:
-* **Separate OS Processes**: The Yaegi interpreter is an isolated process inside the capsule namespace; it has no access to `autoputer`'s in-memory Go channels.
-* **Deadlock Prevention**: If an in-cell call blocked waiting for another agent, and that agent required an LLM turn or asked a clarifying question, the system would deadlock.
-* **The Solution**: In-cell calls (`choir.Message`) stage intents into an in-memory tray in microseconds. When the cell ends, the batch is sent across the Unix domain socket to `autoputer`, which persists the message into Dolt (ensuring restart durability) and pushes it into the recipient's **Go channel mailbox**, waking its next LLM turn.
+1. **Peer-to-Peer Mesh Across Root Desks**: Management, Engineering, and Research desks communicate directly in a peer-to-peer mesh.
+2. **Asynchronous Fan-Out & Scoped Fan-In**: Desks spawn child workers asynchronously via `choir.Spawn(role, objective)` within role bounds. Child workers report strictly back to their assigned return target.
+3. **Context in the REPL (`choir.Inbox()`)**: At cell launch, `autoputer` injects a snapshot of unread messages into the worker frame. In-cell code calls `choir.Inbox()` to inspect messages in Go, keeping prompt windows lean.
+4. **Two-Phase Cursor & Adaptive Coalescing**: Calling `Inbox()` does not advance the durable cursor. The cursor is committed in Dolt only upon successful cell reduction. Parent wakes are coalesced via bounded adaptive quiescence (e.g. 500ms debounce or error tombstones).
 
 <div class="page-break"></div>
 
@@ -90,8 +92,7 @@ A key architectural finding from the audit is that the codebase currently contai
 
 1. **The Inner Runner (`internal/yaegikernel/broker.go`)**:
    * **Execution Mechanism**: Invokes programs directly via `exec.Command(binary, args...)`. It bypasses the shell entirely, eliminating wildcard expansion, pipe parsing, and shell injection vulnerabilities.
-   * **Environment Sanitization**: Enforces a strict environment allowlist (`PATH`, `HOME`, `TMPDIR`). Any caller-provided environment variables are filtered to strip sensitive credentials, including `CHOIR_*`, `*KEY*`, and `*TOKEN*`.
-   * **Process Management**: Configures dedicated process groups (`Setpgid: true`). On timeout or cancellation, a `SIGKILL` is sent to the process group, cleanly terminating all child processes.
+   * **Environment Sanitization**: Enforces an authoritative allowlist (`PATH`, `HOME`, `TMPDIR`, `LANG=C.UTF-8`). Sensitive credentials (`CHOIR_*`, tokens, keys) are stripped; additional variables pass only if declared in signed capability manifests.
 
 2. **The Outer Runner (`cmd/capsule-broker/main.go`)**:
    * **Execution Mechanism**: Executes commands through a shell string wrapper (`sh -c '<command>'`). While flexible, this parses shell syntax, pipes, and wildcards, and introduces shell dependency risks.
@@ -132,17 +133,11 @@ The `autoputer` daemon receives the completed frame and processes the intent tra
 
 ## 7. Key Protocol Decisions
 
-The multi-model review panels reached formal consensus on several critical operational parameters:
-
-* **Typed Completion Contract**: Task completion is invoked via `choir.Complete(result, verdict, summary, evidence_refs)` where `result` must be one of `{completed, failed, blocked}`. A cell cannot supply execution receipts directly; `autoputer` binds authoritative command receipts from the capsule broker upon settlement. At most one `Complete` intent is permitted per assignment.
-* **Host-Controlled Message Envelopes**: Agent cells specify only the recipient address (`to`) and the payload (`body`). All routing headers—including sender identity, originating role, delivery direction, timestamp, and message kind—are authoritatively generated by `autoputer`. Messages can only be addressed to the assigned parent supervisor.
-* **Dedicated Mailbox Wake Channel**: To avoid interference with legacy lifecycle suppression logic, mailbox deliveries trigger a dedicated, coalesced wake signal. Replayed messages and messages arriving after assignment cancellation do not trigger wakes.
-* **Operational Quotas and Bounded Buffers**: To prevent infinite loops or memory exhaustion:
-  * Maximum 16 intents per execution cell.
-  * Maximum 16 KiB per message body.
-  * Maximum 256 KiB aggregate tray payload per cell.
-  * Strict per-activation quotas enforced by the guest runtime.
-
+* **Typed Completion Contract**: Task completion is invoked via `choir.Complete(result, verdict, summary, evidence_refs)` where `result ∈ {completed, failed, blocked}`. The guest runtime binds authoritative command receipts upon settlement. At most one `Complete` intent is permitted per assignment.
+* **Cell-Start Inbox Snapshot & Two-Phase Ack**: `choir.Inbox()` returns an injected snapshot of unread messages idempotently. The durable cursor in Dolt advances only upon successful cell reduction; failed, poisoned, or timed-out cells never acknowledge unread mail.
+* **Mesh Routing with Scoped Worker Fan-In**: Root desks (Management, Engineering, Research) communicate peer-to-peer. Spawned sub-workers (`choir.Spawn`) are authority-fenced: they report exclusively to their assigned return target.
+* **Bounded Adaptive Coalescing**: Parent wakes are debounced via adaptive quiescence (500ms window, all-complete, timeout, or error tombstones), completely eliminating distributed barrier deadlocks.
+* **Operational Quotas and Bounded Buffers**: Maximum 16 intents per execution cell, 16 KiB per message body, 256 KiB aggregate tray payload per cell, with strict per-activation quotas enforced by `autoputer`.
 ---
 
 ## 8. Phased Implementation Sequence
