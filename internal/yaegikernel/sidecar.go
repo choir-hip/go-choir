@@ -3,6 +3,7 @@ package yaegikernel
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -156,6 +157,56 @@ func ExecuteWorkerStdin() {
 	}
 	_ = json.NewEncoder(os.Stdout).Encode(resp)
 	if err != nil {
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
+// SessionWorkerConfig carries the per-activation identity a session worker
+// needs before serving frames: package allowlist, computer/epoch fencing for
+// handle verification, and the activation the choir scope reports.
+type SessionWorkerConfig struct {
+	AllowedPackages []string
+	ComputerID      string
+	ActivationID    string
+	Epoch           uint64
+	AllowedRoot     string
+}
+
+// ExecuteWorkerSessionStdin serves framed eval cells on stdin/stdout with one
+// persistent Session (see RunSessionLoop). It exits zero on a close frame or
+// EOF and non-zero when a cell poisons the session, so the broker respawns a
+// clean worker. The process group boundary (set by the spawner) provides
+// SIGKILL containment exactly like the one-shot worker.
+func ExecuteWorkerSessionStdin(cfg SessionWorkerConfig) {
+	allowlist := NewAllowlist(cfg.AllowedPackages...)
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		os.Exit(2)
+	}
+	issuer, err := NewHandleIssuer(secret)
+	if err != nil {
+		os.Exit(2)
+	}
+	root := cfg.AllowedRoot
+	if root == "" {
+		root = "/tmp"
+	}
+	broker, err := NewBroker(BrokerConfig{ComputerID: cfg.ComputerID, CurrentEpoch: cfg.Epoch, AllowedRoot: root}, issuer)
+	if err != nil {
+		os.Exit(2)
+	}
+	computerID := cfg.ComputerID
+	if computerID == "" {
+		computerID = "worker-local"
+	}
+	scope, err := NewChoirScope(broker, issuer, computerID, cfg.ActivationID, cfg.Epoch)
+	if err != nil {
+		os.Exit(2)
+	}
+	if err := RunSessionLoop(os.Stdin, os.Stdout, func() (*Session, error) {
+		return NewSession(allowlist, scope.ChoirExports())
+	}); err != nil {
 		os.Exit(1)
 	}
 	os.Exit(0)

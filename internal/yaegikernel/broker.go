@@ -99,6 +99,8 @@ func (b *Broker) HandleRequest(ctx context.Context, req *BrokerRequest) *BrokerR
 		return b.handleReadFile(ctx, req, receiptID, start)
 	case ActionWriteFile:
 		return b.handleWriteFile(ctx, req, receiptID, start)
+	case ActionListDir:
+		return b.handleListDir(ctx, req, receiptID, start)
 	case ActionAssign:
 		return b.handleAssign(ctx, req, receiptID, start)
 	case ActionMessage:
@@ -248,6 +250,33 @@ func (b *Broker) handleWriteFile(ctx context.Context, req *BrokerRequest, receip
 	}
 
 	resp, err := NewSuccessResponse(req.RequestID, result, receiptID, time.Since(start))
+	if err != nil {
+		return NewErrorResponse(req.RequestID, err.Error(), time.Since(start))
+	}
+	return resp
+}
+func (b *Broker) handleListDir(ctx context.Context, req *BrokerRequest, receiptID string, start time.Time) *BrokerResponse {
+	var payload ListDirPayload
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		return NewErrorResponse(req.RequestID, fmt.Sprintf("unmarshal list_dir payload: %v", err), time.Since(start))
+	}
+
+	cleanPath, err := b.resolveSafePath(payload.Path)
+	if err != nil {
+		return NewErrorResponse(req.RequestID, err.Error(), time.Since(start))
+	}
+
+	entries, err := os.ReadDir(cleanPath)
+	if err != nil {
+		return NewErrorResponse(req.RequestID, fmt.Sprintf("list dir failed: %v", err), time.Since(start))
+	}
+
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+
+	resp, err := NewSuccessResponse(req.RequestID, ListDirResult{Entries: names}, receiptID, time.Since(start))
 	if err != nil {
 		return NewErrorResponse(req.RequestID, err.Error(), time.Since(start))
 	}

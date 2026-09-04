@@ -15,6 +15,7 @@ const (
 	ActionExec      BrokerAction = "exec"
 	ActionReadFile  BrokerAction = "read_file"
 	ActionWriteFile BrokerAction = "write_file"
+	ActionListDir   BrokerAction = "list_dir"
 	ActionAssign    BrokerAction = "assign"
 	ActionMessage   BrokerAction = "message"
 )
@@ -79,6 +80,16 @@ type WriteFilePayload struct {
 type WriteFileResult struct {
 	BytesWritten int   `json:"bytes_written"`
 	ModTime      int64 `json:"mod_time"`
+}
+
+// ListDirPayload defines the parameters for ActionListDir.
+type ListDirPayload struct {
+	Path string `json:"path"`
+}
+
+// ListDirResult defines the result for ActionListDir.
+type ListDirResult struct {
+	Entries []string `json:"entries"`
 }
 
 // AssignPayload defines the parameters for ActionAssign (spawning a subagent/worker).

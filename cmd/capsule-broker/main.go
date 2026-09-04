@@ -40,12 +40,14 @@ type Broker struct {
 	publicKey          ed25519.PublicKey // injected by Executor at spawn
 	mergedDir          string            // capsule's merged overlayfs mount
 	sessions           map[string]*Session
+	sessionWorkers     map[string]*sessionWorker
+	sessionMu          sync.Mutex
 	revokedCaps        map[string]bool
 	authorizedPeerUID  uint32
 	listener           net.Listener
 	brokerBin          string // path to this broker binary (for go_eval worker spawn)
 	actuator           actuatorRoute
-	sessionWorkerReady bool // set by the persistent Session worker (Def 2 item 2); false until then
+	sessionWorkerReady bool // session worker manager ships with Def 2 item 3
 }
 
 // actuatorRoute selects the execution route for an activation. Tools is the
@@ -108,13 +110,17 @@ type BrokerRPCResponse struct {
 
 func main() {
 	var (
-		socketPath        string
-		capsuleID         string
-		pubKeyHex         string
-		mergedDir         string
-		listenerFD        int
-		isolationStage    string
-		authorizedPeerUID uint
+		socketPath         string
+		capsuleID          string
+		pubKeyHex          string
+		mergedDir          string
+		listenerFD         int
+		isolationStage     string
+		authorizedPeerUID  uint
+		sessionComputerID  string
+		sessionEpoch       uint64
+		sessionActivation  string
+		sessionAllowedRoot string
 	)
 
 	flag.StringVar(&socketPath, "socket", "/tmp/capsule-broker.sock", "Unix socket path")
@@ -124,6 +130,10 @@ func main() {
 	flag.StringVar(&pubKeyHex, "pubkey", "", "Ed25519 public key (hex)")
 	flag.StringVar(&mergedDir, "merged", "/mnt/merged", "Merged overlayfs mount point")
 	flag.UintVar(&authorizedPeerUID, "authorized-peer-uid", 65534, "UID guest-core presents inside the broker user namespace")
+	flag.StringVar(&sessionComputerID, "session-computer-id", "", "Session worker computer identity")
+	flag.Uint64Var(&sessionEpoch, "session-epoch", 1, "Session worker epoch fence")
+	flag.StringVar(&sessionActivation, "session-activation", "", "Session worker activation identity")
+	flag.StringVar(&sessionAllowedRoot, "session-allowed-root", "/tmp", "Session worker filesystem root")
 	flag.Parse()
 	if uint64(authorizedPeerUID) > uint64(^uint32(0)) {
 		log.Fatal("--authorized-peer-uid exceeds uint32")
@@ -133,6 +143,19 @@ func main() {
 		// write a SidecarResponse on stdout. This is the killable process PG
 		// boundary for model-authored Go evaluation inside the capsule.
 		yaegikernel.ExecuteWorkerStdin()
+		return
+	}
+	if isolationStage == "exec-go-session" {
+		// Persistent session worker: serve framed eval cells on stdin/stdout
+		// with one interpreter. Exits non-zero when a cell poisons the
+		// session so the broker respawns clean.
+		yaegikernel.ExecuteWorkerSessionStdin(yaegikernel.SessionWorkerConfig{
+			AllowedPackages: yaegikernel.DefaultSafeStdlibPackagesList(),
+			ComputerID:      sessionComputerID,
+			ActivationID:    sessionActivation,
+			Epoch:           sessionEpoch,
+			AllowedRoot:     sessionAllowedRoot,
+		})
 		return
 	}
 	if isolationStage == "launcher" {
@@ -203,16 +226,18 @@ func main() {
 	}
 
 	broker := &Broker{
-		socketPath:        socketPath,
-		capsuleID:         capsuleID,
-		publicKey:         ed25519.PublicKey(pubKeyBytes),
-		mergedDir:         mergedDir,
-		authorizedPeerUID: uint32(authorizedPeerUID),
-		listener:          listener,
-		sessions:          make(map[string]*Session),
-		revokedCaps:       make(map[string]bool),
-		brokerBin:         "/run/capsule/broker",
-		actuator:          resolveActuatorRoute(),
+		socketPath:         socketPath,
+		capsuleID:          capsuleID,
+		publicKey:          ed25519.PublicKey(pubKeyBytes),
+		mergedDir:          mergedDir,
+		authorizedPeerUID:  uint32(authorizedPeerUID),
+		listener:           listener,
+		sessions:           make(map[string]*Session),
+		sessionWorkers:     make(map[string]*sessionWorker),
+		revokedCaps:        make(map[string]bool),
+		brokerBin:          "/run/capsule/broker",
+		actuator:           resolveActuatorRoute(),
+		sessionWorkerReady: true,
 	}
 	log.Printf("capsule-broker: actuator route=%s (CHOIR_ACTUATOR; session worker ready=%v)", broker.actuator, broker.sessionWorkerReady)
 
@@ -380,6 +405,10 @@ func (b *Broker) handleRPC(req BrokerRPCRequest) BrokerRPCResponse {
 		return b.handleGoEval(ctx, &cap, req.Params)
 	case "get_actuator":
 		return b.handleGetActuator(ctx, &cap, req.Params)
+	case "init_session":
+		return b.handleInitSession(ctx, &cap, req.Params)
+	case "close_session":
+		return b.handleCloseSession(ctx, &cap, req.Params)
 	default:
 		return BrokerRPCResponse{Error: fmt.Sprintf("unknown verb: %s", req.Verb)}
 	}
@@ -507,6 +536,12 @@ func (b *Broker) handleExec(ctx context.Context, cap *capsule.Capability, params
 // --exec-go-stdin worker mode as a separate killable process group, so a
 // runaway interpreter is SIGKILLed on timeout and never runs in guest core.
 func (b *Broker) handleGoEval(ctx context.Context, cap *capsule.Capability, params json.RawMessage) BrokerRPCResponse {
+	// RLM route serves cells on the activation's persistent session worker;
+	// tools route keeps the one-shot worker. The route is resolved once per
+	// call so an unhold/flag change takes effect without reboot.
+	if b.effectiveRoute() == actuatorRLM {
+		return b.handleGoEvalSession(ctx, cap, params)
+	}
 	var p capsule.GoEvalRequest
 	if err := json.Unmarshal(params, &p); err != nil {
 		return BrokerRPCResponse{Error: fmt.Sprintf("failed to parse go_eval params: %v", err)}

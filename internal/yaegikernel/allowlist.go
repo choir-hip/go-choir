@@ -72,6 +72,15 @@ func NewDefaultSafeAllowlist() *Allowlist {
 	}
 	return &Allowlist{allowed: m}
 }
+// DefaultSafeStdlibPackagesList returns the default safe packages plus the
+// prebound choir package for session workers.
+func DefaultSafeStdlibPackagesList() []string {
+	out := make([]string, 0, len(DefaultSafeStdlibPackages)+1)
+	for p := range DefaultSafeStdlibPackages {
+		out = append(out, p)
+	}
+	return append(out, "choir")
+}
 
 // IsAllowed checks if an import path is permitted under the policy.
 func (a *Allowlist) IsAllowed(importPath string) error {
