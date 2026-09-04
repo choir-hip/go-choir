@@ -198,6 +198,15 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 	if allowLegacyTextureBootstrap {
 		return nil
 	}
+	every := s.doltCheckpointEvery
+	if every == 0 {
+		every = defaultFinalizeCheckpointEvery
+	}
+	s.finalizeSinceCheckpoint++
+	if s.finalizeSinceCheckpoint < every {
+		return nil
+	}
+	s.finalizeSinceCheckpoint = 0
 	return s.commitDoltCheckpoint(ctx, "finalize computer event "+eventDigest)
 }
 
