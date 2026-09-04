@@ -1057,6 +1057,13 @@ func (s *Store) listLifecycleRunsByScope(ctx context.Context, ownerID, computerI
 	}
 	runs := make([]types.RunRecord, 0)
 	for _, ref := range refs {
+		// Mirror ReadObjectSnapshot's SQL-level computer predicate: the row's
+		// computer_id column must equal the scope before the body is even
+		// fetched. Body ComputerID can differ from the column on legacy rows;
+		// the old path excluded those at SQL level.
+		if strings.TrimSpace(ref.ComputerID) != computerID {
+			continue
+		}
 		obj, err := graph.GetObject(ctx, ref.CanonicalID)
 		if err != nil {
 			if errors.Is(err, objectgraph.ErrNotFound) {
