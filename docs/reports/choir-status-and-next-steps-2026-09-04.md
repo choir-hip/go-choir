@@ -17,8 +17,9 @@ that doorway the agent programs against a small built-in library called
 
 ## What is finished and live
 
-All of the core construction work is done, tested, deployed to the
-staging site, and running on the retained test computer:
+As of this writing the code sits at commit `8c410a0d` on the staging
+site, running on the retained test computer at boot epoch 879. All of
+the core construction work is done, tested, and live there:
 
 - **The route switch.** The capsule system can run in either the old
   mode (individual JSON tools) or the new session mode, chosen by a
@@ -42,9 +43,12 @@ staging site, and running on the retained test computer:
   gets read-only powers only — it cannot write or execute, enforced at
   two independent layers. Proven by a test that boots the real program.
 - **The sealed tool set.** When session mode is on, the agent's visible
-  tool list shrinks to the session doorway plus reporting and
-  verification tools. The old file and command tools disappear from
-  view, so the agent cannot bypass the session.
+  tool list shrinks from ten tools to six: the session doorway
+  (`capsule_go_eval`) plus reporting, verification, and bundle tools.
+  The old command tool (`capsule_exec`) and the three file tools
+  disappear from view, so the agent cannot bypass the session. An
+  automated test asserts the exact list in both modes, so any drift
+  fails the build.
 
 ## What outside review found (and what we fixed)
 
@@ -52,53 +56,78 @@ We ran two rounds of multi-model review panels — seven independent AI
 systems reading the actual code — and both rounds found real defects.
 Every confirmed defect has been fixed, tested, and deployed:
 
-- **Round one: the worker could never start.** The code passed an empty
-  identity to a component that rejects empty identities, so every
-  session worker died at boot. Our tests missed it because they never
-  booted a real worker. Fixed with the handshake above plus a test that
-  boots the genuine program end to end.
-- **Round one: a privilege hole.** A read-only agent using the session
-  would have received full write and execute powers. Fixed with
-  role-scoped permissions before the startup fix ever went live — in
-  that order deliberately, so the fix for the first bug could not arm
-  the second.
-- **Round one: dead controls.** Session start/stop commands existed but
-  were rejected for every user role, and the fallback path was a flag
-  that was always on. Both are now real, tested behavior.
+- **Round one: the worker could never start.** The code gave the worker
+  an empty computer identity, which the worker's own setup rejects, so
+  every session died immediately at boot (exit code 2) while the system
+  reported itself ready. Our tests missed it because they never booted
+  a real worker — only a nonexistent binary and a dummy `sleep`
+  process. Fixed with the startup handshake plus a test that compiles
+  and boots the genuine program and runs cells through it.
+- **Round one: a privilege hole.** A read-only researcher agent using
+  the session would have received full write and execute powers,
+  bypassing the role rules that govern everything else. Fixed with
+  role-scoped permissions — researcher sessions get a read-only
+  library, enforced both in which functions exist and in each function
+  itself — before the startup fix ever went live. That ordering was
+  deliberate: fixing the boot bug first would have switched on the
+  privilege hole with it.
+- **Round one: dead controls.** The session start/stop/status commands
+  existed but were rejected for every user role, so no caller could
+  ever reach them; and the old-mode fallback was a flag hardwired to
+  "ready," so it could never actually engage. The commands are now
+  admitted for the right roles, and fallback is real per-call
+  behavior: if no session can start, the call runs the old way and
+  says so on the receipt.
 - **Round two (planning the live demonstration): no on-switch.** There
-  is currently no product-supported way to flip the new mode on for the
-  live test computer — the setting travels with the machine's boot
-  configuration, and no such channel exists yet. This is the single
-  biggest remaining engineering task, and it is fully mapped out.
-- **Round two: the prompt lies.** The system instructions shown to the
-  agent still describe the old tools as the complete authority, which
-  would confuse the agent once those tools are hidden. The fix (a
-  mode-aware prompt) is specified but not yet built.
-
+  is currently no supported way to flip the new mode on for the live
+  test computer. The setting has to travel from the owner's refresh
+  command into the guest machine's boot configuration, and that
+  channel does not exist yet — no machine field for it, no boot
+  parameter for it, no flag on the refresh command. Building it is
+  the single biggest remaining engineering task, and its shape is
+  fully mapped: a new machine setting, a `choir.actuator` boot
+  parameter, a line in the guest startup script that turns it into
+  the worker's environment, and a mode-aware agent prompt (the
+  current prompt still describes the old tools as the whole world,
+  which would confuse the agent once those tools are hidden).
 ## The open design question
 
 The liveliest debate — including a third review round with eight
 systems, several of which researched published RLM and agent-harness
 designs on the web — concerns three small functions in the `choir`
-library: Assign, Message, and Outcome. The honest finding is that two
-of them were never really designed: they record notes in the worker's
-short-term memory and report "delivered" when nothing durable happened
-anywhere. All eight reviewers converged on the same principles, drawn
-from real-world systems:
+library: Assign, Message, and Outcome. To be precise about what was
+and was not designed: Message was designed (a typed inter-agent
+message carrying recipient, kind, and body, returning a receipt). The
+other two were not — Assign and Outcome grew as conveniences with no
+specified host counterpart, and Outcome is literally implemented as a
+Message addressed to oneself.
 
-- A computation step should not *send* its result like a letter; the
-  host should *harvest* it like a return value.
-- File and process operations belong inside the session; promises about
-  the outside world (waking a supervisor, closing out an assignment,
-  freezing a bundle) belong outside it.
-- Nothing should claim success the host has not actually performed.
+The problem is not the design of Message but what was built under it.
+All three functions record their payloads in the worker program's
+short-term memory and report success words like "dispatched" and
+"delivered" — while nothing on the host side ever reads them. A
+message can therefore be "delivered" with no recipient, no mailbox,
+and no reader anywhere in the system. The receipt is the fiction, not
+the function signature. The same holds for Assign (an assignment that
+assigns nothing durable) and Outcome (a completion report nobody
+collects).
 
-The concrete proposal on the table: delete the misleading functions,
-keep the file and process operations, leave durable promises in the
-existing host tools, and let the host infer results from what the
-session actually did. This simplification is drawn up and reviewed but
-**not yet approved and not yet built** — that approval is the decision
-this report is waiting on.
+All eight reviewers converged on the same principles, drawn from
+real-world systems: a computation step should not *send* its result
+like a letter; the host should *harvest* it like a return value. File
+and process operations belong inside the session; promises about the
+outside world (waking a supervisor, closing out an assignment,
+freezing a bundle) belong outside it. And no function should claim a
+success the host has not actually performed.
+
+The concrete proposal on the table: delete Assign and Outcome, keep
+Message only if it is re-grounded on a real host mailbox with a named
+reader (otherwise remove it too), keep the file and process
+operations, leave durable promises in the existing host tools, and let
+the host infer results from what the session actually did. This
+simplification is drawn up and reviewed but **not yet approved and
+not yet built** — that approval is the decision this report is
+waiting on.
 
 ## Suggested next steps, in order
 
