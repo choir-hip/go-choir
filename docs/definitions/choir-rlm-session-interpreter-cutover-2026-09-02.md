@@ -114,8 +114,8 @@ measures:
     cannot_prove: "cannot prove model reasoning quality"
 
 now:
-  status: working
-  slice: "RLM Session Interpreter Cutover active execution"
+  status: superseded
+  slice: "Superseded by choir-rlm-target-architecture-cutover-2026-09-04"
   question: none
   reconciliation:
     observed_at: "2026-09-04T04:00:00Z"
@@ -137,14 +137,14 @@ now:
     digest: none
     scope: []
   decision:
-    selected: "Begin RLM cutover execution: session persistence and prebound choir modules in cmd/capsule-broker and internal/yaegikernel; code work may proceed immediately."
+    selected: "Superseded by choir-rlm-target-architecture-cutover-2026-09-04 following comprehensive audit, 8-model agentic consensus review, and Rev 5 target architecture specification."
     kind: architecture
     status: settled
     source: owner
-    evidence_ref: "docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md"
-    owner_ratification_ref: "Definition 1 terminal receipt 2026-09-03; review receipt effects-red-substrate-scheduling-review-2026-09-03"
-    recorded_at: "2026-09-03T15:00:00Z"
-    consequence: "Def 2 code work proceeds; staging is healthy on the final commit so no refresh gates the live sealed proof."
+    evidence_ref: "docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md"
+    owner_ratification_ref: "Owner directive 2026-09-04"
+    recorded_at: "2026-09-04T16:20:00Z"
+    consequence: "Execution redirects to docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md."
   evidence_refs:
     - "docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md"
     - "docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md"
@@ -152,8 +152,8 @@ now:
     - "docs/evidence/effects-repair-verification-2026-09-03.md"
     - "cmd/capsule-broker/main.go"
     - "internal/yaegikernel/eval.go"
-  blocker_or_risk: "Definition 1 resume-hang residual closed (dispatch watchdog) and the 2026-09-03 outage chain repaired and verified; code work (session worker, prebound modules, containment tests) is unblocked and live proof is ungated."
-  next_action: "Code complete and deployed (8c410a0d; guest epoch 879): route flag with real fallback, session worker with handshake plus role-scoped choir, prebound modules with parity corpus, 500ms containment proof, sealed CoSuper overlay derivation. Only the live sealed proof remains: stage CHOIR_ACTUATOR=rlm on the guest, create the CoSuper assignment vehicle, and drive the read->compute->write->assign arc per live_gate (re-verify staging identity, soak, empty Super slot at proof time). Owner go required: env staging is host-wide and the arc writes."
+  blocker_or_risk: none
+  next_action: "None. Execute successor /goal docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md."
 
 receipts:
   - id: rlm-cutover-baseline-2026-09-02

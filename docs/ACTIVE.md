@@ -59,16 +59,27 @@ without `RUNTIME_MAINTENANCE_HOLD` on staging `computer-03335285269bdba4f94377e5
 [`evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md`](evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md).
 Effects remain OFF.
 
-## Active Definition — RLM Session Interpreter Cutover
+## Active Definition — RLM Target Architecture Cutover
+
+[`definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`](definitions/choir-rlm-target-architecture-cutover-2026-09-04.md)
+is **active and executable**, superseding `choir-rlm-session-interpreter-cutover-2026-09-02.md`
+following the 8-model agentic consensus review and Rev 5 target architecture specification.
+Target: 6-step implementation sequence across `cmd/capsule-broker`, `internal/yaegikernel`,
+`internal/actor`, and `internal/agentcore`, including direct-argv execution, strict allowlists,
+multiplexed Unix domain socket frame protocol, in-cell intent staging (`choir.Message`, `choir.Spawn`,
+`choir.Complete`), post-cell Dolt reduction, Go-channel mailbox delivery, `choir.Inbox()` cell-start
+snapshots with two-phase cursor commitment, bounded adaptive coalescing, role-bounded fan-out/fan-in,
+and live sealed proof on staging `computer-03335285269bdba4f94377e56879f9e6` with ambient JSON tools removed.
+
+## Superseded Definition — RLM Session Interpreter Cutover
 
 [`definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md`](definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md)
-is **unblocked and active** following Definition 1 completion. Target: persistent Session worker per
-activation in `cmd/capsule-broker` and `internal/yaegikernel`, prebound `choir` modules,
-SIGKILL reaped <500ms, ambient JSON tool removal from CoSuper prompt, live sealed proof on staging.
+is **superseded** by `choir-rlm-target-architecture-cutover-2026-09-04.md`. Its session persistence scope
+is subsumed by the comprehensive RLM target architecture.
 ## Queued Definition — Supervised Self-Development on RLM
 
 [`definitions/choir-supervised-self-development-on-rlm-2026-09-02.md`](definitions/choir-supervised-self-development-on-rlm-2026-09-02.md)
-is **paused pending Definition 1 and Definition 2 deployed acceptance**.
+is **paused pending `choir-rlm-target-architecture-cutover-2026-09-04.md` deployed acceptance**.
 Target: Candidate change A solitaire implementation authored via RLM session cells, 5-ref freeze,
 qualified consensus under `reversible-selfdev-v1`, promotion, live play verification, falsification with B,
 and restore to pre-A checkpoint `99949fe2`.
@@ -197,10 +208,10 @@ superseded, or historical as stated by their source Definitions, not entrypoints
 
 ## Invocation
 
-Invoke the active Definition 2 via
-`/goal docs/definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md`.
-RLM session interpreter cutover executes on staging
-`computer-03335285269bdba4f94377e56879f9e6` following Definition 1 completion.
+Invoke the active Definition via
+`/goal docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`.
+RLM target architecture cutover executes on staging
+`computer-03335285269bdba4f94377e56879f9e6`.
 
 ## Unowned External Work
 

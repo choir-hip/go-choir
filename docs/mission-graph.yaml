@@ -442,22 +442,48 @@ nodes:
     title: RLM Session Interpreter & Ambient Tool Parity
     path: docs/definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md
     ledger: ''
+    status: superseded
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-substrate-and-scheduling-readiness-2026-09-02
+      - choir-private-go-actor-kernel-2026-08-12
+    enables:
+      - choir-rlm-target-architecture-cutover-2026-09-04
+    note: >-
+      Phase 2 of autonomous engineering sequence. Superseded by
+      choir-rlm-target-architecture-cutover-2026-09-04 following 8-model agentic
+      consensus review and Rev 5 target architecture specification.
+    sources:
+      - docs/definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md
+      - docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md
+      - docs/ACTIVE.md
+  - id: choir-rlm-target-architecture-cutover-2026-09-04
+    title: Choir RLM Target Architecture Cutover
+    path: docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md
+    ledger: ''
     status: working
     kind: spine
     entrypoint: true
     execution_mode: mission_orchestrator
     depends_on:
       - choir-substrate-and-scheduling-readiness-2026-09-02
-      - choir-private-go-actor-kernel-2026-08-12
+      - choir-rlm-session-interpreter-cutover-2026-09-02
     enables:
       - choir-supervised-self-development-on-rlm-2026-09-02
     note: >-
-      Phase 2 of autonomous engineering sequence. Evolving cmd/capsule-broker and
-      internal/yaegikernel to persistent Session worker per activation, prebound
-      choir package exports, ambient JSON tool removal from CoSuper prompt schema.
+      Phase 2 comprehensive RLM target architecture cutover. 6-step implementation
+      sequence across cmd/capsule-broker, internal/yaegikernel, internal/actor, and
+      internal/agentcore: direct-argv execution, strict allowlists, multiplexed
+      Unix domain socket frame protocol, in-cell intent staging, post-cell Dolt reduction,
+      Go-channel mailbox delivery, choir.Inbox() cell-start snapshot with two-phase
+      cursor commitment, bounded adaptive coalescing, role-bounded fan-out/fan-in,
+      and live sealed proof on staging computer-03335285269bdba4f94377e56879f9e6.
     sources:
-      - docs/definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md
-      - docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md
+      - docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md
+      - docs/designs/rlm-target-architecture-2026-09-04.md
+      - docs/reports/choir-status-and-next-steps-2026-09-04.md
       - docs/choir-doctrine.md
       - docs/ACTIVE.md
   - id: choir-supervised-self-development-on-rlm-2026-09-02
@@ -469,7 +495,7 @@ nodes:
     entrypoint: false
     execution_mode: blocked_incomplete
     depends_on:
-      - choir-rlm-session-interpreter-cutover-2026-09-02
+      - choir-rlm-target-architecture-cutover-2026-09-04
     enables: []
     note: >-
       Phase 3 of autonomous engineering sequence. Candidate A solitaire proof,
