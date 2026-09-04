@@ -141,7 +141,7 @@ func evalCell(t *testing.T, w *sessionWorker, source string) yaegikernel.Session
 
 // TestSessionWorkerRealSpawnEndToEnd is the B1 regression: a worker spawned
 // through spawnSessionWorker completes the ready handshake and serves cells
-// (import persistence, real overlay write, assign/message receipts) instead
+// (import persistence, real overlay write, tray-staged messaging) instead
 // of dying at startup on an empty computer identity.
 func TestSessionWorkerRealSpawnEndToEnd(t *testing.T) {
 	bin := buildBrokerBinary(t)
@@ -168,14 +168,20 @@ func TestSessionWorkerRealSpawnEndToEnd(t *testing.T) {
 	if res.Error != "" {
 		t.Fatalf("message: %s", res.Error)
 	}
+	// RLM contract: bound cells stage into the tray for post-cell reduction
+	// instead of synchronously delivering. The intent ships on the result;
+	// worker-local receipts stay empty (nothing was delivered yet).
 	found := false
-	for _, r := range res.Receipts {
-		if strings.HasPrefix(r, "message/") {
+	for _, in := range res.Intents {
+		if in.Kind == yaegikernel.IntentMessage && in.ToDesk == "owner" && in.Body == "hi" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("receipts = %v, want message entry", res.Receipts)
+		t.Fatalf("staged intents = %+v, want owner/note/hi message", res.Intents)
+	}
+	if len(res.Receipts) != 0 {
+		t.Fatalf("receipts = %v, want empty (staged, not delivered)", res.Receipts)
 	}
 }
 
