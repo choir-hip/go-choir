@@ -267,3 +267,27 @@ func TestPersistentSuperReportToolDoesNotDependOnCapsuleExecutor(t *testing.T) {
 		}
 	}
 }
+
+// TestRLMAssignedCoSuperOverlayIsSealedGo is Def 2 item 4 schema derivation:
+// under the RLM route the assigned CoSuper model schema keeps capsule_go_eval
+// as the sole capsule-effect entry plus host reconciliation channels, with
+// the JSON exec/file tools removed (subsumed by in-cell choir ops).
+func TestRLMAssignedCoSuperOverlayIsSealedGo(t *testing.T) {
+	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
+	if !capsule.HostSelectsRLM() {
+		t.Fatal("host route authority did not select RLM")
+	}
+	registry, err := buildAssignedCoSuperRegistry(nil)
+	if err != nil {
+		t.Fatalf("build RLM assigned registry: %v", err)
+	}
+	want := []string{"capsule_go_eval", "commit_transaction", "inspect_self_development_bundle", "record_assignment_result", "record_self_development_verification", "update_coagent"}
+	if got := registryToolNames(registry); !slices.Equal(got, want) {
+		t.Fatalf("RLM assigned registry tools = %v, want exact %v", got, want)
+	}
+	for _, absent := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir"} {
+		if _, ok := registry.Lookup(absent); ok {
+			t.Fatalf("RLM registry kept JSON capsule tool %q", absent)
+		}
+	}
+}

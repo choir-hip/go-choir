@@ -56,17 +56,17 @@ type Broker struct {
 type actuatorRoute string
 
 const (
-	actuatorTools actuatorRoute = "tools"
-	actuatorRLM   actuatorRoute = "rlm"
+	actuatorTools actuatorRoute = actuatorRoute(capsule.ActuatorTools)
+	actuatorRLM   actuatorRoute = actuatorRoute(capsule.ActuatorRLM)
 )
 
-// resolveActuatorRoute is the single authority for the activation route
-// (Def 2 route_authority): CHOIR_ACTUATOR env, default tools, invalid values
-// fail closed to tools. It derives BOTH the model-facing schema view (via the
-// get_actuator verb the host reads when building the overlay) and the
-// execution dispatcher (effectiveRoute below).
+// resolveActuatorRoute is the dispatch side of the route authority (Def 2
+// route_authority): broker-env CHOIR_ACTUATOR, default tools, invalid values
+// fail closed to tools. The model-facing schema side lives in the host
+// overlay builder (agentcore derives it from the host env); get_actuator
+// only advertises this broker's resolved route for diagnosis.
 func resolveActuatorRoute() actuatorRoute {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("CHOIR_ACTUATOR"))) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(capsule.ActuatorEnvVar))) {
 	case string(actuatorRLM):
 		return actuatorRLM
 	default:

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/runtimeprompts"
 	"github.com/yusefmosiah/go-choir/internal/search"
@@ -307,6 +308,9 @@ type registryToolInstaller func(*toolregistry.ToolRegistry) error
 // belong in this input type, so the delegated registry cannot receive their
 // backing callbacks by configuration accident.
 func buildAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, error) {
+	if capsule.HostSelectsRLM() {
+		return buildRLMAssignedCoSuperRegistry(rt)
+	}
 	registry := toolregistry.MustNewToolRegistry()
 	if err := RegisterCapsuleLocalTools(registry, rt); err != nil {
 		return nil, fmt.Errorf("build assigned co-super registry: %w", err)
@@ -316,6 +320,32 @@ func buildAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, erro
 	}
 	if err := registerCapsuleBoundSelfDevelopmentTools(registry); err != nil {
 		return nil, fmt.Errorf("build assigned co-super registry: %w", err)
+	}
+	return registry, nil
+}
+
+// buildRLMAssignedCoSuperRegistry is the sealed-Go overlay (Def 2 item 4):
+// capsule_go_eval is the sole capsule-effect entry (the broker dispatches it
+// to the persistent session worker with prebound choir ops). The JSON file
+// and exec tools are removed — choir.ReadFile/WriteFile/ListDir/Exec inside
+// cells subsume them. Report/update channels and bundle-verification tools
+// stay: they are host reconciliation, not capsule effects, and have no
+// in-cell equivalent.
+func buildRLMAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, error) {
+	registry := toolregistry.MustNewToolRegistry()
+	for _, tool := range []toolregistry.Tool{
+		newCapsuleGoEvalTool(),
+		newCommitTransactionTool(),
+		newInspectSelfDevelopmentBundleTool(),
+		newRecordSelfDevelopmentVerificationTool(),
+		newRecordAssignedCoSuperReportTool(rt),
+	} {
+		if err := registry.Register(tool); err != nil {
+			return nil, fmt.Errorf("build RLM assigned co-super registry: %w", err)
+		}
+	}
+	if err := RegisterCoagentUpdateTools(registry, rt); err != nil {
+		return nil, fmt.Errorf("build RLM assigned co-super registry: %w", err)
 	}
 	return registry, nil
 }
