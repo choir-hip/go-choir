@@ -153,7 +153,7 @@ now:
     - "cmd/capsule-broker/main.go"
     - "internal/yaegikernel/eval.go"
   blocker_or_risk: "Definition 1 resume-hang residual closed (dispatch watchdog) and the 2026-09-03 outage chain repaired and verified; code work (session worker, prebound modules, containment tests) is unblocked and live proof is ungated."
-  next_action: "Implement the runtime route flag (actuator=tools vs actuator=rlm) and persistent Session worker per the acceptance criteria."
+  next_action: "Code complete and deployed (8c410a0d; guest epoch 879): route flag with real fallback, session worker with handshake plus role-scoped choir, prebound modules with parity corpus, 500ms containment proof, sealed CoSuper overlay derivation. Only the live sealed proof remains: stage CHOIR_ACTUATOR=rlm on the guest, create the CoSuper assignment vehicle, and drive the read->compute->write->assign arc per live_gate (re-verify staging identity, soak, empty Super slot at proof time). Owner go required: env staging is host-wide and the arc writes."
 
 receipts:
   - id: rlm-cutover-baseline-2026-09-02
