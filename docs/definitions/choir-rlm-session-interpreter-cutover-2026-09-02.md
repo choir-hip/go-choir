@@ -109,9 +109,9 @@ now:
   slice: "RLM Session Interpreter Cutover active execution"
   question: none
   reconciliation:
-    observed_at: "2026-09-03T15:00:00Z"
-    source_ref: "main@bf6c51c0"
-    deploy_identity: "staging https://choir.news proxy deployed_commit bf6c51c0; guest binary 3fe61c54 (refresh to final commit owed); computer-03335285269bdba4f94377e56879f9e6"
+    observed_at: "2026-09-04T04:00:00Z"
+    source_ref: "main@7495ffa1"
+    deploy_identity: "staging https://choir.news proxy deployed_commit fa0fd202; guest binary fa0fd202 epoch 876 on computer-03335285269bdba4f94377e56879f9e6 servable; pre-A fence 99949fe2 untouched; effects OFF"
     authority_identities:
       - "docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md"
       - "docs/evidence/effects-red-substrate-scheduling-review-2026-09-03.md"
@@ -135,14 +135,15 @@ now:
     evidence_ref: "docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md"
     owner_ratification_ref: "Definition 1 terminal receipt 2026-09-03; review receipt effects-red-substrate-scheduling-review-2026-09-03"
     recorded_at: "2026-09-03T15:00:00Z"
-    consequence: "Def 2 code work proceeds; its live sealed proof on staging is gated on a guest refresh to the final commit (guest still runs 3fe61c54 per observability)."
+    consequence: "Def 2 code work proceeds; staging is healthy on the final commit so no refresh gates the live sealed proof."
   evidence_refs:
     - "docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md"
     - "docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md"
     - "docs/evidence/effects-red-substrate-scheduling-review-2026-09-03.md"
+    - "docs/evidence/effects-repair-verification-2026-09-03.md"
     - "cmd/capsule-broker/main.go"
     - "internal/yaegikernel/eval.go"
-  blocker_or_risk: "Live sealed proof requires guest refresh to bf6c51c0 and closure of the Definition 1 resume-hang residual; code work (session worker, prebound modules, containment tests) is unblocked."
+  blocker_or_risk: "Definition 1 resume-hang residual closed (dispatch watchdog) and the 2026-09-03 outage chain repaired and verified; code work (session worker, prebound modules, containment tests) is unblocked and live proof is ungated."
   next_action: "Implement the runtime route flag (actuator=tools vs actuator=rlm) and persistent Session worker per the acceptance criteria."
 
 receipts:
