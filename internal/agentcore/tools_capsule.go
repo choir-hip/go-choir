@@ -77,7 +77,7 @@ func RegisterCapsuleTools(registry *toolregistry.ToolRegistry) error {
 // composed by the assigned CoSuper registry, not inherited from any host profile.
 func RegisterCapsuleLocalTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
 	for _, tool := range []toolregistry.Tool{
-		newCapsuleExecTool(), newCapsuleGoEvalTool(), newCapsuleReadFileTool(), newCapsuleWriteFileTool(), newCapsuleListDirTool(), newRecordAssignedCoSuperReportTool(rt),
+		newCapsuleExecTool(), newCapsuleGoEvalTool(rt), newCapsuleReadFileTool(), newCapsuleWriteFileTool(), newCapsuleListDirTool(), newRecordAssignedCoSuperReportTool(rt),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
@@ -704,14 +704,15 @@ func newInspectCapsuleTool() toolregistry.Tool {
 
 func newCapsuleExecTool() toolregistry.Tool {
 	type args struct {
-		Command   string `json:"command"`
-		Cwd       string `json:"cwd"`
-		TimeoutMS int    `json:"timeout_ms"`
+		Command   string   `json:"command"`
+		Args      []string `json:"args"`
+		Cwd       string   `json:"cwd"`
+		TimeoutMS int      `json:"timeout_ms"`
 	}
 	return toolregistry.Tool{
 		Name: "capsule_exec", Description: "Execute a command inside the assigned isolated capsule.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"command": map[string]any{"type": "string"}, "cwd": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer"},
+			"command": map[string]any{"type": "string"}, "args": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "cwd": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer"},
 		}, []string{"command"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			toolCtx, err := requireCapsuleMutationRole(ctx)
@@ -722,7 +723,7 @@ func newCapsuleExecTool() toolregistry.Tool {
 			if err := json.Unmarshal(raw, &input); err != nil {
 				return "", err
 			}
-			result, err := toolCtx.Executor.Exec(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, capsule.ExecRequest{Command: input.Command, Cwd: input.Cwd, TimeoutMS: input.TimeoutMS})
+			result, err := toolCtx.Executor.Exec(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, capsule.ExecRequest{Command: input.Command, Args: input.Args, Cwd: input.Cwd, TimeoutMS: input.TimeoutMS})
 			if err != nil {
 				return "", err
 			}
@@ -740,7 +741,7 @@ func newCapsuleExecTool() toolregistry.Tool {
 // before execution (the same gate as capsule_exec). The package allowlist is
 // resolved server-side by the broker from the verified capability role; the
 // model never supplies allowed_packages.
-func newCapsuleGoEvalTool() toolregistry.Tool {
+func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		Source    string `json:"source"`
 		Code      string `json:"code"`
@@ -766,11 +767,22 @@ func newCapsuleGoEvalTool() toolregistry.Tool {
 			if src == "" {
 				src = input.Code
 			}
-			result, err := toolCtx.Executor.GoEval(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, capsule.GoEvalRequest{
-				Source: src, Cwd: input.Cwd, TimeoutMS: input.TimeoutMS,
-			})
+			req := capsule.GoEvalRequest{Source: src, Cwd: input.Cwd, TimeoutMS: input.TimeoutMS}
+			reduction := rlmReductionForCall(ctx, rt, toolCtx)
+			if reduction.active {
+				req.Inbox = reduction.inbox
+			}
+			result, err := toolCtx.Executor.GoEval(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, req)
 			if err != nil {
 				return "", err
+			}
+			if reduction.active && result.Error == "" {
+				if rerr := reduction.commit(ctx, result.Intents); rerr != nil {
+					return "", rerr
+				}
+				for _, in := range reduction.receipt.Intents {
+					result.Receipts = append(result.Receipts, fmt.Sprintf("rlm:%s:%d", in.Kind, in.Seq))
+				}
 			}
 			return toolregistry.ResultJSON(result)
 		},

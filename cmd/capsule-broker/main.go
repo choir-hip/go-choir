@@ -60,14 +60,15 @@ const (
 	actuatorRLM   actuatorRoute = actuatorRoute(capsule.ActuatorRLM)
 )
 
-// resolveActuatorRoute is the dispatch side of the route authority (Def 2
-// route_authority): broker-env CHOIR_ACTUATOR, default tools, invalid values
-// fail closed to tools. The model-facing schema side lives in the host
+// resolveActuatorRoute is the dispatch side of the route authority: the guest
+// kernel command line (machine boot setting choir.actuator=) wins, the
+// forwarded broker env CHOIR_ACTUATOR is the fallback, and anything else
+// fails closed to tools. The model-facing schema side lives in the host
 // overlay builder (agentcore derives it from the host env); get_actuator
 // only advertises this broker's resolved route for diagnosis.
 func resolveActuatorRoute() actuatorRoute {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(capsule.ActuatorEnvVar))) {
-	case string(actuatorRLM):
+	switch capsule.ReadGuestActuator() {
+	case capsule.ActuatorRLM:
 		return actuatorRLM
 	default:
 		return actuatorTools
@@ -122,6 +123,7 @@ func main() {
 		sessionActivation  string
 		sessionAllowedRoot string
 		sessionRole        string
+		sessionSockFD      int
 	)
 
 	flag.StringVar(&socketPath, "socket", "/tmp/capsule-broker.sock", "Unix socket path")
@@ -136,6 +138,7 @@ func main() {
 	flag.StringVar(&sessionActivation, "session-activation", "", "Session worker activation identity")
 	flag.StringVar(&sessionAllowedRoot, "session-allowed-root", "/tmp", "Session worker filesystem root")
 	flag.StringVar(&sessionRole, "session-role", "", "Session worker role bounding the prebound choir surface (trusted, from verified capability)")
+	flag.IntVar(&sessionSockFD, "session-sock-fd", -1, "inherited multiplexed session socket fd (Step 2 transport); -1 selects legacy stdio")
 	flag.Parse()
 	if uint64(authorizedPeerUID) > uint64(^uint32(0)) {
 		log.Fatal("--authorized-peer-uid exceeds uint32")
@@ -148,16 +151,29 @@ func main() {
 		return
 	}
 	if isolationStage == "exec-go-session" {
-		// Persistent session worker: serve framed eval cells on stdin/stdout
-		// with one interpreter. Exits non-zero when a cell poisons the
-		yaegikernel.ExecuteWorkerSessionStdin(yaegikernel.SessionWorkerConfig{
+		cfg := yaegikernel.SessionWorkerConfig{
 			AllowedPackages: yaegikernel.DefaultSafeStdlibPackagesList(),
 			ComputerID:      sessionComputerID,
 			ActivationID:    sessionActivation,
 			Epoch:           sessionEpoch,
 			AllowedRoot:     sessionAllowedRoot,
 			Role:            sessionRole,
-		})
+		}
+		if sessionSockFD >= 0 {
+			// Multiplexed session socket (Step 2): the broker passed its
+			// socketpair end as an inherited fd. Raw stdio piping is gone.
+			sockFile := os.NewFile(uintptr(sessionSockFD), "session-sock")
+			conn, err := net.FileConn(sockFile)
+			_ = sockFile.Close()
+			if err != nil {
+				log.Fatalf("session socket fd %d: %v", sessionSockFD, err)
+			}
+			yaegikernel.ExecuteWorkerSessionConn(conn, cfg)
+			return
+		}
+		// Legacy stdio fallback for pre-cutover brokers; emits the same
+		// ready handshake so spawn verification cannot mistake silence.
+		yaegikernel.ExecuteWorkerSessionStdin(cfg)
 		return
 	}
 	if isolationStage == "launcher" {
@@ -447,38 +463,163 @@ func (b *Broker) handleGetActuator(_ context.Context, _ *capsule.Capability, _ j
 }
 
 // handleExec executes a command in the capsule.
+//
+// Direct-argv is canonical: when params carry a non-empty args vector, the
+// binary runs with no shell, a strict environment allowlist, and its own
+// process group (SIGKILL reaped within execKillReapGrace). An empty args
+// vector selects the frozen legacy shell path, kept only for rollback of
+// legacy JSON tools and unreachable in RLM mode.
 func (b *Broker) handleExec(ctx context.Context, cap *capsule.Capability, params json.RawMessage) BrokerRPCResponse {
 	var p capsule.ExecRequest
 	if err := json.Unmarshal(params, &p); err != nil {
 		return BrokerRPCResponse{Error: fmt.Sprintf("failed to parse exec params: %v", err)}
 	}
 
-	// Create or reuse session.
+	// Resolve cwd safely within the merged dir.
 	cwd := p.Cwd
 	if cwd == "" {
 		cwd = "/"
 	}
-
-	// Resolve cwd safely within the merged dir.
 	cwdPath, err := resolveWithin(b.mergedDir, cwd)
 	if err != nil {
 		return BrokerRPCResponse{Error: fmt.Sprintf("invalid cwd: %v", err)}
 	}
 
+	timeout := 60 * time.Second
+	if p.TimeoutMS > 0 {
+		timeout = time.Duration(p.TimeoutMS) * time.Millisecond
+	}
+	evalCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	if len(p.Args) > 0 {
+		return b.handleExecDirect(evalCtx, cwdPath, p)
+	}
+	return b.handleExecLegacyShell(evalCtx, cwdPath, p)
+}
+
+// execKillReapGrace bounds process-group reaping after SIGKILL: a timed-out
+// command's whole group must be gone within half a second, never orphaned.
+const execKillReapGrace = 500 * time.Millisecond
+
+// directExecAllowlist is the authoritative environment allowlist for
+// direct-argv execution. Only these keys pass; everything else from the
+// caller or the broker daemon environment is dropped, so ambient credentials
+// (CHOIR_*, tokens, keys) can never leak into executed commands.
+var directExecAllowlist = map[string]bool{"PATH": true, "HOME": true, "TMPDIR": true, "LANG": true}
+
+// directExecEnv builds the sanitized environment: fixed safe baseline plus
+// caller overrides restricted to the allowlist. Credential-shaped keys never
+// pass, even when allowlisted by name collision.
+func directExecEnv(overrides []string) []string {
+	env := []string{
+		"PATH=/run/current-system/sw/bin:/bin:/usr/bin",
+		"HOME=/tmp",
+		"TMPDIR=/tmp",
+		"LANG=C.UTF-8",
+	}
+	for _, kv := range overrides {
+		name, value, ok := strings.Cut(kv, "=")
+		if !ok {
+			continue
+		}
+		key := strings.ToUpper(strings.TrimSpace(name))
+		if !directExecAllowlist[key] {
+			continue
+		}
+		if strings.HasPrefix(key, "CHOIR_") || strings.Contains(key, "KEY") || strings.Contains(key, "TOKEN") {
+			continue
+		}
+		env = append(env, key+"="+value)
+	}
+	return env
+}
+
+// handleExecDirect runs binary+args with no shell in its own process group.
+func (b *Broker) handleExecDirect(ctx context.Context, cwdPath string, p capsule.ExecRequest) BrokerRPCResponse {
+	binary := p.Command
+	if !strings.Contains(binary, "/") {
+		resolved, err := exec.LookPath(binary)
+		if err != nil {
+			return BrokerRPCResponse{Error: fmt.Sprintf("exec binary not found: %s", binary)}
+		}
+		binary = resolved
+	}
+	cmd := exec.CommandContext(ctx, binary, p.Args...)
+	cmd.Dir = cwdPath
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
+	cmd.Env = directExecEnv(p.Env)
+
+	var stdout, stderr cappedBuffer
+	stdout.max = goEvalMaxOutputBytes
+	stderr.max = goEvalMaxOutputBytes
+	if p.Stdin != "" {
+		stdin, pipeErr := cmd.StdinPipe()
+		if pipeErr != nil {
+			return BrokerRPCResponse{Error: fmt.Sprintf("failed to create stdin pipe: %v", pipeErr)}
+		}
+		go func() {
+			stdin.Write([]byte(p.Stdin))
+			stdin.Close()
+		}()
+	}
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	start := time.Now()
+	if err := cmd.Start(); err != nil {
+		return BrokerRPCResponse{Error: fmt.Sprintf("exec start failed: %v", err)}
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	result := capsule.ExecResult{SessionID: p.SessionID, Stdout: "", Stderr: ""}
+	select {
+	case <-ctx.Done():
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = cmd.Process.Kill()
+		}
+		select {
+		case <-done:
+		case <-time.After(execKillReapGrace):
+		}
+		result.ExitCode = -1
+		result.Stdout = stdout.String()
+		result.Stderr = stderr.String()
+		result.Duration = time.Since(start)
+		resultBytes, _ := json.Marshal(result)
+		return BrokerRPCResponse{Result: resultBytes}
+	case waitErr := <-done:
+		result.ExitCode = 0
+		if waitErr != nil {
+			if exitErr, ok := waitErr.(*exec.ExitError); ok {
+				result.ExitCode = exitErr.ExitCode()
+			} else {
+				return BrokerRPCResponse{Error: fmt.Sprintf("exec failed: %v", waitErr)}
+			}
+		}
+		result.Stdout = stdout.String()
+		result.Stderr = stderr.String()
+		result.Duration = time.Since(start)
+		resultBytes, _ := json.Marshal(result)
+		return BrokerRPCResponse{Result: resultBytes}
+	}
+}
+
+// handleExecLegacyShell is the frozen rollback path for legacy JSON tools
+// (sh -c string execution). It is unreachable in RLM mode: RLM callers must
+// supply an args vector. Preserved byte-identical for mechanical rollback.
+func (b *Broker) handleExecLegacyShell(ctx context.Context, cwdPath string, p capsule.ExecRequest) BrokerRPCResponse {
 	shell := "sh"
-	var shellArgs []string
-	if _, err := exec.LookPath("sh"); err == nil {
-		shell = "sh"
-		shellArgs = []string{"-c", p.Command}
-	} else if path, err := exec.LookPath("bash"); err == nil {
-		shell = path
-		shellArgs = []string{"--noprofile", "--norc", "-c", p.Command}
-	} else if _, err := os.Stat("/run/current-system/sw/bin/bash"); err == nil {
-		shell = "/run/current-system/sw/bin/bash"
-		shellArgs = []string{"--noprofile", "--norc", "-c", p.Command}
-	} else {
-		shell = "/bin/sh"
-		shellArgs = []string{"-c", p.Command}
+	shellArgs := []string{"-c", p.Command}
+	if _, err := exec.LookPath("sh"); err != nil {
+		if path, err := exec.LookPath("bash"); err == nil {
+			shell = path
+			shellArgs = []string{"--noprofile", "--norc", "-c", p.Command}
+		} else {
+			shell = "/bin/sh"
+		}
 	}
 	cmd := exec.CommandContext(ctx, shell, shellArgs...)
 	cmd.Dir = cwdPath

@@ -3,17 +3,19 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -33,13 +35,14 @@ type workerSessionConfig struct {
 
 // sessionWorker owns one persistent worker process serving framed eval cells
 // for a single activation. At most one in-flight Eval runs at a time; a
-// timeout, poisoned cell, or transport error kills the whole process group
+// timeout, poisoned cell, or transport error kills the whole process group.
+// Transport is the multiplexed Unix domain socketpair (Step 2): the broker
+// keeps one end, the worker inherits the other as fd 3. Raw stdio piping is
+// gone; worker stdin stays closed and stdout carries only crash diagnostics.
 type sessionWorker struct {
 	mu     sync.Mutex
 	cmd    *exec.Cmd
-	stdin  *os.File
-	stdout *os.File
-	dec    *json.Decoder
+	framed *yaegikernel.FramedConn
 	pid    int
 	dead   bool
 	config workerSessionConfig
@@ -63,17 +66,19 @@ const sessionReadyTimeout = 10 * time.Second
 // spawnSessionWorker starts a session worker process in its own process group
 // with a sanitized environment, mirroring the one-shot worker hardening. The
 // role rides a trusted flag from the verified outer capability and bounds the
-// prebound choir surface; the computer identity is the broker's capsule.
 func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, error) {
-	stdinR, stdinW, err := os.Pipe()
+	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("session socketpair: %w", err)
 	}
-	stdoutR, stdoutW, err := os.Pipe()
+	parentFile := os.NewFile(uintptr(fds[0]), "session-parent")
+	childFile := os.NewFile(uintptr(fds[1]), "session-child")
+	parentConn, err := net.FileConn(parentFile)
+	_ = parentFile.Close()
 	if err != nil {
-		_ = stdinR.Close()
-		_ = stdinW.Close()
-		return nil, err
+		_ = childFile.Close()
+		_ = unix.Close(fds[0])
+		return nil, fmt.Errorf("session parent socket: %w", err)
 	}
 	args := []string{
 		"--isolation-stage", "exec-go-session",
@@ -82,82 +87,88 @@ func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, er
 		"--session-allowed-root", cfg.allowedRoot,
 		"--session-epoch", fmt.Sprintf("%d", cfg.epoch),
 		"--session-role", cfg.role,
+		"--session-sock-fd", "3",
 	}
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = cfg.allowedRoot
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	cmd.Env = []string{"PATH=/run/current-system/sw/bin:/bin:/usr/bin", "TMPDIR=/tmp"}
-	cmd.Stdin = stdinR
-	cmd.Stdout = stdoutW
+	cmd.ExtraFiles = []*os.File{childFile}
 	cmd.Stderr = &bytes.Buffer{}
 	if err := cmd.Start(); err != nil {
-		_ = stdinR.Close()
-		_ = stdinW.Close()
-		_ = stdoutR.Close()
-		_ = stdoutW.Close()
+		_ = childFile.Close()
+		_ = parentConn.Close()
 		return nil, fmt.Errorf("start session worker: %w", err)
 	}
-	_ = stdinR.Close()
-	_ = stdoutW.Close()
+	_ = childFile.Close()
 	w := &sessionWorker{
 		cmd:    cmd,
-		stdin:  stdinW,
-		stdout: stdoutR,
-		dec:    json.NewDecoder(bufio.NewReader(stdoutR)),
+		framed: yaegikernel.NewFramedConn(parentConn),
 		pid:    cmd.Process.Pid,
 		config: cfg,
 	}
 	if err := w.awaitReady(sessionReadyTimeout); err != nil {
 		w.killLocked()
-		_ = stdinW.Close()
-		_ = stdoutR.Close()
 		return nil, err
 	}
 	return w, nil
 }
 
-// awaitReady consumes the worker's post-prebind {"id":"ready"} frame through
-// the same decoder that serves cells, so buffered bytes are never lost.
+// awaitReady consumes the worker's post-prebind ready result frame from the
+// session socket, so a process that starts but never proves readiness is
+// killed, never trusted.
 func (w *sessionWorker) awaitReady(timeout time.Duration) error {
 	type readyFrame struct {
 		ID string `json:"id"`
 	}
-	ch := make(chan error, 1)
+	type result struct {
+		stream  byte
+		payload []byte
+		err     error
+	}
+	ch := make(chan result, 1)
 	go func() {
-		var f readyFrame
-		if err := w.dec.Decode(&f); err != nil {
-			ch <- fmt.Errorf("session worker ready: %w", err)
-			return
-		}
-		if f.ID != "ready" {
-			ch <- fmt.Errorf("session worker ready: unexpected frame %q", f.ID)
-			return
-		}
-		ch <- nil
+		stream, payload, err := w.framed.ReadFrame()
+		ch <- result{stream: stream, payload: payload, err: err}
 	}()
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
-	case err := <-ch:
-		return err
+	case r := <-ch:
+		if r.err != nil {
+			return fmt.Errorf("session worker ready: %w", r.err)
+		}
+		if r.stream != yaegikernel.StreamCell {
+			return fmt.Errorf("session worker ready: unexpected stream %d", r.stream)
+		}
+		var f readyFrame
+		if err := json.Unmarshal(r.payload, &f); err != nil {
+			return fmt.Errorf("session worker ready: %w", err)
+		}
+		if f.ID != "ready" {
+			return fmt.Errorf("session worker ready: unexpected frame %q", f.ID)
+		}
+		return nil
 	case <-timer.C:
 		return fmt.Errorf("session worker ready: handshake timed out")
 	}
 }
 
-// eval sends one cell and waits for its result. A timeout kills the worker;
-// a poisoned cell (worker exits) is surfaced so the caller respawns.
-func (w *sessionWorker) eval(source string, timeout time.Duration) (yaegikernel.SessionResult, error) {
+// eval sends one cell over the session socket and waits for its result. The
+// inbox snapshot rides the frame for cell-start injection. A timeout kills
+// the worker; a poisoned cell (worker exits) is surfaced so the caller
+// respawns. Reserved output streams are tolerated and skipped.
+func (w *sessionWorker) eval(source string, inbox []yaegikernel.IncomingMessage, timeout time.Duration) (yaegikernel.SessionResult, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.dead {
 		return yaegikernel.SessionResult{}, fmt.Errorf("session worker dead, respawn required")
 	}
-	frame, err := json.Marshal(yaegikernel.SessionFrame{ID: nextSessionFrameID(), Source: source})
+	frame, err := json.Marshal(yaegikernel.SessionFrame{ID: nextSessionFrameID(), Source: source, Inbox: inbox})
 	if err != nil {
 		return yaegikernel.SessionResult{}, err
 	}
-	if _, err := w.stdin.Write(append(frame, '\n')); err != nil {
+	if err := w.framed.WriteFrame(yaegikernel.StreamCell, frame); err != nil {
 		w.killLocked()
 		return yaegikernel.SessionResult{}, fmt.Errorf("session worker write: %w", err)
 	}
@@ -167,12 +178,23 @@ func (w *sessionWorker) eval(source string, timeout time.Duration) (yaegikernel.
 	}
 	ch := make(chan result, 1)
 	go func() {
-		var res yaegikernel.SessionResult
-		if derr := w.dec.Decode(&res); derr != nil {
-			ch <- result{err: fmt.Errorf("session worker read: %w", derr)}
+		for {
+			stream, payload, rerr := w.framed.ReadFrame()
+			if rerr != nil {
+				ch <- result{err: fmt.Errorf("session worker read: %w", rerr)}
+				return
+			}
+			if stream != yaegikernel.StreamCell {
+				continue
+			}
+			var res yaegikernel.SessionResult
+			if uerr := json.Unmarshal(payload, &res); uerr != nil {
+				ch <- result{err: fmt.Errorf("session worker decode: %w", uerr)}
+				return
+			}
+			ch <- result{res: res}
 			return
 		}
-		ch <- result{res: res}
 	}()
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
@@ -197,7 +219,7 @@ func (w *sessionWorker) close() {
 		return
 	}
 	if frame, err := json.Marshal(yaegikernel.SessionFrame{ID: "close", Close: true}); err == nil {
-		_, _ = w.stdin.Write(append(frame, '\n'))
+		_ = w.framed.WriteFrame(yaegikernel.StreamCell, frame)
 	}
 	w.killLocked()
 }
@@ -236,13 +258,9 @@ func (w *sessionWorker) killLocked() {
 		w.pid = w.cmd.Process.Pid
 		killProcessGroup(w.cmd, sessionKillReapGrace)
 	}
-	if w.stdin != nil {
-		_ = w.stdin.Close()
-		w.stdin = nil
-	}
-	if w.stdout != nil {
-		_ = w.stdout.Close()
-		w.stdout = nil
+	if w.framed != nil {
+		_ = w.framed.Close()
+		w.framed = nil
 	}
 }
 
@@ -368,7 +386,7 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 	if err != nil {
 		return b.fallbackGoEval(ctx, cap, params, fmt.Sprintf("session worker unavailable: %v", err))
 	}
-	res, err := w.eval(p.Source, timeout)
+	res, err := w.eval(p.Source, p.Inbox, timeout)
 	if err != nil {
 		b.dropSession(cap.AgentRunID)
 		result := capsule.GoEvalResult{ExitCode: 1, Error: fmt.Sprintf("session eval: %v", err), Duration: time.Since(start)}
@@ -383,8 +401,12 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 		Receipts: res.Receipts,
 	}
 	if res.Error != "" {
+		// Poisoned cells drop their tray: no intents ship, the inbox cursor
+		// cannot advance, and the worker is discarded, never reused.
 		result.ExitCode = 1
 		b.dropSession(cap.AgentRunID)
+	} else {
+		result.Intents = res.Intents
 	}
 	resultBytes, _ := json.Marshal(result)
 	return BrokerRPCResponse{Result: resultBytes}

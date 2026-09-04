@@ -247,7 +247,11 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString(runtimeprompts.SuperRuntimeOverlay())
 	}
 	if profile == agentprofile.CoSuper {
-		b.WriteString(runtimeprompts.CoSuperRuntimeOverlay())
+		if capsule.HostSelectsRLM() {
+			b.WriteString(runtimeprompts.RLMCoSuperOverlay())
+		} else {
+			b.WriteString(runtimeprompts.CoSuperRuntimeOverlay())
+		}
 		kind := metadataStringValue(rec.Metadata, "assignment_kind")
 		if assignmentID := metadataStringValue(rec.Metadata, "assignment_id"); assignmentID != "" {
 			b.WriteString("\n\nExact authenticated assignment: assignment_id=")
@@ -334,7 +338,7 @@ func buildAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, erro
 func buildRLMAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, error) {
 	registry := toolregistry.MustNewToolRegistry()
 	for _, tool := range []toolregistry.Tool{
-		newCapsuleGoEvalTool(),
+		newCapsuleGoEvalTool(rt),
 		newCommitTransactionTool(),
 		newInspectSelfDevelopmentBundleTool(),
 		newRecordSelfDevelopmentVerificationTool(),

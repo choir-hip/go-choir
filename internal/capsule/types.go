@@ -3,6 +3,8 @@ package capsule
 import (
 	"os"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // SpawnSpec describes the desired state of a new capsule.
@@ -71,13 +73,18 @@ func (s CapsuleState) String() string {
 }
 
 // ExecRequest is a request to execute a command in a capsule.
+// Direct-argv is canonical: when Args is non-empty, Command names the binary
+// and Args carries the argument vector with no shell involved. An empty Args
+// selects the frozen legacy shell path (sh -c), reachable only for rollback
+// of legacy JSON tools and never in RLM mode.
 type ExecRequest struct {
 	SessionID string   // broker-minted random ID (NOT agentRunID)
-	Command   string   // command to execute
+	Command   string   // binary path (direct-argv) or shell string (legacy)
+	Args      []string // direct-argv vector; empty = legacy shell
 	Cwd       string   // working directory for command
-	Env       []string // environment overrides
+	Env       []string // environment overrides (allowlisted, never credentials)
 	Stdin     string   // stdin content (empty for no input)
-	TimeoutMS int      // timeout in milliseconds (0 = no timeout)
+	TimeoutMS int      // timeout in milliseconds (0 = broker default)
 	PTY       bool     // use PTY for command
 }
 
@@ -94,15 +101,21 @@ type ExecResult struct {
 // GoEvalRequest is a request to evaluate model-authored Go source inside the
 // capsule's restricted Yaegi interpreter. All package access is constrained by
 // the kernel allowlist; the interpreted process runs as a killable child of the
-// broker, never in guest core.
+// broker, never in guest core. Inbox carries the cell-start snapshot assembled
+// by guest core from the durable mailbox; the worker injects it into the frame
+// and the cell reads it through choir.Inbox() without network roundtrips.
 type GoEvalRequest struct {
 	Source          string   `json:"source"`           // Go source to evaluate
 	Cwd             string   `json:"cwd"`              // working directory (optional)
 	AllowedPackages []string `json:"allowed_packages"` // kernel allowlist override (optional)
 	TimeoutMS       int      `json:"timeout_ms"`       // timeout in milliseconds (0 = broker default)
+	Inbox           []yaegikernel.IncomingMessage `json:"inbox,omitempty"`
 }
 
-// GoEvalResult is the result of evaluating Go source in the capsule.
+// GoEvalResult is the result of evaluating Go source in the capsule. Intents
+// carries the cell's staged tray for post-cell reduction by guest core; it is
+// populated only for successful cells (failed cells drop their tray and never
+// advance the inbox cursor).
 type GoEvalResult struct {
 	Stdout     string        `json:"stdout"`
 	Stderr     string        `json:"stderr"`
@@ -112,6 +125,7 @@ type GoEvalResult struct {
 	ReceiptRef string        `json:"receipt_ref,omitempty"`
 	Fallback   bool          `json:"fallback,omitempty"`
 	Receipts   []string      `json:"receipts,omitempty"`
+	Intents    []yaegikernel.StagedIntent `json:"intents,omitempty"`
 }
 
 type ExecutionReceipt struct {

@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"syscall"
@@ -185,6 +186,28 @@ type SessionWorkerConfig struct {
 // the spawner distinguishes a live worker from a process that started and
 // died (spawn success is not readiness).
 func ExecuteWorkerSessionStdin(cfg SessionWorkerConfig) {
+	sess, broker, scope := buildSessionWorker(cfg)
+	ready, err := json.Marshal(SessionResult{ID: "ready"})
+	if err != nil {
+		os.Exit(2)
+	}
+	if _, err := os.Stdout.Write(append(ready, '\n')); err != nil {
+		os.Exit(2)
+	}
+	hooks := scope.BindCell()
+	if err := RunSessionLoopWithDrainAndHooks(os.Stdin, os.Stdout, func() (*Session, error) {
+		return sess, nil
+	}, broker.DrainReceipts, &hooks); err != nil {
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
+// buildSessionWorker assembles the persistent interpreter, broker, and choir
+// scope shared by both worker transports (stdio legacy and framed socket).
+// It exits 2 when the worker cannot prove it will serve cells correctly:
+// spawn success is not readiness.
+func buildSessionWorker(cfg SessionWorkerConfig) (*Session, *Broker, *ChoirScope) {
 	allowlist := NewAllowlist(cfg.AllowedPackages...)
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
@@ -214,16 +237,26 @@ func ExecuteWorkerSessionStdin(cfg SessionWorkerConfig) {
 	if err != nil {
 		os.Exit(2)
 	}
+	return sess, broker, scope
+}
+
+// ExecuteWorkerSessionConn serves framed eval cells over the multiplexed
+// session socket (Step 2 transport). It emits one ready result frame after
+// prebind, then serves until a close frame, EOF, or a poisoned cell.
+func ExecuteWorkerSessionConn(conn net.Conn, cfg SessionWorkerConfig) {
+	sess, broker, scope := buildSessionWorker(cfg)
+	fc := NewFramedConn(conn)
 	ready, err := json.Marshal(SessionResult{ID: "ready"})
 	if err != nil {
 		os.Exit(2)
 	}
-	if _, err := os.Stdout.Write(append(ready, '\n')); err != nil {
+	if err := fc.WriteFrame(StreamCell, ready); err != nil {
 		os.Exit(2)
 	}
-	if err := RunSessionLoopWithDrain(os.Stdin, os.Stdout, func() (*Session, error) {
+	hooks := scope.BindCell()
+	if err := RunSessionLoopFramedWithHooks(fc, func() (*Session, error) {
 		return sess, nil
-	}, broker.DrainReceipts); err != nil {
+	}, broker.DrainReceipts, &hooks); err != nil {
 		os.Exit(1)
 	}
 	os.Exit(0)

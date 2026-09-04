@@ -18,7 +18,7 @@ func TestCapsuleGoEvalToolDispatchesToExecutorGoEval(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping dispatch test in short mode")
 	}
-	tool := newCapsuleGoEvalTool()
+	tool := newCapsuleGoEvalTool(nil)
 
 	// CoSuper role with a passing obligation validator; the stub executor is a
 	// zero-value *capsule.Executor on non-linux, whose GoEval returns an error.

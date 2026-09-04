@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"syscall"
 	"testing"
@@ -29,22 +30,26 @@ func testSessionBroker(t *testing.T) *Broker {
 }
 
 func TestSessionFrameCodecRoundTrip(t *testing.T) {
-	frame := yaegikernel.SessionFrame{ID: "cell-9", Source: `x := 1`}
+	frame := yaegikernel.SessionFrame{ID: "cell-9", Source: `x := 1`, Inbox: []yaegikernel.IncomingMessage{
+		{ID: "m-1", FromDesk: "super", ToDesk: "cosuper", Kind: "directive", Body: "go"},
+	}}
 	raw, err := json.Marshal(frame)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var back yaegikernel.SessionFrame
-	if err := json.Unmarshal(raw, &back); err != nil || back != frame {
+	if err := json.Unmarshal(raw, &back); err != nil || !reflect.DeepEqual(back, frame) {
 		t.Fatalf("frame roundtrip = %+v, %v", back, err)
 	}
-	res := yaegikernel.SessionResult{ID: "cell-9", Stdout: "hi"}
+	res := yaegikernel.SessionResult{ID: "cell-9", Stdout: "hi", Intents: []yaegikernel.StagedIntent{
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "hi"},
+	}}
 	raw, err = json.Marshal(res)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var backRes yaegikernel.SessionResult
-	if err := json.Unmarshal(raw, &backRes); err != nil || backRes.ID != res.ID || backRes.Stdout != res.Stdout || backRes.Stderr != res.Stderr || backRes.Error != res.Error || backRes.DurationMs != res.DurationMs || len(backRes.Receipts) != 0 {
+	if err := json.Unmarshal(raw, &backRes); err != nil || !reflect.DeepEqual(backRes, res) {
 		t.Fatalf("result roundtrip = %+v, %v", backRes, err)
 	}
 }
@@ -127,7 +132,7 @@ func buildBrokerBinary(t *testing.T) string {
 
 func evalCell(t *testing.T, w *sessionWorker, source string) yaegikernel.SessionResult {
 	t.Helper()
-	res, err := w.eval(source, 60*time.Second)
+	res, err := w.eval(source, nil, 60*time.Second)
 	if err != nil {
 		t.Fatalf("eval %q: %v", source, err)
 	}
@@ -189,7 +194,7 @@ func TestSessionWorkerResearcherDeniedEndToEnd(t *testing.T) {
 	if res := evalCell(t, w, `import "choir"`); res.Error != "" {
 		t.Fatalf("import choir: %s", res.Error)
 	}
-	res, err := w.eval(`choir.WriteFile("x.txt", "x")`, 60*time.Second)
+	res, err := w.eval(`choir.WriteFile("x.txt", "x")`, nil, 60*time.Second)
 	if err != nil {
 		t.Fatalf("transport: %v", err)
 	}
@@ -204,20 +209,20 @@ func TestSessionWorkerResearcherDeniedEndToEnd(t *testing.T) {
 // ready frame passes, any other first frame fails the spawn.
 func TestAwaitReadyHandshake(t *testing.T) {
 	ready := func(payload string) *sessionWorker {
-		r, w, err := os.Pipe()
+		a, b, err := yaegikernel.SocketPair()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := w.Write([]byte(payload)); err != nil {
+		fa := yaegikernel.NewFramedConn(a)
+		if err := fa.WriteFrame(yaegikernel.StreamCell, []byte(payload)); err != nil {
 			t.Fatal(err)
 		}
-		_ = w.Close()
-		return &sessionWorker{dec: json.NewDecoder(r)}
+		return &sessionWorker{framed: yaegikernel.NewFramedConn(b)}
 	}
-	if err := ready("{\"id\":\"ready\"}\n").awaitReady(5 * time.Second); err != nil {
+	if err := ready("{\"id\":\"ready\"}").awaitReady(5 * time.Second); err != nil {
 		t.Fatalf("ready frame: %v", err)
 	}
-	if err := ready("{\"id\":\"cell-1\",\"stdout\":\"hi\"}\n").awaitReady(5 * time.Second); err == nil {
+	if err := ready("{\"id\":\"cell-1\",\"stdout\":\"hi\"}").awaitReady(5 * time.Second); err == nil {
 		t.Fatal("non-ready first frame accepted")
 	}
 }

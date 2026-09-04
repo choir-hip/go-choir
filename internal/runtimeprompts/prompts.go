@@ -54,6 +54,14 @@ func CoSuperRuntimeOverlay() string {
 	return mustRenderOverlay("co_super_runtime", nil)
 }
 
+// RLMCoSuperOverlay is the sealed-Go variant served when actuator=rlm:
+// capsule_go_eval is the sole capsule doorway and the choir package subsumes
+// the JSON file/exec tools. The legacy catalog sentence is replaced, not
+// amended, so the model never sees two authorities.
+func RLMCoSuperOverlay() string {
+	return mustRenderOverlay("rlm_co_super_runtime", nil)
+}
+
 func ResearcherRuntimeOverlay() string {
 	return mustRenderOverlay("researcher_runtime", nil)
 }

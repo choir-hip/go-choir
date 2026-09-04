@@ -24,6 +24,13 @@ type ChoirScope struct {
 	epoch        uint64
 	activationID string
 	readOnly     bool
+	// Cell binding (RLM Step 4): while a cell is bound, messaging and
+	// delegation stage into the tray and return in microseconds without
+	// blocking; Inbox() reads the bound snapshot. Unbound scopes keep the
+	// legacy synchronous broker behavior (one-shot path). The session loop
+	// owns binding lifetime: exactly one cell binds at a time.
+	tray  *Tray
+	inbox []IncomingMessage
 }
 
 // SessionRoleResearcher is the read-only role: sessions bound to it observe
@@ -52,6 +59,26 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 		return nil, fmt.Errorf("choir: issue session handle: %w", err)
 	}
 	return &ChoirScope{broker: broker, handleRef: handleRef, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly}, nil
+}
+
+// BindCell binds one cell: installs the inbox snapshot and a fresh tray,
+// returning hooks the session loop drives around evaluation.
+func (s *ChoirScope) BindCell() CellHooks {
+	return CellHooks{
+		Begin: func(frame SessionFrame) {
+			s.tray = &Tray{}
+			s.inbox = append([]IncomingMessage(nil), frame.Inbox...)
+		},
+		End: func() []StagedIntent {
+			var out []StagedIntent
+			if s.tray != nil {
+				out = s.tray.Drain()
+				s.tray = nil
+			}
+			s.inbox = nil
+			return out
+		},
+	}
 }
 
 func (s *ChoirScope) call(action BrokerAction, payload any, result any) error {
@@ -83,17 +110,19 @@ func (s *ChoirScope) call(action BrokerAction, payload any, result any) error {
 	return nil
 }
 
-// ChoirExports returns the prebound choir package for model-authored Go
-// (Def 2 item 3): file operations, assignment, messaging, activation context,
-// and outcome reporting, all executed through the broker with receipts. Model
-// code imports it as `import "choir"`. Read-only scopes export observation
-// plus context only; mutation entry points are omitted AND method-guarded,
-// so a future export mistake cannot re-open them.
+// ChoirExports returns the prebound choir package for model-authored Go:
+// file operations, assignment, activation context, outcome reporting, plus
+// the RLM orchestration surface (tray-staged Message/Spawn/Complete and the
+// side-effect-free Inbox snapshot). Model code imports it as `import
+// "choir"`. Read-only scopes export observation plus context and inbox only;
+// mutation entry points are omitted AND method-guarded, so a future export
+// mistake cannot re-open them.
 func (s *ChoirScope) ChoirExports() interp.Exports {
 	exports := map[string]reflect.Value{
 		"ReadFile": reflect.ValueOf(s.ReadFile),
 		"ListDir":  reflect.ValueOf(s.ListDir),
 		"Context":  reflect.ValueOf(s.Context),
+		"Inbox":    reflect.ValueOf(s.Inbox),
 	}
 	if s == nil || !s.readOnly {
 		exports["WriteFile"] = reflect.ValueOf(s.WriteFile)
@@ -101,6 +130,8 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		exports["Assign"] = reflect.ValueOf(s.Assign)
 		exports["Message"] = reflect.ValueOf(s.Message)
 		exports["Outcome"] = reflect.ValueOf(s.Outcome)
+		exports["Spawn"] = reflect.ValueOf(s.Spawn)
+		exports["Complete"] = reflect.ValueOf(s.Complete)
 	}
 	return interp.Exports{"choir/choir": exports}
 }
@@ -168,16 +199,66 @@ func (s *ChoirScope) Assign(taskID, actorProfile, instruction string) (AssignRes
 	return result, nil
 }
 
-// Message records a typed inter-agent message and returns its receipt.
+// Message records a typed inter-agent message and returns its receipt. While
+// a cell is bound it stages into the tray and returns immediately with the
+// cell-local correlation ID (tray bookkeeping, never a delivery receipt);
+// unbound it keeps the legacy synchronous broker call.
 func (s *ChoirScope) Message(recipientID, kind, body string) (MessageResult, error) {
 	if err := s.mutateDenied("Message"); err != nil {
 		return MessageResult{}, err
+	}
+	if s.tray != nil {
+		if recipientID == "" {
+			return MessageResult{}, fmt.Errorf("choir: message requires a destination desk")
+		}
+		localID, err := s.tray.stage(StagedIntent{Kind: IntentMessage, ToDesk: recipientID, MsgKind: kind, Body: body})
+		if err != nil {
+			return MessageResult{}, err
+		}
+		return MessageResult{MessageID: localID}, nil
 	}
 	var result MessageResult
 	if err := s.call(ActionMessage, MessagePayload{RecipientID: recipientID, Kind: kind, Body: body}, &result); err != nil {
 		return MessageResult{}, err
 	}
 	return result, nil
+}
+
+// Spawn asynchronously delegates a subtask within role policy. It stages
+// into the cell tray and returns a cell-local child handle; it requires a
+// bound cell because delegation only reduces after a successful cell.
+func (s *ChoirScope) Spawn(role, objective string) (string, error) {
+	if err := s.mutateDenied("Spawn"); err != nil {
+		return "", err
+	}
+	if s.tray == nil {
+		return "", fmt.Errorf("choir: spawn requires a bound cell")
+	}
+	return s.tray.Spawn(role, objective)
+}
+
+// Complete marks the assignment finished with a typed verdict. It stages
+// into the cell tray; the reducer binds execution receipts to it. At most
+// one complete per cell. It requires a bound cell.
+func (s *ChoirScope) Complete(result, verdict, summary string, evidenceRefs []string) error {
+	if err := s.mutateDenied("Complete"); err != nil {
+		return err
+	}
+	if s.tray == nil {
+		return fmt.Errorf("choir: complete requires a bound cell")
+	}
+	return s.tray.Complete(result, verdict, summary, evidenceRefs)
+}
+
+// Inbox returns the cell-start snapshot of unread messages. It is
+// side-effect-free inside the cell: no network call, no cursor movement.
+// The durable cursor advances only when the cell's intents reduce
+// successfully. Unbound scopes observe an empty inbox.
+func (s *ChoirScope) Inbox() []IncomingMessage {
+	if s == nil {
+		return []IncomingMessage{}
+	}
+	return append([]IncomingMessage(nil), s.inbox...)
 }
 
 // Context reports the activation identity the scope is bound to.

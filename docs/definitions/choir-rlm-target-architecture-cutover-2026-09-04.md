@@ -143,18 +143,18 @@ measures:
 
 now:
   status: working
-  slice: "Step 1: Wire choir.actuator boot channel and mechanical rollback flag"
+  slice: "Step 6 done; landing: commit, CI, staging proof"
   question: none
   reconciliation:
-    observed_at: "2026-09-04T16:20:00Z"
-    source_ref: "main@de93d6aa"
+    observed_at: "2026-09-04T19:30:00Z"
+    source_ref: "main@d0e2e5f6 plus uncommitted RLM cutover work"
     deploy_identity: "staging https://choir.news deployed_commit 8c410a0d94bc7afa4383f5942b83611540a27824; computer-03335285269bdba4f94377e56879f9e6 active realization_epoch 879; effects OFF"
     authority_identities:
       - "docs/designs/rlm-target-architecture-2026-09-04.md"
       - "docs/reports/choir-status-and-next-steps-2026-09-04.md"
       - ".agentic-consensus/agentic-consensus-20260904-155821/manifest.tsv"
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "git status --short; clean"
+    worktree_inventory_ref: "git status --short; only RLM cutover paths dirty"
     status: reconciled
   candidate:
     id: none
@@ -175,13 +175,14 @@ now:
     consequence: "Proceed to Step 1 implementation under this Definition."
   evidence_refs:
     - "docs/designs/rlm-target-architecture-2026-09-04.md"
-    - "docs/reports/choir-status-and-next-steps-2026-09-04.md"
-    - ".agentic-consensus/agentic-consensus-20260904-155821/manifest.tsv"
-    - "cmd/capsule-broker/main.go"
-    - "internal/yaegikernel/broker.go"
-  blocker_or_risk: none
-  next_action: "Implement Step 1: Wire choir.actuator boot parameter channel and mechanical rollback flag in cmd/capsule-broker and internal/yaegikernel."
-
+    - "internal/capsule/actuator.go (Step 1: choir.actuator boot param wins, env fallback, fail-closed tools)"
+    - "cmd/capsule-broker direct-argv exec with allowlist + 500ms group reap (Step 3)"
+    - "internal/yaegikernel/transport.go framed UDS + socketpair worker migration (Step 2)"
+    - "internal/yaegikernel/intent.go tray/Inbox/hooks + internal/agentcore/rlm_reduce.go Dolt persist, run-memory cursor, two-phase ack (Step 4)"
+    - "internal/actor/coalesce.go bounded wakes + spawnRoleAllowed + scoped fan-in (Step 5)"
+    - "internal/runtimeprompts/overlays/rlm_co_super_runtime.yaml + sealed registry (Step 6)"
+  blocker_or_risk: "Linux-only broker runtime tests (exec reap, session e2e) compile locally but execute in CI; staging sealed proof requires deploy."
+  next_action: "Commit cutover, push origin main, monitor CI, verify staging deploy, run sealed CoSuper proof on computer-03335285269bdba4f94377e56879f9e6 with effects OFF."
 receipts:
   - id: rlm-target-architecture-consensus-and-definition-2026-09-04
     boundary: define
