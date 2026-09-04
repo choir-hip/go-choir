@@ -2512,22 +2512,25 @@ func (s *Store) SleepAgentMutation(ctx context.Context, ownerID, computerID, run
 	return nil
 }
 
-// sleepAfterTurnTapeRefused reports whether SleepAgentMutationAfterTextureTurn
-// must not append its requireRevision=false sleep op for the current row.
-// A missing row is already completed; a revision-carrying row would produce a
-// batch that CASes and then fails FinalizeBatch forever (2026-09-03 seq
-// 138612). Both cases report as already completed, matching the direct-SQL
-// path's revision_id=” predicate.
-func sleepAfterTurnTapeRefused(current *AgentMutation) bool {
+// sleepAfterTurnRequireRevision derives the revision-presence assertion for
+// SleepAgentMutationAfterTextureTurn from the projected row instead of the
+// turn outcome. A non-revision turn says nothing about revisions attached by
+// earlier turns: asserting absence for a revision-carrying row appends a batch
+// that CASes and then fails FinalizeBatch forever (2026-09-03 seq 138612).
+// Asserting the row's actual presence preserves it through the sleep and the
+// guard passes; a concurrent attach between this read and finalize still fails
+// closed at finalize (and, with the pre-CAS dry-run, before CAS).
+func sleepAfterTurnRequireRevision(current *AgentMutation) bool {
 	if current == nil {
-		return true
+		return false
 	}
 	return strings.TrimSpace(current.RevisionID) != ""
 }
 
-// SleepAgentMutationAfterTextureTurn passivates a mutation without a fake
-// revision only when the canonical lifecycle receipt proves the exact caller
-// run committed a non-revision Texture outcome.
+// SleepAgentMutationAfterTextureTurn passivates a mutation whose caller run
+// committed a non-revision Texture outcome. A revision attached by an earlier
+// turn is preserved through the sleep; only the pending→sleeping transition
+// is asserted.
 func (s *Store) SleepAgentMutationAfterTextureTurn(ctx context.Context, ownerID, computerID, trajectoryID, runID string) error {
 	s.textureMutationMu.Lock()
 	defer s.textureMutationMu.Unlock()
@@ -2544,15 +2547,7 @@ func (s *Store) SleepAgentMutationAfterTextureTurn(ctx context.Context, ownerID,
 		if readErr != nil {
 			return readErr
 		}
-		if sleepAfterTurnTapeRefused(current) {
-			// Parity with the direct-SQL revision_id='' predicate below: a
-			// missing row is already completed, and a revision-carrying row
-			// must never be slept with requireRevision=false — that batch
-			// CASes onto the tape and then fails FinalizeBatch forever
-			// (2026-09-03 seq 138612).
-			return ErrMutationAlreadyCompleted
-		}
-		requireRevision := false
+		requireRevision := sleepAfterTurnRequireRevision(current)
 		completedAt := now.Format(time.RFC3339Nano)
 		found, err := s.projectTextureMutation(ctx, ownerID, computerID, "", runID, []string{"pending"}, &requireRevision, func(m *computerevent.TextureAgentMutationProjection) {
 			m.State = "sleeping"
@@ -2566,9 +2561,9 @@ func (s *Store) SleepAgentMutationAfterTextureTurn(ctx context.Context, ownerID,
 		}
 		return nil
 	}
-	result, err := s.textureHandle().ExecContext(ctx, `UPDATE texture_agent_mutations SET state = 'sleeping', completed_at = ? WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending' AND revision_id = ''`, now.Format(time.RFC3339Nano), strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(runID))
+	result, err := s.textureHandle().ExecContext(ctx, `UPDATE texture_agent_mutations SET state = 'sleeping', completed_at = ? WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`, now.Format(time.RFC3339Nano), strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(runID))
 	if err != nil {
-		return fmt.Errorf("sleep committed non-revision Texture mutation: %w", err)
+		return fmt.Errorf("sleep Texture mutation after turn: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {

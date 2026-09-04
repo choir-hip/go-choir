@@ -40,17 +40,17 @@ func TestTextureRevisionPresenceConflict(t *testing.T) {
 	}
 }
 
-func TestSleepAfterTurnTapeRefused(t *testing.T) {
-	if !sleepAfterTurnTapeRefused(nil) {
-		t.Fatal("missing row must be refused")
+func TestSleepAfterTurnRequireRevision(t *testing.T) {
+	if sleepAfterTurnRequireRevision(nil) {
+		t.Fatal("missing row derives false")
 	}
-	if !sleepAfterTurnTapeRefused(&AgentMutation{RevisionID: "f1511357-seq-138612"}) {
-		t.Fatal("revision-carrying row must be refused (seq 138612 shape)")
+	if !sleepAfterTurnRequireRevision(&AgentMutation{RevisionID: "f1511357-seq-138612"}) {
+		t.Fatal("revision-carrying row derives true (preserve through sleep)")
 	}
-	if sleepAfterTurnTapeRefused(&AgentMutation{RevisionID: ""}) {
-		t.Fatal("pending row without revision must proceed")
+	if sleepAfterTurnRequireRevision(&AgentMutation{RevisionID: ""}) {
+		t.Fatal("row without revision derives false")
 	}
-	if sleepAfterTurnTapeRefused(&AgentMutation{RevisionID: "  "}) {
-		t.Fatal("whitespace revision must proceed")
+	if sleepAfterTurnRequireRevision(&AgentMutation{RevisionID: "  "}) {
+		t.Fatal("whitespace revision derives false")
 	}
 }
