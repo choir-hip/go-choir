@@ -193,7 +193,9 @@ func TestSessionWorkerResearcherDeniedEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("transport: %v", err)
 	}
-	if !strings.Contains(res.Error, "denied") {
+	// Denial surfaces at compile time (symbol absent from the researcher
+	// package) or at the method guard; either proves confinement.
+	if !strings.Contains(res.Error, "denied") && !strings.Contains(res.Error, "no symbol WriteFile") {
 		t.Fatalf("researcher write error = %q, want denial", res.Error)
 	}
 }
