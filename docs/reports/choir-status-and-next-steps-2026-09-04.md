@@ -10,11 +10,12 @@
 
 Choir is building an autonomous computer system capable of supervised self-development. A central component of this platform is the execution harness for autonomous agents operating inside isolated microVM environments, known as **capsules**.
 
-Currently, autonomous agents interact with their capsule workspaces by making repeated, individual JSON tool calls across the network (e.g., calling `capsule_read_file`, `capsule_write_file`, and `capsule_exec` one by one). This approach introduces significant latency, causes state fragmentation between turns, and increases the risk of network deadlocks.
+We are transitioning the agent harness from legacy, individual JSON tool calling to a **Recursive Language Model (RLM) session interpreter** (`capsule_go_eval`). The primary architectural motivation for this transition is **orchestration as code**:
 
-To resolve these limitations, we are transitioning the agent harness to a **Recursive Language Model (RLM) session interpreter**. Under this architecture, the agent interacts with its workspace through a single execution doorway: `capsule_go_eval(source)`. Within this doorway, the agent writes concise Go code that runs inside a long-lived, stateful interpreter session (powered by Yaegi). Variables, functions, and imported packages persist across execution steps, much like an interactive computational notebook. The agent manipulates its workspace using a lightweight, built-in standard library named `choir`.
-
-This report synthesizes the work completed to date, documents the architectural bugs identified and repaired across multiple review panels, explains the unified target architecture, and outlines the step-by-step engineering roadmap for deployment.
+* **Code Is Closed Under Composition; Tool DSLs Are Not**: In legacy tool calling, every loop, branch, intermediate data transformation, and multi-step pipeline must be mediated step-by-step by the harness over prompt/generation roundtrips. The model cannot compose tools or pass intermediate data in memory. By authoring interpreted Go inside a persistent session (powered by Yaegi), the agent writes real programs that compose functions, iterate over data structures, evaluate complex conditions, and orchestrate multi-step workflows directly.
+* **Full Computational Expressivity, Narrow Gated Authority**: The harness fixes a small, stable, and verifiable *authority surface* (host capability gates, authoritative receipts, and durable state reducers) while providing the model a large, general-purpose *expression surface* (the Go programming language). This authority/expressivity split makes the platform model-agnostic: as frontier models improve, their expressive power expands automatically without altering the harness's security boundaries.
+* **Supervision as Code**: Multi-agent verification panels, code reviewers, and test assertions become first-class, inspectable programs within the pipeline—itself improvable via supervised self-development.
+* **Elimination of Operational Friction**: By moving orchestration into code, the operational failure modes of legacy tool calling—per-call latency overhead, conversational state fragmentation between turns, and distributed deadlock risks across host boundaries—naturally dissolve.
 
 ---
 
@@ -22,12 +23,12 @@ This report synthesizes the work completed to date, documents the architectural 
 
 The foundational session interpreter infrastructure has been deployed to the staging environment at commit `8c410a0d` and validated on the retained test microVM:
 
-* **Dual-Mode Route Switch**: The platform supports both the legacy individual JSON tool suite and the new persistent session mode, selectable via a centralized configuration switch. The legacy tool suite remains the active default. If the session worker fails to initialize for any reason, the system automatically falls back to legacy tools and records an explicit diagnostic flag on the execution receipt.
-* **Persistent In-Guest Session**: Each agent assignment receives a dedicated, long-lived interpreter process. A bidirectional startup handshake verifies that the interpreter process is fully initialized and operational before accepting agent commands. If an interpreter process ever crashes, it is immediately discarded and replaced with a fresh process.
-* **Built-in In-Capsule Standard Library (`choir`)**: The interpreter exposes core workspace operations to agent code, including `choir.ReadFile`, `choir.WriteFile`, `choir.ListDir`, `choir.Exec`, and `choir.Context`. Three early prototype methods (`Assign`, `Outcome`, and an un-routed `Message`) have been audited and are slated for clean removal and replacement (detailed in Section 4).
-* **Process Group Isolation and Rapid Reaping**: Runaway, infinite-looping, or timed-out programs are isolated in dedicated process groups. When an execution deadline expires, the harness issues a `SIGKILL` to the entire process group and verifies that all child processes are completely reaped within 500 milliseconds. This behavior is covered by automated regression tests.
-* **Multi-Layer Role Security**: Read-only research agents are strictly prevented from writing files or executing commands. This restriction is enforced independently at both the host boundary and inside the in-guest runtime, verified by end-to-end integration tests.
-* **Sealed Tool Surface**: When session mode is active, the agent's visible tool list is reduced from ten discrete tools to a minimal set: the primary execution doorway (`capsule_go_eval`) plus necessary verification and transaction tools. Automated tests assert the exact tool surface in both operational modes.
+* **Dual-Mode Route Switch**: Supports both the legacy JSON tool suite and the new persistent session mode via a centralized configuration switch. Legacy tools remain the active default. If the session worker fails to initialize, the system automatically falls back to legacy tools and records an explicit diagnostic flag on the execution receipt.
+* **Persistent In-Guest Session**: Each agent assignment receives a dedicated, long-lived interpreter process. A bidirectional startup handshake verifies operational readiness before accepting agent commands. If an interpreter process crashes, it is immediately discarded and replaced.
+* **Built-in Standard Library (`choir`)**: Exposes core workspace operations to agent code (`choir.ReadFile`, `choir.WriteFile`, `choir.ListDir`, `choir.Exec`, `choir.Context`). Three early prototype methods (`Assign`, `Outcome`, and an un-routed `Message`) have been audited and are slated for clean removal and replacement (detailed in Section 4).
+* **Process Group Isolation and Rapid Reaping**: Runaway or timed-out programs are isolated in dedicated process groups. When an execution deadline expires, the harness issues a `SIGKILL` to the process group and verifies complete reaping within 500 milliseconds, covered by automated tests.
+* **Multi-Layer Role Security**: Read-only research agents are strictly prevented from writing files or executing commands, enforced independently at both the host boundary and inside the in-guest runtime.
+* **Sealed Tool Surface**: When session mode is active, the agent's visible tool list is reduced from ten discrete tools to a minimal set: the primary execution doorway (`capsule_go_eval`) plus necessary verification and transaction tools. Automated tests assert the exact tool surface in both modes.
 
 <div class="page-break"></div>
 
@@ -49,12 +50,12 @@ Across three independent multi-model consensus review rounds (encompassing fifte
 
 ## 4. Target Architecture: Unified Broker and Post-Cell Reduction
 
-The multi-model review panels converged on a clean, unified target architecture (documented in `docs/designs/rlm-target-architecture-2026-09-04.md`, Revision 3). This design resolves architectural debt that accumulated during early prototyping.
+The multi-model review panels converged on a clean, unified target architecture (documented in `docs/designs/rlm-target-architecture-2026-09-04.md`, Revision 3). This design grounds the platform in Choir's foundational doctrine:
 
 ### The Core Architectural Principles
 
-1. **Local Operations Are Synchronous Syscalls**: Operations that affect only the local capsule workspace (reading files, writing files, executing programs) are executed synchronously inside the guest microVM via direct pipes to the capsule broker. They never require network roundtrips to the host supervisor, completely eliminating mid-cell distributed deadlocks.
-2. **External Effects Are Staged Intents**: Any action that affects an external actor or requires durable persistence (sending messages to other agents, reporting task completion) must not attempt direct network calls mid-cell. Instead, the cell stages these actions as structured *intents* into a local, in-memory tray.
+1. **Full Computational Expressivity In-Cell (Orchestration as Code)**: Operations that compute, transform data, or affect only the local capsule workspace (reading files, writing files, executing programs) are written as ordinary Go code and executed synchronously inside the guest microVM via direct pipes to the capsule broker. Code is closed under composition; the agent expresses complex control flow, loops, and data pipelines in memory without prompt-turn mediation or host roundtrips.
+2. **Narrow Gated Authority for Action (External Effects Are Staged Intents)**: The agent has full expressivity for computation, but narrow, gated authority for external action. Any effect that touches an external actor or requires durable persistence (sending messages to other agents, reporting task completion) cannot execute arbitrary host syscalls. Instead, the cell stages these actions as structured *intents* into a local in-memory tray.
 3. **The Host Reducer Has Exclusive Authority**: When an execution cell completes, its buffered intent tray is returned to the host supervisor alongside the execution result. The host reducer validates permissions, applies authoritative envelope metadata, writes messages to the durable Dolt database, binds real execution receipts, and triggers supervisor notifications. No in-cell function can claim delivery or completion before the host has committed the transaction.
 
 ![Target Architecture Topology](diagrams/diagram-architecture-topology.svg)

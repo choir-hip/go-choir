@@ -10,18 +10,34 @@ Prior round: `.agentic-consensus/agentic-consensus-20260904-133048/`.
 
 ## Principles
 
-1. The cell is a shell: files and processes are syscalls. Anything
-   needing another actor or durable fate is not a syscall.
-2. No function claims success the host has not performed. Local ids
-   are tray bookkeeping, never delivery receipts.
-3. Async messaging: sends never block on the recipient; wake is the
-   host's job after commit, always (with fate exemptions, not
-   content suppressions).
-4. No legacy carries weight: update_coagent's cell-facing kinds,
+1. **Orchestration as code**: Code is closed under composition;
+   tool DSLs are not. The cell is a full computational shell:
+   orchestration, control flow, loops, branching, data
+   transformation, and in-memory pipelining are written directly in
+   Go, not mediated turn-by-turn as JSON tool calls.
+2. **Full computational expressivity, narrow gated authority**:
+   The model has unbounded expressivity to compute, inspect, and
+   transform workspace state in code, but narrow, strictly gated
+   authority for external action. External effects pass exclusively
+   through typed capability gates and host reducers.
+3. **Local syscalls vs. external staged intents**: Files and
+   processes inside the capsule are synchronous guest syscalls.
+   Anything touching another actor, durable persistence, or task
+   settlement is an intent staged in an in-memory tray, never a
+   live mid-cell network call.
+4. **No function claims success the host has not performed**: Local
+   ids are tray bookkeeping, never delivery receipts. The host
+   commits the batch, mints durable IDs, binds execution receipts,
+   and triggers recipient wakes.
+5. **Async messaging & supervision as code**: Sends never block on
+   the recipient; wake is the host's job after commit, always
+   (with fate exemptions, not content suppressions). Multi-agent
+   supervision and verification panels are first-class, inspectable
+   code within the pipeline, improvable via self-development.
+6. **No legacy carries weight**: update_coagent's cell-facing kinds,
    summaries, and wake suppressions do not constrain the new
    protocol. The host adapter to existing durable machinery is
    specified exactly below — one fixed envelope, not a table.
-
 ## Topology (target)
 
 The model sees exactly ONE JSON tool (implementation slot).
