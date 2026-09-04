@@ -1311,10 +1311,12 @@ func (s *Store) GetHistoryByScope(ctx context.Context, docID, ownerID, computerI
 	return s.getHistory(ctx, docID, ownerID, computerID, limit)
 }
 
-// GetHistory returns the revision history for a document from committed Dolt
-// snapshots. dolt_history_og_objects identifies an addressable commit for each
-// immutable revision object; AS OF resolves the revision body at that commit.
-// The explicit parent chain still defines ordering, avoiding timestamp ties.
+// GetHistory returns the revision history for a document by walking the
+// explicit parent chain through indexed revision rows. Revision objects are
+// immutable and content-addressed, so the chain — not Dolt commit history or
+// AS OF snapshots — is the history authority. The dirty-gated checkpoint
+// above preserves the one-batched-commit audit shape; reads never depend on
+// it.
 func (s *Store) getHistory(ctx context.Context, docID, ownerID, computerID string, limit int) ([]types.HistoryEntry, error) {
 	if limit <= 0 {
 		limit = 50
@@ -1337,78 +1339,22 @@ func (s *Store) getHistory(ctx context.Context, docID, ownerID, computerID strin
 		return nil, err
 	}
 
-	type revisionSnapshot struct {
-		commitHash  string
-		canonicalID string
-		preview     types.Revision
-	}
-	rows, err := s.textureHandle().QueryContext(ctx, `
-		SELECT commit_hash, canonical_id, body
-		FROM (
-			SELECT commit_hash, canonical_id, body,
-				ROW_NUMBER() OVER (
-					PARTITION BY canonical_id
-					ORDER BY commit_date DESC, commit_hash DESC
-				) AS snapshot_rank
-			FROM dolt_history_og_objects
-			WHERE object_kind = ?
-			  AND owner_id = ?
-			  AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.doc_id')) = ?
-		) AS committed_revisions
-		WHERE snapshot_rank = 1`, string(ogKindTexRev), ownerID, docID)
-	if err != nil {
-		return nil, fmt.Errorf("query native texture history: %w", err)
-	}
-
-	snapshots := make(map[string]revisionSnapshot)
-	for rows.Next() {
-		var snapshot revisionSnapshot
-		var body []byte
-		if err := rows.Scan(&snapshot.commitHash, &snapshot.canonicalID, &body); err != nil {
-			_ = rows.Close()
-			return nil, fmt.Errorf("scan native texture history: %w", err)
-		}
-		if err := json.Unmarshal(body, &snapshot.preview); err != nil {
-			_ = rows.Close()
-			return nil, fmt.Errorf("decode native texture history preview: %w", err)
-		}
-		if snapshot.preview.OwnerID == ownerID && snapshot.preview.DocID == docID &&
-			((strings.TrimSpace(computerID) == "" && strings.TrimSpace(snapshot.preview.ComputerID) == "") ||
-				strings.TrimSpace(snapshot.preview.ComputerID) == strings.TrimSpace(computerID)) {
-			snapshots[snapshot.preview.RevisionID] = snapshot
-		}
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return nil, fmt.Errorf("iterate native texture history: %w", err)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, fmt.Errorf("close native texture history: %w", err)
-	}
-
 	currentID := doc.CurrentRevisionID
 	entries := make([]types.HistoryEntry, 0, limit)
+	visited := make(map[string]bool, limit)
 	for len(entries) < limit && currentID != "" {
-		snapshot, ok := snapshots[currentID]
-		if !ok {
+		if visited[currentID] {
+			return nil, fmt.Errorf("texture revision chain cycles at %s", currentID)
+		}
+		visited[currentID] = true
+		rev, err := s.GetRevision(ctx, currentID, ownerID)
+		if err != nil {
 			return nil, fmt.Errorf("load native texture history revision %s: %w", currentID, ErrNotFound)
 		}
-		if err := validateDoltCommitHash(snapshot.commitHash); err != nil {
-			return nil, fmt.Errorf("load native texture history: %w", err)
-		}
-		var body []byte
-		if err := s.textureHandle().QueryRowContext(ctx,
-			fmt.Sprintf("SELECT body FROM og_objects AS OF '%s' WHERE canonical_id = ?", snapshot.commitHash),
-			snapshot.canonicalID,
-		).Scan(&body); err != nil {
-			return nil, fmt.Errorf("load texture revision AS OF %s: %w", snapshot.commitHash, err)
-		}
-		var rev types.Revision
-		if err := json.Unmarshal(body, &rev); err != nil {
-			return nil, fmt.Errorf("decode texture revision AS OF %s: %w", snapshot.commitHash, err)
-		}
-		if rev.OwnerID != ownerID || rev.DocID != docID || rev.RevisionID != currentID {
-			return nil, fmt.Errorf("load texture revision AS OF %s: snapshot identity mismatch", snapshot.commitHash)
+		if rev.DocID != docID ||
+			!((strings.TrimSpace(computerID) == "" && strings.TrimSpace(rev.ComputerID) == "") ||
+				strings.TrimSpace(rev.ComputerID) == strings.TrimSpace(computerID)) {
+			return nil, fmt.Errorf("load native texture history revision %s: %w", currentID, ErrNotFound)
 		}
 		entries = append(entries, types.HistoryEntry{
 			RevisionID:       rev.RevisionID,
