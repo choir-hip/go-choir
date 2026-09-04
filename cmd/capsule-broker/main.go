@@ -34,16 +34,51 @@ import (
 // The broker is bind-mounted from a content-addressed host store (v2 decision).
 // Its binary hash is verified at spawn time.
 type Broker struct {
-	mu                sync.RWMutex
-	socketPath        string
-	capsuleID         string            // this broker's capsule ID (binding check)
-	publicKey         ed25519.PublicKey // injected by Executor at spawn
-	mergedDir         string            // capsule's merged overlayfs mount
-	sessions          map[string]*Session
-	revokedCaps       map[string]bool
-	authorizedPeerUID uint32
-	listener          net.Listener
-	brokerBin         string // path to this broker binary (for go_eval worker spawn)
+	mu                 sync.RWMutex
+	socketPath         string
+	capsuleID          string            // this broker's capsule ID (binding check)
+	publicKey          ed25519.PublicKey // injected by Executor at spawn
+	mergedDir          string            // capsule's merged overlayfs mount
+	sessions           map[string]*Session
+	revokedCaps        map[string]bool
+	authorizedPeerUID  uint32
+	listener           net.Listener
+	brokerBin          string // path to this broker binary (for go_eval worker spawn)
+	actuator           actuatorRoute
+	sessionWorkerReady bool // set by the persistent Session worker (Def 2 item 2); false until then
+}
+
+// actuatorRoute selects the execution route for an activation. Tools is the
+// legacy JSON-verb dispatcher; RLM routes model work through model-written Go
+// in the persistent session interpreter.
+type actuatorRoute string
+
+const (
+	actuatorTools actuatorRoute = "tools"
+	actuatorRLM   actuatorRoute = "rlm"
+)
+
+// resolveActuatorRoute is the single authority for the activation route
+// (Def 2 route_authority): CHOIR_ACTUATOR env, default tools, invalid values
+// fail closed to tools. It derives BOTH the model-facing schema view (via the
+// get_actuator verb the host reads when building the overlay) and the
+// execution dispatcher (effectiveRoute below).
+func resolveActuatorRoute() actuatorRoute {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("CHOIR_ACTUATOR"))) {
+	case string(actuatorRLM):
+		return actuatorRLM
+	default:
+		return actuatorTools
+	}
+}
+
+// effectiveRoute applies session-worker readiness: RLM requested but not
+// ready falls back to tools with an observable receipt (Def 2 fallback).
+func (b *Broker) effectiveRoute() actuatorRoute {
+	if b != nil && b.actuator == actuatorRLM && b.sessionWorkerReady {
+		return actuatorRLM
+	}
+	return actuatorTools
 }
 
 // Session represents a long-lived shell session.
@@ -177,7 +212,9 @@ func main() {
 		sessions:          make(map[string]*Session),
 		revokedCaps:       make(map[string]bool),
 		brokerBin:         "/run/capsule/broker",
+		actuator:          resolveActuatorRoute(),
 	}
+	log.Printf("capsule-broker: actuator route=%s (CHOIR_ACTUATOR; session worker ready=%v)", broker.actuator, broker.sessionWorkerReady)
 
 	// Handle signals for clean shutdown.
 	sigCh := make(chan os.Signal, 1)
@@ -341,9 +378,41 @@ func (b *Broker) handleRPC(req BrokerRPCRequest) BrokerRPCResponse {
 		return b.handleKillSession(ctx, &cap, req.Params)
 	case "go_eval":
 		return b.handleGoEval(ctx, &cap, req.Params)
+	case "get_actuator":
+		return b.handleGetActuator(ctx, &cap, req.Params)
 	default:
 		return BrokerRPCResponse{Error: fmt.Sprintf("unknown verb: %s", req.Verb)}
 	}
+}
+
+// handleGetActuator advertises the activation route: the requested actuator,
+// the effective route after session-worker readiness (fallback to tools when
+// RLM is requested but unready), and session readiness itself. The host reads
+// this when building the model-facing tool schema so schema and dispatcher
+// cannot disagree.
+func (b *Broker) handleGetActuator(_ context.Context, _ *capsule.Capability, _ json.RawMessage) BrokerRPCResponse {
+	requested := actuatorTools
+	ready := false
+	if b != nil {
+		requested = b.actuator
+		if requested == "" {
+			requested = actuatorTools
+		}
+		ready = b.sessionWorkerReady
+	}
+	route := b.effectiveRoute()
+	if requested == actuatorRLM && route == actuatorTools {
+		log.Printf("capsule-broker: actuator fallback to tools (RLM requested, session worker not ready)")
+	}
+	raw, err := json.Marshal(map[string]string{
+		"requested":     string(requested),
+		"route":         string(route),
+		"session_ready": map[bool]string{true: "true", false: "false"}[ready],
+	})
+	if err != nil {
+		return BrokerRPCResponse{Error: fmt.Sprintf("failed to marshal actuator route: %v", err)}
+	}
+	return BrokerRPCResponse{Result: raw}
 }
 
 // handleExec executes a command in the capsule.
