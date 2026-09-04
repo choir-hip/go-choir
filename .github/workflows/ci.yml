@@ -616,6 +616,12 @@ jobs:
   deploy-staging:
     name: Deploy to Staging (Node B)
     runs-on: ubuntu-latest
+    # Own lane: a docs-only (or any non-deploy) push must never cancel an
+    # in-flight deploy via the workflow-level ci- group, while a newer deploy
+    # still supersedes a stale one in flight.
+    concurrency:
+      group: staging-deploy-node-b
+      cancel-in-progress: true
     needs: [check, build-frontend, deploy-impact]
     if: always() && github.ref == 'refs/heads/main' && needs.deploy-impact.outputs.deploy_needed == 'true' && needs.check.result == 'success' && (needs.deploy-impact.outputs.deploy_frontend != 'true' || needs.build-frontend.result == 'success')
     timeout-minutes: 60
