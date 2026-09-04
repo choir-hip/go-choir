@@ -1047,14 +1047,22 @@ func (s *Store) listLifecycleRunsByScope(ctx context.Context, ownerID, computerI
 	if graph == nil {
 		return nil, fmt.Errorf("lifecycle runs: object graph not initialized")
 	}
-	objs, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	// Kind-filtered headers first (idx_og_objects_kind_owner, no bodies),
+	// then point-fetch only run-kind rows. A full ReadObjectSnapshot here
+	// materialized every body in the graph (2026-09-03: 94k objects / 220 MB
+	// for a runs list); run-kind rows are a small fraction of that.
+	refs, err := graph.ListAllObjectRefsByKindOwner(ctx, string(ogKindRun), ownerID)
 	if err != nil {
 		return nil, err
 	}
 	runs := make([]types.RunRecord, 0)
-	for _, obj := range objs {
-		if obj.ObjectKind != ogKindRun {
-			continue
+	for _, ref := range refs {
+		obj, err := graph.GetObject(ctx, ref.CanonicalID)
+		if err != nil {
+			if errors.Is(err, objectgraph.ErrNotFound) {
+				continue
+			}
+			return nil, fmt.Errorf("list lifecycle runs by scope: get %s: %w", ref.CanonicalID, err)
 		}
 		run, decodeErr := decodeLifecycleObject[types.RunRecord](obj)
 		if decodeErr != nil {

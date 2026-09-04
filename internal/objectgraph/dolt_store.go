@@ -595,6 +595,41 @@ func (s *DoltStore) ListObjectRefsByKindOwner(ctx context.Context, kind, ownerID
 	return out, rows.Err()
 }
 
+// ListAllObjectRefsByKindOwner returns every object header of one kind for one
+// owner using idx_og_objects_kind_owner, without LIMIT and without body.
+// Prefer it over ReadObjectSnapshot when the caller filters or sorts after
+// decoding: run-kind rows are a small fraction of the object graph.
+func (s *DoltStore) ListAllObjectRefsByKindOwner(ctx context.Context, kind, ownerID string) ([]ObjectRef, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return nil, fmt.Errorf("objectgraph dolt: owner_id is required")
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT canonical_id, computer_id, metadata, updated_at, tombstone
+		 FROM og_objects
+		 WHERE object_kind = ? AND owner_id = ?
+		 ORDER BY updated_at DESC`,
+		kind, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: list all refs by kind owner: %w", err)
+	}
+	defer rows.Close()
+	var out []ObjectRef
+	for rows.Next() {
+		var ref ObjectRef
+		var metadata string
+		if scanErr := rows.Scan(&ref.CanonicalID, &ref.ComputerID, &metadata, &ref.UpdatedAt, &ref.Tombstone); scanErr != nil {
+			return nil, scanErr
+		}
+		ref.Metadata = json.RawMessage(metadata)
+		out = append(out, ref)
+	}
+	return out, rows.Err()
+}
+
 // JSONBodyFieldRow is extracted JSON body fields plus computer_id. Super
 // rewarm indexes pending delivered worker-updates this way so it does not
 // materialize LONGBLOB bodies.
