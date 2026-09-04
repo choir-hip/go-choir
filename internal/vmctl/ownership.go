@@ -1012,6 +1012,11 @@ func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManage
 		return VMManagerConfig{}
 	}
 	cpu, mem := machineShapeForOwnership(own)
+	// MaintenanceHold is derived from the ownership hold record: the boot
+	// configuration is never the authority for fenced boots, so a stale
+	// manager instance config cannot re-fence a computer after unhold
+	// (2026-09-03). Callers needing a different mode set the flags explicitly
+	// afterwards (recoverVMForDesktop does for maintenance recovery).
 	cfg := VMManagerConfig{
 		VMID:              own.VMID,
 		ComputerID:        stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
@@ -1024,6 +1029,7 @@ func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManage
 		DesktopID:         own.DesktopID,
 		RealizationID:     realizationIDFor(own.VMID, own.Epoch),
 		Epoch:             own.Epoch,
+		MaintenanceHold:   own.IsHeld(),
 	}
 	return cfg
 }

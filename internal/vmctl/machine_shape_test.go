@@ -32,3 +32,17 @@ func TestInteractiveMachineShapeRejectsBadValues(t *testing.T) {
 		}
 	}
 }
+
+func TestVMManagerConfigDerivesHoldFromOwnership(t *testing.T) {
+	base := &VMOwnership{VMID: "vm-1", ComputerID: "computer-1", UserID: "user-1", DesktopID: "primary"}
+	if cfg := vmManagerConfigForOwnership(base, "token"); cfg.MaintenanceHold {
+		t.Fatal("unheld ownership produced a fenced boot config")
+	}
+	held := &VMOwnership{VMID: "vm-1", ComputerID: "computer-1", UserID: "user-1", DesktopID: "primary", HoldStatus: &MaintenanceHold{Reason: "test", HeldBy: "test"}}
+	if cfg := vmManagerConfigForOwnership(held, "token"); !cfg.MaintenanceHold {
+		t.Fatal("held ownership produced an unfenced boot config")
+	}
+	if cfg := vmManagerConfigForOwnership(nil, "token"); cfg.MaintenanceHold {
+		t.Fatal("nil ownership produced a fenced boot config")
+	}
+}
