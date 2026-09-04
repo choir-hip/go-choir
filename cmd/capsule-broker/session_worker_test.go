@@ -5,7 +5,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -42,7 +44,7 @@ func TestSessionFrameCodecRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	var backRes yaegikernel.SessionResult
-	if err := json.Unmarshal(raw, &backRes); err != nil || backRes != res {
+	if err := json.Unmarshal(raw, &backRes); err != nil || backRes.ID != res.ID || backRes.Stdout != res.Stdout || backRes.Stderr != res.Stderr || backRes.Error != res.Error || backRes.DurationMs != res.DurationMs || len(backRes.Receipts) != 0 {
 		t.Fatalf("result roundtrip = %+v, %v", backRes, err)
 	}
 }
@@ -73,10 +75,13 @@ func TestGoEvalSessionFailsClosedWithoutBinary(t *testing.T) {
 	params, _ := json.Marshal(map[string]string{"source": `1 + 1`})
 	cap := &capsule.Capability{AgentRunID: "run-test"}
 	resp := b.handleGoEvalSession(context.Background(), cap, params)
-	// Spawn failure surfaces as a transport error, mirroring the one-shot
-	// path's "failed to start go_eval worker" shape — never a fake result.
+	// Spawn failure attempts the one-shot tools fallback and reports both
+	// errors when it also fails — never a fake result, never silent.
 	if resp.Error == "" || !strings.Contains(resp.Error, "session worker") {
 		t.Fatalf("resp = %+v, want session-worker transport error", resp)
+	}
+	if !strings.Contains(resp.Error, "fallback") {
+		t.Fatalf("resp = %+v, want visible fallback attempt", resp)
 	}
 	if len(b.sessionWorkers) != 0 {
 		t.Fatalf("failed eval left %d workers", len(b.sessionWorkers))
@@ -100,5 +105,117 @@ func TestSessionKillReapsProcessGroup(t *testing.T) {
 	}
 	if err := cmd.Process.Signal(syscall.Signal(0)); err == nil {
 		t.Fatal("process still alive after kill")
+	}
+}
+
+// buildBrokerBinary compiles the capsule-broker for real-spawn tests (linux
+// CI). It fails the test when the toolchain cannot produce the binary: a
+// skipped spawn test is how B1 shipped.
+func buildBrokerBinary(t *testing.T) string {
+	t.Helper()
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go toolchain unavailable for real-spawn test")
+	}
+	out := filepath.Join(t.TempDir(), "capsule-broker-test")
+	cmd := exec.Command("go", "build", "-o", out, ".")
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build broker binary: %v\n%s", err, out)
+	}
+	return out
+}
+
+func evalCell(t *testing.T, w *sessionWorker, source string) yaegikernel.SessionResult {
+	t.Helper()
+	res, err := w.eval(source, 60*time.Second)
+	if err != nil {
+		t.Fatalf("eval %q: %v", source, err)
+	}
+	return res
+}
+
+// TestSessionWorkerRealSpawnEndToEnd is the B1 regression: a worker spawned
+// through spawnSessionWorker completes the ready handshake and serves cells
+// (import persistence, real overlay write, assign/message receipts) instead
+// of dying at startup on an empty computer identity.
+func TestSessionWorkerRealSpawnEndToEnd(t *testing.T) {
+	bin := buildBrokerBinary(t)
+	root := t.TempDir()
+	w, err := spawnSessionWorker(bin, workerSessionConfig{
+		computerID: "test-capsule", epoch: 1, activation: "run-e2e",
+		allowedRoot: root, timeout: 60 * time.Second, role: "co-super",
+	})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	defer w.close()
+	if res := evalCell(t, w, `import "choir"`); res.Error != "" {
+		t.Fatalf("import choir: %s", res.Error)
+	}
+	if res := evalCell(t, w, `choir.WriteFile("e2e.txt", "live")`); res.Error != "" {
+		t.Fatalf("write: %s", res.Error)
+	}
+	content, err := os.ReadFile(filepath.Join(root, "e2e.txt"))
+	if err != nil || string(content) != "live" {
+		t.Fatalf("overlay file = %q, %v", content, err)
+	}
+	res := evalCell(t, w, `choir.Message("owner", "note", "hi")`)
+	if res.Error != "" {
+		t.Fatalf("message: %s", res.Error)
+	}
+	found := false
+	for _, r := range res.Receipts {
+		if strings.HasPrefix(r, "message/") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("receipts = %v, want message entry", res.Receipts)
+	}
+}
+
+// TestSessionWorkerResearcherDeniedEndToEnd is the B2 regression: a worker
+// spawned with the researcher role refuses writes through the real binary.
+func TestSessionWorkerResearcherDeniedEndToEnd(t *testing.T) {
+	bin := buildBrokerBinary(t)
+	w, err := spawnSessionWorker(bin, workerSessionConfig{
+		computerID: "test-capsule", epoch: 1, activation: "run-researcher",
+		allowedRoot: t.TempDir(), timeout: 60 * time.Second, role: "researcher",
+	})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	defer w.close()
+	if res := evalCell(t, w, `import "choir"`); res.Error != "" {
+		t.Fatalf("import choir: %s", res.Error)
+	}
+	res, err := w.eval(`choir.WriteFile("x.txt", "x")`, 60*time.Second)
+	if err != nil {
+		t.Fatalf("transport: %v", err)
+	}
+	if !strings.Contains(res.Error, "denied") {
+		t.Fatalf("researcher write error = %q, want denial", res.Error)
+	}
+}
+
+// TestAwaitReadyHandshake proves spawn readiness is verified, not assumed: a
+// ready frame passes, any other first frame fails the spawn.
+func TestAwaitReadyHandshake(t *testing.T) {
+	ready := func(payload string) *sessionWorker {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(payload)); err != nil {
+			t.Fatal(err)
+		}
+		_ = w.Close()
+		return &sessionWorker{dec: json.NewDecoder(r)}
+	}
+	if err := ready("{\"id\":\"ready\"}\n").awaitReady(5 * time.Second); err != nil {
+		t.Fatalf("ready frame: %v", err)
+	}
+	if err := ready("{\"id\":\"cell-1\",\"stdout\":\"hi\"}\n").awaitReady(5 * time.Second); err == nil {
+		t.Fatal("non-ready first frame accepted")
 	}
 }

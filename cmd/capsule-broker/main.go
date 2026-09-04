@@ -121,6 +121,7 @@ func main() {
 		sessionEpoch       uint64
 		sessionActivation  string
 		sessionAllowedRoot string
+		sessionRole        string
 	)
 
 	flag.StringVar(&socketPath, "socket", "/tmp/capsule-broker.sock", "Unix socket path")
@@ -134,6 +135,7 @@ func main() {
 	flag.Uint64Var(&sessionEpoch, "session-epoch", 1, "Session worker epoch fence")
 	flag.StringVar(&sessionActivation, "session-activation", "", "Session worker activation identity")
 	flag.StringVar(&sessionAllowedRoot, "session-allowed-root", "/tmp", "Session worker filesystem root")
+	flag.StringVar(&sessionRole, "session-role", "", "Session worker role bounding the prebound choir surface (trusted, from verified capability)")
 	flag.Parse()
 	if uint64(authorizedPeerUID) > uint64(^uint32(0)) {
 		log.Fatal("--authorized-peer-uid exceeds uint32")
@@ -148,13 +150,13 @@ func main() {
 	if isolationStage == "exec-go-session" {
 		// Persistent session worker: serve framed eval cells on stdin/stdout
 		// with one interpreter. Exits non-zero when a cell poisons the
-		// session so the broker respawns clean.
 		yaegikernel.ExecuteWorkerSessionStdin(yaegikernel.SessionWorkerConfig{
 			AllowedPackages: yaegikernel.DefaultSafeStdlibPackagesList(),
 			ComputerID:      sessionComputerID,
 			ActivationID:    sessionActivation,
 			Epoch:           sessionEpoch,
 			AllowedRoot:     sessionAllowedRoot,
+			Role:            sessionRole,
 		})
 		return
 	}
@@ -532,9 +534,7 @@ func (b *Broker) handleExec(ctx context.Context, cap *capsule.Capability, params
 }
 
 // handleGoEval evaluates model-authored Go source inside the capsule's
-// restricted Yaegi interpreter. It spawns this same broker binary in
-// --exec-go-stdin worker mode as a separate killable process group, so a
-// runaway interpreter is SIGKILLed on timeout and never runs in guest core.
+// restricted Yaegi interpreter, dispatching on the actuator route.
 func (b *Broker) handleGoEval(ctx context.Context, cap *capsule.Capability, params json.RawMessage) BrokerRPCResponse {
 	// RLM route serves cells on the activation's persistent session worker;
 	// tools route keeps the one-shot worker. The route is resolved once per
@@ -542,6 +542,15 @@ func (b *Broker) handleGoEval(ctx context.Context, cap *capsule.Capability, para
 	if b.effectiveRoute() == actuatorRLM {
 		return b.handleGoEvalSession(ctx, cap, params)
 	}
+	return b.handleGoEvalOneShot(ctx, cap, params)
+}
+
+// handleGoEvalOneShot spawns this same broker binary in --exec-go-stdin
+// worker mode as a separate killable process group, so a runaway interpreter
+// is SIGKILLed on timeout and never runs in guest core. The session fallback
+// calls this directly to avoid re-entering route dispatch (which would
+// recurse under RLM when no session worker can start).
+func (b *Broker) handleGoEvalOneShot(ctx context.Context, cap *capsule.Capability, params json.RawMessage) BrokerRPCResponse {
 	var p capsule.GoEvalRequest
 	if err := json.Unmarshal(params, &p); err != nil {
 		return BrokerRPCResponse{Error: fmt.Sprintf("failed to parse go_eval params: %v", err)}

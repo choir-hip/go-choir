@@ -28,16 +28,17 @@ type workerSessionConfig struct {
 	allowedRoot string
 	allowed     []string
 	timeout     time.Duration
+	role        string
 }
 
 // sessionWorker owns one persistent worker process serving framed eval cells
 // for a single activation. At most one in-flight Eval runs at a time; a
 // timeout, poisoned cell, or transport error kills the whole process group
-// and marks the worker dead so the next call respawns clean.
 type sessionWorker struct {
 	mu     sync.Mutex
 	cmd    *exec.Cmd
 	stdin  *os.File
+	stdout *os.File
 	dec    *json.Decoder
 	pid    int
 	dead   bool
@@ -54,8 +55,15 @@ func nextSessionFrameID() string {
 	return fmt.Sprintf("cell-%d", sessionFrameID)
 }
 
+// sessionReadyTimeout bounds the worker's post-prebind ready handshake. A
+// process that starts but never proves readiness (missing binary entry,
+// rejected identity, failed prebind) is killed, never trusted.
+const sessionReadyTimeout = 10 * time.Second
+
 // spawnSessionWorker starts a session worker process in its own process group
-// with a sanitized environment, mirroring the one-shot worker hardening.
+// with a sanitized environment, mirroring the one-shot worker hardening. The
+// role rides a trusted flag from the verified outer capability and bounds the
+// prebound choir surface; the computer identity is the broker's capsule.
 func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, error) {
 	stdinR, stdinW, err := os.Pipe()
 	if err != nil {
@@ -63,6 +71,8 @@ func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, er
 	}
 	stdoutR, stdoutW, err := os.Pipe()
 	if err != nil {
+		_ = stdinR.Close()
+		_ = stdinW.Close()
 		return nil, err
 	}
 	args := []string{
@@ -71,6 +81,7 @@ func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, er
 		"--session-activation", cfg.activation,
 		"--session-allowed-root", cfg.allowedRoot,
 		"--session-epoch", fmt.Sprintf("%d", cfg.epoch),
+		"--session-role", cfg.role,
 	}
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = cfg.allowedRoot
@@ -80,17 +91,58 @@ func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, er
 	cmd.Stdout = stdoutW
 	cmd.Stderr = &bytes.Buffer{}
 	if err := cmd.Start(); err != nil {
+		_ = stdinR.Close()
+		_ = stdinW.Close()
+		_ = stdoutR.Close()
+		_ = stdoutW.Close()
 		return nil, fmt.Errorf("start session worker: %w", err)
 	}
 	_ = stdinR.Close()
 	_ = stdoutW.Close()
-	return &sessionWorker{
+	w := &sessionWorker{
 		cmd:    cmd,
 		stdin:  stdinW,
+		stdout: stdoutR,
 		dec:    json.NewDecoder(bufio.NewReader(stdoutR)),
 		pid:    cmd.Process.Pid,
 		config: cfg,
-	}, nil
+	}
+	if err := w.awaitReady(sessionReadyTimeout); err != nil {
+		w.killLocked()
+		_ = stdinW.Close()
+		_ = stdoutR.Close()
+		return nil, err
+	}
+	return w, nil
+}
+
+// awaitReady consumes the worker's post-prebind {"id":"ready"} frame through
+// the same decoder that serves cells, so buffered bytes are never lost.
+func (w *sessionWorker) awaitReady(timeout time.Duration) error {
+	type readyFrame struct {
+		ID string `json:"id"`
+	}
+	ch := make(chan error, 1)
+	go func() {
+		var f readyFrame
+		if err := w.dec.Decode(&f); err != nil {
+			ch <- fmt.Errorf("session worker ready: %w", err)
+			return
+		}
+		if f.ID != "ready" {
+			ch <- fmt.Errorf("session worker ready: unexpected frame %q", f.ID)
+			return
+		}
+		ch <- nil
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case err := <-ch:
+		return err
+	case <-timer.C:
+		return fmt.Errorf("session worker ready: handshake timed out")
+	}
 }
 
 // eval sends one cell and waits for its result. A timeout kills the worker;
@@ -184,29 +236,44 @@ func (w *sessionWorker) killLocked() {
 		w.pid = w.cmd.Process.Pid
 		killProcessGroup(w.cmd, sessionKillReapGrace)
 	}
+	if w.stdin != nil {
+		_ = w.stdin.Close()
+		w.stdin = nil
+	}
+	if w.stdout != nil {
+		_ = w.stdout.Close()
+		w.stdout = nil
+	}
 }
 
 // sessionConfigFor builds the worker config from broker state. The worker is
-// fenced by its own allowed root (the broker merged dir); computer and epoch
-// ride the worker flags for handle verification fenced to this session. The
-// allowed set is the server-owned stdlib surface plus the prebound choir
-// package: never model-controlled.
-func (b *Broker) sessionConfigFor(activationID string) workerSessionConfig {
+// fenced by its own allowed root (the broker merged dir); the computer
+// identity is the broker's capsule (never empty: an empty id would make the
+// worker reject itself at startup). The role comes from the verified outer
+// capability and bounds the prebound choir surface. The allowed set is the
+// server-owned stdlib surface plus the prebound choir package: never
+// model-controlled.
+func (b *Broker) sessionConfigFor(activationID, role string) workerSessionConfig {
 	allowed := yaegikernel.DefaultSafeStdlibPackagesList()
+	computerID := b.capsuleID
+	if computerID == "" {
+		computerID = "worker-local"
+	}
 	return workerSessionConfig{
-		computerID:  "",
+		computerID:  computerID,
 		epoch:       1,
 		activation:  activationID,
 		allowedRoot: b.mergedDir,
 		allowed:     allowed,
 		timeout:     60 * time.Second,
+		role:        role,
 	}
 }
 
 // sessionFor returns the live worker for an activation, spawning it on first
 // use. A dead worker is replaced, never resurrected: post-poison state is
 // never trusted.
-func (b *Broker) sessionFor(agentRunID string) (*sessionWorker, error) {
+func (b *Broker) sessionFor(agentRunID, role string) (*sessionWorker, error) {
 	if b == nil {
 		return nil, fmt.Errorf("session worker: broker unavailable")
 	}
@@ -218,7 +285,7 @@ func (b *Broker) sessionFor(agentRunID string) (*sessionWorker, error) {
 	if b.brokerBin == "" {
 		return nil, fmt.Errorf("session worker: broker binary path unavailable")
 	}
-	w, err := spawnSessionWorker(b.brokerBin, b.sessionConfigFor(agentRunID))
+	w, err := spawnSessionWorker(b.brokerBin, b.sessionConfigFor(agentRunID, role))
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +315,7 @@ func (b *Broker) handleInitSession(_ context.Context, cap *capsule.Capability, _
 		return BrokerRPCResponse{Error: "init_session: activation required"}
 	}
 	b.dropSession(cap.AgentRunID)
-	w, err := b.sessionFor(cap.AgentRunID)
+	w, err := b.sessionFor(cap.AgentRunID, string(cap.AgentRole))
 	if err != nil {
 		return BrokerRPCResponse{Error: fmt.Sprintf("init_session: %v", err)}
 	}
@@ -274,7 +341,11 @@ func (b *Broker) handleCloseSession(_ context.Context, cap *capsule.Capability, 
 
 // handleGoEvalSession evaluates one cell on the activation's persistent
 // worker. A dead or poisoned worker is dropped and reported (never silently
-// retried: the cell may have partially executed).
+// retried: the cell may have partially executed). When no session worker can
+// start, the cell falls back to the one-shot tools worker and the result is
+// marked Fallback: the Def 2 fallback is per-call behavior with a receipt,
+// not a flag. The cell deadline never exceeds the parent RPC deadline: a
+// model-supplied TimeoutMS cannot extend the activation budget.
 func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capability, params json.RawMessage) BrokerRPCResponse {
 	var p capsule.GoEvalRequest
 	if err := json.Unmarshal(params, &p); err != nil {
@@ -284,11 +355,18 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 	if p.TimeoutMS > 0 {
 		timeout = time.Duration(p.TimeoutMS) * time.Millisecond
 	}
-	_ = ctx
+	if deadline, ok := ctx.Deadline(); ok {
+		if remaining := time.Until(deadline); remaining < timeout {
+			timeout = remaining
+		}
+	}
+	if timeout <= 0 {
+		return BrokerRPCResponse{Error: "go_eval: parent deadline already exceeded"}
+	}
 	start := time.Now()
-	w, err := b.sessionFor(cap.AgentRunID)
+	w, err := b.sessionFor(cap.AgentRunID, string(cap.AgentRole))
 	if err != nil {
-		return BrokerRPCResponse{Error: fmt.Sprintf("session worker unavailable: %v", err)}
+		return b.fallbackGoEval(ctx, cap, params, fmt.Sprintf("session worker unavailable: %v", err))
 	}
 	res, err := w.eval(p.Source, timeout)
 	if err != nil {
@@ -302,11 +380,31 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 		Stderr:   res.Stderr,
 		Error:    res.Error,
 		Duration: time.Since(start),
+		Receipts: res.Receipts,
 	}
 	if res.Error != "" {
 		result.ExitCode = 1
 		b.dropSession(cap.AgentRunID)
 	}
+	resultBytes, _ := json.Marshal(result)
+	return BrokerRPCResponse{Result: resultBytes}
+}
+
+// fallbackGoEval runs the cell on the one-shot tools worker after a session
+// spawn failure and marks the result Fallback with the session error that
+// caused it. When the one-shot path also fails, both errors are reported so
+// the fallback attempt is visible, never silent.
+func (b *Broker) fallbackGoEval(ctx context.Context, cap *capsule.Capability, params json.RawMessage, sessionErr string) BrokerRPCResponse {
+	resp := b.handleGoEvalOneShot(ctx, cap, params)
+	if resp.Error != "" {
+		return BrokerRPCResponse{Error: fmt.Sprintf("%s; tools fallback also failed: %v", sessionErr, resp.Error)}
+	}
+	var result capsule.GoEvalResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return BrokerRPCResponse{Error: fmt.Sprintf("%s; tools fallback result undecodable: %v", sessionErr, err)}
+	}
+	result.Fallback = true
+	result.Stderr += "\n[rlm fallback: " + sessionErr + "]"
 	resultBytes, _ := json.Marshal(result)
 	return BrokerRPCResponse{Result: resultBytes}
 }

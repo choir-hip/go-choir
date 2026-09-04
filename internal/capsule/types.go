@@ -110,6 +110,8 @@ type GoEvalResult struct {
 	Duration   time.Duration `json:"duration,omitempty"`
 	ExitCode   int           `json:"exit_code"`
 	ReceiptRef string        `json:"receipt_ref,omitempty"`
+	Fallback   bool          `json:"fallback,omitempty"`
+	Receipts   []string      `json:"receipts,omitempty"`
 }
 
 type ExecutionReceipt struct {

@@ -69,6 +69,27 @@ func (b *Broker) SetEpoch(epoch uint64) {
 	defer b.mu.Unlock()
 	b.cfg.CurrentEpoch = epoch
 }
+// DrainReceipts returns worker-local assign/message entries recorded since
+// the last drain and clears them, so the session loop surfaces each receipt
+// to the host exactly once in SessionResult. Entries are host-reconciled,
+// never trusted as durable; undrained entries die with the worker.
+func (b *Broker) DrainReceipts() []string {
+	if b == nil {
+		return nil
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	var out []string
+	for id, p := range b.assignments {
+		out = append(out, "assign/"+id+"/"+p.TaskID)
+		delete(b.assignments, id)
+	}
+	for id, p := range b.messages {
+		out = append(out, "message/"+id+"/"+p.Kind)
+		delete(b.messages, id)
+	}
+	return out
+}
 
 // HandleRequest authenticates the handle and executes the requested action.
 func (b *Broker) HandleRequest(ctx context.Context, req *BrokerRequest) *BrokerResponse {

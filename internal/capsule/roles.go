@@ -21,10 +21,12 @@ var RoleVerbSets = map[AgentRole]VerbSet{
 		"mkdir": true, "mkdir_all": true, "remove": true, "remove_all": true,
 		"rename": true, "chmod": true, "symlink": true, "truncate": true,
 		"file_hash": true, "kill_session": true, "go_eval": true,
+		"get_actuator": true, "init_session": true, "close_session": true,
 	},
 	RoleResearcher: {
 		"read_file": true, "list_dir": true, "stat": true, "lstat": true,
 		"readlink": true, "file_hash": true, "go_eval": true,
+		"get_actuator": true,
 	},
 }
 

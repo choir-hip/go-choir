@@ -22,19 +22,27 @@ type SessionFrame struct {
 // surface through Stdout like the one-shot path; structured values stay
 // in-process (the broker re-fetches them with follow-up cells).
 type SessionResult struct {
-	ID         string `json:"id"`
-	Stdout     string `json:"stdout"`
-	Stderr     string `json:"stderr"`
-	Error      string `json:"error,omitempty"`
-	DurationMs int64  `json:"duration_ms"`
+	ID         string   `json:"id"`
+	Stdout     string   `json:"stdout"`
+	Stderr     string   `json:"stderr"`
+	Error      string   `json:"error,omitempty"`
+	DurationMs int64    `json:"duration_ms"`
+	Receipts   []string `json:"receipts,omitempty"`
 }
 
 // RunSessionLoop serves framed eval cells on r/w using a single persistent
 // Session: variables, imports, and definitions survive across frames until a
 // close frame, EOF, or a failed cell. A failed cell poisons the session and
 // the loop exits non-zero so the broker respawns a clean worker (poisoned
-// session replacement). Extracted from stdio so tests drive it over pipes.
 func RunSessionLoop(r io.Reader, w io.Writer, newSession func() (*Session, error)) error {
+	return RunSessionLoopWithDrain(r, w, newSession, nil)
+}
+
+// RunSessionLoopWithDrain serves the same framed loop but attaches
+// worker-local assign/message receipts recorded during each cell (via drain,
+// nil to skip) to that cell's SessionResult, so the host reconciles outcomes
+// without trusting worker memory as durable state.
+func RunSessionLoopWithDrain(r io.Reader, w io.Writer, newSession func() (*Session, error), drain func() []string) error {
 	sess, err := newSession()
 	if err != nil {
 		return err
@@ -58,6 +66,9 @@ func RunSessionLoop(r io.Reader, w io.Writer, newSession func() (*Session, error
 		start := time.Now()
 		res, evalErr := sess.Eval(context.Background(), frame.Source)
 		out := SessionResult{ID: frame.ID, Stdout: res.Stdout, Stderr: res.Stderr, DurationMs: time.Since(start).Milliseconds()}
+		if drain != nil {
+			out.Receipts = drain()
+		}
 		if evalErr != nil {
 			out.Error = evalErr.Error()
 		}

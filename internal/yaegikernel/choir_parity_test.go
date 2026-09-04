@@ -24,7 +24,7 @@ func testChoirFixture(t *testing.T) (*Broker, *HandleIssuer, *ChoirScope, string
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1)
+	scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, "co-super")
 	if err != nil {
 		t.Fatalf("choir scope: %v", err)
 	}
@@ -177,5 +177,58 @@ func TestChoirSymbolsInSession(t *testing.T) {
 	}
 	if !res.Value.IsValid() || res.Value.Interface() != "session-data" {
 		t.Fatalf("read cell value = %v", res.Value)
+	}
+}
+
+// TestChoirResearcherScopeIsReadOnly is the B2 regression: a researcher-bound
+// scope observes files but cannot write, execute, assign, message, or report
+// outcomes, at both the export table and the method level.
+func TestChoirResearcherScopeIsReadOnly(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		t.Fatal(err)
+	}
+	issuer, err := NewHandleIssuer(secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := NewBroker(BrokerConfig{ComputerID: "computer-choir", CurrentEpoch: 1, AllowedRoot: root}, issuer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, SessionRoleResearcher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exports := scope.ChoirExports()["choir/choir"]
+	for _, sym := range []string{"WriteFile", "Exec", "Assign", "Message", "Outcome"} {
+		if _, ok := exports[sym]; ok {
+			t.Fatalf("researcher exports %s", sym)
+		}
+	}
+	for _, sym := range []string{"ReadFile", "ListDir", "Context"} {
+		if _, ok := exports[sym]; !ok {
+			t.Fatalf("researcher missing %s", sym)
+		}
+	}
+	if _, err := scope.WriteFile("x.txt", "x"); err == nil {
+		t.Fatal("researcher WriteFile allowed")
+	}
+	if _, err := scope.Exec("echo", nil); err == nil {
+		t.Fatal("researcher Exec allowed")
+	}
+	if _, err := scope.Assign("t", "p", "i"); err == nil {
+		t.Fatal("researcher Assign allowed")
+	}
+	if _, err := scope.Message("r", "k", "b"); err == nil {
+		t.Fatal("researcher Message allowed")
+	}
+	if _, err := scope.Outcome("v"); err == nil {
+		t.Fatal("researcher Outcome allowed")
+	}
+	if _, err := scope.ReadFile("missing.txt"); err == nil {
+		t.Fatal("researcher ReadFile unexpectedly succeeded on missing file")
 	}
 }
