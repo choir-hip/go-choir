@@ -6,7 +6,7 @@ usage() {
 agentic-consensus-runner.sh --prompt TEXT | --prompt-file FILE [options]
 
 Runs one prompt across an agentic consensus panel and writes one output file per agent.
-Default panel: codex, devin, cursor, opencode, omp-gpt56-sol, omp-gpt56-luna, omp-gemini38, omp-cursor-grok46, omp-muse-spark, omp-nemotron-3-ultra, omp-glm53-flash, omp-hy3.
+Default panel: codex, devin, claude, cursor, opencode, omp-gpt56-sol, omp-gpt56-luna, omp-gemini38, omp-cursor-grok46, omp-muse-spark, omp-nemotron-3-ultra, omp-glm53-flash, omp-hy3.
 External CLIs use their configured default model unless a --*-model override is passed.
 
 Required input:
@@ -26,14 +26,15 @@ Thinking mode:
 
 Panel selection:
   --include LIST                Comma-separated agent ids to run.
-                                Default: codex,devin,cursor,opencode,omp-gpt56-sol,omp-gpt56-luna,omp-gemini38,omp-cursor-grok46,omp-muse-spark,omp-nemotron-3-ultra,omp-glm53-flash,omp-hy3
+                                Default: codex,devin,claude,cursor,opencode,omp-gpt56-sol,omp-gpt56-luna,omp-gemini38,omp-cursor-grok46,omp-muse-spark,omp-nemotron-3-ultra,omp-glm53-flash,omp-hy3
   --exclude LIST                Comma-separated agent ids to skip.
   --list-agents                 Print supported agent ids and exit.
 
 Model overrides, optional:
   --codex-model MODEL           Pass -m MODEL to codex exec.
   --devin-model MODEL           Pass --model MODEL to devin.
-  --claude-model MODEL          Pass --model MODEL to claude.
+  --claude-model MODEL          Pass --model MODEL to claude. Default: opus.
+                                 fable is request-only.
   --cursor-model MODEL          Pass --model MODEL to Cursor agent.
   --opencode-model MODEL        Pass -m MODEL to opencode run.
   --omp-gpt56-sol-model MODEL   Default: openai-codex/gpt-5.6-sol.
@@ -73,7 +74,7 @@ Output:
 USAGE
 }
 
-DEFAULT_INCLUDE="codex,devin,cursor,opencode,omp-gpt56-sol,omp-gpt56-luna,omp-gemini38,omp-cursor-grok46,omp-muse-spark,omp-nemotron-3-ultra,omp-glm53-flash,omp-hy3"
+DEFAULT_INCLUDE="codex,devin,claude,cursor,opencode,omp-gpt56-sol,omp-gpt56-luna,omp-gemini38,omp-cursor-grok46,omp-muse-spark,omp-nemotron-3-ultra,omp-glm53-flash,omp-hy3"
 SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt56-sol omp-gpt56-terra omp-gpt56-luna omp-gemini38 omp-cursor-grok46 omp-muse-spark omp-nemotron-3-ultra omp-glm53-flash omp-hy3)
 
 PROMPT=""
@@ -93,7 +94,7 @@ LENS_LIST=()
 
 CODEX_MODEL=""
 DEVIN_MODEL=""
-CLAUDE_MODEL=""
+CLAUDE_MODEL="opus"
 CURSOR_MODEL=""
 OPENCODE_MODEL=""
 OMP_GPT56_SOL_MODEL="openai-codex/gpt-5.6-sol"

@@ -21,18 +21,19 @@ The default panel is:
 
 1. `codex` CLI with its configured default model.
 2. Devin CLI/API with its configured default model/agent (currently free-tier `swe-1-6-slow`; lowest-capability route but free, so it still adds an independent opinion).
-3. Cursor `agent` CLI with its configured default model.
-4. `opencode` CLI with its configured default model.
-5. OMP `openai-codex/gpt-5.6-sol` with `--thinking medium`.
-6. OMP `openai-codex/gpt-5.6-luna` with `--thinking max` — the cost champion; fastest/cheapest GPT-5.6 tier (weak long-context recall).
-7. OMP `google-antigravity/gemini-3.8-flash` with `--thinking high`.
-8. OMP `cursor/cursor-grok-4.6-high` with `--thinking high`.
-9. OMP `opencode-zen/muse-spark-1.3-contributor-free` with `--thinking high`.
-10. OMP `opencode-zen/nemotron-3-ultra-free` with `--thinking high`.
-11. OMP `opencode-go/glm-5.3-flash` with `--thinking high`.
-12. OMP `opencode-zen/hy3-free` with `--thinking high`.
+3. `claude` CLI pinned to `opus` (`--model opus`).
+4. Cursor `agent` CLI with its configured default model.
+5. `opencode` CLI with its configured default model.
+6. OMP `openai-codex/gpt-5.6-sol` with `--thinking medium`.
+7. OMP `openai-codex/gpt-5.6-luna` with `--thinking max` — the cost champion; fastest/cheapest GPT-5.6 tier (weak long-context recall).
+8. OMP `google-antigravity/gemini-3.8-flash` with `--thinking high`.
+9. OMP `cursor/cursor-grok-4.6-high` with `--thinking high`.
+10. OMP `opencode-zen/muse-spark-1.3-contributor-free` with `--thinking high`.
+11. OMP `opencode-zen/nemotron-3-ultra-free` with `--thinking high`.
+12. OMP `opencode-go/glm-5.3-flash` with `--thinking high`.
+13. OMP `opencode-zen/hy3-free` with `--thinking high`.
 
-`claude` is supported but intentionally excluded from the default panel because its token rate limits are lower. Add it explicitly with `--include claude,...` when needed. Claude's configured default tracks the current `opus` tier, so no model override is needed.
+`claude` is in the default panel, pinned to `opus`. `fable` is request-only: pass `--claude-model fable` when the user explicitly asks for it — never in the default panel.
 
 External CLIs intentionally use their default model unless the user asks for a model override. OMP entries are pinned because they are the stable built-in comparison anchors.
 
@@ -157,7 +158,8 @@ Notes:
 - `--permission-mode plan` makes the run read-only/planning-oriented.
 - `--no-session-persistence` avoids saving sessions.
 - Use `--output-format json` only when downstream parsing needs Claude's JSON wrapper; the runner defaults to text for uniform raw outputs.
-- Claude's configured default auto-updates to the current `opus` tier, so no `--claude-model` is needed unless you want to pin something else.
+- The runner pins `--model opus` by default (claude CLI aliases: `fable`, `opus`, `sonnet`).
+- `fable` is request-only: pass `--claude-model fable` only when the user explicitly asks.
 
 ### Cursor Agent CLI
 
@@ -324,7 +326,7 @@ Override selected models:
 
 ```bash
 skill://agentic-consensus/agentic-consensus-runner.sh \
-  --claude-model opus \
+  --claude-model fable \
   --opencode-model anthropic/claude-sonnet-4-5 \
   --cursor-model gpt-5 \
   --prompt-file .agentic-consensus/prompt.md
