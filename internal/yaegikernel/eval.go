@@ -35,6 +35,16 @@ func NewEvaluator(allowlist *Allowlist, extraSymbols interp.Exports) *Evaluator 
 	if allowlist == nil {
 		allowlist = NewDefaultSafeAllowlist()
 	}
+	return &Evaluator{
+		allowlist: allowlist,
+		symbols:   buildFilteredSymbols(allowlist, extraSymbols),
+	}
+}
+
+// buildFilteredSymbols merges allowlisted stdlib symbols with extra custom
+// symbols (e.g. choir client bindings). Shared by one-shot Evaluator and the
+// persistent Session so both enforce the identical symbol surface.
+func buildFilteredSymbols(allowlist *Allowlist, extraSymbols interp.Exports) interp.Exports {
 	filteredSymbols := make(interp.Exports)
 	for pkgKey, symbols := range stdlib.Symbols {
 		importPath := cleanImportPathFromSymbolKey(pkgKey)
@@ -47,11 +57,7 @@ func NewEvaluator(allowlist *Allowlist, extraSymbols interp.Exports) *Evaluator 
 	for k, v := range extraSymbols {
 		filteredSymbols[k] = v
 	}
-
-	return &Evaluator{
-		allowlist: allowlist,
-		symbols:   filteredSymbols,
-	}
+	return filteredSymbols
 }
 
 // CheckImports statically inspects Go source code and returns an error if any
