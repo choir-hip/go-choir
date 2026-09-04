@@ -65,7 +65,7 @@
     <rect x="16" y="128" width="373" height="34" rx="4" fill="#ffffff" stroke="#fde68a"/>
     <text x="26" y="143" class="text-sub" font-weight="600">Environment Sanitization:</text>
     <text x="175" y="143" class="text-sub" fill="#b45309" font-weight="600">Inherits Full Daemon Environ</text>
-    <text x="26" y="156" class="text-sub">Copies entire broker daemon environment including host secrets.</text>
+    <text x="26" y="156" class="text-sub">Copies entire broker daemon environment including guest credentials.</text>
 
     <rect x="16" y="168" width="373" height="34" rx="4" fill="#ffffff" stroke="#fde68a"/>
     <text x="26" y="183" class="text-sub" font-weight="600">Process Group Control:</text>

@@ -38,32 +38,66 @@ Prior round: `.agentic-consensus/agentic-consensus-20260904-133048/`.
    summaries, and wake suppressions do not constrain the new
    protocol. The host adapter to existing durable machinery is
    specified exactly below — one fixed envelope, not a table.
+## Virtualization Boundaries and System Ontology
+
+Strict terminology is enforced across all documentation and code:
+
+* **NixOS Host**: The physical server or cloud instance running base
+  infrastructure (`vmctl`, Firecracker hypervisor, Node B).
+* **Guest MicroVM (User Computer)**: The persistent virtual machine
+  running the NixOS guest kernel and the `autoputer` daemon. Super,
+  CoSuper, Researchers, Dolt database, and the causal event log all
+  run INSIDE the microVM.
+* **Capsule**: An ephemeral sandbox *inside* the microVM, created via
+  Linux namespaces (PID, mount, net, IPC, UTS), cgroups v2, and
+  overlayfs (`internal/capsule/executor.go`). All agent code execution
+  lives exclusively inside capsules.
+
+### Capsule Allocation Policy: Dedicated vs. Shared
+
+1. **Dedicated Capsules (Mandatory)**:
+   * **Any agent with Bash / shell access**: Must execute in its own
+     dedicated capsule. Shell access allows arbitrary process
+     spawning, `/proc` inspection, and scratch file mutation, which
+     shatters isolation if shared.
+   * **Any agent authoring or testing candidate changes**: Self-development
+     candidate changes are frozen directly from the capsule's writable
+     overlay filesystem (`upperDir`). Sharing a capsule would
+     contaminate candidate bundles with uncommitted scratch files.
+   * **Any agent with concurrent write authority**: Prevents race
+     conditions on `/workspace/platform`.
+2. **Shared Capsules**:
+   * Permissible **only for read-only inspection** (e.g., passive
+     researchers examining the clean baseline source tree without
+     write or shell authority).
+
 ## Topology (target)
 
 The model sees exactly ONE JSON tool (implementation slot).
-Everything else is a Go spelling inside cells, reduced by the host
-after the cell ends.
+Everything else is a Go spelling inside cells, reduced by the guest
+runtime (`autoputer`) after the cell ends.
 ![Target Architecture Topology](../reports/diagrams/diagram-architecture-topology.svg)
 
 ```mermaid
 flowchart TB
-    M[CoSuper model] -- "JSON: capsule_go_eval(source)<br/>THE ONLY implementation-slot tool" --> H[host agentcore]
-    H -- "framed cell" --> B["capsule broker<br/>(THE broker, in-guest)"]
-    B -- "spawn + pipes" --> W["session worker<br/>(yaegi, choir.* syscalls<br/>+ intent tray)"]
+    M[CoSuper model] -- "JSON: capsule_go_eval(source)<br/>THE ONLY implementation-slot tool" --> H["autoputer supervisor<br/>(guest runtime)"]
+    H -- "framed cell" --> B["capsule broker<br/>(in-capsule daemon)"]
+    B -- "spawn + pipes" --> W["session worker<br/>(in-capsule yaegi,<br/>syscalls + intent tray)"]
     W -- "typed frames:<br/>cell I/O + file/exec values" --> B
-    B -- "file/exec verbs<br/>single impl, guest-local" --> FS[(capsule overlay)]
+    B -- "file/exec verbs<br/>single impl, in-capsule" --> FS[(capsule overlay)]
     W -- "intent tray<br/>with cell result" --> B
-    B -- "intent batch<br/>post-cell" --> H
-    H -- "reducer: persist mailbox + receipts,<br/>fate funcs, wake always" --> S[Super / recipient]
+    B -- "intent batch<br/>post-cell (Unix socket)" --> H
+    H -- "reducer: Dolt event log,<br/>push to Go channel" --> S["recipient Go-channel<br/>mailbox (chan Update)"]
 ```
 
 Crossing notes: file/exec values round-trip mid-cell, but stay
-guest-internal (worker↔broker pipes). NOTHING crosses guest→host
-mid-cell. All host effects travel post-cell as one intent batch,
-reduced by existing fate functions. This dissolves the deadlock
-objection by construction: there is no mid-cell host roundtrip to
-deadlock.
-
+capsule-internal (worker↔broker pipes). NOTHING crosses the capsule
+boundary mid-cell. All external effects (messages, task completion)
+travel post-cell as one intent batch over the internal Unix domain
+socket to `autoputer`, which persists them to Dolt and delivers them
+directly into the recipient actor's resident Go channel. This dissolves
+the distributed deadlock objection by construction: there is no mid-cell
+blocking roundtrip to deadlock.
 ## The exec split, and its resolution
 
 Two runners exist today with different languages, environments, and
@@ -103,34 +137,35 @@ reachable from RLM.
 
 ## The message protocol v2 (rev 3)
 
-No cell-chosen kinds. No live mid-cell host calls of any kind:
+No cell-chosen kinds. No live mid-cell cross-calls of any kind:
 
 - Cell calls `choir.Message(to, body)`. The call appends an intent
   to the cell's outbound tray and returns a local intent id
-  immediately. Nothing is sent; nothing is claimed.
-- Intent ids are host-derived, never worker counters: derived from
-  (spawning activation, host tool-call id, host cell id, sequence).
+  immediately in microseconds. Nothing is sent across sockets mid-cell;
+  nothing is claimed.
+- Intent ids are guest-runtime-derived, never worker counters: derived from
+  (spawning activation, tool-call id, cell id, sequence).
   Same id + same payload on retry returns the original durable id;
   different calls get distinct ids even with identical bodies.
 - Tray caps, first slice: at most 16 intents per cell, 16 KiB per
   body, 256 KiB serialized tray aggregate, plus a per-activation
   mailbox quota. Over-cap calls fail in-cell; over-quota fails
-  closed in the tool result. (Numbers are tuning from receipts;
-  the caps' existence is the contract.)
+  closed in the tool result.
 - When the cell ends, the tray travels as a field on the cell
-  result. The host reducer, in intent order:
+  result across the Unix domain socket to `autoputer`. The guest
+  runtime reducer, in intent order:
   1. validates `to` (must equal the bound parent Super this slice;
      terminal/revoked actors fail closed with reason);
-  2. persists each intent to the recipient's durable mailbox with a
-     FIXED host-built envelope — sender/role/direction from the
-     spawning activation, `Kind=evidence_update`,
+  2. persists each intent to the recipient's durable Dolt event/mailbox
+     table with a FIXED runtime-built envelope — sender/role/direction
+     from the spawning activation, `Kind=evidence_update`,
      `schema_version=v1`, summary plus one claim carrying the body
      verbatim. The cell chooses nothing but `to` and `body`;
   3. mints durable packet ids; replays return originals, never new
      rows or wakes;
-  4. wakes the recipient exactly once per fresh committed batch via
-     a dedicated mailbox wake (ensure-schedule + coalesce if live),
-     NEVER the existing producer-report-suppressed wake path.
+  4. delivers the update into the recipient actor's resident Go channel
+     (`mailbox chan Update` in `internal/actor`), waking the recipient
+     actor for its next LLM inference turn.
 - Wake exemptions (fate, not legacy): no wake on replayed intents;
   no wake/reopen on late evidence after cancel/revoke; one wake per
   batch when the recipient is already live.
@@ -160,7 +195,7 @@ flowchart LR
 - Spelling: `choir.Complete(result, verdict, summary,
   evidence_refs)` with `result ∈ {completed, failed, blocked}`.
   Partial progress is a Message, not a Complete. No
-  `execution_refs` parameter: the host binds this activation's
+  `execution_refs` parameter: the guest runtime binds this activation's
   persisted broker exec receipts when assembling the report.
 - At most one Complete per activation; it must be the final tray
   entry — later appends fail in-cell. Reducible only from a
@@ -183,7 +218,7 @@ flowchart LR
 | choir.Complete(...) | capsule spelling, host act | terminal intent; fate path post-cell |
 | choir.Assign | — | DELETED (never designed, no counterpart) |
 | choir.Outcome | — | REMOVED for now (goal completion deferred) |
-| record/update/commit | host functions, NOT model tools | the reducer calls these; the model never sees them |
+| record/update/commit | guest runtime functions, NOT model tools | the reducer calls these; the model never sees them |
 
 Implementation overlay registers EXACTLY `{capsule_go_eval}`:
 delete `update_coagent`, `record_assignment_result`,

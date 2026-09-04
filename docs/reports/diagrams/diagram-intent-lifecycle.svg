@@ -21,20 +21,20 @@
     <rect x="16" y="14" width="75" height="22" rx="11" fill="#3b82f6"/>
     <text x="53" y="29" class="step-badge" text-anchor="middle">PHASE 1</text>
     <text x="16" y="58" class="text-title">In-Cell Execution</text>
-    <text x="16" y="75" class="text-sub">Inside the Yaegi session worker</text>
+    <text x="16" y="75" class="text-sub">Inside the in-capsule Yaegi worker</text>
 
     <rect x="14" y="88" width="222" height="68" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
     <text x="22" y="106" class="text-code" fill="#059669">choir.ReadFile / Exec</text>
-    <text x="22" y="122" class="text-sub">Synchronous guest syscalls</text>
-    <text x="22" y="138" class="text-sub">Zero host roundtrips mid-cell</text>
+    <text x="22" y="122" class="text-sub">Synchronous guest-local syscalls</text>
+    <text x="22" y="138" class="text-sub">Zero blocking cross-calls mid-cell</text>
 
     <rect x="14" y="165" width="222" height="118" rx="6" fill="#f5f3ff" stroke="#ddd6fe"/>
     <text x="22" y="183" class="text-code" fill="#7c3aed">choir.Message / Complete</text>
-    <text x="22" y="200" class="text-sub">• Appends to memory tray</text>
+    <text x="22" y="200" class="text-sub">• Appends to in-memory tray</text>
     <text x="22" y="216" class="text-sub">• Mints local correlation ID</text>
     <text x="22" y="232" class="text-sub">• Enforces quotas (16 max)</text>
-    <text x="22" y="248" class="text-sub">• NO network calls; NO delivery</text>
-    <text x="22" y="264" class="text-sub">  receipts claimed prematurely</text>
+    <text x="22" y="248" class="text-sub">• Returns in microseconds</text>
+    <text x="22" y="264" class="text-sub">  (No blocking wait; no deadlocks)</text>
   </g>
 
   <!-- Arrow Phase 1 -> Phase 2 -->
@@ -46,7 +46,7 @@
     <rect x="16" y="14" width="75" height="22" rx="11" fill="#3b82f6"/>
     <text x="53" y="29" class="step-badge" text-anchor="middle">PHASE 2</text>
     <text x="16" y="58" class="text-title">Cell Completion &amp; Frame</text>
-    <text x="16" y="75" class="text-sub">Crosses guest → host boundary</text>
+    <text x="16" y="75" class="text-sub">Crosses capsule → autoputer socket</text>
 
     <rect x="14" y="88" width="212" height="195" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
     <text x="22" y="110" class="text-title" font-size="12">Packaged Result Frame</text>
@@ -56,33 +56,33 @@
     <text x="32" y="192" class="text-sub">  commands run, exit codes,</text>
     <text x="32" y="207" class="text-sub">  stdout/stderr digests</text>
     <text x="22" y="228" class="text-code">• Staged Intent Tray Batch</text>
-    <text x="22" y="254" class="text-sub" fill="#2563eb" font-weight="600">Atomic handover to Host</text>
+    <text x="22" y="254" class="text-sub" fill="#2563eb" font-weight="600">Atomic handover to autoputer</text>
   </g>
 
   <!-- Arrow Phase 2 -> Phase 3 -->
   <path d="M 575 165 L 605 165" class="arrow"/>
 
-  <!-- Phase 3: Host Reduction -->
+  <!-- Phase 3: Guest Runtime Reduction -->
   <g transform="translate(615, 25)">
     <rect width="240" height="300" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
     <rect x="16" y="14" width="75" height="22" rx="11" fill="#15803d"/>
     <text x="53" y="29" class="step-badge" text-anchor="middle">PHASE 3</text>
-    <text x="16" y="58" class="text-title">Host Reduction &amp; Fate</text>
-    <text x="16" y="75" class="text-sub">Authoritative host commit</text>
+    <text x="16" y="58" class="text-title">Guest Reducer &amp; Channels</text>
+    <text x="16" y="75" class="text-sub">Inside autoputer (Guest MicroVM)</text>
 
     <rect x="14" y="88" width="212" height="62" rx="6" fill="#ffffff" stroke="#bbf7d0"/>
     <text x="22" y="106" class="text-title" font-size="11">1. Envelope &amp; Validate</text>
-    <text x="22" y="122" class="text-sub">Host injects sender, timestamp,</text>
+    <text x="22" y="122" class="text-sub">Stamps sender, timestamp,</text>
     <text x="22" y="137" class="text-sub">direction, and fixed schema.</text>
 
     <rect x="14" y="158" width="212" height="62" rx="6" fill="#ffffff" stroke="#bbf7d0"/>
-    <text x="22" y="176" class="text-title" font-size="11">2. Mailbox Persistence</text>
-    <text x="22" y="192" class="text-sub">Commits to Dolt mailbox table.</text>
-    <text x="22" y="207" class="text-sub">Mints durable message IDs.</text>
+    <text x="22" y="176" class="text-title" font-size="11">2. Durable Dolt Log</text>
+    <text x="22" y="192" class="text-sub">Commits to Dolt event table.</text>
+    <text x="22" y="207" class="text-sub">Survives reboots &amp; restores.</text>
 
     <rect x="14" y="228" width="212" height="58" rx="6" fill="#ffffff" stroke="#bbf7d0"/>
-    <text x="22" y="246" class="text-title" font-size="11">3. Wake &amp; Assignment Fate</text>
-    <text x="22" y="262" class="text-sub">Wakes parent Super; executes</text>
-    <text x="22" y="277" class="text-sub">freeze, verification, revocation.</text>
+    <text x="22" y="246" class="text-title" font-size="11">3. Go Channel &amp; Wake</text>
+    <text x="22" y="262" class="text-sub">Pushes to recipient mailbox chan;</text>
+    <text x="22" y="277" class="text-sub">schedules recipient LLM turn.</text>
   </g>
 </svg>
