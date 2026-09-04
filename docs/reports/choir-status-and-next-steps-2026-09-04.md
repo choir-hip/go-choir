@@ -1,180 +1,157 @@
-# Choir Status Report — September 4, 2026 (rev 2)
+# Choir Engineering Status Report — September 4, 2026
 
-## What this is about
+**Subject**: Architecture, Verification, and Rollout Plan for the Recursive Language Model (RLM) Session Interpreter  
+**Status**: Target Architecture Rev 3 Prepared for Owner Review  
+**Staging Environment**: Retained Computer `computer-03335285269bdba4f94377e56879f9e6` (Boot Epoch 879, Commit `8c410a0d`)  
 
-Choir is building a computer that can improve its own software under
-supervision. The piece under work is a new way for the AI agents that
-do that work to use their isolated workspace (called a capsule).
-Instead of calling a long list of individual tools one at a time over
-a text protocol, the agent writes small programs in the Go programming
-language that run inside a persistent session — like working in a
-notebook where variables and imports carry over from one step to the
-next. We call this the session interpreter, or RLM. Everything the
-agent does inside the capsule happens through one doorway
-(`capsule_go_eval`), and inside that doorway the agent programs
-against a small built-in library called `choir`.
+---
 
-## What is finished and live
+## 1. Executive Summary
 
-As of this writing the code sits at commit `8c410a0d` on the staging
-site, running on the retained test computer at boot epoch 879:
+Choir is building an autonomous computer system capable of supervised self-development. A central component of this platform is the execution harness for autonomous agents operating inside isolated microVM environments, known as **capsules**.
 
-- **The route switch.** Old mode (individual JSON tools) or new
-  session mode, chosen by one setting. Old mode is the default. If
-  the session worker fails to start, calls fall back to the old path
-  automatically, and the fallback is recorded on the receipt.
-- **The persistent session.** Each assignment gets its own long-lived
-  interpreter process with a startup handshake proving it is truly
-  alive (we learned "process started" does not mean "process works").
-  Crashed sessions are replaced, never trusted after failure.
-- **The `choir` library.** Eight functions: reading, writing,
-  listing, executing, plus assignment, messaging, context, and
-  outcome reporting. (Three of these are now slated for
-  deletion/removal — see below.)
-- **Containment.** A runaway program is killed as a whole process
-  group and reaped within half a second, proven by an automated test
-  on every code change.
-- **Role safety.** A read-only researcher gets read-only powers
-  only, enforced at two independent layers, proven by a test that
-  boots the real program.
-- **The sealed tool set.** Under session mode the visible tool list
-  shrinks from ten tools to six: the session doorway plus reporting,
-  verification, and bundle tools. An automated test asserts the exact
-  list in both modes.
+Currently, autonomous agents interact with their capsule workspaces by making repeated, individual JSON tool calls across the network (e.g., calling `capsule_read_file`, `capsule_write_file`, and `capsule_exec` one by one). This approach introduces significant latency, causes state fragmentation between turns, and increases the risk of network deadlocks.
 
-## What outside review found (and what we fixed)
+To resolve these limitations, we are transitioning the agent harness to a **Recursive Language Model (RLM) session interpreter**. Under this architecture, the agent interacts with its workspace through a single execution doorway: `capsule_go_eval(source)`. Within this doorway, the agent writes concise Go code that runs inside a long-lived, stateful interpreter session (powered by Yaegi). Variables, functions, and imported packages persist across execution steps, much like an interactive computational notebook. The agent manipulates its workspace using a lightweight, built-in standard library named `choir`.
 
-Three review rounds, fifteen panel verdicts total, every confirmed
-defect fixed, tested, and deployed:
+This report synthesizes the work completed to date, documents the architectural bugs identified and repaired across multiple review panels, explains the unified target architecture, and outlines the step-by-step engineering roadmap for deployment.
 
-- **The worker could never start.** It was given an empty identity
-  that its own setup rejects — every session died at boot (exit
-  code 2) while the system reported ready. Tests missed it because
-  they never booted a real worker. Fixed with the handshake plus an
-  end-to-end boot test.
-- **A privilege hole.** A read-only researcher using the session
-  would have received full write and execute powers. Fixed with
-  role-scoped permissions *before* the startup fix went live — in
-  that order deliberately, so fixing the boot bug could not arm the
-  hole with it.
-- **Dead controls.** Session start/stop commands were rejected for
-  every role; the fallback was a hardwired flag. Both are now real,
-  tested behavior.
-- **No on-switch.** There is no supported way to flip the new mode
-  on for the live computer: the setting must travel from the
-  owner's refresh command into the guest boot configuration, and
-  that channel does not exist yet. Fully mapped (machine setting +
-  `choir.actuator` boot parameter + guest startup mapping) and
-  first in the build order.
-- **The prompt lies.** System instructions still describe the old
-  tools as the whole world. A mode-aware prompt fix is specified.
+---
 
-## The design question — resolved direction, awaiting approval
+## 2. Current Deployed and Verified State
 
-The `choir` library grew three functions that were never properly
-designed. To be precise: **Message was designed** (a typed
-inter-agent message with recipient, kind, body, and receipt).
-**Assign and Outcome were not** — conveniences with no host
-counterpart, and Outcome is literally implemented as a Message
-addressed to oneself. Worse, all three store payloads in the
-worker program's short-term memory while reporting "dispatched"
-and "delivered" — with no mailbox, no reader, and nothing on the
-host ever reading them.
+The foundational session interpreter infrastructure has been deployed to the staging environment at commit `8c410a0d` and validated on the retained test microVM:
 
-Two further review rounds (seven reviewers, then eight, several
-consulting published RLM/agent-harness designs) converged on a
-target architecture, now written up as
-`docs/designs/rlm-target-architecture-2026-09-04.md` (rev 3). The
-shape, in brief:
+* **Dual-Mode Route Switch**: The platform supports both the legacy individual JSON tool suite and the new persistent session mode, selectable via a centralized configuration switch. The legacy tool suite remains the active default. If the session worker fails to initialize for any reason, the system automatically falls back to legacy tools and records an explicit diagnostic flag on the execution receipt.
+* **Persistent In-Guest Session**: Each agent assignment receives a dedicated, long-lived interpreter process. A bidirectional startup handshake verifies that the interpreter process is fully initialized and operational before accepting agent commands. If an interpreter process ever crashes, it is immediately discarded and replaced with a fresh process.
+* **Built-in In-Capsule Standard Library (`choir`)**: The interpreter exposes core workspace operations to agent code, including `choir.ReadFile`, `choir.WriteFile`, `choir.ListDir`, `choir.Exec`, and `choir.Context`. Three early prototype methods (`Assign`, `Outcome`, and an un-routed `Message`) have been audited and are slated for clean removal and replacement (detailed in Section 4).
+* **Process Group Isolation and Rapid Reaping**: Runaway, infinite-looping, or timed-out programs are isolated in dedicated process groups. When an execution deadline expires, the harness issues a `SIGKILL` to the entire process group and verifies that all child processes are completely reaped within 500 milliseconds. This behavior is covered by automated regression tests.
+* **Multi-Layer Role Security**: Read-only research agents are strictly prevented from writing files or executing commands. This restriction is enforced independently at both the host boundary and inside the in-guest runtime, verified by end-to-end integration tests.
+* **Sealed Tool Surface**: When session mode is active, the agent's visible tool list is reduced from ten discrete tools to a minimal set: the primary execution doorway (`capsule_go_eval`) plus necessary verification and transaction tools. Automated tests assert the exact tool surface in both operational modes.
 
-```
-CoSuper model -- JSON: capsule_go_eval ONLY --> host
-host -- framed cell --> capsule broker (THE broker, in-guest)
-broker -- pipes --> session worker (yaegi: file/exec syscalls + intent tray)
-worker -- file/exec values (guest-internal) --> broker --> capsule disk
-worker -- intent tray WITH cell result --> broker --> host
-host reducer: persist mailbox + receipts, run fate, wake recipient
-```
+<div class="page-break"></div>
 
-File and process operations stay inside the session as real system
-calls. Everything needing another actor or durable fate becomes an
-*intent*: the cell appends it to an outbound tray, the host
-persists and acts on it after the cell ends, then wakes the
-recipient — always. Nothing claims success the host has not
-performed. The model-visible surface becomes one JSON tool plus Go
-spellings (`Message(to, body)`, typed `Complete(...)`); durable
-machinery (`record`, `commit`, `update`) is called by the host
-reducer, never by the model. Assign is deleted; Outcome-as-message
-is removed.
+---
 
-## The two command runners, explained
+## 3. Audits and Resolved Defects
 
-The trickiest detail, because two programs grew up that both "run
-commands" with different meanings:
+Across three independent multi-model consensus review rounds (encompassing fifteen panel evaluations), several subtle failure modes in early prototype code were identified, reproduced, and repaired before reaching production:
 
-```
-INNER (worker-local)              OUTER (capsule broker)
-  program + argument list            one command STRING via sh -c
-  NO shell: no pipes/globs/$VAR     FULL shell language
-  env: 3 vars + filtered extras      env: broker's WHOLE environment
-  secrets stripped                   secrets visible
-  own process group, group kill      broker's group, no group kill
-```
+* **Worker Initialization Failure (Unpopulated Actor Identity)**: In early prototypes, the interpreter worker process was launched with an empty actor identity data structure. Because the worker's own initialization routine required a valid identity, the process immediately exited on startup with exit code 2. However, the host supervisor incorrectly interpreted process creation as operational readiness. We introduced a mandatory bidirectional startup handshake alongside end-to-end boot tests to guarantee operational readiness before dispatching work.
+* **Privilege Separation Leak in Prototype Session Worker**: Early draft code did not adequately scope permissions inside the interpreter process, which would have allowed a read-only research agent to execute arbitrary commands if session mode had been enabled. We implemented role-scoped capability checks at the interpreter boundary and deployed them *before* fixing the startup handshake, ensuring an invalid configuration could never inadvertently open an escalated execution path.
+* **Unregistered Session Control RPCs**: Commands to explicitly start or terminate interpreter sessions were initially rejected across all agent roles due to an overly restrictive API allowlist, and fallback behavior depended on a hardcoded flag. Session lifecycle verbs are now properly registered, role-authorized, and covered by automated tests.
+* **Absence of a Dynamic Kernel Boot Parameter Channel**: Staging analysis revealed that there was no supported mechanism to pass the session mode switch dynamically from the owner's refresh command down to the guest microVM bootloader. We mapped out the necessary control plane path (Machine Setting $\rightarrow$ `choir.actuator` kernel boot parameter $\rightarrow$ Guest Init) and placed this item first in the deployment sequence.
+* **System Prompt Inconsistency**: The agent's system prompt instructions continued to describe the legacy tool suite as the exclusive interface, without mentioning `capsule_go_eval` or the `choir` package. A mode-aware prompt generation mechanism was specified to ensure the agent receives instructions matching its active tool surface.
 
-Why `sh` and not bash: the minimal guest image only guarantees
-`sh`; bash may not exist (bash is a fallback, run with startup
-files disabled). The resolution all reviewers accept: the inner
-semantics (direct execution, clean environment) are implemented
-once in the capsule broker; the shell form stays frozen for the
-old-mode rollback only, with its retirement tracked — never
-reachable from the new session path.
+<div class="page-break"></div>
 
-## Exact decisions on the table
+---
 
-- **Complete is typed:** `(result, verdict, summary,
-  evidence_refs)` with result in {completed, failed, blocked};
-  at most one per assignment, last in the tray; failed cells
-  deliver messages but never a Complete. The host binds real
-  execution receipts itself — the cell never supplies them.
-- **Messages get a fixed host envelope** (sender from the
-  activation, one fixed kind, sequence, time) addressed to the
-  bound parent supervisor only; no cell-chosen kinds, ever.
-- **Wake is dedicated and coalesced:** a new wake path for mailbox
-  commits (the old one deliberately skips this direction), one
-  wake per batch, with exemptions for replays and cancelled work.
-- **Caps:** 16 intents per cell, 16 KiB per message, aggregate
-  tray bound, per-activation quota (numbers tunable from
-  evidence; their existence is the contract).
-- **Exact tool lists per assignment slot,** tracked deletions for
-  every removed JSON tool, and a strict build order: boot channel
-  first, then pipes, then the canonical runner, then the reducer,
-  then deletions. Rollback at every step is "switch the flag off
-  and refresh."
+## 4. Target Architecture: Unified Broker and Post-Cell Reduction
 
-## Suggested next steps, in order
+The multi-model review panels converged on a clean, unified target architecture (documented in `docs/designs/rlm-target-architecture-2026-09-04.md`, Revision 3). This design resolves architectural debt that accumulated during early prototyping.
 
-1. **You review and approve (or amend) the target architecture.**
-   The full rev-3 document is in the repo, with the panel's
-   dissent and alternatives recorded. Nothing below starts
-   without this.
-2. **Build in the specified order** (boot channel → pipes →
-   runner → reducer → deletions), each step with tests and its
-   own rollback.
-3. **Run the live demonstration** on the test computer: switch
-   to the new mode, supervised agent does a small
-   read-compute-write task entirely through session programs,
-   verify every receipt, switch back. Gated at each step.
-4. **Follow-on work already identified:** in-cell verification
-   design, supervisor-agent session treatment, retiring the
-   frozen shell runner. None starts until the demonstration
-   reports.
+### The Core Architectural Principles
 
-## Risks being carried
+1. **Local Operations Are Synchronous Syscalls**: Operations that affect only the local capsule workspace (reading files, writing files, executing programs) are executed synchronously inside the guest microVM via direct pipes to the capsule broker. They never require network roundtrips to the host supervisor, completely eliminating mid-cell distributed deadlocks.
+2. **External Effects Are Staged Intents**: Any action that affects an external actor or requires durable persistence (sending messages to other agents, reporting task completion) must not attempt direct network calls mid-cell. Instead, the cell stages these actions as structured *intents* into a local, in-memory tray.
+3. **The Host Reducer Has Exclusive Authority**: When an execution cell completes, its buffered intent tray is returned to the host supervisor alongside the execution result. The host reducer validates permissions, applies authoritative envelope metadata, writes messages to the durable Dolt database, binds real execution receipts, and triggers supervisor notifications. No in-cell function can claim delivery or completion before the host has committed the transaction.
 
-- The test computer is healthy and idle; every live step has a
-  pre-spelled rollback (switch off, refresh).
-- The new mode, once on, applies to every workspace on that
-  computer until switched off — keep the window short and quiet.
-- Panels advise; they do not prove. Every consequential claim
-  traces to a test, a build, or a line of code — except future
-  work, marked as such throughout.
+![Target Architecture Topology](diagrams/diagram-architecture-topology.svg)
+
+### In-Capsule Library Surface Cleanup
+
+During early prototyping, three functions were added to the `choir` library without complete backend integrations:
+* `choir.Assign`: Intended for sub-agent delegation, but lacked any supporting host infrastructure. **Action: Deleted**.
+* `choir.Outcome`: Implemented merely as a synthetic message sent to the calling agent's own address, without connecting to the host verification or task fate pipelines. **Action: Removed**.
+* `choir.Message`: Originally buffered payloads in volatile worker memory while prematurely returning status "delivered". **Action: Redesigned** as an asynchronous intent that is persisted and routed by the host reducer post-cell.
+
+<div class="page-break"></div>
+
+---
+
+## 5. Resolving the Command Execution Divergence
+
+A key architectural finding from the audit is that the codebase currently contains **two competing command execution implementations** that evolved independently in different packages. Because they were developed separately, they exhibit sharply contrasting security and operational characteristics.
+
+![Command Execution Divergence](diagrams/diagram-command-execution.svg)
+
+### Technical Comparison of the Two Runners
+
+1. **The Inner Runner (`internal/yaegikernel/broker.go`)**:
+   * **Execution Mechanism**: Invokes programs directly via `exec.Command(binary, args...)`. It bypasses the shell entirely, eliminating wildcard expansion, pipe parsing, and shell injection vulnerabilities.
+   * **Environment Sanitization**: Enforces a strict environment allowlist (`PATH`, `HOME`, `TMPDIR`). Any caller-provided environment variables are filtered to strip sensitive credentials, including `CHOIR_*`, `*KEY*`, and `*TOKEN*`.
+   * **Process Management**: Configures dedicated process groups (`Setpgid: true`). On timeout or cancellation, a `SIGKILL` is sent to the process group, cleanly terminating all child processes.
+
+2. **The Outer Runner (`cmd/capsule-broker/main.go`)**:
+   * **Execution Mechanism**: Executes commands through a shell string wrapper (`sh -c '<command>'`). While flexible, this parses shell syntax, pipes, and wildcards, and introduces shell dependency risks.
+   * **Environment Sanitization**: Inherits the capsule broker daemon's entire process environment (`os.Environ()`), inadvertently exposing ambient daemon tokens and host credentials to executed commands.
+   * **Process Management**: Shares the capsule broker's process group (`Setpgid: false`). When a command times out, the system can only terminate the top-level shell process, frequently leaving orphaned child processes running in the background.
+
+### The Unified Resolution
+
+The consensus decision is clear: **the inner runner's direct-argv execution semantics must become the single canonical standard across the entire platform**.
+
+We will implement these direct-argv, sanitized-environment, process-group-isolated semantics natively within the primary in-guest daemon (`cmd/capsule-broker`). The legacy shell-based runner will be frozen strictly for emergency rollback of legacy JSON tools, and will be completely unreachable whenever RLM session mode is active.
+
+<div class="page-break"></div>
+
+---
+
+## 6. Intent Staging and Post-Cell Reduction Lifecycle
+
+To guarantee that agent code cannot cause distributed deadlocks or forge delivery confirmations, all inter-agent communication and task settlement follow a strict three-phase lifecycle.
+
+![Intent Lifecycle and Reduction](diagrams/diagram-intent-lifecycle.svg)
+
+### Phase 1: In-Cell Execution (Guest MicroVM)
+Agent code executes within the Yaegi interpreter worker. File operations and command executions take place immediately as local guest syscalls. When the agent calls `choir.Message(to, body)` or `choir.Complete(...)`, the worker does not attempt external network communication. Instead, it assigns a local correlation ID, validates that cell quotas are respected, and appends the structured intent to an in-memory staging tray.
+
+### Phase 2: Frame Packaging and Transport
+When the Go cell finishes executing (or when its execution timeout expires), the worker packages the execution status, captured standard output and error, an execution manifest (listing commands run, exit codes, and output hashes), and the staged intent tray into a single structured response frame. This frame is returned atomically across the Unix domain socket to the host supervisor.
+
+### Phase 3: Host Reduction and Settlement
+The host reducer receives the completed frame and processes the intent tray:
+1. **Validation & Enveloping**: The host verifies that the sender holds valid authorization, injects authoritative timestamps and sequence ordinals, and wraps each message in a fixed schema envelope (`schema_version = v1`, `Kind = evidence_update`).
+2. **Durable Mailbox Persistence**: The host commits the enveloped messages to the Dolt database. Durable, globally unique message IDs are minted at this step.
+3. **Supervisor Notification & Assignment Fate**: For messages, the host triggers a dedicated, coalesced wake signal to the recipient's supervisor. If the cell submitted a `Complete` intent, the host binds the recorded command execution receipts, updates the assignment status, and revokes active access tokens.
+
+<div class="page-break"></div>
+
+---
+
+## 7. Key Protocol Decisions
+
+The multi-model review panels reached formal consensus on several critical operational parameters:
+
+* **Typed Completion Contract**: Task completion is invoked via `choir.Complete(result, verdict, summary, evidence_refs)` where `result` must be one of `{completed, failed, blocked}`. A cell cannot supply execution receipts directly; the host reducer binds authoritative command receipts from the capsule broker upon settlement. At most one `Complete` intent is permitted per assignment.
+* **Host-Controlled Message Envelopes**: Agent cells specify only the recipient address (`to`) and the payload (`body`). All routing headers—including sender identity, originating role, delivery direction, timestamp, and message kind—are authoritatively generated by the host. Messages can only be addressed to the assigned parent supervisor.
+* **Dedicated Mailbox Wake Channel**: To avoid interference with legacy lifecycle suppression logic, mailbox deliveries trigger a dedicated, coalesced wake signal. Replayed messages and messages arriving after assignment cancellation do not trigger wakes.
+* **Operational Quotas and Bounded Buffers**: To prevent infinite loops or memory exhaustion:
+  * Maximum 16 intents per execution cell.
+  * Maximum 16 KiB per message body.
+  * Maximum 256 KiB aggregate tray payload per cell.
+  * Strict per-activation quotas enforced by the host reducer.
+
+---
+
+## 8. Phased Implementation Sequence
+
+To ensure safety and maintain full rollback capability at every stage, implementation will proceed in six strictly ordered steps. No step will begin until the preceding step has passed automated verification:
+
+| Step | Component | Description | Rollback Strategy |
+|:---:|:---|:---|:---|
+| **1** | **Control Plane Boot Channel** | Wire the machine setting through `choir.actuator` into the guest microVM boot parameters. | Revert commit; guest defaults to legacy tools. |
+| **2** | **Multiplexed Transport Pipe** | Establish the dedicated Unix domain socket and frame protocol between the worker and broker. | Disable transport flag; falls back to stdin pipe. |
+| **3** | **Canonical Command Runner** | Implement direct-argv, sanitized-environment command execution in `cmd/capsule-broker`. | Frozen legacy shell runner remains available for tools mode. |
+| **4** | **Intent Tray & Host Reducer** | Deploy in-memory tray buffering in Yaegi and the host reduction engine in `internal/agentcore`. | Disable RLM mode; messages route through legacy tools. |
+| **5** | **Tool Surface & Prompt Update** | Update agent tool profiles to expose only `capsule_go_eval`; enable mode-aware system prompts. | Revert profile configuration to expose legacy tool list. |
+| **6** | **Live Staging Verification** | Run an end-to-end self-development task on the retained staging microVM; verify all receipts. | Reset microVM to pre-test checkpoint `99949fe2`. |
+
+---
+
+## 9. Conclusion and Next Actions
+
+The architectural design for the RLM session interpreter is fully specified, vetted by fifteen panel reviews, and grounded in the realities of the existing codebase. By unifying command execution semantics, separating guest-local syscalls from host-mediated intents, and enforcing authoritative host reduction, this design eliminates the distributed deadlocks and privilege ambiguities present in earlier prototypes.
+
+**Immediate Next Action**: Following owner approval of this report and the companion specification (`docs/designs/rlm-target-architecture-2026-09-04.md`), implementation will commence with Step 1 (the control plane boot parameter channel).

@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 440" width="880" height="440">
+  <defs>
+    <style>
+      .text-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-weight: 700; font-size: 13.5px; fill: #0f172a; }
+      .text-sub { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 11px; fill: #475569; }
+      .text-code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; fill: #1e293b; font-weight: 600; }
+      .badge-green { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 9px; font-weight: 700; text-transform: uppercase; fill: #15803d; }
+      .badge-amber { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 9px; font-weight: 700; text-transform: uppercase; fill: #b45309; }
+      .badge-blue { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 9px; font-weight: 700; text-transform: uppercase; fill: #1d4ed8; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="880" height="440" fill="#ffffff" rx="12" stroke="#e2e8f0" stroke-width="1.5"/>
+
+  <!-- Header Banner (Two-line title/subtitle for breathing room) -->
+  <g transform="translate(25, 18)">
+    <rect width="830" height="52" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+    <text x="20" y="24" class="text-title" font-size="14">Command Execution Divergence in Current Codebase</text>
+    <text x="20" y="41" class="text-sub">Two separate execution implementations created independently in different packages</text>
+  </g>
+
+  <!-- Left Column: Inner Runner -->
+  <g transform="translate(25, 82)">
+    <rect width="405" height="240" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+    <rect x="16" y="14" width="160" height="20" rx="4" fill="#dcfce7"/>
+    <text x="96" y="28" class="badge-green" text-anchor="middle">Inner Runner (Worker-Local)</text>
+    <text x="16" y="55" class="text-title">internal/yaegikernel/broker.go</text>
+    <text x="16" y="74" class="text-sub">Used inside the session interpreter worker process</text>
+
+    <!-- Feature items -->
+    <rect x="16" y="88" width="373" height="34" rx="4" fill="#ffffff" stroke="#bbf7d0"/>
+    <text x="26" y="103" class="text-sub" font-weight="600">Invocation Mechanism:</text>
+    <text x="160" y="103" class="text-code">exec.Command(binary, args...)</text>
+    <text x="26" y="116" class="text-sub">Direct executable launch; no shell wrapper, no pipe or wildcard expansion.</text>
+
+    <rect x="16" y="128" width="373" height="34" rx="4" fill="#ffffff" stroke="#bbf7d0"/>
+    <text x="26" y="143" class="text-sub" font-weight="600">Environment Sanitization:</text>
+    <text x="175" y="143" class="text-sub" fill="#15803d" font-weight="600">Strict Allowlist + Token Filter</text>
+    <text x="26" y="156" class="text-sub">Inherits PATH/HOME/TMPDIR only; filters out CHOIR_*, *KEY*, *TOKEN*.</text>
+
+    <rect x="16" y="168" width="373" height="34" rx="4" fill="#ffffff" stroke="#bbf7d0"/>
+    <text x="26" y="183" class="text-sub" font-weight="600">Process Group Control:</text>
+    <text x="160" y="183" class="text-code">Setpgid: true (Own Group)</text>
+    <text x="26" y="196" class="text-sub">Timeout sends SIGKILL to entire child process group; clean cleanup.</text>
+
+    <rect x="16" y="208" width="373" height="22" rx="4" fill="#dcfce7"/>
+    <text x="202" y="223" class="badge-green" text-anchor="middle">Selected as the Target Architecture Standard</text>
+  </g>
+
+  <!-- Right Column: Outer Runner -->
+  <g transform="translate(450, 82)">
+    <rect width="405" height="240" rx="8" fill="#fffbeb" stroke="#fcd34d" stroke-width="1.5"/>
+    <rect x="16" y="14" width="165" height="20" rx="4" fill="#fef3c7"/>
+    <text x="98" y="28" class="badge-amber" text-anchor="middle">Outer Runner (Capsule Broker)</text>
+    <text x="16" y="55" class="text-title">cmd/capsule-broker/main.go</text>
+    <text x="16" y="74" class="text-sub">Used by legacy JSON tool RPC handler handleExec()</text>
+
+    <!-- Feature items -->
+    <rect x="16" y="88" width="373" height="34" rx="4" fill="#ffffff" stroke="#fde68a"/>
+    <text x="26" y="103" class="text-sub" font-weight="600">Invocation Mechanism:</text>
+    <text x="160" y="103" class="text-code">sh -c &apos;command string&apos;</text>
+    <text x="26" y="116" class="text-sub">Full shell language execution; expands globs, pipes, subshells, variables.</text>
+
+    <rect x="16" y="128" width="373" height="34" rx="4" fill="#ffffff" stroke="#fde68a"/>
+    <text x="26" y="143" class="text-sub" font-weight="600">Environment Sanitization:</text>
+    <text x="175" y="143" class="text-sub" fill="#b45309" font-weight="600">Inherits Full Daemon Environ</text>
+    <text x="26" y="156" class="text-sub">Copies entire broker daemon environment including host secrets.</text>
+
+    <rect x="16" y="168" width="373" height="34" rx="4" fill="#ffffff" stroke="#fde68a"/>
+    <text x="26" y="183" class="text-sub" font-weight="600">Process Group Control:</text>
+    <text x="160" y="183" class="text-code">Setpgid: false (Shared Group)</text>
+    <text x="26" y="196" class="text-sub">Shares broker daemon process group; timeout kills top process only.</text>
+
+    <rect x="16" y="208" width="373" height="22" rx="4" fill="#fef3c7"/>
+    <text x="202" y="223" class="badge-amber" text-anchor="middle">Frozen for Rollback; Unreachable from RLM Mode</text>
+  </g>
+
+  <!-- Bottom Resolution Banner -->
+  <g transform="translate(25, 336)">
+    <rect width="830" height="85" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+    <rect x="16" y="12" width="135" height="18" rx="4" fill="#dbeafe"/>
+    <text x="83" y="24" class="badge-blue" text-anchor="middle">Unified Resolution</text>
+    <text x="160" y="25" class="text-title">Consensus Decision: Canonicalize on the Safe Inner Semantics</text>
+    <text x="16" y="48" class="text-sub">1. Implement the clean direct-argv runner inside the unified capsule broker daemon (cmd/capsule-broker).</text>
+    <text x="16" y="65" class="text-sub">2. Freeze the outer shell runner strictly for emergency rollback of legacy JSON tools; delete it once RLM cutover is accepted.</text>
+  </g>
+</svg>

@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 500" width="880" height="500">
+  <defs>
+    <style>
+      .text-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-weight: 700; font-size: 14px; fill: #0f172a; }
+      .text-sub { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 11px; fill: #475569; }
+      .text-code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; fill: #1e293b; font-weight: 600; }
+      .badge { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+      .arrow { stroke: #64748b; stroke-width: 2; fill: none; marker-end: url(#arrow-head); }
+      .arrow-accent { stroke: #2563eb; stroke-width: 2.5; fill: none; marker-end: url(#arrow-head-blue); }
+      .arrow-dashed { stroke: #059669; stroke-width: 2; stroke-dasharray: 4,3; fill: none; marker-end: url(#arrow-head-green); }
+    </style>
+    <marker id="arrow-head" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 1 2 L 8 5 L 1 8 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-head-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 1 2 L 8 5 L 1 8 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-head-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 1 2 L 8 5 L 1 8 z" fill="#059669"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="880" height="500" fill="#ffffff" rx="12" stroke="#e2e8f0" stroke-width="1.5"/>
+
+  <!-- Tier 1: Agent Model -->
+  <g transform="translate(40, 30)">
+    <rect width="210" height="90" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+    <rect x="12" y="12" width="80" height="18" rx="4" fill="#dbeafe"/>
+    <text x="52" y="24" class="badge" fill="#1d4ed8" text-anchor="middle">Agent Model</text>
+    <text x="12" y="48" class="text-title">CoSuper AI Agent</text>
+    <text x="12" y="68" class="text-sub">Emits executable Go code via</text>
+    <text x="12" y="84" class="text-code" fill="#2563eb">capsule_go_eval(source)</text>
+  </g>
+
+  <!-- Connection Model -> Host -->
+  <path d="M 250 75 L 340 75" class="arrow-accent"/>
+  <text x="295" y="66" class="text-sub" font-size="10" text-anchor="middle">JSON Tool Call</text>
+
+  <!-- Tier 2: Host Agentcore -->
+  <g transform="translate(340, 20)">
+    <rect width="500" height="110" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+    <rect x="16" y="12" width="105" height="18" rx="4" fill="#e2e8f0"/>
+    <text x="68" y="24" class="badge" fill="#475569" text-anchor="middle">Host Supervisor</text>
+    <text x="16" y="48" class="text-title">Host Agentcore (internal/agentcore)</text>
+    <text x="16" y="68" class="text-sub">1. Encapsulates Go source into an execution frame</text>
+    <text x="16" y="85" class="text-sub">2. Streams frame to guest MicroVM over dedicated Unix domain socket</text>
+    <text x="16" y="102" class="text-sub">3. Waits for cell result + staged intent batch</text>
+  </g>
+
+  <!-- Connection Host -> Guest Boundary -->
+  <path d="M 590 130 L 590 175" class="arrow-accent"/>
+  <text x="600" y="158" class="text-sub" font-size="10">Framed Cell Dispatch</text>
+
+  <!-- Guest Capsule Boundary Box -->
+  <g transform="translate(40, 180)">
+    <rect width="800" height="170" rx="10" fill="#fcfcfd" stroke="#64748b" stroke-width="1.5" stroke-dasharray="6,4"/>
+    <rect x="16" y="-10" width="210" height="20" rx="4" fill="#334155"/>
+    <text x="121" y="4" class="badge" fill="#ffffff" text-anchor="middle">Isolated Guest MicroVM (Capsule)</text>
+
+    <!-- In-Guest: Capsule Broker -->
+    <g transform="translate(20, 25)">
+      <rect width="195" height="125" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+      <rect x="12" y="12" width="125" height="18" rx="4" fill="#dcfce7"/>
+      <text x="74" y="24" class="badge" fill="#15803d" text-anchor="middle">Single In-Guest Broker</text>
+      <text x="12" y="48" class="text-title">Capsule Broker</text>
+      <text x="12" y="65" class="text-sub">cmd/capsule-broker</text>
+      <text x="12" y="83" class="text-sub">• Multiplexes worker pipes</text>
+      <text x="12" y="99" class="text-sub">• Enforces overlay access</text>
+      <text x="12" y="115" class="text-sub">• Canonical direct runner</text>
+    </g>
+
+    <!-- Communication inside guest: wider gap for clean text -->
+    <path d="M 215 85 L 285 85" class="arrow"/>
+    <text x="250" y="76" class="text-sub" font-size="9" text-anchor="middle">Dedicated fd</text>
+
+    <!-- In-Guest: Session Worker -->
+    <g transform="translate(285, 25)">
+      <rect width="270" height="125" rx="8" fill="#fefce8" stroke="#fde047" stroke-width="1.5"/>
+      <rect x="12" y="12" width="105" height="18" rx="4" fill="#fef9c3"/>
+      <text x="64" y="24" class="badge" fill="#a16207" text-anchor="middle">Persistent Worker</text>
+      <text x="12" y="48" class="text-title">Session Worker (Yaegi)</text>
+      <text x="12" y="65" class="text-sub">• Evaluates Go statements statefully</text>
+      <text x="12" y="83" class="text-code">choir.ReadFile() / choir.Exec()</text>
+      <text x="12" y="99" class="text-sub">  → Synchronous in-guest syscalls</text>
+      <text x="12" y="115" class="text-code">choir.Message() / choir.Complete()</text>
+    </g>
+
+    <!-- In-Guest: Intent Tray Buffer -->
+    <path d="M 555 85 L 595 85" class="arrow"/>
+    <g transform="translate(595, 25)">
+      <rect width="185" height="125" rx="8" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1.5"/>
+      <rect x="12" y="12" width="95" height="18" rx="4" fill="#f3e8ff"/>
+      <text x="59" y="24" class="badge" fill="#7e22ce" text-anchor="middle">In-Memory Tray</text>
+      <text x="12" y="48" class="text-title">Intent Staging Tray</text>
+      <text x="12" y="68" class="text-sub">• Buffered in-memory during cell</text>
+      <text x="12" y="85" class="text-sub">• Max 16 intents / 16 KiB bodies</text>
+      <text x="12" y="102" class="text-sub">• Bound to activation ID</text>
+      <text x="12" y="119" class="text-sub">• Ships to host on cell done</text>
+    </g>
+  </g>
+
+  <!-- Connection: Guest Tray -> Host Reducer -->
+  <path d="M 720 350 L 720 385 L 490 385" class="arrow-dashed"/>
+  <text x="635" y="377" class="text-sub" font-size="10" fill="#059669" text-anchor="middle">Post-Cell Batch (Cell Result + Intent Tray)</text>
+
+  <!-- Tier 3: Host Reducer & Persistence -->
+  <g transform="translate(40, 395)">
+    <rect width="450" height="85" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+    <rect x="16" y="10" width="90" height="18" rx="4" fill="#dcfce7"/>
+    <text x="61" y="22" class="badge" fill="#15803d" text-anchor="middle">Host Reducer</text>
+    <text x="16" y="42" class="text-title">Host Reduction &amp; Settlement Engine</text>
+    <text x="16" y="59" class="text-sub">• Validates sender activation authority and applies fixed envelope schema</text>
+    <text x="16" y="74" class="text-sub">• Persists to Dolt mailbox and executes assignment fate (freeze / verify)</text>
+  </g>
+
+  <!-- Output: Parent Super Wake -->
+  <path d="M 490 440 L 590 440" class="arrow-accent"/>
+  <g transform="translate(590, 395)">
+    <rect width="250" height="85" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+    <rect x="16" y="10" width="125" height="18" rx="4" fill="#dbeafe"/>
+    <text x="78" y="22" class="badge" fill="#1d4ed8" text-anchor="middle">Durable Event / Wake</text>
+    <text x="16" y="42" class="text-title">Supervisor Wake Signal</text>
+    <text x="16" y="59" class="text-sub">• Dedicated mailbox wake (coalesced)</text>
+    <text x="16" y="74" class="text-sub">• Wakes parent Super for next action</text>
+  </g>
+</svg>

@@ -27,6 +27,7 @@ Prior round: `.agentic-consensus/agentic-consensus-20260904-133048/`.
 The model sees exactly ONE JSON tool (implementation slot).
 Everything else is a Go spelling inside cells, reduced by the host
 after the cell ends.
+![Target Architecture Topology](../reports/diagrams/diagram-architecture-topology.svg)
 
 ```mermaid
 flowchart TB
@@ -51,6 +52,7 @@ deadlock.
 
 Two runners exist today with different languages, environments, and
 kill semantics:
+![Command Execution Divergence](../reports/diagrams/diagram-command-execution.svg)
 
 ```mermaid
 flowchart LR
@@ -124,6 +126,7 @@ No cell-chosen kinds. No live mid-cell host calls of any kind:
   existing update path. Ordering: FIFO per recipient by commit
   sequence. Bodies are untrusted evidence, never executable: no
   intent can imply `execution_request`.
+![Intent Lifecycle and Post-Cell Reduction](../reports/diagrams/diagram-intent-lifecycle.svg)
 
 ```mermaid
 flowchart LR

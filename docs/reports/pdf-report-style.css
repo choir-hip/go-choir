@@ -1,0 +1,173 @@
+@page {
+  size: letter;
+  margin: 13mm 15mm 13mm 15mm;
+  @top-right {
+    content: "Choir Engineering Report | September 4, 2026";
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 8pt;
+    color: #94a3b8;
+  }
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 8pt;
+    color: #94a3b8;
+  }
+}
+
+.page-break {
+  page-break-before: always;
+  break-before: page;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 8.8pt;
+  line-height: 1.38;
+  color: #1e293b;
+}
+
+h1 {
+  font-size: 16.5pt;
+  font-weight: 700;
+  color: #0f172a;
+  margin-top: 0;
+  margin-bottom: 4pt;
+  border-bottom: 2px solid #2563eb;
+  padding-bottom: 3pt;
+}
+
+h2 {
+  font-size: 11.2pt;
+  font-weight: 700;
+  color: #0f172a;
+  margin-top: 6.5pt;
+  margin-bottom: 2pt;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 1.5pt;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+h3 {
+  font-size: 9.3pt;
+  font-weight: 600;
+  color: #1e293b;
+  margin-top: 4.5pt;
+  margin-bottom: 1.5pt;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+p {
+  margin-top: 0;
+  margin-bottom: 3pt;
+  color: #334155;
+}
+
+ul, ol {
+  margin-top: 0;
+  margin-bottom: 3pt;
+  padding-left: 14pt;
+  color: #334155;
+}
+
+li {
+  margin-bottom: 1pt;
+}
+
+strong {
+  color: #0f172a;
+}
+
+img {
+  max-width: 100%;
+  max-height: 3.2in;
+  width: auto;
+  height: auto;
+  display: block;
+  margin: 5pt auto 2pt auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+figure {
+  margin: 3pt 0;
+  text-align: center;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+figcaption {
+  font-size: 7.2pt;
+  color: #64748b;
+  margin-top: 1.5pt;
+  font-style: italic;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 3pt 0 4pt 0;
+  font-size: 7.8pt;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+th {
+  background-color: #f8fafc;
+  color: #0f172a;
+  font-weight: 600;
+  text-align: left;
+  padding: 2.5pt 4.5pt;
+  border-bottom: 1.5px solid #cbd5e1;
+  border-top: 1px solid #e2e8f0;
+}
+
+td {
+  padding: 1.8pt 4.5pt;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+  color: #334155;
+}
+
+tr:nth-child(even) td {
+  background-color: #fcfcfd;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 7.3pt;
+  background-color: #f1f5f9;
+  padding: 0.8pt 2.2pt;
+  border-radius: 3px;
+  color: #0f172a;
+}
+
+pre {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 4pt 6pt;
+  font-size: 7.3pt;
+  line-height: 1.3;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+blockquote {
+  border-left: 3px solid #3b82f6;
+  padding: 2.5pt 7pt;
+  margin: 3pt 0;
+  background-color: #eff6ff;
+  color: #1e3a8a;
+  font-size: 8.2pt;
+  border-radius: 0 4px 4px 0;
+}
