@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -22,6 +23,35 @@ const (
 	doltGCEmergencyAvailBytes = 512 << 20 // 512 MiB free
 	gibBytes                  = 1024 * 1024 * 1024
 )
+const doltGCDispositionFileName = ".choir-dolt-gc-disposition.json"
+
+// doltGCDisposition is the machine-readable record of the last GC decision,
+// written beside the milestone marker on every MaybeRunDoltGC outcome
+// (including skips). A skipped GC must be observable to operators and host
+// sweepers, not just a log line: a deferral at scale is how a 9.8 GB journal
+// grew for ~0.5 GB of live data (2026-09-03). Never fails the caller.
+type doltGCDisposition struct {
+	At           string `json:"at"`
+	Outcome      string `json:"outcome"`
+	UsedGiB      uint64 `json:"used_gib"`
+	ThresholdGiB uint64 `json:"threshold_gib,omitempty"`
+	Detail       string `json:"detail,omitempty"`
+}
+
+func writeDoltGCDisposition(persistentDir string, disposition doltGCDisposition) {
+	persistentDir = strings.TrimSpace(persistentDir)
+	if persistentDir == "" {
+		return
+	}
+	if strings.TrimSpace(disposition.At) == "" {
+		disposition.At = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	raw, err := json.Marshal(disposition)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(persistentDir, doltGCDispositionFileName), append(raw, '\n'), 0o644)
+}
 
 type doltGCDiskUsage = persistentdisk.Usage
 
@@ -77,6 +107,10 @@ func writeDoltGCMilestoneMarker(markerPath string, milestoneGiB uint64) error {
 func persistentDiskUsage(persistentDir string) (doltGCDiskUsage, error) {
 	return persistentdisk.Statfs(persistentDir)
 }
+
+// diskUsageForGC is the statfs source for MaybeRunDoltGC, indirected so tests
+// can stage small/large filesystems deterministically.
+var diskUsageForGC = persistentDiskUsage
 
 func planDoltGC(usage doltGCDiskUsage, previousMilestoneGiB, milestoneGiB uint64) doltGCPlan {
 	if milestoneGiB == 0 {
@@ -162,6 +196,7 @@ func runDoltGCWorkspace(workspacePath string) error {
 // store.Open so GC can drop unreachable chunk history without an active store.
 func MaybeRunDoltGC(persistentDir, storePath string) error {
 	if doltGCDisabled() {
+		writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "skipped_disabled", Detail: "RUNTIME_DOLT_GC_DISABLED"})
 		return nil
 	}
 	persistentDir = strings.TrimSpace(persistentDir)
@@ -176,7 +211,7 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 		return fmt.Errorf("dolt gc: stat workspace: %w", err)
 	}
 
-	usage, err := persistentDiskUsage(persistentDir)
+	usage, err := diskUsageForGC(persistentDir)
 	if err != nil {
 		return err
 	}
@@ -195,6 +230,7 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 	if usage.UsedBytes > safeGuestGCUsedGiB*gibBytes {
 		log.Printf("store: dolt gc skipped: used=%d GiB exceeds safe bounded-guest GC size (%d GiB); reclaim deferred",
 			usage.UsedBytes/gibBytes, safeGuestGCUsedGiB)
+		writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "skipped_size", UsedGiB: usage.UsedBytes / gibBytes, ThresholdGiB: safeGuestGCUsedGiB, Detail: "host-side offline GC required; see docs/runbooks/offline-guest-gc.md"})
 		return nil
 	}
 
@@ -216,6 +252,7 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 		)
 	}
 	if !plan.Run {
+		writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "noop", UsedGiB: usage.UsedBytes / gibBytes, Detail: plan.Reason})
 		return nil
 	}
 
@@ -235,12 +272,12 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 			plan.Reason,
 		)
 	}
-
 	if err := runDoltGCWorkspace(workspacePath); err != nil {
+		writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "error", UsedGiB: usage.UsedBytes / gibBytes, Detail: err.Error()})
 		return err
 	}
 
-	after, err := persistentDiskUsage(persistentDir)
+	after, err := diskUsageForGC(persistentDir)
 	if err != nil {
 		return err
 	}
@@ -259,6 +296,7 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 		after.AvailBytes/(1024*1024),
 		plan.TargetMilestone,
 	)
+	writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "ran", UsedGiB: after.UsedBytes / gibBytes, Detail: plan.Reason})
 	return nil
 }
 
