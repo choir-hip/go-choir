@@ -150,21 +150,39 @@ func (w *sessionWorker) close() {
 	w.killLocked()
 }
 
+// sessionKillReapGrace bounds process-group reaping after SIGKILL (Def 2
+// containment: kill-and-reaped within 500ms).
+const sessionKillReapGrace = 500 * time.Millisecond
+
+// killProcessGroup SIGKILLs the process group, kills the leader, and waits
+// for reaping bounded by grace. It reports whether the group reaped in time;
+// a late reap is logged by the caller, never fatal (init reaps orphans).
+func killProcessGroup(cmd *exec.Cmd, grace time.Duration) bool {
+	if cmd == nil || cmd.Process == nil {
+		return true
+	}
+	pid := cmd.Process.Pid
+	_ = syscall.Kill(-pid, syscall.SIGKILL)
+	_ = cmd.Process.Kill()
+	done := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(done) }()
+	select {
+	case <-done:
+		return true
+	case <-time.After(grace):
+		log.Printf("capsule-broker: pid %d not reaped after SIGKILL", pid)
+		return false
+	}
+}
+
 func (w *sessionWorker) killLocked() {
 	if w.dead {
 		return
 	}
 	w.dead = true
 	if w.cmd != nil && w.cmd.Process != nil {
-		_ = syscall.Kill(-w.cmd.Process.Pid, syscall.SIGKILL)
-		_ = w.cmd.Process.Kill()
-		done := make(chan struct{})
-		go func() { _ = w.cmd.Wait(); close(done) }()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			log.Printf("capsule-broker: session worker pid %d not reaped after SIGKILL", w.pid)
-		}
+		w.pid = w.cmd.Process.Pid
+		killProcessGroup(w.cmd, sessionKillReapGrace)
 	}
 }
 

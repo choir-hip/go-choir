@@ -5,8 +5,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"os/exec"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -77,5 +80,25 @@ func TestGoEvalSessionFailsClosedWithoutBinary(t *testing.T) {
 	}
 	if len(b.sessionWorkers) != 0 {
 		t.Fatalf("failed eval left %d workers", len(b.sessionWorkers))
+	}
+}
+
+// TestSessionKillReapsProcessGroup is Def 2 containment: a live process group
+// is SIGKILLed and reaped within 500ms.
+func TestSessionKillReapsProcessGroup(t *testing.T) {
+	cmd := exec.Command("sleep", "30")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Skipf("sleep unavailable: %v", err)
+	}
+	start := time.Now()
+	if !killProcessGroup(cmd, sessionKillReapGrace) {
+		t.Fatal("process group not reaped within grace")
+	}
+	if elapsed := time.Since(start); elapsed > sessionKillReapGrace {
+		t.Fatalf("reap took %v, exceeds 500ms", elapsed)
+	}
+	if err := cmd.Process.Signal(syscall.Signal(0)); err == nil {
+		t.Fatal("process still alive after kill")
 	}
 }
