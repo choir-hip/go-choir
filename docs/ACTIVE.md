@@ -81,10 +81,14 @@ Definition 3 for candidate A solitaire proof).
 ## Sealed Operation — Stabilize and Hold 0333528
 
 [`definitions/choir-0333528-stabilize-and-hold-2026-08-24.md`](definitions/choir-0333528-stabilize-and-hold-2026-08-24.md)
-is **settled and sealed**. Computer `computer-03335285269bdba4f94377e56879f9e6` is
-permanently held host-side (`held=true`) and guest-fenced (`RUNTIME_MAINTENANCE_HOLD=1`),
-serving on `:8085` (HTTP 200) with canonical head advancing past 133,319. It serves as
-an immutable historical evidence artifact.
+is **settled and sealed** as a historical operation. Its hold statement below
+is superseded: the hold was lifted 2026-09-03 during outage recovery
+(see `docs/evidence/effects-red-computer-unresolvable-after-refresh-2026-09-03.md`
+and `docs/evidence/effects-repair-verification-2026-09-03.md`), and the computer
+has since served active staging duty across realizations into epoch 876 with
+Effects OFF. Do not treat this section as a standing hold directive.
+(Original 2026-08-24 record: held host-side with guest fence, serving `:8085`,
+canonical head past 133,319, as immutable evidence artifact.)
 
 ## Completed Pre-Flight & Historical Recovery
 

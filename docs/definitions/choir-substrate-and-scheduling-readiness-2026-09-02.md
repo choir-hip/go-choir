@@ -193,8 +193,8 @@ now:
     - "docs/evidence/effects-red-super-texture-rewake-2026-08-20.md"
     - "docs/evidence/effects-red-assignment-supersession-loop-2026-08-21.md"
     - "docs/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md"
-  blocker_or_risk: "Open residuals per independent review effects-red-substrate-scheduling-review-2026-09-03: (1) acceptance proofs ran on guest binary 3fe61c54; guest refresh to bf6c51c0 and re-proof owed; (2) resume-hang residual (fe92ea2b, 52 stale candidates; candidate repairs unpaid); (3) boots 856-860 lack recorded boot-log receipts."
-  next_action: "Follow-up staging run: refresh guest to bf6c51c0, re-run criteria 1-3 and 5 with recorded boot receipts, close or ratify the resume-hang residual, amend terminal landing chain."
+  blocker_or_risk: "Follow-up closed 2026-09-04: guest advanced far past bf6c51c0 (serving fa0fd202, epoch 876); resume-hang bounded by dispatch watchdog (e3edfc6e) and verified live; boot receipts recorded across the 2026-09-03 outage recovery (see docs/evidence/effects-repair-verification-2026-09-03.md). Store/GC/hold residuals tracked separately in docs/evidence/effects-red-sleep-generator-unfinalizable-2026-09-03.md."
+  next_action: "None owed. Definition remains complete; terminal landing chain stands as amended by the outage recovery."
 
 receipts:
   - id: substrate-scheduling-baseline-2026-09-02

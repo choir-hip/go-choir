@@ -2,12 +2,15 @@
 
 - Date: 2026-09-03
 - Mutation class of this receipt: green (documentation); repair is red
-- Status: open, unfixed. Discovered during the seq-138612 outage; confirmed by
-  code inspection + independent consensus panel (11 agents,
-  `.agentic-consensus/store-review-20260903/`).
-- Blocker this unblocks: none active (replay tolerance of
-  `internal/store/project.go` keeps boots alive); the generator below can mint
-  the next poison at any time.
+- Status: closed 2026-09-04. Disarmed in two layers: sleep derives
+  `requireRevision` from the projected row (multi-turn lifecycles sleep
+  correctly instead of minting unfinalizable batches), and the pre-CAS
+  dry-run firewall refuses any batch that could never finalize before it
+  reaches the tape. Phantom-attach audit (RecordAgentMutationRevision without
+  existence check) investigated: the sole caller writes-then-reads-back the
+  revision before attaching, so the f1511357 origin remains unexplained but
+  no longer safety-relevant while the firewall gates appends. Monitor, do not
+  treat as live risk.
 
 ## The Problem
 

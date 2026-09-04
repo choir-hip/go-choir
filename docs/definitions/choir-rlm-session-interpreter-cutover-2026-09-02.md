@@ -42,6 +42,13 @@ finish:
     - action: "Implement runtime route flag (e.g. actuator=tools vs actuator=rlm) and test fallback."
       proves: "Mechanical rollback path is verified before any ambient tools are removed from prompt schema."
       evidence_class: local_test
+      route_authority:
+        field: "CHOIR_ACTUATOR env on the capsule-broker activation (values tools|rlm)"
+        owner: "capsule-broker runtime (not the model, not the prompt overlay)"
+        default: "tools"
+        resolution: "single resolveActuator function per activation startup deriving BOTH the model-facing tool-schema view AND the execution dispatcher; no split-brain route"
+        persistence: "selected route recorded in the activation receipt; restart re-resolves from env (no sticky in-memory route)"
+        fallback: "partial RLM initialization failure (session worker fails to start, module prebind fails) forces tools route with an observable receipt; fallback test covers this path"
     - action: "Run multi-eval integration test asserting variable persistence across sequential cells (cell 1 defines variable, cell 2 computes on it without re-import)."
       proves: "Session interpreter persists state across eval calls within an activation without state loss or redeclaration errors."
       evidence_class: local_test
@@ -50,10 +57,12 @@ finish:
       evidence_class: local_test
     - action: "Execute ambient tool parity fixture corpus (five sealed cells matching observable contract of capsule_exec, capsule_read_file, capsule_write_file, capsule_list_dir, and assign)."
       proves: "Prebound choir modules provide identical path jailing, refusal receipts, and execution bounds as JSON tools."
+      parity_scope: "The assigned CoSuper registry exposes ten tools (capsule_exec, capsule_go_eval, capsule_list_dir, capsule_read_file, capsule_write_file, commit_transaction, inspect_self_development_bundle, record_assignment_result, record_self_development_verification, update_coagent). Before corpus sign-off, map each to its Go-module equivalent cell (assign maps to the record_assignment_result path) or record an explicit deferral with reason; the five sealed cells alone do not certify the other five."
       evidence_class: local_test
     - action: "Execute live sealed CoSuper proof on computer-03335285269bdba4f94377e56879f9e6 with JSON tool definitions removed from the model prompt schema."
       proves: "CoSuper successfully executes a multi-step read->compute->write->assign arc exclusively via model-written Go on staging."
       evidence_class: deployed_proof
+      live_gate: "At proof time (not before local code): re-verify staging identity (proxy/guest deployed_commit, servable runs-list, zero OOM kills since deploy), record guest shape variance (4 CPU/8 GiB incident override vs fleet default), and confirm the Super singleton slot is empty. Local gates 1-4 proceed without this."
   rollback: "Runtime flag flip (actuator=tools) and Git revert; pre-A checkpoint 99949fe2 remains the immutable fence."
   landing:
     required: true

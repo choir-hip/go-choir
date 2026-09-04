@@ -25,8 +25,10 @@ chunk history from the host with the VM stopped. Proven 2026-09-03
    `mount -o rw /dev/loopN /mnt/guestlive`; `touch` probe to confirm RW.
 4. Backup the live store (reversible surgery or stop):
    `cp -a /mnt/guestlive/state.texture/texture /var/tmp/texture-backup-pre-gc-<date>`.
-5. Collect with default GC only (never `--full`: Texture history reads via
-   `dolt_history_*` + `AS OF` depend on branch-reachable commits):
+5. Collect with default GC only (`--full` is not automated pending review;
+   since 2026-09-04 Texture history resolves through the indexed parent chain
+   rather than `dolt_history_*` + `AS OF`, branch history is no longer
+   load-bearing for reads):
    `HOME=/tmp/guestq dolt gc` in the live texture dir.
 6. Verify before unmount — all must hold:
    - `SELECT sequence, canonical_event_head FROM computer_event_projection_heads`
