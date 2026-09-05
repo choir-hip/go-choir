@@ -53,3 +53,26 @@ Cancelled hung Super `da34787a` only. Owner tell `owner-instruction-b1b60919` on
 **Cause:** capsule Landlock directory access included `WRITE_FILE`/`MAKE_DIR`/`MAKE_SYM` but not `MAKE_REG`. Creating a new regular file is EACCES. Existing-file reads still work.
 
 **Not proved:** in-capsule write of the proof file, granted receipts, live `get_actuator` RPC.
+
+## Landlock MAKE_REG retry (2026-09-05T19:55Z)
+
+`48c5c5b1` added Landlock `AccessFSMakeReg`. CI run 33986200851 succeeded after SQLITE_BUSY flake reruns, including Deploy to Staging. Owner refresh LifecycleReceipt `01a07323-c4fa-718a-96cf-8d8291e3c8ec` epoch **885→886**, actuator=rlm.
+
+| Leg | Result |
+| --- | --- |
+| Host | `https://choir.news` `x-choir-build-commit` `a281f1c0` |
+| Guest | `http://10.200.19.2:8085/health` ready, `deployed_commit=a281f1c0`, `deployed_at` 2026-09-05T19:55:16Z |
+| Ownership | epoch 886 `actuator=rlm` |
+| Cmdline | `choir.actuator=rlm` `...-epoch-886` |
+| Source/platform | HEAD `7574d899` |
+
+Owner tell `owner-instruction-5540d699` cursor 138. Super `8b001023` exact-bound control `f75e21b1` work `8ea7fad9`.
+
+| Assignment | Outcome |
+| --- | --- |
+| `assignment-5a5dbb9d` | Super cancelled in 46s; objective omitted `package main` |
+| `assignment-241bb9a1` | Verbatim `package main` cell. `capsule_go_eval` **exit 0**. Wrote `/workspace/platform/rlm-option-b-proof-2026-09-05.txt`. Receipt `capsule-go-eval:sha256:7fe0432dcb0600ba03ba4bbbe15bc5026902fea196c1675e3a442b1d88f5a166`. `choir.Complete` receipt `rlm:complete:1`. `record_assignment_result` failed: `executor receipt unavailable`. No freeze event. Super `8b001023` completed. |
+
+**Proved:** three-way actuator=rlm on epoch 886; exact Super bind; sealed overlay; Yaegi file eval; in-capsule read-compute-write of the proof file (Landlock MAKE_REG).
+**Not proved:** granted/freeze bind of the go_eval receipt into `record_assignment_result`.
+
