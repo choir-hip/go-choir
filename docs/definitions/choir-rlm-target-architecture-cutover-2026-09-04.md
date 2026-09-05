@@ -148,12 +148,12 @@ measures:
 
 now:
   status: working
-  slice: "landing: 7574d899 on Node B; computer-0333528 epoch 880 actuator=rlm cmdline confirmed; Option B sealed proof not complete (Super mailbox + missing Source/platform)"
+  slice: "landing: 7574d899 on Node B; computer-0333528 epoch 882 actuator=rlm; Source/platform clean at 7574d899; Option B blocked on Super FIFO mailbox"
   question: none
   reconciliation:
-    observed_at: "2026-09-05T14:25:11Z"
+    observed_at: "2026-09-05T14:46:30Z"
     source_ref: "main@7574d899bcd75b00824040f1684ff33a94ac3f2b"
-    deploy_identity: "staging https://choir.news deployed_commit 7574d899bcd75b00824040f1684ff33a94ac3f2b; computer-03335285269bdba4f94377e56879f9e6 active epoch 880 actuator=rlm; guest health 7574d899; effects propose_only; pre-A fence 99949fe2 untouched"
+    deploy_identity: "staging https://choir.news deployed_commit 7574d899bcd75b00824040f1684ff33a94ac3f2b; computer-03335285269bdba4f94377e56879f9e6 active epoch 882 actuator=rlm; Source/platform HEAD 7574d899; guest health ready; effects propose_only; pre-A fence 99949fe2 untouched"
     authority_identities:
       - "docs/designs/rlm-target-architecture-2026-09-04.md"
       - "docs/reports/choir-status-and-next-steps-2026-09-04.md"
@@ -183,7 +183,7 @@ now:
     consequence: "Proceed to Step 1 implementation under this Definition."
   evidence_refs:
     - "CI run 33942777266 on 7574d899 success including Deploy to Staging (https://github.com/choir-hip/go-choir/actions/runs/33942777266)"
-    - "docs/evidence/rlm-option-b-actuator-refresh-2026-09-05.md (epoch 880 actuator=rlm cmdline; Option B Super mailbox / Source/platform blockers)"
+    - "docs/evidence/rlm-option-b-actuator-refresh-2026-09-05.md (epoch 882 actuator=rlm; Source/platform 7574d899 populated; Option B Super FIFO remaining)"
     - "LifecycleReceipt 01a071e3-e430-7073-b95f-9bddd7f0e74d idempotency rlm-actuator-cutover-2026-09-05T1405Z epoch 879→880"
     - "Node B deployed: https://choir.news reports x-choir-build-commit: 7574d899bcd75b00824040f1684ff33a94ac3f2b at 2026-09-05T04:32:50Z"
     - "Panel 3 on 7574d899: 4 approve + 1 approve-with-changes + 4 Codex-quota skips (.agentic-consensus/agentic-consensus-20260904-234730/); alt panel 2 approve (.agentic-consensus/agentic-consensus-20260905-000659/); 0 blocks; no remaining Option B code blocker"
@@ -194,8 +194,8 @@ now:
     - "internal/yaegikernel/intent.go tray/Inbox/hooks + internal/agentcore/rlm_reduce.go Dolt persist, run-memory cursor, two-phase ack (Step 4)"
     - "internal/actor/coalesce.go bounded wakes + spawnRoleAllowed + scoped fan-in (Step 5)"
     - "internal/runtimeprompts/overlays/rlm_co_super_runtime.yaml + sealed registry (Step 6)"
-  blocker_or_risk: "actuator=rlm refresh landed (epoch 880, cmdline choir.actuator=rlm). Option B independently blocked by (1) Super FIFO mailbox: hundreds of pending controls on older Texture docs; wakes bind oldest global packet, not the Option B work item; (2) CHOIR_CAPSULE_SOURCE_ROOT /mnt/persistent/files/Source/platform missing, so assign_co_super preflight cannot spawn a capsule. Live get_actuator and sealed overlay were not observed."
-  next_action: "Do not drain Super mailbox. Populate Source/platform as clean git of deployed 7574d899 (not pre-A restore); make Super activation bind the Texture-queued control that woke it; then live get_actuator + sealed overlay + read-compute-write-assign with effects propose_only."
+  blocker_or_risk: "actuator=rlm and Source/platform@7574d899 are live on epoch 882. Option B sealed proof blocked by Super FIFO mailbox: live Texture wakes dispatch hashed coagent_result; Super mints from updates[0] (oldest pending), not the waking control. Exact-control binding exists only on persistent-super-recovery:v2:. Live get_actuator and sealed overlay were not observed."
+  next_action: "Do not drain Super mailbox. Make live Texture→Super wakes bind the queued control (Persistent Super recovery occurrence, not global FIFO); then live get_actuator + sealed overlay + read-compute-write-assign with effects propose_only."
 receipts:
   - id: rlm-target-architecture-consensus-and-definition-2026-09-04
     boundary: define
