@@ -387,7 +387,7 @@ documents:
     is_root: [authority, entry]
     annotations: {doc_role: definition, authority: active_mission_contract, lifecycle: active, entrypoint: true}
     supersedes: [docs/definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md]
-    witnesses: [docs/designs/rlm-target-architecture-2026-09-04.md, docs/reports/choir-status-and-next-steps-2026-09-04.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/choir-doctrine.md]
+    witnesses: [docs/designs/rlm-target-architecture-2026-09-04.md, docs/reports/choir-status-and-next-steps-2026-09-04.md, docs/reports/choir-rlm-substrate-repairs-and-g1-producer-2026-09-05.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/choir-doctrine.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
   - path: docs/definitions/choir-supervised-self-development-on-rlm-2026-09-02.md
     claim_scope: current

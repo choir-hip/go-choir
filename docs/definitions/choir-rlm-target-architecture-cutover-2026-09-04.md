@@ -148,19 +148,20 @@ measures:
 
 now:
   status: working
-  slice: "landing: substrate repairs + G1 producer implemented locally; awaiting CI and Node B deploy"
+  slice: "landing: 7574d899 on Node B; substrate+G1 code-ready; Option B awaits owner-scoped actuator=rlm"
   question: none
   reconciliation:
-    observed_at: "2026-09-05T02:50:00Z"
-    source_ref: "worktree with G1 producer + reducer repairs on top of main@19bcd957"
-    deploy_identity: "staging https://choir.news deployed_commit 66939532248ee2d83c17d1f3f05d0f820e06c35b; G1 producer not yet on Node B; computer-03335285269bdba4f94377e56879f9e6 active; effects OFF"
+    observed_at: "2026-09-05T04:32:50Z"
+    source_ref: "main@7574d899bcd75b00824040f1684ff33a94ac3f2b"
+    deploy_identity: "staging https://choir.news deployed_commit 7574d899bcd75b00824040f1684ff33a94ac3f2b; computer-03335285269bdba4f94377e56879f9e6 active epoch 879; effects OFF; pre-A fence 99949fe2 untouched"
     authority_identities:
       - "docs/designs/rlm-target-architecture-2026-09-04.md"
       - "docs/reports/choir-status-and-next-steps-2026-09-04.md"
-      - ".agentic-consensus/agentic-consensus-20260904-155821/manifest.tsv"
+      - "docs/reports/choir-rlm-substrate-repairs-and-g1-producer-2026-09-05.md"
+      - ".agentic-consensus/agentic-consensus-20260904-234730/manifest.tsv"
       - "docs/evidence/rlm-live-proof-staging-gaps-2026-09-04.md (G1 owner-gate)"
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "git status --short; clean"
+    worktree_inventory_ref: "git status --short"
     status: reconciled
   candidate:
     id: none
@@ -180,16 +181,18 @@ now:
     recorded_at: "2026-09-04T16:20:00Z"
     consequence: "Proceed to Step 1 implementation under this Definition."
   evidence_refs:
-    - "CI run 33931633587 on 66939532 passed 100% green: all 21 jobs succeeded including Docs Truth Check, Go Vet+Build, all 12 race shards, scale tests, heresy detector, and Deploy to Staging"
-    - "Node B deployed successfully: https://choir.news reports x-choir-build-commit: 66939532248ee2d83c17d1f3f05d0f820e06c35b at 2026-09-05T00:24:48Z"
-    - "internal/capsule/actuator.go (Step 1 guest contract: choir.actuator boot param wins, env fallback, fail-closed tools)"
+    - "CI run 33942777266 on 7574d899 success including Deploy to Staging (https://github.com/choir-hip/go-choir/actions/runs/33942777266)"
+    - "Node B deployed: https://choir.news reports x-choir-build-commit: 7574d899bcd75b00824040f1684ff33a94ac3f2b at 2026-09-05T04:32:50Z"
+    - "Panel 3 on 7574d899: 4 approve + 1 approve-with-changes + 4 Codex-quota skips (.agentic-consensus/agentic-consensus-20260904-234730/); alt panel 2 approve (.agentic-consensus/agentic-consensus-20260905-000659/); 0 blocks; no remaining Option B code blocker"
+    - "docs/reports/choir-rlm-substrate-repairs-and-g1-producer-2026-09-05.md"
+    - "internal/capsule/actuator.go + VMConfig.Actuator producer (Step 1 guest+host contract: choir.actuator boot param wins, env fallback, fail-closed tools)"
     - "cmd/capsule-broker direct-argv exec with allowlist + 500ms group reap (Step 3)"
     - "internal/yaegikernel/transport.go framed UDS + socketpair worker migration (Step 2)"
     - "internal/yaegikernel/intent.go tray/Inbox/hooks + internal/agentcore/rlm_reduce.go Dolt persist, run-memory cursor, two-phase ack (Step 4)"
     - "internal/actor/coalesce.go bounded wakes + spawnRoleAllowed + scoped fan-in (Step 5)"
     - "internal/runtimeprompts/overlays/rlm_co_super_runtime.yaml + sealed registry (Step 6)"
-  blocker_or_risk: "G1 producer and reducer repairs are implemented locally and not yet on Node B. Sealed Option B proof still requires this commit to pass CI, deploy, then an owner-scoped refresh with actuator=rlm on computer-03335285269bdba4f94377e56879f9e6."
-  next_action: "Commit, push, confirm CI green and Node B deploy of the G1 producer; then run Option B sealed proof (in-capsule read-compute-write-assign, effects OFF)."
+  blocker_or_risk: "No remaining substrate code blocker for Option B. Sealed proof still requires owner-scoped refresh of computer-03335285269bdba4f94377e56879f9e6 with actuator=rlm and three-way readback (cmdline, get_actuator, overlay/schema)."
+  next_action: "Owner-scoped refresh actuator=rlm on computer-03335285269bdba4f94377e56879f9e6; three-way readback; then Option B sealed proof (in-capsule read-compute-write-assign, effects OFF)."
 receipts:
   - id: rlm-target-architecture-consensus-and-definition-2026-09-04
     boundary: define
