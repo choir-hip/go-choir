@@ -343,7 +343,7 @@ func (rt *Runtime) resumeSelfDevelopmentSuperForPendingInstruction(ctx context.C
 func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
 	rt.superReconcileMu.Lock()
 	defer rt.superReconcileMu.Unlock()
-	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, false)
+	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, false, "")
 }
 
 // reconcilePersistentSuperActorForOwnerStart is the wake path for the owner's
@@ -356,7 +356,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 func (rt *Runtime) reconcilePersistentSuperActorForOwnerStart(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
 	rt.superReconcileMu.Lock()
 	defer rt.superReconcileMu.Unlock()
-	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, true)
+	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, true, "")
 }
 
 // ResumeInterruptedPersistentSuperControlRun is the dedicated structurally isolated
@@ -396,7 +396,7 @@ func (rt *Runtime) resumeInterruptedPersistentSuperControlRunLocked(ctx context.
 	return nil, false, nil
 }
 
-func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, ownerID, agentID string, allowInstructionResume bool) (*types.RunRecord, error) {
+func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, ownerID, agentID string, allowInstructionResume bool, exactUpdateID string) (*types.RunRecord, error) {
 	if ownerID == "" {
 		return nil, fmt.Errorf("owner_id is required")
 	}
@@ -406,17 +406,26 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
 		return nil, fmt.Errorf("check resident super run: %w", err)
 	} else if found {
+		if err := rt.persistentSuperResidentMatchesExact(&resident, exactUpdateID); err != nil {
+			return nil, err
+		}
 		return &resident, nil
 	}
 	if resumed, ok, err := rt.reactivateRestartedPersistentSuperControlRun(ctx, ownerID, agentID); err != nil {
 		return nil, err
 	} else if ok {
+		if err := rt.persistentSuperResidentMatchesExact(resumed, exactUpdateID); err != nil {
+			return nil, err
+		}
 		return resumed, nil
 	}
 	if active, err := rt.latestActiveRunByAgent(ctx, ownerID, agentID); err == nil {
 		if active.State == types.RunBlocked {
 			// A blocked Super is awaiting external input/approval; do not spawn
 			// a competing Super or mint an unprompted Texture rewake.
+			if err := rt.persistentSuperResidentMatchesExact(&active, exactUpdateID); err != nil {
+				return nil, err
+			}
 			return &active, nil
 		}
 	} else if !errors.Is(err, store.ErrNotFound) {
@@ -450,6 +459,26 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 	}
 
 	first := updates[0]
+	if exact := strings.TrimSpace(exactUpdateID); exact != "" {
+		matched := false
+		for _, update := range updates {
+			if strings.TrimSpace(update.UpdateID) != exact {
+				continue
+			}
+			targetWork := firstNonEmpty(update.TargetWorkItemID, update.WorkItemID)
+			selected := selectLifecycleControlActivation(updates, update.TrajectoryID, map[string]bool{strings.TrimSpace(targetWork): true})
+			if len(selected) == 0 {
+				selected = []types.CoagentSourcePacket{update}
+			}
+			updates = selected
+			first = selected[0]
+			matched = true
+			break
+		}
+		if !matched {
+			return nil, fmt.Errorf("exact live Super control %s is not pending", exact)
+		}
+	}
 	requestSource := "update_coagent"
 	if lifecycleControls {
 		requestSource = "lifecycle_texture_control"
@@ -2581,6 +2610,116 @@ func (rt *Runtime) ReconcileCoagentWake(ctx context.Context, ownerID, agentID st
 		return rt.reconcilePersistentSuperActor(ctx, ownerID, agentID)
 	}
 	return rt.reconcileUpdatedCoagentActor(ctx, ownerID, agentID)
+}
+
+func (rt *Runtime) persistentSuperResidentMatchesExact(rec *types.RunRecord, exactUpdateID string) error {
+	exact := strings.TrimSpace(exactUpdateID)
+	if rec == nil || exact == "" {
+		return nil
+	}
+	for _, id := range metadataStringSlice(rec.Metadata["worker_update_ids"]) {
+		if strings.TrimSpace(id) == exact {
+			return nil
+		}
+	}
+	for _, id := range persistentSuperBoundUpdateIDs(rec.Metadata["lifecycle_control_bindings"]) {
+		if id == exact {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: persistent Super slot occupied by run %s", ErrActivationOccurrenceMustRemainUnprocessed, rec.RunID)
+}
+
+func persistentSuperBoundUpdateIDs(raw any) []string {
+	appendID := func(dst []string, id string) []string {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return dst
+		}
+		return append(dst, id)
+	}
+	switch value := raw.(type) {
+	case []any:
+		out := make([]string, 0, len(value))
+		for _, rawEntry := range value {
+			switch entry := rawEntry.(type) {
+			case map[string]any:
+				out = appendID(out, fmt.Sprint(entry["update_id"]))
+			case map[string]string:
+				out = appendID(out, entry["update_id"])
+			}
+		}
+		return out
+	case []map[string]any:
+		out := make([]string, 0, len(value))
+		for _, entry := range value {
+			out = appendID(out, fmt.Sprint(entry["update_id"]))
+		}
+		return out
+	case []map[string]string:
+		out := make([]string, 0, len(value))
+		for _, entry := range value {
+			out = appendID(out, entry["update_id"])
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// ResolvePersistentSuperLiveOccurrence binds a hashed live Texture→Super wake
+// to the exact pending control named by the occurrence. Generic
+// ReconcileCoagentWake remains FIFO; this path is the live trigger.
+func (rt *Runtime) ResolvePersistentSuperLiveOccurrence(ctx context.Context, ownerID, computerID, agentID, content, trajectoryID, fromAgentID string) (*types.RunRecord, bool, error) {
+	if rt == nil || rt.store == nil {
+		return nil, false, fmt.Errorf("runtime store unavailable")
+	}
+	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
+	content, trajectoryID, fromAgentID = strings.TrimSpace(content), strings.TrimSpace(trajectoryID), strings.TrimSpace(fromAgentID)
+	if ownerID == "" || computerID == "" || agentID == "" || !strings.HasPrefix(content, "sha256:") {
+		return nil, false, fmt.Errorf("%w: unsupported live Super occurrence", ErrInvalidPersistentSuperRecovery)
+	}
+	if agentID != persistentSuperAgentID(ownerID) {
+		return nil, false, fmt.Errorf("%w: not persistent Super", ErrInvalidPersistentSuperRecovery)
+	}
+	if computerID != strings.TrimSpace(rt.TextureComputerID()) {
+		return nil, false, fmt.Errorf("%w: computer mismatch", ErrInvalidPersistentSuperRecovery)
+	}
+	rt.superReconcileMu.Lock()
+	defer rt.superReconcileMu.Unlock()
+	pending, err := rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100)
+	if err != nil {
+		return nil, false, err
+	}
+	var matched types.CoagentSourcePacket
+	found := false
+	for _, update := range pending {
+		if lifecycleControlActorOccurrenceContent(update) != content {
+			continue
+		}
+		if trajectoryID != "" && strings.TrimSpace(update.TrajectoryID) != trajectoryID {
+			continue
+		}
+		if fromAgentID != "" && strings.TrimSpace(update.AgentID) != fromAgentID {
+			continue
+		}
+		if found {
+			return nil, false, fmt.Errorf("%w: ambiguous live Super occurrence", ErrInvalidPersistentSuperRecovery)
+		}
+		matched = update
+		found = true
+	}
+	if !found {
+		return nil, true, nil
+	}
+	rec, err := rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, false, matched.UpdateID)
+	if err != nil {
+		return nil, false, err
+	}
+	if rec == nil {
+		return nil, true, nil
+	}
+	return rec, false, nil
 }
 
 // LifecycleControlActorOccurrenceContent returns the deterministic actor-log

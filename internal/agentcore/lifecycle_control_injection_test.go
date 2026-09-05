@@ -367,6 +367,49 @@ func TestPersistentSuperLifecycleControlsStayTrajectoryIsolatedThenReconcile(t *
 	}
 }
 
+func TestPersistentSuperLiveOccurrenceBindsExactControlNotFIFO(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	ownerID := "owner-super-live-exact"
+	superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	one := seedTextureLifecycleControl(t, s, ownerID, "live-a", superAgent.AgentID, agentprofile.Super)
+	two := seedTextureLifecycleControl(t, s, ownerID, "live-b", superAgent.AgentID, agentprofile.Super)
+	pending, err := rt.listPendingPersistentSuperLifecycleControls(context.Background(), ownerID, "autoputer-test", superAgent.AgentID, 10)
+	if err != nil || len(pending) != 2 {
+		t.Fatalf("pending=%+v err=%v", pending, err)
+	}
+	fifoFirst := pending[0].UpdateID
+	later := two.control
+	if later.UpdateID == fifoFirst {
+		later = one.control
+	}
+	if later.UpdateID == fifoFirst {
+		t.Fatal("could not select a non-FIFO pending Super control")
+	}
+	content := LifecycleControlActorOccurrenceContent(later)
+	rec, terminal, err := rt.ResolvePersistentSuperLiveOccurrence(context.Background(), ownerID, "autoputer-test", superAgent.AgentID, content, later.TrajectoryID, later.AgentID)
+	if err != nil || terminal || rec == nil {
+		t.Fatalf("live occurrence=%+v terminal=%t err=%v", rec, terminal, err)
+	}
+	if lifecycleControlTrajectoryForRun(rec) != later.TrajectoryID {
+		t.Fatalf("bound trajectory=%q want %q fifo=%q", lifecycleControlTrajectoryForRun(rec), later.TrajectoryID, pending[0].TrajectoryID)
+	}
+	injected, err := rt.pendingCoagentUpdatesForRun(context.Background(), rec, ownerID, superAgent.AgentID, 10)
+	if err != nil || len(injected) != 1 || injected[0].UpdateID != later.UpdateID {
+		t.Fatalf("live payload=%+v err=%v want %s", injected, err, later.UpdateID)
+	}
+
+	third := seedTextureLifecycleControl(t, s, ownerID, "live-c", superAgent.AgentID, agentprofile.Super)
+	laterContent := LifecycleControlActorOccurrenceContent(third.control)
+	_, _, occupiedErr := rt.ResolvePersistentSuperLiveOccurrence(context.Background(), ownerID, "autoputer-test", superAgent.AgentID, laterContent, third.control.TrajectoryID, third.control.AgentID)
+	if !errors.Is(occupiedErr, ErrActivationOccurrenceMustRemainUnprocessed) {
+		t.Fatalf("occupied slot err=%v", occupiedErr)
+	}
+}
+
 func TestPersistentSuperRestartUsesDistinctRecoveryOccurrence(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
@@ -2144,7 +2187,7 @@ func seedCancelledCoSuperReport(t *testing.T, rt *Runtime, s *store.Store, owner
 	}
 	ack := revoke
 	ack.CommandID, ack.ExpectedLifecycleVersion, ack.Disposition, ack.AckRef =
-		"revoke-ack-" + suffix, revRequested.Assignment.LifecycleVersion, types.CoSuperCapsuleRevoked, "capsule-revoke:sha256:" + strings.Repeat("a", 64)
+		"revoke-ack-"+suffix, revRequested.Assignment.LifecycleVersion, types.CoSuperCapsuleRevoked, "capsule-revoke:sha256:"+strings.Repeat("a", 64)
 	ack.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(ack)
 	revAcked, err := s.SetCoSuperCapsuleDisposition(context.Background(), ack)
 	if err != nil {

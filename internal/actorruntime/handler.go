@@ -239,6 +239,31 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		}
 		return h.memoryFromRunState(rec)
 	}
+	if strings.HasPrefix(strings.TrimSpace(u.Content), "sha256:") && agentID == "super:"+ownerID {
+		log.Printf("actorruntime: persistent Super live occurrence received agent=%s trajectory=%s from=%s", agentID, u.TrajectoryID, u.FromAgentID)
+		rec, terminal, liveErr := h.rt.ResolvePersistentSuperLiveOccurrence(ctx, ownerID, computerID, agentID, u.Content, u.TrajectoryID, u.FromAgentID)
+		if liveErr != nil {
+			if errors.Is(liveErr, agentcore.ErrInvalidPersistentSuperRecovery) {
+				log.Printf("actorruntime: persistent Super live occurrence discarded as invalid agent=%s: %v", agentID, liveErr)
+				return nil, nil
+			}
+			if errors.Is(liveErr, agentcore.ErrActivationOccurrenceMustRemainUnprocessed) {
+				return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, liveErr)
+			}
+			return nil, fmt.Errorf("%w: actorruntime: defer persistent Super live occurrence: %v", actor.ErrDeferUnprocessed, liveErr)
+		}
+		if terminal {
+			log.Printf("actorruntime: persistent Super live occurrence terminal agent=%s", agentID)
+			return nil, nil
+		}
+		if rec == nil {
+			return nil, fmt.Errorf("actorruntime: persistent Super live occurrence returned no exact run")
+		}
+		// Locked mint already dispatched initial_dispatch. Resident exact-match
+		// Super is already bound. Do not execute here (recovery prefix does).
+		log.Printf("actorruntime: persistent Super live occurrence bound run=%s", rec.RunID)
+		return nil, nil
+	}
 	if strings.HasPrefix(agentID, agentprofile.Texture+":") {
 		if h.textureOwner == nil {
 			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture owner is not bound"))
