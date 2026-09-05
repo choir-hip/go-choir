@@ -1,10 +1,5 @@
 package capsule
 
-import (
-	"os"
-	"strings"
-)
-
 // AgentRole determines the fixed broker verb set granted by guest core.
 type AgentRole string
 
@@ -25,11 +20,19 @@ const (
 	ActuatorTools  = "tools"
 )
 
-// HostSelectsRLM reports whether the host activation selected the RLM
-// actuator. It is the overlay/schema side of the route authority; the broker
-// resolves its own dispatch from its process env independently.
+// EffectiveActuator is the single route authority shared by the broker,
+// overlay/schema builder, and reduction gate: guest kernel cmdline
+// (choir.actuator=) wins, process env CHOIR_ACTUATOR is the fallback, and
+// anything else fails closed to tools.
+func EffectiveActuator() string {
+	return ReadGuestActuator()
+}
+
+// HostSelectsRLM reports whether the activation selected the RLM actuator.
+// It shares EffectiveActuator with the broker so cmdline and env cannot
+// disagree by construction.
 func HostSelectsRLM() bool {
-	return strings.EqualFold(strings.TrimSpace(os.Getenv(ActuatorEnvVar)), ActuatorRLM)
+	return EffectiveActuator() == ActuatorRLM
 }
 
 // VerbSet is a fixed role policy. Capability payloads carry a copy for audit,

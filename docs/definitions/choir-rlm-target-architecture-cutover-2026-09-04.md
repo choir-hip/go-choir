@@ -112,6 +112,11 @@ boundaries:
     - "internal/actor/actor.go"
     - "internal/agentcore/tool_profiles.go"
     - "internal/agentcore/tools_capsule.go"
+    - "internal/agentcore/rlm_reduce.go"
+    - "internal/capsule/actuator.go"
+    - "internal/vmmanager/manager.go"
+    - "internal/vmctl/ownership.go"
+    - "nix/autoputer-vm.nix"
   completion_evidence_floor:
     - deployed_proof
 
@@ -143,12 +148,12 @@ measures:
 
 now:
   status: working
-  slice: "landing: CI 100% green (run 33931633587), deployed to Node B (66939532); G1 owner decisions pending"
+  slice: "landing: substrate repairs + G1 producer implemented locally; awaiting CI and Node B deploy"
   question: none
   reconciliation:
-    observed_at: "2026-09-05T00:30:00Z"
-    source_ref: "main@66939532"
-    deploy_identity: "staging https://choir.news deployed_commit 66939532248ee2d83c17d1f3f05d0f820e06c35b; active realization_epoch 879 on computer-03335285269bdba4f94377e56879f9e6; effects OFF"
+    observed_at: "2026-09-05T02:50:00Z"
+    source_ref: "worktree with G1 producer + reducer repairs on top of main@19bcd957"
+    deploy_identity: "staging https://choir.news deployed_commit 66939532248ee2d83c17d1f3f05d0f820e06c35b; G1 producer not yet on Node B; computer-03335285269bdba4f94377e56879f9e6 active; effects OFF"
     authority_identities:
       - "docs/designs/rlm-target-architecture-2026-09-04.md"
       - "docs/reports/choir-status-and-next-steps-2026-09-04.md"
@@ -183,8 +188,8 @@ now:
     - "internal/yaegikernel/intent.go tray/Inbox/hooks + internal/agentcore/rlm_reduce.go Dolt persist, run-memory cursor, two-phase ack (Step 4)"
     - "internal/actor/coalesce.go bounded wakes + spawnRoleAllowed + scoped fan-in (Step 5)"
     - "internal/runtimeprompts/overlays/rlm_co_super_runtime.yaml + sealed registry (Step 6)"
-  blocker_or_risk: "Sealed RLM staging proof on microVM requires G1 producer channel (nix choir.actuator branch, VMConfig.Actuator, owner refresh transport) per docs/evidence/rlm-live-proof-staging-gaps-2026-09-04.md repair steps 2-3, awaiting owner decisions on G2 scope and persistence scope before code."
-  next_action: "Escalate G1 owner decisions (G2 scope, persistence scope, proof artifact fate, abort authority) to unblock sealed RLM proof on computer-03335285269bdba4f94377e56879f9e6."
+  blocker_or_risk: "G1 producer and reducer repairs are implemented locally and not yet on Node B. Sealed Option B proof still requires this commit to pass CI, deploy, then an owner-scoped refresh with actuator=rlm on computer-03335285269bdba4f94377e56879f9e6."
+  next_action: "Commit, push, confirm CI green and Node B deploy of the G1 producer; then run Option B sealed proof (in-capsule read-compute-write-assign, effects OFF)."
 receipts:
   - id: rlm-target-architecture-consensus-and-definition-2026-09-04
     boundary: define

@@ -36,6 +36,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
@@ -134,6 +135,11 @@ type VMOwnership struct {
 	// retention) while held, and the deploy active-VM refresh skips it.
 	// It is set and cleared only by an authorized owner/recovery operation.
 	HoldStatus *MaintenanceHold `json:"hold_status,omitempty"`
+
+	// Actuator is the durable guest execution route (tools|rlm). Empty
+	// fails closed to tools at boot. An unflagged refresh preserves this
+	// field; an explicit write is cutover or rollback.
+	Actuator string `json:"actuator,omitempty"`
 }
 
 // IsReady returns true if the VM is in a state that can serve routed requests.
@@ -203,6 +209,20 @@ func (r *OwnershipRegistry) ClearHold(computerID string) error {
 		return fmt.Errorf("vmctl: no ownership for computer %s", computerID)
 	}
 	own.HoldStatus = nil
+	return r.writePersistenceLocked()
+}
+
+// SetActuatorForDesktop persists an explicit owner-scoped actuator write.
+// Omit-on-refresh is the caller not invoking this: the stored value is kept.
+func (r *OwnershipRegistry) SetActuatorForDesktop(userID, desktopID, actuator string) error {
+	key := ownershipKey(userID, desktopID)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own, ok := r.ownerships[key]
+	if !ok {
+		return fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
+	}
+	own.Actuator = capsule.ParseActuator(actuator)
 	return r.writePersistenceLocked()
 }
 
@@ -286,6 +306,8 @@ type VMManagerConfig struct {
 	// (RUNTIME_RECOVERY_REPLAY_ONLY=1): materialize to head, then exit
 	// without starting the runtime or appending.
 	RecoveryReplayOnly bool
+	// Actuator is the durable guest execution route (tools|rlm).
+	Actuator string
 }
 
 // VMInstanceInfo holds the information returned by the VM manager
@@ -1030,6 +1052,7 @@ func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManage
 		RealizationID:     realizationIDFor(own.VMID, own.Epoch),
 		Epoch:             own.Epoch,
 		MaintenanceHold:   own.IsHeld(),
+		Actuator:          own.Actuator,
 	}
 	return cfg
 }

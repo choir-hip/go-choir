@@ -238,6 +238,7 @@ func toManagerVMConfig(cfg vmctl.VMManagerConfig) vmmanager.VMConfig {
 		DesktopID:                  cfg.DesktopID,
 		MaintenanceHold:            cfg.MaintenanceHold,
 		RecoveryReplayOnly:         cfg.RecoveryReplayOnly,
+		Actuator:                   cfg.Actuator,
 	}
 }
 

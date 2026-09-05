@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -190,5 +191,132 @@ func TestReduceAddressesScopedFanIn(t *testing.T) {
 	}
 	if bySeq[2].ToAgentID != "co-super:peer" {
 		t.Fatalf("mesh message misrouted: %+v", msgs)
+	}
+}
+
+func TestCommitAdvancesOnlyInboxHighWater(t *testing.T) {
+	rt, _ := testRuntime(t)
+	scope := testReductionScope()
+	ctx := testReductionCtx(scope)
+
+	if _, err := rt.ChannelCast(ctx, scope.ChannelID, scope.FromAgentID, "", "super", "super", "snapshot-mail"); err != nil {
+		t.Fatal(err)
+	}
+	reduction := &rlmCallReduction{
+		active:    true,
+		mb:        rt,
+		st:        rt.store,
+		scope:     scope,
+		highWater: 1,
+	}
+	if _, err := rt.ChannelCast(ctx, scope.ChannelID, scope.FromAgentID, "", "peer", "researcher", "late-inbound"); err != nil {
+		t.Fatal(err)
+	}
+	if err := reduction.commit(ctx, []yaegikernel.StagedIntent{
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "outbound"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cursor, err := LoadInboxCursor(ctx, rt.store, scope.OwnerID, scope.RunID, scope.ChannelID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cursor != 1 {
+		t.Fatalf("cursor = %d, want snapshot high-water 1 (must not skip concurrent inbound)", cursor)
+	}
+	inbox, _, err := AssembleCellInbox(ctx, rt, scope.ChannelID, cursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inbox) < 1 {
+		t.Fatal("late inbound must remain visible after commit")
+	}
+	foundLate := false
+	for _, msg := range inbox {
+		if msg.Body == "late-inbound" || msg.FromDesk != "" && msg.Kind == "channel" {
+			if msg.Body == "late-inbound" {
+				foundLate = true
+			}
+		}
+	}
+	for _, msg := range inbox {
+		if msg.Body == "late-inbound" {
+			foundLate = true
+		}
+	}
+	if !foundLate {
+		t.Fatalf("late inbound dropped from next inbox: %+v", inbox)
+	}
+}
+
+func TestReduceCellIntentsIdempotentReplay(t *testing.T) {
+	rt, _ := testRuntime(t)
+	scope := testReductionScope()
+	scope.CellID = "cell-replay"
+	ctx := testReductionCtx(scope)
+	intents := []yaegikernel.StagedIntent{
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "same"},
+	}
+	first, err := ReduceCellIntents(ctx, rt, scope, intents, true)
+	if err != nil || !first.Committed || len(first.Intents) != 1 {
+		t.Fatalf("first reduce = %+v, %v", first, err)
+	}
+	second, err := ReduceCellIntents(ctx, rt, scope, intents, true)
+	if err != nil || !second.Committed || len(second.Intents) != 1 {
+		t.Fatalf("replay reduce = %+v, %v", second, err)
+	}
+	if first.Intents[0].Seq != second.Intents[0].Seq {
+		t.Fatalf("replay assigned new seq %d, want %d", second.Intents[0].Seq, first.Intents[0].Seq)
+	}
+	msgs, _, err := rt.ChannelRead(scope.ChannelID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("replay duplicated envelopes: %d messages", len(msgs))
+	}
+}
+
+func TestReduceCellIntentsIdempotencyConflict(t *testing.T) {
+	rt, _ := testRuntime(t)
+	scope := testReductionScope()
+	scope.CellID = "cell-conflict"
+	ctx := testReductionCtx(scope)
+	if _, err := ReduceCellIntents(ctx, rt, scope, []yaegikernel.StagedIntent{
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "first"},
+	}, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReduceCellIntents(ctx, rt, scope, []yaegikernel.StagedIntent{
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "changed"},
+	}, true); err == nil {
+		t.Fatal("changed content under the same key must conflict")
+	}
+}
+
+func TestChannelCastWakesAddressedActor(t *testing.T) {
+	rt, _ := testRuntime(t)
+	var mu sync.Mutex
+	var wakes []string
+	rt.SetDispatchActor(func(_ context.Context, _, _, toAgentID, kind, _, _, _ string) error {
+		mu.Lock()
+		wakes = append(wakes, kind+":"+toAgentID)
+		mu.Unlock()
+		return nil
+	})
+	ctx := testReductionCtx(testReductionScope())
+	if _, err := rt.ChannelCast(ctx, "chan-wake", "super:root", "", "co-super:impl", "co-super", "hi"); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(wakes) != 1 || wakes[0] != "channel_message:super:root" {
+		t.Fatalf("wakes = %v, want channel_message to super:root", wakes)
+	}
+	if _, err := rt.ChannelCast(ctx, "chan-wake", "", "", "co-super:impl", "co-super", "broadcast"); err != nil {
+		t.Fatal(err)
+	}
+	if len(wakes) != 1 {
+		t.Fatalf("broadcast must not wake: %v", wakes)
 	}
 }

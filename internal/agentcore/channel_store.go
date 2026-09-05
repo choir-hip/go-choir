@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"log"
 	"strings"
 	"time"
 
@@ -26,6 +27,16 @@ func (rt *Runtime) ChannelPost(ctx context.Context, channelID, from, role, conte
 // the corresponding event. Addressed wake/delivery is owned by update_coagent
 // (actor messages); channel messages remain the audit/replay surface.
 func (rt *Runtime) ChannelCast(ctx context.Context, channelID, toAgentID, toRunID, from, role, content string) (uint64, error) {
+	return rt.channelCast(ctx, channelID, toAgentID, toRunID, from, role, content, "")
+}
+
+// CastEnvelope persists a reducer envelope with a durable idempotency key
+// so a retried successful cell cannot duplicate already-written intents.
+func (rt *Runtime) CastEnvelope(ctx context.Context, channelID, toAgentID, from, role, content, idempotencyKey string) (uint64, error) {
+	return rt.channelCast(ctx, channelID, toAgentID, "", from, role, content, idempotencyKey)
+}
+
+func (rt *Runtime) channelCast(ctx context.Context, channelID, toAgentID, toRunID, from, role, content, idempotencyKey string) (uint64, error) {
 	trajectoryID := ""
 	if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil && runRec.Metadata != nil {
 		if id, _ := runRec.Metadata[runMetadataTrajectoryID].(string); strings.TrimSpace(id) != "" {
@@ -33,16 +44,17 @@ func (rt *Runtime) ChannelCast(ctx context.Context, channelID, toAgentID, toRunI
 		}
 	}
 	message := ChannelMessage{
-		ChannelID:    channelID,
-		FromAgentID:  toolregistry.ExecutionContextFrom(ctx).AgentID,
-		FromRunID:    toolregistry.ExecutionContextFrom(ctx).RunID,
-		ToAgentID:    strings.TrimSpace(toAgentID),
-		ToRunID:      strings.TrimSpace(toRunID),
-		TrajectoryID: trajectoryID,
-		From:         from,
-		Role:         role,
-		Content:      content,
-		Timestamp:    time.Now().UTC(),
+		ChannelID:      channelID,
+		FromAgentID:    toolregistry.ExecutionContextFrom(ctx).AgentID,
+		FromRunID:      toolregistry.ExecutionContextFrom(ctx).RunID,
+		ToAgentID:      strings.TrimSpace(toAgentID),
+		ToRunID:        strings.TrimSpace(toRunID),
+		TrajectoryID:   trajectoryID,
+		From:           from,
+		Role:           role,
+		Content:        content,
+		IdempotencyKey: strings.TrimSpace(idempotencyKey),
+		Timestamp:      time.Now().UTC(),
 	}
 	ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 	if ownerID == "" && message.FromRunID != "" {
@@ -54,7 +66,26 @@ func (rt *Runtime) ChannelCast(ctx context.Context, channelID, toAgentID, toRunI
 		return 0, err
 	}
 	rt.emitChannelMessageEvent(ctx, message, ownerID)
+	rt.wakeChannelCastRecipient(ctx, message, ownerID)
 	return uint64(message.Seq), nil
+}
+
+func (rt *Runtime) wakeChannelCastRecipient(ctx context.Context, message ChannelMessage, ownerID string) {
+	target := strings.TrimSpace(message.ToAgentID)
+	if rt == nil || rt.dispatchActor == nil || target == "" {
+		return
+	}
+	execCtx := toolregistry.ExecutionContextFrom(ctx)
+	computerID := strings.TrimSpace(execCtx.ComputerID)
+	if rec := execCtx.RunRecord; rec != nil && computerID == "" {
+		computerID = strings.TrimSpace(rec.ComputerID)
+	}
+	if computerID == "" {
+		computerID = rt.TextureComputerID()
+	}
+	if err := rt.dispatchActor(context.Background(), ownerID, computerID, target, "channel_message", message.Content, message.TrajectoryID, message.FromAgentID); err != nil {
+		log.Printf("runtime: actor wake channel cast for %s: %v", target, err)
+	}
 }
 
 // ChannelRead reads messages from the store for the given channel ID since

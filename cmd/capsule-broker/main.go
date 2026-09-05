@@ -67,12 +67,7 @@ const (
 // overlay builder (agentcore derives it from the host env); get_actuator
 // only advertises this broker's resolved route for diagnosis.
 func resolveActuatorRoute() actuatorRoute {
-	switch capsule.ReadGuestActuator() {
-	case capsule.ActuatorRLM:
-		return actuatorRLM
-	default:
-		return actuatorTools
-	}
+	return actuatorRoute(capsule.EffectiveActuator())
 }
 
 // effectiveRoute applies session-worker readiness: RLM requested but not

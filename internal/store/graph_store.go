@@ -1630,15 +1630,16 @@ func (s *Store) AppendChannelMessageOG(ctx context.Context, message *types.Chann
 		now = time.Now().UTC()
 	}
 	metadata := map[string]any{
-		"channel_id":    message.ChannelID,
-		"seq":           message.Seq,
-		"from_agent_id": message.FromAgentID,
-		"from_run_id":   message.FromRunID,
-		"to_agent_id":   message.ToAgentID,
-		"to_run_id":     message.ToRunID,
-		"trajectory_id": message.TrajectoryID,
-		"role":          message.Role,
-		"timestamp":     message.Timestamp.UTC().Format(time.RFC3339Nano),
+		"channel_id":      message.ChannelID,
+		"seq":             message.Seq,
+		"from_agent_id":   message.FromAgentID,
+		"from_run_id":     message.FromRunID,
+		"to_agent_id":     message.ToAgentID,
+		"to_run_id":       message.ToRunID,
+		"trajectory_id":   message.TrajectoryID,
+		"role":            message.Role,
+		"idempotency_key": message.IdempotencyKey,
+		"timestamp":       message.Timestamp.UTC().Format(time.RFC3339Nano),
 	}
 
 	_, err := s.ogPut(ctx, ogKindChannelMsg, ownerID, "", message, metadata, now)

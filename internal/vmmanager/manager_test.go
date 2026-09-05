@@ -1938,3 +1938,56 @@ func TestMergeVMConfigOverridesTakesBootModeFromOverrides(t *testing.T) {
 		t.Fatalf("merge dropped explicit replay-only: %+v", got)
 	}
 }
+
+func TestMergeVMConfigOverridesPreservesActuatorOnOmit(t *testing.T) {
+	got := mergeVMConfigOverrides(VMConfig{VMID: "vm-1", Actuator: "rlm"}, VMConfig{VMID: "vm-1"})
+	if got.Actuator != "rlm" {
+		t.Fatalf("omit must preserve stored actuator, got %q", got.Actuator)
+	}
+	got = mergeVMConfigOverrides(VMConfig{VMID: "vm-1", Actuator: "rlm"}, VMConfig{VMID: "vm-1", Actuator: "tools"})
+	if got.Actuator != "tools" {
+		t.Fatalf("explicit tools must rollback, got %q", got.Actuator)
+	}
+	got = mergeVMConfigOverrides(VMConfig{VMID: "vm-1"}, VMConfig{VMID: "vm-1", Actuator: "RLM"})
+	if got.Actuator != "rlm" {
+		t.Fatalf("explicit rlm must parse, got %q", got.Actuator)
+	}
+}
+
+func TestRefreshConfigForCurrentDeployKeepsActuator(t *testing.T) {
+	got := refreshConfigForCurrentDeploy(VMConfig{Actuator: "rlm", KernelParams: "root=fstab", StoreDiskPath: "/store"}, ManagerConfig{StoreDiskPath: "/store"})
+	if got.Actuator != "rlm" {
+		t.Fatalf("deploy refresh must not wipe Actuator, got %q", got.Actuator)
+	}
+	if got.KernelParams != "" {
+		t.Fatalf("deploy refresh must still wipe KernelParams, got %q", got.KernelParams)
+	}
+}
+
+func TestBuildFirecrackerConfigRendersActuatorRuntimeArg(t *testing.T) {
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = t.TempDir()
+	mgr := NewManager(cfg)
+
+	legacy := VMConfig{
+		VMID: "vm-actuator-legacy", KernelImagePath: "/opt/vmlinux", RootfsPath: "/opt/rootfs.ext4",
+		GuestPort: 8085, MachineCPUCount: 2, MachineMemSizeMib: 512, Epoch: 1, Actuator: "rlm",
+	}
+	bootArgs := mgr.buildFirecrackerConfig(legacy, 9001)["boot-source"].(map[string]interface{})["boot_args"].(string)
+	if !containsStr(bootArgs, "choir.actuator=rlm") {
+		t.Fatalf("legacy boot missing choir.actuator=rlm: %s", bootArgs)
+	}
+
+	nix := VMConfig{
+		VMID: "vm-actuator-nix", KernelImagePath: "/opt/vmlinux", InitrdPath: "/opt/initrd",
+		StoreDiskPath: "/opt/store.erofs", KernelParams: "root=fstab init=/nix/store/init",
+		GuestPort: 8085, MachineCPUCount: 2, MachineMemSizeMib: 512, Epoch: 1,
+	}
+	bootArgs = mgr.buildFirecrackerConfig(nix, 9001)["boot-source"].(map[string]interface{})["boot_args"].(string)
+	if !containsStr(bootArgs, "choir.actuator=tools") {
+		t.Fatalf("empty actuator must fail closed to tools: %s", bootArgs)
+	}
+	if containsStr(bootArgs, "choir.actuator=rlm") {
+		t.Fatalf("empty actuator must not emit rlm: %s", bootArgs)
+	}
+}

@@ -4318,3 +4318,38 @@ func TestSetGatewayURL(t *testing.T) {
 }
 
 func allowLifecycleRoute(context.Context, string, string) error { return nil }
+
+func TestOwnershipRegistry_ActuatorPersistsAcrossUnflaggedRefresh(t *testing.T) {
+	mock := &mockVMManager{
+		refreshResponse: &VMInstanceInfo{HostURL: "http://127.0.0.1:9045", Epoch: 100, Healthy: true, State: "running"},
+	}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetCorpusdURL(testComputerCredentialIssuerURL(t))
+	reg.SetVMManager(mock)
+	_, _ = reg.ResolveOrAssign("user-actuator")
+	if err := reg.SetActuatorForDesktop("user-actuator", PrimaryDesktopID, "rlm"); err != nil {
+		t.Fatal(err)
+	}
+	own, err := reg.RefreshVMForDesktop("user-actuator", PrimaryDesktopID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if own.Actuator != "rlm" {
+		t.Fatalf("ownership actuator = %q, want rlm", own.Actuator)
+	}
+	if len(mock.refreshCfgs) != 1 {
+		t.Fatalf("expected 1 refresh cfg, got %d", len(mock.refreshCfgs))
+	}
+	if mock.refreshCfgs[0].Actuator != "rlm" {
+		t.Fatalf("refresh cfg actuator = %q, want rlm after omit", mock.refreshCfgs[0].Actuator)
+	}
+	if err := reg.SetActuatorForDesktop("user-actuator", PrimaryDesktopID, "tools"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.RefreshVMForDesktop("user-actuator", PrimaryDesktopID); err != nil {
+		t.Fatal(err)
+	}
+	if mock.refreshCfgs[1].Actuator != "tools" {
+		t.Fatalf("explicit tools refresh cfg = %q", mock.refreshCfgs[1].Actuator)
+	}
+}

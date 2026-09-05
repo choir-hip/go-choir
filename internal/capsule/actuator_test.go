@@ -49,3 +49,30 @@ func TestHostSelectsRLMUnchanged(t *testing.T) {
 		t.Fatal("host env tools must not select RLM")
 	}
 }
+
+func TestEffectiveActuatorAgreesWithHostSelectsRLM(t *testing.T) {
+	t.Setenv(ActuatorEnvVar, ActuatorRLM)
+	if EffectiveActuator() != ActuatorRLM || !HostSelectsRLM() {
+		t.Fatal("EffectiveActuator and HostSelectsRLM must agree on env=rlm")
+	}
+	t.Setenv(ActuatorEnvVar, ActuatorTools)
+	if EffectiveActuator() != ActuatorTools || HostSelectsRLM() {
+		t.Fatal("EffectiveActuator and HostSelectsRLM must agree on env=tools")
+	}
+	t.Setenv(ActuatorEnvVar, "bogus")
+	if EffectiveActuator() != ActuatorTools {
+		t.Fatalf("bogus env must fail closed to tools, got %q", EffectiveActuator())
+	}
+}
+
+func TestResolveGuestActuatorCmdlineAndEnvAgreement(t *testing.T) {
+	if got := ResolveGuestActuator("choir.actuator=rlm quiet", ""); got != ActuatorRLM {
+		t.Fatalf("cmdline-only rlm = %q", got)
+	}
+	if got := ResolveGuestActuator("", ActuatorRLM); got != ActuatorRLM {
+		t.Fatalf("env-only rlm = %q", got)
+	}
+	if got := ResolveGuestActuator("choir.actuator=tools", ActuatorRLM); got != ActuatorTools {
+		t.Fatalf("cmdline must win over env: %q", got)
+	}
+}

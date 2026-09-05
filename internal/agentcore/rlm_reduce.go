@@ -11,6 +11,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
+
 // commits a successful cell's staged tray into durable state and wakes
 // recipients. Doctrine: the database remembers (Dolt channel log + run
 // memory), Go delivers (channel event wakes consumed by recipient turns).
@@ -28,6 +29,7 @@ const rlmInboxCursorKind = types.RunMemoryEntryKind("rlm_inbox_cursor")
 // log for envelopes. *Runtime implements it directly.
 type rlmMailbox interface {
 	ChannelCast(ctx context.Context, channelID, toAgentID, toRunID, from, role, content string) (uint64, error)
+	CastEnvelope(ctx context.Context, channelID, toAgentID, from, role, content, idempotencyKey string) (uint64, error)
 	ChannelRead(channelID string, cursor uint64) ([]ChannelMessage, uint64, error)
 }
 
@@ -47,6 +49,7 @@ type ReductionScope struct {
 	OwnerID     string // store owner for run memory
 	ReturnTo    string // supervisor desk: spawn requests and completion reports
 	Cursor      uint64 // durable unread cursor entering the cell
+	CellID      string // stable cell identity for intent idempotency keys
 }
 
 // ReducedIntent pairs a cell-local ID with its durable sequence.
@@ -145,6 +148,14 @@ func encodeEnvelope(env rlmEnvelope) string {
 	return rlmEnvelopeV1 + string(raw)
 }
 
+func intentIdempotencyKey(scope ReductionScope, localID string) string {
+	cell := strings.TrimSpace(scope.CellID)
+	if cell == "" {
+		cell = fmt.Sprintf("%s:%d", scope.RunID, scope.Cursor)
+	}
+	return "rlm:" + cell + ":" + strings.TrimSpace(localID)
+}
+
 // ReduceCellIntents commits one cell's staged tray. cellSucceeded false (or a
 // poisoned-cell result) persists nothing and returns the entering cursor: the
 // durable cursor advances only upon successful reduction, so failed cells
@@ -170,7 +181,7 @@ func ReduceCellIntents(ctx context.Context, mb rlmMailbox, scope ReductionScope,
 			to = scope.ReturnTo
 			content = encodeEnvelope(rlmEnvelope{Kind: "complete", Result: in.Result, Verdict: in.Verdict, Summary: in.Summary, EvidenceRefs: in.EvidenceRefs, From: scope.FromAgentID})
 		}
-		seq, err := mb.ChannelCast(ctx, scope.ChannelID, to, "", scope.FromAgentID, scope.FromRole, content)
+		seq, err := mb.CastEnvelope(ctx, scope.ChannelID, to, scope.FromAgentID, scope.FromRole, content, intentIdempotencyKey(scope, in.LocalID))
 		if err != nil {
 			return ReductionReceipt{Cursor: scope.Cursor}, fmt.Errorf("reduce: persist %s: %w", in.LocalID, err)
 		}
@@ -318,6 +329,7 @@ func rlmReductionForCall(ctx context.Context, rt *Runtime, toolCtx *CapsuleToolC
 			OwnerID:     execCtx.OwnerID,
 			ReturnTo:    requester,
 			Cursor:      cursor,
+			CellID:      fmt.Sprintf("%s:%d", execCtx.RunID, cursor),
 		},
 		inbox:     inbox,
 		highWater: highWater,
@@ -325,9 +337,9 @@ func rlmReductionForCall(ctx context.Context, rt *Runtime, toolCtx *CapsuleToolC
 }
 
 // commit reduces a successful cell's staged tray and advances the durable
-// inbox cursor past the consumed snapshot and the newly persisted intents.
-// Failed cells never reach this path: their tray is dropped and the cursor
-// holds, so unread mail is never acknowledged for work that did not happen.
+// inbox cursor to the consumed snapshot high-water only. Outbound intent
+// sequences live on the same channel log and must not fence unread inbound
+// mail that arrived after the snapshot. Failed cells never reach this path.
 func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.StagedIntent) error {
 	if r == nil || !r.active {
 		return nil
@@ -337,11 +349,6 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 		return err
 	}
 	highWater := r.highWater
-	for _, in := range receipt.Intents {
-		if in.Seq > highWater {
-			highWater = in.Seq
-		}
-	}
 	if highWater < r.scope.Cursor {
 		highWater = r.scope.Cursor
 	}

@@ -2307,6 +2307,7 @@ func (s *Store) AppendChannelMessage(ctx context.Context, message *types.Channel
 		return fmt.Errorf("append channel message: list existing: %w", err)
 	}
 	maxSeq := int64(0)
+	key := strings.TrimSpace(message.IdempotencyKey)
 	for _, obj := range existing {
 		var msg types.ChannelMessage
 		if err := ogDecode(obj, &msg); err != nil {
@@ -2315,6 +2316,14 @@ func (s *Store) AppendChannelMessage(ctx context.Context, message *types.Channel
 		if msg.Seq > maxSeq {
 			maxSeq = msg.Seq
 		}
+		if key == "" || strings.TrimSpace(msg.IdempotencyKey) != key {
+			continue
+		}
+		if msg.Content != message.Content || msg.ToAgentID != message.ToAgentID || msg.FromAgentID != message.FromAgentID {
+			return fmt.Errorf("append channel message: idempotency key %q conflicts", key)
+		}
+		*message = msg
+		return nil
 	}
 	message.Seq = maxSeq + 1
 	if message.Timestamp.IsZero() {

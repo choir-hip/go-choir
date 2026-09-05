@@ -1600,3 +1600,48 @@ func TestListRunsByOwnerStatesLoadsMatchingStatesOnly(t *testing.T) {
 		t.Fatalf("owner states = %+v", got)
 	}
 }
+
+func TestAppendChannelMessageIdempotentReplay(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	msg := &types.ChannelMessage{
+		ChannelID:      "ch-idem",
+		From:           "co-super",
+		FromAgentID:    "co-super:impl",
+		ToAgentID:      "super",
+		Role:           "co-super",
+		Content:        "hello",
+		IdempotencyKey: "rlm:cell-1:tray-1",
+	}
+	if err := s.AppendChannelMessage(ctx, msg, "owner-idem"); err != nil {
+		t.Fatal(err)
+	}
+	first := msg.Seq
+	replay := &types.ChannelMessage{
+		ChannelID:      "ch-idem",
+		From:           "co-super",
+		FromAgentID:    "co-super:impl",
+		ToAgentID:      "super",
+		Role:           "co-super",
+		Content:        "hello",
+		IdempotencyKey: "rlm:cell-1:tray-1",
+	}
+	if err := s.AppendChannelMessage(ctx, replay, "owner-idem"); err != nil {
+		t.Fatal(err)
+	}
+	if replay.Seq != first {
+		t.Fatalf("replay seq = %d, want %d", replay.Seq, first)
+	}
+	conflict := &types.ChannelMessage{
+		ChannelID:      "ch-idem",
+		From:           "co-super",
+		FromAgentID:    "co-super:impl",
+		ToAgentID:      "super",
+		Role:           "co-super",
+		Content:        "changed",
+		IdempotencyKey: "rlm:cell-1:tray-1",
+	}
+	if err := s.AppendChannelMessage(ctx, conflict, "owner-idem"); err == nil {
+		t.Fatal("changed content under the same key must conflict")
+	}
+}

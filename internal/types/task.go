@@ -508,6 +508,10 @@ type ChannelMessage struct {
 	// Content is the message body.
 	Content string `json:"content"`
 
+	// IdempotencyKey is an optional reducer-assigned key so a retried cell
+	// cannot duplicate an already-persisted envelope. Empty means append-only.
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+
 	// Timestamp is when the message was posted.
 	Timestamp time.Time `json:"timestamp"`
 }

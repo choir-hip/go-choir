@@ -153,10 +153,16 @@ func (c *Client) ColdRecover(ctx context.Context, computerID, expectedCanonicalH
 // RefreshDesktopContext force-refreshes an existing user/desktop VM while
 // preserving its persistent data image.
 func (c *Client) RefreshDesktopContext(ctx context.Context, userID, desktopID string) (*resolveResponse, error) {
+	return c.RefreshDesktopContextWithActuator(ctx, userID, desktopID, "")
+}
+
+// RefreshDesktopContextWithActuator force-refreshes a desktop VM. A non-empty
+// actuator persists that route before reboot; empty preserves the stored value.
+func (c *Client) RefreshDesktopContextWithActuator(ctx context.Context, userID, desktopID, actuator string) (*resolveResponse, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	reqBody := resolveRequest{UserID: userID, DesktopID: normalizeDesktopID(desktopID)}
+	reqBody := resolveRequest{UserID: userID, DesktopID: normalizeDesktopID(desktopID), Actuator: strings.TrimSpace(actuator)}
 	data, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("vmctl client: marshal refresh request: %w", err)

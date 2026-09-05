@@ -341,6 +341,9 @@ EOF
           choir.runtime_recovery_replay_only=*)
             echo "RUNTIME_RECOVERY_REPLAY_ONLY=''${param#choir.runtime_recovery_replay_only=}" >> "$ENV_FILE"
             ;;
+          choir.actuator=*)
+            echo "CHOIR_ACTUATOR=''${param#choir.actuator=}" >> "$ENV_FILE"
+            ;;
           choir.gateway_token=*)
             echo "RUNTIME_GATEWAY_TOKEN=''${param#choir.gateway_token=}" >> "$ENV_FILE"
             ;;
