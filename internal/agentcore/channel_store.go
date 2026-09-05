@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -22,8 +23,10 @@ func (rt *Runtime) ChannelPost(ctx context.Context, channelID, from, role, conte
 	return rt.ChannelCast(ctx, channelID, "", "", from, role, content)
 }
 
-// ChannelCast persists an addressed envelope and, on first insert, emits the
-// channel event and wakes the recipient actor with kind "channel_message".
+// ChannelCast persists an addressed envelope, emits the channel event on first
+// insert, and wakes the recipient actor with kind "channel_message". Replay
+// skips the event and re-issues the wake; actor.Send collapses the same
+// channelID:seq UpdateID.
 func (rt *Runtime) ChannelCast(ctx context.Context, channelID, toAgentID, toRunID, from, role, content string) (uint64, error) {
 	return rt.channelCast(ctx, channelID, toAgentID, toRunID, from, role, content, "")
 }
@@ -63,12 +66,18 @@ func (rt *Runtime) channelCast(ctx context.Context, channelID, toAgentID, toRunI
 	if err := rt.store.AppendChannelMessage(ctx, &message, ownerID); err != nil {
 		return 0, err
 	}
-	if message.Replayed {
-		return uint64(message.Seq), nil
+	if !message.Replayed {
+		rt.emitChannelMessageEvent(ctx, message, ownerID)
 	}
-	rt.emitChannelMessageEvent(ctx, message, ownerID)
+	// Re-issue the wake on replay. actor.Send collapses the same
+	// channelID:seq UpdateID, so a crash after persist and before the
+	// durable actor append recovers on retry without double-executing.
 	rt.wakeChannelCastRecipient(ctx, message, ownerID)
 	return uint64(message.Seq), nil
+}
+
+func channelMessageDispatchSeed(message ChannelMessage) string {
+	return fmt.Sprintf("%s:%d", strings.TrimSpace(message.ChannelID), message.Seq)
 }
 
 func (rt *Runtime) wakeChannelCastRecipient(ctx context.Context, message ChannelMessage, ownerID string) {
@@ -84,7 +93,7 @@ func (rt *Runtime) wakeChannelCastRecipient(ctx context.Context, message Channel
 	if computerID == "" {
 		computerID = rt.TextureComputerID()
 	}
-	if err := rt.dispatchActor(context.Background(), ownerID, computerID, target, "channel_message", message.Content, message.TrajectoryID, message.FromAgentID); err != nil {
+	if err := rt.dispatchActor(context.Background(), ownerID, computerID, target, "channel_message", channelMessageDispatchSeed(message), message.TrajectoryID, message.FromAgentID); err != nil {
 		log.Printf("runtime: actor wake channel cast for %s: %v", target, err)
 	}
 }

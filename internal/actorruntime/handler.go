@@ -96,8 +96,12 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 // Unlike coagent_result, this kind never mints a new run: spawn/assign create
 // runs, channel mail only wakes an existing activation.
 func (h *actorHandler) handleChannelMessage(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
-	if _, _, _, err := parseScopedActorMailboxID(u.ToAgentID); err != nil {
+	_, _, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
 		return nil, fmt.Errorf("actorruntime: resolve channel_message scope: %w", err)
+	}
+	if strings.HasPrefix(agentID, agentprofile.Texture+":") {
+		return memory, nil
 	}
 	rs, err := decodeResumeState(memory)
 	if err != nil {
@@ -468,20 +472,21 @@ func (h *actorHandler) handleCancel(ctx context.Context, u actor.Update, memory 
 	return nil, nil
 }
 
-// memoryFromRunState encodes the resume pointer if the run passivated, or
-// returns nil (clears memory) if the run completed or failed.
+// memoryFromRunState encodes the resume pointer for passivated and still-active
+// runs (including blocked). Terminal states clear memory.
 func (h *actorHandler) memoryFromRunState(rec *types.RunRecord) ([]byte, error) {
 	if rec == nil {
 		return nil, nil
 	}
-	switch rec.State {
-	case types.RunPassivated:
-		rs := resumeState{RunID: rec.RunID, Phase: "parked"}
+	if rec.State == types.RunPassivated || rec.State.Active() {
+		phase := "parked"
+		if rec.State == types.RunBlocked {
+			phase = "blocked"
+		}
+		rs := resumeState{RunID: rec.RunID, Phase: phase}
 		return json.Marshal(rs)
-	default:
-		// RunCompleted, RunFailed, or any other terminal state — clear memory.
-		return nil, nil
 	}
+	return nil, nil
 }
 
 func decodeResumeState(memory []byte) (resumeState, error) {

@@ -313,16 +313,24 @@ func TestInitialDispatchUpdateIdentityIsStableAndScoped(t *testing.T) {
 }
 
 func TestChannelMessageUpdateIdentityIsStableAndScoped(t *testing.T) {
-	first := actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", "rlm/v1 hello", "", "co-super:impl")
-	replay := actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", "rlm/v1 hello", "", "co-super:impl")
+	seed := "chan-a:1"
+	first := actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", seed, "", "co-super:impl")
+	replay := actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", seed, "", "co-super:impl")
 	if first != replay {
 		t.Fatalf("channel_message replay IDs differ: %q != %q", first, replay)
 	}
+	sameBodyNextSeq := actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", "chan-a:2", "", "co-super:impl")
+	if sameBodyNextSeq == first {
+		t.Fatalf("distinct channel seqs collapsed to %q", first)
+	}
+	otherChannel := actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", "chan-b:1", "", "co-super:impl")
+	if otherChannel == first {
+		t.Fatalf("distinct channel IDs collapsed to %q", first)
+	}
 	for name, changed := range map[string]string{
-		"owner":   actorDispatchUpdateID("owner-b", "computer-a", "super:root", "channel_message", "rlm/v1 hello", "", "co-super:impl"),
-		"agent":   actorDispatchUpdateID("owner-a", "computer-a", "super:other", "channel_message", "rlm/v1 hello", "", "co-super:impl"),
-		"content": actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", "rlm/v1 other", "", "co-super:impl"),
-		"from":    actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", "rlm/v1 hello", "", "co-super:other"),
+		"owner": actorDispatchUpdateID("owner-b", "computer-a", "super:root", "channel_message", seed, "", "co-super:impl"),
+		"agent": actorDispatchUpdateID("owner-a", "computer-a", "super:other", "channel_message", seed, "", "co-super:impl"),
+		"from":  actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", seed, "", "co-super:other"),
 	} {
 		if changed == first {
 			t.Fatalf("%s change reused channel_message ID %q", name, first)
@@ -1326,6 +1334,53 @@ func TestHandlerChannelMessageIgnoresTerminalRun(t *testing.T) {
 	}
 	if len(runs) != 1 {
 		t.Fatalf("terminal channel_message minted extra runs: %d", len(runs))
+	}
+}
+
+func TestHandlerChannelMessageIgnoresTextureMailbox(t *testing.T) {
+	env := newAdapterTestEnv(t)
+	agentID := "texture:doc-channel"
+	ownerID := "user-channel-texture"
+	mem, _ := json.Marshal(resumeState{RunID: "run-should-not-load", Phase: "parked"})
+	handler := newActorHandler(env.adapter.Runtime, nil)
+	u := actorUpdate(ownerID, "channel_message", agentID, "chan-texture:1")
+	out, err := handler.HandleUpdate(env.ctx, agentID, u, mem)
+	if err != nil {
+		t.Fatalf("HandleUpdate channel_message texture: %v", err)
+	}
+	if string(out) != string(mem) {
+		t.Fatalf("texture channel_message mutated memory")
+	}
+	runs, err := env.store.ListRunsByOwner(env.ctx, ownerID, 20)
+	if err != nil {
+		t.Fatalf("ListRuns: %v", err)
+	}
+	if len(runs) != 0 {
+		t.Fatalf("texture channel_message minted %d runs, want 0", len(runs))
+	}
+}
+
+func TestMemoryFromRunStateRetainsBlockedPointer(t *testing.T) {
+	h := &actorHandler{}
+	blocked := types.RunRecord{RunID: "run-blocked-mem", State: types.RunBlocked}
+	mem, err := h.memoryFromRunState(&blocked)
+	if err != nil {
+		t.Fatalf("memoryFromRunState blocked: %v", err)
+	}
+	rs, err := decodeResumeState(mem)
+	if err != nil {
+		t.Fatalf("decode blocked memory: %v", err)
+	}
+	if rs.RunID != blocked.RunID || rs.Phase != "blocked" {
+		t.Fatalf("blocked memory = %+v, want run-id retained", rs)
+	}
+	done := types.RunRecord{RunID: "run-done-mem", State: types.RunCompleted}
+	cleared, err := h.memoryFromRunState(&done)
+	if err != nil {
+		t.Fatalf("memoryFromRunState completed: %v", err)
+	}
+	if cleared != nil {
+		t.Fatalf("completed memory = %q, want nil", cleared)
 	}
 }
 

@@ -306,6 +306,37 @@ func TestReduceCellIntentsSequentialCellsAtSameCursor(t *testing.T) {
 	}
 }
 
+func TestReduceCellIntentsSequentialCellsDistinctDestinations(t *testing.T) {
+	rt, _ := testRuntime(t)
+	scope := testReductionScope()
+	ctx := testReductionCtx(scope)
+	first, err := ReduceCellIntents(ctx, rt, scope, []yaegikernel.StagedIntent{
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "peer-a", Body: "same"},
+	}, true)
+	if err != nil || !first.Committed {
+		t.Fatalf("first dest = %+v, %v", first, err)
+	}
+	second, err := ReduceCellIntents(ctx, rt, scope, []yaegikernel.StagedIntent{
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "peer-b", Body: "same"},
+	}, true)
+	if err != nil || !second.Committed {
+		t.Fatalf("second dest = %+v, %v", second, err)
+	}
+	if first.Intents[0].Seq == second.Intents[0].Seq {
+		t.Fatalf("distinct destinations reused seq %d", first.Intents[0].Seq)
+	}
+	msgs, _, err := rt.ChannelRead(scope.ChannelID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("distinct destinations = %d messages, want 2", len(msgs))
+	}
+	if msgs[0].ToAgentID == msgs[1].ToAgentID {
+		t.Fatalf("destination-distinct envelopes collapsed: %+v", msgs)
+	}
+}
+
 func TestReduceCellIntentsReplaySkipsEventAndWake(t *testing.T) {
 	rt, st := testRuntime(t)
 	scope := testReductionScope()
@@ -331,8 +362,8 @@ func TestReduceCellIntentsReplaySkipsEventAndWake(t *testing.T) {
 	mu.Lock()
 	gotWakes := wakes
 	mu.Unlock()
-	if gotWakes != 1 {
-		t.Fatalf("wakes = %d, want 1 (replay must not re-wake)", gotWakes)
+	if gotWakes != 2 {
+		t.Fatalf("wakes = %d, want 2 (replay re-issues wake; actor.Send collapses UpdateID)", gotWakes)
 	}
 	events, err := st.ListEventsByChannel(ctx, scope.OwnerID, scope.ChannelID, 20)
 	if err != nil {
@@ -353,9 +384,9 @@ func TestChannelCastWakesAddressedActor(t *testing.T) {
 	rt, _ := testRuntime(t)
 	var mu sync.Mutex
 	var wakes []string
-	rt.SetDispatchActor(func(_ context.Context, _, _, toAgentID, kind, _, _, _ string) error {
+	rt.SetDispatchActor(func(_ context.Context, _, _, toAgentID, kind, content, _, _ string) error {
 		mu.Lock()
-		wakes = append(wakes, kind+":"+toAgentID)
+		wakes = append(wakes, kind+":"+toAgentID+":"+content)
 		mu.Unlock()
 		return nil
 	})
@@ -364,14 +395,26 @@ func TestChannelCastWakesAddressedActor(t *testing.T) {
 		t.Fatal(err)
 	}
 	mu.Lock()
-	defer mu.Unlock()
-	if len(wakes) != 1 || wakes[0] != "channel_message:super:root" {
-		t.Fatalf("wakes = %v, want channel_message to super:root", wakes)
+	if len(wakes) != 1 || wakes[0] != "channel_message:super:root:chan-wake:1" {
+		mu.Unlock()
+		t.Fatalf("wakes = %v, want channel_message to super:root with chan-wake:1", wakes)
 	}
+	mu.Unlock()
+	if _, err := rt.ChannelCast(ctx, "chan-wake", "super:root", "", "co-super:impl", "co-super", "hi"); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	if len(wakes) != 2 || wakes[1] != "channel_message:super:root:chan-wake:2" {
+		mu.Unlock()
+		t.Fatalf("same-body second envelope collapsed: %v", wakes)
+	}
+	mu.Unlock()
 	if _, err := rt.ChannelCast(ctx, "chan-wake", "", "", "co-super:impl", "co-super", "broadcast"); err != nil {
 		t.Fatal(err)
 	}
-	if len(wakes) != 1 {
+	mu.Lock()
+	defer mu.Unlock()
+	if len(wakes) != 2 {
 		t.Fatalf("broadcast must not wake: %v", wakes)
 	}
 }

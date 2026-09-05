@@ -150,12 +150,12 @@ func encodeEnvelope(env rlmEnvelope) string {
 	return rlmEnvelopeV1 + string(raw)
 }
 
-func intentIdempotencyKey(scope ReductionScope, localID, content string) string {
+func intentIdempotencyKey(scope ReductionScope, localID, to, content string) string {
 	cell := strings.TrimSpace(scope.CellID)
 	if cell == "" {
 		cell = fmt.Sprintf("%s:%d", scope.RunID, scope.Cursor)
 	}
-	sum := sha256.Sum256([]byte(content))
+	sum := sha256.Sum256([]byte(strings.TrimSpace(to) + "\x1f" + content))
 	return "rlm:" + cell + ":" + strings.TrimSpace(localID) + ":" + hex.EncodeToString(sum[:6])
 }
 
@@ -184,7 +184,7 @@ func ReduceCellIntents(ctx context.Context, mb rlmMailbox, scope ReductionScope,
 			to = scope.ReturnTo
 			content = encodeEnvelope(rlmEnvelope{Kind: "complete", Result: in.Result, Verdict: in.Verdict, Summary: in.Summary, EvidenceRefs: in.EvidenceRefs, From: scope.FromAgentID})
 		}
-		seq, err := mb.CastEnvelope(ctx, scope.ChannelID, to, scope.FromAgentID, scope.FromRole, content, intentIdempotencyKey(scope, in.LocalID, content))
+		seq, err := mb.CastEnvelope(ctx, scope.ChannelID, to, scope.FromAgentID, scope.FromRole, content, intentIdempotencyKey(scope, in.LocalID, to, content))
 		if err != nil {
 			return ReductionReceipt{Cursor: scope.Cursor}, fmt.Errorf("reduce: persist %s: %w", in.LocalID, err)
 		}
