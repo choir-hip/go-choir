@@ -379,7 +379,7 @@ documents:
     is_root: []
     is_evidence: true
     annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded, entrypoint: false}
-    superseded_by: docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md
+    superseded_by: [docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md]
     refresh_triggers: []
 
   - path: docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md
