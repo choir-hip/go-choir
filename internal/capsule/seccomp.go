@@ -25,7 +25,7 @@ var capsuleAllowedSyscalls = []string{
 	"inotify_init", "inotify_init1", "inotify_add_watch", "inotify_rm_watch",
 	"socketpair", "connect", "bind", "listen", "accept", "accept4", "shutdown", "sendto", "recvfrom", "sendmsg", "recvmsg",
 	"getsockname", "getpeername", "setsockopt", "getsockopt",
-	"clone", "clone3", "fork", "vfork", "execve", "execveat", "exit", "exit_group", "wait4", "waitid",
+	"clone", "clone3", "fork", "vfork", "setpgid", "execve", "execveat", "exit", "exit_group", "wait4", "waitid",
 	"getpid", "getppid", "gettid", "getuid", "geteuid", "getgid", "getegid", "getresuid", "getresgid", "getgroups",
 	"setuid", "setgid", "setreuid", "setregid", "setresuid", "setresgid", "setgroups", "setfsuid", "setfsgid",
 	"kill", "tkill", "tgkill", "prctl", "capget", "capset", "set_tid_address", "set_robust_list", "rseq",
