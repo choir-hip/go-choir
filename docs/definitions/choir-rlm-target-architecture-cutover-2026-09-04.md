@@ -148,10 +148,10 @@ measures:
 
 now:
   status: working
-  slice: "landing: 3724db1a epoch 885 actuator=rlm; exact Super bind + sealed overlay tools=6 proved; Option B go_eval still parse-fails"
+  slice: "landing: 3724db1a epoch 885 actuator=rlm; exact Super bind + sealed overlay + verbatim package main eval proved; WriteFile EACCES pending Landlock MAKE_REG"
   question: none
   reconciliation:
-    observed_at: "2026-09-05T18:48:00Z"
+    observed_at: "2026-09-05T19:04:00Z"
     source_ref: "main@3724db1abb9c1538dfa8f32c0974102814c00df1"
     deploy_identity: "staging https://choir.news deployed_commit 3724db1abb9c1538dfa8f32c0974102814c00df1; computer-03335285269bdba4f94377e56879f9e6 active epoch 885 actuator=rlm; guest deployed_at 2026-09-05T17:36:04Z; Source/platform HEAD 7574d899; guest health ready; effects propose_only; pre-A fence 99949fe2 untouched"
     authority_identities:
@@ -185,7 +185,7 @@ now:
   evidence_refs:
     - "CI run 33942777266 on 7574d899 success including Deploy to Staging (https://github.com/choir-hip/go-choir/actions/runs/33942777266)"
     - "docs/evidence/rlm-option-b-actuator-refresh-2026-09-05.md (epoch 882 actuator=rlm; Source/platform 7574d899 populated; Option B Super FIFO remaining)"
-    - "docs/evidence/rlm-option-b-exact-bind-go-eval-2026-09-05.md (epoch 885; exact bind 96212cc3/948a9e0a; CoSuper tools=6; freeze after 3724db1a; go_eval parse still failing)"
+    - "docs/evidence/rlm-option-b-exact-bind-go-eval-2026-09-05.md (epoch 885; exact bind 6fc6c937→5d01c158; assignment-e7107631 verbatim package main eval; WriteFile EACCES missing Landlock MAKE_REG)"
     - "LifecycleReceipt 01a071e3-e430-7073-b95f-9bddd7f0e74d idempotency rlm-actuator-cutover-2026-09-05T1405Z epoch 879→880"
     - "Node B deployed: https://choir.news reports x-choir-build-commit: 7574d899bcd75b00824040f1684ff33a94ac3f2b at 2026-09-05T04:32:50Z"
     - "Panel 3 on 7574d899: 4 approve + 1 approve-with-changes + 4 Codex-quota skips (.agentic-consensus/agentic-consensus-20260904-234730/); alt panel 2 approve (.agentic-consensus/agentic-consensus-20260905-000659/); 0 blocks; no remaining Option B code blocker"
@@ -196,8 +196,8 @@ now:
     - "internal/yaegikernel/intent.go tray/Inbox/hooks + internal/agentcore/rlm_reduce.go Dolt persist, run-memory cursor, two-phase ack (Step 4)"
     - "internal/actor/coalesce.go bounded wakes + spawnRoleAllowed + scoped fan-in (Step 5)"
     - "internal/runtimeprompts/overlays/rlm_co_super_runtime.yaml + sealed registry (Step 6)"
-  blocker_or_risk: "Three-way actuator readback holds on epoch 885. Exact live Super bind is proved (e3306a66→96212cc3, da34787a→948a9e0a). CoSuper overlay is tools=6. Freeze/grant after 3724db1a succeeds. Sealed proof is still incomplete: Super paraphrases the verbatim package-main cell into assign_co_super, and CoSuper go_eval fails parse (English; snippet without func main; invalid octal 09 from unquoted 2026-09-05). assignment-60bdda62 and assignment-b8fad426 froze without exit-0 receipts."
-  next_action: "Do not drain the Super mailbox. Make assign_co_super carry the verbatim package-main choir.ReadFile/WriteFile/Complete cell as the capsule_go_eval source (not a paraphrase). Then one exit-0 eval and one record_assignment_result, effects propose_only."
+  blocker_or_risk: "Three-way actuator readback holds on epoch 885. Exact live Super bind is proved (6fc6c937→5d01c158). CoSuper overlay is tools=6. Super copied the verbatim package-main cell into assignment-e7107631. Yaegi parsed and choir.ReadFile succeeded. choir.WriteFile of a new /workspace/platform file failed permission denied because capsule Landlock directory access omitted MAKE_REG. Capsule froze without an exit-0 receipt."
+  next_action: "Land capsule Landlock MAKE_REG so choir.WriteFile can create /workspace/platform artifacts, deploy, refresh Node B, then Texture-tell Option B again. Do not drain the Super mailbox. Effects remain propose_only."
 receipts:
   - id: rlm-target-architecture-consensus-and-definition-2026-09-04
     boundary: define

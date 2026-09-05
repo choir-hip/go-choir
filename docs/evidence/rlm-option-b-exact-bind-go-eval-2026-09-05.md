@@ -38,17 +38,18 @@ Both fresh assignments reached `capsule_disposition=frozen` with fate acks. That
 | `assignment-60bdda62` | `capsule-ce184f10-...` frozen | parse error before execution (`deepseek-v4-flash`) |
 | `assignment-b8fad426` | `capsule-c6e9f846-...` frozen | invalid octal-literal during parse (`deepseek-v4-flash`, 18636/1154 tokens) |
 
-## Remaining gap
 
-Super work items carried the exact Go program. `assign_co_super` paraphrased it. CoSuper then invented source:
+## Verbatim cell retry (2026-09-05T18:57Z)
 
-1. English / snippet without `package main` + `func main()` (Yaegi eval is a file, not a statement list).
-2. Unquoted date fragments such as `2026-09-05` parse as `2026 - 09 - 05`; Go rejects `09` as an octal literal.
+Cancelled hung Super `da34787a` only. Owner tell `owner-instruction-b1b60919` on doc `d599c4b1` queued at cursor 120.
 
-The first exact-Go tell's source itself omitted `package main`/`func main()`. The 18:42Z tell included a complete program; Super still did not copy it into the CoSuper objective.
+| Step | Receipt |
+| --- | --- |
+| Texture turn | version 9, `8105bd86`, 18:59:45Z |
+| Super exact bind | `6fc6c937` bound control `5d01c158` work `7855459f` (not FIFO) |
+| CoSuper | `assignment-e7107631` capsule `capsule-900854c2` tools=6, prompt contained verbatim `package main` + `func main()` |
+| Eval | Yaegi parsed and ran. `choir.ReadFile("/workspace/platform/AGENTS.md")` succeeded. `choir.WriteFile("/workspace/platform/rlm-option-b-proof-2026-09-05.txt")` failed `permission denied`. Capsule froze. `record_assignment_result` did not land a pass. CoSuper completed 19:03:33Z. |
 
-**Not proved:** live `get_actuator` RPC, in-capsule read-compute-write of `rlm-option-b-proof-2026-09-05.txt`, or a successful `record_assignment_result`.
+**Cause:** capsule Landlock directory access included `WRITE_FILE`/`MAKE_DIR`/`MAKE_SYM` but not `MAKE_REG`. Creating a new regular file is EACCES. Existing-file reads still work.
 
-## Next
-
-Do not drain the Super mailbox. Super must place the verbatim `package main` cell into `assign_co_super` (structured field, not paraphrase). Then one `capsule_go_eval` exit 0 and one `record_assignment_result`, effects `propose_only`.
+**Not proved:** in-capsule write of the proof file, granted receipts, live `get_actuator` RPC.
