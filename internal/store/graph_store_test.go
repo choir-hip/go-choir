@@ -1632,6 +1632,9 @@ func TestAppendChannelMessageIdempotentReplay(t *testing.T) {
 	if replay.Seq != first {
 		t.Fatalf("replay seq = %d, want %d", replay.Seq, first)
 	}
+	if !replay.Replayed {
+		t.Fatal("replay must set ChannelMessage.Replayed")
+	}
 	conflict := &types.ChannelMessage{
 		ChannelID:      "ch-idem",
 		From:           "co-super",

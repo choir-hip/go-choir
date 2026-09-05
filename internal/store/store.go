@@ -2323,6 +2323,7 @@ func (s *Store) AppendChannelMessage(ctx context.Context, message *types.Channel
 			return fmt.Errorf("append channel message: idempotency key %q conflicts", key)
 		}
 		*message = msg
+		message.Replayed = true
 		return nil
 	}
 	message.Seq = maxSeq + 1

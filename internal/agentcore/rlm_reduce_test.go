@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -277,20 +278,74 @@ func TestReduceCellIntentsIdempotentReplay(t *testing.T) {
 	}
 }
 
-func TestReduceCellIntentsIdempotencyConflict(t *testing.T) {
+func TestReduceCellIntentsSequentialCellsAtSameCursor(t *testing.T) {
 	rt, _ := testRuntime(t)
 	scope := testReductionScope()
-	scope.CellID = "cell-conflict"
 	ctx := testReductionCtx(scope)
-	if _, err := ReduceCellIntents(ctx, rt, scope, []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "first"},
-	}, true); err != nil {
+	first, err := ReduceCellIntents(ctx, rt, scope, []yaegikernel.StagedIntent{
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "cell-a"},
+	}, true)
+	if err != nil || !first.Committed {
+		t.Fatalf("first cell = %+v, %v", first, err)
+	}
+	second, err := ReduceCellIntents(ctx, rt, scope, []yaegikernel.StagedIntent{
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "cell-b"},
+	}, true)
+	if err != nil || !second.Committed {
+		t.Fatalf("second cell = %+v, %v", second, err)
+	}
+	if first.Intents[0].Seq == second.Intents[0].Seq {
+		t.Fatalf("sequential cells at the same cursor reused seq %d", first.Intents[0].Seq)
+	}
+	msgs, _, err := rt.ChannelRead(scope.ChannelID, 0)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ReduceCellIntents(ctx, rt, scope, []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "changed"},
-	}, true); err == nil {
-		t.Fatal("changed content under the same key must conflict")
+	if len(msgs) != 2 {
+		t.Fatalf("sequential cells = %d messages, want 2", len(msgs))
+	}
+}
+
+func TestReduceCellIntentsReplaySkipsEventAndWake(t *testing.T) {
+	rt, st := testRuntime(t)
+	scope := testReductionScope()
+	scope.CellID = "cell-replay-side-effect"
+	ctx := testReductionCtx(scope)
+	var mu sync.Mutex
+	var wakes int
+	rt.SetDispatchActor(func(_ context.Context, _, _, toAgentID, kind, _, _, _ string) error {
+		mu.Lock()
+		wakes++
+		mu.Unlock()
+		return nil
+	})
+	intents := []yaegikernel.StagedIntent{
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "same"},
+	}
+	if _, err := ReduceCellIntents(ctx, rt, scope, intents, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReduceCellIntents(ctx, rt, scope, intents, true); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	gotWakes := wakes
+	mu.Unlock()
+	if gotWakes != 1 {
+		t.Fatalf("wakes = %d, want 1 (replay must not re-wake)", gotWakes)
+	}
+	events, err := st.ListEventsByChannel(ctx, scope.OwnerID, scope.ChannelID, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, ev := range events {
+		if ev.Kind == types.EventChannelMessage {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("channel events = %d, want 1 (replay must not emit)", count)
 	}
 }
 

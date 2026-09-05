@@ -81,12 +81,62 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return h.handleInitialDispatch(ctx, u, memory)
 	case "coagent_result":
 		return h.handleCoagentResult(ctx, u, memory)
+	case "channel_message":
+		return h.handleChannelMessage(ctx, u, memory)
 	case "cancel":
 		return h.handleCancel(ctx, u, memory)
 	default:
 		log.Printf("actorruntime: handler: unknown update kind %q for agent %s", u.Kind, agentID)
 		return memory, nil // leave memory unchanged; update marked processed
 	}
+}
+
+// handleChannelMessage resumes a parked recipient against the durable channel
+// log. The envelope is already persisted; Inbox() on the next cell observes it.
+// Unlike coagent_result, this kind never mints a new run: spawn/assign create
+// runs, channel mail only wakes an existing activation.
+func (h *actorHandler) handleChannelMessage(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	if _, _, _, err := parseScopedActorMailboxID(u.ToAgentID); err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve channel_message scope: %w", err)
+	}
+	rs, err := decodeResumeState(memory)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: decode resume state for channel_message: %w", err)
+	}
+	if rs.RunID == "" {
+		return memory, nil
+	}
+	rec, err := h.scopedRunForUpdate(ctx, u, rs.RunID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: load parked run %s for channel_message: %w", rs.RunID, err)
+	}
+	if textureRunRecord(rec) {
+		return memory, nil
+	}
+	if rec.State == types.RunPassivated || rec.State.Active() {
+		if rec.Metadata == nil {
+			rec.Metadata = make(map[string]any)
+		}
+		rec.Metadata["actor_reactivate_existing_memory"] = true
+		rec.Metadata["actor_reactivated_from_passivated"] = true
+		rec.Metadata["request_source"] = "channel_message"
+		rec.State = types.RunPending
+		rec.Error = ""
+		rec.Result = ""
+		rec.FinishedAt = nil
+		rec.UpdatedAt = time.Now().UTC()
+		if err := h.rt.Store().UpdateRun(ctx, rec); err != nil {
+			return nil, fmt.Errorf("actorruntime: reactivate run %s from channel_message: %w", rs.RunID, err)
+		}
+		if err := h.rt.ExecuteActivationSyncChecked(ctx, &rec); err != nil {
+			if errors.Is(err, agentcore.ErrActivationOccurrenceMustRemainUnprocessed) {
+				return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, err)
+			}
+			return nil, fmt.Errorf("actorruntime: execute channel_message resumed activation: %w", err)
+		}
+		return h.memoryFromRunState(&rec)
+	}
+	return memory, nil
 }
 
 // handleInitialDispatch starts a new run. memory should be nil (fresh start).

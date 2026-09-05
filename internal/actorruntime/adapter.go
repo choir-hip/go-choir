@@ -218,9 +218,16 @@ func actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, content, trajec
 	canonicalContent := strings.TrimSpace(content)
 	canonicalTrajectoryID := strings.TrimSpace(trajectoryID)
 	canonicalFromAgentID := strings.TrimSpace(fromAgentID)
-	if canonicalContent == "" ||
-		(canonicalKind != "initial_dispatch" && canonicalKind != "coagent_result") ||
-		(canonicalKind == "coagent_result" && (canonicalTrajectoryID == "" || canonicalFromAgentID == "")) {
+	if canonicalContent == "" {
+		return uuid.New().String()
+	}
+	switch canonicalKind {
+	case "initial_dispatch", "channel_message":
+	case "coagent_result":
+		if canonicalTrajectoryID == "" || canonicalFromAgentID == "" {
+			return uuid.New().String()
+		}
+	default:
 		return uuid.New().String()
 	}
 

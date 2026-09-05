@@ -512,6 +512,10 @@ type ChannelMessage struct {
 	// cannot duplicate an already-persisted envelope. Empty means append-only.
 	IdempotencyKey string `json:"idempotency_key,omitempty"`
 
+	// Replayed is set by AppendChannelMessage when an existing row was
+	// returned for a matching idempotency key. It is not persisted.
+	Replayed bool `json:"-"`
+
 	// Timestamp is when the message was posted.
 	Timestamp time.Time `json:"timestamp"`
 }

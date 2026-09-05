@@ -17,15 +17,13 @@ import (
 type ChannelMessage = types.ChannelMessage
 
 // ChannelPost posts a broadcast message to the channel log in the store and
-// emits a channel.message event. Broadcast posts are the audit/trace surface;
-// addressed wake/delivery is owned by update_coagent (actor messages).
+// emits a channel.message event. Broadcasts do not wake a recipient actor.
 func (rt *Runtime) ChannelPost(ctx context.Context, channelID, from, role, content string) (uint64, error) {
 	return rt.ChannelCast(ctx, channelID, "", "", from, role, content)
 }
 
-// ChannelCast posts an addressed message to the store channel log and emits
-// the corresponding event. Addressed wake/delivery is owned by update_coagent
-// (actor messages); channel messages remain the audit/replay surface.
+// ChannelCast persists an addressed envelope and, on first insert, emits the
+// channel event and wakes the recipient actor with kind "channel_message".
 func (rt *Runtime) ChannelCast(ctx context.Context, channelID, toAgentID, toRunID, from, role, content string) (uint64, error) {
 	return rt.channelCast(ctx, channelID, toAgentID, toRunID, from, role, content, "")
 }
@@ -64,6 +62,9 @@ func (rt *Runtime) channelCast(ctx context.Context, channelID, toAgentID, toRunI
 	}
 	if err := rt.store.AppendChannelMessage(ctx, &message, ownerID); err != nil {
 		return 0, err
+	}
+	if message.Replayed {
+		return uint64(message.Seq), nil
 	}
 	rt.emitChannelMessageEvent(ctx, message, ownerID)
 	rt.wakeChannelCastRecipient(ctx, message, ownerID)

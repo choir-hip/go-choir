@@ -2,6 +2,8 @@ package agentcore
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -148,12 +150,13 @@ func encodeEnvelope(env rlmEnvelope) string {
 	return rlmEnvelopeV1 + string(raw)
 }
 
-func intentIdempotencyKey(scope ReductionScope, localID string) string {
+func intentIdempotencyKey(scope ReductionScope, localID, content string) string {
 	cell := strings.TrimSpace(scope.CellID)
 	if cell == "" {
 		cell = fmt.Sprintf("%s:%d", scope.RunID, scope.Cursor)
 	}
-	return "rlm:" + cell + ":" + strings.TrimSpace(localID)
+	sum := sha256.Sum256([]byte(content))
+	return "rlm:" + cell + ":" + strings.TrimSpace(localID) + ":" + hex.EncodeToString(sum[:6])
 }
 
 // ReduceCellIntents commits one cell's staged tray. cellSucceeded false (or a
@@ -181,7 +184,7 @@ func ReduceCellIntents(ctx context.Context, mb rlmMailbox, scope ReductionScope,
 			to = scope.ReturnTo
 			content = encodeEnvelope(rlmEnvelope{Kind: "complete", Result: in.Result, Verdict: in.Verdict, Summary: in.Summary, EvidenceRefs: in.EvidenceRefs, From: scope.FromAgentID})
 		}
-		seq, err := mb.CastEnvelope(ctx, scope.ChannelID, to, scope.FromAgentID, scope.FromRole, content, intentIdempotencyKey(scope, in.LocalID))
+		seq, err := mb.CastEnvelope(ctx, scope.ChannelID, to, scope.FromAgentID, scope.FromRole, content, intentIdempotencyKey(scope, in.LocalID, content))
 		if err != nil {
 			return ReductionReceipt{Cursor: scope.Cursor}, fmt.Errorf("reduce: persist %s: %w", in.LocalID, err)
 		}

@@ -312,6 +312,24 @@ func TestInitialDispatchUpdateIdentityIsStableAndScoped(t *testing.T) {
 	}
 }
 
+func TestChannelMessageUpdateIdentityIsStableAndScoped(t *testing.T) {
+	first := actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", "rlm/v1 hello", "", "co-super:impl")
+	replay := actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", "rlm/v1 hello", "", "co-super:impl")
+	if first != replay {
+		t.Fatalf("channel_message replay IDs differ: %q != %q", first, replay)
+	}
+	for name, changed := range map[string]string{
+		"owner":   actorDispatchUpdateID("owner-b", "computer-a", "super:root", "channel_message", "rlm/v1 hello", "", "co-super:impl"),
+		"agent":   actorDispatchUpdateID("owner-a", "computer-a", "super:other", "channel_message", "rlm/v1 hello", "", "co-super:impl"),
+		"content": actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", "rlm/v1 other", "", "co-super:impl"),
+		"from":    actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", "rlm/v1 hello", "", "co-super:other"),
+	} {
+		if changed == first {
+			t.Fatalf("%s change reused channel_message ID %q", name, first)
+		}
+	}
+}
+
 func TestLifecycleCoagentResultUpdateIdentityUsesExactCanonicalOccurrence(t *testing.T) {
 	content := "control-a\x1fproducer-update-a"
 	first := actorDispatchUpdateID("owner-a", "computer-a", "researcher-a", "coagent_result", content, "trajectory-a", "texture-a")
@@ -1208,6 +1226,106 @@ func TestHandlerUnknownUpdateKind(t *testing.T) {
 	// Memory should be unchanged.
 	if string(resultMem) != string(existingMem) {
 		t.Errorf("memory changed: got %q, want %q (unchanged for unknown kind)", resultMem, existingMem)
+	}
+}
+
+func TestHandlerChannelMessageResumesBlockedRun(t *testing.T) {
+	env := newAdapterTestEnv(t)
+	agentID := "agent-channel-blocked"
+	ownerID := "user-channel-blocked"
+	if err := env.store.UpsertAgent(env.ctx, types.AgentRecord{
+		AgentID: agentID, OwnerID: ownerID, ComputerID: "autoputer-test", Profile: "test-profile",
+	}); err != nil {
+		t.Fatalf("UpsertAgent: %v", err)
+	}
+	rec := types.RunRecord{
+		RunID: "run-channel-blocked", OwnerID: ownerID, ComputerID: "autoputer-test",
+		AgentID: agentID, Prompt: "test channel wake", State: types.RunBlocked, Error: "parked",
+	}
+	if err := env.store.CreateRun(env.ctx, rec); err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+	mem, _ := json.Marshal(resumeState{RunID: rec.RunID, Phase: "parked"})
+	handler := newActorHandler(env.adapter.Runtime, nil)
+	u := actorUpdate(ownerID, "channel_message", agentID, "rlm/v1 assign")
+	if _, err := handler.HandleUpdate(env.ctx, agentID, u, mem); err != nil {
+		t.Fatalf("HandleUpdate channel_message for blocked run: %v", err)
+	}
+	updated, err := env.store.GetRun(env.ctx, rec.RunID)
+	if err != nil {
+		t.Fatalf("GetRun: %v", err)
+	}
+	if updated.State == types.RunBlocked {
+		t.Fatal("channel_message left the run blocked")
+	}
+	if updated.State != types.RunCompleted {
+		updated = waitForRunState(t, env.store, env.ctx, rec.RunID, types.RunCompleted, 3*time.Second)
+	}
+}
+
+func TestHandlerChannelMessageWithoutParkedRunDoesNotMintRun(t *testing.T) {
+	env := newAdapterTestEnv(t)
+	agentID := "agent-channel-cold"
+	ownerID := "user-channel-cold"
+	if err := env.store.UpsertAgent(env.ctx, types.AgentRecord{
+		AgentID: agentID, OwnerID: ownerID, ComputerID: "autoputer-test", Profile: "test-profile",
+	}); err != nil {
+		t.Fatalf("UpsertAgent: %v", err)
+	}
+	handler := newActorHandler(env.adapter.Runtime, nil)
+	u := actorUpdate(ownerID, "channel_message", agentID, "rlm/v1 assign")
+	mem, err := handler.HandleUpdate(env.ctx, agentID, u, nil)
+	if err != nil {
+		t.Fatalf("HandleUpdate channel_message cold: %v", err)
+	}
+	if mem != nil {
+		t.Fatalf("cold channel_message memory = %q, want nil/unchanged", mem)
+	}
+	runs, err := env.store.ListRunsByOwner(env.ctx, ownerID, 20)
+	if err != nil {
+		t.Fatalf("ListRuns: %v", err)
+	}
+	if len(runs) != 0 {
+		t.Fatalf("channel_message minted %d runs, want 0", len(runs))
+	}
+}
+
+func TestHandlerChannelMessageIgnoresTerminalRun(t *testing.T) {
+	env := newAdapterTestEnv(t)
+	agentID := "agent-channel-done"
+	ownerID := "user-channel-done"
+	if err := env.store.UpsertAgent(env.ctx, types.AgentRecord{
+		AgentID: agentID, OwnerID: ownerID, ComputerID: "autoputer-test", Profile: "test-profile",
+	}); err != nil {
+		t.Fatalf("UpsertAgent: %v", err)
+	}
+	now := time.Now().UTC()
+	rec := types.RunRecord{
+		RunID: "run-channel-done", OwnerID: ownerID, AgentID: agentID, ComputerID: "autoputer-test",
+		Prompt: "done", State: types.RunCompleted, Result: "ok", FinishedAt: &now,
+	}
+	if err := env.store.CreateRun(env.ctx, rec); err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+	mem, _ := json.Marshal(resumeState{RunID: rec.RunID, Phase: "parked"})
+	handler := newActorHandler(env.adapter.Runtime, nil)
+	u := actorUpdate(ownerID, "channel_message", agentID, "rlm/v1 late")
+	if _, err := handler.HandleUpdate(env.ctx, agentID, u, mem); err != nil {
+		t.Fatalf("HandleUpdate channel_message terminal: %v", err)
+	}
+	updated, err := env.store.GetRun(env.ctx, rec.RunID)
+	if err != nil {
+		t.Fatalf("GetRun: %v", err)
+	}
+	if updated.State != types.RunCompleted {
+		t.Fatalf("terminal run state = %s, want completed", updated.State)
+	}
+	runs, err := env.store.ListRunsByOwner(env.ctx, ownerID, 20)
+	if err != nil {
+		t.Fatalf("ListRuns: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("terminal channel_message minted extra runs: %d", len(runs))
 	}
 }
 
