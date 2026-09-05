@@ -619,18 +619,15 @@ func (e *Executor) GoEval(ctx context.Context, agentRunID, handle string, reques
 	// receipt for every admitted evaluation: success, interpreter error,
 	// timeout, cancellation, and receipt-persistence failure. The source digest
 	// is bound before dispatch so the record identifies exactly which program
-	// ran, even when it failed.
+	// ran, even when it failed. WorktreeDigest is the post-evaluation subject:
+	// freeze/grant certifies that exact frozen tree, matching Exec.
 	sourceDigest := computerevent.DigestBytes([]byte(request.Source))
-	worktreeDigest, err := digestCapsuleWorktree(ctx, caps)
-	if err != nil {
-		worktreeDigest = ""
-	}
 
-	result, err := caps.GoEval(ctx, capability, request)
+	result, evalErr := caps.GoEval(ctx, capability, request)
 	exitCode := 0
 	stdoutDigest := computerevent.DigestBytes([]byte(result.Stdout))
 	stderrDigest := computerevent.DigestBytes([]byte(result.Stderr))
-	if err != nil {
+	if evalErr != nil {
 		exitCode = 1
 		// An interpreter error or timeout must never look like a successful exit.
 		if result.ExitCode != 0 {
@@ -640,6 +637,11 @@ func (e *Executor) GoEval(ctx context.Context, agentRunID, handle string, reques
 		exitCode = result.ExitCode
 	}
 
+	worktreeDigest, digestErr := digestCapsuleWorktree(ctx, caps)
+	if digestErr != nil {
+		worktreeDigest = ""
+	}
+
 	receipt := ExecutionReceipt{
 		AgentRunID: agentRunID, CapabilityHandleDigest: computerevent.DigestBytes([]byte(handle)),
 		CapsuleID: caps.ID,
@@ -647,17 +649,17 @@ func (e *Executor) GoEval(ctx context.Context, agentRunID, handle string, reques
 		StdoutDigest: stdoutDigest, StderrDigest: stderrDigest,
 		WorktreeDigest: worktreeDigest, SourceTreeDigest: caps.SourceSnapshotDigest, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
-	canonical, err := computerevent.CanonicalJSON(receipt)
-	if err != nil {
-		return GoEvalResult{}, err
+	canonical, errJSON := computerevent.CanonicalJSON(receipt)
+	if errJSON != nil {
+		return GoEvalResult{}, errJSON
 	}
 	receipt.ReceiptRef = "capsule-go-eval:sha256:" + computerevent.DigestBytes(canonical)
-	storedCanonical, err := computerevent.CanonicalJSON(receipt)
-	if err != nil {
-		return GoEvalResult{}, err
+	storedCanonical, errStored := computerevent.CanonicalJSON(receipt)
+	if errStored != nil {
+		return GoEvalResult{}, errStored
 	}
-	if err := e.persistReceiptArtifact("execution", receipt.ReceiptRef, storedCanonical); err != nil {
-		return GoEvalResult{}, err
+	if errPersist := e.persistReceiptArtifact("execution", receipt.ReceiptRef, storedCanonical); errPersist != nil {
+		return GoEvalResult{}, errPersist
 	}
 	e.mu.Lock()
 	e.executionReceipts[receipt.ReceiptRef] = receipt
@@ -666,10 +668,10 @@ func (e *Executor) GoEval(ctx context.Context, agentRunID, handle string, reques
 	// Bind the attempt outcome into the returned result so the actor can cite the
 	// exact receipt even on failure; a timeout must not report ExitCode 0.
 	result.ReceiptRef = receipt.ReceiptRef
-	if result.ExitCode == 0 && err != nil {
+	if result.ExitCode == 0 && evalErr != nil {
 		result.ExitCode = exitCode
 	}
-	return result, err
+	return result, evalErr
 }
 
 func (e *Executor) Exec(ctx context.Context, agentRunID, handle string, request ExecRequest) (ExecResult, error) {
@@ -883,20 +885,19 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 	if err != nil {
 		return nil, err
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	handleDigest := computerevent.DigestBytes([]byte(handle))
 	receipts := make([]ExecutionReceipt, 0, len(refs))
 	seen := make(map[string]struct{}, len(refs))
 	for _, ref := range refs {
 		if _, duplicate := seen[ref]; duplicate {
 			continue
 		}
-		receipt, found := e.executionReceipts[ref]
-		handleDigest := computerevent.DigestBytes([]byte(handle))
-		if !found || receipt.AgentRunID != agentRunID || receipt.CapabilityHandleDigest != handleDigest ||
-			receipt.CapsuleID != caps.ID || receipt.ExitCode != 0 || receipt.WorktreeDigest != worktreeDigest ||
-			receipt.SourceTreeDigest != caps.SourceSnapshotDigest {
-			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, frozen source, and final successful subject")
+		receipt, openErr := e.OpenExecutionReceipt(ref)
+		if openErr != nil {
+			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, frozen source, and final successful subject: receipt unavailable")
+		}
+		if reason := grantedExecutionBindReason(receipt, agentRunID, handleDigest, caps.ID, worktreeDigest, caps.SourceSnapshotDigest); reason != "" {
+			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, frozen source, and final successful subject: %s", reason)
 		}
 		granted := GrantedExecutionReceipt{Execution: receipt, AgentRunID: agentRunID, CapabilityHandleDigest: handleDigest,
 			CapsuleID: caps.ID, Frozen: true, SourceSubjectDigest: caps.SourceSnapshotDigest, FinalSubjectDigest: worktreeDigest}
@@ -912,8 +913,17 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 		if persistErr := e.persistReceiptArtifact("granted", granted.ReceiptRef, canonical); persistErr != nil {
 			return nil, persistErr
 		}
-		e.grantedReceipts[granted.ReceiptRef] = granted
 		receipt.GrantedReceiptRef = granted.ReceiptRef
+		e.mu.Lock()
+		if e.grantedReceipts == nil {
+			e.grantedReceipts = map[string]GrantedExecutionReceipt{}
+		}
+		if e.executionReceipts == nil {
+			e.executionReceipts = map[string]ExecutionReceipt{}
+		}
+		e.grantedReceipts[granted.ReceiptRef] = granted
+		e.executionReceipts[ref] = receipt
+		e.mu.Unlock()
 		seen[ref] = struct{}{}
 		receipts = append(receipts, receipt)
 	}
