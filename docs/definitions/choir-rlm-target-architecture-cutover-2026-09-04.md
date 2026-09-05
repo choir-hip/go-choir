@@ -143,12 +143,12 @@ measures:
 
 now:
   status: working
-  slice: "landing: repair doccheck manifest YAML error, push to turn CI green"
+  slice: "landing: CI 100% green (run 33931633587), deployed to Node B (66939532); G1 owner decisions pending"
   question: none
   reconciliation:
-    observed_at: "2026-09-05T00:15:00Z"
-    source_ref: "main@ea94da58 plus doc-authority-manifest fix"
-    deploy_identity: "staging https://choir.news still x-choir-build-commit 8c410a0d94bc7afa4383f5942b83611540a27824; computer-03335285269bdba4f94377e56879f9e6 active realization_epoch 879; effects OFF"
+    observed_at: "2026-09-05T00:30:00Z"
+    source_ref: "main@66939532"
+    deploy_identity: "staging https://choir.news deployed_commit 66939532248ee2d83c17d1f3f05d0f820e06c35b; active realization_epoch 879 on computer-03335285269bdba4f94377e56879f9e6; effects OFF"
     authority_identities:
       - "docs/designs/rlm-target-architecture-2026-09-04.md"
       - "docs/reports/choir-status-and-next-steps-2026-09-04.md"
@@ -175,16 +175,16 @@ now:
     recorded_at: "2026-09-04T16:20:00Z"
     consequence: "Proceed to Step 1 implementation under this Definition."
   evidence_refs:
-    - "CI 33930249230 on 01d4c72e: Go Vet+Build success; all race shards success (incl. capsule-broker direct-argv gates + session e2e with tray contract); scale success; Heresy Detector success"
-    - "CI Docs Truth Check failure root cause identified and repaired: docs/doc-authority-manifest.yaml:382 had a scalar string for superseded_by instead of []string array, crashing readManifest and failing report generation"
+    - "CI run 33931633587 on 66939532 passed 100% green: all 21 jobs succeeded including Docs Truth Check, Go Vet+Build, all 12 race shards, scale tests, heresy detector, and Deploy to Staging"
+    - "Node B deployed successfully: https://choir.news reports x-choir-build-commit: 66939532248ee2d83c17d1f3f05d0f820e06c35b at 2026-09-05T00:24:48Z"
     - "internal/capsule/actuator.go (Step 1 guest contract: choir.actuator boot param wins, env fallback, fail-closed tools)"
     - "cmd/capsule-broker direct-argv exec with allowlist + 500ms group reap (Step 3)"
     - "internal/yaegikernel/transport.go framed UDS + socketpair worker migration (Step 2)"
     - "internal/yaegikernel/intent.go tray/Inbox/hooks + internal/agentcore/rlm_reduce.go Dolt persist, run-memory cursor, two-phase ack (Step 4)"
     - "internal/actor/coalesce.go bounded wakes + spawnRoleAllowed + scoped fan-in (Step 5)"
     - "internal/runtimeprompts/overlays/rlm_co_super_runtime.yaml + sealed registry (Step 6)"
-  blocker_or_risk: "Sealed RLM staging proof needs two owner-gated items: (1) Node B deploy of 01d4c72e/HEAD (still serving 8c410a0d); (2) G1 producer channel (nix choir.actuator branch, VMConfig.Actuator, owner refresh transport) per docs/evidence/rlm-live-proof-staging-gaps-2026-09-04.md repair step 2-3, which requires owner decisions on G2 scope and persistence scope before code."
-  next_action: "Push manifest fix to turn CI green; monitor CI run; watch Node B for deploy; run tools-mode control acceptance on deploy; escalate G1 owner decisions to unblock sealed RLM proof."
+  blocker_or_risk: "Sealed RLM staging proof on microVM requires G1 producer channel (nix choir.actuator branch, VMConfig.Actuator, owner refresh transport) per docs/evidence/rlm-live-proof-staging-gaps-2026-09-04.md repair steps 2-3, awaiting owner decisions on G2 scope and persistence scope before code."
+  next_action: "Escalate G1 owner decisions (G2 scope, persistence scope, proof artifact fate, abort authority) to unblock sealed RLM proof on computer-03335285269bdba4f94377e56879f9e6."
 receipts:
   - id: rlm-target-architecture-consensus-and-definition-2026-09-04
     boundary: define
