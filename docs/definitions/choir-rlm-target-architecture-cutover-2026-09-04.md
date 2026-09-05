@@ -148,18 +148,19 @@ measures:
 
 now:
   status: working
-  slice: "landing: 7574d899 on Node B; substrate+G1 code-ready; Option B awaits owner-scoped actuator=rlm"
+  slice: "landing: 7574d899 on Node B; computer-0333528 epoch 880 actuator=rlm cmdline confirmed; Option B sealed proof not complete (Super mailbox + missing Source/platform)"
   question: none
   reconciliation:
-    observed_at: "2026-09-05T04:32:50Z"
+    observed_at: "2026-09-05T14:25:11Z"
     source_ref: "main@7574d899bcd75b00824040f1684ff33a94ac3f2b"
-    deploy_identity: "staging https://choir.news deployed_commit 7574d899bcd75b00824040f1684ff33a94ac3f2b; computer-03335285269bdba4f94377e56879f9e6 active epoch 879; effects OFF; pre-A fence 99949fe2 untouched"
+    deploy_identity: "staging https://choir.news deployed_commit 7574d899bcd75b00824040f1684ff33a94ac3f2b; computer-03335285269bdba4f94377e56879f9e6 active epoch 880 actuator=rlm; guest health 7574d899; effects propose_only; pre-A fence 99949fe2 untouched"
     authority_identities:
       - "docs/designs/rlm-target-architecture-2026-09-04.md"
       - "docs/reports/choir-status-and-next-steps-2026-09-04.md"
       - "docs/reports/choir-rlm-substrate-repairs-and-g1-producer-2026-09-05.md"
       - ".agentic-consensus/agentic-consensus-20260904-234730/manifest.tsv"
       - "docs/evidence/rlm-live-proof-staging-gaps-2026-09-04.md (G1 owner-gate)"
+      - "docs/evidence/rlm-option-b-actuator-refresh-2026-09-05.md"
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "git status --short"
     status: reconciled
@@ -182,6 +183,8 @@ now:
     consequence: "Proceed to Step 1 implementation under this Definition."
   evidence_refs:
     - "CI run 33942777266 on 7574d899 success including Deploy to Staging (https://github.com/choir-hip/go-choir/actions/runs/33942777266)"
+    - "docs/evidence/rlm-option-b-actuator-refresh-2026-09-05.md (epoch 880 actuator=rlm cmdline; Option B Super mailbox / Source/platform blockers)"
+    - "LifecycleReceipt 01a071e3-e430-7073-b95f-9bddd7f0e74d idempotency rlm-actuator-cutover-2026-09-05T1405Z epoch 879→880"
     - "Node B deployed: https://choir.news reports x-choir-build-commit: 7574d899bcd75b00824040f1684ff33a94ac3f2b at 2026-09-05T04:32:50Z"
     - "Panel 3 on 7574d899: 4 approve + 1 approve-with-changes + 4 Codex-quota skips (.agentic-consensus/agentic-consensus-20260904-234730/); alt panel 2 approve (.agentic-consensus/agentic-consensus-20260905-000659/); 0 blocks; no remaining Option B code blocker"
     - "docs/reports/choir-rlm-substrate-repairs-and-g1-producer-2026-09-05.md"
@@ -191,8 +194,8 @@ now:
     - "internal/yaegikernel/intent.go tray/Inbox/hooks + internal/agentcore/rlm_reduce.go Dolt persist, run-memory cursor, two-phase ack (Step 4)"
     - "internal/actor/coalesce.go bounded wakes + spawnRoleAllowed + scoped fan-in (Step 5)"
     - "internal/runtimeprompts/overlays/rlm_co_super_runtime.yaml + sealed registry (Step 6)"
-  blocker_or_risk: "No remaining substrate code blocker for Option B. Sealed proof still requires owner-scoped refresh of computer-03335285269bdba4f94377e56879f9e6 with actuator=rlm and three-way readback (cmdline, get_actuator, overlay/schema)."
-  next_action: "Owner-scoped refresh actuator=rlm on computer-03335285269bdba4f94377e56879f9e6; three-way readback; then Option B sealed proof (in-capsule read-compute-write-assign, effects OFF)."
+  blocker_or_risk: "actuator=rlm refresh landed (epoch 880, cmdline choir.actuator=rlm). Option B independently blocked by (1) Super FIFO mailbox: hundreds of pending controls on older Texture docs; wakes bind oldest global packet, not the Option B work item; (2) CHOIR_CAPSULE_SOURCE_ROOT /mnt/persistent/files/Source/platform missing, so assign_co_super preflight cannot spawn a capsule. Live get_actuator and sealed overlay were not observed."
+  next_action: "Do not drain Super mailbox. Populate Source/platform as clean git of deployed 7574d899 (not pre-A restore); make Super activation bind the Texture-queued control that woke it; then live get_actuator + sealed overlay + read-compute-write-assign with effects propose_only."
 receipts:
   - id: rlm-target-architecture-consensus-and-definition-2026-09-04
     boundary: define
