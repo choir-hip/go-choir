@@ -67,10 +67,14 @@ func (r *LandlockRestrictor) Apply() error {
 		return fmt.Errorf("no paths configured for Landlock restriction")
 	}
 
+	// MAKE_REG is required to create new files (os.WriteFile, choir.WriteFile).
+	// WRITE_FILE only covers existing inodes; without MAKE_REG, overlay copy-up
+	// of a new /workspace/platform artifact fails closed with EACCES.
 	directoryAccess := landlock.AccessFSSet(ll.AccessFSWriteFile |
 		ll.AccessFSReadFile |
 		ll.AccessFSReadDir |
 		ll.AccessFSMakeDir |
+		ll.AccessFSMakeReg |
 		ll.AccessFSRemoveFile |
 		ll.AccessFSRemoveDir |
 		ll.AccessFSMakeSym |
