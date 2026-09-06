@@ -124,7 +124,7 @@ type GoEvalResult struct {
 	ExitCode   int           `json:"exit_code"`
 	ReceiptRef string        `json:"receipt_ref,omitempty"`
 	Fallback   bool          `json:"fallback,omitempty"`
-	Receipts   []string      `json:"receipts,omitempty"`
+	StagedIntentIDs []string                   `json:"staged_intent_ids,omitempty"`
 	Intents    []yaegikernel.StagedIntent `json:"intents,omitempty"`
 }
 

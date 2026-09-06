@@ -806,6 +806,13 @@ func (e *Executor) OpenCapsuleFateReceipt(ref string) (CapsuleFateReceipt, error
 }
 
 func (e *Executor) OpenExecutionReceipt(ref string) (ExecutionReceipt, error) {
+	ref = strings.TrimSpace(ref)
+	if strings.HasPrefix(ref, "rlm:") {
+		return ExecutionReceipt{}, fmt.Errorf("receipt reference %q is an internal intent token, not an execution receipt (expected capsule-go-eval:sha256:* or capsule-exec:sha256:*)", ref)
+	}
+	if !strings.HasPrefix(ref, "capsule-exec:sha256:") && !strings.HasPrefix(ref, "capsule-go-eval:sha256:") && !strings.HasPrefix(ref, "capsule-fate:sha256:") {
+		return ExecutionReceipt{}, fmt.Errorf("executor receipt %q is invalid: unsupported prefix (expected capsule-go-eval:sha256:* or capsule-exec:sha256:*)", ref)
+	}
 	e.mu.RLock()
 	stored, ok := e.executionReceipts[ref]
 	e.mu.RUnlock()

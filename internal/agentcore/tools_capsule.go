@@ -781,7 +781,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 					return "", rerr
 				}
 				for _, in := range reduction.receipt.Intents {
-					result.Receipts = append(result.Receipts, fmt.Sprintf("rlm:%s:%d", in.Kind, in.Seq))
+					result.StagedIntentIDs = append(result.StagedIntentIDs, fmt.Sprintf("rlm:%s:%d", in.Kind, in.Seq))
 				}
 			}
 			return toolregistry.ResultJSON(result)
@@ -896,8 +896,11 @@ func newRecordAssignedCoSuperReportTool(rt *Runtime) toolregistry.Tool {
 			}
 			input.EvidenceRefs = sortedUniqueStrings(input.EvidenceRefs)
 			input.ExecutionRefs = trimNonEmptyStrings(input.ExecutionRefs)
+			if input.Result == types.CoSuperResultCompleted && input.Verdict == types.CoSuperVerdictPass && len(input.ExecutionRefs) == 0 {
+				return "", fmt.Errorf("record_assignment_result: terminal completed pass requires at least one valid execution_ref")
+			}
 			receipts, err := toolCtx.Executor.ResolveExecutionReceipts(input.ExecutionRefs)
-			if err != nil && len(input.ExecutionRefs) > 0 {
+			if err != nil {
 				return "", err
 			}
 			commands := make([]types.CoSuperRecordedCommand, 0, len(receipts))

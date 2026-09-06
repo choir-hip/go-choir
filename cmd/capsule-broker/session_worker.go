@@ -398,7 +398,7 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 		Stderr:   res.Stderr,
 		Error:    res.Error,
 		Duration: time.Since(start),
-		Receipts: res.Receipts,
+		StagedIntentIDs: res.Receipts,
 	}
 	if res.Error != "" {
 		// Poisoned cells drop their tray: no intents ship, the inbox cursor
