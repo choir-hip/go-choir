@@ -44,4 +44,13 @@ func TestOpenExecutionReceiptPrefixValidation(t *testing.T) {
 	if !strings.Contains(err.Error(), "internal intent token") {
 		t.Fatalf("expected batch to fail with intent token error, got: %v", err)
 	}
+
+	// Test 5: capsule-fate:* rejected in execution receipt opener
+	_, err = e.OpenExecutionReceipt("capsule-fate:sha256:7fe0432dcb0600ba03ba4bbbe15bc5026902fea196c1675e3a442b1d88f5a166")
+	if err == nil {
+		t.Fatal("expected error for capsule-fate in execution receipt opener, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported prefix") {
+		t.Fatalf("expected unsupported prefix error for capsule-fate, got: %v", err)
+	}
 }

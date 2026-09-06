@@ -9,8 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -94,7 +94,6 @@ func TestSelfDevelopmentTextureCallerReactivatesDeterministicRun(t *testing.T) {
 		t.Fatalf("successor not released: %+v err=%v", successorStored, err)
 	}
 }
-
 
 func TestPersistentSuperReconcileMintsTextureRewakeAfterTerminalSelfDevelopmentSuper(t *testing.T) {
 	ctx := context.Background()

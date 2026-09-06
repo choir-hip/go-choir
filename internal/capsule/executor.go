@@ -810,7 +810,7 @@ func (e *Executor) OpenExecutionReceipt(ref string) (ExecutionReceipt, error) {
 	if strings.HasPrefix(ref, "rlm:") {
 		return ExecutionReceipt{}, fmt.Errorf("receipt reference %q is an internal intent token, not an execution receipt (expected capsule-go-eval:sha256:* or capsule-exec:sha256:*)", ref)
 	}
-	if !strings.HasPrefix(ref, "capsule-exec:sha256:") && !strings.HasPrefix(ref, "capsule-go-eval:sha256:") && !strings.HasPrefix(ref, "capsule-fate:sha256:") {
+	if !strings.HasPrefix(ref, "capsule-exec:sha256:") && !strings.HasPrefix(ref, "capsule-go-eval:sha256:") {
 		return ExecutionReceipt{}, fmt.Errorf("executor receipt %q is invalid: unsupported prefix (expected capsule-go-eval:sha256:* or capsule-exec:sha256:*)", ref)
 	}
 	e.mu.RLock()
@@ -837,15 +837,12 @@ func (e *Executor) OpenExecutionReceipt(ref string) (ExecutionReceipt, error) {
 	// capsule-fate), not a hard-coded one. A Go-eval receipt stored as
 	// capsule-go-eval:sha256: must re-verify after executor restart, or auditable
 	// evidence is not restart-durable.
-	if !strings.HasPrefix(ref, "capsule-exec:sha256:") && !strings.HasPrefix(ref, "capsule-go-eval:sha256:") && !strings.HasPrefix(ref, "capsule-fate:sha256:") {
+	if !strings.HasPrefix(ref, "capsule-exec:sha256:") && !strings.HasPrefix(ref, "capsule-go-eval:sha256:") {
 		return ExecutionReceipt{}, fmt.Errorf("executor receipt digest mismatch")
 	}
 	prefix := "capsule-exec:sha256:"
-	switch {
-	case strings.HasPrefix(ref, "capsule-go-eval:sha256:"):
+	if strings.HasPrefix(ref, "capsule-go-eval:sha256:") {
 		prefix = "capsule-go-eval:sha256:"
-	case strings.HasPrefix(ref, "capsule-fate:sha256:"):
-		prefix = "capsule-fate:sha256:"
 	}
 	if prefix+computerevent.DigestBytes(canonical) != ref {
 		return ExecutionReceipt{}, fmt.Errorf("executor receipt digest mismatch")

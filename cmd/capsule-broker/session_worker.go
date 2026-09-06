@@ -394,10 +394,10 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 		return BrokerRPCResponse{Result: resultBytes}
 	}
 	result := capsule.GoEvalResult{
-		Stdout:   res.Stdout,
-		Stderr:   res.Stderr,
-		Error:    res.Error,
-		Duration: time.Since(start),
+		Stdout:          res.Stdout,
+		Stderr:          res.Stderr,
+		Error:           res.Error,
+		Duration:        time.Since(start),
 		StagedIntentIDs: res.Receipts,
 	}
 	if res.Error != "" {

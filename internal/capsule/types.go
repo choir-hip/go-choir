@@ -105,10 +105,10 @@ type ExecResult struct {
 // by guest core from the durable mailbox; the worker injects it into the frame
 // and the cell reads it through choir.Inbox() without network roundtrips.
 type GoEvalRequest struct {
-	Source          string   `json:"source"`           // Go source to evaluate
-	Cwd             string   `json:"cwd"`              // working directory (optional)
-	AllowedPackages []string `json:"allowed_packages"` // kernel allowlist override (optional)
-	TimeoutMS       int      `json:"timeout_ms"`       // timeout in milliseconds (0 = broker default)
+	Source          string                        `json:"source"`           // Go source to evaluate
+	Cwd             string                        `json:"cwd"`              // working directory (optional)
+	AllowedPackages []string                      `json:"allowed_packages"` // kernel allowlist override (optional)
+	TimeoutMS       int                           `json:"timeout_ms"`       // timeout in milliseconds (0 = broker default)
 	Inbox           []yaegikernel.IncomingMessage `json:"inbox,omitempty"`
 }
 
@@ -117,15 +117,15 @@ type GoEvalRequest struct {
 // populated only for successful cells (failed cells drop their tray and never
 // advance the inbox cursor).
 type GoEvalResult struct {
-	Stdout     string        `json:"stdout"`
-	Stderr     string        `json:"stderr"`
-	Error      string        `json:"error,omitempty"`
-	Duration   time.Duration `json:"duration,omitempty"`
-	ExitCode   int           `json:"exit_code"`
-	ReceiptRef string        `json:"receipt_ref,omitempty"`
-	Fallback   bool          `json:"fallback,omitempty"`
+	Stdout          string                     `json:"stdout"`
+	Stderr          string                     `json:"stderr"`
+	Error           string                     `json:"error,omitempty"`
+	Duration        time.Duration              `json:"duration,omitempty"`
+	ExitCode        int                        `json:"exit_code"`
+	ReceiptRef      string                     `json:"receipt_ref,omitempty"`
+	Fallback        bool                       `json:"fallback,omitempty"`
 	StagedIntentIDs []string                   `json:"staged_intent_ids,omitempty"`
-	Intents    []yaegikernel.StagedIntent `json:"intents,omitempty"`
+	Intents         []yaegikernel.StagedIntent `json:"intents,omitempty"`
 }
 
 type ExecutionReceipt struct {
