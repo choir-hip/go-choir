@@ -1,9 +1,9 @@
 # Choir RLM Architecture Cutover: Autonomous Run Progress & Current State Report
 
 **Date**: September 5, 2026  
-**Subject**: Comprehensive analysis of the ~12-hour autonomous cutover run under Grok 4.6 on mission `docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`, incorporating Agentic Consensus Panel Review (7 models: Claude Opus, GPT-5.6 Sol, GPT-5.6 Terra, Gemini 3.8 Flash, Grok 4.6 High, Cursor Agent, OpenCode)  
-**Current Git HEAD**: `dd6a8f040b05896fccba2091b78a9d38d0348509` (`main`)  
-**Staging Host**: `https://choir.news` (`x-choir-build-commit: a281f1c0df394a719fb48fdb7f61af9dffcac5d3`)  
+**Subject**: Comprehensive analysis of the ~12-hour autonomous cutover run under Grok 4.6 on mission `docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`, incorporating Two Iterative Agentic Consensus Panels (8 models: Claude Opus, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, Gemini 3.8 Flash, Grok 4.6 High, Cursor Agent, OpenCode) and Substrate Code Fixes (`c794915e`, `2c8904e3`)  
+**Current Git HEAD**: `2c8904e393b45a0b5a6c3f6838a3962d3f789e92` (`main`)  
+**Staging Host**: `https://choir.news` (`x-choir-build-commit: a281f1c0df394a719fb48fdb7f61af9dffcac5d3` pending CI deploy of `2c8904e3`)  
 **Staging Retained Computer**: `computer-03335285269bdba4f94377e56879f9e6` (VM `candidate-fleet-e15cb89f25d963c220319b7b`, realization epoch **886**, `actuator=rlm`)  
 **Pre-A Checkpoint Restore Fence**: `99949fe2e16d...` intact, effects `propose_only`
 
@@ -11,7 +11,7 @@
 
 ## 1. Executive Summary
 
-Over the ~12-hour autonomous execution window (2026-09-04T22:31:01Z through 2026-09-05T20:08:08Z), the coding harness executed 19 commits (+4,345/-404 total lines across packages) progressing the Recursive Language Model (RLM) Target Architecture cutover from design proposal (Rev 5) to live staging execution on Node B.
+Over the ~12-hour autonomous execution window (2026-09-04T22:31:01Z through 2026-09-05T20:08:08Z), the coding harness executed 19 commits (+4,345/-404 total lines across packages) progressing the Recursive Language Model (RLM) Target Architecture cutover from design proposal (Rev 5) to live staging execution on Node B. Subsequent consensus-adjudicated repairs added 2 commits (`c794915e`, `2c8904e3`, +172/-38 lines) to eliminate the receipt dual-naming trap and enforce fail-closed receipt resolution.
 
 The autonomous agent operated in strict adherence to Choir doctrine:
 1. **Substrate before symptom**: When distributed deadlocks, wake omissions, and actuator split-brain conditions were encountered in staging, the agent stopped patching CoSuper prompts and instead repaired the core messaging, wake, and reduction substrates (`7cf4050b`, `bb17d0ef`, `7574d899`), subjecting each to multi-model agentic consensus panels before landing.
@@ -25,13 +25,17 @@ The autonomous agent operated in strict adherence to Choir doctrine:
 - **Landlock Regular File Creation Enabled**: Identified that Linux Landlock V5 directory policy permitted `WRITE_FILE` but omitted `MAKE_REG` (`48c5c5b1`), causing overlay copy-up of new files to fail closed with `EACCES`. Adding `AccessFSMakeReg` unblocked in-capsule artifact generation.
 - **Full In-Capsule Go Orchestration Proved**: On epoch 886, `assignment-241bb9a1` ran the verbatim `package main` cell via `capsule_go_eval`, exited 0, successfully executed `choir.ReadFile("/workspace/platform/AGENTS.md")`, computed the proof payload, wrote `/workspace/platform/rlm-option-b-proof-2026-09-05.txt` inside the capsule, and produced execution receipt `capsule-go-eval:sha256:7fe0432dcb0600ba03ba4bbbe15bc5026902fea196c1675e3a442b1d88f5a166`.
 
-### The Immediate Blocker & Consensus Adjudication
-Following the successful exit-0 `capsule_go_eval`, CoSuper called `record_assignment_result` to seal the assignment. The call failed with `executor receipt unavailable` before freeze/grant could be committed. 
-
-The multi-model agentic consensus panel (7 independent models) unanimously confirmed the root cause:
-- **The failure is a schema-naming defect**: `GoEvalResult` (`types.go:119-128`) returns both `receipt_ref` (scalar string containing `capsule-go-eval:sha256:...`) and `receipts` (string slice populated with `rlm:complete:1` by `reduction.commit`). When `record_assignment_result` requests `execution_refs`, the model passes either `["rlm:complete:1"]` or both. `OpenExecutionReceipt` fails closed on `rlm:complete:1` because it is an in-memory intent sequence ID, not an `ExecutionReceipt`.
-- **Silent filtering of `rlm:*` is rejected**: Filtering worker-local tokens would allow a model that passed only `["rlm:complete:1"]` to seal a terminal `pass` with zero execution evidence (`0==0` pass).
-- **The required fix**: (1) Rename/separate `GoEvalResult.receipts` $\rightarrow$ `staged_intent_ids` so the model receives only one execution receipt reference; (2) fail closed with early prefix validation in `OpenExecutionReceipt`; (3) require $\ge 1$ valid execution receipt for terminal `completed`+`pass`.
+### The Blocker Resolution & Convergence
+The terminal step `record_assignment_result` failed on epoch 886 with `executor receipt unavailable` immediately after `capsule_go_eval` exited 0.
+Through two consecutive rounds of multi-model agentic consensus review across 8 frontier models, the panel converged on the root cause and verified the code repair:
+1. **Root cause**: `GoEvalResult` dual-naming (`receipt_ref` vs `receipts: ["rlm:complete:1"]`) invited the model to supply intent sequence tokens into `execution_refs`, failing `OpenExecutionReceipt` closed.
+2. **Repaired code (`c794915e`, `2c8904e3`)**:
+   - Renamed `GoEvalResult.Receipts` $\rightarrow$ `StagedIntentIDs []string `json:"staged_intent_ids,omitempty"``, leaving `receipt_ref` as the sole model-visible execution reference.
+   - Added early prefix validation in `OpenExecutionReceipt` rejecting `rlm:*` with a typed error naming internal intent tokens, and rejecting unsupported prefixes (`capsule-fate:`) before filesystem lookup.
+   - Enforced that a terminal completed pass requires $\ge 1$ valid execution receipt, closing the `0==0` false-pass bypass.
+   - Updated prompt overlay instructions in `rlm_co_super_runtime.yaml`.
+   - Cleaned up formatting with `gofmt` and added unit tests in `internal/capsule` and `internal/agentcore`.
+3. **Convergence**: 7 of 8 models approved the code repair; the sole dissenting block (GPT-5.6 Terra) holds the line that Step 6 completion requires the live Node B deployed proof, which is the immediate next action.
 
 ---
 
@@ -55,9 +59,9 @@ The multi-model agentic consensus panel (7 independent models) unanimously confi
 
 ## 3. Git History and Substrate Mutations
 
-Between baseline `de93d6aa` and HEAD `dd6a8f04`, 19 commits landed on `main`:
-- **Red (Runtime / Substrate Changes)**: 9 commits (+3,545 / -296 lines)
-- **Green (Docs / Evidence / Manifests)**: 10 commits (+800 / -108 lines)
+Between baseline `de93d6aa` and current HEAD `2c8904e3`, 22 commits landed on `main`:
+- **Red (Runtime / Substrate Changes)**: 11 commits (+3,717 / -334 lines)
+- **Green (Docs / Evidence / Manifests)**: 11 commits (+1,058 / -108 lines)
 
 | Commit | Timestamp (UTC) | Class | Component | Summary & Substrate Impact |
 | :--- | :--- | :--- | :--- | :--- |
@@ -80,6 +84,9 @@ Between baseline `de93d6aa` and HEAD `dd6a8f04`, 19 commits landed on `main`:
 | `48c5c5b1` | 2026-09-05 19:08 | `red` | `capsule` | **Landlock Fix**: Add `AccessFSMakeReg` to Landlock directory policy, enabling regular file creation inside `/workspace/platform` (+9/-1). |
 | `a281f1c0` | 2026-09-05 19:08 | `green` | `docs` | Record verbatim package-main evaluation and Landlock MAKE_REG remainder. |
 | `dd6a8f04` | 2026-09-05 20:08 | `green` | `docs` | Record exit-0 `capsule_go_eval`, proof file creation, and `executor receipt unavailable` blocker. |
+| `6933c8c1` | 2026-09-05 20:45 | `green` | `docs` | Add cutover progress report with first consensus panel review synthesis. |
+| `c794915e` | 2026-09-06 00:57 | `red` | `capsule` | **Receipt Fix 1**: Separate `StagedIntentIDs` from `receipt_ref`, fail closed in `OpenExecutionReceipt`, and require $\ge 1$ execution ref on completed pass (+137/-8). |
+| `2c8904e3` | 2026-09-06 01:25 | `red` | `capsule` | **Receipt Fix 2**: Reject `capsule-fate` in `OpenExecutionReceipt`, format structs with `gofmt`, and add fate rejection test (+35/-30). |
 
 ---
 
@@ -133,13 +140,7 @@ While `capsule_go_eval` succeeded, the terminal step `record_assignment_result` 
 ### Code Path Tracing
 1. **Tool Invocation**: CoSuper invokes `record_assignment_result` with parameter `execution_refs` (`internal/agentcore/tools_capsule.go:867-929`).
 2. **Whitespace Trimming**: `trimNonEmptyStrings` strips leading/trailing whitespace from each ref (`tools_capsule.go:954-960`).
-3. **Receipt Resolution**: The tool immediately executes:
-   ```go
-   receipts, err := toolCtx.Executor.ResolveExecutionReceipts(ctx, executionRefs)
-   if err != nil {
-       return nil, err
-   }
-   ```
+3. **Receipt Resolution**: The tool immediately executes `receipts, err := toolCtx.Executor.ResolveExecutionReceipts(input.ExecutionRefs)`.
 4. **Resolution Loop**: `ResolveExecutionReceipts` iterates over every supplied ref and invokes `e.OpenExecutionReceipt(ref)` (`internal/capsule/executor.go:936-943`).
 5. **Lookup & Fallback**: `OpenExecutionReceipt` executes:
    ```go
@@ -154,11 +155,11 @@ While `capsule_go_eval` succeeded, the terminal step `record_assignment_result` 
        return ExecutionReceipt{}, fmt.Errorf("executor receipt unavailable")
    }
    ```
-6. **Error Return**: An error returned from `OpenExecutionReceipt` halts `record_assignment_result` immediately, before `recordAssignedCoSuperReport` or `bindFrozenAssignmentExecutionReceipts` can be invoked.
+6. **Error Return**: An error returned from `OpenExecutionReceipt` halted `record_assignment_result` immediately, before `recordAssignedCoSuperReport` or `bindFrozenAssignmentExecutionReceipts` could be invoked.
 
 ### Causal Hypotheses & Discriminators
 
-The static source and consensus review rule out several potential explanations:
+The static source and consensus reviews ruled out several potential explanations:
 - **Not a naming hash discrepancy**: `persistReceiptArtifact` and `OpenExecutionReceipt` use the exact same `receiptArtifactName(ref)` helper (`sha256(ref).json`).
 - **Not prefix validation failure**: A receipt with an invalid prefix or mismatched SHA256 digest returns `executor receipt digest mismatch` or `executor receipt is invalid`, **not** `executor receipt unavailable`. The `unavailable` error occurs strictly when both the in-memory map lookup and the disk `os.ReadFile` fail.
 - **Not an Autoputer or Firecracker restart (Hypothesis B excluded)**:
@@ -167,50 +168,62 @@ The static source and consensus review rule out several potential explanations:
   - In `GoEval` (`executor.go:664-666`), `receipt.ReceiptRef` is inserted into `e.executionReceipts` *before returning*. In the same process, a lookup for that exact string is a guaranteed in-memory map hit.
 
 ### The Confirmed Primary Mechanism: Schema Naming Contamination
-- In `internal/capsule/types.go:119-128`, `GoEvalResult` serializes:
+- In `internal/capsule/types.go:119-128`, `GoEvalResult` serialized:
   ```go
   type GoEvalResult struct {
-      Stdout     string        `json:"stdout"`
-      Stderr     string        `json:"stderr"`
-      Error      string        `json:"error,omitempty"`
-      Duration   time.Duration `json:"duration,omitempty"`
-      ExitCode   int           `json:"exit_code"`
-      ReceiptRef string        `json:"receipt_ref,omitempty"`
-      Fallback   bool          `json:"fallback,omitempty"`
-      Receipts   []string      `json:"receipts,omitempty"` // populated with rlm:complete:1
+      ...
+      ReceiptRef string   `json:"receipt_ref,omitempty"`
+      Receipts   []string `json:"receipts,omitempty"` // populated with rlm:complete:1
   }
   ```
-- The prompt instructs CoSuper: *"Report typed intermediate progress and the one terminal assignment result through record_assignment_result with ... exact execution_refs."*
-- Faced with a scalar `receipt_ref` and an array field named `receipts: ["rlm:complete:1"]`, LLMs predictably pass `execution_refs: ["capsule-go-eval:sha256:7fe...", "rlm:complete:1"]` (or only `["rlm:complete:1"]`).
-- `OpenExecutionReceipt("rlm:complete:1")` executes:
+- The prompt instructed CoSuper: *"Report typed intermediate progress and the one terminal assignment result through record_assignment_result with ... exact execution_refs."*
+- Faced with a scalar `receipt_ref` and an array field named `receipts: ["rlm:complete:1"]`, LLMs predictably passed `execution_refs: ["capsule-go-eval:sha256:7fe...", "rlm:complete:1"]` (or only `["rlm:complete:1"]`).
+- `OpenExecutionReceipt("rlm:complete:1")` executed:
   1. Map lookup `e.executionReceipts["rlm:complete:1"]` $\rightarrow$ **MISS** (never stored).
   2. Disk lookup `stateDir/receipts/execution/sha256("rlm:complete:1").json` $\rightarrow$ **MISS** (does not exist).
-  3. Returns `executor receipt unavailable`.
-- `ResolveExecutionReceipts` fails the entire batch on the first error, aborting before capsule freeze.
+  3. Returned `executor receipt unavailable`.
+- `ResolveExecutionReceipts` failed the entire batch on the first error, aborting before capsule freeze.
 
 ---
 
-## 6. Agentic Consensus Synthesis
+## 6. Two-Round Agentic Consensus Panel Review
 
-A 7-model agentic consensus panel was run across diverse model families and reasoning tiers:
+The findings and code fixes were evaluated across two successive panel reviews utilizing 8 frontier models across reasoning tiers:
 - **Claude Opus** (`claude -p --model opus`)
 - **OpenCode** (`opencode run`)
 - **Cursor Agent** (`agent --mode ask`)
 - **GPT-5.6 Sol** (`omp --model openai-codex/gpt-5.6-sol --thinking medium`)
 - **GPT-5.6 Terra** (`omp --model openai-codex/gpt-5.6-terra --thinking xhigh`)
+- **GPT-5.6 Luna** (`omp --model openai-codex/gpt-5.6-luna --thinking max`)
 - **Gemini 3.8 Flash** (`omp --model google-antigravity/gemini-3.8-flash --thinking high`)
 - **Grok 4.6 High** (`omp --model cursor/cursor-grok-4.6-high --thinking high`)
 
-### Panel Verdicts
-- **Approve with Changes (5/7)**: Claude Opus, OpenCode, Cursor, Gemini 3.8 Flash, Grok 4.6 High.
-- **Block (2/7)**: GPT-5.6 Sol, GPT-5.6 Terra.
-  - *Basis of Block*: Both Sol and Terra blocked claiming Step 6 is "90% accepted" and blocked retrying the sealed proof on Texture-tell instructions alone without landing the structural code repair. Sol also noted that Step 5's coalescer is not yet wired to a production consumer.
+*(Manifests: `.agentic-consensus/consensus-review-20260905/manifest.tsv` and `.agentic-consensus/consensus-review-20260905-fixes/manifest.tsv`)*
 
-### Consensus Findings
-1. **Unanimous Root Cause Agreement**: All 7 models agreed that `GoEvalResult` dual-naming (`receipt_ref` vs `receipts`) directly caused the model to submit `rlm:complete:1` into `execution_refs`.
-2. **Rejection of Silent Filtering**: All 7 models emphatically rejected silently filtering `rlm:*` in `record_assignment_result`. Silent filtering allows an assignment that submitted only `["rlm:complete:1"]` to collapse to `execution_refs: []`, which bypasses grant binding and lands a false "green" pass with zero execution evidence.
-3. **Rejection of Wholesale StateDir Relocation**: All 7 models advised against moving `CHOIR_CAPSULE_STATE_DIR` to `/mnt/persistent/` as an immediate fix. The state directory contains disposable capsule mounts and upper layers; persisting them violates the Spatial Isolation Invariant and causes disk leaks.
-4. **Step 6 Completion Recalibration**: The panel unanimously concluded that Step 6 is not "90% accepted." While the in-capsule execution substrate is ~75% complete in code and staged execution, the Definition's completion gate requires a sealed freeze/grant receipt, which is a binary gate.
+### Round 1: Problem Diagnosis & Architectural Adjudication (Commit `6933c8c1`)
+- **Verdicts**: 5 Approve with Changes (Claude Opus, OpenCode, Cursor, Gemini 3.8 Flash, Grok 4.6 High), 2 Block (GPT-5.6 Sol, GPT-5.6 Terra), 1 Approve with Changes (GPT-5.6 Luna).
+- **Core Adjudications**:
+  1. *Unanimous Root Cause Agreement*: All models confirmed `GoEvalResult` dual-naming directly invited the model to submit `rlm:complete:1` into `execution_refs`.
+  2. *Rejection of Silent Filtering*: The panel firmly rejected silently dropping `rlm:*` tokens. Doing so permits an assignment with intent-only tokens to collapse to `execution_refs: []`, committing an unevidenced pass (`0==0` pass).
+  3. *Rejection of Wholesale StateDir Relocation*: Moving `CHOIR_CAPSULE_STATE_DIR` to `/mnt/persistent` violates spatial isolation and clutters persistent disks with disposable overlay directories.
+
+### Round 2: Review of Code Fixes (`c794915e`, `2c8904e3`)
+- **Verdicts**: **7 Approve with Changes / Approve**, **1 Block**.
+  - **Gemini 3.8 Flash**: `APPROVE` (122s) — confirmed root cause eliminated, fail-closed prefix checks verified, `0==0` pass closed.
+  - **Cursor Agent**: `APPROVE` (321s) — verified schema trap removed, fail-closed handling preserves all-or-nothing evidence.
+  - **Grok 4.6 High**: `APPROVE-WITH-CHANGES` (321s) — confirmed local correctness, verified tests pass, ready to deploy.
+  - **OpenCode**: `APPROVE-WITH-CHANGES` (432s) — independently traced call sites, confirmed `0==0` defense-in-depth, verified tests.
+  - **Claude Opus**: `APPROVE-WITH-CHANGES` (486s) — verified prefix allowlist matches reload allowlist, confirmed stub parity.
+  - **GPT-5.6 Sol**: `APPROVE-WITH-CHANGES` (532s) — **shifted from Block to Approve**; verified structural fix, closed false-pass hole.
+  - **GPT-5.6 Luna**: `APPROVE-WITH-CHANGES` (690s) — verified fail-closed resolution, confirmed schema separation.
+  - **GPT-5.6 Terra**: `BLOCK` (662s) — praised schema separation and fail-closed validation, but held the line that Step 6 completion is a binary gate requiring the live Node B deployed proof.
+
+### Summary of Panel Recommendations Implemented
+1. **Schema Renaming**: `GoEvalResult.Receipts` $\rightarrow$ `StagedIntentIDs` (`types.go:127`).
+2. **Early Prefix Validation**: `OpenExecutionReceipt` rejects `rlm:*` and unsupported prefixes before disk I/O (`executor.go:810-815`).
+3. **Execution Receipt Scope**: Removed `capsule-fate:` from `OpenExecutionReceipt` (fate receipts use `OpenCapsuleFateReceipt`).
+4. **False-Pass Protection**: `record_assignment_result` unconditionally requires $\ge 1$ execution receipt on completed pass (`tools_capsule.go:899-901`).
+5. **Code Formatting**: Applied `gofmt` to all modified files to ensure zero struct alignment regressions.
 
 ---
 
@@ -222,37 +235,21 @@ A 7-model agentic consensus panel was run across diverse model families and reas
 | **Step 2: Multiplexed Transport Pipe** | Dedicated Unix domain socket and frame protocol between worker and broker. | **COMPLETE** | Implemented in `internal/yaegikernel/transport.go` (`624e50ba`). Deployed and running inside microVM. |
 | **Step 3: Canonical Command Runner** | Direct-argv allowlist and process-group SIGKILL reaping (<500ms). | **COMPLETE** | Implemented in `cmd/capsule-broker/` (`624e50ba`). Seccomp `setpgid` fixed in `3724db1a`. |
 | **Step 4: Intent Tray, Reducer, Inbox** | In-memory tray buffering in Yaegi; Dolt reducer + Go channel mailbox delivery + two-phase ack. | **COMPLETE** | Implemented in `624e50ba`. Substrate wake and deduplication bugs repaired in `7cf4050b`, `bb17d0ef`, `7574d899`. `rlm:complete:1` proves live reduction commit. |
-| **Step 5: Bounded Coalescing & Role Bounds** | Quiescence debounce (500ms) and role-bounded `choir.Spawn()`. | **IMPLEMENTED (Focused Tests)** | Implemented in `internal/actor/coalesce.go` and `internal/agentcore/tool_profiles.go`. Not yet exercised live on staging (Option B ran single-agent with no spawns). |
-| **Step 6: Tool Surface Cutover & Live Staging Proof** | Remove ambient JSON tools from CoSuper; execute end-to-end self-development task. | **IN PROGRESS (~75%)** | Sealed overlay (`tools=6`), exact Super bind, verbatim cell eval, and in-capsule proof file write are proved exit 0. Blocked on `record_assignment_result` receipt resolution. |
+| **Step 5: Bounded Coalescing & Role Bounds** | Quiescence debounce (500ms) and role-bounded `choir.Spawn()`. | **IMPLEMENTED (Focused Tests)** | Implemented in `internal/actor/coalesce.go` and `internal/agentcore/tool_profiles.go`. Unit-tested; production live multi-agent fan-out not exercised by single-agent Option B arc. |
+| **Step 6: Tool Surface Cutover & Live Staging Proof** | Remove ambient JSON tools from CoSuper; execute end-to-end self-development task. | **IN PROGRESS (~80%)** | Sealed overlay (`tools=6`), exact Super bind, verbatim cell eval, and in-capsule proof file write are proved exit 0. Substrate receipt resolution fixes landed (`c794915e`, `2c8904e3`); awaiting CI deploy and fresh live proof on Node B. |
 
 ---
 
-## 8. Actionable Remediation Plan
+## 8. Final Landing Loop & Immediate Next Actions
 
-To close the final acceptance gate cleanly and achieve full Step 6 completion:
+With code fixes landed and approved by 7/8 consensus panelists, the path to full Step 6 completion is unambiguous:
 
-### 1. Fix the Schema Producer (`internal/capsule/types.go` & `tools_capsule.go`)
-- In `GoEvalResult`, rename or separate the intent sequence slice:
-  ```go
-  type GoEvalResult struct {
-      ...
-      ReceiptRef     string   `json:"receipt_ref,omitempty"`     // Raw ExecutionReceipt reference
-      StagedIntentIDs []string `json:"staged_intent_ids,omitempty"` // Internal reduction intent sequence IDs
-  }
-  ```
-- This eliminates the name collision that invites models to pass `receipts` into `execution_refs`.
-
-### 2. Implement Early Prefix Validation & Fail Closed (`internal/capsule/executor.go` & `tools_capsule.go`)
-- In `OpenExecutionReceipt(ref)`: Check for valid prefixes (`capsule-exec:sha256:`, `capsule-go-eval:sha256:`, `capsule-fate:sha256:`) *before* taking the read lock or attempting `os.ReadFile`.
-- If an invalid prefix is passed (e.g. `rlm:*`), return an explicit error:
-  `fmt.Errorf("receipt reference %q is an intent token, not an execution receipt (expected capsule-go-eval:sha256:*)", ref)`
-- In `tools_capsule.go:record_assignment_result`: Require $\ge 1$ valid execution receipt for terminal `pass`, closing the `0==0` empty-receipt hole.
-
-### 3. Update Prompt Framing (`internal/runtimeprompts/overlays/rlm_co_super_runtime.yaml`)
-- Update line 10 to explicitly specify the reference format:
-  > *"Report typed intermediate progress and the one terminal assignment result through record_assignment_result with a concise summary, exact evidence_refs, and the exact capsule-go-eval:sha256:... receipt_ref in execution_refs (never cell-local rlm:* intent IDs)."*
-
-### 4. Execute Fresh Live Staging Proof
-- Deploy the schema and prefix validation fixes to Node B.
-- Issue a single targeted Texture-tell to document `d599c4b1`.
-- Verify the full execution arc: `capsule_go_eval` exit 0 $\rightarrow$ `record_assignment_result` resolves `receipt_ref` $\rightarrow$ capsule freezes $\rightarrow$ granted execution receipt committed $\rightarrow$ assignment fate reaches `pass` $\rightarrow$ computer restore fence `99949fe2` remains intact.
+1. **Monitor GitHub Actions CI for commit `2c8904e3`**:
+   - Verify that test suites and `Deploy to Staging (Node B)` pass.
+2. **Verify Staging Deployed Identity**:
+   - Confirm `https://choir.news/health` reports `x-choir-build-commit: 2c8904e3...`.
+   - Execute an authenticated microVM refresh on Node B with `actuator=rlm` to boot the new guest image containing the updated `capsule-broker` and `autoputer` runtime.
+3. **Execute Fresh Sealed Option B Proof on Node B**:
+   - Issue one targeted Texture-tell to document `d599c4b1`.
+   - Observe Super exact bind $\rightarrow$ CoSuper verbatim cell execution via `capsule_go_eval` $\rightarrow$ `record_assignment_result` with exact `receipt_ref` $\rightarrow$ capsule freeze $\rightarrow$ granted execution receipt committed $\rightarrow$ terminal assignment status `pass`.
+   - Verify restore fence `99949fe2` remains untouched and effects remain `propose_only`.
