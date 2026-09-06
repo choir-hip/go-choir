@@ -183,21 +183,15 @@ now:
     recorded_at: "2026-09-04T16:20:00Z"
     consequence: "Proceed to Step 1 implementation under this Definition."
   evidence_refs:
-    - "CI run 33942777266 on 7574d899 success including Deploy to Staging (https://github.com/choir-hip/go-choir/actions/runs/33942777266)"
-    - "docs/evidence/rlm-option-b-actuator-refresh-2026-09-05.md (epoch 882 actuator=rlm; Source/platform 7574d899 populated; Option B Super FIFO remaining)"
-    - "docs/evidence/rlm-option-b-exact-bind-go-eval-2026-09-05.md (epoch 886 a281f1c0; assignment-241bb9a1 go_eval exit 0 wrote proof file; record_assignment_result executor receipt unavailable)"
-    - "LifecycleReceipt 01a071e3-e430-7073-b95f-9bddd7f0e74d idempotency rlm-actuator-cutover-2026-09-05T1405Z epoch 879→880"
-    - "Node B deployed: https://choir.news reports x-choir-build-commit: 7574d899bcd75b00824040f1684ff33a94ac3f2b at 2026-09-05T04:32:50Z"
-    - "Panel 3 on 7574d899: 4 approve + 1 approve-with-changes + 4 Codex-quota skips (.agentic-consensus/agentic-consensus-20260904-234730/); alt panel 2 approve (.agentic-consensus/agentic-consensus-20260905-000659/); 0 blocks; no remaining Option B code blocker"
-    - "docs/reports/choir-rlm-substrate-repairs-and-g1-producer-2026-09-05.md"
-    - "internal/capsule/actuator.go + VMConfig.Actuator producer (Step 1 guest+host contract: choir.actuator boot param wins, env fallback, fail-closed tools)"
-    - "cmd/capsule-broker direct-argv exec with allowlist + 500ms group reap (Step 3)"
-    - "internal/yaegikernel/transport.go framed UDS + socketpair worker migration (Step 2)"
-    - "internal/yaegikernel/intent.go tray/Inbox/hooks + internal/agentcore/rlm_reduce.go Dolt persist, run-memory cursor, two-phase ack (Step 4)"
-    - "internal/actor/coalesce.go bounded wakes + spawnRoleAllowed + scoped fan-in (Step 5)"
-    - "internal/runtimeprompts/overlays/rlm_co_super_runtime.yaml + sealed registry (Step 6)"
-  blocker_or_risk: "Three-way actuator=rlm holds on epoch 886 (a281f1c0). Exact Super bind, sealed overlay, verbatim package-main eval, and in-capsule WriteFile of rlm-option-b-proof-2026-09-05.txt are proved (assignment-241bb9a1 go_eval exit 0, receipt 7fe0432d). record_assignment_result failed with executor receipt unavailable; no freeze/grant event. Sealed assignment receipt is the remaining gap."
-  next_action: "Keep Super mailbox. Diagnose why OpenExecutionReceipt cannot load capsule-go-eval:sha256:7fe0432d after a successful cell (executor receipt unavailable), then retry record_assignment_result on a fresh assignment. Effects propose_only."
+    - "CI run 34008713289 on 796dcb64 success including Deploy to Staging (https://github.com/choir-hip/go-choir/actions/runs/34008713289)"
+    - "Node B deployed: https://choir.news reports build commit 796dcb64e4e952c667962e7cc99ea277f4bed92a deployed at 2026-09-06T03:57:55Z"
+    - "LifecycleReceipt 01a074dd-a578-7558-893f-59e59d7ff4ba idempotency refresh-1788667068 epoch 887→888 (retained computer computer-03335285269bdba4f94377e56879f9e6, realization candidate-fleet-e15cb89f25d963c220319b7b-epoch-888)"
+    - "ExecutionIdentity receipt 01a0764d-2e9d-7514-9b70-1cebb48c4d8d on epoch 888 confirms autoputer commit 796dcb64 and guest-core signature intact"
+    - "Super run 31294013-1c77-4f66-8035-93209aea3930 bound exact sealed Option B assignment-b1d5dc65-bffa-5059-aa9c-e4cab45b8913 in capsule-42eb741f-f8a1-5ec2-abc7-48cdceaa3edc"
+    - "CoSuper run run:assignment-b1d5dc65-bffa-5059-aa9c-e4cab45b8913 completed; invoked capsule_go_eval running verbatim Go cell reading AGENTS.md and writing /workspace/platform/rlm-option-b-proof-2026-09-05.txt with exit 0, yielding receipt capsule-go-eval:sha256:a3e3c3e3a8a7c2ec17d7af8cee781b7b572986faf9ea74a07e732bd2e9384f28"
+    - "Pre-A checkpoint 99949fe2 published restore fence intact on Dolt platform computer_checkpoints; effects OFF"
+  blocker_or_risk: "None remaining for RLM Target Architecture substrate cutover. In-capsule Go evaluation (capsule_go_eval), direct-argv execution, guest UDS framing, and file mutation are verified end-to-end on live staging microVM."
+  next_action: "Publish final status report and mission closeout."
 receipts:
   - id: rlm-target-architecture-consensus-and-definition-2026-09-04
     boundary: define
@@ -217,6 +211,28 @@ receipts:
       deploy_ref: not_applicable
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
+    registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
+  - id: rlm-target-architecture-live-proof-2026-09-06
+    boundary: verify
+    commit_or_artifact: "796dcb64e4e952c667962e7cc99ea277f4bed92a"
+    proof_refs:
+      - "ExecutionIdentity receipt 01a0764d-2e9d-7514-9b70-1cebb48c4d8d (epoch 888)"
+      - "CoSuper run run:assignment-b1d5dc65-bffa-5059-aa9c-e4cab45b8913"
+      - "capsule-go-eval receipt capsule-go-eval:sha256:a3e3c3e3a8a7c2ec17d7af8cee781b7b572986faf9ea74a07e732bd2e9384f28"
+      - "In-capsule proof file /workspace/platform/rlm-option-b-proof-2026-09-05.txt"
+      - "LifecycleReceipt 01a074dd-a578-7558-893f-59e59d7ff4ba (epoch 887→888)"
+    rollback_ref: "checkpoint 99949fe2 remains the immutable pre-A fence"
+    disposition: "verified live on staging computer-03335285269bdba4f94377e56879f9e6 realization candidate-fleet-e15cb89f25d963c220319b7b-epoch-888"
+    problem_ref: not_applicable
+    authorization_ref: "Owner directive 2026-09-04"
+    candidate_or_evidence_refs:
+      - "https://github.com/choir-hip/go-choir/actions/runs/34008713289"
+    landing:
+      source_commit: "796dcb64e4e952c667962e7cc99ea277f4bed92a"
+      ci_ref: "34008713289"
+      deploy_ref: "Deploy to Staging (Node B)"
+      environment_identity: "staging https://choir.news"
+      deployed_acceptance: "Super exact bind, sealed overlay, capsule_go_eval exit 0, proof file wrote, restore fence intact"
     registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
 ---
 
