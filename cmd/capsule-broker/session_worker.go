@@ -386,7 +386,7 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 	if err != nil {
 		return b.fallbackGoEval(ctx, cap, params, fmt.Sprintf("session worker unavailable: %v", err))
 	}
-	res, err := w.eval(p.Source, p.Inbox, timeout)
+	res, err := w.eval(yaegikernel.CleanGoSource(p.Source), p.Inbox, timeout)
 	if err != nil {
 		b.dropSession(cap.AgentRunID)
 		result := capsule.GoEvalResult{ExitCode: 1, Error: fmt.Sprintf("session eval: %v", err), Duration: time.Since(start)}

@@ -63,8 +63,8 @@ func buildFilteredSymbols(allowlist *Allowlist, extraSymbols interp.Exports) int
 // CheckImports statically inspects Go source code and returns an error if any
 // import is not permitted under the allowlist.
 func (e *Evaluator) CheckImports(src string) error {
+	src = CleanGoSource(src)
 	fset := token.NewFileSet()
-	// Parse as a full file or package
 	node, err := parser.ParseFile(fset, "src.go", src, parser.ImportsOnly)
 	if err != nil {
 		// If src is a snippet without 'package main', wrap it to check imports
@@ -89,8 +89,8 @@ func (e *Evaluator) CheckImports(src string) error {
 // Eval executes the Go source code with timeout and output capture.
 func (e *Evaluator) Eval(ctx context.Context, src string) (EvalResult, error) {
 	start := time.Now()
+	src = CleanGoSource(src)
 	res := EvalResult{}
-
 	// Static check first to fail fast on disallowed imports
 	if err := e.CheckImports(src); err != nil {
 		res.Duration = time.Since(start)
@@ -191,7 +191,6 @@ func cleanImportPathFromSymbolKey(key string) string {
 	return key
 }
 
-
 // maxEvalOutputBytes bounds model-authored interpreter output so a runaway
 // print loop cannot consume the capsule memory limit before the broker cap.
 const maxEvalOutputBytes = 2 * 1024 * 1024 // 2 MiB
@@ -241,4 +240,24 @@ func (w *overflowWriter) Write(p []byte) (int, error) {
 		}
 	}
 	return n, err
+}
+
+// CleanGoSource strips markdown code fences (``` or ~~~) from model-authored Go source.
+func CleanGoSource(s string) string {
+	s = strings.TrimSpace(s)
+	for _, fence := range []string{"```", "~~~"} {
+		if strings.HasPrefix(s, fence) {
+			if idx := strings.Index(s, "\n"); idx != -1 {
+				s = s[idx+1:]
+			} else {
+				return ""
+			}
+			if idx := strings.LastIndex(s, fence); idx != -1 {
+				s = s[:idx]
+			}
+			s = strings.TrimSpace(s)
+			break
+		}
+	}
+	return s
 }

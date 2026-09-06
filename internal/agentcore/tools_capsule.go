@@ -23,6 +23,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // CapsuleToolCtx is injected by guest core. Opaque handles are bound to the
@@ -767,6 +768,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			if src == "" {
 				src = input.Code
 			}
+			src = yaegikernel.CleanGoSource(src)
 			req := capsule.GoEvalRequest{Source: src, Cwd: input.Cwd, TimeoutMS: input.TimeoutMS}
 			reduction := rlmReductionForCall(ctx, rt, toolCtx)
 			if reduction.active {
