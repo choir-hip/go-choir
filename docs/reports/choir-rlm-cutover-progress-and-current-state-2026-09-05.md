@@ -1,11 +1,11 @@
 # Choir RLM Architecture Cutover: Autonomous Run Progress & Current State Report
 
 **Date**: September 6, 2026  
-**Subject**: Comprehensive analysis of the autonomous cutover run under Grok 4.6 on mission `docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`, incorporating Three Iterative Agentic Consensus Panels (8 models: Claude Opus, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, Gemini 3.8 Flash, Grok 4.6 High, Cursor Agent, OpenCode), Substrate Repairs (`c794915e`, `2c8904e3`, `9e0a94bd`), and Consensus-Adjudicated Prompt Tuning (`796dcb64`)  
-**Current Git HEAD**: `796dcb648b261aa9a557b7f16ef06c9bc539266f` (`main`)  
-**Staging Host**: `https://choir.news` (`x-choir-build-commit: 2c8904e3d1335e01b8bf519e9c64f1c73d53c815` deployed at 02:00:26Z, pending CI deploy of `796dcb64`)  
-**Staging Retained Computer**: `computer-03335285269bdba4f94377e56879f9e6` (VM `candidate-fleet-e15cb89f25d963c220319b7b`, realization epoch **887**, `actuator=rlm`)  
-**Pre-A Checkpoint Restore Fence**: `99949fe2e16d...` intact, effects `propose_only`
+**Subject**: Comprehensive analysis of the autonomous cutover run under Grok 4.6 on mission `docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`, incorporating Four Iterative Agentic Consensus Panels (8 models: Claude Opus, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, Gemini 3.8 Flash, Grok 4.6 High, Cursor Agent, OpenCode), Live Sealed Option B Execution on Staging Epoch 888, and Substrate Heresy Diagnosis  
+**Current Git HEAD**: `dc179263` (`main`)  
+**Staging Host**: `https://choir.news` (`x-choir-build-commit: 796dcb64e4e952c667962e7cc99ea277f4bed92a` deployed at 03:57:55Z via CI run `34008713289`)  
+**Staging Retained Computer**: `computer-03335285269bdba4f94377e56879f9e6` (VM `candidate-fleet-e15cb89f25d963c220319b7b`, realization epoch **888**, `actuator=rlm`)  
+**Pre-A Checkpoint Restore Fence**: `99949fe2e16d...` intact in Dolt `computer_checkpoints`, effects `propose_only`
 
 ---
 
@@ -202,18 +202,149 @@ Following the consensus panel synthesis, Choir's RLM execution environment is st
 | **Step 3: Canonical Command Runner** | Direct-argv allowlist and process-group SIGKILL reaping (<500ms). | **COMPLETE** | Implemented in `cmd/capsule-broker/` (`624e50ba`). Seccomp `setpgid` fixed in `3724db1a`. |
 | **Step 4: Intent Tray, Reducer, Inbox** | In-memory tray buffering in Yaegi; Dolt reducer + Go channel mailbox delivery + two-phase ack. | **COMPLETE** | Implemented in `624e50ba`. Substrate wake and deduplication bugs repaired in `7cf4050b`, `bb17d0ef`, `7574d899`. `rlm:complete:1` proves live reduction commit. |
 | **Step 5: Bounded Coalescing & Role Bounds** | Quiescence debounce (500ms) and role-bounded `choir.Spawn()`. | **COMPLETE** | Implemented in `internal/actor/coalesce.go` and `internal/agentcore/tool_profiles.go`. Verified by unit tests. |
-| **Step 6: Tool Surface Cutover & Live Staging Proof** | Remove ambient JSON tools from CoSuper; execute end-to-end self-development task. | **READY FOR TERMINAL PROOF (~95%)** | Sealed overlay (`tools=6`), exact Super bind, verbatim cell eval, proof file write, CleanGoSource fence stripping, and consensus prompt tuning landed (`796dcb64`). Ready for final live proof. |
+| **Step 6: Tool Surface Cutover & Live Staging Proof** | Remove ambient JSON tools from CoSuper; execute end-to-end self-development task. | **PROVED LIVE (EXECUTION PATH)** | Deployed to epoch 888 under `796dcb64`. Super exact bind, verbatim Go cell execution, artifact write, and execution receipt generation proved live. Terminal assignment fate settlement identified an open substrate heresy. |
 
 ---
 
-## 8. Final Landing Loop & Immediate Next Actions
+## 8. Live Sealed Option B Execution on Staging Epoch 888
 
-1. **Complete CI & Staging Deploy for Commit `796dcb64`**:
-   - Verify CI run `34008713289` completes all test shards and `Deploy to Staging (Node B)`.
-   - Confirm `https://choir.news/health` reports commit `796dcb64`.
-2. **Refresh MicroVM on Node B**:
-   - Trigger `choir computer refresh --computer=computer-03335285269bdba4f94377e56879f9e6` to boot epoch 888 with updated guest binaries and prompt overlays.
-3. **Execute Live Sealed Option B Proof on Node B**:
-   - Issue Texture tell on document `d599c4b1-a265-5545-b073-9fb7b51d5ce5`.
-   - Observe Super exact bind $\rightarrow$ CoSuper Go REPL execution $\rightarrow$ `record_assignment_result` with exact `receipt_ref` $\rightarrow$ capsule freeze $\rightarrow$ terminal assignment status `pass`.
-   - Verify restore fence `99949fe2` remains untouched and effects remain `propose_only`.
+Following successful completion of GitHub Actions CI run `34008713289` (deploying commit `796dcb64` to Node B at `03:57:55Z`), retained staging computer `computer-03335285269bdba4f94377e56879f9e6` was cold-rebooted via `LifecycleReceipt 01a074dd-a578-7558-893f-59e59d7ff4ba` into realization `candidate-fleet-e15cb89f25d963c220319b7b-epoch-888` (boot epoch **888**).
+
+Execution identity was confirmed via signed guest receipt:
+```json
+{
+  "schema": "choir.execution_identity.v1",
+  "identity": {
+    "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+    "realization_id": "candidate-fleet-e15cb89f25d963c220319b7b-epoch-888",
+    "vm_epoch": "888",
+    "build": {
+      "commit": "796dcb64e4e952c667962e7cc99ea277f4bed92a",
+      "deployed_commit": "796dcb64e4e952c667962e7cc99ea277f4bed92a"
+    }
+  },
+  "receipt": {
+    "receipt_id": "01a0764d-2e9d-7514-9b70-1cebb48c4d8d",
+    "receipt_kind": "ExecutionIdentity",
+    "signature_set": [{
+      "key_id": "guest-core-30ac40668989f584",
+      "signature": "kiYNxGYBb5OuQQDa9c/JsTdPkX6Rj97HTeIA1bUTDUavdXmvjupk+WatUffGeyW/PqK+RsTR9oH3Z1pXBO2gCw"
+    }]
+  }
+}
+```
+
+### 8.1 Super Exact Binding Execution
+Super run `31294013-1c77-4f66-8035-93209aea3930` consumed pending lifecycle control packets, unblocking the single slot. It bound exact implementation assignment `assignment-b1d5dc65-bffa-5059-aa9c-e4cab45b8913` (attempt 1) into dedicated guest capsule `capsule-42eb741f-f8a1-5ec2-abc7-48cdceaa3edc` under the sealed Option B tool overlay (`tools=6`). Super run completed cleanly at `2026-09-06T04:04:22Z`.
+
+### 8.2 CoSuper In-Capsule Go Evaluation
+CoSuper run `run:assignment-b1d5dc65-bffa-5059-aa9c-e4cab45b8913` invoked `capsule_go_eval` with the verbatim Go cell:
+```go
+package main
+
+import "choir"
+
+func main() {
+    src, err := choir.ReadFile("/workspace/platform/AGENTS.md")
+    if err != nil {
+        panic(err)
+    }
+    proof := "rlm-option-b-proof-2026-09-05\n" + src
+    if _, err := choir.WriteFile("/workspace/platform/rlm-option-b-proof-2026-09-05.txt", proof); err != nil {
+        panic(err)
+    }
+    if err := choir.Complete("completed", "pass", "wrote /workspace/platform/rlm-option-b-proof-2026-09-05.txt", []string{"/workspace/platform/rlm-option-b-proof-2026-09-05.txt"}); err != nil {
+        panic(err)
+    }
+}
+```
+The cell executed inside the capsule with exit code 0 and generated:
+- **Durable Execution Receipt**: `capsule-go-eval:sha256:a3e3c3e3a8a7c2ec17d7af8cee781b7b572986faf9ea74a07e732bd2e9384f28`
+- **Artifact Evidence**: `/workspace/platform/rlm-option-b-proof-2026-09-05.txt`
+- **Staged Intent**: `choir.Complete` staged into the cell tray.
+
+### 8.3 Restore Fence Integrity
+Dolt query on table `computer_checkpoints` confirmed that pre-A checkpoint `99949fe2e16d3c4c446838c0e59517b108accecab7afefd9329c3a6c4a1209f7` remains the latest published checkpoint for `computer-03335285269bdba4f94377e56879f9e6`. Effects remained strictly OFF (`propose_only`).
+
+---
+
+## 9. Agentic Consensus Panel 4 Review & Synthesis
+
+Following epoch 888 execution, an 8-model Agentic Consensus Panel was convened in convergent mode (.agentic-consensus/agentic-consensus-20260906-111107/) to review the live proof, verify invariants, evaluate the terminal reporting error, and advise on completion. Seven models completed full reviews (Claude Opus, GPT-5.6 Sol, Grok 4.6 High, Cursor Agent, Gemini 3.8 Flash, GPT-5.6 Terra, OpenCode).
+
+### 9.1 Unanimous Panel Verdict
+**Accept the execution path as an epoch 888 live proof of sealed in-capsule Go execution; reject completion of Definition 2 run acceptance until assignment fate settlement is repaired. Withhold `goal.complete`.**
+
+The panel emphasized that under Choir doctrine (Standing Question 5), run state is not assignment disposition. While CoSuper run reached `state: completed`, assignment fate did not achieve a terminal `pass` disposition due to a lifecycle command conflict on the freeze intent.
+
+### 9.2 Invariant Verification Matrix
+
+| Invariant | Panel Finding | Evidence |
+| :--- | :--- | :--- |
+| **In-Capsule Go Evaluation** | **PROVED LIVE** | Verbatim Go cell exited 0; receipt `capsule-go-eval:sha256:a3e3c3e3…4f28` generated. |
+| **In-Capsule Read/Compute/Write** | **PROVED LIVE** | Read `/workspace/platform/AGENTS.md`, wrote `/workspace/platform/rlm-option-b-proof-2026-09-05.txt`. |
+| **Exact Assignment/Capsule Binding** | **PROVED LIVE** | Super `31294013…` bound assignment `b1d5dc65…` to dedicated guest capsule `capsule-42eb741f…`. |
+| **RLM Route Authority** | **PROVED LIVE** | Epoch 888 boot parameters, realization identity, and signed receipt agree on deployed RLM realization. |
+| **Sealed Tool Catalog** | **STRONGLY SUBSTANTIATED** | Live gateway reported `tools=6`; ambient JSON capsule tools completely sealed out. |
+| **Guest UDS Transport Framing** | **SUBSTANTIATED (TRANSITIVE)** | Evaluation succeeded over guest transport socket, but malformed frames/truncation not falsified live. |
+| **Direct-Argv Command Execution** | **IMPLEMENTED (UNEXERCISED LIVE)** | Implemented with allowlist in `cmd/capsule-broker`; proof cell exercised file syscalls, not `choir.Exec`. |
+| **Spatial Isolation** | **BINDING SHOWN (UNPROVED)** | Unique capsule allocated; concurrent isolation across desks not directly exercised. |
+| **Restart Durability & Inbox Snapshots** | **NOT EXERCISED** | Interrupted cell, unread message replay, and cursor advance not exercised in this single-shot proof. |
+| **Restore Fence Integrity** | **PROVED LIVE** | Checkpoint `99949fe2` intact; effects strictly OFF (`propose_only`). |
+
+---
+
+## 10. Discovered Substrate Heresy & Surgical Repair Specification
+
+When CoSuper called `record_assignment_result`, the tool returned `lifecycle command digest conflict`. Investigation and unanimous panel review identified the exact mechanics:
+
+### 10.1 Root Cause 1: Multi-Tool Turn Early-Exit Bypass (`toolloop.go:622, 658`)
+In `internal/toolregistry/toolloop.go`:
+```go
+terminalClosure := len(resp.ToolCalls) == 1 &&
+    options.detachedTerminalTool != nil &&
+    options.detachedTerminalTool(resp.ToolCalls[0])
+// ...
+if terminalClosure && len(toolResults) == 1 && !toolResults[0].IsError {
+    return "", totalUsage, ErrDetachedTerminalToolCommitted
+}
+```
+In iteration 4, the model emitted two tool calls in parallel (`capsule_go_eval` + `record_assignment_result`). Because `len(resp.ToolCalls) == 2`, `terminalClosure` was false. The detached context was skipped, and the early return was bypassed. The tool loop proceeded to iteration 5.
+
+### 10.2 Root Cause 2: Deterministic CommandID vs Transient ToolCallID Digest Conflict
+In `internal/agentcore/cosuper_assignment_fate.go`:
+1. `CommandID` is deterministic per assignment attempt:
+   `fmt.Sprintf("co-super-capsule:%s:%d:%s", assignment.AssignmentID, assignment.Binding.Attempt, disposition)`
+2. `ReportID` hashes the transient provider `toolCallID` (`:568-570`).
+3. `terminalFingerprint` incorporates `ReportID` (`:587-592`).
+4. `IntentRef` = `capsule-freeze-intent:` + `terminalFingerprint` (`:639`).
+5. `CommandDigest` hashes the whole fate request, including `IntentRef`.
+6. In iteration 5, the model re-attempted `record_assignment_result` with a fresh `toolCallID`.
+7. The store found the existing command receipt with the same `CommandID` but a different `CommandDigest`, triggering `ErrLifecycleCommandConflict` (`ErrCoSuperAssignmentCommandConflict`).
+
+### 10.3 The Surgical Two-Layer Repair
+1. **Substrate (Identity)**: Derive terminal `ReportID` from assignment scope + semantic payload (result, verdict, summary, execution receipts), completely excluding transient provider `toolCallID`. Retries with fresh tool-call IDs become legitimate idempotent replays rather than command conflicts.
+2. **Loop (Control)**: In `toolloop.go`, detect if *any* successful detached terminal tool was committed in the batch, and exit cleanly on that result rather than requiring `len(toolResults) == 1`.
+
+**Heresy Delta**: `discovered: 1`, `introduced: 0`, `repaired: 0` (per Problem Documentation First, discovery is recorded before code repair).
+
+---
+
+## 11. Residual Risks & Next Realism Axis
+
+### 11.1 Residual Technical Risks
+1. **Stranded Capsule Disposition**: Assignment `assignment-b1d5dc65` may reside in `FreezeRequested` state on staging Dolt, requiring reconciliation before attempt 1 can settle.
+2. **Dual Reporting Path**: In-cell `choir.Complete` stages intent, but terminal settlement still requires outer JSON `record_assignment_result`. Long-term doctrine favors folding terminal settlement directly into post-cell reduction.
+3. **Multi-Cell Heap Continuity**: Model was evaluated on a self-contained `package main` cell; cross-cell memory persistence has not been exercised live.
+
+### 11.2 Next Realism Sequence
+1. **Step 1 (Gate)**: Land two-layer substrate fix; re-run identical sealed Option B proof on staging until freeze $\rightarrow$ terminal `pass` receipts commit cleanly.
+2. **Step 2**: Multi-cell notebook proof demonstrating heap state reuse across cells without re-declaration.
+3. **Step 3**: Concurrent multi-capsule verification testing spatial isolation under simultaneous load.
+4. **Step 4**: Role-bounded `choir.Spawn` fan-out and fan-in with error tombstones.
+5. **Step 5**: Supervised self-development with effects enabled only after settlement durability is verified.
+
+---
+
+*Report committed to repository: `docs/reports/choir-rlm-cutover-progress-and-current-state-2026-09-05.md`*  
+*Rendered and delivered to iCloud Drive Choir Reports: `choir-rlm-cutover-progress-and-current-state-2026-09-05.pdf`*
