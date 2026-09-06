@@ -750,10 +750,12 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 		TimeoutMS int    `json:"timeout_ms"`
 	}
 	return toolregistry.Tool{
-		Name: "capsule_go_eval", Description: "Evaluate model-authored Go source inside the assigned isolated capsule (restricted Yaegi interpreter).",
+		Name: "capsule_go_eval", Description: "Evaluate model-authored Go source inside the assigned isolated capsule (persistent Yaegi interpreter). Pass raw Go source directly without markdown fences (never ```go) or surrounding prose. Top-level variables and imports persist across successful cells.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"source": map[string]any{"type": "string"}, "code": map[string]any{"type": "string"}, "cwd": map[string]any{"type": "string"},
-			"timeout_ms": map[string]any{"type": "integer"},
+			"source":     map[string]any{"type": "string", "description": "Raw Go source for one REPL cell. Bare top-level statements or declarations. Do not wrap in markdown code fences."},
+			"code":       map[string]any{"type": "string", "description": "Alias for source."},
+			"cwd":        map[string]any{"type": "string", "description": "Optional working directory inside /workspace/platform."},
+			"timeout_ms": map[string]any{"type": "integer", "description": "Evaluation timeout in milliseconds."},
 		}, []string{}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			toolCtx, err := requireCurrentAssignedCapsule(ctx)
@@ -881,7 +883,7 @@ func newRecordAssignedCoSuperReportTool(rt *Runtime) toolregistry.Tool {
 			"verdict":        map[string]any{"type": "string", "enum": []string{"none", "pass", "fail", "abstain"}},
 			"summary":        map[string]any{"type": "string"},
 			"evidence_refs":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"execution_refs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"execution_refs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Exact receipt_ref strings returned by capsule_go_eval, beginning capsule-go-eval:sha256:. Never staged_intent_ids or rlm:* tokens."},
 		}, []string{"result", "verdict", "summary", "evidence_refs", "execution_refs"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
