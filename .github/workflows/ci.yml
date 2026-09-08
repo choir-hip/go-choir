@@ -1468,6 +1468,8 @@ jobs:
             echo "==> Published activation receipt for ${DEPLOY_COMMIT}"
             cat /var/lib/go-choir/deploy-receipt.json
             note_phase "activation receipt"
+            echo "==> Publishing platform release manifest for ${DEPLOY_COMMIT}"
+            go run ./cmd/platformrelease --output /var/lib/go-choir/platform-release.json || true
 
             deploy_completed=true
             echo "==> Staging deploy complete"
