@@ -1134,6 +1134,9 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 // HandleLogout handles POST /auth/logout.
 // It invalidates the current authenticated state: deletes the refresh session
 // from the store, clears both auth cookies, and returns a signed-out response.
+// By default, it deletes only the current device's refresh session so other
+// browser sessions remain active. If ?all=true or ?all_devices=true is requested,
+// it deletes all refresh sessions for the user.
 // If the user is already signed out (no valid cookies), it returns a
 // non-500 signed-out result so repeat logout is safe.
 func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
@@ -1142,22 +1145,43 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Best-effort: try to find the user ID from either the access JWT or the
-	// refresh cookie so we can delete their refresh sessions from the store.
 	userID := h.extractUserIDFromAuthCookies(r)
-
-	// Delete all refresh sessions for the user (prevents silent restoration).
-	if userID != "" {
-		if err := h.store.DeleteRefreshSessionsByUserID(userID); err != nil {
-			log.Printf("[auth] operation=logout user_id=%s result=error step=delete_refresh_sessions error=%q", userID, err)
-			// Continue anyway — we still clear the cookies.
+	allDevices := r.URL.Query().Get("all") == "true" || r.URL.Query().Get("all_devices") == "true"
+	if allDevices {
+		if userID != "" {
+			if err := h.store.DeleteRefreshSessionsByUserID(userID); err != nil {
+				log.Printf("[auth] operation=logout user_id=%s result=error step=delete_all_refresh_sessions error=%q", userID, err)
+			} else {
+				log.Printf("[auth] operation=logout user_id=%s result=success step=all_refresh_sessions_deleted", userID)
+			}
 		} else {
-			log.Printf("[auth] operation=logout user_id=%s result=success step=refresh_sessions_deleted", userID)
+			log.Printf("[auth] operation=logout result=success note=no_user_id_found_cookies_cleared")
 		}
 	} else {
-		log.Printf("[auth] operation=logout result=success note=no_user_id_found_cookies_cleared")
+		// Single-device logout: delete only the presenting refresh session so other browsers stay logged in.
+		if rs, _, err := h.validateRefreshCookie(r); err == nil && rs != nil {
+			if err := h.store.DeleteRefreshSessionByID(rs.ID); err != nil {
+				log.Printf("[auth] operation=logout user_id=%s session_id=%s result=error step=delete_refresh_session error=%q", userID, rs.ID, err)
+			} else {
+				log.Printf("[auth] operation=logout user_id=%s session_id=%s result=success step=refresh_session_deleted", userID, rs.ID)
+			}
+		} else if cookie, err := r.Cookie(RefreshTokenCookieName); err == nil && cookie.Value != "" {
+			hash := sha256.Sum256([]byte(cookie.Value))
+			hashHex := fmt.Sprintf("%x", hash)
+			if found, err := h.store.GetRefreshSessionByTokenHash(hashHex); err == nil && found != nil {
+				_ = h.store.DeleteRefreshSessionByID(found.ID)
+				log.Printf("[auth] operation=logout user_id=%s session_id=%s result=success step=expired_refresh_session_deleted", userID, found.ID)
+			} else if userID != "" {
+				log.Printf("[auth] operation=logout user_id=%s result=success note=refresh_session_not_found_cookies_cleared", userID)
+			} else {
+				log.Printf("[auth] operation=logout result=success note=no_user_id_found_cookies_cleared")
+			}
+		} else if userID != "" {
+			log.Printf("[auth] operation=logout user_id=%s result=success note=access_cookie_cleared", userID)
+		} else {
+			log.Printf("[auth] operation=logout result=success note=no_user_id_found_cookies_cleared")
+		}
 	}
-
 	// Clear both auth cookies by setting MaxAge=-1 with empty values.
 	http.SetCookie(w, &http.Cookie{
 		Name:     AccessTokenCookieName,

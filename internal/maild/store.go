@@ -1207,8 +1207,8 @@ func (s *Store) ListMessagesPaged(ctx context.Context, opts ListMessagesOptions)
 		return ListMessagesResult{}, err
 	}
 	limit := opts.Limit
-	if limit <= 0 || limit > 100 {
-		limit = 50
+	if limit <= 0 || limit > 500 {
+		limit = 100
 	}
 	where := "mailbox_owner_id = ?"
 	countArgs := []any{opts.OwnerID}

@@ -192,7 +192,7 @@ func (h *Handler) handleMessageList(w http.ResponseWriter, r *http.Request, owne
 	q := r.URL.Query()
 	folder := q.Get("folder")
 	cursor := q.Get("cursor")
-	limit := 50
+	limit := 100
 	if l := q.Get("limit"); l != "" {
 		if val, err := strconv.Atoi(l); err == nil && val > 0 {
 			limit = val

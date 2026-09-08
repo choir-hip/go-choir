@@ -252,7 +252,7 @@
         await loadDrafts(options, requestId);
         return;
       }
-      const res = await fetchEmailWithTimeout(`/api/email/messages?folder=${encodeURIComponent(nextFolder)}`);
+      const res = await fetchEmailWithTimeout(`/api/email/messages?folder=${encodeURIComponent(nextFolder)}&limit=100`);
       if (!res.ok) {
         if (res.status === 401) throw new AuthRequiredError();
         throw new Error('Could not load mail');
@@ -314,7 +314,7 @@
     loadingMore = true;
     try {
       const res = await fetchEmailWithTimeout(
-        `/api/email/messages?folder=${encodeURIComponent(currentFolder)}&cursor=${encodeURIComponent(cursor)}`
+        `/api/email/messages?folder=${encodeURIComponent(currentFolder)}&cursor=${encodeURIComponent(cursor)}&limit=100`
       );
       if (!res.ok) return;
       const data = await res.json();
@@ -922,6 +922,16 @@
         {/each}
         {#if loadingMore}
           <div class="loading-more">Loading more messages...</div>
+        {:else if nextCursor}
+          <div class="load-more-container">
+            <button
+              type="button"
+              class="load-more-btn"
+              on:click={() => void loadMoreMessages()}
+            >
+              Load older messages
+            </button>
+          </div>
         {/if}
       </div>
     {/if}
@@ -1234,8 +1244,30 @@
   }
 
   .rows {
-    overflow: auto;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
     padding: 10px;
+  }
+
+  .load-more-container {
+    padding: 12px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .load-more-btn {
+    padding: 8px 16px;
+    font-size: 13px;
+    border: 1px solid var(--choir-border-strong);
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .load-more-btn:hover {
+    background: var(--choir-state-hover, rgba(255, 255, 255, 0.05));
   }
 
   .message-row {

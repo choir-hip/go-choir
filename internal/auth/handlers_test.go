@@ -3725,7 +3725,7 @@ func TestConcurrentSessionsOnReLogin(t *testing.T) {
 		}
 	}
 
-	// Logout from session 1 should invalidate ALL sessions (current behavior).
+	// Logout from session 1 without ?all=true should only invalidate session 1.
 	logoutReq := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
 	for _, c := range rec1.Result().Cookies() {
 		logoutReq.AddCookie(c)
@@ -3733,9 +3733,8 @@ func TestConcurrentSessionsOnReLogin(t *testing.T) {
 	logoutRec := httptest.NewRecorder()
 	h.HandleLogout(logoutRec, logoutReq)
 
-	// Session 2's refresh token should also be invalidated.
+	// Session 2's refresh token should REMAIN valid and restorable across devices.
 	req2 := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
-	// Use an expired access JWT to force refresh token usage.
 	for _, c := range rec2.Result().Cookies() {
 		if c.Name == RefreshTokenCookieName {
 			req2.AddCookie(c)
@@ -3748,10 +3747,38 @@ func TestConcurrentSessionsOnReLogin(t *testing.T) {
 	if err := json.NewDecoder(checkRec2.Body).Decode(&resp2); err != nil {
 		t.Fatalf("session 2 after logout 1: decode: %v", err)
 	}
-	// After logout (which deletes all refresh sessions for the user),
-	// session 2 should not be restorable via refresh.
-	if resp2.Authenticated {
-		t.Error("session 2 should not be restorable after global logout deleted all refresh sessions")
+	if !resp2.Authenticated {
+		t.Error("session 2 should remain restorable after single-device logout")
+	}
+
+	// Now issue another session and test that ?all=true DOES invalidate all sessions.
+	rec3 := httptest.NewRecorder()
+	_, err = h.issueSession(rec3, httptest.NewRequest(http.MethodGet, "/", nil), user)
+	if err != nil {
+		t.Fatalf("issue session 3: %v", err)
+	}
+	logoutAllReq := httptest.NewRequest(http.MethodPost, "/auth/logout?all=true", nil)
+	for _, c := range rec2.Result().Cookies() {
+		logoutAllReq.AddCookie(c)
+	}
+	logoutAllRec := httptest.NewRecorder()
+	h.HandleLogout(logoutAllRec, logoutAllReq)
+
+	// Session 3 should now be invalidated.
+	req3 := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
+	for _, c := range rec3.Result().Cookies() {
+		if c.Name == RefreshTokenCookieName {
+			req3.AddCookie(c)
+		}
+	}
+	checkRec3 := httptest.NewRecorder()
+	h.HandleSession(checkRec3, req3)
+	var resp3 sessionResponse
+	if err := json.NewDecoder(checkRec3.Body).Decode(&resp3); err != nil {
+		t.Fatalf("session 3 after logout all: decode: %v", err)
+	}
+	if resp3.Authenticated {
+		t.Error("session 3 should be invalidated after global logout (?all=true)")
 	}
 }
 
