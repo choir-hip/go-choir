@@ -171,6 +171,8 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	if err != nil {
 		log.Fatalf("actorruntime: open actor log db: %v", err)
 	}
+	logDB.SetMaxOpenConns(1)
+	logDB.SetMaxIdleConns(1)
 	actorLog, err := actor.NewSQLiteLog(logDB)
 	if err != nil {
 		_ = logDB.Close()
@@ -646,5 +648,7 @@ func (a *Adapter) cleanupLog() {
 	}
 	if a.logPath != "" {
 		_ = os.Remove(a.logPath)
+		_ = os.Remove(a.logPath + "-wal")
+		_ = os.Remove(a.logPath + "-shm")
 	}
 }

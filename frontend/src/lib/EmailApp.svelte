@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { previewEmailMessages } from './public-preview-data';
   import { mediaRouteForFileName } from './media-utils.js';
@@ -261,7 +261,6 @@
       if (!isLatestMessageLoad(requestId)) return;
       loadedOnce = true;
       const incoming = data.messages || [];
-      nextCursor = data.next_cursor || '';
       if (typeof data.total === 'number') {
         folderTotals[nextFolder] = data.total;
         folderTotals = folderTotals;
@@ -272,13 +271,15 @@
       }
 
       if (options.background && messages.length > 0) {
-        const existingMap = new Map(messages.map((m) => [m.id, m]));
-        for (const msg of incoming) {
-          existingMap.set(msg.id, msg);
+        const incomingMap = new Map(incoming.map((m) => [m.id, m]));
+        const olderMessages = messages.filter((m) => !incomingMap.has(m.id));
+        messages = [...incoming, ...olderMessages];
+        if (!nextCursor) {
+          nextCursor = data.next_cursor || '';
         }
-        messages = Array.from(existingMap.values());
       } else {
         messages = incoming;
+        nextCursor = data.next_cursor || '';
       }
 
       if (options.selectedId && messages.some((message) => message.id === options.selectedId)) {
@@ -663,14 +664,8 @@
   }
 
   let bodyViewMode = 'html';
-  let emailIframe = null;
-  let iframeLoadToken = 0;
-
   $: hasHtmlBody = Boolean(detail?.html_body && detail.html_body.trim());
   $: effectiveBodyMode = hasHtmlBody ? bodyViewMode : 'text';
-  $: if (detail?.html_body && bodyViewMode === 'html') {
-    void tick().then(renderEmailIframe);
-  }
 
   function sanitizeEmailHtml(html) {
     if (!html) return '';

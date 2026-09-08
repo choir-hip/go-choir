@@ -223,6 +223,8 @@ func OpenStore(dbPath string, storageRoot string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open routing sqlite: %w", err)
 	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping routing sqlite: %w", err)
@@ -277,6 +279,8 @@ func (s *Store) mailboxForOwner(ownerID string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open mailbox sqlite for %s: %w", ownerID, err)
 	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping mailbox sqlite for %s: %w", ownerID, err)
@@ -662,6 +666,8 @@ func ensureMailboxSchema(db *sql.DB) error {
 			sent_at text,
 			created_at text not null
 		)`,
+		`CREATE INDEX IF NOT EXISTS idx_email_messages_listing
+			ON email_messages(mailbox_owner_id, direction, trust_status, received_at, sent_at, created_at, id)`,
 		`CREATE TABLE IF NOT EXISTS email_message_recipients (
 			id text primary key,
 			message_id text not null,

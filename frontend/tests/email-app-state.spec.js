@@ -136,6 +136,9 @@ test('email inbox displays truthful counts and sandboxes html reading pane', asy
   page,
   authenticator,
 }) => {
+  const pageErrors = [];
+  page.on('pageerror', (err) => pageErrors.push(err));
+
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, email);
 
@@ -190,4 +193,50 @@ test('email inbox displays truthful counts and sandboxes html reading pane', asy
   expect(srcdoc).toContain('Message one <b>html</b> body');
   expect(srcdoc).not.toContain('<script>');
   expect(srcdoc).toContain("Content-Security-Policy");
+  expect(pageErrors).toEqual([]);
+});
+
+test('background refresh prepends newer messages preserving descending sort order', async ({
+  page,
+  authenticator,
+}) => {
+  const pageErrors = [];
+  page.on('pageerror', (err) => pageErrors.push(err));
+
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, email);
+
+  const msgOld = messageSummary('inbox-1', 'Old Message', 'inbox');
+  const msgNew = messageSummary('inbox-2', 'New Message Arrived', 'inbox');
+
+  let callCount = 0;
+  await page.route('**/api/email/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/email/aliases') {
+      await route.fulfill({ json: { aliases: [{ address: 'owner@example.com' }] } });
+      return;
+    }
+    if (url.pathname === '/api/email/messages' && url.searchParams.get('folder') === 'inbox') {
+      callCount += 1;
+      if (callCount === 1) {
+        await route.fulfill({ json: { messages: [msgOld], total: 1, unread: 0 } });
+      } else {
+        await route.fulfill({ json: { messages: [msgNew, msgOld], total: 2, unread: 1 } });
+      }
+      return;
+    }
+    await route.fulfill({ status: 404, json: { error: 'unexpected email route' } });
+  });
+
+  const emailApp = await openEmail(page);
+  await expect(emailApp.locator('.row-subject')).toHaveText(['Old Message']);
+
+  // Simulate window visibility event triggering background refresh
+  await page.evaluate(() => {
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+
+  // Verify newer message is prepended to the top, preserving descending order
+  await expect(emailApp.locator('.row-subject')).toHaveText(['New Message Arrived', 'Old Message']);
+  expect(pageErrors).toEqual([]);
 });
