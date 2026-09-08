@@ -167,7 +167,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	// uses Dolt (MySQL-compatible); the actor log uses SQLite. The file
 	// lives alongside the store so it survives restarts.
 	logPath := actorLogPath(s.Path())
-	logDB, err := sql.Open("sqlite", logPath+"?_busy_timeout=60000")
+	logDB, err := sql.Open("sqlite", logPath+"?_pragma=busy_timeout(60000)&_pragma=journal_mode(WAL)")
 	if err != nil {
 		log.Fatalf("actorruntime: open actor log db: %v", err)
 	}

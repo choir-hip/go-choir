@@ -435,7 +435,7 @@ func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *te
 		t.Fatalf("create running Texture mutation: %v", err)
 	}
 
-	logDB, err := sql.Open("sqlite", actorLogPath(dbPath)+"?_busy_timeout=60000")
+	logDB, err := sql.Open("sqlite", actorLogPath(dbPath)+"?_pragma=busy_timeout(60000)&_pragma=journal_mode(WAL)")
 	if err != nil {
 		t.Fatalf("open actor log: %v", err)
 	}
@@ -2491,8 +2491,17 @@ func TestAdapterSQLiteResearcherAdmissionRecoveryExecutesWithoutSnapshot(t *test
 	if loadErr != nil || stored.State != types.RunCompleted || counting.calls.Load() != 1 {
 		t.Fatalf("recovery state=%s calls=%d err=%v metadata=%+v run=%s", stored.State, counting.calls.Load(), loadErr, stored.Metadata, stored.RunID)
 	}
-	if memory, err := adapter.log.LoadSnapshot(ctx, mailboxID); err != nil || len(memory) != 0 {
-		t.Fatalf("test unexpectedly relied on actor snapshot memory=%q err=%v", memory, err)
+	var memory []byte
+	var snapErr error
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		memory, snapErr = adapter.log.LoadSnapshot(ctx, mailboxID)
+		if snapErr == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if snapErr != nil || len(memory) != 0 {
+		t.Fatalf("test unexpectedly relied on actor snapshot memory=%q err=%v", memory, snapErr)
 	}
 	if got := counting.calls.Load(); got != 1 {
 		t.Fatalf("provider calls=%d", got)
@@ -2557,8 +2566,17 @@ func TestAdapterSQLiteInjectionAppendRecoveryExecutesWithoutSnapshot(t *testing.
 	if loadErr != nil || stored.State != types.RunCompleted || counting.calls.Load() != 1 {
 		t.Fatalf("injection recovery state=%s calls=%d err=%v metadata=%+v run=%s", stored.State, counting.calls.Load(), loadErr, stored.Metadata, stored.RunID)
 	}
-	if memory, err := adapter.log.LoadSnapshot(ctx, mailboxID); err != nil || len(memory) != 0 {
-		t.Fatalf("test unexpectedly relied on actor snapshot memory=%q err=%v", memory, err)
+	var memory []byte
+	var snapErr error
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		memory, snapErr = adapter.log.LoadSnapshot(ctx, mailboxID)
+		if snapErr == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if snapErr != nil || len(memory) != 0 {
+		t.Fatalf("test unexpectedly relied on actor snapshot memory=%q err=%v", memory, snapErr)
 	}
 	if got := counting.calls.Load(); got != 1 {
 		t.Fatalf("provider calls=%d", got)

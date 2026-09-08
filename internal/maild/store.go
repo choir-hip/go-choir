@@ -219,7 +219,7 @@ type StoreStats struct {
 // OpenStore opens a maild store with a global routing database. Per-user
 // mailbox databases are opened on demand via mailboxForOwner.
 func OpenStore(dbPath string, storageRoot string) (*Store, error) {
-	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=60000&_foreign_keys=on")
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=busy_timeout(60000)&_pragma=foreign_keys(on)&_pragma=journal_mode(WAL)")
 	if err != nil {
 		return nil, fmt.Errorf("open routing sqlite: %w", err)
 	}
@@ -273,7 +273,7 @@ func (s *Store) mailboxForOwner(ownerID string) (*sql.DB, error) {
 		return nil, fmt.Errorf("create mailbox dir for %s: %w", ownerID, err)
 	}
 	dbPath := filepath.Join(dir, "mail.db")
-	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=60000&_foreign_keys=on")
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=busy_timeout(60000)&_pragma=foreign_keys(on)&_pragma=journal_mode(WAL)")
 	if err != nil {
 		return nil, fmt.Errorf("open mailbox sqlite for %s: %w", ownerID, err)
 	}
