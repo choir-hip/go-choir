@@ -1502,8 +1502,8 @@ func TestCoagentRewarmUsesResidentActivationNotActiveRunProxy(t *testing.T) {
 	trajectoryID := "traj-resident-reuse"
 
 	active, err := rt.StartRunWithMetadata(ctx, "continue active work", ownerID, map[string]any{
-		runMetadataAgentProfile: agentprofile.CoSuper,
-		runMetadataAgentRole:    agentprofile.CoSuper,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 		runMetadataAgentID:      agentID,
 		runMetadataChannelID:    "chan-resident-reuse",
 		runMetadataTrajectoryID: trajectoryID,
@@ -1524,7 +1524,7 @@ func TestCoagentRewarmUsesResidentActivationNotActiveRunProxy(t *testing.T) {
 		TargetAgentID: agentID,
 		ChannelID:     active.ChannelID,
 		TrajectoryID:  trajectoryID,
-		Role:          agentprofile.CoSuper,
+		Role:          agentprofile.Researcher,
 		Packet:        testCoagentUpdatePacket("evidence_update", "new steering input"),
 		Content:       "new steering input",
 		CreatedAt:     time.Now().UTC(),
