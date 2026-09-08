@@ -1135,8 +1135,8 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 // It invalidates the current authenticated state: deletes the refresh session
 // from the store, clears both auth cookies, and returns a signed-out response.
 // By default, it deletes only the current device's refresh session so other
-// browser sessions remain active. If ?all=true or ?all_devices=true is requested,
-// it deletes all refresh sessions for the user.
+// browser sessions remain active across concurrent devices. If ?all=true or
+// ?all_devices=true is requested, it deletes all refresh sessions for the user.
 // If the user is already signed out (no valid cookies), it returns a
 // non-500 signed-out result so repeat logout is safe.
 func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {

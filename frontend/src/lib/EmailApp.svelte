@@ -252,6 +252,7 @@
         await loadDrafts(options, requestId);
         return;
       }
+      // Request initial 100 messages to ensure full mailbox display with keyset pagination
       const res = await fetchEmailWithTimeout(`/api/email/messages?folder=${encodeURIComponent(nextFolder)}&limit=100`);
       if (!res.ok) {
         if (res.status === 401) throw new AuthRequiredError();
