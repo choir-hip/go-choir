@@ -15,8 +15,8 @@ import (
 	"net/http"
 	"net/mail"
 	"strings"
+	"sync"
 	"time"
-
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/golang-jwt/jwt/v5"
@@ -33,22 +33,91 @@ const RefreshTokenCookieName = "choir_refresh"
 // SessionChallengeTTL is how long a WebAuthn challenge remains valid.
 const SessionChallengeTTL = 5 * time.Minute
 
+type rotatedGraceEntry struct {
+	user       *User
+	accessJWT  string
+	newRefresh string
+	expiresAt  time.Time
+}
+
+const rotationGraceDuration = 30 * time.Second
+
 // Handler provides HTTP handlers for the /auth/* routes.
 type Handler struct {
-	store    *Store
-	webauthn *webauthn.WebAuthn
-	config   *Config
-	signer   ed25519.PrivateKey // loaded at startup for JWT signing
+	store           *Store
+	webauthn        *webauthn.WebAuthn
+	config          *Config
+	signer          ed25519.PrivateKey // loaded at startup for JWT signing
+	recentRotations map[string]rotatedGraceEntry
+	rotationsMu     sync.Mutex
 }
 
 // NewHandler creates a Handler with the given store, WebAuthn instance, and config.
 // The signer is the Ed25519 private key used for JWT signing.
 func NewHandler(store *Store, wa *webauthn.WebAuthn, cfg *Config, signer ed25519.PrivateKey) *Handler {
 	return &Handler{
-		store:    store,
-		webauthn: wa,
-		config:   cfg,
-		signer:   signer,
+		store:           store,
+		webauthn:        wa,
+		config:          cfg,
+		signer:          signer,
+		recentRotations: make(map[string]rotatedGraceEntry),
+	}
+}
+func (h *Handler) rotationGraceTTL() time.Duration {
+	if h.config != nil && h.config.RotationGraceTTL > 0 {
+		return h.config.RotationGraceTTL
+	}
+	return 0
+}
+
+func (h *Handler) recordRotatedGrace(oldHash string, user *User, accessJWT, newRefresh string) {
+	ttl := h.rotationGraceTTL()
+	if ttl <= 0 {
+		return
+	}
+	h.rotationsMu.Lock()
+	defer h.rotationsMu.Unlock()
+	now := time.Now().UTC()
+	for k, v := range h.recentRotations {
+		if now.After(v.expiresAt) {
+			delete(h.recentRotations, k)
+		}
+	}
+	h.recentRotations[oldHash] = rotatedGraceEntry{
+		user:       user,
+		accessJWT:  accessJWT,
+		newRefresh: newRefresh,
+		expiresAt:  now.Add(ttl),
+	}
+}
+
+func (h *Handler) getRotatedGrace(oldHash string) (rotatedGraceEntry, bool) {
+	h.rotationsMu.Lock()
+	defer h.rotationsMu.Unlock()
+	entry, ok := h.recentRotations[oldHash]
+	if !ok {
+		return rotatedGraceEntry{}, false
+	}
+	if time.Now().UTC().After(entry.expiresAt) {
+		delete(h.recentRotations, oldHash)
+		return rotatedGraceEntry{}, false
+	}
+	return entry, true
+}
+
+func (h *Handler) deleteRotatedGraceByTokenHash(tokenHash string) {
+	h.rotationsMu.Lock()
+	defer h.rotationsMu.Unlock()
+	delete(h.recentRotations, tokenHash)
+}
+
+func (h *Handler) revokeRotatedGraceForUser(userID string) {
+	h.rotationsMu.Lock()
+	defer h.rotationsMu.Unlock()
+	for k, v := range h.recentRotations {
+		if v.user != nil && v.user.ID == userID {
+			delete(h.recentRotations, k)
+		}
 	}
 }
 
@@ -338,11 +407,6 @@ func (h *Handler) validateRefreshCookie(r *http.Request) (*RefreshSession, *User
 // The old session is deleted to prevent reuse (refresh rotation). The device
 // info is carried over from the request for the new session.
 func (h *Handler) rotateRefreshSession(w http.ResponseWriter, r *http.Request, oldSession *RefreshSession, user *User) error {
-	// Delete the old session.
-	if err := h.store.DeleteRefreshSessionByID(oldSession.ID); err != nil {
-		return fmt.Errorf("delete old refresh session: %w", err)
-	}
-
 	// Generate a new refresh token with device info from the request.
 	deviceInfo := r.UserAgent()
 	newRefresh, err := h.generateRefreshToken(user, deviceInfo)
@@ -354,6 +418,16 @@ func (h *Handler) rotateRefreshSession(w http.ResponseWriter, r *http.Request, o
 	accessJWT, err := h.issueAccessJWT(user)
 	if err != nil {
 		return fmt.Errorf("issue new access JWT: %w", err)
+	}
+
+	// Record rotation in grace cache before deleting old session, allowing concurrent
+	// requests within the 30-second window to receive this valid session instead of
+	// failing with 401 unauthenticated.
+	h.recordRotatedGrace(oldSession.TokenHash, user, accessJWT, newRefresh)
+
+	// Delete the old session from the database.
+	if err := h.store.DeleteRefreshSessionByID(oldSession.ID); err != nil {
+		return fmt.Errorf("delete old refresh session: %w", err)
 	}
 
 	h.setAuthCookies(w, accessJWT, newRefresh)
@@ -1105,8 +1179,46 @@ func (h *Handler) HandleSession(w http.ResponseWriter, r *http.Request) {
 // session, issues a new access JWT, and returns authenticated user info.
 // If refresh is also invalid or missing, it returns signed-out state.
 func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie(RefreshTokenCookieName)
+	if err != nil || cookie.Value == "" {
+		writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false})
+		return
+	}
+
+	hash := sha256.Sum256([]byte(cookie.Value))
+	hashHex := fmt.Sprintf("%x", hash)
+
+	// Check if this token was recently rotated within the grace window (e.g. concurrent request).
+	if grace, ok := h.getRotatedGrace(hashHex); ok {
+		log.Printf("[auth] operation=session_refresh user_id=%s result=success step=grace_window_hit", grace.user.ID)
+		h.setAuthCookies(w, grace.accessJWT, grace.newRefresh)
+		writeJSON(w, http.StatusOK, sessionResponse{
+			Authenticated: true,
+			User: &userInfo{
+				ID:        grace.user.ID,
+				Email:     grace.user.Email,
+				CreatedAt: grace.user.CreatedAt.Format(time.RFC3339),
+			},
+		})
+		return
+	}
+
 	rs, user, err := h.validateRefreshCookie(r)
 	if err != nil {
+		// Check grace window once more in case of a race where another concurrent request rotated it while validating.
+		if grace, ok := h.getRotatedGrace(hashHex); ok {
+			log.Printf("[auth] operation=session_refresh user_id=%s result=success step=grace_window_race_hit", grace.user.ID)
+			h.setAuthCookies(w, grace.accessJWT, grace.newRefresh)
+			writeJSON(w, http.StatusOK, sessionResponse{
+				Authenticated: true,
+				User: &userInfo{
+					ID:        grace.user.ID,
+					Email:     grace.user.Email,
+					CreatedAt: grace.user.CreatedAt.Format(time.RFC3339),
+				},
+			})
+			return
+		}
 		// No valid refresh — signed out.
 		writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false})
 		return
@@ -1115,7 +1227,7 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 	// Rotate the refresh session and issue new cookies.
 	if err := h.rotateRefreshSession(w, r, rs, user); err != nil {
 		log.Printf("[auth] operation=session_refresh user_id=%s result=error step=rotate_refresh error=%q", user.ID, err)
-		writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false})
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to rotate session"})
 		return
 	}
 
@@ -1149,6 +1261,7 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	allDevices := r.URL.Query().Get("all") == "true" || r.URL.Query().Get("all_devices") == "true"
 	if allDevices {
 		if userID != "" {
+			h.revokeRotatedGraceForUser(userID)
 			if err := h.store.DeleteRefreshSessionsByUserID(userID); err != nil {
 				log.Printf("[auth] operation=logout user_id=%s result=error step=delete_all_refresh_sessions error=%q", userID, err)
 			} else {
@@ -1160,6 +1273,7 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Single-device logout: delete only the presenting refresh session so other browsers stay logged in.
 		if rs, _, err := h.validateRefreshCookie(r); err == nil && rs != nil {
+			h.deleteRotatedGraceByTokenHash(rs.TokenHash)
 			if err := h.store.DeleteRefreshSessionByID(rs.ID); err != nil {
 				log.Printf("[auth] operation=logout user_id=%s session_id=%s result=error step=delete_refresh_session error=%q", userID, rs.ID, err)
 			} else {
@@ -1168,6 +1282,7 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		} else if cookie, err := r.Cookie(RefreshTokenCookieName); err == nil && cookie.Value != "" {
 			hash := sha256.Sum256([]byte(cookie.Value))
 			hashHex := fmt.Sprintf("%x", hash)
+			h.deleteRotatedGraceByTokenHash(hashHex)
 			if found, err := h.store.GetRefreshSessionByTokenHash(hashHex); err == nil && found != nil {
 				_ = h.store.DeleteRefreshSessionByID(found.ID)
 				log.Printf("[auth] operation=logout user_id=%s session_id=%s result=success step=expired_refresh_session_deleted", userID, found.ID)
@@ -1177,6 +1292,7 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 				log.Printf("[auth] operation=logout result=success note=no_user_id_found_cookies_cleared")
 			}
 		} else if userID != "" {
+			h.revokeRotatedGraceForUser(userID)
 			log.Printf("[auth] operation=logout user_id=%s result=success note=access_cookie_cleared", userID)
 		} else {
 			log.Printf("[auth] operation=logout result=success note=no_user_id_found_cookies_cleared")

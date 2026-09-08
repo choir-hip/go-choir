@@ -2128,6 +2128,52 @@ func TestReplayedOldRefreshTokenFailsAfterRotation(t *testing.T) {
 		t.Error("should NOT be authenticated with replayed old refresh token after rotation")
 	}
 }
+func TestConcurrentRefreshRotationGraceWindow(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	h.config.RotationGraceTTL = 15 * time.Second
+
+	user, err := h.store.CreateUser("grace-user", "grace@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	rawRefresh, err := h.generateRefreshToken(user, "test-device")
+	if err != nil {
+		t.Fatalf("generate refresh token: %v", err)
+	}
+	oldRefreshCookie := &http.Cookie{Name: RefreshTokenCookieName, Value: rawRefresh}
+
+	// Request 1: triggers rotation.
+	req1 := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
+	req1.AddCookie(oldRefreshCookie)
+	rec1 := httptest.NewRecorder()
+	h.HandleSession(rec1, req1)
+
+	var resp1 sessionResponse
+	if err := json.NewDecoder(rec1.Body).Decode(&resp1); err != nil {
+		t.Fatalf("decode resp1: %v", err)
+	}
+	if !resp1.Authenticated {
+		t.Fatal("request 1 should be authenticated")
+	}
+
+	// Request 2 (concurrent tab using the old refresh cookie within grace window).
+	req2 := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
+	req2.AddCookie(oldRefreshCookie)
+	rec2 := httptest.NewRecorder()
+	h.HandleSession(rec2, req2)
+
+	var resp2 sessionResponse
+	if err := json.NewDecoder(rec2.Body).Decode(&resp2); err != nil {
+		t.Fatalf("decode resp2: %v", err)
+	}
+	if !resp2.Authenticated {
+		t.Fatal("request 2 within grace window should succeed and remain authenticated")
+	}
+	if resp2.User.ID != user.ID {
+		t.Errorf("user ID mismatch: got %q, want %q", resp2.User.ID, user.ID)
+	}
+}
 
 // --- ValidateAccessToken tests (for proxy use) ---
 
