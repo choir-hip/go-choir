@@ -23,21 +23,6 @@
     void loadComponent(app);
   }
 
-  const memoryReloaded = new Set<string>();
-
-  function isDynamicImportError(err: unknown): boolean {
-    if (!err) return false;
-    const msg = err instanceof Error ? err.message : String(err);
-    return (
-      /failed to fetch dynamically imported module/i.test(msg) ||
-      /error loading dynamically imported module/i.test(msg) ||
-      /unable to preload/i.test(msg) ||
-      /failed to load module script/i.test(msg) ||
-      /importing a module script failed/i.test(msg) ||
-      /error resolving module specifier/i.test(msg)
-    );
-  }
-
   async function loadComponent(definition: ChoirAppDefinition) {
     const token = ++loadToken;
     loadedAppId = definition.id;
@@ -47,29 +32,9 @@
       const module = await definition.component();
       if (token === loadToken) {
         Component = module.default;
-        memoryReloaded.delete(definition.id);
-        try {
-          sessionStorage.removeItem(`choir:chunk-reload:${definition.id}`);
-        } catch {}
       }
     } catch (err) {
       if (token === loadToken) {
-        if (isDynamicImportError(err)) {
-          const reloadKey = `choir:chunk-reload:${definition.id}`;
-          let alreadyReloaded = memoryReloaded.has(definition.id);
-          try {
-            alreadyReloaded = alreadyReloaded || !!sessionStorage.getItem(reloadKey);
-          } catch {}
-
-          if (!alreadyReloaded) {
-            memoryReloaded.add(definition.id);
-            try {
-              sessionStorage.setItem(reloadKey, '1');
-            } catch {}
-            window.location.reload();
-            return;
-          }
-        }
         loadError = err instanceof Error ? err.message : 'Could not load app';
       }
     }

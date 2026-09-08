@@ -319,10 +319,18 @@
       const session = await checkSession();
       if (session?.authenticated) {
         window.localStorage?.setItem('choir.auth.returning', 'true');
-        maybeReplayPendingIntent(pendingAuthIntent);
-        clearConsumedAppIntentFromURL(pendingAuthIntent);
         authOverlayOpen = false;
         pendingAuthIntent = null;
+
+        // Await prewarm so the user's computer microVM is awake and serving
+        await prewarmAuthenticatedComputer().catch(() => {});
+
+        // Under C15/I25, the UI that renders a user computer is that computer's surface.
+        // The unauthenticated document was loaded from the host platform shell.
+        // Handoff cleanly to the authenticated computer's surface so the browser
+        // executes the computer's exact asset graph instead of mixing host and guest chunk hashes.
+        window.location.replace(window.location.href);
+        return;
       }
     } catch (err) {
       // Ceremony failed or was cancelled — stay in signed-out
