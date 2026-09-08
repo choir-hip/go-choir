@@ -57,12 +57,12 @@ documents:
     refresh_triggers: [doctrine_change, domain_contract_change]
 
   - path: docs/NOW.md
-    claim_scope: current
-    is_root: [entry]
-    is_evidence: true
-    annotations: {doc_role: observed_current_state, authority: evidence_scoped, lifecycle: living}
-    witnesses: [docs/NOW.md, docs/current-architecture.md, docs/platform-os-app-state.md]
-    refresh_triggers: [staging_deploy, current_state_route_choice]
+    claim_scope: retired
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: retired_pointer, authority: derived_support, lifecycle: retired}
+    witnesses: [docs/ACTIVE.md]
+    refresh_triggers: []
 
   - path: docs/ACTIVE.md
     claim_scope: current
