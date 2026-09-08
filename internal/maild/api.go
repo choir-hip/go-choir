@@ -137,11 +137,22 @@ func (h *Handler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 2 && parts[1] == "read" {
+		switch r.Method {
+		case http.MethodPost:
+			h.handleMessageRead(w, r, ownerID, messageID)
+		case http.MethodDelete:
+			h.handleMessageUnread(w, r, ownerID, messageID)
+		default:
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		}
+		return
+	}
+	if len(parts) == 2 && parts[1] == "unread" {
 		if r.Method != http.MethodPost {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
-		h.handleMessageRead(w, r, ownerID, messageID)
+		h.handleMessageUnread(w, r, ownerID, messageID)
 		return
 	}
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -329,6 +340,14 @@ func (h *Handler) handleMessageRead(w http.ResponseWriter, r *http.Request, owne
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "read"})
+}
+
+func (h *Handler) handleMessageUnread(w http.ResponseWriter, r *http.Request, ownerID, messageID string) {
+	if err := h.store.MarkMessageUnread(r.Context(), ownerID, messageID); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "unread"})
 }
 
 func summarizeMessage(msg EmailMessage) messageSummary {

@@ -1527,6 +1527,26 @@ func (s *Store) MarkMessageRead(ctx context.Context, ownerID, messageID string, 
 	return nil
 }
 
+// MarkMessageUnread marks a message unread for its owner by clearing read_at.
+func (s *Store) MarkMessageUnread(ctx context.Context, ownerID, messageID string) error {
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return err
+	}
+	result, err := db.ExecContext(ctx, `UPDATE email_messages SET read_at = NULL WHERE mailbox_owner_id = ? AND id = ?`, ownerID, messageID)
+	if err != nil {
+		return fmt.Errorf("mark unread: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("mark unread rows: %w", err)
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 type messageScanner interface {
 	Scan(dest ...any) error
 }

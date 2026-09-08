@@ -383,6 +383,49 @@
     await loadDetail(id, { openPane: true });
   }
 
+  function isMessageUnread(msg) {
+    return Boolean(msg && msg.direction === 'inbound' && !msg.read_at);
+  }
+
+  async function toggleReadStatus() {
+    if (!detail?.message || activeFolder === 'drafts' || !authenticated) return;
+    const msg = detail.message;
+    const currentlyUnread = !msg.read_at;
+    const newReadAt = currentlyUnread ? new Date().toISOString() : '';
+    msg.read_at = newReadAt;
+    detail = detail;
+
+    const target = messages.find((m) => m.id === msg.id);
+    if (target) {
+      target.read_at = newReadAt;
+      messages = messages;
+    }
+
+    if (currentlyUnread) {
+      if (folderUnread[activeFolder] > 0) {
+        folderUnread[activeFolder]--;
+        folderUnread = folderUnread;
+      }
+      try {
+        await fetchEmailWithTimeout(`/api/email/messages/${encodeURIComponent(msg.id)}/read`, {
+          method: 'POST',
+        });
+      } catch (err) {
+        console.warn('Failed to mark message read:', err);
+      }
+    } else {
+      folderUnread[activeFolder] = (folderUnread[activeFolder] || 0) + 1;
+      folderUnread = folderUnread;
+      try {
+        await fetchEmailWithTimeout(`/api/email/messages/${encodeURIComponent(msg.id)}/unread`, {
+          method: 'POST',
+        });
+      } catch (err) {
+        console.warn('Failed to mark message unread:', err);
+      }
+    }
+  }
+
   async function loadDetail(id, options = {}) {
     const requestId = ++detailLoadGeneration;
     const ownerMessageLoad = options.ownerMessageLoad || 0;
@@ -414,6 +457,31 @@
       const data = await res.json();
       if (!isLatestDetailLoad(requestId, ownerMessageLoad)) return;
       detail = data;
+
+      // Mark inbound unread message as read on viewing
+      const msg = data?.message;
+      if (msg && msg.direction === 'inbound' && !msg.read_at && activeFolder !== 'drafts') {
+        const readAt = new Date().toISOString();
+        msg.read_at = readAt;
+
+        const target = messages.find((m) => m.id === id);
+        if (target && !target.read_at) {
+          target.read_at = readAt;
+          messages = messages;
+          if (folderUnread[activeFolder] > 0) {
+            folderUnread[activeFolder]--;
+            folderUnread = folderUnread;
+          }
+        }
+
+        if (authenticated) {
+          void fetchEmailWithTimeout(`/api/email/messages/${encodeURIComponent(id)}/read`, {
+            method: 'POST',
+          }).catch((err) => {
+            console.warn('Failed to mark message read on server:', err);
+          });
+        }
+      }
     } catch (err) {
       if (isLatestDetailLoad(requestId, ownerMessageLoad)) handleError(err);
     } finally {
@@ -833,10 +901,16 @@
             type="button"
             class="message-row"
             class:selected={message.id === selectedId}
+            class:unread={isMessageUnread(message)}
             on:click={() => loadDetail(message.id, { openPane: true })}
             data-email-message-id={message.id}
           >
-            <span class="sender">{message.from_display || message.from_address}</span>
+            <span class="sender">
+              {#if isMessageUnread(message)}
+                <span class="unread-dot" aria-label="Unread" title="Unread"></span>
+              {/if}
+              {message.from_display || message.from_address}
+            </span>
             <span class="time">{formatTime(message.received_at || message.sent_at || message.created_at)}</span>
             <span class="subject">{message.subject || '(no subject)'}</span>
             <span class="snippet">{message.snippet}</span>
@@ -983,6 +1057,17 @@
           {#if hasHtmlBody}
             <button class:active={effectiveBodyMode === 'html'} on:click={() => (bodyViewMode = 'html')}>HTML</button>
             <button class:active={effectiveBodyMode === 'text'} on:click={() => (bodyViewMode = 'text')}>Plain text</button>
+          {/if}
+          {#if !detail.draft && detail.message?.direction === 'inbound'}
+            <button
+              type="button"
+              class="read-toggle-btn"
+              on:click={toggleReadStatus}
+              title={detail.message.read_at ? 'Mark as unread' : 'Mark as read'}
+              data-email-read-toggle
+            >
+              {detail.message.read_at ? 'Mark unread' : 'Mark read'}
+            </button>
           {/if}
         </div>
         <div class="actions">
@@ -1172,9 +1257,36 @@
     cursor: pointer;
   }
 
+  .unread-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #3b82f6;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+
   .sender {
     grid-area: sender;
+    display: flex;
+    align-items: center;
+    font-weight: 500;
+    color: var(--choir-text-muted);
+  }
+
+  .message-row.unread .sender {
     font-weight: 700;
+    color: var(--choir-text, inherit);
+  }
+
+  .message-row.unread .subject {
+    font-weight: 600;
+    color: var(--choir-text, inherit);
+  }
+
+  .message-row:not(.unread) .subject {
+    color: var(--choir-text-muted);
   }
 
   .time {

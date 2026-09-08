@@ -175,6 +175,10 @@ test('email inbox displays truthful counts and sandboxes html reading pane', asy
       });
       return;
     }
+    if (url.pathname === '/api/email/messages/inbox-1/read') {
+      await route.fulfill({ json: { status: 'read' } });
+      return;
+    }
     await route.fulfill({ status: 404, json: { error: 'unexpected email route' } });
   });
 
@@ -238,5 +242,90 @@ test('background refresh prepends newer messages preserving descending sort orde
 
   // Verify newer message is prepended to the top, preserving descending order
   await expect(emailApp.locator('.row-subject')).toHaveText(['New Message Arrived', 'Old Message']);
+  expect(pageErrors).toEqual([]);
+});
+
+test('opening unread email marks it read and decrements unread count', async ({
+  page,
+  authenticator,
+}) => {
+  const pageErrors = [];
+  page.on('pageerror', (err) => pageErrors.push(err));
+
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, email);
+
+  const unreadMsg = { ...messageSummary('inbox-unread', 'Urgent update', 'inbox'), read_at: null, direction: 'inbound' };
+  let readEndpointCalled = false;
+  let unreadEndpointCalled = false;
+
+  await page.route('**/api/email/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/email/aliases') {
+      await route.fulfill({ json: { aliases: [{ address: 'owner@example.com' }] } });
+      return;
+    }
+    if (url.pathname === '/api/email/messages' && url.searchParams.get('folder') === 'inbox') {
+      await route.fulfill({
+        json: {
+          messages: [unreadMsg],
+          total: 1,
+          unread: 1,
+        },
+      });
+      return;
+    }
+    if (url.pathname === '/api/email/messages/inbox-unread/read' && route.request().method() === 'POST') {
+      readEndpointCalled = true;
+      await route.fulfill({ json: { status: 'read' } });
+      return;
+    }
+    if (url.pathname === '/api/email/messages/inbox-unread/unread' && route.request().method() === 'POST') {
+      unreadEndpointCalled = true;
+      await route.fulfill({ json: { status: 'unread' } });
+      return;
+    }
+    if (url.pathname === '/api/email/messages/inbox-unread') {
+      await route.fulfill({
+        json: {
+          message: unreadMsg,
+          text_body: 'This is an unread message body.',
+          raw_headers: {},
+          recipients: { to: [{ address: 'owner@example.com' }], cc: [], bcc: [] },
+          attachments: [],
+        },
+      });
+      return;
+    }
+    await route.fulfill({ status: 404, json: { error: 'unexpected email route' } });
+  });
+
+  const emailApp = await openEmail(page);
+
+  // Detail loads on select, so read endpoint is called
+  await expect.poll(() => readEndpointCalled).toBe(true);
+
+  // The unread dot should disappear from the message row
+  const row = emailApp.locator('[data-email-message-id="inbox-unread"]');
+  await expect(row).not.toHaveClass(/unread/);
+  await expect(row.locator('.unread-dot')).toHaveCount(0);
+
+  // Header should update to 0 unread (so "1 messages" without "unread")
+  await expect(emailApp.locator('.list-header p')).toHaveText('1 messages');
+
+  // Reading pane footer toggle button should say "Mark unread"
+  const toggleBtn = emailApp.locator('[data-email-read-toggle]');
+  await expect(toggleBtn).toHaveText('Mark unread');
+
+  // Click "Mark unread"
+  await toggleBtn.click();
+  await expect.poll(() => unreadEndpointCalled).toBe(true);
+
+  // Unread dot re-appears, row has class unread, and count increments
+  await expect(row).toHaveClass(/unread/);
+  await expect(row.locator('.unread-dot')).toBeVisible();
+  await expect(emailApp.locator('.list-header p')).toContainText('1 unread');
+  await expect(toggleBtn).toHaveText('Mark read');
+
   expect(pageErrors).toEqual([]);
 });

@@ -425,3 +425,100 @@ func TestHandleMessagesPaginationAndCounts(t *testing.T) {
 		t.Fatalf("bad cursor status = %d, want 400", wBad.Code)
 	}
 }
+
+func TestHandleMessageMarkReadAndUnread(t *testing.T) {
+	store, cfg := newTestStore(t)
+	h := NewHandler(cfg, store)
+
+	db, err := store.mailboxForOwner("user-read-test")
+	if err != nil {
+		t.Fatalf("open mailbox: %v", err)
+	}
+	ts := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err = db.Exec(`INSERT INTO email_messages (
+		id, provider, provider_message_id, provider_event_id, direction,
+		mailbox_owner_id, alias_id, from_address, subject, text_body,
+		trust_status, received_at, created_at, read_at
+	) VALUES ('msg-read-1', 'resend', 'p-1', 'e-1', 'inbound', 'user-read-test', 'alias-1', 'sender@example.com', 'Test Read', 'Body', 'untrusted', ?, ?, NULL)`, ts, ts)
+	if err != nil {
+		t.Fatalf("insert message: %v", err)
+	}
+
+	// 1. Initially unread: unread = 1
+	reqList1 := httptest.NewRequest(http.MethodGet, "/api/email/messages?folder=inbox", nil)
+	setInternalOwner(reqList1, "user-read-test")
+	wList1 := httptest.NewRecorder()
+	h.HandleMessages(wList1, reqList1)
+	if wList1.Code != http.StatusOK {
+		t.Fatalf("list 1 status = %d, want 200", wList1.Code)
+	}
+	var respList1 messageListResponse
+	if err := json.NewDecoder(wList1.Body).Decode(&respList1); err != nil {
+		t.Fatalf("decode list 1: %v", err)
+	}
+	if respList1.Total != 1 || respList1.Unread != 1 {
+		t.Fatalf("initial unread = %d, want 1", respList1.Unread)
+	}
+	if respList1.Messages[0].ReadAt != "" {
+		t.Fatalf("initial read_at = %q, want empty", respList1.Messages[0].ReadAt)
+	}
+
+	// 2. Mark read: POST /api/email/messages/msg-read-1/read
+	reqRead := httptest.NewRequest(http.MethodPost, "/api/email/messages/msg-read-1/read", nil)
+	setInternalOwner(reqRead, "user-read-test")
+	wRead := httptest.NewRecorder()
+	h.HandleMessages(wRead, reqRead)
+	if wRead.Code != http.StatusOK {
+		t.Fatalf("mark read status = %d, want 200", wRead.Code)
+	}
+
+	// 3. Verify unread = 0 and read_at is non-empty
+	reqList2 := httptest.NewRequest(http.MethodGet, "/api/email/messages?folder=inbox", nil)
+	setInternalOwner(reqList2, "user-read-test")
+	wList2 := httptest.NewRecorder()
+	h.HandleMessages(wList2, reqList2)
+	var respList2 messageListResponse
+	if err := json.NewDecoder(wList2.Body).Decode(&respList2); err != nil {
+		t.Fatalf("decode list 2: %v", err)
+	}
+	if respList2.Unread != 0 {
+		t.Fatalf("post-read unread = %d, want 0", respList2.Unread)
+	}
+	if respList2.Messages[0].ReadAt == "" {
+		t.Fatalf("post-read read_at is empty, expected timestamp")
+	}
+
+	// 4. Mark unread: POST /api/email/messages/msg-read-1/unread
+	reqUnread := httptest.NewRequest(http.MethodPost, "/api/email/messages/msg-read-1/unread", nil)
+	setInternalOwner(reqUnread, "user-read-test")
+	wUnread := httptest.NewRecorder()
+	h.HandleMessages(wUnread, reqUnread)
+	if wUnread.Code != http.StatusOK {
+		t.Fatalf("mark unread status = %d, want 200", wUnread.Code)
+	}
+
+	// 5. Verify unread = 1 and read_at is cleared
+	reqList3 := httptest.NewRequest(http.MethodGet, "/api/email/messages?folder=inbox", nil)
+	setInternalOwner(reqList3, "user-read-test")
+	wList3 := httptest.NewRecorder()
+	h.HandleMessages(wList3, reqList3)
+	var respList3 messageListResponse
+	if err := json.NewDecoder(wList3.Body).Decode(&respList3); err != nil {
+		t.Fatalf("decode list 3: %v", err)
+	}
+	if respList3.Unread != 1 {
+		t.Fatalf("post-unread unread = %d, want 1", respList3.Unread)
+	}
+	if respList3.Messages[0].ReadAt != "" {
+		t.Fatalf("post-unread read_at = %q, want empty", respList3.Messages[0].ReadAt)
+	}
+
+	// 6. Mark unread via DELETE /api/email/messages/msg-read-1/read
+	reqDeleteRead := httptest.NewRequest(http.MethodDelete, "/api/email/messages/msg-read-1/read", nil)
+	setInternalOwner(reqDeleteRead, "user-read-test")
+	wDeleteRead := httptest.NewRecorder()
+	h.HandleMessages(wDeleteRead, reqDeleteRead)
+	if wDeleteRead.Code != http.StatusOK {
+		t.Fatalf("delete read status = %d, want 200", wDeleteRead.Code)
+	}
+}
