@@ -2,6 +2,7 @@ package maild
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -336,5 +337,91 @@ func TestHandleMessageReadMarksOwnerMessage(t *testing.T) {
 	}
 	if msg.ReadAt == "" {
 		t.Fatalf("ReadAt not set")
+	}
+}
+
+func TestHandleMessagesPaginationAndCounts(t *testing.T) {
+	store, cfg := newTestStore(t)
+	h := NewHandler(cfg, store)
+
+	// Seed 3 messages with descending timestamps
+	base := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	db, err := store.mailboxForOwner("user-paged")
+	if err != nil {
+		t.Fatalf("open mailbox: %v", err)
+	}
+	for i := 1; i <= 3; i++ {
+		ts := base.Add(time.Duration(i) * time.Hour).Format(time.RFC3339Nano)
+		msgID := fmt.Sprintf("msg-%d", i)
+		readAt := ""
+		if i == 1 {
+			readAt = ts // msg-1 is read, msg-2 and msg-3 are unread
+		}
+		_, err = db.Exec(`INSERT INTO email_messages (
+			id, provider, provider_message_id, provider_event_id, direction,
+			mailbox_owner_id, alias_id, from_address, subject, text_body,
+			trust_status, received_at, created_at, read_at
+		) VALUES (?, 'resend', ?, ?, 'inbound', 'user-paged', 'alias-1', 'sender@example.com', 'Update', 'Body', 'untrusted', ?, ?, ?)`,
+			msgID, "p-"+msgID, "e-"+msgID, ts, ts, readAt)
+		if err != nil {
+			t.Fatalf("insert msg %d: %v", i, err)
+		}
+	}
+
+	// Page 1: limit 2
+	req1 := httptest.NewRequest(http.MethodGet, "/api/email/messages?folder=inbox&limit=2", nil)
+	setInternalOwner(req1, "user-paged")
+	w1 := httptest.NewRecorder()
+	h.HandleMessages(w1, req1)
+	if w1.Code != http.StatusOK {
+		t.Fatalf("page 1 status = %d, want 200", w1.Code)
+	}
+	var resp1 messageListResponse
+	if err := json.NewDecoder(w1.Body).Decode(&resp1); err != nil {
+		t.Fatalf("decode page 1: %v", err)
+	}
+	if len(resp1.Messages) != 2 {
+		t.Fatalf("page 1 got %d messages, want 2", len(resp1.Messages))
+	}
+	if resp1.Total != 3 || resp1.Unread != 2 {
+		t.Fatalf("page 1 total=%d unread=%d, want total=3 unread=2", resp1.Total, resp1.Unread)
+	}
+	if resp1.NextCursor == "" {
+		t.Fatalf("page 1 expected non-empty next_cursor")
+	}
+	// Newest first: msg-3 then msg-2
+	if resp1.Messages[0].ID != "msg-3" || resp1.Messages[1].ID != "msg-2" {
+		t.Fatalf("page 1 unexpected order: %+v", resp1.Messages)
+	}
+
+	// Page 2: with cursor
+	req2 := httptest.NewRequest(http.MethodGet, "/api/email/messages?folder=inbox&limit=2&cursor="+resp1.NextCursor, nil)
+	setInternalOwner(req2, "user-paged")
+	w2 := httptest.NewRecorder()
+	h.HandleMessages(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("page 2 status = %d, want 200", w2.Code)
+	}
+	var resp2 messageListResponse
+	if err := json.NewDecoder(w2.Body).Decode(&resp2); err != nil {
+		t.Fatalf("decode page 2: %v", err)
+	}
+	if len(resp2.Messages) != 1 || resp2.Messages[0].ID != "msg-1" {
+		t.Fatalf("page 2 got %+v, want only msg-1", resp2.Messages)
+	}
+	if resp2.NextCursor != "" {
+		t.Fatalf("page 2 expected empty next_cursor at end, got %q", resp2.NextCursor)
+	}
+	if resp2.Total != 3 || resp2.Unread != 2 {
+		t.Fatalf("page 2 total=%d unread=%d, want total=3 unread=2", resp2.Total, resp2.Unread)
+	}
+
+	// Malformed cursor: returns 400
+	reqBad := httptest.NewRequest(http.MethodGet, "/api/email/messages?folder=inbox&cursor=invalid-not-base64", nil)
+	setInternalOwner(reqBad, "user-paged")
+	wBad := httptest.NewRecorder()
+	h.HandleMessages(wBad, reqBad)
+	if wBad.Code != http.StatusBadRequest {
+		t.Fatalf("bad cursor status = %d, want 400", wBad.Code)
 	}
 }

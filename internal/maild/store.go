@@ -3,6 +3,7 @@ package maild
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -1145,19 +1146,67 @@ func (s *Store) Stats(ctx context.Context) (StoreStats, error) {
 	}
 	return stats, nil
 }
+// ListMessagesOptions configures message listing and pagination.
+type ListMessagesOptions struct {
+	OwnerID string
+	Folder  string
+	Limit   int
+	Cursor  string
+}
 
-// ListMessages returns owner-visible messages for a simple v0 folder.
-func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit int) ([]EmailMessage, error) {
-	db, err := s.mailboxForOwner(ownerID)
-	if err != nil {
-		return nil, err
+// ListMessagesResult returns paginated messages with cursor and counts.
+type ListMessagesResult struct {
+	Messages   []EmailMessage
+	NextCursor string
+	Total      int
+	Unread     int
+}
+
+func decodeMessageCursor(raw string) (sortAt string, id string, err error) {
+	if strings.TrimSpace(raw) == "" {
+		return "", "", nil
 	}
+	bytes, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		bytes, err = base64.URLEncoding.DecodeString(raw)
+		if err != nil {
+			return "", "", fmt.Errorf("invalid cursor: %w", err)
+		}
+	}
+	parts := strings.SplitN(string(bytes), "\x00", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("malformed cursor payload")
+	}
+	return parts[0], parts[1], nil
+}
+
+func encodeMessageCursor(sortAt, id string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(sortAt + "\x00" + id))
+}
+
+func messageSortAt(msg EmailMessage) string {
+	if strings.TrimSpace(msg.ReceivedAt) != "" {
+		return msg.ReceivedAt
+	}
+	if strings.TrimSpace(msg.SentAt) != "" {
+		return msg.SentAt
+	}
+	return msg.CreatedAt
+}
+
+// ListMessagesPaged returns owner-visible messages with keyset pagination and folder counts.
+func (s *Store) ListMessagesPaged(ctx context.Context, opts ListMessagesOptions) (ListMessagesResult, error) {
+	db, err := s.mailboxForOwner(opts.OwnerID)
+	if err != nil {
+		return ListMessagesResult{}, err
+	}
+	limit := opts.Limit
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
 	where := "mailbox_owner_id = ?"
-	args := []any{ownerID}
-	switch strings.ToLower(strings.TrimSpace(folder)) {
+	countArgs := []any{opts.OwnerID}
+	switch strings.ToLower(strings.TrimSpace(opts.Folder)) {
 	case "", "inbox":
 		where += " AND direction = 'inbound' AND trust_status <> 'quarantined'"
 	case "sent":
@@ -1165,10 +1214,29 @@ func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit 
 	case "quarantine":
 		where += " AND trust_status = 'quarantined'"
 	default:
-		return nil, fmt.Errorf("unsupported folder %q", folder)
+		return ListMessagesResult{}, fmt.Errorf("unsupported folder %q", opts.Folder)
 	}
-	args = append(args, limit)
-	rows, err := db.QueryContext(ctx, `SELECT
+
+	var total, unread int
+	countQuery := `SELECT count(*), count(CASE WHEN (read_at IS NULL OR read_at = '') AND direction = 'inbound' THEN 1 END) FROM email_messages WHERE ` + where
+	if err := db.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total, &unread); err != nil {
+		return ListMessagesResult{}, fmt.Errorf("count messages: %w", err)
+	}
+
+	const sortExpr = "coalesce(nullif(received_at, ''), nullif(sent_at, ''), created_at)"
+	args := []any{opts.OwnerID}
+	pageWhere := where
+	if opts.Cursor != "" {
+		sortAt, id, err := decodeMessageCursor(opts.Cursor)
+		if err != nil {
+			return ListMessagesResult{}, err
+		}
+		pageWhere += fmt.Sprintf(" AND (%s < ? OR (%s = ? AND id < ?))", sortExpr, sortExpr)
+		args = append(args, sortAt, sortAt, id)
+	}
+
+	args = append(args, limit+1)
+	query := fmt.Sprintf(`SELECT
 		id, provider, coalesce(provider_message_id, ''), coalesce(provider_event_id, ''),
 		direction, mailbox_owner_id, coalesce(alias_id, ''), from_address,
 		coalesce(from_display, ''), subject, coalesce(text_body, ''),
@@ -1177,27 +1245,53 @@ func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit 
 		coalesce(received_at, ''), coalesce(sent_at, ''), created_at,
 		EXISTS(SELECT 1 FROM email_attachments a WHERE a.message_id = email_messages.id)
 		FROM email_messages
-		WHERE `+where+`
-		ORDER BY coalesce(received_at, sent_at, created_at) DESC
-		LIMIT ?`, args...)
+		WHERE %s
+		ORDER BY %s DESC, id DESC
+		LIMIT ?`, pageWhere, sortExpr)
+
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list messages: %w", err)
+		return ListMessagesResult{}, fmt.Errorf("list messages: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	messages := make([]EmailMessage, 0)
 	for rows.Next() {
 		msg, err := scanMessage(rows)
 		if err != nil {
-			return nil, err
+			return ListMessagesResult{}, err
 		}
 		messages = append(messages, msg)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return ListMessagesResult{}, err
 	}
-	return messages, nil
+
+	var nextCursor string
+	if len(messages) > limit {
+		nextCursor = encodeMessageCursor(messageSortAt(messages[limit-1]), messages[limit-1].ID)
+		messages = messages[:limit]
+	}
+
+	return ListMessagesResult{
+		Messages:   messages,
+		NextCursor: nextCursor,
+		Total:      total,
+		Unread:     unread,
+	}, nil
 }
 
+// ListMessages returns owner-visible messages for a simple v0 folder.
+func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit int) ([]EmailMessage, error) {
+	res, err := s.ListMessagesPaged(ctx, ListMessagesOptions{
+		OwnerID: ownerID,
+		Folder:  folder,
+		Limit:   limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return res.Messages, nil
+}
 // GetMessage returns an owner-visible message by id.
 func (s *Store) GetMessage(ctx context.Context, ownerID, messageID string) (EmailMessage, error) {
 	db, err := s.mailboxForOwner(ownerID)

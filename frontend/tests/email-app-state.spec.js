@@ -131,3 +131,63 @@ test('stale slower mailbox response cannot overwrite newer folder state', async 
   await expect(emailApp).toContainText('Sent current message');
   await expect(emailApp).not.toContainText('Inbox stale message');
 });
+
+test('email inbox displays truthful counts and sandboxes html reading pane', async ({
+  page,
+  authenticator,
+}) => {
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, email);
+
+  const msg1 = messageSummary('inbox-1', 'Message One', 'inbox');
+  const msg2 = messageSummary('inbox-2', 'Message Two', 'inbox');
+
+  await page.route('**/api/email/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/email/aliases') {
+      await route.fulfill({ json: { aliases: [{ address: 'owner@example.com' }] } });
+      return;
+    }
+    if (url.pathname === '/api/email/messages' && url.searchParams.get('folder') === 'inbox') {
+      await route.fulfill({
+        json: {
+          messages: [msg1, msg2],
+          next_cursor: 'cursor-token-page2',
+          total: 142,
+          unread: 3,
+        },
+      });
+      return;
+    }
+    if (url.pathname === '/api/email/messages/inbox-1') {
+      await route.fulfill({
+        json: {
+          message: msg1,
+          text_body: 'Message one plain text',
+          html_body: '<p>Message one <b>html</b> body <script>alert(1)</script></p>',
+          raw_headers: {},
+          recipients: { to: [{ address: 'owner@example.com' }], cc: [], bcc: [] },
+          attachments: [],
+        },
+      });
+      return;
+    }
+    await route.fulfill({ status: 404, json: { error: 'unexpected email route' } });
+  });
+
+  const emailApp = await openEmail(page);
+  // Verify truthful server total and unread counts in list header
+  await expect(emailApp.locator('.list-header p')).toContainText('142 messages · 3 unread');
+
+  // Verify reading pane sandboxed iframe
+  const iframe = emailApp.locator('iframe.body-html-iframe');
+  await expect(iframe).toBeVisible();
+  await expect(iframe).toHaveAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox');
+  await expect(iframe).not.toHaveAttribute('autoputer', /allow-same-origin/);
+
+  // Verify script tag was stripped from srcdoc
+  const srcdoc = await iframe.getAttribute('srcdoc');
+  expect(srcdoc).toContain('Message one <b>html</b> body');
+  expect(srcdoc).not.toContain('<script>');
+  expect(srcdoc).toContain("Content-Security-Policy");
+});

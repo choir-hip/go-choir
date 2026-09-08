@@ -17,7 +17,6 @@
     { id: 'quarantine', label: 'Quarantine' },
   ];
   const EMAIL_REQUEST_TIMEOUT_MS = 15000;
-
   let aliases = [];
   let activeFolder = normalizeFolder(appContext?.activeFolder) || 'inbox';
   let messages = [];
@@ -25,6 +24,10 @@
   let detail = null;
   let loading = false;
   let detailLoading = false;
+  let nextCursor = '';
+  let loadingMore = false;
+  let folderTotals: Record<string, number> = {};
+  let folderUnread: Record<string, number> = {};
   let error = '';
   let actionStatus = '';
   let replyOpen = false;
@@ -59,12 +62,22 @@
     void openContextDraft(appContext.draftId);
   }
 
+  function handleVisibilityOrFocus() {
+    if (document.visibilityState === 'visible' && authenticated && !loading && !loadingMore) {
+      void loadMessages(activeFolder, { persist: false, background: true });
+    }
+  }
+
   onMount(() => {
     mounted = true;
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
   });
 
   onDestroy(() => {
     mounted = false;
+    window.removeEventListener('focus', handleVisibilityOrFocus);
+    document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
     invalidateEmailRequests();
     if (appStateEmitTimer) clearTimeout(appStateEmitTimer);
   });
@@ -226,13 +239,16 @@
     }
     detailLoadGeneration += 1;
     detailLoading = false;
-    loading = true;
-    error = '';
+    if (!options.background) {
+      loading = true;
+      error = '';
+    }
     activeFolder = nextFolder;
     detailPaneOpen = Boolean(options.openPane);
     if (options.persist !== false) emitAppState();
     try {
       if (nextFolder === 'drafts') {
+        nextCursor = '';
         await loadDrafts(options, requestId);
         return;
       }
@@ -244,7 +260,27 @@
       const data = await res.json();
       if (!isLatestMessageLoad(requestId)) return;
       loadedOnce = true;
-      messages = data.messages || [];
+      const incoming = data.messages || [];
+      nextCursor = data.next_cursor || '';
+      if (typeof data.total === 'number') {
+        folderTotals[nextFolder] = data.total;
+        folderTotals = folderTotals;
+      }
+      if (typeof data.unread === 'number') {
+        folderUnread[nextFolder] = data.unread;
+        folderUnread = folderUnread;
+      }
+
+      if (options.background && messages.length > 0) {
+        const existingMap = new Map(messages.map((m) => [m.id, m]));
+        for (const msg of incoming) {
+          existingMap.set(msg.id, msg);
+        }
+        messages = Array.from(existingMap.values());
+      } else {
+        messages = incoming;
+      }
+
       if (options.selectedId && messages.some((message) => message.id === options.selectedId)) {
         selectedId = options.selectedId;
       }
@@ -252,7 +288,7 @@
         selectedId = messages[0]?.id || '';
         detail = null;
       }
-      if (selectedId) {
+      if (selectedId && (!options.background || !detail)) {
         await loadDetail(selectedId, {
           openPane: Boolean(options.openPane),
           persist: false,
@@ -260,12 +296,55 @@
         });
       }
     } catch (err) {
-      if (isLatestMessageLoad(requestId)) handleError(err);
+      if (isLatestMessageLoad(requestId) && !options.background) handleError(err);
     } finally {
       if (isLatestMessageLoad(requestId)) {
         loading = false;
         if (options.persist !== false) scheduleAppStateEmit();
       }
+    }
+  }
+
+  async function loadMoreMessages() {
+    if (!nextCursor || loadingMore || !authenticated || activeFolder === 'drafts') return;
+    const currentFolder = activeFolder;
+    const cursor = nextCursor;
+    const requestId = messageLoadGeneration;
+    loadingMore = true;
+    try {
+      const res = await fetchEmailWithTimeout(
+        `/api/email/messages?folder=${encodeURIComponent(currentFolder)}&cursor=${encodeURIComponent(cursor)}`
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!isLatestMessageLoad(requestId) || activeFolder !== currentFolder) return;
+      nextCursor = data.next_cursor || '';
+      if (typeof data.total === 'number') {
+        folderTotals[currentFolder] = data.total;
+        folderTotals = folderTotals;
+      }
+      if (typeof data.unread === 'number') {
+        folderUnread[currentFolder] = data.unread;
+        folderUnread = folderUnread;
+      }
+      const incoming = data.messages || [];
+      if (incoming.length > 0) {
+        const seen = new Set(messages.map((m) => m.id));
+        const toAppend = incoming.filter((m) => !seen.has(m.id));
+        messages = [...messages, ...toAppend];
+      }
+    } catch (err) {
+      // transient pagination failure
+    } finally {
+      loadingMore = false;
+    }
+  }
+
+  function handleListScroll(event) {
+    const el = event.currentTarget;
+    if (!el || !nextCursor || loadingMore) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) {
+      void loadMoreMessages();
     }
   }
 
@@ -593,23 +672,46 @@
     void tick().then(renderEmailIframe);
   }
 
+  function sanitizeEmailHtml(html) {
+    if (!html) return '';
+    let sanitized = String(html)
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+      .replace(/<\/?(form|iframe|object|embed|base)\b[^>]*>/gi, '')
+      .replace(/href\s*=\s*["']?\s*javascript:[^"'>]*/gi, 'href="#"');
+
+    sanitized = sanitized.replace(/<a\b([^>]*)>/gi, (match, attrs) => {
+      let cleaned = attrs.replace(/\s*target\s*=\s*["'][^"']*["']/gi, '');
+      cleaned = cleaned.replace(/\s*rel\s*=\s*["'][^"']*["']/gi, '');
+      return `<a ${cleaned} target="_blank" rel="noopener noreferrer">`;
+    });
+    return sanitized;
+  }
+
   function buildIframeContent(html) {
+    const safeBody = sanitizeEmailHtml(html);
     return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data: cid:; style-src 'unsafe-inline'; font-src https: data:; media-src https:; base-uri 'none'; form-action 'none';">
 <style>
+  html, body {
+    height: 100%;
+    margin: 0;
+    box-sizing: border-box;
+  }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 15px;
     line-height: 1.6;
     color: #1a1a1a;
     background: #fff;
-    margin: 0;
     padding: 16px;
     word-wrap: break-word;
     overflow-wrap: break-word;
+    overflow-y: auto;
   }
   img { max-width: 100%; height: auto; }
   table { max-width: 100%; }
@@ -623,22 +725,8 @@
   }
 </style>
 </head>
-<body>${html}</body>
+<body>${safeBody}</body>
 </html>`;
-  }
-
-  function renderEmailIframe() {
-    if (!emailIframe || !hasHtmlBody) return;
-    const token = ++iframeLoadToken;
-    const doc = emailIframe.contentDocument;
-    if (!doc) return;
-    doc.open();
-    doc.write(buildIframeContent(detail.html_body));
-    doc.close();
-  }
-
-  function handleIframeLoad() {
-    if (iframeLoadToken === 0) renderEmailIframe();
   }
 
   function attachmentIcon(attachment) {
@@ -727,7 +815,7 @@
     <header class="list-header">
       <div>
         <h2>{folders.find((folder) => folder.id === activeFolder)?.label || 'Inbox'}</h2>
-        <p>{messages.length} {activeFolder === 'drafts' ? 'drafts' : 'messages'}</p>
+        <p>{(folderTotals[activeFolder] != null ? folderTotals[activeFolder] : messages.length)} {activeFolder === 'drafts' ? 'drafts' : 'messages'}{folderUnread[activeFolder] > 0 ? ` · ${folderUnread[activeFolder]} unread` : ''}</p>
       </div>
       <div class="list-actions">
         <button type="button" on:click={openCompose} data-email-compose>Compose</button>
@@ -744,7 +832,7 @@
     {:else if messages.length === 0}
       <div class="empty-state">No messages</div>
     {:else}
-      <div class="rows">
+      <div class="rows" on:scroll={handleListScroll}>
         {#each messages as message}
           <button
             type="button"
@@ -763,6 +851,9 @@
             {/if}
           </button>
         {/each}
+        {#if loadingMore}
+          <div class="loading-more">Loading more messages...</div>
+        {/if}
       </div>
     {/if}
   </main>
@@ -813,26 +904,21 @@
         <strong>{formatTime(detail.message.received_at || detail.message.created_at)}</strong>
       </div>
 
-      {#if effectiveBodyMode === 'html' && hasHtmlBody}
-        <div class="body-html-container">
-          <iframe
-            class="body-html-iframe"
-            bind:this={emailIframe}
-            autoputer="allow-same-origin"
-            title="Email body"
-            on:load={handleIframeLoad}
-          ></iframe>
-        </div>
-        <div class="body-toggle">
-          <button class:active={bodyViewMode === 'html'} on:click={() => (bodyViewMode = 'html')}>HTML</button>
-          <button class:active={bodyViewMode === 'text'} on:click={() => (bodyViewMode = 'text')}>Plain text</button>
-        </div>
-        {#if bodyViewMode === 'text'}
+      <div class="detail-body-container">
+        {#if effectiveBodyMode === 'html' && hasHtmlBody}
+          <div class="body-html-container">
+            <iframe
+              class="body-html-iframe"
+              sandbox="allow-popups allow-popups-to-escape-sandbox"
+              referrerpolicy="no-referrer"
+              title="Email body"
+              srcdoc={buildIframeContent(detail.html_body)}
+            ></iframe>
+          </div>
+        {:else}
           <article class="body-text">{detail.text_body || 'No plain text body.'}</article>
         {/if}
-      {:else}
-        <article class="body-text">{detail.text_body || 'No plain text body.'}</article>
-      {/if}
+      </div>
 
       <details class="message-details" data-email-headers>
         <summary>Details</summary>
@@ -897,15 +983,22 @@
         </div>
       {/if}
 
-      <div class="actions">
-        {#if detail.draft}
-          <button type="button" disabled={sending || detail.draft.status === 'sent'} on:click={emailApprovalLink}>Email approval link</button>
-          <button type="button" disabled={sending || detail.draft.status === 'sent'} on:click={sendDraft}>Send approved draft</button>
-        {:else}
-          <button type="button" on:click={() => (replyOpen = !replyOpen)}>Reply</button>
-        {/if}
+      <div class="detail-footer">
+        <div class="body-toggle">
+          {#if hasHtmlBody}
+            <button class:active={effectiveBodyMode === 'html'} on:click={() => (bodyViewMode = 'html')}>HTML</button>
+            <button class:active={effectiveBodyMode === 'text'} on:click={() => (bodyViewMode = 'text')}>Plain text</button>
+          {/if}
+        </div>
+        <div class="actions">
+          {#if detail.draft}
+            <button type="button" disabled={sending || detail.draft.status === 'sent'} on:click={emailApprovalLink}>Email approval link</button>
+            <button type="button" disabled={sending || detail.draft.status === 'sent'} on:click={sendDraft}>Send approved draft</button>
+          {:else}
+            <button type="button" on:click={() => (replyOpen = !replyOpen)}>{replyOpen ? 'Cancel' : 'Reply'}</button>
+          {/if}
+        </div>
       </div>
-
       {#if replyOpen}
         <div class="reply-box">
           <label>
@@ -1124,7 +1217,9 @@
     display: flex;
     flex-direction: column;
     background: var(--choir-state-selected);
-    overflow: auto;
+    overflow: hidden;
+    height: 100%;
+    min-height: 0;
   }
 
   .detail-trust {
@@ -1154,13 +1249,19 @@
     gap: 12px;
   }
 
-  .body-text {
-    white-space: pre-wrap;
-    line-height: 1.55;
+  .detail-body-container {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin: 12px 20px 0;
   }
 
   .body-html-container {
-    margin: 18px 20px 0;
+    flex: 1;
+    height: 100%;
+    min-height: 0;
     border: 1px solid var(--choir-border-strong);
     border-radius: 8px;
     overflow: hidden;
@@ -1169,18 +1270,47 @@
 
   .body-html-iframe {
     width: 100%;
-    min-height: 300px;
+    height: 100%;
+    min-height: 0;
     border: none;
     display: block;
   }
 
-  .body-toggle {
-    display: flex;
-    gap: 2px;
-    margin: 0 20px;
-    margin-top: 8px;
+  .body-text {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    white-space: pre-wrap;
+    line-height: 1.55;
+    margin: 0;
+    padding: 16px;
+    background: #fff;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 8px;
   }
 
+  .detail-footer {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    margin-top: 12px;
+    border-top: 1px solid var(--choir-border-strong);
+    background: var(--choir-bg-elevated);
+  }
+
+  .loading-more {
+    padding: 10px 20px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--choir-text-muted);
+  }
+
+  .body-toggle {
+    display: flex;
+    gap: 4px;
+  }
   .body-toggle button {
     padding: 4px 12px;
     border: 1px solid var(--choir-border-strong);
