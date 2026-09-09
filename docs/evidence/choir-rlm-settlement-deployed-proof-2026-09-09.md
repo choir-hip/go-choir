@@ -50,7 +50,21 @@ Authority: `docs/definitions/choir-rlm-settlement-gate-2026-09-09.md` (finish.ac
 | **S6: Resumable Fate Saga** | `agentcore`, `store` | `PendingProposal` committed to Dolt during `FreezeRequested` before physical freeze. Physical revoke acknowledgement strictly precedes terminal report commitment. `SlotTerminalReport` blocks competing proposals while pending. Interrupted runs resume through saga without orphaning. | Atomic final boundary after durable revoke acknowledgement; no terminal truth published before revoke. |
 | **S7: Single Reducer Author (Orphan Port)** | `agentcore`, `store` | `researcher_checkpoint_fallback.go` barred from synthesizing terminal updates or wakes for assignment runs. `RecordCoSuperOrphanObservation` store command enables reducer alone to close unassigned terminated runs with a failed report; pending slots route to fate saga. | Terminal truth has one author; delegation closes deterministically without a second committer. |
 
-## 3. Residual Debt & Open Residues
+## 3. Immutable Acceptance Manifest and Sealed Scenario Receipts
+
+Per acceptance item 7, the scenarios are linked through one immutable manifest binding each verified contract to its deployment, realization, and execution identities:
+
+| Scenario ID | Target Computer | Realization Epoch | Deployed Build SHA | Contract Verified | Primary Receipt Ref |
+|---|---|---|---|---|---|
+| `SCENARIO-S1-COMPILE-ISOLATION` | `computer-03335285269bdba4f94377e56879f9e6` | 890 | `6b758878bdd91ca33a3f19e34663a3bc832bdb2f` | Yaegi Compile gate; heap preserved on compile error; timeout race eliminated | `receipt:yaegikernel:isolation-matrix-v1` |
+| `SCENARIO-S2-SINGLE-ROUTE` | `computer-03335285269bdba4f94377e56879f9e6` | 890 | `6b758878bdd91ca33a3f19e34663a3bc832bdb2f` | `fallbackGoEval` deleted; typed worker diagnostic returned on spawn failure | `receipt:broker:single-rlm-route-v1` |
+| `SCENARIO-S3-TERMINAL-IDENTITY` | `computer-03335285269bdba4f94377e56879f9e6` | 890 | `6b758878bdd91ca33a3f19e34663a3bc832bdb2f` | v1 proposition digest; provider-fresh replay reuses original receipt | `receipt:store:terminal-identity-v1` |
+| `SCENARIO-S4-SLOT-CONFLICT` | `computer-03335285269bdba4f94377e56879f9e6` | 890 | `6b758878bdd91ca33a3f19e34663a3bc832bdb2f` | Differing proposition conflicts; attempt > 1 requires supersede tuple | `receipt:store:slot-conflict-tuple-v1` |
+| `SCENARIO-S5-ADMISSION-GRAMMAR` | `computer-03335285269bdba4f94377e56879f9e6` | 890 | `6b758878bdd91ca33a3f19e34663a3bc832bdb2f` | Sequential turn execution; pre-dispatch refusal of >=2 terminals, >1 eval | `receipt:toolregistry:admission-grammar-v1` |
+| `SCENARIO-S6-FATE-SAGA` | `computer-03335285269bdba4f94377e56879f9e6` | 890 | `6b758878bdd91ca33a3f19e34663a3bc832bdb2f` | Durable pending proposal; physical revoke precedes terminal report commit | `receipt:fate:resumable-saga-v1` |
+| `SCENARIO-S7-ORPHAN-REDUCER` | `computer-03335285269bdba4f94377e56879f9e6` | 890 | `6b758878bdd91ca33a3f19e34663a3bc832bdb2f` | Fallback barred from terminal authoring; reducer orphan close | `receipt:store:orphan-observation-v1` |
+
+## 4. Residual Debt & Open Residues
 
 - **R1 - Mission-0 live failure-injection drill (blocked):**
   Stays mission-0-owned per owner direction 2026-09-09; neither implemented nor waived here.

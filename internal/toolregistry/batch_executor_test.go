@@ -314,13 +314,13 @@ func TestExecuteToolBatchAssignedCoSuperAdmissionGrammar(t *testing.T) {
 		t.Fatalf("eval failure did not skip terminal: executed=%v results=%+v", executed, results)
 	}
 
-	// 8. Admitted shape (b) with tray complete collision: terminal skipped.
+	// 8. Admitted shape (b) with mailbox complete: eval completes mailbox and JSON terminal executes.
 	executed = nil
 	results = ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
 		{ID: "1", Name: "capsule_go_eval", Arguments: json.RawMessage(`{"code":"stage_complete"}`)},
 		{ID: "2", Name: "record_assignment_result", Arguments: json.RawMessage(`{"result":"completed"}`)},
 	}, func(types.EventKind, string, json.RawMessage) {})
-	if len(executed) != 1 || executed[0] != "eval" || results[0].IsError || !results[1].IsError || !strings.Contains(results[1].Output, "multi-terminal collision") {
-		t.Fatalf("tray collision did not skip terminal: executed=%v results=%+v", executed, results)
+	if len(executed) != 2 || executed[0] != "eval" || executed[1] != "record" || results[0].IsError || results[1].IsError {
+		t.Fatalf("eval+complete with JSON terminal failed: executed=%v results=%+v", executed, results)
 	}
 }

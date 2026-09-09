@@ -190,8 +190,11 @@ now:
     - "Super run 31294013-1c77-4f66-8035-93209aea3930 bound exact sealed Option B assignment-b1d5dc65-bffa-5059-aa9c-e4cab45b8913 in capsule-42eb741f-f8a1-5ec2-abc7-48cdceaa3edc"
     - "CoSuper run run:assignment-b1d5dc65-bffa-5059-aa9c-e4cab45b8913 completed; invoked capsule_go_eval running verbatim Go cell reading AGENTS.md and writing /workspace/platform/rlm-option-b-proof-2026-09-05.txt with exit 0, yielding receipt capsule-go-eval:sha256:a3e3c3e3a8a7c2ec17d7af8cee781b7b572986faf9ea74a07e732bd2e9384f28"
     - "Pre-A checkpoint 99949fe2 published restore fence intact on Dolt platform computer_checkpoints; effects OFF"
-  blocker_or_risk: "Run acceptance WITHHELD for the terminal digest-conflict/settlement remainder (same-turn eval+report batch escaping the singleton terminal exit; provider ToolCallID in report identity/fingerprint). Execution proof retained (epoch 888 exit-0 cell, proof file, signed receipt, fence intact). Remainder owned by mission 1; this Definition is not executable and never completes in this state."
-  next_action: "No action under this Definition. Restore work runs under choir-rlm-restore-zero-2026-09-08; settlement work awaits mission 1 charter. Do not mark complete."
+  dated_corrections:
+    - date: "2026-09-09"
+      note: "Withheld settlement acceptance closed 2026-09-09 under mission choir-rlm-settlement-gate-2026-09-09 with deployed proof on staging computer-03335285269bdba4f94377e56879f9e6 at commit 6b758878 (CI run 34401118732). Remainder-holder status retained per owner direction 2026-09-09 (residue R6); this Definition remains non-executable and blocked from standalone completion until fully superseded by a named successor."
+  blocker_or_risk: "Withheld settlement acceptance closed under choir-rlm-settlement-gate-2026-09-09. Remainder-holder status retained per owner direction 2026-09-09 (residue R6). This Definition remains non-executable and blocked from standalone completion until fully superseded by a named successor."
+  next_action: "None. Retained as non-executable remainder holder (residue R6). Full supersession deferred to future mission."
 receipts:
   - id: rlm-target-architecture-consensus-and-definition-2026-09-04
     boundary: define

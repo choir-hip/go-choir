@@ -143,7 +143,12 @@ boundaries:
       - "Compile failures discarded working heaps through loop-level worker exit."
       - "One-shot diversion replacing exact diagnostics with generic wait errors."
     introduced: []
-    repaired: "none; mark repaired only after terminal deployed receipts"
+    repaired:
+      - "Same-turn eval+terminal batch escaping singleton exit with provider-contaminated identity (repaired: v1 terminal identity contract, proposition digest, slot conflict, supersede tuple)."
+      - "Compile failures discarded working heaps through loop-level worker exit (repaired: Yaegi compile gate with non-mutating heap preservation)."
+      - "One-shot diversion replacing exact diagnostics with generic wait errors (repaired: fallbackGoEval deleted from active RLM route; typed worker diagnostics)."
+      - "Pre-revoke premature terminal commitment (repaired: resumable fate saga with atomic final boundary strictly following revoke acknowledgement)."
+      - "Dual authorship of terminal truth by fallback (repaired: fallback barred for assignment runs; reducer-owned orphan observation port)."
 
 measures:
   - name: terminal_replay_predicate

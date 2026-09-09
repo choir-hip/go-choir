@@ -58,6 +58,21 @@ func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persis
 	// a second worker-update authority from the RunRecord outcome.
 	assignmentID := strings.TrimSpace(metadataStringValue(persisted.Metadata, "assignment_id"))
 	if assignmentID != "" {
+		attempt := uint64(metadataIntValue(persisted.Metadata, "assignment_attempt"))
+		reason := types.OrphanReasonProcessExitedWithoutPacket
+		if persisted.State == types.RunCancelled {
+			reason = types.OrphanReasonCancelled
+		}
+		obs := types.CoSuperOrphanObservation{
+			OwnerID:      persisted.OwnerID,
+			ComputerID:   persisted.ComputerID,
+			RunID:        persisted.RunID,
+			AssignmentID: assignmentID,
+			Attempt:      attempt,
+			Reason:       reason,
+			ObservedAt:   time.Now().UTC(),
+		}
+		_, _ = rt.store.RecordCoSuperOrphanObservation(ctx, obs)
 		return terminalOutcomeBinding{}, nil
 	}
 	hasLifecycleMarker := strings.TrimSpace(metadataStringValue(persisted.Metadata, "lifecycle_work_item_id")) != "" ||

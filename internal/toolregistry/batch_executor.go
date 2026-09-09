@@ -39,25 +39,17 @@ func ExecuteToolBatch(ctx context.Context, registry *ToolRegistry, calls []types
 		profile := ExecutionContextFrom(ctx).Profile
 		successfulTextureEditCallID := ""
 		evalFailed := false
-		evalStagedTrayTerminal := false
 		for i, call := range calls {
 			skipReason := skipped[i]
 			if skipReason == "" && evalFailed && call.Name == "record_assignment_result" {
 				skipReason = "tool_error: admission_grammar_refusal: prior capsule_go_eval failed, subsequent terminal skipped"
 			}
-			if skipReason == "" && evalStagedTrayTerminal && call.Name == "record_assignment_result" {
-				skipReason = "tool_error: admission_grammar_refusal: multi-terminal collision (tray complete already staged by eval)"
-			}
 			if skipReason == "" && profile == agentprofile.Texture && isTextureWriteToolName(call.Name) && successfulTextureEditCallID != "" {
 				skipReason = fmt.Sprintf("tool_notice:duplicate Texture write tool %s in this Texture turn skipped after call %s; one canonical document mutation is allowed per revision run", call.Name, successfulTextureEditCallID)
 			}
 			results[i] = executeOneTool(ctx, registry, call, skipReason, emit)
-			if call.Name == "capsule_go_eval" {
-				if results[i].IsError {
-					evalFailed = true
-				} else if strings.Contains(results[i].Output, `"rlm:complete:`) || strings.Contains(results[i].Output, `"kind":"complete"`) {
-					evalStagedTrayTerminal = true
-				}
+			if call.Name == "capsule_go_eval" && results[i].IsError {
+				evalFailed = true
 			}
 			if skipReason == "" && profile == agentprofile.Texture && isTextureWriteToolName(call.Name) && !results[i].IsError && IsStructuredToolSuccess(results[i].Output) {
 				successfulTextureEditCallID = call.ID
