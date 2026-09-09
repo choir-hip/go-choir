@@ -653,6 +653,12 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 	// capsule effect can reopen/revise the cancelled assignment.
 	if lateFate {
 		if reportExists {
+			if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+				assignment, err = rt.revokeAssignedCapsule(ctx, assignment, "terminal assignment report recorded")
+				if err != nil {
+					return types.CoSuperAssignmentCommandResult{}, err
+				}
+			}
 			return rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
 				assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, "co-super-report:"+assignment.AssignmentID+":"+report.ReportID)
 		}
@@ -675,7 +681,16 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 		if reportExists {
 			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("stored terminal report cannot precede freeze intent")
 		}
-		requested, err := rt.store.SetCoSuperCapsuleDisposition(ctx, coSuperFateRequest(assignment, types.CoSuperCapsuleFreezeRequested, intent, ""))
+		proposal := &types.CoSuperPendingProposal{
+			PropositionDigest: propositionDigest,
+			Report:            report,
+			FreezeIntentRef:   intent,
+			CreatedAt:         time.Now().UTC(),
+		}
+		freezeReq := coSuperFateRequest(assignment, types.CoSuperCapsuleFreezeRequested, intent, "")
+		freezeReq.PendingProposal = proposal
+		freezeReq.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(freezeReq)
+		requested, err := rt.store.SetCoSuperCapsuleDisposition(ctx, freezeReq)
 		if err != nil {
 			return types.CoSuperAssignmentCommandResult{}, err
 		}
@@ -717,6 +732,10 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 		fateAck, fateAckErr := coSuperFateAckRequest(assignment, types.CoSuperCapsuleFrozen, intent, ack, "sha256:"+strings.TrimPrefix(freezeReceipt.SourceSubjectDigest, "sha256:"), "sha256:"+strings.TrimPrefix(freezeReceipt.FinalSubjectDigest, "sha256:"), freezeReceipt.OccurredAt, false)
 		if fateAckErr != nil {
 			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("invalid freeze receipt occurred_at: %w", fateAckErr)
+		}
+		if assignment.PendingProposal != nil {
+			fateAck.PendingProposal = assignment.PendingProposal
+			fateAck.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(fateAck)
 		}
 		frozen, err := rt.store.SetCoSuperCapsuleDisposition(ctx, fateAck)
 		if err != nil {
@@ -761,28 +780,32 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 
 	var result types.CoSuperAssignmentCommandResult
 	if reportExists {
+		if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+			assignment, err = rt.revokeAssignedCapsule(ctx, assignment, "terminal assignment report recorded")
+			if err != nil {
+				return types.CoSuperAssignmentCommandResult{}, err
+			}
+		}
 		commandID := "co-super-report:" + assignment.AssignmentID + ":" + report.ReportID
 		result, err = rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, commandID)
 	} else {
-		if assignment.CapsuleDisposition != types.CoSuperCapsuleFrozen {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("terminal report requires frozen executor acknowledgement")
+		// Revocation must precede terminal commitment! No terminal state is visible until revoke ack.
+		if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+			assignment, err = rt.revokeAssignedCapsule(ctx, assignment, "terminal assignment report recorded")
+			if err != nil {
+				return types.CoSuperAssignmentCommandResult{}, err
+			}
+		}
+		if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("terminal report requires revoked executor acknowledgement")
 		}
 		result, err = rt.commitAssignedCoSuperReport(ctx, assignment, report)
 	}
 	if err != nil {
 		return result, err
 	}
-	current := result.Assignment
-	if current.CapsuleDisposition != types.CoSuperCapsuleRevoked {
-		current, err = rt.revokeAssignedCapsule(ctx, current, "terminal assignment report recorded")
-		if err != nil {
-			return result, err
-		}
-	}
-	result.Assignment = current
 	return result, nil
 }
-
 func (rt *Runtime) bindLateAssignmentExecutionReceipts(assignment types.CoSuperAssignment, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentReport, error) {
 	refs := make([]string, 0, len(report.Commands))
 	for _, command := range report.Commands {

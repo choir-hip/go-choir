@@ -264,6 +264,17 @@ type CoSuperAssignment struct {
 	CreatedAt              time.Time                      `json:"created_at"`
 	UpdatedAt              time.Time                      `json:"updated_at"`
 	TerminalAt             *time.Time                     `json:"terminal_at,omitempty"`
+	PendingProposal        *CoSuperPendingProposal        `json:"pending_proposal,omitempty"`
+}
+
+// CoSuperPendingProposal holds the reducer-owned pending proposal (settlement gate item 5)
+// committed durably before issuing physical freeze/revoke actions.
+type CoSuperPendingProposal struct {
+	PropositionDigest string                  `json:"proposition_digest"`
+	Report            CoSuperAssignmentReport `json:"report"`
+	FreezeIntentRef   string                  `json:"freeze_intent_ref"`
+	RevokeIntentRef   string                  `json:"revoke_intent_ref,omitempty"`
+	CreatedAt         time.Time               `json:"created_at"`
 }
 
 func (a CoSuperAssignment) Validate() error {
@@ -602,4 +613,5 @@ type SetCoSuperCapsuleDispositionRequest struct {
 	IntentRef                string                    `json:"intent_ref"`
 	AckRef                   string                    `json:"ack_ref,omitempty"`
 	FateStep                 *CoSuperCapsuleFateStep   `json:"fate_step,omitempty"`
+	PendingProposal          *CoSuperPendingProposal   `json:"pending_proposal,omitempty"`
 }

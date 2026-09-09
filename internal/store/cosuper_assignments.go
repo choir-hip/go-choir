@@ -1573,6 +1573,13 @@ func (s *Store) projectCoSuperTerminal(ctx context.Context, assignment types.CoS
 // stored digest recompute best-effort from the pinned belief; a stale overlay
 // can only fail closed, never accept twice.
 func (s *Store) SlotTerminalReport(ctx context.Context, assignment types.CoSuperAssignment, propositionDigest string) (matchID, matchCommandID, conflictID string, err error) {
+	if assignment.PendingProposal != nil {
+		if assignment.PendingProposal.PropositionDigest != propositionDigest {
+			if conflictID == "" {
+				conflictID = assignment.PendingProposal.Report.ReportID
+			}
+		}
+	}
 	for _, ref := range assignment.ReportRefs {
 		obj, getErr := s.lifecycleGraph().GetObject(ctx, strings.TrimSpace(ref))
 		if getErr != nil {
@@ -1650,7 +1657,6 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 	if intentErr != nil && !errors.Is(intentErr, ErrNotFound) {
 		return types.CoSuperAssignmentCommandResult{}, intentErr
 	}
-	lateAuthority := cancellationIntended || assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked
 	propositionDigest := ""
 	if req.Report.Result != types.CoSuperResultPartial {
 		var propErr error
@@ -1668,6 +1674,10 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 		if req.Report.PropositionDigest != "" && req.Report.ReportID != expectedReportID {
 			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("co-super assignment report report_id mismatch: %s vs %s: %w", req.Report.ReportID, expectedReportID, ErrCoSuperAssignmentInvalid)
 		}
+	}
+	pendingMatches := assignment.PendingProposal != nil && assignment.PendingProposal.PropositionDigest == propositionDigest && !cancellationIntended && !assignment.Disposition.Terminal()
+	lateAuthority := (cancellationIntended || assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked) && !pendingMatches
+	if req.Report.Result != types.CoSuperResultPartial {
 		matchID, matchCommandID, conflictID, scanErr := s.SlotTerminalReport(ctx, assignment, propositionDigest)
 		if scanErr != nil {
 			return types.CoSuperAssignmentCommandResult{}, scanErr
@@ -1803,6 +1813,7 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 	}
 	if assignment.Disposition != previousDisposition && assignment.Disposition.Terminal() {
 		assignment.DispositionReason = "reducer-derived from report " + report.ReportID
+		assignment.PendingProposal = nil
 		assignment.TerminalAt = &now
 	}
 	assignment.LifecycleVersion++
@@ -2038,6 +2049,10 @@ func (s *Store) SetCoSuperCapsuleDisposition(ctx context.Context, req types.SetC
 	}
 	assignment.CapsuleDisposition, assignment.CapsuleIntentRef, assignment.CapsuleAckRef = req.Disposition, req.IntentRef, req.AckRef
 	assignment.LifecycleVersion++
+	if req.PendingProposal != nil {
+		copy := *req.PendingProposal
+		assignment.PendingProposal = &copy
+	}
 	assignment.UpdatedAt = now
 	if req.FateStep != nil {
 		step := *req.FateStep

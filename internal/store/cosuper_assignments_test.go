@@ -1532,3 +1532,114 @@ func TestOpenSupersedeTuple(t *testing.T) {
 		t.Fatalf("attempt 1 with tuple = %v, want invalid", err)
 	}
 }
+
+func TestCoSuperPendingProposalDurabilityAndAtomicRevokeFinality(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-pending-saga", 1, types.CoSuperAssignmentImplementation, true, "cap-saga", "capsule-saga")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	bindReq := bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-saga")
+	bound, err := s.BindCoSuperAssignment(ctx, bindReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reportReq := assignmentReportRequest(open, bound.Assignment.LifecycleVersion, "report-saga-1", open.Binding.SubjectDigest, types.CoSuperResultCompleted, types.CoSuperVerdictNone)
+	propDigest, err := ComputeTerminalPropositionDigest(open.Binding.SubjectDigest, reportReq.Report.Result, reportReq.Report.Verdict, reportReq.Report.Commands, reportReq.Report.Outputs, reportReq.Report.EvidenceRefs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Commit PendingProposal with FreezeRequested
+	freezeIntent := "capsule-freeze-intent:" + propDigest
+	proposal := types.CoSuperPendingProposal{
+		PropositionDigest: propDigest,
+		Report:            reportReq.Report,
+		FreezeIntentRef:   freezeIntent,
+		CreatedAt:         time.Now().UTC(),
+	}
+	freezeReq := types.SetCoSuperCapsuleDispositionRequest{
+		CommandID: "cmd-freeze-req", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: bound.Assignment.LifecycleVersion,
+		Disposition: types.CoSuperCapsuleFreezeRequested, IntentRef: freezeIntent,
+		PendingProposal: &proposal,
+	}
+	freezeReq.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(freezeReq)
+	requested, err := s.SetCoSuperCapsuleDisposition(ctx, freezeReq)
+	if err != nil {
+		t.Fatalf("set freeze requested: %v", err)
+	}
+	if requested.Assignment.PendingProposal == nil || requested.Assignment.PendingProposal.PropositionDigest != propDigest {
+		t.Fatalf("pending proposal not stored: %+v", requested.Assignment.PendingProposal)
+	}
+	if requested.Assignment.Disposition != types.CoSuperAssignmentBound || requested.Assignment.TerminalAt != nil {
+		t.Fatalf("disposition advanced while pending: %+v", requested.Assignment)
+	}
+
+	// 2. Pending slot blocks competing different-digest terminal proposal
+	otherDigest := objectgraph.SHA256([]byte("other-digest"))
+	_, _, conflictID, err := s.SlotTerminalReport(ctx, requested.Assignment, otherDigest)
+	if err != nil || conflictID != reportReq.Report.ReportID {
+		t.Fatalf("pending conflict = %q err=%v, want %s", conflictID, err, reportReq.Report.ReportID)
+	}
+	sameMatchID, _, sameConflictID, err := s.SlotTerminalReport(ctx, requested.Assignment, propDigest)
+	if err != nil || sameMatchID != "" || sameConflictID != "" {
+		t.Fatalf("pending match = %q conflict = %q err=%v, want empty match and conflict", sameMatchID, sameConflictID, err)
+	}
+	// 3. Freeze ack preserves PendingProposal
+	freezeAckReq := types.SetCoSuperCapsuleDispositionRequest{
+		CommandID: "cmd-freeze-ack", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: requested.Assignment.LifecycleVersion,
+		Disposition: types.CoSuperCapsuleFrozen, IntentRef: freezeIntent, AckRef: "capsule-ack:freeze-1",
+		PendingProposal: requested.Assignment.PendingProposal,
+	}
+	freezeAckReq.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(freezeAckReq)
+	frozen, err := s.SetCoSuperCapsuleDisposition(ctx, freezeAckReq)
+	if err != nil {
+		t.Fatalf("set frozen: %v", err)
+	}
+	if frozen.Assignment.PendingProposal == nil {
+		t.Fatal("pending proposal lost on freeze ack")
+	}
+
+	// 4. Revoke ack preserves PendingProposal
+	revokeIntent := "capsule-revoke-intent:1"
+	revokeReq := types.SetCoSuperCapsuleDispositionRequest{
+		CommandID: "cmd-revoke-req", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: frozen.Assignment.LifecycleVersion,
+		Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: revokeIntent,
+		PendingProposal: frozen.Assignment.PendingProposal,
+	}
+	revokeReq.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(revokeReq)
+	revokeReqResult, err := s.SetCoSuperCapsuleDisposition(ctx, revokeReq)
+	if err != nil {
+		t.Fatalf("set revoke requested: %v", err)
+	}
+	revokeAckReq := types.SetCoSuperCapsuleDispositionRequest{
+		CommandID: "cmd-revoke-ack", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: revokeReqResult.Assignment.LifecycleVersion,
+		Disposition: types.CoSuperCapsuleRevoked, IntentRef: revokeIntent, AckRef: "capsule-revoke:" + objectgraph.SHA256([]byte("revoke-ack")),
+		PendingProposal: revokeReqResult.Assignment.PendingProposal,
+	}
+	revokeAckReq.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(revokeAckReq)
+	revoked, err := s.SetCoSuperCapsuleDisposition(ctx, revokeAckReq)
+	if err != nil {
+		t.Fatalf("set revoked: %v", err)
+	}
+
+	// 5. Atomic finalization: terminal report recorded, pending proposal cleared, disposition Completed, TerminalAt set
+	finalReportReq := assignmentReportRequest(open, revoked.Assignment.LifecycleVersion, reportReq.Report.ReportID, open.Binding.SubjectDigest, types.CoSuperResultCompleted, types.CoSuperVerdictNone)
+	final, err := s.RecordCoSuperAssignmentReport(ctx, finalReportReq)
+	if err != nil {
+		t.Fatalf("record final report: %v", err)
+	}
+	if final.Assignment.Disposition != types.CoSuperAssignmentCompleted || final.Assignment.TerminalAt == nil {
+		t.Fatalf("final settlement disposition = %v, terminal_at=%v", final.Assignment.Disposition, final.Assignment.TerminalAt)
+	}
+	if final.Assignment.PendingProposal != nil {
+		t.Fatalf("pending proposal not cleared after final settlement: %+v", final.Assignment.PendingProposal)
+	}
+}
