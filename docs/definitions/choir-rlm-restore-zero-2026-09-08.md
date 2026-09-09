@@ -124,6 +124,7 @@ boundaries:
     - "Final witness/head/verifier/route checks precede exposure; shared platform/world-wire and irreversible external effects are outside a user-computer restore."
     - "Pre-A checkpoint 99949fe2 remains untouched as the self-development fence."
     - "Problem-documentation-first: a code-free Define receipt naming the observed genesis/silent-base/ancestry defects precedes every repair-code commit."
+    - "Simplification over addition: extend or repair existing restore surfaces and delete the flawed patterns (silent fallbacks, genesis-by-default paths); new modules only where no existing surface can carry the contract. The end state reads as how the substrate should have been all along."
     - "Mission 0 and mission 1 may rehearse concurrently, but commits on shared files, deployment, route, and registry authority serialize."
   excluded:
     - "Mission-1 terminal semantic identity, compile/runtime classification, one-shot unification, fate saga, and singleton-detector replacement."
