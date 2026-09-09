@@ -3,6 +3,7 @@ package toolregistry
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"errors"
 	"strings"
 	"sync"
@@ -215,5 +216,111 @@ func TestExecuteToolBatchInstallsProviderToolCallID(t *testing.T) {
 	results := ExecuteToolBatch(WithExecutionContext(context.Background(), ExecutionContext{ToolCallID: "stale"}), registry, []types.ToolCall{{ID: "provider-call-42", Name: "capture_call_id"}}, func(types.EventKind, string, json.RawMessage) {})
 	if len(results) != 1 || results[0].IsError || results[0].Output != "provider-call-42" {
 		t.Fatalf("results=%+v", results)
+	}
+}
+
+func TestExecuteToolBatchAssignedCoSuperAdmissionGrammar(t *testing.T) {
+	registry := NewToolRegistry()
+	var executed []string
+	_ = registry.Register(Tool{Name: "capsule_go_eval", Func: func(_ context.Context, args json.RawMessage) (string, error) {
+		executed = append(executed, "eval")
+		var in struct {
+			Code string `json:"code"`
+		}
+		_ = json.Unmarshal(args, &in)
+		if in.Code == "fail" {
+			return "", fmt.Errorf("compile error")
+		}
+		if in.Code == "stage_complete" {
+			return `{"staged_intent_ids":["rlm:complete:1"]}`, nil
+		}
+		return `{"stdout":"ok"}`, nil
+	}})
+	_ = registry.Register(Tool{Name: "record_assignment_result", Func: func(_ context.Context, args json.RawMessage) (string, error) {
+		executed = append(executed, "record")
+		return `{"receipt":"ok"}`, nil
+	}})
+	_ = registry.Register(Tool{Name: "bash", Func: func(_ context.Context, _ json.RawMessage) (string, error) {
+		executed = append(executed, "bash")
+		return `{"exit_code":0}`, nil
+	}})
+
+	// 1. Two explicit terminals: statically refused, none run.
+	executed = nil
+	results := ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
+		{ID: "1", Name: "record_assignment_result", Arguments: json.RawMessage(`{"result":"completed"}`)},
+		{ID: "2", Name: "record_assignment_result", Arguments: json.RawMessage(`{"result":"failed"}`)},
+	}, func(types.EventKind, string, json.RawMessage) {})
+	if len(executed) != 0 || !results[0].IsError || !results[1].IsError || !strings.Contains(results[0].Output, "at most one explicit terminal call") {
+		t.Fatalf("two terminals not refused: executed=%v results=%+v", executed, results)
+	}
+
+	// 2. Two evals: statically refused, none run.
+	executed = nil
+	results = ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
+		{ID: "1", Name: "capsule_go_eval", Arguments: json.RawMessage(`{"code":"1"}`)},
+		{ID: "2", Name: "capsule_go_eval", Arguments: json.RawMessage(`{"code":"2"}`)},
+	}, func(types.EventKind, string, json.RawMessage) {})
+	if len(executed) != 0 || !results[0].IsError || !results[1].IsError || !strings.Contains(results[0].Output, "at most one capsule_go_eval call") {
+		t.Fatalf("two evals not refused: executed=%v results=%+v", executed, results)
+	}
+
+	// 3. Reversed companion order: statically refused, none run.
+	executed = nil
+	results = ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
+		{ID: "1", Name: "record_assignment_result", Arguments: json.RawMessage(`{"result":"completed"}`)},
+		{ID: "2", Name: "capsule_go_eval", Arguments: json.RawMessage(`{"code":"1"}`)},
+	}, func(types.EventKind, string, json.RawMessage) {})
+	if len(executed) != 0 || !results[0].IsError || !results[1].IsError || !strings.Contains(results[0].Output, "cannot precede capsule_go_eval") {
+		t.Fatalf("reversed order not refused: executed=%v results=%+v", executed, results)
+	}
+
+	// 4. Forbidden companion alongside explicit terminal: statically refused, none run.
+	executed = nil
+	results = ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
+		{ID: "1", Name: "bash", Arguments: json.RawMessage(`{"cmd":"ls"}`)},
+		{ID: "2", Name: "record_assignment_result", Arguments: json.RawMessage(`{"result":"completed"}`)},
+	}, func(types.EventKind, string, json.RawMessage) {})
+	if len(executed) != 0 || !results[0].IsError || !results[1].IsError || !strings.Contains(results[0].Output, "companion tool calls are forbidden") {
+		t.Fatalf("forbidden companion not refused: executed=%v results=%+v", executed, results)
+	}
+
+	// 5. Admitted shape (a): singleton terminal executes.
+	executed = nil
+	results = ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
+		{ID: "1", Name: "record_assignment_result", Arguments: json.RawMessage(`{"result":"completed"}`)},
+	}, func(types.EventKind, string, json.RawMessage) {})
+	if len(executed) != 1 || executed[0] != "record" || results[0].IsError {
+		t.Fatalf("shape (a) failed: executed=%v results=%+v", executed, results)
+	}
+
+	// 6. Admitted shape (b): eval then terminal executes sequentially.
+	executed = nil
+	results = ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
+		{ID: "1", Name: "capsule_go_eval", Arguments: json.RawMessage(`{"code":"1"}`)},
+		{ID: "2", Name: "record_assignment_result", Arguments: json.RawMessage(`{"result":"completed"}`)},
+	}, func(types.EventKind, string, json.RawMessage) {})
+	if len(executed) != 2 || executed[0] != "eval" || executed[1] != "record" || results[0].IsError || results[1].IsError {
+		t.Fatalf("shape (b) failed: executed=%v results=%+v", executed, results)
+	}
+
+	// 7. Admitted shape (b) with eval failure: terminal skipped.
+	executed = nil
+	results = ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
+		{ID: "1", Name: "capsule_go_eval", Arguments: json.RawMessage(`{"code":"fail"}`)},
+		{ID: "2", Name: "record_assignment_result", Arguments: json.RawMessage(`{"result":"completed"}`)},
+	}, func(types.EventKind, string, json.RawMessage) {})
+	if len(executed) != 1 || executed[0] != "eval" || !results[0].IsError || !results[1].IsError || !strings.Contains(results[1].Output, "prior capsule_go_eval failed") {
+		t.Fatalf("eval failure did not skip terminal: executed=%v results=%+v", executed, results)
+	}
+
+	// 8. Admitted shape (b) with tray complete collision: terminal skipped.
+	executed = nil
+	results = ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
+		{ID: "1", Name: "capsule_go_eval", Arguments: json.RawMessage(`{"code":"stage_complete"}`)},
+		{ID: "2", Name: "record_assignment_result", Arguments: json.RawMessage(`{"result":"completed"}`)},
+	}, func(types.EventKind, string, json.RawMessage) {})
+	if len(executed) != 1 || executed[0] != "eval" || results[0].IsError || !results[1].IsError || !strings.Contains(results[1].Output, "multi-terminal collision") {
+		t.Fatalf("tray collision did not skip terminal: executed=%v results=%+v", executed, results)
 	}
 }

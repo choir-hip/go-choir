@@ -173,7 +173,7 @@ measures:
 
 now:
   status: working
-  slice: "Item 4 active: code-free Define recorded 2026-09-09 with narrow admission grammar specification (Stage 1 pre-dispatch refusal, Stage 2 post-eval tray validation, sequential execution, toolloop decoupling). Next: implement item-4 repair."
+  slice: "Item 4 implemented 2026-09-09: sequential turn execution for capsule_go_eval and record_assignment_result + Stage 1 pre-dispatch admission refusal (at most one terminal, at most one eval, no reversed order, no forbidden companions) with none-run semantics + Stage 2 post-eval tray skip + toolloop decoupling; toolregistry green. Next: items 5-8. Push/deploy/proof deferred to item-7 landing."
   question: none
   reconciliation:
     observed_at: "2026-09-09T16:31:36Z"
@@ -205,14 +205,14 @@ now:
     - "cmd/capsule-broker/session_worker.go"
     - "internal/agentcore/cosuper_assignment_fate.go"
     - "docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md (item-1 Define: matrix + authorized Compile/Execute repair boundary)"
-    - "docs/evidence/choir-rlm-settlement-item2-define-2026-09-09.md (item-2 Define: fallback-diversion defect + authorized removal boundary)"
+    - "item-4 repair commit (this commit): toolRequiresSequentialTurnExecution + validateCoSuperBatchAdmission + tray collision skip + batchContainsAdmittedTerminalTool + unit tests"
+    - "docs/evidence/choir-rlm-settlement-item4-define-2026-09-09.md (item-4 Define: narrow admission grammar + Stage 1/2 boundaries + sequential execution)"
     - "item-3 repair commit 965e26a7: canonicalizer + TerminalReportID + SlotTerminalReport + Record/Open integration + agentcore mint/gate + strict decode + v1 tests"
     - "docs/evidence/choir-rlm-settlement-item3-define-2026-09-09.md (item-3 Define: frozen v1 table + dated overlay-paradox correction + authorized repair boundary)"
-    - "docs/evidence/choir-rlm-settlement-item4-define-2026-09-09.md (item-4 Define: narrow admission grammar + Stage 1/2 boundaries + sequential execution)"
     - "item-2 repair commit a6b898f0: fallbackGoEval deletion + typed spawn-failure diagnostic; cross-vet ok, linux-test execution deferred to CI"
     - "item-1 repair commit b8aaa89b: EvalError + Compile gate + serveCell/broker carry + contract tests; yaegikernel/capsule/toolregistry green, agentcore capsule/fate subset green, broker cross-build ok"
-  blocker_or_risk: "Item-4 repair unimplemented (eval+terminal parallel dispatch, 2+ terminals in batch, contradictory tray); items 5-8 open. Broker linux-test execution deferred to CI. Mission-0 drill debt stays mission-0-owned (residue R1)."
-  next_action: "Implement item-4 repair: sequential classification + pre-dispatch batch refusal + post-eval tray validation + admitted shape tests."
+  blocker_or_risk: "Items 5-8 open (fate finality-before-revoke saga, fallback authorship, deployed proof, regression contracts). Broker linux-test execution deferred to CI. Mission-0 drill debt stays mission-0-owned (residue R1)."
+  next_action: "Commit item-4 repair, then author item-5 Define (resumable fate saga with atomic final boundary)."
 
 receipts:
   - id: settlement-gate-charter-2026-09-09
@@ -300,7 +300,7 @@ receipts:
     candidate_or_evidence_refs: []
   - id: settlement-item4-define-2026-09-09
     boundary: define
-    commit_or_artifact: "this commit (docs/evidence/choir-rlm-settlement-item4-define-2026-09-09.md)"
+    commit_or_artifact: "f320e4fe (docs/evidence/choir-rlm-settlement-item4-define-2026-09-09.md)"
     proof_refs:
       - "docs/evidence/choir-rlm-settlement-item4-define-2026-09-09.md (narrow admission grammar: stage 1 pre-dispatch, stage 2 post-eval tray, sequential execution)"
       - "inventory defect cited: toolRequiresSequentialTurnExecution omits capsule_go_eval and record_assignment_result"
@@ -308,4 +308,17 @@ receipts:
     disposition: "item-4 repair boundary authorized; no source changed"
     problem_ref: "eval+terminal parallel dispatch; 2+ terminals in batch; reversed companion order; contradictory tray collision"
     authorization_ref: "Owner-chartered item 4; problem-documentation-first per mission boundaries"
+    candidate_or_evidence_refs: []
+  - id: settlement-item4-implement-2026-09-09
+    boundary: implement
+    commit_or_artifact: "this commit (red: narrow admission grammar repair + tests)"
+    proof_refs:
+      - "new: TestExecuteToolBatchAssignedCoSuperAdmissionGrammar covering 2+ terminals, 2+ evals, reversed order, forbidden companion, shape a, shape b, eval failure skip, tray collision skip"
+      - "sequential execution: capsule_go_eval and record_assignment_result classified sequential"
+      - "toolloop decoupling: batchContainsAdmittedTerminalTool recognizes shape a and shape b under detached terminal timeout"
+      - "go test ./internal/toolregistry green (0.18s)"
+    rollback_ref: "revert this commit; Define receipt f320e4fe retained"
+    disposition: "item-4 repair lands; items 5-8 open; push/deploy/proof deferred to item-7 landing"
+    problem_ref: "docs/evidence/choir-rlm-settlement-item4-define-2026-09-09.md"
+    authorization_ref: "Owner-chartered item 4; Define-precedes-repair satisfied by f320e4fe"
     candidate_or_evidence_refs: []

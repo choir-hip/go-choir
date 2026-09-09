@@ -619,7 +619,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				}
 			}
 
-			terminalClosure := len(resp.ToolCalls) == 1 && options.detachedTerminalTool != nil && options.detachedTerminalTool(resp.ToolCalls[0])
+			terminalClosure := options.detachedTerminalTool != nil && batchContainsAdmittedTerminalTool(resp.ToolCalls, options.detachedTerminalTool)
 			runToolTurn := func() ([]types.ToolResult, error) {
 				toolCtx := ctx
 				if terminalClosure {
@@ -1762,4 +1762,17 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func batchContainsAdmittedTerminalTool(calls []types.ToolCall, predicate DetachedTerminalToolPredicate) bool {
+	if predicate == nil || len(calls) == 0 {
+		return false
+	}
+	if len(calls) == 1 && predicate(calls[0]) {
+		return true
+	}
+	if len(calls) == 2 && calls[0].Name == "capsule_go_eval" && predicate(calls[1]) {
+		return true
+	}
+	return false
 }

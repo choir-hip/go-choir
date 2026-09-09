@@ -18,17 +18,47 @@ import (
 // execution policy and returns results in provider call order.
 func ExecuteToolBatch(ctx context.Context, registry *ToolRegistry, calls []types.ToolCall, emit provideriface.EventEmitFunc) []types.ToolResult {
 	results := make([]types.ToolResult, len(calls))
+
+	// Stage 1 (pre-dispatch): narrow assigned-CoSuper admission grammar
+	// (settlement gate item 4). Statically refuse contradictory or forbidden
+	// batches with none run.
+	if refusalErr := validateCoSuperBatchAdmission(calls); refusalErr != nil {
+		for i, call := range calls {
+			results[i] = types.ToolResult{
+				CallID:  call.ID,
+				Output:  fmt.Sprintf("tool_error: %v", refusalErr),
+				IsError: true,
+			}
+		}
+		return results
+	}
+
 	skipped := plannedToolSkips(ctx, calls)
 
 	if shouldExecuteToolsSequentially(calls) {
 		profile := ExecutionContextFrom(ctx).Profile
 		successfulTextureEditCallID := ""
+		evalFailed := false
+		evalStagedTrayTerminal := false
 		for i, call := range calls {
 			skipReason := skipped[i]
+			if skipReason == "" && evalFailed && call.Name == "record_assignment_result" {
+				skipReason = "tool_error: admission_grammar_refusal: prior capsule_go_eval failed, subsequent terminal skipped"
+			}
+			if skipReason == "" && evalStagedTrayTerminal && call.Name == "record_assignment_result" {
+				skipReason = "tool_error: admission_grammar_refusal: multi-terminal collision (tray complete already staged by eval)"
+			}
 			if skipReason == "" && profile == agentprofile.Texture && isTextureWriteToolName(call.Name) && successfulTextureEditCallID != "" {
 				skipReason = fmt.Sprintf("tool_notice:duplicate Texture write tool %s in this Texture turn skipped after call %s; one canonical document mutation is allowed per revision run", call.Name, successfulTextureEditCallID)
 			}
 			results[i] = executeOneTool(ctx, registry, call, skipReason, emit)
+			if call.Name == "capsule_go_eval" {
+				if results[i].IsError {
+					evalFailed = true
+				} else if strings.Contains(results[i].Output, `"rlm:complete:`) || strings.Contains(results[i].Output, `"kind":"complete"`) {
+					evalStagedTrayTerminal = true
+				}
+			}
 			if skipReason == "" && profile == agentprofile.Texture && isTextureWriteToolName(call.Name) && !results[i].IsError && IsStructuredToolSuccess(results[i].Output) {
 				successfulTextureEditCallID = call.ID
 			}
@@ -122,7 +152,7 @@ func shouldExecuteToolsSequentially(calls []types.ToolCall) bool {
 
 func toolRequiresSequentialTurnExecution(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "bash", "write_file", "patch_texture", "rewrite_texture", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "product_api_request", "update_coagent", "save_evidence":
+	case "bash", "write_file", "patch_texture", "rewrite_texture", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "product_api_request", "update_coagent", "save_evidence", "capsule_go_eval", "record_assignment_result":
 		return true
 	default:
 		return false
@@ -138,6 +168,81 @@ func isTextureWriteToolName(name string) bool {
 	}
 }
 
+func validateCoSuperBatchAdmission(calls []types.ToolCall) error {
+	hasEval := false
+	hasRecord := false
+	for _, call := range calls {
+		switch strings.TrimSpace(call.Name) {
+		case "capsule_go_eval":
+			hasEval = true
+		case "record_assignment_result":
+			hasRecord = true
+		}
+	}
+	if !hasEval && !hasRecord {
+		return nil
+	}
+
+	evalCount := 0
+	explicitTerminalCount := 0
+	recordCount := 0
+	seenRecordBeforeEval := false
+	hasForbiddenCompanion := false
+
+	for _, call := range calls {
+		name := strings.TrimSpace(call.Name)
+		switch name {
+		case "capsule_go_eval":
+			evalCount++
+			if recordCount > 0 {
+				seenRecordBeforeEval = true
+			}
+		case "record_assignment_result":
+			recordCount++
+			if isExplicitTerminalCall(call) {
+				explicitTerminalCount++
+			}
+		default:
+			hasForbiddenCompanion = true
+		}
+	}
+
+	if explicitTerminalCount >= 2 {
+		return fmt.Errorf("admission_grammar_refusal: at most one explicit terminal call allowed per turn (found %d)", explicitTerminalCount)
+	}
+	if evalCount > 1 {
+		return fmt.Errorf("admission_grammar_refusal: at most one capsule_go_eval call allowed per turn (found %d)", evalCount)
+	}
+	if seenRecordBeforeEval && evalCount > 0 {
+		return fmt.Errorf("admission_grammar_refusal: record_assignment_result cannot precede capsule_go_eval in the same turn")
+	}
+	if explicitTerminalCount > 0 && hasForbiddenCompanion {
+		return fmt.Errorf("admission_grammar_refusal: companion tool calls are forbidden alongside an explicit terminal call")
+	}
+	return nil
+}
+
+func isExplicitTerminalCall(call types.ToolCall) bool {
+	if strings.TrimSpace(call.Name) != "record_assignment_result" {
+		return false
+	}
+	var probe struct {
+		Result string `json:"result"`
+	}
+	if err := json.Unmarshal(call.Arguments, &probe); err != nil {
+		// Fail closed on unparseable arguments for record_assignment_result
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(probe.Result)) {
+	case "completed", "failed", "blocked":
+		return true
+	case "partial":
+		return false
+	default:
+		// Unknown or empty result: fail closed
+		return true
+	}
+}
 func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]string {
 	profile := ExecutionContextFrom(ctx).Profile
 	if profile == "" || len(calls) == 0 {
