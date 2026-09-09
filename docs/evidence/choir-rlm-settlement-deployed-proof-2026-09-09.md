@@ -20,18 +20,20 @@ Authority: `docs/definitions/choir-rlm-settlement-gate-2026-09-09.md` (finish.ac
   - `f5cfc206` red(settlement-item6): fallback canonical-author port closure, reducer orphan observation, and obligation routing
   - `5022c6b7` red(yaegikernel): execute compiled program directly and guard result read on failure to eliminate timeout data race
   - `6b758878` red(agentcore): increase trajectoryActivationDrainTimeout to accommodate large scale trajectory drains
+  - `0c71d1f9` red(settlement-gate): post-consensus completion adjudications, immutable acceptance manifest, and cutover closure
+  - `0475ed84` red(settlement-gate): round-2 closure - orphan replay by report identity, producer test, sealed manifest, registry reconciliation
 - **CI Status:**
-  - Workflow: GitHub Actions CI run `34401118732`
-  - Result: `completed success`
+  - Workflow: GitHub Actions CI run `34408184941`
+  - Result: `completed success` (superset of prior green run `34401118732`)
   - All CI gates passed: Plan CI Lanes, Heresy Detector, Go Vet + Build, Docs Truth Check, Build Differential SBOM Candidate, Detect Staging Deploy Impact, all 6 `agentcore/textureowner` shards (race detector), all 6 `non-runtime` shards (race detector), isolated scale tests, Publish Rolling Flake, and Deploy to Staging (Node B).
 - **Staging Verification:**
   - URL: `https://choir.news/`
   - Response: `HTTP/2 200 OK`
   - Headers:
-    - `x-choir-build-commit: 6b758878bdd91ca33a3f19e34663a3bc832bdb2f`
+    - `x-choir-build-commit: 0475ed84cc2bb380dc8df69ab368e443a969a207`
     - `x-choir-build-service: proxy`
     - `via: 1.1 Caddy`
-    - `date: Wed, 09 Sep 2026 20:54:12 GMT`
+    - `date: Wed, 09 Sep 2026 22:07:34 GMT`
 - **Target Computer Identity (consumed read-only from mission 0):**
   - Computer: `computer-03335285269bdba4f94377e56879f9e6`
   - Realization Epoch: 890
@@ -54,13 +56,13 @@ Authority: `docs/definitions/choir-rlm-settlement-gate-2026-09-09.md` (finish.ac
 
 Shared deployment identity for every scenario row: staging computer
 `computer-03335285269bdba4f94377e56879f9e6`, realization epoch 890, deployed
-build `6b758878bdd91ca33a3f19e34663a3bc832bdb2f`, CI run `34401118732`
-(all green), staging `HTTP/2 200 OK` with `x-choir-build-commit: 6b758878...`
-(Section 1). No live assignment attempt was opened on the staging computer;
-per-scenario execution evidence is the named contract test (run in CI
-`34401118732`) against the named repair commit. Attempt/run/capsule bindings
-below are the testcase fixture identities exercised by those verifiers, not
-staging attempts.
+build `0475ed84cc2bb380dc8df69ab368e443a969a207`, CI run `34408184941`
+(all green; superset of prior green run `34401118732` at `6b758878`), staging
+`HTTP/2 200 OK` with `x-choir-build-commit: 0475ed84...` (Section 1). No live
+assignment attempt was opened on the staging computer; per-scenario execution
+evidence is the named contract test (run in CI `34408184941`) against the named
+repair commit. Attempt/run/capsule bindings below are the testcase fixture
+identities exercised by those verifiers, not staging attempts.
 
 | Scenario ID | Repair Commit | Verifier (resolvable) | Contract Verified |
 |---|---|---|---|
@@ -70,7 +72,7 @@ staging attempts.
 | `SCENARIO-S4-SLOT-CONFLICT` | `965e26a7` | `internal/store`: `TestCoSuperAssignmentCommandsReplayAndDigestConflict`, `TestOpenSupersedeTuple` | Differing proposition conflicts; supersede tuple required for attempt > 1 |
 | `SCENARIO-S5-ADMISSION-GRAMMAR` | `18498447`, `0c71d1f9` | `internal/toolregistry`: `TestExecuteToolBatchAssignedCoSuperAdmissionGrammar` (test 8: `[stage_complete eval, completed terminal]` executes sequentially) | Sequential execution; pre-dispatch refusal; mailbox complete never aborts admitted terminal |
 | `SCENARIO-S6-FATE-SAGA` | `0921c542` | `internal/store`: `TestCoSuperPendingProposalDurabilityAndAtomicRevokeFinality` | Durable pending proposal; revoke acknowledgement precedes terminal commit |
-| `SCENARIO-S7-ORPHAN-REDUCER` | `f5cfc206` | `internal/store`: `TestRecordCoSuperOrphanObservation` (close, pending-conflict, bound-run mismatch, terminal retry replay); `internal/agentcore`: `TestFallbackRecordsOrphanObservationOnAssignedTerminalRun`, `TestFallbackAbstainsOnAssignmentRun` | Fallback synthesizes nothing on assignment runs; reducer closes orphans with bound-run validation and replay |
+| `SCENARIO-S7-ORPHAN-REDUCER` | `f5cfc206`, `0475ed84` | `internal/store`: `TestRecordCoSuperOrphanObservation` (close, pending-conflict, bound-run mismatch, terminal retry replay); `internal/agentcore`: `TestFallbackRecordsOrphanObservationOnAssignedTerminalRun`, `TestFallbackAbstainsOnAssignmentRun` | Fallback synthesizes nothing on assignment runs; reducer closes orphans with bound-run validation and replay |
 
 ## 4. Residual Debt & Open Residues
 

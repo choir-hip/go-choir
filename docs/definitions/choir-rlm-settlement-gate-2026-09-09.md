@@ -210,7 +210,7 @@ now:
     - "cmd/capsule-broker/session_worker.go"
     - "internal/agentcore/cosuper_assignment_fate.go"
     - "docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md (item-1 Define: matrix + authorized Compile/Execute repair boundary)"
-    - "docs/evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md (deployed proof: scenarios S1-S7, staging commit 6b758878, CI run 34401118732)"
+    - "docs/evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md (deployed proof: scenarios S1-S7, staging commit 0475ed84, CI run 34408184941; supersedes prior green run 34401118732 at 6b758878)"
     - "item-6 repair commit f5cfc206: fallback barred from synthesizing terminal updates/wakes on assignment runs + RecordCoSuperOrphanObservation store command + obligation routing + caller-map proof"
     - "docs/evidence/choir-rlm-settlement-item6-define-2026-09-09.md (item-6 Define: fallback canonical author port closure + reducer orphan observation + caller-map proof)"
     - "item-5 repair commit 0921c542: PendingProposal schema + SetCoSuperCapsuleDisposition proposal commit + fate saga reordering + TestCoSuperPendingProposalDurabilityAndAtomicRevokeFinality"
