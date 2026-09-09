@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -59,8 +60,13 @@ func main() {
 				Key string `json:"key"`
 			}
 			if err := json.Unmarshal(raw, &kf); err == nil && kf.Key != "" {
-				// Base64-decoded in computerevent.
-				keyMaterial = []byte(kf.Key)
+				if dec, err := base64.StdEncoding.DecodeString(kf.Key); err == nil && len(dec) == 32 {
+					keyMaterial = dec
+				} else if dec, err := base64.RawStdEncoding.DecodeString(kf.Key); err == nil && len(dec) == 32 {
+					keyMaterial = dec
+				} else {
+					keyMaterial = []byte(kf.Key)
+				}
 			} else {
 				keyMaterial = raw
 			}
@@ -89,7 +95,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	diskSource := projectionbase.NewDiskEventSource(cfg.ArtifactsRoot, cfg.ComputerID)
+	diskSource := projectionbase.NewDiskEventSource(cfg.ArtifactsRoot, cfg.ComputerID, cfg.TargetHead)
 
 	fmt.Printf("Starting offline projection base rebuild for %s through head %s...\n", cfg.ComputerID, cfg.TargetHead)
 	result, err := rebuilder.Run(ctx, diskSource)

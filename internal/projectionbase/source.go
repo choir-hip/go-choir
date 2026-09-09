@@ -18,14 +18,22 @@ import (
 type DiskEventSource struct {
 	artifactsRoot string
 	computerID    string
+	targetHead    string
 }
 
 // NewDiskEventSource returns an event and payload source reading from artifactsRoot.
-func NewDiskEventSource(artifactsRoot, computerID string) *DiskEventSource {
-	return &DiskEventSource{
+// When targetHead is provided, the source traces backwards along the exact
+// previous_head ancestry to genesis, avoiding scanning uncommitted or foreign
+// event files on disk.
+func NewDiskEventSource(artifactsRoot, computerID string, targetHead ...string) *DiskEventSource {
+	s := &DiskEventSource{
 		artifactsRoot: filepath.Clean(artifactsRoot),
 		computerID:    strings.TrimSpace(computerID),
 	}
+	if len(targetHead) > 0 {
+		s.targetHead = strings.TrimSpace(targetHead[0])
+	}
+	return s
 }
 
 // EventsPage loads and parses sequence-ordered event envelopes from disk.
@@ -42,41 +50,68 @@ func (s *DiskEventSource) EventsPage(ctx context.Context, computerID string, aft
 	}
 
 	eventsDir := filepath.Join(s.artifactsRoot, "sha256", "computer-event")
-	entries, err := os.ReadDir(eventsDir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("disk event source: read events directory: %w", err)
-	}
-
 	var allEvents []computerevent.Event
 	var allDigests []string
-	for _, entry := range entries {
-		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
-			continue
+	if s.targetHead != "" && computerevent.IsSHA256(s.targetHead) {
+		curr := s.targetHead
+		for curr != computerevent.ZeroHead && computerevent.IsSHA256(curr) {
+			path := filepath.Join(eventsDir, curr)
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("disk event source: read event file %s: %w", curr, err)
+			}
+			if computerevent.DigestBytes(raw) != curr {
+				return nil, fmt.Errorf("disk event source: digest mismatch for event %s", curr)
+			}
+			var event computerevent.Event
+			if err := json.Unmarshal(raw, &event); err != nil {
+				return nil, fmt.Errorf("disk event source: decode event %s: %w", curr, err)
+			}
+			if event.ComputerID != computerID {
+				return nil, fmt.Errorf("disk event source: event %s computer %q mismatch with %q", curr, event.ComputerID, computerID)
+			}
+			allEvents = append(allEvents, event)
+			allDigests = append(allDigests, curr)
+			curr = event.PreviousHead
 		}
-		digest := entry.Name()
-		if !computerevent.IsSHA256(digest) {
-			continue
+		for i, j := 0, len(allEvents)-1; i < j; i, j = i+1, j-1 {
+			allEvents[i], allEvents[j] = allEvents[j], allEvents[i]
+			allDigests[i], allDigests[j] = allDigests[j], allDigests[i]
 		}
-		path := filepath.Join(eventsDir, digest)
-		raw, err := os.ReadFile(path)
+	} else {
+		entries, err := os.ReadDir(eventsDir)
 		if err != nil {
-			return nil, fmt.Errorf("disk event source: read event file %s: %w", digest, err)
+			if errors.Is(err, os.ErrNotExist) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("disk event source: read events directory: %w", err)
 		}
-		if computerevent.DigestBytes(raw) != digest {
-			return nil, fmt.Errorf("disk event source: digest mismatch for event %s", digest)
+		for _, entry := range entries {
+			if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+			digest := entry.Name()
+			if !computerevent.IsSHA256(digest) {
+				continue
+			}
+			path := filepath.Join(eventsDir, digest)
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("disk event source: read event file %s: %w", digest, err)
+			}
+			if computerevent.DigestBytes(raw) != digest {
+				return nil, fmt.Errorf("disk event source: digest mismatch for event %s", digest)
+			}
+			var event computerevent.Event
+			if err := json.Unmarshal(raw, &event); err != nil {
+				return nil, fmt.Errorf("disk event source: decode event %s: %w", digest, err)
+			}
+			if event.ComputerID != computerID {
+				continue
+			}
+			allEvents = append(allEvents, event)
+			allDigests = append(allDigests, digest)
 		}
-		var event computerevent.Event
-		if err := json.Unmarshal(raw, &event); err != nil {
-			return nil, fmt.Errorf("disk event source: decode event %s: %w", digest, err)
-		}
-		if event.ComputerID != computerID {
-			continue
-		}
-		allEvents = append(allEvents, event)
-		allDigests = append(allDigests, digest)
 	}
 
 	// Sort all events strictly by sequence ascending.
