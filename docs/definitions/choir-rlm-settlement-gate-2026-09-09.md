@@ -178,12 +178,12 @@ measures:
 
 now:
   status: completed
-  slice: "Settlement Gate completed 2026-09-09 with full CI green (run 34401118732) and deployed proof on staging computer-03335285269bdba4f94377e56879f9e6 at commit 6b758878. All 8 acceptance items satisfied. Withheld cutover run acceptance closed; cutover definition retained as remainder holder (R6). Mission-0 live drill debt stays mission-0-owned (R1)."
+  slice: "Settlement Gate completed 2026-09-09 with full CI green (run 34408184941, superset of prior green run 34401118732) and deployed proof on staging computer-03335285269bdba4f94377e56879f9e6 at commit 0475ed84. All 8 acceptance items satisfied. Withheld cutover run acceptance closed; cutover definition retained as remainder holder (R6). Mission-0 live drill debt stays mission-0-owned (R1)."
   question: none
   reconciliation:
-    observed_at: "2026-09-09T20:54:12Z"
-    source_ref: "main@6b758878"
-    deploy_identity: "staging https://choir.news ok via proxy 6b758878 (x-choir-build-commit: 6b758878bdd91ca33a3f19e34663a3bc832bdb2f), vmctl routing enabled; mission-0 accepted restore identity consumed read-only"
+    observed_at: "2026-09-09T22:07:34Z"
+    source_ref: "main@0475ed84"
+    deploy_identity: "staging https://choir.news ok via proxy 0475ed84 (x-choir-build-commit: 0475ed84cc2bb380dc8df69ab368e443a969a207), vmctl routing enabled; mission-0 accepted restore identity consumed read-only"
     authority_identities:
       - "docs/reports/choir-rlm-mission-state-2026-09-08.md"
       - "docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md (remainder holder)"
@@ -202,7 +202,7 @@ now:
     source: owner
     evidence_ref: "Owner charter ratification 2026-09-09T16:53:43Z; ten verification rounds with no HOLD; live reconciliation main@54eb9328 with staging proxy 9341b5d1 ok"
     owner_ratification_ref: "ratified 2026-09-09T16:53:43Z; executable promotion lands atomically with this receipt"
-    recorded_at: "2026-09-09T20:54:12Z"
+    recorded_at: "2026-09-09T22:07:34Z"
     consequence: "Mission completed. All 8 acceptance items satisfied; sole working entrypoint retired to completed."
   evidence_refs:
     - "internal/yaegikernel/session.go"
@@ -371,7 +371,7 @@ receipts:
     boundary: implement
     commit_or_artifact: "f5cfc206 (red: fallback canonical-author port closure + orphan observation + tests)"
     proof_refs:
-      - "new: TestRecordCoSuperOrphanObservation proving reducer-derived failed report for unreserved orphan run, conflict on pending slot, and conflict on terminal slot"
+      - "new: TestRecordCoSuperOrphanObservation proving reducer-derived failed report for unreserved orphan run, conflict on pending slot, invalid on bound-run mismatch, replay on terminal retry; TestFallbackRecordsOrphanObservationOnAssignedTerminalRun proving the fallback producer persists the observation with zero synthesized updates"
       - "new: TestFallbackAbstainsOnAssignmentRun proving researcher fallback synthesizes zero worker updates and zero wakes when assignment_id is present"
       - "caller-map: fallback barred from authoring terminal updates for assignment runs"
       - "go test ./internal/store and go test ./internal/agentcore green"
@@ -384,8 +384,8 @@ receipts:
     boundary: verify
     commit_or_artifact: "docs/evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md"
     proof_refs:
-      - "commit 6b758878 deployed to staging (https://choir.news, x-choir-build-commit: 6b758878bdd91ca33a3f19e34663a3bc832bdb2f)"
-      - "CI run 34401118732 success (all 12 race test shards, vet, build, heresy, doccheck, scale, sbom, deploy)"
+      - "commit 0475ed84 deployed to staging (https://choir.news, x-choir-build-commit: 0475ed84cc2bb380dc8df69ab368e443a969a207)"
+      - "CI run 34408184941 success (superset of prior green run 34401118732 at 6b758878)"
       - "docs/evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md (acceptance scenarios S1-S7 verified)"
       - "docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md withheld settlement acceptance closed; remainder-holder status retained (R6)"
       - "docs/mission-residues.md R1-R6 status updated (R4-R5 closed)"
