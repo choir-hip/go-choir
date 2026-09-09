@@ -167,12 +167,14 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 		VMLocalContentWitness: witness,
 		CreatedAt:             time.Now().UTC(),
 	}
-
 	if err := descriptor.Validate(); err != nil {
 		return nil, fmt.Errorf("rebuilder: validate descriptor: %w", err)
 	}
 
 	blobPath := filepath.Join(r.cfg.ArtifactsRoot, "sha256", Namespace, blobSHA256)
+	if _, err := publisher.PublishDescriptor(descriptor, blobSHA256); err != nil {
+		return nil, fmt.Errorf("rebuilder: publish descriptor sidecar: %w", err)
+	}
 	return &Result{
 		Descriptor: descriptor,
 		BlobPath:   blobPath,

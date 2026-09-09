@@ -549,7 +549,7 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 		if platformURL != "" && capSource != nil {
 			storeDirectory := storeDir(provideriface.DefaultStorePath)
 			if materialized, err := materializeProjectionBaseIfNeeded(bootstrapCtx, storeDirectory, computerID, platformURL, capSource); err != nil {
-				log.Printf("autoputer: ProjectionBase materialization deferred: %v", err)
+				log.Fatalf("autoputer: required projection base refused; refusing genesis fallback: %v", err)
 			} else if materialized {
 				log.Printf("autoputer: ProjectionBase materialized before reconstruct for %s", computerID)
 			}

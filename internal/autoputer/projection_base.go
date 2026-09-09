@@ -2,11 +2,8 @@ package autoputer
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -15,17 +12,24 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 )
 
-type watermarkResponse struct {
-	WatermarkSequence uint64 `json:"watermark_sequence"`
-	BaseRef           string `json:"base_ref"`
-}
-
-// materializeProjectionBaseIfNeeded inspects storeDir and, if empty, queries
-// the platform for a verified ProjectionBase watermark and unpacks it before
-// the local embedded Dolt/SQLite store is opened.
+// materializeProjectionBaseIfNeeded installs the required base before the
+// local embedded Dolt/SQLite store is opened. The contract is explicit:
+//
+//   - non-empty store: nothing to do, the resume path owns recovery;
+//   - no canonical chain on the platform (head 404): explicit new-computer
+//     bootstrap, genesis is allowed and no base is required;
+//   - canonical chain exists: a verified base is REQUIRED. Any missing,
+//     foreign, corrupt, non-ancestor, or incompatible base refuses loudly.
+//     There is no silent genesis fallback: a failed install is a fatal boot
+//     refusal, never a fresh store.
+//
+// The previous succeeds-with-nothing deferral (missing capability, HTTP or
+// decode failure returning materialized=false without an error) is deleted:
+// every required-base failure is now a typed error the caller must not survive.
 func materializeProjectionBaseIfNeeded(ctx context.Context, storeDir, computerID, platformURL string, capability func(context.Context) (string, error)) (bool, error) {
 	storeDir = filepath.Clean(storeDir)
 	computerID = strings.TrimSpace(computerID)
@@ -38,114 +42,55 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storeDir, computerID
 		return false, nil
 	}
 
+	head, err := queryCanonicalHead(ctx, platformURL, computerID, capability)
+	if err != nil {
+		return false, err
+	}
+	if head == nil || head.Sequence == 0 {
+		log.Printf("autoputer: no canonical chain for %s; explicit new-computer bootstrap without base", computerID)
+		return false, nil
+	}
+
+	source := projectionbase.NewHTTPSource(platformURL, projectionbase.CapabilityFunc(capability))
+	descriptor, err := projectionbase.InstallVerifiedBase(ctx, source, storeDir, "runtime.db", computerID, head.CanonicalEventHead, head.Sequence)
+	if err != nil {
+		return false, fmt.Errorf("autoputer: required projection base refused: %w", err)
+	}
+	log.Printf("autoputer: ProjectionBase installed at sequence %d (base %s) for target %d", descriptor.Sequence, descriptor.BlobSHA256, head.Sequence)
+	return true, nil
+}
+
+// queryCanonicalHead reads the platform canonical head. A missing head is the
+// explicit bootstrap signal (nil, nil); any other failure is loud because
+// boot cannot distinguish a new computer from a broken recovery without it.
+func queryCanonicalHead(ctx context.Context, platformURL, computerID string, capability func(context.Context) (string, error)) (*computerevent.Head, error) {
 	token, err := capability(ctx)
 	if err != nil || strings.TrimSpace(token) == "" {
-		return false, nil
+		return nil, fmt.Errorf("autoputer: platform capability unavailable: %w", err)
 	}
-
-	watermarkURL := fmt.Sprintf("%s/internal/computers/files/watermark?computer_id=%s", platformURL, url.QueryEscape(computerID))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, watermarkURL, nil)
+	query := url.Values{"computer_id": {computerID}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, platformURL+"/internal/computers/events/head?"+query.Encode(), nil)
 	if err != nil {
-		return false, nil
+		return nil, fmt.Errorf("autoputer: canonical head request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(token))
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return false, nil
+		return nil, fmt.Errorf("autoputer: canonical head fetch: %w", err)
 	}
 	defer resp.Body.Close()
-
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
 	if resp.StatusCode != http.StatusOK {
-		return false, nil
+		return nil, fmt.Errorf("autoputer: canonical head status %d", resp.StatusCode)
 	}
-
-	var wm watermarkResponse
-	if err := json.NewDecoder(resp.Body).Decode(&wm); err != nil {
-		return false, nil
+	var head computerevent.Head
+	if err := json.NewDecoder(resp.Body).Decode(&head); err != nil {
+		return nil, fmt.Errorf("autoputer: decode canonical head: %w", err)
 	}
-
-	baseRef := strings.TrimSpace(wm.BaseRef)
-	if wm.WatermarkSequence == 0 || baseRef == "" {
-		return false, nil
-	}
-
-	// Fetch the ProjectionBase blob from the payload artifact endpoint
-	artifactRef := "artifact:sha256:" + baseRef
-	payloadURL := fmt.Sprintf("%s/internal/computers/events/payload?computer_id=%s&artifact_ref=%s", platformURL, url.QueryEscape(computerID), url.QueryEscape(artifactRef))
-	payloadReq, err := http.NewRequestWithContext(ctx, http.MethodGet, payloadURL, nil)
-	if err != nil {
-		return false, nil
-	}
-	payloadReq.Header.Set("Authorization", "Bearer "+token)
-
-	payloadResp, err := client.Do(payloadReq)
-	if err != nil {
-		return false, nil
-	}
-	defer payloadResp.Body.Close()
-
-	if payloadResp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("projection base: payload fetch status %d", payloadResp.StatusCode)
-	}
-
-	tmpFile, err := os.CreateTemp(storeDir, ".projection-base-download-*")
-	if err != nil {
-		return false, fmt.Errorf("projection base: create temp download file: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-	defer func() {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpPath)
-	}()
-
-	hasher := sha256.New()
-	writer := io.MultiWriter(tmpFile, hasher)
-	if _, err := io.Copy(writer, payloadResp.Body); err != nil {
-		return false, fmt.Errorf("projection base: write payload: %w", err)
-	}
-	if err := tmpFile.Close(); err != nil {
-		return false, fmt.Errorf("projection base: close temp download: %w", err)
-	}
-
-	digest := hex.EncodeToString(hasher.Sum(nil))
-	if digest != baseRef {
-		return false, fmt.Errorf("projection base: blob digest mismatch: got %s, want %s", digest, baseRef)
-	}
-
-	stagingDir := filepath.Join(storeDir, ".projection-base-staging")
-	_ = os.RemoveAll(stagingDir)
-	if err := os.MkdirAll(stagingDir, 0o755); err != nil {
-		return false, fmt.Errorf("projection base: create staging dir: %w", err)
-	}
-	defer os.RemoveAll(stagingDir)
-
-	if err := projectionbase.Unpack(tmpPath, stagingDir); err != nil {
-		return false, fmt.Errorf("projection base: unpack blob: %w", err)
-	}
-
-	// Move unpacked contents into storeDir
-	entries, err := os.ReadDir(stagingDir)
-	if err != nil {
-		return false, fmt.Errorf("projection base: read staging dir: %w", err)
-	}
-	for _, entry := range entries {
-		src := filepath.Join(stagingDir, entry.Name())
-		dst := filepath.Join(storeDir, entry.Name())
-		if err := os.Rename(src, dst); err != nil {
-			return false, fmt.Errorf("projection base: install entry %s: %w", entry.Name(), err)
-		}
-	}
-
-	// Fsync storeDir
-	if dir, err := os.Open(storeDir); err == nil {
-		_ = dir.Sync()
-		_ = dir.Close()
-	}
-
-	log.Printf("autoputer: ProjectionBase materialized at sequence %d (base %s)", wm.WatermarkSequence, baseRef)
-	return true, nil
+	return &head, nil
 }
 
 func isStoreEmpty(dir string) bool {

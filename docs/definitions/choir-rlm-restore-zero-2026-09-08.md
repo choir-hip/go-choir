@@ -298,3 +298,25 @@ receipts:
       deployed_acceptance: not_applicable
     registry_conformance_ref: "no topology change"
     simplification: "extended existing Descriptor/Validate and Rebuilder emission; deleted nothing (zero live descriptor consumers); new files verify.go/verify_test.go carry the predicate contract no existing surface owns (installer is boot-only fetch, appender is replay mechanics)"
+  - id: restore-zero-slice2a-installer-2026-09-09
+    boundary: implement
+    commit_or_artifact: "this commit (red: descriptor persistence + serving + verified installer + boot wiring)"
+    proof_refs:
+      - "go test ./internal/projectionbase/ ok (install end-to-end W=1 then tail replay to H=3 through ReconstructThroughTarget; refusal classes; transport contract; binding matrix)"
+      - "go test ./internal/platform/ ok (descriptor/blob serving: auth, binding, 404/409/405)"
+      - "go test ./internal/autoputer/ -run TestMaterialize|TestIsStoreEmpty ok (bootstrap/refusal/short-circuit)"
+      - "go build ./... ok; go vet clean; gofmt clean"
+    rollback_ref: "revert restores silent boot deferral; immutable events, tapes, watermarks untouched; no stored descriptors consumed yet"
+    disposition: "verified install path landed for boot; rematerialize/restore/probe wiring still pending (slice 2b)"
+    problem_ref: "genesis-by-default rematerialization; silent required-base deferral; missing ancestry/compatibility verification"
+    authorization_ref: "Owner topology answers 2026-09-09 (sole working entrypoint); Define 24be54a2; reconciliation e00540a0"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "no topology change"
+    simplification: "one BaseSource/installer in projectionbase shared by all future callers; deleted the silent-deferral installer body and the dead artifact_ref fetch; no new package; platform change is two handlers plus routes on the existing file-CAS surface"
+    discovered: "boot base fetch used artifact_ref, a parameter the platform payload endpoint never reads: the boot base path was dead on arrival, not merely deferring"
