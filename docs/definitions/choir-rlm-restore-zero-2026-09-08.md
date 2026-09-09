@@ -204,13 +204,13 @@ measures:
     cannot_prove: "Cannot authorize promotion, prove code, or advance completion."
 
 now:
-  status: working
-  slice: "9341b5d1 is on origin/main and staging host/proxy/autoputer-package. W=148431 advertised at live H. Owner computer remains constructed-computer-version on guest 80d43427; CI active-VM refresh recorded active_computers=empty. Prefix=0 retained-store boot of PlanRecovery is unobserved."
+  status: completed
+  slice: "Owner-scoped refresh booted 9341b5d1 on retained computer-03335285269bdba4f94377e56879f9e6. PlanRecovery resume local=148431 W=148431 H=148431 tail=0; reconstruct with no prefix page fetches. Epoch 894 at 10.200.12.2."
   question: none
   reconciliation:
-    observed_at: "2026-09-09T07:49:24Z"
+    observed_at: "2026-09-09T08:17:00Z"
     source_ref: "main@9341b5d18d5b962a4440671233efd402038a8b8a (primary worktree /Users/wiz/go-choir; unrelated worktrees and untracked leftovers preserved)"
-    deploy_identity: "staging proxy/host 9341b5d1 deployed 2026-09-09T07:49:24Z (CI 34323073581 attempt 2); owner guest computer-03335285269bdba4f94377e56879f9e6 still 80d43427 epoch 893 at 10.200.6.2; W=148431 base_ref 6099cf69…; H=148431"
+    deploy_identity: "owner guest 9341b5d1 epoch 894 at 10.200.12.2 after product-path refresh; W=148431 base_ref 6099cf69…; H=148431; host/proxy already 9341b5d1"
     authority_identities:
       - "docs/reports/choir-rlm-mission-state-2026-09-08.md"
       - "docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md"
@@ -246,8 +246,9 @@ now:
     - "docs/evidence/choir-rlm-restore-zero-reconciliation-2026-09-09.md"
     - "internal/projectionbase/verify.go and verify_test.go (slice 1)"
     - "docs/evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md"
-  blocker_or_risk: "Owner computer is snapshot_kind constructed-computer-version; CI deploy refresh preserves it (G4). Guest 80d43427 cannot execute PlanRecovery. Action 8 failure-injection controls remain a recorded blocked prerequisite."
-  next_action: "Find an owner-reachable recovery entrypoint that boots the 9341b5d1 snapshotting contract against the retained owner store and shows prefix reads (seq ≤ W) = 0. Do not SSH-refresh, do not weaken the G4 constructed-computer skip, do not mark complete on guest /health or host SHA 9341b5d1."
+    - "docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md"
+  blocker_or_risk: "Action 8 scoped owner failure-injection controls remain a recorded blocked prerequisite. Proxy 502-during-resolve and periodic near-head W publication are follow-on, not Restore-Zero remaining error."
+  next_action: "none; Restore-Zero retained-store prefix=0 boot is observed. Follow-on: keep W within 10000 of future H (S1-B); optional proxy boot-screen during resolve lock."
 receipts:
   - id: restore-zero-define-and-topology-2026-09-09
     boundary: define
@@ -500,3 +501,26 @@ receipts:
       deployed_acceptance: "not_applicable; problem receipt, not completion"
     registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
 
+  - id: restore-zero-retained-boot-2026-09-09
+    boundary: verify
+    commit_or_artifact: "docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md"
+    proof_refs:
+      - "POST /api/computers/computer-03335285269bdba4f94377e56879f9e6/lifecycle/refresh HTTP 201 receipt_id 01a0853d-e18f-74a3-8170-8fa77ca8e183"
+      - "epoch 893 -> 894; computer_url http://10.200.12.2:8085"
+      - "guest build.commit=9341b5d18d5b962a4440671233efd402038a8b8a deployed_at 2026-09-09T08:16:51Z"
+      - "journal: projection recovery resume for computer-03335285269bdba4f94377e56879f9e6 (local=148431 W=148431 H=148431 tail=0)"
+      - "journal: computer event authority reconstructed; no replay page fetch after= in this boot window"
+      - "persistent_disk used_bytes=16605167616 (retained, not sparse)"
+    rollback_ref: "docs-only; runtime unchanged by this receipt"
+    disposition: "retained-store boot of 9341b5d1 resumed at W=H with tail=0; prefix reads seq<=W = 0"
+    problem_ref: "constructed-computer CI skip blocked host deploy from booting PlanRecovery; owner-scoped refresh is the product path"
+    authorization_ref: "Owner: snapshotting is the mission; complete only on prefix=0 retained boot, not guest /health or host SHA"
+    candidate_or_evidence_refs:
+      - "docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md"
+    landing:
+      source_commit: "9341b5d18d5b962a4440671233efd402038a8b8a"
+      ci_ref: "34323073581"
+      deploy_ref: "owner-scoped refresh 2026-09-09T08:16:45Z epoch 894"
+      environment_identity: "staging proxy 9341b5d1; owner guest 9341b5d1 epoch 894 at 10.200.12.2"
+      deployed_acceptance: "accepted; PlanRecovery resume tail=0 on retained store"
+    registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"

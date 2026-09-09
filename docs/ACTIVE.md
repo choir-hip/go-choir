@@ -59,20 +59,16 @@ without `RUNTIME_MAINTENANCE_HOLD` on staging `computer-03335285269bdba4f94377e5
 [`evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md`](evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md).
 Effects remain OFF.
 
-## Active Definition — RLM Restore-Zero
+## Completed Definition — RLM Restore-Zero
 
 [`definitions/choir-rlm-restore-zero-2026-09-08.md`](definitions/choir-rlm-restore-zero-2026-09-08.md)
-is **active and executable**. The 2026-09-09 completion claim is demoted: W=1/W=13
-publication plus HTTP 200 is not tail-only recovery. Snapshotting is encoded in
-`9341b5d1` (rebase when `local < W`, resume only inside a 10,000-event tail,
-refuse a stale watermark) and that SHA is the staging host/proxy/autoputer
-package as of 2026-09-09T07:49:24Z. Advertised W=148431 matches live H.
-The owner computer `computer-03335285269bdba4f94377e56879f9e6` is
-`constructed-computer-version`; CI refresh recorded `active_computers=empty`
-and the guest is still `80d43427`. Prefix=0 retained-store boot is unobserved.
-Do not treat host SHA or guest `/health` as acceptance. Problem receipt:
-[`evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md`](evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md).
-Correction: [`reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md`](reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md).
+completed 2026-09-09 on owner-scoped retained-store boot of `9341b5d1`.
+PlanRecovery resumed `computer-03335285269bdba4f94377e56879f9e6` at
+`local=148431 W=148431 H=148431 tail=0` (epoch 894, `10.200.12.2`).
+No prefix page fetches. CI constructed-computer skip (G4) was left intact.
+Proof: [`evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md`](evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md).
+The earlier W=1/W=13 HTTP 200 claim remains demoted. Follow-on: keep W near H;
+proxy 502-during-resolve is not this mission.
 ## Blocked Definition — RLM Settlement Gate (stub)
 
 [`definitions/choir-rlm-settlement-gate-2026-09-09.md`](definitions/choir-rlm-settlement-gate-2026-09-09.md)

@@ -516,7 +516,7 @@ nodes:
     title: RLM Restore-Zero
     path: docs/definitions/choir-rlm-restore-zero-2026-09-08.md
     ledger: ''
-    status: working
+    status: completed
     kind: spine
     entrypoint: true
     execution_mode: mission_orchestrator
@@ -525,15 +525,14 @@ nodes:
     enables:
       - choir-rlm-settlement-gate-2026-09-09
     note: >-
-      Demoted from completed 2026-09-09. Snapshotting is on origin/main and
-      staging host as 9341b5d1; W=148431 at live H. Owner computer is
-      constructed-computer-version and still serves guest 80d43427; CI
-      active_computers=empty. Next: owner-reachable retained-store boot of
-      PlanRecovery with prefix reads = 0. Do not complete on host SHA.
+      Completed 2026-09-09: owner-scoped refresh booted 9341b5d1 on the retained
+      owner store. PlanRecovery resume local=148431 W=148431 H=148431 tail=0;
+      no prefix page fetches. G4 constructed-computer CI skip left intact.
     sources:
       - docs/definitions/choir-rlm-restore-zero-2026-09-08.md
       - docs/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md
       - docs/evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md
+      - docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md
       - docs/reports/choir-rlm-mission-state-2026-09-08.md
       - docs/ACTIVE.md
   - id: choir-rlm-settlement-gate-2026-09-09
