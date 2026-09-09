@@ -118,7 +118,12 @@ type ComputerEventAppender struct {
 	cipher           *PrivateArtifactCipher
 	livePayloads     map[string][]byte
 	replayProjection bool
-	mu               sync.Mutex
+	// replayObserver receives tail-bounded recovery telemetry: page
+	// enumerations, applied sequences, and durable commits. Nil disables
+	// observation with a single branch per site; recovery evidence, not
+	// control flow — the observer can never alter replay.
+	replayObserver ReplayObserver
+	mu             sync.Mutex
 	// Replay progress snapshot (guarded by mu) so the guest health surface can
 	// report a replay in progress with its sequence to the host wait-for-ready
 	// probe without racing the replay goroutine.
@@ -127,6 +132,23 @@ type ComputerEventAppender struct {
 	replayCommittedSeq       uint64
 	replayCheckpointEvery    int
 	replayCheckpointInterval time.Duration
+}
+
+// ReplayObserver records recovery-critical replay work for tail-bounded cost
+// evidence. Implementations must be goroutine-safe and non-blocking; replay
+// never waits for observation.
+type ReplayObserver interface {
+	PageFetched(afterSequence uint64, count int)
+	RecordApplied(sequence uint64)
+	CheckpointCommitted(sequence uint64)
+}
+
+// SetReplayObserver installs the recovery telemetry observer. Nil disables.
+func (a *ComputerEventAppender) SetReplayObserver(observer ReplayObserver) {
+	if a == nil {
+		return
+	}
+	a.replayObserver = observer
 }
 
 // ReplaySnapshot describes the durable replay progress for the liveness probe.
@@ -724,6 +746,9 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			return fmt.Errorf("computer event appender: replay finalize sequence %d: %w", record.Request.Event.Sequence, err)
 		}
 		a.setReplayProgress(record.Request.Event.Sequence, a.committedReplaySeq())
+		if observer := a.replayObserver; observer != nil {
+			observer.RecordApplied(record.Request.Event.Sequence)
+		}
 		if elapsed := time.Since(applyStarted); elapsed > 2*time.Second {
 			log.Printf("computer event appender: replay apply slow seq=%d elapsed=%s", record.Request.Event.Sequence, elapsed)
 		}
@@ -766,6 +791,9 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			page, err := pageSource.EventsPage(ctx, a.computerID, after, pageSize)
 			if err != nil {
 				return fmt.Errorf("computer event appender: fetch durable chain: %w", err)
+			}
+			if observer := a.replayObserver; observer != nil {
+				observer.PageFetched(after, len(page))
 			}
 			if elapsed := time.Since(pageStarted); elapsed > 2*time.Second {
 				log.Printf("computer event appender: replay page fetch after=%d count=%d elapsed=%s", after, len(page), elapsed)
@@ -868,6 +896,9 @@ func (a *ComputerEventAppender) commitReplay(ctx context.Context) error {
 		a.replayCommittedSeq = a.replaySeq
 	}
 	a.mu.Unlock()
+	if observer := a.replayObserver; observer != nil {
+		observer.CheckpointCommitted(a.committedReplaySeq())
+	}
 	return nil
 }
 
@@ -981,6 +1012,7 @@ func (a *ComputerEventAppender) replayInto(ctx context.Context, projection Proje
 		reader:           a.reader,
 		cipher:           a.cipher,
 		replayProjection: true,
+		replayObserver:   a.replayObserver,
 	}
 	if targetHead == "" {
 		return dryRun.Reconstruct(ctx, source)

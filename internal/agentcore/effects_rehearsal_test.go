@@ -168,6 +168,7 @@ func TestEffectsRehearsalReversibleProposeConsensusPromoteRestore(t *testing.T) 
 	pointCurrent(t, updaterRoot, priorDigest)
 	rt.selfdevUpdaterRoot = updaterRoot
 	ctx := context.Background()
+	seedRestoreBase(t, ctx, rt, cas, computerID, 1)
 	report, err := rt.ReplayCompleteness(ctx, computerID)
 	if err != nil {
 		t.Fatal(err)

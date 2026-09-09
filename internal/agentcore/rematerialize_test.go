@@ -36,13 +36,14 @@ func TestRematerializeFromTapeQuarantinesOriginalAndDropsLiveOnlyRows(t *testing
 		}
 	}()
 
-	rt, _, acceptedHead := rematerializeTapeRuntime(t, computerID, storePath, live)
+	rt, cas, acceptedHead := rematerializeTapeRuntime(t, computerID, storePath, live)
 	updaterRoot := filepath.Join(t.TempDir(), "updater")
 	priorDigest, _ := pinFrontendRelease(t, updaterRoot, computerID, "<html>live</html>")
 	targetDigest, targetIdentity := pinFrontendRelease(t, updaterRoot, computerID, "<html>checkpoint</html>")
 	pointCurrent(t, updaterRoot, priorDigest)
 	rt.selfdevUpdaterRoot = updaterRoot
 	ctx := context.Background()
+	seedRestoreBase(t, ctx, rt, cas, computerID, 1)
 	report, err := rt.ReplayCompleteness(ctx, computerID)
 	if err != nil {
 		t.Fatal(err)
@@ -132,13 +133,14 @@ func TestRematerializeFromTapeKeepsOriginalOnWitnessMismatch(t *testing.T) {
 	}
 	defer live.Close()
 
-	rt, _, acceptedHead := rematerializeTapeRuntime(t, computerID, storePath, live)
+	rt, cas, acceptedHead := rematerializeTapeRuntime(t, computerID, storePath, live)
 	updaterRoot := filepath.Join(t.TempDir(), "updater")
 	liveDigest, _ := pinFrontendRelease(t, updaterRoot, computerID, "<html>live</html>")
 	targetDigest, targetIdentity := pinFrontendRelease(t, updaterRoot, computerID, "<html>checkpoint</html>")
 	pointCurrent(t, updaterRoot, liveDigest)
 	rt.selfdevUpdaterRoot = updaterRoot
 	ctx := context.Background()
+	seedRestoreBase(t, ctx, rt, cas, computerID, 1)
 	report, err := rt.ReplayCompleteness(ctx, computerID)
 	if err != nil {
 		t.Fatal(err)
@@ -445,6 +447,7 @@ func TestRestoreFromTapeAppendsIntentAndStopsAtTarget(t *testing.T) {
 	pointCurrent(t, updaterRoot, priorDigest)
 	rt.selfdevUpdaterRoot = updaterRoot
 	ctx := context.Background()
+	seedRestoreBase(t, ctx, rt, cas, computerID, 1)
 	report, err := rt.ReplayCompleteness(ctx, computerID)
 	if err != nil {
 		t.Fatal(err)
@@ -551,7 +554,8 @@ func TestCheckpointBindRefusesLiveOnlyRowsAndMissingSPA(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer live.Close()
-	rt, _, _ := rematerializeTapeRuntime(t, computerID, storePath, live)
+	rt, cas, _ := rematerializeTapeRuntime(t, computerID, storePath, live)
+	seedRestoreBase(t, context.Background(), rt, cas, computerID, 1)
 	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/checkpoint", nil)
 	request.Header.Set("X-Authenticated-User", "owner-checkpoint")
 	request.Header.Set("X-Authenticated-Computer", computerID)
@@ -627,7 +631,8 @@ func TestCheckpointBindAcceptsEligibleRestoreSet(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer live.Close()
-	rt, _, _ := rematerializeTapeRuntime(t, computerID, storePath, live)
+	rt, cas, _ := rematerializeTapeRuntime(t, computerID, storePath, live)
+	seedRestoreBase(t, context.Background(), rt, cas, computerID, 1)
 	updaterRoot := filepath.Join(t.TempDir(), "updater")
 	digest, identity := pinFrontendRelease(t, updaterRoot, computerID, "<html>checkpoint</html>")
 	pointCurrent(t, updaterRoot, digest)
@@ -693,13 +698,14 @@ func TestRematerializeFromTapeAcceptsOwnerRecoveryCheckpoint(t *testing.T) {
 			_ = live.Close()
 		}
 	}()
-	rt, _, acceptedHead := rematerializeTapeRuntime(t, computerID, storePath, live)
+	rt, cas, acceptedHead := rematerializeTapeRuntime(t, computerID, storePath, live)
 	updaterRoot := filepath.Join(t.TempDir(), "updater")
 	priorDigest, _ := pinFrontendRelease(t, updaterRoot, computerID, "<html>live</html>")
 	targetDigest, targetIdentity := pinFrontendRelease(t, updaterRoot, computerID, "<html>checkpoint</html>")
 	pointCurrent(t, updaterRoot, priorDigest)
 	rt.selfdevUpdaterRoot = updaterRoot
 	ctx := context.Background()
+	seedRestoreBase(t, ctx, rt, cas, computerID, 1)
 	report, err := rt.ReplayCompleteness(ctx, computerID)
 	if err != nil {
 		t.Fatal(err)

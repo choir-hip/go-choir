@@ -22,6 +22,7 @@ import (
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
+	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -153,6 +154,11 @@ type Runtime struct {
 	// re-entrant).
 	superReconcileMu     sync.Mutex
 	selfdevMaterializeMu sync.Mutex
+	// restoreBaseSource overrides verified-base resolution for recovery
+	// (rematerialize, restore, replay-completeness). Nil builds a platform
+	// source from CorpusdURL plus guest credentials per call; tests inject
+	// a fake. There is no genesis fallback in either case.
+	restoreBaseSource projectionbase.BaseSource
 }
 
 type textureWakeTimer interface {

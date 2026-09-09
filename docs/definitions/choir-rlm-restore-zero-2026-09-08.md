@@ -199,7 +199,7 @@ measures:
 
 now:
   status: working
-  slice: "slice 1 landed (descriptor vocabulary_version seam + VerifyForRecovery/VerifyTailHead + refusal matrix); next is slice 2 wiring (required-base refusal + tail-only journal + publication fence)"
+  slice: "slice 2b landed (guest recovery on verified base plus tail with refusal matrix); next is slice 3 deployed proof (scoped staging observation, base selection, drill, cost telemetry)"
   question: none
   reconciliation:
     observed_at: "2026-09-09T01:30:00Z"
@@ -320,3 +320,24 @@ receipts:
     registry_conformance_ref: "no topology change"
     simplification: "one BaseSource/installer in projectionbase shared by all future callers; deleted the silent-deferral installer body and the dead artifact_ref fetch; no new package; platform change is two handlers plus routes on the existing file-CAS surface"
     discovered: "boot base fetch used artifact_ref, a parameter the platform payload endpoint never reads: the boot base path was dead on arrival, not merely deferring"
+  - id: restore-zero-slice2b-guest-wiring-2026-09-09
+    boundary: implement
+    commit_or_artifact: "this commit (red: rematerialize/restore/probe on verified base plus tail)"
+    proof_refs:
+      - "go test ./internal/agentcore/ ok (migrated recovery tests on seeded real bases; refusal matrix; 409 mapping; tail receipt bounds)"
+      - "go test ./internal/computerevent/ ok (observer hooks nil-safe)"
+      - "go test ./internal/vmctl/ -run TestColdRecover ok (recover_current strictness unchanged; zero base-machinery references)"
+      - "go build ./... ok; go vet clean; gofmt clean"
+    rollback_ref: "revert restores genesis rematerialize/probe; immutable events, tapes, watermarks untouched"
+    disposition: "every named recovery surface now refuses a missing/foreign/corrupt/non-ancestor/incompatible required base with typed ErrBaseRefused (409 on product APIs) and replays only (W,H]; deployed proof pending (slice 3)"
+    problem_ref: "genesis-by-default rematerialization; silent required-base deferral; missing ancestry/compatibility verification"
+    authorization_ref: "Owner topology answers 2026-09-09 (sole working entrypoint); Define 24be54a2; reconciliation e00540a0"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "no topology change"
+    simplification: "no new replay mechanics: installed head W plus the existing reconstruct loop is tail-only by construction; no new journal (durable replay checkpoints plus quantum flush plus install idempotency plus cold-recovery journal already carry resume); observer is three nil-guarded hooks plus one propagated field; agentcore change is one Runtime seam field plus install/resolve helpers"
