@@ -176,7 +176,7 @@ now:
   slice: "round-9 repaired draft under focused verification; mission 0 complete; charter ratification pending"
   question: "Is the reconciled round-9 repaired charter with classification receipt, compositional grammar, and durable saga ready for owner ratification?"
   reconciliation:
-    source_ref: "main@65e4c797 (round-8 repaired draft; re-observe HEAD at charter ratification)"
+    source_ref: "main@0314ec70 (round-9 repaired draft; re-observe HEAD at charter ratification)"
     deploy_identity: "unreconciled; mission-0 accepted identity consumed read-only at charter; re-observe before any red mutation"
     authority_identities:
       - "docs/reports/choir-rlm-mission-state-2026-09-08.md"
