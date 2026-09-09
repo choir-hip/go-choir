@@ -2147,8 +2147,24 @@ func (s *Store) RecordCoSuperOrphanObservation(ctx context.Context, obs types.Co
 	if assignment.PendingProposal != nil {
 		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("co-super assignment: pending proposal in-flight; must reconcile through fate saga, not orphan path: %w", ErrCoSuperAssignmentCommandConflict)
 	}
-	// Terminal check: if already terminal, return conflict or replay.
+	if assignment.BoundRunID != "" && assignment.BoundRunID != obs.RunID {
+		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("co-super assignment: orphan run %s does not match bound run %s: %w", obs.RunID, assignment.BoundRunID, ErrCoSuperAssignmentInvalid)
+	}
+	// Terminal check: if already terminal, replay the recorded orphan close when this
+	// observation's derived report is the occupant; otherwise conflict. The report ID
+	// is derived identically to the close path below, so a retry replays instead of
+	// conflicting with itself.
 	if assignment.Disposition.Terminal() {
+		commandID := fmt.Sprintf("co-super-orphan:%s:%d:%s", obs.AssignmentID, obs.Attempt, obs.RunID)
+		replayVerdict := types.CoSuperVerdictNone
+		if assignment.Binding.Kind == types.CoSuperAssignmentVerification {
+			replayVerdict = types.CoSuperVerdictAbstain
+		}
+		replayPropDigest, _ := ComputeTerminalPropositionDigest(assignment.Binding.SubjectDigest, types.CoSuperResultFailed, replayVerdict, nil, nil, nil)
+		replayReportID := TerminalReportID(obs.OwnerID, obs.ComputerID, obs.AssignmentID, obs.Attempt, replayPropDigest)
+		if replay, replayErr := s.ReplayRecordedCoSuperAssignmentReport(ctx, obs.OwnerID, obs.ComputerID, obs.AssignmentID, obs.Attempt, replayReportID, commandID); replayErr == nil {
+			return replay, nil
+		}
 		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentCommandConflict
 	}
 	verdict := types.CoSuperVerdictNone

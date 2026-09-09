@@ -72,7 +72,9 @@ func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persis
 			Reason:       reason,
 			ObservedAt:   time.Now().UTC(),
 		}
-		_, _ = rt.store.RecordCoSuperOrphanObservation(ctx, obs)
+		if _, err := rt.store.RecordCoSuperOrphanObservation(ctx, obs); err != nil && !errors.Is(err, store.ErrCoSuperAssignmentCommandConflict) {
+			return terminalOutcomeBinding{}, fmt.Errorf("record orphan observation for run %s: %w", persisted.RunID, err)
+		}
 		return terminalOutcomeBinding{}, nil
 	}
 	hasLifecycleMarker := strings.TrimSpace(metadataStringValue(persisted.Metadata, "lifecycle_work_item_id")) != "" ||

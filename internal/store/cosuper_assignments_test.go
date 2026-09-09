@@ -1712,4 +1712,20 @@ func TestRecordCoSuperOrphanObservation(t *testing.T) {
 	if _, err := s.RecordCoSuperOrphanObservation(ctx, obsPending); !errors.Is(err, ErrCoSuperAssignmentCommandConflict) {
 		t.Fatalf("orphan observation on pending proposal err = %v, want conflict", err)
 	}
+
+	// 3. Observation for a run that is not the bound run is rejected as invalid.
+	obsMismatch := obs
+	obsMismatch.RunID = "run-not-bound-to-assignment"
+	if _, err := s.RecordCoSuperOrphanObservation(ctx, obsMismatch); !errors.Is(err, ErrCoSuperAssignmentInvalid) {
+		t.Fatalf("orphan observation on wrong run err = %v, want invalid", err)
+	}
+
+	// 4. Retrying the recorded orphan observation replays the original close.
+	retry, err := s.RecordCoSuperOrphanObservation(ctx, obs)
+	if err != nil {
+		t.Fatalf("orphan observation retry: %v", err)
+	}
+	if !retry.Replay || retry.Report == nil || retry.Report.ReportID != result.Report.ReportID {
+		t.Fatalf("orphan retry replay = %+v, want replay of report %s", retry, result.Report.ReportID)
+	}
 }

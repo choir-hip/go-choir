@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -467,6 +469,115 @@ func TestFallbackAbstainsOnAssignmentRun(t *testing.T) {
 		t.Fatalf("bind terminal outcome on assignment run: %v", err)
 	}
 	updates, err := s.ListPendingWorkerUpdates(ctx, rec.OwnerID, "texture:"+rec.ChannelID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updates) != 0 {
+		t.Fatalf("fallback synthesized updates for assignment run: %+v", updates)
+	}
+}
+
+func TestFallbackRecordsOrphanObservationOnAssignedTerminalRun(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	seed, err := store.SeedCoSuperAssignmentAuthority(s, "owner-orphan-prod", rt.TextureComputerID(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assignmentID := "assignment-orphan-prod"
+	capability := "opaque-orphan-prod"
+	capsuleID := "capsule-orphan-prod"
+	open := types.OpenCoSuperAssignmentRequest{
+		CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
+		Binding: types.CoSuperAssignmentBinding{
+			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
+			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
+			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
+			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
+			Kind: types.CoSuperAssignmentImplementation, Attempt: 1,
+			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
+			CapabilityDigest: store.DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
+			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
+			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
+			Writable:          true, CapsuleID: capsuleID,
+			NetworkMode:    types.CoSuperCapsuleNetworkForbidden,
+			FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
+		},
+		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
+		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "bounded delegated assignment"},
+	}
+	if open.CommandDigest, err = store.ComputeOpenCoSuperAssignmentDigest(open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	runID := seed.AssignedRunIDs[0]
+	run := types.RunRecord{
+		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
+		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
+		AgentProfile: "co-super", AgentRole: "co-super", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		State: types.RunPending, Prompt: open.AssignedWork.Objective,
+		Metadata: map[string]any{
+			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
+			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "super",
+			"assignment_id": assignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
+			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
+			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
+			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
+			"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
+			"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
+		},
+	}
+	bind := types.BindCoSuperAssignmentRequest{
+		CommandID: "command-bind-" + assignmentID + "-1",
+		OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: assignmentID,
+		Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
+		OpaqueCapability: capability, CapsuleID: capsuleID,
+	}
+	if bind.CommandDigest, err = store.ComputeBindCoSuperAssignmentDigest(bind); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindCoSuperAssignment(ctx, bind); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := s.GetLifecycleRun(ctx, seed.OwnerID, seed.ComputerID, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	persisted.State, persisted.Result, persisted.UpdatedAt, persisted.FinishedAt =
+		types.RunCompleted, "child exited without terminal packet", now, &now
+	if err := s.UpdateRun(ctx, persisted); err != nil {
+		t.Fatal(err)
+	}
+	probe := types.RunRecord{
+		RunID: runID, OwnerID: seed.OwnerID, RequestedByRunID: seed.ParentRunID,
+		AgentProfile: agentprofile.CoSuper,
+	}
+	if err := rt.bindTerminalRunOutcome(ctx, &probe, false); err != nil {
+		t.Fatalf("fallback orphan observation: %v", err)
+	}
+	assignment, err := s.GetCoSuperAssignment(ctx, seed.OwnerID, seed.ComputerID, assignmentID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assignment.Disposition.Terminal() {
+		t.Fatalf("assignment disposition = %v, want terminal orphan close", assignment.Disposition)
+	}
+	propDigest, err := store.ComputeTerminalPropositionDigest(open.Binding.SubjectDigest, types.CoSuperResultFailed, types.CoSuperVerdictNone, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportID := store.TerminalReportID(seed.OwnerID, seed.ComputerID, assignmentID, 1, propDigest)
+	report, err := s.GetCoSuperAssignmentReport(ctx, seed.OwnerID, seed.ComputerID, reportID)
+	if err != nil {
+		t.Fatalf("orphan report %s: %v", reportID, err)
+	}
+	if report.Result != types.CoSuperResultFailed {
+		t.Fatalf("orphan report result = %v, want failed", report.Result)
+	}
+	updates, err := s.ListPendingWorkerUpdates(ctx, seed.OwnerID, "texture:"+run.ChannelID, 10)
 	if err != nil {
 		t.Fatal(err)
 	}

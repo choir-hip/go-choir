@@ -481,8 +481,9 @@ nodes:
       cursor commitment, bounded adaptive coalescing, role-bounded fan-out/fan-in,
       and live sealed proof on staging computer-03335285269bdba4f94377e56879f9e6.
       Dispositioned 2026-09-09 to blocked remainder holder with owner topology
-      authority: execution proof retained; run acceptance withheld for the terminal
-      digest-conflict remainder owned by choir-rlm-settlement-gate-2026-09-09.
+      authority: execution proof retained; run acceptance closed under completed
+      choir-rlm-settlement-gate-2026-09-09 (2026-09-09 with deployed proof) with
+      no open settlement remainder.
       Restore spine is choir-rlm-restore-zero-2026-09-08. Do not mark complete.
     sources:
       - docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md
@@ -503,10 +504,11 @@ nodes:
       - choir-rlm-restore-zero-2026-09-08
       - choir-rlm-settlement-gate-2026-09-09
     note: >-
-      Phase 3 of autonomous engineering sequence, paused pending restore-zero,
-      settlement-gate, and desk-rename deployed acceptance. Candidate A solitaire
-      proof, 5-ref freeze, qualified consensus under reversible-selfdev-v1,
-      promotion, falsification, and restore to pre-A checkpoint 99949fe2 on the RLM surface.
+      Phase 3 of autonomous engineering sequence, paused pending restore-zero
+      and desk-rename deployed acceptance (settlement-gate acceptance closed
+      2026-09-09). Candidate A solitaire proof, 5-ref freeze, qualified consensus
+      under reversible-selfdev-v1, promotion, falsification, and restore to
+      pre-A checkpoint 99949fe2 on the RLM surface.
     sources:
       - docs/definitions/choir-supervised-self-development-on-rlm-2026-09-02.md
       - docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md

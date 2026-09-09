@@ -91,8 +91,9 @@ holder (residue R6). Mission-0 live drill debt stays mission-0-owned (residue R1
 [`definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`](definitions/choir-rlm-target-architecture-cutover-2026-09-04.md)
 is **blocked and non-executable** (dispositioned 2026-09-09 with owner topology
 authority). Execution proof retained (epoch 888 exit-0 cell, proof file, signed
-receipt, fence intact); run acceptance withheld for the terminal
-digest-conflict remainder now owned by the mission 1 stub. No action runs under
+receipt, fence intact); run acceptance closed under completed mission 1
+(2026-09-09 with deployed proof); the cutover retains no open settlement
+remainder and stays remainder holder (residue R6). No action runs under
 it. Do not mark complete.
 
 ## Superseded Definition — RLM Session Interpreter Cutover
@@ -103,7 +104,7 @@ is subsumed by the comprehensive RLM target architecture.
 ## Queued Definition — Supervised Self-Development on RLM
 
 [`definitions/choir-supervised-self-development-on-rlm-2026-09-02.md`](definitions/choir-supervised-self-development-on-rlm-2026-09-02.md)
-is **paused pending restore-zero, settlement-gate, and desk-rename deployed acceptance**.
+is **paused pending restore-zero and desk-rename deployed acceptance** (settlement-gate acceptance closed 2026-09-09).
 Target: Candidate change A solitaire implementation authored via RLM session cells, 5-ref freeze,
 qualified consensus under `reversible-selfdev-v1`, promotion, live play verification, falsification with B,
 and restore to pre-A checkpoint `99949fe2`.

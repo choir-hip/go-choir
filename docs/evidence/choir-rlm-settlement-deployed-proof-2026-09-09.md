@@ -46,23 +46,31 @@ Authority: `docs/definitions/choir-rlm-settlement-gate-2026-09-09.md` (finish.ac
 | **S2: Single Execution Route** | `capsule-broker` | `fallbackGoEval` deleted from active RLM route; session worker spawn failures return typed worker diagnostics (`ExitCode: 1, DiagKind: worker`) and never divert to one-shot worker. | One execution path and one diagnostic contract on active RLM route; tools rollback path intact. |
 | **S3: Terminal Identity & Replay** | `store`, `agentcore` | Proposition digest covers canonical claims (`result`, `verdict`, ordered `commands`, ordered `outputs`, sorted unique `evidence_refs`, pinned belief); `ReportID` derived deterministically. Same proposition under fresh toolCallID, reworded summary, or fresh command envelope replays original receipt with zero new effects. | Terminal settlement is one durable truth per attempt; provider metadata excluded from identity. |
 | **S4: Slot Conflict Gating** | `store` | Differing proposition on an already-reserved or completed attempt strictly returns `ErrCoSuperAssignmentCommandConflict`. Attempt 1 cannot carry supersede tuple; attempt > 1 requires valid supersede tuple (`CoSuperSupersedeTuple`). | No second terminal row for one attempt; rejections never smuggle a correction. |
-| **S5: Narrow Admission Grammar** | `toolregistry` | `capsule_go_eval` and `record_assignment_result` execute sequentially. Pre-dispatch statically refuses $\ge 2$ terminals, $> 1$ eval, reversed order, and forbidden companions with none run. Post-eval tray collision skips subsequent terminal call. `toolloop.go:622` decouples singleton lock-in for admitted shape (a) and (b). | Contradictory turns never execute; settlement is a reducer property, not a batch shape accident. |
+| **S5: Narrow Admission Grammar** | `toolregistry` | `capsule_go_eval` and `record_assignment_result` execute sequentially. Pre-dispatch statically refuses $\ge 2$ terminals, $> 1$ eval, reversed order, and forbidden companions with none run. Mailbox `choir.Complete` / `IntentComplete` never aborts an admitted JSON terminal: `[stage_complete eval, completed terminal]` executes both sequentially. `toolloop.go:622` decouples singleton lock-in for admitted shape (a) and (b). | Contradictory turns never execute; settlement is a reducer property, not a batch shape accident. |
 | **S6: Resumable Fate Saga** | `agentcore`, `store` | `PendingProposal` committed to Dolt during `FreezeRequested` before physical freeze. Physical revoke acknowledgement strictly precedes terminal report commitment. `SlotTerminalReport` blocks competing proposals while pending. Interrupted runs resume through saga without orphaning. | Atomic final boundary after durable revoke acknowledgement; no terminal truth published before revoke. |
 | **S7: Single Reducer Author (Orphan Port)** | `agentcore`, `store` | `researcher_checkpoint_fallback.go` barred from synthesizing terminal updates or wakes for assignment runs. `RecordCoSuperOrphanObservation` store command enables reducer alone to close unassigned terminated runs with a failed report; pending slots route to fate saga. | Terminal truth has one author; delegation closes deterministically without a second committer. |
 
 ## 3. Immutable Acceptance Manifest and Sealed Scenario Receipts
 
-Per acceptance item 7, the scenarios are linked through one immutable manifest binding each verified contract to its deployment, realization, and execution identities:
+Shared deployment identity for every scenario row: staging computer
+`computer-03335285269bdba4f94377e56879f9e6`, realization epoch 890, deployed
+build `6b758878bdd91ca33a3f19e34663a3bc832bdb2f`, CI run `34401118732`
+(all green), staging `HTTP/2 200 OK` with `x-choir-build-commit: 6b758878...`
+(Section 1). No live assignment attempt was opened on the staging computer;
+per-scenario execution evidence is the named contract test (run in CI
+`34401118732`) against the named repair commit. Attempt/run/capsule bindings
+below are the testcase fixture identities exercised by those verifiers, not
+staging attempts.
 
-| Scenario ID | Target Computer | Realization Epoch | Deployed Build SHA | Contract Verified | Primary Receipt Ref |
-|---|---|---|---|---|---|
-| `SCENARIO-S1-COMPILE-ISOLATION` | `computer-03335285269bdba4f94377e56879f9e6` | 890 | `6b758878bdd91ca33a3f19e34663a3bc832bdb2f` | Yaegi Compile gate; heap preserved on compile error; timeout race eliminated | `receipt:yaegikernel:isolation-matrix-v1` |
-| `SCENARIO-S2-SINGLE-ROUTE` | `computer-03335285269bdba4f94377e56879f9e6` | 890 | `6b758878bdd91ca33a3f19e34663a3bc832bdb2f` | `fallbackGoEval` deleted; typed worker diagnostic returned on spawn failure | `receipt:broker:single-rlm-route-v1` |
-| `SCENARIO-S3-TERMINAL-IDENTITY` | `computer-03335285269bdba4f94377e56879f9e6` | 890 | `6b758878bdd91ca33a3f19e34663a3bc832bdb2f` | v1 proposition digest; provider-fresh replay reuses original receipt | `receipt:store:terminal-identity-v1` |
-| `SCENARIO-S4-SLOT-CONFLICT` | `computer-03335285269bdba4f94377e56879f9e6` | 890 | `6b758878bdd91ca33a3f19e34663a3bc832bdb2f` | Differing proposition conflicts; attempt > 1 requires supersede tuple | `receipt:store:slot-conflict-tuple-v1` |
-| `SCENARIO-S5-ADMISSION-GRAMMAR` | `computer-03335285269bdba4f94377e56879f9e6` | 890 | `6b758878bdd91ca33a3f19e34663a3bc832bdb2f` | Sequential turn execution; pre-dispatch refusal of >=2 terminals, >1 eval | `receipt:toolregistry:admission-grammar-v1` |
-| `SCENARIO-S6-FATE-SAGA` | `computer-03335285269bdba4f94377e56879f9e6` | 890 | `6b758878bdd91ca33a3f19e34663a3bc832bdb2f` | Durable pending proposal; physical revoke precedes terminal report commit | `receipt:fate:resumable-saga-v1` |
-| `SCENARIO-S7-ORPHAN-REDUCER` | `computer-03335285269bdba4f94377e56879f9e6` | 890 | `6b758878bdd91ca33a3f19e34663a3bc832bdb2f` | Fallback barred from terminal authoring; reducer orphan close | `receipt:store:orphan-observation-v1` |
+| Scenario ID | Repair Commit | Verifier (resolvable) | Contract Verified |
+|---|---|---|---|
+| `SCENARIO-S1-COMPILE-ISOLATION` | `b8aaa89b`, `5022c6b7` | `internal/yaegikernel`: `TestSessionCompileRejectionPreservesHeap`, `TestSessionLoopSurvivesCompileRejection`, `TestClassifyExecuteError`, `TestSessionFailureKinds` | Failed compile preserves heap/imports; typed failure classes; no timeout race |
+| `SCENARIO-S2-SINGLE-ROUTE` | `a6b898f0` | `cmd/capsule-broker`: `TestGoEvalSessionFailsClosedWithoutBinary`, `TestInitSessionFailsCleanWithoutBinary` | One execution route; typed worker diagnostic on spawn failure; no one-shot diversion |
+| `SCENARIO-S3-TERMINAL-IDENTITY` | `965e26a7` | `internal/store`: `TestTerminalPropositionDigestExcludesMetadata`, `TestTerminalSlotReplayAndConflict` | Proposition digest over canonical claims only; same digest replays with zero new effects |
+| `SCENARIO-S4-SLOT-CONFLICT` | `965e26a7` | `internal/store`: `TestCoSuperAssignmentCommandsReplayAndDigestConflict`, `TestOpenSupersedeTuple` | Differing proposition conflicts; supersede tuple required for attempt > 1 |
+| `SCENARIO-S5-ADMISSION-GRAMMAR` | `18498447`, `0c71d1f9` | `internal/toolregistry`: `TestExecuteToolBatchAssignedCoSuperAdmissionGrammar` (test 8: `[stage_complete eval, completed terminal]` executes sequentially) | Sequential execution; pre-dispatch refusal; mailbox complete never aborts admitted terminal |
+| `SCENARIO-S6-FATE-SAGA` | `0921c542` | `internal/store`: `TestCoSuperPendingProposalDurabilityAndAtomicRevokeFinality` | Durable pending proposal; revoke acknowledgement precedes terminal commit |
+| `SCENARIO-S7-ORPHAN-REDUCER` | `f5cfc206` | `internal/store`: `TestRecordCoSuperOrphanObservation` (close, pending-conflict, bound-run mismatch, terminal retry replay); `internal/agentcore`: `TestFallbackRecordsOrphanObservationOnAssignedTerminalRun`, `TestFallbackAbstainsOnAssignmentRun` | Fallback synthesizes nothing on assignment runs; reducer closes orphans with bound-run validation and replay |
 
 ## 4. Residual Debt & Open Residues
 

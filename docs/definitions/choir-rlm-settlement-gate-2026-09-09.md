@@ -148,7 +148,7 @@ boundaries:
       - "Compile failures discarded working heaps through loop-level worker exit (repaired: Yaegi compile gate with non-mutating heap preservation)."
       - "One-shot diversion replacing exact diagnostics with generic wait errors (repaired: fallbackGoEval deleted from active RLM route; typed worker diagnostics)."
       - "Pre-revoke premature terminal commitment (repaired: resumable fate saga with atomic final boundary strictly following revoke acknowledgement)."
-      - "Dual authorship of terminal truth by fallback (repaired: fallback barred for assignment runs; reducer-owned orphan observation port)."
+      - "Dual authorship of terminal truth by fallback (repaired: fallback barred from synthesizing terminal updates or wakes on assignment runs; it submits one orphan observation that the reducer alone closes, with bound-run validation and terminal retry replay)."
 
 measures:
   - name: terminal_replay_predicate
@@ -211,7 +211,7 @@ now:
     - "internal/agentcore/cosuper_assignment_fate.go"
     - "docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md (item-1 Define: matrix + authorized Compile/Execute repair boundary)"
     - "docs/evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md (deployed proof: scenarios S1-S7, staging commit 6b758878, CI run 34401118732)"
-    - "item-6 repair commit f5cfc206: fallback authoring barred for assignment runs + RecordCoSuperOrphanObservation store command + obligation routing + caller-map proof"
+    - "item-6 repair commit f5cfc206: fallback barred from synthesizing terminal updates/wakes on assignment runs + RecordCoSuperOrphanObservation store command + obligation routing + caller-map proof"
     - "docs/evidence/choir-rlm-settlement-item6-define-2026-09-09.md (item-6 Define: fallback canonical author port closure + reducer orphan observation + caller-map proof)"
     - "item-5 repair commit 0921c542: PendingProposal schema + SetCoSuperCapsuleDisposition proposal commit + fate saga reordering + TestCoSuperPendingProposalDurabilityAndAtomicRevokeFinality"
     - "docs/evidence/choir-rlm-settlement-item5-define-2026-09-09.md (item-5 Define: resumable fate saga + pending proposal durability + atomic final boundary)"
