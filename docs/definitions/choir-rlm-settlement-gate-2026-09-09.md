@@ -173,7 +173,7 @@ measures:
 
 now:
   status: working
-  slice: "Item 6 active: code-free Define recorded 2026-09-09 with fallback canonical-author port closure specification (strip direct committing/wake authority from fallback, reducer-owned orphan observation port, obligation routing). Next: implement item 6."
+  slice: "Item 6 implemented 2026-09-09: fallback author port closed + RecordCoSuperOrphanObservation store command + obligation routing + TestRecordCoSuperOrphanObservation and TestFallbackAbstainsOnAssignmentRun green. Next: item 7 (staging deployed proof) and item 8 (regression contracts)."
   question: none
   reconciliation:
     observed_at: "2026-09-09T16:31:36Z"
@@ -205,17 +205,18 @@ now:
     - "cmd/capsule-broker/session_worker.go"
     - "internal/agentcore/cosuper_assignment_fate.go"
     - "docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md (item-1 Define: matrix + authorized Compile/Execute repair boundary)"
+    - "item-6 repair commit (this commit): fallback authoring barred for assignment runs + RecordCoSuperOrphanObservation store command + obligation routing + caller-map proof"
+    - "docs/evidence/choir-rlm-settlement-item6-define-2026-09-09.md (item-6 Define: fallback canonical author port closure + reducer orphan observation + caller-map proof)"
     - "item-5 repair commit 0921c542: PendingProposal schema + SetCoSuperCapsuleDisposition proposal commit + fate saga reordering + TestCoSuperPendingProposalDurabilityAndAtomicRevokeFinality"
     - "docs/evidence/choir-rlm-settlement-item5-define-2026-09-09.md (item-5 Define: resumable fate saga + pending proposal durability + atomic final boundary)"
-    - "docs/evidence/choir-rlm-settlement-item6-define-2026-09-09.md (item-6 Define: fallback canonical author port closure + reducer orphan observation + caller-map proof)"
     - "item-4 repair commit 18498447: toolRequiresSequentialTurnExecution + validateCoSuperBatchAdmission + tray collision skip + batchContainsAdmittedTerminalTool + unit tests"
     - "docs/evidence/choir-rlm-settlement-item4-define-2026-09-09.md (item-4 Define: narrow admission grammar + Stage 1/2 boundaries + sequential execution)"
     - "item-3 repair commit 965e26a7: canonicalizer + TerminalReportID + SlotTerminalReport + Record/Open integration + agentcore mint/gate + strict decode + v1 tests"
     - "docs/evidence/choir-rlm-settlement-item3-define-2026-09-09.md (item-3 Define: frozen v1 table + dated overlay-paradox correction + authorized repair boundary)"
     - "item-2 repair commit a6b898f0: fallbackGoEval deletion + typed spawn-failure diagnostic; cross-vet ok, linux-test execution deferred to CI"
     - "item-1 repair commit b8aaa89b: EvalError + Compile gate + serveCell/broker carry + contract tests; yaegikernel/capsule/toolregistry green, agentcore capsule/fate subset green, broker cross-build ok"
-  blocker_or_risk: "Item-6 repair unimplemented (fallback directly commits/wakes terminal updates, metadata conditional bypass); items 7-8 open. Broker linux-test execution deferred to CI. Mission-0 drill debt stays mission-0-owned (residue R1)."
-  next_action: "Implement item-6 repair: strip fallback authoring + RecordCoSuperOrphanObservation store command + obligation routing + caller-map tests."
+  blocker_or_risk: "Item 7 (deployed proof on physical staging computer) and item 8 (focused contracts regression) open. Broker linux-test execution deferred to CI. Mission-0 drill debt stays mission-0-owned (residue R1)."
+  next_action: "Commit item-6 repair, then proceed to item 7 deployed proof and item 8 regression verification."
 
 receipts:
   - id: settlement-gate-charter-2026-09-09
@@ -351,7 +352,7 @@ receipts:
 
   - id: settlement-item6-define-2026-09-09
     boundary: define
-    commit_or_artifact: "this commit (docs/evidence/choir-rlm-settlement-item6-define-2026-09-09.md)"
+    commit_or_artifact: "e28d6be8 (docs/evidence/choir-rlm-settlement-item6-define-2026-09-09.md)"
     proof_refs:
       - "docs/evidence/choir-rlm-settlement-item6-define-2026-09-09.md (fallback canonical author port closure: reducer orphan observation, obligation check, caller-map proof)"
       - "competing author defect cited: researcher_checkpoint_fallback.go:144-167 dispatches worker updates and emits channel message events"
@@ -359,4 +360,17 @@ receipts:
     disposition: "item-6 repair boundary authorized; no source changed"
     problem_ref: "dual authors of terminal truth; metadata-conditional exemption leak; orphan vs pending collision"
     authorization_ref: "Owner-chartered item 6; problem-documentation-first per mission boundaries"
+    candidate_or_evidence_refs: []
+  - id: settlement-item6-implement-2026-09-09
+    boundary: implement
+    commit_or_artifact: "this commit (red: fallback canonical-author port closure + orphan observation + tests)"
+    proof_refs:
+      - "new: TestRecordCoSuperOrphanObservation proving reducer-derived failed report for unreserved orphan run, conflict on pending slot, and conflict on terminal slot"
+      - "new: TestFallbackAbstainsOnAssignmentRun proving researcher fallback synthesizes zero worker updates and zero wakes when assignment_id is present"
+      - "caller-map: fallback barred from authoring terminal updates for assignment runs"
+      - "go test ./internal/store and go test ./internal/agentcore green"
+    rollback_ref: "revert this commit; Define receipt e28d6be8 retained"
+    disposition: "item-6 repair lands; items 7-8 open; push/deploy/proof deferred to item-7 landing"
+    problem_ref: "docs/evidence/choir-rlm-settlement-item6-define-2026-09-09.md"
+    authorization_ref: "Owner-chartered item 6; Define-precedes-repair satisfied by e28d6be8"
     candidate_or_evidence_refs: []

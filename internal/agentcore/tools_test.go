@@ -447,6 +447,34 @@ func TestRootTerminalRunSkipsOutcomeBindingWithoutStoreLookup(t *testing.T) {
 	}
 }
 
+func TestFallbackAbstainsOnAssignmentRun(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	rec := terminalResearcherRunFixture(
+		"owner",
+		"computer",
+		"run-assigned-child",
+		"run-parent-requester",
+		"channel-1",
+		now,
+	)
+	rec.Metadata["assignment_id"] = "assignment-xyz"
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.bindTerminalRunOutcome(ctx, &rec, false); err != nil {
+		t.Fatalf("bind terminal outcome on assignment run: %v", err)
+	}
+	updates, err := s.ListPendingWorkerUpdates(ctx, rec.OwnerID, "texture:"+rec.ChannelID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updates) != 0 {
+		t.Fatalf("fallback synthesized updates for assignment run: %+v", updates)
+	}
+}
+
 func TestResearcherPlainTerminalResultBindsAddressedOutcome(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

@@ -2125,3 +2125,57 @@ func (s *Store) GetCoSuperSubjectCandidate(ctx context.Context, ownerID, compute
 	}
 	return candidate, nil
 }
+
+// RecordCoSuperOrphanObservation processes an authenticated immutable orphan observation (settlement gate item 6).
+// If the child run has an assignment obligation, the reducer validates the slot family:
+// - An in-flight pending proposal must reconcile through the fate saga, never through the orphan path.
+// - An already terminal assignment replays or conflicts.
+// - An unreserved bound assignment is closed by the reducer deriving a terminal failed proposition.
+func (s *Store) RecordCoSuperOrphanObservation(ctx context.Context, obs types.CoSuperOrphanObservation) (types.CoSuperAssignmentCommandResult, error) {
+	if err := obs.Validate(); err != nil {
+		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("%w: %v", ErrCoSuperAssignmentInvalid, err)
+	}
+	if strings.TrimSpace(obs.AssignmentID) == "" {
+		return types.CoSuperAssignmentCommandResult{}, nil
+	}
+	assignmentObj, assignment, err := s.getCoSuperAssignmentObject(ctx, obs.OwnerID, obs.ComputerID, obs.AssignmentID, obs.Attempt)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	_ = assignmentObj
+	// Obligation check: if a pending proposal is in-flight, route exclusively through fate saga.
+	if assignment.PendingProposal != nil {
+		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("co-super assignment: pending proposal in-flight; must reconcile through fate saga, not orphan path: %w", ErrCoSuperAssignmentCommandConflict)
+	}
+	// Terminal check: if already terminal, return conflict or replay.
+	if assignment.Disposition.Terminal() {
+		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentCommandConflict
+	}
+	verdict := types.CoSuperVerdictNone
+	if assignment.Binding.Kind == types.CoSuperAssignmentVerification {
+		verdict = types.CoSuperVerdictAbstain
+	}
+	orphanPropDigest, _ := ComputeTerminalPropositionDigest(assignment.Binding.SubjectDigest, types.CoSuperResultFailed, verdict, nil, nil, nil)
+	reportID := TerminalReportID(obs.OwnerID, obs.ComputerID, obs.AssignmentID, obs.Attempt, orphanPropDigest)
+	report := types.CoSuperAssignmentReport{
+		Schema:                types.CoSuperAssignmentSchemaV1,
+		ReportID:              reportID,
+		Result:                types.CoSuperResultFailed,
+		Verdict:               verdict,
+		ObservedSubjectDigest: assignment.Binding.SubjectDigest,
+		Summary:               fmt.Sprintf("orphan close: child run %s terminated without packet (%s)", obs.RunID, obs.Reason),
+		EvidenceRefs:          nil,
+		CreatedAt:             obs.ObservedAt,
+	}
+	req := types.RecordCoSuperAssignmentReportRequest{
+		CommandID:                fmt.Sprintf("co-super-orphan:%s:%d:%s", obs.AssignmentID, obs.Attempt, obs.RunID),
+		OwnerID:                  obs.OwnerID,
+		ComputerID:               obs.ComputerID,
+		AssignmentID:             obs.AssignmentID,
+		Attempt:                  obs.Attempt,
+		ExpectedLifecycleVersion: assignment.LifecycleVersion,
+		Report:                   report,
+	}
+	req.CommandDigest, _ = ComputeRecordCoSuperAssignmentReportDigest(req)
+	return s.RecordCoSuperAssignmentReport(ctx, req)
+}

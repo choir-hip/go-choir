@@ -530,6 +530,40 @@ type CoSuperAssignmentCommandResult struct {
 	Update     *CoagentSourcePacket     `json:"update,omitempty"`
 	Replay     bool                     `json:"replay"`
 }
+
+// CoSuperOrphanReason names why a child run is observed as orphaned (settlement gate item 6).
+type CoSuperOrphanReason string
+
+const (
+	OrphanReasonProcessExitedWithoutPacket CoSuperOrphanReason = "process_exited_without_packet"
+	OrphanReasonCancelled                  CoSuperOrphanReason = "cancelled"
+	OrphanReasonConfirmedDead              CoSuperOrphanReason = "confirmed_dead"
+)
+
+// CoSuperOrphanObservation is an authenticated immutable observation submitted
+// to the reducer when a child run terminates without a terminal packet (settlement gate item 6).
+type CoSuperOrphanObservation struct {
+	OwnerID      string              `json:"owner_id"`
+	ComputerID   string              `json:"computer_id"`
+	RunID        string              `json:"run_id"`
+	AssignmentID string              `json:"assignment_id,omitempty"`
+	Attempt      uint64              `json:"attempt,omitempty"`
+	Reason       CoSuperOrphanReason `json:"reason"`
+	ObservedAt   time.Time           `json:"observed_at"`
+	EvidenceRef  string              `json:"evidence_ref,omitempty"`
+}
+
+func (o CoSuperOrphanObservation) Validate() error {
+	if strings.TrimSpace(o.OwnerID) == "" || strings.TrimSpace(o.ComputerID) == "" || strings.TrimSpace(o.RunID) == "" {
+		return fmt.Errorf("orphan observation: owner_id, computer_id, and run_id are required")
+	}
+	switch o.Reason {
+	case OrphanReasonProcessExitedWithoutPacket, OrphanReasonCancelled, OrphanReasonConfirmedDead:
+	default:
+		return fmt.Errorf("orphan observation: invalid reason %q", o.Reason)
+	}
+	return nil
+}
 type OpenCoSuperAssignmentRequest struct {
 	CommandID     string                   `json:"command_id"`
 	CommandDigest string                   `json:"command_digest"`

@@ -1643,3 +1643,73 @@ func TestCoSuperPendingProposalDurabilityAndAtomicRevokeFinality(t *testing.T) {
 		t.Fatalf("pending proposal not cleared after final settlement: %+v", final.Assignment.PendingProposal)
 	}
 }
+
+func TestRecordCoSuperOrphanObservation(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 2)
+	open := coSuperOpenRequest(f, 0, "assignment-orphan-1", 1, types.CoSuperAssignmentImplementation, true, "cap-orphan-1", "capsule-orphan-1")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	bindReq := bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-orphan-1")
+	if _, err := s.BindCoSuperAssignment(ctx, bindReq); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Unreserved bound assignment is closed as orphan by reducer
+	obs := types.CoSuperOrphanObservation{
+		OwnerID:      open.Binding.OwnerID,
+		ComputerID:   open.Binding.ComputerID,
+		RunID:        f.assignedRunIDs[0],
+		AssignmentID: open.AssignmentID,
+		Attempt:      1,
+		Reason:       types.OrphanReasonProcessExitedWithoutPacket,
+		ObservedAt:   time.Now().UTC(),
+	}
+	result, err := s.RecordCoSuperOrphanObservation(ctx, obs)
+	if err != nil {
+		t.Fatalf("record orphan observation: %v", err)
+	}
+	if result.Report == nil || result.Report.Result != types.CoSuperResultFailed || result.Report.Verdict != types.CoSuperVerdictNone {
+		t.Fatalf("orphan report = %+v", result.Report)
+	}
+
+	// 2. An in-flight pending proposal rejects orphan disposition
+	openPending := coSuperOpenRequest(f, 1, "assignment-orphan-pending", 1, types.CoSuperAssignmentImplementation, true, "cap-orphan-p", "capsule-orphan-p")
+	if _, err := s.OpenCoSuperAssignment(ctx, openPending); err != nil {
+		t.Fatal(err)
+	}
+	boundPending, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(openPending, f.assignedRunIDs[1], "cap-orphan-p"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	freezeReq := types.SetCoSuperCapsuleDispositionRequest{
+		CommandID: "cmd-freeze-pending", OwnerID: openPending.Binding.OwnerID, ComputerID: openPending.Binding.ComputerID,
+		AssignmentID: openPending.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: boundPending.Assignment.LifecycleVersion,
+		Disposition: types.CoSuperCapsuleFreezeRequested, IntentRef: "capsule-freeze-intent:pending-obs",
+		PendingProposal: &types.CoSuperPendingProposal{
+			PropositionDigest: objectgraph.SHA256([]byte("pending-obs")),
+			Report:            types.CoSuperAssignmentReport{ReportID: "report-pending-obs"},
+			FreezeIntentRef:   "capsule-freeze-intent:pending-obs",
+			CreatedAt:         time.Now().UTC(),
+		},
+	}
+	freezeReq.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(freezeReq)
+	if _, err := s.SetCoSuperCapsuleDisposition(ctx, freezeReq); err != nil {
+		t.Fatalf("set freeze requested: %v", err)
+	}
+
+	obsPending := types.CoSuperOrphanObservation{
+		OwnerID:      openPending.Binding.OwnerID,
+		ComputerID:   openPending.Binding.ComputerID,
+		RunID:        f.assignedRunIDs[1],
+		AssignmentID: openPending.AssignmentID,
+		Attempt:      1,
+		Reason:       types.OrphanReasonConfirmedDead,
+		ObservedAt:   time.Now().UTC(),
+	}
+	if _, err := s.RecordCoSuperOrphanObservation(ctx, obsPending); !errors.Is(err, ErrCoSuperAssignmentCommandConflict) {
+		t.Fatalf("orphan observation on pending proposal err = %v, want conflict", err)
+	}
+}
