@@ -30,11 +30,13 @@ import (
 // The previous succeeds-with-nothing deferral (missing capability, HTTP or
 // decode failure returning materialized=false without an error) is deleted:
 // every required-base failure is now a typed error the caller must not survive.
-func materializeProjectionBaseIfNeeded(ctx context.Context, storeDir, computerID, platformURL string, capability func(context.Context) (string, error)) (bool, error) {
-	storeDir = filepath.Clean(storeDir)
+func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerID, platformURL string, capability func(context.Context) (string, error)) (bool, error) {
+	storePath = filepath.Clean(storePath)
+	markerName := filepath.Base(storePath)
+	storeDir := filepath.Dir(storePath)
 	computerID = strings.TrimSpace(computerID)
 	platformURL = strings.TrimRight(strings.TrimSpace(platformURL), "/")
-	if storeDir == "" || computerID == "" || platformURL == "" || capability == nil {
+	if storeDir == "" || storeDir == "." || markerName == "" || markerName == "." || markerName == "/" || computerID == "" || platformURL == "" || capability == nil {
 		return false, nil
 	}
 
@@ -52,7 +54,7 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storeDir, computerID
 	}
 
 	source := projectionbase.NewHTTPSource(platformURL, projectionbase.CapabilityFunc(capability))
-	descriptor, err := projectionbase.InstallVerifiedBase(ctx, source, storeDir, "runtime.db", computerID, head.CanonicalEventHead, head.Sequence)
+	descriptor, err := projectionbase.InstallVerifiedBase(ctx, source, storeDir, markerName, computerID, head.CanonicalEventHead, head.Sequence)
 	if err != nil {
 		return false, fmt.Errorf("autoputer: required projection base refused: %w", err)
 	}

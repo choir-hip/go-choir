@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
+	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
 func TestIsStoreEmpty(t *testing.T) {
@@ -55,7 +56,7 @@ func TestMaterializeBootstrapsNewComputerWithoutBase(t *testing.T) {
 	defer server.Close()
 	capability := func(ctx context.Context) (string, error) { return "test-cap", nil }
 
-	materialized, err := materializeProjectionBaseIfNeeded(context.Background(), t.TempDir(), "computer-new", server.URL, capability)
+	materialized, err := materializeProjectionBaseIfNeeded(context.Background(), filepath.Join(t.TempDir(), "runtime.db"), "computer-new", server.URL, capability)
 	if err != nil {
 		t.Fatalf("bootstrap refused: %v", err)
 	}
@@ -72,7 +73,7 @@ func TestMaterializeRefusesMissingBaseForExistingChain(t *testing.T) {
 	capability := func(ctx context.Context) (string, error) { return "test-cap", nil }
 
 	storeDir := t.TempDir()
-	_, err := materializeProjectionBaseIfNeeded(context.Background(), storeDir, "computer-old", server.URL, capability)
+	_, err := materializeProjectionBaseIfNeeded(context.Background(), filepath.Join(storeDir, "runtime.db"), "computer-old", server.URL, capability)
 	if !errors.Is(err, projectionbase.ErrBaseRefused) {
 		t.Fatalf("missing required base did not refuse: %v", err)
 	}
@@ -92,11 +93,35 @@ func TestMaterializeShortCircuitsNonEmptyStore(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(storeDir, ".dolt"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	materialized, err := materializeProjectionBaseIfNeeded(context.Background(), storeDir, "computer-live", server.URL, capability)
+	materialized, err := materializeProjectionBaseIfNeeded(context.Background(), filepath.Join(storeDir, "runtime.db"), "computer-live", server.URL, capability)
 	if err != nil {
 		t.Fatalf("non-empty store refused: %v", err)
 	}
 	if materialized || calls != 0 {
 		t.Fatalf("non-empty store caused platform reads: materialized=%v calls=%d", materialized, calls)
+	}
+}
+
+func TestMaterializeSkipsLiveStoreLayout(t *testing.T) {
+	var calls int
+	server := bootTestServer(t, http.StatusOK, nil, http.StatusOK, nil, &calls)
+	defer server.Close()
+	capability := func(ctx context.Context) (string, error) { return "test-cap", nil }
+
+	// Production layout: marker file plus derived workspace directory. The
+	// installer must recognize the live store and never consult the platform,
+	// or a healthy computer refuses its own boot.
+	storeDir := t.TempDir()
+	store, err := choirstore.Open(filepath.Join(storeDir, "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	materialized, err := materializeProjectionBaseIfNeeded(context.Background(), filepath.Join(storeDir, "runtime.db"), "computer-live", server.URL, capability)
+	if err != nil {
+		t.Fatalf("live store refused: %v", err)
+	}
+	if materialized || calls != 0 {
+		t.Fatalf("live store caused platform reads: materialized=%v calls=%d", materialized, calls)
 	}
 }

@@ -480,7 +480,7 @@ func Run() {
 		gate.appender = replayAppender
 		gate.mu.Unlock()
 		s.SetHealthHandler(gate.ServeHTTP)
-		go runReplayPhase(gate, replayAppender, replayClient, replayCredentials, replayComputerID, replayBootstrapCtx, replayBootstrapCancel, func() error {
+		go runReplayPhase(gate, replayAppender, replayClient, replayCredentials, replayComputerID, rtCfg.StorePath, replayBootstrapCtx, replayBootstrapCancel, func() error {
 			if fileSyncService != nil {
 				restored, err := fileSyncService.HydrateIfNeeded(ctx)
 				if err != nil {
@@ -533,7 +533,7 @@ func startPeriodicDoltGC(storePath string) {
 // (Restart=on-failure) restart the guest and the next boot resumes from the
 // committed head. Never CAS during replay (B8); the appender is read-only over
 // the canonical tape.
-func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEventAppender, client *computerevent.HTTPClient, credentials *selfdev.GuestCredentials, computerID string, bootstrapCtx context.Context, cancel context.CancelFunc, afterReplay func() error) {
+func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEventAppender, client *computerevent.HTTPClient, credentials *selfdev.GuestCredentials, computerID, storePath string, bootstrapCtx context.Context, cancel context.CancelFunc, afterReplay func() error) {
 	defer cancel()
 	// B14 host-drive boundary: when RUNTIME_RECOVERY_REPLAY_ONLY is set the
 	// reconstruct is a one-shot, deterministic projection materialization on
@@ -547,8 +547,7 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 		platformURL := client.BaseURL()
 		capSource := client.Capability()
 		if platformURL != "" && capSource != nil {
-			storeDirectory := storeDir(provideriface.DefaultStorePath)
-			if materialized, err := materializeProjectionBaseIfNeeded(bootstrapCtx, storeDirectory, computerID, platformURL, capSource); err != nil {
+			if materialized, err := materializeProjectionBaseIfNeeded(bootstrapCtx, storePath, computerID, platformURL, capSource); err != nil {
 				log.Fatalf("autoputer: required projection base refused; refusing genesis fallback: %v", err)
 			} else if materialized {
 				log.Printf("autoputer: ProjectionBase materialized before reconstruct for %s", computerID)

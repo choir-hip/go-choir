@@ -199,7 +199,7 @@ measures:
 
 now:
   status: working
-  slice: "slice 2b landed (guest recovery on verified base plus tail with refusal matrix); next is slice 3 deployed proof (scoped staging observation, base selection, drill, cost telemetry)"
+  slice: "staging incident: boot installer checked the constant store dir instead of the runtime store path and crash-looped the staging guest; fix passes rtCfg.StorePath through (this commit). Next: land fix, refresh guest, publish base via host, drill."
   question: none
   reconciliation:
     observed_at: "2026-09-09T01:30:00Z"
@@ -341,3 +341,23 @@ receipts:
       deployed_acceptance: not_applicable
     registry_conformance_ref: "no topology change"
     simplification: "no new replay mechanics: installed head W plus the existing reconstruct loop is tail-only by construction; no new journal (durable replay checkpoints plus quantum flush plus install idempotency plus cold-recovery journal already carry resume); observer is three nil-guarded hooks plus one propagated field; agentcore change is one Runtime seam field plus install/resolve helpers"
+  - id: restore-zero-staging-incident-2026-09-09
+    boundary: implement
+    commit_or_artifact: "this commit (red: installer checks the runtime store path)"
+    proof_refs:
+      - "Node B vmctl journal: 331+ autoputer: required projection base refused fatals, PIDs climbing every ~2s, runtime store opens fresh=false"
+      - "data.img 34GB intact Aug 27; persistent data preserved by refresh"
+      - "go test ./internal/autoputer/ -run TestMaterialize|TestIsStoreEmpty ok including live-store skip regression"
+    rollback_ref: "revert restores constant-dir check (and the crash loop with it); data.img untouched throughout"
+    disposition: "root cause: runReplayPhase checked storeDir(DefaultStorePath) while the guest store lives at RUNTIME_STORE_PATH; the old deferral made the mismatch benign, fail-closed weaponized it. Fix threads rtCfg.StorePath plus marker derivation through; live layout skips without platform reads."
+    problem_ref: "silent required-base deferral masked a wrong-directory boot check"
+    authorization_ref: "Owner SSH break-glass (alias node-b) for diagnosis; fix under sole working entrypoint"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: "staging proxy 4d6e67e7; guest crash-looping pre-fix"
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "no topology change"
+    simplification: "one-line wiring (constant to rtCfg-derived path) plus marker derivation; no new surface; regression test uses a real store layout"
