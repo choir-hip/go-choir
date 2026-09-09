@@ -132,7 +132,7 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 			}
 			close(done)
 		}()
-		val, evalErr = s.interp.ExecuteWithContext(outCtx, prog)
+		val, evalErr = s.interp.Execute(prog)
 	}()
 	overflowed := make(chan struct{}, 1)
 	go func() {
@@ -153,7 +153,9 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 	finish := func(err error, kind DiagnosticKind) (EvalResult, error) {
 		res.Stdout = stdoutCap.String()
 		res.Stderr = stderrCap.String()
-		res.Value = val
+		if err == nil {
+			res.Value = val
+		}
 		res.Duration = time.Since(start)
 		if err != nil {
 			s.poisoned = err
