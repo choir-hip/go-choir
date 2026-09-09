@@ -173,7 +173,7 @@ measures:
 
 now:
   status: working
-  slice: "Item 1 implemented 2026-09-09: typed reuse disposition with Compile/Execute split and loop/broker carry; focused contracts green. Next: item-2 Define (fallback removal) then repair, items 3-8 in order. Push/deploy/deployed-proof deferred to item-7 landing."
+  slice: "Item 2 active: code-free Define recorded 2026-09-09 (spawn-failure diversion + wait-error diagnostics; effectiveRoute dead config out of scope). Next: fallbackGoEval removal with typed worker diagnostic, then items 3-8 in order. Push/deploy/deployed-proof deferred to item-7 landing."
   question: none
   reconciliation:
     observed_at: "2026-09-09T16:31:36Z"
@@ -205,9 +205,10 @@ now:
     - "cmd/capsule-broker/session_worker.go"
     - "internal/agentcore/cosuper_assignment_fate.go"
     - "docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md (item-1 Define: matrix + authorized Compile/Execute repair boundary)"
-    - "item-1 repair commit (this commit): EvalError + Compile gate + serveCell/broker carry + contract tests; go test ./internal/yaegikernel ./internal/capsule ./internal/toolregistry green, agentcore capsule/fate subset green, broker CGO_ENABLED=0 GOOS=linux build ok"
-  blocker_or_risk: "Items 2-8 unimplemented (fallback diversion, provider-contaminated identity, batch race, fate finality-before-revoke, fallback authorship live); deployed proof outstanding. Mission-0 drill debt stays mission-0-owned (residue R1)."
-  next_action: "Item 2: code-free Define naming the fallback-diversion defect, then remove fallbackGoEval from the RLM route with one typed diagnostic contract (local_test)."
+    - "docs/evidence/choir-rlm-settlement-item2-define-2026-09-09.md (item-2 Define: fallback-diversion defect + authorized removal boundary)"
+    - "item-1 repair commit b8aaa89b: EvalError + Compile gate + serveCell/broker carry + contract tests; yaegikernel/capsule/toolregistry green, agentcore capsule/fate subset green, broker cross-build ok"
+  blocker_or_risk: "Item-2 repair unimplemented (RLM spawn failure still diverts to one-shot); items 3-8 open (provider-contaminated identity, batch race, fate finality-before-revoke, fallback authorship live); deployed proof outstanding. Mission-0 drill debt stays mission-0-owned (residue R1)."
+  next_action: "Implement item-2 repair: delete fallbackGoEval, return typed unsafe/worker diagnostic on RLM spawn failure, update broker contract test (local_test)."
 
 receipts:
   - id: settlement-gate-charter-2026-09-09
@@ -246,4 +247,14 @@ receipts:
     disposition: "item-1 repair lands; items 2-8 open; push/deploy/proof deferred to item-7 landing"
     problem_ref: "docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md"
     authorization_ref: "Owner-chartered item 1; Define-precedes-repair satisfied by d133fa9a"
+    candidate_or_evidence_refs: []
+  - id: settlement-item2-define-2026-09-09
+    boundary: define
+    commit_or_artifact: "this commit (code-free; docs/evidence/choir-rlm-settlement-item2-define-2026-09-09.md + now update)"
+    proof_refs:
+      - "docs/evidence/choir-rlm-settlement-item2-define-2026-09-09.md (route inventory: fallbackGoEval live, effectiveRoute dead config, tools branch preserved; Fallback field readerless)"
+    rollback_ref: "docs-only; revert restores pre-item-2 now card"
+    disposition: "item-2 repair boundary authorized; no source changed"
+    problem_ref: "RLM spawn failure diverts to one-shot with wait-error diagnostics; two paths/one route"
+    authorization_ref: "Owner-chartered item 2; problem-documentation-first per mission boundaries"
     candidate_or_evidence_refs: []
