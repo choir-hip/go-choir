@@ -71,12 +71,13 @@ Post-completion panel (12/13 routes; 8 accept-with-conditions, 4 reject):
 [`evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md`](evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md).
 The earlier W=1/W=13 HTTP 200 claim remains demoted. Follow-on: keep W near H;
 nontrivial-tail rematerialize/restore drill; proxy 502-during-resolve is not this mission.
-## Blocked Definition — RLM Settlement Gate (stub)
+## Blocked Definition — RLM Settlement Gate (repaired draft pending charter)
 
 [`definitions/choir-rlm-settlement-gate-2026-09-09.md`](definitions/choir-rlm-settlement-gate-2026-09-09.md)
-is a **blocked non-executable stub** holding the terminal digest-conflict
-remainder. Full charter follows during mission 0 execution. Nothing executes
-under it.
+is a **blocked non-executable draft** holding the terminal digest-conflict
+remainder. Mission 0 is complete; the draft has survived five verification
+rounds and awaits owner charter ratification with fresh reconciliation and
+R4/R5 freezes. Nothing executes under it before then.
 
 ## Blocked Definition — RLM Target Architecture Cutover (remainder holder)
 

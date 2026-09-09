@@ -549,8 +549,9 @@ nodes:
       - choir-rlm-restore-zero-2026-09-08
     enables: []
     note: >-
-      Blocked non-executable stub holding the terminal digest-conflict remainder.
-      Full charter follows during mission 0 execution. Nothing executes under it.
+      Blocked non-executable draft holding the terminal digest-conflict remainder.
+      Mission 0 complete; five verification rounds survived; charter ratification with
+      fresh reconciliation and R4/R5 freezes pending. Nothing executes under it before then.
     sources:
       - docs/definitions/choir-rlm-settlement-gate-2026-09-09.md
       - docs/ACTIVE.md
