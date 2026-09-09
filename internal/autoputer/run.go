@@ -260,6 +260,12 @@ func Run() {
 			cancel()
 			log.Fatalf("autoputer: resolve canonical event head before keyring: %v", err)
 		}
+		if materialized, baseErr := materializeProjectionBaseIfNeeded(bootstrapCtx, rtCfg.StorePath, computerID, platformURL, credentials.Capability, db); baseErr != nil {
+			cancel()
+			log.Fatalf("autoputer: required projection base refused; refusing genesis fallback: %v", baseErr)
+		} else if materialized {
+			log.Printf("autoputer: ProjectionBase materialized before reconstruct for %s", computerID)
+		}
 		privacyKeyPath := strings.TrimSpace(os.Getenv("CHOIR_PRIVACY_KEY_FILE"))
 		privateCipher, err := computerevent.LoadGuestPrivateArtifactCipher(privacyKeyPath, computerID, canonicalHead == nil)
 		if err != nil {
@@ -543,17 +549,6 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 	// workspace durably checkpointed. The guest boot afterwards sees
 	// local==platform and takes over verification + route authority.
 	replayOnly := strings.TrimSpace(os.Getenv("RUNTIME_RECOVERY_REPLAY_ONLY")) == "1"
-	if client != nil {
-		platformURL := client.BaseURL()
-		capSource := client.Capability()
-		if platformURL != "" && capSource != nil {
-			if materialized, err := materializeProjectionBaseIfNeeded(bootstrapCtx, storePath, computerID, platformURL, capSource); err != nil {
-				log.Fatalf("autoputer: required projection base refused; refusing genesis fallback: %v", err)
-			} else if materialized {
-				log.Printf("autoputer: ProjectionBase materialized before reconstruct for %s", computerID)
-			}
-		}
-	}
 	appender.SetReplayMode(true)
 	err := appender.Reconstruct(bootstrapCtx, client)
 	appender.SetReplayMode(false)

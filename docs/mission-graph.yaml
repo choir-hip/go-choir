@@ -516,23 +516,22 @@ nodes:
     title: RLM Restore-Zero
     path: docs/definitions/choir-rlm-restore-zero-2026-09-08.md
     ledger: ''
-    status: settled
+    status: working
     kind: spine
-    entrypoint: false
-    execution_mode: completed_non_executable
+    entrypoint: true
+    execution_mode: mission_orchestrator
     depends_on:
       - choir-rlm-target-architecture-cutover-2026-09-04
     enables:
       - choir-rlm-settlement-gate-2026-09-09
     note: >-
-      Completed 2026-09-09 (deployed commit 80d43427): verified ProjectionBase
-      at watermark W plus immutable tail (W,H], Dolt head as address and witness,
-      loud refusal on bad bases, tail-only replay, crash-resume, non-rewinding
-      recover_current. Base W=1 and W=13 published on Node B, platform serving
-      and refusal matrix verified on staging.
+      Demoted from completed 2026-09-09: W=1/W=13 publication is not tail-only
+      recovery. Boot now rebases a retained store onto advertised W or refuses a
+      stale watermark (max tail 10000). Next: host-publish W near H with
+      choir-rebuild-base --advertise, then observe prefix=0 retained boot.
     sources:
       - docs/definitions/choir-rlm-restore-zero-2026-09-08.md
-      - docs/evidence/choir-rlm-restore-zero-deployed-proof-2026-09-09.md
+      - docs/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md
       - docs/reports/choir-rlm-mission-state-2026-09-08.md
       - docs/ACTIVE.md
   - id: choir-rlm-settlement-gate-2026-09-09

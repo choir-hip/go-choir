@@ -204,8 +204,8 @@ measures:
     cannot_prove: "Cannot authorize promotion, prove code, or advance completion."
 
 now:
-  status: completed
-  slice: "mission 0 restore-zero complete: verified-base-plus-tail restore contract deployed on staging (commit 80d43427), verified base W=1 (8ae2cc33) and W=13 (ab740388) published on Node B with sidecar descriptors, platform serving and refusal matrix verified, local test suite clean, failure-injection blocked prerequisite recorded per action 8."
+  status: working
+  slice: "snapshotting contract encoded locally: PlanRecovery rebases retained stores when local < W, resumes only inside a 10000-event tail, and refuses a stale watermark. The 2026-09-09 completion is demoted; W=1/W=13 plus HTTP 200 is not tail-only recovery. Next is host publication of W near H and a retained-store boot that applies only (W,H]."
   question: none
   reconciliation:
     observed_at: "2026-09-09T04:30:46Z"
@@ -246,7 +246,7 @@ now:
     - "docs/evidence/choir-rlm-restore-zero-reconciliation-2026-09-09.md"
     - "internal/projectionbase/verify.go and verify_test.go (slice 1)"
   blocker_or_risk: "Action 8 scoped owner failure-injection controls (in-flight interruption, live base corruption) do not exist in product API; recorded as blocked prerequisite receipt restore-zero-blocked-prerequisites-2026-09-09. Local tests prove complete failure matrix and interruption resumption."
-  next_action: "None. Mission 0 restore-zero complete. Next is mission 1 settlement gate (choir-rlm-settlement-gate-2026-09-09.md) consensus promotion."
+  next_action: "Host-publish a ProjectionBase at current H with choir-rebuild-base --advertise; then observe a retained-store boot that enumerates/reduces only (W,H] with prefix reads = 0. Do not mark complete on guest /health JSON or W=1/W=13 publication."
 receipts:
   - id: restore-zero-define-and-topology-2026-09-09
     boundary: define
@@ -451,3 +451,26 @@ receipts:
       environment_identity: "staging proxy 80d43427, computer epoch 890"
       deployed_acceptance: "recorded blocked prerequisite"
     registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
+
+  - id: restore-zero-retained-store-rebase-2026-09-09
+    boundary: implement
+    commit_or_artifact: "this commit (red: PlanRecovery rebase/refuse; choir-rebuild-base --advertise)"
+    proof_refs:
+      - "internal/projectionbase/recovery_plan.go MaxRecoveryTailEvents=10000"
+      - "internal/projectionbase/rebase.go staged sibling install + quarantine swap"
+      - "internal/autoputer/projection_base.go deletes non-empty skip"
+      - "go test ./internal/projectionbase ./internal/autoputer ./cmd/choir-rebuild-base"
+      - "docs/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md"
+    rollback_ref: "revert restores empty-store skip and unadvertised W=1 lifetime replay"
+    disposition: "retained computers rebase onto advertised W or refuse a stale watermark; publication must keep W within 10000 of H"
+    problem_ref: "boot skipped non-empty stores and lifetime-replayed retained computers; W=1/W=13 never consumed"
+    authorization_ref: "Owner: snapshotting is the mission; do not mark complete on guest /health"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
+    simplification: "one PlanRecovery decision reused by boot and rematerialize; existing InstallVerifiedBase plus quarantine swap; no third store"

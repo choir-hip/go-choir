@@ -115,6 +115,11 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	report.BaseSequence = descriptor.Sequence
 	report.BaseBlobSHA256 = descriptor.BlobSHA256
 	report.TailTargetSequence = targetSequence
+	if _, err := projectionbase.PlanRecovery(true, 0, true, descriptor.Sequence, targetSequence); err != nil {
+		_ = staged.Close()
+		_ = os.RemoveAll(stagingRoot)
+		return report, err
+	}
 	request.StagedWorkspacePath = staged.TexturePath()
 	if err := selfdevprotocol.RematerializeFromRequest(request); err != nil {
 		_ = staged.Close()

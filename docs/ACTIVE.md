@@ -59,16 +59,17 @@ without `RUNTIME_MAINTENANCE_HOLD` on staging `computer-03335285269bdba4f94377e5
 [`evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md`](evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md).
 Effects remain OFF.
 
-## Completed Definition — RLM Restore-Zero
+## Active Definition — RLM Restore-Zero
 
 [`definitions/choir-rlm-restore-zero-2026-09-08.md`](definitions/choir-rlm-restore-zero-2026-09-08.md)
-completed 2026-09-09 (deployed commit `80d43427`, staging proxy `80d43427` active). Target achieved:
-verified ProjectionBase at watermark W plus immutable tail (W,H], Dolt head as address and
-witness, loud refusal on missing/foreign/corrupt/incompatible bases, tail-only
-replay, crash-resume from durable progress, recover_current non-rewinding. Base W=1
-and W=13 published on Node B with sidecar descriptors, platform serving and refusal matrix
-verified on staging, failure-injection blocked prerequisite recorded per action 8.
-Evidence: [`evidence/choir-rlm-restore-zero-deployed-proof-2026-09-09.md`](evidence/choir-rlm-restore-zero-deployed-proof-2026-09-09.md).
+is **active and executable**. The 2026-09-09 completion claim is demoted: W=1/W=13
+publication plus HTTP 200 is not tail-only recovery. Boot skipped any non-empty
+store and lifetime-replayed a retained computer (local ≈ 20k, H ≈ 148k). The
+snapshotting contract is now encoded: rebase when `local < W`, resume only inside
+a 10,000-event tail, refuse a stale watermark, staged sibling install with no
+in-place SQLite overwrite, `choir-rebuild-base --advertise`. Next action is host
+publication of W near H, then a retained-store boot that applies only `(W,H]`.
+Correction: [`reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md`](reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md).
 ## Blocked Definition — RLM Settlement Gate (stub)
 
 [`definitions/choir-rlm-settlement-gate-2026-09-09.md`](definitions/choir-rlm-settlement-gate-2026-09-09.md)
@@ -220,8 +221,9 @@ Supporting maintenance Definitions retain their evidence and status:
 `documentation-authority-reduction-2026-07-09.md`. They are settled,
 superseded, or historical as stated by their source Definitions, not entrypoints.
 
-Mission 0 RLM restore-zero completed on staging `computer-03335285269bdba4f94377e56879f9e6`
-(epoch 890 active). Zero working entrypoints until Mission 1 settlement gate is promoted.
+RLM restore-zero remains the sole working entrypoint on staging
+`computer-03335285269bdba4f94377e56879f9e6`. Do not mark complete until a retained
+boot consumes a near-head snapshot with prefix reads = 0.
 
 ## Unowned External Work
 

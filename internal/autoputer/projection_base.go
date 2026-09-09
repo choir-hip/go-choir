@@ -3,6 +3,7 @@ package autoputer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,23 +15,20 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
+	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
-// materializeProjectionBaseIfNeeded installs the required base before the
-// local embedded Dolt/SQLite store is opened. The contract is explicit:
+// materializeProjectionBaseIfNeeded installs or rebases onto a verified
+// ProjectionBase before reconstruct. The contract:
 //
-//   - non-empty store: nothing to do, the resume path owns recovery;
-//   - no canonical chain on the platform (head 404): explicit new-computer
-//     bootstrap, genesis is allowed and no base is required;
-//   - canonical chain exists: a verified base is REQUIRED. Any missing,
-//     foreign, corrupt, non-ancestor, or incompatible base refuses loudly.
-//     There is no silent genesis fallback: a failed install is a fatal boot
-//     refusal, never a fresh store.
+//   - empty store + no canonical chain: explicit new-computer genesis
+//   - chain exists: a verified base is REQUIRED and the remaining tail
+//     (start, H] must be ≤ MaxRecoveryTailEvents
+//   - local < W: staged rebase (sibling install + quarantine/swap)
+//   - local ≥ W and tail in bound: resume from the retained head
 //
-// The previous succeeds-with-nothing deferral (missing capability, HTTP or
-// decode failure returning materialized=false without an error) is deleted:
-// every required-base failure is now a typed error the caller must not survive.
-func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerID, platformURL string, capability func(context.Context) (string, error)) (bool, error) {
+// A non-empty store is never skipped. Silent genesis fallback is deleted.
+func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerID, platformURL string, capability func(context.Context) (string, error), live *choirstore.Store) (bool, error) {
 	storePath = filepath.Clean(storePath)
 	markerName := filepath.Base(storePath)
 	storeDir := filepath.Dir(storePath)
@@ -40,26 +38,88 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 		return false, nil
 	}
 
-	if !isStoreEmpty(storeDir) {
-		return false, nil
+	empty := isStoreEmpty(storeDir)
+	var localSeq uint64
+	if !empty {
+		if live != nil {
+			head, err := live.Head(ctx, computerID)
+			if err != nil {
+				return false, fmt.Errorf("%w: retained store head: %v", projectionbase.ErrBaseRefused, err)
+			}
+			if head != nil {
+				localSeq = head.Sequence
+			}
+		} else {
+			seq, err := projectionbase.PeekLocalSequence(ctx, storePath, computerID)
+			if err != nil {
+				return false, err
+			}
+			localSeq = seq
+		}
 	}
 
 	head, err := queryCanonicalHead(ctx, platformURL, computerID, capability)
 	if err != nil {
 		return false, err
 	}
-	if head == nil || head.Sequence == 0 {
-		log.Printf("autoputer: no canonical chain for %s; explicit new-computer bootstrap without base", computerID)
-		return false, nil
+	chainExists := head != nil && head.Sequence > 0
+	var targetHead string
+	var targetSeq uint64
+	if chainExists {
+		targetHead = head.CanonicalEventHead
+		targetSeq = head.Sequence
 	}
 
 	source := projectionbase.NewHTTPSource(platformURL, projectionbase.CapabilityFunc(capability))
-	descriptor, err := projectionbase.InstallVerifiedBase(ctx, source, storeDir, markerName, computerID, head.CanonicalEventHead, head.Sequence)
-	if err != nil {
-		return false, fmt.Errorf("autoputer: required projection base refused: %w", err)
+	var watermarkSeq uint64
+	if chainExists {
+		seq, _, wmErr := source.Watermark(ctx, computerID)
+		if wmErr != nil && !errors.Is(wmErr, projectionbase.ErrBaseRefused) {
+			return false, wmErr
+		}
+		if wmErr == nil {
+			watermarkSeq = seq
+		}
 	}
-	log.Printf("autoputer: ProjectionBase installed at sequence %d (base %s) for target %d", descriptor.Sequence, descriptor.BlobSHA256, head.Sequence)
-	return true, nil
+
+	plan, err := projectionbase.PlanRecovery(empty, localSeq, chainExists, watermarkSeq, targetSeq)
+	if err != nil {
+		return false, err
+	}
+	switch plan.Action {
+	case projectionbase.RecoveryGenesis, projectionbase.RecoveryResume:
+		log.Printf("autoputer: projection recovery %s for %s (local=%d W=%d H=%d tail=%d)", plan.Action, computerID, localSeq, watermarkSeq, targetSeq, plan.TailEvents)
+		return false, nil
+	case projectionbase.RecoveryInstall:
+		descriptor, err := projectionbase.InstallVerifiedBase(ctx, source, storeDir, markerName, computerID, targetHead, targetSeq)
+		if err != nil {
+			return false, fmt.Errorf("autoputer: required projection base refused: %w", err)
+		}
+		log.Printf("autoputer: ProjectionBase installed at sequence %d (base %s) for target %d", descriptor.Sequence, descriptor.BlobSHA256, targetSeq)
+		return true, nil
+	case projectionbase.RecoveryRebase:
+		if live != nil {
+			if err := live.Close(); err != nil {
+				return false, fmt.Errorf("autoputer: close retained store before rebase: %w", err)
+			}
+		}
+		descriptor, err := projectionbase.RebaseRetainedStore(ctx, source, storePath, computerID, targetHead, targetSeq)
+		if err != nil {
+			if live != nil {
+				_ = live.Reopen(storePath)
+			}
+			return false, fmt.Errorf("autoputer: required projection rebase refused: %w", err)
+		}
+		if live != nil {
+			if err := live.Reopen(storePath); err != nil {
+				return false, fmt.Errorf("autoputer: reopen rebased store: %w", err)
+			}
+		}
+		log.Printf("autoputer: ProjectionBase rebased retained store from %d onto W=%d (base %s) for target %d", localSeq, descriptor.Sequence, descriptor.BlobSHA256, targetSeq)
+		return true, nil
+	default:
+		return false, fmt.Errorf("%w: unknown recovery action %s", projectionbase.ErrBaseRefused, plan.Action)
+	}
 }
 
 // queryCanonicalHead reads the platform canonical head. A missing head is the
@@ -103,6 +163,9 @@ func isStoreEmpty(dir string) bool {
 	for _, e := range entries {
 		name := e.Name()
 		if strings.HasPrefix(name, ".") && name != ".dolt" {
+			continue
+		}
+		if strings.HasPrefix(name, "restore-staging-") || strings.HasPrefix(name, "restore-quarantine-") {
 			continue
 		}
 		if name == ".dolt" || strings.HasSuffix(name, ".db") || strings.HasSuffix(name, ".sqlite") {

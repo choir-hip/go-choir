@@ -250,6 +250,13 @@ func OpenTextureWorkspace(path string) (*Store, error) {
 	return s, nil
 }
 
+// TextureWorkspacePath is the Dolt workspace derived from a runtime marker.
+// Recovery swaps this directory together with the marker; it must not invent
+// a second store.
+func TextureWorkspacePath(path string) string {
+	return deriveTextureWorkspacePath(path)
+}
+
 func deriveTextureWorkspacePath(path string) string {
 	if path == "" {
 		return filepath.Join(os.TempDir(), defaultTextureWorkspaceDir)
