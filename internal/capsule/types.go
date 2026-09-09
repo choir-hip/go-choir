@@ -126,6 +126,11 @@ type GoEvalResult struct {
 	Fallback        bool                       `json:"fallback,omitempty"`
 	StagedIntentIDs []string                   `json:"staged_intent_ids,omitempty"`
 	Intents         []yaegikernel.StagedIntent `json:"intents,omitempty"`
+	// Reuse carries the session reuse disposition for a failed cell
+	// (preserve: heap intact, worker alive). DiagKind carries the
+	// diagnostic kind with the message verbatim. Settlement-gate item 1.
+	Reuse    yaegikernel.ReuseDisposition `json:"reuse,omitempty"`
+	DiagKind yaegikernel.DiagnosticKind   `json:"diag_kind,omitempty"`
 }
 
 type ExecutionReceipt struct {

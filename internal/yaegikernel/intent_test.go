@@ -123,7 +123,9 @@ func TestServeCellFailedDropsTray(t *testing.T) {
 	if len(good.Intents) != 1 {
 		t.Fatalf("good cell intents = %+v", good.Intents)
 	}
-	bad, err := serveCell(sess, SessionFrame{ID: "c-bad", Source: `choir.Message("super", "k", "x"); undefined.Symbol()`}, nil, &hooks)
+	// Runtime failure (not a compile rejection): the cell stages then panics
+	// at execution, so it poisons and ships nothing.
+	bad, err := serveCell(sess, SessionFrame{ID: "c-bad", Source: `choir.Message("super", "k", "x"); panic("boom")`}, nil, &hooks)
 	if err == nil {
 		t.Fatal("bad cell must poison")
 	}

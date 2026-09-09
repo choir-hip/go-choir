@@ -173,7 +173,7 @@ measures:
 
 now:
   status: working
-  slice: "Item 1 active: isolation matrix complete 2026-09-09 (compile-failure preserves, compile-success mutates, execute-failure partially mutates); code-free Define receipt recorded. Next: typed reuse-disposition repair (Compile/Execute split + loop/broker carry), then items 2-8 in order."
+  slice: "Item 1 implemented 2026-09-09: typed reuse disposition with Compile/Execute split and loop/broker carry; focused contracts green. Next: item-2 Define (fallback removal) then repair, items 3-8 in order. Push/deploy/deployed-proof deferred to item-7 landing."
   question: none
   reconciliation:
     observed_at: "2026-09-09T16:31:36Z"
@@ -205,8 +205,9 @@ now:
     - "cmd/capsule-broker/session_worker.go"
     - "internal/agentcore/cosuper_assignment_fate.go"
     - "docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md (item-1 Define: matrix + authorized Compile/Execute repair boundary)"
-  blocker_or_risk: "Item-1 repair unimplemented (all EvalWithContext failures still poison); actuator fence/dedup and deployed crash/cancel proof outstanding. Mission-0 drill debt stays mission-0-owned (residue R1)."
-  next_action: "Implement item-1 repair: typed reuse disposition with Compile/Execute split and loop/broker carry per the Define receipt, with focused local_test contracts."
+    - "item-1 repair commit (this commit): EvalError + Compile gate + serveCell/broker carry + contract tests; go test ./internal/yaegikernel ./internal/capsule ./internal/toolregistry green, agentcore capsule/fate subset green, broker CGO_ENABLED=0 GOOS=linux build ok"
+  blocker_or_risk: "Items 2-8 unimplemented (fallback diversion, provider-contaminated identity, batch race, fate finality-before-revoke, fallback authorship live); deployed proof outstanding. Mission-0 drill debt stays mission-0-owned (residue R1)."
+  next_action: "Item 2: code-free Define naming the fallback-diversion defect, then remove fallbackGoEval from the RLM route with one typed diagnostic contract (local_test)."
 
 receipts:
   - id: settlement-gate-charter-2026-09-09
@@ -232,4 +233,17 @@ receipts:
     disposition: "item-1 repair boundary authorized; no source changed"
     problem_ref: "compile-phase rejections discard heaps via poison/exit/drop; typeless Error strings force string matching"
     authorization_ref: "Owner-chartered item 1; problem-documentation-first per mission boundaries"
+    candidate_or_evidence_refs: []
+  - id: settlement-item1-implement-2026-09-09
+    boundary: implement
+    commit_or_artifact: "this commit (red: session Compile/Execute split + typed carry + tests)"
+    proof_refs:
+      - "go test ./internal/yaegikernel ./internal/capsule ./internal/toolregistry green; agentcore capsule/fate subset green"
+      - "CGO_ENABLED=0 GOOS=linux go build ./cmd/capsule-broker ok (linux-only package; darwin toolchain cannot link cgo)"
+      - "new contracts: compile-rejection heap preservation x4 shapes, kinds, timeout poison, loop survival, classifier unit"
+      - "updated contracts: TestSessionPoisonsOnFailure and TestServeCellFailedDropsTray moved to runtime failures (changed contract)"
+    rollback_ref: "revert this commit; Define receipt d133fa9a retained"
+    disposition: "item-1 repair lands; items 2-8 open; push/deploy/proof deferred to item-7 landing"
+    problem_ref: "docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md"
+    authorization_ref: "Owner-chartered item 1; Define-precedes-repair satisfied by d133fa9a"
     candidate_or_evidence_refs: []

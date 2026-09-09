@@ -389,7 +389,7 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 	res, err := w.eval(yaegikernel.CleanGoSource(p.Source), p.Inbox, timeout)
 	if err != nil {
 		b.dropSession(cap.AgentRunID)
-		result := capsule.GoEvalResult{ExitCode: 1, Error: fmt.Sprintf("session eval: %v", err), Duration: time.Since(start)}
+		result := capsule.GoEvalResult{ExitCode: 1, Error: fmt.Sprintf("session eval: %v", err), Duration: time.Since(start), Reuse: yaegikernel.ReuseUnsafeToReuse, DiagKind: yaegikernel.DiagWorker}
 		resultBytes, _ := json.Marshal(result)
 		return BrokerRPCResponse{Result: resultBytes}
 	}
@@ -399,12 +399,19 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 		Error:           res.Error,
 		Duration:        time.Since(start),
 		StagedIntentIDs: res.Receipts,
+		Reuse:           res.Reuse,
+		DiagKind:        res.DiagKind,
 	}
 	if res.Error != "" {
-		// Poisoned cells drop their tray: no intents ship, the inbox cursor
-		// cannot advance, and the worker is discarded, never reused.
+		// Failed cells drop their tray: no intents ship and the inbox cursor
+		// cannot advance. Only unsafe-to-reuse failures discard the worker:
+		// a preserving rejection (typed by the session, never string
+		// matching) keeps the live worker. Transport-level failures above
+		// already dropped it.
 		result.ExitCode = 1
-		b.dropSession(cap.AgentRunID)
+		if res.Reuse != yaegikernel.ReusePreserve {
+			b.dropSession(cap.AgentRunID)
+		}
 	} else {
 		result.Intents = res.Intents
 	}
