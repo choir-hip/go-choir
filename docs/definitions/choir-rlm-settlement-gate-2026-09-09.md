@@ -173,7 +173,7 @@ measures:
 
 now:
   status: working
-  slice: "Chartered 2026-09-09T16:53:43Z by owner ratification; sole executable root for settlement repair. Next: the Yaegi isolation matrix (acceptance item 1), then identity, admission, saga, orphan, deployed proof, and focused contracts in order."
+  slice: "Item 1 active: isolation matrix complete 2026-09-09 (compile-failure preserves, compile-success mutates, execute-failure partially mutates); code-free Define receipt recorded. Next: typed reuse-disposition repair (Compile/Execute split + loop/broker carry), then items 2-8 in order."
   question: none
   reconciliation:
     observed_at: "2026-09-09T16:31:36Z"
@@ -204,8 +204,9 @@ now:
     - "internal/yaegikernel/session_loop.go"
     - "cmd/capsule-broker/session_worker.go"
     - "internal/agentcore/cosuper_assignment_fate.go"
-  blocker_or_risk: "Yaegi isolation experiment unproven (host-preflight class only until the matrix proves more); actuator fence/dedup and deployed crash/cancel proof outstanding. Mission-0 drill debt stays mission-0-owned (residue R1)."
-  next_action: "Execute acceptance item 1: the Yaegi isolation matrix against the exact session construction, with problem documentation preceding any repair-code commit."
+    - "docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md (item-1 Define: matrix + authorized Compile/Execute repair boundary)"
+  blocker_or_risk: "Item-1 repair unimplemented (all EvalWithContext failures still poison); actuator fence/dedup and deployed crash/cancel proof outstanding. Mission-0 drill debt stays mission-0-owned (residue R1)."
+  next_action: "Implement item-1 repair: typed reuse disposition with Compile/Execute split and loop/broker carry per the Define receipt, with focused local_test contracts."
 
 receipts:
   - id: settlement-gate-charter-2026-09-09
@@ -220,4 +221,15 @@ receipts:
     disposition: "settlement-gate promoted to sole working entrypoint; restore-zero to completed non-entrypoint; cutover retained as remainder holder"
     problem_ref: "same-turn eval+terminal escaping singleton exit with provider-contaminated identity; compile failures discarding heaps; one-shot diversion replacing exact diagnostics"
     authorization_ref: "Owner charter ratification 2026-09-09T16:53:43Z"
+    candidate_or_evidence_refs: []
+  - id: settlement-item1-define-2026-09-09
+    boundary: define
+    commit_or_artifact: "this commit (code-free; docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md + now update)"
+    proof_refs:
+      - "docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md (matrix table + Compile/Execute mechanism at yaegi v0.16.1)"
+      - "throwaway probes run at main@9157d2f1, removed before commit (worktree clean apart from preserved unrelated WIP)"
+    rollback_ref: "docs-only; revert restores pre-matrix now card"
+    disposition: "item-1 repair boundary authorized; no source changed"
+    problem_ref: "compile-phase rejections discard heaps via poison/exit/drop; typeless Error strings force string matching"
+    authorization_ref: "Owner-chartered item 1; problem-documentation-first per mission boundaries"
     candidate_or_evidence_refs: []
