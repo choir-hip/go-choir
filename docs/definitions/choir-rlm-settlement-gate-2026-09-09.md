@@ -172,11 +172,10 @@ measures:
 
 now:
   status: blocked_incomplete
-  slice: "round-5 repaired draft under focused verification; mission 0 complete; charter ratification pending"
-  question: "Is the reconciled round-5 repaired charter with frozen R4/R5 ready for owner ratification?"
+  slice: "round-6 repaired draft under focused verification; mission 0 complete; charter ratification pending"
+  question: "Is the reconciled round-6 repaired charter with frozen R4/R5 ready for owner ratification?"
   reconciliation:
-    observed_at: "2026-09-09T00:00:00Z"
-    source_ref: "main@35810aad (mechanical review head; round-5 draft edits committed alongside)"
+    source_ref: "main@81e2d589 (round-6 repaired draft; re-observe HEAD at charter ratification)"
     deploy_identity: "unreconciled; mission-0 accepted identity consumed read-only at charter; re-observe before any red mutation"
     authority_identities:
       - "docs/reports/choir-rlm-mission-state-2026-09-08.md"
@@ -208,7 +207,7 @@ now:
     - "cmd/capsule-broker/session_worker.go"
     - "internal/agentcore/cosuper_assignment_fate.go"
     - "internal/agentcore/researcher_checkpoint_fallback.go"
-  blocker_or_risk: "Charter ratification pending. Yaegi isolation experiment unproven (host-preflight class only until the matrix proves more); full terminal inventory freezes at charter (residue R5); correction superseding fields freeze at charter (residue R4)."
-  next_action: "Focused verification consensus on round-5 repairs; reconcile the repaired draft with fresh source, deploy, worktree, and authority identities; freeze R4 correction fields and R5 recognition inventory; then present the reconciled charter for owner ratification."
+  blocker_or_risk: "Charter ratification pending. Yaegi isolation experiment unproven (host-preflight class only until the matrix proves more). R4 superseding tuple with rejection classes and R5 frozen admission are now in the draft; charter re-pins and ratifies them."
+  next_action: "Focused verification consensus on round-6 repairs; reconcile the repaired draft with fresh source, deploy, worktree, and authority identities; then present the reconciled charter for owner ratification."
 
 receipts: []
