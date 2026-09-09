@@ -63,12 +63,15 @@ Effects remain OFF.
 
 [`definitions/choir-rlm-restore-zero-2026-09-08.md`](definitions/choir-rlm-restore-zero-2026-09-08.md)
 is **active and executable**. The 2026-09-09 completion claim is demoted: W=1/W=13
-publication plus HTTP 200 is not tail-only recovery. Boot skipped any non-empty
-store and lifetime-replayed a retained computer (local ≈ 20k, H ≈ 148k). The
-snapshotting contract is now encoded: rebase when `local < W`, resume only inside
-a 10,000-event tail, refuse a stale watermark, staged sibling install with no
-in-place SQLite overwrite, `choir-rebuild-base --advertise`. Next action is host
-publication of W near H, then a retained-store boot that applies only `(W,H]`.
+publication plus HTTP 200 is not tail-only recovery. Snapshotting is encoded in
+`9341b5d1` (rebase when `local < W`, resume only inside a 10,000-event tail,
+refuse a stale watermark) and that SHA is the staging host/proxy/autoputer
+package as of 2026-09-09T07:49:24Z. Advertised W=148431 matches live H.
+The owner computer `computer-03335285269bdba4f94377e56879f9e6` is
+`constructed-computer-version`; CI refresh recorded `active_computers=empty`
+and the guest is still `80d43427`. Prefix=0 retained-store boot is unobserved.
+Do not treat host SHA or guest `/health` as acceptance. Problem receipt:
+[`evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md`](evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md).
 Correction: [`reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md`](reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md).
 ## Blocked Definition — RLM Settlement Gate (stub)
 
