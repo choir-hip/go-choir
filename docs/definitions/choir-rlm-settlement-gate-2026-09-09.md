@@ -46,6 +46,7 @@ start:
     - "Whether Yaegi exposes a genuinely non-executing compile/type boundary (isolation experiment outstanding)."
     - "Full sequential-tool and terminal-recognition inventory beyond panel-cited sites."
     - "Measured terminal-conflict and batch-shape distributions."
+    - "Correction-landing mechanism choice (new attempt vs structured supersession event vs append-only presentation amendment) and field-inventory audit proving every authoritative claim has a structured representation."
 
 finish:
   deliver: "Terminal settlement is one durable truth per assignment attempt: provider metadata excluded from semantic identity, compile feedback preserving the heap, runtime failure poisoning to the same snapshot, a single execution path with exact diagnostics, a crash-resumable fate saga, batches that serialize or refuse, rejections that never settle, and a fallback that explains rather than commits. The cutover's withheld run acceptance closes under this mission."
@@ -65,11 +66,11 @@ finish:
     - action: "Unify execution onto the persistent session with disposal as its single-cell case; delete the one-shot diversion so the exact diagnostic surfaces as runtime-class through one error contract."
       proves: "One execution path, one diagnostic contract, no silent fallback."
       evidence_class: local_test
-    - action: "Scrub provider call identifiers, retry ordinals, batch positions, delivery receipts, and model metadata from report identity and fingerprint; replay the same semantic packet under fresh provider metadata and changed content."
-      proves: "Same semantics return the original receipt; changed content conflicts deterministically; no retry mints or collides."
+    - action: "Derive a versioned stable settlement key and canonical length-framed semantic packet per assignment/attempt/computer/authorized-actor terminal slot from result and verdict as exact typed values, commands as the canonical ordered execution_ref/command_digest sequence, and evidence_refs as a sorted deduplicated canonical set, plus all already-settled scope/payload fields. Exclude provider call identifiers, retry ordinals, batch positions, delivery receipts, model/transport metadata, and nonsemantic presentation. Exclude summary and every free-text explanatory field entirely, including from freeze/capsule-intent references; no prose normalization is applied because prose is not input. Same slot plus identical packet returns the original receipt with its first-committed presentation across restart/retry storms; any changed semantic field conflicts before new report, fate, outbox, or wake effects. A legacy provider-keyed stored report conflicts or is explicitly reconciled, never re-minted. Corrections changing durable truth land as structured semantic deltas through the correction/repackage flow as a new attempt or explicit superseding event; prose-only ordinary retries are idempotent replays. Owner-panel settled 11-0: presentation-only."
+      proves: "Retries and crash recovery succeed on paraphrase; corrections require structured deltas; no retry mints or collides."
       evidence_class: local_test
-    - action: "Exercise singleton, mixed consequential, double-terminal, and rejection batch shapes; an accepted terminal disposition of any shape closes the loop, a rejected packet settles nothing and explains itself."
-      proves: "The singleton special case is gone; settlement is a reducer property, not a batch-shape accident."
+    - action: "Preflight-refuse every batch containing more than one terminal report before any member executes, so terminal-second-after-reject is impossible by construction. Serialize remaining consequential shapes; an accepted terminal disposition of any admitted shape closes the loop, a rejected packet settles nothing and explains itself. Owner-settled: simple refusal now; full RLM dissolves the batch race structurally."
+      proves: "The singleton special case is gone; contradictory turns never execute; settlement is a reducer property, not a batch-shape accident."
       evidence_class: local_test
     - action: "Fault-inject before and during the reducer transition, after the fate request, and after physical effect before acknowledgement: zero partial durable effects before commit, one recovered fate command after, provider-free replay reproducing receipt and disposition, changed-payload conflict, and cancellation beating a racing pass."
       proves: "Fate is a resumable saga with deterministic identity, not an assumed atomic transaction."
