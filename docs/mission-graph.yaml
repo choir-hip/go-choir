@@ -540,20 +540,21 @@ nodes:
     title: RLM Settlement Gate
     path: docs/definitions/choir-rlm-settlement-gate-2026-09-09.md
     ledger: ''
-    status: working
+    status: settled
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on:
       - choir-rlm-target-architecture-cutover-2026-09-04
       - choir-rlm-restore-zero-2026-09-08
     enables: []
     note: >-
-      Sole working entrypoint, chartered 2026-09-09T16:53:43Z by owner
-      ratification after ten verification rounds with zero HOLD verdicts.
-      Red repair executes under its 8 acceptance items in order.
+      Completed 2026-09-09 with full CI green (run 34401118732) and deployed
+      proof on staging computer-03335285269bdba4f94377e56879f9e6 at commit 6b758878.
+      All 8 acceptance items satisfied.
     sources:
       - docs/definitions/choir-rlm-settlement-gate-2026-09-09.md
+      - docs/evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md
       - docs/ACTIVE.md
   - id: choir-host-orchestrated-recovery-2026-08-22
     title: Host-Orchestrated Recovery (Cold Recover Current)

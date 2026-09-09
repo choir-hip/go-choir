@@ -71,15 +71,21 @@ Post-completion panel (12/13 routes; 8 accept-with-conditions, 4 reject):
 [`evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md`](evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md).
 The earlier W=1/W=13 HTTP 200 claim remains demoted. Follow-on: keep W near H;
 nontrivial-tail rematerialize/restore drill; proxy 502-during-resolve is not this mission.
-## Executable Definition — RLM Settlement Gate (chartered 2026-09-09)
+## Completed Definition — RLM Settlement Gate
 
 [`definitions/choir-rlm-settlement-gate-2026-09-09.md`](definitions/choir-rlm-settlement-gate-2026-09-09.md)
-is the **sole working entrypoint**, chartered by owner ratification
-2026-09-09T16:53:43Z after ten verification rounds with zero HOLD verdicts.
-Red settlement repair executes under its 8 acceptance items in order,
-starting with the Yaegi isolation matrix. Mission-0 drill debt stays
-mission-0-owned (residue R1); the cutover stays remainder holder (residue R6).
-
+completed 2026-09-09 (deployed commit `6b758878`, CI run `34401118732`). All 8
+acceptance items are satisfied: Yaegi compile gate with non-mutating heap preservation,
+deletion of session-spawn fallback `fallbackGoEval` from active RLM route,
+v1 terminal identity contract with proposition digest, derived ReportID, slot conflict
+gating and supersede tuple, narrow assigned-CoSuper admission grammar with sequential
+execution and toolloop decoupling, resumable fate saga with atomic final settlement
+strictly following durable revocation acknowledgement, single reducer author for orphan
+closure, and physical staging proof on `computer-03335285269bdba4f94377e56879f9e6`
+with effects OFF. Deployed evidence:
+[`evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md`](evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md).
+The cutover's withheld settlement acceptance is closed; the cutover stays remainder
+holder (residue R6). Mission-0 live drill debt stays mission-0-owned (residue R1).
 ## Blocked Definition — RLM Target Architecture Cutover (remainder holder)
 
 [`definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`](definitions/choir-rlm-target-architecture-cutover-2026-09-04.md)

@@ -24,15 +24,14 @@ follow-ons, and deferred decisions that a later mission must circle back to.
   approaches that bound.
 - **R3 — Proxy boot-screen during resolve lock (optional).** Follow-on
   from mission-0 completion; cosmetic. Revisit: next proxy/UX pass.
-- **R4 — Mission-1 correction superseding tuple (frozen in round-7 draft).** Owner chose correction-as-new-attempt (2026-09-09); the tuple fields and rejection classes (a/b/c) are now in the draft. Revisit: charter ratification re-pins them.
-- **R5 — Mission-1 narrow admission grammar (frozen in round-7 draft).** Owner chose the narrow consequential subset (2026-09-09); the exact grammar is now in the draft. Revisit: charter ratification re-pins it.
 - **R6 — Cutover final disposition deferred (owner direction 2026-09-09).**
   Mission 1 closes the cutover's withheld settlement acceptance and retains
   the cutover Definition as remainder holder; full supersession by a named
   successor is deferred while the program continues in future missions.
   Revisit: a later mission names the complete successor and redirects the
   cutover atomically.
-
 ## Closed
 
-(none yet)
+- **R4 — Mission-1 correction superseding tuple.** Closed 2026-09-09 by settlement-gate item-3 repair (commit `965e26a7`): `CoSuperSupersedeTuple` required for attempt > 1, forbidden on attempt 1, validated in-store; slot conflict enforced on differing propositions without tuple.
+- **R5 — Mission-1 narrow admission grammar.** Closed 2026-09-09 by settlement-gate item-4 repair (commit `18498447`): sequential turn execution for `capsule_go_eval` and `record_assignment_result`; Stage 1 pre-dispatch refusal (>= 2 terminals, > 1 eval, reversed order, forbidden companions) with none-run semantics; Stage 2 tray collision skip; toolloop decoupling for admitted shapes (a) and (b).
+

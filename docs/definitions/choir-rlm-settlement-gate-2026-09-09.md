@@ -172,17 +172,17 @@ measures:
     cannot_prove: "Cannot authorize promotion, prove code, or advance completion."
 
 now:
-  status: working
-  slice: "Item 6 implemented 2026-09-09: fallback author port closed + RecordCoSuperOrphanObservation store command + obligation routing + TestRecordCoSuperOrphanObservation and TestFallbackAbstainsOnAssignmentRun green. Next: item 7 (staging deployed proof) and item 8 (regression contracts)."
+  status: completed
+  slice: "Settlement Gate completed 2026-09-09 with full CI green (run 34401118732) and deployed proof on staging computer-03335285269bdba4f94377e56879f9e6 at commit 6b758878. All 8 acceptance items satisfied. Withheld cutover run acceptance closed; cutover definition retained as remainder holder (R6). Mission-0 live drill debt stays mission-0-owned (R1)."
   question: none
   reconciliation:
-    observed_at: "2026-09-09T16:31:36Z"
-    source_ref: "main@54eb9328 (round-10 repaired draft HEAD, observed live at charter)"
-    deploy_identity: "staging https://choir.news ok via proxy 9341b5d1 (built 20260909055454), vmctl routing enabled; mission-0 accepted restore identity consumed read-only"
+    observed_at: "2026-09-09T20:54:12Z"
+    source_ref: "main@6b758878"
+    deploy_identity: "staging https://choir.news ok via proxy 6b758878 (x-choir-build-commit: 6b758878bdd91ca33a3f19e34663a3bc832bdb2f), vmctl routing enabled; mission-0 accepted restore identity consumed read-only"
     authority_identities:
       - "docs/reports/choir-rlm-mission-state-2026-09-08.md"
       - "docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md (remainder holder)"
-      - "docs/mission-residues.md (R1-R6 open)"
+      - "docs/mission-residues.md (R1-R3 open, R4-R5 closed, R6 remainder holder)"
       - "AGENTS.md; docs/standing-questions.md"
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "4 untracked leftover paths preserved as unrelated WIP (mission-0 completion report, report generator script, pycache, tmp/); no other dirty paths"
@@ -197,15 +197,16 @@ now:
     source: owner
     evidence_ref: "Owner charter ratification 2026-09-09T16:53:43Z; ten verification rounds with no HOLD; live reconciliation main@54eb9328 with staging proxy 9341b5d1 ok"
     owner_ratification_ref: "ratified 2026-09-09T16:53:43Z; executable promotion lands atomically with this receipt"
-    recorded_at: "2026-09-09T16:53:43Z"
-    consequence: "Chartered executable. Red repair work is authorized under the 8 acceptance items in order; problem-documentation-first precedes every repair-code commit."
+    recorded_at: "2026-09-09T20:54:12Z"
+    consequence: "Mission completed. All 8 acceptance items satisfied; sole working entrypoint retired to completed."
   evidence_refs:
     - "internal/yaegikernel/session.go"
     - "internal/yaegikernel/session_loop.go"
     - "cmd/capsule-broker/session_worker.go"
     - "internal/agentcore/cosuper_assignment_fate.go"
     - "docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md (item-1 Define: matrix + authorized Compile/Execute repair boundary)"
-    - "item-6 repair commit (this commit): fallback authoring barred for assignment runs + RecordCoSuperOrphanObservation store command + obligation routing + caller-map proof"
+    - "docs/evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md (deployed proof: scenarios S1-S7, staging commit 6b758878, CI run 34401118732)"
+    - "item-6 repair commit f5cfc206: fallback authoring barred for assignment runs + RecordCoSuperOrphanObservation store command + obligation routing + caller-map proof"
     - "docs/evidence/choir-rlm-settlement-item6-define-2026-09-09.md (item-6 Define: fallback canonical author port closure + reducer orphan observation + caller-map proof)"
     - "item-5 repair commit 0921c542: PendingProposal schema + SetCoSuperCapsuleDisposition proposal commit + fate saga reordering + TestCoSuperPendingProposalDurabilityAndAtomicRevokeFinality"
     - "docs/evidence/choir-rlm-settlement-item5-define-2026-09-09.md (item-5 Define: resumable fate saga + pending proposal durability + atomic final boundary)"
@@ -215,8 +216,8 @@ now:
     - "docs/evidence/choir-rlm-settlement-item3-define-2026-09-09.md (item-3 Define: frozen v1 table + dated overlay-paradox correction + authorized repair boundary)"
     - "item-2 repair commit a6b898f0: fallbackGoEval deletion + typed spawn-failure diagnostic; cross-vet ok, linux-test execution deferred to CI"
     - "item-1 repair commit b8aaa89b: EvalError + Compile gate + serveCell/broker carry + contract tests; yaegikernel/capsule/toolregistry green, agentcore capsule/fate subset green, broker cross-build ok"
-  blocker_or_risk: "Item 7 (deployed proof on physical staging computer) and item 8 (focused contracts regression) open. Broker linux-test execution deferred to CI. Mission-0 drill debt stays mission-0-owned (residue R1)."
-  next_action: "Commit item-6 repair, then proceed to item 7 deployed proof and item 8 regression verification."
+  blocker_or_risk: "None. Mission complete. Residues R1 (drill debt) and R6 (cutover remainder holder) open in docs/mission-residues.md as chartered."
+  next_action: "None; mission-1 closed with deployed proof."
 
 receipts:
   - id: settlement-gate-charter-2026-09-09
@@ -363,7 +364,7 @@ receipts:
     candidate_or_evidence_refs: []
   - id: settlement-item6-implement-2026-09-09
     boundary: implement
-    commit_or_artifact: "this commit (red: fallback canonical-author port closure + orphan observation + tests)"
+    commit_or_artifact: "f5cfc206 (red: fallback canonical-author port closure + orphan observation + tests)"
     proof_refs:
       - "new: TestRecordCoSuperOrphanObservation proving reducer-derived failed report for unreserved orphan run, conflict on pending slot, and conflict on terminal slot"
       - "new: TestFallbackAbstainsOnAssignmentRun proving researcher fallback synthesizes zero worker updates and zero wakes when assignment_id is present"
@@ -373,4 +374,18 @@ receipts:
     disposition: "item-6 repair lands; items 7-8 open; push/deploy/proof deferred to item-7 landing"
     problem_ref: "docs/evidence/choir-rlm-settlement-item6-define-2026-09-09.md"
     authorization_ref: "Owner-chartered item 6; Define-precedes-repair satisfied by e28d6be8"
+    candidate_or_evidence_refs: []
+  - id: settlement-gate-deployed-proof-2026-09-09
+    boundary: verify
+    commit_or_artifact: "docs/evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md"
+    proof_refs:
+      - "commit 6b758878 deployed to staging (https://choir.news, x-choir-build-commit: 6b758878bdd91ca33a3f19e34663a3bc832bdb2f)"
+      - "CI run 34401118732 success (all 12 race test shards, vet, build, heresy, doccheck, scale, sbom, deploy)"
+      - "docs/evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md (acceptance scenarios S1-S7 verified)"
+      - "docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md withheld settlement acceptance closed; remainder-holder status retained (R6)"
+      - "docs/mission-residues.md R1-R6 status updated (R4-R5 closed)"
+    rollback_ref: "git revert of mission commits; product restore remains forward event-chain transaction"
+    disposition: "settlement gate completed with deployed proof; sole entrypoint retired to completed; remainder-holder status retained on cutover"
+    problem_ref: "same-turn eval+terminal escaping singleton exit; provider-contaminated ReportID; pre-revoke premature commit; fallback dual authorship"
+    authorization_ref: "Owner charter ratification 2026-09-09T16:53:43Z"
     candidate_or_evidence_refs: []
