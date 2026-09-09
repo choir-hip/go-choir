@@ -518,7 +518,7 @@ nodes:
     ledger: ''
     status: completed
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on:
       - choir-rlm-target-architecture-cutover-2026-09-04
@@ -537,21 +537,21 @@ nodes:
       - docs/reports/choir-rlm-mission-state-2026-09-08.md
       - docs/ACTIVE.md
   - id: choir-rlm-settlement-gate-2026-09-09
-    title: RLM Settlement Gate (stub)
+    title: RLM Settlement Gate
     path: docs/definitions/choir-rlm-settlement-gate-2026-09-09.md
     ledger: ''
-    status: blocked
+    status: working
     kind: spine
-    entrypoint: false
-    execution_mode: blocked_incomplete
+    entrypoint: true
+    execution_mode: mission_orchestrator
     depends_on:
       - choir-rlm-target-architecture-cutover-2026-09-04
       - choir-rlm-restore-zero-2026-09-08
     enables: []
     note: >-
-      Blocked non-executable draft holding the terminal digest-conflict remainder.
-      Mission 0 complete; five verification rounds survived; charter ratification with
-      fresh reconciliation and R4/R5 freezes pending. Nothing executes under it before then.
+      Sole working entrypoint, chartered 2026-09-09T16:53:43Z by owner
+      ratification after ten verification rounds with zero HOLD verdicts.
+      Red repair executes under its 8 acceptance items in order.
     sources:
       - docs/definitions/choir-rlm-settlement-gate-2026-09-09.md
       - docs/ACTIVE.md

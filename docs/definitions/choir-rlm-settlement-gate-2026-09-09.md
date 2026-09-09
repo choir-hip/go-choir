@@ -1,7 +1,7 @@
 ---
 definition_version: 2
 definition_id: choir-rlm-settlement-gate-2026-09-09
-execution_mode: draft_non_executable
+execution_mode: mission_orchestrator
 
 start:
   captured_at: "2026-09-09T00:00:00Z"
@@ -172,9 +172,9 @@ measures:
     cannot_prove: "Cannot authorize promotion, prove code, or advance completion."
 
 now:
-  status: blocked_incomplete
-  slice: "round-10 repaired draft under focused verification; mission 0 complete; charter ratification pending"
-  question: "Is the reconciled round-10 repaired charter with two-stage admission, total classification, and liveness policy ready for owner ratification?"
+  status: working
+  slice: "Chartered 2026-09-09T16:53:43Z by owner ratification; sole executable root for settlement repair. Next: the Yaegi isolation matrix (acceptance item 1), then identity, admission, saga, orphan, deployed proof, and focused contracts in order."
+  question: none
   reconciliation:
     observed_at: "2026-09-09T16:31:36Z"
     source_ref: "main@54eb9328 (round-10 repaired draft HEAD, observed live at charter)"
@@ -193,23 +193,31 @@ now:
     ref: none
     owner: none
     base: none
-    digest: none
-    scope: []
-  decision:
-    selected: "Mission 1 charters the settlement gate as repaired; executes only after owner charter ratification with fresh reconciliation; closes the withheld cutover run acceptance through a demonstrated successful settlement path."
-    kind: architecture
-    status: proposal
-    source: orchestrator
-    evidence_ref: "Owner-settled mission order and owner-settled narrow-grammar, revoke-visibility, and cutover-holder choices; the complete settlement architecture remains a proposal until the ratification receipt exists"
-    owner_ratification_ref: "charter ratification still required before execution"
-    recorded_at: "2026-09-09T00:00:00Z"
-    consequence: "Draft and review only. No settlement repair executes under this file before charter ratification with fresh reconciliation. Mission-0 drill debt stays mission-0-owned (residue R1)."
+    status: settled
+    source: owner
+    evidence_ref: "Owner charter ratification 2026-09-09T16:53:43Z; ten verification rounds with no HOLD; live reconciliation main@54eb9328 with staging proxy 9341b5d1 ok"
+    owner_ratification_ref: "ratified 2026-09-09T16:53:43Z; executable promotion lands atomically with this receipt"
+    recorded_at: "2026-09-09T16:53:43Z"
+    consequence: "Chartered executable. Red repair work is authorized under the 8 acceptance items in order; problem-documentation-first precedes every repair-code commit."
   evidence_refs:
     - "internal/yaegikernel/session.go"
     - "internal/yaegikernel/session_loop.go"
     - "cmd/capsule-broker/session_worker.go"
     - "internal/agentcore/cosuper_assignment_fate.go"
-  blocker_or_risk: "Charter ratification pending. Yaegi isolation experiment unproven (host-preflight class only until the matrix proves more). Classification receipt v1, two-stage narrow grammar, dead-actuator liveness policy, and R6 cutover-holder retention are now in the draft; charter re-pins and ratifies them."
-  next_action: "Focused verification consensus on round-10 repairs; reconcile the repaired draft with fresh source, deploy, worktree, and authority identities; then present the reconciled charter for owner ratification."
+  blocker_or_risk: "Yaegi isolation experiment unproven (host-preflight class only until the matrix proves more); actuator fence/dedup and deployed crash/cancel proof outstanding. Mission-0 drill debt stays mission-0-owned (residue R1)."
+  next_action: "Execute acceptance item 1: the Yaegi isolation matrix against the exact session construction, with problem documentation preceding any repair-code commit."
 
-receipts: []
+receipts:
+  - id: settlement-gate-charter-2026-09-09
+    boundary: define
+    commit_or_artifact: "b321e2a3 (owner-ratified reconciled charter); executable promotion lands atomically in this commit"
+    proof_refs:
+      - "docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md remainder-holder status retained (residue R6)"
+      - "docs/definitions/choir-rlm-restore-zero-2026-09-08.md completed status consumed read-only"
+      - "docs/mission-residues.md R1-R6"
+      - "ten verification rounds, zero HOLD verdicts"
+    rollback_ref: "registry-only change; revert restores blocked-draft topology"
+    disposition: "settlement-gate promoted to sole working entrypoint; restore-zero to completed non-entrypoint; cutover retained as remainder holder"
+    problem_ref: "same-turn eval+terminal escaping singleton exit with provider-contaminated identity; compile failures discarding heaps; one-shot diversion replacing exact diagnostics"
+    authorization_ref: "Owner charter ratification 2026-09-09T16:53:43Z"
+    candidate_or_evidence_refs: []

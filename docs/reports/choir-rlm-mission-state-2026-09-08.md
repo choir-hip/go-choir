@@ -87,3 +87,7 @@ HOLD, unanimously against as-is promotion: seven HOLD, three conditional REPAIR,
 ## Promotion to executable (2026-09-09, owner topology authority)
 
 The gate's HOLD is lifted by owner decision, not by further paneling: the cutover stands as blocked remainder holder with its digest-conflict remainder owned by the mission-1 blocked stub, and restore-zero is the sole working entrypoint. The eight in-file repairs are in the draft, the Define receipt and registry conformance land atomically with this promotion, and the first executable act is read-only reconciliation of live identities. No repair code runs before it.
+
+## Mission-1 charter (2026-09-09T16:53:43Z, owner ratification)
+
+The settlement gate is chartered executable after ten verification rounds with zero HOLD verdicts: sole working entrypoint, 8 acceptance items in order starting with the Yaegi isolation matrix. Restore-zero is completed non-entrypoint consumed read-only; the cutover stays remainder holder (residue R6); drill debt stays mission-0-owned (residue R1). Charter reconciliation observed live (source main@54eb9328, staging proxy 9341b5d1 ok). The Define receipt and registry conformance land atomically with this promotion. No repair code runs before problem documentation per item.
