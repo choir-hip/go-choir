@@ -533,6 +533,7 @@ nodes:
       - docs/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md
       - docs/evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md
       - docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md
+      - docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md
       - docs/reports/choir-rlm-mission-state-2026-09-08.md
       - docs/ACTIVE.md
   - id: choir-rlm-settlement-gate-2026-09-09

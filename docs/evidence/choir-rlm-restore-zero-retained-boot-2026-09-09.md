@@ -60,11 +60,11 @@ Interpretation against the Restore-Zero contract:
 
 - Decision: **resume**, not rebase, not genesis, not refuse.
 - `local = W = H = 148431`, `tail = 0`.
-- Reconstruct completed immediately after the resume line.
-- No `replay page fetch after=` lines in this boot window (prefix enumerated/fetched/reduced for seq ≤ W = 0; applied = H−W = 0).
+- Prefix=0 is **structural**, not an observer count. Reconstruct seeds `after = localHead.Sequence`; platform replay is strictly-after; at `after=148431` the page is empty and seq ≤ W cannot be reduced. Boot installs no `ReplayObserver`. `replay page fetch after=` logs only when a page takes > 2s, so its absence is not a fetch counter.
+- The 08:16:59 `computer event authority reconstructed` line is appender wiring (`run.go` before deferred replay). Replay completion is `computer event authority reconstructed (replay complete)` after `runReplayPhase`. Guest `/health` `ready` is corroboration that reconstruct returned, not the acceptance line.
 - No `ProjectionBase rebased`, `required projection base refused`, `projection recovery genesis`, or `after=0` lifetime replay for this computer.
 
-That is prefix=0 retained-store recovery on the snapshotting binary.
+That is prefix=0 retained-store recovery on the snapshotting binary (resume-at-head). It is not a staging observation of rebase or a nontrivial `(W,H]` rematerialize/restore. Post-completion panel: `docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md`.
 
 ## Explicitly not this proof
 

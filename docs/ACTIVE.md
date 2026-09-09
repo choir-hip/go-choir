@@ -67,8 +67,10 @@ PlanRecovery resumed `computer-03335285269bdba4f94377e56879f9e6` at
 `local=148431 W=148431 H=148431 tail=0` (epoch 894, `10.200.12.2`).
 No prefix page fetches. CI constructed-computer skip (G4) was left intact.
 Proof: [`evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md`](evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md).
+Post-completion panel (12/13 routes; 8 accept-with-conditions, 4 reject):
+[`evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md`](evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md).
 The earlier W=1/W=13 HTTP 200 claim remains demoted. Follow-on: keep W near H;
-proxy 502-during-resolve is not this mission.
+nontrivial-tail rematerialize/restore drill; proxy 502-during-resolve is not this mission.
 ## Blocked Definition — RLM Settlement Gate (stub)
 
 [`definitions/choir-rlm-settlement-gate-2026-09-09.md`](definitions/choir-rlm-settlement-gate-2026-09-09.md)
