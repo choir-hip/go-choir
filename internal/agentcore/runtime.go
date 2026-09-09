@@ -1490,7 +1490,7 @@ func (rt *Runtime) CancelAgent(ctx context.Context, agentID, ownerID string) err
 	return rt.CancelRun(ctx, rec.RunID, ownerID)
 }
 
-const trajectoryActivationDrainTimeout = 30 * time.Second
+const trajectoryActivationDrainTimeout = 120 * time.Second
 
 // cancelTrajectoryAuthority delegates the durable cancellation transition to
 // the store, which atomically closes open obligations and terminalizes live
