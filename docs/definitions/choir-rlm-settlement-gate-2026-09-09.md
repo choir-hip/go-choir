@@ -29,16 +29,16 @@ start:
   observed_artifact:
     - claim: "The static import check returns without poisoning, yet cell serving returns the error and both session loops exit the worker on any evaluation error; the broker drops the session on any non-empty error string."
       evidence_ref: "internal/yaegikernel/session.go:90; internal/yaegikernel/session_loop.go:82,161; cmd/capsule-broker/session_worker.go:391,407"
-    - claim: "The session finish path poisons on every error including parse and type failures; the session comment declares poisoning on any failed eval."
+    - claim: "Errors reaching the session finish path poison, and the session comment declares poisoning on any failed eval; the static import check returns before finish and does not itself poison, although loop and broker behavior still drop the session on the resulting error."
       evidence_ref: "internal/yaegikernel/session.go:136-137; internal/yaegikernel/session.go:19-23"
-    - claim: "The one-shot fallback runs only on session spawn failure with the session error attached and the result marked Fallback; the one-shot path overwrites the exact diagnostic with a generic wait error."
-      evidence_ref: "cmd/capsule-broker/session_worker.go:386-428; panel evidence for handleGoEvalOneShot diagnostic loss"
+    - claim: "The one-shot fallback runs only on session spawn failure with the session error attached and the result marked Fallback; the one-shot worker overwrites the result Error with the process wait error, so the exact child diagnostic is not decoded into the result contract."
+      evidence_ref: "cmd/capsule-broker/session_worker.go:386-428; cmd/capsule-broker/main.go:141-145,787-802"
     - claim: "The assignment report identifier is derived over the provider tool call identifier and the terminal fingerprint over the report identifier; same-command changed-payload retries conflict."
       evidence_ref: "internal/agentcore/cosuper_assignment_fate.go:568-592,601-609"
-    - claim: "The tool loop closes only on an exactly-one recognized terminal call while the batch executor names no evaluation or terminal tool in its sequential list, so evaluation plus terminal report run concurrently."
-      evidence_ref: "Panel evidence: internal/toolregistry/toolloop.go:622-650; internal/toolregistry/batch_executor.go sequential list"
-    - claim: "The researcher fallback binds delegated terminal outcomes into the parent under guards (root runs return, lifecycle-authoritative runs abstain, explicit identity matching, duplicate bindings rejected)."
-      evidence_ref: "internal/agentcore/researcher_checkpoint_fallback.go:23-122"
+    - claim: "The tool loop closes only when the batch holds exactly one recognized terminal call while the sequential-execution list names no evaluation or terminal tool, so evaluation plus terminal report run concurrently."
+      evidence_ref: "internal/toolregistry/toolloop.go:622; internal/toolregistry/batch_executor.go:114-129"
+    - claim: "The researcher fallback binds delegated terminal outcomes into the parent under guards (root runs return, lifecycle-authoritative runs abstain, explicit identity matching, duplicate bindings rejected) and synthesizes reference updates with channel emission and wake on the bound path."
+      evidence_ref: "internal/agentcore/researcher_checkpoint_fallback.go:23-122,134-167"
     - claim: "The cutover's run acceptance is withheld for this remainder; mission 0 executes the restore predecessor in parallel with this draft."
       evidence_ref: "docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md remainder disposition; docs/definitions/choir-rlm-restore-zero-2026-09-08.md"
   unknowns:
@@ -49,36 +49,36 @@ start:
     - "Correction-landing mechanism choice (new attempt vs structured supersession event vs append-only presentation amendment) and field-inventory audit proving every authoritative claim has a structured representation."
 
 finish:
-  deliver: "Terminal settlement is one durable truth per assignment attempt: provider metadata excluded from semantic identity, compile feedback preserving the heap, runtime failure poisoning to the same snapshot, a single execution path with exact diagnostics, a crash-resumable fate saga, batches that serialize or refuse, rejections that never settle, and a fallback that explains rather than commits. The cutover's withheld run acceptance closes under this mission."
+  deliver: "Terminal settlement is one durable truth per assignment attempt: provider metadata excluded from semantic identity, compile feedback preserving the heap where the isolation experiment proves a non-executing boundary (else documented all-poison), runtime failure poisoning to the same snapshot, a single execution path with exact diagnostics, a crash-resumable fate saga, batches that refuse multi-terminal and order the admitted shapes, rejections that never settle, reducer-owned orphan close, and a fallback that explains rather than commits. The cutover's withheld run acceptance closes under this mission."
   artifact: "A deployed staging settlement contract across the Yaegi session, broker, batch executor, tool loop, assignment fate store, researcher fallback, and capsule revoke paths, with the epoch-888-class sealed proof re-executed to clean freeze, terminal pass, and revocation."
   entrypoints:
     implementation:
-      - "internal/yaegikernel/session.go and session_loop.go"
+      - "internal/yaegikernel/session.go and session_loop.go (evaluator, cell serving, both loops, sidecar boundary)"
       - "cmd/capsule-broker/session_worker.go and one-shot worker"
       - "internal/toolregistry/batch_executor.go and toolloop.go"
       - "internal/agentcore/cosuper_assignment_fate.go and store/cosuper_assignments.go"
       - "internal/agentcore/researcher_checkpoint_fallback.go"
       - "capsule revoke/fate reconciliation paths"
   acceptance:
-    - action: "Demonstrate a genuinely non-executing compile/type boundary (or record its absence): rejected cells return structured diagnostics, preserve prior heap/imports/definitions, drop only the failed tray, hold the cursor, and the following valid cell observes the exact prior heap. Runtime panic, timeout, overflow, worker death, transport corruption, or any doubt poisons, drops the tray, holds the cursor, and respawns over the same snapshot."
+    - action: "Run the isolation matrix against the exact Yaegi/session construction: rejected parse/import/type/declaration cells must prove no user execution and no observable mutation of heap, imports, definitions, or interpreter bookkeeping, with a valid successor observing exactly the prior heap. Only the proven class preserves the interpreter through evaluator, cell serving, both loops, sidecar, and broker; static import/parser rejection is separately non-executing and must survive the loop/broker. Every unproven Eval-time error, runtime error, panic, timeout, overflow, worker death, transport failure, or doubt poisons and respawns from the durable snapshot; string matching is forbidden. If the experiment fails, all failures remain typed runtime-poison by documented revision, which is a valid safe endpoint (owner-settled)."
       proves: "Compile feedback never destroys working context; runtime failure never reuses unsafe state; string matching carries no classification."
       evidence_class: local_test
     - action: "Unify execution onto the persistent session with disposal as its single-cell case; delete the one-shot diversion so the exact diagnostic surfaces as runtime-class through one error contract."
       proves: "One execution path, one diagnostic contract, no silent fallback."
       evidence_class: local_test
-    - action: "Derive a versioned stable settlement key and canonical length-framed semantic packet per assignment/attempt/computer/authorized-actor terminal slot from result and verdict as exact typed values, commands as the canonical ordered execution_ref/command_digest sequence, and evidence_refs as a sorted deduplicated canonical set, plus all already-settled scope/payload fields. Exclude provider call identifiers, retry ordinals, batch positions, delivery receipts, model/transport metadata, and nonsemantic presentation. Exclude summary and every free-text explanatory field entirely, including from freeze/capsule-intent references; no prose normalization is applied because prose is not input. Same slot plus identical packet returns the original receipt with its first-committed presentation across restart/retry storms; any changed semantic field conflicts before new report, fate, outbox, or wake effects. A legacy provider-keyed stored report conflicts or is explicitly reconciled, never re-minted. Corrections changing durable truth land as structured semantic deltas through the correction/repackage flow as a new attempt or explicit superseding event; prose-only ordinary retries are idempotent replays. Owner-panel settled 11-0: presentation-only."
+    - action: "Define a stable terminal-slot key over immutable assignment scope only; a canonical length-framed digest of the submitted typed terminal proposition carrying result/verdict/payload; and the first committed reducer receipt. Exclude provider call identifiers, retry ordinals, batch positions, delivery receipts, model/transport metadata, summary, and prose from all three. Inventory and classify every authoritative request/report/fate/outbox/receipt field. Cancellation-wins and late-fate outcomes are reducer dispositions recorded on the receipt, never state-dependent rewrites of the submitted packet before identity. Stored pass with a later cancellation intent and identical retry returns original receipt and replay semantics with the reducer disposition; never a fresh conflict. Corrections land as new attempts with explicit superseding relation (owner-settled); legacy provider-keyed stored reports conflict or are explicitly reconciled, never re-minted. Owner-panel settled 11-0: presentation-only."
       proves: "Retries and crash recovery succeed on paraphrase; corrections require structured deltas; no retry mints or collides."
       evidence_class: local_test
-    - action: "Preflight-refuse every batch containing more than one terminal report before any member executes, so terminal-second-after-reject is impossible by construction. Serialize remaining consequential shapes; an accepted terminal disposition of any admitted shape closes the loop, a rejected packet settles nothing and explains itself. Owner-settled: simple refusal now; full RLM dissolves the batch race structurally."
+    - action: "Freeze the typed terminal/consequential recognition inventory before execution and fail closed on unknown terminal-like calls. Preflight-refuse every batch with more than one terminal before any member runs. Admit only explicitly ordered nonterminal-before-terminal shapes; terminal-before-eval and unknown shapes fail closed (owner-settled). Accepted or replayed-accepted terminal disposition immediately stops the batch and loop with remaining members recorded unexecuted; a structured rejection settles nothing and enables no later terminal in that turn; runtime-poison evaluation aborts later members. Tool transport/JSON success is not terminal acceptance. Exercise terminal-first/middle/last, terminal+eval, eval+terminal, first-reject/two-terminal, duplicate/replay, and poison-before-terminal. Owner-settled: simple refusal now; full RLM dissolves the batch race structurally."
       proves: "The singleton special case is gone; contradictory turns never execute; settlement is a reducer property, not a batch-shape accident."
       evidence_class: local_test
-    - action: "Fault-inject before and during the reducer transition, after the fate request, and after physical effect before acknowledgement: zero partial durable effects before commit, one recovered fate command after, provider-free replay reproducing receipt and disposition, changed-payload conflict, and cancellation beating a racing pass."
+    - action: "Atomically persist the validated proposal plus freeze/revoke intent before physical action; intent is legitimate durable pending state carrying the stable idempotency/fencing key, and the actuator is idempotent or queryable by fate identity so recovery reissues to one logical effect and one accepted typed acknowledgement. No parent wake, accepted settlement, or externally final frozen/revoked claim precedes the required store acknowledgement. Fault-inject before durable intent, after intent/before effect, after effect/before ack, after ack/projection, and during cancellation racing pass, including stale freeze-vs-revoke fencing. Same slot plus identical packet returns the original receipt across restart/retry storms; changed semantic content conflicts before new report, fate, outbox, or wake effects."
       proves: "Fate is a resumable saga with deterministic identity, not an assumed atomic transaction."
       evidence_class: local_test
-    - action: "Close the fallback write port: it explains structured rejections and repackages corrections through the sole reducer and can mint no update, report, wake, terminal state, freeze, or revoke."
+    - action: "Close the fallback canonical-author port: for a delegated child with no accepted terminal packet (dead, timeout, cancellation, worker death, restart-discovered orphan), a lifecycle/reconciliation producer submits one authenticated structured orphan outcome and the reducer commits exactly one parent-visible disposition/update/wake under the existing slot; replays, duplicates, and late child reports return the original outcome with no duplicate wake. The fallback only explains structured rejections or submits non-authoritative correction proposals; it performs no canonical dispatch, terminal bind, wake-policy, report, fate, freeze, or revoke write. Exercise explicit child, terminal-without-packet, dead, timeout, cancel, restart, duplicate, and late-packet cases."
       proves: "Terminal truth has one author; delegation closes deterministically without a second committer."
       evidence_class: local_test
-    - action: "Re-execute the sealed staging proof class to clean freeze, terminal pass, and capsule revocation with effects OFF, then record freeze/pass/revocation receipts."
+    - action: "After mission-0 deployed acceptance, consume its accepted restore/computer identity read-only. On the freshly reconciled staging computer/realization/build/route/fence with effects OFF, execute the original same-turn eval+terminal class in its repaired serialization/refusal form, a same-semantic retry with fresh provider metadata returning the original receipt, a changed-semantic-payload conflict before effects, and cancel racing pass with no second accepted packet/wake/fate effect; retrieve execution, terminal, intent, ack, parent/outbox, freeze/revoke, environment, deploy, and verifier receipts bound to one attempt/computer/capsule/deployment identity. Record the remainder-paid receipt and update the cutover registry disposition atomically. Historical epoch-888 receipts are provenance only, never a requirement to reuse the old epoch or SHA."
       proves: "The withheld cutover run acceptance closes under this mission on the physical staging computer."
       evidence_class: deployed_proof
     - action: "Run the affected existing suites with no regression."
@@ -124,7 +124,7 @@ boundaries:
     - "internal/yaegikernel/session.go and session_loop.go"
     - "cmd/capsule-broker/session_worker.go and one-shot worker"
     - "internal/toolregistry/batch_executor.go and toolloop.go"
-    - "internal/agentcore/cosuper_assignment_fate.go and store/cosuper_assignments.go"
+    - "internal/agentcore/cosuper_assignment_fate.go and store/cosuper_assignments.go (report/fingerprint identity, CAS, correction-as-new-attempt)"
     - "internal/agentcore/researcher_checkpoint_fallback.go"
     - "capsule revoke/fate reconciliation, run acceptance, and staging deployment routing"
   completion_evidence_floor: [local_test, deployed_proof]
@@ -171,8 +171,8 @@ measures:
 
 now:
   status: blocked_incomplete
-  slice: "full draft under consensus review; executable only after mission 0 completes and owner ratifies charter"
-  question: none
+  slice: "repaired draft under verification round 2; mission 0 complete; charter ratification pending"
+  question: "Terminal/consequential recognition inventory and correction-as-new-attempt superseding relation still to be mechanically closed at charter."
   reconciliation:
     observed_at: "2026-09-09T00:00:00Z"
     source_ref: "main@24be54a2"
@@ -195,7 +195,7 @@ now:
   decision:
     selected: "Mission 1 charters the settlement gate as drafted; executes only after mission 0 completes; closes the withheld cutover run acceptance."
     kind: architecture
-    status: settled
+    status: proposal
     source: owner
     evidence_ref: "Owner-settled mission order"
     owner_ratification_ref: "charter ratification still required before execution"
@@ -207,7 +207,7 @@ now:
     - "cmd/capsule-broker/session_worker.go"
     - "internal/agentcore/cosuper_assignment_fate.go"
     - "internal/agentcore/researcher_checkpoint_fallback.go"
-  blocker_or_risk: "Mission 0 incomplete; Yaegi isolation experiment unproven; sequential/terminal inventories partially panel-sourced and need mechanical verification at charter."
-  next_action: "Iterate consensus on this draft until verdicts accept; then await mission 0 completion and owner charter ratification."
+  blocker_or_risk: "Mission 0 complete; charter ratification pending. Yaegi isolation experiment unproven; sequential/terminal inventories mechanically anchored at cited lines with full-inventory closure at charter; correction-as-new-attempt relation chosen, superseding mechanics open."
+  next_action: "Verification consensus round on repaired draft; then owner charter ratification with fresh reconciliation."
 
 receipts: []
