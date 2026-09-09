@@ -1,7 +1,7 @@
 ---
 definition_version: 2
 definition_id: choir-rlm-restore-zero-2026-09-08
-execution_mode: draft_non_executable
+execution_mode: mission_orchestrator
 
 start:
   captured_at: "2026-09-08T23:46:42Z"
@@ -194,9 +194,9 @@ measures:
     cannot_prove: "Cannot authorize promotion, prove code, or advance completion."
 
 now:
-  status: checkpoint_incomplete
-  slice: "Read-only reconciliation and code-free restore-zero Define; no restore-path implementation and no second working spine."
-  question: "What recorded disposition transfers/reconciles the active cutover's withheld run-acceptance remainder to mission 1 before restore-zero becomes an executable active Definition?"
+  status: working
+  slice: "code-free Define and topology landed this commit; next is read-only reconciliation of live identities, then implement preparation"
+  question: none
   reconciliation:
     observed_at: "2026-09-08T23:46:42Z"
     source_ref: "main@a5dea315c25f10f093800194a9e701ad1561e1da"
@@ -234,5 +234,24 @@ now:
     - "internal/vmctl/cold_recover.go"
     - "internal/vmctl/recovery_authorities.go"
   blocker_or_risk: "Current staging/base-retention identities are unverified; the read-only reconciliation/Define receipt must publish the verified producer-to-selection-to-installer-to-replay-to-verifier-to-route caller map and either add each demonstrated restore participant to protected_surfaces or exclude it with reason (candidates: replay-completeness handlers, self-development/guest restore bindings, guest copier, file-CAS hydration; speculative files join only on demonstration, never on enumeration). The active cutover's closeout card conflicts with the later withheld-acceptance record. Promotion while it remains the working spine would create stale topology or a second working spine."
-  next_action: "Read-only reconcile current HEAD, all worktrees, staging build/computer identity, base producer/consumer/retention paths, and the cutover remainder. Then land one code-free Define that names the three observed defects and, in the same change, atomically records the owner-approved active topology in the registries; do not include repair code."
-receipts: []
+  next_action: "Read-only reconcile live identities (HEAD, worktrees, staging build/computer/guest/epoch/effects/fence, base producer/consumer/retention paths); then implement preparation with red-surface candidate classification. No repair code before reconciliation completes."
+receipts:
+  - id: restore-zero-define-and-topology-2026-09-09
+    boundary: define
+    commit_or_artifact: "this commit"
+    proof_refs:
+      - "docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md remainder disposition receipt"
+      - "docs/definitions/choir-rlm-settlement-gate-2026-09-09.md blocked stub"
+      - "docs/reports/choir-rlm-mission-state-2026-09-08.md promotion-gate section"
+    rollback_ref: "registry-only change; revert restores prior topology"
+    disposition: "restore-zero promoted to sole working entrypoint; cutover to blocked remainder holder; mission 1 to blocked stub"
+    problem_ref: "genesis-by-default rematerialization; silent required-base deferral; missing ancestry/compatibility verification"
+    authorization_ref: "Owner topology answers 2026-09-09: cutover Blocked remainder holder; mission 1 Blocked stub"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"

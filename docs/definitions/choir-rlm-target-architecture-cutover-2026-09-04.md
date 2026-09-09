@@ -147,8 +147,8 @@ measures:
     cannot_prove: "cannot prove model reasoning capability"
 
 now:
-  status: working
-  slice: "landing: a281f1c0 epoch 886 actuator=rlm; go_eval exit 0 wrote proof file; record_assignment_result failed executor receipt unavailable"
+  status: blocked_incomplete
+  slice: "remainder holder: execution proof retained; run acceptance withheld for terminal digest/settlement remainder owned by mission 1 (choir-rlm-settlement-gate-2026-09-09); restore spine is choir-rlm-restore-zero-2026-09-08"
   question: none
   reconciliation:
     observed_at: "2026-09-05T20:07:00Z"
@@ -190,8 +190,8 @@ now:
     - "Super run 31294013-1c77-4f66-8035-93209aea3930 bound exact sealed Option B assignment-b1d5dc65-bffa-5059-aa9c-e4cab45b8913 in capsule-42eb741f-f8a1-5ec2-abc7-48cdceaa3edc"
     - "CoSuper run run:assignment-b1d5dc65-bffa-5059-aa9c-e4cab45b8913 completed; invoked capsule_go_eval running verbatim Go cell reading AGENTS.md and writing /workspace/platform/rlm-option-b-proof-2026-09-05.txt with exit 0, yielding receipt capsule-go-eval:sha256:a3e3c3e3a8a7c2ec17d7af8cee781b7b572986faf9ea74a07e732bd2e9384f28"
     - "Pre-A checkpoint 99949fe2 published restore fence intact on Dolt platform computer_checkpoints; effects OFF"
-  blocker_or_risk: "None remaining for RLM Target Architecture substrate cutover. In-capsule Go evaluation (capsule_go_eval), direct-argv execution, guest UDS framing, and file mutation are verified end-to-end on live staging microVM."
-  next_action: "Publish final status report and mission closeout."
+  blocker_or_risk: "Run acceptance WITHHELD for the terminal digest-conflict/settlement remainder (same-turn eval+report batch escaping the singleton terminal exit; provider ToolCallID in report identity/fingerprint). Execution proof retained (epoch 888 exit-0 cell, proof file, signed receipt, fence intact). Remainder owned by mission 1; this Definition is not executable and never completes in this state."
+  next_action: "No action under this Definition. Restore work runs under choir-rlm-restore-zero-2026-09-08; settlement work awaits mission 1 charter. Do not mark complete."
 receipts:
   - id: rlm-target-architecture-consensus-and-definition-2026-09-04
     boundary: define
@@ -233,6 +233,25 @@ receipts:
       deploy_ref: "Deploy to Staging (Node B)"
       environment_identity: "staging https://choir.news"
       deployed_acceptance: "Super exact bind, sealed overlay, capsule_go_eval exit 0, proof file wrote, restore fence intact"
+    registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
+  - id: rlm-cutover-remainder-disposition-2026-09-09
+    boundary: define
+    commit_or_artifact: "this commit"
+    proof_refs:
+      - "docs/definitions/choir-rlm-restore-zero-2026-09-08.md"
+      - "docs/definitions/choir-rlm-settlement-gate-2026-09-09.md"
+      - "docs/reports/choir-rlm-mission-state-2026-09-08.md"
+    rollback_ref: "registry-only change; revert this commit restores working status"
+    disposition: "blocked_incomplete remainder holder, non-entrypoint; execution proof retained; run-acceptance remainder transferred to mission 1"
+    problem_ref: "terminal digest-conflict remainder (withheld run acceptance)"
+    authorization_ref: "Owner topology answers 2026-09-09: cutover Blocked remainder holder; mission 1 Blocked stub"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
     registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
 ---
 

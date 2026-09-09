@@ -59,17 +59,30 @@ without `RUNTIME_MAINTENANCE_HOLD` on staging `computer-03335285269bdba4f94377e5
 [`evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md`](evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md).
 Effects remain OFF.
 
-## Active Definition — RLM Target Architecture Cutover
+## Active Definition — RLM Restore-Zero
+
+[`definitions/choir-rlm-restore-zero-2026-09-08.md`](definitions/choir-rlm-restore-zero-2026-09-08.md)
+is **active and executable** (promoted 2026-09-09 with owner topology authority;
+code-free Define and registry receipt in this promotion commit). Target: verified
+ProjectionBase at watermark W plus immutable tail (W,H], Dolt head as address and
+witness, loud refusal on missing/foreign/corrupt/incompatible bases, tail-only
+replay, crash-resume from durable progress, recover_current non-rewinding. First
+action is read-only reconciliation of live identities; no repair code before it.
+## Blocked Definition — RLM Settlement Gate (stub)
+
+[`definitions/choir-rlm-settlement-gate-2026-09-09.md`](definitions/choir-rlm-settlement-gate-2026-09-09.md)
+is a **blocked non-executable stub** holding the terminal digest-conflict
+remainder. Full charter follows during mission 0 execution. Nothing executes
+under it.
+
+## Blocked Definition — RLM Target Architecture Cutover (remainder holder)
 
 [`definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`](definitions/choir-rlm-target-architecture-cutover-2026-09-04.md)
-is **active and executable**, superseding `choir-rlm-session-interpreter-cutover-2026-09-02.md`
-following the 8-model agentic consensus review and Rev 5 target architecture specification.
-Target: 6-step implementation sequence across `cmd/capsule-broker`, `internal/yaegikernel`,
-`internal/actor`, and `internal/agentcore`, including direct-argv execution, strict allowlists,
-multiplexed Unix domain socket frame protocol, in-cell intent staging (`choir.Message`, `choir.Spawn`,
-`choir.Complete`), post-cell Dolt reduction, Go-channel mailbox delivery, `choir.Inbox()` cell-start
-snapshots with two-phase cursor commitment, bounded adaptive coalescing, role-bounded fan-out/fan-in,
-and live sealed proof on staging `computer-03335285269bdba4f94377e56879f9e6` with ambient JSON tools removed.
+is **blocked and non-executable** (dispositioned 2026-09-09 with owner topology
+authority). Execution proof retained (epoch 888 exit-0 cell, proof file, signed
+receipt, fence intact); run acceptance withheld for the terminal
+digest-conflict remainder now owned by the mission 1 stub. No action runs under
+it. Do not mark complete.
 
 ## Superseded Definition — RLM Session Interpreter Cutover
 
@@ -79,7 +92,7 @@ is subsumed by the comprehensive RLM target architecture.
 ## Queued Definition — Supervised Self-Development on RLM
 
 [`definitions/choir-supervised-self-development-on-rlm-2026-09-02.md`](definitions/choir-supervised-self-development-on-rlm-2026-09-02.md)
-is **paused pending `choir-rlm-target-architecture-cutover-2026-09-04.md` deployed acceptance**.
+is **paused pending restore-zero, settlement-gate, and desk-rename deployed acceptance**.
 Target: Candidate change A solitaire implementation authored via RLM session cells, 5-ref freeze,
 qualified consensus under `reversible-selfdev-v1`, promotion, live play verification, falsification with B,
 and restore to pre-A checkpoint `99949fe2`.
@@ -206,12 +219,10 @@ Supporting maintenance Definitions retain their evidence and status:
 `documentation-authority-reduction-2026-07-09.md`. They are settled,
 superseded, or historical as stated by their source Definitions, not entrypoints.
 
-## Invocation
-
 Invoke the active Definition via
-`/goal docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`.
-RLM target architecture cutover executes on staging
-`computer-03335285269bdba4f94377e56879f9e6`.
+`/goal docs/definitions/choir-rlm-restore-zero-2026-09-08.md`.
+RLM restore-zero executes on staging `computer-03335285269bdba4f94377e56879f9e6`
+(identity re-observed at reconciliation).
 
 ## Unowned External Work
 
