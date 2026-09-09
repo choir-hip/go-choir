@@ -173,8 +173,7 @@ now:
   slice: "round-7 repaired draft under focused verification; mission 0 complete; charter ratification pending"
   question: "Is the reconciled round-7 repaired charter with frozen R4/R5/R6 and the narrow R5 grammar ready for owner ratification?"
   reconciliation:
-    observed_at: "2026-09-09T00:00:00Z (draft receipt date; the ratifier records the real RFC-3339 re-observation time here at charter — do not treat this placeholder as an observation)"
-    source_ref: "main@81e2d589 (round-6 repaired draft; re-observe HEAD at charter ratification)"
+    source_ref: "main@3dc2f3c0 (round-7 repaired draft; re-observe HEAD at charter ratification)"
     deploy_identity: "unreconciled; mission-0 accepted identity consumed read-only at charter; re-observe before any red mutation"
     authority_identities:
       - "docs/reports/choir-rlm-mission-state-2026-09-08.md"
