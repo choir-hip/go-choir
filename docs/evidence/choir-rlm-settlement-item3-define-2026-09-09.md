@@ -162,3 +162,37 @@ message inspection beyond the table, stop and record the refusal here.
    history). 5. Single authority: reducer-owned slot row; report rows are
    derivations. 6. Artifact: local_test replay/conflict matrix. 7/8. No new
    substrate, nothing durable added beyond rows the path already writes. 9. No SSH.
+
+## Dated correction (2026-09-09, pre-repair implementation finding)
+
+Four table rows move from canonical to derived/excluded, forced by the
+reservation ordering the contract itself mandates ("canonical input is only
+submitted claims plus authenticated receipt facts available before
+reservation"):
+
+- `observed_subject_digest`: the submitted value is replaced by the PINNED
+  pre-execution belief (the attempt's binding subject digest, set server-side;
+  no entry path accepts it from the model). The freeze-ack overlay rewrites the
+  stored observed value post-reservation, so digesting the submitted value
+  would make pre-freeze gating and stored identity irreconcilable. The binding
+  digest in the proposition IS the subject declaration; submitted-observed
+  mismatch with ack facts rejects by existing validation, never silently.
+- `mutations[]`: always populated by the freeze-ack overlay post-reservation;
+  validated by shape rules, never digested.
+- `execution_attestations[]`: bound post-reservation from freeze ack; validated
+  by exact field/cardinality rules, never digested. (The store command digest
+  still envelopes them as command identity, not proposition identity.)
+- `certifies_original_subject`, `candidate_subject_digest`, `candidate_id`,
+  `candidate_artifact_ref`: all store-derived; excluded.
+- `outputs[]`: only `kind` and content `digest` enter proposition identity;
+  `output_id` and `ref` are deterministic derivations of `execution_ref`+`kind`
+  (`capsule-command:...:stdout/stderr` and `receiptRef#stdout/stderr`) and are
+  excluded from digest input to prevent derived tokens from contaminating identity.
+
+Execution-ref uniqueness binds each digest to one execution (different
+executions have different receipt refs), preserving conflict sensitivity: any
+real outcome difference moves commands, outputs, or evidence. The command
+digest (exactly-once envelope) additionally drops Summary prose and the new
+derivation fields so reworded identical propositions replay at that layer too;
+pre-existing digests are untouched otherwise, so no recorded command identity
+migrates.

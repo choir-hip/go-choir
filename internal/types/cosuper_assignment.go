@@ -379,6 +379,15 @@ type CoSuperAssignmentReport struct {
 	Summary                  string                        `json:"summary,omitempty"`
 	EvidenceRefs             []string                      `json:"evidence_refs,omitempty"`
 	CreatedAt                time.Time                     `json:"created_at"`
+	// PropositionDigest is the reducer-derived v1 terminal-proposition digest
+	// (settlement gate item 3): sha over the canonical submitted-proposition
+	// content plus the pinned pre-execution subject belief. It is derivation,
+	// never digest input; the store computes it authoritatively at record.
+	PropositionDigest string `json:"proposition_digest,omitempty"`
+	// RecordCommandID is the lifecycle command that recorded this report
+	// (derivation, never identity input): same-digest replays resolve the
+	// original receipt through it.
+	RecordCommandID string `json:"record_command_id,omitempty"`
 }
 
 func (r CoSuperAssignmentReport) ValidateAgainst(a CoSuperAssignment) error {
@@ -510,7 +519,6 @@ type CoSuperAssignmentCommandResult struct {
 	Update     *CoagentSourcePacket     `json:"update,omitempty"`
 	Replay     bool                     `json:"replay"`
 }
-
 type OpenCoSuperAssignmentRequest struct {
 	CommandID     string                   `json:"command_id"`
 	CommandDigest string                   `json:"command_digest"`
@@ -518,8 +526,32 @@ type OpenCoSuperAssignmentRequest struct {
 	Binding       CoSuperAssignmentBinding `json:"binding"`
 	AssignedAgent AgentRecord              `json:"assigned_agent"`
 	AssignedWork  WorkItemRecord           `json:"assigned_work"`
+	// Supersedes carries the frozen correction tuple (settlement gate item 3):
+	// a correction lands only as a new attempt carrying it. Attempt 1 never
+	// carries it; attempt > 1 always does.
+	Supersedes *CoSuperSupersedeTuple `json:"supersedes,omitempty"`
 }
 
+// CoSuperSupersedeKind names why a new attempt supersedes a prior one.
+type CoSuperSupersedeKind string
+
+const (
+	CoSuperSupersedeCorrection      CoSuperSupersedeKind = "correction"
+	CoSuperSupersedeRetryAfterBlock CoSuperSupersedeKind = "retry_after_block"
+	CoSuperSupersedeOwnerReopen     CoSuperSupersedeKind = "owner_reopen"
+)
+
+// CoSuperSupersedeTuple is the frozen correction tuple: who is superseded,
+// which receipt it corrects, why, and a digest over structured fields only
+// (never summary or prose).
+type CoSuperSupersedeTuple struct {
+	SupersedesAssignmentID string               `json:"supersedes_assignment_id"`
+	SupersedesAttempt      uint64               `json:"supersedes_attempt"`
+	PriorReceiptRef        string               `json:"prior_receipt_ref"`
+	SupersedeKind          CoSuperSupersedeKind `json:"supersede_kind"`
+	ReasonEnum             string               `json:"reason_enum"`
+	DeltaDigest            string               `json:"delta_digest"`
+}
 type BindCoSuperAssignmentRequest struct {
 	CommandID                string                         `json:"command_id"`
 	CommandDigest            string                         `json:"command_digest"`

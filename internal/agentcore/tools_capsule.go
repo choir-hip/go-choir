@@ -891,8 +891,14 @@ func newRecordAssignedCoSuperReportTool(rt *Runtime) toolregistry.Tool {
 				return "", err
 			}
 			var input args
-			if err := json.Unmarshal(raw, &input); err != nil {
-				return "", err
+			decoder := json.NewDecoder(bytes.NewReader(raw))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&input); err != nil {
+				return "", fmt.Errorf("record_assignment_result: unknown or malformed field: %w", err)
+			}
+			var trailing any
+			if err := decoder.Decode(&trailing); err != io.EOF {
+				return "", fmt.Errorf("record_assignment_result: unexpected trailing data after JSON value")
 			}
 			input.Summary = strings.TrimSpace(input.Summary)
 			if input.Summary == "" {

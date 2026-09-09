@@ -151,13 +151,20 @@ func ComputeBindCoSuperAssignmentDigest(req types.BindCoSuperAssignmentRequest) 
 }
 
 func normalizeCoSuperReportForDigest(report types.CoSuperAssignmentReport) types.CoSuperAssignmentReport {
-	report.Schema, report.AssignmentID = "", ""
+	report.Schema, report.ReportID, report.AssignmentID = "", "", ""
 	report.Attempt, report.OwnerID, report.ComputerID, report.TrajectoryID = 0, "", "", ""
 	report.RunID, report.AssignedAgentID = "", ""
 	report.Late, report.CertifiesOriginalSubject = false, false
 	report.CandidateSubjectDigest, report.CandidateID = "", ""
 	report.ExecutionAttestations = nil
 	report.CreatedAt = time.Time{}
+	// v1 settlement identity: excluded metadata and reducer derivations never
+	// enter command identity, so a reworded identical proposition replays the
+	// original command receipt instead of conflicting on prose. The terminal
+	// proposition digest (slot gate) decides semantic conflicts separately.
+	report.Summary = ""
+	report.CandidateArtifactRef = ""
+	report.PropositionDigest, report.RecordCommandID = "", ""
 	return report
 }
 
@@ -170,6 +177,119 @@ func ComputeRecordCoSuperAssignmentReportDigest(req types.RecordCoSuperAssignmen
 		normalizeExecutionAttestationForCommandDigest(&req.ExecutionAttestations[i])
 	}
 	return computeCoSuperCommandDigest(req)
+}
+
+// TerminalPropositionV1 is the frozen version domain for terminal settlement
+// identity (settlement gate item 3). Every proposition digest input is
+// prefixed with it; the receipt is docs/evidence/choir-rlm-settlement-item3-define-2026-09-09.md.
+const TerminalPropositionV1 = "choir:terminal-proposition:v1"
+
+// terminalPropositionCommandV1 is one ordered command claim: digest, declared
+// execution reference, and exit code. CommandID is derivation, never input.
+type terminalPropositionCommandV1 struct {
+	CommandDigest string `json:"command_digest"`
+	ExecutionRef  string `json:"execution_ref"`
+	ExitCode      int    `json:"exit_code"`
+}
+
+// terminalPropositionOutputV1 is one ordered output claim: kind and content
+// digest. OutputID and Ref are deterministic derivations of execution_ref+kind,
+// never digest inputs.
+type terminalPropositionOutputV1 struct {
+	Kind   string `json:"kind"`
+	Digest string `json:"digest"`
+}
+
+// terminalPropositionV1 is the frozen canonical proposition: exactly the
+// submitted-claim content that settles terminal truth, plus the pinned
+// pre-execution subject belief. Ordered sequences keep submission order;
+// evidence is a key-sorted set. Excluded: provider/transport/retry/batch/model
+// metadata, summary and prose, timestamps, late flag, schema tags, report/command
+// identifiers, mutations/attestations/candidate-discovery overlays (all bound
+// post-reservation and validated by field rules, never digested), and the
+// proposition digest itself.
+type terminalPropositionV1 struct {
+	Version               string                         `json:"v"`
+	Result                string                         `json:"result"`
+	Verdict               string                         `json:"verdict"`
+	ObservedSubjectDigest string                         `json:"observed_subject_digest"`
+	Commands              []terminalPropositionCommandV1 `json:"commands"`
+	Outputs               []terminalPropositionOutputV1  `json:"outputs"`
+	EvidenceRefs          []string                       `json:"evidence_refs"`
+}
+
+// ComputeTerminalPropositionDigest reduces a submitted terminal report to its
+// v1 proposition digest. pinnedSubjectDigest is the attempt's binding subject
+// digest (the pre-execution belief); the submitted observed value is validated
+// elsewhere and never enters identity, so post-reservation ack overlays cannot
+// move the digest. Attestations, mutations, and candidate discovery are
+// post-reservation overlays: validated by exact field rules, never digested.
+// Nil slices normalize to empty (a missing list and an empty list are the same
+// proposition). Any error fails closed.
+func ComputeTerminalPropositionDigest(pinnedSubjectDigest string, result types.CoSuperAssignmentResultKind, verdict types.CoSuperAssignmentVerdict, commands []types.CoSuperRecordedCommand, outputs []types.CoSuperRecordedOutput, evidenceRefs []string) (string, error) {
+	pinnedSubjectDigest = strings.ToLower(strings.TrimSpace(pinnedSubjectDigest))
+	if !types.ValidSHA256Digest(pinnedSubjectDigest) {
+		return "", fmt.Errorf("terminal proposition: pinned subject digest is required: %w", ErrCoSuperAssignmentInvalid)
+	}
+	prop := terminalPropositionV1{
+		Version:               TerminalPropositionV1,
+		Result:                string(result),
+		Verdict:               string(verdict),
+		ObservedSubjectDigest: pinnedSubjectDigest,
+		Commands:              make([]terminalPropositionCommandV1, 0, len(commands)),
+		Outputs:               make([]terminalPropositionOutputV1, 0, len(outputs)),
+		EvidenceRefs:          make([]string, 0, len(evidenceRefs)),
+	}
+	for _, command := range commands {
+		digest := strings.ToLower(strings.TrimSpace(command.CommandDigest))
+		if !types.ValidSHA256Digest(digest) {
+			return "", fmt.Errorf("terminal proposition: command digest is required: %w", ErrCoSuperAssignmentInvalid)
+		}
+		prop.Commands = append(prop.Commands, terminalPropositionCommandV1{
+			CommandDigest: digest,
+			ExecutionRef:  strings.TrimSpace(command.ExecutionRef),
+			ExitCode:      command.ExitCode,
+		})
+	}
+	for _, output := range outputs {
+		digest := strings.ToLower(strings.TrimSpace(output.Digest))
+		if !types.ValidSHA256Digest(digest) {
+			return "", fmt.Errorf("terminal proposition: output digest is required: %w", ErrCoSuperAssignmentInvalid)
+		}
+		prop.Outputs = append(prop.Outputs, terminalPropositionOutputV1{
+			Kind:   strings.TrimSpace(output.Kind),
+			Digest: digest,
+		})
+	}
+	seenEvidence := make(map[string]struct{}, len(evidenceRefs))
+	for _, ref := range evidenceRefs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		if _, exists := seenEvidence[ref]; !exists {
+			seenEvidence[ref] = struct{}{}
+			prop.EvidenceRefs = append(prop.EvidenceRefs, ref)
+		}
+	}
+	slices.Sort(prop.EvidenceRefs)
+	payload, err := json.Marshal(prop)
+	if err != nil {
+		return "", err
+	}
+	return objectgraph.SHA256([]byte(TerminalPropositionV1 + "\x00" + string(payload))), nil
+}
+
+// TerminalReportID derives the terminal report identifier from its reservation
+// slot and proposition digest. It is derivation, never digest input: a
+// provider-fresh resubmission of the same proposition replays the same ID.
+func TerminalReportID(ownerID, computerID, assignmentID string, attempt uint64, propositionDigest string) string {
+	slot := strings.Join([]string{
+		strings.TrimSpace(ownerID), strings.TrimSpace(computerID),
+		strings.TrimSpace(assignmentID), strconv.FormatUint(attempt, 10),
+		propositionDigest,
+	}, "\x00")
+	return "report:" + objectgraph.SHA256([]byte(TerminalPropositionV1+"\x00"+slot))
 }
 
 func ComputeCancelCoSuperAssignmentDigest(req types.CancelCoSuperAssignmentRequest) (string, error) {
@@ -807,6 +927,9 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 	if replay, found, err := s.replayCoSuperAssignmentCommand(ctx, req.Binding.OwnerID, req.Binding.ComputerID, req.CommandID, req.CommandDigest, req.AssignmentID, req.Binding.Attempt, ""); found || err != nil {
 		return replay, err
 	}
+	if err := s.validateCoSuperSupersedeTuple(ctx, req); err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
 	authority, err := s.requireCoSuperParentAuthority(ctx, req.Binding)
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
@@ -883,6 +1006,60 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 		objectgraph.ObjectCondition{CanonicalID: agentObj.CanonicalID}, objectgraph.ObjectCondition{CanonicalID: workObj.CanonicalID})
 	return s.commitCoSuperLifecycleCommand(ctx, transition, types.LifecycleOpenCoSuperAssignment, types.LifecycleCoSuperAssignmentOpened,
 		req.CommandID, req.CommandDigest, assignment, nil, nil, "", "", []objectgraph.Object{assignmentObj, agentObj, workObj}, conditions, edges, nil, nil)
+}
+
+// validateCoSuperSupersedeTuple enforces the frozen correction rule
+// (settlement gate item 3, v1): attempt 1 never carries a tuple; attempt > 1
+// always carries one naming a recorded prior report of the same assignment's
+// earlier attempt with a valid kind, a non-empty reason, and a well-formed
+// structured-fields delta digest. The tuple rides the open command digest, so
+// a correction cannot be re-targeted without invalidating the command.
+func (s *Store) validateCoSuperSupersedeTuple(ctx context.Context, req types.OpenCoSuperAssignmentRequest) error {
+	tuple := req.Supersedes
+	if tuple == nil {
+		if req.Binding.Attempt > 1 {
+			return fmt.Errorf("co-super assignment: attempt %d requires the superseding tuple: %w", req.Binding.Attempt, ErrCoSuperAssignmentInvalid)
+		}
+		return nil
+	}
+	if req.Binding.Attempt <= 1 {
+		return fmt.Errorf("co-super assignment: attempt 1 cannot carry a superseding tuple: %w", ErrCoSuperAssignmentInvalid)
+	}
+	if strings.TrimSpace(tuple.SupersedesAssignmentID) != strings.TrimSpace(req.AssignmentID) {
+		return fmt.Errorf("co-super assignment: supersede targets its own assignment: %w", ErrCoSuperAssignmentInvalid)
+	}
+	if tuple.SupersedesAttempt == 0 || tuple.SupersedesAttempt >= req.Binding.Attempt {
+		return fmt.Errorf("co-super assignment: supersede names a strictly earlier attempt: %w", ErrCoSuperAssignmentInvalid)
+	}
+	switch tuple.SupersedeKind {
+	case types.CoSuperSupersedeCorrection, types.CoSuperSupersedeRetryAfterBlock, types.CoSuperSupersedeOwnerReopen:
+	default:
+		return fmt.Errorf("co-super assignment: invalid supersede kind %q: %w", tuple.SupersedeKind, ErrCoSuperAssignmentInvalid)
+	}
+	if strings.TrimSpace(tuple.ReasonEnum) == "" || strings.TrimSpace(tuple.PriorReceiptRef) == "" {
+		return fmt.Errorf("co-super assignment: supersede requires reason and prior receipt: %w", ErrCoSuperAssignmentInvalid)
+	}
+	if !types.ValidSHA256Digest(strings.TrimSpace(tuple.DeltaDigest)) {
+		return fmt.Errorf("co-super assignment: supersede delta digest must be exact sha256: %w", ErrCoSuperAssignmentInvalid)
+	}
+	_, prior, err := s.getCoSuperAssignmentObject(ctx, req.Binding.OwnerID, req.Binding.ComputerID, req.AssignmentID, tuple.SupersedesAttempt)
+	if err != nil {
+		return fmt.Errorf("co-super assignment: superseded attempt unavailable: %w", ErrCoSuperAssignmentInvalid)
+	}
+	for _, ref := range prior.ReportRefs {
+		obj, getErr := s.lifecycleGraph().GetObject(ctx, strings.TrimSpace(ref))
+		if getErr != nil {
+			continue
+		}
+		stored, decodeErr := decodeLifecycleObject[types.CoSuperAssignmentReport](obj)
+		if decodeErr != nil {
+			continue
+		}
+		if strings.TrimSpace(stored.ReportID) == strings.TrimSpace(tuple.PriorReceiptRef) {
+			return nil
+		}
+	}
+	return fmt.Errorf("co-super assignment: prior receipt is not a recorded report of the superseded attempt: %w", ErrCoSuperAssignmentInvalid)
 }
 
 func (s *Store) getCoSuperAssignmentObject(ctx context.Context, ownerID, computerID, assignmentID string, attempt uint64) (objectgraph.Object, types.CoSuperAssignment, error) {
@@ -1386,6 +1563,55 @@ func (s *Store) projectCoSuperTerminal(ctx context.Context, assignment types.CoS
 	return append(objects, runUpdated), append(conditions, coSuperObjectCondition(runObj)), nil
 }
 
+// SlotTerminalReport scans an assignment's recorded reports for settlement
+// slot relevance (settlement gate item 3, v1). Partial reports use the
+// separate nonterminal sequence and never compete. It returns the occupying
+// report ID for a same-digest match (late or terminal: a match replays its
+// receipt with no new effects) and, separately, a non-late terminal occupant
+// with a different digest (only a non-late submission may conflict with it;
+// late evidence never competes for terminal truth). Legacy rows without a
+// stored digest recompute best-effort from the pinned belief; a stale overlay
+// can only fail closed, never accept twice.
+func (s *Store) SlotTerminalReport(ctx context.Context, assignment types.CoSuperAssignment, propositionDigest string) (matchID, matchCommandID, conflictID string, err error) {
+	for _, ref := range assignment.ReportRefs {
+		obj, getErr := s.lifecycleGraph().GetObject(ctx, strings.TrimSpace(ref))
+		if getErr != nil {
+			if errors.Is(getErr, objectgraph.ErrNotFound) {
+				continue
+			}
+			return "", "", "", getErr
+		}
+		stored, decodeErr := decodeLifecycleObject[types.CoSuperAssignmentReport](obj)
+		if decodeErr != nil {
+			continue
+		}
+		if stored.Result == types.CoSuperResultPartial {
+			continue
+		}
+		digest := strings.TrimSpace(stored.PropositionDigest)
+		if digest == "" {
+			digest, decodeErr = ComputeTerminalPropositionDigest(
+				assignment.Binding.SubjectDigest,
+				stored.Result, stored.Verdict,
+				stored.Commands, stored.Outputs, stored.EvidenceRefs)
+			if decodeErr != nil {
+				return "", "", stored.ReportID, fmt.Errorf("legacy terminal report proposition recompute failed: %w", decodeErr)
+			}
+		}
+		if digest == propositionDigest {
+			replayCommandID := strings.TrimSpace(stored.RecordCommandID)
+			if replayCommandID == "" {
+				replayCommandID = "co-super-report:" + assignment.AssignmentID + ":" + stored.ReportID
+			}
+			return stored.ReportID, replayCommandID, "", nil
+		}
+		if !stored.Late && conflictID == "" {
+			conflictID = stored.ReportID
+		}
+	}
+	return "", "", conflictID, nil
+}
+
 func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.RecordCoSuperAssignmentReportRequest) (types.CoSuperAssignmentCommandResult, error) {
 	req.CommandID, req.CommandDigest = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest)
 	req.OwnerID, req.ComputerID, req.AssignmentID = strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID), strings.TrimSpace(req.AssignmentID)
@@ -1411,12 +1637,48 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 	if assignment.LifecycleVersion != req.ExpectedLifecycleVersion || assignment.BoundRunID == "" || assignment.Disposition == types.CoSuperAssignmentOpen {
 		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
 	}
+	// v1 terminal settlement gate: the authoritative proposition digest is
+	// computed over the submitted claims with the pinned pre-execution belief
+	// before any derivation (late/verdict/candidate overlays below). Partial
+	// reports never compete and skip the gate. A same-digest occupant (late or
+	// terminal) replays its receipt with no new effects; a non-late terminal
+	// occupant with a different digest conflicts a non-late submission before
+	// any report, fate, outbox, wake, or physical effect. Late evidence never
+	// competes for terminal truth.
 	_, intentErr := s.GetLifecycleCancellationIntent(ctx, req.OwnerID, req.ComputerID, assignment.Binding.TrajectoryID)
 	cancellationIntended := intentErr == nil
 	if intentErr != nil && !errors.Is(intentErr, ErrNotFound) {
 		return types.CoSuperAssignmentCommandResult{}, intentErr
 	}
 	lateAuthority := cancellationIntended || assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked
+	propositionDigest := ""
+	if req.Report.Result != types.CoSuperResultPartial {
+		var propErr error
+		propositionDigest, propErr = ComputeTerminalPropositionDigest(
+			assignment.Binding.SubjectDigest,
+			req.Report.Result, req.Report.Verdict,
+			req.Report.Commands, req.Report.Outputs, req.Report.EvidenceRefs)
+		if propErr != nil {
+			return types.CoSuperAssignmentCommandResult{}, propErr
+		}
+		if req.Report.PropositionDigest != "" && req.Report.PropositionDigest != propositionDigest {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("co-super assignment report proposition digest mismatch: %s vs %s: %w", req.Report.PropositionDigest, propositionDigest, ErrCoSuperAssignmentInvalid)
+		}
+		expectedReportID := TerminalReportID(req.OwnerID, req.ComputerID, req.AssignmentID, req.Attempt, propositionDigest)
+		if req.Report.PropositionDigest != "" && req.Report.ReportID != expectedReportID {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("co-super assignment report report_id mismatch: %s vs %s: %w", req.Report.ReportID, expectedReportID, ErrCoSuperAssignmentInvalid)
+		}
+		matchID, matchCommandID, conflictID, scanErr := s.SlotTerminalReport(ctx, assignment, propositionDigest)
+		if scanErr != nil {
+			return types.CoSuperAssignmentCommandResult{}, scanErr
+		}
+		if matchID != "" {
+			return s.ReplayRecordedCoSuperAssignmentReport(ctx, req.OwnerID, req.ComputerID, req.AssignmentID, req.Attempt, matchID, matchCommandID)
+		}
+		if conflictID != "" {
+			return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentCommandConflict
+		}
+	}
 	var parentAuthority coSuperAuthorityObjects
 	if lateAuthority {
 		parentAuthority, err = s.requireCoSuperHistoricalParentAuthority(ctx, assignment.Binding)
@@ -1442,6 +1704,8 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 	report.OwnerID, report.ComputerID, report.TrajectoryID = assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID
 	report.RunID, report.AssignedAgentID = assignment.BoundRunID, assignment.Binding.AssignedAgentID
 	report.Late = lateAuthority
+	report.PropositionDigest = propositionDigest
+	report.RecordCommandID = req.CommandID
 	if report.Late {
 		report.CertifiesOriginalSubject, report.CandidateSubjectDigest, report.CandidateID, report.CandidateArtifactRef = false, "", "", ""
 		if report.Verdict == types.CoSuperVerdictPass {

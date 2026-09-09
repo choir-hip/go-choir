@@ -48,3 +48,40 @@ func TestCapsuleGoEvalToolDispatchesToExecutorGoEval(t *testing.T) {
 		t.Fatalf("expected the executor's refusal/error (proving dispatch to Executor.GoEval), got: %v", err)
 	}
 }
+
+// TestRecordAssignmentResultRejectsUnknownFields (settlement gate item 3, v1):
+// unknown submitted fields and extensions fail closed at admission, before any
+// identity, fate, or effect.
+func TestRecordAssignmentResultRejectsUnknownFields(t *testing.T) {
+	tool := newRecordAssignedCoSuperReportTool(nil)
+	toolCtx := &CapsuleToolCtx{
+		Executor:                  new(capsule.Executor),
+		AgentRunID:                "run-unknown-fields",
+		Role:                      capsule.RoleCoSuper,
+		ValidateCurrentObligation: func(ctx context.Context) error { return nil },
+	}
+	ctx := WithCapsuleCtx(context.Background(), toolCtx)
+	raw, _ := json.Marshal(map[string]any{
+		"result": "completed", "verdict": "none", "summary": "done",
+		"evidence_refs": []string{}, "execution_refs": []string{},
+		"provider_call_id": "call-smuggled",
+	})
+	if _, err := tool.Func(ctx, raw); err == nil || !strings.Contains(err.Error(), "unknown or malformed field") {
+		t.Fatalf("unknown field = %v, want fail-closed admission reject", err)
+	}
+}
+
+func TestRecordAssignmentResultRejectsTrailingData(t *testing.T) {
+	tool := newRecordAssignedCoSuperReportTool(nil)
+	toolCtx := &CapsuleToolCtx{
+		Executor:                  new(capsule.Executor),
+		AgentRunID:                "run-trailing-data",
+		Role:                      capsule.RoleCoSuper,
+		ValidateCurrentObligation: func(ctx context.Context) error { return nil },
+	}
+	ctx := WithCapsuleCtx(context.Background(), toolCtx)
+	raw := []byte(`{"result":"completed","verdict":"none","summary":"done","evidence_refs":[],"execution_refs":[]} {"smuggled":1}`)
+	if _, err := tool.Func(ctx, raw); err == nil || !strings.Contains(err.Error(), "unexpected trailing data") {
+		t.Fatalf("trailing data err = %v, want unexpected trailing data reject", err)
+	}
+}

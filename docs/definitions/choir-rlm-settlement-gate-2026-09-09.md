@@ -173,7 +173,7 @@ measures:
 
 now:
   status: working
-  slice: "Item 3 active: code-free Define recorded 2026-09-09 with frozen v1 field-classification receipt (slot/canonical/derived/excluded + replay/conflict/rejection rules). Next: v1 canonicalizer repair across agentcore mint and store CAS, then items 4-8. Push/deploy/proof deferred to item-7 landing."
+  slice: "Item 3 implemented 2026-09-09: v1 proposition digest + derived ReportID + slot gate (store + agentcore pre-freeze) + supersede tuple + strict tool admission; consensus repairs F1-F4 and B1-B3 verified across store and agentcore. Next: items 4-8 (admission grammar, fate saga, orphan close, deployed proof, focused contracts). Push/deploy/proof deferred to item-7 landing."
   question: none
   reconciliation:
     observed_at: "2026-09-09T16:31:36Z"
@@ -206,11 +206,12 @@ now:
     - "internal/agentcore/cosuper_assignment_fate.go"
     - "docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md (item-1 Define: matrix + authorized Compile/Execute repair boundary)"
     - "docs/evidence/choir-rlm-settlement-item2-define-2026-09-09.md (item-2 Define: fallback-diversion defect + authorized removal boundary)"
-    - "docs/evidence/choir-rlm-settlement-item3-define-2026-09-09.md (item-3 Define: frozen v1 table + authorized repair boundary)"
+    - "item-3 repair commit (this commit): canonicalizer + TerminalReportID + SlotTerminalReport + Record/Open integration + agentcore mint/gate + strict decode + v1 tests; full store suite pending"
+    - "docs/evidence/choir-rlm-settlement-item3-define-2026-09-09.md (item-3 Define: frozen v1 table + dated overlay-paradox correction + authorized repair boundary)"
     - "item-2 repair commit a6b898f0: fallbackGoEval deletion + typed spawn-failure diagnostic; cross-vet ok, linux-test execution deferred to CI"
     - "item-1 repair commit b8aaa89b: EvalError + Compile gate + serveCell/broker carry + contract tests; yaegikernel/capsule/toolregistry green, agentcore capsule/fate subset green, broker cross-build ok"
-  blocker_or_risk: "Item-3 repair unimplemented (ReportID/fingerprint still provider-contaminated; outputs-only change replays silently); items 4-8 open; broker linux-test execution deferred to CI; deployed proof outstanding. Mission-0 drill debt stays mission-0-owned (residue R1)."
-  next_action: "Implement item-3 repair: v1 canonicalizer + ReportID/digest re-derivation + rejection classes + replay/conflict tests (local_test)."
+  blocker_or_risk: "Items 4-8 open (admission grammar, fate finality-before-revoke saga, fallback authorship, deployed proof). Broker linux-test execution deferred to CI. Mission-0 drill debt stays mission-0-owned (residue R1)."
+  next_action: "Commit item-3 repair, then author item-4 Define (narrow admission grammar)."
 
 receipts:
   - id: settlement-gate-charter-2026-09-09
@@ -282,4 +283,17 @@ receipts:
     disposition: "item-3 repair boundary authorized; no source changed"
     problem_ref: "provider-contaminated ReportID/fingerprint; outputs-only change replays silently; pre-digest packet rewrites"
     authorization_ref: "Owner-chartered item 3; problem-documentation-first per mission boundaries"
+    candidate_or_evidence_refs: []
+  - id: settlement-item3-implement-2026-09-09
+    boundary: implement
+    commit_or_artifact: "this commit (red: v1 identity repair + tests)"
+    proof_refs:
+      - "new: proposition digest invariance/sensitivity, slot replay/conflict, partial non-occupancy, supersede matrix, strict admission reject"
+      - "updated: late summary-only change replays (was conflict); attempt-two carries tuple (changed contract)"
+      - "go test ./internal/store -run 'TestCoSuper|TestTerminal|TestOpenSupersede' (124s) + agentcore fate/capsule subsets green; consensus repairs F1-F4 and B1-B3 verified"
+      - "slot conflict enforced on differing propositions; provider-fresh replay reuses original receipt with no new effects"
+    rollback_ref: "revert this commit; Define receipt 8370b121 retained (with dated overlay-paradox correction)"
+    disposition: "item-3 repair lands; items 4-8 open; push/deploy/proof deferred to item-7 landing"
+    problem_ref: "docs/evidence/choir-rlm-settlement-item3-define-2026-09-09.md"
+    authorization_ref: "Owner-chartered item 3; Define-precedes-repair satisfied by 8370b121"
     candidate_or_evidence_refs: []
