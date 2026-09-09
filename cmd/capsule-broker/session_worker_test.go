@@ -80,13 +80,24 @@ func TestGoEvalSessionFailsClosedWithoutBinary(t *testing.T) {
 	params, _ := json.Marshal(map[string]string{"source": `1 + 1`})
 	cap := &capsule.Capability{AgentRunID: "run-test"}
 	resp := b.handleGoEvalSession(context.Background(), cap, params)
-	// Spawn failure attempts the one-shot tools fallback and reports both
-	// errors when it also fails — never a fake result, never silent.
-	if resp.Error == "" || !strings.Contains(resp.Error, "session worker") {
-		t.Fatalf("resp = %+v, want session-worker transport error", resp)
+	// Spawn failure executes nothing: a typed session diagnostic in the
+	// Result (never a top-level Error, never the one-shot worker — brokerBin
+	// is nonexistent, so any fallback attempt would surface its own error).
+	if resp.Error != "" {
+		t.Fatalf("resp = %+v, want Result with typed diagnostic, not top-level Error", resp)
 	}
-	if !strings.Contains(resp.Error, "fallback") {
-		t.Fatalf("resp = %+v, want visible fallback attempt", resp)
+	var result capsule.GoEvalResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+	if result.ExitCode != 1 || result.Error == "" || !strings.Contains(result.Error, "session worker") {
+		t.Fatalf("result = %+v, want exit 1 with session-worker diagnostic", result)
+	}
+	if result.Fallback {
+		t.Fatalf("result = %+v, one-shot fallback must never run on the RLM route", result)
+	}
+	if result.Reuse != yaegikernel.ReuseUnsafeToReuse || result.DiagKind != yaegikernel.DiagWorker {
+		t.Fatalf("result = %+v, want unsafe_to_reuse/worker", result)
 	}
 	if len(b.sessionWorkers) != 0 {
 		t.Fatalf("failed eval left %d workers", len(b.sessionWorkers))

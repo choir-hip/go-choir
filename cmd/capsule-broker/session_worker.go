@@ -360,10 +360,11 @@ func (b *Broker) handleCloseSession(_ context.Context, cap *capsule.Capability, 
 // handleGoEvalSession evaluates one cell on the activation's persistent
 // worker. A dead or poisoned worker is dropped and reported (never silently
 // retried: the cell may have partially executed). When no session worker can
-// start, the cell falls back to the one-shot tools worker and the result is
-// marked Fallback: the Def 2 fallback is per-call behavior with a receipt,
-// not a flag. The cell deadline never exceeds the parent RPC deadline: a
-// model-supplied TimeoutMS cannot extend the activation budget.
+// start, the cell is not executed anywhere: the broker returns a typed
+// session diagnostic (unsafe-to-reuse/worker) instead of diverting to the
+// one-shot tools worker, which serves only explicit actuator=tools calls.
+// The cell deadline never exceeds the parent RPC deadline: a model-supplied
+// TimeoutMS cannot extend the activation budget.
 func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capability, params json.RawMessage) BrokerRPCResponse {
 	var p capsule.GoEvalRequest
 	if err := json.Unmarshal(params, &p); err != nil {
@@ -384,7 +385,9 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 	start := time.Now()
 	w, err := b.sessionFor(cap.AgentRunID, string(cap.AgentRole))
 	if err != nil {
-		return b.fallbackGoEval(ctx, cap, params, fmt.Sprintf("session worker unavailable: %v", err))
+		result := capsule.GoEvalResult{ExitCode: 1, Error: fmt.Sprintf("session worker unavailable: %v", err), Duration: time.Since(start), Reuse: yaegikernel.ReuseUnsafeToReuse, DiagKind: yaegikernel.DiagWorker}
+		resultBytes, _ := json.Marshal(result)
+		return BrokerRPCResponse{Result: resultBytes}
 	}
 	res, err := w.eval(yaegikernel.CleanGoSource(p.Source), p.Inbox, timeout)
 	if err != nil {
@@ -415,25 +418,6 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 	} else {
 		result.Intents = res.Intents
 	}
-	resultBytes, _ := json.Marshal(result)
-	return BrokerRPCResponse{Result: resultBytes}
-}
-
-// fallbackGoEval runs the cell on the one-shot tools worker after a session
-// spawn failure and marks the result Fallback with the session error that
-// caused it. When the one-shot path also fails, both errors are reported so
-// the fallback attempt is visible, never silent.
-func (b *Broker) fallbackGoEval(ctx context.Context, cap *capsule.Capability, params json.RawMessage, sessionErr string) BrokerRPCResponse {
-	resp := b.handleGoEvalOneShot(ctx, cap, params)
-	if resp.Error != "" {
-		return BrokerRPCResponse{Error: fmt.Sprintf("%s; tools fallback also failed: %v", sessionErr, resp.Error)}
-	}
-	var result capsule.GoEvalResult
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
-		return BrokerRPCResponse{Error: fmt.Sprintf("%s; tools fallback result undecodable: %v", sessionErr, err)}
-	}
-	result.Fallback = true
-	result.Stderr += "\n[rlm fallback: " + sessionErr + "]"
 	resultBytes, _ := json.Marshal(result)
 	return BrokerRPCResponse{Result: resultBytes}
 }

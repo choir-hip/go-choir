@@ -683,9 +683,10 @@ func (b *Broker) handleGoEval(ctx context.Context, cap *capsule.Capability, para
 
 // handleGoEvalOneShot spawns this same broker binary in --exec-go-stdin
 // worker mode as a separate killable process group, so a runaway interpreter
-// is SIGKILLed on timeout and never runs in guest core. The session fallback
-// calls this directly to avoid re-entering route dispatch (which would
-// recurse under RLM when no session worker can start).
+// is SIGKILLed on timeout and never runs in guest core. It serves only
+// explicit actuator=tools calls via route dispatch above; the RLM session
+// path never diverts here (a session start failure returns a typed session
+// diagnostic instead).
 func (b *Broker) handleGoEvalOneShot(ctx context.Context, cap *capsule.Capability, params json.RawMessage) BrokerRPCResponse {
 	var p capsule.GoEvalRequest
 	if err := json.Unmarshal(params, &p); err != nil {
