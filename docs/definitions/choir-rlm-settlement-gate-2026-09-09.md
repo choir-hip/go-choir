@@ -173,7 +173,7 @@ measures:
 
 now:
   status: working
-  slice: "Item 2 implemented 2026-09-09: fallbackGoEval deleted; RLM spawn failure returns typed unsafe/worker diagnostic and executes nothing; one-shot serves explicit actuator=tools only. Next: item-3 Define (terminal identity contract), then repair; items 4-8 in order. Push/deploy/deployed-proof deferred to item-7 landing."
+  slice: "Item 3 active: code-free Define recorded 2026-09-09 with frozen v1 field-classification receipt (slot/canonical/derived/excluded + replay/conflict/rejection rules). Next: v1 canonicalizer repair across agentcore mint and store CAS, then items 4-8. Push/deploy/proof deferred to item-7 landing."
   question: none
   reconciliation:
     observed_at: "2026-09-09T16:31:36Z"
@@ -206,10 +206,11 @@ now:
     - "internal/agentcore/cosuper_assignment_fate.go"
     - "docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md (item-1 Define: matrix + authorized Compile/Execute repair boundary)"
     - "docs/evidence/choir-rlm-settlement-item2-define-2026-09-09.md (item-2 Define: fallback-diversion defect + authorized removal boundary)"
-    - "item-2 repair commit (this commit): fallbackGoEval deletion + typed spawn-failure diagnostic + broker contract test; CGO_ENABLED=0 GOOS=linux vet ok (linux test execution deferred to CI: no local linux runtime)"
+    - "docs/evidence/choir-rlm-settlement-item3-define-2026-09-09.md (item-3 Define: frozen v1 table + authorized repair boundary)"
+    - "item-2 repair commit a6b898f0: fallbackGoEval deletion + typed spawn-failure diagnostic; cross-vet ok, linux-test execution deferred to CI"
     - "item-1 repair commit b8aaa89b: EvalError + Compile gate + serveCell/broker carry + contract tests; yaegikernel/capsule/toolregistry green, agentcore capsule/fate subset green, broker cross-build ok"
-  blocker_or_risk: "Items 3-8 open (provider-contaminated identity, batch race, fate finality-before-revoke, fallback authorship live); broker linux-test execution deferred to CI; deployed proof outstanding. Mission-0 drill debt stays mission-0-owned (residue R1)."
-  next_action: "Item 3: code-free Define for the terminal identity contract (versioned field-classification receipt v1), then canonicalization repair (local_test)."
+  blocker_or_risk: "Item-3 repair unimplemented (ReportID/fingerprint still provider-contaminated; outputs-only change replays silently); items 4-8 open; broker linux-test execution deferred to CI; deployed proof outstanding. Mission-0 drill debt stays mission-0-owned (residue R1)."
+  next_action: "Implement item-3 repair: v1 canonicalizer + ReportID/digest re-derivation + rejection classes + replay/conflict tests (local_test)."
 
 receipts:
   - id: settlement-gate-charter-2026-09-09
@@ -270,4 +271,15 @@ receipts:
     disposition: "item-2 repair lands; items 3-8 open; push/deploy/proof deferred to item-7 landing"
     problem_ref: "docs/evidence/choir-rlm-settlement-item2-define-2026-09-09.md"
     authorization_ref: "Owner-chartered item 2; Define-precedes-repair satisfied by 8fd4dc6f"
+    candidate_or_evidence_refs: []
+  - id: settlement-item3-define-2026-09-09
+    boundary: define
+    commit_or_artifact: "this commit (code-free; docs/evidence/choir-rlm-settlement-item3-define-2026-09-09.md + now update)"
+    proof_refs:
+      - "docs/evidence/choir-rlm-settlement-item3-define-2026-09-09.md (frozen v1 table: slot/scope/canonical/derived/excluded + replay/conflict/rejection rules)"
+      - "contamination sited at fate.go:568-592 (toolCallID ReportID, Summary fingerprint) and store normalizeCoSuperReportForDigest (ReportID+Summary in CAS)"
+    rollback_ref: "docs-only; revert restores pre-item-3 now card"
+    disposition: "item-3 repair boundary authorized; no source changed"
+    problem_ref: "provider-contaminated ReportID/fingerprint; outputs-only change replays silently; pre-digest packet rewrites"
+    authorization_ref: "Owner-chartered item 3; problem-documentation-first per mission boundaries"
     candidate_or_evidence_refs: []
