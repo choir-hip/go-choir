@@ -25,6 +25,7 @@
   import Desktop from './lib/Desktop.svelte';
   import LegalDocument from './lib/LegalDocument.svelte';
   import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError } from './lib/auth.js';
+  import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
   import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme';
   import { fetchThemePreference, saveThemePreference } from './lib/preferences.js';
   import { addLiveEventListener, isOwnLiveEvent, liveEventPayload } from './lib/live-events.js';
@@ -446,7 +447,11 @@
       void loadUniversalWirePublicLink(universalWirePublicToken);
     }
     const initialIntent = initialAppIntentFromURL();
-    checkSession().then((session) => {
+    checkSession().then(async (session) => {
+      if (session?.authenticated) {
+        await prewarmAuthenticatedComputer().catch(() => {});
+        if (await handoffToComputerSurfaceIfStale()) return;
+      }
       if (!initialIntent) return;
       if (session?.authenticated) {
         maybeReplayPendingIntent(initialIntent);

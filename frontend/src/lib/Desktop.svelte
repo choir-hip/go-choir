@@ -23,6 +23,7 @@
   import { onDestroy } from 'svelte';
   import { tick } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError, renewSession } from './auth.js';
+  import { handoffToComputerSurfaceIfStale } from './computer-surface-handoff.js';
   import { submitConductorPrompt, waitForConductorDecision } from './conductor.js';
   import { fetchDesktopState, saveDesktopState } from './desktop.js';
   import { withDesktopSelector } from './desktop-selector.js';
@@ -295,6 +296,7 @@
         liveStatus.set('error');
         return;
       }
+      if (await handoffToComputerSurfaceIfStale()) return;
       appendBootLine('Opening live channel');
       connectLiveChannel();
       appendBootLine('Restoring desktop state');
