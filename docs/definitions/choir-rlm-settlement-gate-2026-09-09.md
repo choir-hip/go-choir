@@ -176,15 +176,17 @@ now:
   slice: "round-10 repaired draft under focused verification; mission 0 complete; charter ratification pending"
   question: "Is the reconciled round-10 repaired charter with two-stage admission, total classification, and liveness policy ready for owner ratification?"
   reconciliation:
-    source_ref: "main@9f95e590 (round-10 repaired draft; re-observe HEAD at charter ratification)"
-    deploy_identity: "unreconciled; mission-0 accepted identity consumed read-only at charter; re-observe before any red mutation"
+    observed_at: "2026-09-09T16:31:36Z"
+    source_ref: "main@54eb9328 (round-10 repaired draft HEAD, observed live at charter)"
+    deploy_identity: "staging https://choir.news ok via proxy 9341b5d1 (built 20260909055454), vmctl routing enabled; mission-0 accepted restore identity consumed read-only"
     authority_identities:
       - "docs/reports/choir-rlm-mission-state-2026-09-08.md"
-      - "docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md"
+      - "docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md (remainder holder)"
+      - "docs/mission-residues.md (R1-R6 open)"
       - "AGENTS.md; docs/standing-questions.md"
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "draft-observed clean tree superseded; current untracked leftovers (mission-0 completion report, scripts, tmp/) preserved as unrelated WIP; re-observe before charter"
-    status: reconciling
+    worktree_inventory_ref: "4 untracked leftover paths preserved as unrelated WIP (mission-0 completion report, report generator script, pycache, tmp/); no other dirty paths"
+    status: reconciled
   candidate:
     id: none
     state: none
