@@ -173,7 +173,7 @@ measures:
 
 now:
   status: working
-  slice: "Item 4 implemented 2026-09-09: sequential turn execution for capsule_go_eval and record_assignment_result + Stage 1 pre-dispatch admission refusal (at most one terminal, at most one eval, no reversed order, no forbidden companions) with none-run semantics + Stage 2 post-eval tray skip + toolloop decoupling; toolregistry green. Next: items 5-8. Push/deploy/proof deferred to item-7 landing."
+  slice: "Item 5 active: code-free Define recorded 2026-09-09 with resumable fate saga specification (durable pending proposal, freeze -> revoke -> finalize order, atomic final boundary after revoke ack). Next: implement item 5."
   question: none
   reconciliation:
     observed_at: "2026-09-09T16:31:36Z"
@@ -205,14 +205,15 @@ now:
     - "cmd/capsule-broker/session_worker.go"
     - "internal/agentcore/cosuper_assignment_fate.go"
     - "docs/evidence/choir-rlm-settlement-item1-define-2026-09-09.md (item-1 Define: matrix + authorized Compile/Execute repair boundary)"
-    - "item-4 repair commit (this commit): toolRequiresSequentialTurnExecution + validateCoSuperBatchAdmission + tray collision skip + batchContainsAdmittedTerminalTool + unit tests"
+    - "item-4 repair commit 18498447: toolRequiresSequentialTurnExecution + validateCoSuperBatchAdmission + tray collision skip + batchContainsAdmittedTerminalTool + unit tests"
     - "docs/evidence/choir-rlm-settlement-item4-define-2026-09-09.md (item-4 Define: narrow admission grammar + Stage 1/2 boundaries + sequential execution)"
+    - "docs/evidence/choir-rlm-settlement-item5-define-2026-09-09.md (item-5 Define: resumable fate saga + pending proposal durability + atomic final boundary)"
     - "item-3 repair commit 965e26a7: canonicalizer + TerminalReportID + SlotTerminalReport + Record/Open integration + agentcore mint/gate + strict decode + v1 tests"
     - "docs/evidence/choir-rlm-settlement-item3-define-2026-09-09.md (item-3 Define: frozen v1 table + dated overlay-paradox correction + authorized repair boundary)"
     - "item-2 repair commit a6b898f0: fallbackGoEval deletion + typed spawn-failure diagnostic; cross-vet ok, linux-test execution deferred to CI"
     - "item-1 repair commit b8aaa89b: EvalError + Compile gate + serveCell/broker carry + contract tests; yaegikernel/capsule/toolregistry green, agentcore capsule/fate subset green, broker cross-build ok"
-  blocker_or_risk: "Items 5-8 open (fate finality-before-revoke saga, fallback authorship, deployed proof, regression contracts). Broker linux-test execution deferred to CI. Mission-0 drill debt stays mission-0-owned (residue R1)."
-  next_action: "Commit item-4 repair, then author item-5 Define (resumable fate saga with atomic final boundary)."
+  blocker_or_risk: "Item-5 repair unimplemented (commit-then-revoke ordering, replay bypasses revoke, transient pending state); items 6-8 open. Broker linux-test execution deferred to CI. Mission-0 drill debt stays mission-0-owned (residue R1)."
+  next_action: "Implement item-5 repair: PendingProposal schema + SetCoSuperPendingProposal + atomic final settlement after revoke ack + crash resumption."
 
 receipts:
   - id: settlement-gate-charter-2026-09-09
@@ -311,7 +312,7 @@ receipts:
     candidate_or_evidence_refs: []
   - id: settlement-item4-implement-2026-09-09
     boundary: implement
-    commit_or_artifact: "this commit (red: narrow admission grammar repair + tests)"
+    commit_or_artifact: "18498447 (red: narrow admission grammar repair + tests)"
     proof_refs:
       - "new: TestExecuteToolBatchAssignedCoSuperAdmissionGrammar covering 2+ terminals, 2+ evals, reversed order, forbidden companion, shape a, shape b, eval failure skip, tray collision skip"
       - "sequential execution: capsule_go_eval and record_assignment_result classified sequential"
@@ -321,4 +322,15 @@ receipts:
     disposition: "item-4 repair lands; items 5-8 open; push/deploy/proof deferred to item-7 landing"
     problem_ref: "docs/evidence/choir-rlm-settlement-item4-define-2026-09-09.md"
     authorization_ref: "Owner-chartered item 4; Define-precedes-repair satisfied by f320e4fe"
+    candidate_or_evidence_refs: []
+  - id: settlement-item5-define-2026-09-09
+    boundary: define
+    commit_or_artifact: "this commit (docs/evidence/choir-rlm-settlement-item5-define-2026-09-09.md)"
+    proof_refs:
+      - "docs/evidence/choir-rlm-settlement-item5-define-2026-09-09.md (resumable fate saga: pending proposal durability, freeze -> revoke -> finalize, crash resumption)"
+      - "line defect cited: cosuper_assignment_fate.go:760-777 commits terminal report before revoke acknowledgement"
+    rollback_ref: "docs-only; revert restores pre-item-5 now card"
+    disposition: "item-5 repair boundary authorized; no source changed"
+    problem_ref: "commit-then-revoke ordering; replay bypasses incomplete revocation; absence of durable pending proposal"
+    authorization_ref: "Owner-chartered item 5; problem-documentation-first per mission boundaries"
     candidate_or_evidence_refs: []
