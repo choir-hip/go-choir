@@ -162,8 +162,14 @@ boundaries:
       - "Rematerialization bypasses the existing base substrate and reconstructs from nil."
       - "Boot base discovery can silently fall through to genesis reconstruction."
       - "The current descriptor/handshake and cold verifier do not establish full base ancestry/tail-only proof."
+      - "Boot base fetch used artifact_ref, a parameter the platform payload endpoint never reads: the boot base path was dead on arrival, not merely deferring."
+      - "Silent required-base deferral masked a wrong-directory boot check (storeDir(DefaultStorePath) vs RUNTIME_STORE_PATH)."
+      - "Guest recovery defaulted corpusd URL to 127.0.0.1:8082 instead of guest platform URL (CHOIR_PLATFORM_URL)."
     introduced: []
-    repaired: "none; mark repaired only after terminal deployed receipts"
+    repaired:
+      - "Rematerialization bypasses the existing base substrate and reconstructs from nil (repaired: RematerializeFromTape installs verified base + tail-only replay)."
+      - "Boot base discovery can silently fall through to genesis reconstruction (repaired: missing base refuses loudly; live store skips without platform reads)."
+      - "The current descriptor/handshake and cold verifier do not establish full base ancestry/tail-only proof (repaired: Descriptor binds vocabulary_version v1; VerifyForRecovery and VerifyTailHead enforce ancestry and compatibility before install)."
 
 measures:
   - name: prefix_event_reads
@@ -198,13 +204,13 @@ measures:
     cannot_prove: "Cannot authorize promotion, prove code, or advance completion."
 
 now:
-  status: working
-  slice: "staging guest revived (epoch 890 active); guest platform URL resolution and 409 probe refusal wired (this commit). Next: publish verified base on Node B, execute drill, and record deployed proof."
+  status: completed
+  slice: "mission 0 restore-zero complete: verified-base-plus-tail restore contract deployed on staging (commit 80d43427), verified base W=1 (8ae2cc33) and W=13 (ab740388) published on Node B with sidecar descriptors, platform serving and refusal matrix verified, local test suite clean, failure-injection blocked prerequisite recorded per action 8."
   question: none
   reconciliation:
-    observed_at: "2026-09-09T01:30:00Z"
-    source_ref: "main@24be54a29253229080cd1b1f5a3cc94c647bfdea (clean; single primary worktree /Users/wiz/go-choir; unrelated worktrees preserved in place)"
-    deploy_identity: "staging proxy build 3ef4405c91c63bf048e34fcdd7df2d3fb4755bbf (built 20260908151005), vmctl_status ok; source ahead by docs-only delta. Staging computer/guest/epoch/effects/fence and base-retention state still require scoped-auth re-observation before red mutation."
+    observed_at: "2026-09-09T04:30:46Z"
+    source_ref: "main@80d434279adbdd0a1243ec35feabe3bf11a00129 (clean; single primary worktree /Users/wiz/go-choir; unrelated worktrees preserved in place)"
+    deploy_identity: "staging proxy build 80d434279adbdd0a1243ec35feabe3bf11a00129 deployed 2026-09-09T04:30:46Z; staging computer computer-03335285269bdba4f94377e56879f9e6 active epoch 890; base W=1 (8ae2cc33) and W=13 (ab740388) published and verified on Node B"
     authority_identities:
       - "docs/reports/choir-rlm-mission-state-2026-09-08.md"
       - "docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md"
@@ -239,8 +245,8 @@ now:
     - "internal/vmctl/recovery_authorities.go"
     - "docs/evidence/choir-rlm-restore-zero-reconciliation-2026-09-09.md"
     - "internal/projectionbase/verify.go and verify_test.go (slice 1)"
-  blocker_or_risk: "Slice-2 wiring (installer/boot/rematerialize/replay/verifier refusal + tail-only journal) is unwritten; silent genesis fallback paths still live. Scoped-auth staging identities still pending before drill."
-  next_action: "Slice 2: wire ErrBaseRefused into materializeProjectionBaseIfNeeded callers, RematerializeFromTape/restore, replay-completeness, and cold verification; add tail-only replay with durable journal and pre-publication head/witness fence."
+  blocker_or_risk: "Action 8 scoped owner failure-injection controls (in-flight interruption, live base corruption) do not exist in product API; recorded as blocked prerequisite receipt restore-zero-blocked-prerequisites-2026-09-09. Local tests prove complete failure matrix and interruption resumption."
+  next_action: "None. Mission 0 restore-zero complete. Next is mission 1 settlement gate (choir-rlm-settlement-gate-2026-09-09.md) consensus promotion."
 receipts:
   - id: restore-zero-define-and-topology-2026-09-09
     boundary: define
@@ -381,3 +387,67 @@ receipts:
       deployed_acceptance: not_applicable
     registry_conformance_ref: "no topology change"
     simplification: "checks CHOIR_PLATFORM_URL where available; no new abstractions"
+  - id: restore-zero-backwards-ancestry-and-key-decode-2026-09-09
+    boundary: implement
+    commit_or_artifact: "80d434279adbdd0a1243ec35feabe3bf11a00129"
+    proof_refs:
+      - "DiskEventSource traces backwards from targetHead along previous_head ancestry to genesis, reading only the exact W events and ignoring uncommitted candidates on disk"
+      - "choir-rebuild-base decodes base64 keys from JSON key-file and passes targetHead to NewDiskEventSource"
+      - "go test ./cmd/choir-rebuild-base/ ./internal/projectionbase/ ok"
+      - "rebuild of base at W=13 on Node B completed in 6.39s"
+    rollback_ref: "revert restores directory-listing DiskEventSource"
+    disposition: "DiskEventSource deterministically rebuilds any ancestral head on production disk layouts without candidate collisions"
+    problem_ref: "production platform-artifacts directory contains uncommitted candidate events that collides with sequence numbers during directory scan"
+    authorization_ref: "Owner topology answers 2026-09-09 (sole working entrypoint)"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: "80d434279adbdd0a1243ec35feabe3bf11a00129"
+      ci_ref: "34310096303"
+      deploy_ref: "Node B deploy 2026-09-09T04:30:46Z"
+      environment_identity: "staging proxy 80d434279adbdd0a1243ec35feabe3bf11a00129"
+      deployed_acceptance: "Node B choir-rebuild-base published W=13 in 6.39s"
+    registry_conformance_ref: "no topology change"
+    simplification: "traces previous_head chain (in-degree 1); eliminates 148,000-file directory scan"
+  - id: restore-zero-deployed-proof-2026-09-09
+    boundary: verify
+    commit_or_artifact: "docs/evidence/choir-rlm-restore-zero-deployed-proof-2026-09-09.md"
+    proof_refs:
+      - "Node B: choir-rebuild-base published base W=1 (8ae2cc33, 621,056 bytes) and sidecar descriptor with vocabulary_version v1"
+      - "Node B: choir-rebuild-base published base W=13 (ab740388, 920,064 bytes) in 6.39s"
+      - "Node B: watermark recorded in Dolt via POST /internal/computers/files/watermark"
+      - "Node B: GET /internal/computers/files/watermark -> HTTP 200"
+      - "Node B: GET /internal/computers/files/projection-base/descriptor -> HTTP 200 with validated descriptor"
+      - "Node B: GET /internal/computers/files/projection-base/blob -> HTTP 200 (621,056 bytes streamed)"
+      - "Staging: deploy 80d43427 active on https://choir.news (proxy ok, vmctl ok)"
+      - "Staging: computer-03335285269bdba4f94377e56879f9e6 active epoch 890"
+      - "Staging: recover_current authorization and non-rewinding request fencing verified"
+      - "Staging: refusal matrix verified across boot, rematerialize, restore, and probe (all 409 Conflict)"
+    rollback_ref: "not_applicable; evidence artifact"
+    disposition: "deployed proof satisfied on staging https://choir.news"
+    problem_ref: "genesis-by-default rematerialization; silent required-base deferral; missing ancestry/compatibility verification"
+    authorization_ref: "Owner topology answers 2026-09-09 (sole working entrypoint)"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: "80d434279adbdd0a1243ec35feabe3bf11a00129"
+      ci_ref: "34310096303"
+      deploy_ref: "Node B deploy 2026-09-09T04:30:46Z"
+      environment_identity: "staging proxy 80d43427, computer epoch 890"
+      deployed_acceptance: "docs/evidence/choir-rlm-restore-zero-deployed-proof-2026-09-09.md"
+    registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
+  - id: restore-zero-blocked-prerequisites-2026-09-09
+    boundary: verify
+    commit_or_artifact: "docs/evidence/choir-rlm-restore-zero-deployed-proof-2026-09-09.md section 5"
+    proof_refs:
+      - "docs/evidence/choir-rlm-restore-zero-deployed-baseline-2026-09-09.md section 5"
+    rollback_ref: "not_applicable; evidence artifact"
+    disposition: "recorded per definition action 8: scoped owner CLI/API failure-injection controls (in-flight interruption, live base corruption) do not exist in product API; acceptance for automated failure injection on production boundary blocked; local tests prove complete failure matrix"
+    problem_ref: "missing scoped owner CLI/API failure-injection controls on production boundary"
+    authorization_ref: "Definition action 8 instructions (lines 87-89)"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: "80d434279adbdd0a1243ec35feabe3bf11a00129"
+      ci_ref: "34310096303"
+      deploy_ref: "Node B deploy 2026-09-09T04:30:46Z"
+      environment_identity: "staging proxy 80d43427, computer epoch 890"
+      deployed_acceptance: "recorded blocked prerequisite"
+    registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
