@@ -173,7 +173,7 @@ now:
   slice: "round-8 repaired draft under focused verification; mission 0 complete; charter ratification pending"
   question: "Is the reconciled round-8 repaired charter with the digest-before-derivation rule and pre-dispatch grammar ready for owner ratification?"
   reconciliation:
-    source_ref: "main@3dc2f3c0 (round-7 repaired draft; re-observe HEAD at charter ratification)"
+    source_ref: "main@65e4c797 (round-8 repaired draft; re-observe HEAD at charter ratification)"
     deploy_identity: "unreconciled; mission-0 accepted identity consumed read-only at charter; re-observe before any red mutation"
     authority_identities:
       - "docs/reports/choir-rlm-mission-state-2026-09-08.md"
