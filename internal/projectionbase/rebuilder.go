@@ -163,6 +163,7 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 		BlobSizeBytes:         blobSize,
 		ReducerVersion:        finalHead.ReducerVersion,
 		SchemaVersion:         int(computerevent.SchemaVersionV1),
+		VocabularyVersion:     CurrentVocabularyVersion,
 		VMLocalContentWitness: witness,
 		CreatedAt:             time.Now().UTC(),
 	}

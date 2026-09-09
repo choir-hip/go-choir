@@ -199,7 +199,7 @@ measures:
 
 now:
   status: working
-  slice: "reconciliation landed 2026-09-09 (read-only receipt); next is implement preparation for slice 1 (descriptor + vocabulary_version + verified ancestry predicate)"
+  slice: "slice 1 landed (descriptor vocabulary_version seam + VerifyForRecovery/VerifyTailHead + refusal matrix); next is slice 2 wiring (required-base refusal + tail-only journal + publication fence)"
   question: none
   reconciliation:
     observed_at: "2026-09-09T01:30:00Z"
@@ -238,8 +238,9 @@ now:
     - "internal/vmctl/cold_recover.go"
     - "internal/vmctl/recovery_authorities.go"
     - "docs/evidence/choir-rlm-restore-zero-reconciliation-2026-09-09.md"
-  blocker_or_risk: "Staging computer/guest/epoch/effects/fence and base-retention identities still require scoped-auth re-observation before red mutation or drill. Caller map and surface classification landed in docs/evidence/choir-rlm-restore-zero-reconciliation-2026-09-09.md sections 3-4."
-  next_action: "Implement preparation for slice 1 (descriptor + vocabulary_version + verified installation/ancestry predicate with simplification adjudication). No repair code until preparation names the exact surfaces and citers."
+    - "internal/projectionbase/verify.go and verify_test.go (slice 1)"
+  blocker_or_risk: "Slice-2 wiring (installer/boot/rematerialize/replay/verifier refusal + tail-only journal) is unwritten; silent genesis fallback paths still live. Scoped-auth staging identities still pending before drill."
+  next_action: "Slice 2: wire ErrBaseRefused into materializeProjectionBaseIfNeeded callers, RematerializeFromTape/restore, replay-completeness, and cold verification; add tail-only replay with durable journal and pre-publication head/witness fence."
 receipts:
   - id: restore-zero-define-and-topology-2026-09-09
     boundary: define
@@ -277,3 +278,23 @@ receipts:
       environment_identity: "staging proxy 3ef4405c91c63bf048e34fcdd7df2d3fb4755bbf observed anonymously; scoped computer/base identities pending"
       deployed_acceptance: not_applicable
     registry_conformance_ref: "no topology change; docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml unchanged and still conformant"
+  - id: restore-zero-slice1-descriptor-ancestry-2026-09-09
+    boundary: implement
+    commit_or_artifact: "this commit (red: projectionbase contract + predicate + tests)"
+    proof_refs:
+      - "go test ./internal/projectionbase/ ok (descriptor binding matrix, ordering, tail-ancestry, V1 rebuild seam)"
+      - "go build ./... ok; go vet clean; gofmt clean"
+      - "go test ./internal/autoputer/ -run TestMaterialize|TestProjectionBase ok (installer behavior unchanged)"
+    rollback_ref: "revert restores prior Descriptor shape; no stored descriptors exist (rebuild-base prints to stdout only)"
+    disposition: "slice 1 contract library landed; live recovery paths not yet wired (slice 2)"
+    problem_ref: "genesis-by-default rematerialization; silent required-base deferral; missing ancestry/compatibility verification"
+    authorization_ref: "Owner topology answers 2026-09-09 (sole working entrypoint); Define 24be54a2; reconciliation e00540a0"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "no topology change"
+    simplification: "extended existing Descriptor/Validate and Rebuilder emission; deleted nothing (zero live descriptor consumers); new files verify.go/verify_test.go carry the predicate contract no existing surface owns (installer is boot-only fetch, appender is replay mechanics)"
