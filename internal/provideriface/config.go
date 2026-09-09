@@ -120,7 +120,7 @@ func LoadConfig() Config {
 		VmctlURL:           envOr("RUNTIME_VMCTL_URL", os.Getenv("PROXY_VMCTL_URL")),
 		MaildURL:           os.Getenv("RUNTIME_MAILD_URL"),
 		WirePublishURL:     os.Getenv("RUNTIME_WIRE_PUBLISH_URL"),
-		CorpusdURL:         envOr("RUNTIME_CORPUSD_URL", envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL)),
+		CorpusdURL:         envOr("CHOIR_PLATFORM_URL", envOr("RUNTIME_CORPUSD_URL", envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL))),
 		LLMProvider:        os.Getenv("RUNTIME_LLM_PROVIDER"),
 		LLMModel:           os.Getenv("RUNTIME_LLM_MODEL"),
 		LLMReasoningEffort: os.Getenv("RUNTIME_LLM_REASONING_EFFORT"),

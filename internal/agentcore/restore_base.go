@@ -3,10 +3,10 @@ package agentcore
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
@@ -23,9 +23,9 @@ func (rt *Runtime) resolveRestoreBaseSource() (projectionbase.BaseSource, error)
 	if rt.restoreBaseSource != nil {
 		return rt.restoreBaseSource, nil
 	}
-	baseURL := ""
-	if rt.cfg.CorpusdURL != "" {
-		baseURL = rt.cfg.CorpusdURL
+	baseURL := strings.TrimSpace(os.Getenv("CHOIR_PLATFORM_URL"))
+	if baseURL == "" && strings.TrimSpace(rt.cfg.CorpusdURL) != "" {
+		baseURL = strings.TrimSpace(rt.cfg.CorpusdURL)
 	}
 	creds := rt.selfdevControl
 	if strings.TrimSpace(baseURL) == "" || creds == nil {

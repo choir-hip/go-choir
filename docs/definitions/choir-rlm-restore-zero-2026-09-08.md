@@ -199,7 +199,7 @@ measures:
 
 now:
   status: working
-  slice: "staging incident: boot installer checked the constant store dir instead of the runtime store path and crash-looped the staging guest; fix passes rtCfg.StorePath through (this commit). Next: land fix, refresh guest, publish base via host, drill."
+  slice: "staging guest revived (epoch 890 active); guest platform URL resolution and 409 probe refusal wired (this commit). Next: publish verified base on Node B, execute drill, and record deployed proof."
   question: none
   reconciliation:
     observed_at: "2026-09-09T01:30:00Z"
@@ -361,3 +361,23 @@ receipts:
       deployed_acceptance: not_applicable
     registry_conformance_ref: "no topology change"
     simplification: "one-line wiring (constant to rtCfg-derived path) plus marker derivation; no new surface; regression test uses a real store layout"
+  - id: restore-zero-guest-platform-url-and-probe-refusal-2026-09-09
+    boundary: implement
+    commit_or_artifact: "this commit (red: guest resolves platform URL via CHOIR_PLATFORM_URL; probe maps ErrBaseRefused to 409)"
+    proof_refs:
+      - "staging probe evidence: guest returned dial tcp 127.0.0.1:8082 connection refused because CorpusdURL defaulted to localhost instead of CHOIR_PLATFORM_URL (http://10.200.5.1:8086)"
+      - "api_self_development.go maps projectionbase.ErrBaseRefused to http.StatusConflict (409) instead of 500"
+      - "go test ./internal/provideriface/ ./internal/autoputer/ ./internal/agentcore/ ok"
+    rollback_ref: "revert restores CorpusdURL localhost default and 500 probe status"
+    disposition: "guest recovery services now route platform calls to CHOIR_PLATFORM_URL (corpusd on port 8086); missing base returns 409 Conflict as specified"
+    problem_ref: "guest recovery defaulted corpusd URL to 127.0.0.1:8082 instead of guest platform URL"
+    authorization_ref: "Owner topology answers 2026-09-09 (sole working entrypoint)"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: "staging computer epoch 890 active"
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "no topology change"
+    simplification: "checks CHOIR_PLATFORM_URL where available; no new abstractions"

@@ -679,6 +679,9 @@ func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot
 	if strings.TrimSpace(rtCfg.ModelPolicyPath) == "" {
 		rtCfg.ModelPolicyPath = provideriface.DefaultModelPolicyPath(filesRoot)
 	}
+	if platformURL := strings.TrimSpace(os.Getenv("CHOIR_PLATFORM_URL")); platformURL != "" {
+		rtCfg.CorpusdURL = platformURL
+	}
 	return rtCfg
 }
 
