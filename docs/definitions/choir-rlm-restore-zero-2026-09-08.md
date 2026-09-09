@@ -142,6 +142,10 @@ boundaries:
     - "internal/platform/file_cas.go and file_cas_http.go"
     - "internal/vmctl/cold_recover.go and recovery_authorities.go"
     - "internal/proxy/computer_lifecycle.go"
+    - "internal/agentcore/replay_completeness.go, checkpoint_restore_bindings.go, and api_self_development.go lifecycle/replay routes (mandatory verifier carrier; classified 2026-09-09)"
+    - "internal/proxy/self_development.go and handlers.go replay-completeness path (deployed verifier transport; classified 2026-09-09)"
+    - "internal/vmctl TrustedGuestKeyCopier seam (sole guest-data path in cold recovery; classified 2026-09-09)"
+    - "file-CAS hydration seam invoked in runReplayPhase (durable replay input; classified 2026-09-09)"
     - "cmd/choir/main.go and cmd/choir-rebuild-base/main.go"
     - "canonical event-head, checkpoint/route projection, recovery journal/quarantine, and staging deployment routing"
   completion_evidence_floor: [local_test, deployed_proof]
@@ -195,20 +199,20 @@ measures:
 
 now:
   status: working
-  slice: "code-free Define and topology landed this commit; next is read-only reconciliation of live identities, then implement preparation"
+  slice: "reconciliation landed 2026-09-09 (read-only receipt); next is implement preparation for slice 1 (descriptor + vocabulary_version + verified ancestry predicate)"
   question: none
   reconciliation:
-    observed_at: "2026-09-08T23:46:42Z"
-    source_ref: "main@a5dea315c25f10f093800194a9e701ad1561e1da"
-    deploy_identity: "Panel-observed health build 3ef4405c91c63bf048e34fcdd7df2d3fb4755bbf; must be re-observed with staging computer identity before red mutation."
+    observed_at: "2026-09-09T01:30:00Z"
+    source_ref: "main@24be54a29253229080cd1b1f5a3cc94c647bfdea (clean; single primary worktree /Users/wiz/go-choir; unrelated worktrees preserved in place)"
+    deploy_identity: "staging proxy build 3ef4405c91c63bf048e34fcdd7df2d3fb4755bbf (built 20260908151005), vmctl_status ok; source ahead by docs-only delta. Staging computer/guest/epoch/effects/fence and base-retention state still require scoped-auth re-observation before red mutation."
     authority_identities:
       - "docs/reports/choir-rlm-mission-state-2026-09-08.md"
       - "docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md"
       - "docs/standing-questions.md"
       - "docs/ACTIVE.md; docs/mission-graph.yaml (discovery only); docs/doc-authority-manifest.yaml"
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "2026-09-08 panel clean-worktree receipt; fresh git status/worktree reconciliation required before mutation"
-    status: reconciling
+    worktree_inventory_ref: "docs/evidence/choir-rlm-restore-zero-reconciliation-2026-09-09.md section 1"
+    status: reconciled
   candidate:
     id: none
     state: none
@@ -233,12 +237,13 @@ now:
     - "internal/projectionbase/types.go"
     - "internal/vmctl/cold_recover.go"
     - "internal/vmctl/recovery_authorities.go"
-  blocker_or_risk: "Current staging/base-retention identities are unverified; the read-only reconciliation/Define receipt must publish the verified producer-to-selection-to-installer-to-replay-to-verifier-to-route caller map and either add each demonstrated restore participant to protected_surfaces or exclude it with reason (candidates: replay-completeness handlers, self-development/guest restore bindings, guest copier, file-CAS hydration; speculative files join only on demonstration, never on enumeration). The active cutover's closeout card conflicts with the later withheld-acceptance record. Promotion while it remains the working spine would create stale topology or a second working spine."
-  next_action: "Read-only reconcile live identities (HEAD, worktrees, staging build/computer/guest/epoch/effects/fence, base producer/consumer/retention paths); then implement preparation with red-surface candidate classification. No repair code before reconciliation completes."
+    - "docs/evidence/choir-rlm-restore-zero-reconciliation-2026-09-09.md"
+  blocker_or_risk: "Staging computer/guest/epoch/effects/fence and base-retention identities still require scoped-auth re-observation before red mutation or drill. Caller map and surface classification landed in docs/evidence/choir-rlm-restore-zero-reconciliation-2026-09-09.md sections 3-4."
+  next_action: "Implement preparation for slice 1 (descriptor + vocabulary_version + verified installation/ancestry predicate with simplification adjudication). No repair code until preparation names the exact surfaces and citers."
 receipts:
   - id: restore-zero-define-and-topology-2026-09-09
     boundary: define
-    commit_or_artifact: "this commit"
+    commit_or_artifact: "24be54a29253229080cd1b1f5a3cc94c647bfdea"
     proof_refs:
       - "docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md remainder disposition receipt"
       - "docs/definitions/choir-rlm-settlement-gate-2026-09-09.md blocked stub"
@@ -255,3 +260,20 @@ receipts:
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
     registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
+  - id: restore-zero-reconciliation-2026-09-09
+    boundary: define
+    commit_or_artifact: "this commit (reconciliation receipt; green docs-only)"
+    proof_refs:
+      - "docs/evidence/choir-rlm-restore-zero-reconciliation-2026-09-09.md (caller map sections 3-4; surface classification; live source/deploy identities)"
+    rollback_ref: "docs-only; revert restores prior Definition text"
+    disposition: "read-only reconciliation complete; red-surface candidates classified and protected_surfaces extended; scoped-auth staging identities carried as explicit unknowns"
+    problem_ref: "genesis-by-default rematerialization; silent required-base deferral; missing ancestry/compatibility verification"
+    authorization_ref: "Owner topology answers 2026-09-09 (sole working entrypoint)"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: "staging proxy 3ef4405c91c63bf048e34fcdd7df2d3fb4755bbf observed anonymously; scoped computer/base identities pending"
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "no topology change; docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml unchanged and still conformant"
