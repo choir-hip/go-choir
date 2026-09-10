@@ -33,7 +33,7 @@ follow-ons, and deferred decisions that a later mission must circle back to.
 - **R7 — Engineering-proof successor owns tool/operation retirement (open).**
   Mission 2 proves vocabulary only; the five overlay JSON tools and four
   legacy capsule operations plus replay-returns-original-receipts belong to
-  the Engineering-proof successor mission: overlay JSON tools record_assignment_result, update_coagent, commit_transaction, inspect_self_development_bundle, record_self_development_verification; legacy capsule operations capsule_exec, list_dir, read_file, write_file; eval primitive capsule_go_eval in neither retirement list (counts verifiable via TestAssignedCoSuperBuilderIsExactClosedSet). Revisit: when that mission charters.
+  the Engineering-proof successor mission: overlay JSON tools record_assignment_result, update_coagent, commit_transaction, inspect_self_development_bundle, record_self_development_verification; legacy capsule operations capsule_exec, capsule_list_dir, capsule_read_file, capsule_write_file; eval primitive capsule_go_eval in neither retirement list (counts verifiable via TestAssignedCoSuperBuilderIsExactClosedSet). Revisit: when that mission charters.
 
 ## Closed
 
