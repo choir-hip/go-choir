@@ -28,9 +28,9 @@ start:
       disposition: none
   observed_artifact:
     - claim: "No executable V2 desk vocabulary exists; the desired vocabulary lives only as architecture text. The spawn path accepts engineering as a raw authorization synonym and ReduceCellIntents persists the raw in.Role, both mechanically visible; a mechanical persistence census beyond these two sites pins the exact live V1 write surface at charter."
-      evidence_ref: "docs/designs/rlm-target-architecture-2026-09-04.md:79-85; internal/agentcore/rlm_reduce.go:82-85,182,187 (mechanically verified); persistence census beyond these sites re-pins at charter"
+      evidence_ref: "docs/designs/rlm-target-architecture-2026-09-04.md:79-85; internal/agentcore/rlm_reduce.go:76-89,180-187 (mechanically verified at current tree; re-pin at charter); persistence census beyond these sites re-pins at charter"
     - claim: "Live alias normalization runs in two general canonicalizers before any version-selected decode: agentprofile.Canonical and modelpolicy.NormalizeRole both accept legacy aliases on the live path."
-      evidence_ref: "internal/agentprofile/agentprofile.go:115-138; internal/modelpolicy/model_policy.go:172-185"
+      evidence_ref: "internal/agentprofile/agentprofile.go:116-140; internal/modelpolicy/model_policy.go:172-185 (line refs drift; re-pin at charter)"
     - claim: "Mission-0's vocabulary_version seam gates ProjectionBase descriptors only; it does not select a V1/V2 tape or content role decoder."
       evidence_ref: "internal/projectionbase/types.go:22-33,63-113; internal/projectionbase/verify.go:17-48"
     - claim: "ProjectionBatch V1/V2 is an independent format discriminator, not a vocabulary version; it must not be confused with the absent vocabulary V2."
@@ -42,8 +42,6 @@ start:
   unknowns:
     - "V1 field sites beyond the scout-mapped anchors; the charter freezes the exhaustive inventory."
     - "Exact V2 writer/validator cutover list beyond the scout-mapped vocabulary surfaces."
-    - "Post-V2 rollback safety procedure."
-
 finish:
   deliver: "Versioned rename is one durable truth per vocabulary version: V1 tape decodes under frozen V1 rules with original bytes preserved, V2 writers emit only the new desks vocabulary, unknown live values reject at activation, and the exhaustive V1 field inventory exists as a frozen artifact. Rename-first with owner-settled scope (revised 2026-09-10): every in-scope V1 desk-name occurrence renames (super, co-super/cosuper, researcher, live aliases, ID prefixes, agent addresses, prompt paths, digest inputs carrying desk tokens); version-tagged digest domains and the mission-1 v1 classification receipt stay immutable, with a successor v2 identity/mapping receipt recording token, prefix, and digest-input equivalence. No bundling, no alias period, no rename-last."
   artifact: "A frozen V1 field inventory artifact plus the version-selected decode/encode/activation contract across tape replay, writers, validators, policies, prompts, grants, and role-bearing persistence, with the Engineering-named desk as the first vocabulary proof vehicle and a deployed staging proof."
@@ -57,19 +55,23 @@ finish:
       - "internal/computerevent/event.go, http_client.go, appender.go, projection_batch.go (V1 envelope, tape decode, replay dispatcher)"
       - "internal/projectionbase/types.go, publisher.go, verify.go, rebuilder.go (vocabulary_version seam extension)"
       - "internal/types/task.go, cosuper_assignment.go, evidence.go (V1 role-bearing schema)"
-      - "internal/store/store.go, graph_store.go, lifecycle.go, cosuper_assignments.go, project.go (role-bearing persistence and digests)"
+      - "internal/computerevent/payload_resolver.go (payload fetch; charter records the negative sweep if payload bytes carry no role-bearing content)"
+      - "frontend/src/lib/TextureEditor.svelte (model-policy role list, source-panel role selection)"
+      - "internal/yaegikernel/profiles.go (Yaegi session profiles, GetProfile)"
+      - "internal/store/cosuper_assignment_seed.go and internal/capsule/capability.go (seed roles, capability verbs)"
       - "internal/objectgraph/object.go (edge kinds and metadata)"
       - "internal/autoputer/run.go, internal/agentcore/rematerialize.go, restore_base.go (boot replay dispatch)"
   acceptance:
-    - action: "Produce the exhaustive frozen V1 field inventory artifact covering all twelve classes (the eleven mission-state classes including capsule verb sets, plus Yaegi session profiles) with file:line anchors for every site; exhaustiveness proof is a standing CI gate running a role-identifier sweep over the frozen artifact plus a held-out fixture role string failing closed. Unknown or unanchored sites fail the inventory."
+    - action: "Produce the exhaustive frozen V1 field inventory artifact covering all twelve classes, enumerated here as the frozen partition: (1) agent profiles and canonicalizers, (2) capsule roles and verb sets, (3) Yaegi session profiles, (4) reducer and spawn aliases, (5) prompt roles and prompt file paths, (6) model policies and role selection, (7) persisted runs and lifecycle records, (8) assignments and work-item authority profiles, (9) mailbox destinations and agent addresses, (10) agent-ID prefixes and object-graph edge metadata, (11) grants, digest inputs, and evidence identifiers, (12) event envelope actor profiles and replay dispatch. Frontend display strings classify display-only and sort separately. Exhaustiveness proof is a standing CI gate running a role-identifier sweep over the frozen artifact plus a held-out fixture role string failing closed. Unknown or unanchored sites fail the inventory."
       proves: "The rename scope is bounded by evidence, not by assumption."
       evidence_class: local_test
-    - action: "Add version-selected frozen V1 decode before the general canonicalizers, carried by a per-record version field extending the mission-0 vocabulary_version seam (unmarked tape/content/persistence rows default V1; ProjectionBase descriptors keep mission-0 refuse-missing/unknown and are never re-admitted as legacy; frozen V1 decode runs at interpretation, never by rewriting envelope/payload bytes before digest). The carrier rides projection/SQL rows and an omitempty Event field that V1 replay never emits, so historic heads never change. V1 tape bytes are preserved and cold replay through the frozen decoder yields projections equivalent to the recorded receipts. Byte-identical replay deposits V1 names into live tables, so live projection rows (assignment parents, join predicates, authorization keys) forward-migrate to V2 names under the frozen mapping; V1 activation via decode serves replay verification only, never live authority."
-      proves: "History remains readable exactly as written; decode never silently modernizes and projections never silently change."
-    - action: "Cut every live writer to the new desks vocabulary only, with the exact V1/V2 wire mapping frozen at charter as lowercase tokens: super to management, co-super to engineering, researcher to research (owner-settled three-desk scope; conductor, texture, processor, reconciler, email, and verifier roles stay frozen as-is and are explicitly out of scope). Rename-everything migration map covers ID prefixes, agent addresses, prompt paths, and digest inputs carrying desk tokens with per-site equivalence proof; version-tagged digest domains stay frozen and a successor v2 identity/mapping receipt records the equivalence while the mission-1 v1 receipt remains immutable. Grant, policy, and prompt surfaces validate the new vocabulary."
+    - action: "Add version-selected frozen V1 decode before the general canonicalizers, carried by a per-record version field extending the mission-0 vocabulary_version seam (unmarked tape/content/persistence rows default V1; ProjectionBase descriptors keep mission-0 refuse-missing/unknown and are never re-admitted as legacy; IsKnownVocabularyVersion widens to the explicit set {v1, v2} while CurrentVocabularyVersion advances to v2, so a v1-stamped base remains installable and replays through the frozen V1 decoder while a missing or out-of-set version still refuses; acceptance requires a pre-cutover v1 base descriptor installing and verifying on post-cutover source, and a post-cutover restore falling back to genesis replay is a mission-0 regression and a completion blocker; frozen V1 decode runs at interpretation, never by rewriting envelope/payload bytes before digest). The carrier rides projection/SQL rows and an omitempty Event field that V1 replay never emits, so historic heads never change. V1 tape bytes are preserved and cold replay through the frozen decoder yields projections equivalent to the recorded receipts. Byte-identical replay deposits V1 names into live tables, so live projection rows (assignment parents, join predicates, authorization keys) forward-migrate to V2 names under the frozen mapping; V1 activation via decode serves replay verification only, never live authority."
+      proves: "Tape bytes never change under replay; live rows migrate to V2 names only under the frozen mapping with a proven inverse, never silently."
+      evidence_class: local_test
+    - action: "Cut every live writer to the new desks vocabulary only, with the exact V1/V2 wire mapping frozen at charter as lowercase tokens: super to management, co-super to engineering, researcher to research (owner-settled three-desk scope; conductor, texture, processor, reconciler, email, and verifier roles stay frozen as-is and are explicitly out of scope). Canonical EventKind wire values are frozen as-is — researcher_update keeps its V1 string in both V1 and V2 events because it is a digest input over the immutable chain, and any EventKind rename is explicitly out of scope. Rename migration map covers ID prefixes, agent addresses, prompt paths, and digest inputs carrying desk tokens with per-site equivalence proof; prompt-path renaming migrates owner override files on disk (promptstore.Load falls back silently), with acceptance requiring a V1-path override read back under the V2 path with identical content. Version-tagged digest domains stay frozen and a successor v2 identity/mapping receipt records the equivalence while the mission-1 v1 receipt remains immutable. Grant, policy, and prompt surfaces validate the new vocabulary."
       proves: "New truth is written once, in one vocabulary."
       evidence_class: local_test
-    - action: "Reject unknown live values at activation: any role or desk value outside the version-selected vocabulary fails closed before spawn, admission, or persistence. Refusal covers the agentprofile.Canonical default passthrough, the PolicyFor default policy, the NormalizeRole default, grant/assignment/run equality sites, prompt normalizePromptRole, and Yaegi GetProfile. Copy-forward of a V1 token into a V2-stamped row is a writer defect. Per-record version covers the event envelope (interpretation only), assignment, run, agent, mailbox, grant, and prompt-selection rows."
+    - action: "Reject unknown live values at activation: any role or desk value outside the version-selected vocabulary fails closed before spawn, admission, or persistence. Refusal covers the agentprofile.Canonical default passthrough, the PolicyFor default policy, the NormalizeRole default, grant/assignment/run equality sites, prompt normalizePromptRole, Yaegi GetProfile, toolCallSpawnProfile role/profile reads, and the capsule RoleVerbSets constants rename. Event.Validate is version-gated and admission-only: it may reject unknown actor_profile on new events but must never reject on any path that recomputes a digest for historic tape, with replay and digest verification applying V1 rules to V1-stamped events. Copy-forward of a V1 token into a V2-stamped row is a writer defect. Per-record version covers the event envelope (interpretation only), assignment, run, agent, mailbox, grant, and prompt-selection rows."
       proves: "The unnamed can never execute or persist."
       evidence_class: local_test
     - action: "Retire the live alias path per rename-first: the general canonicalizers no longer accept legacy aliases on the live path, with no alias period and no rename-last fallback; the spawnRoleAllowed engineering/co-super/cosuper synonym set is retired as a named cutover entry. V1 aliases survive only inside the frozen V1 decoder."
@@ -78,13 +80,13 @@ finish:
     - action: "Prove the engineering desk vocabulary end-to-end: V2 writers emit engineering (never co-super or cosuper aliases); activation accepts only the version-selected live name; V1 tape, mailboxes, and grants with canonical V1 names still replay byte-identical and verify via frozen V1 decode, with live rows forward-migrated per the decode item. No overlay JSON tool or legacy capsule operation is replaced or deleted under this item; the five-tool/four-operation retirement and replay-returns-original-receipts belong to the Engineering-proof successor mission (residue R7)."
       proves: "The first RLM desk speaks the new vocabulary without a carrier rewrite."
       evidence_class: local_test
-    - action: "Extend the vocabulary_version seam beyond descriptors to tape/content role decoding, and prove the full matrix on staging with effects OFF: V1 replay byte-identical, V2 write/activate clean, unknown-value refusal, and the Engineering carrier path, all bound to one attempt/computer/capsule/deployment identity with CI green."
+    - action: "Extend the vocabulary_version seam beyond descriptors to tape/content role decoding, and prove the full matrix on staging with effects OFF: V1 replay byte-identical, V2 write/activate clean, unknown-value refusal, the Engineering carrier path, and the browser surface with /api/model-policy/resolve answering every V2 role name and refusing V1 names (a stale pre-cutover client bundle sending V1 tokens receives refusal until reload, recorded explicitly as the designed cutover window). All bound to one attempt/computer/capsule/deployment identity with CI green."
       proves: "The rename holds on the physical staging computer, not just in unit tests."
       evidence_class: deployed_proof
     - action: "Run the focused contracts with no regression: replay byte-identity, writer vocabulary, activation refusal, grant/policy attestation, prompt selection, and projection-base validation."
       proves: "Rename preserves adjacent behavior on the contracts it touches."
       evidence_class: local_test
-  rollback: "Revert the source commits and redeploy the prior accepted source; immutable events, reports, and recovery evidence remain. A retained V1-live writer path is a completion blocker. Product restore remains a forward event-chain transaction."
+  rollback: "Two-part rollback. (a) Source: revert the mission commits and redeploy the prior accepted source. (b) Live rows: the forward migration ships with a proven inverse — every V2-named projection row maps back under the frozen mapping, exercised as a migrate/revert/migrate cycle on staging before the writer cutover lands. Reverting source without the inverse is a known-broken state (V1 equality sites in store/cosuper_assignments.go and store/lifecycle.go would silently fail to match), so the inverse is a completion blocker, not a follow-up. A retained V1-live writer path is a completion blocker. Immutable events, reports, and recovery evidence remain untouched; product restore remains a forward event-chain transaction."
   landing:
     required: true
     environment: "staging https://choir.news"
@@ -128,6 +130,7 @@ boundaries:
     - "internal/types/task.go, cosuper_assignment.go, evidence.go"
     - "internal/store/store.go, graph_store.go, lifecycle.go, cosuper_assignments.go, project.go"
     - "internal/objectgraph/object.go"
+    - "internal/yaegikernel/profiles.go, internal/store/cosuper_assignment_seed.go, internal/capsule/capability.go, internal/computerevent/payload_resolver.go, frontend/src/lib/TextureEditor.svelte"
     - "run acceptance and staging deployment routing"
   completion_evidence_floor: [local_test, deployed_proof]
   conjecture_delta:
@@ -161,6 +164,15 @@ measures:
   - name: replay_byte_identity
     kind: gate
     baseline: "V1 replay unmeasured against original bytes."
+  - name: live_row_migration_reversibility
+    kind: gate
+    baseline: "Forward migration specified; inverse unproven."
+    desired: "Every migrated row class round-trips V1 to V2 to V1 with join predicates, assignment parents, and authorization keys intact, exercised as migrate/revert/migrate on staging."
+    decision_use: "Blocks the writer cutover until the inverse is exercised."
+    cannot_prove: "Cannot prove migration coverage of row classes outside the frozen inventory."
+  - name: replay_byte_identity
+    kind: gate
+    baseline: "V1 replay unmeasured against original bytes."
     desired: "V1 tape replay is byte-identical through the appender path."
     decision_use: "Blocks the frozen-decoder cutover on any mutation."
     cannot_prove: "Cannot prove decoder totality beyond the inventoried classes."
@@ -172,9 +184,8 @@ measures:
     cannot_prove: "Cannot authorize promotion, prove code, or advance completion."
 
 now:
-  status: blocked_incomplete
-  slice: "round-3 repaired draft under focused verification; missions 0 and 1 complete; charter ratification pending"
-  question: "Is the round-3 repaired draft with revised scope, live-row migration, and resolved envelope ready for owner ratification?"
+  slice: "round-4 repaired draft under focused verification; missions 0 and 1 complete; charter ratification pending"
+  question: "Is the round-4 repaired draft with two-part rollback, frozen EventKind, and enumerated partition ready for owner ratification?"
   reconciliation:
     observed_at: "2026-09-09T23:29:36Z"
     source_ref: "main@34629502"
@@ -210,8 +221,6 @@ now:
     - "internal/agentprofile/agentprofile.go"
     - "internal/capsule/roles.go"
     - "internal/computerevent/event.go and appender.go"
-    - "internal/projectionbase/types.go"
-  blocker_or_risk: "Charter ratification pending. V1 inventory exhaustiveness unproven beyond scout anchors; mission-1 v1 receipt stays immutable with a successor v2 mapping receipt under the revised scope."
-  next_action: "Focused verification consensus on round-3 repairs; pin the reviewed draft digest; reconcile source, deployment, and individual WIP paths; record owner ratification and the code-free Define receipt; verify all three navigation registries before enabling execution."
+  next_action: "Focused verification consensus on round-4 repairs; pin the reviewed draft digest; reconcile source, deployment, and individual WIP paths; record owner ratification and the code-free Define receipt; verify all three navigation registries before enabling execution."
 
 receipts: []
