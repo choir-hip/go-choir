@@ -198,7 +198,7 @@ now:
   question: "Does this draft specify all three desk renames with a single cutover, ready for owner ratification?"
   reconciliation:
     observed_at: "2026-09-10T03:45:36Z"
-    source_ref: "main@cf8ea58f (opus workability repairs; re-observe HEAD at charter ratification)"
+    source_ref: "main@4ee0e9bf (grok workability repairs; re-observe HEAD at charter ratification)"
     deploy_identity: "staging https://choir.news ok via proxy 0475ed84; missions 0 and 1 completed with deployed proof"
     authority_identities:
       - "docs/reports/choir-rlm-mission-state-2026-09-08.md (carried mission order, rename-first)"
