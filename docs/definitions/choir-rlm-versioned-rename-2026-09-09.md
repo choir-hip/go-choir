@@ -203,18 +203,18 @@ now:
   slice: "round-10 repaired draft under focused verification; missions 0 and 1 complete; charter ratification pending"
   question: "Is the round-10 repaired draft with recovery fencing, lens inventory, and registry registration ready for owner ratification?"
   reconciliation:
-    observed_at: "2026-09-09T23:29:36Z"
-    source_ref: "main@81e92b97 (round-10 repaired draft; re-observe HEAD at charter ratification)"
-    deploy_identity: "staging https://choir.news ok via proxy 0475ed84 (last observed; re-observe at charter)"
+    observed_at: "2026-09-10T03:45:36Z"
+    source_ref: "main@89145513 (round-10 repaired draft HEAD, observed live at charter)"
+    deploy_identity: "staging https://choir.news ok via proxy 0475ed84; missions 0 and 1 completed with deployed proof"
     authority_identities:
       - "docs/designs/rlm-target-architecture-2026-09-04.md:79-85 (desks vocabulary)"
       - "docs/definitions/choir-rlm-restore-zero-2026-09-08.md (completed predecessor)"
       - "docs/definitions/choir-rlm-settlement-gate-2026-09-09.md (completed predecessor)"
-      - "docs/mission-residues.md (R1, R6 open)"
+      - "docs/mission-residues.md (R1, R6, R7 open)"
       - "AGENTS.md; docs/standing-questions.md"
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "4 untracked leftover paths preserved as unrelated WIP; re-observe before charter"
-    status: reconciling
+    worktree_inventory_ref: "docs/reports/choir-rlm-restore-zero-completion-report-2026-09-09.md, scripts/generate_restore_zero_completion_pdf_2026_09_09.py, scripts/__pycache__/, tmp/ — unknown-owner unrelated WIP, preserve read-only leave-in-place"
+    status: reconciled
   candidate:
     id: none
     state: none
