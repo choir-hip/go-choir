@@ -190,8 +190,7 @@ now:
   question: "Is the round-6 repaired draft with admission-entry gating, phased inventory, and frozen identifiers ready for owner ratification?"
   reconciliation:
     observed_at: "2026-09-09T23:29:36Z"
-    source_ref: "main@2fe1841a (round-5 repaired draft; re-observe HEAD at charter ratification)"
-    deploy_identity: "staging https://choir.news ok via proxy 0475ed84; missions 0 and 1 completed with deployed proof"
+    source_ref: "main@2a381611 (round-6 repaired draft; re-observe HEAD at charter ratification)"
     authority_identities:
       - "docs/designs/rlm-target-architecture-2026-09-04.md:79-85 (desks vocabulary)"
       - "docs/definitions/choir-rlm-restore-zero-2026-09-08.md (completed predecessor)"
