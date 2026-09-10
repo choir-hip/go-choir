@@ -33,7 +33,7 @@ follow-ons, and deferred decisions that a later mission must circle back to.
 - **R7 — Engineering-proof successor owns tool/operation retirement (open).**
   Mission 2 proves vocabulary only; the five overlay JSON tools and four
   legacy capsule operations plus replay-returns-original-receipts belong to
-  the Engineering-proof successor mission. Revisit: when that mission charters.
+  the Engineering-proof successor mission (counts verifiable via TestAssignedCoSuperBuilderIsExactClosedSet). Revisit: when that mission charters.
 
 ## Closed
 
