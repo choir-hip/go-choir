@@ -239,6 +239,7 @@ now:
     - "internal/agentcore/api_self_development.go, chain_bootstrap.go, self_development_materializer.go raw Event ActorProfile Super writers; actorcore adapter/handler researcher canonical consumers (late GrantsEvents rows)"
     - "internal/types/task.go, cosuper_assignment.go; internal/store/cosuper_assignments.go:182-218 terminal proposition V1 domain; internal/objectgraph/object.go:97-174 content/edge hashing"
     - "internal/yaegikernel/profiles.go: no production callers (delete-first, test-only)"
+    - "late GrantsEvents rows for artifact freeze: rematerialize.go:347-355 owner restore writer; self_development_materializer multi-site Super writers; tools_capsule.go CoSuper verification/effect writers; texture_audit.go texture writer; file_sync.go/run.go Super writers"
   blocker_or_risk: "Census mapped; freeze unproven until the machine-readable inventory artifact plus corpus manifest and CI gate land. Actuator and staging proofs outstanding. R1 drill debt stays mission-0-owned; cutover stays remainder holder (R6); tool retirement belongs to the R7 successor."
   next_action: "Freeze the V1 inventory artifact plus versioned corpus manifest and CI gate spec (acceptance item 1); no repair-code commits before that freeze lands."
 
