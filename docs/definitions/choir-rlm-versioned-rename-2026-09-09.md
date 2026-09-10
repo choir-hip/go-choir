@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Scratch drill landed (store SQL migration + migrate/revert/migrate drill test green, inventory at 321 rows, both gates PASS). Awaiting CI verdict. Next: single writer cutover (step 6) with owner-ratified mapping, then staging proof."
+  slice: "Drill landed with CI proof (drill PASS in CI shard; workflow green; deploy correctly skipped). Next: owner ratification of the §7 owner classification, then the single writer cutover (step 6)."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -360,5 +360,18 @@ receipts:
     rollback_ref: "revert removes uncalled fence code; nothing calls it yet so revert is safe"
     disposition: "decode item fence core landed; enforcement binds paths at the cutover after forward-migration runs; drill design is next"
     problem_ref: "no executable guarantee stood behind the serving fence; migration had no refusal counterpart"
+    authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; mapping freeze c908494e precedes per problem-documentation-first"
+    candidate_or_evidence_refs: []
+  - id: versioned-rename-drill-2026-09-10
+    boundary: implement
+    commit_or_artifact: "219814ca red(migrate): SQL row migration with provenance plus scratch drill proving inverse; 00af1397 red(migrate): break test-only import cycle on seam pin test"
+    proof_refs:
+      - "TestVocabDrillMigrateRevertMigrate PASS locally and in CI shard 3/6 (0.93s): migrate (fence-v2, joins, authz-equivalence, unknown untouched), revert byte-identical incl. aliases, re-migrate, final revert ending on V1 with fence-v1 clean"
+      - "CI completed/success with zero failures; V1 inventory gate green; staging deploy correctly skipped (no reachable behavior change); staging healthy"
+      - "import-cycle caught by CI vet (vocabmigrate test vs projectionbase-store edge); pin test moved projectionbase-side, both suites green"
+      - "inventory at 321 rows (+4 drill rows by Define update); corpus covers new files; both gates PASS"
+    rollback_ref: "revert both commits; migration code has zero production callers so removal is safe"
+    disposition: "landing-order step 5 machinery landed on scratch; single writer cutover (step 6) is next with owner-ratified mapping"
+    problem_ref: "proven inverse existed only as unit claims over structs, never over real SQL round-trips with joins and authorization"
     authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; mapping freeze c908494e precedes per problem-documentation-first"
     candidate_or_evidence_refs: []
