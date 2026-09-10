@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Canonical string-to-tuple refactor landed behaviorally inert (landing step 4): (string, error) with UnknownProfileError, unknown returns input passthrough, ~143 call sites take the tuple discarding the error. Awaiting CI verdict. Next: migrate/revert/migrate drill ending on V1 serving rows (step 5)."
+  slice: "Tuple refactor landed end-to-end (19dd5116; CI green with zero failures incl. sharded heavies; staging serving 19dd5116). Next: migrate/revert/migrate drill on staging ending on V1 serving rows (landing step 5)."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -322,5 +322,18 @@ receipts:
     rollback_ref: "revert restores per-site json.Unmarshal decodes; roots are behaviorally inert so revert is safe"
     disposition: "landing-order step 3 landed; behaviorally-inert Canonical string-to-tuple refactor (step 4) is next"
     problem_ref: "tape/content decode ran through a dozen ad-hoc unmarshal sites with no version-selected seam"
+    authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; mapping freeze c908494e precedes per problem-documentation-first"
+    candidate_or_evidence_refs: []
+  - id: versioned-rename-tuple-2026-09-10
+    boundary: implement
+    commit_or_artifact: "19dd5116 red(agentprofile): Canonical returns typed unknown-profile tuple, behaviorally inert"
+    proof_refs:
+      - "build clean; vet clean; agentprofile/toolregistry/coagentowner/actorruntime suites ok; agentcore/store/textureowner focused subsets ok"
+      - "CI completed/success with zero failures incl. sharded agentcore/textureowner race suites; staging /health ok serving 19dd5116"
+      - "delegated edits reviewed pre-commit: restored a dropped refusal return, removed stray lines and a duplicated fragment, repaired two brace losses"
+      - "full unsharded suites time out identically on the unmodified baseline locally (environmental); inventory re-frozen by hunk mapping (310 rows, keys stable)"
+    rollback_ref: "revert restores string Canonical; inert so revert is safe at any point before the cutover"
+    disposition: "landing-order step 4 landed; migrate/revert/migrate drill ending on V1 serving rows (step 5) is next"
+    problem_ref: "stringly-typed Canonical hid unknown-profile passthrough from every enforcement point"
     authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; mapping freeze c908494e precedes per problem-documentation-first"
     candidate_or_evidence_refs: []
