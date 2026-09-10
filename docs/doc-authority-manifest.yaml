@@ -176,6 +176,14 @@ documents:
     witnesses: [docs/memo-problem-documentation-first.md, AGENTS.md]
     refresh_triggers: [problem_documentation_policy_change]
 
+  - path: docs/memo-predictive-icrl-delta-2026-09-10.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: research_delta, authority: support, lifecycle: living}
+    witnesses: [docs/memo-predictive-icrl-delta-2026-09-10.md, docs/choir-vision.md, docs/computer-ontology.md, docs/standing-questions.md]
+    refresh_triggers: [memo_revision, computer_ontology_change]
+
   - path: docs/memo-per-computer-frontend-2026-08-13.md
     claim_scope: current
     is_root: []
