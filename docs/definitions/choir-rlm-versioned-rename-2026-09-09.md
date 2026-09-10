@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Inventory freeze landed: 308-row V1 artifact plus 660-file corpus manifest plus standing CI gate (v1-inventory job), all verified green in CI mode; --freeze red on exactly the 3 allowlisted owner-token rows pending mapping-table item 4. Next: mapping-table freeze (acceptance item 4 incl. owner classification) then decode/writer/activation in normative landing order."
+  slice: "Mapping-table freeze landed as code-free Define (docs/evidence/choir-rlm-v2-mapping-2026-09-10.md): per-function V1 acceptor tables, V2 identity maps, three-desk forward map with inverses, overlay map, v2 receipt field list, and owner-as-frozen-protocol proposal awaiting owner ratification. Next: never-reverted IsKnownVocabularyVersion widening commit, then frozen V1 decoder, in normative landing order."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -239,8 +239,8 @@ now:
     - "internal/agentcore/api_self_development.go, chain_bootstrap.go, self_development_materializer.go raw Event ActorProfile Super writers; actorcore adapter/handler researcher canonical consumers (late GrantsEvents rows)"
     - "internal/types/task.go, cosuper_assignment.go; internal/store/cosuper_assignments.go:182-218 terminal proposition V1 domain; internal/objectgraph/object.go:97-174 content/edge hashing"
     - "internal/yaegikernel/profiles.go: no production callers (delete-first, test-only)"
-  blocker_or_risk: "Freeze landed with named remainder: 3 owner-token rows (rematerialize.go:351 restore intent, texture_agent_revision.go:274/295 revision Role/From) unknown pending owner-ratified mapping-table classification (acceptance item 4). Gate --freeze stays red until then; CI mode green and protective. Actuator and staging proofs outstanding. R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
-  next_action: "Freeze the per-function/per-carrier mapping table (acceptance item 4) with owner-token classification proposal for owner ratification; no repair-code commits before that freeze lands."
+  blocker_or_risk: "Owner ratification outstanding on the owner-as-frozen-protocol proposal (item 4 §7); --freeze stays red until then, but the widening and decoder slices do not depend on it. R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
+  next_action: "Land the never-reverted IsKnownVocabularyVersion widening commit ({v1,v2} only, Current stays v1), then the frozen V1 decoder with two centralized decode roots."
 
 
 receipts:
@@ -284,4 +284,17 @@ receipts:
     disposition: "acceptance item 1 landed with named remainder (owner classification at item 4); mapping-table freeze is next; no repair-code commits before it lands"
     problem_ref: "3 role-shaped owner tokens unclassifiable by orchestrator authority (rematerialize restore intent; revision Role/From); live alias path and unversioned tape decode unchanged"
     authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; owner ratification still required for the owner-classification proposal at item 4"
+    candidate_or_evidence_refs: []
+  - id: versioned-rename-mapping-2026-09-10
+    boundary: define
+    commit_or_artifact: "docs/evidence/choir-rlm-v2-mapping-2026-09-10.md (this commit); no runtime source touched"
+    proof_refs:
+      - "§1 per-function V1 acceptor tables never unioned (Canonical 8-branch, NormalizeRole 4-branch plus pinned no-research-branch absence, spawnRoleAllowed, strict prompt registry)"
+      - "§2 V2 identity maps with fail-closed defaults; §3 one three-desk forward map with INV-CANON/INV-PROV inverses"
+      - "§4 research/research stamp-decides-authority rule; §5 owner-override overlay map; §6 v2 successor receipt field enumeration"
+      - "§7 owner-as-frozen-protocol proposal with rationale and named fallback; 3 rows stay unknown-allowlisted pending ratification"
+    rollback_ref: "registry-only change; revert restores pre-mapping now card"
+    disposition: "acceptance item 4 frozen as Define; widening commit is next; writer cutover waits on owner ratification"
+    problem_ref: "every equivalence was implied across four disjoint alias tables; owner token had no classification"
+    authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; §7 itself proposes, does not settle — owner ratification still required"
     candidate_or_evidence_refs: []
