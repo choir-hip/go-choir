@@ -339,6 +339,10 @@ jobs:
         shell: bash
         run: scripts/check-v1-inventory.sh
 
+      - name: Run decode-roots guard
+        shell: bash
+        run: scripts/check-decode-roots.sh
+
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest

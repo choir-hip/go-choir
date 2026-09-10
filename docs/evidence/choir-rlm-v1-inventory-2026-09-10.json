@@ -5,11 +5,14 @@
   "generator": "scripts/v1-inventory-queries.py",
   "query_version": 1,
   "corpus_manifest": "docs/evidence/choir-rlm-v1-inventory-corpus-2026-09-10.txt",
-  "row_count": 308,
+  "row_count": 310,
   "unknown_allowlisted": [
    "main@57c26060|internal/agentcore/rematerialize.go|restoreIntentOwner",
    "main@57c26060|internal/textureowner/texture_agent_revision.go|revisionRoleOwner",
    "main@57c26060|internal/textureowner/texture_agent_revision.go|revisionFromOwner"
+  ],
+  "supplements": [
+   "decoder-commit: +2 frozen-table rows for internal/computerevent/decode.go (Define update; no prior rows touched)"
   ]
  },
  "rows": [
@@ -10444,6 +10447,78 @@
     "if rec == nil || agentProfileForRun(rec) != agentprofile.Texture {"
    ],
    "note": "canonical-stays-live profile consumers (auto-grouped; identity map)"
+  },
+  {
+   "key": "main@57c26060|internal/computerevent/decode.go|frozenV1Canonical",
+   "file": "internal/computerevent/decode.go",
+   "lines": [
+    40,
+    42,
+    43,
+    45,
+    46,
+    47
+   ],
+   "symbol": "frozenV1Canonical",
+   "field_path": "frozenV1Canonical",
+   "class": 1,
+   "namespace": "decode.frozen.table",
+   "v1_tokens": [
+    "super",
+    "co-super",
+    "cosuper",
+    "coagent",
+    "co-agent",
+    "researcher",
+    "researchers",
+    "research",
+    "research-agent",
+    "web-research",
+    "web-researcher"
+   ],
+   "v2_token": "per-\u00a73-map",
+   "carrier": "n/a (frozen snapshot of \u00a71a; must not call live Canonical)",
+   "liveness": "history",
+   "role": "def",
+   "digest": "NONE",
+   "forward": "MAP",
+   "inverse": "INV-CANON",
+   "verification": "verified",
+   "texts": [
+    "\"super\": \"super\",",
+    "\"cosuper\": \"co-super\", \"co-super\": \"co-super\",",
+    "\"coagent\": \"co-super\", \"co-agent\": \"co-super\",",
+    "\"researcher\": \"researcher\", \"researchers\": \"researcher\",",
+    "\"research\": \"researcher\", \"research-agent\": \"researcher\",",
+    "\"web-research\": \"researcher\", \"web-researcher\": \"researcher\","
+   ],
+   "note": "Deliberate duplication of mapping-doc \u00a71a; interprets history forever; V2 writers never read it."
+  },
+  {
+   "key": "main@57c26060|internal/computerevent/decode.go|frozenV1Normalize",
+   "file": "internal/computerevent/decode.go",
+   "lines": [
+    65
+   ],
+   "symbol": "frozenV1Normalize",
+   "field_path": "frozenV1Normalize",
+   "class": 6,
+   "namespace": "decode.frozen.table",
+   "v1_tokens": [
+    "cosuper-coding"
+   ],
+   "v2_token": "engineering",
+   "carrier": "n/a (frozen snapshot of \u00a71b; overlapping keys resolve via canonical fallthrough)",
+   "liveness": "history",
+   "role": "def",
+   "digest": "NONE",
+   "forward": "MAP",
+   "inverse": "INV-CANON",
+   "verification": "verified",
+   "texts": [
+    "\"cosuper-coding\": \"co-super\","
+   ],
+   "note": "NormalizeRole-only extra in normalized form; never unioned with the canonical table."
   }
  ],
  "negative_sweeps": [

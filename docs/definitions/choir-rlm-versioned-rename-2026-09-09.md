@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Widening landed end-to-end (c19e3028; CI green incl. staging deploy serving c19e3028). Next: frozen V1 decoder with two centralized decode roots (historic vs V2 write-admission), V1 aliases still accepted live, per landing-order step 3."
+  slice: "Decoder slice landed (landing step 3): centralized historic/admission roots in computerevent/decode.go with frozen V1 tables, 10 call sites migrated behaviorally inert, decoder matrix frozen, decode-roots CI guard green, inventory supplemented to 310 rows. Awaiting CI verdict on the decoder commit. Next: behaviorally-inert Canonical string-to-tuple refactor (step 4)."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -239,8 +239,8 @@ now:
     - "internal/agentcore/api_self_development.go, chain_bootstrap.go, self_development_materializer.go raw Event ActorProfile Super writers; actorcore adapter/handler researcher canonical consumers (late GrantsEvents rows)"
     - "internal/types/task.go, cosuper_assignment.go; internal/store/cosuper_assignments.go:182-218 terminal proposition V1 domain; internal/objectgraph/object.go:97-174 content/edge hashing"
     - "internal/yaegikernel/profiles.go: no production callers (delete-first, test-only)"
-  blocker_or_risk: "Owner ratification outstanding on the owner-as-frozen-protocol proposal (item 4 §7); decoder slice does not depend on it. R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
-  next_action: "Land the frozen V1 decoder with two centralized decode roots (historic raw-preserving vs V2 write-admission), V1 aliases still accepted live; decoder matrix enumerates every current call site with CI rejecting new decode roots."
+  blocker_or_risk: "Decoder commit in flight; owner ratification still outstanding on owner-as-frozen-protocol (blocks --freeze and writer cutover only). R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
+  next_action: "Land the behaviorally-inert Canonical string-to-tuple refactor (landing step 4): signature change only, still accepts every frozen V1 alias and reports it known."
 
 
 receipts:

@@ -51,9 +51,11 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 		if computerevent.DigestBytes(eventJSON) != record.Request.EventDigest {
 			return nil, fmt.Errorf("event replay: event digest mismatch at sequence %d", sequence)
 		}
-		if err := json.Unmarshal(eventJSON, &record.Request.Event); err != nil {
+		event, err := computerevent.DecodeHistoricEvent(eventJSON)
+		if err != nil {
 			return nil, fmt.Errorf("event replay: decode event sequence %d: %w", sequence, err)
 		}
+		record.Request.Event = event
 		if record.Request.Event.Sequence != sequence || record.Request.Event.ComputerID != computerID {
 			return nil, fmt.Errorf("event replay: event index mismatch at sequence %d", sequence)
 		}

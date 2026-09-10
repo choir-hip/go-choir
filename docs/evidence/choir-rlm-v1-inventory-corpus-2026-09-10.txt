@@ -1,7 +1,7 @@
 # Choir RLM versioned-rename V1 inventory corpus manifest
 # source_ref: main@57c26060
 # generator: scripts/check-v1-inventory.sh --write-manifest (query_version 1)
-# files: 661
+# files: 663
 # excluded_test_support: internal/base/testkit/scenarios.go (fixture helper, no production callers)
 # excluded_generator: scripts/v1-inventory-*.py (measuring instrument; desk-lexeme strings are query patterns, swept clean of role fields)
 # excluded_ops_tooling: extensionless scripts/* shell tooling (negative-swept clean except prose substring noise)
@@ -255,6 +255,7 @@ internal/coagentowner/spawn_tool.go
 internal/computerevent/appender.go
 internal/computerevent/artifact_ref.go
 internal/computerevent/canonical.go
+internal/computerevent/decode.go
 internal/computerevent/event.go
 internal/computerevent/event_receipt.go
 internal/computerevent/http_client.go
@@ -661,6 +662,7 @@ nix/node-a-disks.nix
 nix/node-a-hardware.nix
 nix/node-a.nix
 nix/node-b.nix
+scripts/check-decode-roots.sh
 scripts/check-heresies.sh
 scripts/check-v1-inventory.sh
 scripts/selfdev-turn-census.sh

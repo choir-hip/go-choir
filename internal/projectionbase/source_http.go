@@ -175,8 +175,12 @@ func (s *HTTPSource) TailPage(ctx context.Context, computerID string, afterSeque
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("projection base: tail status %d", resp.StatusCode)
 	}
-	var page []computerevent.DurableEvent
-	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("projection base: decode tail: %w", err)
+	}
+	page, err := computerevent.DecodeHistoricDurableEvents(raw)
+	if err != nil {
 		return nil, fmt.Errorf("projection base: decode tail: %w", err)
 	}
 	return page, nil

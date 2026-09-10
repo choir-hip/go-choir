@@ -2,7 +2,6 @@ package projectionbase
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -63,8 +62,8 @@ func (s *DiskEventSource) EventsPage(ctx context.Context, computerID string, aft
 			if computerevent.DigestBytes(raw) != curr {
 				return nil, fmt.Errorf("disk event source: digest mismatch for event %s", curr)
 			}
-			var event computerevent.Event
-			if err := json.Unmarshal(raw, &event); err != nil {
+			event, err := computerevent.DecodeHistoricEvent(raw)
+			if err != nil {
 				return nil, fmt.Errorf("disk event source: decode event %s: %w", curr, err)
 			}
 			if event.ComputerID != computerID {
@@ -102,8 +101,8 @@ func (s *DiskEventSource) EventsPage(ctx context.Context, computerID string, aft
 			if computerevent.DigestBytes(raw) != digest {
 				return nil, fmt.Errorf("disk event source: digest mismatch for event %s", digest)
 			}
-			var event computerevent.Event
-			if err := json.Unmarshal(raw, &event); err != nil {
+			event, err := computerevent.DecodeHistoricEvent(raw)
+			if err != nil {
 				return nil, fmt.Errorf("disk event source: decode event %s: %w", digest, err)
 			}
 			if event.ComputerID != computerID {

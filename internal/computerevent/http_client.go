@@ -184,8 +184,12 @@ func (c *HTTPClient) EventsPage(ctx context.Context, computerID string, afterSeq
 		"after_sequence": []string{fmt.Sprintf("%d", afterSequence)},
 		"limit":          []string{fmt.Sprintf("%d", pageSize)},
 	}
-	var page []DurableEvent
-	_, err := c.doWithResponseLimit(ctx, http.MethodGet, "/internal/computers/events/replay?"+query.Encode(), nil, &page, EventReplayMaxResponseBytes)
+	var rawPage json.RawMessage
+	_, err := c.doWithResponseLimit(ctx, http.MethodGet, "/internal/computers/events/replay?"+query.Encode(), nil, &rawPage, EventReplayMaxResponseBytes)
+	if err != nil {
+		return nil, fmt.Errorf("computer event client: replay page after sequence %d: %w", afterSequence, err)
+	}
+	page, err := DecodeHistoricDurableEvents(rawPage)
 	if err != nil {
 		return nil, fmt.Errorf("computer event client: replay page after sequence %d: %w", afterSequence, err)
 	}
