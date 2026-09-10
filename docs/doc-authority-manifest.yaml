@@ -405,6 +405,13 @@ documents:
     annotations: {doc_role: definition, authority: completed_mission_contract, lifecycle: completed, entrypoint: false}
     witnesses: [docs/evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md, docs/reports/choir-rlm-mission-state-2026-09-08.md, docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md, docs/definitions/choir-rlm-restore-zero-2026-09-08.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/choir-doctrine.md, docs/computer-ontology.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
+  - path: docs/definitions/choir-rlm-versioned-rename-2026-09-09.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: subordinate_mission_contract, lifecycle: blocked, entrypoint: false}
+    witnesses: [docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md, docs/definitions/choir-rlm-restore-zero-2026-09-08.md, docs/definitions/choir-rlm-settlement-gate-2026-09-09.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/choir-doctrine.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change]
   - path: docs/definitions/choir-supervised-self-development-on-rlm-2026-09-02.md
     claim_scope: current
     is_root: []

@@ -86,6 +86,17 @@ with effects OFF. Deployed evidence:
 [`evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md`](evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md).
 The cutover's withheld settlement acceptance is closed; the cutover stays remainder
 holder (residue R6). Mission-0 live drill debt stays mission-0-owned (residue R1).
+
+## Blocked Definition — RLM Versioned Rename (draft)
+
+[`definitions/choir-rlm-versioned-rename-2026-09-09.md`](definitions/choir-rlm-versioned-rename-2026-09-09.md)
+is a **blocked non-executable draft** holding the versioned-rename scope:
+rename-first versioned desk vocabulary with frozen V1 decode, V2-only writers,
+activation refusal, and the exhaustive V1 inventory. Nothing executes under it
+before owner charter ratification with fresh reconciliation. The cutover stays
+remainder holder (residue R6); mission-0 drill debt stays mission-0-owned
+(residue R1); tool and operation retirement belongs to the Engineering-proof
+successor (residue R7).
 ## Blocked Definition — RLM Target Architecture Cutover (remainder holder)
 
 [`definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`](definitions/choir-rlm-target-architecture-cutover-2026-09-04.md)

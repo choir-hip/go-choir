@@ -557,6 +557,26 @@ nodes:
       - docs/definitions/choir-rlm-settlement-gate-2026-09-09.md
       - docs/evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md
       - docs/ACTIVE.md
+  - id: choir-rlm-versioned-rename-2026-09-09
+    title: RLM Versioned Rename
+    path: docs/definitions/choir-rlm-versioned-rename-2026-09-09.md
+    ledger: ''
+    status: blocked
+    kind: spine
+    entrypoint: false
+    execution_mode: draft_non_executable
+    depends_on:
+      - choir-rlm-target-architecture-cutover-2026-09-04
+      - choir-rlm-restore-zero-2026-09-08
+      - choir-rlm-settlement-gate-2026-09-09
+    enables: []
+    note: >-
+      Blocked non-executable draft holding the versioned-rename scope.
+      Charter ratification with fresh reconciliation pending. Nothing executes
+      under it before then.
+    sources:
+      - docs/definitions/choir-rlm-versioned-rename-2026-09-09.md
+      - docs/ACTIVE.md
   - id: choir-host-orchestrated-recovery-2026-08-22
     title: Host-Orchestrated Recovery (Cold Recover Current)
     path: docs/definitions/choir-host-orchestrated-recovery-2026-08-22.md
