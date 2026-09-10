@@ -327,11 +327,22 @@ jobs:
           name: heresy-detector-report
           path: heresy-detector-report.json
           if-no-files-found: warn
+  v1-inventory:
+    name: V1 Inventory Gate
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.non_docs == 'true'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run V1 desk-vocabulary inventory gate
+        shell: bash
+        run: scripts/check-v1-inventory.sh
 
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest
-    needs: [plan, go-vet-build, tla-model-check, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, build-frontend]
+    needs: [plan, go-vet-build, tla-model-check, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, v1-inventory, build-frontend]
     if: always()
     steps:
       - name: Confirm selected CI gates passed
@@ -379,6 +390,7 @@ jobs:
           require_success "${{ needs.plan.outputs.go }}" go-test-scale "${{ needs.go-test-scale.result }}"
           require_success "${{ needs.plan.outputs.specs }}" tla-model-check "${{ needs.tla-model-check.result }}"
           require_success "${{ needs.plan.outputs.non_docs }}" heresy-detector "${{ needs.heresy-detector.result }}"
+          require_success "${{ needs.plan.outputs.non_docs }}" v1-inventory "${{ needs.v1-inventory.result }}"
           require_if_run build-frontend "${{ needs.build-frontend.result }}"
           echo "All selected CI gates passed"
 

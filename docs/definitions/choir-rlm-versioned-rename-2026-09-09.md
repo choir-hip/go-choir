@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Census Define frozen 2026-09-10: mechanical V1 inventory mapped across all twelve classes at main@8bc16619 (four parallel scout slices, no code touched). Next: freeze the machine-readable V1 inventory artifact plus versioned corpus manifest and CI gate spec, then decode, writer, activation, carrier, deployed proof, and focused contracts in normative landing order. Missions 0 and 1 complete; charter ratified 2026-09-10T04:28:08Z."
+  slice: "Inventory freeze landed: 308-row V1 artifact plus 660-file corpus manifest plus standing CI gate (v1-inventory job), all verified green in CI mode; --freeze red on exactly the 3 allowlisted owner-token rows pending mapping-table item 4. Next: mapping-table freeze (acceptance item 4 incl. owner classification) then decode/writer/activation in normative landing order."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -239,9 +239,8 @@ now:
     - "internal/agentcore/api_self_development.go, chain_bootstrap.go, self_development_materializer.go raw Event ActorProfile Super writers; actorcore adapter/handler researcher canonical consumers (late GrantsEvents rows)"
     - "internal/types/task.go, cosuper_assignment.go; internal/store/cosuper_assignments.go:182-218 terminal proposition V1 domain; internal/objectgraph/object.go:97-174 content/edge hashing"
     - "internal/yaegikernel/profiles.go: no production callers (delete-first, test-only)"
-    - "late GrantsEvents rows for artifact freeze: rematerialize.go:347-355 owner restore writer; self_development_materializer multi-site Super writers; tools_capsule.go CoSuper verification/effect writers; texture_audit.go texture writer; file_sync.go/run.go Super writers"
-  blocker_or_risk: "Census mapped; freeze unproven until the machine-readable inventory artifact plus corpus manifest and CI gate land. Actuator and staging proofs outstanding. R1 drill debt stays mission-0-owned; cutover stays remainder holder (R6); tool retirement belongs to the R7 successor."
-  next_action: "Freeze the V1 inventory artifact plus versioned corpus manifest and CI gate spec (acceptance item 1); no repair-code commits before that freeze lands."
+  blocker_or_risk: "Freeze landed with named remainder: 3 owner-token rows (rematerialize.go:351 restore intent, texture_agent_revision.go:274/295 revision Role/From) unknown pending owner-ratified mapping-table classification (acceptance item 4). Gate --freeze stays red until then; CI mode green and protective. Actuator and staging proofs outstanding. R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
+  next_action: "Freeze the per-function/per-carrier mapping table (acceptance item 4) with owner-token classification proposal for owner ratification; no repair-code commits before that freeze lands."
 
 
 receipts:
@@ -270,4 +269,17 @@ receipts:
     disposition: "census mapped; freeze (artifact plus corpus manifest plus CI gate) is the next Define before any repair-code commit"
     problem_ref: "live alias normalizers accept legacy values on the live write path; vocabulary seam gates descriptors while tape decode stays unversioned; Event.Validate actor_profile non-emptiness only at tape-append gate; raw spawn synonyms authorize while ReduceCellIntents persists raw roles"
     authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; problem-documentation-first per AGENTS.md"
+    candidate_or_evidence_refs: []
+  - id: versioned-rename-freeze-2026-09-10
+    boundary: define
+    commit_or_artifact: "freeze commit (this commit): artifact plus manifest plus gate plus CI wiring; no runtime source touched"
+    proof_refs:
+      - "docs/evidence/choir-rlm-v1-inventory-2026-09-10.json: 308 rows, 894 pinned-query hits claimed, 306 verified, 3 unknown allowlisted"
+      - "docs/evidence/choir-rlm-v1-inventory-corpus-2026-09-10.txt: 660-file manifest at main@57c26060"
+      - "scripts/check-v1-inventory.sh PASS (ci mode); --freeze FAILED on exactly the 3 allowlisted owner rows"
+      - ".github/workflows/ci.yml v1-inventory job wired into check aggregation"
+    rollback_ref: "revert restores pre-freeze tree; gate never ran in production (CI-only, first run on next push)"
+    disposition: "acceptance item 1 landed with named remainder (owner classification at item 4); mapping-table freeze is next; no repair-code commits before it lands"
+    problem_ref: "3 role-shaped owner tokens unclassifiable by orchestrator authority (rematerialize restore intent; revision Role/From); live alias path and unversioned tape decode unchanged"
+    authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; owner ratification still required for the owner-classification proposal at item 4"
     candidate_or_evidence_refs: []
