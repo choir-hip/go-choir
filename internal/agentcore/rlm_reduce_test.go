@@ -395,16 +395,16 @@ func TestChannelCastWakesAddressedActor(t *testing.T) {
 		t.Fatal(err)
 	}
 	mu.Lock()
-	if len(wakes) != 1 || wakes[0] != "channel_message:super:root:chan-wake:1" {
+	if len(wakes) != 1 || wakes[0] != "channel_message:management:root:chan-wake:1" {
 		mu.Unlock()
-		t.Fatalf("wakes = %v, want channel_message to super:root with chan-wake:1", wakes)
+		t.Fatalf("wakes = %v, want channel_message to management:root with chan-wake:1", wakes)
 	}
 	mu.Unlock()
 	if _, err := rt.ChannelCast(ctx, "chan-wake", "management:root", "", "engineering:impl", "engineering", "hi"); err != nil {
 		t.Fatal(err)
 	}
 	mu.Lock()
-	if len(wakes) != 2 || wakes[1] != "channel_message:super:root:chan-wake:2" {
+	if len(wakes) != 2 || wakes[1] != "channel_message:management:root:chan-wake:2" {
 		mu.Unlock()
 		t.Fatalf("same-body second envelope collapsed: %v", wakes)
 	}

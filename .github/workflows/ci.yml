@@ -328,16 +328,16 @@ jobs:
           path: heresy-detector-report.json
           if-no-files-found: warn
   v1-inventory:
-    name: V1 Inventory Gate
+    name: Vocabulary Gates
     runs-on: ubuntu-latest
     needs: plan
     if: needs.plan.outputs.non_docs == 'true'
     steps:
       - uses: actions/checkout@v6
 
-      - name: Run V1 desk-vocabulary inventory gate
+      - name: Run V1 writer-purity gate
         shell: bash
-        run: scripts/check-v1-inventory.sh
+        run: scripts/check-v1-writer-purity.sh
 
       - name: Run decode-roots guard
         shell: bash
